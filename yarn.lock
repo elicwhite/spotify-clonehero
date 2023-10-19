@@ -123,6 +123,11 @@ csv-parse@^5.5.0:
   resolved "https://registry.yarnpkg.com/csv-parse/-/csv-parse-5.5.0.tgz#2313421e69b650dae32a79ac884b20b21ca1d9da"
   integrity sha512-RxruSK3M4XgzcD7Trm2wEN+SJ26ChIb903+IWxNOcB5q4jT2Cs+hFr6QP39J05EohshRFEvyzEBoZ/466S2sbw==
 
+csv-stringify@^6.4.4:
+  version "6.4.4"
+  resolved "https://registry.yarnpkg.com/csv-stringify/-/csv-stringify-6.4.4.tgz#92ef52e21b5cc39d20e7db9b6b913367460e2659"
+  integrity sha512-NDshLupGa7gp4UG4sSNIqwYJqgSwvds0SvENntxoVoVvTzXcrHvd5gG2MWpbRpSNvk59dlmIe1IwNvSxN4IVmg==
+
 debug@2.6.9:
   version "2.6.9"
   resolved "https://registry.yarnpkg.com/debug/-/debug-2.6.9.tgz#5d128515df134ff327e90a4c93f4e077a536341f"
@@ -422,6 +427,11 @@ isexe@^2.0.0:
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/isexe/-/isexe-2.0.0.tgz#e8fbf374dc556ff8947a10dcb0572d633f2cfa10"
   integrity sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==
+
+levenshtein-edit-distance@^3.0.1:
+  version "3.0.1"
+  resolved "https://registry.yarnpkg.com/levenshtein-edit-distance/-/levenshtein-edit-distance-3.0.1.tgz#e3518ddf35e75d175928964e9063649963d9693c"
+  integrity sha512-/qMCkZbrAF7jZP/voqlkfNrBtEn0TMdhCK7OEBh/zb39t/c3wCnTjwU1ZvrMfQ3OxB8sBQXIpWRMM6FiQJVG3g==
 
 lru-cache@^6.0.0:
   version "6.0.0"

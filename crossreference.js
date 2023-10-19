@@ -2,10 +2,11 @@ import fs from 'fs';
 import { parse } from 'csv-parse';
 import path from 'path';
 import os from 'node:os';
+import {levenshteinEditDistance} from 'levenshtein-edit-distance'
 
 const CLONE_HERO_SONGS_FOLDER = path.join(os.homedir(), 'Clone Hero', 'Songs');
-// const CHORUS_DUMP = new URL('Chorus_Dump-export_feb_15_2023.csv', import.meta.url).pathname;
 const CHORUS_DUMP = path.join(os.homedir(), 'Downloads', 'chorus_2023-10-02.csv');
+// const SPOTIFY_DATA_DUMP_FOLDER = path.join(os.homedir(), 'Downloads', 'Hoph20SpotifyData');//SpotifyData-Aug-26');
 const SPOTIFY_DATA_DUMP_FOLDER = path.join(os.homedir(), 'Downloads', 'SpotifyData-Aug-26');
 
 async function run() {
@@ -117,10 +118,28 @@ async function filterAndGroupCharts(spotifyData, isInstalledFilter) {
   return notInstalledSongs;
 }
 
+// async function createIsInstalledFilter() {
+//   const installedSongs = fs.readFileSync('/Users/eliwhite/Downloads/FolderList.txt', 'utf-8')
+//     .split('\n')
+//     .filter(row => row.includes(' - '))
+//     .map(row => row.trim())
+//     .map(row => row.substring(row.lastIndexOf('\\')+1));
+
+//   console.log(installedSongs);
+//   process.exit(0)
+
+// }
+
 async function createIsInstalledFilter() {
   const installedSongs = fs.readdirSync(CLONE_HERO_SONGS_FOLDER, {withFileTypes: true})
     .filter(dirent => dirent.isDirectory())
     .map(dirent => dirent.name);
+
+  // const installedSongs = fs.readFileSync('/Users/eliwhite/Downloads/FolderList.txt', 'utf-8')
+  //   .split('\n')
+  //   .filter(row => row.includes(' - '))
+  //   .map(row => row.trim())
+  //   .map(row => row.substring(row.lastIndexOf('\\')+1));
 
   const installedArtistsSongs = new Map();
 
@@ -135,15 +154,37 @@ async function createIsInstalledFilter() {
   }
 
   return function isInstalled(artist, song) {
-    const artistSongs = installedArtistsSongs.get(artist);
+    let likelyArtist;
+
+    for (const installedArtist of installedArtistsSongs.keys()){
+      const artistDistance = levenshteinEditDistance(installedArtist, artist);
+      if (artistDistance <= 1) {
+        likelyArtist = installedArtist;
+      }
+    }
+
+    const artistSongs = installedArtistsSongs.get(likelyArtist);
 
     if (artistSongs == null) {
       return false;
     }
 
-    if (artistSongs.includes(song)) {
+    let likelySong;
+
+    for (const installedSong of artistSongs){
+      const songDistance = levenshteinEditDistance(installedSong, song);
+      if (songDistance <= 1) {
+        likelySong = installedSong;
+      }
+    }
+
+    if (likelySong != null) {
       return true;
     }
+
+    // if (artistSongs.includes(song)) {
+    //   return true;
+    // }
 
     // Some installed songs have (2x double bass) suffixes. 
     return artistSongs.some(artistSong => artistSong.includes(song));

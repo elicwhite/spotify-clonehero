@@ -1,75 +1,109 @@
 import {authenticate} from './auth.js';
 import SpotifyWebApi from 'spotify-web-api-node';
+import { stringify } from 'csv-stringify';
+import { parse } from 'csv-parse';
+import path from 'path';
+import fs from 'fs';
 
-// require('dotenv').config({ path: 'secrets.env' })
-
+const OUTPUT_FILE = path.join(process.cwd(), 'spotifyapidata.csv')
 const scopes = ['user-read-private', 'user-read-email', 'user-read-recently-played', 'playlist-read-private'];
-const state = 'some-state-of-my-choice';
-
-// // credentials are optional
-// const spotifyApi = new SpotifyWebApi({
-//   clientId: process.env.CLIENT_ID,
-//   clientSecret: process.env.CLIENT_SECRET,
-//   redirectUri: 'http://localhost:3000'
-// });
-
-
-
-
-
-// Create the authorization URL
-// var authorizeURL = spotifyApi.createAuthorizeURL(scopes, state);
-// console.log(authorizeURL);
-// process.exit(0);
-
-// spotifyApi.authorizationCodeGrant(accessCode)
-// .then(
-//   function(data) {
-//     console.log('The token expires in ' + data.body['expires_in']);
-//     console.log('The access token is ' + data.body['access_token']);
-//     console.log('The refresh token is ' + data.body['refresh_token']);
-
-//     // Set the access token on the API object to use it in later calls
-//     spotifyApi.setAccessToken(data.body['access_token']);
-//     spotifyApi.setRefreshToken(data.body['refresh_token']);
-//   },
-//   function(err) {
-//     console.log('Something went wrong!', err);
-//   }
-// );
-
-
-// console.log(authorizeURL);
-
-// spotifyApi.getMyRecentlyPlayedTracks({
-//   limit : 20
-// }).then(function(data) {
-//     // Output items
-//     console.log("Your 20 most recently played tracks are:");
-//     data.body.items.forEach(item => console.log(item.track));
-//   }, function(err) {
-//     console.log('Something went wrong!', err);
-//   });
 
 async function run() {
   const accessToken = await authenticate({scopes});
 
-  const spotifyApi = new SpotifyWebApi({
-    clientId: process.env.CLIENT_ID,
-  });
+  const spotifyApi = new SpotifyWebApi();
+  spotifyApi.setAccessToken(accessToken);
+  
+  let beforeCursor = await getInitialBeforeCursor();
+  
+  // const writableStream = fs.createWriteStream(OUTPUT_FILE, {flags: 'a'});
 
-  if (accessToken) {
-    spotifyApi.setAccessToken(accessToken);
-    // spotifyApi.accessToken = accessCode;
+  const stringifier = stringify({
+    header: !fs.existsSync(OUTPUT_FILE), 
+    columns: ['timestamp', 'artist', 'track', 'source'],
+  })
+
+  let counter = 0;
+
+  // const NUM_STEPS = 5;
+  // for (var i = 0; i < NUM_STEPS; i++) {
+  //   if (beforeCursor == null) {
+  //     break;
+  //   }
+
+    const result = await getMyRecentlyPlayedTracks(spotifyApi, {
+      before: beforeCursor
+    })
+
+    result.recentTracks.forEach((play) => {
+      counter++;
+
+        console.log(play);
+      // stringifier.write([ play.timestamp, play.artist, play.trackName, 'api' ]);
+    });
+
+    // data = data.concat(result.recentTracks);
+
+    // beforeCursor = result.beforeCursor;
+  // }
+
+  console.log(`Found ${counter} plays. Ended at`, beforeCursor);
+  // stringifier.pipe(writableStream);
+  // stringifier.end();
+
+  // if (data.length == 0) {
+  //   console.log('No data recieved');
+  // }
+  // data.forEach(item => {
+  //   console.log(`${item.timestamp} ${item.artist} ${item.trackName}`);
+  // })
+}
+
+async function getInitialBeforeCursor() {
+  if (!fs.existsSync(OUTPUT_FILE)) {
+    return Date.now();
+  }
+  // const foo = fs.readFileSync('asdf.csv');
+  // console.log('foo,', foo)
+  const stream = fs
+    .createReadStream(OUTPUT_FILE)
+    .pipe(parse({
+      columns: true
+    }));
+
+  let lastTrack = null;
+  for await (const track of stream) {
+    lastTrack = track;
   }
 
+  if (lastTrack == null) {
+    return Date.now();
+  } 
 
-  const playlists = await spotifyApi.getUserPlaylists({
-    limit: 50
+  return Date.parse(lastTrack.timestamp);
+}
+
+async function getMyRecentlyPlayedTracks(spotifyApi, {before}) {
+  const recents = await spotifyApi.getMyRecentlyPlayedTracks({
+    limit : 50,
+    // before: before,
+    after: 1697389769186,
+  })
+
+  const recentTracks = recents.body.items.map(item => {
+    const artist = item.track.artists.map(artist => artist.name).join(' & ');
+    const trackName = item.track.name;
+    const timestamp = item.played_at;
+    
+    return {
+      artist, trackName, timestamp
+    };
   });
 
-  console.log(playlists.body);
-
+  return {
+    recentTracks,
+    beforeCursor: recents.body.cursors?.before
+  }
 }
 
 run().catch(function(err) {
