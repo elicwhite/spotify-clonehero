@@ -12,5 +12,8 @@
     "levenshtein-edit-distance": "^3.0.1",
     "open": "^9.1.0",
     "spotify-web-api-node": "^5.0.2"
+  },
+  "devDependencies": {
+    "prettier": "^3.0.3"
   }
 }
