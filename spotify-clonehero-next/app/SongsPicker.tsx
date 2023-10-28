@@ -75,8 +75,8 @@ export default function SongsPicker() {
 
   return (
     <>
-      <button onClick={() => handler()}>Click me</button>
-      <h1>{counter}</h1>
+      <button onClick={() => handler()}>Scan Clone Hero Songs Library</button>
+      <h1>{counter} songs scanned</h1>
     </>
   );
 }
