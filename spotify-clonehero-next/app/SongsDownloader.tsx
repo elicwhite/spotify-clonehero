@@ -25,8 +25,6 @@ const songIniOrder = [
   'diff_drums_real',
   'diff_keys',
   'diff_guitarghl',
-  'diff_bassghl',
-  'diff_guitarghl',
   'diff_guitar_coop_ghl',
   'diff_rhythm_ghl',
   'diff_bassghl',
@@ -109,8 +107,9 @@ export default function SongsDownloader() {
         create: true,
       });
 
-      createSongIniString(header.metadata);
+      const contents = createSongIniString(header.metadata);
 
+      fileHandle;
       // ini.encode({Song: header.metadata});
     });
 
