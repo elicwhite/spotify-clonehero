@@ -4,18 +4,22 @@ import {useCallback, useState, useMemo} from 'react';
 import ini from 'ini';
 import SongsTable from './SongsTable';
 
-export type SongAccumulator = Array<{
+export type SongAccumulator = {
   artist: string;
   song: string;
   lastModified: number;
   charter: string;
-  data: Object;
-}>;
+  data: {
+    artist: string;
+    name: string;
+    charter: string;
+  };
+};
 
 async function processSongDirectory(
   directoryName: string,
   directoryHandle: FileSystemDirectoryHandle,
-  accumulator: SongAccumulator,
+  accumulator: SongAccumulator[],
   incrementCounter: Function,
 ) {
   let newestDate = 0;
@@ -61,13 +65,13 @@ async function processSongDirectory(
 
 export default function SongsPicker() {
   const [counter, setCounter] = useState(0);
-  const [songs, setSongs] = useState(null);
+  const [songs, setSongs] = useState<SongAccumulator[] | null>(null);
 
   const handler = useCallback(async () => {
     setSongs(null);
     setCounter(0);
     const directoryHandle = await window.showDirectoryPicker();
-    const songs: SongAccumulator = [];
+    const songs: SongAccumulator[] = [];
 
     await processSongDirectory('Songs', directoryHandle, songs, () =>
       setCounter(n => n + 1),

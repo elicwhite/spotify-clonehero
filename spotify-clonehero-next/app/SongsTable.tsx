@@ -11,8 +11,16 @@ import {
 import {useVirtual} from 'react-virtual';
 import {SongAccumulator} from './SongsPicker';
 
-export default function SongsTable({songs}) {
-  const [songState, setSongState] = useState(
+type RowType = {
+  id: number;
+  artist: string;
+  song: string;
+  charter: string;
+  lastModified: Date;
+};
+
+export default function SongsTable({songs}: {songs: SongAccumulator[]}) {
+  const [songState, setSongState] = useState<RowType[]>(
     songs.map((song, index) => ({
       id: index + 1,
       artist: song.data.artist,
@@ -24,7 +32,7 @@ export default function SongsTable({songs}) {
 
   const [sorting, setSorting] = useState<SortingState>([]);
 
-  const columns = useMemo<ColumnDef<Person>[]>(
+  const columns = useMemo<ColumnDef<RowType>[]>(
     () => [
       {
         accessorKey: 'artist',
@@ -119,7 +127,7 @@ export default function SongsTable({songs}) {
               </tr>
             )}
             {virtualRows.map(virtualRow => {
-              const row = rows[virtualRow.index] as Row<SongAccumulator>;
+              const row = rows[virtualRow.index] as Row<RowType>;
               return (
                 <tr key={row.id}>
                   {row.getVisibleCells().map(cell => {
