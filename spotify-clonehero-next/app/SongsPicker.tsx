@@ -1,11 +1,26 @@
 'use client';
 
-import {useCallback, useState, useMemo} from 'react';
+import {useCallback, useState, useMemo, useReducer} from 'react';
 import ini from 'ini';
 import SongsTable from './SongsTable';
 
 import searchForChart from './searchForChart';
 import {ChartResponse} from './chartSelection';
+
+export type RecommendedChart =
+  | {
+      type: 'not-checked';
+    }
+  | {
+      type: 'searching';
+    }
+  | {
+      type: 'best-chart-installed';
+    }
+  | {
+      type: 'better-chart-found';
+      betterChart: ChartResponse;
+    };
 
 export type SongAccumulator = {
   artist: string;
@@ -17,6 +32,7 @@ export type SongAccumulator = {
     name: string;
     charter: string;
   };
+  recommendedChart: RecommendedChart;
 };
 
 async function processSongDirectory(
@@ -61,49 +77,119 @@ async function processSongDirectory(
       lastModified: newestDate,
       charter: songIniData?.charter,
       data: songIniData,
+      recommendedChart: {
+        type: 'not-checked',
+      },
     });
     incrementCounter();
   }
 }
 
+type SongState = {
+  songs: SongAccumulator[] | null;
+  songsCounted: number;
+};
+
+type SongStateActions =
+  | {
+      type: 'reset';
+    }
+  | {
+      type: 'increment-counter';
+    }
+  | {
+      type: 'set-songs';
+      songs: SongAccumulator[];
+    }
+  | {
+      type: 'set-recommendation';
+      song: SongAccumulator;
+      recommendation: RecommendedChart;
+    };
+
+function songsReducer(state: SongState, action: SongStateActions): SongState {
+  switch (action.type) {
+    case 'reset':
+      return {songs: null, songsCounted: 0};
+    case 'increment-counter':
+      return {...state, songsCounted: state.songsCounted + 1};
+    case 'set-songs':
+      return {...state, songs: action.songs};
+    case 'set-recommendation':
+      if (state.songs == null) {
+        throw new Error('Cannot set a recommendation before songs are scanned');
+      }
+
+      return {
+        ...state,
+        songs: state.songs.toSpliced(state.songs.indexOf(action.song), 1, {
+          ...action.song,
+          recommendedChart: action.recommendation,
+        }),
+      };
+    // return {...state};
+    default:
+      throw new Error('unrecognized action');
+  }
+}
+
 export default function SongsPicker() {
-  const [counter, setCounter] = useState(0);
-  const [songs, setSongs] = useState<SongAccumulator[] | null>(null);
+  const [songsState, songsDispatch] = useReducer(songsReducer, {
+    songs: null,
+    songsCounted: 0,
+  });
+
+  const [chartUpdates, setChartUpdate] = useState<RecommendedChart[]>([]);
 
   const handler = useCallback(async () => {
-    setSongs(null);
-    setCounter(0);
+    songsDispatch({
+      type: 'reset',
+    });
     const directoryHandle = await window.showDirectoryPicker();
     const songs: SongAccumulator[] = [];
 
-    await processSongDirectory('Songs', directoryHandle, songs, () =>
-      setCounter(n => n + 1),
-    );
+    await processSongDirectory('Songs', directoryHandle, songs, () => {
+      songsDispatch({
+        type: 'increment-counter',
+      });
+    });
 
-    setSongs(songs);
-    console.log(songs);
-  }, [setCounter]);
+    songsDispatch({
+      type: 'set-songs',
+      songs,
+    });
+  }, [songsDispatch]);
 
   const checkForUpdates = useCallback(async () => {
-    if (songs == null) {
+    if (songsState.songs == null) {
       return;
     }
-    const song = songs[songs.length - 1];
-    console.log(song);
-    const recommendedChart = await searchForChart(song.artist, song.song);
-    console.log(recommendedChart);
-  }, [songs]);
+
+    for await (const song of songsState.songs) {
+      const recommendedChart = await searchForChart(song.artist, song.song);
+
+      debugger;
+
+      songsDispatch({
+        type: 'set-recommendation',
+        song,
+        recommendation: {
+          type: 'best-chart-installed',
+        },
+      });
+    }
+  }, [songsState.songs]);
 
   return (
     <>
       <button onClick={() => handler()}>Scan Clone Hero Songs Library</button>
-      <h1>{counter} songs scanned</h1>
-      {songs && (
+      <h1>{songsState.songsCounted} songs scanned</h1>
+      {songsState.songs && (
         <button onClick={() => checkForUpdates()}>
           Check Chorus for Updated Charts
         </button>
       )}
-      {songs && <SongsTable songs={songs} />}
+      {songsState.songs && <SongsTable songs={songsState.songs} />}
     </>
   );
 }

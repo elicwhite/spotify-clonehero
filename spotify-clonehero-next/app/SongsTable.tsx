@@ -11,6 +11,7 @@ import {
 } from '@tanstack/react-table';
 import {useVirtual} from 'react-virtual';
 import {SongAccumulator} from './SongsPicker';
+import {ChartResponse} from './chartSelection';
 
 type RowType = {
   id: number;
@@ -18,49 +19,67 @@ type RowType = {
   song: string;
   charter: string;
   lastModified: string;
+  recommendedChart:
+    | {
+        type: 'not-checked';
+      }
+    | {
+        type: 'searching';
+      }
+    | {
+        type: 'best-chart-installed';
+      }
+    | {
+        type: 'better-chart-found';
+        betterChart: ChartResponse;
+      };
 };
 
 const columnHelper = createColumnHelper<RowType>();
 
+const columns = [
+  {
+    accessorKey: 'artist',
+    header: 'Artist',
+    minSize: 200,
+  },
+  {
+    accessorKey: 'song',
+    header: 'Song',
+  },
+  {
+    accessorKey: 'charter',
+    header: 'Charter',
+  },
+  {
+    accessorKey: 'lastModified',
+    header: 'Last Modified',
+  },
+  columnHelper.accessor('recommendedChart', {
+    header: 'Updated Chart?',
+    cell: props => props.getValue().type,
+  }),
+];
+
 export default function SongsTable({songs}: {songs: SongAccumulator[]}) {
-  const [songState, setSongState] = useState<RowType[]>(
-    songs.map((song, index) => ({
-      id: index + 1,
-      artist: song.data.artist,
-      song: song.data.name,
-      charter: song.data.charter,
-      lastModified: new Date(song.lastModified).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      }),
-    })),
+  const songState = useMemo(
+    () =>
+      songs.map((song, index) => ({
+        id: index + 1,
+        artist: song.data.artist,
+        song: song.data.name,
+        charter: song.data.charter,
+        lastModified: new Date(song.lastModified).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        }),
+        recommendedChart: song.recommendedChart,
+      })),
+    [songs],
   );
 
   const [sorting, setSorting] = useState<SortingState>([]);
-
-  const columns = useMemo<ColumnDef<RowType>[]>(
-    () => [
-      {
-        accessorKey: 'artist',
-        header: 'Artist',
-        minSize: 200,
-      },
-      {
-        accessorKey: 'song',
-        header: 'Song',
-      },
-      {
-        accessorKey: 'charter',
-        header: 'Charter',
-      },
-      {
-        accessorKey: 'lastModified',
-        header: 'Last Modified',
-      },
-    ],
-    [],
-  );
 
   const table = useReactTable({
     data: songState,
@@ -71,7 +90,7 @@ export default function SongsTable({songs}: {songs: SongAccumulator[]}) {
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    // debugTable: true,
+    debugTable: true,
   });
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
