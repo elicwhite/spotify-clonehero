@@ -4,6 +4,9 @@ import {useCallback, useState, useMemo} from 'react';
 import ini from 'ini';
 import SongsTable from './SongsTable';
 
+import searchForChart from './searchForChart';
+import {ChartResponse} from './chartSelection';
+
 export type SongAccumulator = {
   artist: string;
   song: string;
@@ -81,10 +84,25 @@ export default function SongsPicker() {
     console.log(songs);
   }, [setCounter]);
 
+  const checkForUpdates = useCallback(async () => {
+    if (songs == null) {
+      return;
+    }
+    const song = songs[songs.length - 1];
+    console.log(song);
+    const recommendedChart = await searchForChart(song.artist, song.song);
+    console.log(recommendedChart);
+  }, [songs]);
+
   return (
     <>
       <button onClick={() => handler()}>Scan Clone Hero Songs Library</button>
       <h1>{counter} songs scanned</h1>
+      {songs && (
+        <button onClick={() => checkForUpdates()}>
+          Check Chorus for Updated Charts
+        </button>
+      )}
       {songs && <SongsTable songs={songs} />}
     </>
   );
