@@ -2,7 +2,6 @@
 
 import {useCallback} from 'react';
 import {SngStream} from 'parse-sng';
-import ini from 'ini';
 
 // const URL =
 // 'https://www.enchor.us/download?md5=0acb9bad1d27efe83af51587bd20de0a&isSng=true';
@@ -92,26 +91,32 @@ export default function SongsDownloader() {
       credentials: 'omit',
     });
 
-    const sngStream = new SngStream((start, end) => response.body);
-    // sngStream.on('file', async (file, stream) => {
-    //   const fileHandle = await songDirHandle.getFileHandle(file, {
-    //     create: true,
-    //   });
-    //   const writableStream = await fileHandle.createWritable();
-    //   stream.pipeTo(writableStream);
-    // });
+    const body = response.body;
+    if (body == null) {
+      return;
+    }
 
-    sngStream.on('header', async header => {
-      console.log('header', header);
-      const fileHandle = await songDirHandle.getFileHandle('song.ini', {
+    const sngStream = new SngStream((start, end) => body);
+    sngStream.on('file', async (file, stream) => {
+      const fileHandle = await songDirHandle.getFileHandle(file, {
         create: true,
       });
-
-      const contents = createSongIniString(header.metadata);
-      //
-      fileHandle;
-      // ini.encode({Song: header.metadata});
+      const writableStream = await fileHandle.createWritable();
+      stream.pipeTo(writableStream);
     });
+
+    // sngStream.on('header', async header => {
+    //   console.log('header', header);
+    //   const fileHandle = await songDirHandle.getFileHandle('song.ini', {
+    //     create: true,
+    //   });
+
+    //   const accessHandle = await fileHandle.createSyncAccessHandle();
+    //   const contents = createSongIniString(header.metadata);
+    //   accessHandle.write(contents);
+    //   accessHandle.flush();
+    //   accessHandle.close();
+    // });
 
     sngStream.on('end', () => console.log('test.sng has been fully parsed'));
 
