@@ -1,6 +1,7 @@
 import {useCallback, useRef, useState, useReducer, useMemo} from 'react';
 import {
   ColumnDef,
+  createColumnHelper,
   flexRender,
   getCoreRowModel,
   getSortedRowModel,
@@ -16,8 +17,10 @@ type RowType = {
   artist: string;
   song: string;
   charter: string;
-  lastModified: Date;
+  lastModified: string;
 };
+
+const columnHelper = createColumnHelper<RowType>();
 
 export default function SongsTable({songs}: {songs: SongAccumulator[]}) {
   const [songState, setSongState] = useState<RowType[]>(
@@ -26,7 +29,11 @@ export default function SongsTable({songs}: {songs: SongAccumulator[]}) {
       artist: song.data.artist,
       song: song.data.name,
       charter: song.data.charter,
-      lastModified: new Date(song.lastModified),
+      lastModified: new Date(song.lastModified).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }),
     })),
   );
 
@@ -37,6 +44,7 @@ export default function SongsTable({songs}: {songs: SongAccumulator[]}) {
       {
         accessorKey: 'artist',
         header: 'Artist',
+        minSize: 200,
       },
       {
         accessorKey: 'song',
@@ -63,7 +71,7 @@ export default function SongsTable({songs}: {songs: SongAccumulator[]}) {
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    debugTable: true,
+    // debugTable: true,
   });
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -83,74 +91,74 @@ export default function SongsTable({songs}: {songs: SongAccumulator[]}) {
       : 0;
 
   return (
-    <div className="p-2">
-      <div className="h-2" />
-      <div ref={tableContainerRef} className="container">
-        <table>
-          <thead>
-            {table.getHeaderGroups().map(headerGroup => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map(header => {
+    <div className="p-2 overflow-y-auto" ref={tableContainerRef}>
+      <table className="w-full">
+        <thead>
+          {table.getHeaderGroups().map(headerGroup => (
+            <tr key={headerGroup.id}>
+              {headerGroup.headers.map(header => {
+                return (
+                  <th
+                    key={header.id}
+                    colSpan={header.colSpan}
+                    className="sticky top-0"
+                    style={{
+                      width: header.getSize(),
+                    }}>
+                    {header.isPlaceholder ? null : (
+                      <div
+                        {...{
+                          className: header.column.getCanSort()
+                            ? 'cursor-pointer select-none'
+                            : '',
+                          onClick: header.column.getToggleSortingHandler(),
+                        }}>
+                        {flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
+                        {{
+                          asc: ' 🔼',
+                          desc: ' 🔽',
+                        }[header.column.getIsSorted() as string] ?? null}
+                      </div>
+                    )}
+                  </th>
+                );
+              })}
+            </tr>
+          ))}
+        </thead>
+        <tbody>
+          {paddingTop > 0 && (
+            <tr>
+              <td style={{height: `${paddingTop}px`}} />
+            </tr>
+          )}
+          {virtualRows.map(virtualRow => {
+            const row = rows[virtualRow.index] as Row<RowType>;
+            return (
+              <tr key={row.id}>
+                {row.getVisibleCells().map(cell => {
                   return (
-                    <th
-                      key={header.id}
-                      colSpan={header.colSpan}
-                      style={{width: header.getSize()}}>
-                      {header.isPlaceholder ? null : (
-                        <div
-                          {...{
-                            className: header.column.getCanSort()
-                              ? 'cursor-pointer select-none'
-                              : '',
-                            onClick: header.column.getToggleSortingHandler(),
-                          }}>
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                          {{
-                            asc: ' 🔼',
-                            desc: ' 🔽',
-                          }[header.column.getIsSorted() as string] ?? null}
-                        </div>
+                    <td key={cell.id}>
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
                       )}
-                    </th>
+                    </td>
                   );
                 })}
               </tr>
-            ))}
-          </thead>
-          <tbody>
-            {paddingTop > 0 && (
-              <tr>
-                <td style={{height: `${paddingTop}px`}} />
-              </tr>
-            )}
-            {virtualRows.map(virtualRow => {
-              const row = rows[virtualRow.index] as Row<RowType>;
-              return (
-                <tr key={row.id}>
-                  {row.getVisibleCells().map(cell => {
-                    return (
-                      <td key={cell.id}>
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-            {paddingBottom > 0 && (
-              <tr>
-                <td style={{height: `${paddingBottom}px`}} />
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            );
+          })}
+          {paddingBottom > 0 && (
+            <tr>
+              <td style={{height: `${paddingBottom}px`}} />
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
