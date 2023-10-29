@@ -1,9 +1,10 @@
 'use client';
 
-import {useCallback, useState} from 'react';
+import {useCallback, useState, useMemo} from 'react';
 import ini from 'ini';
+import SongsTable from './SongsTable';
 
-type SongAccumulator = Array<{
+export type SongAccumulator = Array<{
   artist: string;
   song: string;
   lastModified: number;
@@ -60,8 +61,10 @@ async function processSongDirectory(
 
 export default function SongsPicker() {
   const [counter, setCounter] = useState(0);
+  const [songs, setSongs] = useState(null);
 
   const handler = useCallback(async () => {
+    setSongs(null);
     setCounter(0);
     const directoryHandle = await window.showDirectoryPicker();
     const songs: SongAccumulator = [];
@@ -70,6 +73,7 @@ export default function SongsPicker() {
       setCounter(n => n + 1),
     );
 
+    setSongs(songs);
     console.log(songs);
   }, [setCounter]);
 
@@ -77,6 +81,7 @@ export default function SongsPicker() {
     <>
       <button onClick={() => handler()}>Scan Clone Hero Songs Library</button>
       <h1>{counter} songs scanned</h1>
+      {songs && <SongsTable songs={songs} />}
     </>
   );
 }
