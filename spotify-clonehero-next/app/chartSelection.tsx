@@ -9,7 +9,13 @@ export type ChartResponse = {
   link: string;
 };
 
-export function selectChart(charts: ChartResponse[]): ChartResponse {
+export type ChartInfo = {
+  charter: string;
+  uploadedAt: string;
+  diff_drums: number | null;
+};
+
+export function selectChart<T extends ChartInfo>(charts: T[]): T {
   let recommendedChart = charts[0];
 
   for (let chartIndex = 1; chartIndex < charts.length; chartIndex++) {

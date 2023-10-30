@@ -6,6 +6,7 @@ import SongsTable from './SongsTable';
 
 import searchForChart from './searchForChart';
 import {ChartResponse} from './chartSelection';
+import {compareToCurrentChart} from './compareToCurrentChart';
 
 export type RecommendedChart =
   | {
@@ -31,6 +32,7 @@ export type SongAccumulator = {
     artist: string;
     name: string;
     charter: string;
+    diff_drums: number;
   };
   recommendedChart: RecommendedChart;
 };
@@ -88,6 +90,7 @@ async function processSongDirectory(
 type SongState = {
   songs: SongAccumulator[] | null;
   songsCounted: number;
+  songsCheckedForUpdates: number;
 };
 
 type SongStateActions =
@@ -110,7 +113,7 @@ type SongStateActions =
 function songsReducer(state: SongState, action: SongStateActions): SongState {
   switch (action.type) {
     case 'reset':
-      return {songs: null, songsCounted: 0};
+      return {songs: null, songsCounted: 0, songsCheckedForUpdates: 0};
     case 'increment-counter':
       return {...state, songsCounted: state.songsCounted + 1};
     case 'set-songs':
@@ -122,12 +125,12 @@ function songsReducer(state: SongState, action: SongStateActions): SongState {
 
       return {
         ...state,
+        songsCheckedForUpdates: state.songsCheckedForUpdates + 1,
         songs: state.songs.toSpliced(state.songs.indexOf(action.song), 1, {
           ...action.song,
           recommendedChart: action.recommendation,
         }),
       };
-    // return {...state};
     default:
       throw new Error('unrecognized action');
   }
@@ -137,15 +140,21 @@ export default function SongsPicker() {
   const [songsState, songsDispatch] = useReducer(songsReducer, {
     songs: null,
     songsCounted: 0,
+    songsCheckedForUpdates: 0,
   });
-
-  const [chartUpdates, setChartUpdate] = useState<RecommendedChart[]>([]);
 
   const handler = useCallback(async () => {
     songsDispatch({
       type: 'reset',
     });
-    const directoryHandle = await window.showDirectoryPicker();
+    let directoryHandle;
+
+    try {
+      directoryHandle = await window.showDirectoryPicker();
+    } catch {
+      console.log('User canceled picker');
+      return;
+    }
     const songs: SongAccumulator[] = [];
 
     await processSongDirectory('Songs', directoryHandle, songs, () => {
@@ -166,16 +175,35 @@ export default function SongsPicker() {
     }
 
     for await (const song of songsState.songs) {
+      let recommendation: RecommendedChart;
+
       const recommendedChart = await searchForChart(song.artist, song.song);
 
-      debugger;
+      if (recommendedChart == null) {
+        recommendation = {
+          type: 'best-chart-installed',
+        };
+      } else {
+        const result = compareToCurrentChart(song, recommendedChart);
+
+        if (result == 'current') {
+          recommendation = {
+            type: 'best-chart-installed',
+          };
+        } else if (result == 'new') {
+          recommendation = {
+            type: 'better-chart-found',
+            betterChart: recommendedChart,
+          };
+        } else {
+          throw new Error('Unexpected chart comparison');
+        }
+      }
 
       songsDispatch({
         type: 'set-recommendation',
         song,
-        recommendation: {
-          type: 'best-chart-installed',
-        },
+        recommendation,
       });
     }
   }, [songsState.songs]);
@@ -185,9 +213,12 @@ export default function SongsPicker() {
       <button onClick={() => handler()}>Scan Clone Hero Songs Library</button>
       <h1>{songsState.songsCounted} songs scanned</h1>
       {songsState.songs && (
-        <button onClick={() => checkForUpdates()}>
-          Check Chorus for Updated Charts
-        </button>
+        <>
+          <button onClick={() => checkForUpdates()}>
+            Check Chorus for Updated Charts
+          </button>
+          <h1>{songsState.songsCheckedForUpdates} songs checked for updates</h1>
+        </>
       )}
       {songsState.songs && <SongsTable songs={songsState.songs} />}
     </>

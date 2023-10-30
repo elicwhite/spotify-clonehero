@@ -8,7 +8,7 @@ export default async function search(
 ): Promise<ChartResponse> {
   // TODO this needs a useTransition
   const result = await searchForChart(artist, song);
-  const charts = JSON.parse(result);
+  const charts: ChartResponse[] = JSON.parse(result);
 
   const selectedChart = selectChart(charts);
   return selectedChart;
