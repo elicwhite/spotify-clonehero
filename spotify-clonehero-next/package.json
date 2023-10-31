@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@headlessui/react": "^1.7.17",
     "@tanstack/react-table": "^8.10.7",
     "@types/react-icons": "^3.0.0",
     "@types/wicg-file-system-access": "^2023.10.2",

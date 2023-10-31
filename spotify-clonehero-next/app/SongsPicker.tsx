@@ -23,17 +23,19 @@ export type RecommendedChart =
       betterChart: ChartResponse;
     };
 
+export type SongIniData = {
+  name: string;
+  artist: string;
+  charter: string;
+  diff_drums: number;
+};
+
 export type SongAccumulator = {
   artist: string;
   song: string;
   lastModified: number;
   charter: string;
-  data: {
-    artist: string;
-    name: string;
-    charter: string;
-    diff_drums: number;
-  };
+  data: SongIniData;
   recommendedChart: RecommendedChart;
 };
 

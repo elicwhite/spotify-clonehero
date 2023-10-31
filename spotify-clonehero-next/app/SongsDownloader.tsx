@@ -7,7 +7,7 @@ import {SngStream} from 'parse-sng';
 // 'https://www.enchor.us/download?md5=0acb9bad1d27efe83af51587bd20de0a&isSng=true';
 const URL = 'https://files.enchor.us/0acb9bad1d27efe83af51587bd20de0a.sng';
 
-const songIniOrder = [
+export const songIniOrder = [
   'name',
   'artist',
   'album',
@@ -36,7 +36,7 @@ const songIniOrder = [
   'video_start_time',
   'five_lane_drums',
   'pro_drums',
-];
+] as const;
 function createSongIniString(metadata: {[key: string]: string}): string {
   const metadataMap = new Map(Object.entries(metadata));
 
