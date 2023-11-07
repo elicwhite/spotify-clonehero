@@ -1,6 +1,13 @@
 'use client';
 
-import {useCallback, useState, useMemo, useReducer} from 'react';
+import {
+  useCallback,
+  useState,
+  useMemo,
+  useReducer,
+  useRef,
+  useEffect,
+} from 'react';
 import ini from 'ini';
 import SongsTable from './SongsTable';
 
@@ -145,7 +152,16 @@ export default function SongsPicker() {
     songsCheckedForUpdates: 0,
   });
 
+  const [shouldAbortUpdateChecking, setShouldAbortUpdateChecking] =
+    useState(false);
+  const shouldAbortUpdateCheckingRef = useRef(false);
+
+  useEffect(() => {
+    shouldAbortUpdateCheckingRef.current = shouldAbortUpdateChecking;
+  }, [shouldAbortUpdateChecking]);
+
   const handler = useCallback(async () => {
+    setShouldAbortUpdateChecking(false);
     songsDispatch({
       type: 'reset',
     });
@@ -207,8 +223,12 @@ export default function SongsPicker() {
         song,
         recommendation,
       });
+
+      if (shouldAbortUpdateCheckingRef.current) {
+        break;
+      }
     }
-  }, [songsState.songs]);
+  }, [songsState.songs, shouldAbortUpdateChecking]);
 
   return (
     <>
@@ -220,9 +240,20 @@ export default function SongsPicker() {
             Check Chorus for Updated Charts
           </button>
           <h1>{songsState.songsCheckedForUpdates} songs checked for updates</h1>
+          {songsState.songsCheckedForUpdates > 0 &&
+            !shouldAbortUpdateChecking && (
+              <button
+                onClick={() => {
+                  setShouldAbortUpdateChecking(true);
+                  debugger;
+                }}>
+                Stop checking for updates!
+              </button>
+            )}
         </>
       )}
       {songsState.songs && <SongsTable songs={songsState.songs} />}
     </>
   );
 }
+``;
