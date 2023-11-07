@@ -106,3 +106,28 @@ test('select more recent chart when both are from the same charter', () => {
   ]);
   expect(selectedChart.link).toBe('2');
 });
+
+xtest('select the first chart if the charts are the same', () => {
+  // As an implementation detail of chart comparison, we need the first one to be stable
+
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  const chart1 = createChartFixture({
+    charter: 'good',
+    diff_drums: 8,
+    uploadedAt: yesterday,
+    link: '1',
+  });
+
+  const chart2 = createChartFixture({
+    charter: 'good',
+    diff_drums: 8,
+    uploadedAt: yesterday,
+    link: '1',
+  });
+
+  const selectedChart = selectChart([chart1, chart2]);
+  expect(selectedChart.link).toBe(chart1);
+});

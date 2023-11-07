@@ -9,6 +9,17 @@ export type ChartResponse = {
   link: string;
 };
 
+export type ChartResponseEncore = {
+  name: string;
+  artist: string;
+  charter: string;
+  diff_drums: number;
+  diff_guitar: number;
+  modifiedTime: string;
+  md5: string;
+  link: string;
+};
+
 export type ChartInfo = {
   charter: string;
   uploadedAt: string;

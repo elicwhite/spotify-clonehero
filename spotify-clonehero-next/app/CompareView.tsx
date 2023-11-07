@@ -7,7 +7,9 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 
-type NullableSongIniData = {[P in keyof SongIniData]: SongIniData[P] | null};
+type NullableSongIniData = {
+  [P in keyof SongIniData]: SongIniData[P] | null;
+};
 // type NullableSongIniData = {
 //   [K in (typeof songIniOrder)[number]]: SongIniData[K] | null;
 // };
@@ -15,7 +17,17 @@ type NullableSongIniData = {[P in keyof SongIniData]: SongIniData[P] | null};
 export default function CompareView<
   T extends NullableSongIniData,
   U extends NullableSongIniData,
->({currentChart, recommendedChart}: {currentChart: T; recommendedChart: U}) {
+>({
+  currentChart,
+  currentModified,
+  recommendedChart,
+  recommendedModified,
+}: {
+  currentChart: T;
+  currentModified: Date;
+  recommendedChart: U;
+  recommendedModified: Date;
+}) {
   return (
     <div className="bg-white dark:bg-slate-800 overflow-y-auto">
       <div className="px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
@@ -34,6 +46,17 @@ export default function CompareView<
             </tr>
           </thead>
           <tbody>
+            <tr>
+              <td className="border-b border-slate-100 dark:border-slate-700 p-1 pl-8 text-slate-500 dark:text-slate-400 text-left">
+                Last Modified
+              </td>
+              <td className="border-b border-slate-100 dark:border-slate-700 p-1 pl-8 text-slate-500 dark:text-slate-400 text-left">
+                {currentModified.toISOString()}
+              </td>
+              <td className="border-b border-slate-100 dark:border-slate-700 p-1 pl-8 text-slate-500 dark:text-slate-400 text-left">
+                {recommendedModified.toISOString()}
+              </td>
+            </tr>
             {songIniOrder
               .map(key => {
                 // @ts-ignore Need to fix the types of the chart data
@@ -46,7 +69,7 @@ export default function CompareView<
                 }
 
                 return (
-                  <tr>
+                  <tr key={key}>
                     <td className="border-b border-slate-100 dark:border-slate-700 p-1 pl-8 text-slate-500 dark:text-slate-400 text-left">
                       {key}
                     </td>
@@ -89,5 +112,4 @@ export default function CompareView<
       </div>
     </div>
   );
-  return <h1>Review!</h1>;
 }

@@ -168,7 +168,7 @@ export default function SongsTable({songs}: {songs: SongAccumulator[]}) {
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    debugTable: true,
+    debugTable: false,
   });
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -224,8 +224,14 @@ export default function SongsTable({songs}: {songs: SongAccumulator[]}) {
                     <Dialog.Panel className="relative transform rounded-lg shadow-xl ring-1 ring-slate-900/5 transition-all sm:my-8 sm:w-full sm:max-w-3xl">
                       <CompareView
                         currentChart={currentlyReviewing.data}
+                        currentModified={currentlyReviewing.lastModified}
                         recommendedChart={
                           currentlyReviewing.recommendedChart.betterChart
+                        }
+                        recommendedModified={
+                          new Date(
+                            currentlyReviewing.recommendedChart.betterChart.uploadedAt,
+                          )
                         }
                       />
                     </Dialog.Panel>

@@ -11,7 +11,9 @@ import {
 import ini from 'ini';
 import SongsTable from './SongsTable';
 
-import searchForChart from './searchForChart';
+import searchForChart, {
+  searchEncore as searchForChartEncore,
+} from './searchForChart';
 import {ChartResponse} from './chartSelection';
 import {compareToCurrentChart} from './compareToCurrentChart';
 
@@ -195,7 +197,10 @@ export default function SongsPicker() {
     for await (const song of songsState.songs) {
       let recommendation: RecommendedChart;
 
-      const recommendedChart = await searchForChart(song.artist, song.song);
+      const recommendedChart = await searchForChartEncore(
+        song.artist,
+        song.song,
+      );
 
       if (recommendedChart == null) {
         recommendation = {
@@ -245,7 +250,6 @@ export default function SongsPicker() {
               <button
                 onClick={() => {
                   setShouldAbortUpdateChecking(true);
-                  debugger;
                 }}>
                 Stop checking for updates!
               </button>
@@ -256,4 +260,3 @@ export default function SongsPicker() {
     </>
   );
 }
-``;
