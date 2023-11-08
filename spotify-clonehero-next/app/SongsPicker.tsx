@@ -233,7 +233,7 @@ export default function SongsPicker() {
         break;
       }
     }
-  }, [songsState.songs, shouldAbortUpdateChecking]);
+  }, [songsState.songs]);
 
   return (
     <>

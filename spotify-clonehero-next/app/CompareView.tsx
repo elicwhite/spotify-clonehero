@@ -38,10 +38,10 @@ export default function CompareView<
                 Key
               </th>
               <th className="pt-8 font-medium p-4 pl-8 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left">
-                Current Chart's Value
+                Current Chart&apos;s Value
               </th>
               <th className="pt-8 font-medium p-4 pl-8 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left">
-                New Chart's Value
+                New Chart&apos;s Value
               </th>
             </tr>
           </thead>
