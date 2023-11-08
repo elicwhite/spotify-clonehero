@@ -3611,14 +3611,6 @@ parse-json@^5.2.0:
     json-parse-even-better-errors "^2.3.0"
     lines-and-columns "^1.1.6"
 
-parse-sng@^3.0.5:
-  version "3.0.5"
-  resolved "https://registry.yarnpkg.com/parse-sng/-/parse-sng-3.0.5.tgz#03172f741d5d2ab0f8029597aed720507f3048a6"
-  integrity sha512-RLxKkB/gC8+iqS0EXZIYalmC9UxjAp+So6C6VEMfrKmNVKeJ49Jy2R20WFUQdV2gSkOtdsgbO1/Jtr62U/VuBQ==
-  dependencies:
-    binary-parser "^2.2.1"
-    events "^3.3.0"
-
 parse-sng@^3.1.0:
   version "3.1.0"
   resolved "https://registry.yarnpkg.com/parse-sng/-/parse-sng-3.1.0.tgz#58605eae632bf2a254bb3f436a3bb50e65eadb5e"
@@ -4027,10 +4019,8 @@ sanitize-filename@^1.6.3:
   dependencies:
     truncate-utf8-bytes "^1.0.0"
 
-scan-chart@^3.3.2:
+scan-chart@../scan-chart-web/:
   version "3.3.2"
-  resolved "https://registry.yarnpkg.com/scan-chart/-/scan-chart-3.3.2.tgz#e5c179d82bb4664816e417f574e4c7a6011f4eae"
-  integrity sha512-ubZV4XV8nXZhS2D4Ud/K+KVX2OyxasT4TAAcJql7VXwYnb4J4jdJMzW7AyZERIil7upXKfjsSU77tglC8xvc5g==
   dependencies:
     bottleneck "^2.19.5"
     charset-detector "^0.0.2"
