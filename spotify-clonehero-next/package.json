@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build:scan-chart-web": "cd ../scan-chart-web && pnpm i && pnpm run build && cd ../spotify-clonehero-next",
-    "build": "build:scan-chart-web && yarn run jest && next build",
+    "build": "yarn run build:scan-chart-web && yarn run jest && next build",
     "start": "next start",
     "lint": "next lint"
   },
