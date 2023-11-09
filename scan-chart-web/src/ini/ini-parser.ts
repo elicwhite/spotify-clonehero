@@ -1,49 +1,51 @@
-import { CachedFile } from 'src/cached-file'
-import { getEncoding } from '../utils'
+import {CachedFile} from 'src/cached-file';
+import {getEncoding} from '../utils';
 
-export const $NoSection: unique symbol = Symbol('Lines before any sections')
+export const $NoSection: unique symbol = Symbol('Lines before any sections');
 export interface IniObject {
-	[$NoSection]?: { [key: string]: string }
-	[section: string]: { [key: string]: string }
+  [$NoSection]?: {[key: string]: string};
+  [section: string]: {[key: string]: string};
 }
 
 function createParseError(line: string) {
-	return `Unsupported type of line: "${line}"`
+  return `Unsupported type of line: "${line}"`;
 }
 
 function decode(data: string) {
-	const iniObject: IniObject = {}
-	const iniErrors: string[] = []
+  const iniObject: IniObject = {};
+  const iniErrors: string[] = [];
 
-	let currentSection = ''
+  let currentSection = '';
 
-	const lines = data.split(/\r?\n/g).map(line => line.trim())
-	for (const line of lines) {
-		if ((line.length === 0) || (line.startsWith(';'))) { continue }
+  const lines = data.split(/\r?\n/g).map(line => line.trim());
+  for (const line of lines) {
+    if (line.length === 0 || line.startsWith(';')) {
+      continue;
+    }
 
-		if (line[0].startsWith('[')) {
-			const match = /\[(.+)]$/.exec(line)
-			if (match === null) {
-				iniErrors.push(createParseError(line))
-			} else {
-				currentSection = match[1].trim()
-			}
-		} else if (line.includes('=')) {
-			const delimeterPos = line.indexOf('=')
-			const key = line.slice(0, delimeterPos).trim()
-			const value = line.slice(delimeterPos + 1).trim()
+    if (line[0].startsWith('[')) {
+      const match = /\[(.+)]$/.exec(line);
+      if (match === null) {
+        iniErrors.push(createParseError(line));
+      } else {
+        currentSection = match[1].trim();
+      }
+    } else if (line.includes('=')) {
+      const delimeterPos = line.indexOf('=');
+      const key = line.slice(0, delimeterPos).trim();
+      const value = line.slice(delimeterPos + 1).trim();
 
-			if (currentSection === '') {
-				(iniObject[$NoSection] ??= {})[key] = value
-			} else {
-				(iniObject[currentSection] ??= {})[key] = value
-			}
-		} else {
-			iniErrors.push(createParseError(line))
-		}
-	}
+      if (currentSection === '') {
+        (iniObject[$NoSection] ??= {})[key] = value;
+      } else {
+        (iniObject[currentSection] ??= {})[key] = value;
+      }
+    } else {
+      iniErrors.push(createParseError(line));
+    }
+  }
 
-	return { iniObject, iniErrors }
+  return {iniObject, iniErrors};
 }
 
 /**
@@ -51,7 +53,9 @@ function decode(data: string) {
  * @returns the `IIniObject` object corresponding with the ".ini" file at `filepath`.
  */
 export function parseIni(file: CachedFile) {
-	const encoding = getEncoding(file.data)
-	const iniText = file.data.toString(encoding)
-	return decode(iniText)
+  // I don't know how to detect other encodings with the Web APIs. Only supporting UTF-8
+  return decode(new TextDecoder().decode(file.data));
+  // const encoding = getEncoding(file.data)
+  // const iniText = file.data.toString(encoding)
+  // return decode(iniText)
 }

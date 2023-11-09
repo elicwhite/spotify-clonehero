@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "es2016",
-    "module": "CommonJS",
+    "module": "esnext",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "moduleResolution": "node",
 		"esModuleInterop": true,
     "declaration": true,
     "emitDecoratorMetadata": true,
@@ -17,7 +19,8 @@
     "strictBindCallApply": true,
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
-		"typeRoots": ["src/@types"],
+		"typeRoots": ["./node_modules/@types", "src/@types"],
+    // "types": ["node"],
 		"noErrorTruncation": true,
     "noEmit": true
   }
