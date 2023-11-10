@@ -3818,10 +3818,10 @@ sanitize-filename@^1.6.3:
   dependencies:
     truncate-utf8-bytes "^1.0.0"
 
-scan-chart-web@^3.3.3:
-  version "3.3.3"
-  resolved "https://registry.yarnpkg.com/scan-chart-web/-/scan-chart-web-3.3.3.tgz#913a9569a826f46e119a4136361a4e7530c563ad"
-  integrity sha512-x0f9LqJhV66y+9ECjLol37JezaxOQ5UvVOx7umTHu/JDSUqhYKRA1gJQ6DvXi2Aeyyxx1mxiU1fYVq/zbckpZg==
+scan-chart-web@3.3.4:
+  version "3.3.4"
+  resolved "https://registry.yarnpkg.com/scan-chart-web/-/scan-chart-web-3.3.4.tgz#6630deb931247a50a8b851419e4c552f7d3d50a2"
+  integrity sha512-aoqNTgtsYxfiFYgg859EnAgJbHYoodLmBW+EgnJYUpOUoZ1Zt85DiYs9GnNVyT7kWLdUp5c0NWmuRh4hAyZp5Q==
   dependencies:
     bottleneck "^2.19.5"
     charset-detector "^0.0.2"
