@@ -63,7 +63,7 @@ class ChartsScanner {
 	 * Scans the charts in `chartsFolder` and its subfolders.
 	 */
 	public async scanChartsFolder() {
-		const chartFolders = await this.getChartFolders(this.chartsFolder)
+		const chartFolders = await this.getChartFolders(this.chartsFolder.name, this.chartsFolder)
 
 		if (chartFolders.length == 0) {
 			this.eventEmitter.emit('end', [])
@@ -119,7 +119,7 @@ class ChartsScanner {
 	/**
 	 * @returns valid chart folders in `path` and all its subdirectories.
 	 */
-	private async getChartFolders(directoryHandle: FileSystemDirectoryHandle) {
+	private async getChartFolders(path: string, directoryHandle: FileSystemDirectoryHandle) {
 		const chartFolders: { path: string; files: FileSystemFileHandle[] }[] = []
 
 		const files = []
@@ -129,20 +129,23 @@ class ChartsScanner {
 
 		const subfolders = _.chain(files)
 			.filter(f => f.kind == 'directory' && f.name !== '__MACOSX') // Apple should follow the principle of least astonishment (smh)
-			.map((f: FileSystemDirectoryHandle) => this.getChartFolders(f))
+			.map((f: FileSystemDirectoryHandle) => this.getChartFolders([path, f.name].join('/'), f))
 			.value()
 
 		chartFolders.push(..._.flatMap(await Promise.all(subfolders)))
 
 		const sngFiles = files.filter(f => f.kind != 'directory' && hasSngExtension(f.name))
-		chartFolders.push(...sngFiles.map((sf: FileSystemFileHandle) => ({ path: directoryHandle.name, files: [sf] })))
+		chartFolders.push(...sngFiles.map((sf: FileSystemFileHandle) => ({ path, files: [sf] })))
 
 		if (
 			!this.config.onlyScanSng &&
 			appearsToBeChartFolder(files.map(file => getExtension(file.name).substring(1))) &&
 			subfolders.length === 0 // Charts won't contain other charts
 		) {
-			chartFolders.push({ path: directoryHandle.name, files: files.filter(f => f.kind != 'directory') as FileSystemFileHandle[] })
+			chartFolders.push({
+				path,
+				files: files.filter(f => f.kind != 'directory') as FileSystemFileHandle[],
+			})
 			this.eventEmitter.emit('folder', directoryHandle.name)
 		}
 
