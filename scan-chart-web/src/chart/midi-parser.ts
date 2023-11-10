@@ -1,6 +1,19 @@
 import { createHash } from 'crypto'
 import * as _ from 'lodash'
-import { EVENT_DIVSYSEX, EVENT_META, EVENT_META_END_OF_TRACK, EVENT_META_LYRICS, EVENT_META_SET_TEMPO, EVENT_META_TEXT, EVENT_META_TIME_SIGNATURE, EVENT_META_TRACK_NAME, EVENT_MIDI, EVENT_MIDI_NOTE_ON, EVENT_SYSEX, MIDIEvent } from 'midievents'
+import {
+	EVENT_DIVSYSEX,
+	EVENT_META,
+	EVENT_META_END_OF_TRACK,
+	EVENT_META_LYRICS,
+	EVENT_META_SET_TEMPO,
+	EVENT_META_TEXT,
+	EVENT_META_TIME_SIGNATURE,
+	EVENT_META_TRACK_NAME,
+	EVENT_MIDI,
+	EVENT_MIDI_NOTE_ON,
+	EVENT_SYSEX,
+	MIDIEvent,
+} from 'midievents'
 import MIDIFile from 'midifile'
 
 import { Difficulty, EventType, Instrument, NotesData, TrackEvent } from '../interfaces'
@@ -99,7 +112,7 @@ class MidiParser {
 						case EVENT_META_END_OF_TRACK:
 							break // Ignored
 						case EVENT_META_TEXT: {
-							; (trackEvents[midiEvent.track!] ??= []).push(midiEvent)
+							(trackEvents[midiEvent.track!] ??= []).push(midiEvent)
 							break
 						}
 					}
@@ -107,11 +120,11 @@ class MidiParser {
 				}
 				case EVENT_SYSEX:
 				case EVENT_DIVSYSEX: {
-					; (trackEvents[midiEvent.track!] ??= []).push(midiEvent)
+					(trackEvents[midiEvent.track!] ??= []).push(midiEvent)
 					break
 				}
 				case EVENT_MIDI: {
-					; (trackEvents[midiEvent.track!] ??= []).push(midiEvent)
+					(trackEvents[midiEvent.track!] ??= []).push(midiEvent)
 					break
 				}
 			}
@@ -186,14 +199,14 @@ class MidiParser {
 					note === 103
 						? EventType.soloMarker
 						: note === 116
-							? EventType.starPower
-							: note >= 120 && note <= 124
-								? EventType.activationLane
-								: note === 126
-									? EventType.rollLaneSingle
-									: note === 127
-										? EventType.rollLaneDouble
-										: null,
+						? EventType.starPower
+						: note >= 120 && note <= 124
+						? EventType.activationLane
+						: note === 126
+						? EventType.rollLaneSingle
+						: note === 127
+						? EventType.rollLaneDouble
+						: null,
 				isStart: event.subtype === EVENT_MIDI_NOTE_ON,
 			}
 		}
@@ -205,8 +218,8 @@ class MidiParser {
 				(['guitarghl', 'guitarcoopghl', 'rhythmghl', 'bassghl'].includes(instrument)
 					? this.get6FretNoteType(note, difficulty)
 					: instrument === 'drums'
-						? this.getDrumsNoteType(note, difficulty)
-						: this.get5FretNoteType(note, difficulty)) ?? null,
+					? this.getDrumsNoteType(note, difficulty)
+					: this.get5FretNoteType(note, difficulty)) ?? null,
 			isStart: event.subtype === EVENT_MIDI_NOTE_ON,
 		}
 	}

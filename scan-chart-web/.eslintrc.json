@@ -17,7 +17,7 @@
         "plugin:@angular-eslint/recommended"
 			],
 			"rules": {
-				// "semi": "off",
+				"semi": "off",
 				"@typescript-eslint/semi": ["error", "never"],
 				"@typescript-eslint/consistent-type-definitions": "error",
 				"@typescript-eslint/dot-notation": "off",
@@ -70,22 +70,6 @@
 				"arrow-parens": ["error", "as-needed"],
 				"comma-dangle": ["error", "always-multiline"],
 				"prefer-arrow/prefer-arrow-functions": ["error", { "allowStandaloneDeclarations": true }]
-			}
-		},
-		{
-			"files": ["*.ts"],
-			"plugins": ["prettier"],
-			"extends": ["plugin:prettier/recommended"],
-			"rules": {
-				"prettier/prettier": ["error", {
-					"parser": "typescript",
-					"endOfLine": "auto",
-					"printWidth": 150,
-					"bracketSpacing": true,
-					"useTabs": true,
-					"semi": false,
-					"singleQuote": true
-				}]
 			}
 		},
 		{

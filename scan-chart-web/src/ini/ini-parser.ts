@@ -35,9 +35,9 @@ function decode(data: string) {
 			const value = line.slice(delimeterPos + 1).trim()
 
 			if (currentSection === '') {
-				; (iniObject[$NoSection] ??= {})[key] = value
+				(iniObject[$NoSection] ??= {})[key] = value
 			} else {
-				; (iniObject[currentSection] ??= {})[key] = value
+				(iniObject[currentSection] ??= {})[key] = value
 			}
 		} else {
 			iniErrors.push(createParseError(line))

@@ -264,10 +264,8 @@ class ChartParser {
 			}
 			case 'S': {
 				switch (value) {
-					case '2':
-						return EventType.starPower
-					case '64':
-						return EventType.activationLane
+					case '2': return EventType.starPower
+					case '64': return EventType.activationLane
 					case '65':
 						return EventType.rollLaneSingle
 					case '66':
