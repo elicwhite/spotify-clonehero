@@ -34,6 +34,8 @@
 				"@typescript-eslint/no-non-null-assertion": "off",
 				"@typescript-eslint/no-empty-function": ["error", { "allow": ["private-constructors"] }],
 				"brace-style": ["error", "1tbs", { "allowSingleLine": true }],
+				"@typescript-eslint/block-spacing": "error",
+				"indent": ["error", "tab"],
 				"id-blacklist": "off",
 				"id-match": "off",
 				"max-len": [

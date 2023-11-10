@@ -295,10 +295,10 @@ export interface Chart {
   /** Data describing properties of the .chart or .mid file. `undefined` if the .chart or .mid file couldn't be parsed. */
   notesData?: Overwrite<
     NotesData,
-    {maxNps: {notes: {type: keyof typeof EventType}[]}[]}
+    { maxNps: { notes: { type: keyof typeof EventType }[] }[] }
   >
   /** Issues with the chart files. */
-  folderIssues: {folderIssue: FolderIssueType; description: string}[]
+  folderIssues: { folderIssue: FolderIssueType; description: string }[]
   /** Issues with the chart's metadata. */
   metadataIssues: MetadataIssueType[]
   /** `true` if the chart has a video background. */
