@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build:scan-chart-web": "cd ../scan-chart-web && NODE_ENV=dev pnpm i && pnpm run build && cd ../spotify-clonehero-next",
-    "build": "yarn run build:scan-chart-web && yarn run jest && next build",
+    "build:scan-chart": "cd ../scan-chart && NODE_ENV=dev pnpm i && pnpm run build && cd ../spotify-clonehero-next",
+    "build": "yarn run build:scan-chart && yarn run jest && next build",
     "start": "next start",
     "lint": "next lint"
   },
@@ -23,7 +23,7 @@
     "react-icons": "^4.11.0",
     "react-loading-icons": "^1.1.0",
     "react-virtual": "^2.10.4",
-    "scan-chart": "../scan-chart-web/"
+    "scan-chart": "file:../scan-chart"
   },
   "devDependencies": {
     "@types/ini": "^1.3.32",
