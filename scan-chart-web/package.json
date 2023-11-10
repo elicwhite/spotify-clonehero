@@ -11,7 +11,8 @@
     "build": "tsup src/index.ts --format cjs,esm --dts",
     "test": "tsx src/test.ts",
     "release": "pnpm run build && changeset publish",
-    "lint": "tsc"
+    "lint": "tsc",
+    "eslint": "eslint src"
   },
   "repository": {
     "type": "git",

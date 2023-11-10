@@ -1,33 +1,33 @@
-import * as _ from 'lodash';
+import * as _ from 'lodash'
 
-import {CachedFile} from 'src/cached-file';
-import {FolderIssueType, MetadataIssueType} from '../interfaces';
-import {hasIniExtension, hasIniName, isArray, removeStyleTags} from '../utils';
-import {IniObject, parseIni} from './ini-parser';
+import {CachedFile} from 'src/cached-file'
+import {FolderIssueType, MetadataIssueType} from '../interfaces'
+import {hasIniExtension, hasIniName, isArray, removeStyleTags} from '../utils'
+import {IniObject, parseIni} from './ini-parser'
 
-type TypedSubset<O, K extends keyof O, T> = O[K] extends T ? K : never;
+type TypedSubset<O, K extends keyof O, T> = O[K] extends T ? K : never
 type StringProperties<O> = {
   [key in keyof O as TypedSubset<O, key, string>]: string;
-};
+}
 type NumberProperties<O> = {
   [key in keyof O as TypedSubset<O, key, number>]: number;
-};
+}
 type BooleanProperties<O> = {
   [key in keyof O as TypedSubset<O, key, boolean>]: boolean;
-};
+}
 
-type Metadata = typeof defaultMetadata;
-type CInputMetaStringKey = keyof StringProperties<InputMetadata>;
-type CMetaStringKey = keyof StringProperties<Metadata>;
-type CInputMetaNumberKey = keyof NumberProperties<InputMetadata>;
-type CMetaNumberKey = keyof NumberProperties<Metadata>;
-type CInputMetaBooleanKey = keyof BooleanProperties<InputMetadata>;
-type CMetaBooleanKey = keyof BooleanProperties<Metadata>;
+type Metadata = typeof defaultMetadata
+type CInputMetaStringKey = keyof StringProperties<InputMetadata>
+type CMetaStringKey = keyof StringProperties<Metadata>
+type CInputMetaNumberKey = keyof NumberProperties<InputMetadata>
+type CMetaNumberKey = keyof NumberProperties<Metadata>
+type CInputMetaBooleanKey = keyof BooleanProperties<InputMetadata>
+type CMetaBooleanKey = keyof BooleanProperties<Metadata>
 
 type InputMetadata = Metadata & {
-  frets: string;
-  track: number;
-};
+  frets: string
+  track: number
+}
 export const defaultMetadata = {
   name: 'Unknown Name',
   artist: 'Unknown Artist',
@@ -63,19 +63,19 @@ export const defaultMetadata = {
   five_lane_drums: false,
   pro_drums: false,
   end_events: true,
-};
+}
 
 class IniScanner {
-  public metadata: Metadata | null = null;
+  public metadata: Metadata | null = null
   public folderIssues: {folderIssue: FolderIssueType; description: string}[] =
-    [];
-  public metadataIssues: MetadataIssueType[] = [];
+    []
+  public metadataIssues: MetadataIssueType[] = []
 
   /** The ini object with parsed data from the song.ini file, or the notes.chart file if an ini doesn't exist */
-  private iniObject: IniObject;
+  private iniObject: IniObject
 
   private addFolderIssue(folderIssue: FolderIssueType, description: string) {
-    this.folderIssues.push({folderIssue, description});
+    this.folderIssues.push({folderIssue, description})
   }
 
   /**
@@ -86,52 +86,52 @@ class IniScanner {
     sngMetadata?: {[key: string]: string},
   ) {
     if (sngMetadata) {
-      this.iniObject = {song: sngMetadata};
+      this.iniObject = {song: sngMetadata}
     } else {
-      const iniChartFile = this.getIniChartFile(chartFolder);
+      const iniChartFile = this.getIniChartFile(chartFolder)
       if (!iniChartFile) {
-        return;
+        return
       }
 
-      const iniFile = this.getIniAtFile(iniChartFile);
+      const iniFile = this.getIniAtFile(iniChartFile)
       if (!iniFile) {
-        return;
+        return
       }
 
-      this.iniObject = iniFile;
-      this.iniObject.song = iniFile.song || iniFile.Song || iniFile.SONG;
+      this.iniObject = iniFile
+      this.iniObject.song = iniFile.song || iniFile.Song || iniFile.SONG
       if (iniFile.song === undefined) {
         this.addFolderIssue(
           'invalidMetadata',
           `"song.ini" doesn't have a "[Song]" section.`,
-        );
-        return;
+        )
+        return
       }
     }
 
-    this.extractIniMetadata();
-    this.findMetadataIssues();
+    this.extractIniMetadata()
+    this.findMetadataIssues()
   }
 
   /**
    * @returns the .ini file in this chart, or `null` if one wasn't found.
    */
   private getIniChartFile(chartFolder: CachedFile[]) {
-    let iniCount = 0;
-    let bestIni: CachedFile | null = null;
-    let lastIni: CachedFile | null = null;
+    let iniCount = 0
+    let bestIni: CachedFile | null = null
+    let lastIni: CachedFile | null = null
 
     for (const file of chartFolder) {
       if (hasIniExtension(file.name)) {
-        iniCount++;
-        lastIni = file;
+        iniCount++
+        lastIni = file
         if (!hasIniName(file.name)) {
           this.addFolderIssue(
             'invalidIni',
             `"${file.name}" is not named "song.ini".`,
-          );
+          )
         } else {
-          bestIni = file;
+          bestIni = file
         }
       }
     }
@@ -140,16 +140,16 @@ class IniScanner {
       this.addFolderIssue(
         'multipleIniFiles',
         `This chart has multiple .ini files.`,
-      );
+      )
     }
 
     if (bestIni !== null) {
-      return bestIni;
+      return bestIni
     } else if (lastIni !== null) {
-      return lastIni;
+      return lastIni
     } else {
-      this.addFolderIssue('noMetadata', `This chart doesn't have "song.ini".`);
-      return null;
+      this.addFolderIssue('noMetadata', `This chart doesn't have "song.ini".`)
+      return null
     }
   }
 
@@ -157,21 +157,21 @@ class IniScanner {
    * @returns an `IIniObject` derived from the .ini file at `file`, or `null` if the file couldn't be read.
    */
   private getIniAtFile(file: CachedFile) {
-    const {iniObject, iniErrors} = parseIni(file);
+    const {iniObject, iniErrors} = parseIni(file)
 
     for (const iniError of iniErrors.slice(-5)) {
       // Limit this if there are too many errors
-      this.addFolderIssue('badIniLine', _.truncate(iniError, {length: 200}));
+      this.addFolderIssue('badIniLine', _.truncate(iniError, {length: 200}))
     }
 
-    return iniObject;
+    return iniObject
   }
 
   /**
    * Stores all the metadata found in `this.iniFile.song` into `this.metadata` (uses default values if not found).
    */
   private extractIniMetadata() {
-    this.metadata = Object.assign({}, defaultMetadata);
+    this.metadata = Object.assign({}, defaultMetadata)
 
     // Charter may be stored in `this.iniFile.song.frets`
     const strings = [
@@ -183,14 +183,14 @@ class IniScanner {
       ['frets', 'charter'],
       'icon',
       'loading_phrase',
-    ] as const;
+    ] as const
     this.extractMetadataField<CInputMetaStringKey, CMetaStringKey>(
       this.extractMetadataString.bind(this),
       strings,
-    );
-    this.metadata.icon = this.metadata.icon?.toLowerCase(); // Icons are interpreted as lowercase in CH
+    )
+    this.metadata.icon = this.metadata.icon?.toLowerCase() // Icons are interpreted as lowercase in CH
     if (this.metadata.icon === this.metadata.charter?.toLowerCase()) {
-      this.metadata.icon = '';
+      this.metadata.icon = ''
     } // Setting `icon` can be redundant
 
     // album_track may be stored in `this.iniFile.song.track`
@@ -216,11 +216,11 @@ class IniScanner {
       'hopo_frequency',
       'multiplier_note',
       'video_start_time',
-    ] as const;
+    ] as const
     this.extractMetadataField<CInputMetaNumberKey, CMetaNumberKey>(
       this.extractMetadataInteger.bind(this),
       integers,
-    );
+    )
 
     const booleans = [
       'modchart',
@@ -228,11 +228,11 @@ class IniScanner {
       'five_lane_drums',
       'pro_drums',
       'end_events',
-    ] as const;
+    ] as const
     this.extractMetadataField<CInputMetaBooleanKey, CMetaBooleanKey>(
       this.extractMetadataBoolean.bind(this),
       booleans,
-    );
+    )
   }
 
   /**
@@ -251,12 +251,12 @@ class IniScanner {
   ) {
     fields.forEach(value => {
       if (isArray(value)) {
-        extractFunction(value[1], value[0]);
-        extractFunction(value[1]);
+        extractFunction(value[1], value[0])
+        extractFunction(value[1])
       } else {
-        extractFunction(value);
+        extractFunction(value)
       }
-    });
+    })
   }
 
   /**
@@ -267,9 +267,9 @@ class IniScanner {
     metadataField: CMetaStringKey,
     iniField?: Exclude<CInputMetaStringKey, CMetaStringKey>,
   ): void {
-    const value = this.iniObject.song[iniField ?? metadataField];
+    const value = this.iniObject.song[iniField ?? metadataField]
     if (value && !['', '0', '-1'].includes(value)) {
-      this.metadata![metadataField] = removeStyleTags(value);
+      this.metadata![metadataField] = removeStyleTags(value)
     }
   }
 
@@ -281,16 +281,16 @@ class IniScanner {
     metadataField: CMetaNumberKey,
     iniField?: Exclude<CInputMetaNumberKey, CMetaNumberKey>,
   ): void {
-    const value = parseFloat(this.iniObject.song[iniField ?? metadataField]);
+    const value = parseFloat(this.iniObject.song[iniField ?? metadataField])
     if (!isNaN(value) && value !== -1) {
-      const int = Math.round(value);
+      const int = Math.round(value)
       if (int !== value) {
         this.addFolderIssue(
           'badIniLine',
           `The "${iniField}" value in "song.ini" is "${value}", which is not an integer.`,
-        );
+        )
       }
-      this.metadata![metadataField] = int;
+      this.metadata![metadataField] = int
     }
   }
 
@@ -301,35 +301,35 @@ class IniScanner {
     metadataField: CMetaBooleanKey,
     iniField?: Exclude<CInputMetaBooleanKey, CMetaBooleanKey>,
   ): void {
-    const value = this.iniObject.song[iniField ?? metadataField];
+    const value = this.iniObject.song[iniField ?? metadataField]
     if (value === 'True' || value === '1') {
-      this.metadata![metadataField] = true;
+      this.metadata![metadataField] = true
     } else if (value === 'False' || value === '0') {
-      this.metadata![metadataField] = false;
+      this.metadata![metadataField] = false
     }
   }
 
   private findMetadataIssues() {
     if (this.metadata!.name === defaultMetadata.name) {
-      this.metadataIssues.push('noName');
+      this.metadataIssues.push('noName')
     }
     if (this.metadata!.artist === defaultMetadata.artist) {
-      this.metadataIssues.push('noArtist');
+      this.metadataIssues.push('noArtist')
     }
     if (this.metadata!.album === defaultMetadata.album) {
-      this.metadataIssues.push('noAlbum');
+      this.metadataIssues.push('noAlbum')
     }
     if (this.metadata!.genre === defaultMetadata.genre) {
-      this.metadataIssues.push('noGenre');
+      this.metadataIssues.push('noGenre')
     }
     if (this.metadata!.year === defaultMetadata.year) {
-      this.metadataIssues.push('noYear');
+      this.metadataIssues.push('noYear')
     }
     if (this.metadata!.charter === defaultMetadata.charter) {
-      this.metadataIssues.push('noCharter');
+      this.metadataIssues.push('noCharter')
     }
     if (this.metadata!.delay !== 0) {
-      this.metadataIssues.push('nonzeroDelay');
+      this.metadataIssues.push('nonzeroDelay')
     }
   }
 }
@@ -338,11 +338,11 @@ export function scanIni(
   chartFolder: CachedFile[],
   sngMetadata?: {[key: string]: string},
 ) {
-  const iniScanner = new IniScanner();
-  iniScanner.scan(chartFolder, sngMetadata);
+  const iniScanner = new IniScanner()
+  iniScanner.scan(chartFolder, sngMetadata)
   return {
     metadata: iniScanner.metadata,
     folderIssues: iniScanner.folderIssues,
     metadataIssues: iniScanner.metadataIssues,
-  };
+  }
 }

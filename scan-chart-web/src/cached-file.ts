@@ -1,13 +1,12 @@
-import {createHash} from 'crypto';
-import {createReadStream} from 'fs';
-import {constants, readFile, stat} from 'fs/promises';
-import {SngHeader, SngStream} from 'parse-sng';
-import {basename} from 'path';
-import {Readable} from 'stream';
-import {md5} from 'js-md5';
+import {createReadStream} from 'fs'
+import {constants, readFile, stat} from 'fs/promises'
+import {SngHeader, SngStream} from 'parse-sng'
+import {basename} from 'path'
+import {Readable} from 'stream'
+import {md5} from 'js-md5'
 
 export class CachedFile {
-  public name: string;
+  public name: string
 
   private constructor(
     public fileHandle: FileSystemFileHandle,
@@ -17,21 +16,21 @@ export class CachedFile {
     private _readStream: ReadableStream<Uint8Array> | null,
     name?: string,
   ) {
-    this.name = name ?? fileHandle.name;
+    this.name = name ?? fileHandle.name
   }
 
   static async build(fileHandle: FileSystemFileHandle) {
     if (fileHandle.kind != 'file') {
-      throw new Error(`Can't read file at ${fileHandle}; not a file`);
+      throw new Error(`Can't read file at ${fileHandle}; not a file`)
     }
 
-    const file = await fileHandle.getFile();
+    const file = await fileHandle.getFile()
 
-    const fileSizeMiB = file.size / 1024 / 1024;
+    const fileSizeMiB = file.size / 1024 / 1024
     if (fileSizeMiB < 2048) {
-      return new CachedFile(fileHandle, await file.arrayBuffer(), null);
+      return new CachedFile(fileHandle, await file.arrayBuffer(), null)
     } else {
-      return new CachedFile(fileHandle, null, file.stream());
+      return new CachedFile(fileHandle, null, file.stream())
     }
   }
 
@@ -109,9 +108,9 @@ export class CachedFile {
    */
   get data() {
     if (!this._data) {
-      throw new Error(`Can't store full file in a buffer; larger than 2 GiB.`);
+      throw new Error(`Can't store full file in a buffer; larger than 2 GiB.`)
     }
-    return this._data;
+    return this._data
   }
 
   /**
@@ -119,29 +118,26 @@ export class CachedFile {
    */
   get readStream() {
     if (this._data) {
-      return new Blob([this._data]).stream();
-      // return Readable.toWeb(
-      //   Readable.from(this._data),
-      // ) as ReadableStream<Uint8Array>;
+      return new Blob([this._data]).stream()
     } else {
-      return this._readStream!;
+      return this._readStream!
     }
   }
 
   async getMD5() {
-    const hash = md5.create();
+    const hash = md5.create()
 
-    const reader = this.readStream.getReader();
+    const reader = this.readStream.getReader()
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      const result = await reader.read();
+      const result = await reader.read()
       if (result.done) {
-        break;
+        break
       }
-      hash.update(result.value);
+      hash.update(result.value)
     }
 
-    return hash.hex();
+    return hash.hex()
   }
 }
