@@ -1,5 +1,4 @@
 import detect from 'charset-detector'
-import { parse } from 'path'
 
 /** Overwrites the type of a nested property in `T` with `U`. */
 export type Overwrite<T, U> = U extends object ? (
@@ -39,18 +38,26 @@ export function appearsToBeChartFolder(extensions: string[]) {
 	return (containsNotes || containsAudio)
 }
 
+export function getExtension(fileName: string) {
+	return '.' + fileName.toLowerCase().split('.').pop()!
+}
+
+export function getBasename(fileName: string) {
+	return fileName.slice(0, fileName.indexOf('.'))
+}
+
 /**
  * @returns `true` if `name` has a valid sng file extension.
  */
 export function hasSngExtension(name: string) {
-	return '.sng' === parse(name.toLowerCase()).ext
+	return '.sng' === getExtension(name)
 }
 
 /**
  * @returns `true` if `name` has a valid ini file extension.
  */
 export function hasIniExtension(name: string) {
-	return ('.ini' === parse(name.toLowerCase()).ext)
+	return ('.ini' === getExtension(name))
 }
 
 /**
@@ -64,7 +71,7 @@ export function hasIniName(name: string) {
  * @returns `true` if `name` has a valid chart file extension.
  */
 export function hasChartExtension(name: string) {
-	return (['.chart', '.mid'].includes(parse(name.toLowerCase()).ext))
+	return (['.chart', '.mid'].includes(getExtension(name)))
 }
 
 /**
@@ -78,7 +85,7 @@ export function hasChartName(name: string) {
  * @returns `true` if `name` has a valid chart audio file extension.
  */
 export function hasAudioExtension(name: string) {
-	return (['.ogg', '.mp3', '.wav', '.opus'].includes(parse(name.toLowerCase()).ext))
+	return (['.ogg', '.mp3', '.wav', '.opus'].includes(getExtension(name)))
 }
 
 /**
@@ -86,8 +93,8 @@ export function hasAudioExtension(name: string) {
  */
 export function hasAudioName(name: string) {
 	return (['song', 'guitar', 'bass', 'rhythm', 'keys', 'vocals', 'vocals_1', 'vocals_2',
-		'drums', 'drums_1', 'drums_2', 'drums_3', 'drums_4', 'crowd', 'preview'].includes(parse(name).name))
-		&& (['.ogg', '.mp3', '.wav', '.opus'].includes(parse(name).ext))
+		'drums', 'drums_1', 'drums_2', 'drums_3', 'drums_4', 'crowd', 'preview'].includes(getBasename(name)))
+		&& (['.ogg', '.mp3', '.wav', '.opus'].includes(getExtension(name)))
 }
 
 /**
@@ -101,14 +108,14 @@ export function hasAlbumName(name: string) {
  * @returns `true` if `name` is a valid video filename.
  */
 export function hasVideoName(name: string) {
-	return parse(name).name === 'video' && (['.mp4', '.avi', '.webm', '.vp8', '.ogv', '.mpeg'].includes(parse(name).ext))
+	return getBasename(name) === 'video' && (['.mp4', '.avi', '.webm', '.vp8', '.ogv', '.mpeg'].includes(getExtension(name)))
 }
 
 /**
  * @returns `true` if `name` is a video filename that is not supported on Linux.
  */
 export function hasBadVideoName(name: string) {
-	return parse(name).name === 'video' && (['.mp4', '.avi', '.mpeg'].includes(parse(name).ext))
+	return getBasename(name) === 'video' && (['.mp4', '.avi', '.mpeg'].includes(getExtension(name)))
 }
 
 /**

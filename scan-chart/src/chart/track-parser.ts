@@ -69,6 +69,7 @@ export class TrackParser {
 			this.notesData.hashes.push({
 				instrument: this.instrument,
 				difficulty: this.difficulty,
+				// TODO update with web
 				hash: createHash('md5').update(this.trackEvents.map(n => `${n.time}_${n.type}_${n.length}`).join(':')).digest('hex'),
 			})
 

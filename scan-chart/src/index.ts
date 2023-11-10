@@ -1,19 +1,12 @@
 import Bottleneck from 'bottleneck'
-import { createHash } from 'crypto'
-import EventEmitter from 'events'
-import { Dirent } from 'fs'
-import { readdir } from 'fs/promises'
+import { EventEmitter } from 'events'
 import * as _ from 'lodash'
-import { cpus } from 'os'
-import { join, parse, relative } from 'path'
 
-import { scanAudio } from './audio'
 import { CachedFile } from './cached-file'
 import { scanChart } from './chart'
-import { scanImage } from './image'
 import { defaultMetadata, scanIni } from './ini'
 import { Chart, EventType, ScanChartsConfig, ScannedChart } from './interfaces'
-import { appearsToBeChartFolder, hasSngExtension, RequireMatchingProps, Subset } from './utils'
+import { appearsToBeChartFolder, getExtension, hasSngExtension, RequireMatchingProps, Subset } from './utils'
 import { scanVideo } from './video'
 
 export * from './interfaces'
@@ -56,7 +49,7 @@ class ChartsScanner {
 
 	private config: ScanChartsConfig
 
-	constructor(private chartsFolder: string, config?: ScanChartsConfig) {
+	constructor(private chartsFolder: FileSystemDirectoryHandle, config?: ScanChartsConfig) {
 		this.config = {
 			onlyScanSng: false,
 			...config,
@@ -84,12 +77,13 @@ class ChartsScanner {
 				const isSng = chartFolder.files.length === 1 && hasSngExtension(chartFolder.files[0].name)
 
 				if (isSng) {
-					const { sngMetadata, files } = await CachedFile.buildFromSng(join(chartFolder.path, chartFolder.files[0].name))
-					chart = await this.scanChartFolder(files, sngMetadata)
+					throw new Error('sng files not yet supported')
+					// const { sngMetadata, files } = await CachedFile.buildFromSng(join(chartFolder.path, chartFolder.files[0].name))
+					// chart = await this.scanChartFolder(files, sngMetadata)
 				} else {
 					const chartFiles: CachedFile[] = []
 					await Promise.all(chartFolder.files.map(async file => {
-						chartFiles.push(await CachedFile.build(join(chartFolder.path, file.name)))
+						chartFiles.push(await CachedFile.build(file))
 					}))
 					chart = await this.scanChartFolder(chartFiles)
 				}
@@ -97,7 +91,7 @@ class ChartsScanner {
 				if (chart) {
 					const result: ScannedChart = {
 						chart,
-						chartPath: relative(this.chartsFolder, chartFolder.path),
+						chartPath: chartFolder.path,
 						chartFileName: isSng ? chartFolder.files[0].name : null,
 					}
 					charts.push(result)
@@ -123,28 +117,31 @@ class ChartsScanner {
 	/**
 	 * @returns valid chart folders in `path` and all its subdirectories.
 	 */
-	private async getChartFolders(path: string) {
-		const chartFolders: { path: string; files: Dirent[] }[] = []
+	private async getChartFolders(directoryHandle: FileSystemDirectoryHandle) {
+		const chartFolders: { path: string; files: FileSystemFileHandle[] }[] = []
 
-		const files = await readdir(path, { withFileTypes: true })
+		const files = []
+		for await (const subHandle of directoryHandle.values()) {
+			files.push(subHandle)
+		}
 
 		const subfolders = _.chain(files)
-			.filter(f => f.isDirectory() && f.name !== '__MACOSX') // Apple should follow the principle of least astonishment (smh)
-			.map(f => this.getChartFolders(join(path, f.name)))
+			.filter(f => f.kind == 'directory' && f.name !== '__MACOSX') // Apple should follow the principle of least astonishment (smh)
+			.map((f: FileSystemDirectoryHandle) => this.getChartFolders(f))
 			.value()
 
 		chartFolders.push(..._.flatMap(await Promise.all(subfolders)))
 
-		const sngFiles = files.filter(f => !f.isDirectory() && hasSngExtension(f.name))
-		chartFolders.push(...sngFiles.map(sf => ({ path, files: [sf] })))
+		const sngFiles = files.filter(f => f.kind != 'directory' && hasSngExtension(f.name))
+		chartFolders.push(...sngFiles.map((sf: FileSystemFileHandle) => ({ path: directoryHandle.name, files: [sf] })))
 
 		if (
 			!this.config.onlyScanSng &&
-			appearsToBeChartFolder(files.map(file => parse(file.name).ext.substring(1))) &&
+			appearsToBeChartFolder(files.map(file => getExtension(file.name).substring(1))) &&
 			subfolders.length === 0 // Charts won't contain other charts
 		) {
-			chartFolders.push({ path, files: files.filter(f => !f.isDirectory()) })
-			this.eventEmitter.emit('folder', relative(this.chartsFolder, path))
+			chartFolders.push({ path: directoryHandle.name, files: files.filter(f => f.kind != 'directory') as FileSystemFileHandle[] })
+			this.eventEmitter.emit('folder', directoryHandle.name)
 		}
 
 		return chartFolders
@@ -157,7 +154,7 @@ class ChartsScanner {
 			playable: true,
 		}
 
-		chart.md5 = await this.getChartMD5(chartFolder)
+		// chart.md5 = await this.getChartMD5(chartFolder)
 
 		const iniData = scanIni(chartFolder, sngMetadata)
 		chart.folderIssues.push(...iniData.folderIssues)
@@ -217,21 +214,21 @@ class ChartsScanner {
 		}
 		chart.chart_offset = chartData.metadata?.delay ?? 0
 
-		const imageData = await scanImage(chartFolder)
-		chart.folderIssues.push(...imageData.folderIssues)
-		if (imageData.albumBuffer) {
-			chart.albumArt = {
-				md5: createHash('md5').update(imageData.albumBuffer).digest('hex'),
-				data: imageData.albumBuffer,
-			}
-		}
+		// const imageData = await scanImage(chartFolder)
+		// chart.folderIssues.push(...imageData.folderIssues)
+		// if (imageData.albumBuffer) {
+		// 	chart.albumArt = {
+		// 		md5: createHash('md5').update(imageData.albumBuffer).digest('hex'),
+		// 		data: imageData.albumBuffer,
+		// 	}
+		// }
 
-		const audioData = await scanAudio(chartFolder, cpus().length - 1)
-		chart.folderIssues.push(...audioData.folderIssues)
+		// const audioData = await scanAudio(chartFolder, cpus().length - 1)
+		// chart.folderIssues.push(...audioData.folderIssues)
 
-		if (!chartData.notesData || chart.folderIssues.find(i => i!.folderIssue === 'noAudio') /* TODO: || !audioData.audioHash */) {
-			chart.playable = false
-		}
+		// if (!chartData.notesData || chart.folderIssues.find(i => i!.folderIssue === 'noAudio') /* TODO: || !audioData.audioHash */) {
+		// 	chart.playable = false
+		// }
 
 		const videoData = scanVideo(chartFolder)
 		chart.folderIssues.push(...videoData.folderIssues)
@@ -240,20 +237,20 @@ class ChartsScanner {
 		return chart as Chart
 	}
 
-	private async getChartMD5(chartFolder: CachedFile[]) {
-		const hash = createHash('md5')
-		for (const file of _.orderBy(chartFolder, f => f.name)) {
-			hash.update(file.name)
-			hash.update(await file.getMD5())
-		}
-		return hash.digest('hex')
-	}
+	// private async getChartMD5(chartFolder: CachedFile[]) {
+	// 	const hash = createHash('md5')
+	// 	for (const file of _.orderBy(chartFolder, f => f.name)) {
+	// 		hash.update(file.name)
+	// 		hash.update(await file.getMD5())
+	// 	}
+	// 	return hash.digest('hex')
+	// }
 }
 
 /**
  * Scans the charts in the `chartsFolder` directory and returns an event emitter that emits the results.
  */
-export function scanCharts(chartsFolder: string, config?: ScanChartsConfig) {
+export function scanCharts(chartsFolder: FileSystemDirectoryHandle, config?: ScanChartsConfig) {
 	const chartsScanner = new ChartsScanner(chartsFolder, config)
 	chartsScanner.scanChartsFolder()
 

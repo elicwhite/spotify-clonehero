@@ -24,14 +24,13 @@
   "dependencies": {
     "bottleneck": "^2.19.5",
     "charset-detector": "^0.0.2",
-    "fluent-ffmpeg": "^2.1.2",
+    "events": "^3.3.0",
+    "js-md5": "^0.8.3",
     "lodash": "^4.17.21",
     "midievents": "^2.0.0",
     "midifile": "^2.0.0",
     "parse-sng": "^3.1.0",
     "sanitize-filename": "^1.6.3",
-    "sharp": "^0.32.1",
-    "stream-audio-fingerprint": "git+https://github.com/Geomitron/stream-audio-fingerprint.git",
     "workerpool": "^6.4.0"
   },
   "devDependencies": {
@@ -42,9 +41,10 @@
     "@angular-eslint/template-parser": "^16.0.2",
     "@changesets/cli": "^2.26.1",
     "@types/charset-detector": "^0.0.1",
-    "@types/fluent-ffmpeg": "^2.1.21",
+    "@types/events": "^3.0.3",
     "@types/lodash": "^4.14.194",
     "@types/node": "^18.16.16",
+    "@types/wicg-file-system-access": "^2023.10.3",
     "@types/workerpool": "^6.4.0",
     "@typescript-eslint/eslint-plugin": "^5.59.7",
     "@typescript-eslint/parser": "^5.59.7",

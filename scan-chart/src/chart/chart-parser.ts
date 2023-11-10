@@ -2,7 +2,6 @@ import { createHash } from 'crypto'
 import * as _ from 'lodash'
 
 import { EventType, Instrument, NotesData, TrackEvent } from '../interfaces'
-import { getEncoding } from '../utils'
 import { TrackParser } from './track-parser'
 
 export type ChartMetadata = ReturnType<ChartParser['getMetadata']>
@@ -397,8 +396,8 @@ function getFileSections(chartText: string) {
  * @returns the `notesData` and `notesMetadata` objects corresponding with the ".chart" file in `buffer`.
  */
 export function parseChart(buffer: Buffer) {
-	const encoding = getEncoding(buffer)
-	const chartText = buffer.toString(encoding)
+	// I don't know how to detect other encodings with the Web APIs. Only supporting UTF-8
+	const chartText = new TextDecoder().decode(buffer)
 	const fileSections = getFileSections(chartText) ?? {}
 	return new ChartParser(fileSections).parse()
 }

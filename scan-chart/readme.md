@@ -1,3 +1,5 @@
+This is a fork of https://github.com/Geomitron/scan-chart to work with Web APIs instead of local `fs` calls. Ideally we'll upstream changes to be able to reuse.
+
 This package scans charts for rhythm games like Clone Hero and produces useful metadata about them.
 
 # API

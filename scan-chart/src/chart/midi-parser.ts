@@ -404,7 +404,7 @@ class MidiParser {
 /**
  * @returns the `notesData` object corresponding with the ".mid" file in `buffer`.
  */
-export function parseMidi(buffer: Buffer) {
+export function parseMidi(buffer: ArrayBuffer) {
 	const midiFile = new MIDIFile(buffer)
 	return new MidiParser(midiFile).parse()
 }

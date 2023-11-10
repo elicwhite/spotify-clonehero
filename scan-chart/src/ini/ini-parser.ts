@@ -1,5 +1,4 @@
 import { CachedFile } from 'src/cached-file'
-import { getEncoding } from '../utils'
 
 export const $NoSection: unique symbol = Symbol('Lines before any sections')
 export interface IniObject {
@@ -51,7 +50,6 @@ function decode(data: string) {
  * @returns the `IIniObject` object corresponding with the ".ini" file at `filepath`.
  */
 export function parseIni(file: CachedFile) {
-	const encoding = getEncoding(file.data)
-	const iniText = file.data.toString(encoding)
-	return decode(iniText)
+	// I don't know how to detect other encodings with the Web APIs. Only supporting UTF-8
+	return decode(new TextDecoder().decode(file.data))
 }
