@@ -1,7 +1,7 @@
 {
-  "name": "scan-chart",
+  "name": "scan-chart-web",
   "version": "3.3.3",
-  "author": "Geo",
+  "author": "Geo & Eli",
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -15,12 +15,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/Geomitron/scan-chart.git"
+    "url": "git+ssh://git@github.com/TheSavior/scan-chart-web.git.git"
   },
   "bugs": {
-    "url": "https://github.com/Geomitron/scan-chart/issues"
+    "url": "https://github.com/TheSavior/scan-chart-web.git/issues"
   },
-  "homepage": "https://github.com/Geomitron/scan-chart#readme",
+  "homepage": "https://github.com/TheSavior/scan-chart-web.git#readme",
   "dependencies": {
     "bottleneck": "^2.19.5",
     "charset-detector": "^0.0.2",
