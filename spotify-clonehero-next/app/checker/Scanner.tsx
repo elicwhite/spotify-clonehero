@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback} from 'react';
-import {scanCharts} from 'scan-chart';
+import {scanCharts} from 'scan-chart-web';
 
 export default function Scanner() {
   const handler = useCallback(async () => {
