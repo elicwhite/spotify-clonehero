@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { md5 } from 'js-md5'
 import * as _ from 'lodash'
 
 import { EventType, Instrument, NotesData, TrackEvent } from '../interfaces'
@@ -184,10 +184,10 @@ class ChartParser {
 		}
 
 		// Add tempo map hash
-		this.notesData.tempoMapHash = createHash('md5')
+		this.notesData.tempoMapHash = md5.create()
 			.update(this.tempoMap.map(t => `${t.time}_${t.bpm}`).join(':'))
 			.update(this.timeSignatures.map(t => t.value).join(':'))
-			.digest('hex')
+			.hex()
 		this.notesData.tempoMarkerCount = this.tempoMap.length
 
 		// Add lengths

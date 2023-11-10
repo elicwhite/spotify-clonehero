@@ -1,9 +1,11 @@
 import Bottleneck from 'bottleneck'
 import { EventEmitter } from 'events'
+import { md5 } from 'js-md5'
 import * as _ from 'lodash'
 
 import { CachedFile } from './cached-file'
 import { scanChart } from './chart'
+import { scanImage } from './image'
 import { defaultMetadata, scanIni } from './ini'
 import { Chart, EventType, ScanChartsConfig, ScannedChart } from './interfaces'
 import { appearsToBeChartFolder, getExtension, hasSngExtension, RequireMatchingProps, Subset } from './utils'
@@ -153,7 +155,7 @@ class ChartsScanner {
 			playable: true,
 		}
 
-		// chart.md5 = await this.getChartMD5(chartFolder)
+		chart.md5 = await this.getChartMD5(chartFolder)
 
 		const iniData = scanIni(chartFolder, sngMetadata)
 		chart.folderIssues.push(...iniData.folderIssues)
@@ -213,21 +215,21 @@ class ChartsScanner {
 		}
 		chart.chart_offset = chartData.metadata?.delay ?? 0
 
-		// const imageData = await scanImage(chartFolder)
-		// chart.folderIssues.push(...imageData.folderIssues)
-		// if (imageData.albumBuffer) {
-		// 	chart.albumArt = {
-		// 		md5: createHash('md5').update(imageData.albumBuffer).digest('hex'),
-		// 		data: imageData.albumBuffer,
-		// 	}
-		// }
+		const imageData = await scanImage(chartFolder)
+		chart.folderIssues.push(...imageData.folderIssues)
+		if (imageData.albumBuffer) {
+			chart.albumArt = {
+				md5: md5.create().update(imageData.albumBuffer).hex(),
+				data: new Uint8Array(imageData.albumBuffer),
+			}
+		}
 
 		// const audioData = await scanAudio(chartFolder, cpus().length - 1)
 		// chart.folderIssues.push(...audioData.folderIssues)
 
-		// if (!chartData.notesData || chart.folderIssues.find(i => i!.folderIssue === 'noAudio') /* TODO: || !audioData.audioHash */) {
-		// 	chart.playable = false
-		// }
+		if (!chartData.notesData || chart.folderIssues.find(i => i!.folderIssue === 'noAudio') /* TODO: || !audioData.audioHash */) {
+			chart.playable = false
+		}
 
 		const videoData = scanVideo(chartFolder)
 		chart.folderIssues.push(...videoData.folderIssues)
@@ -236,14 +238,14 @@ class ChartsScanner {
 		return chart as Chart
 	}
 
-	// private async getChartMD5(chartFolder: CachedFile[]) {
-	// 	const hash = createHash('md5')
-	// 	for (const file of _.orderBy(chartFolder, f => f.name)) {
-	// 		hash.update(file.name)
-	// 		hash.update(await file.getMD5())
-	// 	}
-	// 	return hash.digest('hex')
-	// }
+	private async getChartMD5(chartFolder: CachedFile[]) {
+		const hash = md5.create()
+		for (const file of _.orderBy(chartFolder, f => f.name)) {
+			hash.update(file.name)
+			hash.update(await file.getMD5())
+		}
+		return hash.hex()
+	}
 }
 
 /**

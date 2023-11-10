@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { md5 } from 'js-md5'
 import * as _ from 'lodash'
 
 import { Difficulty, EventType, GroupedTrackEvent, Instrument, NoteIssue, NoteIssueType, NotesData, TrackEvent, TrackIssueType } from '../interfaces'
@@ -69,8 +69,7 @@ export class TrackParser {
 			this.notesData.hashes.push({
 				instrument: this.instrument,
 				difficulty: this.difficulty,
-				// TODO update with web
-				hash: createHash('md5').update(this.trackEvents.map(n => `${n.time}_${n.type}_${n.length}`).join(':')).digest('hex'),
+				hash: md5.create().update(this.trackEvents.map(n => `${n.time}_${n.type}_${n.length}`).join(':')).hex(),
 			})
 
 			// Add note count

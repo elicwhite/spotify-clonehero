@@ -25,6 +25,7 @@
     "bottleneck": "^2.19.5",
     "charset-detector": "^0.0.2",
     "events": "^3.3.0",
+    "exifreader": "^4.16.0",
     "js-md5": "^0.8.3",
     "lodash": "^4.17.21",
     "midievents": "^2.0.0",

@@ -52,7 +52,6 @@ export class CachedFile {
 
 			sngStream.on('files', files => {
 				cachedFiles = Promise.all(files.map(async ({ fileName, fileStream }) => {
-
 					const fileSizeMiB = Number(sngHeader.fileMeta.find(fm => fm.filename === fileName)!.contentsLen) / 1024 / 1024
 
 					if (fileSizeMiB < 2048) {
@@ -64,7 +63,7 @@ export class CachedFile {
 							try {
 								const result = await reader.read()
 								if (result.done) { break }
-								chunks.push(result.value)
+								// chunks.push(result.value)
 							} catch (err) {
 								reject(err)
 								return new CachedFile(fileHandle, null, null)

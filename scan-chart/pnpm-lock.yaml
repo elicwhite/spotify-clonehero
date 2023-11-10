@@ -14,6 +14,9 @@ dependencies:
   events:
     specifier: ^3.3.0
     version: 3.3.0
+  exifreader:
+    specifier: ^4.16.0
+    version: 4.16.0
   js-md5:
     specifier: ^0.8.3
     version: 0.8.3
@@ -1591,6 +1594,13 @@ packages:
       eslint-visitor-keys: 3.4.1
     dev: true
 
+  /@xmldom/xmldom@0.8.10:
+    resolution: {integrity: sha512-2WALfTl4xo2SkGCYRt6rDTFfk9R1czmBvUQy12gK2KuRKIpWEhcbbzy8EZXtz/jkRqHX8bFEc6FC1HjX4TUWYw==}
+    engines: {node: '>=10.0.0'}
+    requiresBuild: true
+    dev: false
+    optional: true
+
   /@yarnpkg/lockfile@1.1.0:
     resolution: {integrity: sha512-GpSwvyXOcOOlV70vbnzjj4fW5xW/FdUF6nQEt1ENy7m4ZCczi1+/buVUPAqmGfqznsORNFzUMjctTIp8a9tuCQ==}
     dev: true
@@ -2842,6 +2852,13 @@ packages:
       signal-exit: 3.0.7
       strip-final-newline: 2.0.0
     dev: true
+
+  /exifreader@4.16.0:
+    resolution: {integrity: sha512-Ivd4lr/EZ2lPHBrAFsO4C90OUKihQWJfsUjGAn7pAuRcXs/RqdENFQLIRQDVLn+KFE5GuSN8q5AdRIDPT94QUQ==}
+    requiresBuild: true
+    optionalDependencies:
+      '@xmldom/xmldom': 0.8.10
+    dev: false
 
   /extendable-error@0.1.7:
     resolution: {integrity: sha512-UOiS2in6/Q0FK0R0q6UY9vYpQ21mr/Qn1KOnte7vsACuNJf514WvCCUHSRCPcgjPT2bAhNIJdlE6bVap1GKmeg==}

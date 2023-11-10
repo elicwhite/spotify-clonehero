@@ -1,4 +1,4 @@
-import sharp from 'sharp'
+import ExifReader from 'exifreader'
 
 import { CachedFile } from 'src/cached-file'
 import { FolderIssueType } from '../interfaces'
@@ -6,7 +6,7 @@ import { hasAlbumName } from '../utils'
 
 class ImageScanner {
 
-	public albumBuffer: Buffer | null = null
+	public albumBuffer: ArrayBuffer | null = null
 	public folderIssues: { folderIssue: FolderIssueType; description: string }[] = []
 
 	private addFolderIssue(folderIssue: FolderIssueType, description: string) {
@@ -54,17 +54,17 @@ class ImageScanner {
 	 */
 	private async getAlbumAtFile(file: CachedFile) {
 		try {
-			const image = sharp(file.data)
-			const metadata = await image.metadata()
-			const heightWidth = `${metadata.height}x${metadata.width}`
+			const image = await ExifReader.load(file.data)
+			// const image = sharp(file.data)
+			const height = image.ImageHeight || image['Image Height']
+			const width = image.ImageWidth || image['Image Width']
+			const heightWidth = `${height!.value}x${width!.value}`
 			if (heightWidth != '500x500' && heightWidth != '512x512') {
 				this.addFolderIssue('albumArtSize', `This chart's album art is ${heightWidth}, and should be 512x512.`)
 			}
 
-			return await image
-				.resize(512, 512)
-				.jpeg({ quality: 75 }) // Note: reducing quality is more effective than reducing image size
-				.toBuffer()
+			// On the web we don't need to resize
+			return file.data
 		} catch (err) {
 			this.addFolderIssue('badAlbumArt', `This chart's album art couldn't be parsed.`)
 		}

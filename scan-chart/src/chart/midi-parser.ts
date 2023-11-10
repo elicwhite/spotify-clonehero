@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { md5 } from 'js-md5'
 import * as _ from 'lodash'
 import { EVENT_DIVSYSEX, EVENT_META, EVENT_META_END_OF_TRACK, EVENT_META_LYRICS, EVENT_META_SET_TEMPO, EVENT_META_TEXT, EVENT_META_TIME_SIGNATURE, EVENT_META_TRACK_NAME, EVENT_MIDI, EVENT_MIDI_NOTE_ON, EVENT_SYSEX, MIDIEvent } from 'midievents'
 import MIDIFile from 'midifile'
@@ -338,10 +338,10 @@ class MidiParser {
 			.value()
 		if (!sectionEvents.length) { this.notesData.chartIssues.push('noSections') }
 
-		this.notesData.tempoMapHash = createHash('md5')
+		this.notesData.tempoMapHash = md5.create()
 			.update(this.tempoMap.map(t => `${t.playTime}_${_.round(t.tempoBPM!, 3)}`).join(':'))
 			.update(this.timeSignatures.map(t => t.param1! / Math.pow(2, t.param2!)).join(':'))
-			.digest('hex')
+			.hex()
 		this.notesData.tempoMarkerCount = this.tempoMap.length
 
 		if (this.tempoMap.length === 1 && _.round(this.tempoMap[0].tempoBPM!, 3) === 120 && this.timeSignatures.length === 1) {
