@@ -1,9 +1,9 @@
 import * as _ from 'lodash'
 
-import {CachedFile} from 'src/cached-file'
-import {FolderIssueType, MetadataIssueType} from '../interfaces'
-import {hasIniExtension, hasIniName, isArray, removeStyleTags} from '../utils'
-import {IniObject, parseIni} from './ini-parser'
+import { CachedFile } from 'src/cached-file'
+import { FolderIssueType, MetadataIssueType } from '../interfaces'
+import { hasIniExtension, hasIniName, isArray, removeStyleTags } from '../utils'
+import { IniObject, parseIni } from './ini-parser'
 
 type TypedSubset<O, K extends keyof O, T> = O[K] extends T ? K : never
 type StringProperties<O> = {
@@ -75,7 +75,7 @@ class IniScanner {
 	private iniObject: IniObject
 
 	private addFolderIssue(folderIssue: FolderIssueType, description: string) {
-		this.folderIssues.push({folderIssue, description})
+		this.folderIssues.push({ folderIssue, description })
 	}
 
 	/**
@@ -86,7 +86,7 @@ class IniScanner {
 		sngMetadata?: { [key: string]: string },
 	) {
 		if (sngMetadata) {
-			this.iniObject = {song: sngMetadata}
+			this.iniObject = { song: sngMetadata }
 		} else {
 			const iniChartFile = this.getIniChartFile(chartFolder)
 			if (!iniChartFile) {
@@ -157,11 +157,11 @@ class IniScanner {
    * @returns an `IIniObject` derived from the .ini file at `file`, or `null` if the file couldn't be read.
    */
 	private getIniAtFile(file: CachedFile) {
-		const {iniObject, iniErrors} = parseIni(file)
+		const { iniObject, iniErrors } = parseIni(file)
 
 		for (const iniError of iniErrors.slice(-5)) {
 			// Limit this if there are too many errors
-			this.addFolderIssue('badIniLine', _.truncate(iniError, {length: 200}))
+			this.addFolderIssue('badIniLine', _.truncate(iniError, { length: 200 }))
 		}
 
 		return iniObject

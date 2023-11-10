@@ -1,6 +1,6 @@
 import Bottleneck from 'bottleneck'
 // import { createHash } from 'crypto'
-import {EventEmitter} from 'events'
+import { EventEmitter } from 'events'
 // import { Dirent } from 'fs'
 // import { readdir } from 'fs/promises'
 import * as _ from 'lodash'
@@ -8,18 +8,18 @@ import * as _ from 'lodash'
 // import { join, parse, relative } from 'path'
 
 // import { scanAudio } from './audio'
-import {CachedFile} from './cached-file'
-import {scanChart} from './chart'
+import { CachedFile } from './cached-file'
+import { scanChart } from './chart'
 // import { scanImage } from './image'
-import {defaultMetadata, scanIni} from './ini'
-import {Chart, EventType, ScanChartsConfig, ScannedChart} from './interfaces'
+import { defaultMetadata, scanIni } from './ini'
+import { Chart, EventType, ScanChartsConfig, ScannedChart } from './interfaces'
 import {
 	appearsToBeChartFolder,
 	hasSngExtension,
 	RequireMatchingProps,
 	Subset,
 } from './utils'
-import {scanVideo} from './video'
+import { scanVideo } from './video'
 
 export * from './interfaces'
 
@@ -84,7 +84,7 @@ class ChartsScanner {
 			return
 		}
 
-		const limiter = new Bottleneck({maxConcurrent: 20}) // Ensures memory use stays bounded
+		const limiter = new Bottleneck({ maxConcurrent: 20 }) // Ensures memory use stays bounded
 		let chartCounter = 0
 
 		const charts: ScannedChart[] = []

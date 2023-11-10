@@ -1,9 +1,9 @@
-import {createReadStream} from 'fs'
-import {constants, readFile, stat} from 'fs/promises'
-import {SngHeader, SngStream} from 'parse-sng'
-import {basename} from 'path'
-import {Readable} from 'stream'
-import {md5} from 'js-md5'
+import { createReadStream } from 'fs'
+import { constants, readFile, stat } from 'fs/promises'
+import { SngHeader, SngStream } from 'parse-sng'
+import { basename } from 'path'
+import { Readable } from 'stream'
+import { md5 } from 'js-md5'
 
 export class CachedFile {
 	public name: string

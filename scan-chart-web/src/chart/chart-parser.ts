@@ -1,58 +1,58 @@
-import {createHash} from 'crypto'
+import { createHash } from 'crypto'
 import * as _ from 'lodash'
 
-import {EventType, Instrument, NotesData, TrackEvent} from '../interfaces'
-import {TrackParser} from './track-parser'
+import { EventType, Instrument, NotesData, TrackEvent } from '../interfaces'
+import { TrackParser } from './track-parser'
 
 export type ChartMetadata = ReturnType<ChartParser['getMetadata']>
 
 /* eslint-disable @typescript-eslint/naming-convention */
 type TrackName = keyof typeof trackNameMap
 const trackNameMap = {
-	ExpertSingle: {instrument: 'guitar', difficulty: 'expert'},
-	HardSingle: {instrument: 'guitar', difficulty: 'hard'},
-	MediumSingle: {instrument: 'guitar', difficulty: 'medium'},
-	EasySingle: {instrument: 'guitar', difficulty: 'easy'},
+	ExpertSingle: { instrument: 'guitar', difficulty: 'expert' },
+	HardSingle: { instrument: 'guitar', difficulty: 'hard' },
+	MediumSingle: { instrument: 'guitar', difficulty: 'medium' },
+	EasySingle: { instrument: 'guitar', difficulty: 'easy' },
 
-	ExpertDoubleRhythm: {instrument: 'rhythm', difficulty: 'expert'},
-	HardDoubleRhythm: {instrument: 'rhythm', difficulty: 'hard'},
-	MediumDoubleRhythm: {instrument: 'rhythm', difficulty: 'medium'},
-	EasyDoubleRhythm: {instrument: 'rhythm', difficulty: 'easy'},
+	ExpertDoubleRhythm: { instrument: 'rhythm', difficulty: 'expert' },
+	HardDoubleRhythm: { instrument: 'rhythm', difficulty: 'hard' },
+	MediumDoubleRhythm: { instrument: 'rhythm', difficulty: 'medium' },
+	EasyDoubleRhythm: { instrument: 'rhythm', difficulty: 'easy' },
 
-	ExpertDoubleBass: {instrument: 'bass', difficulty: 'expert'},
-	HardDoubleBass: {instrument: 'bass', difficulty: 'hard'},
-	MediumDoubleBass: {instrument: 'bass', difficulty: 'medium'},
-	EasyDoubleBass: {instrument: 'bass', difficulty: 'easy'},
+	ExpertDoubleBass: { instrument: 'bass', difficulty: 'expert' },
+	HardDoubleBass: { instrument: 'bass', difficulty: 'hard' },
+	MediumDoubleBass: { instrument: 'bass', difficulty: 'medium' },
+	EasyDoubleBass: { instrument: 'bass', difficulty: 'easy' },
 
-	ExpertDrums: {instrument: 'drums', difficulty: 'expert'},
-	HardDrums: {instrument: 'drums', difficulty: 'hard'},
-	MediumDrums: {instrument: 'drums', difficulty: 'medium'},
-	EasyDrums: {instrument: 'drums', difficulty: 'easy'},
+	ExpertDrums: { instrument: 'drums', difficulty: 'expert' },
+	HardDrums: { instrument: 'drums', difficulty: 'hard' },
+	MediumDrums: { instrument: 'drums', difficulty: 'medium' },
+	EasyDrums: { instrument: 'drums', difficulty: 'easy' },
 
-	ExpertKeyboard: {instrument: 'keys', difficulty: 'expert'},
-	HardKeyboard: {instrument: 'keys', difficulty: 'hard'},
-	MediumKeyboard: {instrument: 'keys', difficulty: 'medium'},
-	EasyKeyboard: {instrument: 'keys', difficulty: 'easy'},
+	ExpertKeyboard: { instrument: 'keys', difficulty: 'expert' },
+	HardKeyboard: { instrument: 'keys', difficulty: 'hard' },
+	MediumKeyboard: { instrument: 'keys', difficulty: 'medium' },
+	EasyKeyboard: { instrument: 'keys', difficulty: 'easy' },
 
-	ExpertGHLGuitar: {instrument: 'guitarghl', difficulty: 'expert'},
-	HardGHLGuitar: {instrument: 'guitarghl', difficulty: 'hard'},
-	MediumGHLGuitar: {instrument: 'guitarghl', difficulty: 'medium'},
-	EasyGHLGuitar: {instrument: 'guitarghl', difficulty: 'easy'},
+	ExpertGHLGuitar: { instrument: 'guitarghl', difficulty: 'expert' },
+	HardGHLGuitar: { instrument: 'guitarghl', difficulty: 'hard' },
+	MediumGHLGuitar: { instrument: 'guitarghl', difficulty: 'medium' },
+	EasyGHLGuitar: { instrument: 'guitarghl', difficulty: 'easy' },
 
-	ExpertGHLCoop: {instrument: 'guitarcoopghl', difficulty: 'expert'},
-	HardGHLCoop: {instrument: 'guitarcoopghl', difficulty: 'hard'},
-	MediumGHLCoop: {instrument: 'guitarcoopghl', difficulty: 'medium'},
-	EasyGHLCoop: {instrument: 'guitarcoopghl', difficulty: 'easy'},
+	ExpertGHLCoop: { instrument: 'guitarcoopghl', difficulty: 'expert' },
+	HardGHLCoop: { instrument: 'guitarcoopghl', difficulty: 'hard' },
+	MediumGHLCoop: { instrument: 'guitarcoopghl', difficulty: 'medium' },
+	EasyGHLCoop: { instrument: 'guitarcoopghl', difficulty: 'easy' },
 
-	ExpertGHLRhythm: {instrument: 'rhythmghl', difficulty: 'expert'},
-	HardGHLRhythm: {instrument: 'rhythmghl', difficulty: 'hard'},
-	MediumGHLRhythm: {instrument: 'rhythmghl', difficulty: 'medium'},
-	EasyGHLRhythm: {instrument: 'rhythmghl', difficulty: 'easy'},
+	ExpertGHLRhythm: { instrument: 'rhythmghl', difficulty: 'expert' },
+	HardGHLRhythm: { instrument: 'rhythmghl', difficulty: 'hard' },
+	MediumGHLRhythm: { instrument: 'rhythmghl', difficulty: 'medium' },
+	EasyGHLRhythm: { instrument: 'rhythmghl', difficulty: 'easy' },
 
-	ExpertGHLBass: {instrument: 'bassghl', difficulty: 'expert'},
-	HardGHLBass: {instrument: 'bassghl', difficulty: 'hard'},
-	MediumGHLBass: {instrument: 'bassghl', difficulty: 'medium'},
-	EasyGHLBass: {instrument: 'bassghl', difficulty: 'easy'},
+	ExpertGHLBass: { instrument: 'bassghl', difficulty: 'expert' },
+	HardGHLBass: { instrument: 'bassghl', difficulty: 'hard' },
+	MediumGHLBass: { instrument: 'bassghl', difficulty: 'medium' },
+	EasyGHLBass: { instrument: 'bassghl', difficulty: 'easy' },
 } as const
 /* eslint-enable @typescript-eslint/naming-convention */
 
@@ -139,7 +139,7 @@ class ChartParser {
 				time = lastMarker.time + (tick - lastMarker.tick) * msPerTickInRegion
 			}
 
-			tempoMap.push({tick, time, bpm})
+			tempoMap.push({ tick, time, bpm })
 		}
 		if (!tempoMap.length) {
 			this.notesData.chartIssues.push('noSyncTrackSection')
@@ -169,7 +169,7 @@ class ChartParser {
 			})
 		}
 		if (!timeSignatures.length) {
-			timeSignatures.push({tick: 0, value: 4 / 4})
+			timeSignatures.push({ tick: 0, value: 4 / 4 })
 		}
 		return timeSignatures
 	}
@@ -180,7 +180,7 @@ class ChartParser {
       !this.tempoMap.length ||
       !this.timeSignatures.length
 		) {
-			return {notesData: this.notesData, notesMetadata: this.getMetadata()}
+			return { notesData: this.notesData, notesMetadata: this.getMetadata() }
 		}
 
 		const trackParsers = _.chain(this.trackSections)
@@ -211,7 +211,7 @@ class ChartParser {
 
 		if (globalFirstNote === null || globalLastNote === null) {
 			this.notesData.chartIssues.push('noNotes')
-			return {notesData: this.notesData, notesMetadata: this.getMetadata()}
+			return { notesData: this.notesData, notesMetadata: this.getMetadata() }
 		}
 		this.setEventsProperties()
 		this.setMissingExperts()
@@ -237,7 +237,7 @@ class ChartParser {
 			globalLastNote.time - globalFirstNote.time,
 		)
 
-		return {notesData: this.notesData, notesMetadata: this.getMetadata()}
+		return { notesData: this.notesData, notesMetadata: this.getMetadata() }
 	}
 
 	private parseTrackLines(lines: string[], instrument: Instrument) {
@@ -279,7 +279,7 @@ class ChartParser {
 				instrument,
 			)
 			if (type !== null) {
-				trackEvents.push({time, length, type})
+				trackEvents.push({ time, length, type })
 			}
 		}
 

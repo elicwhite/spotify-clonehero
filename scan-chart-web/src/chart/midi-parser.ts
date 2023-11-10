@@ -1,4 +1,4 @@
-import {createHash} from 'crypto'
+import { createHash } from 'crypto'
 import * as _ from 'lodash'
 import {
 	EVENT_DIVSYSEX,
@@ -23,7 +23,7 @@ import {
 	NotesData,
 	TrackEvent,
 } from '../interfaces'
-import {TrackParser} from './track-parser'
+import { TrackParser } from './track-parser'
 
 /* eslint-disable @typescript-eslint/naming-convention */
 type TrackName = InstrumentName | 'PART VOCALS' | 'EVENTS'
@@ -42,9 +42,9 @@ const instrumentNameMap = {
 /* eslint-enable @typescript-eslint/naming-convention */
 
 const sysExDifficultyMap = ['easy', 'medium', 'hard', 'expert'] as const
-const fiveFretDiffStarts = {easy: 59, medium: 71, hard: 83, expert: 95}
-const sixFretDiffStarts = {easy: 58, medium: 70, hard: 82, expert: 94}
-const drumsDiffStarts = {easy: 60, medium: 72, hard: 84, expert: 96}
+const fiveFretDiffStarts = { easy: 59, medium: 71, hard: 83, expert: 95 }
+const sixFretDiffStarts = { easy: 58, medium: 70, hard: 82, expert: 94 }
+const drumsDiffStarts = { easy: 60, medium: 72, hard: 84, expert: 96 }
 
 interface TrackEventEnd {
 	difficulty: Difficulty | null
@@ -543,7 +543,7 @@ class MidiParser {
 			if (events[i].tempo) {
 				currentTempo = events[i].tempo!
 			} else if (events[i].param1) {
-				timeSignatures.push({...events[i], tick: _.round(currentTick)})
+				timeSignatures.push({ ...events[i], tick: _.round(currentTick) })
 			}
 		}
 

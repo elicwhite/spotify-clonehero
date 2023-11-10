@@ -1,4 +1,4 @@
-import {CachedFile} from 'src/cached-file'
+import { CachedFile } from 'src/cached-file'
 
 export const $NoSection: unique symbol = Symbol('Lines before any sections')
 export interface IniObject {
@@ -44,7 +44,7 @@ function decode(data: string) {
 		}
 	}
 
-	return {iniObject, iniErrors}
+	return { iniObject, iniErrors }
 }
 
 /**
