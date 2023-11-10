@@ -7,13 +7,13 @@ import { IniObject, parseIni } from './ini-parser'
 
 type TypedSubset<O, K extends keyof O, T> = O[K] extends T ? K : never
 type StringProperties<O> = {
-  [key in keyof O as TypedSubset<O, key, string>]: string;
+	[key in keyof O as TypedSubset<O, key, string>]: string
 }
 type NumberProperties<O> = {
-  [key in keyof O as TypedSubset<O, key, number>]: number;
+	[key in keyof O as TypedSubset<O, key, number>]: number
 }
 type BooleanProperties<O> = {
-  [key in keyof O as TypedSubset<O, key, boolean>]: boolean;
+	[key in keyof O as TypedSubset<O, key, boolean>]: boolean
 }
 
 type Metadata = typeof defaultMetadata
@@ -25,8 +25,8 @@ type CInputMetaBooleanKey = keyof BooleanProperties<InputMetadata>
 type CMetaBooleanKey = keyof BooleanProperties<Metadata>
 
 type InputMetadata = Metadata & {
-  frets: string
-  track: number
+	frets: string
+	track: number
 }
 export const defaultMetadata = {
 	name: 'Unknown Name',
@@ -67,8 +67,7 @@ export const defaultMetadata = {
 
 class IniScanner {
 	public metadata: Metadata | null = null
-	public folderIssues: { folderIssue: FolderIssueType; description: string }[] =
-		[]
+	public folderIssues: { folderIssue: FolderIssueType; description: string }[] = []
 	public metadataIssues: MetadataIssueType[] = []
 
 	/** The ini object with parsed data from the song.ini file, or the notes.chart file if an ini doesn't exist */
@@ -79,12 +78,9 @@ class IniScanner {
 	}
 
 	/**
-   * Sets `this.metadata` to the ini metadata provided in `this.chartFolder`.
-   */
-	public scan(
-		chartFolder: CachedFile[],
-		sngMetadata?: { [key: string]: string },
-	) {
+	 * Sets `this.metadata` to the ini metadata provided in `this.chartFolder`.
+	 */
+	public scan(chartFolder: CachedFile[], sngMetadata?: { [key: string]: string }) {
 		if (sngMetadata) {
 			this.iniObject = { song: sngMetadata }
 		} else {
@@ -101,10 +97,7 @@ class IniScanner {
 			this.iniObject = iniFile
 			this.iniObject.song = iniFile.song || iniFile.Song || iniFile.SONG
 			if (iniFile.song === undefined) {
-				this.addFolderIssue(
-					'invalidMetadata',
-					`"song.ini" doesn't have a "[Song]" section.`,
-				)
+				this.addFolderIssue('invalidMetadata', `"song.ini" doesn't have a "[Song]" section.`)
 				return
 			}
 		}
@@ -114,8 +107,8 @@ class IniScanner {
 	}
 
 	/**
-   * @returns the .ini file in this chart, or `null` if one wasn't found.
-   */
+	 * @returns the .ini file in this chart, or `null` if one wasn't found.
+	 */
 	private getIniChartFile(chartFolder: CachedFile[]) {
 		let iniCount = 0
 		let bestIni: CachedFile | null = null
@@ -126,10 +119,7 @@ class IniScanner {
 				iniCount++
 				lastIni = file
 				if (!hasIniName(file.name)) {
-					this.addFolderIssue(
-						'invalidIni',
-						`"${file.name}" is not named "song.ini".`,
-					)
+					this.addFolderIssue('invalidIni', `"${file.name}" is not named "song.ini".`)
 				} else {
 					bestIni = file
 				}
@@ -137,10 +127,7 @@ class IniScanner {
 		}
 
 		if (iniCount > 1) {
-			this.addFolderIssue(
-				'multipleIniFiles',
-				`This chart has multiple .ini files.`,
-			)
+			this.addFolderIssue('multipleIniFiles', `This chart has multiple .ini files.`)
 		}
 
 		if (bestIni !== null) {
@@ -154,8 +141,8 @@ class IniScanner {
 	}
 
 	/**
-   * @returns an `IIniObject` derived from the .ini file at `file`, or `null` if the file couldn't be read.
-   */
+	 * @returns an `IIniObject` derived from the .ini file at `file`, or `null` if the file couldn't be read.
+	 */
 	private getIniAtFile(file: CachedFile) {
 		const { iniObject, iniErrors } = parseIni(file)
 
@@ -168,26 +155,14 @@ class IniScanner {
 	}
 
 	/**
-   * Stores all the metadata found in `this.iniFile.song` into `this.metadata` (uses default values if not found).
-   */
+	 * Stores all the metadata found in `this.iniFile.song` into `this.metadata` (uses default values if not found).
+	 */
 	private extractIniMetadata() {
 		this.metadata = Object.assign({}, defaultMetadata)
 
 		// Charter may be stored in `this.iniFile.song.frets`
-		const strings = [
-			'name',
-			'artist',
-			'album',
-			'genre',
-			'year',
-			['frets', 'charter'],
-			'icon',
-			'loading_phrase',
-		] as const
-		this.extractMetadataField<CInputMetaStringKey, CMetaStringKey>(
-			this.extractMetadataString.bind(this),
-			strings,
-		)
+		const strings = ['name', 'artist', 'album', 'genre', 'year', ['frets', 'charter'], 'icon', 'loading_phrase'] as const
+		this.extractMetadataField<CInputMetaStringKey, CMetaStringKey>(this.extractMetadataString.bind(this), strings)
 		this.metadata.icon = this.metadata.icon?.toLowerCase() // Icons are interpreted as lowercase in CH
 		if (this.metadata.icon === this.metadata.charter?.toLowerCase()) {
 			this.metadata.icon = ''
@@ -217,34 +192,22 @@ class IniScanner {
 			'multiplier_note',
 			'video_start_time',
 		] as const
-		this.extractMetadataField<CInputMetaNumberKey, CMetaNumberKey>(
-			this.extractMetadataInteger.bind(this),
-			integers,
-		)
+		this.extractMetadataField<CInputMetaNumberKey, CMetaNumberKey>(this.extractMetadataInteger.bind(this), integers)
 
-		const booleans = [
-			'modchart',
-			'eighthnote_hopo',
-			'five_lane_drums',
-			'pro_drums',
-			'end_events',
-		] as const
-		this.extractMetadataField<CInputMetaBooleanKey, CMetaBooleanKey>(
-			this.extractMetadataBoolean.bind(this),
-			booleans,
-		)
+		const booleans = ['modchart', 'eighthnote_hopo', 'five_lane_drums', 'pro_drums', 'end_events'] as const
+		this.extractMetadataField<CInputMetaBooleanKey, CMetaBooleanKey>(this.extractMetadataBoolean.bind(this), booleans)
 	}
 
 	/**
-   * Extracts `fields` from `this.metadata` using `extractFunction`.
-   * @param fields
-   * An array of single keys and two key tuple arrays.
-   * With a single key, the field will be extracted from the ini file at that key.
-   * It will then be saved in the metadata object at the same key.
-   * With an array of two keys, the field will be extracted from the ini file at both keys.
-   * (If both are defined, the second field is used)
-   * It will then be saved in the metadata object at the second key.
-   */
+	 * Extracts `fields` from `this.metadata` using `extractFunction`.
+	 * @param fields
+	 * An array of single keys and two key tuple arrays.
+	 * With a single key, the field will be extracted from the ini file at that key.
+	 * It will then be saved in the metadata object at the same key.
+	 * With an array of two keys, the field will be extracted from the ini file at both keys.
+	 * (If both are defined, the second field is used)
+	 * It will then be saved in the metadata object at the second key.
+	 */
 	private extractMetadataField<I, K extends I>(
 		extractFunction: (metadataField: K, iniField?: Exclude<I, K>) => void,
 		fields: readonly (K | readonly [Exclude<I, K>, K])[],
@@ -260,52 +223,40 @@ class IniScanner {
 	}
 
 	/**
-   * Stores `this.iniFile.song[iniField ?? metadataField]` into `this.metadata[metadataField]` if that field has an actual string value.
-   * Any style tags are removed from the string.
-   */
-	private extractMetadataString(
-		metadataField: CMetaStringKey,
-		iniField?: Exclude<CInputMetaStringKey, CMetaStringKey>,
-	): void {
+	 * Stores `this.iniFile.song[iniField ?? metadataField]` into `this.metadata[metadataField]` if that field has an actual string value.
+	 * Any style tags are removed from the string.
+	 */
+	private extractMetadataString(metadataField: CMetaStringKey, iniField?: Exclude<CInputMetaStringKey, CMetaStringKey>): void {
 		const value = this.iniObject.song[iniField ?? metadataField]
 		if (value && !['', '0', '-1'].includes(value)) {
-      this.metadata![metadataField] = removeStyleTags(value)
+			this.metadata![metadataField] = removeStyleTags(value)
 		}
 	}
 
 	/**
-   * Stores `this.iniFile.song[iniField ?? metadataField]` into `this.metadata[metadataField]` if that field has an actual number value.
-   * All numbers are rounded to the nearest integer.
-   */
-	private extractMetadataInteger(
-		metadataField: CMetaNumberKey,
-		iniField?: Exclude<CInputMetaNumberKey, CMetaNumberKey>,
-	): void {
+	 * Stores `this.iniFile.song[iniField ?? metadataField]` into `this.metadata[metadataField]` if that field has an actual number value.
+	 * All numbers are rounded to the nearest integer.
+	 */
+	private extractMetadataInteger(metadataField: CMetaNumberKey, iniField?: Exclude<CInputMetaNumberKey, CMetaNumberKey>): void {
 		const value = parseFloat(this.iniObject.song[iniField ?? metadataField])
 		if (!isNaN(value) && value !== -1) {
 			const int = Math.round(value)
 			if (int !== value) {
-				this.addFolderIssue(
-					'badIniLine',
-					`The "${iniField}" value in "song.ini" is "${value}", which is not an integer.`,
-				)
+				this.addFolderIssue('badIniLine', `The "${iniField}" value in "song.ini" is "${value}", which is not an integer.`)
 			}
-      this.metadata![metadataField] = int
+			this.metadata![metadataField] = int
 		}
 	}
 
 	/**
-   * Stores `this.iniFile.song[iniField ?? metadataField]` into `this.metadata[metadataField]` if that field has an actual boolean value.
-   */
-	private extractMetadataBoolean(
-		metadataField: CMetaBooleanKey,
-		iniField?: Exclude<CInputMetaBooleanKey, CMetaBooleanKey>,
-	): void {
+	 * Stores `this.iniFile.song[iniField ?? metadataField]` into `this.metadata[metadataField]` if that field has an actual boolean value.
+	 */
+	private extractMetadataBoolean(metadataField: CMetaBooleanKey, iniField?: Exclude<CInputMetaBooleanKey, CMetaBooleanKey>): void {
 		const value = this.iniObject.song[iniField ?? metadataField]
 		if (value === 'True' || value === '1') {
-      this.metadata![metadataField] = true
+			this.metadata![metadataField] = true
 		} else if (value === 'False' || value === '0') {
-      this.metadata![metadataField] = false
+			this.metadata![metadataField] = false
 		}
 	}
 
@@ -334,10 +285,7 @@ class IniScanner {
 	}
 }
 
-export function scanIni(
-	chartFolder: CachedFile[],
-	sngMetadata?: { [key: string]: string },
-) {
+export function scanIni(chartFolder: CachedFile[], sngMetadata?: { [key: string]: string }) {
 	const iniScanner = new IniScanner()
 	iniScanner.scan(chartFolder, sngMetadata)
 	return {

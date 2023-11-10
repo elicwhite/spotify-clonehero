@@ -2,8 +2,8 @@ import { CachedFile } from 'src/cached-file'
 
 export const $NoSection: unique symbol = Symbol('Lines before any sections')
 export interface IniObject {
-  [$NoSection]?: { [key: string]: string }
-  [section: string]: { [key: string]: string }
+	[$NoSection]?: { [key: string]: string }
+	[section: string]: { [key: string]: string }
 }
 
 function createParseError(line: string) {
@@ -35,9 +35,9 @@ function decode(data: string) {
 			const value = line.slice(delimeterPos + 1).trim()
 
 			if (currentSection === '') {
-				(iniObject[$NoSection] ??= {})[key] = value
+				; (iniObject[$NoSection] ??= {})[key] = value
 			} else {
-				(iniObject[currentSection] ??= {})[key] = value
+				; (iniObject[currentSection] ??= {})[key] = value
 			}
 		} else {
 			iniErrors.push(createParseError(line))

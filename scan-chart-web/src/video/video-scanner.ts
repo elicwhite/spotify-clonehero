@@ -3,7 +3,6 @@ import { FolderIssueType } from '../interfaces'
 import { hasBadVideoName, hasVideoName } from '../utils'
 
 class VideoScanner {
-
 	public folderIssues: { folderIssue: FolderIssueType; description: string }[] = []
 	public hasVideoBackground = false
 

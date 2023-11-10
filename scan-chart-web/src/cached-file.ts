@@ -1,20 +1,15 @@
-import { createReadStream } from 'fs'
-import { constants, readFile, stat } from 'fs/promises'
-import { SngHeader, SngStream } from 'parse-sng'
-import { basename } from 'path'
-import { Readable } from 'stream'
 import { md5 } from 'js-md5'
 
 export class CachedFile {
 	public name: string
 
 	private constructor(
-    public fileHandle: FileSystemFileHandle,
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    private _data: ArrayBuffer | null = null,
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    private _readStream: ReadableStream<Uint8Array> | null,
-    name?: string,
+		public fileHandle: FileSystemFileHandle,
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		private _data: ArrayBuffer | null = null,
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		private _readStream: ReadableStream<Uint8Array> | null,
+		name?: string,
 	) {
 		this.name = name ?? fileHandle.name
 	}
@@ -104,8 +99,8 @@ export class CachedFile {
 	}
 
 	/**
-   * This will throw an exception if the file is over 2 GiB.
-   */
+	 * This will throw an exception if the file is over 2 GiB.
+	 */
 	get data() {
 		if (!this._data) {
 			throw new Error(`Can't store full file in a buffer; larger than 2 GiB.`)
@@ -114,8 +109,8 @@ export class CachedFile {
 	}
 
 	/**
-   * A stream for the file's data. Creats a read stream of the cached data if the file is less than 2 GiB.
-   */
+	 * A stream for the file's data. Creats a read stream of the cached data if the file is less than 2 GiB.
+	 */
 	get readStream() {
 		if (this._data) {
 			return new Blob([this._data]).stream()

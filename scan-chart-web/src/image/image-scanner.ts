@@ -5,7 +5,6 @@ import { FolderIssueType } from '../interfaces'
 import { hasAlbumName } from '../utils'
 
 class ImageScanner {
-
 	public albumBuffer: Buffer | null = null
 	public folderIssues: { folderIssue: FolderIssueType; description: string }[] = []
 
@@ -15,10 +14,14 @@ class ImageScanner {
 
 	public async scan(chartFolder: CachedFile[]) {
 		const albumFile = this.getAlbumFile(chartFolder)
-		if (!albumFile) { return }
+		if (!albumFile) {
+			return
+		}
 
 		const albumBuffer = await this.getAlbumAtFile(albumFile)
-		if (!albumBuffer) { return }
+		if (!albumBuffer) {
+			return
+		}
 
 		this.albumBuffer = albumBuffer
 	}

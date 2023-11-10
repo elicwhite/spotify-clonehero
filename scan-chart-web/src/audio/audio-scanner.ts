@@ -6,7 +6,6 @@ import { FolderIssueType } from '../interfaces'
 import { hasAudioExtension, hasAudioName } from '../utils'
 
 class AudioScanner {
-
 	public audioHash: number[] | null = null
 	public audioLength: number | null = null
 	public folderIssues: { folderIssue: FolderIssueType; description: string }[] = []
@@ -17,7 +16,9 @@ class AudioScanner {
 
 	public async scan(chartFolder: CachedFile[], max_threads: number) {
 		const audioFiles = this.getAudioFiles(chartFolder)
-		if (audioFiles.length === 0) { return }
+		if (audioFiles.length === 0) {
+			return
+		}
 
 		// TODO: Implement this when determining the best audio fingerprint algorithm
 		// const audioParser = new AudioParser(max_threads)

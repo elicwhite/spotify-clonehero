@@ -63,7 +63,7 @@ class ChartParser {
 	private resolution: number
 	private tempoMap: { tick: number; time: number; bpm: number }[]
 	private timeSignatures: { tick: number; value: number }[]
-	private trackSections: {[trackName in TrackName]: string[]}
+	private trackSections: { [trackName in TrackName]: string[] }
 
 	constructor(private fileSections: { [sectionName: string]: string[] }) {
 		this.notesData = {
@@ -92,10 +92,7 @@ class ChartParser {
 		this.resolution = this.getResolution()
 		this.tempoMap = this.getTempoMap()
 		this.timeSignatures = this.getTimeSignatures()
-		this.trackSections = _.pick(
-			this.fileSections,
-      _.keys(trackNameMap) as TrackName[],
-		)
+		this.trackSections = _.pick(this.fileSections, _.keys(trackNameMap) as TrackName[])
 	}
 
 	private getResolution() {
@@ -110,12 +107,8 @@ class ChartParser {
 		const fileSectionMap: { [key: string]: string } = {}
 		for (const line of fileSection) {
 			const [key, value] = line.split(' = ').map(s => s.trim())
-			fileSectionMap[key] = value.endsWith('"')
-				? value.slice(0, value.length - 1)
-				: value
-			fileSectionMap[key] = fileSectionMap[key].startsWith('"')
-				? fileSectionMap[key].slice(1)
-				: fileSectionMap[key]
+			fileSectionMap[key] = value.endsWith('"') ? value.slice(0, value.length - 1) : value
+			fileSectionMap[key] = fileSectionMap[key].startsWith('"') ? fileSectionMap[key].slice(1) : fileSectionMap[key]
 		}
 		return fileSectionMap
 	}
@@ -151,15 +144,9 @@ class ChartParser {
 		const timeSignatures: { tick: number; value: number }[] = []
 		const syncTrack = this.fileSections['SyncTrack'] ?? []
 		for (const line of syncTrack) {
-			const [, stringTick, stringNumerator, stringDenominatorExp] =
-        /\s*(\d+) = TS (\d+)(?: (\d+))?/.exec(line) || []
-			const [tick, numerator] = [
-				parseInt(stringTick, 10),
-				parseInt(stringNumerator, 10),
-			]
-			const denominatorExp = stringDenominatorExp
-				? parseInt(stringDenominatorExp, 10)
-				: 2
+			const [, stringTick, stringNumerator, stringDenominatorExp] = /\s*(\d+) = TS (\d+)(?: (\d+))?/.exec(line) || []
+			const [tick, numerator] = [parseInt(stringTick, 10), parseInt(stringNumerator, 10)]
+			const denominatorExp = stringDenominatorExp ? parseInt(stringDenominatorExp, 10) : 2
 			if (isNaN(tick) || isNaN(numerator) || isNaN(denominatorExp)) {
 				continue
 			} // Not a time signature marker
@@ -175,11 +162,7 @@ class ChartParser {
 	}
 
 	public parse() {
-		if (
-			!this.resolution ||
-      !this.tempoMap.length ||
-      !this.timeSignatures.length
-		) {
+		if (!this.resolution || !this.tempoMap.length || !this.timeSignatures.length) {
 			return { notesData: this.notesData, notesMetadata: this.getMetadata() }
 		}
 
@@ -191,10 +174,7 @@ class ChartParser {
 						this.notesData,
 						trackNameMap[track as TrackName].instrument,
 						trackNameMap[track as TrackName].difficulty,
-						this.parseTrackLines(
-							lines,
-							trackNameMap[track as TrackName].instrument,
-						),
+						this.parseTrackLines(lines, trackNameMap[track as TrackName].instrument),
 						'chart',
 					),
 			)
@@ -202,12 +182,8 @@ class ChartParser {
 
 		trackParsers.forEach(p => p.parseTrack())
 
-		const globalFirstNote =
-      _.minBy(trackParsers, p => p.firstNote?.time ?? Infinity)?.firstNote ??
-      null
-		const globalLastNote =
-      _.maxBy(trackParsers, p => p.lastNote?.time ?? -Infinity)?.lastNote ??
-      null
+		const globalFirstNote = _.minBy(trackParsers, p => p.firstNote?.time ?? Infinity)?.firstNote ?? null
+		const globalLastNote = _.maxBy(trackParsers, p => p.lastNote?.time ?? -Infinity)?.lastNote ?? null
 
 		if (globalFirstNote === null || globalLastNote === null) {
 			this.notesData.chartIssues.push('noNotes')
@@ -216,11 +192,7 @@ class ChartParser {
 		this.setEventsProperties()
 		this.setMissingExperts()
 		this.setTimeSignatureProperties()
-		if (
-			this.tempoMap.length === 1 &&
-      this.tempoMap[0].bpm === 120 &&
-      this.timeSignatures.length === 1
-		) {
+		if (this.tempoMap.length === 1 && this.tempoMap[0].bpm === 120 && this.timeSignatures.length === 1) {
 			this.notesData.chartIssues.push('isDefaultBPM')
 		}
 
@@ -233,9 +205,7 @@ class ChartParser {
 
 		// Add lengths
 		this.notesData.length = Math.floor(globalLastNote.time)
-		this.notesData.effectiveLength = Math.floor(
-			globalLastNote.time - globalFirstNote.time,
-		)
+		this.notesData.effectiveLength = Math.floor(globalLastNote.time - globalFirstNote.time)
 
 		return { notesData: this.notesData, notesMetadata: this.getMetadata() }
 	}
@@ -247,10 +217,7 @@ class ChartParser {
 		for (const line of lines) {
 			const parsedLine = _.chain(line)
 				.trim()
-				.thru(
-					l =>
-						/^(\d+) = ([A-Z]+) ([\d\w]+) ?(\d+)?$/.exec(l) || ([] as string[]),
-				)
+				.thru(l => /^(\d+) = ([A-Z]+) ([\d\w]+) ?(\d+)?$/.exec(l) || ([] as string[]))
 				.drop(1)
 				.thru(parts => ({
 					tick: +parts[0],
@@ -261,23 +228,13 @@ class ChartParser {
 				.value()
 
 			// Update lastMarker to the closest BPM marker behind this note
-			if (
-				this.tempoMap[lastBpmIndex + 1] &&
-        parsedLine.tick >= this.tempoMap[lastBpmIndex + 1].tick
-			) {
+			if (this.tempoMap[lastBpmIndex + 1] && parsedLine.tick >= this.tempoMap[lastBpmIndex + 1].tick) {
 				lastBpmIndex++
 			}
 
 			const time = this.timeFromTick(lastBpmIndex, parsedLine.tick)
-			const length = parsedLine.len
-				? this.timeFromTick(lastBpmIndex, parsedLine.tick + parsedLine.len) -
-          time
-				: 0
-			const type = this.getEventType(
-				parsedLine.typeCode,
-				parsedLine.value,
-				instrument,
-			)
+			const length = parsedLine.len ? this.timeFromTick(lastBpmIndex, parsedLine.tick + parsedLine.len) - time : 0
+			const type = this.getEventType(parsedLine.typeCode, parsedLine.value, instrument)
 			if (type !== null) {
 				trackEvents.push({ time, length, type })
 			}
@@ -287,125 +244,113 @@ class ChartParser {
 	}
 
 	private timeFromTick(lastBpmIndex: number, tick: number) {
-		while (
-			this.tempoMap[lastBpmIndex + 1] &&
-      this.tempoMap[lastBpmIndex + 1].tick < tick
-		) {
+		while (this.tempoMap[lastBpmIndex + 1] && this.tempoMap[lastBpmIndex + 1].tick < tick) {
 			lastBpmIndex++
 		}
 		// the "Resolution" parameter is the number of ticks in each beat, so `bpm * resolution` is the ticks per minute
-		const msPerTickInRegion =
-      60000 / (this.tempoMap[lastBpmIndex].bpm * this.resolution)
-		return _.round(
-			this.tempoMap[lastBpmIndex].time +
-        (tick - this.tempoMap[lastBpmIndex].tick) * msPerTickInRegion,
-			3,
-		)
+		const msPerTickInRegion = 60000 / (this.tempoMap[lastBpmIndex].bpm * this.resolution)
+		return _.round(this.tempoMap[lastBpmIndex].time + (tick - this.tempoMap[lastBpmIndex].tick) * msPerTickInRegion, 3)
 	}
 
-	private getEventType(
-		typeCode: string,
-		value: string,
-		instrument: Instrument,
-	) {
+	private getEventType(typeCode: string, value: string, instrument: Instrument) {
 		switch (typeCode) {
-		case 'E': {
-			switch (value) {
-			case 'solo':
-				return EventType.soloMarker
+			case 'E': {
+				switch (value) {
+					case 'solo':
+						return EventType.soloMarker
+					default:
+						return null
+				}
+			}
+			case 'S': {
+				switch (value) {
+					case '2':
+						return EventType.starPower
+					case '64':
+						return EventType.activationLane
+					case '65':
+						return EventType.rollLaneSingle
+					case '66':
+						return EventType.rollLaneDouble
+					default:
+						return null
+				}
+			}
+			case 'N': {
+				switch (instrument) {
+					case 'drums': {
+						switch (value) {
+							case '0':
+								return EventType.kick
+							case '1':
+								return EventType.red
+							case '2':
+								return EventType.yellow
+							case '3':
+								return EventType.blue
+							case '4':
+								return EventType.orange
+							case '5':
+								return EventType.green
+							case '32':
+								return EventType.kick2x
+							default:
+								return null
+						}
+					}
+					case 'guitarghl':
+					case 'guitarcoopghl':
+					case 'rhythmghl':
+					case 'bassghl': {
+						switch (value) {
+							case '0':
+								return EventType.white1
+							case '1':
+								return EventType.white2
+							case '2':
+								return EventType.white3
+							case '3':
+								return EventType.black1
+							case '4':
+								return EventType.black2
+							case '5':
+								return EventType.force
+							case '6':
+								return EventType.tap
+							case '7':
+								return EventType.open
+							case '8':
+								return EventType.black3
+							default:
+								return null
+						}
+					}
+					default: {
+						switch (value) {
+							case '0':
+								return EventType.green
+							case '1':
+								return EventType.red
+							case '2':
+								return EventType.yellow
+							case '3':
+								return EventType.blue
+							case '4':
+								return EventType.orange
+							case '5':
+								return EventType.force
+							case '6':
+								return EventType.tap
+							case '7':
+								return EventType.open
+							default:
+								return null
+						}
+					}
+				}
+			}
 			default:
 				return null
-			}
-		}
-		case 'S': {
-			switch (value) {
-			case '2':
-				return EventType.starPower
-			case '64':
-				return EventType.activationLane
-			case '65':
-				return EventType.rollLaneSingle
-			case '66':
-				return EventType.rollLaneDouble
-			default:
-				return null
-			}
-		}
-		case 'N': {
-			switch (instrument) {
-			case 'drums': {
-				switch (value) {
-				case '0':
-					return EventType.kick
-				case '1':
-					return EventType.red
-				case '2':
-					return EventType.yellow
-				case '3':
-					return EventType.blue
-				case '4':
-					return EventType.orange
-				case '5':
-					return EventType.green
-				case '32':
-					return EventType.kick2x
-				default:
-					return null
-				}
-			}
-			case 'guitarghl':
-			case 'guitarcoopghl':
-			case 'rhythmghl':
-			case 'bassghl': {
-				switch (value) {
-				case '0':
-					return EventType.white1
-				case '1':
-					return EventType.white2
-				case '2':
-					return EventType.white3
-				case '3':
-					return EventType.black1
-				case '4':
-					return EventType.black2
-				case '5':
-					return EventType.force
-				case '6':
-					return EventType.tap
-				case '7':
-					return EventType.open
-				case '8':
-					return EventType.black3
-				default:
-					return null
-				}
-			}
-			default: {
-				switch (value) {
-				case '0':
-					return EventType.green
-				case '1':
-					return EventType.red
-				case '2':
-					return EventType.yellow
-				case '3':
-					return EventType.blue
-				case '4':
-					return EventType.orange
-				case '5':
-					return EventType.force
-				case '6':
-					return EventType.tap
-				case '7':
-					return EventType.open
-				default:
-					return null
-				}
-			}
-			}
-		}
-		default:
-			return null
 		}
 	}
 
@@ -426,20 +371,13 @@ class ChartParser {
 	}
 
 	private setMissingExperts() {
-		const missingExperts = _.chain(
-      this.trackSections as { [trackName: string]: string[] },
-		)
+		const missingExperts = _.chain(this.trackSections as { [trackName: string]: string[] })
 			.keys()
 			.map((key: TrackName) => trackNameMap[key])
 			.groupBy(trackSection => trackSection.instrument)
-			.mapValues(trackSections =>
-				trackSections.map(trackSection => trackSection.difficulty),
-			)
+			.mapValues(trackSections => trackSections.map(trackSection => trackSection.difficulty))
 			.toPairs()
-			.filter(
-				([, difficulties]) =>
-					!difficulties.includes('expert') && difficulties.length > 0,
-			)
+			.filter(([, difficulties]) => !difficulties.includes('expert') && difficulties.length > 0)
 			.map(([instrument]) => instrument as Instrument)
 			.value()
 
@@ -455,10 +393,7 @@ class ChartParser {
 				this.notesData.chartIssues.push('misalignedTimeSignatures')
 				break
 			}
-			while (
-				this.timeSignatures[i + 1] &&
-        lastBeatlineTick < this.timeSignatures[i + 1].tick
-			) {
+			while (this.timeSignatures[i + 1] && lastBeatlineTick < this.timeSignatures[i + 1].tick) {
 				lastBeatlineTick += this.resolution * this.timeSignatures[i].value * 4
 			}
 		}
@@ -474,12 +409,8 @@ class ChartParser {
 			charter: this.metadata['Charter'] || undefined,
 			diff_guitar: parseFloat(this.metadata['Difficulty']) || undefined,
 			// "Offset" and "PreviewStart" are in units of seconds
-			delay: parseFloat(this.metadata['Offset'])
-				? parseFloat(this.metadata['Offset']) * 1000
-				: undefined,
-			preview_start_time: parseFloat(this.metadata['PreviewStart'])
-				? parseFloat(this.metadata['PreviewStart']) * 1000
-				: undefined,
+			delay: parseFloat(this.metadata['Offset']) ? parseFloat(this.metadata['Offset']) * 1000 : undefined,
+			preview_start_time: parseFloat(this.metadata['PreviewStart']) ? parseFloat(this.metadata['PreviewStart']) * 1000 : undefined,
 		}
 	}
 }

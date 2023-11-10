@@ -9,7 +9,6 @@ import { calculateFingerprint } from './audio-fingerprint'
 const STREAM_DURATION = 100
 
 export class AudioParser {
-
 	private pool: WorkerPool
 
 	constructor(max_threads: number) {
@@ -47,7 +46,7 @@ export class AudioParser {
 
 		// FFMPEG's "amerge" filter output length is always the shortest input length
 		// If the shortest input length is too short, use the "amix" filter instead
-		const audioFilter = (audioFiles.length > 1 && minLength < STREAM_DURATION ? 'amix' : 'amerge')
+		const audioFilter = audioFiles.length > 1 && minLength < STREAM_DURATION ? 'amix' : 'amerge'
 
 		const { audioHash, errors } = await this.pool.exec(calculateFingerprint, [audioFiles, audioFilter])
 

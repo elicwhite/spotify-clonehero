@@ -17,7 +17,7 @@
         "plugin:@angular-eslint/recommended"
 			],
 			"rules": {
-				"semi": "off",
+				// "semi": "off",
 				"@typescript-eslint/semi": ["error", "never"],
 				"@typescript-eslint/consistent-type-definitions": "error",
 				"@typescript-eslint/dot-notation": "off",
@@ -33,10 +33,7 @@
 				"@typescript-eslint/member-delimiter-style": ["error", { "multiline": { "delimiter": "none", "requireLast": true } }],
 				"@typescript-eslint/no-non-null-assertion": "off",
 				"@typescript-eslint/no-empty-function": ["error", { "allow": ["private-constructors"] }],
-				"@typescript-eslint/block-spacing": "error",
 				"brace-style": ["error", "1tbs", { "allowSingleLine": true }],
-				"object-curly-spacing": ["error", "always"],
-				"indent": ["error", "tab"],
 				"id-blacklist": "off",
 				"id-match": "off",
 				"max-len": [
@@ -73,6 +70,22 @@
 				"arrow-parens": ["error", "as-needed"],
 				"comma-dangle": ["error", "always-multiline"],
 				"prefer-arrow/prefer-arrow-functions": ["error", { "allowStandaloneDeclarations": true }]
+			}
+		},
+		{
+			"files": ["*.ts"],
+			"plugins": ["prettier"],
+			"extends": ["plugin:prettier/recommended"],
+			"rules": {
+				"prettier/prettier": ["error", {
+					"parser": "typescript",
+					"endOfLine": "auto",
+					"printWidth": 150,
+					"bracketSpacing": true,
+					"useTabs": true,
+					"semi": false,
+					"singleQuote": true
+				}]
 			}
 		},
 		{

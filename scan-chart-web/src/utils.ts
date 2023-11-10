@@ -2,22 +2,20 @@ import detect from 'charset-detector'
 
 /** Overwrites the type of a nested property in `T` with `U`. */
 export type Overwrite<T, U> = U extends object
-  ? T extends object
-    ? {
-        [K in keyof T]: K extends keyof U ? Overwrite<T[K], U[K]> : T[K];
-      }
-    : U
-  : U
+	? T extends object
+	? {
+		[K in keyof T]: K extends keyof U ? Overwrite<T[K], U[K]> : T[K]
+	}
+	: U
+	: U
 export type Subset<K> = {
-  [attr in keyof K]?: NonNullable<K[attr]> extends object
-    ? Subset<K[attr]>
-    : K[attr];
+	[attr in keyof K]?: NonNullable<K[attr]> extends object ? Subset<K[attr]> : K[attr]
 }
 export type RequireMatchingProps<T, K extends keyof T> = T & {
-  [P in K]-?: NonNullable<T[P]>;
+	[P in K]-?: NonNullable<T[P]>
 }
 export type OptionalMatchingProps<T, K extends keyof T> = Omit<T, K> & {
-  [P in K]?: T[P];
+	[P in K]?: T[P]
 }
 
 /**
@@ -50,11 +48,7 @@ export function getEncoding(buffer: ArrayBuffer) {
 export function appearsToBeChartFolder(extensions: string[]) {
 	const ext = extensions.map(extension => extension.toLowerCase())
 	const containsNotes = ext.includes('chart') || ext.includes('mid')
-	const containsAudio =
-    ext.includes('ogg') ||
-    ext.includes('mp3') ||
-    ext.includes('wav') ||
-    ext.includes('opus')
+	const containsAudio = ext.includes('ogg') || ext.includes('mp3') || ext.includes('wav') || ext.includes('opus')
 	return containsNotes || containsAudio
 }
 
@@ -129,8 +123,7 @@ export function hasAudioName(name: string) {
 			'drums_4',
 			'crowd',
 			'preview',
-		].includes(getBasename(name)) &&
-    ['.ogg', '.mp3', '.wav', '.opus'].includes(getExtension(name)!)
+		].includes(getBasename(name)) && ['.ogg', '.mp3', '.wav', '.opus'].includes(getExtension(name)!)
 	)
 }
 
@@ -145,22 +138,14 @@ export function hasAlbumName(name: string) {
  * @returns `true` if `name` is a valid video filename.
  */
 export function hasVideoName(name: string) {
-	return (
-		getBasename(name) === 'video' &&
-    ['.mp4', '.avi', '.webm', '.vp8', '.ogv', '.mpeg'].includes(
-      getExtension(name)!,
-    )
-	)
+	return getBasename(name) === 'video' && ['.mp4', '.avi', '.webm', '.vp8', '.ogv', '.mpeg'].includes(getExtension(name)!)
 }
 
 /**
  * @returns `true` if `name` is a video filename that is not supported on Linux.
  */
 export function hasBadVideoName(name: string) {
-	return (
-		getBasename(name) === 'video' &&
-    ['.mp4', '.avi', '.mpeg'].includes(getExtension(name))
-	)
+	return getBasename(name) === 'video' && ['.mp4', '.avi', '.mpeg'].includes(getExtension(name))
 }
 
 /**

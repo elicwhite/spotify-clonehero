@@ -7,7 +7,6 @@ import { ChartMetadata, parseChart } from './chart-parser'
 import { parseMidi } from './midi-parser'
 
 class ChartScanner {
-
 	public chartMd5: string | null = null
 	public notesData: NotesData | null = null
 	public chartMetadata: ChartMetadata | null = null
@@ -19,12 +18,16 @@ class ChartScanner {
 
 	public async scan(chartFolder: CachedFile[]) {
 		const chartFile = this.getChartFile(chartFolder)
-		if (!chartFile) { return }
+		if (!chartFile) {
+			return
+		}
 
 		this.chartMd5 = await chartFile.getMD5()
 
 		const { notesData, notesMetadata } = this.getChartData(chartFile)
-		if (!notesData || !notesMetadata) { return }
+		if (!notesData || !notesMetadata) {
+			return
+		}
 
 		this.notesData = notesData
 		this.chartMetadata = notesMetadata
@@ -86,7 +89,9 @@ export async function scanChart(chartFolder: CachedFile[]) {
 	const chartScanner = new ChartScanner()
 	await chartScanner.scan(chartFolder)
 	const metadataIssues: MetadataIssueType[] = []
-	if (chartScanner.chartMetadata?.delay) { metadataIssues.push('nonzeroOffset') }
+	if (chartScanner.chartMetadata?.delay) {
+		metadataIssues.push('nonzeroOffset')
+	}
 	return {
 		chartMd5: chartScanner.chartMd5,
 		notesData: chartScanner.notesData,

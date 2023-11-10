@@ -4,21 +4,16 @@ import { EventEmitter } from 'events'
 // import { Dirent } from 'fs'
 // import { readdir } from 'fs/promises'
 import * as _ from 'lodash'
+
 // import { cpus } from 'os'
 // import { join, parse, relative } from 'path'
-
 // import { scanAudio } from './audio'
 import { CachedFile } from './cached-file'
 import { scanChart } from './chart'
 // import { scanImage } from './image'
 import { defaultMetadata, scanIni } from './ini'
 import { Chart, EventType, ScanChartsConfig, ScannedChart } from './interfaces'
-import {
-	appearsToBeChartFolder,
-	hasSngExtension,
-	RequireMatchingProps,
-	Subset,
-} from './utils'
+import { appearsToBeChartFolder, hasSngExtension, RequireMatchingProps, Subset } from './utils'
 import { scanVideo } from './video'
 
 export * from './interfaces'
@@ -40,10 +35,7 @@ export declare interface ScanChartsResult {
 	 * The `ScannedChart` is passed to `listener`, along with the index of this chart and the total number of charts to be scanned.
 	 * No `folder` events are emitted after this.
 	 */
-	on(
-		event: 'chart',
-		listener: (chart: ScannedChart, index: number, count: number) => void,
-	): void
+	on(event: 'chart', listener: (chart: ScannedChart, index: number, count: number) => void): void
 
 	/**
 	 * Registers `listener` to be called if the filesystem failed to read a file. If this is called, the "end" event won't happen.
@@ -63,10 +55,7 @@ class ChartsScanner {
 
 	private config: ScanChartsConfig
 
-	constructor(
-		private chartsFolder: FileSystemDirectoryHandle,
-		config?: ScanChartsConfig,
-	) {
+	constructor(private chartsFolder: FileSystemDirectoryHandle, config?: ScanChartsConfig) {
 		this.config = {
 			onlyScanSng: false,
 			...config,
@@ -91,9 +80,7 @@ class ChartsScanner {
 		for (const chartFolder of chartFolders) {
 			limiter.schedule(async () => {
 				let chart: Chart
-				const isSng =
-					chartFolder.files.length === 1 &&
-					hasSngExtension(chartFolder.files[0].name)
+				const isSng = chartFolder.files.length === 1 && hasSngExtension(chartFolder.files[0].name)
 
 				if (isSng) {
 					throw new Error('sng files not yet supported')
@@ -118,12 +105,7 @@ class ChartsScanner {
 						chartFileName: isSng ? chartFolder.files[0].name : null,
 					}
 					charts.push(result)
-					this.eventEmitter.emit(
-						'chart',
-						result,
-						chartCounter,
-						chartFolders.length,
-					)
+					this.eventEmitter.emit('chart', result, chartCounter, chartFolders.length)
 				}
 				chartCounter++
 			})
@@ -163,9 +145,7 @@ class ChartsScanner {
 
 		chartFolders.push(..._.flatMap(await Promise.all(subfolders)))
 
-		const sngFiles = files.filter(
-			f => f.kind != 'directory' && hasSngExtension(f.name),
-		)
+		const sngFiles = files.filter(f => f.kind != 'directory' && hasSngExtension(f.name))
 		chartFolders.push(
 			...sngFiles.map((sf: FileSystemFileHandle) => ({
 				path: directoryHandle.name,
@@ -180,9 +160,7 @@ class ChartsScanner {
 		) {
 			chartFolders.push({
 				path: directoryHandle.name,
-				files: files.filter(
-					f => f.kind != 'directory',
-				) as FileSystemFileHandle[],
+				files: files.filter(f => f.kind != 'directory') as FileSystemFileHandle[],
 			})
 			this.eventEmitter.emit('folder', directoryHandle.name)
 		}
@@ -190,14 +168,8 @@ class ChartsScanner {
 		return chartFolders
 	}
 
-	private async scanChartFolder(
-		chartFolder: CachedFile[],
-		sngMetadata?: { [key: string]: string },
-	) {
-		const chart: RequireMatchingProps<
-			Subset<Chart>,
-			'folderIssues' | 'metadataIssues' | 'playable'
-		> = {
+	private async scanChartFolder(chartFolder: CachedFile[], sngMetadata?: { [key: string]: string }) {
+		const chart: RequireMatchingProps<Subset<Chart>, 'folderIssues' | 'metadataIssues' | 'playable'> = {
 			folderIssues: [],
 			metadataIssues: [],
 			playable: true,
@@ -227,60 +199,32 @@ class ChartsScanner {
 			const instruments = chartData.notesData.instruments
 			if (
 				iniData.metadata &&
-				((instruments.includes('guitar') &&
-					iniData.metadata.diff_guitar === defaultMetadata.diff_guitar) ||
-					(instruments.includes('guitarcoop') &&
-						iniData.metadata.diff_guitar_coop ===
-							defaultMetadata.diff_guitar_coop) ||
-					(instruments.includes('rhythm') &&
-						iniData.metadata.diff_rhythm === defaultMetadata.diff_rhythm) ||
-					(instruments.includes('bass') &&
-						iniData.metadata.diff_bass === defaultMetadata.diff_bass) ||
-					(instruments.includes('drums') &&
-						iniData.metadata.diff_drums === defaultMetadata.diff_drums) ||
-					(instruments.includes('keys') &&
-						iniData.metadata.diff_keys === defaultMetadata.diff_keys) ||
-					(instruments.includes('guitarghl') &&
-						iniData.metadata.diff_guitarghl ===
-							defaultMetadata.diff_guitarghl) ||
-					(instruments.includes('guitarcoopghl') &&
-						iniData.metadata.diff_guitar_coop_ghl ===
-							defaultMetadata.diff_guitar_coop_ghl) ||
-					(instruments.includes('rhythmghl') &&
-						iniData.metadata.diff_rhythm_ghl ===
-							defaultMetadata.diff_rhythm_ghl) ||
-					(instruments.includes('bassghl') &&
-						iniData.metadata.diff_bassghl === defaultMetadata.diff_bassghl) ||
-					(chartData.notesData.hasVocals &&
-						iniData.metadata.diff_vocals === defaultMetadata.diff_vocals))
+				((instruments.includes('guitar') && iniData.metadata.diff_guitar === defaultMetadata.diff_guitar) ||
+					(instruments.includes('guitarcoop') && iniData.metadata.diff_guitar_coop === defaultMetadata.diff_guitar_coop) ||
+					(instruments.includes('rhythm') && iniData.metadata.diff_rhythm === defaultMetadata.diff_rhythm) ||
+					(instruments.includes('bass') && iniData.metadata.diff_bass === defaultMetadata.diff_bass) ||
+					(instruments.includes('drums') && iniData.metadata.diff_drums === defaultMetadata.diff_drums) ||
+					(instruments.includes('keys') && iniData.metadata.diff_keys === defaultMetadata.diff_keys) ||
+					(instruments.includes('guitarghl') && iniData.metadata.diff_guitarghl === defaultMetadata.diff_guitarghl) ||
+					(instruments.includes('guitarcoopghl') && iniData.metadata.diff_guitar_coop_ghl === defaultMetadata.diff_guitar_coop_ghl) ||
+					(instruments.includes('rhythmghl') && iniData.metadata.diff_rhythm_ghl === defaultMetadata.diff_rhythm_ghl) ||
+					(instruments.includes('bassghl') && iniData.metadata.diff_bassghl === defaultMetadata.diff_bassghl) ||
+					(chartData.notesData.hasVocals && iniData.metadata.diff_vocals === defaultMetadata.diff_vocals))
 			) {
 				chart.metadataIssues.push('missingInstrumentDiff')
 			}
 			if (
 				iniData.metadata &&
-				((iniData.metadata.diff_guitar !== defaultMetadata.diff_guitar &&
-					!instruments.includes('guitar')) ||
-					(iniData.metadata.diff_guitar_coop !==
-						defaultMetadata.diff_guitar_coop &&
-						!instruments.includes('guitarcoop')) ||
-					(iniData.metadata.diff_rhythm !== defaultMetadata.diff_rhythm &&
-						!instruments.includes('rhythm')) ||
-					(iniData.metadata.diff_bass !== defaultMetadata.diff_bass &&
-						!instruments.includes('bass')) ||
-					(iniData.metadata.diff_drums !== defaultMetadata.diff_drums &&
-						!instruments.includes('drums')) ||
-					(iniData.metadata.diff_keys !== defaultMetadata.diff_keys &&
-						!instruments.includes('keys')) ||
-					(iniData.metadata.diff_guitarghl !== defaultMetadata.diff_guitarghl &&
-						!instruments.includes('guitarghl')) ||
-					(iniData.metadata.diff_guitar_coop_ghl !==
-						defaultMetadata.diff_guitar_coop_ghl &&
-						!instruments.includes('guitarcoopghl')) ||
-					(iniData.metadata.diff_rhythm_ghl !==
-						defaultMetadata.diff_rhythm_ghl &&
-						!instruments.includes('rhythmghl')) ||
-					(iniData.metadata.diff_bassghl !== defaultMetadata.diff_bassghl &&
-						!instruments.includes('bassghl')))
+				((iniData.metadata.diff_guitar !== defaultMetadata.diff_guitar && !instruments.includes('guitar')) ||
+					(iniData.metadata.diff_guitar_coop !== defaultMetadata.diff_guitar_coop && !instruments.includes('guitarcoop')) ||
+					(iniData.metadata.diff_rhythm !== defaultMetadata.diff_rhythm && !instruments.includes('rhythm')) ||
+					(iniData.metadata.diff_bass !== defaultMetadata.diff_bass && !instruments.includes('bass')) ||
+					(iniData.metadata.diff_drums !== defaultMetadata.diff_drums && !instruments.includes('drums')) ||
+					(iniData.metadata.diff_keys !== defaultMetadata.diff_keys && !instruments.includes('keys')) ||
+					(iniData.metadata.diff_guitarghl !== defaultMetadata.diff_guitarghl && !instruments.includes('guitarghl')) ||
+					(iniData.metadata.diff_guitar_coop_ghl !== defaultMetadata.diff_guitar_coop_ghl && !instruments.includes('guitarcoopghl')) ||
+					(iniData.metadata.diff_rhythm_ghl !== defaultMetadata.diff_rhythm_ghl && !instruments.includes('rhythmghl')) ||
+					(iniData.metadata.diff_bassghl !== defaultMetadata.diff_bassghl && !instruments.includes('bassghl')))
 			) {
 				chart.metadataIssues.push('extraInstrumentDiff')
 			}
@@ -334,18 +278,12 @@ class ChartsScanner {
 /**
  * Scans the charts in the `chartsFolder` directory and returns an event emitter that emits the results.
  */
-export function scanCharts(
-	chartsFolder: FileSystemDirectoryHandle,
-	config?: ScanChartsConfig,
-) {
+export function scanCharts(chartsFolder: FileSystemDirectoryHandle, config?: ScanChartsConfig) {
 	const chartsScanner = new ChartsScanner(chartsFolder, config)
 	chartsScanner.scanChartsFolder()
 
 	return {
-		on: <T extends keyof ScanChartsResultEvents>(
-			event: T,
-			listener: ScanChartsResultEvents[T],
-		) => {
+		on: <T extends keyof ScanChartsResultEvents>(event: T, listener: ScanChartsResultEvents[T]) => {
 			chartsScanner.eventEmitter.on(event, listener)
 		},
 	}

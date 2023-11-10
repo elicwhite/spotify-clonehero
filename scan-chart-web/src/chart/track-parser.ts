@@ -21,17 +21,13 @@ export class TrackParser {
 		private instrument: Instrument,
 		private difficulty: Difficulty,
 		private trackEvents: TrackEvent[],
-		private format: 'chart' | 'mid'
+		private format: 'chart' | 'mid',
 	) {
-		if (!notesData.instruments.includes(this.instrument)) { notesData.instruments.push(this.instrument) }
+		if (!notesData.instruments.includes(this.instrument)) {
+			notesData.instruments.push(this.instrument)
+		}
 
-		const nonNoteEvents = [
-			EventType.starPower,
-			EventType.soloMarker,
-			EventType.activationLane,
-			EventType.rollLaneSingle,
-			EventType.rollLaneDouble,
-		]
+		const nonNoteEvents = [EventType.starPower, EventType.soloMarker, EventType.activationLane, EventType.rollLaneSingle, EventType.rollLaneDouble]
 
 		this.notes = trackEvents.filter(event => !nonNoteEvents.includes(event.type))
 		this.groupedNotes = _.chain(this.notes)
@@ -45,11 +41,19 @@ export class TrackParser {
 			.value()
 	}
 
-	public get firstNote() { return _.first(this.groupedNotes) ?? null }
-	public get lastNote() { return _.last(this.groupedNotes) ?? null }
+	public get firstNote() {
+		return _.first(this.groupedNotes) ?? null
+	}
+	public get lastNote() {
+		return _.last(this.groupedNotes) ?? null
+	}
 
-	private addNoteIssue(issueType: NoteIssueType, time: number) { this.noteIssues.push({ issueType, time }) }
-	private addTrackIssue(issueType: TrackIssueType) { this.trackIssues.push(issueType) }
+	private addNoteIssue(issueType: NoteIssueType, time: number) {
+		this.noteIssues.push({ issueType, time })
+	}
+	private addTrackIssue(issueType: TrackIssueType) {
+		this.trackIssues.push(issueType)
+	}
 
 	/**
 	 * Updates `notesData` with errors and other info detected in this track.
@@ -69,7 +73,9 @@ export class TrackParser {
 			this.notesData.hashes.push({
 				instrument: this.instrument,
 				difficulty: this.difficulty,
-				hash: createHash('md5').update(this.trackEvents.map(n => `${n.time}_${n.type}_${n.length}`).join(':')).digest('hex'),
+				hash: createHash('md5')
+					.update(this.trackEvents.map(n => `${n.time}_${n.type}_${n.length}`).join(':'))
+					.digest('hex'),
 			})
 
 			// Add note count
@@ -85,8 +91,10 @@ export class TrackParser {
 				const previousNote = this.groupedNotes[i - 1]
 				const distance = note.time - previousNote.time
 				if (distance > 0 && distance <= 15) {
-					if ((this.typeCount(note, [EventType.open]) > 0 && this.typeCount(previousNote, [EventType.open]) === 0)
-						|| (this.typeCount(previousNote, [EventType.open]) > 0 && this.typeCount(note, [EventType.open]) === 0)) {
+					if (
+						(this.typeCount(note, [EventType.open]) > 0 && this.typeCount(previousNote, [EventType.open]) === 0) ||
+						(this.typeCount(previousNote, [EventType.open]) > 0 && this.typeCount(note, [EventType.open]) === 0)
+					) {
 						continue // Skip open notes before or after non-open notes
 					}
 					this.addNoteIssue('brokenNote', this.groupedNotes[i].time)
@@ -100,7 +108,10 @@ export class TrackParser {
 		}
 
 		if (this.noteIssues.length) {
-			this.noteIssues = _.chain(this.noteIssues).uniqBy(n => n.issueType + n.time).sortBy(n => n.time).value()
+			this.noteIssues = _.chain(this.noteIssues)
+				.uniqBy(n => n.issueType + n.time)
+				.sortBy(n => n.time)
+				.value()
 			this.notesData.noteIssues.push({ instrument: this.instrument, difficulty: this.difficulty, noteIssues: this.noteIssues })
 		}
 		if (this.trackIssues.length) {
@@ -123,22 +134,36 @@ export class TrackParser {
 		let trackHasActivationLanes = false
 		// Check for drum note type properties
 		for (const event of this.trackEvents) {
-			if (event.type === EventType.starPower) { trackHasStarPower = true }
+			if (event.type === EventType.starPower) {
+				trackHasStarPower = true
+			}
 			// GH1/GH2 charts represent star power using solo marker events
-			if (event.type === EventType.soloMarker && this.format === 'mid') { trackHasStarPower = true }
-			if (event.type === EventType.activationLane) { trackHasActivationLanes = true }
-			if (event.type === EventType.kick2x) { this.notesData.has2xKick = true }
-			if (event.type === EventType.rollLaneSingle || event.type === EventType.rollLaneDouble) { this.notesData.hasRollLanes = true }
+			if (event.type === EventType.soloMarker && this.format === 'mid') {
+				trackHasStarPower = true
+			}
+			if (event.type === EventType.activationLane) {
+				trackHasActivationLanes = true
+			}
+			if (event.type === EventType.kick2x) {
+				this.notesData.has2xKick = true
+			}
+			if (event.type === EventType.rollLaneSingle || event.type === EventType.rollLaneDouble) {
+				this.notesData.hasRollLanes = true
+			}
 		}
 		const nonKickDrumNoteIds = [EventType.green, EventType.red, EventType.yellow, EventType.blue, EventType.orange]
 		const kickDrumNoteIds = [EventType.kick]
 		const kick2xDrumNoteIds = [EventType.kick2x]
 		for (const note of this.groupedNotes) {
 			// Check for three-note drum chords (not including kicks)
-			if (this.typeCount(note, nonKickDrumNoteIds) >= 3) { this.addNoteIssue('threeNoteDrumChord', note.time) }
+			if (this.typeCount(note, nonKickDrumNoteIds) >= 3) {
+				this.addNoteIssue('threeNoteDrumChord', note.time)
+			}
 			// Check for notes forbidden on lower difficulties
 			if (this.difficulty !== 'expert') {
-				if (this.typeCount(note, kick2xDrumNoteIds) > 0) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
+				if (this.typeCount(note, kick2xDrumNoteIds) > 0) {
+					this.addNoteIssue('difficultyForbiddenNote', note.time)
+				}
 			}
 			if (this.difficulty === 'easy') {
 				if (this.typeCount(note, nonKickDrumNoteIds) === 2 && this.typeCount(note, kickDrumNoteIds) > 0) {
@@ -146,25 +171,33 @@ export class TrackParser {
 				}
 			}
 		}
-		if (
-			!trackHasStarPower
-			&& this.firstNote
-			&& this.lastNote
-			&& this.lastNote.time - this.firstNote.time > 60000
-			&& this.groupedNotes.length > 50
-		) { this.addTrackIssue('noStarPower') }
-		if (!trackHasActivationLanes) { this.addTrackIssue('noDrumActivationLanes') }
+		if (!trackHasStarPower && this.firstNote && this.lastNote && this.lastNote.time - this.firstNote.time > 60000 && this.groupedNotes.length > 50) {
+			this.addTrackIssue('noStarPower')
+		}
+		if (!trackHasActivationLanes) {
+			this.addTrackIssue('noDrumActivationLanes')
+		}
 	}
 
 	private parseNonDrumTrack() {
 		let trackHasStarPower = false
 		// Check for guitar note type properties
 		for (const event of this.trackEvents) {
-			if (event.type === EventType.soloMarker) { this.notesData.hasSoloSections = true }
-			if (event.type === EventType.force) { this.notesData.hasForcedNotes = true }
-			if (event.type === EventType.open) { this.notesData.hasOpenNotes = true }
-			if (event.type === EventType.starPower) { trackHasStarPower = true }
-			if (event.type === EventType.tap) { this.notesData.hasTapNotes = true }
+			if (event.type === EventType.soloMarker) {
+				this.notesData.hasSoloSections = true
+			}
+			if (event.type === EventType.force) {
+				this.notesData.hasForcedNotes = true
+			}
+			if (event.type === EventType.open) {
+				this.notesData.hasOpenNotes = true
+			}
+			if (event.type === EventType.starPower) {
+				trackHasStarPower = true
+			}
+			if (event.type === EventType.tap) {
+				this.notesData.hasTapNotes = true
+			}
 		}
 		// Check for sustain properties
 		this.setSustainProperties()
@@ -176,25 +209,31 @@ export class TrackParser {
 			const orangeBlueIds = [EventType.orange, EventType.blue]
 			for (const note of this.groupedNotes) {
 				// Check for five-note chords
-				if (this.typeCount(note, fiveNoteChordIds) === 5) { this.addNoteIssue('fiveNoteChord', note.time) }
+				if (this.typeCount(note, fiveNoteChordIds) === 5) {
+					this.addNoteIssue('fiveNoteChord', note.time)
+				}
 				// Check for notes forbidden on lower difficulties
 				if (this.difficulty === 'hard') {
-					if (this.typeCount(note, greenOrangeChordIds) === 2) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
+					if (this.typeCount(note, greenOrangeChordIds) === 2) {
+						this.addNoteIssue('difficultyForbiddenNote', note.time)
+					}
 				} else if (this.difficulty === 'medium') {
-					if (this.typeCount(note, orangeIds) > 0) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
-					if (this.typeCount(note, greenBlueChordIds) === 2) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
+					if (this.typeCount(note, orangeIds) > 0) {
+						this.addNoteIssue('difficultyForbiddenNote', note.time)
+					}
+					if (this.typeCount(note, greenBlueChordIds) === 2) {
+						this.addNoteIssue('difficultyForbiddenNote', note.time)
+					}
 				} else if (this.difficulty === 'easy') {
-					if (this.typeCount(note, orangeBlueIds) > 0) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
+					if (this.typeCount(note, orangeBlueIds) > 0) {
+						this.addNoteIssue('difficultyForbiddenNote', note.time)
+					}
 				}
 			}
 		}
-		if (
-			!trackHasStarPower
-			&& this.firstNote
-			&& this.lastNote
-			&& this.lastNote.time - this.firstNote.time > 60000
-			&& this.groupedNotes.length > 50
-		) { this.addTrackIssue('noStarPower') }
+		if (!trackHasStarPower && this.firstNote && this.lastNote && this.lastNote.time - this.firstNote.time > 60000 && this.groupedNotes.length > 50) {
+			this.addTrackIssue('noStarPower')
+		}
 	}
 
 	private setSustainProperties() {
@@ -209,7 +248,8 @@ export class TrackParser {
 			}
 
 			if (note.length > 0) {
-				if (note.type !== EventType.open) { // ignore gaps of open sustains
+				if (note.type !== EventType.open) {
+					// ignore gaps of open sustains
 					futureSustainGaps.push({
 						startTime: note.time + note.length,
 						endTime: note.time + note.length + MIN_SUSTAIN_GAP_MS,
@@ -235,7 +275,9 @@ export class TrackParser {
 	}
 
 	private setNpsProperties() {
-		if (!this.groupedNotes.length) { return }
+		if (!this.groupedNotes.length) {
+			return
+		}
 		/** The list of ticks that contain previous notes that are within `NPS_GROUP_SIZE_MS` milliseconds of `note`. */
 		const recentNoteTimes: number[] = []
 		/** Last note in the highest-nps group. */
