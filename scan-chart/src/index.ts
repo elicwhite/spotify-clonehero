@@ -3,6 +3,7 @@ import { EventEmitter } from 'events'
 import { md5 } from 'js-md5'
 import * as _ from 'lodash'
 
+import { scanAudio } from './audio'
 import { CachedFile } from './cached-file'
 import { scanChart } from './chart'
 import { scanImage } from './image'
@@ -224,8 +225,8 @@ class ChartsScanner {
 			}
 		}
 
-		// const audioData = await scanAudio(chartFolder, cpus().length - 1)
-		// chart.folderIssues.push(...audioData.folderIssues)
+		const audioData = await scanAudio(chartFolder, 1)
+		chart.folderIssues.push(...audioData.folderIssues)
 
 		if (!chartData.notesData || chart.folderIssues.find(i => i!.folderIssue === 'noAudio') /* TODO: || !audioData.audioHash */) {
 			chart.playable = false

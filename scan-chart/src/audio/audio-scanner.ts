@@ -1,9 +1,8 @@
 import * as _ from 'lodash'
-import { parse } from 'path'
 
 import { CachedFile } from 'src/cached-file'
 import { FolderIssueType } from '../interfaces'
-import { hasAudioExtension, hasAudioName } from '../utils'
+import { getBasename, hasAudioExtension, hasAudioName } from '../utils'
 
 class AudioScanner {
 
@@ -41,8 +40,8 @@ class AudioScanner {
 		for (const file of chartFolder) {
 			if (hasAudioExtension(file.name)) {
 				if (hasAudioName(file.name)) {
-					stemNames.push(parse(file.name).name)
-					if (!['preview', 'crowd'].includes(parse(file.name.toLowerCase()).name)) {
+					stemNames.push(getBasename(file.name))
+					if (!['preview', 'crowd'].includes(getBasename(file.name).toLowerCase())) {
 						audioFiles.push(file)
 					}
 				} else {
