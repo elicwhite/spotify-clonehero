@@ -949,6 +949,11 @@
     "@typescript-eslint/types" "6.7.5"
     eslint-visitor-keys "^3.4.1"
 
+"@xmldom/xmldom@^0.8.10":
+  version "0.8.10"
+  resolved "https://registry.yarnpkg.com/@xmldom/xmldom/-/xmldom-0.8.10.tgz#a1337ca426aa61cef9fe15b5b28e340a72f6fa99"
+  integrity sha512-2WALfTl4xo2SkGCYRt6rDTFfk9R1czmBvUQy12gK2KuRKIpWEhcbbzy8EZXtz/jkRqHX8bFEc6FC1HjX4TUWYw==
+
 acorn-jsx@^5.3.2:
   version "5.3.2"
   resolved "https://registry.yarnpkg.com/acorn-jsx/-/acorn-jsx-5.3.2.tgz#7ed5bb55908b3b2f1bc55c6af1653bada7f07937"
@@ -1938,6 +1943,13 @@ execa@^5.0.0:
     onetime "^5.1.2"
     signal-exit "^3.0.3"
     strip-final-newline "^2.0.0"
+
+exifreader@^4.16.0:
+  version "4.16.0"
+  resolved "https://registry.yarnpkg.com/exifreader/-/exifreader-4.16.0.tgz#e07b94bb4fc3682c2d3ec3961aa0139f147bc97c"
+  integrity sha512-Ivd4lr/EZ2lPHBrAFsO4C90OUKihQWJfsUjGAn7pAuRcXs/RqdENFQLIRQDVLn+KFE5GuSN8q5AdRIDPT94QUQ==
+  optionalDependencies:
+    "@xmldom/xmldom" "^0.8.10"
 
 exit@^0.1.2:
   version "0.1.2"
@@ -3818,14 +3830,15 @@ sanitize-filename@^1.6.3:
   dependencies:
     truncate-utf8-bytes "^1.0.0"
 
-scan-chart-web@3.3.4:
-  version "3.3.4"
-  resolved "https://registry.yarnpkg.com/scan-chart-web/-/scan-chart-web-3.3.4.tgz#6630deb931247a50a8b851419e4c552f7d3d50a2"
-  integrity sha512-aoqNTgtsYxfiFYgg859EnAgJbHYoodLmBW+EgnJYUpOUoZ1Zt85DiYs9GnNVyT7kWLdUp5c0NWmuRh4hAyZp5Q==
+scan-chart-web@3.3.5:
+  version "3.3.5"
+  resolved "https://registry.yarnpkg.com/scan-chart-web/-/scan-chart-web-3.3.5.tgz#a3d7816e1422a83d7c0ab872575ece8b281cf37c"
+  integrity sha512-QyTJfrYBC/x8ji8y4kjnMPEiY+4GfBRWizs7vf0GAZcOBn1tur8CkTClaKev0eZj7JzdUPVCBcRd9L/hILvXuA==
   dependencies:
     bottleneck "^2.19.5"
     charset-detector "^0.0.2"
     events "^3.3.0"
+    exifreader "^4.16.0"
     js-md5 "^0.8.3"
     lodash "^4.17.21"
     midievents "^2.0.0"
