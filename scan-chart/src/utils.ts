@@ -39,7 +39,7 @@ export function appearsToBeChartFolder(extensions: string[]) {
 }
 
 export function getExtension(fileName: string) {
-	return '.' + fileName.toLowerCase().split('.').pop()!
+	return '.' + fileName.split('.').pop()!
 }
 
 export function getBasename(fileName: string) {
@@ -50,14 +50,14 @@ export function getBasename(fileName: string) {
  * @returns `true` if `name` has a valid sng file extension.
  */
 export function hasSngExtension(name: string) {
-	return '.sng' === getExtension(name)
+	return '.sng' === getExtension(name).toLowerCase()
 }
 
 /**
  * @returns `true` if `name` has a valid ini file extension.
  */
 export function hasIniExtension(name: string) {
-	return ('.ini' === getExtension(name))
+	return ('.ini' === getExtension(name).toLowerCase())
 }
 
 /**
@@ -71,7 +71,7 @@ export function hasIniName(name: string) {
  * @returns `true` if `name` has a valid chart file extension.
  */
 export function hasChartExtension(name: string) {
-	return (['.chart', '.mid'].includes(getExtension(name)))
+	return (['.chart', '.mid'].includes(getExtension(name).toLowerCase()))
 }
 
 /**
@@ -85,7 +85,7 @@ export function hasChartName(name: string) {
  * @returns `true` if `name` has a valid chart audio file extension.
  */
 export function hasAudioExtension(name: string) {
-	return (['.ogg', '.mp3', '.wav', '.opus'].includes(getExtension(name)))
+	return (['.ogg', '.mp3', '.wav', '.opus'].includes(getExtension(name).toLowerCase()))
 }
 
 /**
