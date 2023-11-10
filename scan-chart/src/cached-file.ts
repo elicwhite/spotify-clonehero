@@ -1,4 +1,5 @@
 import { md5 } from 'js-md5'
+import { SngHeader, SngStream } from 'parse-sng'
 
 export class CachedFile {
 
@@ -33,65 +34,59 @@ export class CachedFile {
 
 	static async buildFromSng(fileHandle: FileSystemFileHandle) {
 
-		// const stats = await stat(filepath)
-		// if (!stats.isFile()) {
-		// 	throw new Error(`Can't read file at ${filepath}; not a file`)
-		// }
-		// if ((stats.mode & constants.S_IRUSR) === 0) {
-		// 	throw new Error(`Can't read file at ${filepath}; permission denied`)
-		// }
+		if (fileHandle.kind != 'file') {
+			throw new Error(`Can't read file at ${fileHandle.name}; not a file`)
+		}
 
-		// let sngHeader: SngHeader
-		// let cachedFiles: Promise<CachedFile[]>
+		let sngHeader: SngHeader
+		let cachedFiles: Promise<CachedFile[]>
 
-		// const sngStream = new SngStream(
-		// 	(start, end) => Readable.toWeb(
-		// 		createReadStream(filepath, { start: Number(start), end: Number(end) || undefined })
-		// 	) as ReadableStream<Uint8Array>
-		// )
-		// sngStream.on('header', header => sngHeader = header)
+		const file = await fileHandle.getFile()
+		const sngStream = new SngStream(() => file.stream())
 
-		// await new Promise<void>((resolve, reject) => {
+		sngStream.on('header', header => sngHeader = header)
 
-		// 	sngStream.on('error', err => reject(err))
+		await new Promise<void>((resolve, reject) => {
 
-		// 	sngStream.on('files', files => {
-		// 		cachedFiles = Promise.all(files.map(async ({ fileName, fileStream }) => {
+			sngStream.on('error', err => reject(err))
 
-		// 			const fileSizeMiB = Number(sngHeader.fileMeta.find(fm => fm.filename === fileName)!.contentsLen) / 1024 / 1024
+			sngStream.on('files', files => {
+				cachedFiles = Promise.all(files.map(async ({ fileName, fileStream }) => {
 
-		// 			if (fileSizeMiB < 2048) {
-		// 				const chunks: Uint8Array[] = []
-		// 				const reader = fileStream.getReader()
+					const fileSizeMiB = Number(sngHeader.fileMeta.find(fm => fm.filename === fileName)!.contentsLen) / 1024 / 1024
 
-		// 				// eslint-disable-next-line no-constant-condition
-		// 				while (true) {
-		// 					try {
-		// 						const result = await reader.read()
-		// 						if (result.done) { break }
-		// 						chunks.push(result.value)
-		// 					} catch (err) {
-		// 						reject(err)
-		// 						return new CachedFile(filepath, null, null)
-		// 					}
-		// 				}
+					if (fileSizeMiB < 2048) {
+						const chunks: Uint8Array[] = []
+						const reader = fileStream.getReader()
 
-		// 				return new CachedFile(filepath, Buffer.concat(chunks), null, fileName)
-		// 			} else {
-		// 				return new CachedFile(filepath, null, fileStream, fileName)
-		// 			}
-		// 		}))
+						// eslint-disable-next-line no-constant-condition
+						while (true) {
+							try {
+								const result = await reader.read()
+								if (result.done) { break }
+								chunks.push(result.value)
+							} catch (err) {
+								reject(err)
+								return new CachedFile(fileHandle, null, null)
+							}
+						}
 
-		// 		resolve()
-		// 	})
+						return new CachedFile(fileHandle, Buffer.concat(chunks), null, fileName)
+					} else {
+						return new CachedFile(fileHandle, null, fileStream, fileName)
+					}
+				}))
 
-		// 	sngStream.start()
-		// })
+				resolve()
+			})
 
-		// return {
-		// 	sngMetadata: sngHeader!.metadata,
-		// 	files: await cachedFiles!,
-		// }
+			sngStream.start()
+		})
+
+		return {
+			sngMetadata: sngHeader!.metadata,
+			files: await cachedFiles!,
+		}
 	}
 
 	/**

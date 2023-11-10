@@ -77,9 +77,8 @@ class ChartsScanner {
 				const isSng = chartFolder.files.length === 1 && hasSngExtension(chartFolder.files[0].name)
 
 				if (isSng) {
-					throw new Error('sng files not yet supported')
-					// const { sngMetadata, files } = await CachedFile.buildFromSng(join(chartFolder.path, chartFolder.files[0].name))
-					// chart = await this.scanChartFolder(files, sngMetadata)
+					const { sngMetadata, files } = await CachedFile.buildFromSng(chartFolder.files[0])
+					chart = await this.scanChartFolder(files, sngMetadata)
 				} else {
 					const chartFiles: CachedFile[] = []
 					await Promise.all(chartFolder.files.map(async file => {
