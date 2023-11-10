@@ -4,8 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build:scan-chart": "cd ../scan-chart && NODE_ENV=dev pnpm i && pnpm run build && cd ../spotify-clonehero-next",
-    "build": "yarn run build:scan-chart && yarn run jest && next build",
+    "build": "yarn run jest && next build",
     "start": "next start",
     "lint": "next lint"
   },
