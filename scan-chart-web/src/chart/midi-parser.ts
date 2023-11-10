@@ -196,17 +196,17 @@ class MidiParser {
 				difficulty,
 				time: event.playTime!,
 				type:
-					note === 103
-						? EventType.soloMarker
-						: note === 116
-						? EventType.starPower
-						: note >= 120 && note <= 124
-						? EventType.activationLane
-						: note === 126
-						? EventType.rollLaneSingle
-						: note === 127
-						? EventType.rollLaneDouble
-						: null,
+					note === 103 ?
+						EventType.soloMarker :
+						note === 116 ?
+						EventType.starPower :
+						note >= 120 && note <= 124 ?
+						EventType.activationLane :
+						note === 126 ?
+						EventType.rollLaneSingle :
+						note === 127 ?
+						EventType.rollLaneDouble :
+						null,
 				isStart: event.subtype === EVENT_MIDI_NOTE_ON,
 			}
 		}
@@ -215,11 +215,11 @@ class MidiParser {
 			difficulty,
 			time: event.playTime!,
 			type:
-				(['guitarghl', 'guitarcoopghl', 'rhythmghl', 'bassghl'].includes(instrument)
-					? this.get6FretNoteType(note, difficulty)
-					: instrument === 'drums'
-					? this.getDrumsNoteType(note, difficulty)
-					: this.get5FretNoteType(note, difficulty)) ?? null,
+				(['guitarghl', 'guitarcoopghl', 'rhythmghl', 'bassghl'].includes(instrument) ?
+					this.get6FretNoteType(note, difficulty) :
+					instrument === 'drums' ?
+					this.getDrumsNoteType(note, difficulty) :
+					this.get5FretNoteType(note, difficulty)) ?? null,
 			isStart: event.subtype === EVENT_MIDI_NOTE_ON,
 		}
 	}

@@ -36,6 +36,7 @@
 				"brace-style": ["error", "1tbs", { "allowSingleLine": true }],
 				"id-blacklist": "off",
 				"id-match": "off",
+				"operator-linebreak": ["error", "after"],
 				"max-len": [
 					"error",
 					{

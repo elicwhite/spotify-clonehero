@@ -7,7 +7,7 @@ declare module 'midievents' {
 	type EventType = typeof EVENT_META |
 		typeof EVENT_SYSEX |
 		typeof EVENT_DIVSYSEX |
-		typeof EVENT_MIDI
+		, typeof EVENT_MIDI
 
 	// Meta event types
 	const EVENT_META_SEQUENCE_NUMBER = 0x00
