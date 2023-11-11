@@ -1,6 +1,6 @@
 {
   "name": "scan-chart-web",
-  "version": "3.3.6",
+  "version": "3.3.7",
   "author": "Geo & Eli",
   "license": "MIT",
   "main": "dist/index.js",
