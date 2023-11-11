@@ -137,6 +137,10 @@ class ChartsScanner {
 		const sngFiles = files.filter(f => f.kind != 'directory' && hasSngExtension(f.name))
 		chartFolders.push(...sngFiles.map((sf: FileSystemFileHandle) => ({ path, files: [sf] })))
 
+		sngFiles.forEach(sf => {
+			this.eventEmitter.emit('folder', sf.name)
+		})
+
 		if (
 			!this.config.onlyScanSng &&
 			appearsToBeChartFolder(files.map(file => getExtension(file.name).substring(1))) &&
