@@ -106,7 +106,7 @@ function Scanner({
       });
     }
     run();
-  }, []);
+  }, [directoryHandle]);
 
   const downloadXlsx = useCallback(async () => {
     if (xlsx == null) {
