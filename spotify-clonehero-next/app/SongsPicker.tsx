@@ -11,9 +11,7 @@ import {
 import ini from 'ini';
 import SongsTable from './SongsTable';
 
-import searchForChart, {
-  searchEncore as searchForChartEncore,
-} from './searchForChart';
+import {searchEncore as searchForChartEncore} from './searchForChart';
 import {ChartResponse} from './chartSelection';
 import {compareToCurrentChart} from './compareToCurrentChart';
 

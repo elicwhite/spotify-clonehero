@@ -1,4 +1,4 @@
-import {searchForChart, searchForChartEncore} from './serverActions';
+import {searchForChart, searchForChartEncoreBasic} from './serverActions';
 import {
   ChartResponse,
   ChartResponseEncore,
@@ -6,14 +6,14 @@ import {
 } from './chartSelection';
 import {useState, useTransition} from 'react';
 
-export default async function search(
+export async function searchChorus(
   artist: string,
   song: string,
 ): Promise<ChartResponse> {
   // TODO this needs a useTransition
   const result = await searchForChart(artist, song);
-  const resultCompare = await searchForChartEncore(artist, song);
-  const parsed = JSON.parse(resultCompare);
+  // const resultCompare = await searchForChartEncore(artist, song);
+  // const parsed = JSON.parse(result);
 
   const charts: ChartResponse[] = JSON.parse(result);
 
@@ -26,7 +26,7 @@ export async function searchEncore(
   song: string,
 ): Promise<ChartResponse> {
   // TODO this needs a useTransition
-  const result = await searchForChartEncore(artist, song);
+  const result = await searchForChartEncoreBasic(artist, song);
 
   const charts: ChartResponseEncore[] = JSON.parse(result);
 
