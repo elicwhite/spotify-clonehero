@@ -12,6 +12,11 @@ type CachePlaylistTracks = {
   [snapshotId: string]: TrackResult[];
 };
 
+export type TrackResult = {
+  name: string;
+  artists: string[];
+};
+
 function getCachedPlaylistTracks(): CachePlaylistTracks {
   const cachedPlaylistTracks = localStorage.getItem('playlistTracks');
   if (cachedPlaylistTracks) {
@@ -40,11 +45,6 @@ async function getAllPlaylists(sdk: SpotifyApi): Promise<SimplifiedPlaylist[]> {
 
   return playlists;
 }
-
-type TrackResult = {
-  name: string;
-  artists: string[];
-};
 
 async function getAllPlaylistTracks(
   sdk: SpotifyApi,
