@@ -7,6 +7,7 @@ import {
   SimplifiedPlaylist,
   SimplifiedTrack,
   SpotifyApi,
+  Track,
 } from '@spotify/web-api-ts-sdk';
 import {useCallback, useEffect, useState} from 'react';
 import {RateLimitError, useSpotifySdk} from '@/lib/spotify-sdk/ClientInstance';
@@ -34,46 +35,23 @@ export default function Spotify() {
   );
 }
 
+type CachePlaylistTracks = {
+  [snapshotId: string]: TrackResult[];
+};
+
+function getCachedPlaylistTracks(): CachePlaylistTracks {
+  const cachedPlaylistTracks = localStorage.getItem('playlistTracks');
+  if (cachedPlaylistTracks) {
+    return JSON.parse(cachedPlaylistTracks);
+  }
+  return {};
+}
+
+function setCachedPlaylistTracks(cachedPlaylistTracks: CachePlaylistTracks) {
+  localStorage.setItem('playlistTracks', JSON.stringify(cachedPlaylistTracks));
+}
+
 function LoggedIn({sdk}: {sdk: SpotifyApi}) {
-  const [results, setResults] = useState<SearchResults<['artist']>>(
-    {} as SearchResults<['artist']>,
-  );
-
-  // useEffect(() => {
-  //   (async () => {
-  //     const results = await sdk.browse.getFeaturedPlaylists();
-  //     console.log(results);
-  //     // const results = await sdk.search('The Beatles', ['artist']);
-  //     // setResults(() => results);
-  //   })();
-  // }, [sdk]);
-
-  // // generate a table for the results
-  // const tableRows = results.artists?.items.map(artist => {
-  //   return (
-  //     <tr key={artist.id}>
-  //       <td>{artist.name}</td>
-  //       <td>{artist.popularity}</td>
-  //       <td>{artist.followers.total}</td>
-  //     </tr>
-  //   );
-  // });
-
-  // return (
-  //   <>
-  //     <h1>Spotify Search for The Beatles</h1>
-  //     <table>
-  //       <thead>
-  //         <tr>
-  //           <th>Name</th>
-  //           <th>Popularity</th>
-  //           <th>Followers</th>
-  //         </tr>
-  //       </thead>
-  //       <tbody>{tableRows}</tbody>
-  //     </table>
-  //   </>
-  // );
   const handler = useCallback(async () => {
     // const genreSeeds = await sdk.recommendations.genreSeeds();
     global.sdk = sdk;
@@ -82,15 +60,24 @@ function LoggedIn({sdk}: {sdk: SpotifyApi}) {
     console.log('start', start);
     const playlists = await getAllPlaylists(sdk);
     console.log(playlists);
-    // playlists.forEach(playlist => {
-    //   console.log(playlist.name);
-    // });
+    const cachedPlaylistTracks = getCachedPlaylistTracks();
+    const cachedSnapshots = Object.keys(cachedPlaylistTracks);
+    const foundSnapshots: string[] = [];
 
     const playlistTracks = await pMap(
       playlists,
       async playlist => {
+        if (cachedSnapshots.includes(playlist.snapshot_id)) {
+          foundSnapshots.push(playlist.snapshot_id);
+          return cachedPlaylistTracks[playlist.snapshot_id];
+        }
+
         try {
-          return await getAllPlaylistTracks(sdk, playlist.id);
+          const playlistTracks = await getAllPlaylistTracks(sdk, playlist.id);
+          cachedPlaylistTracks[playlist.snapshot_id] = playlistTracks;
+          foundSnapshots.push(playlist.snapshot_id);
+          setCachedPlaylistTracks(cachedPlaylistTracks);
+          return playlistTracks;
         } catch {
           console.error(
             'Unexpected error fetching tracks for playlist',
@@ -104,6 +91,15 @@ function LoggedIn({sdk}: {sdk: SpotifyApi}) {
       {concurrency: 10},
     );
     const tracks = playlistTracks.flat();
+
+    const newCache = foundSnapshots.reduce(
+      (acc: {[snapshotId: string]: TrackResult[]}, snapshot: string) => {
+        acc[snapshot] = cachedPlaylistTracks[snapshot];
+        return acc;
+      },
+      {},
+    );
+    setCachedPlaylistTracks(newCache);
 
     console.log(tracks);
     const end = Date.now();
@@ -144,11 +140,16 @@ async function getAllPlaylists(sdk: SpotifyApi): Promise<SimplifiedPlaylist[]> {
   return playlists;
 }
 
+type TrackResult = {
+  name: string;
+  artists: string[];
+};
+
 async function getAllPlaylistTracks(
   sdk: SpotifyApi,
   playlistId: string,
-): Promise<PlaylistedTrack[]> {
-  const tracks: PlaylistedTrack[] = [];
+): Promise<TrackResult[]> {
+  const tracks: TrackResult[] = [];
   const limit = 50;
   let offset = 0;
   let total = null;
@@ -166,9 +167,15 @@ async function getAllPlaylistTracks(
       if (total == null) {
         total = items.total;
       }
-      const filteredTracks = items.items.filter(
-        item => item.track.type === 'track',
-      );
+      const filteredTracks = items.items
+        .filter(item => item.track.type === 'track')
+        .map((item: PlaylistedTrack): TrackResult => {
+          return {
+            name: item.track.name,
+            artists: (item.track as Track).artists.map(artist => artist.name),
+          };
+        });
+
       tracks.push(...filteredTracks);
       offset += limit;
     } catch (error: any) {

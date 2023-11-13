@@ -3,54 +3,14 @@
 import {
   AccessToken,
   IAuthStrategy,
+  IHandleErrors,
   IValidateResponses,
   SdkConfiguration,
-  SdkOptions,
   SpotifyApi,
 } from '@spotify/web-api-ts-sdk'; // use "@spotify/web-api-ts-sdk" in your own project
-import {AuthUser} from '@/app/api/auth/[...nextauth]/authOptions';
-import {getSession, signIn, useSession} from 'next-auth/react';
+import {signIn, useSession} from 'next-auth/react';
 import {Session} from 'next-auth';
-
-/**
- * A class that implements the IAuthStrategy interface and wraps the NextAuth functionality.
- * It retrieves the access token and other information from the JWT session handled by NextAuth.
- */
-// class NextAuthStrategy implements IAuthStrategy {
-//   public getOrCreateAccessToken(): Promise<AccessToken> {
-//     return this.getAccessToken();
-//   }
-
-//   public async getAccessToken(): Promise<AccessToken> {
-//     const session: any = await getSession();
-//     if (!session) {
-//       return {} as AccessToken;
-//     }
-
-//     if (session?.error === 'RefreshAccessTokenError') {
-//       await signIn();
-//       return this.getAccessToken();
-//     }
-
-//     const {user}: {user: AuthUser} = session;
-
-//     return {
-//       access_token: user.access_token,
-//       token_type: 'Bearer',
-//       expires_in: user.expires_in,
-//       expires: user.expires_at,
-//       refresh_token: user.refresh_token,
-//     } as AccessToken;
-//   }
-
-//   public removeAccessToken(): void {
-//     console.warn('[Spotify-SDK][WARN]\nremoveAccessToken not implemented');
-//   }
-
-//   public setConfiguration(configuration: SdkConfiguration): void {
-//     console.warn('[Spotify-SDK][WARN]\nsetConfiguration not implemented');
-//   }
-// }
+import {useMemo} from 'react';
 
 export class RateLimitError extends Error {
   public status: number;
@@ -78,9 +38,11 @@ class MyResponseValidator implements IValidateResponses {
         );
       case 429:
         if (!response.headers.get('Retry-After')) {
-          debugger;
+          // This is a bug in Spotify's API. This header is missing from Access-Control-Expose-Headers
+          // for this request
+          // https://community.spotify.com/t5/Spotify-for-Developers/retry-after-header-not-accessible-in-web-app/td-p/5433144
         }
-        const retryAfterHeader = response.headers.get('Retry-After') ?? '1';
+        const retryAfterHeader = response.headers.get('Retry-After') ?? '5';
 
         throw new RateLimitError(
           'The app has exceeded its rate limits.',
@@ -97,14 +59,6 @@ class MyResponseValidator implements IValidateResponses {
     }
   }
 }
-
-// function withNextAuthStrategy(config?: SdkOptions) {
-//   const strategy = new NextAuthStrategy();
-//   return new SpotifyApi(strategy, {
-//     responseValidator: new MyResponseValidator(),
-//     ...config,
-//   });
-// }
 
 class ReactNextAuthStrategy implements IAuthStrategy {
   session: Session;
@@ -157,15 +111,31 @@ class ReactNextAuthStrategy implements IAuthStrategy {
   }
 }
 
-export function useSpotifySdk() {
-  const {data, status} = useSession();
-  if (data == null) {
-    return null;
+export default class MyErrorHandler implements IHandleErrors {
+  public async handleErrors(error: any): Promise<boolean> {
+    if (error.message.includes('Bad or expired token')) {
+      await signIn();
+      return true;
+    }
+    // debugger;
+    return false;
   }
-  const strategy = new ReactNextAuthStrategy(data);
-  return new SpotifyApi(strategy, {
-    responseValidator: new MyResponseValidator(),
-  });
 }
 
-// export default withNextAuthStrategy();
+export function useSpotifySdk() {
+  const {data, status} = useSession();
+
+  const api = useMemo(() => {
+    if (data == null) {
+      return null;
+    }
+
+    const strategy = new ReactNextAuthStrategy(data);
+    return new SpotifyApi(strategy, {
+      responseValidator: new MyResponseValidator(),
+      errorHandler: new MyErrorHandler(),
+    });
+  }, [data]);
+
+  return api;
+}
