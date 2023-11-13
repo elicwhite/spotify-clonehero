@@ -9,7 +9,7 @@ import {
   SpotifyApi,
   Track,
 } from '@spotify/web-api-ts-sdk';
-import {useCallback, useEffect, useState} from 'react';
+import {ReactNode, useCallback, useEffect, useState} from 'react';
 import {RateLimitError, useSpotifySdk} from '@/lib/spotify-sdk/ClientInstance';
 import pMap from 'p-map';
 
@@ -21,15 +21,17 @@ export default function Spotify() {
     return (
       <div>
         <h1>Spotify Web API Typescript SDK in Next.js</h1>
-        <button onClick={() => signIn('spotify')}>Sign in with Spotify</button>
+        <Button onClick={() => signIn('spotify')}>Sign in with Spotify</Button>
       </div>
     );
   }
 
   return (
     <div>
-      <p>Logged in as {session.data.user?.name}</p>
-      <button onClick={() => signOut()}>Sign out</button>
+      <div>
+        <p>Logged in as {session.data.user?.name}</p>
+        <Button onClick={() => signOut()}>Sign out</Button>
+      </div>
       <LoggedIn sdk={spotifySdk} />
     </div>
   );
@@ -53,9 +55,6 @@ function setCachedPlaylistTracks(cachedPlaylistTracks: CachePlaylistTracks) {
 
 function LoggedIn({sdk}: {sdk: SpotifyApi}) {
   const handler = useCallback(async () => {
-    // const genreSeeds = await sdk.recommendations.genreSeeds();
-    global.sdk = sdk;
-
     const start = Date.now();
     console.log('start', start);
     const playlists = await getAllPlaylists(sdk);
@@ -105,20 +104,11 @@ function LoggedIn({sdk}: {sdk: SpotifyApi}) {
     const end = Date.now();
     console.log('end', end);
     console.log('seconds', (end - start) / 1000);
-    // playlists.map(async playlist => {
-    //   const id = playlist.id;
-    // })
-
-    // const playlists =
-
-    // const results = await sdk.browse.getNewReleases();
-    // const results = await sdk.browse.getFeaturedPlaylists();
-    // console.log(results);
   }, [sdk]);
 
   return (
     <>
-      <button onClick={handler}>Get some data</button>
+      <Button onClick={handler}>Refresh Your Saved Tracks from Spotify</Button>
     </>
   );
 }
@@ -193,4 +183,20 @@ async function getAllPlaylistTracks(
   } while (total == null || offset < total);
 
   return tracks;
+}
+
+function Button({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      className="bg-blue-500 text-white px-4 py-2 rounded-md transition-all ease-in-out duration-300 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500"
+      onClick={onClick}>
+      {children}
+    </button>
+  );
 }
