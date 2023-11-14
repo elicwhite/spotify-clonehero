@@ -116,9 +116,12 @@ export function useSpotifyTracks(): [
       const cachedPlaylistTracks = await getCachedPlaylistTracks();
 
       const uniqueSongs = Object.values(cachedPlaylistTracks)
+        .filter(playlistTracks => playlistTracks.length < 1000)
         .flat()
         .reduce((acc, track) => {
-          const key = `${track.name} - ${track.artists.join(', ')}`;
+          const key = `${track.name} - ${track.artists.join(
+            ', ',
+          )}`.toLowerCase();
           if (!acc.has(key)) {
             acc.set(key, track);
           }
