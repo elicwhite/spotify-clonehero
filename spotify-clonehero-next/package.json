@@ -27,7 +27,7 @@
     "react-icons": "^4.11.0",
     "react-loading-icons": "^1.1.0",
     "react-virtual": "^2.10.4",
-    "scan-chart-web": "3.3.4-1"
+    "scan-chart-web": "3.3.4-2"
   },
   "devDependencies": {
     "@types/ini": "^1.3.32",
