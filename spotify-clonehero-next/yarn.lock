@@ -4265,10 +4265,10 @@ saxes@^5.0.1:
   dependencies:
     xmlchars "^2.2.0"
 
-scan-chart-web@3.3.7:
-  version "3.3.7"
-  resolved "https://registry.yarnpkg.com/scan-chart-web/-/scan-chart-web-3.3.7.tgz#4d672bdd8af66950f8a806bd9bf8c96aaeebb07d"
-  integrity sha512-nInqA4njkSyrIMGrcHNtm2BvyrM1Ir0SlXqN2B0ZL5NchQooECt5j/Jtllv3sHsna1W590dfB9DMqlnjiU0+yA==
+scan-chart-web@3.3.4-1:
+  version "3.3.4-1"
+  resolved "https://registry.yarnpkg.com/scan-chart-web/-/scan-chart-web-3.3.4-1.tgz#78e7e1fbe72bb1080398db9e6427d38619c79c16"
+  integrity sha512-7mNRUAnbLWrPyrOX0YE2NJ7W3gc8R1nq+yUjY+PLhcnXnCTTAh0tlwrWREn+Q/4CbLfiCXV9+zQBvJ/3hfOgLQ==
   dependencies:
     bottleneck "^2.19.5"
     charset-detector "^0.0.2"
