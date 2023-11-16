@@ -235,7 +235,18 @@ export default function SongsPicker() {
 
   return (
     <>
-      <button onClick={() => handler()}>Scan Clone Hero Songs Library</button>
+      <p className="mb-4 text-center">
+        This tool is in-progress.
+        <br />
+        The goal is to be a browser based chart library manager, <br />
+        enabling you to easily update charts with new versions
+      </p>
+
+      <button
+        className="bg-blue-500 text-white px-4 py-2 rounded-md transition-all ease-in-out duration-300 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500"
+        onClick={handler}>
+        Scan Clone Hero Songs Library
+      </button>
       <h1>{songsState.songsCounted} songs scanned</h1>
       {songsState.songs && (
         <>
