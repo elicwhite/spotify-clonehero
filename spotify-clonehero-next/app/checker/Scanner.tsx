@@ -52,11 +52,17 @@ export default function CheckerPage() {
 
   return (
     <>
+      <p className="mb-4 text-center">
+        This tool will scan charts in a folder on your computer,
+        <br /> providing an Excel file with all the issues found.
+        <br /> This tool only works in Chrome / Edge.
+      </p>
       <button
         className="bg-blue-500 text-white px-4 py-2 rounded-md transition-all ease-in-out duration-300 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500"
         onClick={handler}>
-        Check Charts
+        Choose Folder
       </button>
+
       {directoryHandle == null ? null : (
         <Scanner key={keyId} directoryHandle={directoryHandle} />
       )}
