@@ -1,4 +1,4 @@
-import {SongAccumulator} from './SongsPicker';
+import {SongAccumulator} from '@/lib/scanLocalCharts';
 import {ChartInfo, ChartResponse, selectChart} from './chartSelection';
 
 export function compareToCurrentChart(

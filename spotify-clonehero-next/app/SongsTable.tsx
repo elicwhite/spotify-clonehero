@@ -17,13 +17,14 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import {useVirtual} from 'react-virtual';
-import {SongAccumulator, SongIniData} from './SongsPicker';
 import {ChartResponse} from './chartSelection';
 import {Dialog, Transition} from '@headlessui/react';
 
 import {AiOutlineDash, AiOutlineCheck, AiFillCheckCircle} from 'react-icons/ai';
 import {ThreeDots} from 'react-loading-icons';
 import CompareView from './CompareView';
+import {SongIniData} from '@/lib/scanLocalCharts';
+import {SongWithRecommendation} from './SongsPicker';
 
 type Recommendation =
   | {
@@ -52,7 +53,7 @@ type RowType = {
 
 const columnHelper = createColumnHelper<RowType>();
 
-export default function SongsTable({songs}: {songs: SongAccumulator[]}) {
+export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
   const [currentlyReviewing, setCurrentlyReviewing] = useState<RowType | null>(
     null,
   );

@@ -1,5 +1,5 @@
+import {SongIniData} from '@/lib/scanLocalCharts';
 import {songIniOrder} from './SongsDownloader';
-import {SongIniData} from './SongsPicker';
 import {
   createColumnHelper,
   flexRender,

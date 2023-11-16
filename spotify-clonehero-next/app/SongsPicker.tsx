@@ -1,19 +1,12 @@
 'use client';
 
-import {
-  useCallback,
-  useState,
-  useMemo,
-  useReducer,
-  useRef,
-  useEffect,
-} from 'react';
-import ini from 'ini';
+import {useCallback, useState, useReducer, useRef, useEffect} from 'react';
 import SongsTable from './SongsTable';
 
 import {searchEncore as searchForChartEncore} from './searchForChart';
 import {ChartResponse} from './chartSelection';
 import {compareToCurrentChart} from './compareToCurrentChart';
+import scanLocalCharts, {SongAccumulator} from '@/lib/scanLocalCharts';
 
 export type RecommendedChart =
   | {
@@ -30,74 +23,12 @@ export type RecommendedChart =
       betterChart: ChartResponse;
     };
 
-export type SongIniData = {
-  name: string;
-  artist: string;
-  charter: string;
-  diff_drums: number;
-};
-
-export type SongAccumulator = {
-  artist: string;
-  song: string;
-  lastModified: number;
-  charter: string;
-  data: SongIniData;
+export type SongWithRecommendation = SongAccumulator & {
   recommendedChart: RecommendedChart;
 };
 
-async function processSongDirectory(
-  directoryName: string,
-  directoryHandle: FileSystemDirectoryHandle,
-  accumulator: SongAccumulator[],
-  incrementCounter: Function,
-) {
-  let newestDate = 0;
-  let songIniData = null;
-
-  for await (const [subName, subHandle] of directoryHandle.entries()) {
-    if (subHandle.kind == 'directory') {
-      await processSongDirectory(
-        subName,
-        subHandle,
-        accumulator,
-        incrementCounter,
-      );
-    }
-
-    if (subHandle.kind == 'file') {
-      const file = await subHandle.getFile();
-
-      if (subName == 'song.ini') {
-        const text = await file.text();
-        const values = ini.parse(text);
-        songIniData = values?.song;
-      }
-
-      if (file.lastModified > newestDate) {
-        newestDate = file.lastModified;
-      }
-    }
-  }
-
-  if (songIniData) {
-    const [artist, song] = directoryName.split(' - ');
-    accumulator.push({
-      artist: songIniData?.artist,
-      song: songIniData?.name,
-      lastModified: newestDate,
-      charter: songIniData?.charter,
-      data: songIniData,
-      recommendedChart: {
-        type: 'not-checked',
-      },
-    });
-    incrementCounter();
-  }
-}
-
 type SongState = {
-  songs: SongAccumulator[] | null;
+  songs: SongWithRecommendation[] | null;
   songsCounted: number;
   songsCheckedForUpdates: number;
 };
@@ -111,11 +42,11 @@ type SongStateActions =
     }
   | {
       type: 'set-songs';
-      songs: SongAccumulator[];
+      songs: SongWithRecommendation[];
     }
   | {
       type: 'set-recommendation';
-      song: SongAccumulator;
+      song: SongWithRecommendation;
       recommendation: RecommendedChart;
     };
 
@@ -175,15 +106,24 @@ export default function SongsPicker() {
     }
     const songs: SongAccumulator[] = [];
 
-    await processSongDirectory('Songs', directoryHandle, songs, () => {
+    await scanLocalCharts(directoryHandle, songs, () => {
       songsDispatch({
         type: 'increment-counter',
       });
     });
 
+    const songsWithRecommendation: SongWithRecommendation[] = songs.map(
+      song => ({
+        ...song,
+        recommendedChart: {
+          type: 'not-checked',
+        },
+      }),
+    );
+
     songsDispatch({
       type: 'set-songs',
-      songs,
+      songs: songsWithRecommendation,
     });
   }, [songsDispatch]);
 
