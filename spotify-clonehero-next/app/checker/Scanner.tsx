@@ -4,6 +4,8 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {Chart, ScannedChart, scanCharts} from 'scan-chart-web';
 import {getChartIssues, getIssuesXLSX} from './ExcelBuilder';
 
+const NOT_SUPPORTED = typeof window.showDirectoryPicker !== 'function';
+
 function formatTimeRemaining(timeInMillis: number) {
   const seconds = Math.ceil(timeInMillis / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -55,9 +57,17 @@ export default function CheckerPage() {
       <p className="mb-4 text-center">
         This tool will scan charts in a folder on your computer,
         <br /> providing an Excel file with all the issues found.
-        <br /> This tool only works in Chrome / Edge.
+        <br />
       </p>
+      {NOT_SUPPORTED && (
+        <p className="mb-4 text-center text-red-700">
+          This tool does not work in your browser.
+          <br />
+          Try again using Chrome / Edge.
+        </p>
+      )}
       <button
+        disabled={NOT_SUPPORTED}
         className="bg-blue-500 text-white px-4 py-2 rounded-md transition-all ease-in-out duration-300 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500"
         onClick={handler}>
         Choose Folder
