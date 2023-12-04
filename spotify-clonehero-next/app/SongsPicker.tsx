@@ -99,7 +99,9 @@ export default function SongsPicker() {
     let directoryHandle;
 
     try {
-      directoryHandle = await window.showDirectoryPicker();
+      directoryHandle = await window.showDirectoryPicker({
+        id: 'clone-hero-songs',
+      });
     } catch {
       console.log('User canceled picker');
       return;

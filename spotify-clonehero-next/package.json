@@ -17,6 +17,7 @@
     "dayjs": "^1.11.10",
     "exceljs": "^4.4.0",
     "ini": "^4.1.1",
+    "levenshtein-edit-distance": "^3.0.1",
     "lodash": "^4.17.21",
     "next": "^14.0.0",
     "next-auth": "^4.23.2",
