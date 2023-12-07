@@ -3,8 +3,8 @@ const fs = require('fs');
 
 const LOCAL_URL = 'http://localhost:4200/api/search/advanced';
 const PROD_URL = 'https://www.enchor.us/api/search/advanced';
-const CHART_FILE = path.join('.', 'data', 'charts.json');
-const METADATA_FILE = path.join('.', 'data', 'metadata.json');
+const CHART_FILE = path.join('.', 'public', 'data', 'charts.json');
+const METADATA_FILE = path.join('.', 'public', 'data', 'metadata.json');
 
 const START_TIME = new Date('2011-01-01');
 async function run() {

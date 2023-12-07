@@ -3,8 +3,13 @@
 import scanLocalCharts, {SongAccumulator} from '@/lib/scanLocalCharts';
 import {levenshteinEditDistance} from 'levenshtein-edit-distance';
 import {useCallback} from 'react';
+import chorusChartDb from '@/lib/chorusChartDb';
 
 export default function Page() {
+  const handler2 = useCallback(async () => {
+    chorusChartDb();
+  }, []);
+
   const handler = useCallback(async () => {
     let spotifyDataHandle;
     let songsDirectoryHandle;
@@ -49,6 +54,11 @@ export default function Page() {
         className="bg-blue-500 text-white px-4 py-2 rounded-md transition-all ease-in-out duration-300 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500"
         onClick={handler}>
         Scan Spotify Dump
+      </button>
+      <button
+        className="bg-blue-500 text-white px-4 py-2 rounded-md transition-all ease-in-out duration-300 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500"
+        onClick={handler2}>
+        Check DB
       </button>
     </main>
   );
