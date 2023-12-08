@@ -4,7 +4,9 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {Chart, ScannedChart, scanCharts} from 'scan-chart-web';
 import {getChartIssues, getIssuesXLSX} from './ExcelBuilder';
 
-const NOT_SUPPORTED = typeof window.showDirectoryPicker !== 'function';
+const NOT_SUPPORTED =
+  typeof window === 'undefined' ||
+  typeof window.showDirectoryPicker !== 'function';
 
 function formatTimeRemaining(timeInMillis: number) {
   const seconds = Math.ceil(timeInMillis / 1000);
