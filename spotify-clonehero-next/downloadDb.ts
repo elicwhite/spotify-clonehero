@@ -19,23 +19,48 @@ async function run() {
     newSongs = 0;
     const json = await fetchSongsAfter(latest);
 
+    const prevLatest = latest;
+    let thisRunLatest;
     for (const song of json.data) {
       if (!earliest || new Date(song.modifiedTime) < earliest) {
         earliest = new Date(song.modifiedTime);
       }
       if (!latest || new Date(song.modifiedTime) > latest) {
-        latest = new Date(song.modifiedTime);
+        latest = thisRunLatest = new Date(song.modifiedTime);
       }
 
       if (!results.has(song.md5)) {
         results.set(song.md5, filterKeys(song));
         newSongs++;
         totalSongs++;
+      } else {
+        const existing = results.get(song.md5);
+        if (new Date(existing.modifiedTime) < new Date(song.modifiedTime)) {
+          results.set(song.md5, filterKeys(song));
+        }
       }
     }
 
     iterations++;
-    console.log(newSongs, earliest, latest);
+    console.log(
+      prevLatest.toISOString(),
+      thisRunLatest,
+      newSongs,
+      json.data.length,
+    );
+    const jsonStr = JSON.stringify(json, null, 2);
+    fs.writeFileSync(
+      path.join(
+        '.',
+        'public',
+        'data',
+        'raw',
+        prevLatest.toISOString() + '.json',
+      ),
+      jsonStr,
+    );
+
+    // console.log(newSongs, earliest, latest);
   } while (newSongs > 0 && iterations < 10);
 
   const res = Array.from(results.values());
@@ -118,7 +143,7 @@ async function fetchSongsAfter(date: Date) {
       minMaxNPS: null,
       maxMaxNPS: null,
       // in YYYY-MM-DD format
-      modifiedAfter: date.toISOString().split('T')[0],
+      modifiedAfter: date.toISOString(),
       hash: '',
       hasSoloSections: null,
       hasForcedNotes: null,

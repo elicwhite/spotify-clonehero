@@ -1,0 +1,1340 @@
+{
+  "data": [
+    {
+      "ordering": 1,
+      "name": "Omoide Kakera",
+      "artist": "Nano",
+      "album": "nanoir",
+      "genre": "J-Rock",
+      "year": "2012",
+      "chartName": null,
+      "chartAlbum": null,
+      "chartGenre": null,
+      "chartYear": null,
+      "chartId": 71294,
+      "songId": null,
+      "chartDriveChartId": 72744,
+      "albumArtMd5": "ec317635e15728356dadc35e531d87aa",
+      "md5": "54a8e20bbee57d00b599c74851c7804b",
+      "chartMd5": "616b8c0f94d8f843fa6df363082f2de8",
+      "versionGroupId": 71294,
+      "charter": "Sang Duta",
+      "song_length": 271248,
+      "diff_band": -1,
+      "diff_guitar": 6,
+      "diff_guitar_coop": -1,
+      "diff_rhythm": -1,
+      "diff_bass": -1,
+      "diff_drums": -1,
+      "diff_drums_real": -1,
+      "diff_keys": -1,
+      "diff_guitarghl": -1,
+      "diff_guitar_coop_ghl": -1,
+      "diff_rhythm_ghl": -1,
+      "diff_bassghl": -1,
+      "diff_vocals": -1,
+      "preview_start_time": 140010,
+      "icon": "duta",
+      "loading_phrase": "Overchart a bit to make it even more fun to play :v",
+      "album_track": 16000,
+      "playlist_track": 16000,
+      "modchart": false,
+      "delay": 0,
+      "chart_offset": 0,
+      "hopo_frequency": 0,
+      "eighthnote_hopo": false,
+      "multiplier_note": 0,
+      "video_start_time": 0,
+      "five_lane_drums": false,
+      "pro_drums": false,
+      "end_events": true,
+      "notesData": {
+        "instruments": [
+          "guitar"
+        ],
+        "hasSoloSections": true,
+        "hasLyrics": true,
+        "hasVocals": false,
+        "hasForcedNotes": true,
+        "hasTapNotes": true,
+        "hasOpenNotes": true,
+        "has2xKick": false,
+        "hasRollLanes": false,
+        "noteIssues": [
+          {
+            "instrument": "guitar",
+            "difficulty": "expert",
+            "noteIssues": [
+              {
+                "issueType": "badSustainGap",
+                "time": 2617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 3367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 3667.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 3967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 4417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 5017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 5767.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 6067.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 6367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 6817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 7417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 8167.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 8467.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 8767.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 9217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 9817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 10567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 10867.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 11167.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 11617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 12217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 12967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 13267.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 13567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 14017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 14617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 15367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 15667.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 15967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 16417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 17017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 17767.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 18067.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 18367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 18817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 19117.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 19567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 20317.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 20917.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 22117.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 22717.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 23317.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 24067.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 28567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 30517.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 31717.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 32917.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 33667.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 34717.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 35017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 36367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 41167.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 43567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 45967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 46267.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 61117.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 63517.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 65917.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 68317.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 70717.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 73417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 74317.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 74617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 79117.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 79417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 80167.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 81217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 81517.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 81817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 82567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 83617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 83917.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 84217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 84967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 86017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 86317.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 86617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 87367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 88417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 88717.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 89017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 89767.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 90817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 91117.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 91417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 92167.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 93217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 93517.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 93817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 94567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 95617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 95917.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 96217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 96967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 98017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 98917.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 103567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 105967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 108367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 108667.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 123517.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 125917.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 128317.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 130717.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 133117.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 135817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 136717.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 137017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 141517.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 141817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 142567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 143617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 143917.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 144217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 144967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 146017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 146317.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 146617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 147367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 148417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 148717.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 149017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 149767.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 150817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 151117.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 151417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 152167.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 153217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 153517.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 153817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 154567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 155617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 155917.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 156217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 156967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 158017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 158317.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 158617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 159367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 160417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 161017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 161767.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 162367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 162817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 163417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 164167.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 164767.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 165217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 165817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 166567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 167167.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 167617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 168217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 168967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 169567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 170017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 170617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 171367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 171967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 172417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 173017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 173767.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 174367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 174817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 175417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 176167.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 176767.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 177217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 177517.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 177967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 180667.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 181117.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 182992.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 199342.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 208717.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 209167.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 209617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 210067.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 210517.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 218467.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 219817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 220717.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 221017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 221767.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 222817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 223117.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 223417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 224167.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 225217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 225517.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 225817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 226567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 227617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 227917.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 228217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 228967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 230017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 230317.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 230617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 231367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 232417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 232717.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 233017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 233767.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 234817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 235117.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 235417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 236167.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 237217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 237517.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 237817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 238567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 239617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 239917.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 240217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 240967.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 241417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 242317.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 242617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 243367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 244417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 244717.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 245017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 245767.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 246817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 247117.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 247417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 248167.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 249217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 249517.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 249817.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 250567.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 251017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 251617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 251917.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 252217.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 254017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 254317.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 254617.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 255367.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 256417.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 256717.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 257017.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 259117.197
+              },
+              {
+                "issueType": "badSustainGap",
+                "time": 259567.197
+              }
+            ]
+          }
+        ],
+        "trackIssues": [],
+        "chartIssues": [],
+        "noteCounts": [
+          {
+            "instrument": "guitar",
+            "difficulty": "expert",
+            "count": 1458
+          }
+        ],
+        "maxNps": [
+          {
+            "instrument": "guitar",
+            "difficulty": "expert",
+            "time": 102592.197,
+            "nps": 17,
+            "notes": [
+              {
+                "time": 101167.197,
+                "length": 0,
+                "type": "blue"
+              },
+              {
+                "time": 101167.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 101317.197,
+                "length": 0,
+                "type": "yellow"
+              },
+              {
+                "time": 101317.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 101467.197,
+                "length": 0,
+                "type": "red"
+              },
+              {
+                "time": 101467.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 101617.197,
+                "length": 0,
+                "type": "green"
+              },
+              {
+                "time": 101617.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 101654.697,
+                "length": 0,
+                "type": "red"
+              },
+              {
+                "time": 101654.697,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 101692.197,
+                "length": 0,
+                "type": "yellow"
+              },
+              {
+                "time": 101692.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 101729.697,
+                "length": 0,
+                "type": "blue"
+              },
+              {
+                "time": 101729.697,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 101767.197,
+                "length": 0,
+                "type": "orange"
+              },
+              {
+                "time": 101767.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 101804.697,
+                "length": 0,
+                "type": "blue"
+              },
+              {
+                "time": 101804.697,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 101842.197,
+                "length": 0,
+                "type": "yellow"
+              },
+              {
+                "time": 101842.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 101917.197,
+                "length": 0,
+                "type": "blue"
+              },
+              {
+                "time": 101917.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 101992.197,
+                "length": 0,
+                "type": "orange"
+              },
+              {
+                "time": 101992.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 102067.197,
+                "length": 0,
+                "type": "blue"
+              },
+              {
+                "time": 102067.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 102142.197,
+                "length": 0,
+                "type": "orange"
+              },
+              {
+                "time": 102142.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 102217.197,
+                "length": 0,
+                "type": "blue"
+              },
+              {
+                "time": 102217.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 102292.197,
+                "length": 0,
+                "type": "yellow"
+              },
+              {
+                "time": 102292.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 102367.197,
+                "length": 0,
+                "type": "red"
+              },
+              {
+                "time": 102367.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 102442.197,
+                "length": 0,
+                "type": "yellow"
+              },
+              {
+                "time": 102442.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 102517.197,
+                "length": 0,
+                "type": "blue"
+              },
+              {
+                "time": 102517.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 102592.197,
+                "length": 0,
+                "type": "yellow"
+              },
+              {
+                "time": 102592.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 102667.197,
+                "length": 0,
+                "type": "red"
+              },
+              {
+                "time": 102667.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 102742.197,
+                "length": 0,
+                "type": "green"
+              },
+              {
+                "time": 102742.197,
+                "length": 0,
+                "type": "tap"
+              },
+              {
+                "time": 102817.197,
+                "length": 0,
+                "type": "red"
+              },
+              {
+                "time": 102817.197,
+                "length": 0,
+                "type": "force"
+              },
+              {
+                "time": 102967.197,
+                "length": 0,
+                "type": "yellow"
+              }
+            ]
+          }
+        ],
+        "hashes": [
+          {
+            "instrument": "guitar",
+            "difficulty": "expert",
+            "hash": "063c802f48faf5b1722c629c8780cf4d"
+          }
+        ],
+        "tempoMapHash": "9789d698fea4110bbd7190b967a5bec4",
+        "tempoMarkerCount": 2,
+        "length": 259717,
+        "effectiveLength": 257700
+      },
+      "folderIssues": [
+        {
+          "folderIssue": "albumArtSize",
+          "description": "This chart's album art is 600x600, and should be 512x512."
+        }
+      ],
+      "metadataIssues": [],
+      "hasVideoBackground": false,
+      "modifiedTime": "2023-12-08T14:28:49.273Z",
+      "applicationDriveId": "1pCM-r3OnQ6rZw8wyFMt637ViKkwSnFG3",
+      "applicationUsername": "Sang Duta",
+      "packName": null,
+      "parentFolderId": "1iF5v5AjWN2Dju1Nw9dEyB4pxcA_XVVZ6",
+      "drivePath": "Japan",
+      "driveFileId": "1IJP8K4gfbnhfOwhiT-xwC4ttdVfL2L2P",
+      "driveFileName": "Nano - Omoide Kakera [ Sang Duta ].rar",
+      "driveChartIsPack": false,
+      "archivePath": "Nano - Omoide Kakera [ Sang Duta ]",
+      "chartFileName": null
+    }
+  ],
+  "found": 1,
+  "search_time_ms": 26
+}
