@@ -7,26 +7,28 @@ const CHART_FILE = path.join('.', 'public', 'data', 'charts.json');
 const METADATA_FILE = path.join('.', 'public', 'data', 'metadata.json');
 
 const START_TIME = new Date('2011-01-01');
+// Debug variable to limit iterations in the future. Leave for full runs.
+const MAX_ITERATIONS = Number.MAX_SAFE_INTEGER;
+
 async function run() {
   const results = new Map<string, any>();
-  let earliest: Date | null = null;
-  let latest: Date | null = START_TIME;
+  const NOW = new Date();
+
+  const modifiedTime = START_TIME;
+  let lastChartId = 1;
+
   let totalSongs = 0;
   let newSongs = 0;
-
   let iterations = 0;
+
   do {
     newSongs = 0;
-    const json = await fetchSongsAfter(latest);
+    const json = await fetchSongsAfter(modifiedTime, lastChartId);
 
-    const prevLatest = latest;
-    let thisRunLatest;
+    let thisRunLatestChartId = lastChartId;
     for (const song of json.data) {
-      if (!earliest || new Date(song.modifiedTime) < earliest) {
-        earliest = new Date(song.modifiedTime);
-      }
-      if (!latest || new Date(song.modifiedTime) > latest) {
-        latest = thisRunLatest = new Date(song.modifiedTime);
+      if (song.chartId > thisRunLatestChartId) {
+        thisRunLatestChartId = song.chartId;
       }
 
       if (!results.has(song.md5)) {
@@ -43,11 +45,15 @@ async function run() {
 
     iterations++;
     console.log(
-      prevLatest.toISOString(),
-      thisRunLatest,
+      modifiedTime.toISOString(),
+      lastChartId,
+      thisRunLatestChartId,
       newSongs,
       json.data.length,
+      totalSongs,
     );
+    lastChartId = thisRunLatestChartId;
+
     const jsonStr = JSON.stringify(json, null, 2);
     fs.writeFileSync(
       path.join(
@@ -55,20 +61,20 @@ async function run() {
         'public',
         'data',
         'raw',
-        prevLatest.toISOString() + '.json',
+        modifiedTime.toISOString() + String(lastChartId) + '.json',
       ),
       jsonStr,
     );
 
     // console.log(newSongs, earliest, latest);
-  } while (newSongs > 0 && iterations < 10);
+  } while (newSongs > 0 && iterations < MAX_ITERATIONS);
 
   const res = Array.from(results.values());
   const json = JSON.stringify(res, null, 2);
   fs.writeFileSync(CHART_FILE, json);
   fs.writeFileSync(
     METADATA_FILE,
-    JSON.stringify({earliest, latest, totalSongs}, null, 2),
+    JSON.stringify({lastRun: NOW.toISOString(), totalSongs}, null, 2),
   );
 }
 
@@ -118,7 +124,7 @@ function filterKeys(chart: Object) {
 
 run();
 
-async function fetchSongsAfter(date: Date) {
+async function fetchSongsAfter(date: Date, lastChartId: number) {
   const response = await fetch(PROD_URL, {
     headers: {
       accept: 'application/json, text/plain, */*',
@@ -156,6 +162,7 @@ async function fetchSongsAfter(date: Date) {
       hasIssues: null,
       hasVideoBackground: null,
       modchart: null,
+      chartIdAfter: lastChartId,
     }),
     method: 'POST',
   });
