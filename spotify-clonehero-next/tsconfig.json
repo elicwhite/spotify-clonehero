@@ -22,6 +22,11 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "lib/chorusChartDb"],
+  "exclude": ["node_modules"],
+  "ts-node": {
+    "module": "nodenext",
+    // Tell ts-node CLI to install the --loader automatically, explained below
+    "esm": true
+  }
 }
