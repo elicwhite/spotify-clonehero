@@ -2,12 +2,12 @@
   "name": "spotify-clonehero",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "yarn run jest && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "update:db": "ts-node ./downloadDb.ts"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.17",

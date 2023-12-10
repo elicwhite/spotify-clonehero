@@ -1,6 +1,6 @@
 import path from 'path';
 import fs from 'fs';
-import fetchNewCharts from './lib/chorusChartDb/fetchNewCharts.js';
+import fetchNewCharts from './lib/chorusChartDb/fetchNewCharts';
 
 const CHART_FILE = path.join('.', 'public', 'data', 'charts.json');
 const METADATA_FILE = path.join('.', 'public', 'data', 'metadata.json');

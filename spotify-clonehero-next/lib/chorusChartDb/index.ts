@@ -1,22 +1,50 @@
-export default async function chorusChartDb() {
+import fetchNewCharts from './fetchNewCharts';
+
+const DEBUG = false;
+
+export default async function getChorusChartDb() {
   const root = await navigator.storage.getDirectory();
 
-  const localDataVersion = localStorage.getItem('chartsDataVersion');
+  debugLog('Checking for server data updates');
+  const localDataVersion = parseInt(
+    localStorage.getItem('chartsDataVersion') ?? '',
+    10,
+  );
   const serverDataVersion = await getServerChartsDataVersion();
 
   if (localDataVersion !== serverDataVersion) {
+    debugLog('Server data is newer, updating');
     root.removeEntry('serverData', {recursive: true});
-    localStorage.setItem('chartsDataVersion', serverDataVersion);
+    localStorage.setItem('chartsDataVersion', String(serverDataVersion));
   }
 
-  const serverDataHandle = await root.getDirectoryHandle('serverData', {
-    create: true,
-  });
+  debugLog('Fetching local charts from server');
+  const {serverCharts, serverMetadata} = await getServerCharts(root);
+  debugLog('Fetching local cache of charts');
+  const localCharts = await getLocalCharts(root);
+  debugLog('Fetching updated charts');
+  const updatedCharts = await getUpdatedCharts(root);
+  debugLog('Done fetching charts');
 
-  const {serverCharts, serverMetadata} =
-    await getServerCharts(serverDataHandle);
+  const finalCharts = reduceCharts(serverCharts, localCharts, updatedCharts);
+  return finalCharts;
+}
 
-  console.log(serverCharts, serverMetadata);
+function reduceCharts(...chartSets: {md5: string; modifiedTime: string}[][]) {
+  const results = new Map<string, any>();
+  for (const chartSet of chartSets) {
+    for (const chart of chartSet) {
+      if (!results.has(chart.md5)) {
+        results.set(chart.md5, chart);
+      } else if (
+        new Date(results.get(chart.md5).modifiedTime) <
+        new Date(chart.modifiedTime)
+      ) {
+        results.set(chart.md5, chart);
+      }
+    }
+  }
+  return Array.from(results.values());
 }
 
 async function fetchServerData(
@@ -55,13 +83,107 @@ async function readJsonFile(fileHandle: FileSystemFileHandle) {
   return JSON.parse(text);
 }
 
-async function getServerChartsDataVersion() {
+async function getServerChartsDataVersion(): Promise<number> {
   const response = await fetch('/api/data');
   const json = await response.json();
-  return json.chartsDataVersion;
+  return parseInt(json.chartsDataVersion, 10);
 }
 
-async function getServerCharts(serverDataHandle: FileSystemDirectoryHandle) {
+async function getLastUpdateTime(
+  rootHandle: FileSystemDirectoryHandle,
+): Promise<Date> {
+  try {
+    // Check if we have existing client data
+    const localMetadataHandle = await rootHandle.getFileHandle(
+      'localMetadata.json',
+      {
+        create: false,
+      },
+    );
+
+    const metadata = await readJsonFile(localMetadataHandle);
+    return new Date(metadata.lastRun);
+  } catch {
+    console.log('No local metadata found');
+    // No existing client data, use server time
+    const serverDataHandle = await rootHandle.getDirectoryHandle('serverData', {
+      create: false,
+    });
+    const serverMetadataHandle = await serverDataHandle.getFileHandle(
+      'metadata.json',
+      {
+        create: false,
+      },
+    );
+    const serverMetadata = await readJsonFile(serverMetadataHandle);
+
+    return new Date(serverMetadata.lastRun);
+  }
+}
+
+async function getLocalCharts(rootHandle: FileSystemDirectoryHandle) {
+  const localDataHandle = await rootHandle.getDirectoryHandle('localData', {
+    create: true,
+  });
+
+  let charts: any[] = [];
+
+  for await (const subHandle of localDataHandle.values()) {
+    if (subHandle.kind !== 'file') {
+      throw new Error('There should not be any subdirectories in localData');
+    }
+
+    const file = await subHandle.getFile();
+    const text = await file.text();
+    const json = JSON.parse(text);
+    charts = charts.concat(json);
+  }
+
+  return charts;
+}
+
+async function getUpdatedCharts(rootHandle: FileSystemDirectoryHandle) {
+  const localDataHandle = await rootHandle.getDirectoryHandle('localData', {
+    create: true,
+  });
+
+  let lastUpdateTime = await getLastUpdateTime(rootHandle);
+
+  const {charts, metadata} = await fetchNewCharts(
+    lastUpdateTime,
+    (json, lastChartId) => {},
+  );
+
+  if (charts.length !== 0) {
+    const localMetadataHandle = await rootHandle.getFileHandle(
+      'localMetadata.json',
+      {
+        create: true,
+      },
+    );
+    await writeFile(localMetadataHandle, JSON.stringify(metadata));
+
+    // Don't bother writing an empty file
+    const fileName = `charts-${new Date(metadata.lastRun)
+      .toISOString()
+      .replace(/[:.]/g, '-')}.json`;
+    // replace : and . with - to avoid issues with file names
+
+    console.log('Writing file', fileName);
+    const chartsFile = await localDataHandle.getFileHandle(fileName, {
+      create: true,
+    });
+    await writeFile(chartsFile, JSON.stringify(charts));
+  }
+
+  return charts;
+}
+
+async function getServerCharts(rootHandle: FileSystemDirectoryHandle) {
+  const serverDataHandle = await rootHandle.getDirectoryHandle('serverData', {
+    create: true,
+  });
+
   let serverCharts;
   let serverMetadata;
 
@@ -104,4 +226,10 @@ async function getServerCharts(serverDataHandle: FileSystemDirectoryHandle) {
   }
 
   return {serverCharts, serverMetadata};
+}
+
+function debugLog(message: string) {
+  if (DEBUG) {
+    console.log(message);
+  }
 }

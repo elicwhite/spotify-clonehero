@@ -25,6 +25,10 @@
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "lib/chorusChartDb"],
   "exclude": ["node_modules"],
   "ts-node": {
+    "compilerOptions": {
+      "module": "CommonJS"
+    },
+
     "module": "nodenext",
     // Tell ts-node CLI to install the --loader automatically, explained below
     "esm": true

@@ -40,19 +40,16 @@ export default async function fetchNewCharts(
     }
 
     iterations++;
-    console.log(
-      afterTime.toISOString(),
-      lastChartId,
-      thisRunLatestChartId,
-      newSongs,
-      json.data.length,
-      totalSongs,
-    );
+    console.log({
+      fetchAfter: afterTime.toISOString(),
+      fetchChartIDAfter: lastChartId,
+      lastChartIDFetched: thisRunLatestChartId,
+      newSongsFound: newSongs,
+      totalSongsFound: totalSongs,
+    });
+
     lastChartId = thisRunLatestChartId;
-
     onEachResponse(json.data.map(filterKeys), lastChartId);
-
-    // console.log(newSongs, earliest, latest);
   } while (newSongs > 0 && iterations < MAX_ITERATIONS);
 
   return {

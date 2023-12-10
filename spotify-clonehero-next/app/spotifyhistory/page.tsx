@@ -7,7 +7,7 @@ import chorusChartDb from '@/lib/chorusChartDb';
 
 export default function Page() {
   const handler2 = useCallback(async () => {
-    chorusChartDb();
+    await chorusChartDb();
   }, []);
 
   const handler = useCallback(async () => {
