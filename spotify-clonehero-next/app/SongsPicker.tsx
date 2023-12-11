@@ -3,7 +3,6 @@
 import {useCallback, useState, useReducer, useRef, useEffect} from 'react';
 import SongsTable from './SongsTable';
 
-import {searchEncore as searchForChartEncore} from './searchForChart';
 import {
   ChartResponse,
   ChartResponseEncore,
@@ -166,7 +165,7 @@ export default function SongsPicker() {
     // Switch this to scan through chorus charts looking for matching songs
     // Make sure to use a fuzzy search. Pull logic from crossreference.js
 
-    for await (const song of songsState.songs) {
+    for (const song of songsState.songs) {
       console.log('Processing song', song.song);
       let recommendation: RecommendedChart;
 

@@ -25,6 +25,7 @@ import {ThreeDots} from 'react-loading-icons';
 import CompareView from './CompareView';
 import {SongIniData} from '@/lib/scanLocalCharts';
 import {SongWithRecommendation} from './SongsPicker';
+import {removeStyleTags} from '@/lib/ui-utils';
 
 type Recommendation =
   | {
@@ -70,19 +71,11 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         header: 'Song',
         minSize: 250,
       },
-      {
-        accessorKey: 'charter',
+      columnHelper.accessor('charter', {
         header: 'Charter',
         minSize: 200,
-      },
-      columnHelper.accessor('lastModified', {
-        header: 'Last Modified',
         cell: props => {
-          return props.getValue().toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-          });
+          return removeStyleTags(props.getValue() || '');
         },
       }),
       columnHelper.accessor('recommendedChart', {

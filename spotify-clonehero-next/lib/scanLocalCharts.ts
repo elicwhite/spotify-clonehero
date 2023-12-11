@@ -23,7 +23,7 @@ export default async function scanLocalCharts(
   let newestDate = 0;
   let songIniData = null;
 
-  for await (const [subName, subHandle] of directoryHandle.entries()) {
+  for await (const subHandle of directoryHandle.values()) {
     if (subHandle.kind == 'directory') {
       await scanLocalCharts(subHandle, accumulator, callbackPerSong);
     }
@@ -31,7 +31,7 @@ export default async function scanLocalCharts(
     if (subHandle.kind == 'file') {
       const file = await subHandle.getFile();
 
-      if (subName == 'song.ini') {
+      if (subHandle.name == 'song.ini') {
         const text = await file.text();
         const values = ini.parse(text);
         songIniData = values?.song;
