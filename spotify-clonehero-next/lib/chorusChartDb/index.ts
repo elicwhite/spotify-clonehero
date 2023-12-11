@@ -1,8 +1,13 @@
+import {levenshteinEditDistance} from 'levenshtein-edit-distance';
+
+import {ChartResponseEncore} from '@/app/chartSelection';
 import fetchNewCharts from './fetchNewCharts';
 
 const DEBUG = false;
 
-export default async function getChorusChartDb() {
+export default async function getChorusChartDb(): Promise<
+  ChartResponseEncore[]
+> {
   const root = await navigator.storage.getDirectory();
 
   debugLog('Checking for server data updates');
@@ -19,7 +24,7 @@ export default async function getChorusChartDb() {
   }
 
   debugLog('Fetching local charts from server');
-  const {serverCharts, serverMetadata} = await getServerCharts(root);
+  const {serverCharts} = await getServerCharts(root);
   debugLog('Fetching local cache of charts');
   const localCharts = await getLocalCharts(root);
   debugLog('Fetching updated charts');
@@ -28,6 +33,21 @@ export default async function getChorusChartDb() {
 
   const finalCharts = reduceCharts(serverCharts, localCharts, updatedCharts);
   return finalCharts;
+}
+
+export function findMatchingCharts(
+  artist: string,
+  song: string,
+  charts: ChartResponseEncore[],
+) {
+  const results = charts.filter(chart => {
+    const artistDistance = levenshteinEditDistance(chart.artist, artist);
+    const songDistance = levenshteinEditDistance(chart.name, song);
+
+    const match = artistDistance < 2 && songDistance < 2;
+    return match;
+  });
+  return results;
 }
 
 function reduceCharts(...chartSets: {md5: string; modifiedTime: string}[][]) {

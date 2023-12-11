@@ -4,9 +4,14 @@ import {useCallback, useState, useReducer, useRef, useEffect} from 'react';
 import SongsTable from './SongsTable';
 
 import {searchEncore as searchForChartEncore} from './searchForChart';
-import {ChartResponse} from './chartSelection';
+import {
+  ChartResponse,
+  ChartResponseEncore,
+  selectChart,
+} from './chartSelection';
 import {compareToCurrentChart} from './compareToCurrentChart';
 import scanLocalCharts, {SongAccumulator} from '@/lib/scanLocalCharts';
+import getChorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 
 export type RecommendedChart =
   | {
@@ -31,6 +36,7 @@ type SongState = {
   songs: SongWithRecommendation[] | null;
   songsCounted: number;
   songsCheckedForUpdates: number;
+  chorusCharts: ChartResponseEncore[] | null;
 };
 
 type SongStateActions =
@@ -48,12 +54,21 @@ type SongStateActions =
       type: 'set-recommendation';
       song: SongWithRecommendation;
       recommendation: RecommendedChart;
+    }
+  | {
+      type: 'set-chorus-songs';
+      charts: ChartResponseEncore[];
     };
 
 function songsReducer(state: SongState, action: SongStateActions): SongState {
   switch (action.type) {
     case 'reset':
-      return {songs: null, songsCounted: 0, songsCheckedForUpdates: 0};
+      return {
+        songs: null,
+        songsCounted: 0,
+        songsCheckedForUpdates: 0,
+        chorusCharts: state.chorusCharts,
+      };
     case 'increment-counter':
       return {...state, songsCounted: state.songsCounted + 1};
     case 'set-songs':
@@ -71,6 +86,8 @@ function songsReducer(state: SongState, action: SongStateActions): SongState {
           recommendedChart: action.recommendation,
         }),
       };
+    case 'set-chorus-songs':
+      return {...state, chorusCharts: action.charts};
     default:
       throw new Error('unrecognized action');
   }
@@ -81,6 +98,7 @@ export default function SongsPicker() {
     songs: null,
     songsCounted: 0,
     songsCheckedForUpdates: 0,
+    chorusCharts: null,
   });
 
   const [shouldAbortUpdateChecking, setShouldAbortUpdateChecking] =
@@ -108,10 +126,21 @@ export default function SongsPicker() {
     }
     const songs: SongAccumulator[] = [];
 
-    await scanLocalCharts(directoryHandle, songs, () => {
+    const chorusChartsPromise = getChorusChartDb();
+    const scanChartsPromise = scanLocalCharts(directoryHandle, songs, () => {
       songsDispatch({
         type: 'increment-counter',
       });
+    });
+
+    const [chorusCharts, _] = await Promise.all([
+      chorusChartsPromise,
+      scanChartsPromise,
+    ]);
+
+    songsDispatch({
+      type: 'set-chorus-songs',
+      charts: chorusCharts,
     });
 
     const songsWithRecommendation: SongWithRecommendation[] = songs.map(
@@ -130,16 +159,30 @@ export default function SongsPicker() {
   }, [songsDispatch]);
 
   const checkForUpdates = useCallback(async () => {
-    if (songsState.songs == null) {
+    if (songsState.songs == null || songsState.chorusCharts == null) {
       return;
     }
 
+    // Switch this to scan through chorus charts looking for matching songs
+    // Make sure to use a fuzzy search. Pull logic from crossreference.js
+
     for await (const song of songsState.songs) {
+      console.log('Processing song', song.song);
       let recommendation: RecommendedChart;
 
-      const recommendedChart = await searchForChartEncore(
+      const matchingCharts = findMatchingCharts(
         song.artist,
         song.song,
+        songsState.chorusCharts,
+      );
+
+      const recommendedChart: ChartResponse = selectChart(
+        matchingCharts.map(chart => ({
+          ...chart,
+          uploadedAt: chart.modifiedTime,
+          lastModified: chart.modifiedTime,
+          file: `https://files.enchor.us/${chart.md5}.sng`,
+        })),
       );
 
       if (recommendedChart == null) {
@@ -173,7 +216,7 @@ export default function SongsPicker() {
         break;
       }
     }
-  }, [songsState.songs]);
+  }, [songsState.chorusCharts, songsState.songs]);
 
   return (
     <>
