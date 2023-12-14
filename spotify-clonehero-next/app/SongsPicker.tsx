@@ -162,11 +162,11 @@ export default function SongsPicker() {
       return;
     }
 
-    // Switch this to scan through chorus charts looking for matching songs
-    // Make sure to use a fuzzy search. Pull logic from crossreference.js
-
-    for (const song of songsState.songs) {
+    const before = Date.now();
+    for await (const song of songsState.songs) {
+      // Yield to React so we can update the UI
       console.log('Processing song', song.song);
+      // await Promise.resolve();
       let recommendation: RecommendedChart;
 
       const matchingCharts = findMatchingCharts(
@@ -215,6 +215,8 @@ export default function SongsPicker() {
         break;
       }
     }
+    const after = Date.now();
+    console.log('Took', (after - before) / 1000, 'ss');
   }, [songsState.chorusCharts, songsState.songs]);
 
   return (

@@ -16,7 +16,7 @@ export async function searchForChartEncoreBasic(
   artist: string,
   song: string,
 ): Promise<string> {
-  const response = await fetch('https://www.enchor.us/api/search', {
+  const response = await fetch('https://api.enchor.us/search', {
     headers: {
       accept: 'application/json, text/plain, */*',
       'accept-language': 'en-US,en;q=0.9',
@@ -41,7 +41,7 @@ export async function searchForChartEncore(
   API Wish List
   * I wish I didn't need to specify all these empty values. If the API adds a new field, and the user hasn't refreshed the page, those search requests will error
   */
-  const response = await fetch('https://www.enchor.us/api/search/advanced', {
+  const response = await fetch('https://api.enchor.us/search/advanced', {
     headers: {
       accept: 'application/json, text/plain, */*',
       'accept-language': 'en-US,en;q=0.9',

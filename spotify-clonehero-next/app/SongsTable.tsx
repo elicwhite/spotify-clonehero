@@ -5,6 +5,7 @@ import {
   useReducer,
   useMemo,
   Fragment,
+  useEffect,
 } from 'react';
 import {
   ColumnDef,
@@ -184,6 +185,10 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
   const [open, setOpen] = useState(true);
   const cancelButtonRef = useRef(null);
 
+  useEffect(() => {
+    setOpen(currentlyReviewing != null);
+  }, [currentlyReviewing]);
+
   return (
     <>
       {currentlyReviewing &&
@@ -193,7 +198,10 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
               as="div"
               className="relative z-10"
               initialFocus={cancelButtonRef}
-              onClose={setOpen}>
+              onClose={(...args) => {
+                setCurrentlyReviewing(null);
+                setOpen(false);
+              }}>
               <Transition.Child
                 as={Fragment}
                 enter="ease-out duration-300"

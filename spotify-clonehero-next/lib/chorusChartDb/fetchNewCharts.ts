@@ -1,5 +1,5 @@
 const LOCAL_URL = 'http://localhost:4200/api/search/advanced';
-const PROD_URL = 'https://www.enchor.us/api/search/advanced';
+const PROD_URL = 'https://api.enchor.us/search/advanced';
 
 // Debug variable to limit iterations in the future. Leave for full runs.
 const MAX_ITERATIONS = Number.MAX_SAFE_INTEGER;
