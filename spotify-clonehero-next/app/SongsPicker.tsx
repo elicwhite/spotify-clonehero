@@ -100,16 +100,7 @@ export default function SongsPicker() {
     chorusCharts: null,
   });
 
-  const [shouldAbortUpdateChecking, setShouldAbortUpdateChecking] =
-    useState(false);
-  const shouldAbortUpdateCheckingRef = useRef(false);
-
-  useEffect(() => {
-    shouldAbortUpdateCheckingRef.current = shouldAbortUpdateChecking;
-  }, [shouldAbortUpdateChecking]);
-
   const handler = useCallback(async () => {
-    setShouldAbortUpdateChecking(false);
     songsDispatch({
       type: 'reset',
     });
@@ -212,10 +203,6 @@ export default function SongsPicker() {
         song,
         recommendation,
       });
-
-      if (shouldAbortUpdateCheckingRef.current) {
-        break;
-      }
     }
     const after = Date.now();
     console.log('Took', (after - before) / 1000, 'ss');
@@ -242,15 +229,6 @@ export default function SongsPicker() {
             Check Chorus for Updated Charts
           </button>
           <h1>{songsState.songsCheckedForUpdates} songs checked for updates</h1>
-          {songsState.songsCheckedForUpdates > 0 &&
-            !shouldAbortUpdateChecking && (
-              <button
-                onClick={() => {
-                  setShouldAbortUpdateChecking(true);
-                }}>
-                Stop checking for updates!
-              </button>
-            )}
         </>
       )}
       {songsState.songs && <SongsTable songs={songsState.songs} />}
