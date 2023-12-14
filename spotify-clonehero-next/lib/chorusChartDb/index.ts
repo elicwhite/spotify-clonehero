@@ -40,19 +40,19 @@ export function findMatchingCharts(
   song: string,
   charts: ChartResponseEncore[],
 ) {
-  // const results = charts.filter(chart => {
-  //   if (chart.artist === artist && chart.name === song) {
-  //     return true;
-  //   }
-  // });
-
   const results = charts.filter(chart => {
-    const artistDistance = levenshteinEditDistance(chart.artist, artist);
-    const songDistance = levenshteinEditDistance(chart.name, song);
-
-    const match = artistDistance < 2 && songDistance < 2;
-    return match;
+    if (chart.artist === artist && chart.name === song) {
+      return true;
+    }
   });
+
+  // const results = charts.filter(chart => {
+  //   const artistDistance = levenshteinEditDistance(chart.artist, artist);
+  //   const songDistance = levenshteinEditDistance(chart.name, song);
+
+  //   const match = artistDistance < 2 && songDistance < 2;
+  //   return match;
+  // });
   return results;
 }
 

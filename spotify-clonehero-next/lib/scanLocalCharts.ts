@@ -1,10 +1,11 @@
-import ini from 'ini';
+import {parse} from '@/lib/ini-parser';
 
 export type SongIniData = {
   name: string;
   artist: string;
   charter: string;
-  diff_drums: number;
+  diff_drums_real: number;
+  diff_guitar: number;
 };
 
 export type SongAccumulator = {
@@ -21,7 +22,7 @@ export default async function scanLocalCharts(
   callbackPerSong: Function,
 ) {
   let newestDate = 0;
-  let songIniData = null;
+  let songIniData: SongIniData | null = null;
 
   for await (const subHandle of directoryHandle.values()) {
     if (subHandle.kind == 'directory') {
@@ -33,8 +34,9 @@ export default async function scanLocalCharts(
 
       if (subHandle.name == 'song.ini') {
         const text = await file.text();
-        const values = ini.parse(text);
-        songIniData = values?.song;
+        const values = parse(text);
+        // @ts-ignore Assuming JSON matches TypeScript
+        songIniData = values.iniObject?.song;
       }
 
       if (file.lastModified > newestDate) {
@@ -43,14 +45,37 @@ export default async function scanLocalCharts(
     }
   }
 
-  if (songIniData) {
+  if (songIniData != null) {
+    const convertedSongIniData = convertValues(songIniData);
     accumulator.push({
       artist: songIniData?.artist,
       song: songIniData?.name,
       lastModified: newestDate,
       charter: songIniData?.charter,
-      data: songIniData,
+      data: convertedSongIniData,
     });
     callbackPerSong();
   }
+}
+
+function convertValues(songIniData: SongIniData) {
+  const mappedEntries = Object.entries(songIniData).map(([key, value]) => {
+    // @ts-ignore Checking if type is int
+    const tryIntValue = parseInt(value, 10);
+    if (value == tryIntValue || value == tryIntValue.toString()) {
+      return [key, tryIntValue];
+    }
+
+    if (value == 'True') {
+      return [key, true];
+    } else if (value == 'False') {
+      return [key, false];
+    }
+
+    return [key, value];
+  });
+
+  console.log(mappedEntries);
+
+  return Object.fromEntries(mappedEntries);
 }

@@ -143,12 +143,14 @@ export default function SongsPicker() {
     });
 
     const songsWithRecommendation: SongWithRecommendation[] = songs.map(
-      song => ({
-        ...song,
-        recommendedChart: {
-          type: 'not-checked',
-        },
-      }),
+      song => {
+        return {
+          ...song,
+          recommendedChart: {
+            type: 'not-checked',
+          },
+        };
+      },
     );
 
     songsDispatch({

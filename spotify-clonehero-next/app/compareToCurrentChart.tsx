@@ -8,7 +8,8 @@ export function compareToCurrentChart(
   const currentChartInfo: ChartInfo = {
     charter: currentChart.charter,
     uploadedAt: new Date(currentChart.lastModified).toISOString(),
-    diff_drums: currentChart.data.diff_drums,
+    diff_drums_real: currentChart.data.diff_drums_real,
+    diff_guitar: currentChart.data.diff_guitar,
   };
 
   const result = selectChart([currentChartInfo, newChart]);

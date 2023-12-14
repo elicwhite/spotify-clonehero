@@ -7,6 +7,8 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 
+const DEBUG = true;
+
 type NullableSongIniData = {
   [P in keyof SongIniData]: SongIniData[P] | null;
 };
@@ -28,6 +30,15 @@ export default function CompareView<
   recommendedChart: U;
   recommendedModified: Date;
 }) {
+  if (DEBUG) {
+    console.log(
+      currentChart,
+      currentModified.getTime(),
+      recommendedChart,
+      recommendedModified.getTime(),
+    );
+  }
+
   return (
     <div className="bg-white dark:bg-slate-800 overflow-y-auto">
       <div className="px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
@@ -58,6 +69,7 @@ export default function CompareView<
               </td>
             </tr>
             {songIniOrder
+              .slice(0, songIniOrder.indexOf('preview_start_time'))
               .map(key => {
                 // @ts-ignore Need to fix the types of the chart data
                 const currentValue = currentChart[key];
