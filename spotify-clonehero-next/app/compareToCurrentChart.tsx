@@ -6,10 +6,8 @@ export function compareToCurrentChart(
   newChart: ChartResponse,
 ) {
   const currentChartInfo: ChartInfo = {
-    charter: currentChart.charter,
+    ...currentChart.data,
     uploadedAt: new Date(currentChart.lastModified).toISOString(),
-    diff_drums_real: currentChart.data.diff_drums_real,
-    diff_guitar: currentChart.data.diff_guitar,
   };
 
   const result = selectChart([currentChartInfo, newChart]);

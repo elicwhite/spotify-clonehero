@@ -114,12 +114,12 @@ export function selectChart<T extends ChartInfo>(charts: T[]): T {
         const chartValue = chart[key as keyof T];
         const recommendedValue = recommendedChart[key as keyof T];
 
-        if (
-          typeof chartValue == 'number' &&
-          typeof recommendedValue == 'number'
-        ) {
-          return recommendedValue < chartValue;
-        }
+        // if (
+        //   typeof chartValue == 'number' &&
+        //   typeof recommendedValue == 'number'
+        // ) {
+        //   return recommendedValue < chartValue;
+        // }
 
         if (
           typeof chartValue == 'boolean' &&
@@ -131,11 +131,11 @@ export function selectChart<T extends ChartInfo>(charts: T[]): T {
         return false;
       });
 
-    if (newChartHasBetterMisc) {
-      isChartBetter = true;
-      recommendedChart = chart;
-      continue;
-    }
+    // if (newChartHasBetterMisc) {
+    //   isChartBetter = true;
+    //   recommendedChart = chart;
+    //   continue;
+    // }
 
     // Can't find anything better about the new chart, move on
   }
