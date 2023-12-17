@@ -31,7 +31,7 @@ export type ChartInfo = {
   diff_guitar: number | null;
 };
 
-export function selectChart<T extends ChartInfo>(charts: T[]): T {
+export function selectChart<T extends ChartInfo>(charts: T[]): T | undefined {
   let recommendedChart = charts[0];
 
   for (let chartIndex = 1; chartIndex < charts.length; chartIndex++) {

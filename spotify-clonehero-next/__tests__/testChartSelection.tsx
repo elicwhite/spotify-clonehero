@@ -27,7 +27,7 @@ test('select Harmonix over Neversoft', () => {
       charter: 'Friend',
     }),
   ]);
-  expect(selectedChart.charter).toBe('Harmonix');
+  expect(selectedChart!.charter).toBe('Harmonix');
 });
 
 test('select Harmonix over rando', () => {
@@ -42,7 +42,7 @@ test('select Harmonix over rando', () => {
       charter: 'Friend',
     }),
   ]);
-  expect(selectedChart.charter).toBe('Harmonix');
+  expect(selectedChart!.charter).toBe('Harmonix');
 });
 
 test('select Neversoft over rando', () => {
@@ -54,7 +54,7 @@ test('select Neversoft over rando', () => {
       charter: 'Neversoft',
     }),
   ]);
-  expect(selectedChart.charter).toBe('Neversoft');
+  expect(selectedChart!.charter).toBe('Neversoft');
 });
 
 test('select drums over no drums when first', () => {
@@ -68,7 +68,7 @@ test('select drums over no drums when first', () => {
       diff_drums_real: null,
     }),
   ]);
-  expect(selectedChart.charter).toBe('good');
+  expect(selectedChart!.charter).toBe('good');
 });
 
 test('select drums over no drums when first', () => {
@@ -82,7 +82,7 @@ test('select drums over no drums when first', () => {
       diff_drums_real: -1,
     }),
   ]);
-  expect(selectedChart.charter).toBe('good');
+  expect(selectedChart!.charter).toBe('good');
 });
 
 test('select drums over no drums when second', () => {
@@ -96,7 +96,7 @@ test('select drums over no drums when second', () => {
       diff_drums_real: 8,
     }),
   ]);
-  expect(selectedChart.charter).toBe('good');
+  expect(selectedChart!.charter).toBe('good');
 });
 
 test('select drums over no drums when second', () => {
@@ -110,7 +110,7 @@ test('select drums over no drums when second', () => {
       diff_drums_real: 8,
     }),
   ]);
-  expect(selectedChart.charter).toBe('good');
+  expect(selectedChart!.charter).toBe('good');
 });
 
 test('select more recent chart when both are from the same charter', () => {
@@ -132,7 +132,7 @@ test('select more recent chart when both are from the same charter', () => {
       link: '2',
     }),
   ]);
-  expect(selectedChart.link).toBe('2');
+  expect(selectedChart!.link).toBe('2');
 });
 
 test('select the first chart if the charts are the same', () => {
@@ -179,7 +179,7 @@ test('select the first chart with more instruments if all else equal', () => {
   });
 
   const selectedChart = selectChart([chart1, chart2]);
-  expect(selectedChart.charter).toBe('a');
+  expect(selectedChart!.charter).toBe('a');
 });
 
 test('select the second chart with more instruments if all else equal', () => {
@@ -203,7 +203,7 @@ test('select the second chart with more instruments if all else equal', () => {
   });
 
   const selectedChart = selectChart([chart1, chart2]);
-  expect(selectedChart.charter).toBe('b');
+  expect(selectedChart!.charter).toBe('b');
 });
 
 test('fixture data', () => {

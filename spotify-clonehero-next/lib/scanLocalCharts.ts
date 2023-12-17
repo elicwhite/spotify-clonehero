@@ -23,7 +23,6 @@ export default async function scanLocalCharts(
 ) {
   let newestDate = 0;
   let songIniData: SongIniData | null = null;
-
   for await (const subHandle of directoryHandle.values()) {
     if (subHandle.kind == 'directory') {
       await scanLocalCharts(subHandle, accumulator, callbackPerSong);
@@ -36,7 +35,7 @@ export default async function scanLocalCharts(
         const text = await file.text();
         const values = parse(text);
         // @ts-ignore Assuming JSON matches TypeScript
-        songIniData = values.iniObject?.song;
+        songIniData = values.iniObject?.song || values.iniObject?.Song;
       }
 
       if (file.lastModified > newestDate) {
@@ -74,8 +73,6 @@ function convertValues(songIniData: SongIniData) {
 
     return [key, value];
   });
-
-  console.log(mappedEntries);
 
   return Object.fromEntries(mappedEntries);
 }

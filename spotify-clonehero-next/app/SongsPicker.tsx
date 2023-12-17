@@ -168,7 +168,7 @@ export default function SongsPicker() {
         songsState.chorusCharts,
       );
 
-      const recommendedChart: ChartResponse = selectChart(
+      const recommendedChart: ChartResponse | undefined = selectChart(
         matchingCharts.map(chart => ({
           ...chart,
           uploadedAt: chart.modifiedTime,

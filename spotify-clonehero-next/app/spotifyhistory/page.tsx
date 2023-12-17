@@ -2,14 +2,26 @@
 
 import scanLocalCharts, {SongAccumulator} from '@/lib/scanLocalCharts';
 import {levenshteinEditDistance} from 'levenshtein-edit-distance';
-import {useCallback} from 'react';
-import chorusChartDb from '@/lib/chorusChartDb';
+import {useCallback, useState} from 'react';
+import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
+import {RecommendedChart} from '../SongsPicker';
+import {ChartResponse, selectChart} from '../chartSelection';
+
+type SpotifyPlaysRecommendations = {
+  artist: string;
+  song: string;
+  playCount: number;
+  recommendedChart: ChartResponse;
+};
+
+type Falsy = false | 0 | '' | null | undefined;
+const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
+  Boolean(v);
 
 export default function Page() {
-  const handler2 = useCallback(async () => {
-    await chorusChartDb();
-  }, []);
-
+  const [songs, setSongs] = useState<SpotifyPlaysRecommendations[] | null>(
+    null,
+  );
   const handler = useCallback(async () => {
     let spotifyDataHandle;
     let songsDirectoryHandle;
@@ -44,8 +56,44 @@ export default function Page() {
       artistTrackPlays,
       isInstalled,
     );
+    const allChorusCharts = await chorusChartDb();
 
-    console.log(notInstalledSongs);
+    const recommendedCharts = notInstalledSongs
+      .map(([artist, song, playCount]) => {
+        const matchingCharts = findMatchingCharts(
+          artist,
+          song,
+          allChorusCharts,
+        );
+
+        const recommendedChart: ChartResponse | undefined = selectChart(
+          matchingCharts
+            // .filter(chart => chart.diff_drums_real > 0)
+            .map(chart => ({
+              ...chart,
+              uploadedAt: chart.modifiedTime,
+              lastModified: chart.modifiedTime,
+              file: `https://files.enchor.us/${chart.md5}.sng`,
+            })),
+        );
+
+        if (recommendedChart == null) {
+          return null;
+        }
+
+        return {
+          artist,
+          song,
+          playCount,
+          recommendedChart,
+        };
+      })
+      .filter(_Boolean);
+
+    if (recommendedCharts.length > 0) {
+      setSongs(recommendedCharts);
+      console.log(recommendedCharts);
+    }
   }, []);
 
   return (
@@ -54,11 +102,6 @@ export default function Page() {
         className="bg-blue-500 text-white px-4 py-2 rounded-md transition-all ease-in-out duration-300 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500"
         onClick={handler}>
         Scan Spotify Dump
-      </button>
-      <button
-        className="bg-blue-500 text-white px-4 py-2 rounded-md transition-all ease-in-out duration-300 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500"
-        onClick={handler2}>
-        Check DB
       </button>
     </main>
   );
@@ -188,22 +231,24 @@ async function createIsInstalledFilter(installedSongs: SongAccumulator[]) {
   }
 
   return function isInstalled(artist: string, song: string) {
-    let likelyArtist;
+    let likelyArtists = [];
 
     for (const installedArtist of installedArtistsSongs.keys()) {
       const artistDistance = levenshteinEditDistance(installedArtist, artist);
-      if (artistDistance <= 1) {
-        likelyArtist = installedArtist;
+      if (artistDistance <= 2) {
+        likelyArtists.push(installedArtist);
       }
     }
 
-    if (likelyArtist == null) {
+    if (likelyArtists.length == 0) {
       return false;
     }
 
-    const artistSongs = installedArtistsSongs.get(likelyArtist);
+    const artistSongs = likelyArtists
+      .map(artist => installedArtistsSongs.get(artist)!)
+      .flat();
 
-    if (artistSongs == null) {
+    if (artistSongs.length == 0) {
       return false;
     }
 
@@ -211,7 +256,7 @@ async function createIsInstalledFilter(installedSongs: SongAccumulator[]) {
 
     for (const installedSong of artistSongs) {
       const songDistance = levenshteinEditDistance(installedSong, song);
-      if (songDistance <= 1) {
+      if (songDistance <= 4) {
         likelySong = installedSong;
       }
     }

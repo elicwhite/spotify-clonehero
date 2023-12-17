@@ -46,10 +46,6 @@ function LoggedIn() {
     artists.add(track.artists[0]);
   });
 
-  console.log('number of artists', artists.size);
-
-  console.log(tracks);
-
   return (
     <>
       <Button onClick={update}>Refresh Your Saved Tracks from Spotify</Button>
