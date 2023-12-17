@@ -41,6 +41,7 @@ export default function Spotify() {
 function LoggedIn() {
   const [tracks, update] = useSpotifyTracks();
 
+  console.log(tracks);
   const artists = new Set();
   tracks.forEach(track => {
     artists.add(track.artists[0]);

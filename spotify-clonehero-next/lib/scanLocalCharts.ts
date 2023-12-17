@@ -1,3 +1,4 @@
+import {levenshteinEditDistance} from 'levenshtein-edit-distance';
 import {parse} from '@/lib/ini-parser';
 
 export type SongIniData = {
@@ -75,4 +76,59 @@ function convertValues(songIniData: SongIniData) {
   });
 
   return Object.fromEntries(mappedEntries);
+}
+
+export async function createIsInstalledFilter(
+  installedSongs: SongAccumulator[],
+) {
+  const installedArtistsSongs = new Map<string, string[]>();
+
+  for (const installedSong of installedSongs) {
+    const {artist, song} = installedSong;
+
+    if (installedArtistsSongs.get(artist) == null) {
+      installedArtistsSongs.set(artist, []);
+    }
+
+    installedArtistsSongs.get(artist)!.push(song);
+  }
+
+  return function isInstalled(artist: string, song: string) {
+    let likelyArtists = [];
+
+    for (const installedArtist of installedArtistsSongs.keys()) {
+      const artistDistance = levenshteinEditDistance(installedArtist, artist);
+      if (artistDistance <= 2) {
+        likelyArtists.push(installedArtist);
+      }
+    }
+
+    if (likelyArtists.length == 0) {
+      return false;
+    }
+
+    const artistSongs = likelyArtists
+      .map(artist => installedArtistsSongs.get(artist)!)
+      .flat();
+
+    if (artistSongs.length == 0) {
+      return false;
+    }
+
+    let likelySong;
+
+    for (const installedSong of artistSongs) {
+      const songDistance = levenshteinEditDistance(installedSong, song);
+      if (songDistance <= 4) {
+        likelySong = installedSong;
+      }
+    }
+
+    if (likelySong != null) {
+      return true;
+    }
+
+    // Some installed songs have (2x double bass) suffixes.
+    return artistSongs.some(artistSong => artistSong.includes(song));
+  };
 }
