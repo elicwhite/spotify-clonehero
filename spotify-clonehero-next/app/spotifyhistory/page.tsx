@@ -2,10 +2,21 @@
 
 import scanLocalCharts, {SongAccumulator} from '@/lib/scanLocalCharts';
 import {levenshteinEditDistance} from 'levenshtein-edit-distance';
-import {useCallback, useState} from 'react';
+import {useCallback, useMemo, useRef, useState} from 'react';
 import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {RecommendedChart} from '../SongsPicker';
 import {ChartResponse, selectChart} from '../chartSelection';
+import {
+  Row,
+  SortingState,
+  createColumnHelper,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from '@tanstack/react-table';
+import {useVirtual} from 'react-virtual';
+import {removeStyleTags} from '@/lib/ui-utils';
 
 type SpotifyPlaysRecommendations = {
   artist: string;
@@ -103,6 +114,8 @@ export default function Page() {
         onClick={handler}>
         Scan Spotify Dump
       </button>
+
+      {songs && <Table tracks={songs} />}
     </main>
   );
 }
@@ -268,4 +281,186 @@ async function createIsInstalledFilter(installedSongs: SongAccumulator[]) {
     // Some installed songs have (2x double bass) suffixes.
     return artistSongs.some(artistSong => artistSong.includes(song));
   };
+}
+
+type RowType = {
+  id: number;
+  artist: string;
+  song: string;
+  playCount: number;
+  charter: string;
+  instruments: string;
+};
+
+const columnHelper = createColumnHelper<RowType>();
+
+function Table({tracks}: {tracks: SpotifyPlaysRecommendations[]}) {
+  const columns = useMemo(
+    () => [
+      {
+        accessorKey: 'artist',
+        header: 'Artist',
+        minSize: 250,
+      },
+      {
+        accessorKey: 'song',
+        header: 'Song',
+        minSize: 250,
+      },
+      {
+        accessorKey: 'playCount',
+        header: '# Plays',
+        minSize: 250,
+      },
+      columnHelper.accessor('charter', {
+        header: 'Charter',
+        minSize: 200,
+        cell: props => {
+          return removeStyleTags(props.getValue() || '');
+        },
+      }),
+      {
+        accessorKey: 'instruments',
+        header: 'Instruments',
+        minSize: 250,
+      },
+    ],
+    [],
+  );
+
+  const trackState = useMemo(
+    () =>
+      tracks.map((track, index) => ({
+        id: index + 1,
+        artist: track.artist,
+        song: track.song,
+        playCount: track.playCount,
+        charter: track.recommendedChart.charter,
+        instruments: JSON.stringify(
+          Object.keys(track.recommendedChart)
+            .filter(
+              key =>
+                key.startsWith('diff_') &&
+                (track.recommendedChart[
+                  key as keyof ChartResponse
+                ] as number) >= 0,
+            )
+            .map(key => ({
+              [key.replace('diff_', '')]: track.recommendedChart[
+                key as keyof ChartResponse
+              ] as number,
+            }))
+            .reduce((a, b) => ({...a, ...b}), {}),
+        ),
+      })),
+    [tracks],
+  );
+
+  const [sorting, setSorting] = useState<SortingState>([
+    {id: 'playCount', desc: true},
+    {id: 'artist', desc: false},
+    {id: 'song', desc: false},
+  ]);
+
+  const table = useReactTable({
+    data: trackState,
+    columns,
+    state: {
+      sorting,
+    },
+    enableMultiSort: true,
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    debugTable: false,
+  });
+
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  const {rows} = table.getRowModel();
+  const rowVirtualizer = useVirtual({
+    parentRef: tableContainerRef,
+    size: rows.length,
+    overscan: 10,
+  });
+  const {virtualItems: virtualRows, totalSize} = rowVirtualizer;
+
+  const paddingTop = virtualRows.length > 0 ? virtualRows?.[0]?.start || 0 : 0;
+  const paddingBottom =
+    virtualRows.length > 0
+      ? totalSize - (virtualRows?.[virtualRows.length - 1]?.end || 0)
+      : 0;
+
+  return (
+    <>
+      <div
+        className="bg-white dark:bg-slate-800 rounded-lg ring-1 ring-slate-900/5 shadow-xl overflow-y-auto ph-8"
+        ref={tableContainerRef}>
+        <table className="border-collapse table-auto w-full text-sm">
+          <thead className="sticky top-0">
+            {table.getHeaderGroups().map(headerGroup => (
+              <tr key={headerGroup.id}>
+                {headerGroup.headers.map(header => {
+                  return (
+                    <th
+                      key={header.id}
+                      colSpan={header.colSpan}
+                      className="bg-white dark:bg-slate-800 pt-8 font-medium p-4 pl-8 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left"
+                      style={{
+                        textAlign: (header.column.columnDef.meta as any)?.align,
+                        width: header.getSize(),
+                      }}>
+                      {flexRender(
+                        header.column.columnDef.header,
+                        header.getContext(),
+                      )}
+                    </th>
+                  );
+                })}
+              </tr>
+            ))}
+            <tr>
+              <th
+                className="h-px bg-slate-100 dark:bg-slate-600 p-0"
+                colSpan={5}></th>
+            </tr>
+          </thead>
+          <tbody className="bg-white dark:bg-slate-800">
+            {paddingTop > 0 && (
+              <tr>
+                <td style={{height: `${paddingTop}px`}} />
+              </tr>
+            )}
+            {virtualRows.map(virtualRow => {
+              const row = rows[virtualRow.index] as Row<RowType>;
+              return (
+                <tr key={row.id}>
+                  {row.getVisibleCells().map(cell => {
+                    return (
+                      <td
+                        className="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400"
+                        key={cell.id}
+                        style={{
+                          textAlign: (cell.column.columnDef.meta as any)?.align,
+                        }}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+            {paddingBottom > 0 && (
+              <tr>
+                <td style={{height: `${paddingBottom}px`}} />
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
 }
