@@ -214,77 +214,76 @@ type RowType = {
 
 const columnHelper = createColumnHelper<RowType>();
 
-function Table({tracks}: {tracks: SpotifyPlaysRecommendations[]}) {
-  const columns = useMemo(
-    () => [
-      {
-        accessorKey: 'artist',
-        header: 'Artist',
-        minSize: 250,
-      },
-      {
-        accessorKey: 'song',
-        header: 'Song',
-        minSize: 250,
-      },
-      {
-        accessorKey: 'playCount',
-        header: '# Plays',
-        minSize: 250,
-      },
-      columnHelper.accessor('charter', {
-        header: 'Charter',
-        minSize: 200,
-        cell: props => {
-          return removeStyleTags(props.getValue() || '');
-        },
-      }),
-      columnHelper.accessor('instruments', {
-        header: 'Instruments',
-        minSize: 250,
-        cell: props => {
-          return (
-            <>
-              {Object.keys(props.getValue())
-                .filter(instrument =>
-                  [
-                    'bass',
-                    'drums',
-                    'guitar',
-                    'keys',
-                    'rhythm',
-                    'vocals',
-                  ].includes(instrument),
-                )
-                .map(instrument => {
-                  return (
-                    <Image
-                      className="inline-block mr-1"
-                      key={instrument}
-                      alt={`Icon for instrument ${instrument}`}
-                      src={`/assets/instruments/${instrument}.png`}
-                      width={32}
-                      height={32}
-                    />
-                  );
-                })}
-            </>
-          );
-        },
-      }),
-      columnHelper.accessor('download', {
-        header: 'Download',
-        minSize: 100,
-        cell: props => {
-          const {artist, song, file} = props.getValue();
-          return <DownloadButton artist={artist} song={song} url={file} />;
-        },
-      }),
-    ],
-    [],
-  );
+const columns = [
+  {
+    accessorKey: 'artist',
+    header: 'Artist',
+    minSize: 250,
+  },
+  {
+    accessorKey: 'song',
+    header: 'Song',
+    minSize: 250,
+  },
+  {
+    accessorKey: 'playCount',
+    header: '# Plays',
+    minSize: 250,
+  },
+  columnHelper.accessor('charter', {
+    header: 'Charter',
+    minSize: 200,
+    cell: props => {
+      return removeStyleTags(props.getValue() || '');
+    },
+  }),
+  columnHelper.accessor('instruments', {
+    header: 'Instruments',
+    minSize: 250,
+    cell: props => {
+      return (
+        <>
+          {Object.keys(props.getValue())
+            .filter(instrument =>
+              [
+                'bass',
+                'bassghl',
+                'drums',
+                'guitar',
+                'guitarghl',
+                'keys',
+                'rhythm',
+                'rhythmghl',
+                'vocals',
+              ].includes(instrument),
+            )
+            .map(instrument => {
+              return (
+                <Image
+                  className="inline-block mr-1"
+                  key={instrument}
+                  alt={`Icon for instrument ${instrument}`}
+                  src={`/assets/instruments/${instrument}.png`}
+                  width={32}
+                  height={32}
+                />
+              );
+            })}
+        </>
+      );
+    },
+  }),
+  columnHelper.accessor('download', {
+    header: 'Download',
+    minSize: 100,
+    cell: props => {
+      const {artist, song, file} = props.getValue();
+      return <DownloadButton artist={artist} song={song} url={file} />;
+    },
+  }),
+];
 
-  console.log(tracks);
+function Table({tracks}: {tracks: SpotifyPlaysRecommendations[]}) {
   const trackState = useMemo(
     () =>
       tracks.map((track, index) => ({
