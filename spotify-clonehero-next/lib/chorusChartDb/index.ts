@@ -28,9 +28,12 @@ export default async function getChorusChartDb(): Promise<
   const {serverCharts} = await getServerCharts(root);
   debugLog('Fetching local cache of charts');
   const localCharts = await getLocalCharts(root);
-  debugLog('Fetching updated charts');
-  const updatedCharts = await getUpdatedCharts(root);
-  debugLog('Done fetching charts');
+  let updatedCharts = [];
+  if (navigator.onLine) {
+    debugLog('Fetching updated charts');
+    updatedCharts = await getUpdatedCharts(root);
+    debugLog('Done fetching charts');
+  }
 
   const finalCharts = reduceCharts(serverCharts, localCharts, updatedCharts);
   return finalCharts;

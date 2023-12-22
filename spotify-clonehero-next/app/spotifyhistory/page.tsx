@@ -4,7 +4,7 @@ import scanLocalCharts, {
   SongAccumulator,
   createIsInstalledFilter,
 } from '@/lib/local-songs-folder/scanLocalCharts';
-import {useCallback, useMemo, useRef, useState} from 'react';
+import {ReactNode, useCallback, useMemo, useRef, useState} from 'react';
 import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {ChartResponse, selectChart} from '../chartSelection';
 import {
@@ -26,6 +26,7 @@ import {
   getSpotifyDumpArtistTrackPlays,
   processSpotifyDump,
 } from '@/lib/spotify-sdk/HistoryDumpParsing';
+import Image from 'next/image';
 
 type SpotifyPlaysRecommendations = {
   artist: string;
@@ -46,6 +47,7 @@ export default function Page() {
     let installedCharts: SongAccumulator[] | undefined;
     let lastScanned: Date | undefined;
 
+    console.log('get spotify listens');
     let cachedInstalledCharts = await getCachedInstalledCharts();
 
     if (cachedInstalledCharts == null) {
@@ -80,11 +82,14 @@ export default function Page() {
       artistTrackPlays = await processSpotifyDump(spotifyDataHandle);
     }
 
+    console.log('create installed filter');
     const isInstalled = await createIsInstalledFilter(installedCharts);
+    console.log('filter songs');
     const notInstalledSongs = filterInstalledSongs(
       artistTrackPlays,
       isInstalled,
     );
+    console.log('done filtering songs');
     const allChorusCharts = await chorusChartDb();
 
     const recommendedCharts = notInstalledSongs
@@ -144,6 +149,8 @@ function filterInstalledSongs(
 ): [artist: string, song: string, playCount: number][] {
   const filtered: Map<string, Map<string, number>> = new Map();
 
+  console.log('add to set');
+  // SLOW
   for (const [artist, songs] of spotifySongs.entries()) {
     for (const [song, playCount] of songs.entries()) {
       if (!isInstalled(artist, song)) {
@@ -156,6 +163,7 @@ function filterInstalledSongs(
     }
   }
 
+  console.log('sort');
   const artistsSortedByListens = [...filtered.entries()]
     .toSorted((a, b) => {
       const aTotal = [...a[1].values()].reduce((a, b) => a + b, 0);
@@ -169,6 +177,7 @@ function filterInstalledSongs(
 
   const results: [artist: string, song: string, playCount: number][] = [];
 
+  // SLOW
   for (const [artist, songs] of spotifySongs.entries()) {
     for (const [song, playCount] of songs.entries()) {
       if (!isInstalled(artist, song)) {
@@ -177,9 +186,13 @@ function filterInstalledSongs(
     }
   }
 
+  console.log('push results');
+
   results.sort((a, b) => {
     return b[2] - a[2];
   });
+
+  console.log('sort results');
 
   return results;
 }
@@ -254,7 +267,8 @@ type RowType = {
   song: string;
   playCount: number;
   charter: string;
-  instruments: string;
+  instruments: {[instrument: string]: number};
+  download: string;
 };
 
 const columnHelper = createColumnHelper<RowType>();
@@ -284,15 +298,51 @@ function Table({tracks}: {tracks: SpotifyPlaysRecommendations[]}) {
           return removeStyleTags(props.getValue() || '');
         },
       }),
-      {
-        accessorKey: 'instruments',
+      columnHelper.accessor('instruments', {
         header: 'Instruments',
         minSize: 250,
-      },
+        cell: props => {
+          return (
+            <>
+              {Object.keys(props.getValue())
+                .filter(instrument =>
+                  [
+                    'bass',
+                    'drums',
+                    'guitar',
+                    'keys',
+                    'rhythm',
+                    'vocals',
+                  ].includes(instrument),
+                )
+                .map(instrument => {
+                  return (
+                    <Image
+                      className="inline-block space-x-4"
+                      key={instrument}
+                      alt={`Icon for instrument ${instrument}`}
+                      src={`/assets/instruments/${instrument}.png`}
+                      width={32}
+                      height={32}
+                    />
+                  );
+                })}
+            </>
+          );
+        },
+      }),
+      columnHelper.accessor('download', {
+        header: 'Download',
+        minSize: 100,
+        cell: props => {
+          return <DownloadButton url={props.getValue()} />;
+        },
+      }),
     ],
     [],
   );
 
+  console.log(tracks);
   const trackState = useMemo(
     () =>
       tracks.map((track, index) => ({
@@ -301,22 +351,20 @@ function Table({tracks}: {tracks: SpotifyPlaysRecommendations[]}) {
         song: track.song,
         playCount: track.playCount,
         charter: track.recommendedChart.charter,
-        instruments: JSON.stringify(
-          Object.keys(track.recommendedChart)
-            .filter(
-              key =>
-                key.startsWith('diff_') &&
-                (track.recommendedChart[
-                  key as keyof ChartResponse
-                ] as number) >= 0,
-            )
-            .map(key => ({
-              [key.replace('diff_', '')]: track.recommendedChart[
-                key as keyof ChartResponse
-              ] as number,
-            }))
-            .reduce((a, b) => ({...a, ...b}), {}),
-        ),
+        instruments: Object.keys(track.recommendedChart)
+          .filter(
+            key =>
+              key.startsWith('diff_') &&
+              (track.recommendedChart[key as keyof ChartResponse] as number) >=
+                0,
+          )
+          .map(key => ({
+            [key.replace('diff_', '')]: track.recommendedChart[
+              key as keyof ChartResponse
+            ] as number,
+          }))
+          .reduce((a, b) => ({...a, ...b}), {}),
+        download: track.recommendedChart.file,
       })),
     [tracks],
   );
@@ -427,5 +475,42 @@ function Table({tracks}: {tracks: SpotifyPlaysRecommendations[]}) {
         </table>
       </div>
     </>
+  );
+}
+
+async function delay(ms: number) {
+  return new Promise(resolve => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function DownloadButton({url}: {url: string}) {
+  const [downloadState, setDownloadState] = useState<
+    'downloaded' | 'downloading' | 'not-downloading'
+  >('not-downloading');
+
+  const handler = useCallback(async () => {
+    if (downloadState != 'not-downloading') {
+      return;
+    }
+
+    setDownloadState('downloading');
+    await delay(1500);
+    setDownloadState('downloaded');
+
+    console.log('download', url);
+  }, [url, downloadState]);
+  return (
+    <button
+      className="bg-blue-500 text-blue-700 font-semibold text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded"
+      onClick={handler}>
+      {downloadState === 'not-downloading'
+        ? 'Download'
+        : downloadState === 'downloading'
+        ? '...'
+        : downloadState === 'downloaded'
+        ? 'so done'
+        : ''}
+    </button>
   );
 }

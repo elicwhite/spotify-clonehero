@@ -9,7 +9,7 @@ export type ChartResponse = {
   diff_guitar: number | null;
   uploadedAt: string;
   lastModified: string | null;
-  link: string;
+  file: string;
 };
 
 export type ChartResponseEncore = {
@@ -31,7 +31,7 @@ export type ChartInfo = {
   diff_guitar: number | null;
 };
 
-export function selectChart<T extends ChartInfo>(charts: T[]): T | undefined {
+export function selectChart<T extends ChartInfo>(charts: T[]): T {
   let recommendedChart = charts[0];
 
   for (let chartIndex = 1; chartIndex < charts.length; chartIndex++) {
