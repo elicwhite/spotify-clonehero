@@ -12,7 +12,7 @@ import {
   getSpotifyDumpArtistTrackPlays,
   processSpotifyDump,
 } from '@/lib/spotify-sdk/HistoryDumpParsing';
-import SpotifyTableDownloader from '../spotifyTableDownloader';
+import SpotifyTableDownloader from '../SpotifyTableDownloader';
 
 type SpotifyPlaysRecommendations = {
   artist: string;

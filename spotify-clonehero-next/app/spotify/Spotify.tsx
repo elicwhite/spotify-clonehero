@@ -12,7 +12,7 @@ import {
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {ChartResponse, selectChart} from '../chartSelection';
-import SpotifyTableDownloader from '../spotifyTableDownloader';
+import SpotifyTableDownloader from '../SpotifyTableDownloader';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>

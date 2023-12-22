@@ -107,7 +107,8 @@ class ReactNextAuthStrategy implements IAuthStrategy {
   }
 
   public setConfiguration(configuration: SdkConfiguration): void {
-    console.warn('[Spotify-SDK][WARN]\nsetConfiguration not implemented');
+    // console.log('config', configuration);
+    // console.warn('[Spotify-SDK][WARN]\nsetConfiguration not implemented');
   }
 }
 
