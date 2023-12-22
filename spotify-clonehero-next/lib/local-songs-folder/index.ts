@@ -25,28 +25,36 @@ async function promptForSongsDirectory() {
   return handle;
 }
 
+let currentSongDirectoryCache: FileSystemDirectoryHandle | undefined;
+
 export async function getSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle> {
-  const handle: FileSystemDirectoryHandle | undefined = await get(
-    'songsDirectoryHandle',
-  );
+  // const handle: FileSystemDirectoryHandle | undefined = await get(
+  //   'songsDirectoryHandle',
+  // );
 
-  if (handle == null) {
-    return await promptForSongsDirectory();
+  if (currentSongDirectoryCache) {
+    return currentSongDirectoryCache;
   }
 
-  const permissionState: PermissionState = await handle.queryPermission({
-    mode: 'readwrite',
-  });
+  // if (handle == null) {
+  const promptedHandle = await promptForSongsDirectory();
+  currentSongDirectoryCache = promptedHandle;
+  return promptedHandle;
+  // }
 
-  console.log('premissionStatus', permissionState);
-  if (permissionState === 'granted') {
-    return handle;
-  } else if (permissionState === 'prompt') {
-    await handle.requestPermission({mode: 'readwrite'});
-    return handle;
-  } else {
-    return await promptForSongsDirectory();
-  }
+  // const permissionState: PermissionState = await handle.queryPermission({
+  //   mode: 'readwrite',
+  // });
+
+  // console.log('premissionStatus', permissionState);
+  // if (permissionState === 'granted') {
+  //   return handle;
+  // } else if (permissionState === 'prompt') {
+  //   await handle.requestPermission({mode: 'readwrite'});
+  //   return handle;
+  // } else {
+  //   return await promptForSongsDirectory();
+  // }
 }
 
 export async function setSongsDirectoryHandle(

@@ -103,7 +103,7 @@ export default function Page() {
 
         const recommendedChart: ChartResponse | undefined = selectChart(
           matchingCharts
-            .filter(chart => chart.diff_drums_real > 0 || chart.diff_drums > 0)
+            // .filter(chart => chart.diff_drums_real > 0 || chart.diff_drums > 0)
             .map(chart => ({
               ...chart,
               uploadedAt: chart.modifiedTime,
