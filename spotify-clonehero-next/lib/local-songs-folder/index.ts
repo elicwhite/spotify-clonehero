@@ -1,6 +1,9 @@
 import {get, set} from 'idb-keyval';
+import filenamify from 'filenamify/browser';
+
 import {readJsonFile, writeFile} from '@/lib/fileSystemHelpers';
 import scanLocalCharts, {SongAccumulator} from './scanLocalCharts';
+import {SngStream} from 'parse-sng';
 
 // Save chart
 // Replace chart
@@ -108,4 +111,68 @@ export async function scanForInstalledCharts(): Promise<InstalledChartsResponse>
     lastScanned: now,
     installedCharts,
   };
+}
+
+export async function downloadSong(artist: string, song: string, url: string) {
+  const handle = await getSongsDirectoryHandle();
+  const response = await fetch(url, {
+    headers: {
+      accept: '*/*',
+      'accept-language': 'en-US,en;q=0.9',
+      'sec-fetch-dest': 'empty',
+    },
+    referrerPolicy: 'no-referrer',
+    body: null,
+    method: 'GET',
+    credentials: 'omit',
+  });
+
+  const body = response.body;
+  if (body == null) {
+    return;
+  }
+
+  const artistSongTitle = `${artist} - ${song}`;
+  const filename = filenamify(artistSongTitle, {replacement: ''});
+
+  // Error if something matches the filename already
+  let songDirHandle: FileSystemDirectoryHandle | undefined;
+  try {
+    songDirHandle = await handle.getDirectoryHandle(filename, {
+      create: false,
+    });
+  } catch {
+    // This is what we hope for, that the file doesn't exist
+  }
+
+  if (songDirHandle != null) {
+    throw new Error(`Chart ${filename} already installed`);
+  }
+
+  songDirHandle = await handle.getDirectoryHandle(filename, {
+    create: true,
+  });
+
+  return await new Promise((resolve, reject) => {
+    const sngStream = new SngStream(() => body);
+    sngStream.on('file', async (file, stream) => {
+      const fileHandle = await songDirHandle!.getFileHandle(file, {
+        create: true,
+      });
+      const writableStream = await fileHandle.createWritable();
+      stream.pipeTo(writableStream);
+    });
+
+    sngStream.on('end', () => {
+      console.log(`Finished downloading ${filename}`);
+      resolve('downloaded');
+    });
+
+    sngStream.on('error', error => {
+      console.log(error);
+      reject(error);
+    });
+
+    sngStream.start();
+  });
 }

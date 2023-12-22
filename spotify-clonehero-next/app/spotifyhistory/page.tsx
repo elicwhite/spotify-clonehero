@@ -19,6 +19,7 @@ import {
 import {useVirtual} from 'react-virtual';
 import {removeStyleTags} from '@/lib/ui-utils';
 import {
+  downloadSong,
   getCachedInstalledCharts,
   scanForInstalledCharts,
 } from '@/lib/local-songs-folder';
@@ -197,69 +198,11 @@ function filterInstalledSongs(
   return results;
 }
 
-async function getAllSpotifyPlays(handle: FileSystemDirectoryHandle) {
-  let hasPdf = false;
-  const results = [];
-  for await (const entry of handle.values()) {
-    if (entry.kind !== 'file') {
-      throw new Error('Select the folder with your Spotify streaming history.');
-    }
-
-    if (entry.name.endsWith('.pdf') && entry.name.startsWith('ReadMeFirst')) {
-      hasPdf = true;
-      continue;
-    }
-
-    if (!entry.name.endsWith('.json')) {
-      throw new Error('Select the folder with your Spotify streaming history.');
-    }
-
-    const file = await entry.getFile();
-    const text = await file.text();
-    const json = JSON.parse(text);
-
-    json;
-    results.push(...json);
-  }
-
-  if (!hasPdf) {
-    throw new Error('Select the folder with your Spotify streaming history.');
-  }
-
-  return results;
-}
-
 type SpotifyHistoryEntry = {
   reason_end: 'fwdbtn' | 'trackdone' | 'backbtn' | 'clickrow'; // There are other options, but it doesn't matter
   master_metadata_album_artist_name: string;
   master_metadata_track_name: string;
 };
-
-function createPlaysMapOfSpotifyData(history: SpotifyHistoryEntry[]) {
-  const artistsTracks = new Map<string, Map<string, number>>();
-
-  for (const song of history) {
-    if (song.reason_end != 'trackdone') {
-      continue;
-    }
-
-    const artist = song.master_metadata_album_artist_name;
-    if (artist == null) {
-      // For some reason these don't have any information about what played
-      continue;
-    }
-    const track = song.master_metadata_track_name;
-
-    let tracksPlays = artistsTracks.get(artist);
-    if (tracksPlays == null) {
-      tracksPlays = new Map();
-      artistsTracks.set(artist, tracksPlays);
-    }
-    tracksPlays.set(track, (tracksPlays.get(track) ?? 0) + 1);
-  }
-
-  return artistsTracks;
-}
 
 type RowType = {
   id: number;
@@ -268,7 +211,11 @@ type RowType = {
   playCount: number;
   charter: string;
   instruments: {[instrument: string]: number};
-  download: string;
+  download: {
+    artist: string;
+    song: string;
+    file: string;
+  };
 };
 
 const columnHelper = createColumnHelper<RowType>();
@@ -335,7 +282,8 @@ function Table({tracks}: {tracks: SpotifyPlaysRecommendations[]}) {
         header: 'Download',
         minSize: 100,
         cell: props => {
-          return <DownloadButton url={props.getValue()} />;
+          const {artist, song, file} = props.getValue();
+          return <DownloadButton artist={artist} song={song} url={file} />;
         },
       }),
     ],
@@ -364,7 +312,11 @@ function Table({tracks}: {tracks: SpotifyPlaysRecommendations[]}) {
             ] as number,
           }))
           .reduce((a, b) => ({...a, ...b}), {}),
-        download: track.recommendedChart.file,
+        download: {
+          artist: track.artist,
+          song: track.song,
+          file: track.recommendedChart.file,
+        },
       })),
     [tracks],
   );
@@ -435,7 +387,7 @@ function Table({tracks}: {tracks: SpotifyPlaysRecommendations[]}) {
             <tr>
               <th
                 className="h-px bg-slate-100 dark:bg-slate-600 p-0"
-                colSpan={5}></th>
+                colSpan={6}></th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-slate-800">
@@ -484,9 +436,17 @@ async function delay(ms: number) {
   });
 }
 
-function DownloadButton({url}: {url: string}) {
+function DownloadButton({
+  artist,
+  song,
+  url,
+}: {
+  artist: string;
+  song: string;
+  url: string;
+}) {
   const [downloadState, setDownloadState] = useState<
-    'downloaded' | 'downloading' | 'not-downloading'
+    'downloaded' | 'downloading' | 'not-downloading' | 'failed'
   >('not-downloading');
 
   const handler = useCallback(async () => {
@@ -494,23 +454,32 @@ function DownloadButton({url}: {url: string}) {
       return;
     }
 
-    setDownloadState('downloading');
-    await delay(1500);
-    setDownloadState('downloaded');
+    try {
+      setDownloadState('downloading');
+      await downloadSong(artist, song, url);
+    } catch {
+      console.log('Error while downloading', artist, song, url);
+      setDownloadState('failed');
+      return;
+    }
 
-    console.log('download', url);
-  }, [url, downloadState]);
-  return (
-    <button
-      className="bg-blue-500 text-blue-700 font-semibold text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded"
-      onClick={handler}>
-      {downloadState === 'not-downloading'
-        ? 'Download'
-        : downloadState === 'downloading'
-        ? '...'
-        : downloadState === 'downloaded'
-        ? 'so done'
-        : ''}
-    </button>
-  );
+    setDownloadState('downloaded');
+  }, [artist, song, url, downloadState]);
+
+  switch (downloadState) {
+    case 'downloaded':
+      return <span>Downloaded</span>;
+    case 'downloading':
+      return <span>Downloading...</span>;
+    case 'failed':
+      return <span>Failed</span>;
+    case 'not-downloading':
+      return (
+        <button
+          className="bg-blue-500 text-blue-700 font-semibold text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded"
+          onClick={handler}>
+          Download
+        </button>
+      );
+  }
 }

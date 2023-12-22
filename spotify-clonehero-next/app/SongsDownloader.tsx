@@ -105,19 +105,6 @@ export default function SongsDownloader() {
       stream.pipeTo(writableStream);
     });
 
-    // sngStream.on('header', async header => {
-    //   console.log('header', header);
-    //   const fileHandle = await songDirHandle.getFileHandle('song.ini', {
-    //     create: true,
-    //   });
-
-    //   const accessHandle = await fileHandle.createSyncAccessHandle();
-    //   const contents = createSongIniString(header.metadata);
-    //   accessHandle.write(contents);
-    //   accessHandle.flush();
-    //   accessHandle.close();
-    // });
-
     sngStream.on('end', () => console.log('test.sng has been fully parsed'));
 
     sngStream.on('error', error => console.log(error));
