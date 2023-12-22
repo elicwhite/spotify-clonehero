@@ -20,11 +20,12 @@ import {useVirtual} from 'react-virtual';
 import {removeStyleTags} from '@/lib/ui-utils';
 import {
   getCachedInstalledCharts,
-  getInstalledCharts,
-  getSongsDirectoryHandle,
   scanForInstalledCharts,
-  setSongsDirectoryHandle,
 } from '@/lib/local-songs-folder';
+import {
+  getSpotifyDumpArtistTrackPlays,
+  processSpotifyDump,
+} from '@/lib/spotify-sdk/HistoryDumpParsing';
 
 type SpotifyPlaysRecommendations = {
   artist: string;
@@ -42,35 +43,44 @@ export default function Page() {
     null,
   );
   const handler = useCallback(async () => {
-    let spotifyDataHandle;
+    let installedCharts: SongAccumulator[] | undefined;
+    let lastScanned: Date | undefined;
 
-    try {
-      spotifyDataHandle = await window.showDirectoryPicker({
-        id: 'spotify-dump',
-      });
-    } catch {
-      console.log('User canceled picker');
-      return;
-    }
+    let cachedInstalledCharts = await getCachedInstalledCharts();
 
-    let installedSongs: SongAccumulator[] | undefined =
-      await getCachedInstalledCharts();
-
-    if (installedSongs == null) {
+    if (cachedInstalledCharts == null) {
       alert('Now select your Clone Hero songs directory');
 
       try {
-        installedSongs = await scanForInstalledCharts();
+        const scanResult = await scanForInstalledCharts();
+        installedCharts = scanResult.installedCharts;
+        lastScanned = scanResult.lastScanned;
       } catch {
         console.log('User canceled picker');
         return;
       }
+    } else {
+      installedCharts = cachedInstalledCharts.installedCharts;
+      lastScanned = cachedInstalledCharts.lastScanned;
     }
 
-    const results = await getAllSpotifyPlays(spotifyDataHandle);
-    const artistTrackPlays = createPlaysMapOfSpotifyData(results);
+    let artistTrackPlays = await getSpotifyDumpArtistTrackPlays();
+    if (artistTrackPlays == null) {
+      let spotifyDataHandle;
 
-    const isInstalled = await createIsInstalledFilter(installedSongs);
+      try {
+        spotifyDataHandle = await window.showDirectoryPicker({
+          id: 'spotify-dump',
+        });
+      } catch {
+        console.log('User canceled picker');
+        return;
+      }
+
+      artistTrackPlays = await processSpotifyDump(spotifyDataHandle);
+    }
+
+    const isInstalled = await createIsInstalledFilter(installedCharts);
     const notInstalledSongs = filterInstalledSongs(
       artistTrackPlays,
       isInstalled,

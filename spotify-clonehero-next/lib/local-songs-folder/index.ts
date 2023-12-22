@@ -52,8 +52,13 @@ export async function setSongsDirectoryHandle(
   await set('songsDirectoryHandle', handle);
 }
 
+type InstalledChartsResponse = {
+  lastScanned: Date;
+  installedCharts: SongAccumulator[];
+};
+
 export async function getCachedInstalledCharts(): Promise<
-  SongAccumulator[] | undefined
+  InstalledChartsResponse | undefined
 > {
   const root = await navigator.storage.getDirectory();
 
@@ -71,10 +76,18 @@ export async function getCachedInstalledCharts(): Promise<
   }
 
   const installedCharts = await readJsonFile(installedChartsCacheHandle);
-  return installedCharts;
+
+  const lastScannedTime = new Date(
+    parseInt(localStorage.getItem('lastScannedInstalledCharts') || '0', 10),
+  );
+
+  return {
+    lastScanned: lastScannedTime,
+    installedCharts,
+  };
 }
 
-export async function scanForInstalledCharts(): Promise<SongAccumulator[]> {
+export async function scanForInstalledCharts(): Promise<InstalledChartsResponse> {
   const root = await navigator.storage.getDirectory();
 
   const handle = await getSongsDirectoryHandle();
@@ -89,6 +102,10 @@ export async function scanForInstalledCharts(): Promise<SongAccumulator[]> {
     },
   );
   writeFile(installedChartsCacheHandle, JSON.stringify(installedCharts));
-
-  return installedCharts;
+  const now = new Date();
+  localStorage.setItem('lastScannedInstalledCharts', now.getTime().toString());
+  return {
+    lastScanned: now,
+    installedCharts,
+  };
 }
