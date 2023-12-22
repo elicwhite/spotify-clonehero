@@ -1,4 +1,4 @@
-import {SongIniData} from '@/lib/scanLocalCharts';
+import {SongIniData} from '@/lib/local-songs-folder/scanLocalCharts';
 import {songIniOrder} from './SongsDownloader';
 import {
   createColumnHelper,

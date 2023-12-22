@@ -3,7 +3,7 @@
 import scanLocalCharts, {
   SongAccumulator,
   createIsInstalledFilter,
-} from '@/lib/scanLocalCharts';
+} from '@/lib/local-songs-folder/scanLocalCharts';
 import {useCallback, useMemo, useRef, useState} from 'react';
 import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {ChartResponse, selectChart} from '../chartSelection';
@@ -18,6 +18,13 @@ import {
 } from '@tanstack/react-table';
 import {useVirtual} from 'react-virtual';
 import {removeStyleTags} from '@/lib/ui-utils';
+import {
+  getCachedInstalledCharts,
+  getInstalledCharts,
+  getSongsDirectoryHandle,
+  scanForInstalledCharts,
+  setSongsDirectoryHandle,
+} from '@/lib/local-songs-folder';
 
 type SpotifyPlaysRecommendations = {
   artist: string;
@@ -36,7 +43,6 @@ export default function Page() {
   );
   const handler = useCallback(async () => {
     let spotifyDataHandle;
-    let songsDirectoryHandle;
 
     try {
       spotifyDataHandle = await window.showDirectoryPicker({
@@ -47,22 +53,23 @@ export default function Page() {
       return;
     }
 
-    alert('Now select your Clone Hero songs directory');
+    let installedSongs: SongAccumulator[] | undefined =
+      await getCachedInstalledCharts();
 
-    try {
-      songsDirectoryHandle = await window.showDirectoryPicker({
-        id: 'clone-hero-songs',
-      });
-    } catch {
-      console.log('User canceled picker');
-      return;
+    if (installedSongs == null) {
+      alert('Now select your Clone Hero songs directory');
+
+      try {
+        installedSongs = await scanForInstalledCharts();
+      } catch {
+        console.log('User canceled picker');
+        return;
+      }
     }
 
     const results = await getAllSpotifyPlays(spotifyDataHandle);
     const artistTrackPlays = createPlaysMapOfSpotifyData(results);
 
-    const installedSongs: SongAccumulator[] = [];
-    await scanLocalCharts(songsDirectoryHandle, installedSongs, () => {});
     const isInstalled = await createIsInstalledFilter(installedSongs);
     const notInstalledSongs = filterInstalledSongs(
       artistTrackPlays,
@@ -80,7 +87,7 @@ export default function Page() {
 
         const recommendedChart: ChartResponse | undefined = selectChart(
           matchingCharts
-            // .filter(chart => chart.diff_drums_real > 0)
+            .filter(chart => chart.diff_drums_real > 0 || chart.diff_drums > 0)
             .map(chart => ({
               ...chart,
               uploadedAt: chart.modifiedTime,

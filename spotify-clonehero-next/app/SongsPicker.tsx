@@ -9,7 +9,9 @@ import {
   selectChart,
 } from './chartSelection';
 import {compareToCurrentChart} from './compareToCurrentChart';
-import scanLocalCharts, {SongAccumulator} from '@/lib/scanLocalCharts';
+import scanLocalCharts, {
+  SongAccumulator,
+} from '@/lib/local-songs-folder/scanLocalCharts';
 import getChorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 
 export type RecommendedChart =
