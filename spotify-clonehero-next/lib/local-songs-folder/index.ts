@@ -154,7 +154,7 @@ export async function downloadSong(artist: string, song: string, url: string) {
   });
 
   return await new Promise((resolve, reject) => {
-    const sngStream = new SngStream(() => body);
+    const sngStream = new SngStream(() => body, {generateSongIni: true});
     sngStream.on('file', async (file, stream) => {
       const fileHandle = await songDirHandle!.getFileHandle(file, {
         create: true,

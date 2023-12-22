@@ -49,23 +49,23 @@ export default function Page() {
     let lastScanned: Date | undefined;
 
     console.log('get spotify listens');
-    let cachedInstalledCharts = await getCachedInstalledCharts();
+    // let cachedInstalledCharts = await getCachedInstalledCharts();
 
-    if (cachedInstalledCharts == null) {
-      alert('Now select your Clone Hero songs directory');
+    // if (cachedInstalledCharts == null) {
+    alert('Select your Clone Hero songs directory');
 
-      try {
-        const scanResult = await scanForInstalledCharts();
-        installedCharts = scanResult.installedCharts;
-        lastScanned = scanResult.lastScanned;
-      } catch {
-        console.log('User canceled picker');
-        return;
-      }
-    } else {
-      installedCharts = cachedInstalledCharts.installedCharts;
-      lastScanned = cachedInstalledCharts.lastScanned;
+    try {
+      const scanResult = await scanForInstalledCharts();
+      installedCharts = scanResult.installedCharts;
+      lastScanned = scanResult.lastScanned;
+    } catch {
+      console.log('User canceled picker');
+      return;
     }
+    // } else {
+    //   installedCharts = cachedInstalledCharts.installedCharts;
+    //   lastScanned = cachedInstalledCharts.lastScanned;
+    // }
 
     let artistTrackPlays = await getSpotifyDumpArtistTrackPlays();
     if (artistTrackPlays == null) {
@@ -198,12 +198,6 @@ function filterInstalledSongs(
   return results;
 }
 
-type SpotifyHistoryEntry = {
-  reason_end: 'fwdbtn' | 'trackdone' | 'backbtn' | 'clickrow'; // There are other options, but it doesn't matter
-  master_metadata_album_artist_name: string;
-  master_metadata_track_name: string;
-};
-
 type RowType = {
   id: number;
   artist: string;
@@ -265,7 +259,7 @@ function Table({tracks}: {tracks: SpotifyPlaysRecommendations[]}) {
                 .map(instrument => {
                   return (
                     <Image
-                      className="inline-block space-x-4"
+                      className="inline-block mr-1"
                       key={instrument}
                       alt={`Icon for instrument ${instrument}`}
                       src={`/assets/instruments/${instrument}.png`}
@@ -428,12 +422,6 @@ function Table({tracks}: {tracks: SpotifyPlaysRecommendations[]}) {
       </div>
     </>
   );
-}
-
-async function delay(ms: number) {
-  return new Promise(resolve => {
-    setTimeout(resolve, ms);
-  });
 }
 
 function DownloadButton({
