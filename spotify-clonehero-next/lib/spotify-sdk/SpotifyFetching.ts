@@ -12,6 +12,10 @@ type CachePlaylistTracks = {
   [snapshotId: string]: TrackResult[];
 };
 
+type CachePlaylistNames = {
+  [snapshotId: string]: string;
+};
+
 export type TrackResult = {
   name: string;
   artists: string[];
@@ -27,6 +31,10 @@ function getCachedPlaylistTracks(): CachePlaylistTracks {
 
 function setCachedPlaylistTracks(cachedPlaylistTracks: CachePlaylistTracks) {
   localStorage.setItem('playlistTracks', JSON.stringify(cachedPlaylistTracks));
+}
+
+function setCachedPlaylistNames(cachedPlaylistNames: CachePlaylistNames) {
+  localStorage.setItem('playlistNames', JSON.stringify(cachedPlaylistNames));
 }
 
 async function getAllPlaylists(sdk: SpotifyApi): Promise<SimplifiedPlaylist[]> {
@@ -54,7 +62,7 @@ async function getAllPlaylistTracks(
   const limit = 50;
   let offset = 0;
   let total = null;
-  let retryAfter = 0;
+
   do {
     try {
       const items = await sdk.playlists.getPlaylistItems(
@@ -140,11 +148,22 @@ export function useSpotifyTracks(): [
     }
 
     const playlists = await getAllPlaylists(sdk);
+    const playlistNames = playlists.reduce(
+      (acc: CachePlaylistNames, playlist) => {
+        const snapshot: string = playlist.snapshot_id;
+        acc[snapshot] = playlist.name;
+        return acc;
+      },
+      {},
+    );
+
+    setCachedPlaylistNames(playlistNames);
+
     const cachedPlaylistTracks = getCachedPlaylistTracks();
     const cachedSnapshots = Object.keys(cachedPlaylistTracks);
     const foundSnapshots: string[] = [];
 
-    const playlistTracks = await pMap(
+    await pMap(
       playlists,
       async playlist => {
         if (cachedSnapshots.includes(playlist.snapshot_id)) {
@@ -170,7 +189,6 @@ export function useSpotifyTracks(): [
       },
       {concurrency: 10},
     );
-    const tracks = playlistTracks.flat();
 
     const newCache = foundSnapshots.reduce(
       (acc: {[snapshotId: string]: TrackResult[]}, snapshot: string) => {

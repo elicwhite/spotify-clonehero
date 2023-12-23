@@ -32,10 +32,11 @@ export default function Spotify() {
 
   return (
     <>
-      <div>
-        <p>Logged in as {session.data.user?.name}</p>
+      <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
+        <span>Logged in as {session.data.user?.name}</span>
         <Button onClick={() => signOut()}>Sign out</Button>
       </div>
+
       <LoggedIn />
     </>
   );
@@ -53,7 +54,11 @@ function LoggedIn() {
     null,
   );
 
+  const [calculating, setCalculating] = useState(false);
+
   const calculate = useCallback(async () => {
+    setCalculating(true);
+    update();
     let installedCharts: SongAccumulator[] | undefined;
 
     alert('Select your Clone Hero songs directory');
@@ -105,12 +110,19 @@ function LoggedIn() {
       setSongs(recommendedCharts);
       console.log(recommendedCharts);
     }
-  }, [tracks]);
+    setCalculating(false);
+  }, [tracks, update]);
 
   return (
     <>
-      <Button onClick={update}>Refresh Your Saved Tracks from Spotify</Button>
-      <Button onClick={calculate}>Calculate</Button>
+      <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
+        {calculating ? (
+          'Calculating'
+        ) : (
+          <Button onClick={calculate}>Calculate</Button>
+        )}
+      </div>
+
       {songs && <SpotifyTableDownloader tracks={songs} />}
     </>
   );

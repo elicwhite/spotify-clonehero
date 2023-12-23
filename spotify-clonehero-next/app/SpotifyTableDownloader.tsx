@@ -1,11 +1,13 @@
-import {useCallback, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ChartResponse} from './chartSelection';
 import {
+  FilterFn,
   Row,
   SortingState,
   createColumnHelper,
   flexRender,
   getCoreRowModel,
+  getFilteredRowModel,
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
@@ -35,6 +37,55 @@ type RowType = {
   };
 };
 
+const RENDERED_INSTRUMENTS = [
+  'bass',
+  'bassghl',
+  'drums',
+  'guitar',
+  'guitarghl',
+  'keys',
+  'rhythm',
+  'rhythmghl',
+  'vocals',
+] as const;
+
+type AllowedInstrument = (typeof RENDERED_INSTRUMENTS)[number];
+
+function InstrumentImage({
+  instrument,
+  classNames,
+  onClick,
+}: {
+  instrument: AllowedInstrument;
+  classNames?: string;
+  onClick?: (instrument: AllowedInstrument) => void;
+}) {
+  const clickCallback = useCallback(() => {
+    if (onClick) {
+      onClick(instrument);
+    }
+  }, [instrument, onClick]);
+  return (
+    <Image
+      className={`inline-block mr-1 ${classNames}`}
+      key={instrument}
+      alt={`Icon for instrument ${instrument}`}
+      src={`/assets/instruments/${instrument}.png`}
+      width={32}
+      height={32}
+      onClick={clickCallback}
+    />
+  );
+}
+
+const instrumentFilter: FilterFn<RowType> = (row, columnId, value) => {
+  const songInstruments = Object.keys(row.getValue(columnId));
+  const atLeastOneInstrument = songInstruments.some(instrument =>
+    value.includes(instrument),
+  );
+  return atLeastOneInstrument;
+};
+
 const columnHelper = createColumnHelper<RowType>();
 
 const columns = [
@@ -62,39 +113,23 @@ const columns = [
   }),
   columnHelper.accessor('instruments', {
     header: 'Instruments',
-    minSize: 250,
+    minSize: 300,
     cell: props => {
       return (
         <>
           {Object.keys(props.getValue())
-            .filter(instrument =>
-              [
-                'bass',
-                'bassghl',
-                'drums',
-                'guitar',
-                'guitarghl',
-                'keys',
-                'rhythm',
-                'rhythmghl',
-                'vocals',
-              ].includes(instrument),
-            )
-            .map(instrument => {
+            // @ts-ignore Don't know how to force TS to know
+            .filter(instrument => RENDERED_INSTRUMENTS.includes(instrument))
+            // @ts-ignore Don't know how to force TS to know
+            .map((instrument: AllowedInstrument) => {
               return (
-                <Image
-                  className="inline-block mr-1"
-                  key={instrument}
-                  alt={`Icon for instrument ${instrument}`}
-                  src={`/assets/instruments/${instrument}.png`}
-                  width={32}
-                  height={32}
-                />
+                <InstrumentImage instrument={instrument} key={instrument} />
               );
             })}
         </>
       );
     },
+    filterFn: instrumentFilter,
   }),
   columnHelper.accessor('download', {
     header: 'Download',
@@ -149,6 +184,17 @@ export default function SpotifyTableDownloader({
     {id: 'song', desc: false},
   ]);
 
+  const [instrumentFilters, setInstrumentFilters] = useState<
+    AllowedInstrument[]
+  >([...RENDERED_INSTRUMENTS]);
+
+  const columnFilters = [
+    {
+      id: 'instruments',
+      value: instrumentFilters,
+    },
+  ];
+
   const table = useReactTable({
     data: trackState,
     columns,
@@ -157,10 +203,12 @@ export default function SpotifyTableDownloader({
       columnVisibility: {
         playCount: hasPlayCount,
       },
+      columnFilters,
     },
     enableMultiSort: true,
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
     debugTable: false,
   });
@@ -181,10 +229,30 @@ export default function SpotifyTableDownloader({
       ? totalSize - (virtualRows?.[virtualRows.length - 1]?.end || 0)
       : 0;
 
+  const filtersChangedCallback = useCallback((filters: AllowedInstrument[]) => {
+    setInstrumentFilters([...filters]);
+  }, []);
+
   return (
     <>
+      {/* <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-4 sm:space-y-0 sm:space-x-4 w-full"> */}
+      <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-end">
+        <span>
+          {instrumentFilters.length !== RENDERED_INSTRUMENTS.length &&
+            `${table.getRowModel().rows.length} of `}
+          {tracks.length} songs found
+        </span>
+
+        <div>
+          Filters
+          <div>
+            <Filters filtersChanged={filtersChangedCallback} />
+          </div>
+        </div>
+      </div>
+      {/* </div> */}
       <div
-        className="bg-white dark:bg-slate-800 rounded-lg ring-1 ring-slate-900/5 shadow-xl overflow-y-auto ph-8"
+        className="bg-white dark:bg-slate-800 rounded-lg ring-1 ring-slate-900/5 shadow-xl overflow-y-auto"
         ref={tableContainerRef}>
         <table className="border-collapse table-auto w-full text-sm">
           <thead className="sticky top-0">
@@ -251,6 +319,58 @@ export default function SpotifyTableDownloader({
           </tbody>
         </table>
       </div>
+    </>
+  );
+}
+
+function Filters({
+  filtersChanged,
+}: {
+  filtersChanged: (instrument: AllowedInstrument[]) => void;
+}) {
+  const [selectedFilters, setSelectedFilters] = useState<AllowedInstrument[]>(
+    [],
+  );
+
+  useEffect(() => {
+    filtersChanged(
+      selectedFilters.length === 0
+        ? [...RENDERED_INSTRUMENTS]
+        : selectedFilters,
+    );
+  }, [filtersChanged, selectedFilters]);
+
+  const callback = useCallback((instrument: AllowedInstrument) => {
+    setSelectedFilters(prev => {
+      if (prev.includes(instrument)) {
+        return prev.filter(i => i != instrument);
+      } else {
+        const newFilter = [...prev, instrument];
+        if (newFilter.length === RENDERED_INSTRUMENTS.length) {
+          return [];
+        }
+        return newFilter;
+      }
+    });
+  }, []);
+
+  return (
+    <>
+      {RENDERED_INSTRUMENTS.map((instrument: AllowedInstrument) => {
+        return (
+          <InstrumentImage
+            instrument={instrument}
+            key={instrument}
+            classNames={
+              selectedFilters.length === 0 ||
+              selectedFilters.includes(instrument)
+                ? 'opacity-100'
+                : 'opacity-50'
+            }
+            onClick={callback}
+          />
+        );
+      })}
     </>
   );
 }
