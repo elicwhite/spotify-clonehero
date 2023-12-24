@@ -12,14 +12,9 @@ import {
   getSpotifyDumpArtistTrackPlays,
   processSpotifyDump,
 } from '@/lib/spotify-sdk/HistoryDumpParsing';
-import SpotifyTableDownloader from '../SpotifyTableDownloader';
-
-type SpotifyPlaysRecommendations = {
-  artist: string;
-  song: string;
-  playCount?: number;
-  recommendedChart: ChartResponse;
-};
+import SpotifyTableDownloader, {
+  SpotifyPlaysRecommendations,
+} from '../SpotifyTableDownloader';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>

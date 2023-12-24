@@ -12,7 +12,9 @@ import {
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {ChartResponse, selectChart} from '../chartSelection';
-import SpotifyTableDownloader from '../SpotifyTableDownloader';
+import SpotifyTableDownloader, {
+  SpotifyPlaysRecommendations,
+} from '../SpotifyTableDownloader';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -42,12 +44,6 @@ export default function Spotify() {
   );
 }
 
-type SpotifyPlaysRecommendations = {
-  artist: string;
-  song: string;
-  recommendedChart: ChartResponse;
-};
-
 function LoggedIn() {
   const [tracks, update] = useSpotifyTracks();
   const [songs, setSongs] = useState<SpotifyPlaysRecommendations[] | null>(
@@ -76,7 +72,7 @@ function LoggedIn() {
     const allChorusCharts = await chorusChartDb();
 
     const recommendedCharts = notInstalledSongs
-      .map(([artist, song]) => {
+      .map(([artist, song, previewUrl]) => {
         const matchingCharts = findMatchingCharts(
           artist,
           song,
@@ -101,6 +97,7 @@ function LoggedIn() {
         return {
           artist,
           song,
+          previewUrl,
           recommendedChart,
         };
       })
@@ -131,12 +128,16 @@ function LoggedIn() {
 function filterInstalledSongs(
   spotifyTracks: TrackResult[],
   isInstalled: (artist: string, song: string) => boolean,
-): [artist: string, song: string][] {
-  const notInstalled: [artist: string, song: string][] = [];
+): [artist: string, song: string, previewUrl: string | null][] {
+  const notInstalled: [
+    artist: string,
+    song: string,
+    previewUrl: string | null,
+  ][] = [];
 
   for (const track of spotifyTracks) {
     if (!isInstalled(track.artists[0], track.name)) {
-      notInstalled.push([track.artists[0], track.name]);
+      notInstalled.push([track.artists[0], track.name, track.preview_url]);
     }
   }
 

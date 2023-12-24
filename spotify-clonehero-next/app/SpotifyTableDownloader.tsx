@@ -16,10 +16,11 @@ import {removeStyleTags} from '@/lib/ui-utils';
 import Image from 'next/image';
 import {downloadSong} from '@/lib/local-songs-folder';
 
-type SpotifyPlaysRecommendations = {
+export type SpotifyPlaysRecommendations = {
   artist: string;
   song: string;
   playCount?: number;
+  previewUrl?: string | null;
   recommendedChart: ChartResponse;
 };
 
@@ -35,6 +36,7 @@ type RowType = {
     song: string;
     file: string;
   };
+  previewUrl?: string | null;
 };
 
 const RENDERED_INSTRUMENTS = [
@@ -139,7 +141,59 @@ const columns = [
       return <DownloadButton artist={artist} song={song} url={file} />;
     },
   }),
+  columnHelper.accessor('previewUrl', {
+    header: 'Preview',
+    minSize: 100,
+    cell: props => {
+      const url = props.getValue();
+
+      if (url == null) {
+        return;
+      }
+
+      return <PreviewButton url={url} />;
+    },
+  }),
 ];
+
+function PreviewButton({url}: {url: string}) {
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(new Audio());
+
+  useEffect(() => {
+    if (audioRef.current) {
+      if (playing) {
+        audioRef.current.play();
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  }, [playing]);
+
+  const handler = useCallback(() => {
+    if (playing) {
+      audioRef.current.pause();
+    } else if (audioRef.current.src == url) {
+      audioRef.current.play();
+    } else {
+      audioRef.current.src = url;
+      audioRef.current.loop = true;
+      audioRef.current.play();
+    }
+
+    setPlaying(prev => !prev);
+  }, [playing, url]);
+
+  return (
+    <>
+      <button
+        className="bg-blue-500 text-blue-700 font-semibold text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded"
+        onClick={handler}>
+        {playing ? 'Stop' : 'Play'}
+      </button>
+    </>
+  );
+}
 
 export default function SpotifyTableDownloader({
   tracks,
@@ -147,6 +201,7 @@ export default function SpotifyTableDownloader({
   tracks: SpotifyPlaysRecommendations[];
 }) {
   const hasPlayCount = tracks[0].playCount != null;
+  const hasPreview = tracks[0].hasOwnProperty('previewUrl');
 
   const trackState = useMemo(
     () =>
@@ -174,8 +229,9 @@ export default function SpotifyTableDownloader({
           song: track.song,
           file: track.recommendedChart.file,
         },
+        ...(hasPreview ? {previewUrl: track.previewUrl} : {}),
       })),
-    [tracks, hasPlayCount],
+    [tracks, hasPlayCount, hasPreview],
   );
 
   const [sorting, setSorting] = useState<SortingState>([
@@ -202,6 +258,7 @@ export default function SpotifyTableDownloader({
       sorting,
       columnVisibility: {
         playCount: hasPlayCount,
+        previewUrl: hasPreview,
       },
       columnFilters,
     },

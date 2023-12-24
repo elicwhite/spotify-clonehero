@@ -19,6 +19,7 @@ type CachePlaylistNames = {
 export type TrackResult = {
   name: string;
   artists: string[];
+  preview_url: string | null;
 };
 
 function getCachedPlaylistTracks(): CachePlaylistTracks {
@@ -68,7 +69,7 @@ async function getAllPlaylistTracks(
       const items = await sdk.playlists.getPlaylistItems(
         playlistId,
         undefined,
-        'total,limit,items(track(type,artists(type,name),name))',
+        'total,limit,items(track(type,artists(type,name),name,preview_url))',
         limit,
         offset,
       );
@@ -82,6 +83,7 @@ async function getAllPlaylistTracks(
           return {
             name: item.track.name,
             artists: (item.track as Track).artists.map(artist => artist.name),
+            preview_url: (item.track as Track).preview_url,
           };
         });
 
