@@ -1,9 +1,9 @@
-import Scanner from './Scanner';
+import dynamic from 'next/dynamic';
+
+const Scanner = dynamic(() => import('./Scanner'), {
+  ssr: false,
+});
 
 export default function Checker() {
-  return (
-    <main className="flex max-h-screen flex-col items-center justify-between p-24">
-      <Scanner />
-    </main>
-  );
+  return <Scanner />;
 }

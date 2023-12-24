@@ -14,7 +14,8 @@ export const metadata: Metadata = {
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en">
-      <body className={`${inter.className} bg-slate-50 dark:bg-slate-950 `}>
+      <body
+        className={`${inter.className} bg-slate-50 dark:bg-slate-950 flex flex-col h-screen`}>
         <nav className="bg-white border-gray-200 dark:bg-gray-900">
           <div className="max-w-screen-xl flex flex-wrap items-center justify-between mx-auto p-4">
             <Link
@@ -70,7 +71,9 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
             </div>
           </div>
         </nav>
-        <ContextProviders>{children}</ContextProviders>
+        <main className="flex flex-col items-center align-center justify-between min-h-0 p-4">
+          <ContextProviders>{children}</ContextProviders>
+        </main>
       </body>
     </html>
   );
