@@ -26,7 +26,6 @@ export default function Spotify() {
   if (!session || session.status !== 'authenticated') {
     return (
       <div>
-        <h1>Spotify Web API Typescript SDK in Next.js</h1>
         <Button onClick={() => signIn('spotify')}>Sign in with Spotify</Button>
       </div>
     );

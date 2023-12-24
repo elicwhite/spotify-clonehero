@@ -89,12 +89,16 @@ function InstrumentImage({
   );
 }
 
-const instrumentFilter: FilterFn<RowType> = (row, columnId, value) => {
+const instrumentFilter: FilterFn<RowType> = (
+  row,
+  columnId,
+  value: AllowedInstrument[],
+) => {
   const songInstruments = Object.keys(row.getValue(columnId));
-  const atLeastOneInstrument = songInstruments.some(instrument =>
-    value.includes(instrument),
+  const allInstrumentsIncluded = value.every(instrument =>
+    songInstruments.includes(instrument),
   );
-  return atLeastOneInstrument;
+  return allInstrumentsIncluded;
 };
 
 const columnHelper = createColumnHelper<RowType>();
@@ -175,6 +179,9 @@ function LookUpPreviewButton({artist, song}: {artist: string; song: string}) {
 
   const handler = useCallback(async () => {
     const url = await getTrackPreviewUrl();
+    if (url == null) {
+      console.log('No preview found', artist, song, url);
+    }
     setUrl(url);
     setFetched(true);
   }, [getTrackPreviewUrl]);
@@ -289,7 +296,7 @@ export default function SpotifyTableDownloader({
 
   const [instrumentFilters, setInstrumentFilters] = useState<
     AllowedInstrument[]
-  >([...RENDERED_INSTRUMENTS]);
+  >([]);
 
   const columnFilters = useMemo(
     () => [
@@ -336,7 +343,7 @@ export default function SpotifyTableDownloader({
       : 0;
 
   const filtersChangedCallback = useCallback((filters: AllowedInstrument[]) => {
-    setInstrumentFilters([...filters]);
+    setInstrumentFilters(filters);
   }, []);
 
   return (
@@ -437,11 +444,7 @@ function Filters({
   );
 
   useEffect(() => {
-    filtersChanged(
-      selectedFilters.length === 0
-        ? [...RENDERED_INSTRUMENTS]
-        : selectedFilters,
-    );
+    filtersChanged(selectedFilters);
   }, [filtersChanged, selectedFilters]);
 
   const callback = useCallback((instrument: AllowedInstrument) => {
@@ -450,9 +453,9 @@ function Filters({
         return prev.filter(i => i != instrument);
       } else {
         const newFilter = [...prev, instrument];
-        if (newFilter.length === RENDERED_INSTRUMENTS.length) {
-          return [];
-        }
+        // if (newFilter.length === RENDERED_INSTRUMENTS.length) {
+        //   return [];
+        // }
         return newFilter;
       }
     });
