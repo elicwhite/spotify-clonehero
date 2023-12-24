@@ -106,6 +106,39 @@ async function getAllPlaylistTracks(
   return tracks;
 }
 
+async function getTrackPreviewUrl(
+  sdk: SpotifyApi,
+  artist: string,
+  song: string,
+): Promise<string | null> {
+  const track = await sdk.search(
+    `track:${song} artist:${artist}`,
+    ['track'],
+    undefined, // market
+    1, // limit
+  );
+
+  const previewUrl = track?.tracks?.items?.[0]?.preview_url;
+  return previewUrl;
+}
+
+export function useTrackPreviewUrl(
+  artist: string,
+  song: string,
+): () => Promise<string | null> {
+  const sdk = useSpotifySdk();
+
+  const getPreviewUrl = useCallback(async () => {
+    if (sdk == null) {
+      return null;
+    }
+
+    return await getTrackPreviewUrl(sdk, artist, song);
+  }, [sdk, artist, song]);
+
+  return getPreviewUrl;
+}
+
 export function useSpotifyTracks(): [
   tracks: TrackResult[],
   updateFromSpotify: () => Promise<void>,

@@ -1,4 +1,11 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {ChartResponse} from './chartSelection';
 import {
   FilterFn,
@@ -15,6 +22,8 @@ import {useVirtual} from 'react-virtual';
 import {removeStyleTags} from '@/lib/ui-utils';
 import Image from 'next/image';
 import {downloadSong} from '@/lib/local-songs-folder';
+import {useTrackPreviewUrl} from '@/lib/spotify-sdk/SpotifyFetching';
+import {AudioContext} from './AudioProvider';
 
 export type SpotifyPlaysRecommendations = {
   artist: string;
@@ -145,51 +154,89 @@ const columns = [
     header: 'Preview',
     minSize: 100,
     cell: props => {
+      const {artist, song} = props.row.original;
       const url = props.getValue();
 
       if (url == null) {
-        return;
+        return <LookUpPreviewButton artist={artist} song={song} />;
       }
 
-      return <PreviewButton url={url} />;
+      return (
+        <PreviewButton artist={artist} song={song} url={url} autoplay={false} />
+      );
     },
   }),
 ];
 
-function PreviewButton({url}: {url: string}) {
-  const [playing, setPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(new Audio());
+function LookUpPreviewButton({artist, song}: {artist: string; song: string}) {
+  const getTrackPreviewUrl = useTrackPreviewUrl(artist, song);
+  const [url, setUrl] = useState<string | null>(null);
+  const [fetched, setFetched] = useState(false);
 
+  const handler = useCallback(async () => {
+    const url = await getTrackPreviewUrl();
+    setUrl(url);
+    setFetched(true);
+  }, [getTrackPreviewUrl]);
+
+  return (
+    <>
+      {url == null ? (
+        fetched == true ? (
+          'No Preview'
+        ) : (
+          <button
+            className="bg-blue-500 text-blue-700 font-semibold text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded"
+            onClick={handler}>
+            Play
+          </button>
+        )
+      ) : (
+        <PreviewButton artist={artist} song={song} url={url} autoplay={true} />
+      )}
+    </>
+  );
+}
+
+function PreviewButton({
+  artist,
+  song,
+  url,
+  autoplay,
+}: {
+  artist: string;
+  song: string;
+  url: string;
+  autoplay: boolean;
+}) {
+  const {isPlaying, currentTrack, playTrack, pause} = useContext(AudioContext);
+
+  const thisTrackPlaying =
+    isPlaying && currentTrack?.artist === artist && currentTrack?.song === song;
   useEffect(() => {
-    if (audioRef.current) {
-      if (playing) {
-        audioRef.current.play();
-      } else {
-        audioRef.current.pause();
-      }
+    if (autoplay) {
+      playTrack(artist, song, url);
     }
-  }, [playing]);
+
+    () => {
+      pause();
+    };
+  }, [autoplay, artist, song, url, playTrack, pause]);
 
   const handler = useCallback(() => {
-    if (playing) {
-      audioRef.current.pause();
-    } else if (audioRef.current.src == url) {
-      audioRef.current.play();
+    if (thisTrackPlaying) {
+      pause();
     } else {
-      audioRef.current.src = url;
-      audioRef.current.loop = true;
-      audioRef.current.play();
+      playTrack(artist, song, url);
     }
-
-    setPlaying(prev => !prev);
-  }, [playing, url]);
+  }, [artist, thisTrackPlaying, pause, playTrack, song, url]);
 
   return (
     <>
       <button
         className="bg-blue-500 text-blue-700 font-semibold text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded"
         onClick={handler}>
-        {playing ? 'Stop' : 'Play'}
+        {thisTrackPlaying ? 'Stop' : 'Play'}
       </button>
     </>
   );
@@ -244,12 +291,15 @@ export default function SpotifyTableDownloader({
     AllowedInstrument[]
   >([...RENDERED_INSTRUMENTS]);
 
-  const columnFilters = [
-    {
-      id: 'instruments',
-      value: instrumentFilters,
-    },
-  ];
+  const columnFilters = useMemo(
+    () => [
+      {
+        id: 'instruments',
+        value: instrumentFilters,
+      },
+    ],
+    [instrumentFilters],
+  );
 
   const table = useReactTable({
     data: trackState,
@@ -258,7 +308,6 @@ export default function SpotifyTableDownloader({
       sorting,
       columnVisibility: {
         playCount: hasPlayCount,
-        previewUrl: hasPreview,
       },
       columnFilters,
     },
@@ -292,7 +341,6 @@ export default function SpotifyTableDownloader({
 
   return (
     <>
-      {/* <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-4 sm:space-y-0 sm:space-x-4 w-full"> */}
       <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-end">
         <span>
           {instrumentFilters.length !== RENDERED_INSTRUMENTS.length &&
@@ -307,7 +355,6 @@ export default function SpotifyTableDownloader({
           </div>
         </div>
       </div>
-      {/* </div> */}
       <div
         className="bg-white dark:bg-slate-800 rounded-lg ring-1 ring-slate-900/5 shadow-xl overflow-y-auto"
         ref={tableContainerRef}>
