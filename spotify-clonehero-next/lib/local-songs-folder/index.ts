@@ -121,7 +121,12 @@ export async function scanForInstalledCharts(): Promise<InstalledChartsResponse>
   };
 }
 
-export async function downloadSong(artist: string, song: string, url: string) {
+export async function downloadSong(
+  artist: string,
+  song: string,
+  charter: string,
+  url: string,
+) {
   const handle = await getSongsDirectoryHandle();
   const response = await fetch(url, {
     headers: {
@@ -140,7 +145,7 @@ export async function downloadSong(artist: string, song: string, url: string) {
     return;
   }
 
-  const artistSongTitle = `${artist} - ${song}`;
+  const artistSongTitle = `${artist} - ${song} (${charter})`;
   const filename = filenamify(artistSongTitle, {replacement: ''});
 
   // Error if something matches the filename already

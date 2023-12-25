@@ -43,6 +43,7 @@ type RowType = {
   download: {
     artist: string;
     song: string;
+    charter: string;
     file: string;
   };
   previewUrl?: string | null;
@@ -150,8 +151,15 @@ const columns = [
     header: 'Download',
     minSize: 100,
     cell: props => {
-      const {artist, song, file} = props.getValue();
-      return <DownloadButton artist={artist} song={song} url={file} />;
+      const {artist, song, charter, file} = props.getValue();
+      return (
+        <DownloadButton
+          artist={artist}
+          song={song}
+          charter={charter}
+          url={file}
+        />
+      );
     },
   }),
   columnHelper.accessor('previewUrl', {
@@ -179,9 +187,6 @@ function LookUpPreviewButton({artist, song}: {artist: string; song: string}) {
 
   const handler = useCallback(async () => {
     const url = await getTrackPreviewUrl();
-    if (url == null) {
-      console.log('No preview found', artist, song, url);
-    }
     setUrl(url);
     setFetched(true);
   }, [getTrackPreviewUrl]);
@@ -281,6 +286,7 @@ export default function SpotifyTableDownloader({
         download: {
           artist: track.artist,
           song: track.song,
+          charter: track.recommendedChart.charter,
           file: track.recommendedChart.file,
         },
         ...(hasPreview ? {previewUrl: track.previewUrl} : {}),
@@ -485,10 +491,12 @@ function Filters({
 function DownloadButton({
   artist,
   song,
+  charter,
   url,
 }: {
   artist: string;
   song: string;
+  charter: string;
   url: string;
 }) {
   const [downloadState, setDownloadState] = useState<
@@ -502,15 +510,15 @@ function DownloadButton({
 
     try {
       setDownloadState('downloading');
-      await downloadSong(artist, song, url);
+      await downloadSong(artist, song, charter, url);
     } catch {
-      console.log('Error while downloading', artist, song, url);
+      console.log('Error while downloading', artist, song, charter, url);
       setDownloadState('failed');
       return;
     }
 
     setDownloadState('downloaded');
-  }, [artist, song, url, downloadState]);
+  }, [artist, song, charter, url, downloadState]);
 
   switch (downloadState) {
     case 'downloaded':
