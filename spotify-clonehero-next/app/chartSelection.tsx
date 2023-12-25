@@ -27,30 +27,37 @@ export type ChartResponseEncore = {
 export type ChartInfo = {
   charter: string;
   uploadedAt: string;
-  diff_drums_real: number | null;
+  diff_drums: number | null;
   diff_guitar: number | null;
 };
 
-export function selectChart<T extends ChartInfo>(charts: T[]): T {
+export function selectChart<T extends ChartInfo>(
+  charts: T[],
+): {
+  chart: T;
+  reasons: string[];
+} {
   let recommendedChart = charts[0];
+  let reasons: string[] = [];
 
   for (let chartIndex = 1; chartIndex < charts.length; chartIndex++) {
     const chart = charts[chartIndex];
     let isChartBetter = false;
+    let chartIsBetterReasons = [];
 
     // Prefer newer charts from the same charter
     if (
       chart.charter == recommendedChart.charter &&
       new Date(chart.uploadedAt) > new Date(recommendedChart.uploadedAt)
     ) {
+      chartIsBetterReasons.push('Chart from same charter is newer');
       isChartBetter = true;
-      // continue;
     }
 
     // Prefer Harmonix
     if (recommendedChart.charter != 'Harmonix' && chart.charter == 'Harmonix') {
+      chartIsBetterReasons.push('Better chart is from Harmonix');
       isChartBetter = true;
-      // continue;
     }
 
     // Prefer official tracks
@@ -58,19 +65,27 @@ export function selectChart<T extends ChartInfo>(charts: T[]): T {
       !['Harmonix', 'Neversoft'].includes(recommendedChart.charter) &&
       ['Harmonix', 'Neversoft'].includes(chart.charter)
     ) {
+      chartIsBetterReasons.push('Better chart is from official game');
       isChartBetter = true;
-      // continue;
     }
 
     // Prefer charts with drums
     if (
-      (recommendedChart.diff_drums_real == null ||
-        recommendedChart.diff_drums_real < 0) &&
-      chart.diff_drums_real != null &&
-      chart.diff_drums_real > 0
+      (recommendedChart.diff_drums == null ||
+        recommendedChart.diff_drums < 0) &&
+      chart.diff_drums != null &&
+      chart.diff_drums > 0
     ) {
+      chartIsBetterReasons.push(
+        "Better chart has drums, current chart doesn't",
+      );
       isChartBetter = true;
-      // continue;
+    }
+
+    if (isChartBetter) {
+      recommendedChart = chart;
+      reasons = chartIsBetterReasons;
+      continue;
     }
 
     if (
@@ -79,13 +94,10 @@ export function selectChart<T extends ChartInfo>(charts: T[]): T {
       chart.diff_guitar != null &&
       chart.diff_guitar > 0
     ) {
+      chartIsBetterReasons.push(
+        "Better chart has guitar, current chart doesn't",
+      );
       isChartBetter = true;
-      // continue;
-    }
-
-    if (isChartBetter) {
-      recommendedChart = chart;
-      continue;
     }
 
     // Prefer charts with higher diff_ sum
@@ -102,8 +114,12 @@ export function selectChart<T extends ChartInfo>(charts: T[]): T {
       .reduce((a: number, b: number) => a + b, 0);
 
     if (chartDiffSum > recommendedDiffSum) {
+      chartIsBetterReasons.push(
+        'Better chart has more instruments or difficulty',
+      );
       isChartBetter = true;
       recommendedChart = chart;
+      reasons = chartIsBetterReasons;
       continue;
     }
 
@@ -140,5 +156,8 @@ export function selectChart<T extends ChartInfo>(charts: T[]): T {
     // Can't find anything better about the new chart, move on
   }
 
-  return recommendedChart;
+  return {
+    chart: recommendedChart,
+    reasons,
+  };
 }

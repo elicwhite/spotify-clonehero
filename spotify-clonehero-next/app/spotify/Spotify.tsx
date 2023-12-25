@@ -78,7 +78,7 @@ function LoggedIn() {
           allChorusCharts,
         );
 
-        const recommendedChart: ChartResponse | undefined = selectChart(
+        const {chart: recommendedChart, reasons} = selectChart(
           matchingCharts
             // .filter(chart => chart.diff_drums_real > 0 || chart.diff_drums > 0)
             .map(chart => ({

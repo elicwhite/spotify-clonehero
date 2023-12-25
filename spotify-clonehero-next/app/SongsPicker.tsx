@@ -28,6 +28,7 @@ export type RecommendedChart =
   | {
       type: 'better-chart-found';
       betterChart: ChartResponse;
+      reasons: string[];
     };
 
 export type SongWithRecommendation = SongAccumulator & {
@@ -165,7 +166,7 @@ export default function SongsPicker() {
         songsState.chorusCharts,
       );
 
-      const recommendedChart: ChartResponse | undefined = selectChart(
+      const {chart: recommendedChart, reasons} = selectChart(
         matchingCharts.map(chart => ({
           ...chart,
           uploadedAt: chart.modifiedTime,
@@ -185,10 +186,11 @@ export default function SongsPicker() {
           recommendation = {
             type: 'best-chart-installed',
           };
-        } else if (result == 'new') {
+        } else if (Array.isArray(result)) {
           recommendation = {
             type: 'better-chart-found',
             betterChart: recommendedChart,
+            reasons: result,
           };
         } else {
           throw new Error('Unexpected chart comparison');

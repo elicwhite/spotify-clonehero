@@ -5,7 +5,7 @@ export type SongIniData = {
   name: string;
   artist: string;
   charter: string;
-  diff_drums_real: number;
+  diff_drums: number;
   diff_guitar: number;
 };
 
@@ -15,10 +15,11 @@ export type SongAccumulator = {
   lastModified: number;
   charter: string;
   data: SongIniData;
-  handleInfo: {
-    parentDir: FileSystemDirectoryHandle;
-    fileName: string;
-  };
+  fileHandle: FileSystemHandle;
+  // handleInfo: {
+  //   parentDir: FileSystemDirectoryHandle;
+  //   fileName: string;
+  // };
 };
 
 export default async function scanLocalCharts(

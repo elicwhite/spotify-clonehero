@@ -28,31 +28,10 @@ import {SongIniData} from '@/lib/local-songs-folder/scanLocalCharts';
 import {SongWithRecommendation} from './SongsPicker';
 import {removeStyleTags} from '@/lib/ui-utils';
 
-type Recommendation =
-  | {
-      type: 'not-checked';
-    }
-  | {
-      type: 'searching';
-    }
-  | {
-      type: 'best-chart-installed';
-    }
-  | {
-      type: 'better-chart-found';
-      betterChart: ChartResponse;
-    };
-
 type RowType = {
   id: number;
-  artist: string;
-  song: string;
-  charter: string;
   lastModified: Date;
-  data: SongIniData;
-  fileHandle: FileSystemHandle;
-  recommendedChart: Recommendation;
-};
+} & Omit<SongWithRecommendation, 'lastModified'>;
 
 const columnHelper = createColumnHelper<RowType>();
 
@@ -87,7 +66,8 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         },
         size: 100,
         cell: props => {
-          switch (props.getValue().type) {
+          const value = props.getValue();
+          switch (value.type) {
             case 'not-checked':
               return <AiOutlineDash />;
             case 'searching':
@@ -95,15 +75,17 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
             case 'best-chart-installed':
               return <AiOutlineCheck />;
             case 'better-chart-found':
-              const value = props;
               return (
-                <button
-                  className="px-3 py-2 text-sm font-medium text-center inline-flex items-center text-white bg-blue-700 rounded-lg hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
-                  onClick={() => {
-                    setCurrentlyReviewing(value.row.original);
-                  }}>
-                  Review
-                </button>
+                <>
+                  <button
+                    className="px-3 py-2 text-sm font-medium text-center inline-flex items-center text-white bg-blue-700 rounded-lg hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
+                    onClick={() => {
+                      setCurrentlyReviewing(props.row.original);
+                    }}>
+                    Review
+                  </button>
+                  <abbr title={value.reasons.join('\n')}>Why?</abbr>
+                </>
               );
             default:
               throw new Error('Unexpected recommended type');
@@ -117,8 +99,10 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
             'not-checked',
           ];
 
-          const aType = (rowA.getValue(columnId) as Recommendation).type;
-          const btype = (rowB.getValue(columnId) as Recommendation).type;
+          const aType = (rowA.getValue(columnId) as RowType['recommendedChart'])
+            .type;
+          const btype = (rowB.getValue(columnId) as RowType['recommendedChart'])
+            .type;
 
           const aIndex = ordering.indexOf(aType);
           const bIndex = ordering.indexOf(btype);

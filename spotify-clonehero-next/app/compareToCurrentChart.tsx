@@ -12,9 +12,9 @@ export function compareToCurrentChart(
 
   const result = selectChart([currentChartInfo, newChart]);
 
-  if (result == currentChartInfo) {
+  if (result.chart == currentChartInfo) {
     return 'current';
   } else {
-    return 'new';
+    return result.reasons;
   }
 }

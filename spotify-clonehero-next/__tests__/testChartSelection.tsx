@@ -6,7 +6,7 @@ function createChartFixture(vals: Object) {
     name: 'name',
     artist: 'artist',
     charter: 'charter',
-    diff_drums_real: 4,
+    diff_drums: 4,
     diff_guitar: 4,
     uploadedAt: '2023-07-29T12:28:08.000Z',
     lastModified: '2023-07-30T12:28:08.000Z',
@@ -16,7 +16,7 @@ function createChartFixture(vals: Object) {
 }
 
 test('select Harmonix over Neversoft', () => {
-  const selectedChart = selectChart([
+  const {chart, reasons} = selectChart([
     createChartFixture({
       charter: 'Harmonix',
     }),
@@ -27,11 +27,28 @@ test('select Harmonix over Neversoft', () => {
       charter: 'Friend',
     }),
   ]);
-  expect(selectedChart!.charter).toBe('Harmonix');
+  expect(chart!.charter).toBe('Harmonix');
+  expect(reasons).toEqual([]);
+});
+
+test('select Harmonix over Neversoft 2nd', () => {
+  const {chart, reasons} = selectChart([
+    createChartFixture({
+      charter: 'Neversoft',
+    }),
+    createChartFixture({
+      charter: 'Harmonix',
+    }),
+    createChartFixture({
+      charter: 'Friend',
+    }),
+  ]);
+  expect(chart!.charter).toBe('Harmonix');
+  expect(reasons).toEqual(['Better chart is from Harmonix']);
 });
 
 test('select Harmonix over rando', () => {
-  const selectedChart = selectChart([
+  const {chart, reasons} = selectChart([
     createChartFixture({
       charter: 'rando',
     }),
@@ -42,11 +59,15 @@ test('select Harmonix over rando', () => {
       charter: 'Friend',
     }),
   ]);
-  expect(selectedChart!.charter).toBe('Harmonix');
+  expect(chart!.charter).toBe('Harmonix');
+  expect(reasons).toEqual([
+    'Better chart is from Harmonix',
+    'Better chart is from official game',
+  ]);
 });
 
 test('select Neversoft over rando', () => {
-  const selectedChart = selectChart([
+  const {chart, reasons} = selectChart([
     createChartFixture({
       charter: 'rando',
     }),
@@ -54,85 +75,148 @@ test('select Neversoft over rando', () => {
       charter: 'Neversoft',
     }),
   ]);
-  expect(selectedChart!.charter).toBe('Neversoft');
+  expect(chart!.charter).toBe('Neversoft');
+  expect(reasons).toEqual(['Better chart is from official game']);
 });
 
 test('select drums over no drums when first', () => {
-  const selectedChart = selectChart([
+  const {chart, reasons} = selectChart([
     createChartFixture({
       charter: 'good',
-      diff_drums_real: 8,
+      diff_drums: 8,
     }),
     createChartFixture({
       charter: 'bad',
-      diff_drums_real: null,
+      diff_drums: null,
     }),
   ]);
-  expect(selectedChart!.charter).toBe('good');
+  expect(chart!.charter).toBe('good');
+  expect(reasons).toEqual([]);
 });
 
 test('select drums over no drums when first', () => {
-  const selectedChart = selectChart([
+  const {chart, reasons} = selectChart([
     createChartFixture({
       charter: 'good',
-      diff_drums_real: 8,
+      diff_drums: 8,
     }),
     createChartFixture({
       charter: 'bad',
-      diff_drums_real: -1,
+      diff_drums: -1,
     }),
   ]);
-  expect(selectedChart!.charter).toBe('good');
+  expect(chart!.charter).toBe('good');
+  expect(reasons).toEqual([]);
 });
 
 test('select drums over no drums when second', () => {
-  const selectedChart = selectChart([
+  const {chart, reasons} = selectChart([
     createChartFixture({
       charter: 'bad',
-      diff_drums_real: null,
+      diff_drums: null,
     }),
     createChartFixture({
       charter: 'good',
-      diff_drums_real: 8,
+      diff_drums: 8,
     }),
   ]);
-  expect(selectedChart!.charter).toBe('good');
+  expect(chart!.charter).toBe('good');
+  expect(reasons).toEqual(["Better chart has drums, current chart doesn't"]);
 });
 
 test('select drums over no drums when second', () => {
-  const selectedChart = selectChart([
+  const {chart, reasons} = selectChart([
     createChartFixture({
       charter: 'bad',
-      diff_drums_real: -1,
+      diff_drums: -1,
     }),
     createChartFixture({
       charter: 'good',
-      diff_drums_real: 8,
+      diff_drums: 8,
     }),
   ]);
-  expect(selectedChart!.charter).toBe('good');
+  expect(chart!.charter).toBe('good');
+  expect(reasons).toEqual(["Better chart has drums, current chart doesn't"]);
 });
 
-test('select more recent chart when both are from the same charter', () => {
+test('select just drums over just guitar first', () => {
+  const {chart, reasons} = selectChart([
+    createChartFixture({
+      charter: 'drums',
+      diff_drums: 3,
+      diff_guitar: -1,
+    }),
+    createChartFixture({
+      charter: 'guitar',
+      diff_drums: -1,
+      diff_guitar: 3,
+    }),
+  ]);
+  expect(chart!.charter).toBe('drums');
+  expect(reasons).toEqual([]);
+});
+
+test('select just drums over just guitar first', () => {
+  const {chart, reasons} = selectChart([
+    createChartFixture({
+      charter: 'guitar',
+      diff_drums: -1,
+      diff_guitar: 3,
+    }),
+    createChartFixture({
+      charter: 'drums',
+      diff_drums: 3,
+      diff_guitar: -1,
+    }),
+  ]);
+  expect(chart!.charter).toBe('drums');
+  expect(reasons).toEqual(["Better chart has drums, current chart doesn't"]);
+});
+
+test('select more recent chart when both are from the same charter first', () => {
   const today = new Date();
   const yesterday = new Date();
   yesterday.setDate(today.getDate() - 1);
 
-  const selectedChart = selectChart([
+  const {chart, reasons} = selectChart([
     createChartFixture({
       charter: 'good',
-      diff_drums_real: 8,
+      diff_drums: 8,
+      uploadedAt: today,
+      link: '2',
+    }),
+    createChartFixture({
+      charter: 'good',
+      diff_drums: 8,
+      uploadedAt: yesterday,
+      link: '1',
+    }),
+  ]);
+  expect(chart!.link).toBe('2');
+  expect(reasons).toEqual([]);
+});
+
+test('select more recent chart when both are from the same charter second', () => {
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  const {chart, reasons} = selectChart([
+    createChartFixture({
+      charter: 'good',
+      diff_drums: 8,
       uploadedAt: yesterday,
       link: '1',
     }),
     createChartFixture({
       charter: 'good',
-      diff_drums_real: 8,
+      diff_drums: 8,
       uploadedAt: today,
       link: '2',
     }),
   ]);
-  expect(selectedChart!.link).toBe('2');
+  expect(chart!.link).toBe('2');
+  expect(reasons).toEqual(['Chart from same charter is newer']);
 });
 
 test('select the first chart if the charts are the same', () => {
@@ -144,18 +228,19 @@ test('select the first chart if the charts are the same', () => {
 
   const chart1 = createChartFixture({
     charter: 'good',
-    diff_drums_real: 8,
+    diff_drums: 8,
     uploadedAt: yesterday,
   });
 
   const chart2 = createChartFixture({
     charter: 'good',
-    diff_drums_real: 8,
+    diff_drums: 8,
     uploadedAt: yesterday,
   });
 
-  const selectedChart = selectChart([chart1, chart2]);
-  expect(selectedChart).toBe(chart1);
+  const {chart, reasons} = selectChart([chart1, chart2]);
+  expect(chart).toBe(chart1);
+  expect(reasons).toEqual([]);
 });
 
 test('select the first chart with more instruments if all else equal', () => {
@@ -167,19 +252,20 @@ test('select the first chart with more instruments if all else equal', () => {
 
   const chart1 = createChartFixture({
     charter: 'a',
-    diff_drums_real: 8,
+    diff_drums: 8,
     diff_bass: 2,
     uploadedAt: yesterday,
   });
 
   const chart2 = createChartFixture({
     charter: 'b',
-    diff_drums_real: 8,
+    diff_drums: 8,
     uploadedAt: yesterday,
   });
 
-  const selectedChart = selectChart([chart1, chart2]);
-  expect(selectedChart!.charter).toBe('a');
+  const {chart, reasons} = selectChart([chart1, chart2]);
+  expect(chart!.charter).toBe('a');
+  expect(reasons).toEqual([]);
 });
 
 test('select the second chart with more instruments if all else equal', () => {
@@ -191,19 +277,20 @@ test('select the second chart with more instruments if all else equal', () => {
 
   const chart1 = createChartFixture({
     charter: 'a',
-    diff_drums_real: 8,
+    diff_drums: 8,
     uploadedAt: yesterday,
   });
 
   const chart2 = createChartFixture({
     charter: 'b',
-    diff_drums_real: 8,
+    diff_drums: 8,
     diff_bass: 2,
     uploadedAt: yesterday,
   });
 
-  const selectedChart = selectChart([chart1, chart2]);
-  expect(selectedChart!.charter).toBe('b');
+  const {chart, reasons} = selectChart([chart1, chart2]);
+  expect(chart!.charter).toBe('b');
+  expect(reasons).toEqual(['Better chart has more instruments or difficulty']);
 });
 
 test('fixture data', () => {
@@ -276,6 +363,7 @@ test('fixture data', () => {
     file: 'https://files.enchor.us/2a5f115ac95699f616a535560c73b3c9.sng',
   });
 
-  const selectedChart = selectChart([chart1, chart2]);
-  expect(selectedChart).toBe(chart1);
+  const {chart, reasons} = selectChart([chart1, chart2]);
+  expect(chart).toBe(chart1);
+  expect(reasons).toEqual([]);
 });
