@@ -3,6 +3,7 @@ import type {Metadata} from 'next';
 import {Inter} from 'next/font/google';
 import ContextProviders from './ContextProviders';
 import Link from 'next/link';
+import {GoogleAnalytics} from '@next/third-parties/google';
 
 const inter = Inter({subsets: ['latin']});
 
@@ -74,6 +75,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
         <main className="flex flex-col items-center align-center justify-between min-h-0 p-4">
           <ContextProviders>{children}</ContextProviders>
         </main>
+        <GoogleAnalytics gaId="G-LEE7EDJH14" />
       </body>
     </html>
   );
