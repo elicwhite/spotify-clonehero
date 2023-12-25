@@ -50,6 +50,7 @@ type RowType = {
   charter: string;
   lastModified: Date;
   data: SongIniData;
+  fileHandle: FileSystemHandle;
   recommendedChart: Recommendation;
 };
 
@@ -142,6 +143,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         charter: song.data.charter,
         lastModified: new Date(song.lastModified),
         recommendedChart: song.recommendedChart,
+        fileHandle: song.fileHandle,
         data: song.data,
       })),
     [songs],
@@ -189,6 +191,11 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
     setOpen(currentlyReviewing != null);
   }, [currentlyReviewing]);
 
+  const close = useCallback(() => {
+    setCurrentlyReviewing(null);
+    setOpen(false);
+  }, []);
+
   return (
     <>
       {currentlyReviewing &&
@@ -198,10 +205,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
               as="div"
               className="relative z-10"
               initialFocus={cancelButtonRef}
-              onClose={(...args) => {
-                setCurrentlyReviewing(null);
-                setOpen(false);
-              }}>
+              onClose={close}>
               <Transition.Child
                 as={Fragment}
                 enter="ease-out duration-300"
@@ -225,6 +229,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                     leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95">
                     <Dialog.Panel className="relative transform rounded-lg shadow-xl ring-1 ring-slate-900/5 transition-all sm:my-8 sm:w-full sm:max-w-3xl">
                       <CompareView
+                        fileHandle={currentlyReviewing.fileHandle}
                         currentChart={currentlyReviewing.data}
                         currentModified={currentlyReviewing.lastModified}
                         recommendedChart={
@@ -235,6 +240,10 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                             currentlyReviewing.recommendedChart.betterChart.uploadedAt,
                           )
                         }
+                        recommendedChartUrl={
+                          currentlyReviewing.recommendedChart.betterChart.file
+                        }
+                        close={close}
                       />
                     </Dialog.Panel>
                   </Transition.Child>

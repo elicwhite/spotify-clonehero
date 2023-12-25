@@ -13,6 +13,7 @@ import scanLocalCharts, {
   SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
 import getChorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
+import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 
 export type RecommendedChart =
   | {
@@ -106,29 +107,23 @@ export default function SongsPicker() {
     songsDispatch({
       type: 'reset',
     });
-    let directoryHandle;
+    const chorusChartsPromise = getChorusChartDb();
+
+    let songs: SongAccumulator[] = [];
 
     try {
-      directoryHandle = await window.showDirectoryPicker({
-        id: 'clone-hero-songs',
+      const scanResult = await scanForInstalledCharts(() => {
+        songsDispatch({
+          type: 'increment-counter',
+        });
       });
+      songs = scanResult.installedCharts;
     } catch {
       console.log('User canceled picker');
       return;
     }
-    const songs: SongAccumulator[] = [];
 
-    const chorusChartsPromise = getChorusChartDb();
-    const scanChartsPromise = scanLocalCharts(directoryHandle, songs, () => {
-      songsDispatch({
-        type: 'increment-counter',
-      });
-    });
-
-    const [chorusCharts, _] = await Promise.all([
-      chorusChartsPromise,
-      scanChartsPromise,
-    ]);
+    const chorusCharts = await chorusChartsPromise;
 
     songsDispatch({
       type: 'set-chorus-songs',

@@ -68,43 +68,45 @@ type InstalledChartsResponse = {
   installedCharts: SongAccumulator[];
 };
 
-export async function getCachedInstalledCharts(): Promise<
-  InstalledChartsResponse | undefined
-> {
-  const root = await navigator.storage.getDirectory();
+// export async function getCachedInstalledCharts(): Promise<
+//   InstalledChartsResponse | undefined
+// > {
+//   const root = await navigator.storage.getDirectory();
 
-  let installedChartsCacheHandle: FileSystemFileHandle;
+//   let installedChartsCacheHandle: FileSystemFileHandle;
 
-  try {
-    installedChartsCacheHandle = await root.getFileHandle(
-      'installedCharts.json',
-      {
-        create: false,
-      },
-    );
-  } catch {
-    return undefined;
-  }
+//   try {
+//     installedChartsCacheHandle = await root.getFileHandle(
+//       'installedCharts.json',
+//       {
+//         create: false,
+//       },
+//     );
+//   } catch {
+//     return undefined;
+//   }
 
-  const installedCharts = await readJsonFile(installedChartsCacheHandle);
+//   const installedCharts = await readJsonFile(installedChartsCacheHandle);
 
-  const lastScannedTime = new Date(
-    parseInt(localStorage.getItem('lastScannedInstalledCharts') || '0', 10),
-  );
+//   const lastScannedTime = new Date(
+//     parseInt(localStorage.getItem('lastScannedInstalledCharts') || '0', 10),
+//   );
 
-  return {
-    lastScanned: lastScannedTime,
-    installedCharts,
-  };
-}
+//   return {
+//     lastScanned: lastScannedTime,
+//     installedCharts,
+//   };
+// }
 
-export async function scanForInstalledCharts(): Promise<InstalledChartsResponse> {
+export async function scanForInstalledCharts(
+  callbackPerSong: () => void = () => {},
+): Promise<InstalledChartsResponse> {
   const root = await navigator.storage.getDirectory();
 
   const handle = await getSongsDirectoryHandle();
 
   const installedCharts: SongAccumulator[] = [];
-  await scanLocalCharts(handle, installedCharts, () => {});
+  await scanLocalCharts(handle, installedCharts, callbackPerSong);
 
   const installedChartsCacheHandle = await root.getFileHandle(
     'installedCharts.json',

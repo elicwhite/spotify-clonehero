@@ -6,6 +6,9 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import {useCallback} from 'react';
+import {downloadSong} from '@/lib/local-songs-folder';
+import Button from '@/components/Button';
 
 const DEBUG = true;
 
@@ -24,11 +27,17 @@ export default function CompareView<
   currentModified,
   recommendedChart,
   recommendedModified,
+  fileHandle,
+  recommendedChartUrl,
+  close,
 }: {
   currentChart: T;
   currentModified: Date;
   recommendedChart: U;
   recommendedModified: Date;
+  fileHandle: FileSystemHandle;
+  recommendedChartUrl: string;
+  close: () => void;
 }) {
   if (DEBUG) {
     console.log(
@@ -38,6 +47,30 @@ export default function CompareView<
       recommendedModified.getTime(),
     );
   }
+
+  const browserSupportsRemove: boolean =
+    typeof (fileHandle as any).remove === 'function';
+
+  const keepCurrentCallback = useCallback(async () => {
+    close();
+  }, [close]);
+
+  const replaceCallback = useCallback(async () => {
+    const {artist, name, charter} = recommendedChart;
+    if (artist == null || name == null || charter == null) {
+      throw new Error('Artist, name, or charter is null in song.ini');
+    }
+
+    // @ts-expect-error Remove is only in Chrome > 110.
+    await fileHandle.remove({recursive: true});
+    await downloadSong(artist, name, charter, recommendedChartUrl);
+
+    // console.log('hi', fileHandle, recommendedChart, recommendedChartUrl);
+  }, [fileHandle, recommendedChart, recommendedChartUrl]);
+
+  const downloadKeepBothCallback = useCallback(async () => {
+    //
+  }, []);
 
   return (
     <div className="bg-white dark:bg-slate-800 overflow-y-auto">
@@ -106,16 +139,16 @@ export default function CompareView<
           </tbody>
         </table>
       </div>
-      <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
-        <button className="bg-transparent hover:bg-blue-500 text-blue-700 font-semibold hover:text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded">
-          Keep current chart
-        </button>
-        <button className="bg-transparent hover:bg-blue-500 text-blue-700 font-semibold hover:text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded">
-          Replace current chart
-        </button>
-        <button className="bg-transparent hover:bg-blue-500 text-blue-700 font-semibold hover:text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded">
+      <div className="bg-gray-50 px-4 py-3 flex sm:px-6 space-x-4">
+        <Button onClick={keepCurrentCallback}>Keep current chart</Button>
+        {browserSupportsRemove && (
+          <Button onClick={replaceCallback}>Replace current chart</Button>
+        )}
+        <Button
+          onClick={downloadKeepBothCallback}
+          disabled={currentChart.charter == recommendedChart.charter}>
           Download and keep both
-        </button>
+        </Button>
       </div>
     </div>
   );

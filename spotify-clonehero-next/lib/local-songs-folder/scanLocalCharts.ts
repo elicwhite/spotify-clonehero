@@ -15,12 +15,16 @@ export type SongAccumulator = {
   lastModified: number;
   charter: string;
   data: SongIniData;
+  handleInfo: {
+    parentDir: FileSystemDirectoryHandle;
+    fileName: string;
+  };
 };
 
 export default async function scanLocalCharts(
   directoryHandle: FileSystemDirectoryHandle,
   accumulator: SongAccumulator[],
-  callbackPerSong: Function,
+  callbackPerSong: () => void,
 ) {
   let newestDate = 0;
   let songIniData: SongIniData | null = null;
@@ -53,6 +57,7 @@ export default async function scanLocalCharts(
       lastModified: newestDate,
       charter: songIniData?.charter,
       data: convertedSongIniData,
+      fileHandle: directoryHandle,
     });
     callbackPerSong();
   }
