@@ -79,6 +79,27 @@ test('select Neversoft over rando', () => {
   expect(reasons).toEqual(['Better chart is from official game']);
 });
 
+test('select Harmonix over chart with more instruments', () => {
+  const {chart, reasons} = selectChart([
+    createChartFixture({
+      charter: 'rando',
+    }),
+    createChartFixture({
+      charter: 'Harmonix',
+    }),
+    createChartFixture({
+      charter: 'Friend',
+      diff_bass: 4,
+      diff_keys: 4,
+    }),
+  ]);
+  expect(chart!.charter).toBe('Harmonix');
+  expect(reasons).toEqual([
+    'Better chart is from Harmonix',
+    'Better chart is from official game',
+  ]);
+});
+
 test('select drums over no drums when first', () => {
   const {chart, reasons} = selectChart([
     createChartFixture({
