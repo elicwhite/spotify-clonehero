@@ -2,13 +2,11 @@ import {
   useCallback,
   useRef,
   useState,
-  useReducer,
   useMemo,
   Fragment,
   useEffect,
 } from 'react';
 import {
-  ColumnDef,
   createColumnHelper,
   flexRender,
   getCoreRowModel,

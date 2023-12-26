@@ -6,6 +6,7 @@ export type SongIniData = {
   artist: string;
   charter: string;
   diff_drums: number;
+  diff_drums_real?: number;
   diff_guitar: number;
 };
 

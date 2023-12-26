@@ -1,11 +1,5 @@
 import {SongIniData} from '@/lib/local-songs-folder/scanLocalCharts';
 import {songIniOrder} from './SongsDownloader';
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from '@tanstack/react-table';
 import {useCallback} from 'react';
 import {downloadSong} from '@/lib/local-songs-folder';
 import Button from '@/components/Button';
@@ -15,9 +9,6 @@ const DEBUG = true;
 type NullableSongIniData = {
   [P in keyof SongIniData]: SongIniData[P] | null;
 };
-// type NullableSongIniData = {
-//   [K in (typeof songIniOrder)[number]]: SongIniData[K] | null;
-// };
 
 export default function CompareView<
   T extends NullableSongIniData,
@@ -64,13 +55,23 @@ export default function CompareView<
     // @ts-expect-error Remove is only in Chrome > 110.
     await fileHandle.remove({recursive: true});
     await downloadSong(artist, name, charter, recommendedChartUrl);
-
-    // console.log('hi', fileHandle, recommendedChart, recommendedChartUrl);
   }, [fileHandle, recommendedChart, recommendedChartUrl]);
 
   const downloadKeepBothCallback = useCallback(async () => {
-    //
-  }, []);
+    const {artist, name, charter} = recommendedChart;
+
+    if (currentChart.charter == charter) {
+      throw new Error(
+        'Cannot download both charts if they have the same charter',
+      );
+    }
+
+    if (artist == null || name == null || charter == null) {
+      throw new Error('Artist, name, or charter is null in song.ini');
+    }
+
+    await downloadSong(artist, name, charter, recommendedChartUrl);
+  }, [currentChart.charter, recommendedChart, recommendedChartUrl]);
 
   return (
     <div className="bg-white dark:bg-slate-800 overflow-y-auto">
@@ -113,6 +114,14 @@ export default function CompareView<
                   return;
                 }
 
+                if (
+                  key.startsWith('diff_') &&
+                  (currentValue == -1 || currentValue == null) &&
+                  (recommendedValue == -1 || recommendedValue == null)
+                ) {
+                  return;
+                }
+
                 return (
                   <tr key={key}>
                     <td className="border-b border-slate-100 dark:border-slate-700 p-1 pl-8 text-slate-500 dark:text-slate-400 text-left">
@@ -139,7 +148,7 @@ export default function CompareView<
           </tbody>
         </table>
       </div>
-      <div className="bg-gray-50 px-4 py-3 flex sm:px-6 space-x-4">
+      <div className="bg-white dark:bg-slate-800 px-4 py-3 flex sm:px-6 space-x-4">
         <Button onClick={keepCurrentCallback}>Keep current chart</Button>
         {browserSupportsRemove && (
           <Button onClick={replaceCallback}>Replace current chart</Button>

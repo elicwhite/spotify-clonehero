@@ -1,6 +1,6 @@
 'use client';
 
-import {useCallback, useState, useReducer, useRef, useEffect} from 'react';
+import {useCallback, useReducer} from 'react';
 import SongsTable from './SongsTable';
 
 import {
@@ -8,10 +8,7 @@ import {
   ChartResponseEncore,
   selectChart,
 } from './chartSelection';
-import {compareToCurrentChart} from './compareToCurrentChart';
-import scanLocalCharts, {
-  SongAccumulator,
-} from '@/lib/local-songs-folder/scanLocalCharts';
+import {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 import getChorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 
@@ -166,31 +163,36 @@ export default function SongsPicker() {
         songsState.chorusCharts,
       );
 
-      const {chart: recommendedChart, reasons} = selectChart(
-        matchingCharts.map(chart => ({
-          ...chart,
-          uploadedAt: chart.modifiedTime,
-          lastModified: chart.modifiedTime,
-          file: `https://files.enchor.us/${chart.md5}.sng`,
-        })),
-      );
-
-      if (recommendedChart == null) {
+      if (matchingCharts.length == 0) {
         recommendation = {
           type: 'best-chart-installed',
         };
       } else {
-        const result = compareToCurrentChart(song, recommendedChart);
+        const currentSong = {
+          ...song.data,
+          uploadedAt: new Date(song.lastModified).toISOString(),
+        };
 
-        if (result == 'current') {
+        const {chart: recommendedChart, reasons} = selectChart(
+          [currentSong].concat(
+            matchingCharts.map(chart => ({
+              ...chart,
+              uploadedAt: chart.modifiedTime,
+              lastModified: chart.modifiedTime,
+              file: `https://files.enchor.us/${chart.md5}.sng`,
+            })),
+          ),
+        );
+
+        if (recommendedChart == currentSong) {
           recommendation = {
             type: 'best-chart-installed',
           };
-        } else if (Array.isArray(result)) {
+        } else if (Array.isArray(reasons)) {
           recommendation = {
             type: 'better-chart-found',
-            betterChart: recommendedChart,
-            reasons: result,
+            betterChart: recommendedChart as unknown as ChartResponse,
+            reasons: reasons,
           };
         } else {
           throw new Error('Unexpected chart comparison');

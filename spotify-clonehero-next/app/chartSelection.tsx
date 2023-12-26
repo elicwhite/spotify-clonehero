@@ -1,5 +1,3 @@
-import {songIniOrder} from './ChartTypes';
-
 export type ChartResponse = {
   name: string;
   artist: string;
@@ -21,7 +19,6 @@ export type ChartResponseEncore = {
   diff_guitar: number;
   modifiedTime: string;
   md5: string;
-  link: string;
 };
 
 export type ChartInfo = {
@@ -30,11 +27,6 @@ export type ChartInfo = {
   diff_drums: number | null;
   diff_guitar: number | null;
 };
-
-type ChartTest<T extends ChartInfo> = (
-  chart: T,
-  recommendedChart: T,
-) => [boolean, string] | undefined;
 
 export function selectChart<T extends ChartInfo>(
   charts: T[],
@@ -45,6 +37,9 @@ export function selectChart<T extends ChartInfo>(
   type ChartTest = (recommendedChart: T, chart: T) => string | undefined;
 
   const testSameCharter: ChartTest = (recommendedChart: T, chart: T) => {
+    if (chart == null || recommendedChart == null) {
+      debugger;
+    }
     if (
       chart.charter == recommendedChart.charter &&
       new Date(chart.uploadedAt) > new Date(recommendedChart.uploadedAt)
