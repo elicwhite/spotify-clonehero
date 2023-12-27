@@ -11,7 +11,7 @@ import {
 } from '@/lib/local-songs-folder/scanLocalCharts';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
-import {ChartResponse, selectChart} from '../chartSelection';
+import {selectChart} from '../chartSelection';
 import SpotifyTableDownloader, {
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';
@@ -78,16 +78,7 @@ function LoggedIn() {
           allChorusCharts,
         );
 
-        const {chart: recommendedChart, reasons} = selectChart(
-          matchingCharts
-            // .filter(chart => chart.diff_drums_real > 0 || chart.diff_drums > 0)
-            .map(chart => ({
-              ...chart,
-              uploadedAt: chart.modifiedTime,
-              lastModified: chart.modifiedTime,
-              file: `https://files.enchor.us/${chart.md5}.sng`,
-            })),
-        );
+        const {chart: recommendedChart, reasons} = selectChart(matchingCharts);
 
         if (recommendedChart == null) {
           return null;

@@ -21,6 +21,7 @@ export default async function getChorusChartDb(): Promise<
   if (localDataVersion !== serverDataVersion) {
     debugLog('Server data is newer, updating');
     root.removeEntry('serverData', {recursive: true});
+    root.removeEntry('localData', {recursive: true});
     localStorage.setItem('chartsDataVersion', String(serverDataVersion));
   }
 
@@ -65,12 +66,18 @@ function reduceCharts(...chartSets: {md5: string; modifiedTime: string}[][]) {
   for (const chartSet of chartSets) {
     for (const chart of chartSet) {
       if (!results.has(chart.md5)) {
-        results.set(chart.md5, chart);
+        results.set(chart.md5, {
+          ...chart,
+          file: `https://files.enchor.us/${chart.md5}.sng`,
+        });
       } else if (
         new Date(results.get(chart.md5).modifiedTime) <
         new Date(chart.modifiedTime)
       ) {
-        results.set(chart.md5, chart);
+        results.set(chart.md5, {
+          ...chart,
+          file: `https://files.enchor.us/${chart.md5}.sng`,
+        });
       }
     }
   }

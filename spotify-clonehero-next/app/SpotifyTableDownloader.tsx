@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import {ChartResponse} from './chartSelection';
+import {ChartResponseEncore} from './chartSelection';
 import {
   FilterFn,
   Row,
@@ -30,7 +30,7 @@ export type SpotifyPlaysRecommendations = {
   song: string;
   playCount?: number;
   previewUrl?: string | null;
-  recommendedChart: ChartResponse;
+  recommendedChart: ChartResponseEncore;
 };
 
 type RowType = {
@@ -274,12 +274,13 @@ export default function SpotifyTableDownloader({
           .filter(
             key =>
               key.startsWith('diff_') &&
-              (track.recommendedChart[key as keyof ChartResponse] as number) >=
-                0,
+              (track.recommendedChart[
+                key as keyof ChartResponseEncore
+              ] as number) >= 0,
           )
           .map(key => ({
             [key.replace('diff_', '')]: track.recommendedChart[
-              key as keyof ChartResponse
+              key as keyof ChartResponseEncore
             ] as number,
           }))
           .reduce((a, b) => ({...a, ...b}), {}),

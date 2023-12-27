@@ -3,14 +3,11 @@
 import {useCallback, useReducer} from 'react';
 import SongsTable from './SongsTable';
 
-import {
-  ChartResponse,
-  ChartResponseEncore,
-  selectChart,
-} from './chartSelection';
+import {ChartInfo, ChartResponseEncore, selectChart} from './chartSelection';
 import {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 import getChorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
+import Button from '@/components/Button';
 
 export type RecommendedChart =
   | {
@@ -24,7 +21,7 @@ export type RecommendedChart =
     }
   | {
       type: 'better-chart-found';
-      betterChart: ChartResponse;
+      betterChart: ChartResponseEncore;
       reasons: string[];
     };
 
@@ -116,8 +113,8 @@ export default function SongsPicker() {
         });
       });
       songs = scanResult.installedCharts;
-    } catch {
-      console.log('User canceled picker');
+    } catch (e) {
+      console.log('User canceled picker', e);
       return;
     }
 
@@ -170,19 +167,15 @@ export default function SongsPicker() {
       } else {
         const currentSong = {
           ...song.data,
-          uploadedAt: new Date(song.lastModified).toISOString(),
+          file: song.file,
+          modifiedTime: song.modifiedTime,
         };
 
-        const {chart: recommendedChart, reasons} = selectChart(
-          [currentSong].concat(
-            matchingCharts.map(chart => ({
-              ...chart,
-              uploadedAt: chart.modifiedTime,
-              lastModified: chart.modifiedTime,
-              file: `https://files.enchor.us/${chart.md5}.sng`,
-            })),
-          ),
-        );
+        const possibleCharts: (typeof currentSong | ChartInfo)[] = [
+          currentSong,
+        ].concat(matchingCharts);
+
+        const {chart: recommendedChart, reasons} = selectChart(possibleCharts);
 
         if (recommendedChart == currentSong) {
           recommendation = {
@@ -191,7 +184,7 @@ export default function SongsPicker() {
         } else if (Array.isArray(reasons)) {
           recommendation = {
             type: 'better-chart-found',
-            betterChart: recommendedChart as unknown as ChartResponse,
+            betterChart: recommendedChart as unknown as ChartResponseEncore,
             reasons: reasons,
           };
         } else {
@@ -226,10 +219,7 @@ export default function SongsPicker() {
       <h1>{songsState.songsCounted} songs scanned</h1>
       {songsState.songs && (
         <>
-          <button onClick={() => checkForUpdates()}>
-            Check Chorus for Updated Charts
-          </button>
-          <h1>{songsState.songsCheckedForUpdates} songs checked for updates</h1>
+          <Button onClick={() => checkForUpdates()}>Check for Updates</Button>
         </>
       )}
       {songsState.songs && <SongsTable songs={songsState.songs} />}

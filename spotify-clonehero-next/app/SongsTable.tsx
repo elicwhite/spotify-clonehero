@@ -16,7 +16,6 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import {useVirtual} from 'react-virtual';
-import {ChartResponse} from './chartSelection';
 import {Dialog, Transition} from '@headlessui/react';
 
 import {AiOutlineDash, AiOutlineCheck, AiFillCheckCircle} from 'react-icons/ai';
@@ -28,10 +27,20 @@ import {removeStyleTags} from '@/lib/ui-utils';
 
 type RowType = {
   id: number;
-  lastModified: Date;
-} & Omit<SongWithRecommendation, 'lastModified'>;
+  modifiedTime: Date;
+} & Omit<Omit<SongWithRecommendation, 'modifiedTime'>, 'file'>;
 
 const columnHelper = createColumnHelper<RowType>();
+
+// Nice to have features:
+// * Show number of songs with updates
+// Don't count songs as newer from within a second
+// When a song has been downloaded, update the "Review" button
+// Update all the songs that are from the same charter
+// Show a spinner while checking for updates
+// Show the number of reasons
+// When clicking download, close the window
+// Show reasons on compare view
 
 export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
   const [currentlyReviewing, setCurrentlyReviewing] = useState<RowType | null>(
@@ -123,13 +132,19 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         artist: song.data.artist,
         song: song.data.name,
         charter: song.data.charter,
-        lastModified: new Date(song.lastModified),
+        modifiedTime: new Date(song.modifiedTime),
         recommendedChart: song.recommendedChart,
         fileHandle: song.fileHandle,
         data: song.data,
       })),
     [songs],
   );
+
+  const numberWithUpdates = useMemo(() => {
+    return songs.filter(
+      song => song.recommendedChart.type == 'better-chart-found',
+    ).length;
+  }, [songs]);
 
   const [sorting, setSorting] = useState<SortingState>([
     {id: 'recommendedChart', desc: true},
@@ -213,13 +228,13 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                       <CompareView
                         fileHandle={currentlyReviewing.fileHandle}
                         currentChart={currentlyReviewing.data}
-                        currentModified={currentlyReviewing.lastModified}
+                        currentModified={currentlyReviewing.modifiedTime}
                         recommendedChart={
                           currentlyReviewing.recommendedChart.betterChart
                         }
                         recommendedModified={
                           new Date(
-                            currentlyReviewing.recommendedChart.betterChart.uploadedAt,
+                            currentlyReviewing.recommendedChart.betterChart.modifiedTime,
                           )
                         }
                         recommendedChartUrl={
@@ -235,6 +250,11 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
           </Transition.Root>
         )}
 
+      <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-end">
+        <span>
+          {numberWithUpdates} updates for {songs.length} songs found
+        </span>
+      </div>
       <div
         className="bg-white dark:bg-slate-800 rounded-lg ring-1 ring-slate-900/5 shadow-xl overflow-y-auto ph-8"
         ref={tableContainerRef}>

@@ -1,31 +1,19 @@
-export type ChartResponse = {
-  name: string;
-  artist: string;
-  charter: string;
-  diff_drums: number | null;
-  diff_drums_real: number | null;
-  diff_guitar: number | null;
-  uploadedAt: string;
-  lastModified: string | null;
-  file: string;
-};
-
 export type ChartResponseEncore = {
-  name: string;
-  artist: string;
-  charter: string;
-  diff_drums: number;
-  diff_drums_real: number;
-  diff_guitar: number;
-  modifiedTime: string;
   md5: string;
-};
+} & ChartInfo;
 
 export type ChartInfo = {
+  name: string;
+  artist: string;
   charter: string;
-  uploadedAt: string;
-  diff_drums: number | null;
-  diff_guitar: number | null;
+  diff_drums?: number | null;
+  diff_guitar?: number | null;
+  diff_bass?: number | null;
+  diff_keys?: number | null;
+  diff_drums_real?: number | null;
+  modifiedTime: string;
+
+  file: string; // Not sent by Encore, calculated locally
 };
 
 export function selectChart<T extends ChartInfo>(
@@ -42,7 +30,7 @@ export function selectChart<T extends ChartInfo>(
     }
     if (
       chart.charter == recommendedChart.charter &&
-      new Date(chart.uploadedAt) > new Date(recommendedChart.uploadedAt)
+      new Date(chart.modifiedTime) > new Date(recommendedChart.modifiedTime)
     ) {
       return 'Chart from same charter is newer';
     }

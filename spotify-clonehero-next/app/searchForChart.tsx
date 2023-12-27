@@ -1,27 +1,16 @@
 import {searchForChartEncoreBasic} from './serverActions';
-import {
-  ChartResponse,
-  ChartResponseEncore,
-  selectChart,
-} from './chartSelection';
+import {ChartResponseEncore, selectChart} from './chartSelection';
 
 export async function searchEncore(
   artist: string,
   song: string,
-): Promise<ChartResponse> {
+): Promise<ChartResponseEncore> {
   // TODO this needs a useTransition
   const result = await searchForChartEncoreBasic(artist, song);
 
   const charts: ChartResponseEncore[] = JSON.parse(result);
 
-  const {chart: selectedChart, reasons} = selectChart(
-    charts.map(chart => ({
-      ...chart,
-      uploadedAt: chart.modifiedTime,
-      lastModified: chart.modifiedTime,
-      file: `https://files.enchor.us/${chart.md5}.sng`,
-    })),
-  );
+  const {chart: selectedChart, reasons} = selectChart(charts);
   return selectedChart;
 }
 

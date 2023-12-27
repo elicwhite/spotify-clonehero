@@ -1,7 +1,7 @@
-import {get, set} from 'idb-keyval';
+import {set} from 'idb-keyval';
 import filenamify from 'filenamify/browser';
 
-import {readJsonFile, writeFile} from '@/lib/fileSystemHelpers';
+import {writeFile} from '@/lib/fileSystemHelpers';
 import scanLocalCharts, {SongAccumulator} from './scanLocalCharts';
 import {SngStream} from 'parse-sng';
 

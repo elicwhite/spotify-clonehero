@@ -5,17 +5,18 @@ export type SongIniData = {
   name: string;
   artist: string;
   charter: string;
-  diff_drums: number;
-  diff_drums_real?: number;
-  diff_guitar: number;
+  diff_drums?: number | null;
+  diff_drums_real?: number | null;
+  diff_guitar?: number | null;
 };
 
 export type SongAccumulator = {
   artist: string;
-  song: string;
-  lastModified: number;
+  song: string; // Change this to Name to match Encore
+  modifiedTime: string;
   charter: string;
   data: SongIniData;
+  file: string; // This will throw if you access it
   fileHandle: FileSystemHandle;
   // handleInfo: {
   //   parentDir: FileSystemDirectoryHandle;
@@ -53,14 +54,23 @@ export default async function scanLocalCharts(
 
   if (songIniData != null) {
     const convertedSongIniData = convertValues(songIniData);
-    accumulator.push({
+    const chart = {
       artist: songIniData?.artist,
       song: songIniData?.name,
-      lastModified: newestDate,
+      modifiedTime: new Date(newestDate).toISOString(),
       charter: songIniData?.charter,
       data: convertedSongIniData,
       fileHandle: directoryHandle,
+      file: '',
+    };
+    Object.defineProperty(chart, 'file', {
+      get() {
+        throw new Error('Charts from disk do not have a download URL');
+      },
+      enumerable: false, // Can't serialize to JSON
     });
+
+    accumulator.push(chart);
     callbackPerSong();
   }
 }
