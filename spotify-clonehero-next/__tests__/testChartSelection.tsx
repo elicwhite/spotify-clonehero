@@ -323,24 +323,38 @@ test('return first chart if only one chart', () => {
   expect(reasons).toEqual([]);
 });
 
-test.skip('do not pick a newer chart from within a second', () => {
+test('do not pick a newer chart from within a second', () => {
   const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(today.getDate() - 1);
-
-  const yesterdayOffBySecond = new Date(yesterday.getTime() + 5000);
+  const todayLessThanASecond = new Date(today);
+  todayLessThanASecond.setUTCMilliseconds(today.getUTCMilliseconds() + 999);
 
   const chart1 = createChartFixture({
-    charter: 'a',
-    modifiedTime: yesterday.toISOString(),
-  });
-
-  const chart2 = createChartFixture({
-    charter: 'b',
     modifiedTime: today.toISOString(),
   });
 
+  const chart2 = createChartFixture({
+    modifiedTime: todayLessThanASecond.toISOString(),
+  });
+
   const {chart, reasons} = selectChart([chart1, chart2]);
-  expect(chart!.charter).toBe('a');
+  expect(chart).toBe(chart1);
   expect(reasons).toEqual([]);
+});
+
+test('pick a newer chart over a second', () => {
+  const today = new Date();
+  const todayLessThanASecond = new Date(today);
+  todayLessThanASecond.setUTCMilliseconds(today.getUTCMilliseconds() + 1001);
+
+  const chart1 = createChartFixture({
+    modifiedTime: today.toISOString(),
+  });
+
+  const chart2 = createChartFixture({
+    modifiedTime: todayLessThanASecond.toISOString(),
+  });
+
+  const {chart, reasons} = selectChart([chart1, chart2]);
+  expect(chart).toBe(chart2);
+  expect(reasons).toEqual(['Chart from same charter is newer']);
 });

@@ -21,7 +21,6 @@ import {Dialog, Transition} from '@headlessui/react';
 import {AiOutlineDash, AiOutlineCheck, AiFillCheckCircle} from 'react-icons/ai';
 import {ThreeDots} from 'react-loading-icons';
 import CompareView from './CompareView';
-import {SongIniData} from '@/lib/local-songs-folder/scanLocalCharts';
 import {SongWithRecommendation} from './SongsPicker';
 import {removeStyleTags} from '@/lib/ui-utils';
 

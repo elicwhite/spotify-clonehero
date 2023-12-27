@@ -37,7 +37,9 @@ export function selectChart<T extends ChartInfo>(
     }
     if (
       chart.charter == recommendedChart.charter &&
-      new Date(chart.modifiedTime) > new Date(recommendedChart.modifiedTime)
+      new Date(chart.modifiedTime).getTime() -
+        new Date(recommendedChart.modifiedTime).getTime() >
+        1000 // Need this check because precision of local scans is lower than Encore's APIs
     ) {
       return 'Chart from same charter is newer';
     }
