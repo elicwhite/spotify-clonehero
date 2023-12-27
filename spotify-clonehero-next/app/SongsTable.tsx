@@ -12,6 +12,7 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   Row,
+  RowData,
   SortingState,
   useReactTable,
 } from '@tanstack/react-table';
@@ -24,9 +25,22 @@ import CompareView from './CompareView';
 import {SongWithRecommendation} from './SongsPicker';
 import {removeStyleTags} from '@/lib/ui-utils';
 
+export type TableDownloadStates =
+  | 'downloaded'
+  | 'downloading'
+  | 'not-downloading'
+  | 'failed';
+
+declare module '@tanstack/react-table' {
+  interface TableMeta<TData extends RowData> {
+    setDownloadState(index: number, state: TableDownloadStates): void;
+  }
+}
+
 type RowType = {
   id: number;
   modifiedTime: Date;
+  downloadState: TableDownloadStates;
 } & Omit<Omit<SongWithRecommendation, 'modifiedTime'>, 'file'>;
 
 const columnHelper = createColumnHelper<RowType>();
@@ -34,7 +48,7 @@ const columnHelper = createColumnHelper<RowType>();
 // Nice to have features:
 // * Show number of songs with updates
 // * Don't count songs as newer from within a second
-// When a song has been downloaded, update the "Review" button
+// * When a song has been downloaded, update the "Review" button
 // Update all the songs that are from the same charter
 // Show a spinner while checking for updates
 // Show the number of reasons
@@ -72,6 +86,10 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         },
         size: 100,
         cell: props => {
+          if (props.row.original.downloadState == 'downloaded') {
+            return <span>Downloaded</span>;
+          }
+
           const value = props.getValue();
           switch (value.type) {
             case 'not-checked':
@@ -124,10 +142,14 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
     [],
   );
 
+  const [downloadState, setDownloadState] = useState<{
+    [key: number]: TableDownloadStates;
+  }>(new Array(songs.length).fill('not-downloading'));
+
   const songState = useMemo(
     () =>
       songs.map((song, index) => ({
-        id: index + 1,
+        id: index,
         artist: song.data.artist,
         song: song.data.name,
         charter: song.data.charter,
@@ -135,8 +157,9 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         recommendedChart: song.recommendedChart,
         fileHandle: song.fileHandle,
         data: song.data,
+        downloadState: downloadState[index],
       })),
-    [songs],
+    [songs, downloadState],
   );
 
   const numberWithUpdates = useMemo(() => {
@@ -192,6 +215,15 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
     setOpen(false);
   }, []);
 
+  const updateDownloadState = useCallback(
+    (index: number, state: TableDownloadStates) => {
+      setDownloadState(prev => {
+        return {...prev, [index]: state};
+      });
+    },
+    [],
+  );
+
   return (
     <>
       {currentlyReviewing &&
@@ -225,6 +257,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                     leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95">
                     <Dialog.Panel className="relative transform rounded-lg shadow-xl ring-1 ring-slate-900/5 transition-all sm:my-8 sm:w-full sm:max-w-3xl">
                       <CompareView
+                        id={currentlyReviewing.id}
                         fileHandle={currentlyReviewing.fileHandle}
                         currentChart={currentlyReviewing.data}
                         currentModified={currentlyReviewing.modifiedTime}
@@ -239,6 +272,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                         recommendedChartUrl={
                           currentlyReviewing.recommendedChart.betterChart.file
                         }
+                        updateDownloadState={updateDownloadState}
                         close={close}
                       />
                     </Dialog.Panel>

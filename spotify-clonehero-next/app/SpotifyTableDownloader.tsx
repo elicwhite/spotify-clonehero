@@ -25,16 +25,11 @@ import Image from 'next/image';
 import {downloadSong} from '@/lib/local-songs-folder';
 import {useTrackPreviewUrl} from '@/lib/spotify-sdk/SpotifyFetching';
 import {AudioContext} from './AudioProvider';
-
-type DownloadStates =
-  | 'downloaded'
-  | 'downloading'
-  | 'not-downloading'
-  | 'failed';
+import {TableDownloadStates} from './SongsTable';
 
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {
-    setDownloadState(index: number, state: DownloadStates): void;
+    setDownloadState(index: number, state: TableDownloadStates): void;
   }
 }
 
@@ -58,7 +53,7 @@ type RowType = {
     song: string;
     charter: string;
     file: string;
-    state: DownloadStates;
+    state: TableDownloadStates;
   };
   previewUrl?: string | null;
 };
@@ -167,7 +162,7 @@ const columns = [
     cell: props => {
       const {artist, song, charter, file, state} = props.getValue();
       const updateDownloadState = props.table.options.meta?.setDownloadState;
-      function update(state: DownloadStates) {
+      function update(state: TableDownloadStates) {
         if (updateDownloadState != null) {
           updateDownloadState(props.row.index, state);
         }
@@ -285,7 +280,7 @@ export default function SpotifyTableDownloader({
   const hasPreview = tracks[0].hasOwnProperty('previewUrl');
 
   const [downloadState, setDownloadState] = useState<{
-    [key: number]: DownloadStates;
+    [key: number]: TableDownloadStates;
   }>(new Array(tracks.length).fill('not-downloading'));
 
   const trackState = useMemo(
@@ -353,7 +348,7 @@ export default function SpotifyTableDownloader({
       columnFilters,
     },
     meta: {
-      setDownloadState(index: number, state: DownloadStates) {
+      setDownloadState(index: number, state: TableDownloadStates) {
         setDownloadState(prev => {
           return {...prev, [index]: state};
         });
@@ -535,8 +530,8 @@ function DownloadButton({
   song: string;
   charter: string;
   url: string;
-  state: DownloadStates;
-  updateDownloadState: (state: DownloadStates) => void;
+  state: TableDownloadStates;
+  updateDownloadState: (state: TableDownloadStates) => void;
 }) {
   const handler = useCallback(async () => {
     if (state != 'not-downloading') {

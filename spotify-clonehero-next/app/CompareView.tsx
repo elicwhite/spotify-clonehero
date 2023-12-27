@@ -3,6 +3,7 @@ import {songIniOrder} from './SongsDownloader';
 import {useCallback} from 'react';
 import {downloadSong} from '@/lib/local-songs-folder';
 import Button from '@/components/Button';
+import {TableDownloadStates} from './SongsTable';
 
 const DEBUG = true;
 
@@ -14,6 +15,7 @@ export default function CompareView<
   T extends NullableSongIniData,
   U extends NullableSongIniData,
 >({
+  id,
   currentChart,
   currentModified,
   recommendedChart,
@@ -21,7 +23,9 @@ export default function CompareView<
   fileHandle,
   recommendedChartUrl,
   close,
+  updateDownloadState,
 }: {
+  id: number;
   currentChart: T;
   currentModified: Date;
   recommendedChart: U;
@@ -29,6 +33,7 @@ export default function CompareView<
   fileHandle: FileSystemHandle;
   recommendedChartUrl: string;
   close: () => void;
+  updateDownloadState: (id: number, state: TableDownloadStates) => void;
 }) {
   if (DEBUG) {
     console.log(
@@ -52,10 +57,18 @@ export default function CompareView<
       throw new Error('Artist, name, or charter is null in song.ini');
     }
 
+    updateDownloadState(id, 'downloading');
     // @ts-expect-error Remove is only in Chrome > 110.
     await fileHandle.remove({recursive: true});
     await downloadSong(artist, name, charter, recommendedChartUrl);
-  }, [fileHandle, recommendedChart, recommendedChartUrl]);
+    updateDownloadState(id, 'downloaded');
+  }, [
+    fileHandle,
+    id,
+    recommendedChart,
+    recommendedChartUrl,
+    updateDownloadState,
+  ]);
 
   const downloadKeepBothCallback = useCallback(async () => {
     const {artist, name, charter} = recommendedChart;
@@ -70,8 +83,16 @@ export default function CompareView<
       throw new Error('Artist, name, or charter is null in song.ini');
     }
 
+    updateDownloadState(id, 'downloading');
     await downloadSong(artist, name, charter, recommendedChartUrl);
-  }, [currentChart.charter, recommendedChart, recommendedChartUrl]);
+    updateDownloadState(id, 'downloaded');
+  }, [
+    currentChart.charter,
+    id,
+    recommendedChart,
+    recommendedChartUrl,
+    updateDownloadState,
+  ]);
 
   return (
     <div className="bg-white dark:bg-slate-800 overflow-y-auto">
