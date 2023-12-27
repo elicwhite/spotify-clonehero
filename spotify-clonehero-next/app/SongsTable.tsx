@@ -33,7 +33,7 @@ const columnHelper = createColumnHelper<RowType>();
 
 // Nice to have features:
 // * Show number of songs with updates
-// Don't count songs as newer from within a second
+// * Don't count songs as newer from within a second
 // When a song has been downloaded, update the "Review" button
 // Update all the songs that are from the same charter
 // Show a spinner while checking for updates

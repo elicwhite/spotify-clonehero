@@ -10,6 +10,7 @@ import {ChartResponseEncore} from './chartSelection';
 import {
   FilterFn,
   Row,
+  RowData,
   SortingState,
   createColumnHelper,
   flexRender,
@@ -24,6 +25,18 @@ import Image from 'next/image';
 import {downloadSong} from '@/lib/local-songs-folder';
 import {useTrackPreviewUrl} from '@/lib/spotify-sdk/SpotifyFetching';
 import {AudioContext} from './AudioProvider';
+
+type DownloadStates =
+  | 'downloaded'
+  | 'downloading'
+  | 'not-downloading'
+  | 'failed';
+
+declare module '@tanstack/react-table' {
+  interface TableMeta<TData extends RowData> {
+    setDownloadState(index: number, state: DownloadStates): void;
+  }
+}
 
 export type SpotifyPlaysRecommendations = {
   artist: string;
@@ -45,6 +58,7 @@ type RowType = {
     song: string;
     charter: string;
     file: string;
+    state: DownloadStates;
   };
   previewUrl?: string | null;
 };
@@ -151,13 +165,21 @@ const columns = [
     header: 'Download',
     minSize: 100,
     cell: props => {
-      const {artist, song, charter, file} = props.getValue();
+      const {artist, song, charter, file, state} = props.getValue();
+      const updateDownloadState = props.table.options.meta?.setDownloadState;
+      function update(state: DownloadStates) {
+        if (updateDownloadState != null) {
+          updateDownloadState(props.row.index, state);
+        }
+      }
       return (
         <DownloadButton
           artist={artist}
           song={song}
           charter={charter}
           url={file}
+          state={state}
+          updateDownloadState={update}
         />
       );
     },
@@ -262,10 +284,14 @@ export default function SpotifyTableDownloader({
   const hasPlayCount = tracks[0].playCount != null;
   const hasPreview = tracks[0].hasOwnProperty('previewUrl');
 
+  const [downloadState, setDownloadState] = useState<{
+    [key: number]: DownloadStates;
+  }>(new Array(tracks.length).fill('not-downloading'));
+
   const trackState = useMemo(
     () =>
       tracks.map((track, index) => ({
-        id: index + 1,
+        id: index,
         artist: track.artist,
         song: track.song,
         ...(hasPlayCount ? {playCount: track.playCount} : {}),
@@ -289,10 +315,11 @@ export default function SpotifyTableDownloader({
           song: track.song,
           charter: track.recommendedChart.charter,
           file: track.recommendedChart.file,
+          state: downloadState[index],
         },
         ...(hasPreview ? {previewUrl: track.previewUrl} : {}),
       })),
-    [tracks, hasPlayCount, hasPreview],
+    [tracks, hasPlayCount, hasPreview, downloadState],
   );
 
   const [sorting, setSorting] = useState<SortingState>([
@@ -324,6 +351,13 @@ export default function SpotifyTableDownloader({
         playCount: hasPlayCount,
       },
       columnFilters,
+    },
+    meta: {
+      setDownloadState(index: number, state: DownloadStates) {
+        setDownloadState(prev => {
+          return {...prev, [index]: state};
+        });
+      },
     },
     enableMultiSort: true,
     onSortingChange: setSorting,
@@ -494,34 +528,34 @@ function DownloadButton({
   song,
   charter,
   url,
+  state,
+  updateDownloadState,
 }: {
   artist: string;
   song: string;
   charter: string;
   url: string;
+  state: DownloadStates;
+  updateDownloadState: (state: DownloadStates) => void;
 }) {
-  const [downloadState, setDownloadState] = useState<
-    'downloaded' | 'downloading' | 'not-downloading' | 'failed'
-  >('not-downloading');
-
   const handler = useCallback(async () => {
-    if (downloadState != 'not-downloading') {
+    if (state != 'not-downloading') {
       return;
     }
 
     try {
-      setDownloadState('downloading');
+      updateDownloadState('downloading');
       await downloadSong(artist, song, charter, url);
     } catch {
       console.log('Error while downloading', artist, song, charter, url);
-      setDownloadState('failed');
+      updateDownloadState('failed');
       return;
     }
 
-    setDownloadState('downloaded');
-  }, [artist, song, charter, url, downloadState]);
+    updateDownloadState('downloaded');
+  }, [state, updateDownloadState, artist, song, charter, url]);
 
-  switch (downloadState) {
+  switch (state) {
     case 'downloaded':
       return <span>Downloaded</span>;
     case 'downloading':
