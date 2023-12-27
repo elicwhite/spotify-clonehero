@@ -78,6 +78,10 @@ function LoggedIn() {
           allChorusCharts,
         );
 
+        if (matchingCharts.length == 0) {
+          return null;
+        }
+
         const {chart: recommendedChart, reasons} = selectChart(matchingCharts);
 
         if (recommendedChart == null) {

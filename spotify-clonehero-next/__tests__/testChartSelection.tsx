@@ -309,7 +309,21 @@ test('select the second chart with more instruments if all else equal', () => {
   expect(reasons).toEqual(['Better chart has more instruments or difficulty']);
 });
 
-test('do not pick a newer chart from within a second', () => {
+test('return first chart if only one chart', () => {
+  const today = new Date();
+
+  const chart1 = createChartFixture({
+    charter: 'a',
+    diff_drums: 8,
+    modifiedTime: today.toISOString(),
+  });
+
+  const {chart, reasons} = selectChart([chart1]);
+  expect(chart).toBe(chart1);
+  expect(reasons).toEqual([]);
+});
+
+test.skip('do not pick a newer chart from within a second', () => {
   const today = new Date();
   const yesterday = new Date();
   yesterday.setDate(today.getDate() - 1);

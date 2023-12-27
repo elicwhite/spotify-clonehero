@@ -24,6 +24,13 @@ export function selectChart<T extends ChartInfo>(
 } {
   type ChartTest = (recommendedChart: T, chart: T) => string | undefined;
 
+  if (charts.length == 1) {
+    return {
+      chart: charts[0],
+      reasons: [],
+    };
+  }
+
   const testSameCharter: ChartTest = (recommendedChart: T, chart: T) => {
     if (chart == null || recommendedChart == null) {
       debugger;
