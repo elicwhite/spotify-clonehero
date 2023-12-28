@@ -19,8 +19,7 @@ import {
 import {useVirtual} from 'react-virtual';
 import {Dialog, Transition} from '@headlessui/react';
 
-import {AiOutlineDash, AiOutlineCheck, AiFillCheckCircle} from 'react-icons/ai';
-import {ThreeDots} from 'react-loading-icons';
+import {AiOutlineCheck} from 'react-icons/ai';
 import CompareView from './CompareView';
 import {SongWithRecommendation} from './SongsPicker';
 import {removeStyleTags} from '@/lib/ui-utils';

@@ -1,5 +1,5 @@
 import {SongIniData} from '@/lib/local-songs-folder/scanLocalCharts';
-import {songIniOrder} from './SongsDownloader';
+import {songIniOrder} from '../SongsDownloader';
 import {useCallback} from 'react';
 import {downloadSong} from '@/lib/local-songs-folder';
 import Button from '@/components/Button';

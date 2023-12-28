@@ -25,7 +25,7 @@ import Image from 'next/image';
 import {downloadSong} from '@/lib/local-songs-folder';
 import {useTrackPreviewUrl} from '@/lib/spotify-sdk/SpotifyFetching';
 import {AudioContext} from './AudioProvider';
-import {TableDownloadStates} from './SongsTable';
+import {TableDownloadStates} from './updates/SongsTable';
 
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {

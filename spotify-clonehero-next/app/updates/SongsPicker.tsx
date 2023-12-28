@@ -3,7 +3,7 @@
 import {useCallback, useReducer} from 'react';
 import SongsTable from './SongsTable';
 
-import {ChartInfo, ChartResponseEncore, selectChart} from './chartSelection';
+import {ChartInfo, ChartResponseEncore, selectChart} from '../chartSelection';
 import {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 import getChorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
@@ -162,14 +162,13 @@ export default function SongsPicker() {
         enabling you to easily update charts with new versions
       </p>
 
-      <button
+      <Button
         disabled={songsState.songs == null && songsState.songsCounted > 0}
-        className="bg-blue-500 text-white px-4 py-2 rounded-md transition-all ease-in-out duration-300 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500"
         onClick={handler}>
         {songsState.songs == null && songsState.songsCounted == 0
           ? 'Select Clone Hero Songs Folder'
           : 'Rescan'}
-      </button>
+      </Button>
       {songsState.songs == null && (
         <h1>{songsState.songsCounted} songs scanned</h1>
       )}
