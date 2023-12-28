@@ -25,6 +25,8 @@ import CompareView from './CompareView';
 import {SongWithRecommendation} from './SongsPicker';
 import {removeStyleTags} from '@/lib/ui-utils';
 import Button from '@/components/Button';
+import pMap from 'p-map';
+import {downloadSong} from '@/lib/local-songs-folder';
 
 export type TableDownloadStates =
   | 'downloaded'
@@ -51,10 +53,10 @@ const columnHelper = createColumnHelper<RowType>();
 // * Show number of songs with updates
 // * Don't count songs as newer from within a second
 // * When a song has been downloaded, update the "Review" button
-// Update all the songs that are from the same charter
+// * Update all the songs that are from the same charter
 // * Check for updates at the same time as scanning
 // * Show the number of reasons
-// When clicking download, close the window
+// * When clicking download, close the window
 // * Show reasons on compare view
 
 export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
@@ -185,15 +187,64 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
     [songsWithUpdates, downloadState],
   );
 
-  const numberUpdatesWithSameCharter = useMemo(() => {
-    return songs.filter(
+  const updatesWithSameCharter = useMemo(() => {
+    return songsWithUpdates.filter(
       song =>
         song.recommendedChart.type == 'better-chart-found' &&
         song.recommendedChart.reasons.includes(
           'Chart from same charter is newer',
         ),
-    ).length;
-  }, [songs]);
+    );
+  }, [songsWithUpdates]);
+
+  const updateDownloadState = useCallback(
+    (index: number, state: TableDownloadStates) => {
+      setDownloadState(prev => {
+        return {...prev, [index]: state};
+      });
+    },
+    [],
+  );
+
+  const updateChartsWithSameCharter = useCallback(async () => {
+    await pMap(
+      songState,
+      async song => {
+        if (
+          !(
+            song.recommendedChart.type == 'better-chart-found' &&
+            song.recommendedChart.reasons.includes(
+              'Chart from same charter is newer',
+            )
+          )
+        ) {
+          return;
+        }
+
+        const {artist, song: name, charter} = song;
+        if (artist == null || name == null || charter == null) {
+          throw new Error('Artist, name, or charter is null in song.ini');
+        }
+
+        const id = song.id;
+
+        updateDownloadState(id, 'downloading');
+        // TODO: If we delete before we download, then if someone is offline,
+        // The download might fail, but we've already deleted the existing chart.
+        // @ts-expect-error Remove is only in Chrome > 110.
+        await song.fileHandle.remove({recursive: true});
+
+        await downloadSong(
+          artist,
+          name,
+          charter,
+          song.recommendedChart.betterChart.file,
+        );
+        updateDownloadState(id, 'downloaded');
+      },
+      {concurrency: 3},
+    );
+  }, [songState, updateDownloadState]);
 
   const [sorting, setSorting] = useState<SortingState>([
     {id: 'recommendedChart', desc: true},
@@ -241,15 +292,6 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
     setCurrentlyReviewing(null);
     setOpen(false);
   }, []);
-
-  const updateDownloadState = useCallback(
-    (index: number, state: TableDownloadStates) => {
-      setDownloadState(prev => {
-        return {...prev, [index]: state};
-      });
-    },
-    [],
-  );
 
   return (
     <>
@@ -315,9 +357,9 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
           {songsWithUpdates.length} updates for {songs.length} songs found
         </div>
         <Button
-          onClick={() => {}}
+          onClick={updateChartsWithSameCharter}
           title="The recommended chart for these songs is a newer chart from the same charter you currently have installed. These updates likely don't need review.">
-          Update {numberUpdatesWithSameCharter} songs from same charter
+          Update {updatesWithSameCharter.length} songs from same charter
         </Button>
       </div>
       <div
