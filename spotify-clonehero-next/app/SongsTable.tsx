@@ -92,10 +92,6 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
 
           const value = props.getValue();
           switch (value.type) {
-            case 'not-checked':
-              return <AiOutlineDash />;
-            case 'searching':
-              return <ThreeDots style={{height: '6px'}} />;
             case 'best-chart-installed':
               return <AiOutlineCheck />;
             case 'better-chart-found':

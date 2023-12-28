@@ -3,35 +3,12 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Chart, ScannedChart, scanCharts} from 'scan-chart-web';
 import {getChartIssues, getIssuesXLSX} from './ExcelBuilder';
+import {formatTimeRemaining} from '@/lib/ui-utils';
+import Button from '@/components/Button';
 
 const NOT_SUPPORTED =
   typeof window === 'undefined' ||
   typeof window.showDirectoryPicker !== 'function';
-
-function formatTimeRemaining(timeInMillis: number) {
-  const seconds = Math.ceil(timeInMillis / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-
-  let formattedTime;
-
-  if (hours > 0) {
-    // Use hours if the time is more than 1 hour
-    formattedTime = `${hours} ${hours === 1 ? 'hour' : 'hours'} remaining`;
-  } else if (minutes > 0) {
-    // Use minutes if the time is less than 1 hour but more than 1 minute
-    formattedTime = `${minutes} ${
-      minutes === 1 ? 'minute' : 'minutes'
-    } remaining`;
-  } else {
-    // Use seconds if the time is less than 1 minute
-    formattedTime = `${seconds} ${
-      seconds === 1 ? 'second' : 'seconds'
-    } remaining`;
-  }
-
-  return formattedTime;
-}
 
 export default function CheckerPage() {
   const [keyId, setKeyId] = useState<number>(0);
@@ -68,12 +45,9 @@ export default function CheckerPage() {
           Try again using Chrome / Edge.
         </p>
       )}
-      <button
-        disabled={NOT_SUPPORTED}
-        className="bg-blue-500 text-white px-4 py-2 rounded-md transition-all ease-in-out duration-300 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500"
-        onClick={handler}>
+      <Button disabled={NOT_SUPPORTED} onClick={handler}>
         Choose Folder
-      </button>
+      </Button>
 
       {directoryHandle == null ? null : (
         <Scanner key={keyId} directoryHandle={directoryHandle} />
@@ -187,11 +161,7 @@ function Scanner({
       ) : null}
       {issuesFound == null ? null : <h1>{issuesFound} issues Found</h1>}
       {xlsx == null ? null : (
-        <button
-          className="bg-blue-500 text-white px-4 py-2 rounded-md transition-all ease-in-out duration-300 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500"
-          onClick={downloadXlsx}>
-          Download Excel File of Issues
-        </button>
+        <Button onClick={downloadXlsx}>Download Excel File of Issues</Button>
       )}
     </>
   );

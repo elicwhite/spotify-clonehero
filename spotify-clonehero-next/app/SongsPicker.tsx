@@ -11,12 +11,6 @@ import Button from '@/components/Button';
 
 export type RecommendedChart =
   | {
-      type: 'not-checked';
-    }
-  | {
-      type: 'searching';
-    }
-  | {
       type: 'best-chart-installed';
     }
   | {
@@ -46,15 +40,6 @@ type SongStateActions =
   | {
       type: 'set-songs';
       songs: SongWithRecommendation[];
-    }
-  | {
-      type: 'set-recommendation';
-      song: SongWithRecommendation;
-      recommendation: RecommendedChart;
-    }
-  | {
-      type: 'set-chorus-songs';
-      charts: ChartResponseEncore[];
     };
 
 function songsReducer(state: SongState, action: SongStateActions): SongState {
@@ -70,21 +55,6 @@ function songsReducer(state: SongState, action: SongStateActions): SongState {
       return {...state, songsCounted: state.songsCounted + 1};
     case 'set-songs':
       return {...state, songs: action.songs};
-    case 'set-recommendation':
-      if (state.songs == null) {
-        throw new Error('Cannot set a recommendation before songs are scanned');
-      }
-
-      return {
-        ...state,
-        songsCheckedForUpdates: state.songsCheckedForUpdates + 1,
-        songs: state.songs.toSpliced(state.songs.indexOf(action.song), 1, {
-          ...action.song,
-          recommendedChart: action.recommendation,
-        }),
-      };
-    case 'set-chorus-songs':
-      return {...state, chorusCharts: action.charts};
     default:
       throw new Error('unrecognized action');
   }
@@ -99,9 +69,11 @@ export default function SongsPicker() {
   });
 
   const handler = useCallback(async () => {
+    const before = Date.now();
     songsDispatch({
       type: 'reset',
     });
+    // Start this early, await it later;
     const chorusChartsPromise = getChorusChartDb();
 
     let songs: SongAccumulator[] = [];
@@ -120,18 +92,54 @@ export default function SongsPicker() {
 
     const chorusCharts = await chorusChartsPromise;
 
-    songsDispatch({
-      type: 'set-chorus-songs',
-      charts: chorusCharts,
-    });
-
     const songsWithRecommendation: SongWithRecommendation[] = songs.map(
       song => {
+        let recommendation: RecommendedChart;
+
+        const matchingCharts = findMatchingCharts(
+          song.artist,
+          song.song,
+          chorusCharts,
+        );
+
+        if (matchingCharts.length == 0) {
+          recommendation = {
+            type: 'best-chart-installed',
+          };
+        } else {
+          const currentSong = {
+            ...song.data,
+            get file() {
+              return song.file;
+            },
+            modifiedTime: song.modifiedTime,
+          };
+
+          const possibleCharts: (typeof currentSong | ChartInfo)[] = [
+            currentSong,
+          ].concat(matchingCharts);
+
+          const {chart: recommendedChart, reasons} =
+            selectChart(possibleCharts);
+
+          if (recommendedChart == currentSong) {
+            recommendation = {
+              type: 'best-chart-installed',
+            };
+          } else if (Array.isArray(reasons)) {
+            recommendation = {
+              type: 'better-chart-found',
+              betterChart: recommendedChart as unknown as ChartResponseEncore,
+              reasons: reasons,
+            };
+          } else {
+            throw new Error('Unexpected chart comparison');
+          }
+        }
+
         return {
           ...song,
-          recommendedChart: {
-            type: 'not-checked',
-          },
+          recommendedChart: recommendation,
         };
       },
     );
@@ -140,67 +148,10 @@ export default function SongsPicker() {
       type: 'set-songs',
       songs: songsWithRecommendation,
     });
-  }, [songsDispatch]);
 
-  const checkForUpdates = useCallback(async () => {
-    if (songsState.songs == null || songsState.chorusCharts == null) {
-      return;
-    }
-
-    const before = Date.now();
-    for await (const song of songsState.songs) {
-      // Yield to React so we can update the UI
-      console.log('Processing song', song.song);
-      // await Promise.resolve();
-      let recommendation: RecommendedChart;
-
-      const matchingCharts = findMatchingCharts(
-        song.artist,
-        song.song,
-        songsState.chorusCharts,
-      );
-
-      if (matchingCharts.length == 0) {
-        recommendation = {
-          type: 'best-chart-installed',
-        };
-      } else {
-        const currentSong = {
-          ...song.data,
-          file: song.file,
-          modifiedTime: song.modifiedTime,
-        };
-
-        const possibleCharts: (typeof currentSong | ChartInfo)[] = [
-          currentSong,
-        ].concat(matchingCharts);
-
-        const {chart: recommendedChart, reasons} = selectChart(possibleCharts);
-
-        if (recommendedChart == currentSong) {
-          recommendation = {
-            type: 'best-chart-installed',
-          };
-        } else if (Array.isArray(reasons)) {
-          recommendation = {
-            type: 'better-chart-found',
-            betterChart: recommendedChart as unknown as ChartResponseEncore,
-            reasons: reasons,
-          };
-        } else {
-          throw new Error('Unexpected chart comparison');
-        }
-      }
-
-      songsDispatch({
-        type: 'set-recommendation',
-        song,
-        recommendation,
-      });
-    }
     const after = Date.now();
     console.log('Took', (after - before) / 1000, 'ss');
-  }, [songsState.chorusCharts, songsState.songs]);
+  }, [songsDispatch]);
 
   return (
     <>
@@ -212,15 +163,15 @@ export default function SongsPicker() {
       </p>
 
       <button
+        disabled={songsState.songs == null && songsState.songsCounted > 0}
         className="bg-blue-500 text-white px-4 py-2 rounded-md transition-all ease-in-out duration-300 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500"
         onClick={handler}>
-        Scan Clone Hero Songs Library
+        {songsState.songs == null && songsState.songsCounted == 0
+          ? 'Select Clone Hero Songs Folder'
+          : 'Rescan'}
       </button>
-      <h1>{songsState.songsCounted} songs scanned</h1>
-      {songsState.songs && (
-        <>
-          <Button onClick={() => checkForUpdates()}>Check for Updates</Button>
-        </>
+      {songsState.songs == null && (
+        <h1>{songsState.songsCounted} songs scanned</h1>
       )}
       {songsState.songs && <SongsTable songs={songsState.songs} />}
     </>

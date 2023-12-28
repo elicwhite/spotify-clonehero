@@ -28,3 +28,28 @@ export function removeStyleTags(text: string) {
   } while (newText !== oldText);
   return newText;
 }
+
+export function formatTimeRemaining(timeInMillis: number) {
+  const seconds = Math.ceil(timeInMillis / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  let formattedTime;
+
+  if (hours > 0) {
+    // Use hours if the time is more than 1 hour
+    formattedTime = `${hours} ${hours === 1 ? 'hour' : 'hours'} remaining`;
+  } else if (minutes > 0) {
+    // Use minutes if the time is less than 1 hour but more than 1 minute
+    formattedTime = `${minutes} ${
+      minutes === 1 ? 'minute' : 'minutes'
+    } remaining`;
+  } else {
+    // Use seconds if the time is less than 1 minute
+    formattedTime = `${seconds} ${
+      seconds === 1 ? 'second' : 'seconds'
+    } remaining`;
+  }
+
+  return formattedTime;
+}
