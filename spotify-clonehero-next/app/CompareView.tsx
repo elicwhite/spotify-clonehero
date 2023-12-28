@@ -58,6 +58,7 @@ export default function CompareView<
     }
 
     updateDownloadState(id, 'downloading');
+    close();
     // @ts-expect-error Remove is only in Chrome > 110.
     await fileHandle.remove({recursive: true});
     await downloadSong(artist, name, charter, recommendedChartUrl);
@@ -68,6 +69,7 @@ export default function CompareView<
     recommendedChart,
     recommendedChartUrl,
     updateDownloadState,
+    close,
   ]);
 
   const downloadKeepBothCallback = useCallback(async () => {
@@ -84,6 +86,7 @@ export default function CompareView<
     }
 
     updateDownloadState(id, 'downloading');
+    close();
     await downloadSong(artist, name, charter, recommendedChartUrl);
     updateDownloadState(id, 'downloaded');
   }, [
@@ -92,6 +95,7 @@ export default function CompareView<
     recommendedChart,
     recommendedChartUrl,
     updateDownloadState,
+    close,
   ]);
 
   return (

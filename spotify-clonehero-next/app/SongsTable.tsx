@@ -24,6 +24,7 @@ import {ThreeDots} from 'react-loading-icons';
 import CompareView from './CompareView';
 import {SongWithRecommendation} from './SongsPicker';
 import {removeStyleTags} from '@/lib/ui-utils';
+import Button from '@/components/Button';
 
 export type TableDownloadStates =
   | 'downloaded'
@@ -41,6 +42,7 @@ type RowType = {
   id: number;
   modifiedTime: Date;
   downloadState: TableDownloadStates;
+  recommendationReasons: string[] | null;
 } & Omit<Omit<SongWithRecommendation, 'modifiedTime'>, 'file'>;
 
 const columnHelper = createColumnHelper<RowType>();
@@ -50,10 +52,10 @@ const columnHelper = createColumnHelper<RowType>();
 // * Don't count songs as newer from within a second
 // * When a song has been downloaded, update the "Review" button
 // Update all the songs that are from the same charter
-// Show a spinner while checking for updates
-// Show the number of reasons
+// * Check for updates at the same time as scanning
+// * Show the number of reasons
 // When clicking download, close the window
-// Show reasons on compare view
+// * Show reasons on compare view
 
 export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
   const [currentlyReviewing, setCurrentlyReviewing] = useState<RowType | null>(
@@ -77,6 +79,22 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         minSize: 200,
         cell: props => {
           return removeStyleTags(props.getValue() || '');
+        },
+      }),
+      columnHelper.accessor('recommendationReasons', {
+        header: 'Reasons to Update',
+        minSize: 300,
+        cell: props => {
+          const value = props.getValue();
+          if (value != null) {
+            return (
+              <ul>
+                {value.map(reason => {
+                  return <li key={reason}>{reason}</li>;
+                })}
+              </ul>
+            );
+          }
         },
       }),
       columnHelper.accessor('recommendedChart', {
@@ -104,7 +122,6 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                     }}>
                     Review
                   </button>
-                  <abbr title={value.reasons.join('\n')}>Why?</abbr>
                 </>
               );
             default:
@@ -142,25 +159,39 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
     [key: number]: TableDownloadStates;
   }>(new Array(songs.length).fill('not-downloading'));
 
+  const songsWithUpdates = useMemo(() => {
+    return songs.filter(
+      song => song.recommendedChart.type == 'better-chart-found',
+    );
+  }, [songs]);
+
   const songState = useMemo(
     () =>
-      songs.map((song, index) => ({
+      songsWithUpdates.map((song, index) => ({
         id: index,
         artist: song.data.artist,
         song: song.data.name,
         charter: song.data.charter,
         modifiedTime: new Date(song.modifiedTime),
+        recommendationReasons:
+          song.recommendedChart.type == 'better-chart-found'
+            ? song.recommendedChart.reasons
+            : null,
         recommendedChart: song.recommendedChart,
         fileHandle: song.fileHandle,
         data: song.data,
         downloadState: downloadState[index],
       })),
-    [songs, downloadState],
+    [songsWithUpdates, downloadState],
   );
 
-  const numberWithUpdates = useMemo(() => {
+  const numberUpdatesWithSameCharter = useMemo(() => {
     return songs.filter(
-      song => song.recommendedChart.type == 'better-chart-found',
+      song =>
+        song.recommendedChart.type == 'better-chart-found' &&
+        song.recommendedChart.reasons.includes(
+          'Chart from same charter is newer',
+        ),
     ).length;
   }, [songs]);
 
@@ -280,9 +311,14 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         )}
 
       <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-end">
-        <span>
-          {numberWithUpdates} updates for {songs.length} songs found
-        </span>
+        <div>
+          {songsWithUpdates.length} updates for {songs.length} songs found
+        </div>
+        <Button
+          onClick={() => {}}
+          title="The recommended chart for these songs is a newer chart from the same charter you currently have installed. These updates likely don't need review.">
+          Update {numberUpdatesWithSameCharter} songs from same charter
+        </Button>
       </div>
       <div
         className="bg-white dark:bg-slate-800 rounded-lg ring-1 ring-slate-900/5 shadow-xl overflow-y-auto ph-8"
@@ -296,7 +332,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                     <th
                       key={header.id}
                       colSpan={header.colSpan}
-                      className="bg-white dark:bg-slate-800 pt-8 font-medium p-4 pl-8 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left"
+                      className="bg-white dark:bg-slate-800 pt-8 font-medium px-8 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left"
                       style={{
                         textAlign: (header.column.columnDef.meta as any)?.align,
                         width: header.getSize(),

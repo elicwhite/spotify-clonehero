@@ -4,10 +4,12 @@ export default function Button({
   onClick,
   children,
   disabled = false,
+  title,
 }: {
   onClick: () => void;
   children: ReactNode;
   disabled?: boolean;
+  title?: string;
 }) {
   return (
     <button
@@ -23,7 +25,8 @@ export default function Button({
           ? 'cursor-not-allowed opacity-50'
           : 'hover:bg-blue-600 dark:hover:bg-blue-500')
       }
-      onClick={onClick}>
+      onClick={onClick}
+      {...(title ? {title} : {})}>
       {children}
     </button>
   );
