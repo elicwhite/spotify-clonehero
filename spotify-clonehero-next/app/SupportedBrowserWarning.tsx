@@ -13,9 +13,9 @@ const NOT_SUPPORTED = !DIRECTORY_PICKER_SUPPROTED || !SELF_REMOVE_SUPPORTED;
 export default function SupportedBrowserWarning() {
   if (NOT_SUPPORTED) {
     return (
-      <p className="my-4 text-red-700">
-        Note: These tools will not work on your browser. It requires some APIs
-        that currently only exist in Chrome based browsers.
+      <p className="text-lg text-red-700 mt-2">
+        Warning: These tools will not work on your browser. It requires some
+        APIs that currently only exist in Chrome based browsers.
       </p>
     );
   }

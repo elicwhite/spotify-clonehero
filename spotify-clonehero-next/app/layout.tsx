@@ -1,11 +1,15 @@
 import './globals.css';
 import type {Metadata} from 'next';
-import {Inter} from 'next/font/google';
+import {Inter as FontSans} from 'next/font/google';
 import ContextProviders from './ContextProviders';
 import Link from 'next/link';
 import {GoogleAnalytics} from '@next/third-parties/google';
+import {cn} from '@/lib/utils';
 
-const inter = Inter({subsets: ['latin']});
+export const fontSans = FontSans({
+  subsets: ['latin'],
+  variable: '--font-sans',
+});
 
 export const metadata: Metadata = {
   title: 'Clone Hero Library Update Manager',
@@ -16,7 +20,10 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en">
       <body
-        className={`${inter.className} bg-slate-50 dark:bg-slate-950 flex flex-col h-screen`}>
+        className={cn(
+          'min-h-screen bg-background font-sans antialiased',
+          fontSans.variable,
+        )}>
         <nav className="bg-white border-gray-200 dark:bg-gray-900">
           <div className="max-w-screen-xl flex flex-wrap items-center justify-between mx-auto p-4">
             <Link
