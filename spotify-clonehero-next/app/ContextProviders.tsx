@@ -4,7 +4,6 @@ import {ReactNode} from 'react';
 import {IconContext} from 'react-icons';
 import {SessionProvider} from 'next-auth/react';
 import {AudioProvider} from './AudioProvider';
-import dynamic from 'next/dynamic';
 
 export default function ContextProviders({children}: {children: ReactNode}) {
   return (
