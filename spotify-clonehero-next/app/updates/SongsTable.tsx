@@ -25,7 +25,8 @@ import {SongWithRecommendation} from './SongsPicker';
 import {removeStyleTags} from '@/lib/ui-utils';
 import Button from '@/components/Button';
 import pMap from 'p-map';
-import {downloadSong} from '@/lib/local-songs-folder';
+import {backupSong, downloadSong} from '@/lib/local-songs-folder';
+import {flushSync} from 'react-dom';
 
 export type TableDownloadStates =
   | 'downloaded'
@@ -199,7 +200,16 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
     [],
   );
 
+  const [updateStatus, setUpdateState] = useState<
+    'not-started' | 'started' | 'done'
+  >('not-started');
+  const [numUpdated, setNumUpdated] = useState(0);
+
   const updateChartsWithSameCharter = useCallback(async () => {
+    const before = Date.now();
+    setNumUpdated(0);
+    setUpdateState('started');
+
     await pMap(
       songState,
       async song => {
@@ -222,21 +232,33 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         const id = song.id;
 
         updateDownloadState(id, 'downloading');
-        // TODO: If we delete before we download, then if someone is offline,
-        // The download might fail, but we've already deleted the existing chart.
-        // @ts-expect-error Remove is only in Chrome > 110.
-        await song.fileHandle.remove({recursive: true});
 
-        await downloadSong(
-          artist,
-          name,
-          charter,
-          song.recommendedChart.betterChart.file,
-        );
-        updateDownloadState(id, 'downloaded');
+        const result = await backupSong(song.fileHandle);
+
+        try {
+          // @ts-expect-error Remove is only in Chrome > 110.
+          await song.fileHandle.remove({recursive: true});
+          await downloadSong(
+            artist,
+            name,
+            charter,
+            song.recommendedChart.betterChart.file,
+          );
+          updateDownloadState(id, 'downloaded');
+          setNumUpdated(n => n + 1);
+          await result.deleteBackup();
+        } catch {
+          await result.revert();
+          console.log('Failed to download', artist, name, charter);
+          updateDownloadState(id, 'failed');
+        }
       },
-      {concurrency: 3},
+      {concurrency: 6},
     );
+
+    setUpdateState('done');
+    const after = Date.now();
+    console.log('Took', (after - before) / 1000, 'ss');
   }, [songState, updateDownloadState]);
 
   const [sorting, setSorting] = useState<SortingState>([
@@ -349,11 +371,22 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         <div>
           {songsWithUpdates.length} updates for {songs.length} songs found
         </div>
-        <Button
-          onClick={updateChartsWithSameCharter}
-          title="The recommended chart for these songs is a newer chart from the same charter you currently have installed. These updates likely don't need review.">
-          Update {updatesWithSameCharter.length} songs from same charter
-        </Button>
+
+        {updateStatus == 'started' ? (
+          <span>
+            Updating, {numUpdated} of {updatesWithSameCharter.length}
+          </span>
+        ) : updateStatus == 'done' ? (
+          <span>
+            Updated {numUpdated} of {updatesWithSameCharter.length}
+          </span>
+        ) : (
+          <Button
+            onClick={updateChartsWithSameCharter}
+            title="The recommended chart for these songs is a newer chart from the same charter you currently have installed. These updates likely don't need review.">
+            Update {updatesWithSameCharter.length} songs from same charter
+          </Button>
+        )}
       </div>
       <div
         className="bg-white dark:bg-slate-800 rounded-lg ring-1 ring-slate-900/5 shadow-xl overflow-y-auto ph-8"
