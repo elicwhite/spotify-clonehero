@@ -17,7 +17,7 @@ export type SongAccumulator = {
   charter: string;
   data: SongIniData;
   file: string; // This will throw if you access it
-  fileHandle: FileSystemHandle;
+  fileHandle: FileSystemFileHandle | FileSystemDirectoryHandle;
   // handleInfo: {
   //   parentDir: FileSystemDirectoryHandle;
   //   fileName: string;

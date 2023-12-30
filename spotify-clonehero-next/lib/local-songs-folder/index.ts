@@ -68,36 +68,6 @@ type InstalledChartsResponse = {
   installedCharts: SongAccumulator[];
 };
 
-// export async function getCachedInstalledCharts(): Promise<
-//   InstalledChartsResponse | undefined
-// > {
-//   const root = await navigator.storage.getDirectory();
-
-//   let installedChartsCacheHandle: FileSystemFileHandle;
-
-//   try {
-//     installedChartsCacheHandle = await root.getFileHandle(
-//       'installedCharts.json',
-//       {
-//         create: false,
-//       },
-//     );
-//   } catch {
-//     return undefined;
-//   }
-
-//   const installedCharts = await readJsonFile(installedChartsCacheHandle);
-
-//   const lastScannedTime = new Date(
-//     parseInt(localStorage.getItem('lastScannedInstalledCharts') || '0', 10),
-//   );
-
-//   return {
-//     lastScanned: lastScannedTime,
-//     installedCharts,
-//   };
-// }
-
 export async function scanForInstalledCharts(
   callbackPerSong: () => void = () => {},
 ): Promise<InstalledChartsResponse> {
@@ -123,6 +93,95 @@ export async function scanForInstalledCharts(
   };
 }
 
+async function getBackupDirectory() {
+  const root = await navigator.storage.getDirectory();
+
+  const backupDirHandle = await root.getDirectoryHandle('backups', {
+    create: true,
+  });
+
+  return backupDirHandle;
+}
+
+export async function moveToFolder(
+  handle: FileSystemFileHandle | FileSystemDirectoryHandle,
+  toFolder: FileSystemDirectoryHandle,
+) {
+  if (handle.kind === 'file') {
+    if (await fileExists(toFolder, handle.name)) {
+      await toFolder.removeEntry(handle.name, {recursive: true});
+    }
+    const newFileHandle = await toFolder.getFileHandle(handle.name, {
+      create: true,
+    });
+    const writableStream = await newFileHandle.createWritable();
+    const readableStream = await handle.getFile();
+    await readableStream.stream().pipeTo(writableStream);
+    return newFileHandle;
+  } else if (handle.kind === 'directory') {
+    if (await fileExists(toFolder, handle.name)) {
+      await toFolder.removeEntry(handle.name, {recursive: true});
+    }
+
+    const backupDirHandle = await toFolder.getDirectoryHandle(handle.name, {
+      create: true,
+    });
+
+    for await (const entry of handle.values()) {
+      await moveToFolder(entry, backupDirHandle);
+    }
+
+    return backupDirHandle;
+  }
+
+  throw new Error('Unknown handle type');
+}
+
+async function fileExists(
+  parentHandle: FileSystemDirectoryHandle,
+  name: string,
+) {
+  try {
+    const checkHandle = await parentHandle.getDirectoryHandle(name, {
+      create: false,
+    });
+
+    return true;
+  } catch {
+    // Can't get it without creating, doesn't exist.
+    return false;
+  }
+}
+
+export async function backupSong(
+  songHandle: FileSystemFileHandle | FileSystemDirectoryHandle,
+): Promise<{
+  revert: () => Promise<void>;
+  deleteBackup: () => Promise<void>;
+}> {
+  const backupRootDirHandle = await getBackupDirectory();
+
+  const newHandle = await moveToFolder(songHandle, backupRootDirHandle);
+
+  const result = {
+    async revert() {
+      // Ideally we'd move the backup back to the original location
+      // but we aren't tracking the parent FileSystemDirectoryHandle
+      // We'll just move it back to Songs, sadly.
+      const songsHandle = await getSongsDirectoryHandle();
+      await moveToFolder(newHandle, songsHandle);
+      // @ts-expect-error This API exists in Chrome, and we unfortunately rely on it
+      await newHandle.remove({recursive: true});
+    },
+    async deleteBackup() {
+      // @ts-expect-error This API exists in Chrome, and we unfortunately rely on it
+      await newHandle.remove({recursive: true});
+    },
+  };
+
+  return result;
+}
+
 export async function downloadSong(
   artist: string,
   song: string,
@@ -140,6 +199,7 @@ export async function downloadSong(
     body: null,
     method: 'GET',
     credentials: 'omit',
+    cache: 'no-store',
   });
 
   const body = response.body;

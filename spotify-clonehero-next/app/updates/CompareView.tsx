@@ -1,7 +1,7 @@
 import {SongIniData} from '@/lib/local-songs-folder/scanLocalCharts';
 import {songIniOrder} from '../SongsDownloader';
 import {useCallback} from 'react';
-import {downloadSong} from '@/lib/local-songs-folder';
+import {backupSong, downloadSong} from '@/lib/local-songs-folder';
 import Button from '@/components/Button';
 import {TableDownloadStates} from './SongsTable';
 
@@ -30,7 +30,7 @@ export default function CompareView<
   currentModified: Date;
   recommendedChart: U;
   recommendedModified: Date;
-  fileHandle: FileSystemHandle;
+  fileHandle: FileSystemFileHandle | FileSystemDirectoryHandle;
   recommendedChartUrl: string;
   close: () => void;
   updateDownloadState: (id: number, state: TableDownloadStates) => void;
@@ -57,12 +57,19 @@ export default function CompareView<
       throw new Error('Artist, name, or charter is null in song.ini');
     }
 
+    const result = await backupSong(fileHandle);
     updateDownloadState(id, 'downloading');
-    close();
-    // @ts-expect-error Remove is only in Chrome > 110.
-    await fileHandle.remove({recursive: true});
-    await downloadSong(artist, name, charter, recommendedChartUrl);
-    updateDownloadState(id, 'downloaded');
+    try {
+      close();
+      // @ts-expect-error Remove is only in Chrome > 110.
+      await fileHandle.remove({recursive: true});
+      await downloadSong(artist, name, charter, recommendedChartUrl);
+      updateDownloadState(id, 'downloaded');
+      await result.deleteBackup();
+    } catch {
+      await result.revert();
+      updateDownloadState(id, 'failed');
+    }
   }, [
     fileHandle,
     id,

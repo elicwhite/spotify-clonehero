@@ -48,15 +48,9 @@ type RowType = {
 
 const columnHelper = createColumnHelper<RowType>();
 
-// Nice to have features:
-// * Show number of songs with updates
-// * Don't count songs as newer from within a second
-// * When a song has been downloaded, update the "Review" button
-// * Update all the songs that are from the same charter
-// * Check for updates at the same time as scanning
-// * Show the number of reasons
-// * When clicking download, close the window
-// * Show reasons on compare view
+// Todo:
+// Progress indicator when clicking on update from same charter
+// - Don't delete chart if download fails
 
 export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
   const [currentlyReviewing, setCurrentlyReviewing] = useState<RowType | null>(
