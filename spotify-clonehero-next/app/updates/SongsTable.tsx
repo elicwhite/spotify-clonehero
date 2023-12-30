@@ -254,7 +254,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
           updateDownloadState(id, 'failed');
         }
       },
-      {concurrency: 6},
+      {concurrency: 3},
     );
 
     setUpdateState('done');
