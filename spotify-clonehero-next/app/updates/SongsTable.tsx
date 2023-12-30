@@ -50,8 +50,9 @@ type RowType = {
 const columnHelper = createColumnHelper<RowType>();
 
 // Todo:
-// Progress indicator when clicking on update from same charter
+// - Progress indicator when clicking on update from same charter
 // - Don't delete chart if download fails
+// If a song fails to download, delete the new folder when restoring backup
 
 export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
   const [currentlyReviewing, setCurrentlyReviewing] = useState<RowType | null>(

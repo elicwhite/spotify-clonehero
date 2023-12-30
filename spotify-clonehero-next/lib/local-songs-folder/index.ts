@@ -228,26 +228,30 @@ export async function downloadSong(
     create: true,
   });
 
-  return await new Promise((resolve, reject) => {
-    const sngStream = new SngStream(() => body, {generateSongIni: true});
-    sngStream.on('file', async (file, stream) => {
-      const fileHandle = await songDirHandle!.getFileHandle(file, {
-        create: true,
+  try {
+    await new Promise((resolve, reject) => {
+      const sngStream = new SngStream(() => body, {generateSongIni: true});
+      sngStream.on('file', async (file, stream) => {
+        const fileHandle = await songDirHandle!.getFileHandle(file, {
+          create: true,
+        });
+        const writableStream = await fileHandle.createWritable();
+        stream.pipeTo(writableStream);
       });
-      const writableStream = await fileHandle.createWritable();
-      stream.pipeTo(writableStream);
-    });
 
-    sngStream.on('end', () => {
-      console.log(`Finished downloading ${filename}`);
-      resolve('downloaded');
-    });
+      sngStream.on('end', () => {
+        console.log(`Finished downloading ${filename}`);
+        resolve('downloaded');
+      });
 
-    sngStream.on('error', error => {
-      console.log(error);
-      reject(error);
-    });
+      sngStream.on('error', error => {
+        reject(error);
+      });
 
-    sngStream.start();
-  });
+      sngStream.start();
+    });
+  } catch (error) {
+    console.log(error);
+    await handle.removeEntry(filename, {recursive: true});
+  }
 }
