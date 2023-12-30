@@ -68,6 +68,22 @@ export default function Home() {
         </Card>
         <Card className="flex flex-col justify-between">
           <CardHeader>
+            <CardTitle>Chart Error Checker</CardTitle>
+            <CardDescription>
+              Primarily for charters. Check your charts for quality issues that
+              will get flagged by the Chorus bot before submitting.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 py-4">
+            <Link
+              href="/checker"
+              className={buttonVariants({variant: 'default'})}>
+              Go to Tool
+            </Link>
+          </CardContent>
+        </Card>
+        <Card className="flex flex-col justify-between">
+          <CardHeader>
             <CardTitle>Spotify Library Scanner</CardTitle>
             <CardDescription>
               Find charts on Chorus that match songs you have saved in your
@@ -76,9 +92,9 @@ export default function Home() {
           </CardHeader>
           <CardFooter className="grid gap-4 py-4">
             <Link
-              href="/spotify"
-              className={buttonVariants({variant: 'default'})}>
-              Go to Tool
+              href="#" // /spotify
+              className={buttonVariants({variant: 'ghost'})}>
+              Under Construction
             </Link>
           </CardFooter>
         </Card>
@@ -93,25 +109,9 @@ export default function Home() {
           </CardHeader>
           <CardContent className="grid gap-4 py-4">
             <Link
-              href="/spotifyhistory"
-              className={buttonVariants({variant: 'default'})}>
-              Go to Tool
-            </Link>
-          </CardContent>
-        </Card>
-        <Card className="flex flex-col justify-between">
-          <CardHeader>
-            <CardTitle>Chart Error Checker</CardTitle>
-            <CardDescription>
-              Primarily for charters. Check your charts for quality issues that
-              will get flagged by the Chorus bot before submitting.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 py-4">
-            <Link
-              href="/checker"
-              className={buttonVariants({variant: 'default'})}>
-              Go to Tool
+              href="#" // spotifyhistory
+              className={buttonVariants({variant: 'ghost'})}>
+              Under Construction
             </Link>
           </CardContent>
         </Card>
