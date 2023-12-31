@@ -27,6 +27,7 @@ import {useTrackPreviewUrl} from '@/lib/spotify-sdk/SpotifyFetching';
 import {AudioContext} from './AudioProvider';
 import {TableDownloadStates} from './updates/SongsTable';
 import {Button} from '@/components/ui/button';
+import {Icons} from '@/components/icons';
 
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {
@@ -215,7 +216,10 @@ function LookUpPreviewButton({artist, song}: {artist: string; song: string}) {
         fetched == true ? (
           'No Preview'
         ) : (
-          <Button onClick={handler}>Play</Button>
+          <Button onClick={handler}>
+            <Icons.spotify className="h-4 w-4 mr-2" />
+            Play
+          </Button>
         )
       ) : (
         <PreviewButton artist={artist} song={song} url={url} autoplay={true} />
@@ -259,7 +263,10 @@ function PreviewButton({
 
   return (
     <>
-      <Button onClick={handler}>{thisTrackPlaying ? 'Stop' : 'Play'}</Button>
+      <Button onClick={handler}>
+        <Icons.spotify className="h-4 w-4 mr-2" />
+        {thisTrackPlaying ? 'Stop' : 'Play'}
+      </Button>
     </>
   );
 }
