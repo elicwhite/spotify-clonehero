@@ -21,13 +21,13 @@ import {Dialog, Transition} from '@headlessui/react';
 
 import {AiOutlineCheck} from 'react-icons/ai';
 import CompareView from './CompareView';
-import {SongWithRecommendation} from './updates/page';
 import {removeStyleTags} from '@/lib/ui-utils';
 import Button from '@/components/Button';
 import pMap from 'p-map';
 import {backupSong, downloadSong} from '@/lib/local-songs-folder';
 import {flushSync} from 'react-dom';
 import {sendGAEvent} from '@next/third-parties/google';
+import {SongWithRecommendation} from './CompareChartsToLocal';
 
 export type TableDownloadStates =
   | 'downloaded'
