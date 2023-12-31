@@ -107,6 +107,8 @@ export function selectChart<T extends ChartInfo>(
     }
   };
 
+  // If a chart is better in an earlier group, skip checking the other groups
+  // If no chart is better in the first group, check the second group, and so on
   const rankingGroups = [
     [
       testSameCharter,
@@ -126,11 +128,6 @@ export function selectChart<T extends ChartInfo>(
     let reasonsPerChart: Map<T, string[]> = new Map();
     for (const chart of chartsInConsideration) {
       const reasons: string[] = [];
-
-      // Log all the reasons for each /new/ chart in this group
-      // If any charts don't have a reason, remove them from consideration
-      //   unless none have a reason
-      // At the end, compare best chart with original chart
 
       for (const test of rankingGroup) {
         const reason = test(recommendedChart, chart);
@@ -173,7 +170,6 @@ export function selectChart<T extends ChartInfo>(
           reasons: [],
         };
       }
-      // No charts have reasons, compare any chart against the original to see if the original has reasons
     }
   }
 
