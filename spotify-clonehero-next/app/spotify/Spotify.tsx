@@ -35,6 +35,7 @@ const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
 - Add progress messages for scanning
 - Make header prettier?
 + Make table buttons match theme
+- List what Spotify Playlist the song is in
 */
 
 export default function Spotify() {
