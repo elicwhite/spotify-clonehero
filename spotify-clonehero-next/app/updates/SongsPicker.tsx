@@ -61,6 +61,9 @@ function songsReducer(state: SongState, action: SongStateActions): SongState {
   }
 }
 
+/* TODO:
+- Show progress indicator while downloading db from Enchor
+*/
 export default function SongsPicker() {
   const [songsState, songsDispatch] = useReducer(songsReducer, {
     songs: null,
@@ -162,10 +165,13 @@ export default function SongsPicker() {
   return (
     <>
       <p className="mb-4 text-center">
-        This tool is in-progress.
+        This tool checks your installed charts for updates,
         <br />
-        The goal is to be a browser based chart library manager, <br />
-        enabling you to easily update charts with new versions
+        as well as better charts for those songs.
+        <br />
+        This tool is currently in beta, it is recommended that you
+        <br />
+        backup your Songs folder before using this tool.
       </p>
 
       <Button
