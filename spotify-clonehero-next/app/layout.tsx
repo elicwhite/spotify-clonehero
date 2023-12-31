@@ -23,7 +23,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
     <html lang="en">
       <body
         className={cn(
-          'min-h-screen bg-background font-sans antialiased',
+          'bg-background flex flex-col h-screen font-sans antialiased',
           fontSans.variable,
         )}>
         <nav className="bg-white border-gray-200 dark:bg-gray-900">
