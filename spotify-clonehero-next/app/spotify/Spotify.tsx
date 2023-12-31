@@ -30,6 +30,13 @@ type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
   Boolean(v);
 
+/* TODO:
+- Add Spotify logos
+- Add progress messages for scanning
+- Make header prettier?
++ Make table buttons match theme
+*/
+
 export default function Spotify() {
   const session = useSession();
 

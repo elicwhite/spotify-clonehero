@@ -26,6 +26,7 @@ import {downloadSong} from '@/lib/local-songs-folder';
 import {useTrackPreviewUrl} from '@/lib/spotify-sdk/SpotifyFetching';
 import {AudioContext} from './AudioProvider';
 import {TableDownloadStates} from './updates/SongsTable';
+import {Button} from '@/components/ui/button';
 
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {
@@ -214,11 +215,7 @@ function LookUpPreviewButton({artist, song}: {artist: string; song: string}) {
         fetched == true ? (
           'No Preview'
         ) : (
-          <button
-            className="bg-blue-500 text-blue-700 font-semibold text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded"
-            onClick={handler}>
-            Play
-          </button>
+          <Button onClick={handler}>Play</Button>
         )
       ) : (
         <PreviewButton artist={artist} song={song} url={url} autoplay={true} />
@@ -262,11 +259,7 @@ function PreviewButton({
 
   return (
     <>
-      <button
-        className="bg-blue-500 text-blue-700 font-semibold text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded"
-        onClick={handler}>
-        {thisTrackPlaying ? 'Stop' : 'Play'}
-      </button>
+      <Button onClick={handler}>{thisTrackPlaying ? 'Stop' : 'Play'}</Button>
     </>
   );
 }
@@ -558,12 +551,6 @@ function DownloadButton({
     case 'failed':
       return <span>Failed</span>;
     case 'not-downloading':
-      return (
-        <button
-          className="bg-blue-500 text-blue-700 font-semibold text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded"
-          onClick={handler}>
-          Download
-        </button>
-      );
+      return <Button onClick={handler}>Download</Button>;
   }
 }
