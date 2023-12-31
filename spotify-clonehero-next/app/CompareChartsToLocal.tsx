@@ -3,11 +3,7 @@
 import {useCallback, useReducer} from 'react';
 import SongsTable from '../SongsTable';
 
-import {
-  ChartInfo,
-  ChartResponseEncore,
-  selectChart,
-} from '../../lib/chartSelection';
+import {ChartInfo, ChartResponseEncore, selectChart} from '../chartSelection';
 import {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 import getChorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
@@ -66,7 +62,11 @@ function songsReducer(state: SongState, action: SongStateActions): SongState {
 /* TODO:
 - Show progress indicator while downloading db from Enchor
 */
-export default function SongsPicker() {
+export default function CompareChartsToLocal({
+  rankingGroups,
+}: {
+  rankingGroups: any;
+}) {
   const [songsState, songsDispatch] = useReducer(songsReducer, {
     songs: null,
     songsCounted: 0,

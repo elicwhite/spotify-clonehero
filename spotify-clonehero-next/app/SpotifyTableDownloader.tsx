@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import {ChartResponseEncore} from './chartSelection';
+import {ChartResponseEncore} from '../lib/chartSelection';
 import {
   FilterFn,
   Row,
@@ -25,7 +25,7 @@ import Image from 'next/image';
 import {downloadSong} from '@/lib/local-songs-folder';
 import {useTrackPreviewUrl} from '@/lib/spotify-sdk/SpotifyFetching';
 import {AudioContext} from './AudioProvider';
-import {TableDownloadStates} from './updates/SongsTable';
+import {TableDownloadStates} from './SongsTable';
 import {Button} from '@/components/ui/button';
 import {Icons} from '@/components/icons';
 

@@ -6,7 +6,7 @@ import {
 } from '@/lib/local-songs-folder/scanLocalCharts';
 import {useCallback, useState} from 'react';
 import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
-import {selectChart} from '../chartSelection';
+import {selectChart} from '../../lib/chartSelection';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import {
   getSpotifyDumpArtistTrackPlays,

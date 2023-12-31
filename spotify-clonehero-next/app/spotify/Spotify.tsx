@@ -11,7 +11,7 @@ import {
 } from '@/lib/local-songs-folder/scanLocalCharts';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
-import {selectChart} from '../chartSelection';
+import {selectChart} from '../../lib/chartSelection';
 import SpotifyTableDownloader, {
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';

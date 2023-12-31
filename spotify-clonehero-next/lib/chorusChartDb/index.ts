@@ -1,6 +1,6 @@
 import {levenshteinEditDistance} from 'levenshtein-edit-distance';
 
-import {ChartResponseEncore} from '@/app/chartSelection';
+import {ChartResponseEncore} from '@/lib/chartSelection';
 import fetchNewCharts from './fetchNewCharts';
 import {readJsonFile, writeFile} from '@/lib/fileSystemHelpers';
 

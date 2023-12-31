@@ -1,5 +1,5 @@
 import {searchForChartEncoreBasic} from './serverActions';
-import {ChartResponseEncore, selectChart} from './chartSelection';
+import {ChartResponseEncore, selectChart} from '../lib/chartSelection';
 
 export async function searchEncore(
   artist: string,

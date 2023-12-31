@@ -1,4 +1,4 @@
-import {selectChart, ChartInfo} from '@/app/chartSelection';
+import {selectChart, ChartInfo} from '../';
 
 function createChartFixture<T extends Partial<ChartInfo>>(vals: T): ChartInfo {
   return {

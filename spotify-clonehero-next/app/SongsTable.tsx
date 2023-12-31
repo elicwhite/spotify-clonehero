@@ -21,7 +21,7 @@ import {Dialog, Transition} from '@headlessui/react';
 
 import {AiOutlineCheck} from 'react-icons/ai';
 import CompareView from './CompareView';
-import {SongWithRecommendation} from './SongsPicker';
+import {SongWithRecommendation} from './updates/page';
 import {removeStyleTags} from '@/lib/ui-utils';
 import Button from '@/components/Button';
 import pMap from 'p-map';
