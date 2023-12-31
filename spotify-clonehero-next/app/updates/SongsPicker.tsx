@@ -27,7 +27,6 @@ export type SongWithRecommendation = SongAccumulator & {
 type SongState = {
   songs: SongWithRecommendation[] | null;
   songsCounted: number;
-  songsCheckedForUpdates: number;
   chorusCharts: ChartResponseEncore[] | null;
 };
 
@@ -49,7 +48,6 @@ function songsReducer(state: SongState, action: SongStateActions): SongState {
       return {
         songs: null,
         songsCounted: 0,
-        songsCheckedForUpdates: 0,
         chorusCharts: state.chorusCharts,
       };
     case 'increment-counter':
@@ -68,7 +66,6 @@ export default function SongsPicker() {
   const [songsState, songsDispatch] = useReducer(songsReducer, {
     songs: null,
     songsCounted: 0,
-    songsCheckedForUpdates: 0,
     chorusCharts: null,
   });
 
