@@ -3,7 +3,7 @@
 import {signIn, signOut, useSession} from 'next-auth/react';
 
 import {TrackResult, useSpotifyTracks} from '@/lib/spotify-sdk/SpotifyFetching';
-import Button from '@/components/Button';
+import {Button} from '@/components/ui/button';
 import {useCallback, useState} from 'react';
 import {
   SongAccumulator,
@@ -15,6 +15,16 @@ import {selectChart} from '../chartSelection';
 import SpotifyTableDownloader, {
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {Icons} from '@/components/icons';
+import Image from 'next/image';
+import spotifyLogoBlack from '@/public/assets/spotify/logo_black.png';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -25,21 +35,45 @@ export default function Spotify() {
 
   if (!session || session.status !== 'authenticated') {
     return (
-      <div>
-        <Button onClick={() => signIn('spotify')}>Sign in with Spotify</Button>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Sign in with Spotify</CardTitle>
+          <CardDescription>
+            Sign in with your Spotify account for the tool to scan your
+            playlists and find matching charts on Chorus.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button onClick={() => signIn('spotify')} className="w-full">
+            <Icons.spotify className="h-4 w-4 mr-2" />
+            Sign in with Spotify
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <>
-      <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
-        <span>Logged in as {session.data.user?.name}</span>
+    <div className="w-full">
+      <div className="flex flex-col items-end px-6">
+        <h3 className="text-xl">
+          All data provided by
+          <Image
+            src={spotifyLogoBlack}
+            sizes="8em"
+            className="inline px-2"
+            priority={true}
+            style={{
+              width: 'auto',
+              height: 'auto',
+            }}
+            alt="Spotify"
+          />
+        </h3>
         <Button onClick={() => signOut()}>Sign out</Button>
       </div>
-
       <LoggedIn />
-    </>
+    </div>
   );
 }
 
@@ -56,7 +90,6 @@ function LoggedIn() {
     update();
     let installedCharts: SongAccumulator[] | undefined;
 
-    alert('Select your Clone Hero songs directory');
     try {
       const scanResult = await scanForInstalledCharts();
       installedCharts = scanResult.installedCharts;
@@ -110,7 +143,7 @@ function LoggedIn() {
         {calculating ? (
           'Calculating'
         ) : (
-          <Button onClick={calculate}>Calculate</Button>
+          <Button onClick={calculate}>Select Clone Hero Songs Folder</Button>
         )}
       </div>
 

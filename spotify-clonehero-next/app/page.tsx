@@ -18,18 +18,6 @@ const SupportedBrowserWarning = dynamic(
   },
 );
 
-function LCard({children}: {children: ReactNode}) {
-  return (
-    <div className="bg-white hover:bg-gray-50 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg ring-1 ring-slate-900/5 shadow-xl p-4 sm:p-8 py-2 sm:py-4 my-2 sm:my-4">
-      {children}
-    </div>
-  );
-}
-
-function ToolTitle({children}: {children: ReactNode}) {
-  return <p className="text-xl">{children}</p>;
-}
-
 export default function Home() {
   return (
     <main className="max-w-4xl p-8">
