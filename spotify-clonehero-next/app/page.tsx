@@ -10,6 +10,7 @@ import {
   CardFooter,
 } from '@/components/ui/card';
 import {Button, buttonVariants} from '@/components/ui/button';
+import {RxExternalLink} from 'react-icons/rx';
 
 const SupportedBrowserWarning = dynamic(
   () => import('./SupportedBrowserWarning'),
@@ -90,8 +91,13 @@ export default function Home() {
           <CardHeader>
             <CardTitle>Spotify History (advanced!)</CardTitle>
             <CardDescription>
-              If you&apos;ve downloaded your Complete Listening History from
-              your Spotify Account settings, this will find charts to songs
+              If you&apos;ve downloaded your{' '}
+              <a
+                href="https://www.spotify.com/us/account/privacy/"
+                className="text-accent-foreground">
+                Extended Streaming History <RxExternalLink className="inline" />
+              </a>{' '}
+              from your Spotify Account settings, this will find charts to songs
               you&apos;ve ever listened to.
             </CardDescription>
           </CardHeader>
