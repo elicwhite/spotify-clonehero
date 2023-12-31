@@ -27,6 +27,7 @@ import Button from '@/components/Button';
 import pMap from 'p-map';
 import {backupSong, downloadSong} from '@/lib/local-songs-folder';
 import {flushSync} from 'react-dom';
+import {sendGAEvent} from '@next/third-parties/google';
 
 export type TableDownloadStates =
   | 'downloaded'
@@ -208,6 +209,9 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
 
   const updateChartsWithSameCharter = useCallback(async () => {
     const before = Date.now();
+    sendGAEvent({
+      event: 'update_charts_with_same_charter',
+    });
     setNumUpdated(0);
     setUpdateState('started');
 

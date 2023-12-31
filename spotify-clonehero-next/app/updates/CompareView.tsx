@@ -4,6 +4,7 @@ import {useCallback} from 'react';
 import {backupSong, downloadSong} from '@/lib/local-songs-folder';
 import Button from '@/components/Button';
 import {TableDownloadStates} from './SongsTable';
+import {sendGAEvent} from '@next/third-parties/google';
 
 const DEBUG = true;
 
@@ -48,6 +49,9 @@ export default function CompareView<
     typeof (fileHandle as any).remove === 'function';
 
   const keepCurrentCallback = useCallback(async () => {
+    sendGAEvent({
+      event: 'keep_current_chart',
+    });
     close();
   }, [close]);
 
@@ -56,6 +60,10 @@ export default function CompareView<
     if (artist == null || name == null || charter == null) {
       throw new Error('Artist, name, or charter is null in song.ini');
     }
+
+    sendGAEvent({
+      event: 'replace_current_chart',
+    });
 
     const result = await backupSong(fileHandle);
     updateDownloadState(id, 'downloading');
@@ -91,6 +99,10 @@ export default function CompareView<
     if (artist == null || name == null || charter == null) {
       throw new Error('Artist, name, or charter is null in song.ini');
     }
+
+    sendGAEvent({
+      event: 'download_keep_both',
+    });
 
     updateDownloadState(id, 'downloading');
     close();

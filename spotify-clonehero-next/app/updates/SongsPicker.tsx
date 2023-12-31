@@ -8,6 +8,7 @@ import {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 import getChorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import Button from '@/components/Button';
+import {sendGAEvent} from '@next/third-parties/google';
 
 export type RecommendedChart =
   | {
@@ -73,6 +74,11 @@ export default function SongsPicker() {
     songsDispatch({
       type: 'reset',
     });
+
+    sendGAEvent({
+      event: 'scan_for_updates',
+    });
+
     // Start this early, await it later;
     const chorusChartsPromise = getChorusChartDb();
 
