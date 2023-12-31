@@ -1,14 +1,19 @@
 'use client';
 
 import {useCallback, useReducer} from 'react';
-import SongsTable from '../SongsTable';
+import SongsTable from './SongsTable';
 
-import {ChartInfo, ChartResponseEncore, selectChart} from '../chartSelection';
 import {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 import getChorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import Button from '@/components/Button';
 import {sendGAEvent} from '@next/third-parties/google';
+import {
+  ChartInfo,
+  ChartResponseEncore,
+  RankingGroups,
+  selectChart,
+} from '@/lib/chartSelection';
 
 export type RecommendedChart =
   | {
@@ -65,7 +70,7 @@ function songsReducer(state: SongState, action: SongStateActions): SongState {
 export default function CompareChartsToLocal({
   rankingGroups,
 }: {
-  rankingGroups: any;
+  rankingGroups: RankingGroups;
 }) {
   const [songsState, songsDispatch] = useReducer(songsReducer, {
     songs: null,
@@ -129,8 +134,10 @@ export default function CompareChartsToLocal({
             currentSong,
           ].concat(matchingCharts);
 
-          const {chart: recommendedChart, reasons} =
-            selectChart(possibleCharts);
+          const {chart: recommendedChart, reasons} = selectChart(
+            possibleCharts,
+            rankingGroups,
+          );
 
           if (recommendedChart == currentSong) {
             recommendation = {
@@ -165,16 +172,6 @@ export default function CompareChartsToLocal({
 
   return (
     <>
-      <p className="mb-4 text-center">
-        This tool checks your installed charts for updates,
-        <br />
-        as well as better charts for those songs.
-        <br />
-        This tool is currently in beta, it is recommended that you
-        <br />
-        backup your Songs folder before using this tool.
-      </p>
-
       <Button
         disabled={songsState.songs == null && songsState.songsCounted > 0}
         onClick={handler}>

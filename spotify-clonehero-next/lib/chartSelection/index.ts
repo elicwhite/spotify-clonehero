@@ -26,7 +26,7 @@ export type ChartInfo = {
   file: string; // Not sent by Encore, calculated locally
 };
 
-type RankingGroups = ChartTest[][];
+export type RankingGroups = ChartTest[][];
 
 // If a chart is better in an earlier group, skip checking the other groups
 // If no chart is better in the first group, check the second group, and so on
