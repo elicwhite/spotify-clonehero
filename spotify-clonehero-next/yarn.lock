@@ -3922,14 +3922,6 @@ parse-json@^5.2.0:
     json-parse-even-better-errors "^2.3.0"
     lines-and-columns "^1.1.6"
 
-parse-sng@^3.1.0:
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/parse-sng/-/parse-sng-3.1.0.tgz#58605eae632bf2a254bb3f436a3bb50e65eadb5e"
-  integrity sha512-cZerIg4Ds2BZ6eSp0mg0JNP0r104DId88kGDjvNeQqmuo8tYBZKRHDEzhTlG5JNVaRGcxec5YWqX2edVKLEgoA==
-  dependencies:
-    binary-parser "^2.2.1"
-    events "^3.3.0"
-
 parse-sng@^3.1.2:
   version "3.1.2"
   resolved "https://registry.yarnpkg.com/parse-sng/-/parse-sng-3.1.2.tgz#1c2e31e0f9b1792cfbbb916a9b96c16a24a970b2"
