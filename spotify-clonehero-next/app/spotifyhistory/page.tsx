@@ -52,7 +52,6 @@ function SpotifyHistory() {
   const handler = useCallback(async () => {
     let installedCharts: SongAccumulator[] | undefined;
 
-    alert('Select your Clone Hero songs directory');
     console.log('scan local charts');
     try {
       const scanResult = await scanForInstalledCharts();

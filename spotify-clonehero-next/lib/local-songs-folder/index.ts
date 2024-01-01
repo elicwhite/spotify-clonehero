@@ -206,37 +206,42 @@ export async function downloadSong(
   if (body == null) {
     return;
   }
-
   const artistSongTitle = `${artist} - ${song} (${charter})`;
   const filename = filenamify(artistSongTitle, {replacement: ''});
 
-  // Error if something matches the filename already
+  await downloadAsFolder(handle, filename, body);
+}
+
+async function downloadAsFolder(
+  folderHandle: FileSystemDirectoryHandle,
+  filename: string,
+  stream: ReadableStream,
+) {
+  // // Error if something matches the filename already
   let songDirHandle: FileSystemDirectoryHandle | undefined;
   try {
-    songDirHandle = await handle.getDirectoryHandle(filename, {
+    songDirHandle = await folderHandle.getDirectoryHandle(filename, {
       create: false,
     });
   } catch {
     // This is what we hope for, that the file doesn't exist
   }
-
   if (songDirHandle != null) {
     throw new Error(`Chart ${filename} already installed`);
   }
 
-  songDirHandle = await handle.getDirectoryHandle(filename, {
-    create: true,
-  });
-
   try {
+    songDirHandle = await folderHandle.getDirectoryHandle(filename, {
+      create: true,
+    });
     await new Promise((resolve, reject) => {
-      const sngStream = new SngStream(() => body, {generateSongIni: true});
+      const sngStream = new SngStream(() => stream, {generateSongIni: true});
       sngStream.on('file', async (file, stream) => {
         const fileHandle = await songDirHandle!.getFileHandle(file, {
           create: true,
         });
         const writableStream = await fileHandle.createWritable();
-        stream.pipeTo(writableStream);
+        await stream.pipeTo(writableStream);
       });
 
       sngStream.on('end', () => {
@@ -251,7 +256,42 @@ export async function downloadSong(
       sngStream.start();
     });
   } catch (error) {
-    console.log(error);
-    await handle.removeEntry(filename, {recursive: true});
+    console.error(error);
+    await folderHandle.removeEntry(filename, {recursive: true});
+    throw error;
+  }
+}
+
+async function downloadAsSng(
+  folderHandle: FileSystemDirectoryHandle,
+  filename: string,
+  stream: ReadableStream,
+) {
+  const fileWithExtension = `${filename}.sng`;
+
+  // // Error if something matches the filename already
+  let songFileHandle: FileSystemFileHandle | undefined;
+  try {
+    songFileHandle = await folderHandle.getFileHandle(fileWithExtension, {
+      create: false,
+    });
+  } catch {
+    // This is what we hope for, that the file doesn't exist
+  }
+  if (songFileHandle != null) {
+    throw new Error(`Chart ${fileWithExtension} already installed`);
+  }
+
+  try {
+    songFileHandle = await folderHandle.getFileHandle(fileWithExtension, {
+      create: true,
+    });
+    const writableStream = await songFileHandle.createWritable();
+
+    await stream.pipeTo(writableStream);
+  } catch (error) {
+    console.error(error);
+    await folderHandle.removeEntry(fileWithExtension, {recursive: true});
+    throw error;
   }
 }

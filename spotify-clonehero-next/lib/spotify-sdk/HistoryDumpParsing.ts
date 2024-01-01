@@ -4,9 +4,15 @@ export type ArtistTrackPlays = Map<string, Map<string, number>>;
 
 export async function getSpotifyDumpArtistTrackPlays() {
   const root = await navigator.storage.getDirectory();
-  const installedChartsCacheHandle = await root.getFileHandle(
-    'spotifyHistoryDump.json',
-  );
+  let installedChartsCacheHandle: FileSystemFileHandle;
+  try {
+    installedChartsCacheHandle = await root.getFileHandle(
+      'spotifyHistoryDump.json',
+    );
+  } catch {
+    // Cache dump doesn't exist, return null
+    return null;
+  }
 
   const cachedInstalledCharts = await readJsonFile(installedChartsCacheHandle);
   return deserialize(cachedInstalledCharts);

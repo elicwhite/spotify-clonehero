@@ -115,7 +115,7 @@ class ReactNextAuthStrategy implements IAuthStrategy {
 export default class MyErrorHandler implements IHandleErrors {
   public async handleErrors(error: any): Promise<boolean> {
     if (error.message.includes('Bad or expired token')) {
-      await signIn();
+      await signIn('spotify');
       return true;
     }
 
