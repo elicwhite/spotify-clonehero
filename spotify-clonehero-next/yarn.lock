@@ -3930,6 +3930,14 @@ parse-sng@^3.1.0:
     binary-parser "^2.2.1"
     events "^3.3.0"
 
+parse-sng@^3.1.2:
+  version "3.1.2"
+  resolved "https://registry.yarnpkg.com/parse-sng/-/parse-sng-3.1.2.tgz#1c2e31e0f9b1792cfbbb916a9b96c16a24a970b2"
+  integrity sha512-gAFsAJ6yaU2uH8UeSRC+EYFAN/urm/ICRJSLSwP1sqVBEF/VhN0XAxNNFTeLGsgdv1V2gx6pLA8sS9M6YX/FCA==
+  dependencies:
+    binary-parser "^2.2.1"
+    events "^3.3.0"
+
 path-exists@^4.0.0:
   version "4.0.0"
   resolved "https://registry.yarnpkg.com/path-exists/-/path-exists-4.0.0.tgz#513bdbe2d3b95d7762e8c1137efa195c6c61b5b3"
@@ -4333,10 +4341,10 @@ saxes@^5.0.1:
   dependencies:
     xmlchars "^2.2.0"
 
-scan-chart-web@3.3.4-2:
-  version "3.3.4-2"
-  resolved "https://registry.yarnpkg.com/scan-chart-web/-/scan-chart-web-3.3.4-2.tgz#dbe58a288e4e65ce24fcc09c75914c402793501b"
-  integrity sha512-+qBgzyHO7bAdSwFsaW3v43d6NfcI/1Yf3nCTBxLhRZr93Wnre1d3iZdCO7m0hN3j4k4qIyWI5pGwKeJIAlVn2w==
+scan-chart-web@^3.4.5-1:
+  version "3.4.5-1"
+  resolved "https://registry.yarnpkg.com/scan-chart-web/-/scan-chart-web-3.4.5-1.tgz#3da209c199b76d82d9822d8e55da9c7f14468f10"
+  integrity sha512-98IfUmLkKapvrcoWdwq/hBhk+VBLs32WMYLuTbu6LrnHQNx/uFdy1X9V0MNtFu0xFF1GAyz2Qw3kf6xXnVrRaQ==
   dependencies:
     bottleneck "^2.19.5"
     charset-detector "^0.0.2"
@@ -4346,7 +4354,7 @@ scan-chart-web@3.3.4-2:
     lodash "^4.17.21"
     midievents "^2.0.0"
     midifile "^2.0.0"
-    parse-sng "^3.1.0"
+    parse-sng "^3.1.2"
     sanitize-filename "^1.6.3"
     workerpool "^6.4.0"
 
