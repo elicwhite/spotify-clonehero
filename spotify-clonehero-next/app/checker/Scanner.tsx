@@ -1,7 +1,7 @@
 'use client';
 
-import {useCallback, useEffect, useRef, useState} from 'react';
-import {Chart, ScannedChart, scanCharts} from 'scan-chart-web';
+import {useCallback, useEffect, useState} from 'react';
+import {ScannedChart, scanCharts} from 'scan-chart-web';
 import {getChartIssues, getIssuesXLSX} from './ExcelBuilder';
 import {formatTimeRemaining} from '@/lib/ui-utils';
 import Button from '@/components/Button';
