@@ -407,14 +407,11 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         className="bg-card text-card-foreground rounded-lg ring-1 ring-slate-900/5 shadow-xl overflow-y-auto ph-8"
         ref={tableContainerRef}>
         <Table>
-          {/* <thead className="sticky top-0"> */}
           <TableHeader className="sticky top-0">
             {table.getHeaderGroups().map(headerGroup => (
               <TableRow key={headerGroup.id}>
-                {/* <tr key={headerGroup.id}> */}
                 {headerGroup.headers.map(header => {
                   return (
-                    // <th
                     <TableHead
                       key={header.id}
                       colSpan={header.colSpan}
@@ -427,41 +424,25 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                         header.column.columnDef.header,
                         header.getContext(),
                       )}
-                      {/* </th> */}
                     </TableHead>
                   );
                 })}
               </TableRow>
-              // </tr>
             ))}
-            {/* <TableRow>
-              <TableHead className="border h-px p-0"></TableHead>
-            </TableRow> */}
-            {/* <tr>
-              <th className="border h-px p-0" colSpan={5}></th>
-            </tr> */}
           </TableHeader>
-          {/* </thead> */}
           <TableBody>
-            {/* <tbody> */}
             {paddingTop > 0 && (
               <TableRow>
                 <TableCell style={{height: `${paddingTop}px`}}></TableCell>
               </TableRow>
-              // <tr>
-              //   <td style={{height: `${paddingTop}px`}} />
-              // </tr>
             )}
             {virtualRows.map(virtualRow => {
               const row = rows[virtualRow.index] as Row<RowType>;
               return (
                 <TableRow key={row.id}>
-                  {/* <tr key={row.id}> */}
                   {row.getVisibleCells().map(cell => {
                     return (
-                      // <td
                       <TableCell
-                        // className="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400"
                         key={cell.id}
                         style={{
                           textAlign: (cell.column.columnDef.meta as any)?.align,
@@ -470,26 +451,19 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                           cell.column.columnDef.cell,
                           cell.getContext(),
                         )}
-                        {/* </td> */}
                       </TableCell>
                     );
                   })}
-                  {/* </tr> */}
                 </TableRow>
               );
             })}
             {paddingBottom > 0 && (
-              // <tr>
-              //   <td style={{height: `${paddingBottom}px`}} />
-              // </tr>
               <TableRow>
                 <TableCell style={{height: `${paddingBottom}px`}} />
               </TableRow>
             )}
           </TableBody>
         </Table>
-        {/* </tbody>
-        </table> */}
       </div>
     </>
   );
