@@ -16,7 +16,7 @@ import SpotifyTableDownloader, {
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';
 import {signIn, signOut, useSession} from 'next-auth/react';
-import Button from '@/components/Button';
+import {Button} from '@/components/ui/button';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -127,11 +127,7 @@ function SpotifyHistory() {
   return (
     <>
       <div className="flex justify-center">
-        <button
-          className="bg-blue-500 text-white px-4 py-2 rounded-md transition-all ease-in-out duration-300 hover:bg-blue-600 dark:bg-blue-400 dark:hover:bg-blue-500"
-          onClick={handler}>
-          Scan Spotify Dump
-        </button>
+        <Button onClick={handler}>Scan Spotify Dump</Button>
       </div>
 
       {songs && <SpotifyTableDownloader tracks={songs} />}

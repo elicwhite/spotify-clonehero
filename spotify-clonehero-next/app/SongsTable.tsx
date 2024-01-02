@@ -22,12 +22,20 @@ import {Dialog, Transition} from '@headlessui/react';
 import {AiOutlineCheck} from 'react-icons/ai';
 import CompareView from './CompareView';
 import {removeStyleTags} from '@/lib/ui-utils';
-import Button from '@/components/Button';
 import pMap from 'p-map';
 import {backupSong, downloadSong} from '@/lib/local-songs-folder';
 import {flushSync} from 'react-dom';
 import {sendGAEvent} from '@next/third-parties/google';
 import {SongWithRecommendation} from './CompareChartsToLocal';
+import {Button} from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 export type TableDownloadStates =
   | 'downloaded'
@@ -113,8 +121,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
             case 'better-chart-found':
               return (
                 <>
-                  <button
-                    className="px-3 py-2 text-sm font-medium text-center inline-flex items-center text-white bg-blue-700 rounded-lg hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
+                  <Button
                     onClick={() => {
                       sendGAEvent({
                         event: 'review_chart',
@@ -122,7 +129,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                       setCurrentlyReviewing(props.row.original);
                     }}>
                     Review
-                  </button>
+                  </Button>
                 </>
               );
             default:
@@ -397,18 +404,21 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         )}
       </div>
       <div
-        className="bg-white dark:bg-slate-800 rounded-lg ring-1 ring-slate-900/5 shadow-xl overflow-y-auto ph-8"
+        className="bg-card text-card-foreground rounded-lg ring-1 ring-slate-900/5 shadow-xl overflow-y-auto ph-8"
         ref={tableContainerRef}>
-        <table className="border-collapse table-auto w-full text-sm">
-          <thead className="sticky top-0">
+        <Table>
+          {/* <thead className="sticky top-0"> */}
+          <TableHeader className="sticky top-0">
             {table.getHeaderGroups().map(headerGroup => (
-              <tr key={headerGroup.id}>
+              <TableRow key={headerGroup.id}>
+                {/* <tr key={headerGroup.id}> */}
                 {headerGroup.headers.map(header => {
                   return (
-                    <th
+                    // <th
+                    <TableHead
                       key={header.id}
                       colSpan={header.colSpan}
-                      className="bg-white dark:bg-slate-800 pt-8 font-medium px-8 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left"
+                      className="bg-card py-4"
                       style={{
                         textAlign: (header.column.columnDef.meta as any)?.align,
                         width: header.getSize(),
@@ -417,31 +427,41 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                         header.column.columnDef.header,
                         header.getContext(),
                       )}
-                    </th>
+                      {/* </th> */}
+                    </TableHead>
                   );
                 })}
-              </tr>
+              </TableRow>
+              // </tr>
             ))}
-            <tr>
-              <th
-                className="h-px bg-slate-100 dark:bg-slate-600 p-0"
-                colSpan={5}></th>
-            </tr>
-          </thead>
-          <tbody className="bg-white dark:bg-slate-800">
+            {/* <TableRow>
+              <TableHead className="border h-px p-0"></TableHead>
+            </TableRow> */}
+            {/* <tr>
+              <th className="border h-px p-0" colSpan={5}></th>
+            </tr> */}
+          </TableHeader>
+          {/* </thead> */}
+          <TableBody>
+            {/* <tbody> */}
             {paddingTop > 0 && (
-              <tr>
-                <td style={{height: `${paddingTop}px`}} />
-              </tr>
+              <TableRow>
+                <TableCell style={{height: `${paddingTop}px`}}></TableCell>
+              </TableRow>
+              // <tr>
+              //   <td style={{height: `${paddingTop}px`}} />
+              // </tr>
             )}
             {virtualRows.map(virtualRow => {
               const row = rows[virtualRow.index] as Row<RowType>;
               return (
-                <tr key={row.id}>
+                <TableRow key={row.id}>
+                  {/* <tr key={row.id}> */}
                   {row.getVisibleCells().map(cell => {
                     return (
-                      <td
-                        className="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400"
+                      // <td
+                      <TableCell
+                        // className="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400"
                         key={cell.id}
                         style={{
                           textAlign: (cell.column.columnDef.meta as any)?.align,
@@ -450,19 +470,26 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                           cell.column.columnDef.cell,
                           cell.getContext(),
                         )}
-                      </td>
+                        {/* </td> */}
+                      </TableCell>
                     );
                   })}
-                </tr>
+                  {/* </tr> */}
+                </TableRow>
               );
             })}
             {paddingBottom > 0 && (
-              <tr>
-                <td style={{height: `${paddingBottom}px`}} />
-              </tr>
+              // <tr>
+              //   <td style={{height: `${paddingBottom}px`}} />
+              // </tr>
+              <TableRow>
+                <TableCell style={{height: `${paddingBottom}px`}} />
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
+        {/* </tbody>
+        </table> */}
       </div>
     </>
   );

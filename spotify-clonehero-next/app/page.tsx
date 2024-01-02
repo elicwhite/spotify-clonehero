@@ -24,12 +24,12 @@ export default function Home() {
     <main className="max-w-4xl p-8">
       <section className="mb-10">
         {/* <h1 className="text-4xl font-bold">Welcome to Our Tools Collection</h1> */}
-        <p className="text-lg text-gray-600 mt-2">
+        <p className="text-lg mt-2">
           This site provides a collection of tools to help you find charts to
           songs you know but might not find in Chorus&apos;s 10s of thousands of
           charts.
         </p>
-        <p className="text-lg text-gray-600 mt-2">
+        <p className="text-lg mt-2">
           The tools on this website don&apos;t require any downloads or custom
           applications on your computer. Manage your Songs directory directly
           from your browser.

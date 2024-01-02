@@ -4,7 +4,7 @@ import {useCallback, useEffect, useState} from 'react';
 import {ScannedChart, scanCharts} from 'scan-chart-web';
 import {getChartIssues, getIssuesXLSX} from './ExcelBuilder';
 import {formatTimeRemaining} from '@/lib/ui-utils';
-import Button from '@/components/Button';
+import {Button} from '@/components/ui/button';
 
 const NOT_SUPPORTED =
   typeof window === 'undefined' ||

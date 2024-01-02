@@ -6,7 +6,7 @@ import SongsTable from './SongsTable';
 import {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 import getChorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
-import Button from '@/components/Button';
+import {Button} from '@/components/ui/button';
 import {sendGAEvent} from '@next/third-parties/google';
 import {
   ChartInfo,
@@ -168,7 +168,7 @@ export default function CompareChartsToLocal({
 
     const after = Date.now();
     console.log('Took', (after - before) / 1000, 'ss');
-  }, [songsDispatch]);
+  }, [rankingGroups]);
 
   return (
     <>

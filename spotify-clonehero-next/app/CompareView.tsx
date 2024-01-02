@@ -2,7 +2,7 @@ import {SongIniData} from '@/lib/local-songs-folder/scanLocalCharts';
 import {songIniOrder} from './SongsDownloader';
 import {useCallback} from 'react';
 import {backupSong, downloadSong} from '@/lib/local-songs-folder';
-import Button from '@/components/Button';
+import {Button} from '@/components/ui/button';
 import {TableDownloadStates} from './SongsTable';
 import {sendGAEvent} from '@next/third-parties/google';
 
