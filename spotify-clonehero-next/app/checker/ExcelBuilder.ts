@@ -226,6 +226,8 @@ export function getMetadataIssueDescription(metadataIssue: MetadataIssueType) {
       return 'Metadata contains a "diff_" property for an uncharted instrument.';
     case 'nonzeroDelay':
       return 'Metadata contains a "delay" property that is not zero.';
+    case 'drumsSetTo4And5Lane':
+      return 'Metadata contains both the "pro_drums" and "five_lane_drums" properties, which is not supported.';
     case 'nonzeroOffset':
       return 'Chart file contains an "Offset" property that is not zero.';
   }
