@@ -8,6 +8,7 @@ import {
 } from 'react';
 import {ChartResponseEncore} from '../lib/chartSelection';
 import {
+  ExpandedState,
   FilterFn,
   Row,
   RowData,
@@ -16,6 +17,7 @@ import {
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
+  getExpandedRowModel,
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
@@ -36,6 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {AiFillCaretDown} from 'react-icons/ai';
 
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {
@@ -48,7 +51,7 @@ export type SpotifyPlaysRecommendations = {
   song: string;
   playCount?: number;
   previewUrl?: string | null;
-  recommendedChart: ChartResponseEncore;
+  matchingCharts: ChartResponseEncore[];
 };
 
 type RowType = {
@@ -56,6 +59,7 @@ type RowType = {
   artist: string;
   song: string;
   playCount?: number;
+  numCharts: number;
   charter: string;
   instruments: {[instrument: string]: number};
   download: {
@@ -66,6 +70,7 @@ type RowType = {
     state: TableDownloadStates;
   };
   previewUrl?: string | null;
+  subRows: RowType[];
 };
 
 const RENDERED_INSTRUMENTS = [
@@ -118,31 +123,56 @@ const instrumentFilter: FilterFn<RowType> = (
   const allInstrumentsIncluded = value.every(instrument =>
     songInstruments.includes(instrument),
   );
+
   return allInstrumentsIncluded;
 };
 
 const columnHelper = createColumnHelper<RowType>();
 
 const columns = [
-  {
-    accessorKey: 'artist',
+  columnHelper.accessor('artist', {
     header: 'Artist',
     minSize: 250,
-  },
-  {
-    accessorKey: 'song',
+    cell: props => {
+      const icon = props.row.getIsExpanded() ? (
+        <AiFillCaretDown />
+      ) : (
+        <AiFillCaretDown
+          className={`opacity-0 ${
+            props.row.getParentRow() != null ? 'pr-10' : ''
+          }`}
+        />
+      );
+
+      return (
+        <>
+          {icon} {props.getValue()}
+        </>
+      );
+    },
+  }),
+  columnHelper.accessor('song', {
     header: 'Song',
     minSize: 250,
-  },
-  {
-    accessorKey: 'playCount',
+    cell: props => {
+      return props.getValue();
+    },
+  }),
+  columnHelper.accessor('playCount', {
     header: '# Plays',
     minSize: 250,
-  },
+    cell: props => {
+      return props.getValue();
+    },
+  }),
   columnHelper.accessor('charter', {
     header: 'Charter',
     minSize: 200,
     cell: props => {
+      if (props.row.getIsExpanded()) {
+        return null;
+      }
+
       return removeStyleTags(props.getValue() || '');
     },
   }),
@@ -150,6 +180,10 @@ const columns = [
     header: 'Instruments',
     minSize: 300,
     cell: props => {
+      if (props.row.getIsExpanded()) {
+        return null;
+      }
+
       return (
         <>
           {Object.keys(props.getValue())
@@ -170,6 +204,10 @@ const columns = [
     header: 'Download',
     minSize: 100,
     cell: props => {
+      if (props.row.getIsExpanded()) {
+        return null;
+      }
+
       const {artist, song, charter, file, state} = props.getValue();
       const updateDownloadState = props.table.options.meta?.setDownloadState;
       function update(state: TableDownloadStates) {
@@ -193,6 +231,10 @@ const columns = [
     header: 'Preview',
     minSize: 100,
     cell: props => {
+      if (props.row.getIsExpanded()) {
+        return null;
+      }
+
       const {artist, song} = props.row.original;
       const url = props.getValue();
 
@@ -293,35 +335,71 @@ export default function SpotifyTableDownloader({
 
   const trackState = useMemo(
     () =>
-      tracks.map((track, index) => ({
-        id: index,
-        artist: track.artist,
-        song: track.song,
-        ...(hasPlayCount ? {playCount: track.playCount} : {}),
-        charter: track.recommendedChart.charter,
-        instruments: Object.keys(track.recommendedChart)
-          .filter(
-            key =>
-              key.startsWith('diff_') &&
-              (track.recommendedChart[
-                key as keyof ChartResponseEncore
-              ] as number) >= 0,
-          )
-          .map(key => ({
-            [key.replace('diff_', '')]: track.recommendedChart[
-              key as keyof ChartResponseEncore
-            ] as number,
-          }))
-          .reduce((a, b) => ({...a, ...b}), {}),
-        download: {
+      tracks.map(
+        (track, index): RowType => ({
+          id: index,
           artist: track.artist,
           song: track.song,
-          charter: track.recommendedChart.charter,
-          file: track.recommendedChart.file,
-          state: downloadState[index],
-        },
-        ...(hasPreview ? {previewUrl: track.previewUrl} : {}),
-      })),
+          ...(hasPlayCount ? {playCount: track.playCount} : {}),
+          numCharts: track.matchingCharts.length,
+          charter: track.matchingCharts[0].charter,
+          instruments: Object.keys(track.matchingCharts[0])
+            .filter(
+              key =>
+                key.startsWith('diff_') &&
+                (track.matchingCharts[0][
+                  key as keyof ChartResponseEncore
+                ] as number) >= 0,
+            )
+            .map(key => ({
+              [key.replace('diff_', '')]: track.matchingCharts[0][
+                key as keyof ChartResponseEncore
+              ] as number,
+            }))
+            .reduce((a, b) => ({...a, ...b}), {}),
+          download: {
+            artist: track.artist,
+            song: track.song,
+            charter: track.matchingCharts[0].charter,
+            file: track.matchingCharts[0].file,
+            state: downloadState[index],
+          },
+          ...(hasPreview ? {previewUrl: track.previewUrl} : {}),
+          subRows:
+            track.matchingCharts.length == 1
+              ? []
+              : track.matchingCharts.map((chart, subIndex) => ({
+                  id: index,
+                  artist: track.artist,
+                  song: track.song,
+                  ...(hasPlayCount ? {playCount: track.playCount} : {}),
+                  charter: chart.charter,
+                  numCharts: 1,
+                  subRows: [],
+                  instruments: Object.keys(chart)
+                    .filter(
+                      key =>
+                        key.startsWith('diff_') &&
+                        (chart[key as keyof ChartResponseEncore] as number) >=
+                          0,
+                    )
+                    .map(key => ({
+                      [key.replace('diff_', '')]: chart[
+                        key as keyof ChartResponseEncore
+                      ] as number,
+                    }))
+                    .reduce((a, b) => ({...a, ...b}), {}),
+                  download: {
+                    artist: track.artist,
+                    song: track.song,
+                    charter: chart.charter,
+                    file: chart.file,
+                    state: downloadState[index],
+                  },
+                  ...(hasPreview ? {previewUrl: track.previewUrl} : {}),
+                })),
+        }),
+      ),
     [tracks, hasPlayCount, hasPreview, downloadState],
   );
 
@@ -354,6 +432,7 @@ export default function SpotifyTableDownloader({
         playCount: hasPlayCount,
       },
       columnFilters,
+      expanded: true,
     },
     meta: {
       setDownloadState(index: number, state: TableDownloadStates) {
@@ -362,10 +441,14 @@ export default function SpotifyTableDownloader({
         });
       },
     },
+    enableExpanding: true,
     enableMultiSort: true,
+    getIsRowExpanded: (row: Row<RowType>) => row.original.numCharts > 1,
     onSortingChange: setSorting,
+    getSubRows: row => row.subRows,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getExpandedRowModel: getExpandedRowModel(),
     getSortedRowModel: getSortedRowModel(),
     debugTable: false,
   });
@@ -418,7 +501,7 @@ export default function SpotifyTableDownloader({
                     <TableHead
                       key={header.id}
                       colSpan={header.colSpan}
-                      className="bg-card py-4"
+                      className="bg-card py-0"
                       style={{
                         textAlign: (header.column.columnDef.meta as any)?.align,
                         width: header.getSize(),
@@ -446,6 +529,7 @@ export default function SpotifyTableDownloader({
                   {row.getVisibleCells().map(cell => {
                     return (
                       <TableCell
+                        className={row.getIsExpanded() ? 'py-2' : ''}
                         key={cell.id}
                         style={{
                           textAlign: (cell.column.columnDef.meta as any)?.align,

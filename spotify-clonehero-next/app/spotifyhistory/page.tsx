@@ -103,17 +103,17 @@ function SpotifyHistory() {
           return null;
         }
 
-        const {chart: recommendedChart, reasons} = selectChart(matchingCharts);
+        // const {chart: recommendedChart, reasons} = selectChart(matchingCharts);
 
-        if (recommendedChart == null) {
-          return null;
-        }
+        // if (recommendedChart == null) {
+        //   return null;
+        // }
 
         return {
           artist,
           song,
           playCount,
-          recommendedChart,
+          matchingCharts,
         };
       })
       .filter(_Boolean);
