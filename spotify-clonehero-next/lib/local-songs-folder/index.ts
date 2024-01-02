@@ -15,6 +15,8 @@ import {SngStream} from 'parse-sng';
 // Get last scanned timestamp
 
 async function promptForSongsDirectory() {
+  alert('Select your Songs directory');
+
   const handle = await window.showDirectoryPicker({
     id: 'clone-hero-songs',
     mode: 'readwrite',

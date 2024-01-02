@@ -23,22 +23,22 @@ const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
   Boolean(v);
 
 export default function Page() {
-  const session = useSession();
+  // const session = useSession();
 
-  if (!session || session.status !== 'authenticated') {
-    return (
-      <div>
-        <Button onClick={() => signIn('spotify')}>Sign in with Spotify</Button>
-      </div>
-    );
-  }
+  // if (!session || session.status !== 'authenticated') {
+  //   return (
+  //     <div>
+  //       <Button onClick={() => signIn('spotify')}>Sign in with Spotify</Button>
+  //     </div>
+  //   );
+  // }
 
   return (
     <>
-      <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
+      {/* <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
         <span>Logged in as {session.data.user?.name}</span>
         <Button onClick={() => signOut()}>Sign out</Button>
-      </div>
+      </div> */}
 
       <SpotifyHistory />
     </>
@@ -66,6 +66,9 @@ function SpotifyHistory() {
     if (artistTrackPlays == null) {
       let spotifyDataHandle;
 
+      alert(
+        'Select the folder containing your extracted Spotify Extended Streaming History',
+      );
       try {
         spotifyDataHandle = await window.showDirectoryPicker({
           id: 'spotify-dump',
