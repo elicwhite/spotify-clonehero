@@ -8,7 +8,6 @@ import {
 } from 'react';
 import {ChartResponseEncore} from '../lib/chartSelection';
 import {
-  ExpandedState,
   FilterFn,
   Row,
   RowData,
@@ -118,7 +117,16 @@ const instrumentFilter: FilterFn<RowType> = (
   row,
   columnId,
   value: AllowedInstrument[],
+  addMeta: any,
 ) => {
+  if (row.subRows.length > 0) {
+    const subRowsIncluded = row.subRows.some(subRow => {
+      return instrumentFilter(subRow, columnId, value, addMeta);
+    });
+
+    return subRowsIncluded;
+  }
+
   const songInstruments = Object.keys(row.getValue(columnId));
   const allInstrumentsIncluded = value.every(instrument =>
     songInstruments.includes(instrument),
@@ -323,11 +331,12 @@ function PreviewButton({
 
 export default function SpotifyTableDownloader({
   tracks,
+  showPreview,
 }: {
   tracks: SpotifyPlaysRecommendations[];
+  showPreview: boolean;
 }) {
   const hasPlayCount = tracks[0].playCount != null;
-  const hasPreview = tracks[0].hasOwnProperty('previewUrl');
 
   const [downloadState, setDownloadState] = useState<{
     [key: number]: TableDownloadStates;
@@ -364,7 +373,7 @@ export default function SpotifyTableDownloader({
             file: track.matchingCharts[0].file,
             state: downloadState[index],
           },
-          ...(hasPreview ? {previewUrl: track.previewUrl} : {}),
+          previewUrl: track.previewUrl,
           subRows:
             track.matchingCharts.length == 1
               ? []
@@ -396,11 +405,11 @@ export default function SpotifyTableDownloader({
                     file: chart.file,
                     state: downloadState[index],
                   },
-                  ...(hasPreview ? {previewUrl: track.previewUrl} : {}),
+                  previewUrl: track.previewUrl,
                 })),
         }),
       ),
-    [tracks, hasPlayCount, hasPreview, downloadState],
+    [tracks, hasPlayCount, downloadState],
   );
 
   const [sorting, setSorting] = useState<SortingState>([
@@ -430,6 +439,7 @@ export default function SpotifyTableDownloader({
       sorting,
       columnVisibility: {
         playCount: hasPlayCount,
+        previewUrl: showPreview,
       },
       columnFilters,
       expanded: true,

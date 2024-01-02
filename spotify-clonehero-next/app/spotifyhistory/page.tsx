@@ -23,29 +23,35 @@ const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
   Boolean(v);
 
 export default function Page() {
-  // const session = useSession();
+  let auth = null;
+  const session = useSession();
 
-  // if (!session || session.status !== 'authenticated') {
-  //   return (
-  //     <div>
-  //       <Button onClick={() => signIn('spotify')}>Sign in with Spotify</Button>
-  //     </div>
-  //   );
-  // }
+  if (process.env.NODE_ENV === 'development') {
+    auth =
+      !session || session.status !== 'authenticated' ? (
+        <div>
+          <Button onClick={() => signIn('spotify')}>
+            Sign in with Spotify
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
+          <span>Logged in as {session.data.user?.name}</span>
+          <Button onClick={() => signOut()}>Sign out</Button>
+        </div>
+      );
+  }
 
   return (
     <>
-      {/* <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
-        <span>Logged in as {session.data.user?.name}</span>
-        <Button onClick={() => signOut()}>Sign out</Button>
-      </div> */}
+      {auth}
 
-      <SpotifyHistory />
+      <SpotifyHistory authenticated={session.status === 'authenticated'} />
     </>
   );
 }
 
-function SpotifyHistory() {
+function SpotifyHistory({authenticated}: {authenticated: boolean}) {
   const [songs, setSongs] = useState<SpotifyPlaysRecommendations[] | null>(
     null,
   );
@@ -103,12 +109,6 @@ function SpotifyHistory() {
           return null;
         }
 
-        // const {chart: recommendedChart, reasons} = selectChart(matchingCharts);
-
-        // if (recommendedChart == null) {
-        //   return null;
-        // }
-
         return {
           artist,
           song,
@@ -130,7 +130,9 @@ function SpotifyHistory() {
         <Button onClick={handler}>Scan Spotify Dump</Button>
       </div>
 
-      {songs && <SpotifyTableDownloader tracks={songs} />}
+      {songs && (
+        <SpotifyTableDownloader tracks={songs} showPreview={authenticated} />
+      )}
     </>
   );
 }
