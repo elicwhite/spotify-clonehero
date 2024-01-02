@@ -28,6 +28,14 @@ import {AudioContext} from './AudioProvider';
 import {TableDownloadStates} from './SongsTable';
 import {Button} from '@/components/ui/button';
 import {Icons} from '@/components/icons';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {
@@ -399,18 +407,18 @@ export default function SpotifyTableDownloader({
         </div>
       </div>
       <div
-        className="bg-white dark:bg-slate-800 rounded-lg ring-1 ring-slate-900/5 shadow-xl overflow-y-auto"
+        className="bg-card text-card-foreground rounded-lg ring-1 ring-slate-900/5 shadow-xl overflow-y-auto ph-8"
         ref={tableContainerRef}>
-        <table className="border-collapse table-auto w-full text-sm">
-          <thead className="sticky top-0">
+        <Table>
+          <TableHeader className="sticky top-0">
             {table.getHeaderGroups().map(headerGroup => (
-              <tr key={headerGroup.id}>
+              <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map(header => {
                   return (
-                    <th
+                    <TableHead
                       key={header.id}
                       colSpan={header.colSpan}
-                      className="bg-white dark:bg-slate-800 pt-8 font-medium p-4 pl-8 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left"
+                      className="bg-card py-4"
                       style={{
                         textAlign: (header.column.columnDef.meta as any)?.align,
                         width: header.getSize(),
@@ -419,31 +427,25 @@ export default function SpotifyTableDownloader({
                         header.column.columnDef.header,
                         header.getContext(),
                       )}
-                    </th>
+                    </TableHead>
                   );
                 })}
-              </tr>
+              </TableRow>
             ))}
-            <tr>
-              <th
-                className="h-px bg-slate-100 dark:bg-slate-600 p-0"
-                colSpan={6}></th>
-            </tr>
-          </thead>
-          <tbody className="bg-white dark:bg-slate-800">
+          </TableHeader>
+          <TableBody>
             {paddingTop > 0 && (
-              <tr>
-                <td style={{height: `${paddingTop}px`}} />
-              </tr>
+              <TableRow>
+                <TableCell style={{height: `${paddingTop}px`}}></TableCell>
+              </TableRow>
             )}
             {virtualRows.map(virtualRow => {
               const row = rows[virtualRow.index] as Row<RowType>;
               return (
-                <tr key={row.id}>
+                <TableRow key={row.id}>
                   {row.getVisibleCells().map(cell => {
                     return (
-                      <td
-                        className="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400"
+                      <TableCell
                         key={cell.id}
                         style={{
                           textAlign: (cell.column.columnDef.meta as any)?.align,
@@ -452,19 +454,19 @@ export default function SpotifyTableDownloader({
                           cell.column.columnDef.cell,
                           cell.getContext(),
                         )}
-                      </td>
+                      </TableCell>
                     );
                   })}
-                </tr>
+                </TableRow>
               );
             })}
             {paddingBottom > 0 && (
-              <tr>
-                <td style={{height: `${paddingBottom}px`}} />
-              </tr>
+              <TableRow>
+                <TableCell style={{height: `${paddingBottom}px`}} />
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </>
   );
