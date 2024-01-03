@@ -488,7 +488,7 @@ export default function SpotifyTableDownloader({
       <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-end">
         <span>
           {instrumentFilters.length !== RENDERED_INSTRUMENTS.length &&
-            `${table.getRowModel().rows.length} of `}
+            `${table.getRowModel().rows.length} charts for `}
           {tracks.length} songs found
         </span>
 
