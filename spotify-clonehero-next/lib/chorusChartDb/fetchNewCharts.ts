@@ -8,12 +8,13 @@ export default async function fetchNewCharts(
   afterTime: Date,
   onEachResponse: (json: any[], lastChartId: number) => void,
 ) {
-  const results = new Map<string, any>();
+  const results = new Map<number, any>();
   const runStartTime = new Date();
 
   let lastChartId = 1;
 
   let totalSongs = 0;
+  let totalCharts = 0;
   let newSongs = 0;
   let iterations = 0;
 
@@ -23,18 +24,19 @@ export default async function fetchNewCharts(
 
     let thisRunLatestChartId = lastChartId;
     for (const song of json.data) {
+      totalCharts++;
       if (song.chartId > thisRunLatestChartId) {
         thisRunLatestChartId = song.chartId;
       }
 
-      if (!results.has(song.md5)) {
-        results.set(song.md5, filterKeys(song));
+      if (!results.has(song.groupId)) {
+        results.set(song.groupId, filterKeys(song));
         newSongs++;
         totalSongs++;
       } else {
-        const existing = results.get(song.md5);
+        const existing = results.get(song.groupId);
         if (new Date(existing.modifiedTime) < new Date(song.modifiedTime)) {
-          results.set(song.md5, filterKeys(song));
+          results.set(song.groupId, filterKeys(song));
         }
       }
     }
@@ -46,6 +48,7 @@ export default async function fetchNewCharts(
       lastChartIDFetched: thisRunLatestChartId,
       newSongsFound: newSongs,
       totalSongsFound: totalSongs,
+      totalChartsFound: totalCharts,
     });
 
     lastChartId = thisRunLatestChartId;
@@ -68,6 +71,7 @@ const saveKeys = [
   'genre',
   'year',
   'md5',
+  'groupId',
   'charter',
   'song_length',
   'diff_band',

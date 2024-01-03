@@ -20,8 +20,8 @@ export default async function getChorusChartDb(): Promise<
 
   if (localDataVersion !== serverDataVersion) {
     debugLog('Server data is newer, updating');
-    root.removeEntry('serverData', {recursive: true});
-    root.removeEntry('localData', {recursive: true});
+    await root.removeEntry('serverData', {recursive: true});
+    await root.removeEntry('localData', {recursive: true});
     localStorage.setItem('chartsDataVersion', String(serverDataVersion));
   }
 
@@ -61,20 +61,22 @@ export function findMatchingCharts(
   return results;
 }
 
-function reduceCharts(...chartSets: {md5: string; modifiedTime: string}[][]) {
-  const results = new Map<string, any>();
+function reduceCharts(
+  ...chartSets: {groupId: number; md5: string; modifiedTime: string}[][]
+) {
+  const results = new Map<number, any>();
   for (const chartSet of chartSets) {
     for (const chart of chartSet) {
-      if (!results.has(chart.md5)) {
-        results.set(chart.md5, {
+      if (!results.has(chart.groupId)) {
+        results.set(chart.groupId, {
           ...chart,
           file: `https://files.enchor.us/${chart.md5}.sng`,
         });
       } else if (
-        new Date(results.get(chart.md5).modifiedTime) <
+        new Date(results.get(chart.groupId).modifiedTime) <
         new Date(chart.modifiedTime)
       ) {
-        results.set(chart.md5, {
+        results.set(chart.groupId, {
           ...chart,
           file: `https://files.enchor.us/${chart.md5}.sng`,
         });

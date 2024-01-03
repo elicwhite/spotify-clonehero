@@ -23,7 +23,7 @@ async function run() {
       fs.writeFileSync(
         path.join(
           RAW_FILE_LOCATION,
-          START_TIME.toISOString() + String(lastChartId) + '.json',
+          NOW.toISOString() + String(lastChartId) + '.json',
         ),
         JSON.stringify(json, null, 2),
       );
