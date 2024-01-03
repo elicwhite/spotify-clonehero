@@ -6,7 +6,6 @@ import {
 } from '@/lib/local-songs-folder/scanLocalCharts';
 import {useCallback, useState} from 'react';
 import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
-import {selectChart} from '../../lib/chartSelection';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import {
   getSpotifyDumpArtistTrackPlays,
@@ -137,12 +136,29 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       status: 'songs-from-encore',
     }));
 
+    // Yield to React to let it update State
+    await new Promise(resolve => {
+      setTimeout(resolve, 10);
+    });
+
     const allChorusCharts = await fetchChorusDb;
 
+    // Yield to React to let it update State
+    await new Promise(resolve => {
+      setTimeout(resolve, 10);
+    });
+
+    console.log('finding matches');
     setStatus(prevStatus => ({
       ...prevStatus,
       status: 'finding-matches',
     }));
+
+    // Yield to React to let it update State
+    await new Promise(resolve => {
+      setTimeout(resolve, 100);
+    });
+
     const recommendedCharts = notInstalledSongs
       .map(([artist, song, playCount]) => {
         const matchingCharts = findMatchingCharts(
