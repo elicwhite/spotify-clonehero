@@ -25,21 +25,21 @@ export default function Page() {
   let auth = null;
   const session = useSession();
 
-  if (process.env.NODE_ENV === 'development') {
-    auth =
-      !session || session.status !== 'authenticated' ? (
-        <div>
-          <Button onClick={() => signIn('spotify')}>
-            Sign in with Spotify
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
-          <span>Logged in as {session.data.user?.name}</span>
-          <Button onClick={() => signOut()}>Sign out</Button>
-        </div>
-      );
-  }
+  // if (process.env.NODE_ENV === 'development') {
+  //   auth =
+  //     !session || session.status !== 'authenticated' ? (
+  //       <div>
+  //         <Button onClick={() => signIn('spotify')}>
+  //           Sign in with Spotify
+  //         </Button>
+  //       </div>
+  //     ) : (
+  //       <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
+  //         <span>Logged in as {session.data.user?.name}</span>
+  //         <Button onClick={() => signOut()}>Sign out</Button>
+  //       </div>
+  //     );
+  // }
 
   return (
     <>
