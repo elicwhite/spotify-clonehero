@@ -51,17 +51,50 @@ export default function Page() {
   );
 }
 
+type Status = {
+  status:
+    | 'not-started'
+    | 'scanning'
+    | 'done-scanning'
+    | 'processing-spotify-dump'
+    | 'songs-from-encore'
+    | 'finding-matches'
+    | 'done';
+  songsCounted: number;
+};
+
 function SpotifyHistory({authenticated}: {authenticated: boolean}) {
   const [songs, setSongs] = useState<SpotifyPlaysRecommendations[] | null>(
     null,
   );
+  const [status, setStatus] = useState<Status>({
+    status: 'not-started',
+    songsCounted: 0,
+  });
+
   const handler = useCallback(async () => {
     let installedCharts: SongAccumulator[] | undefined;
 
+    const fetchChorusDb = chorusChartDb();
+
     console.log('scan local charts');
     try {
-      const scanResult = await scanForInstalledCharts();
+      setStatus({
+        status: 'scanning',
+        songsCounted: 0,
+      });
+
+      const scanResult = await scanForInstalledCharts(() => {
+        setStatus(prevStatus => ({
+          ...prevStatus,
+          songsCounted: prevStatus.songsCounted + 1,
+        }));
+      });
       installedCharts = scanResult.installedCharts;
+      setStatus(prevStatus => ({
+        ...prevStatus,
+        status: 'done-scanning',
+      }));
     } catch {
       console.log('User canceled picker');
       return;
@@ -84,6 +117,10 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
         return;
       }
 
+      setStatus(prevStatus => ({
+        ...prevStatus,
+        status: 'processing-spotify-dump',
+      }));
       artistTrackPlays = await processSpotifyDump(spotifyDataHandle);
     }
 
@@ -95,8 +132,17 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       isInstalled,
     );
     console.log('done filtering songs');
-    const allChorusCharts = await chorusChartDb();
+    setStatus(prevStatus => ({
+      ...prevStatus,
+      status: 'songs-from-encore',
+    }));
 
+    const allChorusCharts = await fetchChorusDb;
+
+    setStatus(prevStatus => ({
+      ...prevStatus,
+      status: 'finding-matches',
+    }));
     const recommendedCharts = notInstalledSongs
       .map(([artist, song, playCount]) => {
         const matchingCharts = findMatchingCharts(
@@ -118,6 +164,11 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       })
       .filter(_Boolean);
 
+    setStatus(prevStatus => ({
+      ...prevStatus,
+      status: 'done',
+    }));
+
     if (recommendedCharts.length > 0) {
       setSongs(recommendedCharts);
       console.log(recommendedCharts);
@@ -126,15 +177,31 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
 
   return (
     <>
-      <div className="flex justify-center">
-        <Button onClick={handler}>Scan Spotify Dump</Button>
-      </div>
+      <div className="flex justify-center">{renderStatus(status, handler)}</div>
 
       {songs && (
         <SpotifyTableDownloader tracks={songs} showPreview={authenticated} />
       )}
     </>
   );
+}
+
+function renderStatus(status: Status, scanHandler: () => void) {
+  switch (status.status) {
+    case 'not-started':
+      return <Button onClick={scanHandler}>Scan Spotify Dump</Button>;
+    case 'scanning':
+    case 'done-scanning':
+      return `${status.songsCounted} songs scanned`;
+    case 'processing-spotify-dump':
+      return 'Processing Spotify Extended Streaming History';
+    case 'songs-from-encore':
+      return 'Downloading songs from Encore';
+    case 'finding-matches':
+      return 'Checking for song matches';
+    case 'done':
+      return <Button onClick={scanHandler}>Rescan</Button>;
+  }
 }
 
 function filterInstalledSongs(
