@@ -123,17 +123,11 @@ function LoggedIn() {
           return null;
         }
 
-        const {chart: recommendedChart, reasons} = selectChart(matchingCharts);
-
-        if (recommendedChart == null) {
-          return null;
-        }
-
         return {
           artist,
           song,
           previewUrl,
-          recommendedChart,
+          matchingCharts,
         };
       })
       .filter(_Boolean);
@@ -155,7 +149,7 @@ function LoggedIn() {
         )}
       </div>
 
-      {songs && <SpotifyTableDownloader tracks={songs} />}
+      {songs && <SpotifyTableDownloader tracks={songs} showPreview={true} />}
     </>
   );
 }
