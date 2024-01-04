@@ -1,5 +1,6 @@
 import {set} from 'idb-keyval';
 import filenamify from 'filenamify/browser';
+import {sendGAEvent} from '@next/third-parties/google';
 
 import {writeFile} from '@/lib/fileSystemHelpers';
 import scanLocalCharts, {SongAccumulator} from './scanLocalCharts';
@@ -86,6 +87,11 @@ export async function scanForInstalledCharts(
 
   const installedCharts: SongAccumulator[] = [];
   await scanLocalCharts(handle, installedCharts, callbackPerSong);
+
+  sendGAEvent({
+    event: 'charts_scanned',
+    value: installedCharts.length,
+  });
 
   const installedChartsCacheHandle = await root.getFileHandle(
     'installedCharts.json',
@@ -197,6 +203,10 @@ export async function downloadSong(
   charter: string,
   url: string,
 ) {
+  sendGAEvent({
+    event: 'download_song',
+  });
+
   const handle = await getSongsDirectoryHandle();
   const response = await fetch(url, {
     headers: {

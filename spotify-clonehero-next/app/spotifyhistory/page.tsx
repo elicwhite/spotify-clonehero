@@ -121,6 +121,8 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
         ...prevStatus,
         status: 'done-scanning',
       }));
+      // Yield to React to let it update State
+      await pause();
     } catch (err) {
       if (err instanceof Error && err.message == 'User canceled picker') {
         return;
@@ -138,6 +140,8 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
         ...prevStatus,
         status: 'processing-spotify-dump',
       }));
+      // Yield to React to let it update State
+      await pause();
       artistTrackPlays = await processSpotifyDump(spotifyDataHandle);
     }
 
@@ -155,16 +159,12 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     }));
 
     // Yield to React to let it update State
-    await new Promise(resolve => {
-      setTimeout(resolve, 10);
-    });
+    await pause();
 
     const allChorusCharts = await fetchChorusDb;
 
     // Yield to React to let it update State
-    await new Promise(resolve => {
-      setTimeout(resolve, 10);
-    });
+    await pause();
 
     console.log('finding matches');
     setStatus(prevStatus => ({
@@ -290,4 +290,11 @@ function filterInstalledSongs(
   console.log('sort results');
 
   return results;
+}
+
+async function pause() {
+  // Yield to React to let it update State
+  await new Promise(resolve => {
+    setTimeout(resolve, 10);
+  });
 }
