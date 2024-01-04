@@ -143,10 +143,10 @@ const columns = [
     minSize: 250,
     cell: props => {
       const icon = props.row.getIsExpanded() ? (
-        <AiFillCaretDown />
+        <AiFillCaretDown className="inline" />
       ) : (
         <AiFillCaretDown
-          className={`opacity-0 ${
+          className={`inline opacity-0 ${
             props.row.getParentRow() != null ? 'pr-10' : ''
           }`}
         />
