@@ -17,10 +17,17 @@ import {SngStream} from 'parse-sng';
 async function promptForSongsDirectory() {
   alert('Select your Songs directory');
 
-  const handle = await window.showDirectoryPicker({
-    id: 'clone-hero-songs',
-    mode: 'readwrite',
-  });
+  let handle;
+  try {
+    handle = await window.showDirectoryPicker({
+      id: 'clone-hero-songs',
+      mode: 'readwrite',
+    });
+  } catch (err) {
+    throw new Error('User canceled picker', {
+      cause: err,
+    });
+  }
 
   await set('songsDirectoryHandle', handle);
 

@@ -16,6 +16,7 @@ import SpotifyTableDownloader, {
 } from '../SpotifyTableDownloader';
 import {signIn, signOut, useSession} from 'next-auth/react';
 import {Button} from '@/components/ui/button';
+import {RxExternalLink} from 'react-icons/rx';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -44,7 +45,17 @@ export default function Page() {
   return (
     <>
       {auth}
-
+      <p className="mb-4 text-center">
+        This tool scans your Spotify{' '}
+        <a
+          href="https://www.spotify.com/us/account/privacy/"
+          className="text-accent-foreground">
+          Extended Streaming History <RxExternalLink className="inline" />
+        </a>
+        <br />
+        and finds all the available charts on Encore for any song you&apos;ve
+        ever listened to.
+      </p>
       <SpotifyHistory authenticated={session.status === 'authenticated'} />
     </>
   );
@@ -76,6 +87,22 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
 
     const fetchChorusDb = chorusChartDb();
 
+    let artistTrackPlays = await getSpotifyDumpArtistTrackPlays();
+    let spotifyDataHandle;
+    if (artistTrackPlays == null) {
+      alert(
+        'Select the folder containing your extracted Spotify Extended Streaming History',
+      );
+      try {
+        spotifyDataHandle = await window.showDirectoryPicker({
+          id: 'spotify-dump',
+        });
+      } catch (err) {
+        console.log('User canceled picker');
+        return;
+      }
+    }
+
     console.log('scan local charts');
     try {
       setStatus({
@@ -94,28 +121,19 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
         ...prevStatus,
         status: 'done-scanning',
       }));
-    } catch {
-      console.log('User canceled picker');
-      return;
+    } catch (err) {
+      if (err instanceof Error && err.message == 'User canceled picker') {
+        return;
+      } else {
+        throw err;
+      }
     }
 
     console.log('get spotify listens');
-    let artistTrackPlays = await getSpotifyDumpArtistTrackPlays();
     if (artistTrackPlays == null) {
-      let spotifyDataHandle;
-
-      alert(
-        'Select the folder containing your extracted Spotify Extended Streaming History',
-      );
-      try {
-        spotifyDataHandle = await window.showDirectoryPicker({
-          id: 'spotify-dump',
-        });
-      } catch {
-        console.log('User canceled picker');
-        return;
+      if (spotifyDataHandle == null) {
+        throw new Error('Spotify data handle is null');
       }
-
       setStatus(prevStatus => ({
         ...prevStatus,
         status: 'processing-spotify-dump',
