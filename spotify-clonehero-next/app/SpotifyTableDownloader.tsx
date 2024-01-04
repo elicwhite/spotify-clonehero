@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useContext,
   useEffect,
@@ -86,7 +87,7 @@ const RENDERED_INSTRUMENTS = [
 
 type AllowedInstrument = (typeof RENDERED_INSTRUMENTS)[number];
 
-function InstrumentImage({
+const InstrumentImage = memo(function InstrumentImage({
   instrument,
   classNames,
   onClick,
@@ -111,7 +112,7 @@ function InstrumentImage({
       onClick={clickCallback}
     />
   );
-}
+});
 
 const instrumentFilter: FilterFn<RowType> = (
   row,
@@ -566,7 +567,7 @@ export default function SpotifyTableDownloader({
   );
 }
 
-function Filters({
+const Filters = memo(function Filters({
   filtersChanged,
 }: {
   filtersChanged: (instrument: AllowedInstrument[]) => void;
@@ -612,7 +613,7 @@ function Filters({
       })}
     </>
   );
-}
+});
 
 function DownloadButton({
   artist,
