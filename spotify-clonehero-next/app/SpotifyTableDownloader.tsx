@@ -20,6 +20,7 @@ import {
   getExpandedRowModel,
   getSortedRowModel,
   useReactTable,
+  OnChangeFn,
 } from '@tanstack/react-table';
 import {useVirtual} from 'react-virtual';
 import {removeStyleTags} from '@/lib/ui-utils';
@@ -85,6 +86,12 @@ const RENDERED_INSTRUMENTS = [
   'vocals',
 ] as const;
 
+const DEFAULT_SORTING = [
+  {id: 'playCount', desc: true},
+  {id: 'artist', desc: false},
+  {id: 'song', desc: false},
+];
+
 type AllowedInstrument = (typeof RENDERED_INSTRUMENTS)[number];
 
 const InstrumentImage = memo(function InstrumentImage({
@@ -142,6 +149,8 @@ const columns = [
   columnHelper.accessor('artist', {
     header: 'Artist',
     minSize: 250,
+    enableMultiSort: true,
+    sortingFn: 'alphanumeric',
     cell: props => {
       const icon = props.row.getIsExpanded() ? (
         <AiFillCaretDown className="inline" />
@@ -163,6 +172,8 @@ const columns = [
   columnHelper.accessor('song', {
     header: 'Song',
     minSize: 250,
+    enableMultiSort: true,
+    sortingFn: 'alphanumeric',
     cell: props => {
       return props.getValue();
     },
@@ -170,6 +181,7 @@ const columns = [
   columnHelper.accessor('playCount', {
     header: '# Plays',
     minSize: 250,
+    enableMultiSort: true,
     cell: props => {
       return props.getValue();
     },
@@ -177,6 +189,8 @@ const columns = [
   columnHelper.accessor('charter', {
     header: 'Charter',
     minSize: 200,
+    enableMultiSort: true,
+    sortingFn: 'alphanumeric',
     cell: props => {
       if (props.row.getIsExpanded()) {
         return null;
@@ -188,6 +202,7 @@ const columns = [
   columnHelper.accessor('instruments', {
     header: 'Instruments',
     minSize: 300,
+    enableSorting: false,
     cell: props => {
       if (props.row.getIsExpanded()) {
         return null;
@@ -212,6 +227,7 @@ const columns = [
   columnHelper.accessor('download', {
     header: 'Download',
     minSize: 100,
+    enableSorting: false,
     cell: props => {
       if (props.row.getIsExpanded()) {
         return null;
@@ -239,6 +255,7 @@ const columns = [
   columnHelper.accessor('previewUrl', {
     header: 'Preview',
     minSize: 100,
+    enableSorting: false,
     cell: props => {
       if (props.row.getIsExpanded()) {
         return null;
@@ -413,11 +430,25 @@ export default function SpotifyTableDownloader({
     [tracks, hasPlayCount, downloadState],
   );
 
-  const [sorting, setSorting] = useState<SortingState>([
-    {id: 'playCount', desc: true},
-    {id: 'artist', desc: false},
-    {id: 'song', desc: false},
-  ]);
+  const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
+
+  const setSortingHelper: OnChangeFn<SortingState> = useCallback(
+    sortingParam => {
+      let sort;
+      if (typeof sortingParam == 'function') {
+        sort = sortingParam(sorting);
+      } else {
+        sort = sortingParam;
+      }
+
+      if (sort.length == 0) {
+        return setSorting(DEFAULT_SORTING);
+      } else {
+        setSorting(sort);
+      }
+    },
+    [sorting],
+  );
 
   const [instrumentFilters, setInstrumentFilters] = useState<
     AllowedInstrument[]
@@ -445,6 +476,9 @@ export default function SpotifyTableDownloader({
       columnFilters,
       expanded: true,
     },
+    initialState: {
+      sorting: DEFAULT_SORTING,
+    },
     meta: {
       setDownloadState(index: number, state: TableDownloadStates) {
         setDownloadState(prev => {
@@ -454,8 +488,10 @@ export default function SpotifyTableDownloader({
     },
     enableExpanding: true,
     enableMultiSort: true,
+    // enableMultiRemove: false,
+    // enableSortingRemoval: false,
     getIsRowExpanded: (row: Row<RowType>) => row.original.numCharts > 1,
-    onSortingChange: setSorting,
+    onSortingChange: setSortingHelper,
     getSubRows: row => row.subRows,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -508,19 +544,45 @@ export default function SpotifyTableDownloader({
             {table.getHeaderGroups().map(headerGroup => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map(header => {
+                  // <div
+                  //   {...{
+                  //     className: header.column.getCanSort()
+                  //       ? 'cursor-pointer select-none'
+                  //       : '',
+                  //     onClick: header.column.getToggleSortingHandler(),
+                  //   }}>
+                  //   {flexRender(
+                  //     header.column.columnDef.header,
+                  //     header.getContext(),
+                  //   )}
+                  //   {{
+                  //     asc: ' 🔼',
+                  //     desc: ' 🔽',
+                  //   }[header.column.getIsSorted() as string] ?? null}
+                  // </div>;
+
                   return (
                     <TableHead
                       key={header.id}
                       colSpan={header.colSpan}
-                      className="bg-card py-0"
+                      className={`bg-card py-0 ${
+                        header.column.getCanSort()
+                          ? 'cursor-pointer select-none'
+                          : ''
+                      }`}
                       style={{
                         textAlign: (header.column.columnDef.meta as any)?.align,
                         width: header.getSize(),
-                      }}>
+                      }}
+                      onClick={header.column.getToggleSortingHandler()}>
                       {flexRender(
                         header.column.columnDef.header,
                         header.getContext(),
                       )}
+                      {{
+                        asc: ' 🔼',
+                        desc: ' 🔽',
+                      }[header.column.getIsSorted() as string] ?? null}
                     </TableHead>
                   );
                 })}
