@@ -20,7 +20,6 @@ import {
   getExpandedRowModel,
   getSortedRowModel,
   useReactTable,
-  OnChangeFn,
 } from '@tanstack/react-table';
 import {useVirtual} from 'react-virtual';
 import {removeStyleTags} from '@/lib/ui-utils';
@@ -73,6 +72,8 @@ type RowType = {
   previewUrl?: string | null;
   subRows: RowType[];
 };
+
+const ALWAYS_TRUE = () => true;
 
 const RENDERED_INSTRUMENTS = [
   'bass',
@@ -432,24 +433,6 @@ export default function SpotifyTableDownloader({
 
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
 
-  const setSortingHelper: OnChangeFn<SortingState> = useCallback(
-    sortingParam => {
-      let sort;
-      if (typeof sortingParam == 'function') {
-        sort = sortingParam(sorting);
-      } else {
-        sort = sortingParam;
-      }
-
-      if (sort.length == 0) {
-        return setSorting(DEFAULT_SORTING);
-      } else {
-        setSorting(sort);
-      }
-    },
-    [sorting],
-  );
-
   const [instrumentFilters, setInstrumentFilters] = useState<
     AllowedInstrument[]
   >([]);
@@ -488,10 +471,9 @@ export default function SpotifyTableDownloader({
     },
     enableExpanding: true,
     enableMultiSort: true,
-    // enableMultiRemove: false,
-    // enableSortingRemoval: false,
+    isMultiSortEvent: ALWAYS_TRUE,
     getIsRowExpanded: (row: Row<RowType>) => row.original.numCharts > 1,
-    onSortingChange: setSortingHelper,
+    onSortingChange: setSorting,
     getSubRows: row => row.subRows,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -522,6 +504,7 @@ export default function SpotifyTableDownloader({
 
   return (
     <>
+      <Button onClick={() => table.resetSorting()}>Reset Sorting</Button>
       <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-end">
         <span>
           {instrumentFilters.length !== RENDERED_INSTRUMENTS.length &&

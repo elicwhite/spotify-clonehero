@@ -22,6 +22,14 @@ type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
   Boolean(v);
 
+/*
+Todo: 
+- Add a time remaining progress bar
++ Fix sorting being weird 
+- Add link to "Other Tools" in navbar
+- Fix scrolling performance
+*/
+
 export default function Page() {
   let auth = null;
   const session = useSession();
