@@ -108,6 +108,15 @@ export async function scanForInstalledCharts(
   };
 }
 
+export async function getDefaultDownloadDirectory(): Promise<FileSystemDirectoryHandle> {
+  const songsDirHandle = await getSongsDirectoryHandle();
+  const downloadsHandle = await songsDirHandle.getDirectoryHandle(
+    'CHCT-downloads',
+    {create: true},
+  );
+  return downloadsHandle;
+}
+
 async function getBackupDirectory() {
   const root = await navigator.storage.getDirectory();
 
@@ -118,10 +127,45 @@ async function getBackupDirectory() {
   return backupDirHandle;
 }
 
+async function getFileOrDirectoryHandle(
+  parentHandle: FileSystemDirectoryHandle,
+  name: string,
+): Promise<null | FileSystemFileHandle | FileSystemDirectoryHandle> {
+  try {
+    return await parentHandle.getFileHandle(name, {
+      create: false,
+    });
+  } catch {
+    // It might be a directory
+  }
+
+  try {
+    return await parentHandle.getDirectoryHandle(name, {
+      create: false,
+    });
+  } catch {
+    // it doesn't exist
+  }
+
+  return null;
+}
+
 export async function moveToFolder(
-  handle: FileSystemFileHandle | FileSystemDirectoryHandle,
+  parentDirectoryHandle: FileSystemDirectoryHandle,
+  fileOrFolderName: string,
   toFolder: FileSystemDirectoryHandle,
-) {
+): Promise<{
+  newParentDirectoryHandle: FileSystemDirectoryHandle;
+  fileName: string;
+}> {
+  const handle = await getFileOrDirectoryHandle(
+    parentDirectoryHandle,
+    fileOrFolderName,
+  );
+  if (handle == null) {
+    throw new Error('File or folder does not exist');
+  }
+
   if (handle.kind === 'file') {
     if (await fileExists(toFolder, handle.name)) {
       await toFolder.removeEntry(handle.name, {recursive: true});
@@ -132,7 +176,11 @@ export async function moveToFolder(
     const writableStream = await newFileHandle.createWritable();
     const readableStream = await handle.getFile();
     await readableStream.stream().pipeTo(writableStream);
-    return newFileHandle;
+
+    return {
+      newParentDirectoryHandle: toFolder,
+      fileName: handle.name,
+    };
   } else if (handle.kind === 'directory') {
     if (await fileExists(toFolder, handle.name)) {
       await toFolder.removeEntry(handle.name, {recursive: true});
@@ -143,10 +191,13 @@ export async function moveToFolder(
     });
 
     for await (const entry of handle.values()) {
-      await moveToFolder(entry, backupDirHandle);
+      await moveToFolder(handle, entry.name, backupDirHandle);
     }
 
-    return backupDirHandle;
+    return {
+      newParentDirectoryHandle: toFolder,
+      fileName: backupDirHandle.name,
+    };
   }
 
   throw new Error('Unknown handle type');
@@ -169,28 +220,39 @@ async function fileExists(
 }
 
 export async function backupSong(
-  songHandle: FileSystemFileHandle | FileSystemDirectoryHandle,
+  parentDirectoryHandle: FileSystemDirectoryHandle,
+  fileOrFolderName: string,
 ): Promise<{
   revert: () => Promise<void>;
   deleteBackup: () => Promise<void>;
 }> {
   const backupRootDirHandle = await getBackupDirectory();
 
-  const newHandle = await moveToFolder(songHandle, backupRootDirHandle);
+  const moveResult = await moveToFolder(
+    parentDirectoryHandle,
+    fileOrFolderName,
+    backupRootDirHandle,
+  );
 
   const result = {
     async revert() {
-      // Ideally we'd move the backup back to the original location
-      // but we aren't tracking the parent FileSystemDirectoryHandle
-      // We'll just move it back to Songs, sadly.
-      const songsHandle = await getSongsDirectoryHandle();
-      await moveToFolder(newHandle, songsHandle);
-      // @ts-expect-error This API exists in Chrome, and we unfortunately rely on it
-      await newHandle.remove({recursive: true});
+      await moveToFolder(
+        moveResult.newParentDirectoryHandle,
+        moveResult.fileName,
+        parentDirectoryHandle,
+      );
+      await moveResult.newParentDirectoryHandle.removeEntry(
+        moveResult.fileName,
+        {
+          recursive: true,
+        },
+      );
     },
     async deleteBackup() {
-      // @ts-expect-error This API exists in Chrome, and we unfortunately rely on it
-      await newHandle.remove({recursive: true});
+      await moveResult.newParentDirectoryHandle.removeEntry(
+        moveResult.fileName,
+        {recursive: true},
+      );
     },
   };
 
@@ -202,12 +264,15 @@ export async function downloadSong(
   song: string,
   charter: string,
   url: string,
+  options?: {
+    folder?: FileSystemDirectoryHandle;
+  },
 ) {
   sendGAEvent({
     event: 'download_song',
   });
 
-  const handle = await getSongsDirectoryHandle();
+  // const handle = await getSongsDirectoryHandle();
   const response = await fetch(url, {
     headers: {
       accept: '*/*',
@@ -228,7 +293,10 @@ export async function downloadSong(
   const artistSongTitle = `${artist} - ${song} (${charter})`;
   const filename = filenamify(artistSongTitle, {replacement: ''});
 
-  await downloadAsFolder(handle, filename, body);
+  const downloadLocation =
+    options?.folder ?? (await getDefaultDownloadDirectory());
+
+  await downloadAsFolder(downloadLocation, filename, body);
 }
 
 async function downloadAsFolder(

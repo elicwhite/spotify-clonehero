@@ -17,11 +17,11 @@ export type SongAccumulator = {
   charter: string;
   data: SongIniData;
   file: string; // This will throw if you access it
-  fileHandle: FileSystemFileHandle | FileSystemDirectoryHandle;
-  // handleInfo: {
-  //   parentDir: FileSystemDirectoryHandle;
-  //   fileName: string;
-  // };
+  // fileHandle: FileSystemFileHandle | FileSystemDirectoryHandle;
+  handleInfo: {
+    parentDir: FileSystemDirectoryHandle;
+    fileName: string;
+  };
 };
 
 export default async function scanLocalCharts(
@@ -29,11 +29,36 @@ export default async function scanLocalCharts(
   accumulator: SongAccumulator[],
   callbackPerSong: () => void,
 ) {
-  let newestDate = 0;
-  let songIniData: SongIniData | null = null;
+  // Every entry in this directory handle should be a song, or folder of songs
+
   for await (const subHandle of directoryHandle.values()) {
     if (subHandle.kind == 'directory') {
-      await scanLocalCharts(subHandle, accumulator, callbackPerSong);
+      await scanLocalChartsDirectory(
+        directoryHandle,
+        subHandle,
+        accumulator,
+        callbackPerSong,
+      );
+    }
+  }
+}
+
+async function scanLocalChartsDirectory(
+  parentDirectoryHandle: FileSystemDirectoryHandle,
+  currentDirectoryHandle: FileSystemDirectoryHandle,
+  accumulator: SongAccumulator[],
+  callbackPerSong: () => void,
+) {
+  let newestDate = 0;
+  let songIniData: SongIniData | null = null;
+  for await (const subHandle of currentDirectoryHandle.values()) {
+    if (subHandle.kind == 'directory') {
+      await scanLocalChartsDirectory(
+        currentDirectoryHandle,
+        subHandle,
+        accumulator,
+        callbackPerSong,
+      );
     }
 
     if (subHandle.kind == 'file') {
@@ -60,7 +85,11 @@ export default async function scanLocalCharts(
       modifiedTime: new Date(newestDate).toISOString(),
       charter: songIniData?.charter,
       data: convertedSongIniData,
-      fileHandle: directoryHandle,
+      // fileHandle: currentDirectoryHandle,
+      handleInfo: {
+        parentDir: parentDirectoryHandle,
+        fileName: currentDirectoryHandle.name,
+      },
       file: '',
     };
     Object.defineProperty(chart, 'file', {

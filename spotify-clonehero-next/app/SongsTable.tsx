@@ -24,7 +24,6 @@ import CompareView from './CompareView';
 import {removeStyleTags} from '@/lib/ui-utils';
 import pMap from 'p-map';
 import {backupSong, downloadSong} from '@/lib/local-songs-folder';
-import {flushSync} from 'react-dom';
 import {sendGAEvent} from '@next/third-parties/google';
 import {SongWithRecommendation} from './CompareChartsToLocal';
 import {Button} from '@/components/ui/button';
@@ -186,9 +185,9 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
             ? song.recommendedChart.reasons
             : null,
         recommendedChart: song.recommendedChart,
-        fileHandle: song.fileHandle,
         data: song.data,
         downloadState: downloadState[index],
+        handleInfo: song.handleInfo,
       })),
     [songsWithUpdates, downloadState],
   );
@@ -248,7 +247,10 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
 
         updateDownloadState(id, 'downloading');
 
-        const result = await backupSong(song.fileHandle);
+        const result = await backupSong(
+          song.handleInfo.parentDir,
+          song.handleInfo.fileName,
+        );
 
         try {
           // @ts-expect-error Remove is only in Chrome > 110.
@@ -357,7 +359,6 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                     <Dialog.Panel className="relative transform rounded-lg shadow-xl ring-1 ring-slate-900/5 transition-all sm:my-8 sm:w-full sm:max-w-3xl">
                       <CompareView
                         id={currentlyReviewing.id}
-                        fileHandle={currentlyReviewing.fileHandle}
                         currentChart={currentlyReviewing.data}
                         currentModified={currentlyReviewing.modifiedTime}
                         recommendedChart={
@@ -367,6 +368,12 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                           new Date(
                             currentlyReviewing.recommendedChart.betterChart.modifiedTime,
                           )
+                        }
+                        parentDirectoryHandle={
+                          currentlyReviewing.handleInfo.parentDir
+                        }
+                        currentChartFileName={
+                          currentlyReviewing.handleInfo.fileName
                         }
                         recommendedChartUrl={
                           currentlyReviewing.recommendedChart.betterChart.file

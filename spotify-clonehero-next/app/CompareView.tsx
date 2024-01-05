@@ -21,7 +21,8 @@ export default function CompareView<
   currentModified,
   recommendedChart,
   recommendedModified,
-  fileHandle,
+  parentDirectoryHandle,
+  currentChartFileName,
   recommendedChartUrl,
   close,
   updateDownloadState,
@@ -31,7 +32,8 @@ export default function CompareView<
   currentModified: Date;
   recommendedChart: U;
   recommendedModified: Date;
-  fileHandle: FileSystemFileHandle | FileSystemDirectoryHandle;
+  parentDirectoryHandle: FileSystemDirectoryHandle;
+  currentChartFileName: string;
   recommendedChartUrl: string;
   close: () => void;
   updateDownloadState: (id: number, state: TableDownloadStates) => void;
@@ -44,9 +46,6 @@ export default function CompareView<
       recommendedModified.getTime(),
     );
   }
-
-  const browserSupportsRemove: boolean =
-    typeof (fileHandle as any).remove === 'function';
 
   const keepCurrentCallback = useCallback(async () => {
     sendGAEvent({
@@ -65,13 +64,19 @@ export default function CompareView<
       event: 'replace_current_chart',
     });
 
-    const result = await backupSong(fileHandle);
+    const result = await backupSong(
+      parentDirectoryHandle,
+      currentChartFileName,
+    );
     updateDownloadState(id, 'downloading');
     try {
       close();
-      // @ts-expect-error Remove is only in Chrome > 110.
-      await fileHandle.remove({recursive: true});
-      await downloadSong(artist, name, charter, recommendedChartUrl);
+      await parentDirectoryHandle.removeEntry(currentChartFileName, {
+        recursive: true,
+      });
+      await downloadSong(artist, name, charter, recommendedChartUrl, {
+        folder: parentDirectoryHandle,
+      });
       updateDownloadState(id, 'downloaded');
       await result.deleteBackup();
     } catch {
@@ -79,12 +84,13 @@ export default function CompareView<
       updateDownloadState(id, 'failed');
     }
   }, [
-    fileHandle,
-    id,
     recommendedChart,
-    recommendedChartUrl,
+    parentDirectoryHandle,
+    currentChartFileName,
     updateDownloadState,
+    id,
     close,
+    recommendedChartUrl,
   ]);
 
   const downloadKeepBothCallback = useCallback(async () => {
@@ -194,9 +200,9 @@ export default function CompareView<
       </div>
       <div className="bg-white dark:bg-slate-800 px-4 py-3 flex sm:px-6 space-x-4">
         <Button onClick={keepCurrentCallback}>Keep current chart</Button>
-        {browserSupportsRemove && (
-          <Button onClick={replaceCallback}>Replace current chart</Button>
-        )}
+
+        <Button onClick={replaceCallback}>Replace current chart</Button>
+
         <Button
           onClick={downloadKeepBothCallback}
           disabled={currentChart.charter == recommendedChart.charter}>
