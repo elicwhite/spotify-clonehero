@@ -647,10 +647,11 @@ const Filters = memo(function Filters({
             instrument={instrument}
             key={instrument}
             classNames={
-              selectedFilters.length === 0 ||
+              `cursor-pointer ` +
+              (selectedFilters.length === 0 ||
               selectedFilters.includes(instrument)
                 ? 'opacity-100'
-                : 'opacity-50'
+                : 'opacity-50')
             }
             onClick={callback}
           />
