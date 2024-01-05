@@ -63,12 +63,16 @@ async function scanLocalChartsDirectory(
 
     if (subHandle.kind == 'file') {
       const file = await subHandle.getFile();
-
-      if (subHandle.name == 'song.ini') {
-        const text = await file.text();
-        const values = parse(text);
-        // @ts-ignore Assuming JSON matches TypeScript
-        songIniData = values.iniObject?.song || values.iniObject?.Song;
+      try {
+        if (subHandle.name == 'song.ini') {
+          const text = await file.text();
+          const values = parse(text);
+          // @ts-ignore Assuming JSON matches TypeScript
+          songIniData = values.iniObject?.song || values.iniObject?.Song;
+        }
+      } catch (e) {
+        console.log('Could not scan song.ini of', currentDirectoryHandle.name);
+        continue;
       }
 
       if (file.lastModified > newestDate) {
