@@ -544,23 +544,6 @@ export default function SpotifyTableDownloader({
             {table.getHeaderGroups().map(headerGroup => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map(header => {
-                  // <div
-                  //   {...{
-                  //     className: header.column.getCanSort()
-                  //       ? 'cursor-pointer select-none'
-                  //       : '',
-                  //     onClick: header.column.getToggleSortingHandler(),
-                  //   }}>
-                  //   {flexRender(
-                  //     header.column.columnDef.header,
-                  //     header.getContext(),
-                  //   )}
-                  //   {{
-                  //     asc: ' 🔼',
-                  //     desc: ' 🔽',
-                  //   }[header.column.getIsSorted() as string] ?? null}
-                  // </div>;
-
                   return (
                     <TableHead
                       key={header.id}
