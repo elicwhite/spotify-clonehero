@@ -21,7 +21,11 @@ import {Dialog, Transition} from '@headlessui/react';
 
 import {AiOutlineCheck} from 'react-icons/ai';
 import CompareView from './CompareView';
-import {removeStyleTags} from '@/lib/ui-utils';
+import {
+  calculateTimeRemaining,
+  formatTimeRemaining,
+  removeStyleTags,
+} from '@/lib/ui-utils';
 import pMap from 'p-map';
 import {backupSong, downloadSong} from '@/lib/local-songs-folder';
 import {sendGAEvent} from '@next/third-parties/google';
@@ -215,6 +219,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
     'not-started' | 'started' | 'done'
   >('not-started');
   const [numUpdated, setNumUpdated] = useState(0);
+  const [startedUpdate, setStartedUpdate] = useState<Date | null>(null);
 
   const updateChartsWithSameCharter = useCallback(async () => {
     const before = Date.now();
@@ -223,6 +228,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
     });
     setNumUpdated(0);
     setUpdateState('started');
+    setStartedUpdate(new Date());
 
     await pMap(
       songState,
@@ -330,6 +336,21 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
     setOpen(false);
   }, []);
 
+  const updateTimeRemaining = useMemo(() => {
+    if (startedUpdate == null) {
+      return null;
+    }
+
+    return formatTimeRemaining(
+      calculateTimeRemaining(
+        startedUpdate,
+        updatesWithSameCharter.length,
+        numUpdated,
+        1000,
+      ),
+    );
+  }, [numUpdated, startedUpdate, updatesWithSameCharter.length]);
+
   return (
     <>
       {currentlyReviewing &&
@@ -400,9 +421,14 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         </div>
 
         {updateStatus == 'started' ? (
-          <span>
-            Updating, {numUpdated} of {updatesWithSameCharter.length}
-          </span>
+          <>
+            <span>
+              Updating, {numUpdated} of {updatesWithSameCharter.length}
+            </span>
+            <div>
+              <span>{updateTimeRemaining}</span>
+            </div>
+          </>
         ) : updateStatus == 'done' ? (
           <span>
             Updated {numUpdated} of {updatesWithSameCharter.length}

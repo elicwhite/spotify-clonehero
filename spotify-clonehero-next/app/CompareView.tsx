@@ -153,7 +153,7 @@ export default function CompareView<
               </td>
             </tr>
             {songIniOrder
-              // .slice(0, songIniOrder.indexOf('preview_start_time'))
+              .slice(0, songIniOrder.indexOf('preview_start_time'))
               .map(key => {
                 // @ts-ignore Need to fix the types of the chart data
                 const currentValue = currentChart[key];

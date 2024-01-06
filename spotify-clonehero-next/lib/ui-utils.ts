@@ -29,6 +29,23 @@ export function removeStyleTags(text: string) {
   return newText;
 }
 
+export function calculateTimeRemaining(
+  startTime: Date,
+  totalNum: number,
+  currentNum: number,
+  defaultEstimate: number,
+): number {
+  const currentTime = new Date();
+  const timeElapsed = currentTime.getTime() - startTime.getTime();
+
+  const timePerItemSoFar =
+    currentNum > 0 ? timeElapsed / currentNum : defaultEstimate;
+  const chartsRemaining = totalNum - currentNum;
+  const timeRemaining = chartsRemaining * timePerItemSoFar;
+
+  return timeRemaining;
+}
+
 export function formatTimeRemaining(timeInMillis: number) {
   const seconds = Math.ceil(timeInMillis / 1000);
   const minutes = Math.floor(seconds / 60);

@@ -26,15 +26,22 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
           'bg-background flex flex-col h-screen font-sans antialiased',
           fontSans.variable,
         )}>
-        <nav className="border-gray-200 dark:bg-gray-900">
+        <nav className="border-b border-border/60">
           <div className="max-w-screen-xl flex flex-wrap items-center justify-between mx-auto p-4">
-            <Link
-              href="/"
-              className="flex items-center space-x-3 rtl:space-x-reverse">
-              <span className="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">
-                Clone Hero Chart Tools
-              </span>
-            </Link>
+            <div className="flex flex-row gap-8">
+              <Link
+                href="/"
+                className="flex items-center space-x-3 rtl:space-x-reverse">
+                <span className="self-center text-xl font-semibold whitespace-nowrap dark:text-white">
+                  Clone Hero Chart Tools
+                </span>
+              </Link>
+              <Link href="/">
+                <Button variant="ghost" className="font-semibold">
+                  <span className="">More Tools</span>
+                </Button>
+              </Link>
+            </div>
 
             <nav className="flex items-center">
               <Link

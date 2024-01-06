@@ -3,7 +3,7 @@
 import {useCallback, useEffect, useState} from 'react';
 import {ScannedChart, scanCharts} from 'scan-chart-web';
 import {getChartIssues, getIssuesXLSX} from './ExcelBuilder';
-import {formatTimeRemaining} from '@/lib/ui-utils';
+import {calculateTimeRemaining, formatTimeRemaining} from '@/lib/ui-utils';
 import {Button} from '@/components/ui/button';
 
 const NOT_SUPPORTED =
@@ -129,17 +129,7 @@ function Scanner({
   let timeRemaining;
   // Calculate time remaining
   if (startTime && numFolders) {
-    const defaultEstimate = 500;
-    const now = new Date();
-
-    const totalCharts = numFolders;
-    const chartsSoFar = counter;
-
-    const elapsedTime = now.getTime() - startTime.getTime();
-    const timePerChartSoFar =
-      chartsSoFar > 0 ? elapsedTime / chartsSoFar : defaultEstimate;
-    const chartsRemaining = totalCharts - chartsSoFar;
-    timeRemaining = chartsRemaining * timePerChartSoFar;
+    timeRemaining = calculateTimeRemaining(startTime, numFolders, counter, 500);
   }
 
   return (
