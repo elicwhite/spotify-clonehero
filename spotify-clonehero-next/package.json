@@ -13,6 +13,7 @@
     "@headlessui/react": "^1.7.17",
     "@next/third-parties": "14.0.5-canary.26",
     "@radix-ui/react-slot": "^1.0.2",
+    "@sentry/nextjs": "^7.92.0",
     "@spotify/web-api-ts-sdk": "^1.1.2",
     "@tanstack/react-table": "^8.10.7",
     "@types/react-icons": "^3.0.0",
