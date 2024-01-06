@@ -90,8 +90,13 @@ async function getAllSpotifyPlays(handle: FileSystemDirectoryHandle) {
     }
 
     const json = await readJsonFile(entry);
-
-    results.push(...json);
+    if (Array.isArray(json)) {
+      results.push(...json);
+    } else {
+      console.error(
+        `Expected ${entry.name} to contain an array. Received ${typeof json}`,
+      );
+    }
   }
 
   if (!hasPdf) {
