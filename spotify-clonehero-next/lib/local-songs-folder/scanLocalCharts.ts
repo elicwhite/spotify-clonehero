@@ -89,7 +89,6 @@ async function scanLocalChartsDirectory(
       modifiedTime: new Date(newestDate).toISOString(),
       charter: songIniData?.charter,
       data: convertedSongIniData,
-      // fileHandle: currentDirectoryHandle,
       handleInfo: {
         parentDir: parentDirectoryHandle,
         fileName: currentDirectoryHandle.name,

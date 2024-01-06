@@ -504,7 +504,6 @@ export default function SpotifyTableDownloader({
 
   return (
     <>
-      <Button onClick={() => table.resetSorting()}>Reset Sorting</Button>
       <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-end">
         <span>
           {instrumentFilters.length !== RENDERED_INSTRUMENTS.length &&
@@ -614,9 +613,6 @@ const Filters = memo(function Filters({
         return prev.filter(i => i != instrument);
       } else {
         const newFilter = [...prev, instrument];
-        // if (newFilter.length === RENDERED_INSTRUMENTS.length) {
-        //   return [];
-        // }
         return newFilter;
       }
     });
