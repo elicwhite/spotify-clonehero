@@ -59,8 +59,8 @@ const columnHelper = createColumnHelper<RowType>();
 
 // Todo:
 // - Progress indicator when clicking on update from same charter
-// - Don't delete chart if download fails
-// If a song fails to download, delete the new folder when restoring backup
+// + Don't delete chart if download fails
+// - If a song fails to download, delete the new folder when restoring backup
 
 export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
   const [currentlyReviewing, setCurrentlyReviewing] = useState<RowType | null>(
@@ -253,13 +253,18 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         );
 
         try {
-          // @ts-expect-error Remove is only in Chrome > 110.
-          await song.fileHandle.remove({recursive: true});
+          song.handleInfo.parentDir.removeEntry(song.handleInfo.fileName, {
+            recursive: true,
+          });
+
           await downloadSong(
             artist,
             name,
             charter,
             song.recommendedChart.betterChart.file,
+            {
+              folder: song.handleInfo.parentDir,
+            },
           );
           updateDownloadState(id, 'downloaded');
           setNumUpdated(n => n + 1);

@@ -6,15 +6,6 @@ import {writeFile} from '@/lib/fileSystemHelpers';
 import scanLocalCharts, {SongAccumulator} from './scanLocalCharts';
 import {SngStream} from 'parse-sng';
 
-// Save chart
-// Replace chart
-// Scan folder
-// Get installed charts
-// Request song directory
-// Refresh permissions
-// Has permission
-// Get last scanned timestamp
-
 async function promptForSongsDirectory() {
   alert('Select your Songs directory');
 

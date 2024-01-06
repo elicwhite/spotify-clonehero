@@ -66,6 +66,7 @@ function songsReducer(state: SongState, action: SongStateActions): SongState {
 
 /* TODO:
 - Show progress indicator while downloading db from Enchor
+- Make sure songs are replaced to the original directory
 */
 export default function CompareChartsToLocal({
   rankingGroups,
