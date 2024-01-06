@@ -1,5 +1,6 @@
 import {levenshteinEditDistance} from 'levenshtein-edit-distance';
 import {parse} from '@/lib/ini-parser';
+import * as Sentry from '@sentry/nextjs';
 
 export type SongIniData = {
   name: string;
@@ -51,34 +52,49 @@ async function scanLocalChartsDirectory(
 ) {
   let newestDate = 0;
   let songIniData: SongIniData | null = null;
-  for await (const subHandle of currentDirectoryHandle.values()) {
-    if (subHandle.kind == 'directory') {
-      await scanLocalChartsDirectory(
-        currentDirectoryHandle,
-        subHandle,
-        accumulator,
-        callbackPerSong,
-      );
-    }
+  try {
+    for await (const subHandle of currentDirectoryHandle.values()) {
+      if (subHandle.kind == 'directory') {
+        await scanLocalChartsDirectory(
+          currentDirectoryHandle,
+          subHandle,
+          accumulator,
+          callbackPerSong,
+        );
+      }
 
-    if (subHandle.kind == 'file') {
-      const file = await subHandle.getFile();
-      try {
-        if (subHandle.name == 'song.ini') {
-          const text = await file.text();
-          const values = parse(text);
-          // @ts-ignore Assuming JSON matches TypeScript
-          songIniData = values.iniObject?.song || values.iniObject?.Song;
+      if (subHandle.kind == 'file') {
+        const file = await subHandle.getFile();
+        try {
+          if (subHandle.name == 'song.ini') {
+            const text = await file.text();
+            const values = parse(text);
+            // @ts-ignore Assuming JSON matches TypeScript
+            songIniData = values.iniObject?.song || values.iniObject?.Song;
+          }
+        } catch (e) {
+          console.log(
+            'Could not scan song.ini of',
+            currentDirectoryHandle.name,
+          );
+          continue;
         }
-      } catch (e) {
-        console.log('Could not scan song.ini of', currentDirectoryHandle.name);
-        continue;
-      }
 
-      if (file.lastModified > newestDate) {
-        newestDate = file.lastModified;
+        if (file.lastModified > newestDate) {
+          newestDate = file.lastModified;
+        }
       }
     }
+  } catch (e) {
+    const error = new Error(
+      `Error scanning directory ${parentDirectoryHandle.name}/${currentDirectoryHandle.name}`,
+      {
+        cause: e,
+      },
+    );
+    Sentry.captureException(error);
+    console.error(error.message);
+    return;
   }
 
   if (songIniData != null) {
