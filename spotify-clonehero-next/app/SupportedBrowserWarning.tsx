@@ -9,7 +9,7 @@ const NOT_SUPPORTED = !DIRECTORY_PICKER_SUPPROTED;
 export default function SupportedBrowserWarning({
   children,
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   if (NOT_SUPPORTED) {
     return (
