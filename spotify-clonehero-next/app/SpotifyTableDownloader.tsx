@@ -54,12 +54,19 @@ export type SpotifyPlaysRecommendations = {
   matchingCharts: ChartResponseEncore[];
 };
 
-type RowType = {
+type SongRow = {
   id: number;
   artist: string;
   song: string;
   playCount?: number;
-  numCharts: number;
+  previewUrl?: string | null;
+  subRows: ChartRow[];
+};
+
+type ChartRow = {
+  id: number;
+  artist: string;
+  song: string;
   charter: string;
   instruments: {[instrument: string]: number};
   download: {
@@ -69,9 +76,9 @@ type RowType = {
     file: string;
     state: TableDownloadStates;
   };
-  previewUrl?: string | null;
-  subRows: RowType[];
 };
+
+type RowType = Partial<SongRow> & Partial<ChartRow>;
 
 const ALWAYS_TRUE = () => true;
 
@@ -197,7 +204,13 @@ const columns = [
         return null;
       }
 
-      return removeStyleTags(props.getValue() || '');
+      const value = props.getValue(); // as ChartRow['charter'] | undefined;
+
+      if (value == null) {
+        return null;
+      }
+
+      return removeStyleTags(value || '');
     },
   }),
   columnHelper.accessor('instruments', {
@@ -209,9 +222,15 @@ const columns = [
         return null;
       }
 
+      const value = props.getValue(); // as ChartRow['instruments'] | undefined;
+
+      if (value == null) {
+        return null;
+      }
+
       return (
         <>
-          {Object.keys(props.getValue())
+          {Object.keys(value)
             // @ts-ignore Don't know how to force TS to know
             .filter(instrument => RENDERED_INSTRUMENTS.includes(instrument))
             // @ts-ignore Don't know how to force TS to know
@@ -234,7 +253,13 @@ const columns = [
         return null;
       }
 
-      const {artist, song, charter, file, state} = props.getValue();
+      const value = props.getValue(); // as ChartRow['download'] | undefined;
+
+      if (value == null) {
+        return null;
+      }
+
+      const {artist, song, charter, file, state} = value;
       const updateDownloadState = props.table.options.meta?.setDownloadState;
       function update(state: TableDownloadStates) {
         if (updateDownloadState != null) {
@@ -259,12 +284,16 @@ const columns = [
     enableSorting: false,
     cell: props => {
       // Verify this logic
-      if (!props.row.getIsExpanded()) {
+      const url = props.getValue(); // as SongRow['previewUrl'] | undefined;
+      if (!props.row.getIsExpanded() || !url) {
         return null;
       }
 
       const {artist, song} = props.row.original;
-      const url = props.getValue();
+
+      if (artist == null || song == null) {
+        return null;
+      }
 
       if (url == null) {
         return <LookUpPreviewButton artist={artist} song={song} />;
@@ -365,68 +394,37 @@ export default function SpotifyTableDownloader({
   const trackState = useMemo(
     () =>
       tracks.map(
-        (track, index): RowType => ({
+        (track, index): SongRow => ({
           id: index,
           artist: track.artist,
           song: track.song,
           ...(hasPlayCount ? {playCount: track.playCount} : {}),
-          numCharts: track.matchingCharts.length,
-          charter: track.matchingCharts[0].charter,
-          instruments: Object.keys(track.matchingCharts[0])
-            .filter(
-              key =>
-                key.startsWith('diff_') &&
-                (track.matchingCharts[0][
-                  key as keyof ChartResponseEncore
-                ] as number) >= 0,
-            )
-            .map(key => ({
-              [key.replace('diff_', '')]: track.matchingCharts[0][
-                key as keyof ChartResponseEncore
-              ] as number,
-            }))
-            .reduce((a, b) => ({...a, ...b}), {}),
-          download: {
-            artist: track.artist,
-            song: track.song,
-            charter: track.matchingCharts[0].charter,
-            file: track.matchingCharts[0].file,
-            state: downloadState[index],
-          },
           previewUrl: track.previewUrl,
-          subRows:
-            track.matchingCharts.length == 1
-              ? []
-              : track.matchingCharts.map((chart, subIndex) => ({
-                  id: subIndex,
-                  artist: chart.artist,
-                  song: chart.name,
-                  ...(hasPlayCount ? {playCount: track.playCount} : {}),
-                  charter: chart.charter,
-                  numCharts: 1,
-                  subRows: [],
-                  instruments: Object.keys(chart)
-                    .filter(
-                      key =>
-                        key.startsWith('diff_') &&
-                        (chart[key as keyof ChartResponseEncore] as number) >=
-                          0,
-                    )
-                    .map(key => ({
-                      [key.replace('diff_', '')]: chart[
-                        key as keyof ChartResponseEncore
-                      ] as number,
-                    }))
-                    .reduce((a, b) => ({...a, ...b}), {}),
-                  download: {
-                    artist: track.artist,
-                    song: track.song,
-                    charter: chart.charter,
-                    file: chart.file,
-                    state: downloadState[index],
-                  },
-                  previewUrl: track.previewUrl,
-                })),
+          subRows: track.matchingCharts.map((chart, subIndex) => ({
+            id: subIndex,
+            artist: chart.artist,
+            song: chart.name,
+            charter: chart.charter,
+            instruments: Object.keys(chart)
+              .filter(
+                key =>
+                  key.startsWith('diff_') &&
+                  (chart[key as keyof ChartResponseEncore] as number) >= 0,
+              )
+              .map(key => ({
+                [key.replace('diff_', '')]: chart[
+                  key as keyof ChartResponseEncore
+                ] as number,
+              }))
+              .reduce((a, b) => ({...a, ...b}), {}),
+            download: {
+              artist: track.artist,
+              song: track.song,
+              charter: chart.charter,
+              file: chart.file,
+              state: downloadState[index],
+            },
+          })),
         }),
       ),
     [tracks, hasPlayCount, downloadState],
@@ -473,7 +471,7 @@ export default function SpotifyTableDownloader({
     enableExpanding: true,
     enableMultiSort: true,
     isMultiSortEvent: ALWAYS_TRUE,
-    getIsRowExpanded: (row: Row<RowType>) => row.original.numCharts > 1,
+    getIsRowExpanded: (row: Row<RowType>) => row.original.subRows != null,
     onSortingChange: setSorting,
     getSubRows: row => row.subRows,
     getCoreRowModel: getCoreRowModel(),
@@ -503,12 +501,20 @@ export default function SpotifyTableDownloader({
     setInstrumentFilters(filters);
   }, []);
 
+  const numMatchingCharts = useMemo(
+    () =>
+      rows
+        .map(row => row.original.subRows?.length || 0)
+        .reduce((acc, num) => acc + num, 0),
+    [rows],
+  );
+
   return (
     <>
       <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-end">
         <span>
           {instrumentFilters.length !== RENDERED_INSTRUMENTS.length &&
-            `${table.getRowModel().rows.length} charts for `}
+            `${numMatchingCharts} charts for `}
           {tracks.length} songs found
         </span>
 
@@ -568,7 +574,9 @@ export default function SpotifyTableDownloader({
                   {row.getVisibleCells().map(cell => {
                     return (
                       <TableCell
-                        className={row.getIsExpanded() ? 'py-2' : ''}
+                        className={
+                          row.getIsExpanded() ? 'py-2 bg-secondary' : ''
+                        }
                         key={cell.id}
                         style={{
                           textAlign: (cell.column.columnDef.meta as any)?.align,

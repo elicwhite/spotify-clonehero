@@ -29,10 +29,10 @@ Todo:
 + Add a time remaining progress bar
 + Fix sorting being weird 
 + Add link to "Other Tools" in navbar
++ Show chart names and artists for each chart
++ Add unsupported browser warning
 - Fix scrolling performance
-- Add unsupported browser warning
 - Show errors to the user?
-- Show chart names and artists for each chart
 - Show preview button on song row
 
 Updates
