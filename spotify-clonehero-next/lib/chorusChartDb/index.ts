@@ -3,6 +3,7 @@ import {levenshteinEditDistance} from 'levenshtein-edit-distance';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import fetchNewCharts from './fetchNewCharts';
 import {readJsonFile, writeFile} from '@/lib/fileSystemHelpers';
+import {search, Searcher} from 'fast-fuzzy';
 
 const DEBUG = false;
 
@@ -44,20 +45,31 @@ export function findMatchingCharts(
   artist: string,
   song: string,
   charts: ChartResponseEncore[],
+  artistSearcher?: Searcher<
+    ChartResponseEncore,
+    {
+      keySelector: (chart: ChartResponseEncore) => string[];
+      threshold: number;
+    }
+  >,
 ) {
+  if (artistSearcher != null) {
+    const artistResult = artistSearcher.search(artist);
+
+    const nameResult = search(song, artistResult, {
+      keySelector: chart => [chart.name],
+      threshold: 1,
+    });
+
+    return nameResult;
+  }
+
   const results = charts.filter(chart => {
     if (chart.artist === artist && chart.name === song) {
       return true;
     }
   });
 
-  // const results = charts.filter(chart => {
-  //   const artistDistance = levenshteinEditDistance(chart.artist, artist);
-  //   const songDistance = levenshteinEditDistance(chart.name, song);
-
-  //   const match = artistDistance < 2 && songDistance < 2;
-  //   return match;
-  // });
   return results;
 }
 

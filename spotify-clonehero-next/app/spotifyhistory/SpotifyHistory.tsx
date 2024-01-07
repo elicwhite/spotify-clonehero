@@ -18,6 +18,7 @@ import {signIn, signOut, useSession} from 'next-auth/react';
 import {Button} from '@/components/ui/button';
 import {RxExternalLink} from 'react-icons/rx';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
+import {Searcher} from 'fast-fuzzy';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -31,6 +32,11 @@ Todo:
 - Fix scrolling performance
 - Add unsupported browser warning
 - Show errors to the user?
+- Show chart names and artists for each chart
+- Show preview button on song row
+
+Updates
+  - Switch to exact match
 */
 
 export default function Page() {
@@ -176,9 +182,6 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
 
     const allChorusCharts = await fetchChorusDb;
 
-    // Yield to React to let it update State
-    await pause();
-
     console.log('finding matches');
     setStatus(prevStatus => ({
       ...prevStatus,
@@ -186,16 +189,25 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     }));
 
     // Yield to React to let it update State
-    await new Promise(resolve => {
-      setTimeout(resolve, 100);
-    });
+    await pause();
 
+    const beforeSearcher = Date.now();
+    const artistSearcher = new Searcher(allChorusCharts, {
+      keySelector: chart => chart.artist,
+      threshold: 1,
+      useDamerau: false,
+      useSellers: false,
+    });
+    console.log('Created index in', Date.now() - beforeSearcher, 'ms');
+
+    const beforeMatching = Date.now();
     const recommendedCharts = notInstalledSongs
       .map(([artist, song, playCount]) => {
         const matchingCharts = findMatchingCharts(
           artist,
           song,
           allChorusCharts,
+          artistSearcher,
         );
 
         if (matchingCharts.length == 0) {
@@ -210,6 +222,8 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
         };
       })
       .filter(_Boolean);
+
+    console.log('Found matches in', Date.now() - beforeMatching, 'ms');
 
     setStatus(prevStatus => ({
       ...prevStatus,

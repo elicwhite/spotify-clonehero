@@ -258,7 +258,8 @@ const columns = [
     minSize: 100,
     enableSorting: false,
     cell: props => {
-      if (props.row.getIsExpanded()) {
+      // Verify this logic
+      if (!props.row.getIsExpanded()) {
         return null;
       }
 
@@ -397,9 +398,9 @@ export default function SpotifyTableDownloader({
             track.matchingCharts.length == 1
               ? []
               : track.matchingCharts.map((chart, subIndex) => ({
-                  id: index,
-                  artist: track.artist,
-                  song: track.song,
+                  id: subIndex,
+                  artist: chart.artist,
+                  song: chart.name,
                   ...(hasPlayCount ? {playCount: track.playCount} : {}),
                   charter: chart.charter,
                   numCharts: 1,
