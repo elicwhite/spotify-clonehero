@@ -14,8 +14,8 @@ export const fontSans = FontSans({
 });
 
 export const metadata: Metadata = {
-  title: 'Clone Hero Library Update Manager',
-  description: 'Manage updates to your Clone Hero charts',
+  title: 'Music Charts Tools',
+  description: 'Tools to manage Clone Hero charts',
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
@@ -33,7 +33,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
                 href="/"
                 className="flex items-center space-x-3 rtl:space-x-reverse">
                 <span className="self-center text-xl font-semibold whitespace-nowrap dark:text-white">
-                  Clone Hero Chart Tools
+                  Music Charts Tools
                 </span>
               </Link>
               <Link href="/">
