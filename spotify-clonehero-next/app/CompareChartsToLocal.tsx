@@ -14,6 +14,7 @@ import {
   RankingGroups,
   selectChart,
 } from '@/lib/chartSelection';
+import SupportedBrowserWarning from './SupportedBrowserWarning';
 
 export type RecommendedChart =
   | {
@@ -173,17 +174,19 @@ export default function CompareChartsToLocal({
 
   return (
     <>
-      <Button
-        disabled={songsState.songs == null && songsState.songsCounted > 0}
-        onClick={handler}>
-        {songsState.songs == null && songsState.songsCounted == 0
-          ? 'Select Clone Hero Songs Folder'
-          : 'Rescan'}
-      </Button>
-      {songsState.songs == null && (
-        <h1>{songsState.songsCounted} songs scanned</h1>
-      )}
-      {songsState.songs && <SongsTable songs={songsState.songs} />}
+      <SupportedBrowserWarning>
+        <Button
+          disabled={songsState.songs == null && songsState.songsCounted > 0}
+          onClick={handler}>
+          {songsState.songs == null && songsState.songsCounted == 0
+            ? 'Select Clone Hero Songs Folder'
+            : 'Rescan'}
+        </Button>
+        {songsState.songs == null && (
+          <h1>{songsState.songsCounted} songs scanned</h1>
+        )}
+        {songsState.songs && <SongsTable songs={songsState.songs} />}
+      </SupportedBrowserWarning>
     </>
   );
 }

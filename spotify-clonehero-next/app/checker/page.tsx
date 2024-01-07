@@ -1,9 +1,9 @@
 import dynamic from 'next/dynamic';
 
-const Scanner = dynamic(() => import('./Scanner'), {
+const Checker = dynamic(() => import('./Checker'), {
   ssr: false,
 });
 
-export default function Checker() {
-  return <Scanner />;
+export default function Page() {
+  return <Checker />;
 }

@@ -1,5 +1,9 @@
-import Spotify from './Spotify';
+import dynamic from 'next/dynamic';
 
-export default function page() {
+const Spotify = dynamic(() => import('./Spotify'), {
+  ssr: false,
+});
+
+export default function Page() {
   return <Spotify />;
 }

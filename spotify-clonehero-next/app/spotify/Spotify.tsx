@@ -11,7 +11,6 @@ import {
 } from '@/lib/local-songs-folder/scanLocalCharts';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
-import {selectChart} from '../../lib/chartSelection';
 import SpotifyTableDownloader, {
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';
@@ -25,17 +24,19 @@ import {
 import {Icons} from '@/components/icons';
 import Image from 'next/image';
 import spotifyLogoBlack from '@/public/assets/spotify/logo_black.png';
+import SupportedBrowserWarning from '../SupportedBrowserWarning';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
   Boolean(v);
 
 /* TODO:
-- Add Spotify logos
++ Add Spotify logos
 - Add progress messages for scanning
 - Make header prettier?
 + Make table buttons match theme
 - List what Spotify Playlist the song is in
+- Make spotify logo light in dark mode
 */
 
 export default function Spotify() {
@@ -62,26 +63,28 @@ export default function Spotify() {
   }
 
   return (
-    <div className="w-full">
-      <div className="flex flex-col items-end px-6">
-        <h3 className="text-xl">
-          All data provided by
-          <Image
-            src={spotifyLogoBlack}
-            sizes="8em"
-            className="inline px-2"
-            priority={true}
-            style={{
-              width: 'auto',
-              height: 'auto',
-            }}
-            alt="Spotify"
-          />
-        </h3>
-        <Button onClick={() => signOut()}>Sign out</Button>
+    <SupportedBrowserWarning>
+      <div className="w-full">
+        <div className="flex flex-col items-end px-6">
+          <h3 className="text-xl">
+            All data provided by
+            <Image
+              src={spotifyLogoBlack}
+              sizes="8em"
+              className="inline px-2"
+              priority={true}
+              style={{
+                width: 'auto',
+                height: 'auto',
+              }}
+              alt="Spotify"
+            />
+          </h3>
+          <Button onClick={() => signOut()}>Sign out</Button>
+        </div>
+        <LoggedIn />
       </div>
-      <LoggedIn />
-    </div>
+    </SupportedBrowserWarning>
   );
 }
 

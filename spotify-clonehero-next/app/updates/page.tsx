@@ -1,6 +1,11 @@
 'use client';
 
-import CompareChartsToLocal from '../CompareChartsToLocal';
+import dynamic from 'next/dynamic';
+
+const CompareChartsToLocal = dynamic(() => import('../CompareChartsToLocal'), {
+  ssr: false,
+});
+
 import {testSameCharter} from '@/lib/chartSelection/comparisonTests';
 
 const RANKING_GROUPS = [[testSameCharter]];

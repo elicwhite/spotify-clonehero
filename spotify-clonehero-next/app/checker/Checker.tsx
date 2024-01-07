@@ -5,10 +5,7 @@ import {ScannedChart, scanCharts} from 'scan-chart-web';
 import {getChartIssues, getIssuesXLSX} from './ExcelBuilder';
 import {calculateTimeRemaining, formatTimeRemaining} from '@/lib/ui-utils';
 import {Button} from '@/components/ui/button';
-
-const NOT_SUPPORTED =
-  typeof window === 'undefined' ||
-  typeof window.showDirectoryPicker !== 'function';
+import SupportedBrowserWarning from '../SupportedBrowserWarning';
 
 export default function CheckerPage() {
   const [keyId, setKeyId] = useState<number>(0);
@@ -38,20 +35,13 @@ export default function CheckerPage() {
         <br /> providing an Excel file with all the issues found.
         <br />
       </p>
-      {NOT_SUPPORTED && (
-        <p className="mb-4 text-center text-red-700">
-          This tool does not work in your browser.
-          <br />
-          Try again using Chrome / Edge.
-        </p>
-      )}
-      <Button disabled={NOT_SUPPORTED} onClick={handler}>
-        Choose Folder
-      </Button>
+      <SupportedBrowserWarning>
+        <Button onClick={handler}>Choose Folder</Button>
 
-      {directoryHandle == null ? null : (
-        <Scanner key={keyId} directoryHandle={directoryHandle} />
-      )}
+        {directoryHandle == null ? null : (
+          <Scanner key={keyId} directoryHandle={directoryHandle} />
+        )}
+      </SupportedBrowserWarning>
     </>
   );
 }

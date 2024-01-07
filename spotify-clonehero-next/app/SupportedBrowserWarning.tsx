@@ -6,7 +6,11 @@ const DIRECTORY_PICKER_SUPPROTED =
 
 const NOT_SUPPORTED = !DIRECTORY_PICKER_SUPPROTED;
 
-export default function SupportedBrowserWarning() {
+export default function SupportedBrowserWarning({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   if (NOT_SUPPORTED) {
     return (
       <p className="text-lg text-red-700 mt-2">
@@ -16,5 +20,5 @@ export default function SupportedBrowserWarning() {
     );
   }
 
-  return null;
+  return children ?? null;
 }
