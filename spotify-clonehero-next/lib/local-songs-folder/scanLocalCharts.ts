@@ -143,57 +143,24 @@ function convertValues(songIniData: SongIniData) {
   return Object.fromEntries(mappedEntries);
 }
 
+function createLookupKey(artist: string, song: string, charter: string) {
+  return `${artist} - ${song} - ${charter}`;
+}
 export async function createIsInstalledFilter(
   installedSongs: SongAccumulator[],
 ) {
-  const installedArtistsSongs = new Map<string, string[]>();
+  const installedCharts = new Set<string>();
 
   for (const installedSong of installedSongs) {
-    const {artist, song} = installedSong;
-
-    if (installedArtistsSongs.get(artist) == null) {
-      installedArtistsSongs.set(artist, []);
-    }
-
-    installedArtistsSongs.get(artist)!.push(song);
+    const {artist, song, charter} = installedSong;
+    installedCharts.add(createLookupKey(artist, song, charter));
   }
 
-  return function isInstalled(artist: string, song: string) {
-    let likelyArtists = [];
-
-    for (const installedArtist of installedArtistsSongs.keys()) {
-      const artistDistance = levenshteinEditDistance(installedArtist, artist);
-      if (artistDistance <= 2) {
-        likelyArtists.push(installedArtist);
-      }
-    }
-
-    if (likelyArtists.length == 0) {
-      return false;
-    }
-
-    const artistSongs = likelyArtists
-      .map(artist => installedArtistsSongs.get(artist)!)
-      .flat();
-
-    if (artistSongs.length == 0) {
-      return false;
-    }
-
-    let likelySong;
-
-    for (const installedSong of artistSongs) {
-      const songDistance = levenshteinEditDistance(installedSong, song);
-      if (songDistance <= 4) {
-        likelySong = installedSong;
-      }
-    }
-
-    if (likelySong != null) {
-      return true;
-    }
-
-    // Some installed songs have (2x double bass) suffixes.
-    return artistSongs.some(artistSong => artistSong.includes(song));
+  return function isChartInstalled(
+    artist: string,
+    song: string,
+    charter: string,
+  ) {
+    return installedCharts.has(createLookupKey(artist, song, charter));
   };
 }

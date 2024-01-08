@@ -41,11 +41,21 @@ export default async function getChorusChartDb(): Promise<
   return finalCharts;
 }
 
-export function findMatchingCharts(
+export function findMatchingChartsExact(
   artist: string,
   song: string,
   charts: ChartResponseEncore[],
-  artistSearcher?: Searcher<
+) {
+  return charts.filter(chart => {
+    return chart.artist == artist && chart.name == song;
+  });
+}
+
+export function findMatchingCharts(
+  artist: string,
+  song: string,
+  // charts: ChartResponseEncore[],
+  artistSearcher: Searcher<
     ChartResponseEncore,
     {
       keySelector: (chart: ChartResponseEncore) => string[];
@@ -53,24 +63,24 @@ export function findMatchingCharts(
     }
   >,
 ) {
-  if (artistSearcher != null) {
-    const artistResult = artistSearcher.search(artist);
+  // if (artistSearcher != null) {
+  const artistResult = artistSearcher.search(artist);
 
-    const nameResult = search(song, artistResult, {
-      keySelector: chart => [chart.name],
-      threshold: 1,
-    });
-
-    return nameResult;
-  }
-
-  const results = charts.filter(chart => {
-    if (chart.artist === artist && chart.name === song) {
-      return true;
-    }
+  const nameResult = search(song, artistResult, {
+    keySelector: chart => [chart.name],
+    threshold: 1,
   });
 
-  return results;
+  return nameResult;
+  // }
+
+  // const results = charts.filter(chart => {
+  //   if (chart.artist === artist && chart.name === song) {
+  //     return true;
+  //   }
+  // });
+
+  // return results;
 }
 
 function reduceCharts(

@@ -1,6 +1,11 @@
 'use client';
 
-import CompareChartsToLocal from '../CompareChartsToLocal';
+import dynamic from 'next/dynamic';
+
+const CompareChartsToLocal = dynamic(() => import('../CompareChartsToLocal'), {
+  ssr: false,
+});
+
 import {
   testPreferDrums,
   testPreferGuitar,
@@ -23,6 +28,7 @@ const RANKING_GROUPS = [
 
 /* TODO:
 - Show progress indicator while downloading db from Enchor
+- Show all matching charts
 */
 export default function SongsPicker() {
   return (
@@ -36,7 +42,7 @@ export default function SongsPicker() {
         <br />
         backup your Songs folder before using this tool.
       </p>
-      <CompareChartsToLocal rankingGroups={RANKING_GROUPS} />
+      <CompareChartsToLocal rankingGroups={RANKING_GROUPS} exact={false} />
     </>
   );
 }

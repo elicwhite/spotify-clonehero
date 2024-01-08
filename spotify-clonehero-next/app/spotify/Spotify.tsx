@@ -10,7 +10,10 @@ import {
   createIsInstalledFilter,
 } from '@/lib/local-songs-folder/scanLocalCharts';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
-import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
+import chorusChartDb, {
+  findMatchingCharts,
+  findMatchingChartsExact,
+} from '@/lib/chorusChartDb';
 import SpotifyTableDownloader, {
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';
@@ -25,6 +28,8 @@ import {Icons} from '@/components/icons';
 import Image from 'next/image';
 import spotifyLogoBlack from '@/public/assets/spotify/logo_black.png';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
+import {ChartResponseEncore} from '@/lib/chartSelection';
+import {Searcher} from 'fast-fuzzy';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -101,6 +106,8 @@ function LoggedIn() {
     update();
     let installedCharts: SongAccumulator[] | undefined;
 
+    const fetchDb = chorusChartDb();
+
     try {
       const scanResult = await scanForInstalledCharts();
       installedCharts = scanResult.installedCharts;
@@ -110,17 +117,24 @@ function LoggedIn() {
     }
 
     const isInstalled = await createIsInstalledFilter(installedCharts);
-    const notInstalledSongs = filterInstalledSongs(tracks, isInstalled);
+    const allChorusCharts = await fetchDb;
+    const notInstalledCharts = filterInstalledCharts(
+      allChorusCharts,
+      isInstalled,
+    );
 
-    const allChorusCharts = await chorusChartDb();
+    const artistSearcher = new Searcher(notInstalledCharts, {
+      keySelector: chart => chart.artist,
+      threshold: 1,
+      useDamerau: false,
+      useSellers: false,
+    });
 
-    const recommendedCharts = notInstalledSongs
-      .map(([artist, song, previewUrl]) => {
-        const matchingCharts = findMatchingCharts(
-          artist,
-          song,
-          allChorusCharts,
-        );
+    const recommendedCharts = tracks
+      .map(({name, artists, preview_url}) => {
+        const artist = artists[0];
+
+        const matchingCharts = findMatchingCharts(artist, name, artistSearcher);
 
         if (matchingCharts.length == 0) {
           return null;
@@ -128,8 +142,8 @@ function LoggedIn() {
 
         return {
           artist,
-          song,
-          previewUrl,
+          song: name,
+          previewUrl: preview_url,
           matchingCharts,
         };
       })
@@ -157,21 +171,11 @@ function LoggedIn() {
   );
 }
 
-function filterInstalledSongs(
-  spotifyTracks: TrackResult[],
-  isInstalled: (artist: string, song: string) => boolean,
-): [artist: string, song: string, previewUrl: string | null][] {
-  const notInstalled: [
-    artist: string,
-    song: string,
-    previewUrl: string | null,
-  ][] = [];
-
-  for (const track of spotifyTracks) {
-    if (!isInstalled(track.artists[0], track.name)) {
-      notInstalled.push([track.artists[0], track.name, track.preview_url]);
-    }
-  }
-
-  return notInstalled;
+function filterInstalledCharts(
+  allCharts: ChartResponseEncore[],
+  isInstalled: (artist: string, song: string, charter: string) => boolean,
+): ChartResponseEncore[] {
+  return allCharts.filter(
+    chart => !isInstalled(chart.artist, chart.name, chart.charter),
+  );
 }

@@ -8,6 +8,7 @@ import {useCallback, useState} from 'react';
 import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import {
+  ArtistTrackPlays,
   getSpotifyDumpArtistTrackPlays,
   processSpotifyDump,
 } from '@/lib/spotify-sdk/HistoryDumpParsing';
@@ -19,6 +20,7 @@ import {Button} from '@/components/ui/button';
 import {RxExternalLink} from 'react-icons/rx';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
 import {Searcher} from 'fast-fuzzy';
+import {ChartResponseEncore} from '@/lib/chartSelection';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -31,12 +33,13 @@ Todo:
 + Add link to "Other Tools" in navbar
 + Show chart names and artists for each chart
 + Add unsupported browser warning
++ Fix scanning performance
 - Fix scrolling performance
 - Show errors to the user?
-- Show preview button on song row
++ Show preview button on song row
 
 Updates
-  - Switch to exact match
+  + Switch to exact match
 */
 
 export default function Page() {
@@ -164,13 +167,26 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       artistTrackPlays = await processSpotifyDump(spotifyDataHandle);
     }
 
+    const flatTrackPlays = flattenArtistTrackPlays(artistTrackPlays);
+
     console.log('create installed filter');
+    const beforeInstalled = Date.now();
     const isInstalled = await createIsInstalledFilter(installedCharts);
-    console.log('filter songs');
-    const notInstalledSongs = filterInstalledSongs(
-      artistTrackPlays,
+    console.log(
+      'Took',
+      (Date.now() - beforeInstalled) / 1000,
+      'ss to create filter',
+    );
+
+    const allChorusCharts = await fetchChorusDb;
+
+    console.log('filter out installed charts');
+    const beforeFilter = Date.now();
+    const notInstalledCharts = filterInstalledCharts(
+      allChorusCharts,
       isInstalled,
     );
+    console.log('Took', (Date.now() - beforeFilter) / 1000, 'ss to filter');
     console.log('done filtering songs');
     setStatus(prevStatus => ({
       ...prevStatus,
@@ -179,8 +195,6 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
 
     // Yield to React to let it update State
     await pause();
-
-    const allChorusCharts = await fetchChorusDb;
 
     console.log('finding matches');
     setStatus(prevStatus => ({
@@ -192,7 +206,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     await pause();
 
     const beforeSearcher = Date.now();
-    const artistSearcher = new Searcher(allChorusCharts, {
+    const artistSearcher = new Searcher(notInstalledCharts, {
       keySelector: chart => chart.artist,
       threshold: 1,
       useDamerau: false,
@@ -201,14 +215,9 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     console.log('Created index in', Date.now() - beforeSearcher, 'ms');
 
     const beforeMatching = Date.now();
-    const recommendedCharts = notInstalledSongs
+    const recommendedCharts = flatTrackPlays
       .map(([artist, song, playCount]) => {
-        const matchingCharts = findMatchingCharts(
-          artist,
-          song,
-          allChorusCharts,
-          artistSearcher,
-        );
+        const matchingCharts = findMatchingCharts(artist, song, artistSearcher);
 
         if (matchingCharts.length == 0) {
           return null;
@@ -265,58 +274,13 @@ function renderStatus(status: Status, scanHandler: () => void) {
   }
 }
 
-function filterInstalledSongs(
-  spotifySongs: Map<string, Map<string, number>>,
-  isInstalled: (artist: string, song: string) => boolean,
-): [artist: string, song: string, playCount: number][] {
-  const filtered: Map<string, Map<string, number>> = new Map();
-
-  console.log('add to set');
-  // SLOW
-  for (const [artist, songs] of spotifySongs.entries()) {
-    for (const [song, playCount] of songs.entries()) {
-      if (!isInstalled(artist, song)) {
-        if (filtered.get(artist) == null) {
-          filtered.set(artist, new Map());
-        }
-
-        filtered.get(artist)!.set(song, playCount);
-      }
-    }
-  }
-
-  console.log('sort');
-  const artistsSortedByListens = [...filtered.entries()]
-    .toSorted((a, b) => {
-      const aTotal = [...a[1].values()].reduce((a, b) => a + b, 0);
-      const bTotal = [...b[1].values()].reduce((a, b) => a + b, 0);
-
-      return bTotal - aTotal;
-    })
-    .map(([artist]) => artist);
-
-  console.log('artists', artistsSortedByListens.length);
-
-  const results: [artist: string, song: string, playCount: number][] = [];
-
-  // SLOW
-  for (const [artist, songs] of spotifySongs.entries()) {
-    for (const [song, playCount] of songs.entries()) {
-      if (!isInstalled(artist, song)) {
-        results.push([artist, song, playCount]);
-      }
-    }
-  }
-
-  console.log('push results');
-
-  results.sort((a, b) => {
-    return b[2] - a[2];
-  });
-
-  console.log('sort results');
-
-  return results;
+function filterInstalledCharts(
+  allCharts: ChartResponseEncore[],
+  isInstalled: (artist: string, song: string, charter: string) => boolean,
+): ChartResponseEncore[] {
+  return allCharts.filter(
+    chart => !isInstalled(chart.artist, chart.name, chart.charter),
+  );
 }
 
 async function pause() {
@@ -324,4 +288,17 @@ async function pause() {
   await new Promise(resolve => {
     setTimeout(resolve, 10);
   });
+}
+
+function flattenArtistTrackPlays(
+  artistTrackPlays: ArtistTrackPlays,
+): [artist: string, song: string, playCount: number][] {
+  const results: [artist: string, song: string, playCount: number][] = [];
+  for (const [artist, songs] of artistTrackPlays.entries()) {
+    for (const [song, playCount] of songs.entries()) {
+      results.push([artist, song, playCount]);
+    }
+  }
+
+  return results;
 }

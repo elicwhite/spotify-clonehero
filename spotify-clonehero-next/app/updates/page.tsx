@@ -25,7 +25,7 @@ export default function SongsPicker() {
         <br />
         backup your Songs folder before using this tool.
       </p>
-      <CompareChartsToLocal rankingGroups={RANKING_GROUPS} />
+      <CompareChartsToLocal rankingGroups={RANKING_GROUPS} exact={true} />
     </>
   );
 }

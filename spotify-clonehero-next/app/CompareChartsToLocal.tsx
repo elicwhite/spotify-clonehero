@@ -4,7 +4,10 @@ import {useCallback, useReducer} from 'react';
 import SongsTable from './SongsTable';
 
 import {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
-import getChorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
+import getChorusChartDb, {
+  findMatchingCharts,
+  findMatchingChartsExact,
+} from '@/lib/chorusChartDb';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import {Button} from '@/components/ui/button';
 import {sendGAEvent} from '@next/third-parties/google';
@@ -15,6 +18,7 @@ import {
   selectChart,
 } from '@/lib/chartSelection';
 import SupportedBrowserWarning from './SupportedBrowserWarning';
+import {Searcher} from 'fast-fuzzy';
 
 export type RecommendedChart =
   | {
@@ -71,8 +75,10 @@ function songsReducer(state: SongState, action: SongStateActions): SongState {
 */
 export default function CompareChartsToLocal({
   rankingGroups,
+  exact,
 }: {
   rankingGroups: RankingGroups;
+  exact: boolean;
 }) {
   const [songsState, songsDispatch] = useReducer(songsReducer, {
     songs: null,
@@ -109,15 +115,20 @@ export default function CompareChartsToLocal({
 
     const chorusCharts = await chorusChartsPromise;
 
+    const searcher = new Searcher(chorusCharts, {
+      keySelector: chart => chart.artist,
+      threshold: 1,
+      useDamerau: false,
+      useSellers: false,
+    });
+
     const songsWithRecommendation: SongWithRecommendation[] = songs.map(
       song => {
         let recommendation: RecommendedChart;
 
-        const matchingCharts = findMatchingCharts(
-          song.artist,
-          song.song,
-          chorusCharts,
-        );
+        const matchingCharts = exact
+          ? findMatchingChartsExact(song.artist, song.song, chorusCharts)
+          : findMatchingCharts(song.artist, song.song, searcher);
 
         if (matchingCharts.length == 0) {
           recommendation = {
@@ -170,7 +181,7 @@ export default function CompareChartsToLocal({
 
     const after = Date.now();
     console.log('Took', (after - before) / 1000, 'ss');
-  }, [rankingGroups]);
+  }, [exact, rankingGroups]);
 
   return (
     <>
