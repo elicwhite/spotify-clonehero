@@ -60,6 +60,7 @@ type SongRow = {
   song: string;
   playCount?: number;
   previewUrl?: string | null;
+  modifiedTime: Date; // Most recent chart from this song
   subRows: ChartRow[];
 };
 
@@ -69,6 +70,7 @@ type ChartRow = {
   song: string;
   charter: string;
   instruments: {[instrument: string]: number};
+  modifiedTime: Date;
   download: {
     artist: string;
     song: string;
@@ -244,6 +246,23 @@ const columns = [
     },
     filterFn: instrumentFilter,
   }),
+  columnHelper.accessor('modifiedTime', {
+    header: 'Last Updated',
+    minSize: 100,
+    enableSorting: true,
+    cell: props => {
+      if (props.row.getIsExpanded()) {
+        return null;
+      }
+
+      const value = props.getValue();
+      if (value == null) {
+        return null;
+      }
+
+      return value.toLocaleDateString();
+    },
+  }),
   columnHelper.accessor('download', {
     header: 'Download',
     minSize: 100,
@@ -400,6 +419,13 @@ export default function SpotifyTableDownloader({
           song: track.song,
           ...(hasPlayCount ? {playCount: track.playCount} : {}),
           previewUrl: track.previewUrl,
+          modifiedTime: track.matchingCharts.reduce((maxDate, chart) => {
+            const chartDate = new Date(chart.modifiedTime);
+            if (chartDate > maxDate) {
+              return chartDate;
+            }
+            return maxDate;
+          }, new Date(track.matchingCharts[0].modifiedTime)),
           subRows: track.matchingCharts.map((chart, subIndex) => ({
             id: subIndex,
             artist: chart.artist,
@@ -417,6 +443,7 @@ export default function SpotifyTableDownloader({
                 ] as number,
               }))
               .reduce((a, b) => ({...a, ...b}), {}),
+            modifiedTime: new Date(chart.modifiedTime),
             download: {
               artist: track.artist,
               song: track.song,
