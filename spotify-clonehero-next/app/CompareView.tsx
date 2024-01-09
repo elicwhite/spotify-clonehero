@@ -36,7 +36,7 @@ export default function CompareView<
   currentChartFileName: string;
   recommendedChartUrl: string;
   close: () => void;
-  updateDownloadState: (id: number, state: TableDownloadStates) => void;
+  updateDownloadState: (id: string, state: TableDownloadStates) => void;
 }) {
   if (DEBUG) {
     console.log(
@@ -68,7 +68,7 @@ export default function CompareView<
       parentDirectoryHandle,
       currentChartFileName,
     );
-    updateDownloadState(id, 'downloading');
+    updateDownloadState(id.toString(), 'downloading');
     try {
       close();
       await parentDirectoryHandle.removeEntry(currentChartFileName, {
@@ -77,11 +77,11 @@ export default function CompareView<
       await downloadSong(artist, name, charter, recommendedChartUrl, {
         folder: parentDirectoryHandle,
       });
-      updateDownloadState(id, 'downloaded');
+      updateDownloadState(id.toString(), 'downloaded');
       await result.deleteBackup();
     } catch {
       await result.revert();
-      updateDownloadState(id, 'failed');
+      updateDownloadState(id.toString(), 'failed');
     }
   }, [
     recommendedChart,
@@ -110,10 +110,10 @@ export default function CompareView<
       event: 'download_keep_both',
     });
 
-    updateDownloadState(id, 'downloading');
+    updateDownloadState(id.toString(), 'downloading');
     close();
     await downloadSong(artist, name, charter, recommendedChartUrl);
-    updateDownloadState(id, 'downloaded');
+    updateDownloadState(id.toString(), 'downloaded');
   }, [
     currentChart.charter,
     id,

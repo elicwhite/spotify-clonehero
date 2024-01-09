@@ -42,7 +42,7 @@ import {AiFillCaretDown} from 'react-icons/ai';
 
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {
-    setDownloadState(index: number, state: TableDownloadStates): void;
+    setDownloadState(index: string, state: TableDownloadStates): void;
   }
 }
 
@@ -76,6 +76,7 @@ type ChartRow = {
     song: string;
     charter: string;
     file: string;
+    md5: string;
     state: TableDownloadStates;
   };
 };
@@ -282,7 +283,10 @@ const columns = [
       const updateDownloadState = props.table.options.meta?.setDownloadState;
       function update(state: TableDownloadStates) {
         if (updateDownloadState != null) {
-          updateDownloadState(props.row.index, state);
+          const key = props.row.original.download?.md5;
+          if (key != null) {
+            updateDownloadState(key, state);
+          }
         }
       }
       return (
@@ -302,9 +306,8 @@ const columns = [
     minSize: 100,
     enableSorting: false,
     cell: props => {
-      // Verify this logic
-      const url = props.getValue(); // as SongRow['previewUrl'] | undefined;
-      if (!props.row.getIsExpanded() || !url) {
+      const url = props.getValue();
+      if (!props.row.getIsExpanded()) {
         return null;
       }
 
@@ -407,8 +410,8 @@ export default function SpotifyTableDownloader({
   const hasPlayCount = tracks[0].playCount != null;
 
   const [downloadState, setDownloadState] = useState<{
-    [key: number]: TableDownloadStates;
-  }>(new Array(tracks.length).fill('not-downloading'));
+    [key: string]: TableDownloadStates;
+  }>({}); //new Array(tracks.length).fill('not-downloading'));
 
   const trackState = useMemo(
     () =>
@@ -445,11 +448,12 @@ export default function SpotifyTableDownloader({
               .reduce((a, b) => ({...a, ...b}), {}),
             modifiedTime: new Date(chart.modifiedTime),
             download: {
-              artist: track.artist,
-              song: track.song,
+              artist: chart.artist,
+              song: chart.name,
               charter: chart.charter,
               file: chart.file,
-              state: downloadState[index],
+              md5: chart.md5,
+              state: downloadState[chart.md5] ?? 'not-downloading',
             },
           })),
         }),
@@ -489,7 +493,7 @@ export default function SpotifyTableDownloader({
       sorting: DEFAULT_SORTING,
     },
     meta: {
-      setDownloadState(index: number, state: TableDownloadStates) {
+      setDownloadState(index: string, state: TableDownloadStates) {
         setDownloadState(prev => {
           return {...prev, [index]: state};
         });
@@ -699,8 +703,8 @@ function DownloadButton({
     try {
       updateDownloadState('downloading');
       await downloadSong(artist, song, charter, url);
-    } catch {
-      console.log('Error while downloading', artist, song, charter, url);
+    } catch (err) {
+      console.log('Error while downloading', artist, song, charter, url, err);
       updateDownloadState('failed');
       return;
     }

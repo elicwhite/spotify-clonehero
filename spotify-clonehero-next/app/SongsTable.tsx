@@ -48,7 +48,7 @@ export type TableDownloadStates =
 
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {
-    setDownloadState(index: number, state: TableDownloadStates): void;
+    setDownloadState(index: string, state: TableDownloadStates): void;
   }
 }
 
@@ -167,8 +167,8 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
   );
 
   const [downloadState, setDownloadState] = useState<{
-    [key: number]: TableDownloadStates;
-  }>(new Array(songs.length).fill('not-downloading'));
+    [key: string]: TableDownloadStates;
+  }>({});
 
   const songsWithUpdates = useMemo(() => {
     return songs.filter(
@@ -207,7 +207,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
   }, [songsWithUpdates]);
 
   const updateDownloadState = useCallback(
-    (index: number, state: TableDownloadStates) => {
+    (index: string, state: TableDownloadStates) => {
       setDownloadState(prev => {
         return {...prev, [index]: state};
       });
@@ -249,7 +249,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
           throw new Error('Artist, name, or charter is null in song.ini');
         }
 
-        const id = song.id;
+        const id = song.id.toString();
 
         updateDownloadState(id, 'downloading');
 

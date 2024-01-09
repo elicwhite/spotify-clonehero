@@ -37,6 +37,9 @@ Todo:
 - Fix scrolling performance
 - Show errors to the user?
 + Show preview button on song row
++ Download state isn't rendering
+- Limit songs downloading in parallel. Gets "Too Many Requests" exception
+- Download songs to backup first, then copy over on success
 
 Updates
   + Switch to exact match
@@ -46,21 +49,21 @@ export default function Page() {
   let auth = null;
   const session = useSession();
 
-  // if (process.env.NODE_ENV === 'development') {
-  //   auth =
-  //     !session || session.status !== 'authenticated' ? (
-  //       <div>
-  //         <Button onClick={() => signIn('spotify')}>
-  //           Sign in with Spotify
-  //         </Button>
-  //       </div>
-  //     ) : (
-  //       <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
-  //         <span>Logged in as {session.data.user?.name}</span>
-  //         <Button onClick={() => signOut()}>Sign out</Button>
-  //       </div>
-  //     );
-  // }
+  if (process.env.NODE_ENV === 'development') {
+    auth =
+      !session || session.status !== 'authenticated' ? (
+        <div>
+          <Button onClick={() => signIn('spotify')}>
+            Sign in with Spotify
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
+          <span>Logged in as {session.data.user?.name}</span>
+          <Button onClick={() => signOut()}>Sign out</Button>
+        </div>
+      );
+  }
 
   return (
     <>
