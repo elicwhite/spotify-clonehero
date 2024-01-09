@@ -104,7 +104,7 @@ export async function scanForInstalledCharts(
 export async function getDefaultDownloadDirectory(): Promise<FileSystemDirectoryHandle> {
   const songsDirHandle = await getSongsDirectoryHandle();
   const downloadsHandle = await songsDirHandle.getDirectoryHandle(
-    'CHCT-downloads',
+    'musiccharts-dot-tools-downloads',
     {create: true},
   );
   return downloadsHandle;
