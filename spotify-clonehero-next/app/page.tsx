@@ -42,9 +42,7 @@ export default function Home() {
           <CardHeader>
             <CardTitle>Updater</CardTitle>
             <CardDescription>
-              Check Chorus for newer/better charts than you have installed.
-              Looks for newer charts that the charter has published, and higher
-              quality charts (more instruments, difficulties, and more).
+              Check Chorus for newer versions of your installed charts.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 py-4">
