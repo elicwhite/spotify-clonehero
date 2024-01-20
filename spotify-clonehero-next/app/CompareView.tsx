@@ -1,7 +1,7 @@
 import {SongIniData} from '@/lib/local-songs-folder/scanLocalCharts';
 import {songIniOrder} from './SongsDownloader';
 import {useCallback} from 'react';
-import {backupSong, downloadSong} from '@/lib/local-songs-folder';
+import {downloadSong} from '@/lib/local-songs-folder';
 import {Button} from '@/components/ui/button';
 import {TableDownloadStates} from './SongsTable';
 import {sendGAEvent} from '@next/third-parties/google';
@@ -64,29 +64,19 @@ export default function CompareView<
       event: 'replace_current_chart',
     });
 
-    const result = await backupSong(
-      parentDirectoryHandle,
-      currentChartFileName,
-    );
     updateDownloadState(id.toString(), 'downloading');
     try {
       close();
-      await parentDirectoryHandle.removeEntry(currentChartFileName, {
-        recursive: true,
-      });
       await downloadSong(artist, name, charter, recommendedChartUrl, {
         folder: parentDirectoryHandle,
       });
       updateDownloadState(id.toString(), 'downloaded');
-      await result.deleteBackup();
     } catch {
-      await result.revert();
       updateDownloadState(id.toString(), 'failed');
     }
   }, [
     recommendedChart,
     parentDirectoryHandle,
-    currentChartFileName,
     updateDownloadState,
     id,
     close,

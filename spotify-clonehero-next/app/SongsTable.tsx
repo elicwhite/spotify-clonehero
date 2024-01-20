@@ -27,7 +27,7 @@ import {
   removeStyleTags,
 } from '@/lib/ui-utils';
 import pMap from 'p-map';
-import {backupSong, downloadSong} from '@/lib/local-songs-folder';
+import {downloadSong} from '@/lib/local-songs-folder';
 import {sendGAEvent} from '@next/third-parties/google';
 import {SongWithRecommendation} from './CompareChartsToLocal';
 import {Button} from '@/components/ui/button';
@@ -253,16 +253,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
 
         updateDownloadState(id, 'downloading');
 
-        const result = await backupSong(
-          song.handleInfo.parentDir,
-          song.handleInfo.fileName,
-        );
-
         try {
-          song.handleInfo.parentDir.removeEntry(song.handleInfo.fileName, {
-            recursive: true,
-          });
-
           await downloadSong(
             artist,
             name,
@@ -274,14 +265,12 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
           );
           updateDownloadState(id, 'downloaded');
           setNumUpdated(n => n + 1);
-          await result.deleteBackup();
-        } catch {
-          await result.revert();
-          console.log('Failed to download', artist, name, charter);
+        } catch (err) {
+          console.log('Failed to download', artist, name, charter, err);
           updateDownloadState(id, 'failed');
         }
       },
-      {concurrency: 3},
+      {concurrency: 3, stopOnError: false},
     );
 
     setUpdateState('done');

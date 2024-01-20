@@ -39,7 +39,7 @@ Todo:
 + Show preview button on song row
 + Download state isn't rendering
 - Limit songs downloading in parallel. Gets "Too Many Requests" exception
-- Download songs to backup first, then copy over on success
++ Download songs to backup first, then copy over on success
 
 Updates
   + Switch to exact match

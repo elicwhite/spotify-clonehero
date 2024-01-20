@@ -179,21 +179,49 @@ export async function moveToFolder(
       await toFolder.removeEntry(handle.name, {recursive: true});
     }
 
-    const backupDirHandle = await toFolder.getDirectoryHandle(handle.name, {
+    const destDirHandle = await toFolder.getDirectoryHandle(handle.name, {
       create: true,
     });
 
+    // If there are .crswap files, wait for them to be gone
+    // It seems like await should do this, but it doesn't
+    // It feels like I /must/ be missing an await somewhere, possibly in parse-sng
+    const start = Date.now();
+    let iterations = 0;
+    do {
+      let hasSwap = false;
+
+      for await (const entry of handle.values()) {
+        if (entry.name.includes('.crswap')) {
+          iterations++;
+          hasSwap = true;
+          break;
+        }
+      }
+
+      if (hasSwap) {
+        await sleep(100);
+      } else {
+        break;
+      }
+    } while (Date.now() - start < 10 * 1000);
+    // console.log('iterations', iterations, 'to remove swap');
+
     for await (const entry of handle.values()) {
-      await moveToFolder(handle, entry.name, backupDirHandle);
+      await moveToFolder(handle, entry.name, destDirHandle);
     }
 
     return {
       newParentDirectoryHandle: toFolder,
-      fileName: backupDirHandle.name,
+      fileName: destDirHandle.name,
     };
   }
 
   throw new Error('Unknown handle type');
+}
+
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function fileExists(
@@ -259,6 +287,7 @@ export async function downloadSong(
   url: string,
   options?: {
     folder?: FileSystemDirectoryHandle;
+    replaceExisting?: boolean;
   },
 ) {
   sendGAEvent({
@@ -289,7 +318,23 @@ export async function downloadSong(
   const downloadLocation =
     options?.folder ?? (await getDefaultDownloadDirectory());
 
-  await downloadAsFolder(downloadLocation, filename, body);
+  const backupRootDirHandle = await getBackupDirectory();
+
+  // Remove any existing backups
+  await backupRootDirHandle.removeEntry(filename, {recursive: true});
+
+  // Download into backups, and only on success copy it over to destination
+  await downloadAsFolder(backupRootDirHandle, filename, body);
+  if (options?.replaceExisting) {
+    await downloadLocation.removeEntry(filename, {recursive: true});
+  }
+
+  await moveToFolder(backupRootDirHandle, filename, downloadLocation);
+
+  // Delete the temp directory
+  await backupRootDirHandle.removeEntry(filename, {recursive: true});
+
+  console.log(`Finished downloading ${filename}`);
 }
 
 async function downloadAsFolder(
@@ -325,7 +370,6 @@ async function downloadAsFolder(
       });
 
       sngStream.on('end', () => {
-        console.log(`Finished downloading ${filename}`);
         resolve('downloaded');
       });
 
