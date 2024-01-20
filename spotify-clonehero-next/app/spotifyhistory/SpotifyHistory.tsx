@@ -13,6 +13,7 @@ import {
   processSpotifyDump,
 } from '@/lib/spotify-sdk/HistoryDumpParsing';
 import SpotifyTableDownloader, {
+  SpotifyChartData,
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';
 import {signIn, signOut, useSession} from 'next-auth/react';
@@ -20,7 +21,7 @@ import {Button} from '@/components/ui/button';
 import {RxExternalLink} from 'react-icons/rx';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
 import {Searcher} from 'fast-fuzzy';
-import {ChartResponseEncore} from '@/lib/chartSelection';
+import {type ChartResponseEncore} from '@/lib/chartSelection';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -40,6 +41,8 @@ Todo:
 + Download state isn't rendering
 - Limit songs downloading in parallel. Gets "Too Many Requests" exception
 + Download songs to backup first, then copy over on success
+- Show all installed charts too
+- Sort by artist/song if not selected. Don't show sort criteria
 
 Updates
   + Switch to exact match
@@ -183,14 +186,10 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
 
     const allChorusCharts = await fetchChorusDb;
 
-    console.log('filter out installed charts');
+    console.log('marking installed charts');
     const beforeFilter = Date.now();
-    const notInstalledCharts = filterInstalledCharts(
-      allChorusCharts,
-      isInstalled,
-    );
-    console.log('Took', (Date.now() - beforeFilter) / 1000, 'ss to filter');
-    console.log('done filtering songs');
+    const markedCharts = markInstalledCharts(allChorusCharts, isInstalled);
+    console.log('Took', (Date.now() - beforeFilter) / 1000, 'ss to mark');
     setStatus(prevStatus => ({
       ...prevStatus,
       status: 'songs-from-encore',
@@ -209,7 +208,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     await pause();
 
     const beforeSearcher = Date.now();
-    const artistSearcher = new Searcher(notInstalledCharts, {
+    const artistSearcher = new Searcher(markedCharts, {
       keySelector: chart => chart.artist,
       threshold: 1,
       useDamerau: false,
@@ -222,7 +221,10 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       .map(([artist, song, playCount]) => {
         const matchingCharts = findMatchingCharts(artist, song, artistSearcher);
 
-        if (matchingCharts.length == 0) {
+        if (
+          matchingCharts.length == 0 ||
+          !matchingCharts.some(chart => !chart.isInstalled)
+        ) {
           return null;
         }
 
@@ -277,12 +279,15 @@ function renderStatus(status: Status, scanHandler: () => void) {
   }
 }
 
-function filterInstalledCharts(
+function markInstalledCharts(
   allCharts: ChartResponseEncore[],
   isInstalled: (artist: string, song: string, charter: string) => boolean,
-): ChartResponseEncore[] {
-  return allCharts.filter(
-    chart => !isInstalled(chart.artist, chart.name, chart.charter),
+): SpotifyChartData[] {
+  return allCharts.map(
+    (chart): SpotifyChartData => ({
+      ...chart,
+      isInstalled: isInstalled(chart.artist, chart.name, chart.charter),
+    }),
   );
 }
 

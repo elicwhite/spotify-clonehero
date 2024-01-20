@@ -51,19 +51,17 @@ export function findMatchingChartsExact(
   });
 }
 
-export function findMatchingCharts(
+export function findMatchingCharts<T extends ChartResponseEncore>(
   artist: string,
   song: string,
-  // charts: ChartResponseEncore[],
   artistSearcher: Searcher<
-    ChartResponseEncore,
+    T,
     {
-      keySelector: (chart: ChartResponseEncore) => string[];
+      keySelector: (chart: T) => string[];
       threshold: number;
     }
   >,
 ) {
-  // if (artistSearcher != null) {
   const artistResult = artistSearcher.search(artist);
 
   const nameResult = search(song, artistResult, {
@@ -72,15 +70,6 @@ export function findMatchingCharts(
   });
 
   return nameResult;
-  // }
-
-  // const results = charts.filter(chart => {
-  //   if (chart.artist === artist && chart.name === song) {
-  //     return true;
-  //   }
-  // });
-
-  // return results;
 }
 
 function reduceCharts(

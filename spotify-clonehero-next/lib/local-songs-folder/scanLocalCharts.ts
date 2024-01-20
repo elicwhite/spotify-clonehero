@@ -143,12 +143,18 @@ function convertValues(songIniData: SongIniData) {
   return Object.fromEntries(mappedEntries);
 }
 
+export type ChartInstalledChecker = (
+  artist: string,
+  song: string,
+  charter: string,
+) => boolean;
+
 function createLookupKey(artist: string, song: string, charter: string) {
   return `${artist} - ${song} - ${charter}`;
 }
-export async function createIsInstalledFilter(
+export function createIsInstalledFilter(
   installedSongs: SongAccumulator[],
-) {
+): ChartInstalledChecker {
   const installedCharts = new Set<string>();
 
   for (const installedSong of installedSongs) {

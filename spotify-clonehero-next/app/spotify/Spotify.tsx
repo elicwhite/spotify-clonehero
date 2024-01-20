@@ -15,6 +15,7 @@ import chorusChartDb, {
   findMatchingChartsExact,
 } from '@/lib/chorusChartDb';
 import SpotifyTableDownloader, {
+  SpotifyChartData,
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';
 import {
@@ -118,12 +119,9 @@ function LoggedIn() {
 
     const isInstalled = await createIsInstalledFilter(installedCharts);
     const allChorusCharts = await fetchDb;
-    const notInstalledCharts = filterInstalledCharts(
-      allChorusCharts,
-      isInstalled,
-    );
+    const markedCharts = markInstalledCharts(allChorusCharts, isInstalled);
 
-    const artistSearcher = new Searcher(notInstalledCharts, {
+    const artistSearcher = new Searcher(markedCharts, {
       keySelector: chart => chart.artist,
       threshold: 1,
       useDamerau: false,
@@ -136,7 +134,10 @@ function LoggedIn() {
 
         const matchingCharts = findMatchingCharts(artist, name, artistSearcher);
 
-        if (matchingCharts.length == 0) {
+        if (
+          matchingCharts.length == 0 ||
+          !matchingCharts.some(chart => !chart.isInstalled)
+        ) {
           return null;
         }
 
@@ -171,11 +172,14 @@ function LoggedIn() {
   );
 }
 
-function filterInstalledCharts(
+function markInstalledCharts(
   allCharts: ChartResponseEncore[],
   isInstalled: (artist: string, song: string, charter: string) => boolean,
-): ChartResponseEncore[] {
-  return allCharts.filter(
-    chart => !isInstalled(chart.artist, chart.name, chart.charter),
+): SpotifyChartData[] {
+  return allCharts.map(
+    (chart): SpotifyChartData => ({
+      ...chart,
+      isInstalled: isInstalled(chart.artist, chart.name, chart.charter),
+    }),
   );
 }

@@ -46,12 +46,16 @@ declare module '@tanstack/react-table' {
   }
 }
 
+export type SpotifyChartData = {
+  isInstalled: boolean;
+} & ChartResponseEncore;
+
 export type SpotifyPlaysRecommendations = {
   artist: string;
   song: string;
   playCount?: number;
   previewUrl?: string | null;
-  matchingCharts: ChartResponseEncore[];
+  matchingCharts: SpotifyChartData[];
 };
 
 type SongRow = {
@@ -71,6 +75,7 @@ type ChartRow = {
   charter: string;
   instruments: {[instrument: string]: number};
   modifiedTime: Date;
+  isInstalled: boolean;
   download: {
     artist: string;
     song: string;
@@ -273,6 +278,10 @@ const columns = [
         return null;
       }
 
+      if (props.row.original.isInstalled) {
+        return <span>Downloaded</span>;
+      }
+
       const value = props.getValue(); // as ChartRow['download'] | undefined;
 
       if (value == null) {
@@ -438,15 +447,16 @@ export default function SpotifyTableDownloader({
               .filter(
                 key =>
                   key.startsWith('diff_') &&
-                  (chart[key as keyof ChartResponseEncore] as number) >= 0,
+                  (chart[key as keyof SpotifyChartData] as number) >= 0,
               )
               .map(key => ({
                 [key.replace('diff_', '')]: chart[
-                  key as keyof ChartResponseEncore
+                  key as keyof SpotifyChartData
                 ] as number,
               }))
               .reduce((a, b) => ({...a, ...b}), {}),
             modifiedTime: new Date(chart.modifiedTime),
+            isInstalled: chart.isInstalled,
             download: {
               artist: chart.artist,
               song: chart.name,
@@ -535,7 +545,11 @@ export default function SpotifyTableDownloader({
   const numMatchingCharts = useMemo(
     () =>
       rows
-        .map(row => row.original.subRows?.length || 0)
+        .map(
+          row =>
+            row.original.subRows?.filter(chart => !chart.isInstalled).length ||
+            0,
+        )
         .reduce((acc, num) => acc + num, 0),
     [rows],
   );
@@ -605,9 +619,9 @@ export default function SpotifyTableDownloader({
                   {row.getVisibleCells().map(cell => {
                     return (
                       <TableCell
-                        className={
-                          row.getIsExpanded() ? 'py-2 bg-secondary' : ''
-                        }
+                        className={[
+                          row.getIsExpanded() ? 'py-2 bg-secondary' : '',
+                        ].join(' ')}
                         key={cell.id}
                         style={{
                           textAlign: (cell.column.columnDef.meta as any)?.align,
