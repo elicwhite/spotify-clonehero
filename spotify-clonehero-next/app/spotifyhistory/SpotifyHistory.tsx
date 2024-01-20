@@ -41,8 +41,8 @@ Todo:
 + Download state isn't rendering
 - Limit songs downloading in parallel. Gets "Too Many Requests" exception
 + Download songs to backup first, then copy over on success
-- Show all installed charts too
-- Sort by artist/song if not selected. Don't show sort criteria
++ Show all installed charts too
+- Sort by artist/song if not selected. Don't show sort criteria (pushed to a branch, doesn't seem like a good idea)
 
 Updates
   + Switch to exact match
