@@ -101,9 +101,9 @@ export default function Home() {
           </CardHeader>
           <CardContent className="grid gap-4 py-4">
             <Link
-              href="#" // spotifyhistory
-              className={buttonVariants({variant: 'ghost'})}>
-              Under Construction
+              href="spotifyhistory"
+              className={buttonVariants({variant: 'default'})}>
+              Go to Tool
             </Link>
           </CardContent>
         </Card>
