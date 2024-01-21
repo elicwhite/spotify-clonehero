@@ -17,6 +17,7 @@ export const Highway: FC<{chart?: ChartFile; song: string}> = ({
     setState(time / 1000);
   }, []);
 
+  const sizingRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -30,9 +31,11 @@ export const Highway: FC<{chart?: ChartFile; song: string}> = ({
 
   useEffect(() => {
     if (chart) {
-      setupRenderer(chart, ref, audioRef, settingsRef.current).then(res => {
-        setSettings(res);
-      });
+      setupRenderer(chart, sizingRef, ref, audioRef, settingsRef.current).then(
+        res => {
+          setSettings(res);
+        },
+      );
       console.log('setup renderer');
     }
   }, [chart]);
@@ -55,15 +58,17 @@ export const Highway: FC<{chart?: ChartFile; song: string}> = ({
           settingsRef.current.highwaySpeed = Number(e.target.value);
         }}></input>
       <div
-        className="flex-1"
-        ref={ref}
+        className="relative flex-1"
+        ref={sizingRef}
         onClick={() => {
           if (!audioRef.current) return;
 
           audioRef.current.paused
             ? audioRef.current.play()
             : audioRef.current.pause();
-        }}></div>
+        }}>
+        <div className="absolute" ref={ref}></div>
+      </div>
     </>
   );
 };

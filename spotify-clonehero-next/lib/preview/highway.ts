@@ -20,15 +20,16 @@ export type HighwaySettings = {
 
 export const setupRenderer = async (
   chart: ChartFile,
+  sizingRef: RefObject<HTMLDivElement>,
   ref: RefObject<HTMLDivElement>,
   audioRef: RefObject<HTMLAudioElement>,
   settings: HighwaySettings,
 ) => {
-  const width = ref.current?.offsetWidth ?? window.innerWidth;
-  const height = ref.current?.offsetHeight ?? window.innerHeight;
+  // const width = ref.current?.offsetWidth ?? window.innerWidth;
+  // const height = ref.current?.offsetHeight ?? window.innerHeight;
 
   console.log('setupRenderer');
-  const camera = new THREE.PerspectiveCamera(90, width / height, 0.01, 10);
+  const camera = new THREE.PerspectiveCamera(90, 1 / 1, 0.01, 10);
   camera.position.z = 0.8;
   camera.position.y = -1.3;
   camera.rotation.x = THREE.MathUtils.degToRad(60);
@@ -39,8 +40,25 @@ export const setupRenderer = async (
   const material = new THREE.MeshNormalMaterial();
 
   const renderer = new THREE.WebGLRenderer({antialias: true});
-  renderer.setSize(width, height);
   renderer.localClippingEnabled = true;
+
+  function setSize() {
+    const width = sizingRef.current?.offsetWidth ?? window.innerWidth;
+    const height = sizingRef.current?.offsetHeight ?? window.innerHeight;
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    renderer.setSize(width, height);
+  }
+  setSize();
+
+  window.addEventListener(
+    'resize',
+    () => {
+      console.log('resize');
+      setSize();
+    },
+    false,
+  );
 
   ref.current?.children.item(0)?.remove();
   ref.current?.appendChild(renderer.domElement);
