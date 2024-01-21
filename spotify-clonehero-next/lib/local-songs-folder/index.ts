@@ -130,6 +130,12 @@ async function getBackupDirectory() {
   return backupDirHandle;
 }
 
+export async function emptyDirectory(directory: FileSystemDirectoryHandle) {
+  for await (const entry of directory.values()) {
+    await directory.removeEntry(entry.name, {recursive: true});
+  }
+}
+
 async function getFileOrDirectoryHandle(
   parentHandle: FileSystemDirectoryHandle,
   name: string,

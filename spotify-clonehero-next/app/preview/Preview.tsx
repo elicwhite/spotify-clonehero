@@ -6,10 +6,12 @@ import styles from './Home.module.css';
 import {Highway} from './Highway';
 import {
   downloadSong,
+  emptyDirectory,
   getPreviewDownloadDirectory,
 } from '@/lib/local-songs-folder';
 import {Button} from '@/components/ui/button';
 import {readTextFile} from '@/lib/fileSystemHelpers';
+import {scanCharts} from 'scan-chart-web';
 
 // https://files.enchor.us/ad8aab427e01dbf8650687886d5d05ea.sng
 export default function Preview() {
@@ -19,6 +21,8 @@ export default function Preview() {
 
   const handler = useCallback(async () => {
     const downloadLocation = await getPreviewDownloadDirectory();
+    // We should have a better way to manage this directory
+    await emptyDirectory(downloadLocation);
     const downloadedSong = await downloadSong(
       'Polyphia',
       'Sweet Tea (feat. Aaron Marshall)',
@@ -32,6 +36,18 @@ export default function Preview() {
     if (downloadedSong == null) {
       return;
     }
+
+    const emitter = scanCharts(downloadLocation);
+
+    await new Promise(resolve => {
+      emitter.on('chart', chart => {
+        console.log('chart', chart);
+      });
+
+      emitter.on('end', async () => {
+        resolve(true);
+      });
+    });
 
     const songDir =
       await downloadedSong.newParentDirectoryHandle.getDirectoryHandle(
