@@ -54,15 +54,15 @@ interface TrackEventDiff extends TrackEvent {
 }
 
 export class MidiParser {
-  private notesData: NotesData;
-  private tempoMap: MIDIEvent[] = [];
-  private timeSignatures: MIDIEvent[] = [];
-  private tracks: {
+  public notesData: NotesData;
+  public tempoMap: MIDIEvent[] = [];
+  public timeSignatures: MIDIEvent[] = [];
+  public tracks: {
     trackIndex: number;
     trackName: TrackName;
     trackEvents: MIDIEvent[];
   }[];
-  private splitTracks: {
+  public splitTracks: {
     instrument: Instrument;
     difficulty: Difficulty;
     trackEvents: TrackEvent[];
@@ -512,7 +512,7 @@ export class MidiParser {
     }
   }
 
-  public parse(): NotesData {
+  public parse(): MidiParser {
     const trackParsers = _.chain(this.splitTracks)
       .map(
         track =>
@@ -537,7 +537,7 @@ export class MidiParser {
 
     if (globalFirstNote === null || globalLastNote === null) {
       this.notesData.chartIssues.push('noNotes');
-      return this.notesData;
+      return this;
     }
 
     const vocalEvents = this.tracks.find(t => t.trackName === 'PART VOCALS')
@@ -584,7 +584,7 @@ export class MidiParser {
     this.setMissingExperts();
     this.setTimeSignatureProperties();
 
-    return this.notesData;
+    return this; //.notesData;
   }
 
   private setMissingExperts() {

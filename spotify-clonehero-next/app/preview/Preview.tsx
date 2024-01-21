@@ -12,6 +12,7 @@ import {Button} from '@/components/ui/button';
 import {readTextFile} from '@/lib/fileSystemHelpers';
 import {ChartFile} from '@/lib/preview/interfaces';
 import {parseMidi} from '@/lib/preview/midi';
+import {parseChart as scanParseChart} from '@/lib/preview/chart-parser';
 import EncoreAutocomplete from '@/components/EncoreAutocomplete';
 import chorusChartDb from '@/lib/chorusChartDb';
 import {Searcher} from 'fast-fuzzy';
@@ -81,6 +82,11 @@ async function getChartData(
       const chart = await readTextFile(entry);
 
       const parsedChart = parseChart(chart);
+
+      const file = await entry.getFile();
+      const result = scanParseChart(await file.arrayBuffer());
+      console.log(parsedChart, result);
+
       return parsedChart;
     } else if (name == 'notes.mid') {
       const file = await entry.getFile();
