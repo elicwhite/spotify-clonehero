@@ -65,7 +65,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
             </nav>
           </div>
         </nav>
-        <main className="flex flex-col items-center align-center justify-between min-h-0 p-4">
+        <main className="flex flex-col flex-1 items-center align-center min-h-0 p-4">
           <ContextProviders>{children}</ContextProviders>
         </main>
         <GoogleAnalytics gaId="G-LEE7EDJH14" />

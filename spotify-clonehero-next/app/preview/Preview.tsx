@@ -1,8 +1,7 @@
 'use client';
 
-import {useCallback, useState} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import {calculateTimes, parseChart} from '@/lib/preview/chart';
-import styles from './Home.module.css';
 import {Highway} from './Highway';
 import {
   downloadSong,
@@ -13,18 +12,21 @@ import {Button} from '@/components/ui/button';
 import {readTextFile} from '@/lib/fileSystemHelpers';
 import {ChartFile} from '@/lib/preview/interfaces';
 import {parseMidi} from '@/lib/preview/midi';
+import EncoreAutocomplete from '@/components/EncoreAutocomplete';
+import chorusChartDb from '@/lib/chorusChartDb';
+import {Searcher} from 'fast-fuzzy';
+import {ChartResponseEncore} from '@/lib/chartSelection';
 
-// https://files.enchor.us/ad8aab427e01dbf8650687886d5d05ea.sng
 export default function Preview() {
   const [chart, setChart] = useState<ChartFile | undefined>();
   const [audioFile, setAudioFile] = useState<string | undefined>();
 
-  const midFileFetch =
-    'https://files.enchor.us/56d31d7c085f5e504b91e272e65d1cd3.sng';
-  const chartFileFetch =
-    'https://files.enchor.us/c395e1d650182ccae787f37758f20223.sng';
+  // const midFileFetch =
+  //   'https://files.enchor.us/56d31d7c085f5e504b91e272e65d1cd3.sng';
+  // const chartFileFetch =
+  //   'https://files.enchor.us/c395e1d650182ccae787f37758f20223.sng';
 
-  const handler = useCallback(async () => {
+  const handler = useCallback(async (chart: ChartResponseEncore) => {
     const downloadLocation = await getPreviewDownloadDirectory();
     // We should have a better way to manage this directory
     await emptyDirectory(downloadLocation);
@@ -32,7 +34,7 @@ export default function Preview() {
       'Artist',
       'Song',
       'charter',
-      midFileFetch, // SWAP THIS OUT WITH midFileFetch TO TEST MIDI
+      chart.file, // SWAP THIS OUT WITH midFileFetch TO TEST MIDI
       {
         folder: downloadLocation,
       },
@@ -59,8 +61,8 @@ export default function Preview() {
   }, []);
 
   return (
-    <div className={styles.main}>
-      <Button onClick={handler}>Start</Button>
+    <div className="flex flex-col w-full flex-1">
+      <TypeAhead onChartSelected={handler} />
       {chart && audioFile && <Highway chart={chart} song={audioFile}></Highway>}
     </div>
   );
@@ -88,4 +90,35 @@ async function getChartData(
   }
 
   throw new Error('No .chart or .mid file found');
+}
+
+function TypeAhead({
+  onChartSelected,
+}: {
+  onChartSelected: (chart: ChartResponseEncore) => void;
+}) {
+  const [searcher, setSearcher] = useState<Searcher<
+    ChartResponseEncore,
+    any
+  > | null>(null);
+
+  useEffect(() => {
+    async function run() {
+      const fetchChorusDb = await chorusChartDb();
+
+      const artistSearcher = new Searcher(fetchChorusDb, {
+        keySelector: chart => [chart.artist, chart.name],
+        threshold: 1,
+        useDamerau: false,
+        useSellers: false,
+      });
+
+      setSearcher(artistSearcher);
+    }
+    run();
+  }, []);
+
+  return (
+    <EncoreAutocomplete onChartSelected={onChartSelected} searcher={searcher} />
+  );
 }

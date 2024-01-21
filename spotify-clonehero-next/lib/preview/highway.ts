@@ -1,6 +1,6 @@
 import {RefObject} from 'react';
 import * as THREE from 'three';
-import {ChartFile, NoteEvent} from './chart';
+import {ChartFile, NoteEvent} from './interfaces';
 
 const noteTextures: Array<THREE.SpriteMaterial> = [];
 const noteTexturesHopo: Array<THREE.SpriteMaterial> = [];
@@ -24,13 +24,11 @@ export const setupRenderer = async (
   audioRef: RefObject<HTMLAudioElement>,
   settings: HighwaySettings,
 ) => {
+  const width = ref.current?.offsetWidth ?? window.innerWidth;
+  const height = ref.current?.offsetHeight ?? window.innerHeight;
+
   console.log('setupRenderer');
-  const camera = new THREE.PerspectiveCamera(
-    90,
-    window.innerWidth / window.innerHeight,
-    0.01,
-    10,
-  );
+  const camera = new THREE.PerspectiveCamera(90, width / height, 0.01, 10);
   camera.position.z = 0.8;
   camera.position.y = -1.3;
   camera.rotation.x = THREE.MathUtils.degToRad(60);
@@ -41,7 +39,7 @@ export const setupRenderer = async (
   const material = new THREE.MeshNormalMaterial();
 
   const renderer = new THREE.WebGLRenderer({antialias: true});
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(width, height);
   renderer.localClippingEnabled = true;
 
   ref.current?.children.item(0)?.remove();
