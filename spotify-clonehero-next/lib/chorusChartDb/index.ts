@@ -73,11 +73,22 @@ export function findMatchingCharts<T extends ChartResponseEncore>(
 }
 
 function reduceCharts(
-  ...chartSets: {groupId: number; md5: string; modifiedTime: string}[][]
+  ...chartSets: {
+    artist: string;
+    name: string;
+    groupId: number;
+    md5: string;
+    modifiedTime: string;
+  }[][]
 ) {
   const results = new Map<number, any>();
   for (const chartSet of chartSets) {
     for (const chart of chartSet) {
+      // Invalid charts can get uploaded to encore and have 30 days to get fixed
+      if (chart.artist == null || chart.name == null) {
+        continue;
+      }
+
       if (!results.has(chart.groupId)) {
         results.set(chart.groupId, {
           ...chart,

@@ -174,22 +174,10 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     }
 
     const flatTrackPlays = flattenArtistTrackPlays(artistTrackPlays);
-
-    console.log('create installed filter');
-    const beforeInstalled = Date.now();
     const isInstalled = await createIsInstalledFilter(installedCharts);
-    console.log(
-      'Took',
-      (Date.now() - beforeInstalled) / 1000,
-      'ss to create filter',
-    );
-
     const allChorusCharts = await fetchChorusDb;
-
-    console.log('marking installed charts');
-    const beforeFilter = Date.now();
     const markedCharts = markInstalledCharts(allChorusCharts, isInstalled);
-    console.log('Took', (Date.now() - beforeFilter) / 1000, 'ss to mark');
+
     setStatus(prevStatus => ({
       ...prevStatus,
       status: 'songs-from-encore',
@@ -208,6 +196,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     await pause();
 
     const beforeSearcher = Date.now();
+
     const artistSearcher = new Searcher(markedCharts, {
       keySelector: chart => chart.artist,
       threshold: 1,
