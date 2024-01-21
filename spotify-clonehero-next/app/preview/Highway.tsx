@@ -6,16 +6,7 @@ export const Highway: FC<{chart?: ChartFile; song: string}> = ({
   chart,
   song,
 }) => {
-  const [state, setState] = React.useState(0);
-
   const requestRef = React.useRef<number>();
-
-  const animate = useCallback((time: number) => {
-    requestRef.current = requestAnimationFrame(animate);
-
-    // console.log("animate", time / 1000);
-    setState(time / 1000);
-  }, []);
 
   const sizingRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -39,11 +30,6 @@ export const Highway: FC<{chart?: ChartFile; song: string}> = ({
       console.log('setup renderer');
     }
   }, [chart]);
-
-  React.useEffect(() => {
-    requestRef.current = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(requestRef.current!);
-  }, [animate]);
 
   return (
     <>
