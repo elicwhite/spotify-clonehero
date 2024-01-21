@@ -109,7 +109,7 @@ function filterKeys(chart: Object) {
   return result;
 }
 
-async function fetchSongsAfter(date: Date, lastChartId: number) {
+async function fetchSongsAfter(date: Date, lastChartId: number): Promise<any> {
   const response = await fetch(PROD_URL, {
     headers: {
       accept: 'application/json, text/plain, */*',
@@ -152,7 +152,13 @@ async function fetchSongsAfter(date: Date, lastChartId: number) {
     method: 'POST',
   });
 
-  const json = await response.json();
-
-  return json;
+  if (response.ok) {
+    return await response.json();
+  } else if (response.status == 429) {
+    console.log('Rate limited, waiting 1 second');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return await fetchSongsAfter(date, lastChartId);
+  } else {
+    console.log('Fetch failed', response.status, response.statusText);
+  }
 }
