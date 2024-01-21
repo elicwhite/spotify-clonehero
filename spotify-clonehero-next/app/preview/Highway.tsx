@@ -1,7 +1,7 @@
-import React, {FC, useEffect, useRef, useState} from 'react';
-import {ChartFile} from '@/lib/preview/chart';
+import React, {FC, useCallback, useEffect, useRef, useState} from 'react';
 import {HighwaySettings, setupRenderer} from '@/lib/preview/highway';
 import styles from './Highway.module.css';
+import {ChartFile} from '@/lib/preview/interfaces';
 
 export const Highway: FC<{chart?: ChartFile; song: string}> = ({
   chart,
@@ -11,12 +11,12 @@ export const Highway: FC<{chart?: ChartFile; song: string}> = ({
 
   const requestRef = React.useRef<number>();
 
-  const animate = (time: number) => {
+  const animate = useCallback((time: number) => {
     requestRef.current = requestAnimationFrame(animate);
 
     // console.log("animate", time / 1000);
     setState(time / 1000);
-  };
+  }, []);
 
   const ref = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -41,7 +41,7 @@ export const Highway: FC<{chart?: ChartFile; song: string}> = ({
   React.useEffect(() => {
     requestRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(requestRef.current!);
-  }, []);
+  }, [animate]);
 
   return (
     <>

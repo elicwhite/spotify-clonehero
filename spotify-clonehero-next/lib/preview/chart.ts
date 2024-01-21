@@ -1,59 +1,10 @@
-type TickEvent = {
-  tick: number;
-};
-
-type TimeSignature = TickEvent & {
-  type: "TS";
-  numerator: number;
-  denominator?: number;
-};
-
-type BPM = TickEvent & {
-  type: "B";
-  bpm: number;
-  duration?: number;
-};
-
-type SyncTrackEntry = TimeSignature | BPM;
-
-type Song = {
-  Name: string;
-  Artist: string;
-  Charter: string;
-  Album: string;
-  Year: string;
-  Offset: number;
-  Resolution: number;
-  Player2: string;
-  Difficulty: number;
-  PreviewStart: number;
-  PreviewEnd: number;
-  Genre: string;
-  MediaType: string;
-  MusicStream: string;
-};
-
-export type NoteEvent = TickEvent & {
-  type: "N";
-  fret: number;
-  length: number;
-  time?: number;
-  step?: number;
-  duration?: number;
-  hopo?: boolean;
-};
-
-export type ChartFile = {
-  song?: Song;
-  syncTrack?: Array<SyncTrackEntry>;
-  expertSingle?: Array<NoteEvent>;
-};
+import {BPM, ChartFile, NoteEvent, Song, SyncTrackEntry} from './interfaces';
 
 export const parseChart = (chartData: string) => {
   const chart: ChartFile = {};
 
   const lines = chartData
-    .split("\r\n")
+    .split('\r\n')
     .map(line => line.trim())
     .filter(line => line.length !== 0);
 
@@ -61,7 +12,7 @@ export const parseChart = (chartData: string) => {
     const song: any = {};
 
     for (const kvpair of lines) {
-      const [key, valueRaw] = kvpair.split("=").map(side => side.trim());
+      const [key, valueRaw] = kvpair.split('=').map(side => side.trim());
 
       let value: string | number = valueRaw;
 
@@ -82,24 +33,24 @@ export const parseChart = (chartData: string) => {
     const syncTrack: Array<SyncTrackEntry> = [];
 
     for (const kvpair of lines) {
-      const [key, valueRaw] = kvpair.split("=").map(side => side.trim());
+      const [key, valueRaw] = kvpair.split('=').map(side => side.trim());
 
       const tick = parseInt(key);
-      const parts = valueRaw.split(" ");
+      const parts = valueRaw.split(' ');
 
-      if (valueRaw.startsWith("B")) {
+      if (valueRaw.startsWith('B')) {
         syncTrack.push({
           tick,
-          type: "B",
+          type: 'B',
           bpm: parseInt(parts[1]),
         });
-      } else if (valueRaw.startsWith("TS")) {
+      } else if (valueRaw.startsWith('TS')) {
         const numerator = parseInt(parts[1]);
         const denominator = parts.length > 2 ? parseInt(parts[2]) : undefined;
 
         syncTrack.push({
           tick,
-          type: "TS",
+          type: 'TS',
           numerator,
           denominator,
         });
@@ -113,15 +64,15 @@ export const parseChart = (chartData: string) => {
     const track: Array<NoteEvent> = [];
 
     for (const kvpair of lines) {
-      const [key, valueRaw] = kvpair.split("=").map(side => side.trim());
+      const [key, valueRaw] = kvpair.split('=').map(side => side.trim());
 
       const tick = parseInt(key);
-      const parts = valueRaw.split(" ");
+      const parts = valueRaw.split(' ');
 
-      if (valueRaw.startsWith("N")) {
+      if (valueRaw.startsWith('N')) {
         track.push({
           tick,
-          type: "N",
+          type: 'N',
           fret: parseInt(parts[1]),
           length: parseInt(parts[2]),
         });
@@ -134,27 +85,27 @@ export const parseChart = (chartData: string) => {
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
 
-    if (line.startsWith("[") && line.endsWith("]")) {
+    if (line.startsWith('[') && line.endsWith(']')) {
       const sectionName = line.slice(1, line.length - 1).toLowerCase();
 
-      if (lines[i + 1] !== "{") {
+      if (lines[i + 1] !== '{') {
         throw new Error(
-          `Could not find opening bracket for section ${sectionName}`
+          `Could not find opening bracket for section ${sectionName}`,
         );
       }
 
-      const sectionLines = lines.slice(i + 2, lines.indexOf("}", i + 2));
+      const sectionLines = lines.slice(i + 2, lines.indexOf('}', i + 2));
 
       switch (sectionName) {
-        case "song": {
+        case 'song': {
           chart.song = processSong(sectionLines);
           break;
         }
-        case "synctrack": {
+        case 'synctrack': {
           chart.syncTrack = processSyncTrack(sectionLines);
           break;
         }
-        case "expertsingle": {
+        case 'expertsingle': {
           chart.expertSingle = processTrack(sectionLines);
           break;
         }
@@ -175,7 +126,7 @@ export const calculateTimes = (chart: ChartFile) => {
    * (idk if it ever wouldn't be)
    */
 
-  const bpms = chart.syncTrack.filter(entry => entry.type == "B") as Array<BPM>;
+  const bpms = chart.syncTrack.filter(entry => entry.type == 'B') as Array<BPM>;
   // console.log(bpms.length);
   for (let i = 0; i < bpms.length; i++) {
     if (i == bpms.length - 1) break;
@@ -200,17 +151,17 @@ export const calculateTimes = (chart: ChartFile) => {
     const note = chart.expertSingle[i];
 
     const bpmEntries = chart.syncTrack.filter(
-      entry => entry.type == "B" && entry.tick <= note.tick
+      entry => entry.type == 'B' && entry.tick <= note.tick,
     ) as Array<BPM>;
     const currentBpmEntry = bpmEntries[bpmEntries.length - 1];
 
     const previousBpms = chart.syncTrack.filter(
-      entry => entry.type === "B" && entry.tick < currentBpmEntry.tick
+      entry => entry.type === 'B' && entry.tick < currentBpmEntry.tick,
     ) as Array<BPM>;
 
     const durationUpTo = previousBpms.reduce(
       (sum, entry) => sum + entry.duration!,
-      0
+      0,
     );
 
     const bpm = currentBpmEntry.bpm / 1000;
@@ -230,7 +181,7 @@ export const calculateTimes = (chart: ChartFile) => {
     if (note.fret === 5) continue;
 
     const bpmEntries = chart.syncTrack.filter(
-      entry => entry.type == "B" && entry.tick <= note.tick
+      entry => entry.type == 'B' && entry.tick <= note.tick,
     ) as Array<BPM>;
     const currentBpmEntry = bpmEntries[bpmEntries.length - 1];
     const bpm = currentBpmEntry.bpm / 1000;
@@ -263,9 +214,9 @@ export const calculateTimes = (chart: ChartFile) => {
         previousFrets = chart.expertSingle
           .filter(
             event =>
-              event.type === "N" &&
+              event.type === 'N' &&
               event.tick == chart.expertSingle![j].tick &&
-              event.fret <= 4
+              event.fret <= 4,
           )
           .map(event => event.fret);
 
@@ -281,14 +232,14 @@ export const calculateTimes = (chart: ChartFile) => {
         note.step !== 0 &&
         note.step < 0.124999999 &&
         chart.expertSingle.filter(
-          x => x.tick === note.tick && x.fret >= 0 && x.fret <= 4
+          x => x.tick === note.tick && x.fret >= 0 && x.fret <= 4,
         ).length === 1
       ) {
         note.hopo = true;
 
         const forced =
           chart.expertSingle.findIndex(
-            x => x.tick === note.tick && x.fret === 5
+            x => x.tick === note.tick && x.fret === 5,
           ) !== -1;
 
         if (forced) note.hopo = !note.hopo;

@@ -29,6 +29,7 @@
     "levenshtein-edit-distance": "^3.0.1",
     "lodash": "^4.17.21",
     "lucide-react": "^0.303.0",
+    "midifile": "^2.0.0",
     "next": "^14.0.0",
     "next-auth": "^4.23.2",
     "p-map": "^6.0.0",
