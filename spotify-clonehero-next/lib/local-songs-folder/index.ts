@@ -110,6 +110,16 @@ export async function getDefaultDownloadDirectory(): Promise<FileSystemDirectory
   return downloadsHandle;
 }
 
+export async function getPreviewDownloadDirectory(): Promise<FileSystemDirectoryHandle> {
+  const root = await navigator.storage.getDirectory();
+
+  const previewDirHandle = await root.getDirectoryHandle('previews', {
+    create: true,
+  });
+
+  return previewDirHandle;
+}
+
 async function getBackupDirectory() {
   const root = await navigator.storage.getDirectory();
 
@@ -289,7 +299,10 @@ export async function downloadSong(
     folder?: FileSystemDirectoryHandle;
     replaceExisting?: boolean;
   },
-) {
+): Promise<null | {
+  newParentDirectoryHandle: FileSystemDirectoryHandle;
+  fileName: string;
+}> {
   sendGAEvent({
     event: 'download_song',
   });
@@ -310,7 +323,7 @@ export async function downloadSong(
 
   const body = response.body;
   if (body == null) {
-    return;
+    return null;
   }
   const artistSongTitle = `${artist} - ${song} (${charter})`;
   const filename = filenamify(artistSongTitle, {replacement: ''});
@@ -329,12 +342,17 @@ export async function downloadSong(
     await downloadLocation.removeEntry(filename, {recursive: true});
   }
 
-  await moveToFolder(backupRootDirHandle, filename, downloadLocation);
+  const result = await moveToFolder(
+    backupRootDirHandle,
+    filename,
+    downloadLocation,
+  );
 
   // Delete the temp directory
   await backupRootDirHandle.removeEntry(filename, {recursive: true});
 
   console.log(`Finished downloading ${filename}`);
+  return result;
 }
 
 async function downloadAsFolder(

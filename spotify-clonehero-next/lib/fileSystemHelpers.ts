@@ -17,3 +17,9 @@ export async function readJsonFile(fileHandle: FileSystemFileHandle) {
   const text = await file.text();
   return JSON.parse(text);
 }
+
+export async function readTextFile(fileHandle: FileSystemFileHandle) {
+  const file = await fileHandle.getFile();
+  const text = await file.text();
+  return text;
+}
