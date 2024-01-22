@@ -12,14 +12,18 @@ import {Button} from '@/components/ui/button';
 import {readTextFile} from '@/lib/fileSystemHelpers';
 import {ChartFile} from '@/lib/preview/interfaces';
 import {parseMidi} from '@/lib/preview/midi';
-import {parseChart as scanParseChart} from '@/lib/preview/chart-parser';
+import {
+  ChartParser,
+  parseChart as scanParseChart,
+} from '@/lib/preview/chart-parser';
 import EncoreAutocomplete from '@/components/EncoreAutocomplete';
 import chorusChartDb from '@/lib/chorusChartDb';
 import {Searcher} from 'fast-fuzzy';
 import {ChartResponseEncore} from '@/lib/chartSelection';
+import {MidiParser} from '@/lib/preview/midi-parser';
 
 export default function Preview() {
-  const [chart, setChart] = useState<ChartFile | undefined>();
+  const [chart, setChart] = useState<ChartParser | MidiParser | undefined>();
   const [audioFile, setAudioFile] = useState<string | undefined>();
 
   // const midFileFetch =
@@ -51,7 +55,7 @@ export default function Preview() {
       );
 
     const chartData = await getChartData(songDir);
-    calculateTimes(chartData);
+    // calculateTimes(chartData);
 
     const audioFileHandle = await songDir.getFileHandle('song.opus');
     const audioFile = await audioFileHandle.getFile();
@@ -71,27 +75,32 @@ export default function Preview() {
 
 async function getChartData(
   directoryHandle: FileSystemDirectoryHandle,
-): Promise<ChartFile> {
+): Promise<ChartParser | MidiParser> {
   for await (const entry of directoryHandle.values()) {
     const name = entry.name.toLowerCase();
     if (entry.kind !== 'file') {
       continue;
     }
 
+    let result: ChartParser | MidiParser | null = null;
     if (name == 'notes.chart') {
       const chart = await readTextFile(entry);
 
       const parsedChart = parseChart(chart);
+      calculateTimes(parsedChart);
 
       const file = await entry.getFile();
-      const result = scanParseChart(await file.arrayBuffer());
+      result = scanParseChart(await file.arrayBuffer());
       console.log(parsedChart, result);
 
-      return parsedChart;
+      // return parsedChart;
+      return result;
     } else if (name == 'notes.mid') {
       const file = await entry.getFile();
-      parseMidi(await file.arrayBuffer());
-      throw new Error('notes.mid files are not supported yet');
+      result = parseMidi(await file.arrayBuffer());
+      // console.log(result);
+      // throw new Error('notes.mid files are not supported yet');
+      return result;
     }
   }
 

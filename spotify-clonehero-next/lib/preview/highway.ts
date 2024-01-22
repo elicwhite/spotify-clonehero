@@ -1,25 +1,30 @@
 import {RefObject} from 'react';
 import * as THREE from 'three';
 import {ChartFile, NoteEvent} from './interfaces';
+import {ChartParser} from './chart-parser';
+import {MidiParser} from './midi-parser';
+import {EventType, TrackEvent} from 'scan-chart-web';
 
 const noteTextures: Array<THREE.SpriteMaterial> = [];
 const noteTexturesHopo: Array<THREE.SpriteMaterial> = [];
 
 type NoteObject = {
   object: THREE.Object3D;
-  note: NoteEvent;
+  note: TrackEvent;
 };
 
 let startTime = Date.now();
 
 let globalScene: THREE.Scene | null = null;
 
+export type Song = {};
+
 export type HighwaySettings = {
   highwaySpeed: number;
 };
 
 export const setupRenderer = async (
-  chart: ChartFile,
+  chart: ChartParser | MidiParser,
   sizingRef: RefObject<HTMLDivElement>,
   ref: RefObject<HTMLDivElement>,
   audioRef: RefObject<HTMLAudioElement>,
@@ -164,17 +169,38 @@ export const setupRenderer = async (
     });
   }
 
-  if (!chart.expertSingle) return;
+  const track = chart.trackParsers.find(
+    parser => parser.instrument == 'guitar' && parser.difficulty == 'expert',
+  )!;
+  if (track == null) {
+    return;
+  }
+  // if (!chart.expertSingle) return;
 
   // const settings = {
   //   highwaySpeed: 2.5
   // }
 
-  const notes = chart.expertSingle.filter(note => note.type === 'N');
+  const notes = track.notes;
+  // const notes = chart.expertSingle.filter(note => note.type === 'N');
 
   const noteObjects: Array<NoteObject> = [];
 
   for (const note of notes) {
+    const fret =
+      note.type == EventType.green
+        ? 0
+        : note.type == EventType.red
+        ? 1
+        : note.type == EventType.yellow
+        ? 2
+        : note.type == EventType.blue
+        ? 3
+        : note.type == EventType.orange
+        ? 4
+        : note.type == EventType.open
+        ? 7
+        : -1;
     // if (note.fret > 4) continue;
 
     const SCALE = 0.105;
@@ -185,11 +211,13 @@ export const setupRenderer = async (
       0.035 +
       -(NOTE_SPAN_WIDTH / 2) +
       SCALE +
-      ((NOTE_SPAN_WIDTH - SCALE) / 5) * note.fret;
+      ((NOTE_SPAN_WIDTH - SCALE) / 5) * fret;
 
-    if (note.fret >= 0 && note.fret <= 4) {
+    if (fret >= 0 && fret <= 4) {
       const sprite = new THREE.Sprite(
-        note.hopo ? noteTexturesHopo[note.fret] : noteTextures[note.fret],
+        note.type === EventType.tap
+          ? noteTexturesHopo[fret]
+          : noteTextures[fret],
       );
       sprite.center = new THREE.Vector2(0.5, 0);
       const aspectRatio =
@@ -201,7 +229,7 @@ export const setupRenderer = async (
       sprite.material.transparent = true;
       sprite.renderOrder = 4;
       group.add(sprite);
-    } else if (note.fret === 7) {
+    } else if (note.type === EventType.open) {
       const openScale = 0.11;
       const sprite = new THREE.Sprite(openMaterial);
       sprite.center = new THREE.Vector2(0.5, 0);
@@ -222,11 +250,11 @@ export const setupRenderer = async (
     // myText.scale.set(SCALE * 0.5, SCALE * 0.5, SCALE * 0.5);
     // group.add(myText);
 
-    if (note.duration && note.duration !== 0) {
+    if (note.length && note.length !== 0) {
       let colors = ['#01B11A', '#DD2214', '#DEEB52', '#006CAF', '#F8B272'];
 
       const mat = new THREE.MeshBasicMaterial({
-        color: colors[note.fret],
+        color: colors[fret],
         side: THREE.DoubleSide,
       });
 
@@ -236,13 +264,13 @@ export const setupRenderer = async (
 
       const geometry = new THREE.PlaneGeometry(
         SCALE * 0.175,
-        note.duration * settings.highwaySpeed,
+        (note.length / 1000) * settings.highwaySpeed,
       );
       const plane = new THREE.Mesh(geometry, mat);
 
       plane.position.z = 0;
       plane.position.y =
-        (note.duration! / 2) * settings.highwaySpeed + SCALE / 2;
+        (note.length! / 1000 / 2) * settings.highwaySpeed + SCALE / 2;
       // console.log(" note.duration! / 2", note.duration! / 2);
       plane.renderOrder = 2;
       group.add(plane);
@@ -262,21 +290,21 @@ export const setupRenderer = async (
   };
   audio.play();
 
-  const SYNC_MS = new AudioContext().outputLatency;
-  const SYNC_ = SYNC_MS / 1000;
+  const SYNC_MS = new AudioContext().outputLatency * 1000;
 
   function animation(time: number) {
     if (!audio.paused) {
-      const elapsedTime = (Date.now() - startTime) / 1000 + SYNC_;
-
+      const elapsedTime = Date.now() - startTime + SYNC_MS;
       if (highwayTexture) {
-        highwayTexture.offset.y = elapsedTime * settings.highwaySpeed - 1;
+        highwayTexture.offset.y =
+          (elapsedTime / 1000) * settings.highwaySpeed - 1;
       }
 
       for (const {object, note} of noteObjects) {
         let notPast = object.position.y > -1;
         object.position.y =
-          (note.time! - elapsedTime) * settings.highwaySpeed - 1;
+          ((note.time - elapsedTime) / 1000) * settings.highwaySpeed - 1;
+        // console.log('y', object.position.y, note.time, elapsedTime);
         if (notPast && object.position.y <= -1) {
           // console.log("note", note.tick);
         }

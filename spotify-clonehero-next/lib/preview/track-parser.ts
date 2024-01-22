@@ -19,7 +19,7 @@ const NPS_GROUP_SIZE_MS = 1000;
 
 export class TrackParser {
   /** Includes all track event types except `starPower`, `soloMarker`, `activationLane`, `rollLaneSingle`, and `rollLaneDouble`. */
-  private notes: TrackEvent[];
+  public notes: TrackEvent[];
   private groupedNotes: GroupedTrackEvent[];
 
   private noteIssues: NoteIssue[] = [];
@@ -27,9 +27,9 @@ export class TrackParser {
 
   constructor(
     private notesData: NotesData,
-    private instrument: Instrument,
-    private difficulty: Difficulty,
-    private trackEvents: TrackEvent[],
+    public instrument: Instrument,
+    public difficulty: Difficulty,
+    public trackEvents: TrackEvent[],
     private format: 'chart' | 'mid',
   ) {
     if (!notesData.instruments.includes(this.instrument)) {

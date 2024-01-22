@@ -67,6 +67,7 @@ export class MidiParser {
     difficulty: Difficulty;
     trackEvents: TrackEvent[];
   }[];
+  public trackParsers: TrackParser[] = [];
 
   constructor(midiFile: MIDIFile) {
     this.notesData = {
@@ -527,6 +528,7 @@ export class MidiParser {
       .value();
 
     trackParsers.forEach(p => p.parseTrack());
+    this.trackParsers = trackParsers;
 
     const globalFirstNote =
       _.minBy(trackParsers, p => p.firstNote?.time ?? Infinity)?.firstNote ??

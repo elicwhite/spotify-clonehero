@@ -1,8 +1,10 @@
 import React, {FC, useCallback, useEffect, useRef, useState} from 'react';
 import {HighwaySettings, setupRenderer} from '@/lib/preview/highway';
 import {ChartFile} from '@/lib/preview/interfaces';
+import {ChartParser} from '@/lib/preview/chart-parser';
+import {MidiParser} from '@/lib/preview/midi-parser';
 
-export const Highway: FC<{chart?: ChartFile; song: string}> = ({
+export const Highway: FC<{chart?: ChartParser | MidiParser; song: string}> = ({
   chart,
   song,
 }) => {

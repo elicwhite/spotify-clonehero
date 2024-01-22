@@ -58,7 +58,7 @@ const trackNameMap = {
   EasyGHLBass: {instrument: 'bassghl', difficulty: 'easy'},
 } as const;
 
-class ChartParser {
+export class ChartParser {
   private notesData: NotesData;
 
   private metadata: {[key: string]: string};
@@ -66,6 +66,7 @@ class ChartParser {
   private tempoMap: {tick: number; time: number; bpm: number}[];
   private timeSignatures: {tick: number; value: number}[];
   private trackSections: {[trackName in TrackName]: string[]};
+  public trackParsers: TrackParser[];
 
   constructor(private fileSections: {[sectionName: string]: string[]}) {
     this.notesData = {
@@ -91,6 +92,7 @@ class ChartParser {
       effectiveLength: 0,
     };
 
+    this.trackParsers = [];
     this.metadata = this.getFileSectionMap(this.fileSections['Song'] ?? []);
     this.resolution = this.getResolution();
     this.tempoMap = this.getTempoMap();
@@ -204,6 +206,7 @@ class ChartParser {
       .value();
 
     trackParsers.forEach(p => p.parseTrack());
+    this.trackParsers = trackParsers;
 
     const globalFirstNote =
       _.minBy(trackParsers, p => p.firstNote?.time ?? Infinity)?.firstNote ??
