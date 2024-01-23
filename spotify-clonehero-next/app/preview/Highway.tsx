@@ -4,38 +4,39 @@ import {ChartFile} from '@/lib/preview/interfaces';
 import {ChartParser} from '@/lib/preview/chart-parser';
 import {MidiParser} from '@/lib/preview/midi-parser';
 
-export const Highway: FC<{chart?: ChartParser | MidiParser; song: string}> = ({
-  chart,
-  song,
-}) => {
-  const requestRef = React.useRef<number>();
-
+export const Highway: FC<{
+  chart?: ChartParser | MidiParser;
+  audioFiles: File[];
+}> = ({chart, audioFiles}) => {
   const sizingRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const playingPromise = useRef<Promise<any>>(Promise.resolve(undefined));
 
   const settingsRef = useRef<HighwaySettings>({
     highwaySpeed: 2,
   });
 
-  const [settings, setSettings] = useState<Awaited<
-    ReturnType<typeof setupRenderer>
-  > | null>(null);
-
   useEffect(() => {
-    if (chart) {
-      setupRenderer(chart, sizingRef, ref, audioRef, settingsRef.current).then(
-        res => {
-          setSettings(res);
-        },
-      );
-      console.log('setup renderer');
-    }
-  }, [chart]);
+    if (!chart) return;
+
+    const renderer = setupRenderer(
+      chart,
+      sizingRef,
+      ref,
+      audioRef,
+      audioFiles,
+      settingsRef.current,
+    );
+
+    return () => {
+      renderer.destroy();
+    };
+  }, [audioFiles, chart]);
 
   return (
     <>
-      <audio src={song} ref={audioRef} className="w-full" controls></audio>
+      <audio ref={audioRef} className="w-full" controls></audio>
       <input
         type="range"
         className="w-full"
@@ -51,9 +52,17 @@ export const Highway: FC<{chart?: ChartParser | MidiParser; song: string}> = ({
         onClick={() => {
           if (!audioRef.current) return;
 
-          audioRef.current.paused
-            ? audioRef.current.play()
-            : audioRef.current.pause();
+          if (audioRef.current.paused) {
+            playingPromise.current = playingPromise.current.then(() => {
+              if (!audioRef.current) return;
+              audioRef.current.play();
+            });
+          } else {
+            playingPromise.current = playingPromise.current.then(() => {
+              if (!audioRef.current) return;
+              audioRef.current.pause();
+            });
+          }
         }}>
         <div className="absolute" ref={ref}></div>
       </div>
