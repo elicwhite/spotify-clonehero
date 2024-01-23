@@ -69,11 +69,9 @@ async function getAllSpotifyPlays(handle: FileSystemDirectoryHandle) {
   const results = [];
   for await (const entry of handle.values()) {
     if (entry.kind !== 'file') {
-      console.error(
-        'Did not expect to see a folder with folders in it. Found folder',
-        entry.name,
+      throw new Error(
+        `Spotify History: Did not expect to see subfolders. Found folder ${entry.name}. Are you sure you selected your Spotify Extended Streaming History?`,
       );
-      throw new Error('Select the folder with your Spotify streaming history.');
     }
 
     if (entry.name.endsWith('.pdf') && entry.name.startsWith('ReadMeFirst')) {
@@ -96,14 +94,16 @@ async function getAllSpotifyPlays(handle: FileSystemDirectoryHandle) {
       console.error(
         `Expected ${entry.name} to contain an array. Received ${typeof json}`,
       );
+      throw new Error(
+        `Spotify History: Unexpected file contents in ${entry.name}. Are you sure you selected your Spotify Extended Streaming History?`,
+      );
     }
   }
 
   if (!hasPdf) {
-    console.error(
-      'Expected to find a ReadMeFirst.pdf file in the Spotify history folder',
+    throw new Error(
+      `Spotify History: Expected to find a ReadMeFirst.pdf file. Are you sure you selected your Spotify Extended Streaming History?`,
     );
-    throw new Error('Select the folder with your Spotify streaming history.');
   }
 
   return results;

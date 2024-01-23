@@ -22,6 +22,7 @@ import {RxExternalLink} from 'react-icons/rx';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
 import {Searcher} from 'fast-fuzzy';
 import {type ChartResponseEncore} from '@/lib/chartSelection';
+import {toast} from 'sonner';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -126,6 +127,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
           id: 'spotify-dump',
         });
       } catch (err) {
+        toast.info('Directory picker canceled');
         console.log('User canceled picker');
         return;
       }
@@ -153,8 +155,18 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       await pause();
     } catch (err) {
       if (err instanceof Error && err.message == 'User canceled picker') {
+        toast.info('Directory picker canceled');
+        setStatus({
+          status: 'not-started',
+          songsCounted: 0,
+        });
         return;
       } else {
+        toast.error('Error scanning local charts');
+        setStatus({
+          status: 'not-started',
+          songsCounted: 0,
+        });
         throw err;
       }
     }
@@ -170,7 +182,19 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       }));
       // Yield to React to let it update State
       await pause();
-      artistTrackPlays = await processSpotifyDump(spotifyDataHandle);
+      try {
+        artistTrackPlays = await processSpotifyDump(spotifyDataHandle);
+      } catch (err) {
+        setStatus({
+          status: 'not-started',
+          songsCounted: 0,
+        });
+
+        if (err instanceof Error) {
+          toast.error(err.message);
+        }
+        return;
+      }
     }
 
     const flatTrackPlays = flattenArtistTrackPlays(artistTrackPlays);

@@ -7,6 +7,7 @@ import {GoogleAnalytics} from '@next/third-parties/google';
 import {cn} from '@/lib/utils';
 import {Icons} from '@/components/icons';
 import {Button} from '@/components/ui/button';
+import {Toaster} from 'sonner';
 
 export const fontSans = FontSans({
   subsets: ['latin'],
@@ -68,6 +69,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
         <main className="flex flex-col flex-1 items-center align-center min-h-0 p-4">
           <ContextProviders>{children}</ContextProviders>
         </main>
+        <Toaster />
         <GoogleAnalytics gaId="G-LEE7EDJH14" />
       </body>
     </html>
