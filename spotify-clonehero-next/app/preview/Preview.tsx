@@ -29,6 +29,8 @@ Things I need from scan-chart
 * List of audio files / references to Audio Files
 */
 
+const DEBUG = true;
+
 export default function Preview() {
   const [chart, setChart] = useState<ChartParser | MidiParser | undefined>();
   const [audioFiles, setAudioFiles] = useState<File[]>([]);
@@ -61,19 +63,12 @@ export default function Preview() {
         downloadedSong.fileName,
       );
 
-    // const chartInfo = await getChartInfo(
-    //   downloadedSong.newParentDirectoryHandle,
-    // );
-    // console.log(chartInfo);
+    // const songDir = await (
+    //   await getPreviewDownloadDirectory()
+    // ).getDirectoryHandle('Artist - Song (charter)');
 
     const chartData = await getChartData(songDir);
     const songFiles = await getSongFiles(songDir);
-    // const songUrls = songFile.map(file => URL.createObjectURL(file));
-    // calculateTimes(chartData);
-
-    // const audioFileHandle = await songDir.getFileHandle('song.opus');
-    // const audioFile = await audioFileHandle.getFile();
-    // const audioUrl = URL.createObjectURL(audioFile);
 
     setChart(chartData);
     setAudioFiles(songFiles);
@@ -81,6 +76,7 @@ export default function Preview() {
 
   return (
     <div className="flex flex-col w-full flex-1">
+      {/* <Button onClick={() => handler(null)}>Play</Button> */}
       <TypeAhead onChartSelected={handler} />
       {chart && audioFiles.length > 0 && (
         <Highway chart={chart} audioFiles={audioFiles}></Highway>

@@ -10,8 +10,6 @@ export const Highway: FC<{
 }> = ({chart, audioFiles}) => {
   const sizingRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const playingPromise = useRef<Promise<any>>(Promise.resolve(undefined));
 
   const settingsRef = useRef<HighwaySettings>({
     highwaySpeed: 2,
@@ -24,7 +22,6 @@ export const Highway: FC<{
       chart,
       sizingRef,
       ref,
-      audioRef,
       audioFiles,
       settingsRef.current,
     );
@@ -36,7 +33,6 @@ export const Highway: FC<{
 
   return (
     <>
-      <audio ref={audioRef} className="w-full" controls></audio>
       <input
         type="range"
         className="w-full"
@@ -46,24 +42,7 @@ export const Highway: FC<{
         onChange={e => {
           settingsRef.current.highwaySpeed = Number(e.target.value);
         }}></input>
-      <div
-        className="relative flex-1"
-        ref={sizingRef}
-        onClick={() => {
-          if (!audioRef.current) return;
-
-          if (audioRef.current.paused) {
-            playingPromise.current = playingPromise.current.then(() => {
-              if (!audioRef.current) return;
-              audioRef.current.play();
-            });
-          } else {
-            playingPromise.current = playingPromise.current.then(() => {
-              if (!audioRef.current) return;
-              audioRef.current.pause();
-            });
-          }
-        }}>
+      <div className="relative flex-1" ref={sizingRef}>
         <div className="absolute" ref={ref}></div>
       </div>
     </>

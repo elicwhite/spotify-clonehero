@@ -15,8 +15,6 @@ type NoteObject = {
 
 let startTime = Date.now();
 
-let globalScene: THREE.Scene | null = null;
-
 export type Song = {};
 
 export type HighwaySettings = {
@@ -27,7 +25,6 @@ export const setupRenderer = (
   chart: ChartParser | MidiParser,
   sizingRef: RefObject<HTMLDivElement>,
   ref: RefObject<HTMLDivElement>,
-  audioRef: RefObject<HTMLAudioElement>,
   audioFiles: File[],
   settings: HighwaySettings,
 ) => {
@@ -55,7 +52,6 @@ export const setupRenderer = (
   setSize();
 
   function onResize() {
-    console.log('resize');
     setSize();
   }
   window.addEventListener('resize', onResize, false);
@@ -66,30 +62,16 @@ export const setupRenderer = (
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   audioCtx.suspend();
 
-  // let audioTime: number = 0;
-  // let playTime: null | number = null;
-  // let pauseTime: null | number = null;
-  function onPlay() {
-    // console.log('context time', audioCtx.currentTime);
-    // playTime = performance.now();
-    // console.log('currentTime', audioTime);
-    audioCtx.resume();
-
-    // When did the track start, if we never paused
-    startTime = Date.now() - audioCtx.currentTime * 1000;
-    // console.log('start time', startTime);
+  async function sizingRefClicked() {
+    if (audioCtx.state === 'running') {
+      await audioCtx.suspend();
+    } else if (audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+      startTime = Date.now() - audioCtx.currentTime * 1000;
+    }
   }
-  function onPause() {
-    // Write how much time has progressed
-    // audioTime += performance.now() - playTime!;
-    // console.log('song time', audioTime!);
-    audioCtx.suspend();
-  }
-  const audioControl = audioRef.current!;
-  audioControl.addEventListener('play', onPlay);
-  audioControl.addEventListener('pause', onPause);
 
-  audioControl.volume = 0.1;
+  sizingRef.current?.addEventListener('click', sizingRefClicked);
 
   run();
 
@@ -98,8 +80,7 @@ export const setupRenderer = (
       console.log('Tearing down the renderer');
       window.removeEventListener('resize', onResize, false);
       audioCtx.close();
-      audioControl.removeEventListener('play', onPlay);
-      audioControl.removeEventListener('pause', onPause);
+      sizingRef.current?.removeEventListener('click', sizingRefClicked);
     },
   };
 
@@ -114,7 +95,7 @@ export const setupRenderer = (
     //   );
     // });
 
-    for (const num of [0, 1, 2, 3, 4]) {
+    for await (const num of [0, 1, 2, 3, 4]) {
       noteTextures.push(
         new THREE.SpriteMaterial({
           map: await textureLoader.loadAsync(
@@ -124,7 +105,7 @@ export const setupRenderer = (
       );
     }
 
-    for (const num of [0, 1, 2, 3, 4]) {
+    for await (const num of [0, 1, 2, 3, 4]) {
       noteTexturesHopo.push(
         new THREE.SpriteMaterial({
           map: await textureLoader.loadAsync(
@@ -133,6 +114,9 @@ export const setupRenderer = (
         }),
       );
     }
+
+    await new Promise(resolve => setTimeout(resolve, 4000));
+    // debugger;
 
     const openMaterial = new THREE.SpriteMaterial({
       map: await textureLoader.loadAsync(`/assets/preview/assets2/strum5.webp`),
@@ -201,7 +185,7 @@ export const setupRenderer = (
         // const scale = 0.15;
         // sprite.scale.set(scale, scale, scale);
         sprite.position.y = -1;
-        const idx = 0;
+        // const idx = 0;
         // sprite.position.x = -0.5 + scale + ((1 - scale) / 5) * idx;
         sprite.renderOrder = 3;
         scene.add(sprite);
@@ -214,14 +198,12 @@ export const setupRenderer = (
     if (track == null) {
       return;
     }
-    // if (!chart.expertSingle) return;
 
     // const settings = {
     //   highwaySpeed: 2.5
     // }
 
     const notes = track.notes;
-    // const notes = chart.expertSingle.filter(note => note.type === 'N');
 
     const noteObjects: Array<NoteObject> = [];
 
@@ -310,7 +292,6 @@ export const setupRenderer = (
         plane.position.z = 0;
         plane.position.y =
           (note.length! / 1000 / 2) * settings.highwaySpeed + SCALE / 2;
-        // console.log(" note.duration! / 2", note.duration! / 2);
         plane.renderOrder = 2;
         group.add(plane);
       }
@@ -323,6 +304,10 @@ export const setupRenderer = (
     // scene.add(group);
     const sources = await Promise.all(
       audioFiles.map(async audioFile => {
+        if (audioCtx.state === 'closed') {
+          // Can happen if cleaned up before setup is done
+          return;
+        }
         const arrayBuffer = await audioFile.arrayBuffer();
         const decodedAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
         const source = audioCtx.createBufferSource();
@@ -332,16 +317,14 @@ export const setupRenderer = (
       }),
     );
 
-    sources.forEach(source => {
-      source.start();
+    sources.filter(Boolean).forEach(source => {
+      source!.start();
     });
-
-    audioControl.play();
 
     const SYNC_MS = new AudioContext().outputLatency * 1000;
 
     function animation(time: number) {
-      if (!audioControl.paused) {
+      if (audioCtx.state === 'running') {
         const elapsedTime = Date.now() - startTime + SYNC_MS;
         if (highwayTexture) {
           highwayTexture.offset.y =
