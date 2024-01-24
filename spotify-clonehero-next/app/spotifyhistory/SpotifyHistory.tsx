@@ -162,7 +162,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
         });
         return;
       } else {
-        toast.error('Error scanning local charts');
+        toast.error('Error scanning local charts', {duration: 8000});
         setStatus({
           status: 'not-started',
           songsCounted: 0,
@@ -191,7 +191,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
         });
 
         if (err instanceof Error) {
-          toast.error(err.message);
+          toast.error(err.message, {duration: 8000});
         }
         return;
       }
