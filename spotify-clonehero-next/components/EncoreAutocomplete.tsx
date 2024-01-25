@@ -4,16 +4,6 @@ import {Searcher} from 'fast-fuzzy';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import {Input} from '@/components/ui/input';
 import {Button} from './ui/button';
-import {
-  DropdownMenu,
-  // DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-  // DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {cn} from '@/lib/utils';
 
 export default function EncoreAutocomplete({
@@ -45,7 +35,6 @@ export default function EncoreAutocomplete({
         setItems(result?.slice(0, 10) ?? []);
       }
     },
-    initialInputValue: 'Sweet Tea (feat. Aaron Marshall)',
     items,
     itemToString(item) {
       return item ? item.name : '';
@@ -54,6 +43,7 @@ export default function EncoreAutocomplete({
 
   const buttonHandler = useCallback(() => {
     if (selectedItem == null) return;
+
     onChartSelected(selectedItem);
   }, [onChartSelected, selectedItem]);
 
@@ -71,15 +61,6 @@ export default function EncoreAutocomplete({
         </div>
         <div className="flex shadow-sm gap-0.5"></div>
       </div>
-      {/* <DropdownMenu>
-        <DropdownMenuTrigger>Open</DropdownMenuTrigger>
-        <DropdownMenuContent className="">
-          <DropdownMenuItem>Profile</DropdownMenuItem>
-          <DropdownMenuItem>Billing</DropdownMenuItem>
-          <DropdownMenuItem>Team</DropdownMenuItem>
-          <DropdownMenuItem>Subscription</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu> */}
       <ul
         className={`absolute w-72 mt-1 shadow-md max-h-80 overflow-scroll p-0 z-10 ${
           !(isOpen && items.length) && 'hidden'

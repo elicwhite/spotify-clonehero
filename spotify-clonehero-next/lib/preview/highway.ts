@@ -1,19 +1,13 @@
 import {RefObject} from 'react';
 import * as THREE from 'three';
-import {ChartFile, NoteEvent} from './interfaces';
 import {ChartParser} from './chart-parser';
 import {MidiParser} from './midi-parser';
 import {EventType, TrackEvent} from 'scan-chart-web';
-
-const noteTextures: Array<THREE.SpriteMaterial> = [];
-const noteTexturesHopo: Array<THREE.SpriteMaterial> = [];
 
 type NoteObject = {
   object: THREE.Object3D;
   note: TrackEvent;
 };
-
-let startTime = Date.now();
 
 export type Song = {};
 
@@ -28,7 +22,8 @@ export const setupRenderer = (
   audioFiles: File[],
   settings: HighwaySettings,
 ) => {
-  console.log('setupRenderer');
+  console.log('Playing Preview');
+  let startTime = Date.now();
   const camera = new THREE.PerspectiveCamera(90, 1 / 1, 0.01, 10);
   camera.position.z = 0.8;
   camera.position.y = -1.3;
@@ -65,6 +60,7 @@ export const setupRenderer = (
   async function sizingRefClicked() {
     if (audioCtx.state === 'running') {
       await audioCtx.suspend();
+      console.log('Paused at', audioCtx.currentTime * 1000);
     } else if (audioCtx.state === 'suspended') {
       await audioCtx.resume();
       startTime = Date.now() - audioCtx.currentTime * 1000;
@@ -94,29 +90,29 @@ export const setupRenderer = (
     //     })
     //   );
     // });
-
+    const noteTextures = [];
     for await (const num of [0, 1, 2, 3, 4]) {
+      const texture = await textureLoader.loadAsync(
+        `/assets/preview/assets2/strum${num}.webp`,
+      );
       noteTextures.push(
         new THREE.SpriteMaterial({
-          map: await textureLoader.loadAsync(
-            `/assets/preview/assets2/strum${num}.webp`,
-          ),
+          map: texture,
         }),
       );
     }
 
+    const noteTexturesHopo = [];
     for await (const num of [0, 1, 2, 3, 4]) {
+      const texture = await textureLoader.loadAsync(
+        `/assets/preview/assets2/hopo${num}.webp`,
+      );
       noteTexturesHopo.push(
         new THREE.SpriteMaterial({
-          map: await textureLoader.loadAsync(
-            `/assets/preview/assets2/hopo${num}.webp`,
-          ),
+          map: texture,
         }),
       );
     }
-
-    await new Promise(resolve => setTimeout(resolve, 4000));
-    // debugger;
 
     const openMaterial = new THREE.SpriteMaterial({
       map: await textureLoader.loadAsync(`/assets/preview/assets2/strum5.webp`),

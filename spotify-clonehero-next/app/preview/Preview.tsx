@@ -34,50 +34,101 @@ const DEBUG = true;
 export default function Preview() {
   const [chart, setChart] = useState<ChartParser | MidiParser | undefined>();
   const [audioFiles, setAudioFiles] = useState<File[]>([]);
+  const [alreadyInstalled, setAlreadyInstalled] = useState<{
+    songName: string;
+    handle: FileSystemDirectoryHandle;
+  } | null>(null);
 
   // const midFileFetch =
   //   'https://files.enchor.us/56d31d7c085f5e504b91e272e65d1cd3.sng';
   // const chartFileFetch =
   //   'https://files.enchor.us/c395e1d650182ccae787f37758f20223.sng';
 
-  const handler = useCallback(async (chart: ChartResponseEncore) => {
-    const downloadLocation = await getPreviewDownloadDirectory();
-    // We should have a better way to manage this directory
-    await emptyDirectory(downloadLocation);
-    const downloadedSong = await downloadSong(
-      'Artist',
-      'Song',
-      'charter',
-      chart.file, // SWAP THIS OUT WITH midFileFetch TO TEST MIDI
-      {
-        folder: downloadLocation,
-      },
-    );
+  // Calculate downloaded preview
+  useEffect(() => {
+    async function run() {
+      const downloadLocation = await getPreviewDownloadDirectory();
+      let subDir = null;
+      for await (const entry of downloadLocation.values()) {
+        subDir = entry;
+        break;
+      }
 
-    if (downloadedSong == null) {
-      return;
+      if (subDir == null || subDir.kind !== 'directory') {
+        return;
+      }
+
+      const chartData = await getChartInfo(subDir);
+      const name = chartData.chart.name;
+      console.log('loaded', name);
+
+      if (!name) {
+        return;
+      }
+
+      setAlreadyInstalled({
+        songName: name,
+        handle: subDir,
+      });
+      // console.log('data', chartData);
+      // const result = scanCharts(subDir);
+      // const song = chartData.metadata.Name;
     }
+    run();
+  }, []);
 
-    const songDir =
-      await downloadedSong.newParentDirectoryHandle.getDirectoryHandle(
-        downloadedSong.fileName,
+  const playDirectory = useCallback(
+    async (directory: FileSystemDirectoryHandle) => {
+      const chartData = await getChartData(directory);
+      console.log(chartData);
+      const songFiles = await getSongFiles(directory);
+
+      setChart(chartData);
+      setAudioFiles(songFiles);
+    },
+    [],
+  );
+
+  const handler = useCallback(
+    async (chart: ChartResponseEncore) => {
+      const downloadLocation = await getPreviewDownloadDirectory();
+      // We should have a better way to manage this directory
+      await emptyDirectory(downloadLocation);
+      const downloadedSong = await downloadSong(
+        'Artist',
+        'Song',
+        'charter',
+        chart.file, // SWAP THIS OUT WITH midFileFetch TO TEST MIDI
+        {
+          folder: downloadLocation,
+        },
       );
 
-    // const songDir = await (
-    //   await getPreviewDownloadDirectory()
-    // ).getDirectoryHandle('Artist - Song (charter)');
+      if (downloadedSong == null) {
+        return;
+      }
 
-    const chartData = await getChartData(songDir);
-    const songFiles = await getSongFiles(songDir);
+      const songDir =
+        await downloadedSong.newParentDirectoryHandle.getDirectoryHandle(
+          downloadedSong.fileName,
+        );
 
-    setChart(chartData);
-    setAudioFiles(songFiles);
-  }, []);
+      await playDirectory(songDir);
+    },
+    [playDirectory],
+  );
 
   return (
     <div className="flex flex-col w-full flex-1">
       {/* <Button onClick={() => handler(null)}>Play</Button> */}
-      <TypeAhead onChartSelected={handler} />
+      <div className="flex flex-row gap-10">
+        <TypeAhead onChartSelected={handler} />
+        {alreadyInstalled != null && (
+          <Button onClick={() => playDirectory(alreadyInstalled?.handle)}>
+            Play {alreadyInstalled?.songName}
+          </Button>
+        )}
+      </div>
       {chart && audioFiles.length > 0 && (
         <Highway chart={chart} audioFiles={audioFiles}></Highway>
       )}
