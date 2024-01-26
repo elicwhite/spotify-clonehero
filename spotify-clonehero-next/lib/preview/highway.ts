@@ -2,11 +2,16 @@ import {RefObject} from 'react';
 import * as THREE from 'three';
 import {ChartParser} from './chart-parser';
 import {MidiParser} from './midi-parser';
-import {EventType, TrackEvent} from 'scan-chart-web';
+import {Difficulty, EventType, Instrument, TrackEvent} from 'scan-chart-web';
 
 type NoteObject = {
   object: THREE.Object3D;
   note: TrackEvent;
+};
+
+export type SelectedTrack = {
+  instrument: Instrument;
+  difficulty: Difficulty;
 };
 
 export type Song = {};
@@ -20,6 +25,7 @@ export const setupRenderer = (
   sizingRef: RefObject<HTMLDivElement>,
   ref: RefObject<HTMLDivElement>,
   audioFiles: File[],
+  selectedTrack: SelectedTrack,
   settings: HighwaySettings,
 ) => {
   console.log('Playing Preview');
@@ -189,9 +195,21 @@ export const setupRenderer = (
     }
 
     const track = chart.trackParsers.find(
-      parser => parser.instrument == 'guitar' && parser.difficulty == 'expert',
+      parser =>
+        parser.instrument == selectedTrack.instrument &&
+        parser.difficulty == selectedTrack.difficulty,
     )!;
     if (track == null) {
+      console.log(
+        'No track found for',
+        selectedTrack,
+        'Only found',
+        chart.trackParsers.map(
+          trackParser =>
+            `${trackParser.instrument} - ${trackParser.difficulty}`,
+        ),
+      );
+
       return;
     }
 
