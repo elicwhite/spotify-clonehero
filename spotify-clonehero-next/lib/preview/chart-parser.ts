@@ -59,7 +59,7 @@ const trackNameMap = {
 } as const;
 
 export class ChartParser {
-  private notesData: NotesData;
+  public notesData: NotesData;
 
   private metadata: {[key: string]: string};
   private resolution: number;

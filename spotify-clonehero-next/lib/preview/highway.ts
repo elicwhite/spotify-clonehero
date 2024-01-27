@@ -284,6 +284,8 @@ export const setupRenderer = (
       noteObjects.push({object: group, note});
     }
 
+    const songLength = chart.notesData.length;
+
     // scene.add(group);
     const sources = await Promise.all(
       audioFiles.map(async audioFile => {
@@ -309,7 +311,11 @@ export const setupRenderer = (
     function animation(time: number) {
       if (audioCtx.state === 'running') {
         const elapsedTime = Date.now() - startTime + SYNC_MS;
-        console.log(time, elapsedTime);
+        if (elapsedTime > songLength) {
+          renderer.setAnimationLoop(null);
+          audioCtx.close();
+        }
+
         if (highwayTexture) {
           highwayTexture.offset.y =
             (elapsedTime / 1000) * settings.highwaySpeed - 1;
