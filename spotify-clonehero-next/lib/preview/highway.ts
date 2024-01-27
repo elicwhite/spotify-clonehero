@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {ChartParser} from './chart-parser';
 import {MidiParser} from './midi-parser';
 import {Difficulty, EventType, Instrument, TrackEvent} from 'scan-chart-web';
+import {text} from 'stream/consumers';
 
 type NoteObject = {
   object: THREE.Object3D;
@@ -89,36 +90,8 @@ export const setupRenderer = (
   async function run() {
     const textureLoader = new THREE.TextureLoader();
 
-    // await [0, 1, 2, 3, 4].forEach(async num => {
-    //   noteTextures.push(
-    //     new THREE.SpriteMaterial({
-    //       map: await textureLoader.loadAsync(`/assets/preview/assets/tile000.png`),
-    //     })
-    //   );
-    // });
-    const noteTextures = [];
-    for await (const num of [0, 1, 2, 3, 4]) {
-      const texture = await textureLoader.loadAsync(
-        `/assets/preview/assets2/strum${num}.webp`,
-      );
-      noteTextures.push(
-        new THREE.SpriteMaterial({
-          map: texture,
-        }),
-      );
-    }
-
-    const noteTexturesHopo = [];
-    for await (const num of [0, 1, 2, 3, 4]) {
-      const texture = await textureLoader.loadAsync(
-        `/assets/preview/assets2/hopo${num}.webp`,
-      );
-      noteTexturesHopo.push(
-        new THREE.SpriteMaterial({
-          map: texture,
-        }),
-      );
-    }
+    const noteTextures = await loadNoteTextures(textureLoader);
+    const noteTexturesHopo = await loadHopoNoteTextures(textureLoader);
 
     const openMaterial = new THREE.SpriteMaterial({
       map: await textureLoader.loadAsync(`/assets/preview/assets2/strum5.webp`),
@@ -212,10 +185,6 @@ export const setupRenderer = (
 
       return;
     }
-
-    // const settings = {
-    //   highwaySpeed: 2.5
-    // }
 
     const notes = track.notes;
 
@@ -340,6 +309,7 @@ export const setupRenderer = (
     function animation(time: number) {
       if (audioCtx.state === 'running') {
         const elapsedTime = Date.now() - startTime + SYNC_MS;
+        console.log(time, elapsedTime);
         if (highwayTexture) {
           highwayTexture.offset.y =
             (elapsedTime / 1000) * settings.highwaySpeed - 1;
@@ -378,3 +348,37 @@ export const setupRenderer = (
     renderer.setAnimationLoop(animation);
   }
 };
+
+async function loadNoteTextures(textureLoader: THREE.TextureLoader) {
+  const noteTextures = [];
+
+  for await (const num of [0, 1, 2, 3, 4]) {
+    const texture = await textureLoader.loadAsync(
+      `/assets/preview/assets2/strum${num}.webp`,
+    );
+    noteTextures.push(
+      new THREE.SpriteMaterial({
+        map: texture,
+      }),
+    );
+  }
+
+  return noteTextures;
+}
+
+async function loadHopoNoteTextures(textureLoader: THREE.TextureLoader) {
+  const hopoNoteTextures = [];
+
+  for await (const num of [0, 1, 2, 3, 4]) {
+    const texture = await textureLoader.loadAsync(
+      `/assets/preview/assets2/strum${num}.webp`,
+    );
+    hopoNoteTextures.push(
+      new THREE.SpriteMaterial({
+        map: texture,
+      }),
+    );
+  }
+
+  return hopoNoteTextures;
+}
