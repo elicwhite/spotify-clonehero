@@ -4,6 +4,7 @@ import {ChartParser} from './chart-parser';
 import {MidiParser} from './midi-parser';
 import {Difficulty, EventType, Instrument, TrackEvent} from 'scan-chart-web';
 import {text} from 'stream/consumers';
+import {TrackParser} from './track-parser';
 
 type NoteObject = {
   object: THREE.Object3D;
@@ -19,6 +20,14 @@ export type Song = {};
 
 export type HighwaySettings = {
   highwaySpeed: number;
+};
+
+const NOTE_COLORS = {
+  green: '#01B11A',
+  red: '#DD2214',
+  yellow: '#DEEB52',
+  blue: '#006CAF',
+  orange: '#F8B272',
 };
 
 export const setupRenderer = (
@@ -90,11 +99,18 @@ export const setupRenderer = (
   async function run() {
     const textureLoader = new THREE.TextureLoader();
 
-    const noteTextures = await loadNoteTextures(textureLoader);
-    const noteTexturesHopo = await loadHopoNoteTextures(textureLoader);
+    const noteTextures = await loadStrumNoteTextures(textureLoader);
+    const noteTexturesHopo = await loadStrumHopoNoteTextures(textureLoader);
 
+    // console.log('textures', noteTextures, noteTexturesHopo);
     const openMaterial = new THREE.SpriteMaterial({
       map: await textureLoader.loadAsync(`/assets/preview/assets2/strum5.webp`),
+    });
+
+    const kickMaterial = new THREE.SpriteMaterial({
+      map: await textureLoader.loadAsync(
+        `/assets/preview/assets2/drum-kick.webp`,
+      ),
     });
 
     const highwayBeginningPlane = new THREE.Plane(
@@ -138,42 +154,78 @@ export const setupRenderer = (
 
     const noteObjects: Array<NoteObject> = [];
 
+    const {getTextureForNote} = await loadNoteTextures(textureLoader, track);
+
+    console.log('instrument', track.instrument);
     for (const note of notes) {
-      const fret =
-        note.type == EventType.green
-          ? 0
-          : note.type == EventType.red
-          ? 1
-          : note.type == EventType.yellow
-          ? 2
-          : note.type == EventType.blue
-          ? 3
-          : note.type == EventType.orange
-          ? 4
-          : note.type == EventType.open
-          ? 7
-          : -1;
-      // if (note.fret > 4) continue;
+      let lane;
+      let laneColors;
+      if (track.instrument == 'drums') {
+        lane =
+          note.type == EventType.red
+            ? 0
+            : note.type == EventType.yellow ||
+              note.type == EventType.yellowTomOrCymbalMarker
+            ? 1
+            : note.type == EventType.blue ||
+              note.type == EventType.blueTomOrCymbalMarker
+            ? 2
+            : note.type == EventType.green ||
+              note.type == EventType.greenTomOrCymbalMarker
+            ? 3
+            : -1;
+        laneColors = [
+          NOTE_COLORS.red,
+          NOTE_COLORS.yellow,
+          NOTE_COLORS.blue,
+          NOTE_COLORS.green,
+        ];
+      } else {
+        lane =
+          note.type == EventType.green
+            ? 0
+            : note.type == EventType.red
+            ? 1
+            : note.type == EventType.yellow
+            ? 2
+            : note.type == EventType.blue
+            ? 3
+            : note.type == EventType.orange
+            ? 4
+            : -1;
+
+        laneColors = [
+          NOTE_COLORS.green,
+          NOTE_COLORS.red,
+          NOTE_COLORS.yellow,
+          NOTE_COLORS.blue,
+          NOTE_COLORS.orange,
+        ];
+      }
 
       const SCALE = 0.105;
       const NOTE_SPAN_WIDTH = 0.99;
 
       const group = new THREE.Group();
 
-      const leftOffset = track.instrument == 'drums' ? 0.015 : 0.035;
+      const leftOffset = track.instrument == 'drums' ? 0.135 : 0.035;
 
-      group.position.x =
-        leftOffset +
-        -(NOTE_SPAN_WIDTH / 2) +
-        SCALE +
-        ((NOTE_SPAN_WIDTH - SCALE) / 5) * fret;
+      if (lane != -1) {
+        group.position.x =
+          leftOffset +
+          -(NOTE_SPAN_WIDTH / 2) +
+          SCALE +
+          ((NOTE_SPAN_WIDTH - SCALE) / 5) * lane;
 
-      if (fret >= 0 && fret <= 4) {
-        const sprite = new THREE.Sprite(
-          note.type === EventType.tap
-            ? noteTexturesHopo[fret]
-            : noteTextures[fret],
-        );
+        // Add the note
+        // const sprite = new THREE.Sprite(
+        //   note.type === EventType.tap
+        //     ? noteTexturesHopo[lane]
+        //     : noteTextures[lane],
+        // );
+
+        const sprite = new THREE.Sprite(getTextureForNote(note.type));
+
         sprite.center = new THREE.Vector2(0.5, 0);
         const aspectRatio =
           sprite.material.map!.image.width / sprite.material.map!.image.height;
@@ -184,7 +236,50 @@ export const setupRenderer = (
         sprite.material.transparent = true;
         sprite.renderOrder = 4;
         group.add(sprite);
-      } else if (note.type === EventType.open) {
+
+        // Add the sustain
+        if (note.length && note.length !== 0) {
+          const mat = new THREE.MeshBasicMaterial({
+            color: laneColors[lane],
+            side: THREE.DoubleSide,
+          });
+
+          mat.clippingPlanes = clippingPlanes;
+          mat.depthTest = false;
+          mat.transparent = true;
+
+          const geometry = new THREE.PlaneGeometry(
+            SCALE * 0.175,
+            (note.length / 1000) * settings.highwaySpeed,
+          );
+          const plane = new THREE.Mesh(geometry, mat);
+
+          plane.position.z = 0;
+          plane.position.y =
+            (note.length! / 1000 / 2) * settings.highwaySpeed + SCALE / 2;
+          plane.renderOrder = 2;
+          group.add(plane);
+        }
+      }
+
+      kickMaterial;
+
+      if (note.type === EventType.kick) {
+        const kickScale = 0.05;
+        const sprite = new THREE.Sprite(kickMaterial);
+        sprite.center = new THREE.Vector2(0.5, 0);
+        const aspectRatio =
+          sprite.material.map!.image.width / sprite.material.map!.image.height;
+        sprite.scale.set(kickScale * aspectRatio, kickScale, kickScale);
+        sprite.position.z = 0;
+        sprite.material.clippingPlanes = clippingPlanes;
+        sprite.material.depthTest = false;
+        sprite.material.transparent = true;
+        sprite.renderOrder = 4;
+        group.add(sprite);
+      }
+
+      if (note.type === EventType.open) {
         const openScale = 0.11;
         const sprite = new THREE.Sprite(openMaterial);
         sprite.center = new THREE.Vector2(0.5, 0);
@@ -204,31 +299,6 @@ export const setupRenderer = (
       // myText.position.z = 0.2;
       // myText.scale.set(SCALE * 0.5, SCALE * 0.5, SCALE * 0.5);
       // group.add(myText);
-
-      if (note.length && note.length !== 0) {
-        let colors = ['#01B11A', '#DD2214', '#DEEB52', '#006CAF', '#F8B272'];
-
-        const mat = new THREE.MeshBasicMaterial({
-          color: colors[fret],
-          side: THREE.DoubleSide,
-        });
-
-        mat.clippingPlanes = clippingPlanes;
-        mat.depthTest = false;
-        mat.transparent = true;
-
-        const geometry = new THREE.PlaneGeometry(
-          SCALE * 0.175,
-          (note.length / 1000) * settings.highwaySpeed,
-        );
-        const plane = new THREE.Mesh(geometry, mat);
-
-        plane.position.z = 0;
-        plane.position.y =
-          (note.length! / 1000 / 2) * settings.highwaySpeed + SCALE / 2;
-        plane.renderOrder = 2;
-        group.add(plane);
-      }
 
       scene.add(group);
 
@@ -306,7 +376,68 @@ export const setupRenderer = (
   }
 };
 
-async function loadNoteTextures(textureLoader: THREE.TextureLoader) {
+async function loadNoteTextures(
+  textureLoader: THREE.TextureLoader,
+  track: TrackParser,
+) {
+  const isDrums = track.instrument == 'drums';
+
+  let strumTextures: THREE.SpriteMaterial[];
+  let strumTexturesHopo: THREE.SpriteMaterial[];
+
+  let tomTextures: Awaited<ReturnType<typeof loadTomTextures>>;
+  let cymbalTextures: Awaited<ReturnType<typeof loadCymbalTextures>>;
+
+  if (isDrums) {
+    tomTextures = await loadTomTextures(textureLoader);
+    cymbalTextures = await loadCymbalTextures(textureLoader);
+  } else {
+    strumTextures = await loadStrumNoteTextures(textureLoader);
+    strumTexturesHopo = await loadStrumHopoNoteTextures(textureLoader);
+  }
+
+  return {
+    getTextureForNote(noteType: EventType) {
+      if (isDrums) {
+        switch (noteType) {
+          case EventType.green:
+            return tomTextures.green;
+          case EventType.red:
+            return tomTextures.red;
+          case EventType.yellow:
+            return tomTextures.yellow;
+          case EventType.blue:
+            return tomTextures.blue;
+          case EventType.blueTomOrCymbalMarker:
+            return cymbalTextures.blue;
+          case EventType.greenTomOrCymbalMarker:
+            return cymbalTextures.green;
+          case EventType.yellowTomOrCymbalMarker:
+            return cymbalTextures.yellow;
+          default:
+            throw new Error('Invalid sprite requested');
+        }
+      } else {
+        switch (noteType) {
+          case EventType.green:
+            return strumTextures[0];
+          case EventType.red:
+            return strumTextures[1];
+          case EventType.yellow:
+            return strumTextures[2];
+          case EventType.blue:
+            return strumTextures[3];
+          case EventType.orange:
+            return strumTextures[4];
+          default:
+            throw new Error('Invalid sprite requested');
+        }
+      }
+    },
+  };
+}
+
+async function loadStrumNoteTextures(textureLoader: THREE.TextureLoader) {
   const noteTextures = [];
 
   for await (const num of [0, 1, 2, 3, 4]) {
@@ -321,6 +452,48 @@ async function loadNoteTextures(textureLoader: THREE.TextureLoader) {
   }
 
   return noteTextures;
+}
+
+// ('drum-kick.webp');
+
+async function loadTomTextures(textureLoader: THREE.TextureLoader) {
+  const textures = await Promise.all(
+    ['blue', 'green', 'red', 'yellow'].map(async color => {
+      const texture = await textureLoader.loadAsync(
+        `/assets/preview/assets2/drum-tom-${color}.webp`,
+      );
+      return new THREE.SpriteMaterial({
+        map: texture,
+      });
+    }),
+  );
+
+  return {
+    blue: textures[0],
+    green: textures[1],
+    red: textures[2],
+    yellow: textures[3],
+  };
+}
+
+async function loadCymbalTextures(textureLoader: THREE.TextureLoader) {
+  const textures = await Promise.all(
+    ['blue', 'green', 'red', 'yellow'].map(async color => {
+      const texture = await textureLoader.loadAsync(
+        `/assets/preview/assets2/drum-cymbal-${color}.webp`,
+      );
+      return new THREE.SpriteMaterial({
+        map: texture,
+      });
+    }),
+  );
+
+  return {
+    blue: textures[0],
+    green: textures[1],
+    red: textures[2],
+    yellow: textures[3],
+  };
 }
 
 async function getHighwayTexture(textureLoader: THREE.TextureLoader) {
@@ -371,7 +544,7 @@ function createDrumHighway(
   return plane;
 }
 
-async function loadHopoNoteTextures(textureLoader: THREE.TextureLoader) {
+async function loadStrumHopoNoteTextures(textureLoader: THREE.TextureLoader) {
   const hopoNoteTextures = [];
 
   for await (const num of [0, 1, 2, 3, 4]) {
