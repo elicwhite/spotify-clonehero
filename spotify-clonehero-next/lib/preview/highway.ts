@@ -102,70 +102,10 @@ export const setupRenderer = (
       1,
     );
     const highwayEndPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0.9);
-
     const clippingPlanes = [highwayBeginningPlane, highwayEndPlane];
 
-    let highwayTexture: THREE.Texture | null;
-
-    {
-      textureLoader.load(
-        '/assets/preview/assets/highways/highway2.png',
-        texture => {
-          highwayTexture = texture;
-
-          texture.wrapS = THREE.RepeatWrapping;
-          texture.wrapT = THREE.RepeatWrapping;
-
-          texture.repeat.set(1, 2);
-
-          const mat = new THREE.MeshBasicMaterial({map: texture});
-
-          const geometry = new THREE.PlaneGeometry(0.95, 2);
-          const material = new THREE.MeshBasicMaterial({
-            color: 0xffff00,
-            side: THREE.DoubleSide,
-          });
-          material.clippingPlanes = clippingPlanes;
-          const plane = new THREE.Mesh(geometry, mat);
-          plane.position.y = -0.1;
-          plane.renderOrder = 1;
-          scene.add(plane);
-        },
-      );
-    }
-
-    {
-      textureLoader.load('/assets/preview/assets/isolated.png', texture => {
-        const material = new THREE.SpriteMaterial({
-          map: texture,
-          sizeAttenuation: true,
-          transparent: true,
-        });
-
-        const aspectRatio = texture.image.width / texture.image.height;
-
-        material.depthTest = false;
-        material.transparent = true;
-
-        const scale = 0.19;
-        const sprite = new THREE.Sprite(material);
-        if (aspectRatio > 1) {
-          // Texture is wider than it is tall
-          sprite.scale.set(aspectRatio * scale, 1 * scale, 1);
-        } else {
-          // Texture is taller than it is wide or square
-          sprite.scale.set(1 * scale, (1 / aspectRatio) * scale, 1);
-        }
-        // sprite.rotation.x = 45;
-        // const scale = 0.15;
-        // sprite.scale.set(scale, scale, scale);
-        sprite.position.y = -1;
-        // const idx = 0;
-        // sprite.position.x = -0.5 + scale + ((1 - scale) / 5) * idx;
-        sprite.renderOrder = 3;
-        scene.add(sprite);
-      });
-    }
+    const highwayTexture: THREE.Texture =
+      await getHighwayTexture(textureLoader);
 
     const track = chart.trackParsers.find(
       parser =>
@@ -184,6 +124,14 @@ export const setupRenderer = (
       );
 
       return;
+    }
+
+    if (track.instrument == 'drums') {
+      scene.add(createDrumHighway(highwayTexture, clippingPlanes));
+      scene.add(await loadAndCreateDrumHitBox(textureLoader));
+    } else {
+      scene.add(createHighway(highwayTexture, clippingPlanes));
+      scene.add(await loadAndCreateHitBox(textureLoader));
     }
 
     const notes = track.notes;
@@ -211,8 +159,11 @@ export const setupRenderer = (
       const NOTE_SPAN_WIDTH = 0.99;
 
       const group = new THREE.Group();
+
+      const leftOffset = track.instrument == 'drums' ? 0.015 : 0.035;
+
       group.position.x =
-        0.035 +
+        leftOffset +
         -(NOTE_SPAN_WIDTH / 2) +
         SCALE +
         ((NOTE_SPAN_WIDTH - SCALE) / 5) * fret;
@@ -372,6 +323,54 @@ async function loadNoteTextures(textureLoader: THREE.TextureLoader) {
   return noteTextures;
 }
 
+async function getHighwayTexture(textureLoader: THREE.TextureLoader) {
+  const texture = await textureLoader.loadAsync(
+    '/assets/preview/assets/highways/highway2.png',
+  );
+
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+
+  texture.repeat.set(1, 2);
+  return texture;
+}
+
+function createHighway(
+  highwayTexture: THREE.Texture,
+  clippingPlanes: THREE.Plane[],
+) {
+  const mat = new THREE.MeshBasicMaterial({map: highwayTexture});
+
+  const geometry = new THREE.PlaneGeometry(0.95, 2);
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xffff00,
+    side: THREE.DoubleSide,
+  });
+  material.clippingPlanes = clippingPlanes;
+  const plane = new THREE.Mesh(geometry, mat);
+  plane.position.y = -0.1;
+  plane.renderOrder = 1;
+  return plane;
+}
+
+function createDrumHighway(
+  highwayTexture: THREE.Texture,
+  clippingPlanes: THREE.Plane[],
+) {
+  const mat = new THREE.MeshBasicMaterial({map: highwayTexture});
+
+  const geometry = new THREE.PlaneGeometry(0.8, 2);
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xffff00,
+    side: THREE.DoubleSide,
+  });
+  material.clippingPlanes = clippingPlanes;
+  const plane = new THREE.Mesh(geometry, mat);
+  plane.position.y = -0.1;
+  plane.renderOrder = 1;
+  return plane;
+}
+
 async function loadHopoNoteTextures(textureLoader: THREE.TextureLoader) {
   const hopoNoteTextures = [];
 
@@ -387,4 +386,76 @@ async function loadHopoNoteTextures(textureLoader: THREE.TextureLoader) {
   }
 
   return hopoNoteTextures;
+}
+
+async function loadAndCreateHitBox(textureLoader: THREE.TextureLoader) {
+  const texture = await textureLoader.loadAsync(
+    '/assets/preview/assets/isolated.png',
+  );
+
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    sizeAttenuation: true,
+    transparent: true,
+  });
+
+  const aspectRatio = texture.image.width / texture.image.height;
+
+  material.depthTest = false;
+  material.transparent = true;
+
+  const scale = 0.19;
+  const sprite = new THREE.Sprite(material);
+  if (aspectRatio > 1) {
+    // Texture is wider than it is tall
+    sprite.scale.set(aspectRatio * scale, 1 * scale, 1);
+  } else {
+    // Texture is taller than it is wide or square
+    sprite.scale.set(1 * scale, (1 / aspectRatio) * scale, 1);
+  }
+  // sprite.rotation.x = 45;
+  // const scale = 0.15;
+  // sprite.scale.set(scale, scale, scale);
+  sprite.position.y = -1;
+  // const idx = 0;
+  // sprite.position.x = -0.5 + scale + ((1 - scale) / 5) * idx;
+  sprite.renderOrder = 3;
+
+  return sprite;
+}
+
+async function loadAndCreateDrumHitBox(textureLoader: THREE.TextureLoader) {
+  const texture = await textureLoader.loadAsync(
+    '/assets/preview/assets/isolated-drums.png',
+  );
+
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    sizeAttenuation: true,
+    transparent: true,
+  });
+
+  const aspectRatio = texture.image.width / texture.image.height;
+
+  material.depthTest = false;
+  material.transparent = true;
+
+  const scale = 0.19;
+  const sprite = new THREE.Sprite(material);
+  if (aspectRatio > 1) {
+    // Texture is wider than it is tall
+    sprite.scale.set(aspectRatio * scale, 1 * scale, 1);
+  } else {
+    // Texture is taller than it is wide or square
+    sprite.scale.set(1 * scale, (1 / aspectRatio) * scale, 1);
+  }
+  // sprite.rotation.x = 45;
+  // const scale = 0.15;
+  // sprite.scale.set(scale, scale, scale);
+  sprite.position.y = -1;
+  // const idx = 0;
+  // sprite.position.x = -0.5 + scale + ((1 - scale) / 5) * idx;
+  sprite.renderOrder = 3;
+
+  return sprite;
 }
