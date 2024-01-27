@@ -30,7 +30,7 @@ export const Highway: FC<{
   });
 
   const settingsRef = useRef<HighwaySettings>({
-    highwaySpeed: 2,
+    highwaySpeed: 1.5,
   });
 
   useEffect(() => {

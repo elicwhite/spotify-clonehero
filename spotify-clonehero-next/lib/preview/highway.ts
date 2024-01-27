@@ -99,9 +99,6 @@ export const setupRenderer = (
   async function run() {
     const textureLoader = new THREE.TextureLoader();
 
-    const noteTextures = await loadStrumNoteTextures(textureLoader);
-    const noteTexturesHopo = await loadStrumHopoNoteTextures(textureLoader);
-
     // console.log('textures', noteTextures, noteTexturesHopo);
     const openMaterial = new THREE.SpriteMaterial({
       map: await textureLoader.loadAsync(`/assets/preview/assets2/strum5.webp`),
@@ -262,12 +259,10 @@ export const setupRenderer = (
         }
       }
 
-      kickMaterial;
-
       if (note.type === EventType.kick) {
-        const kickScale = 0.05;
+        const kickScale = 0.045;
         const sprite = new THREE.Sprite(kickMaterial);
-        sprite.center = new THREE.Vector2(0.5, 0);
+        sprite.center = new THREE.Vector2(0.5, -0.5);
         const aspectRatio =
           sprite.material.map!.image.width / sprite.material.map!.image.height;
         sprite.scale.set(kickScale * aspectRatio, kickScale, kickScale);
@@ -275,7 +270,7 @@ export const setupRenderer = (
         sprite.material.clippingPlanes = clippingPlanes;
         sprite.material.depthTest = false;
         sprite.material.transparent = true;
-        sprite.renderOrder = 4;
+        sprite.renderOrder = 1;
         group.add(sprite);
       }
 
@@ -401,19 +396,19 @@ async function loadNoteTextures(
       if (isDrums) {
         switch (noteType) {
           case EventType.green:
-            return tomTextures.green;
+            return cymbalTextures.green;
           case EventType.red:
             return tomTextures.red;
           case EventType.yellow:
-            return tomTextures.yellow;
-          case EventType.blue:
-            return tomTextures.blue;
-          case EventType.blueTomOrCymbalMarker:
-            return cymbalTextures.blue;
-          case EventType.greenTomOrCymbalMarker:
-            return cymbalTextures.green;
-          case EventType.yellowTomOrCymbalMarker:
             return cymbalTextures.yellow;
+          case EventType.blue:
+            return cymbalTextures.blue;
+          case EventType.blueTomOrCymbalMarker:
+            return tomTextures.blue;
+          case EventType.greenTomOrCymbalMarker:
+            return tomTextures.green;
+          case EventType.yellowTomOrCymbalMarker:
+            return tomTextures.yellow;
           default:
             throw new Error('Invalid sprite requested');
         }
