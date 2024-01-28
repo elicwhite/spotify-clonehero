@@ -168,7 +168,8 @@ export const setupRenderer = (
               note.type == EventType.blueTomOrCymbalMarker
             ? 2
             : note.type == EventType.green ||
-              note.type == EventType.greenTomOrCymbalMarker
+              note.type == EventType.greenTomOrCymbalMarker ||
+              note.type == EventType.orange
             ? 3
             : -1;
         laneColors = [
@@ -376,6 +377,7 @@ async function loadNoteTextures(
   track: TrackParser,
 ) {
   const isDrums = track.instrument == 'drums';
+  const format = track.format;
 
   let strumTextures: THREE.SpriteMaterial[];
   let strumTexturesHopo: THREE.SpriteMaterial[];
@@ -395,20 +397,24 @@ async function loadNoteTextures(
     getTextureForNote(noteType: EventType) {
       if (isDrums) {
         switch (noteType) {
-          case EventType.green:
-            return cymbalTextures.green;
           case EventType.red:
             return tomTextures.red;
-          case EventType.yellow:
-            return cymbalTextures.yellow;
-          case EventType.blue:
-            return cymbalTextures.blue;
-          case EventType.blueTomOrCymbalMarker:
-            return tomTextures.blue;
+          case EventType.green:
+          // 5 lane drum charts seem like they have green cymbal on orange
+          case EventType.orange:
+            return format == 'mid' ? cymbalTextures.green : tomTextures.green;
           case EventType.greenTomOrCymbalMarker:
-            return tomTextures.green;
+            return format == 'chart' ? cymbalTextures.green : tomTextures.green;
+          case EventType.blue:
+            return format == 'mid' ? cymbalTextures.blue : tomTextures.blue;
+          case EventType.blueTomOrCymbalMarker:
+            return format == 'chart' ? cymbalTextures.blue : tomTextures.blue;
+          case EventType.yellow:
+            return format == 'mid' ? cymbalTextures.yellow : tomTextures.yellow;
           case EventType.yellowTomOrCymbalMarker:
-            return tomTextures.yellow;
+            return format == 'chart'
+              ? cymbalTextures.yellow
+              : tomTextures.yellow;
           default:
             throw new Error('Invalid sprite requested');
         }

@@ -30,7 +30,7 @@ export class TrackParser {
     public instrument: Instrument,
     public difficulty: Difficulty,
     public trackEvents: TrackEvent[],
-    private format: 'chart' | 'mid',
+    public format: 'chart' | 'mid',
   ) {
     if (!notesData.instruments.includes(this.instrument)) {
       notesData.instruments.push(this.instrument);
