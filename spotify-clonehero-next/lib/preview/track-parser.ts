@@ -20,7 +20,7 @@ const NPS_GROUP_SIZE_MS = 1000;
 export class TrackParser {
   /** Includes all track event types except `starPower`, `soloMarker`, `activationLane`, `rollLaneSingle`, and `rollLaneDouble`. */
   public notes: TrackEvent[];
-  private groupedNotes: GroupedTrackEvent[];
+  public groupedNotes: GroupedTrackEvent[];
 
   private noteIssues: NoteIssue[] = [];
   private trackIssues: TrackIssueType[] = [];

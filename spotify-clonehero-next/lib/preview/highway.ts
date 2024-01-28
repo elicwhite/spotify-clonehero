@@ -11,6 +11,11 @@ type NoteObject = {
   note: TrackEvent;
 };
 
+type RenderableNoteGroup = {
+  time: number;
+  object: THREE.Object3D;
+};
+
 export type SelectedTrack = {
   instrument: Instrument;
   difficulty: Difficulty;
@@ -22,6 +27,9 @@ export type HighwaySettings = {
   highwaySpeed: number;
 };
 
+const SCALE = 0.105;
+const NOTE_SPAN_WIDTH = 0.99;
+
 const NOTE_COLORS = {
   green: '#01B11A',
   red: '#DD2214',
@@ -29,6 +37,21 @@ const NOTE_COLORS = {
   blue: '#006CAF',
   orange: '#F8B272',
 };
+
+const GUITAR_LANE_COLORS = [
+  NOTE_COLORS.green,
+  NOTE_COLORS.red,
+  NOTE_COLORS.yellow,
+  NOTE_COLORS.blue,
+  NOTE_COLORS.orange,
+];
+
+const DRUM_LANE_COLORS = [
+  NOTE_COLORS.red,
+  NOTE_COLORS.yellow,
+  NOTE_COLORS.blue,
+  NOTE_COLORS.green,
+];
 
 export const setupRenderer = (
   chart: ChartParser | MidiParser,
@@ -147,13 +170,127 @@ export const setupRenderer = (
       scene.add(await loadAndCreateHitBox(textureLoader));
     }
 
+    const groupedNotes = track.groupedNotes;
     const notes = track.notes;
 
     const noteObjects: Array<NoteObject> = [];
+    const highwayGroups: RenderableNoteGroup[] = [];
 
     const {getTextureForNote} = await loadNoteTextures(textureLoader, track);
 
-    console.log('instrument', track.instrument);
+    for (const group of groupedNotes) {
+      const time = group.time;
+      const events = new Map<EventType, number>(
+        group.events.map(event => [event.type, event.length]),
+      );
+
+      const notesGroup = new THREE.Group();
+      scene.add(notesGroup);
+      highwayGroups.push({time, object: notesGroup});
+
+      // Calculate modifiers
+      if (track.instrument == 'drums') {
+      } else {
+        const modifiers = {
+          isTap: events.has(EventType.tap),
+          isForce: events.has(EventType.force),
+          isStarPower: events.has(EventType.starPower),
+        };
+
+        // Remove the modifier events, what's left should be notes
+        events.delete(EventType.tap);
+        events.delete(EventType.force);
+        events.delete(EventType.starPower);
+
+        for (const event of events.keys()) {
+          if (event == EventType.open) {
+            const openScale = 0.11;
+            const sprite = new THREE.Sprite(openMaterial);
+            sprite.center = new THREE.Vector2(0.5, 0);
+            const aspectRatio =
+              sprite.material.map!.image.width /
+              sprite.material.map!.image.height;
+            sprite.scale.set(openScale * aspectRatio, openScale, openScale);
+            // sprite.position.x = -0.9;
+            sprite.position.z = 0;
+            sprite.material.clippingPlanes = clippingPlanes;
+            sprite.material.depthTest = false;
+            sprite.material.transparent = true;
+            sprite.renderOrder = 4;
+            notesGroup.add(sprite);
+          } else {
+            // Standard note
+            const lane =
+              event == EventType.green
+                ? 0
+                : event == EventType.red
+                ? 1
+                : event == EventType.yellow
+                ? 2
+                : event == EventType.blue
+                ? 3
+                : event == EventType.orange
+                ? 4
+                : -1;
+
+            const noteXPosition = calculateNoteXOffset(track.instrument, lane);
+
+            if (lane != -1) {
+              // We should investigate how -1 happens, we probably are missing support for something
+              const noteGroup = new THREE.Group();
+              notesGroup.add(noteGroup);
+              // This likely needs to change from being absolute to being relative to the note
+              noteGroup.position.x = noteXPosition;
+
+              const sprite = new THREE.Sprite(
+                getTextureForNote(event, modifiers),
+              );
+
+              sprite.center = new THREE.Vector2(0.5, 0);
+              const aspectRatio =
+                sprite.material.map!.image.width /
+                sprite.material.map!.image.height;
+              sprite.scale.set(SCALE * aspectRatio, SCALE, SCALE);
+              sprite.position.z = 0;
+              sprite.material.clippingPlanes = clippingPlanes;
+              sprite.material.depthTest = false;
+              sprite.material.transparent = true;
+              sprite.renderOrder = 4;
+              noteGroup.add(sprite);
+
+              // Add the sustain
+              const length = events.get(event)!;
+              if (length > 0) {
+                const mat = new THREE.MeshBasicMaterial({
+                  color: GUITAR_LANE_COLORS[lane],
+                  side: THREE.DoubleSide,
+                });
+
+                mat.clippingPlanes = clippingPlanes;
+                mat.depthTest = false;
+                mat.transparent = true;
+
+                const geometry = new THREE.PlaneGeometry(
+                  SCALE * 0.175,
+                  (length / 1000) * settings.highwaySpeed,
+                );
+                const plane = new THREE.Mesh(geometry, mat);
+
+                plane.position.z = 0;
+                // This probably needs to change to be relative to the group
+                plane.position.y =
+                  (length! / 1000 / 2) * settings.highwaySpeed + SCALE / 2;
+                plane.renderOrder = 2;
+                noteGroup.add(plane);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // console.log('instrument', track.instrument);
+
     for (const note of notes) {
       let lane;
       let laneColors;
@@ -209,11 +346,7 @@ export const setupRenderer = (
       const leftOffset = track.instrument == 'drums' ? 0.135 : 0.035;
 
       if (lane != -1) {
-        group.position.x =
-          leftOffset +
-          -(NOTE_SPAN_WIDTH / 2) +
-          SCALE +
-          ((NOTE_SPAN_WIDTH - SCALE) / 5) * lane;
+        group.position.x = calculateNoteXOffset(track.instrument, lane);
 
         // Add the note
         // const sprite = new THREE.Sprite(
@@ -222,7 +355,7 @@ export const setupRenderer = (
         //     : noteTextures[lane],
         // );
 
-        const sprite = new THREE.Sprite(getTextureForNote(note.type));
+        const sprite = new THREE.Sprite(getTextureForNote(note.type, {}));
 
         sprite.center = new THREE.Vector2(0.5, 0);
         const aspectRatio =
@@ -296,12 +429,14 @@ export const setupRenderer = (
       // myText.scale.set(SCALE * 0.5, SCALE * 0.5, SCALE * 0.5);
       // group.add(myText);
 
-      scene.add(group);
+      // scene.add(group);
 
+      //
       noteObjects.push({object: group, note});
     }
 
-    const songLength = chart.notesData.length;
+    // console.log('noteObjects', noteObjects);
+    // console.log('highway groups', highwayGroups);
 
     // scene.add(group);
     const sources = await Promise.all(
@@ -323,7 +458,9 @@ export const setupRenderer = (
       source!.start();
     });
 
+    // try using audioCtx. Also try checking this in animation loop
     const SYNC_MS = new AudioContext().outputLatency * 1000;
+    const songLength = chart.notesData.length;
 
     function animation(time: number) {
       if (audioCtx.state === 'running') {
@@ -338,20 +475,25 @@ export const setupRenderer = (
             (elapsedTime / 1000) * settings.highwaySpeed - 1;
         }
 
+        for (const {time, object} of highwayGroups) {
+          object.position.y =
+            ((time - elapsedTime) / 1000) * settings.highwaySpeed - 1;
+        }
+
         for (const {object, note} of noteObjects) {
-          let notPast = object.position.y > -1;
+          // let notPast = object.position.y > -1;
           object.position.y =
             ((note.time - elapsedTime) / 1000) * settings.highwaySpeed - 1;
           // console.log('y', object.position.y, note.time, elapsedTime);
-          if (notPast && object.position.y <= -1) {
-            // console.log("note", note.tick);
-          }
+          // if (notPast && object.position.y <= -1) {
+          //   // console.log("note", note.tick);
+          // }
 
-          for (const child of object.children) {
-            if (child instanceof THREE.Sprite) {
-              // object.visible = object.position.y > -1;
-            }
-          }
+          // for (const child of object.children) {
+          //   if (child instanceof THREE.Sprite) {
+          //     // object.visible = object.position.y > -1;
+          //   }
+          // }
 
           // if (object.position.y <= -1) {
           //   for (const child of object.children) {
@@ -370,6 +512,15 @@ export const setupRenderer = (
 
     renderer.setAnimationLoop(animation);
   }
+};
+
+type DrumModifiers = {};
+
+type GuitarModifiers = {
+  isTap: boolean;
+  isForce: boolean;
+  isStarPower: boolean;
+  isOpen: boolean;
 };
 
 async function loadNoteTextures(
@@ -394,7 +545,10 @@ async function loadNoteTextures(
   }
 
   return {
-    getTextureForNote(noteType: EventType) {
+    getTextureForNote(
+      noteType: EventType,
+      modifiers: DrumModifiers | GuitarModifiers,
+    ) {
       if (isDrums) {
         switch (noteType) {
           case EventType.red:
@@ -419,17 +573,21 @@ async function loadNoteTextures(
             throw new Error('Invalid sprite requested');
         }
       } else {
+        const guitarModifiers = modifiers as GuitarModifiers;
+        const textures = guitarModifiers.isTap
+          ? strumTexturesHopo
+          : strumTextures;
         switch (noteType) {
           case EventType.green:
-            return strumTextures[0];
+            return textures[0];
           case EventType.red:
-            return strumTextures[1];
+            return textures[1];
           case EventType.yellow:
-            return strumTextures[2];
+            return textures[2];
           case EventType.blue:
-            return strumTextures[3];
+            return textures[3];
           case EventType.orange:
-            return strumTextures[4];
+            return textures[4];
           default:
             throw new Error('Invalid sprite requested');
         }
@@ -632,4 +790,15 @@ async function loadAndCreateDrumHitBox(textureLoader: THREE.TextureLoader) {
   sprite.renderOrder = 3;
 
   return sprite;
+}
+
+function calculateNoteXOffset(instrument: Instrument, lane: number) {
+  const leftOffset = instrument == 'drums' ? 0.135 : 0.035;
+
+  return (
+    leftOffset +
+    -(NOTE_SPAN_WIDTH / 2) +
+    SCALE +
+    ((NOTE_SPAN_WIDTH - SCALE) / 5) * lane
+  );
 }
