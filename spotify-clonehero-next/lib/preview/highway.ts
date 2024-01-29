@@ -121,8 +121,6 @@ export const setupRenderer = (
 
   async function run() {
     const textureLoader = new THREE.TextureLoader();
-
-    // console.log('textures', noteTextures, noteTexturesHopo);
     const openMaterial = new THREE.SpriteMaterial({
       map: await textureLoader.loadAsync(`/assets/preview/assets2/strum5.webp`),
     });
@@ -190,6 +188,58 @@ export const setupRenderer = (
 
       // Calculate modifiers
       if (track.instrument == 'drums') {
+        normalizeDrumEvents(events, track.format);
+
+        for (const event of events.keys()) {
+          if (event === EventType.kick) {
+            const kickScale = 0.045;
+            const sprite = new THREE.Sprite(kickMaterial);
+            sprite.center = new THREE.Vector2(0.5, -0.5);
+            const aspectRatio =
+              sprite.material.map!.image.width /
+              sprite.material.map!.image.height;
+            sprite.scale.set(kickScale * aspectRatio, kickScale, kickScale);
+            sprite.position.z = 0;
+            sprite.material.clippingPlanes = clippingPlanes;
+            sprite.material.depthTest = false;
+            sprite.material.transparent = true;
+            sprite.renderOrder = 1;
+            notesGroup.add(sprite);
+          }
+
+          const lane =
+            event == EventType.red
+              ? 0
+              : event == EventType.yellow ||
+                event == EventType.yellowTomOrCymbalMarker
+              ? 1
+              : event == EventType.blue ||
+                event == EventType.blueTomOrCymbalMarker
+              ? 2
+              : event == EventType.green ||
+                event == EventType.greenTomOrCymbalMarker ||
+                event == EventType.orange
+              ? 3
+              : -1;
+
+          if (lane != -1) {
+            const noteXPosition = calculateNoteXOffset(track.instrument, lane);
+            const sprite = new THREE.Sprite(getTextureForNote(event, {}));
+            sprite.position.x = noteXPosition;
+
+            sprite.center = new THREE.Vector2(0.5, 0);
+            const aspectRatio =
+              sprite.material.map!.image.width /
+              sprite.material.map!.image.height;
+            sprite.scale.set(SCALE * aspectRatio, SCALE, SCALE);
+            sprite.position.z = 0;
+            sprite.material.clippingPlanes = clippingPlanes;
+            sprite.material.depthTest = false;
+            sprite.material.transparent = true;
+            sprite.renderOrder = 4;
+            notesGroup.add(sprite);
+          }
+        }
       } else {
         const modifiers = {
           isTap: events.has(EventType.tap),
@@ -289,156 +339,6 @@ export const setupRenderer = (
       }
     }
 
-    // console.log('instrument', track.instrument);
-
-    for (const note of notes) {
-      let lane;
-      let laneColors;
-      if (track.instrument == 'drums') {
-        lane =
-          note.type == EventType.red
-            ? 0
-            : note.type == EventType.yellow ||
-              note.type == EventType.yellowTomOrCymbalMarker
-            ? 1
-            : note.type == EventType.blue ||
-              note.type == EventType.blueTomOrCymbalMarker
-            ? 2
-            : note.type == EventType.green ||
-              note.type == EventType.greenTomOrCymbalMarker ||
-              note.type == EventType.orange
-            ? 3
-            : -1;
-        laneColors = [
-          NOTE_COLORS.red,
-          NOTE_COLORS.yellow,
-          NOTE_COLORS.blue,
-          NOTE_COLORS.green,
-        ];
-      } else {
-        lane =
-          note.type == EventType.green
-            ? 0
-            : note.type == EventType.red
-            ? 1
-            : note.type == EventType.yellow
-            ? 2
-            : note.type == EventType.blue
-            ? 3
-            : note.type == EventType.orange
-            ? 4
-            : -1;
-
-        laneColors = [
-          NOTE_COLORS.green,
-          NOTE_COLORS.red,
-          NOTE_COLORS.yellow,
-          NOTE_COLORS.blue,
-          NOTE_COLORS.orange,
-        ];
-      }
-
-      const SCALE = 0.105;
-      const NOTE_SPAN_WIDTH = 0.99;
-
-      const group = new THREE.Group();
-
-      const leftOffset = track.instrument == 'drums' ? 0.135 : 0.035;
-
-      if (lane != -1) {
-        group.position.x = calculateNoteXOffset(track.instrument, lane);
-
-        // Add the note
-        // const sprite = new THREE.Sprite(
-        //   note.type === EventType.tap
-        //     ? noteTexturesHopo[lane]
-        //     : noteTextures[lane],
-        // );
-
-        const sprite = new THREE.Sprite(getTextureForNote(note.type, {}));
-
-        sprite.center = new THREE.Vector2(0.5, 0);
-        const aspectRatio =
-          sprite.material.map!.image.width / sprite.material.map!.image.height;
-        sprite.scale.set(SCALE * aspectRatio, SCALE, SCALE);
-        sprite.position.z = 0;
-        sprite.material.clippingPlanes = clippingPlanes;
-        sprite.material.depthTest = false;
-        sprite.material.transparent = true;
-        sprite.renderOrder = 4;
-        group.add(sprite);
-
-        // Add the sustain
-        if (note.length && note.length !== 0) {
-          const mat = new THREE.MeshBasicMaterial({
-            color: laneColors[lane],
-            side: THREE.DoubleSide,
-          });
-
-          mat.clippingPlanes = clippingPlanes;
-          mat.depthTest = false;
-          mat.transparent = true;
-
-          const geometry = new THREE.PlaneGeometry(
-            SCALE * 0.175,
-            (note.length / 1000) * settings.highwaySpeed,
-          );
-          const plane = new THREE.Mesh(geometry, mat);
-
-          plane.position.z = 0;
-          plane.position.y =
-            (note.length! / 1000 / 2) * settings.highwaySpeed + SCALE / 2;
-          plane.renderOrder = 2;
-          group.add(plane);
-        }
-      }
-
-      if (note.type === EventType.kick) {
-        const kickScale = 0.045;
-        const sprite = new THREE.Sprite(kickMaterial);
-        sprite.center = new THREE.Vector2(0.5, -0.5);
-        const aspectRatio =
-          sprite.material.map!.image.width / sprite.material.map!.image.height;
-        sprite.scale.set(kickScale * aspectRatio, kickScale, kickScale);
-        sprite.position.z = 0;
-        sprite.material.clippingPlanes = clippingPlanes;
-        sprite.material.depthTest = false;
-        sprite.material.transparent = true;
-        sprite.renderOrder = 1;
-        group.add(sprite);
-      }
-
-      if (note.type === EventType.open) {
-        const openScale = 0.11;
-        const sprite = new THREE.Sprite(openMaterial);
-        sprite.center = new THREE.Vector2(0.5, 0);
-        const aspectRatio =
-          sprite.material.map!.image.width / sprite.material.map!.image.height;
-        sprite.scale.set(openScale * aspectRatio, openScale, openScale);
-        sprite.position.x = -0.9;
-        sprite.position.z = 0;
-        sprite.material.clippingPlanes = clippingPlanes;
-        sprite.material.depthTest = false;
-        sprite.material.transparent = true;
-        sprite.renderOrder = 4;
-        group.add(sprite);
-      }
-
-      // const myText = new SpriteText(`${note.tick}`);
-      // myText.position.z = 0.2;
-      // myText.scale.set(SCALE * 0.5, SCALE * 0.5, SCALE * 0.5);
-      // group.add(myText);
-
-      // scene.add(group);
-
-      //
-      noteObjects.push({object: group, note});
-    }
-
-    // console.log('noteObjects', noteObjects);
-    // console.log('highway groups', highwayGroups);
-
-    // scene.add(group);
     const sources = await Promise.all(
       audioFiles.map(async audioFile => {
         if (audioCtx.state === 'closed') {
@@ -481,29 +381,8 @@ export const setupRenderer = (
         }
 
         for (const {object, note} of noteObjects) {
-          // let notPast = object.position.y > -1;
           object.position.y =
             ((note.time - elapsedTime) / 1000) * settings.highwaySpeed - 1;
-          // console.log('y', object.position.y, note.time, elapsedTime);
-          // if (notPast && object.position.y <= -1) {
-          //   // console.log("note", note.tick);
-          // }
-
-          // for (const child of object.children) {
-          //   if (child instanceof THREE.Sprite) {
-          //     // object.visible = object.position.y > -1;
-          //   }
-          // }
-
-          // if (object.position.y <= -1) {
-          //   for (const child of object.children) {
-          //     if (child instanceof THREE.Sprite) {
-          //       object.remove(child);
-
-          //     }
-          //   }
-          //   // scene.remove();
-          // } e
         }
       }
 
@@ -532,6 +411,7 @@ async function loadNoteTextures(
 
   let strumTextures: THREE.SpriteMaterial[];
   let strumTexturesHopo: THREE.SpriteMaterial[];
+  let strumTexturesTap: THREE.SpriteMaterial[];
 
   let tomTextures: Awaited<ReturnType<typeof loadTomTextures>>;
   let cymbalTextures: Awaited<ReturnType<typeof loadCymbalTextures>>;
@@ -542,6 +422,7 @@ async function loadNoteTextures(
   } else {
     strumTextures = await loadStrumNoteTextures(textureLoader);
     strumTexturesHopo = await loadStrumHopoNoteTextures(textureLoader);
+    strumTexturesTap = await loadStrumTapNoteTextures(textureLoader);
   }
 
   return {
@@ -554,27 +435,28 @@ async function loadNoteTextures(
           case EventType.red:
             return tomTextures.red;
           case EventType.green:
-          // 5 lane drum charts seem like they have green cymbal on orange
+            return tomTextures.green;
           case EventType.orange:
-            return format == 'mid' ? cymbalTextures.green : tomTextures.green;
+            throw new Error('should not have an orange note');
           case EventType.greenTomOrCymbalMarker:
-            return format == 'chart' ? cymbalTextures.green : tomTextures.green;
+            return cymbalTextures.green;
           case EventType.blue:
-            return format == 'mid' ? cymbalTextures.blue : tomTextures.blue;
+            return tomTextures.blue;
           case EventType.blueTomOrCymbalMarker:
-            return format == 'chart' ? cymbalTextures.blue : tomTextures.blue;
+            return cymbalTextures.blue;
           case EventType.yellow:
-            return format == 'mid' ? cymbalTextures.yellow : tomTextures.yellow;
+            return tomTextures.yellow;
           case EventType.yellowTomOrCymbalMarker:
-            return format == 'chart'
-              ? cymbalTextures.yellow
-              : tomTextures.yellow;
+            return cymbalTextures.yellow;
           default:
-            throw new Error('Invalid sprite requested');
+            throw new Error(`Invalid sprite requested: ${noteType}`);
         }
       } else {
         const guitarModifiers = modifiers as GuitarModifiers;
+
         const textures = guitarModifiers.isTap
+          ? strumTexturesTap
+          : guitarModifiers.isForce
           ? strumTexturesHopo
           : strumTextures;
         switch (noteType) {
@@ -613,7 +495,39 @@ async function loadStrumNoteTextures(textureLoader: THREE.TextureLoader) {
   return noteTextures;
 }
 
-// ('drum-kick.webp');
+async function loadStrumHopoNoteTextures(textureLoader: THREE.TextureLoader) {
+  const hopoNoteTextures = [];
+
+  for await (const num of [0, 1, 2, 3, 4]) {
+    const texture = await textureLoader.loadAsync(
+      `/assets/preview/assets2/hopo${num}.webp`,
+    );
+    hopoNoteTextures.push(
+      new THREE.SpriteMaterial({
+        map: texture,
+      }),
+    );
+  }
+
+  return hopoNoteTextures;
+}
+
+async function loadStrumTapNoteTextures(textureLoader: THREE.TextureLoader) {
+  const hopoNoteTextures = [];
+
+  for await (const num of [0, 1, 2, 3, 4]) {
+    const texture = await textureLoader.loadAsync(
+      `/assets/preview/assets2/tap${num}.png`,
+    );
+    hopoNoteTextures.push(
+      new THREE.SpriteMaterial({
+        map: texture,
+      }),
+    );
+  }
+
+  return hopoNoteTextures;
+}
 
 async function loadTomTextures(textureLoader: THREE.TextureLoader) {
   const textures = await Promise.all(
@@ -703,23 +617,6 @@ function createDrumHighway(
   return plane;
 }
 
-async function loadStrumHopoNoteTextures(textureLoader: THREE.TextureLoader) {
-  const hopoNoteTextures = [];
-
-  for await (const num of [0, 1, 2, 3, 4]) {
-    const texture = await textureLoader.loadAsync(
-      `/assets/preview/assets2/strum${num}.webp`,
-    );
-    hopoNoteTextures.push(
-      new THREE.SpriteMaterial({
-        map: texture,
-      }),
-    );
-  }
-
-  return hopoNoteTextures;
-}
-
 async function loadAndCreateHitBox(textureLoader: THREE.TextureLoader) {
   const texture = await textureLoader.loadAsync(
     '/assets/preview/assets/isolated.png',
@@ -745,12 +642,7 @@ async function loadAndCreateHitBox(textureLoader: THREE.TextureLoader) {
     // Texture is taller than it is wide or square
     sprite.scale.set(1 * scale, (1 / aspectRatio) * scale, 1);
   }
-  // sprite.rotation.x = 45;
-  // const scale = 0.15;
-  // sprite.scale.set(scale, scale, scale);
   sprite.position.y = -1;
-  // const idx = 0;
-  // sprite.position.x = -0.5 + scale + ((1 - scale) / 5) * idx;
   sprite.renderOrder = 3;
 
   return sprite;
@@ -781,12 +673,7 @@ async function loadAndCreateDrumHitBox(textureLoader: THREE.TextureLoader) {
     // Texture is taller than it is wide or square
     sprite.scale.set(1 * scale, (1 / aspectRatio) * scale, 1);
   }
-  // sprite.rotation.x = 45;
-  // const scale = 0.15;
-  // sprite.scale.set(scale, scale, scale);
   sprite.position.y = -1;
-  // const idx = 0;
-  // sprite.position.x = -0.5 + scale + ((1 - scale) / 5) * idx;
   sprite.renderOrder = 3;
 
   return sprite;
@@ -801,4 +688,120 @@ function calculateNoteXOffset(instrument: Instrument, lane: number) {
     SCALE +
     ((NOTE_SPAN_WIDTH - SCALE) / 5) * lane
   );
+}
+
+function normalizeDrumEvents(
+  events: Map<EventType, number>,
+  format: TrackParser['format'],
+) {
+  // Normalize weirdness
+  // If orange, change to green cymbal
+  // orange comes from 5 lane charts
+  // Possible bug: I have no idea what happens if there's a green and an orange in a 5
+  // lane chart
+
+  /*
+  5-lane Chart	Conversion
+Red	Red
+Yellow	Yellow cymbal
+Blue	Blue tom
+Orange	Green cymbal
+Green	Green tom
+Orange + Green	G cym + B tom
+  */
+
+  if (events.has(EventType.orange)) {
+    events.set(EventType.green, events.get(EventType.orange)!);
+    events.delete(EventType.orange);
+  }
+
+  // I've been told that on mid charts, tomOrCymbal marker is tom, and on chart charts it's cymbal
+  if (format == 'mid') {
+    if (events.has(EventType.orange)) {
+      const orangeLength = events.get(EventType.orange)!;
+      events.set(EventType.green, orangeLength);
+      events.delete(EventType.greenTomOrCymbalMarker);
+      events.delete(EventType.orange);
+    }
+
+    if (
+      events.has(EventType.yellow) &&
+      events.has(EventType.yellowTomOrCymbalMarker)
+    ) {
+      events.delete(EventType.yellowTomOrCymbalMarker);
+    } else if (events.has(EventType.yellowTomOrCymbalMarker)) {
+      events.set(
+        EventType.yellow,
+        events.get(EventType.yellowTomOrCymbalMarker)!,
+      );
+      events.delete(EventType.yellowTomOrCymbalMarker);
+    } else if (events.has(EventType.yellow)) {
+      events.set(
+        EventType.yellowTomOrCymbalMarker,
+        events.get(EventType.yellow)!,
+      );
+      events.delete(EventType.yellow);
+    }
+
+    if (
+      events.has(EventType.green) &&
+      events.has(EventType.greenTomOrCymbalMarker)
+    ) {
+      events.delete(EventType.greenTomOrCymbalMarker);
+    } else if (events.has(EventType.greenTomOrCymbalMarker)) {
+      events.set(
+        EventType.green,
+        events.get(EventType.greenTomOrCymbalMarker)!,
+      );
+      events.delete(EventType.greenTomOrCymbalMarker);
+    } else if (events.has(EventType.green)) {
+      events.set(
+        EventType.greenTomOrCymbalMarker,
+        events.get(EventType.green)!,
+      );
+      events.delete(EventType.green);
+    }
+
+    if (
+      events.has(EventType.blue) &&
+      events.has(EventType.blueTomOrCymbalMarker)
+    ) {
+      events.delete(EventType.blueTomOrCymbalMarker);
+    } else if (events.has(EventType.blueTomOrCymbalMarker)) {
+      events.set(EventType.blue, events.get(EventType.blueTomOrCymbalMarker)!);
+      events.delete(EventType.blueTomOrCymbalMarker);
+    } else if (events.has(EventType.blue)) {
+      events.set(EventType.blueTomOrCymbalMarker, events.get(EventType.blue)!);
+      events.delete(EventType.blue);
+    }
+  } else {
+    if (events.has(EventType.orange)) {
+      const orangeLength = events.get(EventType.orange)!;
+      events.set(EventType.green, orangeLength);
+      events.delete(EventType.orange);
+    }
+
+    if (
+      events.has(EventType.yellow) &&
+      events.has(EventType.yellowTomOrCymbalMarker)
+    ) {
+      events.delete(EventType.yellow);
+    }
+
+    if (
+      events.has(EventType.green) &&
+      events.has(EventType.greenTomOrCymbalMarker)
+    ) {
+      events.delete(EventType.green);
+    }
+
+    if (
+      events.has(EventType.blue) &&
+      events.has(EventType.blueTomOrCymbalMarker)
+    ) {
+      events.delete(EventType.blue);
+    }
+  }
+
+  // return events;
 }
