@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import {ChartParser} from './chart-parser';
 import {MidiParser} from './midi-parser';
 import {Difficulty, EventType, Instrument, TrackEvent} from 'scan-chart-web';
-import {text} from 'stream/consumers';
 import {TrackParser} from './track-parser';
 
 type NoteObject = {
@@ -358,13 +357,12 @@ export const setupRenderer = (
       source!.start();
     });
 
-    // try using audioCtx. Also try checking this in animation loop
-    const SYNC_MS = new AudioContext().outputLatency * 1000;
     const songLength = chart.notesData.length;
 
     function animation(time: number) {
+      const SYNC_MS = audioCtx.outputLatency * 1000;
       if (audioCtx.state === 'running') {
-        const elapsedTime = Date.now() - startTime + SYNC_MS;
+        const elapsedTime = Date.now() - startTime - SYNC_MS;
         if (elapsedTime > songLength) {
           renderer.setAnimationLoop(null);
           audioCtx.close();
