@@ -5,11 +5,6 @@ import {MidiParser} from './midi-parser';
 import {Difficulty, EventType, Instrument, TrackEvent} from 'scan-chart-web';
 import {TrackParser} from './track-parser';
 
-type NoteObject = {
-  object: THREE.Object3D;
-  note: TrackEvent;
-};
-
 type RenderableNoteGroup = {
   time: number;
   object: THREE.Object3D;
@@ -168,9 +163,7 @@ export const setupRenderer = (
     }
 
     const groupedNotes = track.groupedNotes;
-    const notes = track.notes;
 
-    const noteObjects: Array<NoteObject> = [];
     const highwayGroups: RenderableNoteGroup[] = [];
 
     const {getTextureForNote} = await loadNoteTextures(textureLoader, track);
@@ -376,11 +369,6 @@ export const setupRenderer = (
         for (const {time, object} of highwayGroups) {
           object.position.y =
             ((time - elapsedTime) / 1000) * settings.highwaySpeed - 1;
-        }
-
-        for (const {object, note} of noteObjects) {
-          object.position.y =
-            ((note.time - elapsedTime) / 1000) * settings.highwaySpeed - 1;
         }
       }
 
