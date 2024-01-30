@@ -70,9 +70,6 @@ export const setupRenderer = (
 
   const scene = new THREE.Scene();
 
-  // const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-  // const material = new THREE.MeshNormalMaterial();
-
   const renderer = new THREE.WebGLRenderer({antialias: true});
   renderer.localClippingEnabled = true;
 
