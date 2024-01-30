@@ -164,7 +164,8 @@ export const setupRenderer = (
 
     const groupedNotes = track.groupedNotes;
 
-    const highwayGroups: RenderableNoteGroup[] = [];
+    const highwayGroups = new THREE.Group();
+    scene.add(highwayGroups);
 
     const {getTextureForNote} = await loadNoteTextures(textureLoader, track);
 
@@ -175,8 +176,8 @@ export const setupRenderer = (
       );
 
       const notesGroup = new THREE.Group();
-      scene.add(notesGroup);
-      highwayGroups.push({time, object: notesGroup});
+      notesGroup.position.y = (time / 1000) * settings.highwaySpeed - 1;
+      highwayGroups.add(notesGroup);
 
       // Calculate modifiers
       if (track.instrument == 'drums') {
@@ -352,7 +353,7 @@ export const setupRenderer = (
 
     const songLength = chart.notesData.length;
 
-    function animation(time: number) {
+    function animation() {
       const SYNC_MS = audioCtx.outputLatency * 1000;
       if (audioCtx.state === 'running') {
         const elapsedTime = Date.now() - startTime - SYNC_MS;
@@ -361,15 +362,14 @@ export const setupRenderer = (
           audioCtx.close();
         }
 
+        const scrollPosition =
+          -1 * (elapsedTime / 1000) * settings.highwaySpeed;
+
         if (highwayTexture) {
-          highwayTexture.offset.y =
-            (elapsedTime / 1000) * settings.highwaySpeed - 1;
+          highwayTexture.offset.y = -1 * scrollPosition;
         }
 
-        for (const {time, object} of highwayGroups) {
-          object.position.y =
-            ((time - elapsedTime) / 1000) * settings.highwaySpeed - 1;
-        }
+        highwayGroups.position.y = scrollPosition;
       }
 
       renderer.render(scene, camera);
@@ -788,6 +788,4 @@ Orange + Green	G cym + B tom
       events.delete(EventType.blue);
     }
   }
-
-  // return events;
 }

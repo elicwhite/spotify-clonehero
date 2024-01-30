@@ -54,10 +54,11 @@ export const Highway: FC<{
     <>
       <input
         type="range"
-        className="w-full"
+        className="w-full hidden"
         step={0.01}
         min={1}
         max={5}
+        defaultValue={settingsRef.current.highwaySpeed}
         onChange={e => {
           settingsRef.current.highwaySpeed = Number(e.target.value);
         }}
