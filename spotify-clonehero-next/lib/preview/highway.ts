@@ -7,14 +7,8 @@ import {
   EventType,
   GroupedTrackEvent,
   Instrument,
-  TrackEvent,
 } from 'scan-chart-web';
 import {TrackParser} from './track-parser';
-
-type RenderableNoteGroup = {
-  time: number;
-  object: THREE.Object3D;
-};
 
 export type SelectedTrack = {
   instrument: Instrument;
@@ -44,13 +38,6 @@ const GUITAR_LANE_COLORS = [
   NOTE_COLORS.yellow,
   NOTE_COLORS.blue,
   NOTE_COLORS.orange,
-];
-
-const DRUM_LANE_COLORS = [
-  NOTE_COLORS.red,
-  NOTE_COLORS.yellow,
-  NOTE_COLORS.blue,
-  NOTE_COLORS.green,
 ];
 
 export const setupRenderer = (
