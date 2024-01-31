@@ -1,7 +1,6 @@
 'use client';
 
 import {useCallback, useEffect, useState} from 'react';
-import {calculateTimes, parseChart} from '@/lib/preview/chart';
 import {Highway} from './Highway';
 import {
   downloadSong,
@@ -9,8 +8,6 @@ import {
   getPreviewDownloadDirectory,
 } from '@/lib/local-songs-folder';
 import {Button} from '@/components/ui/button';
-import {readTextFile} from '@/lib/fileSystemHelpers';
-import {ChartFile} from '@/lib/preview/interfaces';
 import {parseMidi} from '@/lib/preview/midi';
 import {
   ChartParser,
@@ -147,22 +144,14 @@ async function getChartData(
 
     let result: ChartParser | MidiParser | null = null;
     if (name == 'notes.chart') {
-      const chart = await readTextFile(entry);
-
-      const parsedChart = parseChart(chart);
-      calculateTimes(parsedChart);
-
       const file = await entry.getFile();
       result = scanParseChart(await file.arrayBuffer());
-      console.log(parsedChart, result);
+      console.log(result);
 
-      // return parsedChart;
       return result;
     } else if (name == 'notes.mid') {
       const file = await entry.getFile();
       result = parseMidi(await file.arrayBuffer());
-      // console.log(result);
-      // throw new Error('notes.mid files are not supported yet');
       return result;
     }
   }

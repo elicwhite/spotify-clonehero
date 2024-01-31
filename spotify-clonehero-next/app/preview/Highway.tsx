@@ -1,21 +1,12 @@
-import React, {
-  FC,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, {FC, useEffect, useMemo, useRef, useState} from 'react';
 import {
   HighwaySettings,
   SelectedTrack,
   setupRenderer,
 } from '@/lib/preview/highway';
-import {ChartFile} from '@/lib/preview/interfaces';
 import {ChartParser} from '@/lib/preview/chart-parser';
 import {MidiParser} from '@/lib/preview/midi-parser';
 import {useSelect} from 'downshift';
-import {Difficulty, Instrument} from 'scan-chart-web';
 import {cn} from '@/lib/utils';
 
 export const Highway: FC<{
