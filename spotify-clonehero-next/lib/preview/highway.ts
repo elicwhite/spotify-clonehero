@@ -158,6 +158,16 @@ export const setupRenderer = (
     );
     scene.add(highwayGroups);
 
+    // 0 to 1
+    const volume = 0.5;
+
+    const gainNode = audioCtx.createGain();
+    gainNode.connect(audioCtx.destination);
+    // Let's use an x*x curve (x-squared) since simple linear (x) does not
+    // sound as good.
+    // Taken from https://webaudioapi.com/samples/volume/
+    gainNode.gain.value = volume * volume;
+
     const sources = await Promise.all(
       audioFiles.map(async arrayBuffer => {
         if (audioCtx.state === 'closed') {
@@ -181,7 +191,7 @@ export const setupRenderer = (
         }
         const source = audioCtx.createBufferSource();
         source.buffer = decodedAudioBuffer;
-        source.connect(audioCtx.destination);
+        source.connect(gainNode);
         return source;
       }),
     );
