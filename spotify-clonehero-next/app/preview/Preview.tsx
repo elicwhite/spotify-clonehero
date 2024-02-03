@@ -37,6 +37,9 @@ export default function Preview() {
       const downloadLocation = await getPreviewDownloadDirectory();
 
       const chartData = await getChartInfo(downloadLocation);
+      if (chartData == null) {
+        return;
+      }
       const name = chartData.chart.name;
       if (chartData.chartFileName == null || name == null) {
         return;
