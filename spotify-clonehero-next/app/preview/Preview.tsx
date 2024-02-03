@@ -14,8 +14,6 @@ import {
   parseChart as scanParseChart,
 } from '@/lib/preview/chart-parser';
 import EncoreAutocomplete from '@/components/EncoreAutocomplete';
-import chorusChartDb from '@/lib/chorusChartDb';
-import {Searcher} from 'fast-fuzzy';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import {MidiParser} from '@/lib/preview/midi-parser';
 import {ScannedChart, scanCharts} from 'scan-chart-web';
@@ -119,7 +117,7 @@ export default function Preview() {
     <div className="flex flex-col w-full flex-1">
       {/* <Button onClick={() => handler(null)}>Play</Button> */}
       <div className="flex flex-row gap-10">
-        <TypeAhead onChartSelected={handler} />
+        <EncoreAutocomplete onChartSelected={handler} />
         {alreadyInstalled != null && (
           <Button onClick={() => playDirectory(alreadyInstalled?.handle)}>
             Play {alreadyInstalled?.songName}
@@ -157,37 +155,6 @@ async function getChartData(
   }
 
   throw new Error('No .chart or .mid file found');
-}
-
-function TypeAhead({
-  onChartSelected,
-}: {
-  onChartSelected: (chart: ChartResponseEncore) => void;
-}) {
-  const [searcher, setSearcher] = useState<Searcher<
-    ChartResponseEncore,
-    any
-  > | null>(null);
-
-  useEffect(() => {
-    async function run() {
-      const fetchChorusDb = await chorusChartDb();
-
-      const artistSearcher = new Searcher(fetchChorusDb, {
-        keySelector: chart => [chart.artist, chart.name],
-        threshold: 1,
-        useDamerau: false,
-        useSellers: false,
-      });
-
-      setSearcher(artistSearcher);
-    }
-    run();
-  }, []);
-
-  return (
-    <EncoreAutocomplete onChartSelected={onChartSelected} searcher={searcher} />
-  );
 }
 
 async function getChartInfo(

@@ -327,6 +327,7 @@ export async function downloadSong(
     cache: 'no-store',
   });
 
+  debugger;
   const body = response.body;
   if (body == null) {
     return null;

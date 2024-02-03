@@ -63,6 +63,7 @@ export const setupRenderer = (
   function setSize() {
     const width = sizingRef.current?.offsetWidth ?? window.innerWidth;
     const height = sizingRef.current?.offsetHeight ?? window.innerHeight;
+    console.log('resize', width, height);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height);

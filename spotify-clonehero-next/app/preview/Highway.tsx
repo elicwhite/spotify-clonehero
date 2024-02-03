@@ -8,6 +8,7 @@ import {ChartParser} from '@/lib/preview/chart-parser';
 import {MidiParser} from '@/lib/preview/midi-parser';
 import {useSelect} from 'downshift';
 import {cn} from '@/lib/utils';
+import {Button} from '@/components/ui/button';
 
 export const Highway: FC<{
   chart: ChartParser | MidiParser;
@@ -54,11 +55,19 @@ export const Highway: FC<{
           settingsRef.current.highwaySpeed = Number(e.target.value);
         }}
       />
-      <InstrumentDifficultyPicker
-        chart={chart}
-        selectedTrack={selectedTrack}
-        onTrackSelected={setSelectedTrack}
-      />
+      <div className="flex">
+        <InstrumentDifficultyPicker
+          chart={chart}
+          selectedTrack={selectedTrack}
+          onTrackSelected={setSelectedTrack}
+        />
+        <Button
+          onClick={() => {
+            ref.current?.requestFullscreen();
+          }}>
+          Fullscreen
+        </Button>
+      </div>
       <div className="relative flex-1" ref={sizingRef}>
         <div className="absolute" ref={ref}></div>
       </div>
