@@ -2,11 +2,7 @@
 
 import {useCallback, useEffect, useState} from 'react';
 import {Highway} from './Highway';
-import {
-  downloadSong,
-  emptyDirectory,
-  getPreviewDownloadDirectory,
-} from '@/lib/local-songs-folder';
+import {getPreviewDownloadDirectory} from '@/lib/local-songs-folder';
 import {Button} from '@/components/ui/button';
 import {parseMidi} from '@/lib/preview/midi';
 import {
@@ -17,6 +13,7 @@ import EncoreAutocomplete from '@/components/EncoreAutocomplete';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import {MidiParser} from '@/lib/preview/midi-parser';
 import {ScannedChart, scanCharts} from 'scan-chart-web';
+import {SngStream} from 'parse-sng';
 
 /*
 Things I need from scan-chart
@@ -28,98 +25,96 @@ const DEBUG = true;
 
 export default function Preview() {
   const [chart, setChart] = useState<ChartParser | MidiParser | undefined>();
-  const [audioFiles, setAudioFiles] = useState<File[]>([]);
+  const [audioFiles, setAudioFiles] = useState<ArrayBuffer[]>([]);
   const [alreadyInstalled, setAlreadyInstalled] = useState<{
     songName: string;
-    handle: FileSystemDirectoryHandle;
+    handle: FileSystemFileHandle;
   } | null>(null);
-
-  // const midFileFetch =
-  //   'https://files.enchor.us/56d31d7c085f5e504b91e272e65d1cd3.sng';
-  // const chartFileFetch =
-  //   'https://files.enchor.us/c395e1d650182ccae787f37758f20223.sng';
 
   // Calculate downloaded preview
   useEffect(() => {
     async function run() {
       const downloadLocation = await getPreviewDownloadDirectory();
-      let subDir = null;
-      for await (const entry of downloadLocation.values()) {
-        subDir = entry;
-        break;
-      }
 
-      if (subDir == null || subDir.kind !== 'directory') {
-        return;
-      }
-
-      const chartData = await getChartInfo(subDir);
+      const chartData = await getChartInfo(downloadLocation);
       const name = chartData.chart.name;
-      console.log('loaded', name);
-
-      if (!name) {
+      if (chartData.chartFileName == null || name == null) {
         return;
       }
+      const fileHandle = await downloadLocation.getFileHandle(
+        chartData.chartFileName,
+      );
+      console.log('Found', name, 'already cached');
 
       setAlreadyInstalled({
         songName: name,
-        handle: subDir,
+        handle: fileHandle,
       });
-      // console.log('data', chartData);
-      // const result = scanCharts(subDir);
-      // const song = chartData.metadata.Name;
     }
     run();
   }, []);
 
-  const playDirectory = useCallback(
-    async (directory: FileSystemDirectoryHandle) => {
-      const chartData = await getChartData(directory);
-      console.log(chartData);
-      const songFiles = await getSongFiles(directory);
+  const playBuffers = useCallback((buffers: Map<string, ArrayBuffer>) => {
+    let chartData: undefined | ChartParser | MidiParser;
+    let songs: ArrayBuffer[] = [];
+    for (const fileName of buffers.keys()) {
+      console.log('found', fileName);
+      if (fileName.toLowerCase().endsWith('.mid')) {
+        chartData = getChartDataFromBuffer('mid', buffers.get(fileName)!);
+      } else if (fileName.toLowerCase().endsWith('.chart')) {
+        chartData = getChartDataFromBuffer('chart', buffers.get(fileName)!);
+      }
 
-      setChart(chartData);
-      setAudioFiles(songFiles);
-    },
-    [],
-  );
+      if (
+        ['.ogg', '.mp3', '.wav', '.opus'].some(ext =>
+          fileName.toLowerCase().endsWith(ext),
+        )
+      ) {
+        songs.push(buffers.get(fileName)!);
+      }
+    }
 
-  const handler = useCallback(
-    async (chart: ChartResponseEncore) => {
-      const downloadLocation = await getPreviewDownloadDirectory();
-      // We should have a better way to manage this directory
-      await emptyDirectory(downloadLocation);
-      const downloadedSong = await downloadSong(
-        'Artist',
-        'Song',
-        'charter',
-        chart.file, // SWAP THIS OUT WITH midFileFetch TO TEST MIDI
-        {
-          folder: downloadLocation,
-        },
-      );
+    setChart(chartData);
+    setAudioFiles(songs);
+  }, []);
 
-      if (downloadedSong == null) {
+  const playChartBuffers = useCallback(
+    async (buffers: Map<string, ArrayBuffer> | undefined) => {
+      if (!buffers || buffers?.size == 0) {
+        console.error('Could not parse chart files');
         return;
       }
 
-      const songDir =
-        await downloadedSong.newParentDirectoryHandle.getDirectoryHandle(
-          downloadedSong.fileName,
-        );
-
-      await playDirectory(songDir);
+      playBuffers(buffers);
     },
-    [playDirectory],
+    [playBuffers],
+  );
+
+  const playSngFile = useCallback(
+    async (sngFile: FileSystemFileHandle) => {
+      const file = await sngFile.getFile();
+      const stream = file.stream();
+      const buffers = await processSngStream(stream);
+      playChartBuffers(buffers);
+    },
+    [playChartBuffers],
+  );
+
+  const playSelectedChart = useCallback(
+    async (chart: ChartResponseEncore) => {
+      const chartFiles = await processFileUrlAsStream(chart.file);
+
+      playChartBuffers(chartFiles);
+    },
+    [playChartBuffers],
   );
 
   return (
     <div className="flex flex-col w-full flex-1">
-      {/* <Button onClick={() => handler(null)}>Play</Button> */}
       <div className="flex flex-row gap-10">
-        <EncoreAutocomplete onChartSelected={handler} />
+        <EncoreAutocomplete onChartSelected={playSelectedChart} />
         {alreadyInstalled != null && (
-          <Button onClick={() => playDirectory(alreadyInstalled?.handle)}>
+          <Button onClick={() => playSngFile(alreadyInstalled?.handle)}>
             Play {alreadyInstalled?.songName}
           </Button>
         )}
@@ -131,27 +126,14 @@ export default function Preview() {
   );
 }
 
-async function getChartData(
-  directoryHandle: FileSystemDirectoryHandle,
-): Promise<ChartParser | MidiParser> {
-  for await (const entry of directoryHandle.values()) {
-    const name = entry.name.toLowerCase();
-    if (entry.kind !== 'file') {
-      continue;
-    }
-
-    let result: ChartParser | MidiParser | null = null;
-    if (name == 'notes.chart') {
-      const file = await entry.getFile();
-      result = scanParseChart(await file.arrayBuffer());
-      console.log(result);
-
-      return result;
-    } else if (name == 'notes.mid') {
-      const file = await entry.getFile();
-      result = parseMidi(await file.arrayBuffer());
-      return result;
-    }
+function getChartDataFromBuffer(
+  type: 'mid' | 'chart',
+  arrayBuffer: ArrayBuffer,
+): ChartParser | MidiParser {
+  if (type == 'mid') {
+    return parseMidi(arrayBuffer);
+  } else if (type == 'chart') {
+    return scanParseChart(arrayBuffer);
   }
 
   throw new Error('No .chart or .mid file found');
@@ -174,24 +156,80 @@ async function getChartInfo(
   });
 }
 
-// This should be reused from scan-chart
-async function getSongFiles(folder: FileSystemDirectoryHandle) {
-  const songFiles = [];
-  for await (const entry of folder.values()) {
-    if (entry.kind !== 'file') {
-      continue;
-    }
-    const hasExtension = ['.ogg', '.mp3', '.wav', '.opus'].some(ext =>
-      entry.name.endsWith(ext),
-    );
+async function processFileUrlAsStream(
+  URL: string,
+): Promise<Map<string, ArrayBuffer> | undefined> {
+  const response = await fetch(URL, {
+    headers: {
+      accept: '*/*',
+      'accept-language': 'en-US,en;q=0.9',
+      'sec-fetch-dest': 'empty',
+    },
+    referrerPolicy: 'no-referrer',
+    body: null,
+    method: 'GET',
+    credentials: 'omit',
+  });
 
-    if (
-      hasExtension &&
-      !['preview', 'crowd'].some(base => entry.name.startsWith(base))
-    ) {
-      const file = await entry.getFile();
-      songFiles.push(file);
-    }
+  const body = response.body;
+  if (body == null) {
+    return;
   }
-  return songFiles;
+
+  return await processSngStream(body);
+}
+
+async function processSngStream(
+  stream: ReadableStream<Uint8Array>,
+): Promise<Map<string, ArrayBuffer> | undefined> {
+  return new Promise((resolve, reject) => {
+    const sngStream = new SngStream((start, end) => stream);
+
+    const fileNames: string[] = [];
+    const promises: Promise<ArrayBuffer>[] = [];
+
+    sngStream.on('file', async (file, fileStream) => {
+      console.log('found', file);
+      const validAudio = ['.ogg', '.mp3', '.wav', '.opus'];
+      const validChart = ['notes.chart', 'notes.mid'];
+
+      fileNames.push(file);
+      promises.push(readStreamIntoArrayBuffer(fileStream));
+    });
+
+    sngStream.on('end', async () => {
+      const files = new Map<string, ArrayBuffer>();
+
+      const buffers = await Promise.all(promises);
+      buffers.forEach((buffer, index) => {
+        files.set(fileNames[index], buffer);
+      });
+
+      console.log('files', files);
+      resolve(files);
+    });
+
+    sngStream.on('error', error => reject(error));
+
+    sngStream.start();
+  });
+}
+
+async function readStreamIntoArrayBuffer(
+  stream: ReadableStream,
+): Promise<ArrayBuffer> {
+  const reader = stream.getReader();
+  const chunks = [];
+
+  while (true) {
+    const {done, value} = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    chunks.push(value);
+  }
+
+  return new Blob(chunks).arrayBuffer();
 }

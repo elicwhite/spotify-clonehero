@@ -44,7 +44,7 @@ export const setupRenderer = (
   chart: ChartParser | MidiParser,
   sizingRef: RefObject<HTMLDivElement>,
   ref: RefObject<HTMLDivElement>,
-  audioFiles: File[],
+  audioFiles: ArrayBuffer[],
   selectedTrack: SelectedTrack,
   settings: HighwaySettings,
 ) => {
@@ -157,13 +157,23 @@ export const setupRenderer = (
     scene.add(highwayGroups);
 
     const sources = await Promise.all(
-      audioFiles.map(async audioFile => {
+      audioFiles.map(async arrayBuffer => {
         if (audioCtx.state === 'closed') {
           // Can happen if cleaned up before setup is done
           return;
         }
-        const arrayBuffer = await audioFile.arrayBuffer();
-        const decodedAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+        // If we don't copy this, we can only play it once. decode destroys the buffer
+        const bufferCopy = arrayBuffer.slice(0);
+        let decodedAudioBuffer;
+        try {
+          decodedAudioBuffer = await audioCtx.decodeAudioData(bufferCopy);
+        } catch {
+          // this is likely a situation of the file format not
+          // supported in this browser. For example, safari
+          // doesn't support .ogg :(
+          return;
+        }
         const source = audioCtx.createBufferSource();
         source.buffer = decodedAudioBuffer;
         source.connect(audioCtx.destination);
@@ -178,7 +188,11 @@ export const setupRenderer = (
     const songLength = chart.notesData.length;
 
     function animation() {
-      const SYNC_MS = audioCtx.outputLatency * 1000;
+      const SYNC_MS =
+        (audioCtx.baseLatency +
+          // outputLatency is not implemented in safari
+          (audioCtx.outputLatency || 0)) *
+        1000;
       if (audioCtx.state === 'running') {
         const elapsedTime = Date.now() - startTime - SYNC_MS;
         if (elapsedTime > songLength) {

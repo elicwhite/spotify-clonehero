@@ -131,7 +131,9 @@ async function getBackupDirectory() {
 }
 
 export async function emptyDirectory(directory: FileSystemDirectoryHandle) {
+  console.log('removing', directory.name);
   for await (const entry of directory.values()) {
+    console.log('entry', entry);
     await directory.removeEntry(entry.name, {recursive: true});
   }
 }
@@ -304,6 +306,7 @@ export async function downloadSong(
   options?: {
     folder?: FileSystemDirectoryHandle;
     replaceExisting?: boolean;
+    asSng?: boolean;
   },
 ): Promise<null | {
   newParentDirectoryHandle: FileSystemDirectoryHandle;
@@ -313,7 +316,6 @@ export async function downloadSong(
     event: 'download_song',
   });
 
-  // const handle = await getSongsDirectoryHandle();
   const response = await fetch(url, {
     headers: {
       accept: '*/*',
@@ -327,12 +329,13 @@ export async function downloadSong(
     cache: 'no-store',
   });
 
-  debugger;
   const body = response.body;
   if (body == null) {
     return null;
   }
-  const artistSongTitle = `${artist} - ${song} (${charter})`;
+  const artistSongTitle = `${artist} - ${song} (${charter})${
+    options?.asSng ? '.sng' : ''
+  }`;
   const filename = filenamify(artistSongTitle, {replacement: ''});
 
   const downloadLocation =
@@ -340,11 +343,17 @@ export async function downloadSong(
 
   const backupRootDirHandle = await getBackupDirectory();
 
-  // Remove any existing backups
-  await backupRootDirHandle.removeEntry(filename, {recursive: true});
+  try {
+    // Remove any existing backups
+    await backupRootDirHandle.removeEntry(filename, {recursive: true});
+  } catch (err) {}
 
   // Download into backups, and only on success copy it over to destination
-  await downloadAsFolder(backupRootDirHandle, filename, body);
+  if (options?.asSng) {
+    await downloadAsSng(backupRootDirHandle, filename, body);
+  } else {
+    await downloadAsFolder(backupRootDirHandle, filename, body);
+  }
   if (options?.replaceExisting) {
     await downloadLocation.removeEntry(filename, {recursive: true});
   }
@@ -416,7 +425,7 @@ async function downloadAsSng(
   filename: string,
   stream: ReadableStream,
 ) {
-  const fileWithExtension = `${filename}.sng`;
+  const fileWithExtension = filename;
 
   // // Error if something matches the filename already
   let songFileHandle: FileSystemFileHandle | undefined;

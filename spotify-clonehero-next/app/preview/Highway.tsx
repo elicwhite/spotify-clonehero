@@ -12,7 +12,7 @@ import {Button} from '@/components/ui/button';
 
 export const Highway: FC<{
   chart: ChartParser | MidiParser;
-  audioFiles: File[];
+  audioFiles: ArrayBuffer[];
 }> = ({chart, audioFiles}) => {
   const sizingRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
