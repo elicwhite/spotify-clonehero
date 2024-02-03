@@ -60,6 +60,7 @@ export const setupRenderer = (
 
   const renderer = new THREE.WebGLRenderer({antialias: true});
   renderer.localClippingEnabled = true;
+  renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 
   function setSize() {
     const width = sizingRef.current?.offsetWidth ?? window.innerWidth;
@@ -412,7 +413,7 @@ async function loadCymbalTextures(textureLoader: THREE.TextureLoader) {
 
 async function getHighwayTexture(textureLoader: THREE.TextureLoader) {
   const texture = await textureLoader.loadAsync(
-    '/assets/preview/assets/highways/highway2.png',
+    '/assets/preview/assets/highways/wor.png',
   );
 
   texture.wrapS = THREE.RepeatWrapping;
