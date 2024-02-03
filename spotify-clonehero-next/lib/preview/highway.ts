@@ -9,6 +9,7 @@ import {
   Instrument,
 } from 'scan-chart-web';
 import {TrackParser} from './track-parser';
+import {buffer} from 'stream/consumers';
 
 export type SelectedTrack = {
   instrument: Instrument;
@@ -169,10 +170,13 @@ export const setupRenderer = (
         try {
           decodedAudioBuffer = await audioCtx.decodeAudioData(bufferCopy);
         } catch {
-          // this is likely a situation of the file format not
-          // supported in this browser. For example, safari
-          // doesn't support .ogg :(
-          return;
+          try {
+            const decode = await import('audio-decode');
+            decodedAudioBuffer = await decode.default(bufferCopy);
+          } catch {
+            console.error('Could not decode audio');
+            return;
+          }
         }
         const source = audioCtx.createBufferSource();
         source.buffer = decodedAudioBuffer;
