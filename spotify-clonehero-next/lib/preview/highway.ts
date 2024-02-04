@@ -438,7 +438,7 @@ function createHighway(
 ) {
   const mat = new THREE.MeshBasicMaterial({map: highwayTexture});
 
-  const geometry = new THREE.PlaneGeometry(0.95, 2);
+  const geometry = new THREE.PlaneGeometry(1, 2);
   const material = new THREE.MeshBasicMaterial({
     color: 0xffff00,
     side: THREE.DoubleSide,
@@ -456,7 +456,7 @@ function createDrumHighway(
 ) {
   const mat = new THREE.MeshBasicMaterial({map: highwayTexture});
 
-  const geometry = new THREE.PlaneGeometry(0.8, 2);
+  const geometry = new THREE.PlaneGeometry(0.9, 2);
   const material = new THREE.MeshBasicMaterial({
     color: 0xffff00,
     side: THREE.DoubleSide,
