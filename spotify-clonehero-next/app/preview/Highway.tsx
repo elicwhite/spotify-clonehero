@@ -17,8 +17,8 @@ export const Highway: FC<{
   const sizingRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const [selectedTrack, setSelectedTrack] = useState<SelectedTrack>({
-    instrument: 'guitar',
-    difficulty: 'expert',
+    instrument: chart.trackParsers[0].instrument,
+    difficulty: chart.trackParsers[0].difficulty,
   });
 
   const settingsRef = useRef<HighwaySettings>({
@@ -26,8 +26,6 @@ export const Highway: FC<{
   });
 
   useEffect(() => {
-    if (!chart) return;
-
     const renderer = setupRenderer(
       chart,
       sizingRef,

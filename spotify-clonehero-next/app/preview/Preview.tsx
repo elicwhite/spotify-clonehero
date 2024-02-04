@@ -15,7 +15,6 @@ import {MidiParser} from '@/lib/preview/midi-parser';
 import {ScannedChart, scanCharts} from 'scan-chart-web';
 import {SngStream} from 'parse-sng';
 import {useSearchParams} from 'next/navigation';
-import {get} from 'lodash';
 
 /*
 Things I need from scan-chart
@@ -218,8 +217,6 @@ async function processSngStream(
 
     sngStream.on('file', async (file, fileStream) => {
       console.log('found', file);
-      const validAudio = ['.ogg', '.mp3', '.wav', '.opus'];
-      const validChart = ['notes.chart', 'notes.mid'];
 
       fileNames.push(file);
       promises.push(readStreamIntoArrayBuffer(fileStream));
