@@ -14,6 +14,8 @@ import {ChartResponseEncore} from '@/lib/chartSelection';
 import {MidiParser} from '@/lib/preview/midi-parser';
 import {ScannedChart, scanCharts} from 'scan-chart-web';
 import {SngStream} from 'parse-sng';
+import {useSearchParams} from 'next/navigation';
+import {get} from 'lodash';
 
 /*
 Things I need from scan-chart
@@ -31,31 +33,40 @@ export default function Preview() {
     handle: FileSystemFileHandle;
   } | null>(null);
 
-  // Calculate downloaded preview
-  useEffect(() => {
-    async function run() {
-      const downloadLocation = await getPreviewDownloadDirectory();
+  const searchParams = useSearchParams();
+  const md5 = searchParams.get('md5');
 
-      const chartData = await getChartInfo(downloadLocation);
-      if (chartData == null) {
+  useEffect(
+    function checkForAlreadyInstalledPreview() {
+      if (md5 != null) {
         return;
       }
-      const name = chartData.chart.name;
-      if (chartData.chartFileName == null || name == null) {
-        return;
-      }
-      const fileHandle = await downloadLocation.getFileHandle(
-        chartData.chartFileName,
-      );
-      console.log('Found', name, 'already cached');
 
-      setAlreadyInstalled({
-        songName: name,
-        handle: fileHandle,
-      });
-    }
-    run();
-  }, []);
+      async function run() {
+        const downloadLocation = await getPreviewDownloadDirectory();
+
+        const chartData = await getChartInfo(downloadLocation);
+        if (chartData == null) {
+          return;
+        }
+        const name = chartData.chart.name;
+        if (chartData.chartFileName == null || name == null) {
+          return;
+        }
+        const fileHandle = await downloadLocation.getFileHandle(
+          chartData.chartFileName,
+        );
+        console.log('Found', name, 'already cached');
+
+        setAlreadyInstalled({
+          songName: name,
+          handle: fileHandle,
+        });
+      }
+      run();
+    },
+    [md5],
+  );
 
   const playBuffers = useCallback((buffers: Map<string, ArrayBuffer>) => {
     let chartData: undefined | ChartParser | MidiParser;
@@ -112,10 +123,24 @@ export default function Preview() {
     [playChartBuffers],
   );
 
+  const playMd5 = useCallback(async () => {
+    async function run() {
+      if (md5 == null) {
+        return;
+      }
+
+      playChartBuffers(await processFileUrlAsStream(getDownloadURLForMd5(md5)));
+    }
+    run();
+  }, [md5, playChartBuffers]);
+
   return (
     <div className="flex flex-col w-full flex-1">
       <div className="flex flex-row gap-10">
-        <EncoreAutocomplete onChartSelected={playSelectedChart} />
+        {md5 == null && (
+          <EncoreAutocomplete onChartSelected={playSelectedChart} />
+        )}
+        {md5 != null && <Button onClick={playMd5}>Play Preview</Button>}
         {alreadyInstalled != null && (
           <Button onClick={() => playSngFile(alreadyInstalled?.handle)}>
             Play {alreadyInstalled?.songName}
@@ -235,4 +260,8 @@ async function readStreamIntoArrayBuffer(
   }
 
   return new Blob(chunks).arrayBuffer();
+}
+
+function getDownloadURLForMd5(md5: string): string {
+  return `https://files.enchor.us/${md5}.sng`;
 }

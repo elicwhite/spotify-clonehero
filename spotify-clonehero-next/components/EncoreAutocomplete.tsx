@@ -1,6 +1,5 @@
 import {useCombobox} from 'downshift';
-import {useCallback, useMemo, useState} from 'react';
-import {Searcher} from 'fast-fuzzy';
+import {useCallback, useState} from 'react';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import {Input} from '@/components/ui/input';
 import {Button} from './ui/button';
