@@ -9,7 +9,6 @@ import {
   Instrument,
 } from 'scan-chart-web';
 import {TrackParser} from './track-parser';
-import {buffer} from 'stream/consumers';
 
 export type SelectedTrack = {
   instrument: Instrument;
@@ -17,10 +16,6 @@ export type SelectedTrack = {
 };
 
 export type Song = {};
-
-export type HighwaySettings = {
-  highwaySpeed: number;
-};
 
 const SCALE = 0.105;
 const NOTE_SPAN_WIDTH = 0.99;
@@ -47,16 +42,15 @@ export const setupRenderer = (
   ref: RefObject<HTMLDivElement>,
   audioFiles: ArrayBuffer[],
   selectedTrack: SelectedTrack,
-  settings: HighwaySettings,
 ) => {
   console.log('Playing Preview');
+  const highwaySpeed = 1.5;
+
   let startTime = Date.now();
   const camera = new THREE.PerspectiveCamera(90, 1 / 1, 0.01, 10);
   camera.position.z = 0.8;
   camera.position.y = -1.3;
   camera.rotation.x = THREE.MathUtils.degToRad(60);
-
-  const scene = new THREE.Scene();
 
   const renderer = new THREE.WebGLRenderer({antialias: true});
   renderer.localClippingEnabled = true;
@@ -94,9 +88,32 @@ export const setupRenderer = (
 
   sizingRef.current?.addEventListener('click', sizingRefClicked);
 
-  run();
+  const textureLoader = new THREE.TextureLoader();
 
+  const highwayBeginningPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1);
+  const highwayEndPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0.9);
+  const clippingPlanes = [highwayBeginningPlane, highwayEndPlane];
+
+  async function initialize() {
+    const highwayTexture: THREE.Texture =
+      await getHighwayTexture(textureLoader);
+
+    return {
+      highwayTexture,
+    };
+  }
+
+  const initPromise = initialize();
+
+  run();
   return {
+    prepTrack(track: TrackParser, songLength: number) {
+      const scene = new THREE.Scene();
+      return prepTrack(scene, track, songLength);
+    },
+    play() {},
+    pause() {},
+    seek(percent: number) {},
     destroy: () => {
       console.log('Tearing down the renderer');
       window.removeEventListener('resize', onResize, false);
@@ -105,43 +122,18 @@ export const setupRenderer = (
     },
   };
 
-  async function run() {
-    const textureLoader = new THREE.TextureLoader();
-
-    const highwayBeginningPlane = new THREE.Plane(
-      new THREE.Vector3(0, 1, 0),
-      1,
-    );
-    const highwayEndPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0.9);
-    const clippingPlanes = [highwayBeginningPlane, highwayEndPlane];
-
-    const highwayTexture: THREE.Texture =
-      await getHighwayTexture(textureLoader);
-
-    const track = chart.trackParsers.find(
-      parser =>
-        parser.instrument == selectedTrack.instrument &&
-        parser.difficulty == selectedTrack.difficulty,
-    )!;
-    if (track == null) {
-      console.log(
-        'No track found for',
-        selectedTrack,
-        'Only found',
-        chart.trackParsers.map(
-          trackParser =>
-            `${trackParser.instrument} - ${trackParser.difficulty}`,
-        ),
-      );
-
-      return;
-    }
+  async function prepTrack(
+    scene: THREE.Scene,
+    track: TrackParser,
+    songLength: number,
+  ) {
+    const {highwayTexture} = await initPromise;
 
     if (track.instrument == 'drums') {
-      scene.add(createDrumHighway(highwayTexture, clippingPlanes));
+      scene.add(createDrumHighway(highwayTexture));
       scene.add(await loadAndCreateDrumHitBox(textureLoader));
     } else {
-      scene.add(createHighway(highwayTexture, clippingPlanes));
+      scene.add(createHighway(highwayTexture));
       scene.add(await loadAndCreateHitBox(textureLoader));
     }
 
@@ -151,7 +143,7 @@ export const setupRenderer = (
       textureLoader,
       track.instrument,
       track.format,
-      settings.highwaySpeed,
+      highwaySpeed,
       clippingPlanes,
       groupedNotes,
     );
@@ -195,7 +187,42 @@ export const setupRenderer = (
       }),
     );
 
-    sources.filter(Boolean).forEach(source => {
+    return {
+      highwayTexture,
+      highwayGroups,
+      audioSources: sources,
+    };
+  }
+
+  async function run() {
+    const track = chart.trackParsers.find(
+      parser =>
+        parser.instrument == selectedTrack.instrument &&
+        parser.difficulty == selectedTrack.difficulty,
+    )!;
+    if (track == null) {
+      console.log(
+        'No track found for',
+        selectedTrack,
+        'Only found',
+        chart.trackParsers.map(
+          trackParser =>
+            `${trackParser.instrument} - ${trackParser.difficulty}`,
+        ),
+      );
+
+      return;
+    }
+
+    const scene = new THREE.Scene();
+
+    const {highwayTexture, audioSources, highwayGroups} = await prepTrack(
+      scene,
+      track,
+      chart.notesData.length,
+    );
+
+    audioSources.filter(Boolean).forEach(source => {
       source!.start();
     });
 
@@ -209,13 +236,12 @@ export const setupRenderer = (
         1000;
       if (audioCtx.state === 'running') {
         const elapsedTime = Date.now() - startTime - SYNC_MS;
-        if (elapsedTime > songLength) {
+        if (elapsedTime > songLength + 2000) {
           renderer.setAnimationLoop(null);
           audioCtx.close();
         }
 
-        const scrollPosition =
-          -1 * (elapsedTime / 1000) * settings.highwaySpeed;
+        const scrollPosition = -1 * (elapsedTime / 1000) * highwaySpeed;
 
         if (highwayTexture) {
           highwayTexture.offset.y = -1 * scrollPosition;
@@ -432,36 +458,20 @@ async function getHighwayTexture(textureLoader: THREE.TextureLoader) {
   return texture;
 }
 
-function createHighway(
-  highwayTexture: THREE.Texture,
-  clippingPlanes: THREE.Plane[],
-) {
+function createHighway(highwayTexture: THREE.Texture) {
   const mat = new THREE.MeshBasicMaterial({map: highwayTexture});
 
   const geometry = new THREE.PlaneGeometry(1, 2);
-  const material = new THREE.MeshBasicMaterial({
-    color: 0xffff00,
-    side: THREE.DoubleSide,
-  });
-  material.clippingPlanes = clippingPlanes;
   const plane = new THREE.Mesh(geometry, mat);
   plane.position.y = -0.1;
   plane.renderOrder = 1;
   return plane;
 }
 
-function createDrumHighway(
-  highwayTexture: THREE.Texture,
-  clippingPlanes: THREE.Plane[],
-) {
+function createDrumHighway(highwayTexture: THREE.Texture) {
   const mat = new THREE.MeshBasicMaterial({map: highwayTexture});
 
   const geometry = new THREE.PlaneGeometry(0.9, 2);
-  const material = new THREE.MeshBasicMaterial({
-    color: 0xffff00,
-    side: THREE.DoubleSide,
-  });
-  material.clippingPlanes = clippingPlanes;
   const plane = new THREE.Mesh(geometry, mat);
   plane.position.y = -0.1;
   plane.renderOrder = 1;

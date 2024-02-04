@@ -1,14 +1,18 @@
-import React, {FC, useEffect, useMemo, useRef, useState} from 'react';
-import {
-  HighwaySettings,
-  SelectedTrack,
-  setupRenderer,
-} from '@/lib/preview/highway';
+import React, {
+  FC,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {SelectedTrack, setupRenderer} from '@/lib/preview/highway';
 import {ChartParser} from '@/lib/preview/chart-parser';
 import {MidiParser} from '@/lib/preview/midi-parser';
 import {useSelect} from 'downshift';
 import {cn} from '@/lib/utils';
 import {Button} from '@/components/ui/button';
+import {FaRegPlayCircle, FaRegPauseCircle} from 'react-icons/fa';
 
 export const Highway: FC<{
   chart: ChartParser | MidiParser;
@@ -20,10 +24,7 @@ export const Highway: FC<{
     instrument: chart.trackParsers[0].instrument,
     difficulty: chart.trackParsers[0].difficulty,
   });
-
-  const settingsRef = useRef<HighwaySettings>({
-    highwaySpeed: 1.5,
-  });
+  // const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
     const renderer = setupRenderer(
@@ -32,13 +33,22 @@ export const Highway: FC<{
       ref,
       audioFiles,
       selectedTrack,
-      settingsRef.current,
     );
 
     return () => {
       renderer.destroy();
     };
   }, [audioFiles, chart, selectedTrack]);
+
+  // const playPause = useCallback(() => {
+  //   const wasPlaying = playing;
+  //   setPlaying(!playing);
+
+  //   setTimeout(() => {
+  //     if (wasPlaying) {
+  //     }
+  //   });
+  // }, [playing]);
 
   return (
     <>
@@ -48,10 +58,10 @@ export const Highway: FC<{
         step={0.01}
         min={1}
         max={5}
-        defaultValue={settingsRef.current.highwaySpeed}
-        onChange={e => {
-          settingsRef.current.highwaySpeed = Number(e.target.value);
-        }}
+        // defaultValue={settingsRef.current.highwaySpeed}
+        // onChange={e => {
+        //   settingsRef.current.highwaySpeed = Number(e.target.value);
+        // }}
       />
       <div className="flex">
         <InstrumentDifficultyPicker
@@ -67,6 +77,12 @@ export const Highway: FC<{
         </Button>
       </div>
       <div className="relative flex-1" ref={sizingRef}>
+        {/* <div
+          onClick={playPause}
+          className="flex justify-center items-center absolute w-full h-full z-10 opacity-0 hover:opacity-75 transition-opacity duration-100 delay-1000 hover:delay-0 hover:duration-500">
+          {!playing && <FaRegPlayCircle className="w-1/3 h-1/3" />}
+          {playing && <FaRegPauseCircle className="w-1/3 h-1/3" />}
+        </div> */}
         <div className="absolute" ref={ref}></div>
       </div>
     </>
