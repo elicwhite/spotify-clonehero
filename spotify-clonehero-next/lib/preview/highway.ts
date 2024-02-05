@@ -41,7 +41,7 @@ export const setupRenderer = (
   sizingRef: RefObject<HTMLDivElement>,
   ref: RefObject<HTMLDivElement>,
   audioFiles: ArrayBuffer[],
-  selectedTrack: SelectedTrack,
+  // trackParser: TrackParser,
 ) => {
   console.log('Playing Preview');
   const highwaySpeed = 1.5;
@@ -86,7 +86,7 @@ export const setupRenderer = (
     }
   }
 
-  sizingRef.current?.addEventListener('click', sizingRefClicked);
+  // sizingRef.current?.addEventListener('click', sizingRefClicked);
 
   const textureLoader = new THREE.TextureLoader();
 
@@ -104,29 +104,42 @@ export const setupRenderer = (
   }
 
   const initPromise = initialize();
+  let trackPromise: ReturnType<typeof prepTrack>;
 
-  run();
   return {
-    prepTrack(track: TrackParser, songLength: number) {
+    prepTrack(track: TrackParser) {
       const scene = new THREE.Scene();
-      return prepTrack(scene, track, songLength);
+      trackPromise = prepTrack(scene, track);
+      return trackPromise;
     },
-    play() {},
-    pause() {},
+
+    async startRender() {
+      const {scene, audioSources, highwayGroups, highwayTexture} =
+        await trackPromise;
+      await startRender(
+        scene,
+        highwayTexture,
+        highwayGroups,
+        audioSources,
+        chart.notesData.length,
+      );
+    },
+    play() {
+      sizingRefClicked();
+    },
+    pause() {
+      sizingRefClicked();
+    },
     seek(percent: number) {},
     destroy: () => {
       console.log('Tearing down the renderer');
       window.removeEventListener('resize', onResize, false);
       audioCtx.close();
-      sizingRef.current?.removeEventListener('click', sizingRefClicked);
+      // sizingRef.current?.removeEventListener('click', sizingRefClicked);
     },
   };
 
-  async function prepTrack(
-    scene: THREE.Scene,
-    track: TrackParser,
-    songLength: number,
-  ) {
+  async function prepTrack(scene: THREE.Scene, track: TrackParser) {
     const {highwayTexture} = await initPromise;
 
     if (track.instrument == 'drums') {
@@ -159,74 +172,61 @@ export const setupRenderer = (
     // Taken from https://webaudioapi.com/samples/volume/
     gainNode.gain.value = volume * volume;
 
-    const sources = await Promise.all(
-      audioFiles.map(async arrayBuffer => {
-        if (audioCtx.state === 'closed') {
-          // Can happen if cleaned up before setup is done
-          return;
-        }
-
-        // If we don't copy this, we can only play it once. decode destroys the buffer
-        const bufferCopy = arrayBuffer.slice(0);
-        let decodedAudioBuffer;
-        try {
-          decodedAudioBuffer = await audioCtx.decodeAudioData(bufferCopy);
-        } catch {
-          try {
-            const decode = await import('audio-decode');
-            decodedAudioBuffer = await decode.default(bufferCopy);
-          } catch {
-            console.error('Could not decode audio');
+    const sources = (
+      await Promise.all(
+        audioFiles.map(async arrayBuffer => {
+          if (audioCtx.state === 'closed') {
+            // Can happen if cleaned up before setup is done
             return;
           }
-        }
-        const source = audioCtx.createBufferSource();
-        source.buffer = decodedAudioBuffer;
-        source.connect(gainNode);
-        return source;
-      }),
-    );
+
+          // If we don't copy this, we can only play it once. decode destroys the buffer
+          const bufferCopy = arrayBuffer.slice(0);
+          let decodedAudioBuffer;
+          try {
+            decodedAudioBuffer = await audioCtx.decodeAudioData(bufferCopy);
+          } catch {
+            try {
+              const decode = await import('audio-decode');
+              decodedAudioBuffer = await decode.default(bufferCopy);
+            } catch {
+              console.error('Could not decode audio');
+              return;
+            }
+          }
+          const source = audioCtx.createBufferSource();
+          source.buffer = decodedAudioBuffer;
+          source.connect(gainNode);
+          return source;
+        }),
+      )
+    ).filter(Boolean) as AudioBufferSourceNode[];
 
     return {
+      scene,
       highwayTexture,
       highwayGroups,
       audioSources: sources,
     };
   }
 
-  async function run() {
-    const track = chart.trackParsers.find(
-      parser =>
-        parser.instrument == selectedTrack.instrument &&
-        parser.difficulty == selectedTrack.difficulty,
-    )!;
-    if (track == null) {
-      console.log(
-        'No track found for',
-        selectedTrack,
-        'Only found',
-        chart.trackParsers.map(
-          trackParser =>
-            `${trackParser.instrument} - ${trackParser.difficulty}`,
-        ),
-      );
-
+  async function startRender(
+    scene: THREE.Scene,
+    highwayTexture: THREE.Texture,
+    highwayGroups: THREE.Group,
+    audioSources: AudioBufferSourceNode[],
+    songLength: number,
+  ) {
+    // If this was cleaned up before running
+    if (audioCtx.state === 'closed') {
       return;
     }
-
-    const scene = new THREE.Scene();
-
-    const {highwayTexture, audioSources, highwayGroups} = await prepTrack(
-      scene,
-      track,
-      chart.notesData.length,
-    );
-
-    audioSources.filter(Boolean).forEach(source => {
-      source!.start();
+    await audioCtx.suspend();
+    audioSources.forEach(source => {
+      source.start();
     });
 
-    const songLength = chart.notesData.length;
+    renderer.setAnimationLoop(animation);
 
     function animation() {
       const SYNC_MS =
@@ -252,9 +252,12 @@ export const setupRenderer = (
 
       renderer.render(scene, camera);
     }
-
-    renderer.setAnimationLoop(animation);
   }
+
+  // async function run() {
+  //   toReturn.prepTrack(trackParser);
+  //   await toReturn.startRender();
+  // }
 };
 
 type DrumModifiers = {};

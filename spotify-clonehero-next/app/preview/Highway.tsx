@@ -24,31 +24,45 @@ export const Highway: FC<{
     instrument: chart.trackParsers[0].instrument,
     difficulty: chart.trackParsers[0].difficulty,
   });
+  const rendererRef = useRef<ReturnType<typeof setupRenderer> | null>(null);
   // const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
-    const renderer = setupRenderer(
-      chart,
-      sizingRef,
-      ref,
-      audioFiles,
-      selectedTrack,
-    );
+    const trackParser = chart.trackParsers.find(
+      parser =>
+        parser.instrument == selectedTrack.instrument &&
+        parser.difficulty == selectedTrack.difficulty,
+    )!;
+    if (trackParser == null) {
+      console.log(
+        'No track found for',
+        selectedTrack,
+        'Only found',
+        chart.trackParsers.map(
+          trackParser =>
+            `${trackParser.instrument} - ${trackParser.difficulty}`,
+        ),
+      );
+      return;
+    }
+
+    const renderer = setupRenderer(chart, sizingRef, ref, audioFiles);
+    rendererRef.current = renderer;
+    renderer.prepTrack(trackParser);
+    renderer.startRender();
 
     return () => {
       renderer.destroy();
     };
   }, [audioFiles, chart, selectedTrack]);
 
-  // const playPause = useCallback(() => {
-  //   const wasPlaying = playing;
-  //   setPlaying(!playing);
+  const handlePlayPause = useCallback(() => {
+    if (rendererRef.current == null) {
+      return;
+    }
 
-  //   setTimeout(() => {
-  //     if (wasPlaying) {
-  //     }
-  //   });
-  // }, [playing]);
+    rendererRef.current.play();
+  }, []);
 
   return (
     <>
@@ -83,7 +97,7 @@ export const Highway: FC<{
           {!playing && <FaRegPlayCircle className="w-1/3 h-1/3" />}
           {playing && <FaRegPauseCircle className="w-1/3 h-1/3" />}
         </div> */}
-        <div className="absolute" ref={ref}></div>
+        <div onClick={handlePlayPause} className="absolute" ref={ref}></div>
       </div>
     </>
   );
