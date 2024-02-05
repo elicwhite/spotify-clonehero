@@ -51,6 +51,8 @@ export const Highway: FC<{
     renderer.prepTrack(trackParser);
     renderer.startRender();
 
+    window.renderer = renderer;
+
     return () => {
       renderer.destroy();
     };

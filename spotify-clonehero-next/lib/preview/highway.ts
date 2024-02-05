@@ -41,12 +41,9 @@ export const setupRenderer = (
   sizingRef: RefObject<HTMLDivElement>,
   ref: RefObject<HTMLDivElement>,
   audioFiles: ArrayBuffer[],
-  // trackParser: TrackParser,
 ) => {
-  console.log('Playing Preview');
   const highwaySpeed = 1.5;
 
-  let startTime = Date.now();
   const camera = new THREE.PerspectiveCamera(90, 1 / 1, 0.01, 10);
   camera.position.z = 0.8;
   camera.position.y = -1.3;
@@ -82,11 +79,8 @@ export const setupRenderer = (
       console.log('Paused at', audioCtx.currentTime * 1000);
     } else if (audioCtx.state === 'suspended') {
       await audioCtx.resume();
-      startTime = Date.now() - audioCtx.currentTime * 1000;
     }
   }
-
-  // sizingRef.current?.addEventListener('click', sizingRefClicked);
 
   const textureLoader = new THREE.TextureLoader();
 
@@ -130,12 +124,26 @@ export const setupRenderer = (
     pause() {
       sizingRefClicked();
     },
-    seek(percent: number) {},
+    async seek(percent: number) {
+      // This doesn't work because you cannot call start on a
+      // buffer that has been started before
+      // I'll need to recreate the sources
+      // however, then the audioContext currentTime will be off for
+      // the animation
+      //
+      // await audioCtx.suspend();
+      // const {audioSources} = await trackPromise;
+      // const ms = chart.notesData.length * percent;
+      // const when = Date.now() + 10;
+      // audioSources.forEach(source => {
+      //   source.start(when, ms / 1000);
+      // });
+      // await audioCtx.resume();
+    },
     destroy: () => {
       console.log('Tearing down the renderer');
       window.removeEventListener('resize', onResize, false);
       audioCtx.close();
-      // sizingRef.current?.removeEventListener('click', sizingRefClicked);
     },
   };
 
@@ -221,7 +229,7 @@ export const setupRenderer = (
     if (audioCtx.state === 'closed') {
       return;
     }
-    await audioCtx.suspend();
+
     audioSources.forEach(source => {
       source.start();
     });
@@ -235,7 +243,7 @@ export const setupRenderer = (
           (audioCtx.outputLatency || 0)) *
         1000;
       if (audioCtx.state === 'running') {
-        const elapsedTime = Date.now() - startTime - SYNC_MS;
+        const elapsedTime = audioCtx.currentTime * 1000 - SYNC_MS;
         if (elapsedTime > songLength + 2000) {
           renderer.setAnimationLoop(null);
           audioCtx.close();
