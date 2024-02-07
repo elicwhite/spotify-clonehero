@@ -70,7 +70,7 @@ export const setupRenderer = (
   ref.current?.children.item(0)?.remove();
   ref.current?.appendChild(renderer.domElement);
 
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   audioCtx.suspend();
 
   async function sizingRefClicked() {
@@ -108,8 +108,16 @@ export const setupRenderer = (
     },
 
     async startRender() {
-      const {scene, audioSources, highwayGroups, highwayTexture} =
-        await trackPromise;
+      const {scene, highwayGroups, highwayTexture} = await trackPromise;
+
+      audioCtx.close();
+      const {audioCtx: audioContext, audioSources} = await setupAudioContext(
+        audioFiles,
+        0,
+      );
+      // Update the audio context
+      audioCtx = audioContext;
+
       await startRender(
         scene,
         highwayTexture,
@@ -170,51 +178,10 @@ export const setupRenderer = (
     );
     scene.add(highwayGroups);
 
-    // 0 to 1
-    const volume = 0.5;
-
-    const gainNode = audioCtx.createGain();
-    gainNode.connect(audioCtx.destination);
-    // Let's use an x*x curve (x-squared) since simple linear (x) does not
-    // sound as good.
-    // Taken from https://webaudioapi.com/samples/volume/
-    gainNode.gain.value = volume * volume;
-
-    const sources = (
-      await Promise.all(
-        audioFiles.map(async arrayBuffer => {
-          if (audioCtx.state === 'closed') {
-            // Can happen if cleaned up before setup is done
-            return;
-          }
-
-          // If we don't copy this, we can only play it once. decode destroys the buffer
-          const bufferCopy = arrayBuffer.slice(0);
-          let decodedAudioBuffer;
-          try {
-            decodedAudioBuffer = await audioCtx.decodeAudioData(bufferCopy);
-          } catch {
-            try {
-              const decode = await import('audio-decode');
-              decodedAudioBuffer = await decode.default(bufferCopy);
-            } catch {
-              console.error('Could not decode audio');
-              return;
-            }
-          }
-          const source = audioCtx.createBufferSource();
-          source.buffer = decodedAudioBuffer;
-          source.connect(gainNode);
-          return source;
-        }),
-      )
-    ).filter(Boolean) as AudioBufferSourceNode[];
-
     return {
       scene,
       highwayTexture,
       highwayGroups,
-      audioSources: sources,
     };
   }
 
@@ -267,6 +234,53 @@ export const setupRenderer = (
   //   await toReturn.startRender();
   // }
 };
+
+async function setupAudioContext(audioFiles: ArrayBuffer[], ms: number) {
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx.suspend();
+
+  // 0 to 1
+  const volume = 0.5;
+
+  const gainNode = audioCtx.createGain();
+  gainNode.connect(audioCtx.destination);
+  // Let's use an x*x curve (x-squared) since simple linear (x) does not
+  // sound as good.
+  // Taken from https://webaudioapi.com/samples/volume/
+  gainNode.gain.value = volume * volume;
+
+  const audioSources = (
+    await Promise.all(
+      audioFiles.map(async arrayBuffer => {
+        if (audioCtx.state === 'closed') {
+          // Can happen if cleaned up before setup is done
+          return;
+        }
+
+        // If we don't copy this, we can only play it once. decode destroys the buffer
+        const bufferCopy = arrayBuffer.slice(0);
+        let decodedAudioBuffer;
+        try {
+          decodedAudioBuffer = await audioCtx.decodeAudioData(bufferCopy);
+        } catch {
+          try {
+            const decode = await import('audio-decode');
+            decodedAudioBuffer = await decode.default(bufferCopy);
+          } catch {
+            console.error('Could not decode audio');
+            return;
+          }
+        }
+        const source = audioCtx.createBufferSource();
+        source.buffer = decodedAudioBuffer;
+        source.connect(gainNode);
+        return source;
+      }),
+    )
+  ).filter(Boolean) as AudioBufferSourceNode[];
+
+  return {audioCtx, audioSources};
+}
 
 type DrumModifiers = {};
 
