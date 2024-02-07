@@ -132,14 +132,20 @@ export const setupRenderer = (
     pause() {
       sizingRefClicked();
     },
-    async seek(percent: number) {
-      const ms = chart.notesData.length * percent;
-      trackOffset = ms;
+    async seek({percent, ms}: {percent?: number; ms?: number}) {
+      if (percent == null && ms == null) {
+        throw new Error('Must provide percent or ms');
+      }
+
+      const offset: number =
+        percent != null ? chart.notesData.length * percent : ms!;
+
+      trackOffset = offset;
       audioCtx.close();
       const {audioCtx: audioContext, audioSources} =
         await setupAudioContext(audioFiles);
       audioSources.forEach(source => {
-        source.start(0, ms / 1000);
+        source.start(0, offset / 1000);
       });
 
       // Update the audio context
