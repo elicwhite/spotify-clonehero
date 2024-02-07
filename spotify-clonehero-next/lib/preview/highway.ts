@@ -71,12 +71,13 @@ export const setupRenderer = (
   ref.current?.appendChild(renderer.domElement);
 
   let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  let trackOffset = 0;
   audioCtx.suspend();
 
   async function sizingRefClicked() {
     if (audioCtx.state === 'running') {
       await audioCtx.suspend();
-      console.log('Paused at', audioCtx.currentTime * 1000);
+      console.log('Paused at', trackOffset + audioCtx.currentTime * 1000);
     } else if (audioCtx.state === 'suspended') {
       await audioCtx.resume();
     }
@@ -110,11 +111,10 @@ export const setupRenderer = (
     async startRender() {
       const {scene, highwayGroups, highwayTexture} = await trackPromise;
 
-      audioCtx.close();
-      const {audioCtx: audioContext, audioSources} = await setupAudioContext(
-        audioFiles,
-        0,
-      );
+      // if (audio)
+      // audioCtx.close();
+      const {audioCtx: audioContext, audioSources} =
+        await setupAudioContext(audioFiles);
       // Update the audio context
       audioCtx = audioContext;
 
@@ -133,20 +133,18 @@ export const setupRenderer = (
       sizingRefClicked();
     },
     async seek(percent: number) {
-      // This doesn't work because you cannot call start on a
-      // buffer that has been started before
-      // I'll need to recreate the sources
-      // however, then the audioContext currentTime will be off for
-      // the animation
-      //
-      // await audioCtx.suspend();
-      // const {audioSources} = await trackPromise;
-      // const ms = chart.notesData.length * percent;
-      // const when = Date.now() + 10;
-      // audioSources.forEach(source => {
-      //   source.start(when, ms / 1000);
-      // });
-      // await audioCtx.resume();
+      const ms = chart.notesData.length * percent;
+      trackOffset = ms;
+      audioCtx.close();
+      const {audioCtx: audioContext, audioSources} =
+        await setupAudioContext(audioFiles);
+      audioSources.forEach(source => {
+        source.start(0, ms / 1000);
+      });
+
+      // Update the audio context
+      audioCtx = audioContext;
+      await audioCtx.resume();
     },
     destroy: () => {
       console.log('Tearing down the renderer');
@@ -210,7 +208,7 @@ export const setupRenderer = (
           (audioCtx.outputLatency || 0)) *
         1000;
       if (audioCtx.state === 'running') {
-        const elapsedTime = audioCtx.currentTime * 1000 - SYNC_MS;
+        const elapsedTime = trackOffset + audioCtx.currentTime * 1000 - SYNC_MS;
         if (elapsedTime > songLength + 2000) {
           renderer.setAnimationLoop(null);
           audioCtx.close();
@@ -235,7 +233,7 @@ export const setupRenderer = (
   // }
 };
 
-async function setupAudioContext(audioFiles: ArrayBuffer[], ms: number) {
+async function setupAudioContext(audioFiles: ArrayBuffer[]) {
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   audioCtx.suspend();
 
