@@ -23,7 +23,6 @@ import {
 } from '@tanstack/react-table';
 import {useVirtual} from 'react-virtual';
 import {removeStyleTags} from '@/lib/ui-utils';
-import Image from 'next/image';
 import {downloadSong} from '@/lib/local-songs-folder';
 import {useTrackPreviewUrl} from '@/lib/spotify-sdk/SpotifyFetching';
 import {AudioContext} from './AudioProvider';
@@ -39,6 +38,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {AiFillCaretDown} from 'react-icons/ai';
+import {
+  AllowedInstrument,
+  ChartInstruments,
+  InstrumentImage,
+  RENDERED_INSTRUMENTS,
+  preFilterInstruments,
+} from '@/components/ChartInstruments';
 
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {
@@ -90,52 +96,11 @@ type RowType = Partial<SongRow> & Partial<ChartRow>;
 
 const ALWAYS_TRUE = () => true;
 
-const RENDERED_INSTRUMENTS = [
-  'bass',
-  'bassghl',
-  'drums',
-  'guitar',
-  'guitarghl',
-  'keys',
-  'rhythm',
-  'rhythmghl',
-  'vocals',
-] as const;
-
 const DEFAULT_SORTING = [
   {id: 'playCount', desc: true},
   {id: 'artist', desc: false},
   {id: 'song', desc: false},
 ];
-
-type AllowedInstrument = (typeof RENDERED_INSTRUMENTS)[number];
-
-const InstrumentImage = memo(function InstrumentImage({
-  instrument,
-  classNames,
-  onClick,
-}: {
-  instrument: AllowedInstrument;
-  classNames?: string;
-  onClick?: (instrument: AllowedInstrument) => void;
-}) {
-  const clickCallback = useCallback(() => {
-    if (onClick) {
-      onClick(instrument);
-    }
-  }, [instrument, onClick]);
-  return (
-    <Image
-      className={`inline-block mr-1 ${classNames}`}
-      key={instrument}
-      alt={`Icon for instrument ${instrument}`}
-      src={`/assets/instruments/${instrument}.png`}
-      width={32}
-      height={32}
-      onClick={clickCallback}
-    />
-  );
-});
 
 const instrumentFilter: FilterFn<RowType> = (
   row,
@@ -236,19 +201,7 @@ const columns = [
         return null;
       }
 
-      return (
-        <>
-          {Object.keys(value)
-            // @ts-ignore Don't know how to force TS to know
-            .filter(instrument => RENDERED_INSTRUMENTS.includes(instrument))
-            // @ts-ignore Don't know how to force TS to know
-            .map((instrument: AllowedInstrument) => {
-              return (
-                <InstrumentImage instrument={instrument} key={instrument} />
-              );
-            })}
-        </>
-      );
+      return <ChartInstruments instruments={value} size="md" />;
     },
     filterFn: instrumentFilter,
   }),
@@ -443,18 +396,7 @@ export default function SpotifyTableDownloader({
             artist: chart.artist,
             song: chart.name,
             charter: chart.charter,
-            instruments: Object.keys(chart)
-              .filter(
-                key =>
-                  key.startsWith('diff_') &&
-                  (chart[key as keyof SpotifyChartData] as number) >= 0,
-              )
-              .map(key => ({
-                [key.replace('diff_', '')]: chart[
-                  key as keyof SpotifyChartData
-                ] as number,
-              }))
-              .reduce((a, b) => ({...a, ...b}), {}),
+            instruments: preFilterInstruments(chart),
             modifiedTime: new Date(chart.modifiedTime),
             isInstalled: chart.isInstalled,
             download: {
@@ -677,6 +619,7 @@ const Filters = memo(function Filters({
       {RENDERED_INSTRUMENTS.map((instrument: AllowedInstrument) => {
         return (
           <InstrumentImage
+            size="md"
             instrument={instrument}
             key={instrument}
             classNames={

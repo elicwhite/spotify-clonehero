@@ -116,6 +116,7 @@ export const setupRenderer = (
     prepTrack(track: TrackParser) {
       const scene = new THREE.Scene();
       trackPromise = prepTrack(scene, track);
+      console.log('track', track);
       return trackPromise;
     },
 

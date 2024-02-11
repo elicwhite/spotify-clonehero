@@ -181,7 +181,7 @@ function InstrumentDifficultyPicker({
         </div>
       </div>
       <ul
-        className={`absolute w-72 mt-1 shadow-md max-h-80 overflow-scroll p-0 z-10 ${
+        className={`absolute w-72 mt-1 shadow-md max-h-80 overflow-scroll p-0 z-20 ${
           !(isOpen && trackTypes.length) && 'hidden'
         }`}
         {...getMenuProps()}>
@@ -189,10 +189,10 @@ function InstrumentDifficultyPicker({
           trackTypes.map((trackType, index) => (
             <li
               className={cn(
+                'flex flex-col cursor-default select-none px-2 py-1.5 text-sm outline-none transition-colors bg-background',
                 highlightedIndex === index &&
                   'bg-accent text-accent-foreground',
                 selectedTrack === trackType && 'font-bold',
-                'flex flex-col cursor-default select-none rounded-sm px-2 py-1.5 text-sm outline-none transition-colors bg-background',
               )}
               key={`${trackType.instrument}-${trackType.difficulty}`}
               {...getItemProps({item: trackType, index})}>
