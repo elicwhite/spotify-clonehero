@@ -86,15 +86,6 @@ export const Highway: FC<{
 
   return (
     <>
-      <input
-        type="range"
-        className="w-full"
-        step={0.001}
-        min={0}
-        max={1}
-        value={songProgress}
-        onChange={onInputChange}
-      />
       <div className="flex">
         <InstrumentDifficultyPicker
           chart={chart}
@@ -108,6 +99,15 @@ export const Highway: FC<{
           Fullscreen
         </Button>
       </div>
+      <input
+        type="range"
+        className="w-full"
+        step={0.001}
+        min={0}
+        max={1}
+        value={songProgress}
+        onChange={onInputChange}
+      />
       <div className="relative flex-1" ref={sizingRef}>
         {/* <div
           onClick={playPause}
