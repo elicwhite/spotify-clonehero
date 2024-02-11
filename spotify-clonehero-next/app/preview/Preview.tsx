@@ -216,8 +216,6 @@ async function processSngStream(
     const promises: Promise<ArrayBuffer>[] = [];
 
     sngStream.on('file', async (file, fileStream) => {
-      console.log('found', file);
-
       fileNames.push(file);
       promises.push(readStreamIntoArrayBuffer(fileStream));
     });
@@ -230,7 +228,6 @@ async function processSngStream(
         files.set(fileNames[index], buffer);
       });
 
-      console.log('files', files);
       resolve(files);
     });
 

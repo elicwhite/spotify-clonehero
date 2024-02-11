@@ -12,7 +12,7 @@ import {MidiParser} from '@/lib/preview/midi-parser';
 import {useSelect} from 'downshift';
 import {cn} from '@/lib/utils';
 import {Button} from '@/components/ui/button';
-import {FaRegPlayCircle, FaRegPauseCircle} from 'react-icons/fa';
+import {FaRegPlayCircle} from 'react-icons/fa';
 import throttle from 'throttleit';
 
 export const Highway: FC<{
@@ -117,7 +117,7 @@ export const Highway: FC<{
           onClick={handlePlayPause}
           className={cn(
             playing ? 'opacity-0' : 'opacity-75',
-            'flex justify-center items-center absolute w-full h-full z-10 transition-opacity duration-300 delay-500 hover:delay-0 hover:duration-500',
+            'flex justify-center items-center absolute w-full text-white h-full z-10 transition-opacity duration-300 delay-500 hover:delay-0 hover:duration-500',
           )}>
           <FaRegPlayCircle className="w-1/3 h-1/3" />
         </div>
