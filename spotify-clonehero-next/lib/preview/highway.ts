@@ -107,7 +107,7 @@ export const setupRenderer = (
   const initPromise = initialize();
   let trackPromise: ReturnType<typeof prepTrack>;
 
-  return {
+  const methods = {
     prepTrack(track: TrackParser) {
       const scene = new THREE.Scene();
       trackPromise = prepTrack(scene, track);
@@ -165,8 +165,11 @@ export const setupRenderer = (
       console.log('Tearing down the renderer');
       window.removeEventListener('resize', onResize, false);
       audioCtx.close();
+      renderer.setAnimationLoop(null);
     },
   };
+
+  return methods;
 
   async function prepTrack(scene: THREE.Scene, track: TrackParser) {
     const {highwayTexture} = await initPromise;
@@ -225,7 +228,6 @@ export const setupRenderer = (
       if (audioCtx.state === 'running') {
         const elapsedTime = trackOffset + audioCtx.currentTime * 1000 - SYNC_MS;
         if (elapsedTime > songLength + 2000) {
-          renderer.setAnimationLoop(null);
           audioCtx.close();
         }
 
