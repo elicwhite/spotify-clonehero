@@ -13,6 +13,7 @@ import {useSelect} from 'downshift';
 import {cn} from '@/lib/utils';
 import {Button} from '@/components/ui/button';
 import {FaRegPlayCircle, FaRegPauseCircle} from 'react-icons/fa';
+import throttle from 'throttleit';
 
 export const Highway: FC<{
   chart: ChartParser | MidiParser;
@@ -25,6 +26,7 @@ export const Highway: FC<{
     difficulty: chart.trackParsers[0].difficulty,
   });
   const rendererRef = useRef<ReturnType<typeof setupRenderer> | null>(null);
+  const [songProgress, setSongProgress] = useState(0); // 0 to 1
   // const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
@@ -46,7 +48,15 @@ export const Highway: FC<{
       return;
     }
 
-    const renderer = setupRenderer(chart, sizingRef, ref, audioFiles);
+    const renderer = setupRenderer(
+      chart,
+      sizingRef,
+      ref,
+      audioFiles,
+      (progressPercent: number) => {
+        setSongProgress(progressPercent);
+      },
+    );
     rendererRef.current = renderer;
     renderer.prepTrack(trackParser);
     renderer.startRender();
@@ -66,18 +76,24 @@ export const Highway: FC<{
     rendererRef.current.play();
   }, []);
 
+  const onInputChange = useMemo(
+    () =>
+      throttle(e => {
+        rendererRef.current?.seek({percent: Number(e.target.value)});
+      }, 500),
+    [],
+  );
+
   return (
     <>
       <input
         type="range"
-        className="w-full hidden"
-        step={0.01}
-        min={1}
-        max={5}
-        // defaultValue={settingsRef.current.highwaySpeed}
-        // onChange={e => {
-        //   settingsRef.current.highwaySpeed = Number(e.target.value);
-        // }}
+        className="w-full"
+        step={0.001}
+        min={0}
+        max={1}
+        value={songProgress}
+        onChange={onInputChange}
       />
       <div className="flex">
         <InstrumentDifficultyPicker

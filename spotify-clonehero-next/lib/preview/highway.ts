@@ -36,12 +36,16 @@ const GUITAR_LANE_COLORS = [
   NOTE_COLORS.orange,
 ];
 
+let instanceCounter = 0;
+
 export const setupRenderer = (
   chart: ChartParser | MidiParser,
   sizingRef: RefObject<HTMLDivElement>,
   ref: RefObject<HTMLDivElement>,
   audioFiles: ArrayBuffer[],
+  progressListener: (percent: number) => void,
 ) => {
+  instanceCounter++;
   const highwaySpeed = 1.5;
 
   const camera = new THREE.PerspectiveCamera(90, 1 / 1, 0.01, 10);
@@ -83,6 +87,8 @@ export const setupRenderer = (
     }
   }
 
+  let progressInterval: number;
+
   const textureLoader = new THREE.TextureLoader();
 
   const highwayBeginningPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1);
@@ -110,9 +116,6 @@ export const setupRenderer = (
 
     async startRender() {
       const {scene, highwayGroups, highwayTexture} = await trackPromise;
-
-      // if (audio)
-      // audioCtx.close();
       const {audioCtx: audioContext, audioSources} =
         await setupAudioContext(audioFiles);
       // Update the audio context
@@ -137,22 +140,28 @@ export const setupRenderer = (
         throw new Error('Must provide percent or ms');
       }
 
-      const offset: number =
-        percent != null ? chart.notesData.length * percent : ms!;
-
+      const songLength = chart.notesData.length;
+      const offset: number = ms ?? songLength * percent!;
+      const percentCalculated: number = percent ?? ms! / songLength;
       trackOffset = offset;
-      audioCtx.close();
+
+      progressListener(percentCalculated);
+
+      if (audioCtx.state !== 'closed') {
+        audioCtx.close();
+      }
       const {audioCtx: audioContext, audioSources} =
         await setupAudioContext(audioFiles);
+      // Update the audio context
+      audioCtx = audioContext;
       audioSources.forEach(source => {
         source.start(0, offset / 1000);
       });
 
-      // Update the audio context
-      audioCtx = audioContext;
       await audioCtx.resume();
     },
     destroy: () => {
+      window.clearInterval(progressInterval);
       console.log('Tearing down the renderer');
       window.removeEventListener('resize', onResize, false);
       audioCtx.close();
@@ -227,16 +236,13 @@ export const setupRenderer = (
         }
 
         highwayGroups.position.y = scrollPosition;
+
+        progressListener(elapsedTime / songLength);
       }
 
       renderer.render(scene, camera);
     }
   }
-
-  // async function run() {
-  //   toReturn.prepTrack(trackParser);
-  //   await toReturn.startRender();
-  // }
 };
 
 async function setupAudioContext(audioFiles: ArrayBuffer[]) {

@@ -5481,6 +5481,11 @@ three@^0.160.0:
   resolved "https://registry.yarnpkg.com/three/-/three-0.160.0.tgz#cd1e4dbd01aee0719280a9086d75545db52b7a8f"
   integrity sha512-DLU8lc0zNIPkM7rH5/e1Ks1Z8tWCGRq6g8mPowdDJpw1CFBJMU7UoJjC6PefXW7z//SSl0b2+GCw14LB+uDhng==
 
+throttleit@^2.0.0:
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/throttleit/-/throttleit-2.0.0.tgz#b118da15e6062ec1daf448166e9a0378807401b7"
+  integrity sha512-9VImOCJfOMzgBNJIa8ifGnJbAY3XGkl+mGV/+N69+L07QXrg6B6FqPI+2MCqdO5Ojega5BsA94zKHh2rHsQW9Q==
+
 tiny-inflate@^1.0.0:
   version "1.0.3"
   resolved "https://registry.yarnpkg.com/tiny-inflate/-/tiny-inflate-1.0.3.tgz#122715494913a1805166aaf7c93467933eea26c4"
