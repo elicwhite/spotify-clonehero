@@ -27,7 +27,7 @@ export const Highway: FC<{
   });
   const rendererRef = useRef<ReturnType<typeof setupRenderer> | null>(null);
   const [songProgress, setSongProgress] = useState(0); // 0 to 1
-  // const [playing, setPlaying] = useState(false);
+  const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
     const trackParser = chart.trackParsers.find(
@@ -56,6 +56,9 @@ export const Highway: FC<{
       (progressPercent: number) => {
         setSongProgress(progressPercent);
       },
+      isPlaying => {
+        setPlaying(isPlaying);
+      },
     );
     rendererRef.current = renderer;
     renderer.prepTrack(trackParser);
@@ -68,6 +71,7 @@ export const Highway: FC<{
     };
   }, [audioFiles, chart, selectedTrack]);
 
+  // Need to listen to audio context state as well
   const handlePlayPause = useCallback(() => {
     if (rendererRef.current == null) {
       return;
@@ -109,12 +113,14 @@ export const Highway: FC<{
         onChange={onInputChange}
       />
       <div className="relative flex-1" ref={sizingRef}>
-        {/* <div
-          onClick={playPause}
-          className="flex justify-center items-center absolute w-full h-full z-10 opacity-0 hover:opacity-75 transition-opacity duration-100 delay-1000 hover:delay-0 hover:duration-500">
-          {!playing && <FaRegPlayCircle className="w-1/3 h-1/3" />}
-          {playing && <FaRegPauseCircle className="w-1/3 h-1/3" />}
-        </div> */}
+        <div
+          onClick={handlePlayPause}
+          className={cn(
+            playing ? 'opacity-0' : 'opacity-75',
+            'flex justify-center items-center absolute w-full h-full z-10 transition-opacity duration-300 delay-500 hover:delay-0 hover:duration-500',
+          )}>
+          <FaRegPlayCircle className="w-1/3 h-1/3" />
+        </div>
         <div onClick={handlePlayPause} className="absolute" ref={ref}></div>
       </div>
     </>

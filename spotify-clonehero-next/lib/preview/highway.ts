@@ -44,6 +44,7 @@ export const setupRenderer = (
   ref: RefObject<HTMLDivElement>,
   audioFiles: ArrayBuffer[],
   progressListener: (percent: number) => void,
+  playPauseListener: (isPlaying: boolean) => void,
 ) => {
   instanceCounter++;
   const highwaySpeed = 1.5;
@@ -84,6 +85,10 @@ export const setupRenderer = (
       console.log('Paused at', trackOffset + audioCtx.currentTime * 1000);
     } else if (audioCtx.state === 'suspended') {
       await audioCtx.resume();
+    } else if (audioCtx.state === 'closed') {
+      if (isSongOver()) {
+        await methods.seek({percent: 0});
+      }
     }
   }
 
@@ -120,6 +125,9 @@ export const setupRenderer = (
         await setupAudioContext(audioFiles);
       // Update the audio context
       audioCtx = audioContext;
+      audioCtx.onstatechange = () => {
+        playPauseListener(audioCtx.state === 'running');
+      };
 
       await startRender(
         scene,
@@ -154,6 +162,9 @@ export const setupRenderer = (
         await setupAudioContext(audioFiles);
       // Update the audio context
       audioCtx = audioContext;
+      audioCtx.onstatechange = () => {
+        playPauseListener(audioCtx.state === 'running');
+      };
       audioSources.forEach(source => {
         source.start(0, offset / 1000);
       });
@@ -170,6 +181,13 @@ export const setupRenderer = (
   };
 
   return methods;
+
+  function isSongOver() {
+    const elapsedTime = trackOffset + audioCtx.currentTime * 1000;
+    const songLength = chart.notesData.length;
+
+    return elapsedTime > songLength + 2000;
+  }
 
   async function prepTrack(scene: THREE.Scene, track: TrackParser) {
     const {highwayTexture} = await initPromise;
