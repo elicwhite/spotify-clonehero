@@ -254,15 +254,29 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         updateDownloadState(id, 'downloading');
 
         try {
-          await downloadSong(
+          const savedFile = await downloadSong(
             artist,
             name,
             charter,
             song.recommendedChart.betterChart.file,
             {
               folder: song.handleInfo.parentDir,
+              replaceExisting: true,
             },
           );
+
+          if (savedFile != null) {
+            if (
+              savedFile.newParentDirectoryHandle == song.handleInfo.parentDir &&
+              savedFile.fileName != song.handleInfo.fileName
+            ) {
+              // Delete the previous file in case replace existing didn't catch it
+              song.handleInfo.parentDir.removeEntry(song.handleInfo.fileName, {
+                recursive: true,
+              });
+            }
+          }
+
           updateDownloadState(id, 'downloaded');
           setNumUpdated(n => n + 1);
         } catch (err) {
