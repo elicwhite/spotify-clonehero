@@ -7,6 +7,7 @@ import {
   Track,
 } from '@spotify/web-api-ts-sdk';
 import pMap from 'p-map';
+import {get, set} from 'idb-keyval';
 
 type CachePlaylistTracks = {
   [snapshotId: string]: TrackResult[];
@@ -20,22 +21,22 @@ export type TrackResult = {
   name: string;
   artists: string[];
   preview_url: string | null;
+  spotify_url: string;
 };
 
-function getCachedPlaylistTracks(): CachePlaylistTracks {
-  const cachedPlaylistTracks = localStorage.getItem('playlistTracks');
-  if (cachedPlaylistTracks) {
-    return JSON.parse(cachedPlaylistTracks);
-  }
-  return {};
+async function getCachedPlaylistTracks(): Promise<CachePlaylistTracks> {
+  const cachedPlaylistTracks = await get('playlistTracks');
+  return cachedPlaylistTracks ?? {};
 }
 
-function setCachedPlaylistTracks(cachedPlaylistTracks: CachePlaylistTracks) {
-  localStorage.setItem('playlistTracks', JSON.stringify(cachedPlaylistTracks));
+async function setCachedPlaylistTracks(
+  cachedPlaylistTracks: CachePlaylistTracks,
+) {
+  await set('playlistTracks', cachedPlaylistTracks);
 }
 
-function setCachedPlaylistNames(cachedPlaylistNames: CachePlaylistNames) {
-  localStorage.setItem('playlistNames', JSON.stringify(cachedPlaylistNames));
+async function setCachedPlaylistNames(cachedPlaylistNames: CachePlaylistNames) {
+  await set('playlistNames', cachedPlaylistNames);
 }
 
 async function getAllPlaylists(sdk: SpotifyApi): Promise<SimplifiedPlaylist[]> {
@@ -69,7 +70,7 @@ async function getAllPlaylistTracks(
       const items = await sdk.playlists.getPlaylistItems(
         playlistId,
         undefined,
-        'total,limit,items(track(type,artists(type,name),name,preview_url))',
+        'total,limit,items(track(type,artists(type,name),name,preview_url, external_urls(spotify)))',
         limit,
         offset,
       );
@@ -84,6 +85,7 @@ async function getAllPlaylistTracks(
             name: item.track.name,
             artists: (item.track as Track).artists.map(artist => artist.name),
             preview_url: (item.track as Track).preview_url,
+            spotify_url: (item.track as Track).external_urls.spotify,
           };
         });
 
@@ -106,11 +108,14 @@ async function getAllPlaylistTracks(
   return tracks;
 }
 
-async function getTrackPreviewUrl(
+async function getTrackUrls(
   sdk: SpotifyApi,
   artist: string,
   song: string,
-): Promise<string | null> {
+): Promise<null | {
+  previewUrl: string | null;
+  spotifyUrl: string;
+}> {
   const track = await sdk.search(
     `track:${song} artist:${artist}`,
     ['track'],
@@ -118,14 +123,23 @@ async function getTrackPreviewUrl(
     1, // limit
   );
 
-  const previewUrl = track?.tracks?.items?.[0]?.preview_url;
-  return previewUrl;
+  const item = track?.tracks?.items?.[0];
+
+  const previewUrl = item?.preview_url;
+  const spotifyUrl = item?.external_urls.spotify;
+  return {
+    previewUrl,
+    spotifyUrl,
+  };
 }
 
-export function useTrackPreviewUrl(
+export function useTrackUrls(
   artist: string,
   song: string,
-): () => Promise<string | null> {
+): () => Promise<null | {
+  previewUrl: string | null;
+  spotifyUrl: string;
+}> {
   const sdk = useSpotifySdk();
 
   const getPreviewUrl = useCallback(async () => {
@@ -133,7 +147,7 @@ export function useTrackPreviewUrl(
       return null;
     }
 
-    return await getTrackPreviewUrl(sdk, artist, song);
+    return await getTrackUrls(sdk, artist, song);
   }, [sdk, artist, song]);
 
   return getPreviewUrl;
@@ -192,9 +206,9 @@ export function useSpotifyTracks(): [
       {},
     );
 
-    setCachedPlaylistNames(playlistNames);
+    await setCachedPlaylistNames(playlistNames);
 
-    const cachedPlaylistTracks = getCachedPlaylistTracks();
+    const cachedPlaylistTracks = await getCachedPlaylistTracks();
     const cachedSnapshots = Object.keys(cachedPlaylistTracks);
     const foundSnapshots: string[] = [];
 
@@ -210,7 +224,7 @@ export function useSpotifyTracks(): [
           const playlistTracks = await getAllPlaylistTracks(sdk, playlist.id);
           cachedPlaylistTracks[playlist.snapshot_id] = playlistTracks;
           foundSnapshots.push(playlist.snapshot_id);
-          setCachedPlaylistTracks(cachedPlaylistTracks);
+          await setCachedPlaylistTracks(cachedPlaylistTracks);
           return playlistTracks;
         } catch {
           console.error(
@@ -232,7 +246,7 @@ export function useSpotifyTracks(): [
       },
       {},
     );
-    setCachedPlaylistTracks(newCache);
+    await setCachedPlaylistTracks(newCache);
     setForceUpdate(n => n + 1);
   }, [sdk]);
 

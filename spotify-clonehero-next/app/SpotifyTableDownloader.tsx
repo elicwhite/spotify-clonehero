@@ -24,7 +24,7 @@ import {
 import {useVirtual} from 'react-virtual';
 import {removeStyleTags} from '@/lib/ui-utils';
 import {downloadSong} from '@/lib/local-songs-folder';
-import {useTrackPreviewUrl} from '@/lib/spotify-sdk/SpotifyFetching';
+import {useTrackUrls} from '@/lib/spotify-sdk/SpotifyFetching';
 import {AudioContext} from './AudioProvider';
 import {TableDownloadStates} from './SongsTable';
 import {Button} from '@/components/ui/button';
@@ -45,6 +45,7 @@ import {
   RENDERED_INSTRUMENTS,
   preFilterInstruments,
 } from '@/components/ChartInstruments';
+import {RxExternalLink} from 'react-icons/rx';
 
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {
@@ -60,6 +61,7 @@ export type SpotifyPlaysRecommendations = {
   artist: string;
   song: string;
   playCount?: number;
+  spotifyUrl?: string | null;
   previewUrl?: string | null;
   matchingCharts: SpotifyChartData[];
 };
@@ -69,6 +71,7 @@ type SongRow = {
   artist: string;
   song: string;
   playCount?: number;
+  spotifyUrl?: string | null;
   previewUrl?: string | null;
   modifiedTime: Date; // Most recent chart from this song
   subRows: ChartRow[];
@@ -268,10 +271,12 @@ const columns = [
     minSize: 100,
     enableSorting: false,
     cell: props => {
-      const url = props.getValue();
       if (!props.row.getIsExpanded()) {
         return null;
       }
+
+      const url = props.getValue();
+      const spotifyUrl = props.row.original.spotifyUrl;
 
       const {artist, song} = props.row.original;
 
@@ -279,33 +284,47 @@ const columns = [
         return null;
       }
 
-      if (url == null) {
+      if (url == null || spotifyUrl == null) {
         return <LookUpPreviewButton artist={artist} song={song} />;
       }
 
       return (
-        <PreviewButton artist={artist} song={song} url={url} autoplay={false} />
+        <PreviewButton
+          artist={artist}
+          song={song}
+          url={url}
+          spotifyUrl={spotifyUrl}
+          autoplay={false}
+        />
       );
     },
   }),
 ];
 
 function LookUpPreviewButton({artist, song}: {artist: string; song: string}) {
-  const getTrackPreviewUrl = useTrackPreviewUrl(artist, song);
-  const [url, setUrl] = useState<string | null>(null);
+  const getTrackUrls = useTrackUrls(artist, song);
+  const [urls, setUrls] =
+    useState<Awaited<ReturnType<typeof getTrackUrls>>>(null);
   const [fetched, setFetched] = useState(false);
 
   const handler = useCallback(async () => {
-    const url = await getTrackPreviewUrl();
-    setUrl(url);
+    const urls = await getTrackUrls();
+    setUrls(urls);
     setFetched(true);
-  }, [getTrackPreviewUrl]);
+  }, [getTrackUrls]);
 
   return (
     <>
-      {url == null ? (
+      {urls?.previewUrl == null ? (
         fetched == true ? (
-          'No Preview'
+          <div className="flex gap-4 items-center">
+            No Preview
+            <a href={urls?.spotifyUrl} target="_blank">
+              <Button variant="outline">
+                <RxExternalLink className="inline" />
+              </Button>
+            </a>
+          </div>
         ) : (
           <Button onClick={handler}>
             <Icons.spotify className="h-4 w-4 mr-2" />
@@ -313,7 +332,13 @@ function LookUpPreviewButton({artist, song}: {artist: string; song: string}) {
           </Button>
         )
       ) : (
-        <PreviewButton artist={artist} song={song} url={url} autoplay={true} />
+        <PreviewButton
+          artist={artist}
+          song={song}
+          url={urls.previewUrl}
+          spotifyUrl={urls.spotifyUrl}
+          autoplay={true}
+        />
       )}
     </>
   );
@@ -323,11 +348,13 @@ function PreviewButton({
   artist,
   song,
   url,
+  spotifyUrl,
   autoplay,
 }: {
   artist: string;
   song: string;
   url: string;
+  spotifyUrl: string;
   autoplay: boolean;
 }) {
   const {isPlaying, currentTrack, playTrack, pause} = useContext(AudioContext);
@@ -353,12 +380,18 @@ function PreviewButton({
   }, [artist, thisTrackPlaying, pause, playTrack, song, url]);
 
   return (
-    <>
+    <div className="flex gap-4">
       <Button onClick={handler}>
         <Icons.spotify className="h-4 w-4 mr-2" />
         {thisTrackPlaying ? 'Stop' : 'Play'}
       </Button>
-    </>
+
+      <a href={spotifyUrl} target="_blank">
+        <Button variant="outline">
+          <RxExternalLink className="inline" />
+        </Button>
+      </a>
+    </div>
   );
 }
 
@@ -383,6 +416,7 @@ export default function SpotifyTableDownloader({
           artist: track.artist,
           song: track.song,
           ...(hasPlayCount ? {playCount: track.playCount} : {}),
+          spotifyUrl: track.spotifyUrl,
           previewUrl: track.previewUrl,
           modifiedTime: track.matchingCharts.reduce((maxDate, chart) => {
             const chartDate = new Date(chart.modifiedTime);

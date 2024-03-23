@@ -28,6 +28,7 @@ import {
 import {Icons} from '@/components/icons';
 import Image from 'next/image';
 import spotifyLogoBlack from '@/public/assets/spotify/logo_black.png';
+import spotifyLogoWhite from '@/public/assets/spotify/logo_white.png';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import {Searcher} from 'fast-fuzzy';
@@ -77,7 +78,18 @@ export default function Spotify() {
             <Image
               src={spotifyLogoBlack}
               sizes="8em"
-              className="inline px-2"
+              className="inline dark:hidden px-2"
+              priority={true}
+              style={{
+                width: 'auto',
+                height: 'auto',
+              }}
+              alt="Spotify"
+            />
+            <Image
+              src={spotifyLogoWhite}
+              sizes="8em"
+              className="dark:inline px-2"
               priority={true}
               style={{
                 width: 'auto',
@@ -129,7 +141,7 @@ function LoggedIn() {
     });
 
     const recommendedCharts = tracks
-      .map(({name, artists, preview_url}) => {
+      .map(({name, artists, spotify_url, preview_url}) => {
         const artist = artists[0];
 
         const matchingCharts = findMatchingCharts(artist, name, artistSearcher);
@@ -144,6 +156,7 @@ function LoggedIn() {
         return {
           artist,
           song: name,
+          spotifyUrl: spotify_url,
           previewUrl: preview_url,
           matchingCharts,
         };
