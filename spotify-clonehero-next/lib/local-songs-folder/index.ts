@@ -79,7 +79,12 @@ export async function scanForInstalledCharts(
   const beforeScan = Date.now();
   const installedCharts: SongAccumulator[] = [];
   await scanLocalCharts(handle, installedCharts, callbackPerSong);
-  console.log('Took', (Date.now() - beforeScan) / 1000, 'ss to scan');
+  console.log(
+    'Took',
+    (Date.now() - beforeScan) / 1000,
+    'ss to scan',
+    installedCharts.length,
+  );
 
   sendGAEvent({
     event: 'charts_scanned',

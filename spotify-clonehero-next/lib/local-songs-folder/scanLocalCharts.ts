@@ -32,7 +32,13 @@ export default async function scanLocalCharts(
 ) {
   // Every entry in this directory handle should be a song, or folder of songs
 
-  for await (const subHandle of directoryHandle.values()) {
+  const entries = await directoryHandle.entries();
+  // @ts-ignore fromAsync is not defined in TS yet
+  const arr = (await Array.fromAsync(entries)).toSorted((a, b) =>
+    a[0].localeCompare(b[0]),
+  );
+
+  for (const [name, subHandle] of arr) {
     if (subHandle.kind == 'directory') {
       await scanLocalChartsDirectory(
         directoryHandle,
@@ -53,7 +59,13 @@ async function scanLocalChartsDirectory(
   let newestDate = 0;
   let songIniData: SongIniData | null = null;
   try {
-    for await (const subHandle of currentDirectoryHandle.values()) {
+    const entries = await currentDirectoryHandle.entries();
+    // @ts-ignore fromAsync is not defined in TS yet
+    const arr = (await Array.fromAsync(entries)).toSorted((a, b) =>
+      a[0].localeCompare(b[0]),
+    );
+
+    for (const [name, subHandle] of arr) {
       if (subHandle.kind == 'directory') {
         await scanLocalChartsDirectory(
           currentDirectoryHandle,
