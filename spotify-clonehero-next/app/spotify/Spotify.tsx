@@ -32,6 +32,7 @@ import spotifyLogoWhite from '@/public/assets/spotify/logo_white.png';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import {Searcher} from 'fast-fuzzy';
+import {toast} from 'sonner';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -106,33 +107,87 @@ export default function Spotify() {
   );
 }
 
+type Status = {
+  status:
+    | 'not-started'
+    | 'scanning'
+    | 'done-scanning'
+    | 'fetching-spotify-data'
+    | 'songs-from-encore'
+    | 'finding-matches'
+    | 'done';
+  songsCounted: number;
+};
+
 function LoggedIn() {
   const [tracks, update] = useSpotifyTracks();
   const [songs, setSongs] = useState<SpotifyPlaysRecommendations[] | null>(
     null,
   );
 
+  const [status, setStatus] = useState<Status>({
+    status: 'not-started',
+    songsCounted: 0,
+  });
+
   const [calculating, setCalculating] = useState(false);
 
   const calculate = useCallback(async () => {
-    setCalculating(true);
-    update();
-    let installedCharts: SongAccumulator[] | undefined;
-
     const fetchDb = chorusChartDb();
 
+    setCalculating(true);
+    const updatePromise = update();
+    let installedCharts: SongAccumulator[] | undefined;
+
     try {
-      const scanResult = await scanForInstalledCharts();
+      setStatus({
+        status: 'scanning',
+        songsCounted: 0,
+      });
+
+      const scanResult = await scanForInstalledCharts(() => {
+        setStatus(prevStatus => ({
+          ...prevStatus,
+          songsCounted: prevStatus.songsCounted + 1,
+        }));
+      });
       installedCharts = scanResult.installedCharts;
-    } catch {
-      console.log('User canceled picker');
-      return;
+      setStatus(prevStatus => ({
+        ...prevStatus,
+        status: 'done-scanning',
+      }));
+      // Yield to React to let it update State
+      await pause();
+    } catch (err) {
+      if (err instanceof Error && err.message == 'User canceled picker') {
+        toast.info('Directory picker canceled');
+        setStatus({
+          status: 'not-started',
+          songsCounted: 0,
+        });
+        return;
+      } else {
+        toast.error('Error scanning local charts', {duration: 8000});
+        setStatus({
+          status: 'not-started',
+          songsCounted: 0,
+        });
+        throw err;
+      }
     }
 
     const isInstalled = await createIsInstalledFilter(installedCharts);
+    setStatus(prevStatus => ({
+      ...prevStatus,
+      status: 'songs-from-encore',
+    }));
     const allChorusCharts = await fetchDb;
     const markedCharts = markInstalledCharts(allChorusCharts, isInstalled);
 
+    setStatus(prevStatus => ({
+      ...prevStatus,
+      status: 'finding-matches',
+    }));
     const artistSearcher = new Searcher(markedCharts, {
       keySelector: chart => chart.artist,
       threshold: 1,
@@ -163,6 +218,11 @@ function LoggedIn() {
       })
       .filter(_Boolean);
 
+    setStatus(prevStatus => ({
+      ...prevStatus,
+      status: 'done',
+    }));
+
     if (recommendedCharts.length > 0) {
       setSongs(recommendedCharts);
       console.log(recommendedCharts);
@@ -172,17 +232,33 @@ function LoggedIn() {
 
   return (
     <>
-      <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
-        {calculating ? (
-          'Calculating'
-        ) : (
-          <Button onClick={calculate}>Select Clone Hero Songs Folder</Button>
-        )}
+      <div className="flex justify-center">
+        {renderStatus(status, calculate)}
       </div>
 
       {songs && <SpotifyTableDownloader tracks={songs} showPreview={true} />}
     </>
   );
+}
+
+function renderStatus(status: Status, scanHandler: () => void) {
+  switch (status.status) {
+    case 'not-started':
+      return (
+        <Button onClick={scanHandler}>Select Clone Hero Songs Folder</Button>
+      );
+    case 'scanning':
+    case 'done-scanning':
+      return `${status.songsCounted} songs scanned`;
+    case 'fetching-spotify-data':
+      return 'Scanning your Spotify Library';
+    case 'songs-from-encore':
+      return 'Downloading songs from Encore';
+    case 'finding-matches':
+      return 'Checking for song matches';
+    case 'done':
+      return <Button onClick={scanHandler}>Rescan</Button>;
+  }
 }
 
 function markInstalledCharts(
@@ -195,4 +271,11 @@ function markInstalledCharts(
       isInstalled: isInstalled(chart.artist, chart.name, chart.charter),
     }),
   );
+}
+
+async function pause() {
+  // Yield to React to let it update State
+  await new Promise(resolve => {
+    setTimeout(resolve, 10);
+  });
 }
