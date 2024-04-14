@@ -2,10 +2,10 @@
 // The config you add here will be used whenever a users loads a page in their browser.
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
-import * as Sentry from "@sentry/nextjs";
+import * as Sentry from '@sentry/nextjs';
 
 Sentry.init({
-  dsn: "https://ef4de5241935af48ae2c81fbc23c6a46@o4506522084048896.ingest.sentry.io/4506522086080512",
+  dsn: 'https://ef4de5241935af48ae2c81fbc23c6a46@o4506522084048896.ingest.sentry.io/4506522086080512',
 
   // Adjust this value in production, or use tracesSampler for greater control
   tracesSampleRate: 1,
@@ -17,7 +17,7 @@ Sentry.init({
 
   // This sets the sample rate to be 10%. You may want this to be 100% while
   // in development and sample at a lower rate in production
-  replaysSessionSampleRate: 0.1,
+  replaysSessionSampleRate: 0,
 
   // You can remove this option if you're not planning to use the Sentry Session Replay feature:
   integrations: [
