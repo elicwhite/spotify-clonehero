@@ -127,6 +127,23 @@ const instrumentFilter: FilterFn<RowType> = (
   return allInstrumentsIncluded;
 };
 
+const downloadedFilter: FilterFn<RowType> = (
+  row,
+  columnId,
+  enabled: boolean,
+  addMeta: any,
+) => {
+  if (!enabled) {
+    // If the filter isn't enabled, all rows should be included
+    return true;
+  }
+
+  if (row.subRows.some(subRow => subRow.original.isInstalled)) {
+    return false;
+  }
+  return true;
+};
+
 const columnHelper = createColumnHelper<RowType>();
 
 const columns = [
@@ -265,6 +282,7 @@ const columns = [
         />
       );
     },
+    filterFn: downloadedFilter,
   }),
   columnHelper.accessor('previewUrl', {
     header: 'Preview',
@@ -453,14 +471,20 @@ export default function SpotifyTableDownloader({
     AllowedInstrument[]
   >([]);
 
+  const [hideDownloadedFilter, setHideDownloadedFilter] = useState(false);
+
   const columnFilters = useMemo(
     () => [
       {
         id: 'instruments',
         value: instrumentFilters,
       },
+      {
+        id: 'download',
+        value: hideDownloadedFilter,
+      },
     ],
-    [instrumentFilters],
+    [instrumentFilters, hideDownloadedFilter],
   );
 
   const table = useReactTable({
@@ -518,6 +542,13 @@ export default function SpotifyTableDownloader({
     setInstrumentFilters(filters);
   }, []);
 
+  const downloadedFilterChangedCallback = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setHideDownloadedFilter(e.target.checked);
+    },
+    [],
+  );
+
   const numMatchingCharts = useMemo(
     () =>
       rows
@@ -544,6 +575,10 @@ export default function SpotifyTableDownloader({
           <div>
             <Filters filtersChanged={filtersChangedCallback} />
           </div>
+          <label>
+            <input onChange={downloadedFilterChangedCallback} type="checkbox" />
+            Hide songs with downloaded charts
+          </label>
         </div>
       </div>
       <div
