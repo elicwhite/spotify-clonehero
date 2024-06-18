@@ -2,7 +2,7 @@ import {Borders, Workbook} from 'exceljs';
 import _ from 'lodash';
 import { FolderIssueType, ScannedChart } from 'scan-chart';
 
-export async function getChartIssues(charts: { chart: ScannedChart; path: string }[]) {
+export function getChartIssues(charts: { chart: ScannedChart; path: string }[]) {
   const chartIssues: {
     path: string;
     artist: string;

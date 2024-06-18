@@ -76,19 +76,23 @@ function Scanner({
           setLatestChart(chart.path);
         }
       }, () => isCanceled);
-
-      const issues = await getChartIssues(charts);
+      if (isCanceled) { return }
+      const issues = getChartIssues(charts);
       const xlsx = await getIssuesXLSX(issues);
+      if (isCanceled) { return }
       setIssuesFound(issues.length);
       setXlsx(xlsx);
     }
     run();
     return () => {
       // cleanup
-      isCanceled = true;
       setNumFolders(null);
+      setStartTime(null);
       setCounter(0);
       setLatestChart(null);
+      setXlsx(null);
+      setIssuesFound(null);
+      isCanceled = true;
     }
   }, [directoryHandle]);
 
