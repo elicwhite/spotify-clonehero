@@ -1,16 +1,8 @@
-import dayjs from 'dayjs';
 import {Borders, Workbook} from 'exceljs';
 import _ from 'lodash';
-import {
-  ChartIssueType,
-  FolderIssueType,
-  MetadataIssueType,
-  NoteIssueType,
-  ScannedChart,
-  TrackIssueType,
-} from 'scan-chart-web';
+import { FolderIssueType, ScannedChart } from 'scan-chart';
 
-export async function getChartIssues(charts: ScannedChart[]) {
+export async function getChartIssues(charts: { chart: ScannedChart; path: string }[]) {
   const chartIssues: {
     path: string;
     artist: string;
@@ -27,12 +19,9 @@ export async function getChartIssues(charts: ScannedChart[]) {
       errorDescription: string,
       fixMandatory: boolean,
     ) => {
-      const path =
-        chart.chartPath +
-        (chart.chartFileName != null ? '/' + chart.chartFileName : '');
 
       chartIssues.push({
-        path,
+        path: chart.path,
         artist: removeStyleTags(chart.chart.artist ?? ''),
         name: removeStyleTags(chart.chart.name ?? ''),
         charter: removeStyleTags(chart.chart.charter ?? ''),
@@ -65,61 +54,23 @@ export async function getChartIssues(charts: ScannedChart[]) {
       }
     }
 
-    if (chart.chart.metadataIssues.length > 0) {
-      for (const metadataIssue of chart.chart.metadataIssues) {
-        addIssue(
-          metadataIssue,
-          getMetadataIssueDescription(metadataIssue),
-          (
-            [
-              'noName',
-              'noArtist',
-              'noCharter',
-            ] satisfies MetadataIssueType[] as MetadataIssueType[]
-          ).includes(metadataIssue),
-        );
-      }
-    }
+		for (const metadataIssue of chart.chart.metadataIssues) {
+			addIssue(
+				metadataIssue.metadataIssue,
+				metadataIssue.description,
+				['"name"', '"artist"', '"charter"'].some(property => metadataIssue.description.includes(property)),
+			);
+		}
 
-    if ((chart.chart.notesData?.chartIssues ?? []).length > 0) {
-      for (const chartIssue of chart.chart.notesData!.chartIssues) {
-        addIssue(
-          chartIssue,
-          getChartIssueDescription(chartIssue),
-          (
-            [
-              'noResolution',
-              'noSyncTrackSection',
-              'noNotes',
-            ] satisfies ChartIssueType[] as ChartIssueType[]
-          ).includes(chartIssue),
-        );
-      }
-    }
-
-    if ((chart.chart.notesData?.trackIssues ?? []).length > 0) {
-      for (const trackIssue of chart.chart.notesData!.trackIssues) {
-        for (const i of trackIssue.trackIssues) {
-          const placementTag = `[${trackIssue.instrument}][${trackIssue.difficulty}]`;
-          addIssue(i, `${placementTag}: ${getTrackIssueDescription(i)}`, false);
-        }
-      }
-    }
-
-    if ((chart.chart.notesData?.noteIssues ?? []).length > 0) {
-      for (const noteIssue of chart.chart.notesData!.noteIssues) {
-        for (const i of noteIssue.noteIssues) {
-          const placementTag = `[${noteIssue.instrument}][${
-            noteIssue.difficulty
-          }][${msToExactTime(i.time)}]`;
-          addIssue(
-            i.issueType,
-            `${placementTag}: ${getNoteIssueDescription(i.issueType)}`,
-            false,
-          );
-        }
-      }
-    }
+		if (chart.chart.notesData) {
+			for (const issue of chart.chart.notesData.chartIssues) {
+				addIssue(
+					issue.noteIssue,
+					`${issue.instrument ? `[${issue.instrument}]` : ''}${issue.difficulty ? `[${issue.difficulty}]` : ''} ${issue.description}`,
+					issue.noteIssue === 'noNotes',
+				);
+			}
+		}
   }
 
   return chartIssues;
@@ -128,7 +79,6 @@ export async function getChartIssues(charts: ScannedChart[]) {
 export async function getIssuesXLSX(
   chartIssues: Awaited<ReturnType<typeof getChartIssues>>,
 ) {
-  const today = dayjs();
   const chartIssueHeaders = [
     {text: 'Artist', width: 160 / 7},
     {text: 'Name', width: 400 / 7},
@@ -206,88 +156,6 @@ export async function getIssuesXLSX(
   return await workbook.xlsx.writeBuffer({useStyles: true});
 }
 
-export function getMetadataIssueDescription(metadataIssue: MetadataIssueType) {
-  switch (metadataIssue) {
-    case 'noName':
-      return 'Metadata is missing the "name" property.';
-    case 'noArtist':
-      return 'Metadata is missing the "artist" property.';
-    case 'noAlbum':
-      return 'Metadata is missing the "album" property.';
-    case 'noGenre':
-      return 'Metadata is missing the "genre" property.';
-    case 'noYear':
-      return 'Metadata is missing the "year" property.';
-    case 'noCharter':
-      return 'Metadata is missing the "charter" property.';
-    case 'missingInstrumentDiff':
-      return 'Metadata is missing a "diff_" property.';
-    case 'extraInstrumentDiff':
-      return 'Metadata contains a "diff_" property for an uncharted instrument.';
-    case 'nonzeroDelay':
-      return 'Metadata contains a "delay" property that is not zero.';
-    case 'drumsSetTo4And5Lane':
-      return 'Metadata contains both the "pro_drums" and "five_lane_drums" properties, which is not supported.';
-    case 'nonzeroOffset':
-      return 'Chart file contains an "Offset" property that is not zero.';
-  }
-}
-
-export function getChartIssueDescription(chartIssue: ChartIssueType) {
-  switch (chartIssue) {
-    case 'noResolution':
-      return `This .chart file has no resolution.`;
-    case 'noSyncTrackSection':
-      return `This .chart file has no tempo map information.`;
-    case 'noNotes':
-      return `This chart has no notes.`;
-    case 'noExpert':
-      return `One of this chart's instruments has Easy, Medium, or Hard charted but not Expert.`;
-    case 'isDefaultBPM':
-      return (
-        `This chart has only one 120 BPM marker and only one 4/4 time signature. This usually means the chart ` +
-        `wasn't tempo-mapped, but you can ignore this if the song is a constant 120 BPM.`
-      );
-    case 'misalignedTimeSignatures':
-      return (
-        `This chart has a time signature marker that doesn't appear at the start of a measure. ` +
-        `This can't be interpreted correctly in Clone Hero.`
-      );
-    case 'noSections':
-      return `This chart has no sections.`;
-  }
-}
-
-export function getTrackIssueDescription(trackIssue: TrackIssueType) {
-  switch (trackIssue) {
-    case 'noStarPower':
-      return 'This track has no star power.';
-    case 'noDrumActivationLanes':
-      return 'This drums track has no activation lanes.';
-    case 'smallLeadingSilence':
-      return 'This track has a note that is less than 2000ms after the start of the track.';
-    case 'noNotesOnNonemptyTrack':
-      return 'This track has star power, solo markers, or drum lanes, but no notes.';
-  }
-}
-
-export function getNoteIssueDescription(noteIssue: NoteIssueType) {
-  switch (noteIssue) {
-    case 'fiveNoteChord':
-      return `This is a five-note chord.`;
-    case 'difficultyForbiddenNote':
-      return `This is a note that isn't allowed on the track's difficulty.`;
-    case 'threeNoteDrumChord':
-      return `This is a three-note chord on the "drums" instrument.`;
-    case 'brokenNote':
-      return `This note is so close to the previous note that this was likely a charting mistake.`;
-    case 'badSustainGap':
-      return `This note is not far enough ahead of the previous sustain.`;
-    case 'babySustain':
-      return `The sustain on this note is too short.`;
-  }
-}
-
 export function columnNumberToLetter(column: number) {
   let temp,
     letter = '';
@@ -362,7 +230,7 @@ export function removeStyleTags(text: string) {
   do {
     oldText = newText;
     newText = newText
-      .replace(new RegExp(`<\\s*\\/?\\s*(?:${tagPattern})[^>]*>`, 'gi'), '')
+      .replace(new RegExp(`<\\s*\\/?\\s*(?:#|${tagPattern})[^>]*>`, 'gi'), '')
       .trim();
   } while (newText !== oldText);
   return newText;
