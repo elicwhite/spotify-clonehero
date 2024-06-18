@@ -282,7 +282,8 @@ async function getFilesFromSng(sngFileHandle: FileSystemFileHandle) {
   const files: { fileName: string, data: Uint8Array }[] = [];
 
   sngStream.on('file', async (fileName, fileStream) => {
-    if (hasVideoExtension(fileName) || isFileTruncated(fileName)) {
+    const matchingFileMeta = header.fileMeta.find(f => f.filename === fileName);
+    if (hasVideoExtension(fileName) || isFileTruncated(fileName) || !matchingFileMeta) {
       const reader = fileStream.getReader();
       // eslint-disable-next-line no-constant-condition
       while (true) {
@@ -292,7 +293,7 @@ async function getFilesFromSng(sngFileHandle: FileSystemFileHandle) {
         }
       }
     } else {
-      const data = new Uint8Array(Number(header.fileMeta.find(f => f.filename === fileName)!.contentsLen));
+      const data = new Uint8Array(Number(matchingFileMeta.contentsLen));
       let offset = 0;
       const reader = fileStream.getReader();
       // eslint-disable-next-line no-constant-condition
