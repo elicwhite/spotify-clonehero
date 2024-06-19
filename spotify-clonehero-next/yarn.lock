@@ -5159,10 +5159,10 @@ scan-chart-web@^3.4.5-1:
     sanitize-filename "^1.6.3"
     workerpool "^6.4.0"
 
-scan-chart@^4.0.4:
-  version "4.0.4"
-  resolved "https://registry.yarnpkg.com/scan-chart/-/scan-chart-4.0.4.tgz#ba26b0690fd0612cd20dbc9badc93bb8a96a6368"
-  integrity sha512-1ch4fIghhXRJNyXZpZwqrkMp8iwuOJJvV5+c/+qxp2WLpYF5QhRuviugOxuasc8c/3zkCzTnqowRaES3o5uQCw==
+scan-chart@^4.0.5:
+  version "4.0.5"
+  resolved "https://registry.yarnpkg.com/scan-chart/-/scan-chart-4.0.5.tgz#adfb63d03b101c47b51df8731d7b8f68bd122ce8"
+  integrity sha512-VrB4bNdKAGbuhawmBOOCeStCe3jrUOQSaRjf++5FvR9t1eGOiOZtL7WS50CpWKNBytOG/opQPnHq+eZzFJ1qYQ==
   dependencies:
     "@noble/hashes" "^1.4.0"
     bottleneck "^2.19.5"
