@@ -76,14 +76,9 @@ export async function scanForInstalledCharts(
 
   const handle = await getSongsDirectoryHandle();
 
-  const beforeScan = Date.now();
-  const installedCharts: SongAccumulator[] = [];
-  await scanLocalCharts(handle, installedCharts, callbackPerSong);
-  console.log(
-    'Took',
-    (Date.now() - beforeScan) / 1000,
-    'ss to scan',
-    installedCharts.length,
+  const {lastScanned, installedCharts} = await scanDirectoryForCharts(
+    callbackPerSong,
+    handle,
   );
 
   sendGAEvent({
@@ -98,8 +93,33 @@ export async function scanForInstalledCharts(
     },
   );
   writeFile(installedChartsCacheHandle, JSON.stringify(installedCharts));
+  localStorage.setItem(
+    'lastScannedInstalledCharts',
+    lastScanned.getTime().toString(),
+  );
+  return {
+    lastScanned,
+    installedCharts,
+  };
+}
+
+export async function scanDirectoryForCharts(
+  callbackPerSong: () => void = () => {},
+  directoryHandle: FileSystemDirectoryHandle,
+): Promise<InstalledChartsResponse> {
+  const root = await navigator.storage.getDirectory();
+
+  const beforeScan = Date.now();
+  const installedCharts: SongAccumulator[] = [];
+  await scanLocalCharts(directoryHandle, installedCharts, callbackPerSong);
+  console.log(
+    'Took',
+    (Date.now() - beforeScan) / 1000,
+    'ss to scan',
+    installedCharts.length,
+  );
+
   const now = new Date();
-  localStorage.setItem('lastScannedInstalledCharts', now.getTime().toString());
   return {
     lastScanned: now,
     installedCharts,
