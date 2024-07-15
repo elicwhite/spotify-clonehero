@@ -84,7 +84,11 @@ export async function getIssuesXLSX(
     {text: 'Name', width: 400 / 7},
     {text: 'Charter', width: 160 / 7},
     {text: 'Issue Name', width: 160 / 7},
-    {text: 'Issue Description', width: 650 / 7},
+		{
+			text: 'Issue Description (a more detailed description of issue types can be '
+        + 'found at https://drive.google.com/open?id=1UK7GsP4ZHJkOg8uREFRMY72svySaDlf0QRTGlk-ruYQ)',
+			width: 650 / 7,
+		},
     {text: 'Fix Mandatory?', width: 120 / 7},
     {text: 'Path', width: 600 / 7},
   ];
