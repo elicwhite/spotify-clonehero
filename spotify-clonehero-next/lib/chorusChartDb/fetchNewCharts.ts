@@ -153,6 +153,7 @@ async function fetchSongsAfter(date: Date, lastChartId: number): Promise<any> {
       hasVideoBackground: null,
       modchart: null,
       chartIdAfter: lastChartId,
+      per_page: 250,
     }),
     method: 'POST',
   });
