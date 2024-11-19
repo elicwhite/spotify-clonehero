@@ -54,23 +54,23 @@ export function getChartIssues(charts: { chart: ScannedChart; path: string }[]) 
       }
     }
 
-		for (const metadataIssue of chart.chart.metadataIssues) {
-			addIssue(
-				metadataIssue.metadataIssue,
-				metadataIssue.description,
-				['"name"', '"artist"', '"charter"'].some(property => metadataIssue.description.includes(property)),
-			);
-		}
+    for (const metadataIssue of chart.chart.metadataIssues) {
+      addIssue(
+        metadataIssue.metadataIssue,
+        metadataIssue.description,
+        ['"name"', '"artist"', '"charter"'].some(property => metadataIssue.description.includes(property)),
+      );
+    }
 
-		if (chart.chart.notesData) {
-			for (const issue of chart.chart.notesData.chartIssues) {
-				addIssue(
-					issue.noteIssue,
-					`${issue.instrument ? `[${issue.instrument}]` : ''}${issue.difficulty ? `[${issue.difficulty}]` : ''} ${issue.description}`,
-					issue.noteIssue === 'noNotes',
-				);
-			}
-		}
+    if (chart.chart.notesData) {
+      for (const issue of chart.chart.notesData.chartIssues) {
+        addIssue(
+          issue.noteIssue,
+          `${issue.instrument ? `[${issue.instrument}]` : ''}${issue.difficulty ? `[${issue.difficulty}]` : ''} ${issue.description}`,
+          issue.noteIssue === 'noNotes',
+        );
+      }
+    }
   }
 
   return chartIssues;
@@ -84,11 +84,11 @@ export async function getIssuesXLSX(
     {text: 'Name', width: 400 / 7},
     {text: 'Charter', width: 160 / 7},
     {text: 'Issue Name', width: 160 / 7},
-		{
-			text: 'Issue Description (a more detailed description of issue types can be '
+    {
+      text: 'Issue Description (a more detailed description of issue types can be '
         + 'found at https://drive.google.com/open?id=1UK7GsP4ZHJkOg8uREFRMY72svySaDlf0QRTGlk-ruYQ)',
-			width: 650 / 7,
-		},
+      width: 650 / 7,
+    },
     {text: 'Fix Mandatory?', width: 120 / 7},
     {text: 'Path', width: 600 / 7},
   ];

@@ -218,10 +218,10 @@ async function processSngStream(
       files.set(file, await readStreamIntoArrayBuffer(fileStream));
 
       if (nextFile) {
-				nextFile();
-			} else {
-				resolve(files);
-			}
+        nextFile();
+      } else {
+        resolve(files);
+      }
     });
 
     sngStream.on('error', error => reject(error));

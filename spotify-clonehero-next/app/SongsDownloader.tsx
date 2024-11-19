@@ -104,10 +104,10 @@ export default function SongsDownloader() {
       const writableStream = await fileHandle.createWritable();
       await stream.pipeTo(writableStream);
       if (nextFile) {
-				nextFile();
-			} else {
+        nextFile();
+      } else {
         console.log('test.sng has been fully parsed');
-			}
+      }
     });
 
     sngStream.on('error', error => console.log(error));

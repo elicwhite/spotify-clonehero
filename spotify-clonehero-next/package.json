@@ -20,7 +20,7 @@
     "@types/react-icons": "^3.0.0",
     "@types/wicg-file-system-access": "^2023.10.2",
     "audio-decode": "^2.2.0",
-		"bottleneck": "^2.19.5",
+    "bottleneck": "^2.19.5",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
     "debounce": "^2.0.0",
