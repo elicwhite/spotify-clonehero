@@ -399,17 +399,19 @@ async function downloadAsFolder(
       create: true,
     });
     await new Promise((resolve, reject) => {
-      const sngStream = new SngStream(() => stream, {generateSongIni: true});
-      sngStream.on('file', async (file, stream) => {
+      const sngStream = new SngStream(stream, {generateSongIni: true});
+      sngStream.on('file', async (file, stream, nextFile) => {
         const fileHandle = await songDirHandle!.getFileHandle(file, {
           create: true,
         });
         const writableStream = await fileHandle.createWritable();
         await stream.pipeTo(writableStream);
-      });
 
-      sngStream.on('end', () => {
-        resolve('downloaded');
+        if (nextFile) {
+          nextFile();
+        } else {
+          resolve('downloaded');
+        }
       });
 
       sngStream.on('error', error => {

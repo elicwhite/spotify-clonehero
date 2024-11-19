@@ -96,16 +96,19 @@ export default function SongsDownloader() {
       return;
     }
 
-    const sngStream = new SngStream((start, end) => body);
-    sngStream.on('file', async (file, stream) => {
+    const sngStream = new SngStream(body);
+    sngStream.on('file', async (file, stream, nextFile) => {
       const fileHandle = await songDirHandle.getFileHandle(file, {
         create: true,
       });
       const writableStream = await fileHandle.createWritable();
-      stream.pipeTo(writableStream);
+      await stream.pipeTo(writableStream);
+      if (nextFile) {
+				nextFile();
+			} else {
+        console.log('test.sng has been fully parsed');
+			}
     });
-
-    sngStream.on('end', () => console.log('test.sng has been fully parsed'));
 
     sngStream.on('error', error => console.log(error));
 

@@ -210,25 +210,18 @@ async function processSngStream(
   stream: ReadableStream<Uint8Array>,
 ): Promise<Map<string, ArrayBuffer> | undefined> {
   return new Promise((resolve, reject) => {
-    const sngStream = new SngStream((start, end) => stream);
+    const sngStream = new SngStream(stream);
 
-    const fileNames: string[] = [];
-    const promises: Promise<ArrayBuffer>[] = [];
+    const files = new Map<string, ArrayBuffer>();
 
-    sngStream.on('file', async (file, fileStream) => {
-      fileNames.push(file);
-      promises.push(readStreamIntoArrayBuffer(fileStream));
-    });
+    sngStream.on('file', async (file, fileStream, nextFile) => {
+      files.set(file, await readStreamIntoArrayBuffer(fileStream));
 
-    sngStream.on('end', async () => {
-      const files = new Map<string, ArrayBuffer>();
-
-      const buffers = await Promise.all(promises);
-      buffers.forEach((buffer, index) => {
-        files.set(fileNames[index], buffer);
-      });
-
-      resolve(files);
+      if (nextFile) {
+				nextFile();
+			} else {
+				resolve(files);
+			}
     });
 
     sngStream.on('error', error => reject(error));

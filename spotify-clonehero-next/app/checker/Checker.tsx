@@ -265,7 +265,7 @@ async function getFilesFromFolder(fileHandles: FileSystemFileHandle[]): Promise<
 
 async function getFilesFromSng(sngFileHandle: FileSystemFileHandle) {
 	const file = await sngFileHandle.getFile();
-  const sngStream = new SngStream(() => file.stream(), { generateSongIni: true });
+  const sngStream = new SngStream(file.stream(), { generateSongIni: true });
 
   let header: SngHeader;
   sngStream.on('header', h => header = h);
@@ -285,37 +285,41 @@ async function getFilesFromSng(sngFileHandle: FileSystemFileHandle) {
 
   const files: { fileName: string, data: Uint8Array }[] = [];
 
-  sngStream.on('file', async (fileName, fileStream) => {
-    const matchingFileMeta = header.fileMeta.find(f => f.filename === fileName);
-    if (hasVideoExtension(fileName) || isFileTruncated(fileName) || !matchingFileMeta) {
-      const reader = fileStream.getReader();
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const result = await reader.read();
-        if (result.done) {
-          break;
-        }
-      }
-    } else {
-      const data = new Uint8Array(Number(matchingFileMeta.contentsLen));
-      let offset = 0;
-      const reader = fileStream.getReader();
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const result = await reader.read();
-        if (result.done) {
-          break;
-        }
-        data.set(result.value, offset);
-        offset += result.value.length;
-      }
-
-      files.push({ fileName, data });
-    }
-  })
-
   await new Promise<void>((resolve, reject) => {
-    sngStream.on('end', () => resolve());
+    sngStream.on('file', async (fileName, fileStream, nextFile) => {
+      const matchingFileMeta = header.fileMeta.find(f => f.filename === fileName);
+      if (hasVideoExtension(fileName) || isFileTruncated(fileName) || !matchingFileMeta) {
+        const reader = fileStream.getReader();
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const result = await reader.read();
+          if (result.done) {
+            break;
+          }
+        }
+      } else {
+        const data = new Uint8Array(Number(matchingFileMeta.contentsLen));
+        let offset = 0;
+        const reader = fileStream.getReader();
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const result = await reader.read();
+          if (result.done) {
+            break;
+          }
+          data.set(result.value, offset);
+          offset += result.value.length;
+        }
+
+        files.push({ fileName, data });
+      }
+
+      if (nextFile) {
+        nextFile();
+      } else {
+        resolve();
+      }
+    })
 
     sngStream.on('error', error => reject(error));
 
