@@ -181,25 +181,25 @@ async function scanChartsFolder(
       const isSng = chartFolder.files.length === 1 && hasSngExtension(chartFolder.files[0].name);
       const files = isSng ? await getFilesFromSng(chartFolder.files[0]) : await getFilesFromFolder(chartFolder.files);
 
-			const result: { chart: ScannedChart; path: string } = {
-				chart: scanChartFolder(files),
-				path: chartFolder.path,
-			};
-			charts.push(result);
+      const result: { chart: ScannedChart; path: string } = {
+        chart: scanChartFolder(files),
+        path: chartFolder.path,
+      };
+      charts.push(result);
       listeners.onChart(result);
     });
   }
 
-	return new Promise<{ chart: ScannedChart; path: string }[]>((resolve, reject) => {
-		limiter.on('error', err => {
-			reject(err);
-			limiter.stop();
-		});
+  return new Promise<{ chart: ScannedChart; path: string }[]>((resolve, reject) => {
+    limiter.on('error', err => {
+      reject(err);
+      limiter.stop();
+    });
 
-		limiter.on('idle', () => {
-			resolve(charts);
-		});
-	});
+    limiter.on('idle', () => {
+      resolve(charts);
+    });
+  });
 }
 
 /**
@@ -237,85 +237,89 @@ async function getChartFolders(path: string, directoryHandle: FileSystemDirector
 }
 
 async function getFilesFromFolder(fileHandles: FileSystemFileHandle[]): Promise<{ fileName: string; data: Uint8Array }[]> {
-	const files = await Promise.all(fileHandles.map(async fileHandle => await fileHandle.getFile()));
+  const files = await Promise.all(fileHandles.map(async fileHandle => await fileHandle.getFile()));
 
-	const isFileTruncated = (file: File) => {
-		const MAX_FILE_MIB = 2048;
-		const MAX_FILES_MIB = 5000;
-		const sortedFiles = _.sortBy(files, f => f.size);
-		let usedSizeMib = 0;
-		for (const sortedFile of sortedFiles) {
-			usedSizeMib += Number(sortedFile.size / 1024 / 1024);
-			if (sortedFile === file) {
-				return usedSizeMib > MAX_FILES_MIB || file.size / 1024 / 1024 >= MAX_FILE_MIB;
-			}
-		}
-	}
+  const isFileTruncated = (file: File) => {
+    const MAX_FILE_MIB = 2048;
+    const MAX_FILES_MIB = 5000;
+    const sortedFiles = _.sortBy(files, f => f.size);
+    let usedSizeMib = 0;
+    for (const sortedFile of sortedFiles) {
+      usedSizeMib += Number(sortedFile.size / 1024 / 1024);
+      if (sortedFile === file) {
+        return usedSizeMib > MAX_FILES_MIB || file.size / 1024 / 1024 >= MAX_FILE_MIB;
+      }
+    }
+  }
 
-	return await Promise.all(
-		files.map(async file => {
-			if (isFileTruncated(file) || hasVideoExtension(file.name)) {
-				return { fileName: file.name, data: new Uint8Array() };
-			} else {
-				return { fileName: file.name, data: new Uint8Array(await file.arrayBuffer()) };
-			}
-		}),
-	)
+  return await Promise.all(
+    files.map(async file => {
+      if (isFileTruncated(file) || hasVideoExtension(file.name)) {
+        return { fileName: file.name, data: new Uint8Array() };
+      } else {
+        return { fileName: file.name, data: new Uint8Array(await file.arrayBuffer()) };
+      }
+    }),
+  )
 }
 
 async function getFilesFromSng(sngFileHandle: FileSystemFileHandle) {
-	const file = await sngFileHandle.getFile();
-  const sngStream = new SngStream(() => file.stream(), { generateSongIni: true });
+  const file = await sngFileHandle.getFile();
+  const sngStream = new SngStream(file.stream(), { generateSongIni: true });
 
   let header: SngHeader;
   sngStream.on('header', h => header = h);
   const isFileTruncated = (fileName: string) => {
-		const MAX_FILE_MIB = 2048;
-		const MAX_FILES_MIB = 5000;
-		const sortedFiles = _.sortBy(header.fileMeta, f => f.contentsLen);
-		let usedSizeMib = 0;
-		for (const sortedFile of sortedFiles) {
-			usedSizeMib += Number(sortedFile.contentsLen / BigInt(1024) / BigInt(1024));
-			if (sortedFile.filename === fileName) {
-				return usedSizeMib > MAX_FILES_MIB || sortedFile.contentsLen / BigInt(1024) / BigInt(1024) >= MAX_FILE_MIB;
-			}
-		}
-	}
+    const MAX_FILE_MIB = 2048;
+    const MAX_FILES_MIB = 5000;
+    const sortedFiles = _.sortBy(header.fileMeta, f => f.contentsLen);
+    let usedSizeMib = 0;
+    for (const sortedFile of sortedFiles) {
+      usedSizeMib += Number(sortedFile.contentsLen / BigInt(1024) / BigInt(1024));
+      if (sortedFile.filename === fileName) {
+        return usedSizeMib > MAX_FILES_MIB || sortedFile.contentsLen / BigInt(1024) / BigInt(1024) >= MAX_FILE_MIB;
+      }
+    }
+  }
 
 
   const files: { fileName: string, data: Uint8Array }[] = [];
 
-  sngStream.on('file', async (fileName, fileStream) => {
-    const matchingFileMeta = header.fileMeta.find(f => f.filename === fileName);
-    if (hasVideoExtension(fileName) || isFileTruncated(fileName) || !matchingFileMeta) {
-      const reader = fileStream.getReader();
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const result = await reader.read();
-        if (result.done) {
-          break;
-        }
-      }
-    } else {
-      const data = new Uint8Array(Number(matchingFileMeta.contentsLen));
-      let offset = 0;
-      const reader = fileStream.getReader();
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const result = await reader.read();
-        if (result.done) {
-          break;
-        }
-        data.set(result.value, offset);
-        offset += result.value.length;
-      }
-
-      files.push({ fileName, data });
-    }
-  })
-
   await new Promise<void>((resolve, reject) => {
-    sngStream.on('end', () => resolve());
+    sngStream.on('file', async (fileName, fileStream, nextFile) => {
+      const matchingFileMeta = header.fileMeta.find(f => f.filename === fileName);
+      if (hasVideoExtension(fileName) || isFileTruncated(fileName) || !matchingFileMeta) {
+        const reader = fileStream.getReader();
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const result = await reader.read();
+          if (result.done) {
+            break;
+          }
+        }
+      } else {
+        const data = new Uint8Array(Number(matchingFileMeta.contentsLen));
+        let offset = 0;
+        const reader = fileStream.getReader();
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const result = await reader.read();
+          if (result.done) {
+            break;
+          }
+          data.set(result.value, offset);
+          offset += result.value.length;
+        }
+
+        files.push({ fileName, data });
+      }
+
+      if (nextFile) {
+        nextFile();
+      } else {
+        resolve();
+      }
+    })
 
     sngStream.on('error', error => reject(error));
 
@@ -329,26 +333,26 @@ async function getFilesFromSng(sngFileHandle: FileSystemFileHandle) {
  * @returns `true` if `name` has a valid sng file extension.
  */
 export function hasSngExtension(name: string) {
-	return '.sng' === getExtension(name).toLowerCase();
+  return '.sng' === getExtension(name).toLowerCase();
 }
 /**
  * @returns `true` if `name` is a valid video file extension.
  */
 export function hasVideoExtension(name: string) {
-	return ['.mp4', '.avi', '.webm', '.ogv', '.mpeg'].includes(getExtension(name).toLowerCase());
+  return ['.mp4', '.avi', '.webm', '.ogv', '.mpeg'].includes(getExtension(name).toLowerCase());
 }
 /**
  * @returns extension of a file, including the dot. (e.g. "song.ogg" -> ".ogg")
  */
 export function getExtension(fileName: string) {
-	return '.' + fileName.split('.').pop()!;
+  return '.' + fileName.split('.').pop()!;
 }
 /**
  * @returns true if the list of filename `extensions` appears to be intended as a chart folder.
  */
 export function appearsToBeChartFolder(extensions: string[]) {
-	const ext = extensions.map(extension => extension.toLowerCase());
-	const containsNotes = (ext.includes('chart') || ext.includes('mid'));
-	const containsAudio = (ext.includes('ogg') || ext.includes('mp3') || ext.includes('wav') || ext.includes('opus'));
-	return (containsNotes || containsAudio);
+  const ext = extensions.map(extension => extension.toLowerCase());
+  const containsNotes = (ext.includes('chart') || ext.includes('mid'));
+  const containsAudio = (ext.includes('ogg') || ext.includes('mp3') || ext.includes('wav') || ext.includes('opus'));
+  return (containsNotes || containsAudio);
 }
