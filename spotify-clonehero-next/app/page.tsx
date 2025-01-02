@@ -59,13 +59,15 @@ export default function Home() {
             <CardDescription>
               Primarily for charters. Check your charts for quality issues that
               will get flagged by the Chorus bot before submitting.
+              <span className="font-bold"> The online version no longer works, use the Bridge desktop app.</span>
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 py-4">
             <Link
-              href="/checker"
+              href="https://github.com/Geomitron/Bridge/releases/latest"
+              target='_blank'
               className={buttonVariants({variant: 'default'})}>
-              Go to Tool
+              Go to Bridge
             </Link>
           </CardContent>
         </Card>
@@ -140,5 +142,5 @@ this will find charts to songs you've ever listened to.
 
 ## Chart Error Checker
 Primarily for charters. Check your charts for quality issues that will get flagged
-by the Chorus bot before submitting.
+by the Chorus bot before submitting. The online version no longer works, use the Bridge desktop app.
 */
