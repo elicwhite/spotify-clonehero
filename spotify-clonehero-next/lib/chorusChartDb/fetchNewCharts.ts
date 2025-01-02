@@ -119,6 +119,8 @@ async function fetchSongsAfter(date: Date, lastChartId: number): Promise<any> {
     body: JSON.stringify({
       instrument: null,
       difficulty: null,
+      drumType: null,
+      source: 'website',
       name: {value: '', exact: false, exclude: false},
       artist: {value: '', exact: false, exclude: false},
       album: {value: '', exact: false, exclude: false},
@@ -133,9 +135,12 @@ async function fetchSongsAfter(date: Date, lastChartId: number): Promise<any> {
       maxAverageNPS: null,
       minMaxNPS: null,
       maxMaxNPS: null,
+      minYear: null,
+      maxYear: null,
       // in YYYY-MM-DD format
       modifiedAfter: date.toISOString(),
       hash: '',
+      trackHash: '',
       hasSoloSections: null,
       hasForcedNotes: null,
       hasOpenNotes: null,
@@ -148,6 +153,7 @@ async function fetchSongsAfter(date: Date, lastChartId: number): Promise<any> {
       hasVideoBackground: null,
       modchart: null,
       chartIdAfter: lastChartId,
+      per_page: 250,
     }),
     method: 'POST',
   });

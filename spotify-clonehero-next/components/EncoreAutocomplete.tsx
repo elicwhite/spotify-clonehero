@@ -19,6 +19,9 @@ async function searchEncore(search: string): Promise<ChartResponseEncore[]> {
       page: 1,
       instrument: null,
       difficulty: null,
+
+      drumType: null,
+      source: 'website',
     }),
     method: 'POST',
   });
