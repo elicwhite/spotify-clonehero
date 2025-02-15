@@ -69,6 +69,7 @@ export default function CompareView<
       close();
       await downloadSong(artist, name, charter, recommendedChartUrl, {
         folder: parentDirectoryHandle,
+        asSng: true,
       });
       updateDownloadState(id.toString(), 'downloaded');
     } catch {
@@ -102,7 +103,9 @@ export default function CompareView<
 
     updateDownloadState(id.toString(), 'downloading');
     close();
-    await downloadSong(artist, name, charter, recommendedChartUrl);
+    await downloadSong(artist, name, charter, recommendedChartUrl, {
+      asSng: true,
+    });
     updateDownloadState(id.toString(), 'downloaded');
   }, [
     currentChart.charter,

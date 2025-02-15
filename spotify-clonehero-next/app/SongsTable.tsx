@@ -262,6 +262,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
             {
               folder: song.handleInfo.parentDir,
               replaceExisting: true,
+              asSng: true,
             },
           );
 

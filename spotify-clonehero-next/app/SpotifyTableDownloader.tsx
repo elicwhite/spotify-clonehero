@@ -728,7 +728,7 @@ function DownloadButton({
 
     try {
       updateDownloadState('downloading');
-      await downloadSong(artist, song, charter, url);
+      await downloadSong(artist, song, charter, url, {asSng: true});
     } catch (err) {
       console.log('Error while downloading', artist, song, charter, url, err);
       updateDownloadState('failed');
