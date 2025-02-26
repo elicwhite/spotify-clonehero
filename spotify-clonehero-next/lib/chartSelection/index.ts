@@ -10,6 +10,7 @@ import {
 
 export type ChartResponseEncore = {
   md5: string;
+  hasVideoBackground: boolean;
 } & ChartInfo;
 
 export type ChartInfo = {
