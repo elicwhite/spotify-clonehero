@@ -756,9 +756,9 @@
     third-party-capital "1.0.20"
 
 "@noble/hashes@^1.4.0":
-  version "1.4.0"
-  resolved "https://registry.yarnpkg.com/@noble/hashes/-/hashes-1.4.0.tgz#45814aa329f30e4fe0ba49426f49dfccdd066426"
-  integrity sha512-V1JJ1WTRUqHHrOSh597hURcMqVKVGL/ea3kv0gSnEdsEZ0/+VyPghM1lMNGc00z7CIQorSvbKpuJkxvuHbvdbg==
+  version "1.7.1"
+  resolved "https://registry.yarnpkg.com/@noble/hashes/-/hashes-1.7.1.tgz#5738f6d765710921e7a751e00c20ae091ed8db0f"
+  integrity sha512-B8XBPsn4vT/KJAGqDzbwztd+6Yte3P4V7iafm24bxgDe/mlRuK6xmWPuCNrKt2vDafZ8MfJLlchDG/vYafQEjQ==
 
 "@nodelib/fs.scandir@2.1.5":
   version "2.1.5"
@@ -1746,6 +1746,11 @@
   version "0.8.10"
   resolved "https://registry.yarnpkg.com/@xmldom/xmldom/-/xmldom-0.8.10.tgz#a1337ca426aa61cef9fe15b5b28e340a72f6fa99"
   integrity sha512-2WALfTl4xo2SkGCYRt6rDTFfk9R1czmBvUQy12gK2KuRKIpWEhcbbzy8EZXtz/jkRqHX8bFEc6FC1HjX4TUWYw==
+
+"@xmldom/xmldom@^0.9.4":
+  version "0.9.7"
+  resolved "https://registry.yarnpkg.com/@xmldom/xmldom/-/xmldom-0.9.7.tgz#f21bebdcde4af682a810062b14585c89bb7fab07"
+  integrity sha512-syvR8iIJjpTZ/stv7l89UAViwGFh6lbheeOaqSxkYx9YNmIVvPTRH+CT/fpykFtUx5N+8eSMDRvggF9J8GEPzQ==
 
 acorn-jsx@^5.3.2:
   version "5.3.2"
@@ -3046,11 +3051,11 @@ exifreader@^4.16.0:
     "@xmldom/xmldom" "^0.8.10"
 
 exifreader@^4.23.2:
-  version "4.23.3"
-  resolved "https://registry.yarnpkg.com/exifreader/-/exifreader-4.23.3.tgz#3389c2dab3ab2501562ebdef4115ea34ab9d9aa4"
-  integrity sha512-/Ii4jiNp/5BXdKOiWXZYrWmZFn/ANu3bMVGO7GFQufao5M52/fK2OsAPMH34PL4S79z1eZBzAoaYyBXit0zzVA==
+  version "4.26.1"
+  resolved "https://registry.yarnpkg.com/exifreader/-/exifreader-4.26.1.tgz#c46b4de7650c8779db44c554bc0ee2e4c82c5b4a"
+  integrity sha512-5u7LooUryPAhdQ/Wn5n/P8WsWJ/DxZ5AToc7gTDlzN41QlecGFEt3y+rXpaOe7GhxZ8cD5t8E7yqrq0oZeVHmw==
   optionalDependencies:
-    "@xmldom/xmldom" "^0.8.10"
+    "@xmldom/xmldom" "^0.9.4"
 
 exit@^0.1.2:
   version "0.1.2"
@@ -5338,9 +5343,9 @@ reusify@^1.0.4:
   integrity sha512-U9nH88a3fc/ekCF1l0/UP1IosiuIjyTh7hBvXVMHYgVcfGvt897Xguj2UOLDeI5BG2m7/uwyaLVT6fbtCwTyzw==
 
 rfc4648@^1.5.3:
-  version "1.5.3"
-  resolved "https://registry.yarnpkg.com/rfc4648/-/rfc4648-1.5.3.tgz#e62b81736c10361ca614efe618a566e93d0b41c0"
-  integrity sha512-MjOWxM065+WswwnmNONOT+bD1nXzY9Km6u3kzvnx8F8/HXGZdz3T6e6vZJ8Q/RIMUSp/nxqjH3GwvJDy8ijeQQ==
+  version "1.5.4"
+  resolved "https://registry.yarnpkg.com/rfc4648/-/rfc4648-1.5.4.tgz#1174c0afba72423a0b70c386ecfeb80aa61b05ca"
+  integrity sha512-rRg/6Lb+IGfJqO05HZkN50UtY7K/JhxJag1kP23+zyMfrvoB0B7RWv06MbOzoc79RgCdNTiUaNsTT1AJZ7Z+cg==
 
 rimraf@2:
   version "2.7.1"
@@ -5430,10 +5435,10 @@ scan-chart-web@^3.4.5-1:
     sanitize-filename "^1.6.3"
     workerpool "^6.4.0"
 
-scan-chart@^4.1.1:
-  version "4.1.1"
-  resolved "https://registry.yarnpkg.com/scan-chart/-/scan-chart-4.1.1.tgz#58e97d66bb5deeb3bb42e697882ff3836d40de9f"
-  integrity sha512-qSJHahDoNt/+w8QJKeEixJTfbbNzCTRaTghMQSG7bmRQVaPbXTzLq7QruwyFtx7ErdOQ+PM5a1CeDWUgstnfrQ==
+scan-chart@^6.0.0:
+  version "6.0.0"
+  resolved "https://registry.yarnpkg.com/scan-chart/-/scan-chart-6.0.0.tgz#6520827161e9cc89e9ed0f373b7407b7f83984f8"
+  integrity sha512-j7SdKWmh5/DPKZZQ5t964+EaoTuHjmfOSniwxUWTb1N2e3Og4YkhMS3g9sACBRnnkQgvvz2tapbclqSw9ryU0g==
   dependencies:
     "@noble/hashes" "^1.4.0"
     bottleneck "^2.19.5"
@@ -6077,6 +6082,11 @@ v8-to-istanbul@^9.0.1:
     "@jridgewell/trace-mapping" "^0.3.12"
     "@types/istanbul-lib-coverage" "^2.0.1"
     convert-source-map "^2.0.0"
+
+vexflow@^4.2.5:
+  version "4.2.5"
+  resolved "https://registry.yarnpkg.com/vexflow/-/vexflow-4.2.5.tgz#36ec23334f8971092473f089e8ce0711882c9227"
+  integrity sha512-+P+V2VWFyKcpW4Pwbs0p7nwICRQCzLWvkiPi4RpFlMXh/MRsiN1r7X6yvl1WauoJ4J6pVsnCzTAhC4m1ASlTng==
 
 walker@^1.0.8:
   version "1.0.8"

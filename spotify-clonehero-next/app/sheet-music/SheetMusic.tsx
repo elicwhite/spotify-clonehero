@@ -28,6 +28,7 @@ export default function MyComponent() {
   const searchParams = useSearchParams();
   const md5 = searchParams.get('md5');
   const [rendering, setRendering] = useState<null | {
+    metadata: ChartResponseEncore;
     chart: ParsedChart;
     audioFiles: Uint8Array[];
   }>(null);
@@ -54,14 +55,12 @@ export default function MyComponent() {
       })(),
       (async () => findAudioData(files))(),
     ]);
-    console.log(parsedChart, audioFiles);
+
     setRendering({
+      metadata: chart,
       chart: parsedChart,
       audioFiles,
     });
-    // const chartFiles = await processFileUrlAsStream(chart.file);
-
-    // playChartBuffers(chartFiles);
   }, []);
 
   return (
@@ -75,6 +74,7 @@ export default function MyComponent() {
 
       {rendering != null && (
         <Renderer
+          metadata={rendering.metadata}
           chart={rendering.chart}
           audioFiles={rendering.audioFiles}></Renderer>
       )}
@@ -86,7 +86,7 @@ async function getChartFiles(chartData: ChartResponseEncore) {
   const chartUrl = `https://files.enchor.us/${
     chartData.md5 + (chartData.hasVideoBackground ? '_novideo' : '')
   }.sng`;
-  console.log('ur', chartUrl);
+
   const sngResponse = await fetch(chartUrl, {
     headers: {
       accept: '*/*',

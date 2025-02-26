@@ -1,52 +1,48 @@
 // Heavily inspired by https://github.com/tonygoldcrest/drum-hero Thanks!
 
-import {NoteEvent, parseChartFile} from 'scan-chart';
+import {NoteEvent, parseChartFile, noteTypes, noteFlags} from 'scan-chart';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 type TimeSignature = ParsedChart['timeSignatures'][0];
-type Difficulty = ParsedChart['trackData'][0]['difficulty'];
-
-function getDrumDifficulties(chart: ParsedChart) {
-  return chart.trackData
-    .filter(part => part.instrument === 'drums')
-    .map(part => part.difficulty);
-}
+// type Difficulty = ParsedChart['trackData'][0]['difficulty'];
 
 export default function convertToVexFlow(
   chart: ParsedChart,
   difficulty: string,
-) {
+): Measure[] {
   const drumPart = chart.trackData.find(
     part => part.instrument === 'drums' && part.difficulty === difficulty,
   );
   if (!drumPart) {
     throw new Error('Unable to find difficulty');
   }
+
+  return new Parser(chart, drumPart).getMeasures();
 }
 
-type Instrument =
+export type DrumNoteInstrument =
   | 'kick'
   | 'snare'
-  | 'yellowCymbal'
-  | 'blueCymbal'
-  | 'greenCymbal'
-  | 'yellowTom'
-  | 'blueTom'
-  | 'greenTom';
+  | 'high-tom'
+  | 'mid-tom'
+  | 'floor-tom'
+  | 'hihat'
+  | 'crash'
+  | 'ride';
 
 type InstrumentMapping = {
-  [key in Instrument]: string;
+  [key in DrumNoteInstrument]: string;
 };
 
 const mapping: InstrumentMapping = {
   kick: 'e/4',
   snare: 'c/5',
-  yellowCymbal: 'g/5/x2',
-  blueCymbal: 'f/5/x2',
-  greenCymbal: 'a/5/x2',
-  yellowTom: 'e/5',
-  blueTom: 'd/5',
-  greenTom: 'a/4',
+  hihat: 'g/5/x2',
+  ride: 'f/5/x2',
+  crash: 'a/5/x2',
+  'high-tom': 'e/5',
+  'mid-tom': 'd/5',
+  'floor-tom': 'a/4',
 };
 
 export interface Measure {
@@ -101,6 +97,13 @@ class Parser {
 
     this.createMeasures();
     this.fillBeats();
+    this.extendNoteDuration();
+    this.processCompositeDuration();
+    this.flattenMeasures();
+  }
+
+  getMeasures() {
+    return this.measures;
   }
 
   createMeasures() {
@@ -155,7 +158,7 @@ class Parser {
 
   fillBeats() {
     const noteGroups = this.drumPart.noteEventGroups;
-    const noteGroupIndex = 0;
+    let noteGroupIndex = 0;
 
     const step = 1;
 
@@ -168,8 +171,8 @@ class Parser {
         ) {
           if (noteGroups[noteGroupIndex][0].tick === currentTick) {
             beat.notes.push({
-              notes: tickNotes.map(note =>
-                this.getNoteKey(note, currentModifierNotes),
+              notes: noteGroups[noteGroupIndex].map(
+                note => mapping[convertNoteToString(note)],
               ),
               isRest: false,
               dotted: false,
@@ -178,8 +181,6 @@ class Parser {
               tick: currentTick,
             });
 
-            const notes = noteGroups[noteGroupIndex].map((note) => {
-            }
             noteGroupIndex += 1;
           } else if (currentTick === beat.startTick) {
             beat.notes.push({
@@ -194,6 +195,195 @@ class Parser {
         }
       });
     });
+  }
+
+  flattenMeasures() {
+    this.measures.forEach(measure => {
+      measure.notes = this.collapseQRests(
+        measure.beats.map(beat => beat.notes).flat(),
+      );
+    });
+  }
+
+  collapseQRests(notes: Note[]) {
+    const result: Note[] = [];
+    let consecutiveRests: Note[] = [];
+
+    notes.forEach(note => {
+      if (note.duration === 'qr' && consecutiveRests.length < 4) {
+        consecutiveRests.push(note);
+      } else {
+        if (consecutiveRests.length > 0) {
+          result.push(this.getCollapsedRest(consecutiveRests));
+          consecutiveRests = [];
+        }
+
+        result.push(note);
+      }
+    });
+
+    if (consecutiveRests.length > 0) {
+      result.push(this.getCollapsedRest(consecutiveRests));
+    }
+
+    return result;
+  }
+
+  getCollapsedRest(notes: Note[]) {
+    let duration: string;
+    let dotted = false;
+    switch (notes.length) {
+      case 2:
+        duration = 'hr';
+        break;
+      case 3:
+        duration = 'hrd';
+        dotted = true;
+        break;
+      case 4:
+        duration = 'wr';
+        break;
+      default:
+        duration = 'qr';
+    }
+
+    return {
+      notes: ['b/4'],
+      isRest: true,
+      dotted,
+      isTriplet: false,
+      duration,
+      tick: 0,
+    };
+  }
+
+  extendNoteDuration() {
+    this.measures.forEach(measure => {
+      measure.beats.forEach(beat => {
+        beat.notes.forEach((note, index) => {
+          const noteDuration =
+            (beat.notes[index + 1]?.tick ?? beat.endTick) - note.tick;
+
+          note.durationTicks = noteDuration;
+
+          if (!this.durationMap[noteDuration]) {
+            note.duration = '';
+            return;
+          }
+
+          const {duration, dotted, isTriplet} = this.durationMap[noteDuration];
+
+          note.duration = duration
+            ? `${duration}${note.isRest ? 'r' : ''}`
+            : '';
+
+          if (dotted) {
+            note.dotted = true;
+          }
+          if (isTriplet) {
+            note.isTriplet = true;
+          }
+        });
+      });
+    });
+  }
+
+  processCompositeDuration() {
+    const availableDurations = Object.keys(this.durationMap).map(key =>
+      Number(key),
+    );
+
+    this.measures.forEach(measure => {
+      measure.beats.forEach(beat => {
+        beat.notes = beat.notes
+          .map(note => {
+            if (note.duration) {
+              return note;
+            }
+
+            const atomicDurations = this.getSubsets(
+              availableDurations,
+              note.durationTicks ?? 0,
+            );
+
+            if (atomicDurations.length === 0) {
+              return this.getClosestDuration(availableDurations, note);
+            }
+
+            return atomicDurations
+              .sort((a, b) => a.length - b.length)[0]
+              .sort((a, b) => b - a)
+              .map((durationTicks, index) => {
+                const {duration, dotted, isTriplet} =
+                  this.durationMap[durationTicks];
+
+                const isRest = note.isRest || index !== 0;
+                const newNote: Note = {
+                  isTriplet: isTriplet ?? false,
+                  dotted: dotted ?? false,
+                  durationTicks,
+                  isRest,
+                  tick: 0,
+                  duration: `${duration}${isRest ? 'r' : ''}`,
+                  notes: isRest ? ['b/4'] : note.notes,
+                };
+
+                return newNote;
+              });
+          })
+          .flat();
+      });
+    });
+  }
+
+  getClosestDuration(availableDurations: number[], note: Note) {
+    const ppq = this.chart.resolution;
+
+    let durationDiff = Infinity;
+    let closestDurationKey = ppq / 16;
+    availableDurations.forEach(duration => {
+      const diff = Math.abs(duration - (note.durationTicks ?? 0));
+      if (diff < durationDiff) {
+        closestDurationKey = duration;
+        durationDiff = diff;
+      }
+    });
+
+    const {duration, isTriplet, dotted} = this.durationMap[closestDurationKey];
+
+    return [
+      {
+        isTriplet: isTriplet ?? false,
+        dotted: dotted ?? false,
+        durationTicks: note.durationTicks,
+        isRest: note.isRest,
+        tick: 0,
+        duration: `${duration}${note.isRest ? 'r' : ''}`,
+        notes: note.isRest ? ['b/4'] : note.notes,
+      },
+    ];
+  }
+
+  getSubsets(array: number[], sum: number) {
+    const result: number[][] = [];
+
+    function fork(i = 0, s = 0, t: number[] = []) {
+      if (s === sum) {
+        result.push(t);
+        return;
+      }
+      if (i === array.length) {
+        return;
+      }
+      if (s + array[i] <= sum) {
+        fork(i + 1, s + array[i], t.concat(array[i]));
+      }
+      fork(i + 1, s, t);
+    }
+
+    fork();
+
+    return result;
   }
 
   #constructDurationMap() {
@@ -217,37 +407,36 @@ class Parser {
   }
 }
 
-
 function convertNoteToString(note: NoteEvent): DrumNoteInstrument {
   switch (note.type) {
     case noteTypes.kick:
-      return "kick";
+      return 'kick';
     case noteTypes.redDrum:
-      return "snare";
+      return 'snare';
     case noteTypes.yellowDrum:
       if (note.flags & noteFlags.cymbal && note.flags & noteFlags.accent) {
-        // console.log("open-hat", note);
-        return "open-hat";
+        // Could be open-hat or a harder hit
+        return 'hihat';
       } else if (note.flags & noteFlags.cymbal) {
-        return "hihat";
+        return 'hihat';
       } else if (note.flags & noteFlags.tom) {
-        return "high-tom";
+        return 'high-tom';
       } else {
         throw new Error(`Unexpected Yellow note flags ${note.flags}`);
       }
     case noteTypes.blueDrum:
       if (note.flags & noteFlags.cymbal) {
-        return "ride";
+        return 'ride';
       } else if (note.flags & noteFlags.tom) {
-        return "mid-tom";
+        return 'mid-tom';
       } else {
         throw new Error(`Unexpected Blue note flags ${note.flags}`);
       }
     case noteTypes.greenDrum:
       if (note.flags & noteFlags.cymbal) {
-        return "crash";
+        return 'crash';
       } else if (note.flags & noteFlags.tom) {
-        return "floor-tom";
+        return 'floor-tom';
       } else {
         throw new Error(`Unexpected Green note flags ${note.flags}`);
       }

@@ -12,17 +12,39 @@ import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
 import Link from 'next/link';
 import {ArrowLeft, Maximize2, Play} from 'lucide-react';
-import {useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
+import convertToVexFlow from './convertToVexflow';
+import {RenderData, renderMusic} from './renderVexflow';
+import {ChartResponseEncore} from '@/lib/chartSelection';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
+function getDrumDifficulties(chart: ParsedChart) {
+  return chart.trackData
+    .filter(part => part.instrument === 'drums')
+    .map(part => part.difficulty);
+}
+
 export default function Renderer({
+  metadata,
   chart,
   audioFiles,
 }: {
+  metadata: ChartResponseEncore;
   chart: ParsedChart;
   audioFiles: Uint8Array[];
 }) {
+  const vexflowContainerRef = useRef<HTMLDivElement>(null);
+
+  const availableDifficulties = getDrumDifficulties(chart);
+  const [selectedDifficulty, setSelectedDifficulty] = useState(
+    availableDifficulties[0],
+  );
+
+  const measures = useMemo(() => {
+    return convertToVexFlow(chart, selectedDifficulty);
+  }, [chart, selectedDifficulty]);
+
   const [currentTime, setCurrentTime] = useState(0);
   const duration = 282; // 4:42 in seconds
 
@@ -33,6 +55,29 @@ export default function Renderer({
     {name: 'Song', volume: 75},
     {name: 'Vocals', volume: 75},
   ];
+
+  const [renderData, setRenderData] = useState<RenderData[]>([]);
+
+  useEffect(() => {
+    if (!vexflowContainerRef.current) {
+      return;
+    }
+
+    if (vexflowContainerRef.current?.children.length > 0) {
+      vexflowContainerRef.current.removeChild(
+        vexflowContainerRef.current.children[0],
+      );
+    }
+
+    setRenderData(
+      renderMusic(
+        vexflowContainerRef,
+        measures,
+        true, //showBarNumbers,
+        true, //enableColors,
+      ),
+    );
+  }, [measures]); //, showBarNumbers, enableColors]);
 
   return (
     <div className="flex h-screen bg-background">
@@ -119,12 +164,12 @@ export default function Renderer({
 
         <div className="p-8 flex-1">
           <h1 className="text-3xl font-bold mb-8">
-            The Best Song by The best artist
+            {metadata.name} by {metadata.artist}
           </h1>
 
           {/* Placeholder for sheet music - this div will be populated by sheet music rendering script */}
           <div
-            id="sheet-music"
+            ref={vexflowContainerRef}
             className="w-full h-[calc(100vh-12rem)] bg-white rounded-lg border"
           />
         </div>
