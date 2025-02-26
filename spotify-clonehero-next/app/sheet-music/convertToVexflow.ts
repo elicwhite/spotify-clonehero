@@ -169,7 +169,10 @@ class Parser {
           currentTick < beat.endTick;
           currentTick += step
         ) {
-          if (noteGroups[noteGroupIndex][0].tick === currentTick) {
+          if (
+            noteGroups[noteGroupIndex] != null &&
+            noteGroups[noteGroupIndex][0].tick === currentTick
+          ) {
             beat.notes.push({
               notes: noteGroups[noteGroupIndex].map(
                 note => mapping[convertNoteToString(note)],
