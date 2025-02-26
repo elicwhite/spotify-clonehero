@@ -146,7 +146,7 @@ export default function Renderer({
         </div>
         <p className="text-xs text-muted-foreground text-center mt-auto">
           Special thanks to{' '}
-          <a href="https://github.com/tonygoldcrest">@tonygoldcrest</a>'s{' '}
+          <a href="https://github.com/tonygoldcrest">@tonygoldcrest</a>&apos;s{' '}
           <a href="https://github.com/tonygoldcrest/drum-hero">drum-hero</a> for
           providing much of this tool.
         </p>

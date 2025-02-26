@@ -253,7 +253,7 @@ function RockBand4({authenticated}: {authenticated: boolean}) {
           artist,
           song,
           playCount,
-          matchingCharts
+          matchingCharts,
         };
       })
       .filter(_Boolean);
@@ -310,6 +310,7 @@ function markInstalledCharts(
       ...chart,
       md5: '',
       name: chart.song,
+      hasVideoBackground: false,
       isInstalled: isInstalled(chart.artist, chart.song, chart.charter),
     }),
   );
