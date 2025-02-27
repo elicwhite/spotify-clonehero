@@ -1,228 +1,176 @@
-'use client';
+import {Difficulty, parseChartFile} from 'scan-chart';
 
-// import chain from 'lodash/chain';
-
-import _ from 'lodash';
-import {SngHeader, SngStream} from 'parse-sng';
-import {parseChartFile} from 'scan-chart';
-import {useSearchParams} from 'next/navigation';
-
-import {
-  getBasename,
-  getExtension,
-  hasAudioExtension,
-  hasAudioName,
-  hasChartExtension,
-  hasChartName,
-  hasVideoName,
-} from '@/lib/src-shared/utils';
-import EncoreAutocomplete from '@/components/EncoreAutocomplete';
 import {Button} from '@/components/ui/button';
-import {useCallback, useState} from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {Slider} from '@/components/ui/slider';
+import {Switch} from '@/components/ui/switch';
+import Link from 'next/link';
+import {ArrowLeft, Maximize2, Play} from 'lucide-react';
+import {
+  RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  forwardRef,
+  createRef,
+} from 'react';
+import convertToVexFlow from './convertToVexflow';
+import {RenderData, renderMusic} from './renderVexflow';
 import {ChartResponseEncore} from '@/lib/chartSelection';
-import Renderer from './Renderer';
+import {Files} from './ClientPage';
+
+import {getBasename} from '@/lib/src-shared/utils';
+import {cn} from '@/lib/utils';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
-export default function MyComponent() {
-  const searchParams = useSearchParams();
-  const md5 = searchParams.get('md5');
-  const [rendering, setRendering] = useState<null | {
-    metadata: ChartResponseEncore;
-    chart: ParsedChart;
-    audioFiles: Uint8Array[];
-  }>(null);
-
-  const playSelectedChart = useCallback(async (chart: ChartResponseEncore) => {
-    const files = await getChartFiles(chart);
-    const [parsedChart, audioFiles] = await Promise.all([
-      (async () => {
-        const {chartData, format} = findChartData(files);
-        const iniChartModifiers = Object.assign(
-          {
-            song_length: 0,
-            hopo_frequency: 0,
-            eighthnote_hopo: false,
-            multiplier_note: 0,
-            sustain_cutoff_threshold: -1,
-            chord_snap_threshold: 0,
-            five_lane_drums: false,
-            pro_drums: false,
-          },
-          chart,
-        );
-        return parseChartFile(chartData, format, iniChartModifiers);
-      })(),
-      (async () => findAudioData(files))(),
-    ]);
-
-    setRendering({
-      metadata: chart,
-      chart: parsedChart,
-      audioFiles,
-    });
-  }, []);
-
-  return (
-    <div className="flex flex-col w-full flex-1">
-      <div className="flex flex-row gap-10">
-        {md5 == null && (
-          <EncoreAutocomplete onChartSelected={playSelectedChart} />
-        )}
-        {md5 != null && <Button onClick={() => {}}>Play Preview</Button>}
-      </div>
-
-      {rendering != null && (
-        <Renderer
-          metadata={rendering.metadata}
-          chart={rendering.chart}
-          audioFiles={rendering.audioFiles}></Renderer>
-      )}
-    </div>
-  );
+function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
+  return chart.trackData
+    .filter(part => part.instrument === 'drums')
+    .map(part => part.difficulty);
 }
 
-async function getChartFiles(chartData: ChartResponseEncore) {
-  const chartUrl = `https://files.enchor.us/${
-    chartData.md5 + (chartData.hasVideoBackground ? '_novideo' : '')
-  }.sng`;
+function capitalize(fileName: string): string {
+  return fileName[0].toUpperCase() + getBasename(fileName).slice(1);
+}
 
-  const sngResponse = await fetch(chartUrl, {
-    headers: {
-      accept: '*/*',
-      'accept-language': 'en-US,en;q=0.9',
-      'sec-fetch-dest': 'empty',
-    },
-    referrerPolicy: 'no-referrer',
-    body: null,
-    method: 'GET',
-    credentials: 'omit',
+export default function SheetMusic({
+  chart,
+  difficulty,
+  showBarNumbers,
+  enableColors,
+  onSelectMeasure,
+}: {
+  chart: ParsedChart;
+  difficulty: Difficulty;
+  showBarNumbers: boolean;
+  enableColors: boolean;
+  onSelectMeasure: (time: number) => void;
+}) {
+  const vexflowContainerRef = useRef<HTMLDivElement>(null);
+
+  const highlightsRef = useRef<RefObject<HTMLButtonElement>[]>([]);
+  const [highlightedMeasureIndex, setHighlightedMeasureIndex] =
+    useState<number>(1);
+
+  const measures = useMemo(() => {
+    return convertToVexFlow(chart, difficulty);
+  }, [chart, difficulty]);
+
+  const [renderData, setRenderData] = useState<RenderData[]>([]);
+
+  useEffect(() => {
+    if (!vexflowContainerRef.current) {
+      return;
+    }
+
+    if (vexflowContainerRef.current?.children.length > 0) {
+      vexflowContainerRef.current.removeChild(
+        vexflowContainerRef.current.children[0],
+      );
+    }
+
+    setRenderData(
+      renderMusic(vexflowContainerRef, measures, showBarNumbers, enableColors),
+    );
+  }, [measures, showBarNumbers, enableColors]);
+
+  // useEffect(() => {
+  //   if ( !renderData) { //!midi ||
+  //     return;
+  //   }
+
+  //   highlightsRef.current = renderData.map(() =>
+  //     createRef<HTMLButtonElement>(),
+  //   );
+
+  //   const currentTick = midi.header.secondsToTicks(currentTime) ?? 0;
+  //   const highlightedMeasure = renderData.find(
+  //     ({ measure }) =>
+  //       currentTick >= measure.startTick && currentTick < measure.endTick,
+  //   );
+
+  //   if (!highlightedMeasure) {
+  //     return;
+  //   }
+
+  //   setHighlightedMeasureIndex(renderData.indexOf(highlightedMeasure));
+  // }, [currentTime, midi, renderData]);
+
+  // useEffect(() => {
+  //   if (highlightsRef.current.length === 0) {
+  //     return;
+  //   }
+
+  //   highlightsRef.current[highlightedMeasureIndex].current?.scrollIntoView({
+  //     behavior: 'smooth',
+  //     block: 'center',
+  //   });
+  // }, [highlightedMeasureIndex]);
+
+  const measureHighlights = renderData.map(({measure, stave}, index) => {
+    const isHighlighted = index === highlightedMeasureIndex;
+    return (
+      <MeasureHighlight
+        key={index}
+        ref={highlightsRef.current[index]}
+        style={{
+          top: stave.getY() + 10,
+          left: stave.getX() - 5,
+          width: stave.getWidth() + 10,
+          height: stave.getHeight(),
+        }}
+        highlighted={isHighlighted}
+        onClick={() => {
+          // if (!midi) {
+          //   return;
+          // }
+          // onSelectMeasure(midi.header.ticksToSeconds(measure.startTick));
+        }}
+      />
+    );
   });
 
-  if (!sngResponse.ok) {
-    throw new Error('Failed to fetch the .sng file');
-  }
-
-  const sngStream = new SngStream(sngResponse.body!, {generateSongIni: true});
-
-  let header: SngHeader;
-  sngStream.on('header', h => (header = h));
-  const isFileTruncated = (fileName: string) => {
-    const MAX_FILE_MIB = 2048;
-    const MAX_FILES_MIB = 5000;
-    const sortedFiles = _.sortBy(header.fileMeta, f => f.contentsLen);
-    let usedSizeMib = 0;
-    for (const sortedFile of sortedFiles) {
-      usedSizeMib += Number(
-        sortedFile.contentsLen / BigInt(1024) / BigInt(1024),
-      );
-      if (sortedFile.filename === fileName) {
-        return (
-          usedSizeMib > MAX_FILES_MIB ||
-          sortedFile.contentsLen / BigInt(1024) / BigInt(1024) >= MAX_FILE_MIB
-        );
-      }
-    }
-  };
-
-  const files: {fileName: string; data: Uint8Array}[] = [];
-
-  return await new Promise<{fileName: string; data: Uint8Array}[]>(
-    (resolve, reject) => {
-      sngStream.on(
-        'file',
-        async (
-          fileName: string,
-          fileStream: ReadableStream<Uint8Array>,
-          nextFile,
-        ) => {
-          const matchingFileMeta = header.fileMeta.find(
-            f => f.filename === fileName,
-          );
-          if (
-            hasVideoName(fileName) ||
-            isFileTruncated(fileName) ||
-            !matchingFileMeta
-          ) {
-            const reader = fileStream.getReader();
-            // eslint-disable-next-line no-constant-condition
-            while (true) {
-              const result = await reader.read();
-              if (result.done) {
-                break;
-              }
-            }
-          } else {
-            const data = new Uint8Array(Number(matchingFileMeta.contentsLen));
-            let offset = 0;
-            let readCount = 0;
-            const reader = fileStream.getReader();
-            // eslint-disable-next-line no-constant-condition
-            while (true) {
-              const result = await reader.read();
-              if (result.done) {
-                break;
-              }
-              readCount++;
-              if (readCount % 5 === 0) {
-                await new Promise<void>(resolve => setTimeout(resolve, 2));
-              } // Allow other processing to happen
-              data.set(result.value, offset);
-              offset += result.value.length;
-            }
-
-            files.push({fileName, data});
-          }
-
-          if (nextFile) {
-            nextFile();
-          } else {
-            resolve(files);
-          }
-        },
-      );
-
-      sngStream.on('error', err => reject(err));
-      sngStream.start();
-    },
+  return (
+    <>
+      <div
+        ref={vexflowContainerRef}
+        className="w-full h-[calc(100vh-12rem)] bg-white rounded-lg border"
+      />
+      {measureHighlights}
+    </>
   );
 }
 
-function findChartData(files: {fileName: string; data: Uint8Array}[]) {
-  const chartFiles = _.chain(files)
-    .filter(f => hasChartExtension(f.fileName))
-    .orderBy(
-      [
-        f => hasChartName(f.fileName),
-        f => getExtension(f.fileName).toLowerCase() === 'mid',
-      ],
-      ['desc', 'desc'],
-    )
-    .value();
-
-  return {
-    chartData: chartFiles[0].data,
-    format: (getExtension(chartFiles[0].fileName).toLowerCase() === 'mid'
-      ? 'mid'
-      : 'chart') as 'mid' | 'chart',
-  };
+interface MeasureHighlightProps {
+  style?: React.CSSProperties;
+  highlighted?: boolean;
+  onClick?: () => void;
 }
-function findAudioData(files: {fileName: string; data: Uint8Array}[]) {
-  const audioData: Uint8Array[] = [];
 
-  for (const file of files) {
-    if (hasAudioExtension(file.fileName)) {
-      if (hasAudioName(file.fileName)) {
-        if (
-          !['preview', 'crowd'].includes(
-            getBasename(file.fileName).toLowerCase(),
-          )
-        ) {
-          audioData.push(file.data);
-        }
-      }
-    }
-  }
+const MeasureHighlight = forwardRef<HTMLButtonElement, MeasureHighlightProps>(
+  ({style, highlighted, onClick}, ref) => {
+    return (
+      <button
+        ref={ref}
+        className={cn(
+          'absolute z-[-3] rounded-md border-0 bg-transparent cursor-pointer',
+          highlighted && 'bg-primary/10 shadow-md z-[-2]',
+          'hover:bg-muted hover:shadow-sm hover:z-[-1]',
+        )}
+        style={style}
+        onClick={onClick}
+      />
+    );
+  },
+);
 
-  return audioData;
-}
+MeasureHighlight.displayName = 'MeasureHighlight';

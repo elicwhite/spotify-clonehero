@@ -1,4 +1,4 @@
-import {parseChartFile} from 'scan-chart';
+import {Difficulty, parseChartFile} from 'scan-chart';
 
 import {Button} from '@/components/ui/button';
 import {
@@ -12,17 +12,43 @@ import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
 import Link from 'next/link';
 import {ArrowLeft, Maximize2, Play} from 'lucide-react';
-import {useEffect, useMemo, useRef, useState} from 'react';
+import {
+  RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  forwardRef,
+  createRef,
+} from 'react';
 import convertToVexFlow from './convertToVexflow';
 import {RenderData, renderMusic} from './renderVexflow';
 import {ChartResponseEncore} from '@/lib/chartSelection';
+import {Files} from './ClientPage';
+
+import {getBasename} from '@/lib/src-shared/utils';
+import {cn} from '@/lib/utils';
+import SheetMusic from './SheetMusic';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
-function getDrumDifficulties(chart: ParsedChart) {
+function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
     .filter(part => part.instrument === 'drums')
     .map(part => part.difficulty);
+}
+
+function capitalize(fileName: string): string {
+  return fileName[0].toUpperCase() + getBasename(fileName).slice(1);
+}
+
+interface VolumeControl {
+  trackName: string;
+  volume: number;
+  previousVolume?: number;
+  isMuted: boolean;
+  isSoloed: boolean;
 }
 
 export default function Renderer({
@@ -32,52 +58,42 @@ export default function Renderer({
 }: {
   metadata: ChartResponseEncore;
   chart: ParsedChart;
-  audioFiles: Uint8Array[];
+  audioFiles: Files;
 }) {
-  const vexflowContainerRef = useRef<HTMLDivElement>(null);
+  const [showBarNumbers, setShowBarNumbers] = useState(false);
+  const [enableColors, setEnableColors] = useState(true);
+  const [difficulty, setDifficulty] = useState<Difficulty>('expert');
+  const [currentPlayback, setCurrentPlayback] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [volumeControls, setVolumeControls] = useState<VolumeControl[]>([]);
 
   const availableDifficulties = getDrumDifficulties(chart);
   const [selectedDifficulty, setSelectedDifficulty] = useState(
     availableDifficulties[0],
   );
 
-  const measures = useMemo(() => {
-    return convertToVexFlow(chart, selectedDifficulty);
-  }, [chart, selectedDifficulty]);
-
-  const [currentTime, setCurrentTime] = useState(0);
-  const duration = 282; // 4:42 in seconds
-
-  const instruments = [
-    {name: 'Drums', volume: 75},
-    {name: 'Guitar', volume: 75},
-    {name: 'Rhythm', volume: 75},
-    {name: 'Song', volume: 75},
-    {name: 'Vocals', volume: 75},
-  ];
-
-  const [renderData, setRenderData] = useState<RenderData[]>([]);
-
-  useEffect(() => {
-    if (!vexflowContainerRef.current) {
-      return;
-    }
-
-    if (vexflowContainerRef.current?.children.length > 0) {
-      vexflowContainerRef.current.removeChild(
-        vexflowContainerRef.current.children[0],
-      );
-    }
-
-    setRenderData(
-      renderMusic(
-        vexflowContainerRef,
-        measures,
-        true, //showBarNumbers,
-        true, //enableColors,
-      ),
+  const endEvents = chart.endEvents;
+  if (endEvents.length !== 1) {
+    throw new Error(
+      `Song ${metadata.name} by ${metadata.artist} (${metadata.charter}) had more than one end event: ` +
+        JSON.stringify(endEvents, null, 2),
     );
-  }, [measures]); //, showBarNumbers, enableColors]);
+  }
+  const songDuration = chart.endEvents[0].msTime / 1000;
+
+  const currentTime = 40;
+
+  const difficultySelectorOnSelect = useCallback(
+    (selectedDifficulty: string) => {
+      setSelectedDifficulty(selectedDifficulty as Difficulty);
+    },
+    [],
+  );
+
+  const instruments = audioFiles.map(file => ({
+    name: capitalize(getBasename(file.fileName)),
+    volume: 75,
+  }));
 
   return (
     <div className="flex h-screen bg-background">
@@ -100,14 +116,18 @@ export default function Renderer({
         <div className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Difficulty</label>
-            <Select defaultValue="expert">
+            <Select
+              defaultValue="expert"
+              onValueChange={difficultySelectorOnSelect}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="beginner">Beginner</SelectItem>
-                <SelectItem value="intermediate">Intermediate</SelectItem>
-                <SelectItem value="expert">Expert</SelectItem>
+                {availableDifficulties.map(difficulty => (
+                  <SelectItem key={difficulty} value={difficulty}>
+                    {capitalize(difficulty)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -131,13 +151,21 @@ export default function Renderer({
 
           <div className="space-y-4 pt-4">
             <div className="flex items-center space-x-2">
-              <Switch id="colors" />
+              <Switch
+                id="colors"
+                checked={enableColors}
+                onCheckedChange={setEnableColors}
+              />
               <label htmlFor="colors" className="text-sm font-medium">
                 Enable colors
               </label>
             </div>
             <div className="flex items-center space-x-2">
-              <Switch id="barnumbers" />
+              <Switch
+                id="barnumbers"
+                checked={showBarNumbers}
+                onCheckedChange={setShowBarNumbers}
+              />
               <label htmlFor="barnumbers" className="text-sm font-medium">
                 Show bar numbers
               </label>
@@ -158,7 +186,7 @@ export default function Renderer({
           <div className="w-full bg-secondary rounded-full h-1">
             <div
               className="bg-primary h-full rounded-full"
-              style={{width: `${(currentTime / duration) * 100}%`}}
+              style={{width: `${(currentTime / songDuration) * 100}%`}}
             />
           </div>
           <span className="text-sm text-muted-foreground whitespace-nowrap">
@@ -173,13 +201,49 @@ export default function Renderer({
             {metadata.name} by {metadata.artist}
           </h1>
 
-          {/* Placeholder for sheet music - this div will be populated by sheet music rendering script */}
-          <div
-            ref={vexflowContainerRef}
-            className="w-full h-[calc(100vh-12rem)] bg-white rounded-lg border"
+          <SheetMusic
+            // currentTime={currentPlayback}
+            // midiData={midiData}
+            chart={chart}
+            difficulty={difficulty}
+            showBarNumbers={showBarNumbers}
+            enableColors={enableColors}
+            onSelectMeasure={time => {
+              // if (!audioPlayer) {
+              //   return;
+              // }
+              // audioPlayer.start(time);
+
+              setIsPlaying(true);
+            }}
           />
         </div>
       </div>
     </div>
   );
 }
+
+interface MeasureHighlightProps {
+  style?: React.CSSProperties;
+  highlighted?: boolean;
+  onClick?: () => void;
+}
+
+const MeasureHighlight = forwardRef<HTMLButtonElement, MeasureHighlightProps>(
+  ({style, highlighted, onClick}, ref) => {
+    return (
+      <button
+        ref={ref}
+        className={cn(
+          'absolute z-[-3] rounded-md border-0 bg-transparent cursor-pointer',
+          highlighted && 'bg-primary/10 shadow-md z-[-2]',
+          'hover:bg-muted hover:shadow-sm hover:z-[-1]',
+        )}
+        style={style}
+        onClick={onClick}
+      />
+    );
+  },
+);
+
+MeasureHighlight.displayName = 'MeasureHighlight';
