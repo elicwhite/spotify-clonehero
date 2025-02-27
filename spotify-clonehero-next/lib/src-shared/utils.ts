@@ -76,3 +76,17 @@ export function hasVideoName(fileName: string) {
     )
   );
 }
+
+/**
+ * @returns `true` if `fileName` has a valid ini file extension.
+ */
+export function hasIniExtension(fileName: string) {
+  return 'ini' === getExtension(fileName).toLowerCase();
+}
+
+/**
+ * @returns `true` if `fileName` is a valid ini fileName.
+ */
+export function hasIniName(fileName: string) {
+  return fileName === 'song.ini';
+}

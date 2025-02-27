@@ -25,13 +25,11 @@ import {
 import convertToVexFlow from './convertToVexflow';
 import {RenderData, renderMusic} from './renderVexflow';
 import {ChartResponseEncore} from '@/lib/chartSelection';
-import {Files} from './ClientPage';
 
 import {getBasename} from '@/lib/src-shared/utils';
 import {cn} from '@/lib/utils';
 import SheetMusic from './SheetMusic';
-
-type ParsedChart = ReturnType<typeof parseChartFile>;
+import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData

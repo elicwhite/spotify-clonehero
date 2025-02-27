@@ -1742,11 +1742,6 @@
     "@wasm-audio-decoders/common" "9.0.5"
     codec-parser "2.4.3"
 
-"@xmldom/xmldom@^0.8.10":
-  version "0.8.10"
-  resolved "https://registry.yarnpkg.com/@xmldom/xmldom/-/xmldom-0.8.10.tgz#a1337ca426aa61cef9fe15b5b28e340a72f6fa99"
-  integrity sha512-2WALfTl4xo2SkGCYRt6rDTFfk9R1czmBvUQy12gK2KuRKIpWEhcbbzy8EZXtz/jkRqHX8bFEc6FC1HjX4TUWYw==
-
 "@xmldom/xmldom@^0.9.4":
   version "0.9.7"
   resolved "https://registry.yarnpkg.com/@xmldom/xmldom/-/xmldom-0.9.7.tgz#f21bebdcde4af682a810062b14585c89bb7fab07"
@@ -2315,11 +2310,6 @@ char-regex@^1.0.2:
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/char-regex/-/char-regex-1.0.2.tgz#d744358226217f981ed58f479b1d6bcc29545dcf"
   integrity sha512-kWWXztvZ5SBQV+eRgKFeh8q5sLuZY2+8WUIzlxWVTg+oGwY14qylx1KbKzHd8P6ZYkAg0xyIDU9JMHhyJMZ1jw==
-
-charset-detector@^0.0.2:
-  version "0.0.2"
-  resolved "https://registry.yarnpkg.com/charset-detector/-/charset-detector-0.0.2.tgz#1cd5ddaf56e83259c6ef8e906ccf06f75fe9a1b2"
-  integrity sha512-aZBFdf9aE168W7w3t9JNC0w9hZdTKjtq1hsrfbziJA4DrNI22Mfrc74gw3aADIA9bCQV2IpnbjyQcDHa3qM4rg==
 
 chokidar@^3.5.3:
   version "3.5.3"
@@ -3008,11 +2998,6 @@ eventemitter3@^5.0.1:
   resolved "https://registry.yarnpkg.com/eventemitter3/-/eventemitter3-5.0.1.tgz#53f5ffd0a492ac800721bb42c66b841de96423c4"
   integrity sha512-GWkBvjiSZK87ELrYOSESUYeVIc9mvLLf/nXalMOS5dYrgZq9o5OVkbZAVM06CVxYsCwH9BDZFPlQTlPA1j4ahA==
 
-events@^3.3.0:
-  version "3.3.0"
-  resolved "https://registry.yarnpkg.com/events/-/events-3.3.0.tgz#31a95ad0a924e2d2c419a813aeb2c4e878ea7400"
-  integrity sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==
-
 exceljs@^4.4.0:
   version "4.4.0"
   resolved "https://registry.yarnpkg.com/exceljs/-/exceljs-4.4.0.tgz#cfb1cb8dcc82c760a9fc9faa9e52dadab66b0156"
@@ -3042,13 +3027,6 @@ execa@^5.0.0:
     onetime "^5.1.2"
     signal-exit "^3.0.3"
     strip-final-newline "^2.0.0"
-
-exifreader@^4.16.0:
-  version "4.16.0"
-  resolved "https://registry.yarnpkg.com/exifreader/-/exifreader-4.16.0.tgz#e07b94bb4fc3682c2d3ec3961aa0139f147bc97c"
-  integrity sha512-Ivd4lr/EZ2lPHBrAFsO4C90OUKihQWJfsUjGAn7pAuRcXs/RqdENFQLIRQDVLn+KFE5GuSN8q5AdRIDPT94QUQ==
-  optionalDependencies:
-    "@xmldom/xmldom" "^0.8.10"
 
 exifreader@^4.23.2:
   version "4.26.1"
@@ -4915,14 +4893,6 @@ parse-json@^5.2.0:
     json-parse-even-better-errors "^2.3.0"
     lines-and-columns "^1.1.6"
 
-parse-sng@^3.1.2:
-  version "3.1.2"
-  resolved "https://registry.yarnpkg.com/parse-sng/-/parse-sng-3.1.2.tgz#1c2e31e0f9b1792cfbbb916a9b96c16a24a970b2"
-  integrity sha512-gAFsAJ6yaU2uH8UeSRC+EYFAN/urm/ICRJSLSwP1sqVBEF/VhN0XAxNNFTeLGsgdv1V2gx6pLA8sS9M6YX/FCA==
-  dependencies:
-    binary-parser "^2.2.1"
-    events "^3.3.0"
-
 parse-sng@^4.0.3:
   version "4.0.3"
   resolved "https://registry.yarnpkg.com/parse-sng/-/parse-sng-4.0.3.tgz#bdeb1438b5592c3b2a34236088f0917c32d559de"
@@ -5404,36 +5374,12 @@ safe-regex-test@^1.0.0:
     get-intrinsic "^1.1.3"
     is-regex "^1.1.4"
 
-sanitize-filename@^1.6.3:
-  version "1.6.3"
-  resolved "https://registry.yarnpkg.com/sanitize-filename/-/sanitize-filename-1.6.3.tgz#755ebd752045931977e30b2025d340d7c9090378"
-  integrity sha512-y/52Mcy7aw3gRm7IrcGDFx/bCk4AhRh2eI9luHOQM86nZsqwiRkkq2GekHXBBD+SmPidc8i2PqtYZl+pWJ8Oeg==
-  dependencies:
-    truncate-utf8-bytes "^1.0.0"
-
 saxes@^5.0.1:
   version "5.0.1"
   resolved "https://registry.yarnpkg.com/saxes/-/saxes-5.0.1.tgz#eebab953fa3b7608dbe94e5dadb15c888fa6696d"
   integrity sha512-5LBh1Tls8c9xgGjw3QrMwETmTMVk0oFgvrFSvWx62llR2hcEInrKNZ2GZCCuuy2lvWrdl5jhbpeqc5hRYKFOcw==
   dependencies:
     xmlchars "^2.2.0"
-
-scan-chart-web@^3.4.5-1:
-  version "3.4.5-1"
-  resolved "https://registry.yarnpkg.com/scan-chart-web/-/scan-chart-web-3.4.5-1.tgz#3da209c199b76d82d9822d8e55da9c7f14468f10"
-  integrity sha512-98IfUmLkKapvrcoWdwq/hBhk+VBLs32WMYLuTbu6LrnHQNx/uFdy1X9V0MNtFu0xFF1GAyz2Qw3kf6xXnVrRaQ==
-  dependencies:
-    bottleneck "^2.19.5"
-    charset-detector "^0.0.2"
-    events "^3.3.0"
-    exifreader "^4.16.0"
-    js-md5 "^0.8.3"
-    lodash "^4.17.21"
-    midievents "^2.0.0"
-    midifile "^2.0.0"
-    parse-sng "^3.1.2"
-    sanitize-filename "^1.6.3"
-    workerpool "^6.4.0"
 
 scan-chart@^6.0.0:
   version "6.0.0"
@@ -5862,13 +5808,6 @@ tr46@~0.0.3:
   resolved "https://registry.yarnpkg.com/traverse/-/traverse-0.3.9.tgz#717b8f220cc0bb7b44e40514c22b2e8bbc70d8b9"
   integrity sha512-iawgk0hLP3SxGKDfnDJf8wTz4p2qImnyihM5Hh/sGvQ3K37dPi/w8sRhdNIxYA1TwFwc5mDhIJq+O0RsvXBKdQ==
 
-truncate-utf8-bytes@^1.0.0:
-  version "1.0.2"
-  resolved "https://registry.yarnpkg.com/truncate-utf8-bytes/-/truncate-utf8-bytes-1.0.2.tgz#405923909592d56f78a5818434b0b78489ca5f2b"
-  integrity sha512-95Pu1QXQvruGEhv62XCMO3Mm90GscOCClvrIUwCM0PYOXK3kaF3l3sIHxx71ThJfcbM2O5Au6SO3AWCSEfW4mQ==
-  dependencies:
-    utf8-byte-length "^1.0.1"
-
 ts-api-utils@^1.0.1:
   version "1.0.3"
   resolved "https://registry.yarnpkg.com/ts-api-utils/-/ts-api-utils-1.0.3.tgz#f12c1c781d04427313dbac808f453f050e54a331"
@@ -6058,11 +5997,6 @@ utf-8@^2.0.0:
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/utf-8/-/utf-8-2.0.0.tgz#6c2a309d683958862a01b5bf8e1d2dff46d36bf9"
   integrity sha512-DItg/Z20ltBzugPrb8Mx1oN0F8CqN5bD38T57YM/pF/GOzUsNVXiellI0PbJPq3e1Z7BEDNoWP1H1+4n7g54Cg==
-
-utf8-byte-length@^1.0.1:
-  version "1.0.4"
-  resolved "https://registry.yarnpkg.com/utf8-byte-length/-/utf8-byte-length-1.0.4.tgz#f45f150c4c66eee968186505ab93fcbb8ad6bf61"
-  integrity sha512-4+wkEYLBbWxqTahEsWrhxepcoVOJ+1z5PGIjPZxRkytcdSUaNjIjBM7Xn8E+pdSuV7SzvWovBFA54FO0JSoqhA==
 
 util-deprecate@^1.0.1, util-deprecate@^1.0.2, util-deprecate@~1.0.1:
   version "1.0.2"

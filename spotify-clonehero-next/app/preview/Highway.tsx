@@ -7,42 +7,42 @@ import React, {
   useState,
 } from 'react';
 import {SelectedTrack, setupRenderer} from '@/lib/preview/highway';
-import {ChartParser} from '@/lib/preview/chart-parser';
-import {MidiParser} from '@/lib/preview/midi-parser';
 import {useSelect} from 'downshift';
 import {cn} from '@/lib/utils';
 import {Button} from '@/components/ui/button';
 import {FaRegPlayCircle} from 'react-icons/fa';
 import throttle from 'throttleit';
+import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 
 export const Highway: FC<{
-  chart: ChartParser | MidiParser;
-  audioFiles: ArrayBuffer[];
+  chart: ParsedChart;
+  audioFiles: Files;
 }> = ({chart, audioFiles}) => {
+  chart.trackData;
+
   const sizingRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const [selectedTrack, setSelectedTrack] = useState<SelectedTrack>({
-    instrument: chart.trackParsers[0].instrument,
-    difficulty: chart.trackParsers[0].difficulty,
+    instrument: chart.trackData[0].instrument,
+    difficulty: chart.trackData[0].difficulty,
   });
   const rendererRef = useRef<ReturnType<typeof setupRenderer> | null>(null);
   const [songProgress, setSongProgress] = useState(0); // 0 to 1
   const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
-    const trackParser = chart.trackParsers.find(
+    const track = chart.trackData.find(
       parser =>
         parser.instrument == selectedTrack.instrument &&
         parser.difficulty == selectedTrack.difficulty,
     )!;
-    if (trackParser == null) {
+    if (track == null) {
       console.log(
         'No track found for',
         selectedTrack,
         'Only found',
-        chart.trackParsers.map(
-          trackParser =>
-            `${trackParser.instrument} - ${trackParser.difficulty}`,
+        chart.trackData.map(
+          trackData => `${trackData.instrument} - ${trackData.difficulty}`,
         ),
       );
       return;
@@ -61,7 +61,7 @@ export const Highway: FC<{
       },
     );
     rendererRef.current = renderer;
-    renderer.prepTrack(trackParser);
+    renderer.prepTrack(track);
     renderer.startRender();
 
     window.renderer = renderer;
@@ -132,14 +132,14 @@ function InstrumentDifficultyPicker({
   selectedTrack,
   onTrackSelected,
 }: {
-  chart: ChartParser | MidiParser;
+  chart: ParsedChart;
   selectedTrack: SelectedTrack;
   onTrackSelected: (track: SelectedTrack) => void;
 }) {
   const trackTypes = useMemo(() => {
     return chart == null
       ? []
-      : chart.trackParsers.map(parser => ({
+      : chart.trackData.map(parser => ({
           instrument: parser.instrument,
           difficulty: parser.difficulty,
         }));

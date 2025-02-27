@@ -1,14 +1,11 @@
 import {RefObject} from 'react';
 import * as THREE from 'three';
-import {ChartParser} from './chart-parser';
-import {MidiParser} from './midi-parser';
-import {
-  Difficulty,
-  EventType,
-  GroupedTrackEvent,
-  Instrument,
-} from 'scan-chart-web';
-import {TrackParser} from './track-parser';
+import {Files, ParsedChart} from './chorus-chart-processing';
+import {Difficulty, Instrument, noteFlags, noteTypes} from 'scan-chart';
+
+type Track = ParsedChart['trackData'][0];
+type NoteGroup = ParsedChart['trackData'][0]['noteEventGroups'][0];
+type Note = NoteGroup[0];
 
 export type SelectedTrack = {
   instrument: Instrument;
@@ -39,10 +36,10 @@ const GUITAR_LANE_COLORS = [
 let instanceCounter = 0;
 
 export const setupRenderer = (
-  chart: ChartParser | MidiParser,
+  chart: ParsedChart,
   sizingRef: RefObject<HTMLDivElement>,
   ref: RefObject<HTMLDivElement>,
-  audioFiles: ArrayBuffer[],
+  audioFiles: Files,
   progressListener: (percent: number) => void,
   playPauseListener: (isPlaying: boolean) => void,
 ) => {
@@ -113,7 +110,7 @@ export const setupRenderer = (
   let trackPromise: ReturnType<typeof prepTrack>;
 
   const methods = {
-    prepTrack(track: TrackParser) {
+    prepTrack(track: Track) {
       const scene = new THREE.Scene();
       trackPromise = prepTrack(scene, track);
       console.log('track', track);
@@ -135,7 +132,7 @@ export const setupRenderer = (
         highwayTexture,
         highwayGroups,
         audioSources,
-        chart.notesData.length,
+        chart.endEvents[0].msTime,
       );
     },
     play() {
@@ -149,7 +146,7 @@ export const setupRenderer = (
         throw new Error('Must provide percent or ms');
       }
 
-      const songLength = chart.notesData.length;
+      const songLength = chart.endEvents[0].msTime;
       const offset: number = ms ?? songLength * percent!;
       const percentCalculated: number = percent ?? ms! / songLength;
       trackOffset = offset;
@@ -173,7 +170,8 @@ export const setupRenderer = (
       await audioCtx.resume();
     },
     destroy: () => {
-      window.clearInterval(progressInterval);
+      // I can't figure out where this was used
+      // window.clearInterval(progressInterval);
       console.log('Tearing down the renderer');
       window.removeEventListener('resize', onResize, false);
       audioCtx.close();
@@ -185,12 +183,12 @@ export const setupRenderer = (
 
   function isSongOver() {
     const elapsedTime = trackOffset + audioCtx.currentTime * 1000;
-    const songLength = chart.notesData.length;
+    const songLength = chart.endEvents[0].msTime;
 
     return elapsedTime > songLength + 2000;
   }
 
-  async function prepTrack(scene: THREE.Scene, track: TrackParser) {
+  async function prepTrack(scene: THREE.Scene, track: Track) {
     const {highwayTexture} = await initPromise;
 
     if (track.instrument == 'drums') {
@@ -201,15 +199,12 @@ export const setupRenderer = (
       scene.add(await loadAndCreateHitBox(textureLoader));
     }
 
-    const groupedNotes = track.groupedNotes;
-
     const highwayGroups = await generateNoteHighway(
       textureLoader,
       track.instrument,
-      track.format,
       highwaySpeed,
       clippingPlanes,
-      groupedNotes,
+      track,
     );
     scene.add(highwayGroups);
 
@@ -266,7 +261,7 @@ export const setupRenderer = (
   }
 };
 
-async function setupAudioContext(audioFiles: ArrayBuffer[]) {
+async function setupAudioContext(audioFiles: Files) {
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   audioCtx.suspend();
 
@@ -282,14 +277,15 @@ async function setupAudioContext(audioFiles: ArrayBuffer[]) {
 
   const audioSources = (
     await Promise.all(
-      audioFiles.map(async arrayBuffer => {
+      audioFiles.map(async file => {
+        const arrayBuffer = file.data;
         if (audioCtx.state === 'closed') {
           // Can happen if cleaned up before setup is done
           return;
         }
 
         // If we don't copy this, we can only play it once. decode destroys the buffer
-        const bufferCopy = arrayBuffer.slice(0);
+        const bufferCopy = arrayBuffer.slice(0).buffer;
         let decodedAudioBuffer;
         try {
           decodedAudioBuffer = await audioCtx.decodeAudioData(bufferCopy);
@@ -355,53 +351,57 @@ async function loadNoteTextures(
   }
 
   return {
-    getTextureForNote(
-      noteType: EventType,
-      modifiers: DrumModifiers | GuitarModifiers,
-    ) {
+    getTextureForNote(note: Note, {inStarPower}: {inStarPower: boolean}) {
       if (isDrums) {
-        switch (noteType) {
-          case EventType.kick:
-            return kickMaterial;
-          case EventType.red:
-            return tomTextures.red;
-          case EventType.green:
-            return tomTextures.green;
-          case EventType.orange:
-            throw new Error('should not have an orange note');
-          case EventType.greenTomOrCymbalMarker:
-            return cymbalTextures.green;
-          case EventType.blue:
-            return tomTextures.blue;
-          case EventType.blueTomOrCymbalMarker:
-            return cymbalTextures.blue;
-          case EventType.yellow:
-            return tomTextures.yellow;
-          case EventType.yellowTomOrCymbalMarker:
-            return cymbalTextures.yellow;
-          default:
-            throw new Error(`Invalid sprite requested: ${noteType}`);
+        if (note.type == noteTypes.greenDrum && note.flags & noteFlags.cymbal) {
+          return cymbalTextures.green;
+        } else if (
+          note.type == noteTypes.greenDrum &&
+          note.flags & noteFlags.cymbal
+        ) {
+          return cymbalTextures.green;
+        } else if (
+          note.type == noteTypes.blueDrum &&
+          note.flags & noteFlags.cymbal
+        ) {
+          return cymbalTextures.blue;
+        } else if (
+          note.type == noteTypes.yellowDrum &&
+          note.flags & noteFlags.cymbal
+        ) {
+          return cymbalTextures.yellow;
+        } else if (note.type == noteTypes.kick) {
+          return kickMaterial;
+        } else if (note.type == noteTypes.redDrum) {
+          return tomTextures.red;
+        } else if (note.type == noteTypes.greenDrum) {
+          return tomTextures.green;
+        } else if (note.type == noteTypes.blueDrum) {
+          return tomTextures.blue;
+        } else if (note.type == noteTypes.yellowDrum) {
+          return tomTextures.yellow;
+        } else {
+          throw new Error(`Invalid sprite requested: ${note.type}`);
         }
       } else {
-        const guitarModifiers = modifiers as GuitarModifiers;
-
-        const textures = guitarModifiers.isTap
-          ? strumTexturesTap
-          : guitarModifiers.isForce
-          ? strumTexturesHopo
-          : strumTextures;
-        switch (noteType) {
-          case EventType.open:
+        const textures =
+          note.flags & noteFlags.tap
+            ? strumTexturesTap
+            : note.flags & noteFlags.hopo
+            ? strumTexturesHopo
+            : strumTextures;
+        switch (note.type) {
+          case noteTypes.open:
             return openMaterial;
-          case EventType.green:
+          case noteTypes.green:
             return textures[0];
-          case EventType.red:
+          case noteTypes.red:
             return textures[1];
-          case EventType.yellow:
+          case noteTypes.yellow:
             return textures[2];
-          case EventType.blue:
+          case noteTypes.blue:
             return textures[3];
-          case EventType.orange:
+          case noteTypes.orange:
             return textures[4];
           default:
             throw new Error('Invalid sprite requested');
@@ -607,137 +607,34 @@ function calculateNoteXOffset(instrument: Instrument, lane: number) {
   );
 }
 
-function normalizeDrumEvents(
-  events: Map<EventType, number>,
-  format: TrackParser['format'],
-) {
-  // Normalize weirdness
-  // If orange, change to green cymbal
-  // orange comes from 5 lane charts
-  // Possible bug: I have no idea what happens if there's a green and an orange in a 5
-  // lane chart
-
-  /*
-  5-lane Chart	Conversion
-Red	Red
-Yellow	Yellow cymbal
-Blue	Blue tom
-Orange	Green cymbal
-Green	Green tom
-Orange + Green	G cym + B tom
-  */
-
-  if (events.has(EventType.orange)) {
-    events.set(EventType.green, events.get(EventType.orange)!);
-    events.delete(EventType.orange);
-  }
-
-  // I've been told that on mid charts, tomOrCymbal marker is tom, and on chart charts it's cymbal
-  if (format == 'mid') {
-    if (events.has(EventType.orange)) {
-      const orangeLength = events.get(EventType.orange)!;
-      events.set(EventType.green, orangeLength);
-      events.delete(EventType.greenTomOrCymbalMarker);
-      events.delete(EventType.orange);
-    }
-
-    if (
-      events.has(EventType.yellow) &&
-      events.has(EventType.yellowTomOrCymbalMarker)
-    ) {
-      events.delete(EventType.yellowTomOrCymbalMarker);
-    } else if (events.has(EventType.yellowTomOrCymbalMarker)) {
-      events.set(
-        EventType.yellow,
-        events.get(EventType.yellowTomOrCymbalMarker)!,
-      );
-      events.delete(EventType.yellowTomOrCymbalMarker);
-    } else if (events.has(EventType.yellow)) {
-      events.set(
-        EventType.yellowTomOrCymbalMarker,
-        events.get(EventType.yellow)!,
-      );
-      events.delete(EventType.yellow);
-    }
-
-    if (
-      events.has(EventType.green) &&
-      events.has(EventType.greenTomOrCymbalMarker)
-    ) {
-      events.delete(EventType.greenTomOrCymbalMarker);
-    } else if (events.has(EventType.greenTomOrCymbalMarker)) {
-      events.set(
-        EventType.green,
-        events.get(EventType.greenTomOrCymbalMarker)!,
-      );
-      events.delete(EventType.greenTomOrCymbalMarker);
-    } else if (events.has(EventType.green)) {
-      events.set(
-        EventType.greenTomOrCymbalMarker,
-        events.get(EventType.green)!,
-      );
-      events.delete(EventType.green);
-    }
-
-    if (
-      events.has(EventType.blue) &&
-      events.has(EventType.blueTomOrCymbalMarker)
-    ) {
-      events.delete(EventType.blueTomOrCymbalMarker);
-    } else if (events.has(EventType.blueTomOrCymbalMarker)) {
-      events.set(EventType.blue, events.get(EventType.blueTomOrCymbalMarker)!);
-      events.delete(EventType.blueTomOrCymbalMarker);
-    } else if (events.has(EventType.blue)) {
-      events.set(EventType.blueTomOrCymbalMarker, events.get(EventType.blue)!);
-      events.delete(EventType.blue);
-    }
-  } else {
-    if (events.has(EventType.orange)) {
-      const orangeLength = events.get(EventType.orange)!;
-      events.set(EventType.green, orangeLength);
-      events.delete(EventType.orange);
-    }
-
-    if (
-      events.has(EventType.yellow) &&
-      events.has(EventType.yellowTomOrCymbalMarker)
-    ) {
-      events.delete(EventType.yellow);
-    }
-
-    if (
-      events.has(EventType.green) &&
-      events.has(EventType.greenTomOrCymbalMarker)
-    ) {
-      events.delete(EventType.green);
-    }
-
-    if (
-      events.has(EventType.blue) &&
-      events.has(EventType.blueTomOrCymbalMarker)
-    ) {
-      events.delete(EventType.blue);
-    }
-  }
-}
-
 async function generateNoteHighway(
   textureLoader: THREE.TextureLoader,
   instrument: Instrument,
-  format: TrackParser['format'],
   highwaySpeed: number,
   clippingPlanes: THREE.Plane[],
-  groupedNotes: GroupedTrackEvent[],
+  track: Track,
 ): Promise<THREE.Group> {
+  const groupedNotes = track.noteEventGroups;
+  const starPowerSections = track.starPowerSections;
+
+  function inStarPowerSection(time: number) {
+    return starPowerSections.some(
+      section =>
+        time >= section.msTime && time <= section.msTime + section.msLength,
+    );
+  }
+
   const highwayGroups = new THREE.Group();
 
   const {getTextureForNote} = await loadNoteTextures(textureLoader, instrument);
 
   for (const group of groupedNotes) {
-    const time = group.time;
-    const events = new Map<EventType, number>(
-      group.events.map(event => [event.type, event.length]),
-    );
+    const time = group[0].msTime;
+    const inStarPower = inStarPowerSection(time);
+
+    // const events = new Map<EventType, number>(
+    //   group.events.map(event => [event.type, event.length]),
+    // );
 
     const notesGroup = new THREE.Group();
     notesGroup.position.y = (time / 1000) * highwaySpeed - 1;
@@ -745,12 +642,13 @@ async function generateNoteHighway(
 
     // Calculate modifiers
     if (instrument == 'drums') {
-      normalizeDrumEvents(events, format);
-
-      for (const event of events.keys()) {
-        if (event === EventType.kick) {
+      // normalizeDrumEvents(events, format);
+      for (const note of group) {
+        if (note.type === noteTypes.kick) {
           const kickScale = 0.045;
-          const sprite = new THREE.Sprite(getTextureForNote(event, {}));
+          const sprite = new THREE.Sprite(
+            getTextureForNote(note, {inStarPower}),
+          );
           sprite.center = new THREE.Vector2(0.5, -0.5);
           const aspectRatio =
             sprite.material.map!.image.width /
@@ -762,57 +660,49 @@ async function generateNoteHighway(
           sprite.material.transparent = true;
           sprite.renderOrder = 1;
           notesGroup.add(sprite);
-        }
+        } else {
+          const lane =
+            note.type == noteTypes.redDrum
+              ? 0
+              : note.type == noteTypes.yellow ||
+                note.type == noteTypes.yellowDrum
+              ? 1
+              : note.type == noteTypes.blue || note.type == noteTypes.blueDrum
+              ? 2
+              : note.type == noteTypes.green ||
+                note.type == noteTypes.greenDrum ||
+                note.type == noteTypes.orange
+              ? 3
+              : -1;
 
-        const lane =
-          event == EventType.red
-            ? 0
-            : event == EventType.yellow ||
-              event == EventType.yellowTomOrCymbalMarker
-            ? 1
-            : event == EventType.blue ||
-              event == EventType.blueTomOrCymbalMarker
-            ? 2
-            : event == EventType.green ||
-              event == EventType.greenTomOrCymbalMarker ||
-              event == EventType.orange
-            ? 3
-            : -1;
+          if (lane != -1) {
+            const noteXPosition = calculateNoteXOffset(instrument, lane);
+            const sprite = new THREE.Sprite(
+              getTextureForNote(note, {inStarPower}),
+            );
+            sprite.position.x = noteXPosition;
 
-        if (lane != -1) {
-          const noteXPosition = calculateNoteXOffset(instrument, lane);
-          const sprite = new THREE.Sprite(getTextureForNote(event, {}));
-          sprite.position.x = noteXPosition;
-
-          sprite.center = new THREE.Vector2(0.5, 0);
-          const aspectRatio =
-            sprite.material.map!.image.width /
-            sprite.material.map!.image.height;
-          sprite.scale.set(SCALE * aspectRatio, SCALE, SCALE);
-          sprite.position.z = 0;
-          sprite.material.clippingPlanes = clippingPlanes;
-          sprite.material.depthTest = false;
-          sprite.material.transparent = true;
-          sprite.renderOrder = 4;
-          notesGroup.add(sprite);
+            sprite.center = new THREE.Vector2(0.5, 0);
+            const aspectRatio =
+              sprite.material.map!.image.width /
+              sprite.material.map!.image.height;
+            sprite.scale.set(SCALE * aspectRatio, SCALE, SCALE);
+            sprite.position.z = 0;
+            sprite.material.clippingPlanes = clippingPlanes;
+            sprite.material.depthTest = false;
+            sprite.material.transparent = true;
+            sprite.renderOrder = 4;
+            notesGroup.add(sprite);
+          }
         }
       }
     } else {
-      const modifiers = {
-        isTap: events.has(EventType.tap),
-        isForce: events.has(EventType.force),
-        isStarPower: events.has(EventType.starPower),
-      };
-
-      // Remove the modifier events, what's left should be notes
-      events.delete(EventType.tap);
-      events.delete(EventType.force);
-      events.delete(EventType.starPower);
-
-      for (const event of events.keys()) {
-        if (event == EventType.open) {
+      for (const note of group) {
+        if (note.flags & noteFlags.strum) {
           const openScale = 0.11;
-          const sprite = new THREE.Sprite(getTextureForNote(event, {}));
+          const sprite = new THREE.Sprite(
+            getTextureForNote(note, {inStarPower}),
+          );
           sprite.center = new THREE.Vector2(0.5, 0);
           const aspectRatio =
             sprite.material.map!.image.width /
@@ -828,15 +718,15 @@ async function generateNoteHighway(
         } else {
           // Standard note
           const lane =
-            event == EventType.green
+            note.type == noteTypes.green
               ? 0
-              : event == EventType.red
+              : note.type == noteTypes.red
               ? 1
-              : event == EventType.yellow
+              : note.type == noteTypes.yellow
               ? 2
-              : event == EventType.blue
+              : note.type == noteTypes.blue
               ? 3
-              : event == EventType.orange
+              : note.type == noteTypes.orange
               ? 4
               : -1;
 
@@ -850,7 +740,7 @@ async function generateNoteHighway(
             noteGroup.position.x = noteXPosition;
 
             const sprite = new THREE.Sprite(
-              getTextureForNote(event, modifiers),
+              getTextureForNote(note, {inStarPower}),
             );
 
             sprite.center = new THREE.Vector2(0.5, 0);
@@ -866,7 +756,8 @@ async function generateNoteHighway(
             noteGroup.add(sprite);
 
             // Add the sustain
-            const length = events.get(event)!;
+
+            const length = note.msLength;
             if (length > 0) {
               const mat = new THREE.MeshBasicMaterial({
                 color: GUITAR_LANE_COLORS[lane],
