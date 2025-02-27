@@ -96,7 +96,7 @@ export default function Renderer({
   }));
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen bg-background overflow-hidden">
       {/* Left Sidebar */}
       <div className="w-64 border-r p-4 flex flex-col gap-6">
         <div className="space-y-4">
@@ -181,7 +181,7 @@ export default function Renderer({
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col overflow-hidden">
         <div className="h-12 border-b flex items-center px-4 gap-4">
           <div className="w-full bg-secondary rounded-full h-1">
             <div
@@ -196,14 +196,14 @@ export default function Renderer({
           </span>
         </div>
 
-        <div className="p-8 flex-1">
+        <div className="p-8 flex-1 flex flex-col overflow-hidden">
           <h1 className="text-3xl font-bold mb-8">
             {metadata.name} by {metadata.artist}
           </h1>
 
+          {/* <div className="flex-1"> */}
           <SheetMusic
             // currentTime={currentPlayback}
-            // midiData={midiData}
             chart={chart}
             difficulty={difficulty}
             showBarNumbers={showBarNumbers}
@@ -217,6 +217,7 @@ export default function Renderer({
               setIsPlaying(true);
             }}
           />
+          {/* </div> */}
         </div>
       </div>
     </div>

@@ -65,7 +65,7 @@ export default function MyComponent() {
   }, []);
 
   return (
-    <div className="flex flex-col w-full flex-1">
+    <div className="flex flex-col w-full flex-1 overflow-hidden">
       <div className="flex flex-row gap-10">
         {md5 == null && (
           <EncoreAutocomplete onChartSelected={playSelectedChart} />

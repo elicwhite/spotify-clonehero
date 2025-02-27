@@ -140,13 +140,12 @@ export default function SheetMusic({
   });
 
   return (
-    <>
-      <div
-        ref={vexflowContainerRef}
-        className="w-full h-[calc(100vh-12rem)] bg-white rounded-lg border"
-      />
-      {measureHighlights}
-    </>
+    <div className="flex-1 flex justify-center bg-white rounded-lg border overflow-y-auto">
+      <div className="relative">
+        <div ref={vexflowContainerRef} className="h-full" />
+        {measureHighlights}
+      </div>
+    </div>
   );
 }
 
