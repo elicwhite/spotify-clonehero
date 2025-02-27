@@ -198,7 +198,7 @@ export default function Renderer({
 
         <div className="p-8 flex-1 flex flex-col overflow-hidden">
           <h1 className="text-3xl font-bold mb-8">
-            {metadata.name} by {metadata.artist}
+            {metadata.name} by {metadata.artist} charted by {metadata.charter}
           </h1>
 
           {/* <div className="flex-1"> */}
