@@ -15,9 +15,10 @@ import throttle from 'throttleit';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 
 export const Highway: FC<{
+  metadata: ChartResponseEncore;
   chart: ParsedChart;
   audioFiles: Files;
-}> = ({chart, audioFiles}) => {
+}> = ({metadata, chart, audioFiles}) => {
   chart.trackData;
 
   const sizingRef = useRef<HTMLDivElement>(null);
@@ -49,6 +50,7 @@ export const Highway: FC<{
     }
 
     const renderer = setupRenderer(
+      metadata,
       chart,
       sizingRef,
       ref,

@@ -2,6 +2,7 @@ import {RefObject} from 'react';
 import * as THREE from 'three';
 import {Files, ParsedChart} from './chorus-chart-processing';
 import {Difficulty, Instrument, noteFlags, noteTypes} from 'scan-chart';
+import {ChartResponseEncore} from '../chartSelection';
 
 type Track = ParsedChart['trackData'][0];
 type NoteGroup = ParsedChart['trackData'][0]['noteEventGroups'][0];
@@ -36,6 +37,7 @@ const GUITAR_LANE_COLORS = [
 let instanceCounter = 0;
 
 export const setupRenderer = (
+  metadata: ChartResponseEncore,
   chart: ParsedChart,
   sizingRef: RefObject<HTMLDivElement>,
   ref: RefObject<HTMLDivElement>,
@@ -146,7 +148,7 @@ export const setupRenderer = (
         throw new Error('Must provide percent or ms');
       }
 
-      const songLength = chart.endEvents[0].msTime;
+      const songLength = metadata.song_length;
       const offset: number = ms ?? songLength * percent!;
       const percentCalculated: number = percent ?? ms! / songLength;
       trackOffset = offset;
@@ -183,7 +185,7 @@ export const setupRenderer = (
 
   function isSongOver() {
     const elapsedTime = trackOffset + audioCtx.currentTime * 1000;
-    const songLength = chart.endEvents[0].msTime;
+    const songLength = metadata.song_length;
 
     return elapsedTime > songLength + 2000;
   }

@@ -19,8 +19,7 @@ export type Files = {fileName: string; data: Uint8Array}[];
 
 export async function getChartAndAudioFiles(chart: ChartResponseEncore) {
   const files = await getChartFiles(chart);
-  const [iniContent, parsedChart, audioFiles] = await Promise.all([
-    (async () => getIniContents(files))(),
+  const [parsedChart, audioFiles] = await Promise.all([
     (async () => {
       const {chartData, format} = findChartData(files);
       const iniChartModifiers = Object.assign(
@@ -41,7 +40,7 @@ export async function getChartAndAudioFiles(chart: ChartResponseEncore) {
     (async () => findAudioFiles(files))(),
   ]);
 
-  return {metadata: iniContent, chart: parsedChart, audioFiles};
+  return {metadata: chart, chart: parsedChart, audioFiles};
 }
 
 async function getChartFiles(chartData: ChartResponseEncore) {

@@ -105,6 +105,7 @@ export default function Preview() {
       </div>
       {rendering != null && (
         <Highway
+          metadata={rendering.metadata}
           chart={rendering.chart}
           audioFiles={rendering.audioFiles}></Highway>
       )}
