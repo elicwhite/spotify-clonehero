@@ -148,7 +148,7 @@ export const setupRenderer = (
         throw new Error('Must provide percent or ms');
       }
 
-      const songLength = metadata.song_length;
+      const songLength = metadata.song_length || 60 * 5 * 1000;
       const offset: number = ms ?? songLength * percent!;
       const percentCalculated: number = percent ?? ms! / songLength;
       trackOffset = offset;
@@ -185,7 +185,7 @@ export const setupRenderer = (
 
   function isSongOver() {
     const elapsedTime = trackOffset + audioCtx.currentTime * 1000;
-    const songLength = metadata.song_length;
+    const songLength = metadata.song_length || 60 * 5 * 1000;
 
     return elapsedTime > songLength + 2000;
   }

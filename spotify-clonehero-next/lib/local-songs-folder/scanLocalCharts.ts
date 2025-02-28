@@ -9,6 +9,7 @@ export type SongIniData = {
   diff_drums?: number | null;
   diff_drums_real?: number | null;
   diff_guitar?: number | null;
+  song_length?: number | null;
 };
 
 export type SongAccumulator = {

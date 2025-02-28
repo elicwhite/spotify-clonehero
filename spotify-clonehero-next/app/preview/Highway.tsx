@@ -13,6 +13,7 @@ import {Button} from '@/components/ui/button';
 import {FaRegPlayCircle} from 'react-icons/fa';
 import throttle from 'throttleit';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
+import {ChartResponseEncore} from '@/lib/chartSelection';
 
 export const Highway: FC<{
   metadata: ChartResponseEncore;
@@ -71,7 +72,7 @@ export const Highway: FC<{
     return () => {
       renderer.destroy();
     };
-  }, [audioFiles, chart, selectedTrack]);
+  }, [metadata, audioFiles, chart, selectedTrack]);
 
   // Need to listen to audio context state as well
   const handlePlayPause = useCallback(() => {
