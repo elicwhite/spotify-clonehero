@@ -123,14 +123,8 @@ export default function Renderer({
     });
   }, [volumeControls, audioManagerRef]);
 
-  const endEvents = chart.endEvents;
-  if (endEvents.length !== 1) {
-    throw new Error(
-      `Song ${metadata.name} by ${metadata.artist} (${metadata.charter}) had more than one end event: ` +
-        JSON.stringify(endEvents, null, 2),
-    );
-  }
-  const songDuration = chart.endEvents[0].msTime / 1000;
+  const songDuration =
+    metadata.song_length == null ? 5 * 60 : metadata.song_length / 1000;
 
   const difficultySelectorOnSelect = useCallback(
     (selectedDifficulty: string) => {
