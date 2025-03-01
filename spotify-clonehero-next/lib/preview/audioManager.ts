@@ -56,7 +56,7 @@ export class AudioManager {
         this.#tracks[trackName] = new AudioTrack(
           this.#context,
           decodedAudioBuffer,
-          this.#trackEnded.bind(this),
+          this.#handleTrackEnded.bind(this),
         );
       }),
     );
@@ -106,6 +106,10 @@ export class AudioManager {
     return this.#context.currentTime - this.#startedAt + this.#trackOffset;
   }
 
+  get isInitialized() {
+    return this.#isInitialized;
+  }
+
   async stop() {
     Object.values(this.#tracks).forEach(track => {
       track.stop();
@@ -124,7 +128,7 @@ export class AudioManager {
     this.#context.close();
   }
 
-  #trackEnded() {
+  #handleTrackEnded() {
     if (Object.values(this.#tracks).some(track => track.ended === false)) {
       return;
     }

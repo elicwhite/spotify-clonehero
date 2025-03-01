@@ -11,7 +11,7 @@ import {
 import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
 import Link from 'next/link';
-import {ArrowLeft, Maximize2, Play} from 'lucide-react';
+import {ArrowLeft, Maximize2, Play, Pause} from 'lucide-react';
 import {
   RefObject,
   useCallback,
@@ -68,7 +68,6 @@ export default function Renderer({
 }) {
   const [showBarNumbers, setShowBarNumbers] = useState(false);
   const [enableColors, setEnableColors] = useState(true);
-  const [difficulty, setDifficulty] = useState<Difficulty>('expert');
   const [currentPlayback, setCurrentPlayback] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volumeControls, setVolumeControls] = useState<VolumeControl[]>([]);
@@ -88,8 +87,6 @@ export default function Renderer({
     audioManager.ready.then(() => {
       audioManagerRef.current = audioManager;
     });
-
-    setIsPlaying(true);
 
     return () => {
       audioManagerRef.current?.destroy();
@@ -141,14 +138,28 @@ export default function Renderer({
             variant="secondary"
             className="rounded-full"
             onClick={() => {
-              if (audioManagerRef.current) {
+              if (!audioManagerRef.current) {
+                return;
+              }
+
+              if (isPlaying) {
+                audioManagerRef.current.pause();
+                setIsPlaying(false);
+              } else if (!audioManagerRef.current.isInitialized) {
                 audioManagerRef.current.play({
-                  time: audioManagerRef.current.currentTime,
+                  time: 0,
                 });
-                // setIsPlaying(true);
+                setIsPlaying(true);
+              } else {
+                audioManagerRef.current.resume();
+                setIsPlaying(true);
               }
             }}>
-            <Play className="h-6 w-6" />
+            {isPlaying ? (
+              <Pause className="h-6 w-6" />
+            ) : (
+              <Play className="h-6 w-6" />
+            )}
           </Button>
           {/* <Button variant="ghost" size="icon" className="rounded-full">
             <Maximize2 className="h-6 w-6" />
@@ -254,7 +265,7 @@ export default function Renderer({
           <SheetMusic
             // currentTime={currentPlayback}
             chart={chart}
-            difficulty={difficulty}
+            difficulty={selectedDifficulty}
             showBarNumbers={showBarNumbers}
             enableColors={enableColors}
             onSelectMeasure={time => {
