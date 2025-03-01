@@ -11,7 +11,14 @@ import {
 import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
 import Link from 'next/link';
-import {ArrowLeft, Maximize2, Play, Pause} from 'lucide-react';
+import {
+  ArrowLeft,
+  Maximize2,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import {
   RefObject,
   useCallback,
@@ -84,6 +91,15 @@ export default function Renderer({
       setIsPlaying(false);
     });
 
+    setVolumeControls(
+      audioFiles.map(audioFile => ({
+        trackName: getBasename(audioFile.fileName),
+        volume: 100,
+        isMuted: false,
+        isSoloed: false,
+      })),
+    );
+
     audioManager.ready.then(() => {
       audioManagerRef.current = audioManager;
     });
@@ -102,6 +118,16 @@ export default function Renderer({
     isPlaying ? 100 : null,
   );
 
+  useEffect(() => {
+    if (volumeControls.length === 0 || audioManagerRef.current == null) {
+      return;
+    }
+
+    volumeControls.forEach(control => {
+      audioManagerRef.current?.setVolume(control.trackName, control.volume);
+    });
+  }, [volumeControls, audioManagerRef.current]);
+
   const endEvents = chart.endEvents;
   if (endEvents.length !== 1) {
     throw new Error(
@@ -118,10 +144,115 @@ export default function Renderer({
     [],
   );
 
-  const instruments = audioFiles.map(file => ({
-    name: capitalize(getBasename(file.fileName)),
-    volume: 75,
-  }));
+  const volumeSliders = useMemo(() => {
+    if (volumeControls.length === 0) {
+      // || audioManagerRef.current == null) {
+      return [];
+    }
+    // console.log('full');
+
+    return volumeControls
+      .sort((a, b) => a.trackName.localeCompare(b.trackName))
+      .map(control => {
+        return (
+          <AudioVolume
+            key={control.trackName}
+            name={control.trackName}
+            volume={control.volume}
+            isMuted={control.isMuted}
+            isSoloed={control.isSoloed}
+            onMuteClick={() => {
+              if (control.isMuted) {
+                setVolumeControls([
+                  ...volumeControls.filter(c => c !== control),
+                  {
+                    ...control,
+                    volume: control.previousVolume ?? 100,
+                    previousVolume: undefined,
+                    isMuted: false,
+                  },
+                ]);
+              } else {
+                setVolumeControls([
+                  ...volumeControls.filter(c => c !== control),
+                  {
+                    ...control,
+                    volume: 0,
+                    previousVolume: control.volume,
+                    isMuted: true,
+                  },
+                ]);
+              }
+            }}
+            onSoloClick={() => {
+              const otherControls = volumeControls.filter(c => c !== control);
+
+              if (otherControls.filter(c => c.isSoloed).length > 0) {
+                if (control.isSoloed) {
+                  setVolumeControls([
+                    ...otherControls,
+                    {
+                      ...control,
+                      isSoloed: false,
+                      isMuted: true,
+                      volume: 0,
+                      previousVolume: control.volume,
+                    },
+                  ]);
+                } else {
+                  setVolumeControls([
+                    ...otherControls,
+                    {
+                      ...control,
+                      isSoloed: true,
+                      isMuted: false,
+                      volume: control.previousVolume ?? 100,
+                      previousVolume: undefined,
+                    },
+                  ]);
+                }
+
+                return;
+              }
+
+              if (control.isSoloed) {
+                setVolumeControls([
+                  ...otherControls.map(c => ({
+                    ...c,
+                    isMuted: false,
+                    previousVolume: undefined,
+                    volume: c.previousVolume ?? 100,
+                  })),
+                  {
+                    ...control,
+                    isSoloed: false,
+                  },
+                ]);
+              } else {
+                setVolumeControls([
+                  ...otherControls.map(c => ({
+                    ...c,
+                    isMuted: true,
+                    previousVolume: c.volume,
+                    volume: 0,
+                  })),
+                  {
+                    ...control,
+                    isSoloed: true,
+                  },
+                ]);
+              }
+            }}
+            onChange={value =>
+              setVolumeControls([
+                ...volumeControls.filter(c => c !== control),
+                {...control, volume: value},
+              ])
+            }
+          />
+        );
+      });
+  }, [volumeControls]);
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -185,23 +316,7 @@ export default function Renderer({
             </Select>
           </div>
 
-          {instruments.map(instrument => (
-            <div key={instrument.name} className="space-y-2">
-              <label className="text-sm font-medium">{instrument.name}</label>
-              <div className="flex items-center gap-2">
-                <Slider
-                  defaultValue={[instrument.volume]}
-                  max={100}
-                  step={1}
-                  className="flex-1"
-                />
-                <Button variant="outline" size="icon" className="h-6 w-6">
-                  S
-                </Button>
-              </div>
-            </div>
-          ))}
-
+          {...volumeSliders}
           <div className="space-y-4 pt-4">
             <div className="flex items-center space-x-2">
               <Switch
@@ -308,3 +423,92 @@ const MeasureHighlight = forwardRef<HTMLButtonElement, MeasureHighlightProps>(
 );
 
 MeasureHighlight.displayName = 'MeasureHighlight';
+
+export function AudioVolume({
+  name,
+  volume,
+  onChange,
+  isMuted,
+  isSoloed,
+  onSoloClick,
+  onMuteClick,
+}: {
+  name: string;
+  volume: number;
+  isMuted: boolean;
+  isSoloed: boolean;
+  onChange: (value: number) => void;
+  onSoloClick: () => void;
+  onMuteClick: () => void;
+}) {
+  return (
+    <div key={name} className="space-y-2">
+      <label className="text-sm font-medium">{capitalize(name)}</label>
+      <div className="flex items-center gap-2">
+        <Slider
+          defaultValue={[volume]}
+          max={100}
+          step={1}
+          className="flex-1"
+          onValueChange={values => onChange(values[0])}
+        />
+        <div className="flex gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-6 w-6"
+            onClick={onMuteClick}>
+            {isMuted ? (
+              <VolumeX className="h-3 w-3" />
+            ) : (
+              <Volume2 className="h-3 w-3" />
+            )}
+          </Button>
+          <Button
+            variant={isSoloed ? 'secondary' : 'outline'}
+            size="icon"
+            className="h-6 w-6"
+            onClick={onSoloClick}>
+            S
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    // <div key={name} className="space-y-2">
+    //   <label className="text-sm font-medium">{name}</label>
+    //   <div className="flex items-center gap-2">
+    //     <Slider
+    //       defaultValue={[volume]}
+    //       max={100}
+    //       step={1}
+    //       className="flex-1"
+    //     />
+    //     <Button variant="outline" size="icon" className="h-6 w-6">
+    //       S
+    //     </Button>
+    //   </div>
+    // </div>
+
+    // <Wrapper>
+    //   <FileName>{name}</FileName>
+    //   <VolumeControl>
+    //     <VolumeSlider value={volume} onChange={onChange} />
+    //     <VolumeControlButton
+    //       shape="circle"
+    //       type={isMuted ? 'primary' : 'default'}
+    //       size="small"
+    //       icon={<FontAwesomeIcon size="xs" icon={faVolumeMute} />}
+    //       onClick={onMuteClick}
+    //     />
+    //     <VolumeControlButton
+    //       shape="circle"
+    //       type={isSoloed ? 'primary' : 'default'}
+    //       size="small"
+    //       icon={<FontAwesomeIcon size="xs" icon={faS} />}
+    //       onClick={onSoloClick}
+    //     />
+    //   </VolumeControl>
+    // </Wrapper>
+  );
+}

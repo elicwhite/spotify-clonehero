@@ -98,6 +98,18 @@ export class AudioManager {
     }
   }
 
+  setVolume(trackName: string, volume: number) {
+    if (this.#tracks[trackName] == null) {
+      throw new Error(
+        `Track ${trackName} does not exist. Only have ${Object.keys(
+          this.#tracks,
+        ).join(', ')}`,
+      );
+    }
+
+    this.#tracks[trackName].volume = volume > 1 ? 1 : volume < 0 ? 0 : volume;
+  }
+
   get currentTime() {
     if (this.#startedAt < 0) {
       return 0;
