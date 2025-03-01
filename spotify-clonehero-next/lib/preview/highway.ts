@@ -134,7 +134,7 @@ export const setupRenderer = (
         highwayTexture,
         highwayGroups,
         audioSources,
-        chart.endEvents[0].msTime,
+        metadata.song_length || 60 * 5 * 1000,
       );
     },
     play() {
