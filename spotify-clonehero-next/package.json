@@ -52,6 +52,7 @@
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.160.0",
     "throttleit": "^2.0.0",
+    "use-interval": "^1.4.0",
     "vexflow": "^4.2.5"
   },
   "devDependencies": {

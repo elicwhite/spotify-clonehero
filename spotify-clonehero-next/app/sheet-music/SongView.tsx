@@ -22,6 +22,8 @@ import {
   forwardRef,
   createRef,
 } from 'react';
+import useInterval from 'use-interval';
+
 import convertToVexFlow from './convertToVexflow';
 import {RenderData, renderMusic} from './renderVexflow';
 import {ChartResponseEncore} from '@/lib/chartSelection';
@@ -30,6 +32,7 @@ import {getBasename} from '@/lib/src-shared/utils';
 import {cn} from '@/lib/utils';
 import SheetMusic from './SheetMusic';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
+import {AudioManager} from '@/lib/preview/audioManager';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -49,6 +52,11 @@ interface VolumeControl {
   isSoloed: boolean;
 }
 
+function formatSeconds(seconds: number): string {
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(
+    Math.floor(seconds % 60),
+  ).padStart(2, '0')}`;
+}
 export default function Renderer({
   metadata,
   chart,
@@ -70,6 +78,33 @@ export default function Renderer({
     availableDifficulties[0],
   );
 
+  const audioManagerRef = useRef<AudioManager | null>(null);
+
+  useEffect(() => {
+    const audioManager = new AudioManager(audioFiles, () => {
+      setIsPlaying(false);
+    });
+
+    audioManager.ready.then(() => {
+      audioManagerRef.current = audioManager;
+    });
+
+    setIsPlaying(true);
+
+    return () => {
+      audioManagerRef.current?.destroy();
+      audioManagerRef.current = null;
+    };
+  }, [audioFiles]);
+
+  useInterval(
+    () => {
+      // Your custom logic here
+      setCurrentPlayback(audioManagerRef.current?.currentTime ?? 0);
+    },
+    isPlaying ? 100 : null,
+  );
+
   const endEvents = chart.endEvents;
   if (endEvents.length !== 1) {
     throw new Error(
@@ -78,8 +113,6 @@ export default function Renderer({
     );
   }
   const songDuration = chart.endEvents[0].msTime / 1000;
-
-  const currentTime = 40;
 
   const difficultySelectorOnSelect = useCallback(
     (selectedDifficulty: string) => {
@@ -98,17 +131,28 @@ export default function Renderer({
       {/* Left Sidebar */}
       <div className="w-64 border-r p-4 flex flex-col gap-6">
         <div className="space-y-4">
-          <Link href="#">
+          {/* <Link href="#">
             <Button variant="ghost" size="icon" className="rounded-full">
               <ArrowLeft className="h-6 w-6" />
             </Button>
-          </Link>
-          <Button size="icon" variant="secondary" className="rounded-full">
+          </Link> */}
+          <Button
+            size="icon"
+            variant="secondary"
+            className="rounded-full"
+            onClick={() => {
+              if (audioManagerRef.current) {
+                audioManagerRef.current.play({
+                  time: audioManagerRef.current.currentTime,
+                });
+                // setIsPlaying(true);
+              }
+            }}>
             <Play className="h-6 w-6" />
           </Button>
-          <Button variant="ghost" size="icon" className="rounded-full">
+          {/* <Button variant="ghost" size="icon" className="rounded-full">
             <Maximize2 className="h-6 w-6" />
-          </Button>
+          </Button> */}
         </div>
 
         <div className="space-y-4">
@@ -181,16 +225,23 @@ export default function Renderer({
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="h-12 border-b flex items-center px-4 gap-4">
-          <div className="w-full bg-secondary rounded-full h-1">
-            <div
-              className="bg-primary h-full rounded-full"
-              style={{width: `${(currentTime / songDuration) * 100}%`}}
-            />
-          </div>
+          <Slider
+            value={[currentPlayback]}
+            max={songDuration || 100}
+            min={0}
+            onValueChange={values => {
+              const newTime = values[0];
+              setCurrentPlayback(newTime);
+              if (audioManagerRef.current) {
+                audioManagerRef.current.play({
+                  time: newTime,
+                });
+              }
+            }}
+          />
           <span className="text-sm text-muted-foreground whitespace-nowrap">
-            {`${String(Math.floor(currentTime / 60)).padStart(2, '0')}:${String(
-              Math.floor(currentTime % 60),
-            ).padStart(2, '0')} / 04:42`}
+            {formatSeconds(currentPlayback)} /{' '}
+            {formatSeconds((metadata.song_length || 0) / 1000)}
           </span>
         </div>
 

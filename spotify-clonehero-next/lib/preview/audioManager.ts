@@ -114,7 +114,7 @@ export class AudioManager {
     this.#isInitialized = false;
   }
 
-  destory() {
+  destroy() {
     Object.values(this.#tracks).forEach(track => {
       track.destroy();
     });
