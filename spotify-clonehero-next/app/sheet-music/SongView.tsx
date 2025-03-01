@@ -121,7 +121,7 @@ export default function Renderer({
     volumeControls.forEach(control => {
       audioManagerRef.current?.setVolume(control.trackName, control.volume);
     });
-  }, [volumeControls, audioManagerRef.current]);
+  }, [volumeControls, audioManagerRef]);
 
   const endEvents = chart.endEvents;
   if (endEvents.length !== 1) {
