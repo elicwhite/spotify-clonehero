@@ -109,6 +109,9 @@ export class AudioManager {
 
     this.#tracks[trackName].volume = volume > 1 ? 1 : volume < 0 ? 0 : volume;
   }
+  get tracks() {
+    return Object.values(this.#tracks);
+  }
 
   get currentTime() {
     if (this.#startedAt < 0) {
@@ -190,6 +193,7 @@ class AudioTrack {
   }
 
   set volume(volume: number) {
+    console.log('setting volume', volume);
     // Let's use an x*x curve (x-squared) since simple linear (x) does not
     // sound as good.
     // Taken from https://webaudioapi.com/samples/volume/

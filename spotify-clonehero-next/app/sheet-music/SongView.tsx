@@ -20,19 +20,14 @@ import {
   VolumeX,
 } from 'lucide-react';
 import {
-  RefObject,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   forwardRef,
-  createRef,
 } from 'react';
 import useInterval from 'use-interval';
-
-import convertToVexFlow from './convertToVexflow';
-import {RenderData, renderMusic} from './renderVexflow';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 
 import {getBasename} from '@/lib/src-shared/utils';
@@ -102,6 +97,7 @@ export default function Renderer({
 
     audioManager.ready.then(() => {
       audioManagerRef.current = audioManager;
+      window.am = audioManager;
     });
 
     return () => {
@@ -112,7 +108,6 @@ export default function Renderer({
 
   useInterval(
     () => {
-      // Your custom logic here
       setCurrentPlayback(audioManagerRef.current?.currentTime ?? 0);
     },
     isPlaying ? 100 : null,
@@ -146,10 +141,8 @@ export default function Renderer({
 
   const volumeSliders = useMemo(() => {
     if (volumeControls.length === 0) {
-      // || audioManagerRef.current == null) {
       return [];
     }
-    // console.log('full');
 
     return volumeControls
       .sort((a, b) => a.trackName.localeCompare(b.trackName))
@@ -243,12 +236,12 @@ export default function Renderer({
                 ]);
               }
             }}
-            onChange={value =>
+            onChange={value => {
               setVolumeControls([
                 ...volumeControls.filter(c => c !== control),
                 {...control, volume: value},
-              ])
-            }
+              ]);
+            }}
           />
         );
       });
@@ -378,16 +371,16 @@ export default function Renderer({
 
           {/* <div className="flex-1"> */}
           <SheetMusic
-            // currentTime={currentPlayback}
+            currentTime={currentPlayback}
             chart={chart}
             difficulty={selectedDifficulty}
             showBarNumbers={showBarNumbers}
             enableColors={enableColors}
             onSelectMeasure={time => {
-              // if (!audioPlayer) {
-              //   return;
-              // }
-              // audioPlayer.start(time);
+              if (audioManagerRef.current == null) {
+                return;
+              }
+              audioManagerRef.current.play({time});
 
               setIsPlaying(true);
             }}
@@ -447,8 +440,9 @@ export function AudioVolume({
       <div className="flex items-center gap-2">
         <Slider
           defaultValue={[volume]}
-          max={100}
-          step={1}
+          min={0}
+          max={1}
+          step={0.01}
           className="flex-1"
           onValueChange={values => onChange(values[0])}
         />

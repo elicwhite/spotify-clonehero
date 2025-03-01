@@ -44,12 +44,14 @@ function capitalize(fileName: string): string {
 export default function SheetMusic({
   chart,
   difficulty,
+  currentTime,
   showBarNumbers,
   enableColors,
   onSelectMeasure,
 }: {
   chart: ParsedChart;
   difficulty: Difficulty;
+  currentTime: number;
   showBarNumbers: boolean;
   enableColors: boolean;
   onSelectMeasure: (time: number) => void;
@@ -77,43 +79,43 @@ export default function SheetMusic({
       );
     }
 
-    setRenderData(
-      renderMusic(vexflowContainerRef, measures, showBarNumbers, enableColors),
+    const data = renderMusic(
+      vexflowContainerRef,
+      measures,
+      showBarNumbers,
+      enableColors,
     );
+    setRenderData(data);
+
+    highlightsRef.current = data.map(() => createRef<HTMLButtonElement>());
   }, [measures, showBarNumbers, enableColors]);
 
-  // useEffect(() => {
-  //   if ( !renderData) { //!midi ||
-  //     return;
-  //   }
+  useEffect(() => {
+    if (!renderData) {
+      return;
+    }
+    const highlightedMeasure = renderData.find(({measure}) => {
+      const currentMs = currentTime * 1000;
+      return currentMs >= measure.startMs && currentMs < measure.endMs;
+    });
 
-  //   highlightsRef.current = renderData.map(() =>
-  //     createRef<HTMLButtonElement>(),
-  //   );
+    if (!highlightedMeasure) {
+      return;
+    }
 
-  //   const currentTick = midi.header.secondsToTicks(currentTime) ?? 0;
-  //   const highlightedMeasure = renderData.find(
-  //     ({ measure }) =>
-  //       currentTick >= measure.startTick && currentTick < measure.endTick,
-  //   );
+    setHighlightedMeasureIndex(renderData.indexOf(highlightedMeasure));
+  }, [currentTime, renderData]);
 
-  //   if (!highlightedMeasure) {
-  //     return;
-  //   }
+  useEffect(() => {
+    if (highlightsRef.current.length === 0) {
+      return;
+    }
 
-  //   setHighlightedMeasureIndex(renderData.indexOf(highlightedMeasure));
-  // }, [currentTime, midi, renderData]);
-
-  // useEffect(() => {
-  //   if (highlightsRef.current.length === 0) {
-  //     return;
-  //   }
-
-  //   highlightsRef.current[highlightedMeasureIndex].current?.scrollIntoView({
-  //     behavior: 'smooth',
-  //     block: 'center',
-  //   });
-  // }, [highlightedMeasureIndex]);
+    highlightsRef.current[highlightedMeasureIndex].current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    });
+  }, [highlightedMeasureIndex]);
 
   const measureHighlights = renderData.map(({measure, stave}, index) => {
     const isHighlighted = index === highlightedMeasureIndex;
@@ -132,7 +134,7 @@ export default function SheetMusic({
           // if (!midi) {
           //   return;
           // }
-          // onSelectMeasure(midi.header.ticksToSeconds(measure.startTick));
+          onSelectMeasure(measure.startMs / 1000);
         }}
       />
     );
@@ -160,9 +162,9 @@ const MeasureHighlight = forwardRef<HTMLButtonElement, MeasureHighlightProps>(
       <button
         ref={ref}
         className={cn(
-          'absolute z-[-3] rounded-md border-0 bg-transparent cursor-pointer',
-          highlighted && 'bg-primary/10 shadow-md z-[-2]',
-          'hover:bg-muted hover:shadow-sm hover:z-[-1]',
+          'absolute z-[1] rounded-md border-0 bg-transparent cursor-pointer',
+          highlighted && 'bg-primary/10 shadow-md',
+          'hover:bg-muted/10 hover:shadow-sm',
         )}
         style={style}
         onClick={onClick}
