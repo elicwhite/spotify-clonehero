@@ -1,20 +1,6 @@
 import {Difficulty, parseChartFile} from 'scan-chart';
-
-import {Button} from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {Slider} from '@/components/ui/slider';
-import {Switch} from '@/components/ui/switch';
-import Link from 'next/link';
-import {ArrowLeft, Maximize2, Play} from 'lucide-react';
 import {
   RefObject,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -24,22 +10,10 @@ import {
 } from 'react';
 import convertToVexFlow from './convertToVexflow';
 import {RenderData, renderMusic} from './renderVexflow';
-import {ChartResponseEncore} from '@/lib/chartSelection';
 
-import {getBasename} from '@/lib/src-shared/utils';
 import {cn} from '@/lib/utils';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
-
-function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
-  return chart.trackData
-    .filter(part => part.instrument === 'drums')
-    .map(part => part.difficulty);
-}
-
-function capitalize(fileName: string): string {
-  return fileName[0].toUpperCase() + getBasename(fileName).slice(1);
-}
 
 export default function SheetMusic({
   chart,
@@ -131,9 +105,6 @@ export default function SheetMusic({
         }}
         highlighted={isHighlighted}
         onClick={() => {
-          // if (!midi) {
-          //   return;
-          // }
           onSelectMeasure(measure.startMs / 1000);
         }}
       />

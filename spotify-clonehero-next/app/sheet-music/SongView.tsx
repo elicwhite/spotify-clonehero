@@ -1,4 +1,4 @@
-import {Difficulty, parseChartFile} from 'scan-chart';
+import {Difficulty} from 'scan-chart';
 
 import {Button} from '@/components/ui/button';
 import {
@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/select';
 import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
-import Link from 'next/link';
 import {
   ArrowLeft,
   Maximize2,
@@ -363,7 +362,6 @@ export default function Renderer({
             {metadata.name} by {metadata.artist} charted by {metadata.charter}
           </h1>
 
-          {/* <div className="flex-1"> */}
           <SheetMusic
             currentTime={currentPlayback}
             chart={chart}
@@ -379,7 +377,6 @@ export default function Renderer({
               setIsPlaying(true);
             }}
           />
-          {/* </div> */}
         </div>
       </div>
     </div>
