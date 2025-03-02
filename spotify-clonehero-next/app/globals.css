@@ -47,7 +47,7 @@
       --destructive-foreground: 0 85.7% 97.3%;
       --border: 240 3.7% 15.9%;
       --input: 240 3.7% 15.9%;
-      --ring: 142.4 71.8% 29.2%;
+      --ring: 298 43% 41%;
     }
   }
 }
@@ -71,6 +71,7 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }

@@ -10,6 +10,7 @@ import Image from 'next/image';
 import {Search, Guitar, Drum, Radio, Piano} from 'lucide-react';
 import {Input} from '@/components/ui/input';
 import {Button} from '@/components/ui/button';
+import Link from 'next/link';
 
 const recentSongs = [
   {
@@ -252,6 +253,19 @@ export default function Home() {
   const [filteredSongs, setFilteredSongs] = useState(recentSongs);
   const [activeInstruments, setActiveInstruments] = useState<string[]>([]);
 
+  const chorusDbPromise = useMemo(() => getChorusChartDb(), []);
+  const chorusDb = use(chorusDbPromise);
+  const latest10 = useMemo(() => {
+    return chorusDb
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.modifiedTime).getTime() -
+          new Date(a.modifiedTime).getTime(),
+      )
+      .slice(0, 10);
+  }, [chorusDb]);
+
   const filterSongs = (query: string) => {
     let filtered = recentSongs;
 
@@ -400,13 +414,16 @@ export default function Home() {
           ) : (
             <div className="space-y-4">
               {filteredSongs.map(song => (
-                <div
+                <Link
+                  href="/songs/[id]"
+                  as={`/songs/${song.id}`}
                   key={song.id}
-                  onClick={() => navigateToSong(song.id)}
                   className="flex items-stretch bg-card rounded-lg border border-border hover:bg-accent transition-colors cursor-pointer overflow-hidden">
                   <div className="flex-shrink-0">
                     <Image
-                      src={song.albumArt || '/placeholder.svg'}
+                      src={
+                        'https://files.enchor.us/132c9a0eabbe4b87525962c6560d35fc.jpg'
+                      } //song.albumArt || '/placeholder.svg'}
                       alt={`${song.title} album art`}
                       width={200}
                       height={200}
@@ -447,7 +464,7 @@ export default function Home() {
                     }}>
                     View Sheet
                   </Button>
-                </div>
+                </Link>
               ))}
             </div>
           )}

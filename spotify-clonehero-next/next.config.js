@@ -1,5 +1,15 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        // https://files.enchor.us/132c9a0eabbe4b87525962c6560d35fc.jpg
+        protocol: 'https',
+        hostname: 'files.enchor.us',
+      },
+    ],
+  },
+};
 
 module.exports = nextConfig;
 
