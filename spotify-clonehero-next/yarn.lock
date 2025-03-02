@@ -4566,6 +4566,11 @@ minimist@^1.2.0, minimist@^1.2.6:
   resolved "https://registry.yarnpkg.com/minimist/-/minimist-1.2.8.tgz#c1a464e7693302e082a075cee0c057741ac4772c"
   integrity sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==
 
+mitt@^3.0.1:
+  version "3.0.1"
+  resolved "https://registry.yarnpkg.com/mitt/-/mitt-3.0.1.tgz#ea36cf0cc30403601ae074c8f77b7092cdab36d1"
+  integrity sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==
+
 "mkdirp@>=0.5 0", mkdirp@^0.5.5:
   version "0.5.6"
   resolved "https://registry.yarnpkg.com/mkdirp/-/mkdirp-0.5.6.tgz#7def03d2432dcae4ba1d611445c48396062255f6"
@@ -4685,6 +4690,13 @@ npm-run-path@^4.0.1:
   integrity sha512-S48WzZW777zhNIrn7gxOlISNAqi9ZC/uQFnRdbeIHhZhCA6UqpkOT8T1G7BvfdgP4Er8gF4sUbaS0i7QvIfCWw==
   dependencies:
     path-key "^3.0.0"
+
+nuqs@^2.4.0:
+  version "2.4.0"
+  resolved "https://registry.yarnpkg.com/nuqs/-/nuqs-2.4.0.tgz#74001dde07a72cd35972e4bb88cee281a97464cf"
+  integrity sha512-+yOdX0q/wdYlseSYtWC8StDDt2QFcYX/zV5/E67J1cOJo3PR0mggxMx4acZGC0Hu66xFHENKQkqI2zSpH742xQ==
+  dependencies:
+    mitt "^3.0.1"
 
 oauth@^0.9.15:
   version "0.9.15"
@@ -5090,6 +5102,11 @@ queue-microtask@^1.2.2:
   version "1.2.3"
   resolved "https://registry.yarnpkg.com/queue-microtask/-/queue-microtask-1.2.3.tgz#4929228bbc724dfac43e0efb058caf7b6cfb6243"
   integrity sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==
+
+ratelimit-header-parser@^0.1.0:
+  version "0.1.0"
+  resolved "https://registry.yarnpkg.com/ratelimit-header-parser/-/ratelimit-header-parser-0.1.0.tgz#e840dc540e34669393b6acf0c09a7a4fe505779b"
+  integrity sha512-+gg0VX4h0nBT5JWZfaPNwAV8pWRZa3MAFHLZNUYO5yqw+4IvU64HmPtA3aRapQ2uSP1x3Ta4TZO0k516dtNLZA==
 
 react-dom@^18.2.0:
   version "18.2.0"

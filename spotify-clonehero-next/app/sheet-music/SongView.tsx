@@ -34,6 +34,7 @@ import {cn} from '@/lib/utils';
 import SheetMusic from './SheetMusic';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import {AudioManager} from '@/lib/preview/audioManager';
+import CloneHeroRenderer from './CloneHeroRenderer';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -362,7 +363,13 @@ export default function Renderer({
             {metadata.name} by {metadata.artist} charted by {metadata.charter}
           </h1>
 
-          <SheetMusic
+          <CloneHeroRenderer
+            metadata={metadata}
+            chart={chart}
+            difficulty={selectedDifficulty}
+            audioManager={audioManagerRef.current!}
+          />
+          {/* <SheetMusic
             currentTime={currentPlayback}
             chart={chart}
             difficulty={selectedDifficulty}
@@ -376,7 +383,7 @@ export default function Renderer({
 
               setIsPlaying(true);
             }}
-          />
+          /> */}
         </div>
       </div>
     </div>

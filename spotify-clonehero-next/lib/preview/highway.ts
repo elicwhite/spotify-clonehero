@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {Files, ParsedChart} from './chorus-chart-processing';
 import {Difficulty, Instrument, noteFlags, noteTypes} from 'scan-chart';
 import {ChartResponseEncore} from '../chartSelection';
+import {AudioManager} from './audioManager';
 
 type Track = ParsedChart['trackData'][0];
 type NoteGroup = ParsedChart['trackData'][0]['noteEventGroups'][0];
@@ -41,9 +42,7 @@ export const setupRenderer = (
   chart: ParsedChart,
   sizingRef: RefObject<HTMLDivElement>,
   ref: RefObject<HTMLDivElement>,
-  audioFiles: Files,
-  progressListener: (percent: number) => void,
-  playPauseListener: (isPlaying: boolean) => void,
+  audioManager: AudioManager,
 ) => {
   instanceCounter++;
   const highwaySpeed = 1.5;
@@ -74,22 +73,22 @@ export const setupRenderer = (
   ref.current?.children.item(0)?.remove();
   ref.current?.appendChild(renderer.domElement);
 
-  let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  let trackOffset = 0;
-  audioCtx.suspend();
+  // let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // let trackOffset = 0;
+  // audioCtx.suspend();
 
-  async function sizingRefClicked() {
-    if (audioCtx.state === 'running') {
-      await audioCtx.suspend();
-      console.log('Paused at', trackOffset + audioCtx.currentTime * 1000);
-    } else if (audioCtx.state === 'suspended') {
-      await audioCtx.resume();
-    } else if (audioCtx.state === 'closed') {
-      if (isSongOver()) {
-        await methods.seek({percent: 0});
-      }
-    }
-  }
+  // async function sizingRefClicked() {
+  //   if (audioCtx.state === 'running') {
+  //     await audioCtx.suspend();
+  //     console.log('Paused at', trackOffset + audioCtx.currentTime * 1000);
+  //   } else if (audioCtx.state === 'suspended') {
+  //     await audioCtx.resume();
+  //   } else if (audioCtx.state === 'closed') {
+  //     if (isSongOver()) {
+  //       await methods.seek({percent: 0});
+  //     }
+  //   }
+  // }
 
   let progressInterval: number;
 
@@ -121,74 +120,74 @@ export const setupRenderer = (
 
     async startRender() {
       const {scene, highwayGroups, highwayTexture} = await trackPromise;
-      const {audioCtx: audioContext, audioSources} =
-        await setupAudioContext(audioFiles);
-      // Update the audio context
-      audioCtx = audioContext;
-      audioCtx.onstatechange = () => {
-        playPauseListener(audioCtx.state === 'running');
-      };
+      // const {audioCtx: audioContext, audioSources} =
+      //   await setupAudioContext(audioFiles);
+      // // Update the audio context
+      // audioCtx = audioContext;
+      // audioCtx.onstatechange = () => {
+      //   playPauseListener(audioCtx.state === 'running');
+      // };
 
       await startRender(
         scene,
         highwayTexture,
         highwayGroups,
-        audioSources,
+        // audioSources,
         metadata.song_length || 60 * 5 * 1000,
       );
     },
-    play() {
-      sizingRefClicked();
-    },
-    pause() {
-      sizingRefClicked();
-    },
-    async seek({percent, ms}: {percent?: number; ms?: number}) {
-      if (percent == null && ms == null) {
-        throw new Error('Must provide percent or ms');
-      }
+    // play() {
+    //   sizingRefClicked();
+    // },
+    // pause() {
+    //   sizingRefClicked();
+    // },
+    // async seek({percent, ms}: {percent?: number; ms?: number}) {
+    //   if (percent == null && ms == null) {
+    //     throw new Error('Must provide percent or ms');
+    //   }
 
-      const songLength = metadata.song_length || 60 * 5 * 1000;
-      const offset: number = ms ?? songLength * percent!;
-      const percentCalculated: number = percent ?? ms! / songLength;
-      trackOffset = offset;
+    //   const songLength = metadata.song_length || 60 * 5 * 1000;
+    //   const offset: number = ms ?? songLength * percent!;
+    //   const percentCalculated: number = percent ?? ms! / songLength;
+    //   trackOffset = offset;
 
-      progressListener(percentCalculated);
+    //   progressListener(percentCalculated);
 
-      if (audioCtx.state !== 'closed') {
-        audioCtx.close();
-      }
-      const {audioCtx: audioContext, audioSources} =
-        await setupAudioContext(audioFiles);
-      // Update the audio context
-      audioCtx = audioContext;
-      audioCtx.onstatechange = () => {
-        playPauseListener(audioCtx.state === 'running');
-      };
-      audioSources.forEach(source => {
-        source.start(0, offset / 1000);
-      });
+    //   if (audioCtx.state !== 'closed') {
+    //     audioCtx.close();
+    //   }
+    //   const {audioCtx: audioContext, audioSources} =
+    //     await setupAudioContext(audioFiles);
+    //   // Update the audio context
+    //   audioCtx = audioContext;
+    //   audioCtx.onstatechange = () => {
+    //     playPauseListener(audioCtx.state === 'running');
+    //   };
+    //   audioSources.forEach(source => {
+    //     source.start(0, offset / 1000);
+    //   });
 
-      await audioCtx.resume();
-    },
+    //   await audioCtx.resume();
+    // },
     destroy: () => {
       // I can't figure out where this was used
       // window.clearInterval(progressInterval);
       console.log('Tearing down the renderer');
       window.removeEventListener('resize', onResize, false);
-      audioCtx.close();
+      // audioCtx.close();
       renderer.setAnimationLoop(null);
     },
   };
 
   return methods;
 
-  function isSongOver() {
-    const elapsedTime = trackOffset + audioCtx.currentTime * 1000;
-    const songLength = metadata.song_length || 60 * 5 * 1000;
+  // function isSongOver() {
+  //   const elapsedTime = trackOffset + audioCtx.currentTime * 1000;
+  //   const songLength = metadata.song_length || 60 * 5 * 1000;
 
-    return elapsedTime > songLength + 2000;
-  }
+  //   return elapsedTime > songLength + 2000;
+  // }
 
   async function prepTrack(scene: THREE.Scene, track: Track) {
     const {highwayTexture} = await initPromise;
@@ -221,41 +220,37 @@ export const setupRenderer = (
     scene: THREE.Scene,
     highwayTexture: THREE.Texture,
     highwayGroups: THREE.Group,
-    audioSources: AudioBufferSourceNode[],
+    // audioSources: AudioBufferSourceNode[],
     songLength: number,
   ) {
     // If this was cleaned up before running
-    if (audioCtx.state === 'closed') {
-      return;
-    }
+    // if (audioCtx.state === 'closed') {
+    //   return;
+    // }
 
-    audioSources.forEach(source => {
-      source.start();
-    });
+    // audioSources.forEach(source => {
+    //   source.start();
+    // });
 
     renderer.setAnimationLoop(animation);
 
     function animation() {
-      const SYNC_MS =
-        (audioCtx.baseLatency +
-          // outputLatency is not implemented in safari
-          (audioCtx.outputLatency || 0)) *
-        1000;
-      if (audioCtx.state === 'running') {
-        const elapsedTime = trackOffset + audioCtx.currentTime * 1000 - SYNC_MS;
-        if (elapsedTime > songLength + 2000) {
-          audioCtx.close();
+      if (audioManager != null) {
+        const SYNC_MS = (audioManager.delay || 0) * 1000;
+
+        if (audioManager.isPlaying) {
+          const elapsedTime = audioManager.currentTime * 1000 - SYNC_MS;
+
+          const scrollPosition = -1 * (elapsedTime / 1000) * highwaySpeed;
+
+          if (highwayTexture) {
+            highwayTexture.offset.y = -1 * scrollPosition;
+          }
+
+          highwayGroups.position.y = scrollPosition;
+
+          // progressListener(elapsedTime / songLength);
         }
-
-        const scrollPosition = -1 * (elapsedTime / 1000) * highwaySpeed;
-
-        if (highwayTexture) {
-          highwayTexture.offset.y = -1 * scrollPosition;
-        }
-
-        highwayGroups.position.y = scrollPosition;
-
-        progressListener(elapsedTime / songLength);
       }
 
       renderer.render(scene, camera);
@@ -263,53 +258,53 @@ export const setupRenderer = (
   }
 };
 
-async function setupAudioContext(audioFiles: Files) {
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  audioCtx.suspend();
+// async function setupAudioContext(audioFiles: Files) {
+//   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+//   audioCtx.suspend();
 
-  // 0 to 1
-  const volume = 0.5;
+//   // 0 to 1
+//   const volume = 0.5;
 
-  const gainNode = audioCtx.createGain();
-  gainNode.connect(audioCtx.destination);
-  // Let's use an x*x curve (x-squared) since simple linear (x) does not
-  // sound as good.
-  // Taken from https://webaudioapi.com/samples/volume/
-  gainNode.gain.value = volume * volume;
+//   const gainNode = audioCtx.createGain();
+//   gainNode.connect(audioCtx.destination);
+//   // Let's use an x*x curve (x-squared) since simple linear (x) does not
+//   // sound as good.
+//   // Taken from https://webaudioapi.com/samples/volume/
+//   gainNode.gain.value = volume * volume;
 
-  const audioSources = (
-    await Promise.all(
-      audioFiles.map(async file => {
-        const arrayBuffer = file.data;
-        if (audioCtx.state === 'closed') {
-          // Can happen if cleaned up before setup is done
-          return;
-        }
+//   const audioSources = (
+//     await Promise.all(
+//       audioFiles.map(async file => {
+//         const arrayBuffer = file.data;
+//         if (audioCtx.state === 'closed') {
+//           // Can happen if cleaned up before setup is done
+//           return;
+//         }
 
-        // If we don't copy this, we can only play it once. decode destroys the buffer
-        const bufferCopy = arrayBuffer.slice(0).buffer;
-        let decodedAudioBuffer;
-        try {
-          decodedAudioBuffer = await audioCtx.decodeAudioData(bufferCopy);
-        } catch {
-          try {
-            const decode = await import('audio-decode');
-            decodedAudioBuffer = await decode.default(bufferCopy);
-          } catch {
-            console.error('Could not decode audio');
-            return;
-          }
-        }
-        const source = audioCtx.createBufferSource();
-        source.buffer = decodedAudioBuffer;
-        source.connect(gainNode);
-        return source;
-      }),
-    )
-  ).filter(Boolean) as AudioBufferSourceNode[];
+//         // If we don't copy this, we can only play it once. decode destroys the buffer
+//         const bufferCopy = arrayBuffer.slice(0).buffer;
+//         let decodedAudioBuffer;
+//         try {
+//           decodedAudioBuffer = await audioCtx.decodeAudioData(bufferCopy);
+//         } catch {
+//           try {
+//             const decode = await import('audio-decode');
+//             decodedAudioBuffer = await decode.default(bufferCopy);
+//           } catch {
+//             console.error('Could not decode audio');
+//             return;
+//           }
+//         }
+//         const source = audioCtx.createBufferSource();
+//         source.buffer = decodedAudioBuffer;
+//         source.connect(gainNode);
+//         return source;
+//       }),
+//     )
+//   ).filter(Boolean) as AudioBufferSourceNode[];
 
-  return {audioCtx, audioSources};
-}
+//   return {audioCtx, audioSources};
+// }
 
 type DrumModifiers = {};
 

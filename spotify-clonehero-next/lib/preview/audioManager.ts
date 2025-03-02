@@ -109,8 +109,16 @@ export class AudioManager {
 
     this.#tracks[trackName].volume = volume > 1 ? 1 : volume < 0 ? 0 : volume;
   }
-  get tracks() {
-    return Object.values(this.#tracks);
+  // get tracks() {
+  //   return Object.values(this.#tracks);
+  // }
+
+  get delay() {
+    return this.#context.baseLatency + (this.#context.outputLatency || 0);
+  }
+
+  get isPlaying() {
+    return this.#context.state === 'running';
   }
 
   get currentTime() {
@@ -177,7 +185,7 @@ class AudioTrack {
     gainNode.connect(this.#context.destination);
     this.#gainNode = gainNode;
 
-    this.volume = 0.5;
+    this.volume = 1;
   }
 
   get ended() {
