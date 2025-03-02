@@ -1,3 +1,4 @@
+import {NotesData} from 'scan-chart';
 import {
   ChartTest,
   testPreferDrums,
@@ -11,6 +12,8 @@ import {
 export type ChartResponseEncore = {
   md5: string;
   hasVideoBackground: boolean;
+  albumArtMd5: string;
+  notesData: NotesData;
 } & ChartInfo;
 
 export type ChartInfo = {

@@ -1,6 +1,7 @@
 'use client';
 
 import EncoreAutocomplete, {
+  EncoreResponse,
   searchEncore,
 } from '@/components/EncoreAutocomplete';
 import getChorusChartDb from '@/lib/chorusChartDb';
@@ -121,26 +122,29 @@ export default function Home() {
   );
   const [activeInstruments, setActiveInstruments] = useState<string[]>([]);
 
-  const chorusDbPromise = useMemo(() => getChorusChartDb(), []);
-  const chorusDb = use(chorusDbPromise);
-  const latest10 = useMemo(() => {
-    return chorusDb
-      .slice()
-      .sort(
-        (a, b) =>
-          new Date(b.modifiedTime).getTime() -
-          new Date(a.modifiedTime).getTime(),
-      )
-      .slice(0, 10);
-  }, [chorusDb]);
-  const [filteredSongs, setFilteredSongs] = useState(latest10);
+  // const chorusDbPromise = useMemo(() => getChorusChartDb(), []);
+  // const chorusDb = use(chorusDbPromise);
+  // const latest10 = useMemo(() => {
+  //   return chorusDb
+  //     .slice()
+  //     .sort(
+  //       (a, b) =>
+  //         new Date(b.modifiedTime).getTime() -
+  //         new Date(a.modifiedTime).getTime(),
+  //     )
+  //     .slice(0, 10);
+  // }, [chorusDb]);
+  const [filteredSongs, setFilteredSongs] = useState<EncoreResponse | null>(
+    null,
+  );
 
   const filterSongs = async (query: string) => {
     const results = await searchEncore(query);
-    setFilteredSongs(results.data);
+    console.log(results);
+    setFilteredSongs(results);
   };
 
-  const debouncedFilterSongs = useMemo(() => debounce(filterSongs, 300), []);
+  const debouncedFilterSongs = useMemo(() => debounce(filterSongs, 2000), []);
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
     setSearchQuery(query);
@@ -249,10 +253,11 @@ export default function Home() {
 
         <section>
           <h2 className="text-2xl font-semibold mb-4">
-            {searchQuery ? 'Search Results' : 'Recently Added Sheet Music'}
+            {searchQuery ? 'Search Results' : 'Recently Added Sheet Music'}{' '}
+            {filteredSongs != null ? `(${filteredSongs?.found} charts)` : ''}
           </h2>
 
-          {filteredSongs.length === 0 ? (
+          {filteredSongs?.data.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-muted-foreground">
                 No songs found matching your search.
@@ -261,7 +266,7 @@ export default function Home() {
           ) : (
             <div className="space-y-4">
               {filteredSongs &&
-                filteredSongs.map(song => (
+                filteredSongs.data.map(song => (
                   <Link
                     href="/songs/[id]"
                     as={`/songs/${song.md5}`}

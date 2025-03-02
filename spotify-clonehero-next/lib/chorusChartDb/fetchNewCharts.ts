@@ -6,6 +6,18 @@ const PROD_URL = 'https://api.enchor.us/search/advanced';
 // Debug variable to limit iterations in the future. Leave for full runs.
 const MAX_ITERATIONS = Number.MAX_SAFE_INTEGER;
 
+async function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+class TooManyRetriesError extends Error {
+  constructor(message?: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = this.constructor.name; // Set the name property to the class name
+    Error.captureStackTrace(this, this.constructor); // Optional: Improves stack traces
+  }
+}
+
 export default async function fetchNewCharts(
   afterTime: Date,
   onEachResponse: (json: any[], lastChartId: number) => void,
@@ -72,6 +84,7 @@ const saveKeys = [
   'album',
   'genre',
   'year',
+  'albumArtMd5',
   'md5',
   'groupId',
   'charter',
@@ -95,17 +108,33 @@ const saveKeys = [
   'has2xKick',
   'hasVideoBackground',
   'modifiedTime',
+  'notesData',
 ] as const;
 
 type SaveKeys = (typeof saveKeys)[number];
 
 function filterKeys(chart: Object) {
-  const result: {[key: string]: number | string} = {};
+  const result: {[key: string]: number | string | [{[key: string]: any}]} = {};
   for (const key in chart) {
     if (saveKeys.includes(key as SaveKeys)) {
       // @ts-ignore
       result[key] = chart[key];
     }
+  }
+
+  // @ts-ignore
+  if (Array.isArray(result['notesData']?.trackHashes)) {
+    // @ts-ignore
+    result['notesData'] = {
+      // @ts-ignore
+      trackHashes: result['notesData']['trackHashes'].map(
+        // @ts-ignore
+        (track: {instrument: string; difficulty: string; hash: string}) => ({
+          instrument: track.instrument,
+          difficulty: track.difficulty,
+        }),
+      ),
+    };
   }
 
   return result;
@@ -163,8 +192,20 @@ async function fetchSongsAfter(date: Date, lastChartId: number): Promise<any> {
   if (response.ok) {
     return await response.json();
   } else if (response.status == 429) {
-    console.log('Rate limited, waiting 1 second');
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    const result = parseRateLimit(response.headers);
+    const msTillResult =
+      result?.remaining === 0 && result?.reset
+        ? result.reset.getTime() - Date.now()
+        : 1000;
+
+    if (msTillResult > 0) {
+      console.log(
+        'Rate limited, waiting',
+        Math.round(msTillResult / 4),
+        'seconds',
+      );
+      await delay(msTillResult);
+    }
     return await fetchSongsAfter(date, lastChartId);
   } else {
     console.log('Fetch failed', response.status, response.statusText);

@@ -7,7 +7,7 @@ import {cn} from '@/lib/utils';
 import debounce from 'debounce';
 import {ChartInstruments, preFilterInstruments} from './ChartInstruments';
 
-type EncoreResponse = {
+export type EncoreResponse = {
   found: number;
   out_of: number;
   data: ChartResponseEncore[];
