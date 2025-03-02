@@ -28,13 +28,19 @@ export const InstrumentImage = memo(function InstrumentImage({
   instrument,
   classNames,
   onClick,
+  responsive,
   size,
 }: {
   instrument: AllowedInstrument;
   classNames?: string;
   onClick?: (instrument: AllowedInstrument) => void;
-  size: 'sm' | 'md';
+  responsive?: boolean;
+  size?: 'sm' | 'md' | 'lg';
 }) {
+  if (responsive != null && size != null) {
+    throw new Error('responsive and size cannot be used together');
+  }
+
   const clickCallback = useCallback(() => {
     if (onClick) {
       onClick(instrument);
@@ -46,8 +52,8 @@ export const InstrumentImage = memo(function InstrumentImage({
       key={instrument}
       alt={`Icon for instrument ${instrument}`}
       src={`/assets/instruments/${instrument}.png`}
-      width={size == 'sm' ? 16 : 32}
-      height={size == 'sm' ? 16 : 32}
+      width={size == 'sm' ? 16 : size == 'md' ? 32 : 64}
+      height={size == 'sm' ? 16 : size == 'md' ? 32 : 64}
       onClick={clickCallback}
     />
   );
@@ -72,10 +78,12 @@ export function ChartInstruments({
   instruments,
   onClick,
   size,
+  classNames,
 }: {
   instruments: ReturnType<typeof preFilterInstruments>;
   onClick?: (instrument: AllowedInstrument) => void;
-  size: 'sm' | 'md';
+  size: 'sm' | 'md' | 'lg';
+  classNames?: string;
 }) {
   return (
     <div className="inline-flex gap-1 align-middle">
@@ -90,6 +98,7 @@ export function ChartInstruments({
               instrument={instrument}
               key={instrument}
               onClick={onClick}
+              classNames={classNames}
             />
           );
         })}

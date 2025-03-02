@@ -1,6 +1,8 @@
 'use client';
 
-import EncoreAutocomplete from '@/components/EncoreAutocomplete';
+import EncoreAutocomplete, {
+  searchEncore,
+} from '@/components/EncoreAutocomplete';
 import getChorusChartDb from '@/lib/chorusChartDb';
 import chorusChartDb from '@/lib/chorusChartDb';
 import {use, useMemo, useEffect, useState} from 'react';
@@ -11,145 +13,12 @@ import {Search, Guitar, Drum, Radio, Piano} from 'lucide-react';
 import {Input} from '@/components/ui/input';
 import {Button} from '@/components/ui/button';
 import Link from 'next/link';
-
-const recentSongs = [
-  {
-    id: 1,
-    title: 'Bohemian Rhapsody',
-    artist: 'Queen',
-    albumArt: '/placeholder.svg?height=80&width=80',
-    uploader: 'MusicTeacher42',
-    instruments: [
-      {name: 'Piano', difficulties: ['Medium', 'Hard', 'Expert'], count: 3},
-      {
-        name: 'Guitar',
-        difficulties: ['Easy', 'Medium', 'Hard', 'Expert'],
-        count: 4,
-      },
-      {name: 'Vocals', difficulties: ['Expert'], count: 1},
-    ],
-    dateAdded: '2025-02-28',
-  },
-  {
-    id: 2,
-    title: 'Imagine',
-    artist: 'John Lennon',
-    albumArt: '/placeholder.svg?height=80&width=80',
-    uploader: 'ClassicalFan',
-    instruments: [
-      {name: 'Piano', difficulties: ['Easy', 'Medium'], count: 2},
-      {name: 'Vocals', difficulties: ['Easy', 'Medium', 'Hard'], count: 3},
-    ],
-    dateAdded: '2025-02-27',
-  },
-  {
-    id: 3,
-    title: 'Hotel California',
-    artist: 'Eagles',
-    albumArt: '/placeholder.svg?height=80&width=80',
-    uploader: 'GuitarLover',
-    instruments: [
-      {name: 'Guitar', difficulties: ['Medium', 'Hard'], count: 2},
-      {name: 'Bass', difficulties: ['Easy', 'Medium'], count: 2},
-      {name: 'Drums', difficulties: ['Easy', 'Medium', 'Hard'], count: 3},
-    ],
-    dateAdded: '2025-02-26',
-  },
-  {
-    id: 4,
-    title: 'Billie Jean',
-    artist: 'Michael Jackson',
-    albumArt: '/placeholder.svg?height=80&width=80',
-    uploader: 'PopMusicTeacher',
-    instruments: [
-      {name: 'Piano', difficulties: ['Hard', 'Expert'], count: 2},
-      {name: 'Bass', difficulties: ['Medium', 'Hard'], count: 2},
-      {name: 'Drums', difficulties: ['Medium', 'Hard'], count: 2},
-      {name: 'Vocals', difficulties: ['Hard', 'Expert'], count: 2},
-    ],
-    dateAdded: '2025-02-25',
-  },
-  {
-    id: 5,
-    title: 'Stairway to Heaven',
-    artist: 'Led Zeppelin',
-    albumArt: '/placeholder.svg?height=80&width=80',
-    uploader: 'RockFan99',
-    instruments: [
-      {name: 'Guitar', difficulties: ['Hard', 'Expert'], count: 2},
-      {name: 'Vocals', difficulties: ['Medium', 'Hard'], count: 2},
-      {name: 'Drums', difficulties: ['Easy', 'Medium'], count: 2},
-    ],
-    dateAdded: '2025-02-24',
-  },
-  {
-    id: 6,
-    title: 'Yesterday',
-    artist: 'The Beatles',
-    albumArt: '/placeholder.svg?height=80&width=80',
-    uploader: 'ClassicRockTeacher',
-    instruments: [
-      {name: 'Guitar', difficulties: ['Easy', 'Medium'], count: 2},
-      {name: 'Strings', difficulties: ['Medium', 'Hard'], count: 2},
-      {name: 'Vocals', difficulties: ['Easy', 'Medium'], count: 2},
-    ],
-    dateAdded: '2025-02-23',
-  },
-  {
-    id: 7,
-    title: 'Smells Like Teen Spirit',
-    artist: 'Nirvana',
-    albumArt: '/placeholder.svg?height=80&width=80',
-    uploader: 'GrungeMusician',
-    instruments: [
-      {name: 'Guitar', difficulties: ['Medium', 'Hard', 'Expert'], count: 3},
-      {name: 'Bass', difficulties: ['Easy', 'Medium'], count: 2},
-      {name: 'Drums', difficulties: ['Easy', 'Medium', 'Hard'], count: 3},
-      {name: 'Vocals', difficulties: ['Medium', 'Hard'], count: 2},
-    ],
-    dateAdded: '2025-02-22',
-  },
-  {
-    id: 8,
-    title: "Sweet Child O' Mine",
-    artist: "Guns N' Roses",
-    albumArt: '/placeholder.svg?height=80&width=80',
-    uploader: 'GuitarTeacher',
-    instruments: [
-      {name: 'Guitar', difficulties: ['Hard', 'Expert'], count: 2},
-      {name: 'Bass', difficulties: ['Easy', 'Medium'], count: 2},
-      {name: 'Drums', difficulties: ['Medium', 'Hard'], count: 2},
-      {name: 'Vocals', difficulties: ['Medium', 'Hard'], count: 2},
-    ],
-    dateAdded: '2025-02-21',
-  },
-  {
-    id: 9,
-    title: 'Wonderwall',
-    artist: 'Oasis',
-    albumArt: '/placeholder.svg?height=80&width=80',
-    uploader: 'BritpopFan',
-    instruments: [
-      {name: 'Guitar', difficulties: ['Easy', 'Medium'], count: 2},
-      {name: 'Vocals', difficulties: ['Easy', 'Medium'], count: 2},
-      {name: 'Percussion', difficulties: ['Easy'], count: 1},
-    ],
-    dateAdded: '2025-02-20',
-  },
-  {
-    id: 10,
-    title: 'Let It Be',
-    artist: 'The Beatles',
-    albumArt: '/placeholder.svg?height=80&width=80',
-    uploader: 'PianoTeacher',
-    instruments: [
-      {name: 'Piano', difficulties: ['Easy', 'Medium', 'Hard'], count: 3},
-      {name: 'Guitar', difficulties: ['Easy', 'Medium'], count: 2},
-      {name: 'Vocals', difficulties: ['Easy', 'Medium'], count: 2},
-    ],
-    dateAdded: '2025-02-19',
-  },
-];
+import debounce from 'debounce';
+import {
+  ChartInstruments,
+  preFilterInstruments,
+} from '@/components/ChartInstruments';
+import {Icons} from '@/components/icons';
 
 const DifficultyBadge = ({
   instrument,
@@ -250,7 +119,6 @@ export default function Home() {
     'q',
     parseAsString.withDefault(''),
   );
-  const [filteredSongs, setFilteredSongs] = useState(recentSongs);
   const [activeInstruments, setActiveInstruments] = useState<string[]>([]);
 
   const chorusDbPromise = useMemo(() => getChorusChartDb(), []);
@@ -265,42 +133,21 @@ export default function Home() {
       )
       .slice(0, 10);
   }, [chorusDb]);
+  const [filteredSongs, setFilteredSongs] = useState(latest10);
 
-  const filterSongs = (query: string) => {
-    let filtered = recentSongs;
-
-    // First filter by search query if it exists
-    if (query.trim()) {
-      const lowercaseQuery = query.toLowerCase();
-      filtered = filtered.filter(
-        song =>
-          song.title.toLowerCase().includes(lowercaseQuery) ||
-          song.artist.toLowerCase().includes(lowercaseQuery) ||
-          song.instruments.some(instrument =>
-            instrument.name.toLowerCase().includes(lowercaseQuery),
-          ),
-      );
-    }
-
-    // Then filter by selected instruments if any are active
-    if (activeInstruments.length > 0) {
-      filtered = filtered.filter(song =>
-        activeInstruments.every(instrument =>
-          song.instruments.some(i => i.name === instrument),
-        ),
-      );
-    }
-
-    setFilteredSongs(filtered);
+  const filterSongs = async (query: string) => {
+    const results = await searchEncore(query);
+    setFilteredSongs(results.data);
   };
 
+  const debouncedFilterSongs = useMemo(() => debounce(filterSongs, 300), []);
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
     setSearchQuery(query);
-    filterSongs(query);
+    debouncedFilterSongs(query);
   };
 
-  const navigateToSong = (songId: number) => {
+  const navigateToSong = (songId: string) => {
     // In a real app, this would navigate to the song's sheet music page
     console.log(`Navigating to song ${songId}`);
     router.push(`/songs/${songId}`);
@@ -351,7 +198,7 @@ export default function Home() {
                 size="sm"
                 onClick={() => {
                   toggleInstrument('Guitar');
-                  filterSongs(searchQuery);
+                  // filterSongs(searchQuery);
                 }}
                 className="flex items-center gap-2 text-xs sm:text-sm">
                 <Guitar className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -364,7 +211,7 @@ export default function Home() {
                 size="sm"
                 onClick={() => {
                   toggleInstrument('Drums');
-                  filterSongs(searchQuery);
+                  // filterSongs(searchQuery);
                 }}
                 className="flex items-center gap-2 text-xs sm:text-sm">
                 <Drum className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -377,7 +224,7 @@ export default function Home() {
                 size="sm"
                 onClick={() => {
                   toggleInstrument('Bass');
-                  filterSongs(searchQuery);
+                  // filterSongs(searchQuery);
                 }}
                 className="flex items-center gap-2 text-xs sm:text-sm">
                 <Radio className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -390,7 +237,7 @@ export default function Home() {
                 size="sm"
                 onClick={() => {
                   toggleInstrument('Piano');
-                  filterSongs(searchQuery);
+                  // filterSongs(searchQuery);
                 }}
                 className="flex items-center gap-2 text-xs sm:text-sm">
                 <Piano className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -413,59 +260,58 @@ export default function Home() {
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredSongs.map(song => (
-                <Link
-                  href="/songs/[id]"
-                  as={`/songs/${song.id}`}
-                  key={song.id}
-                  className="flex items-stretch bg-card rounded-lg border border-border hover:bg-accent transition-colors cursor-pointer overflow-hidden">
-                  <div className="flex-shrink-0">
-                    <Image
-                      src={
-                        'https://files.enchor.us/132c9a0eabbe4b87525962c6560d35fc.jpg'
-                      } //song.albumArt || '/placeholder.svg'}
-                      alt={`${song.title} album art`}
-                      width={200}
-                      height={200}
-                      className="h-full w-[120px] sm:w-[160px] lg:w-[200px] object-cover"
-                    />
-                  </div>
-
-                  <div className="flex flex-col flex-grow p-4">
-                    <div className="flex-grow">
-                      <h3 className="font-medium text-base sm:text-lg lg:text-xl">
-                        {song.title}
-                      </h3>
-                      <p className="text-muted-foreground text-sm sm:text-base">
-                        {song.artist}
-                      </p>
-                      <p className="text-sm text-muted-foreground hidden sm:block">
-                        Uploaded by {song.uploader}
-                      </p>
+              {filteredSongs &&
+                filteredSongs.map(song => (
+                  <Link
+                    href="/songs/[id]"
+                    as={`/songs/${song.md5}`}
+                    key={song.md5}
+                    className="flex items-stretch bg-card rounded-lg border border-border hover:bg-accent transition-colors cursor-pointer overflow-hidden">
+                    <div className="flex-shrink-0">
+                      <Image
+                        src={
+                          'https://files.enchor.us/132c9a0eabbe4b87525962c6560d35fc.jpg'
+                        } //song.albumArt || '/placeholder.svg'}
+                        alt={`${song.name} album art`}
+                        width={200}
+                        height={200}
+                        priority={true}
+                        className="h-full w-[120px] sm:w-[160px] lg:w-[200px] object-cover"
+                      />
                     </div>
-                    <div className="flex flex-wrap gap-2 sm:gap-3 mt-2 sm:mt-3">
-                      {song.instruments.map(inst => (
-                        <DifficultyBadge
-                          key={inst.name}
-                          instrument={inst.name}
-                          difficulties={inst.difficulties}
-                          count={inst.count}
+
+                    <div className="flex flex-col flex-grow p-4">
+                      <div className="flex-grow">
+                        <h3 className="font-medium text-base sm:text-lg lg:text-xl">
+                          {song.name}
+                        </h3>
+                        <p className="text-muted-foreground text-sm sm:text-base">
+                          {song.artist}
+                        </p>
+                        <p className="text-sm text-muted-foreground hidden sm:block">
+                          Charted by {song.charter}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 sm:gap-3 mt-2 sm:mt-3">
+                        <ChartInstruments
+                          size="lg"
+                          classNames="h-7 w-7 lg:h-10 lg:w-10 sm:h-8 sm:w-8"
+                          instruments={preFilterInstruments(song)}
                         />
-                      ))}
+                      </div>
                     </div>
-                  </div>
 
-                  <Button
-                    variant="secondary"
-                    className="hidden sm:flex ml-4 mr-4 self-center"
-                    onClick={e => {
-                      e.stopPropagation();
-                      navigateToSong(song.id);
-                    }}>
-                    View Sheet
-                  </Button>
-                </Link>
-              ))}
+                    <Button
+                      variant="secondary"
+                      className="hidden sm:flex ml-4 mr-4 self-center"
+                      onClick={e => {
+                        e.stopPropagation();
+                        navigateToSong(song.md5);
+                      }}>
+                      View Sheet
+                    </Button>
+                  </Link>
+                ))}
             </div>
           )}
         </section>
