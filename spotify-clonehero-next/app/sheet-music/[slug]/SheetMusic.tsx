@@ -112,7 +112,7 @@ export default function SheetMusic({
   });
 
   return (
-    <div className="flex-1 flex justify-center bg-white rounded-lg border overflow-y-auto">
+    <div className="flex-1 flex justify-center bg-white rounded-lg border overflow-y-auto px-0">
       <div className="relative">
         <div ref={vexflowContainerRef} className="h-full" />
         {measureHighlights}
