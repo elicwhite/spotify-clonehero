@@ -370,14 +370,14 @@ export default function Renderer({
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col md:overflow-hidden">
-        {/* Mobile controls - moved here from fixed position */}
-        <div className="md:hidden flex items-center gap-2 px-4 py-3 border-b">
+        {/* Mobile controls - sticky on scroll */}
+        <div className="md:hidden sticky top-0 z-20 flex items-center gap-2 px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
           {backButton}
           {playPauseButton}
           <div className="ml-auto">{menuToggleButton}</div>
         </div>
 
-        <div className="h-12 border-b flex items-center px-4 gap-4">
+        <div className="h-12 border-b flex items-center px-4 gap-4 md:static sticky top-[60px] z-20 bg-background/95 backdrop-blur-sm">
           <Slider
             value={[currentPlayback]}
             max={songDuration || 100}
