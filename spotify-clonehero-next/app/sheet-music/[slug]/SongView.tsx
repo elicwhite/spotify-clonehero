@@ -245,6 +245,52 @@ export default function Renderer({
       });
   }, [volumeControls]);
 
+  // Define reusable control elements
+  const backButton = (
+    <Link href="/sheet-music">
+      <Button variant="ghost" size="icon" className="rounded-full">
+        <ArrowLeft className="h-6 w-6" />
+      </Button>
+    </Link>
+  );
+
+  const playPauseButton = (
+    <Button
+      size="icon"
+      variant="secondary"
+      className="rounded-full"
+      onClick={() => {
+        if (!audioManagerRef.current) {
+          return;
+        }
+
+        if (isPlaying) {
+          audioManagerRef.current.pause();
+          setIsPlaying(false);
+        } else if (!audioManagerRef.current.isInitialized) {
+          audioManagerRef.current.play({
+            time: 0,
+          });
+          setIsPlaying(true);
+        } else {
+          audioManagerRef.current.resume();
+          setIsPlaying(true);
+        }
+      }}>
+      {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
+    </Button>
+  );
+
+  const menuToggleButton = (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="rounded-full"
+      onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+      {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+    </Button>
+  );
+
   return (
     <div className="flex h-screen bg-background overflow-hidden relative">
       {/* Mobile overlay */}
@@ -255,56 +301,6 @@ export default function Renderer({
         />
       )}
 
-      {/* Always visible mobile controls */}
-      <div className="md:hidden fixed top-4 left-4 z-40 flex items-center gap-2">
-        <Link
-          href="/sheet-music"
-          className="bg-background/80 backdrop-blur-sm rounded-full">
-          <Button variant="ghost" size="icon" className="rounded-full">
-            <ArrowLeft className="h-6 w-6" />
-          </Button>
-        </Link>
-        <Button
-          size="icon"
-          variant="secondary"
-          className="rounded-full bg-background/80 backdrop-blur-sm"
-          onClick={() => {
-            if (!audioManagerRef.current) {
-              return;
-            }
-
-            if (isPlaying) {
-              audioManagerRef.current.pause();
-              setIsPlaying(false);
-            } else if (!audioManagerRef.current.isInitialized) {
-              audioManagerRef.current.play({
-                time: 0,
-              });
-              setIsPlaying(true);
-            } else {
-              audioManagerRef.current.resume();
-              setIsPlaying(true);
-            }
-          }}>
-          {isPlaying ? (
-            <Pause className="h-6 w-6" />
-          ) : (
-            <Play className="h-6 w-6" />
-          )}
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="rounded-full bg-background/80 backdrop-blur-sm ml-2"
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
-          {isSidebarOpen ? (
-            <X className="h-6 w-6" />
-          ) : (
-            <Menu className="h-6 w-6" />
-          )}
-        </Button>
-      </div>
-
       {/* Left Sidebar */}
       <div
         className={cn(
@@ -314,39 +310,8 @@ export default function Renderer({
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full',
         )}>
         <div className="space-y-4 md:flex hidden">
-          <Link href="/sheet-music" className="px-1">
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <ArrowLeft className="h-6 w-6" />
-            </Button>
-          </Link>
-          <Button
-            size="icon"
-            variant="secondary"
-            className="rounded-full px-1"
-            onClick={() => {
-              if (!audioManagerRef.current) {
-                return;
-              }
-
-              if (isPlaying) {
-                audioManagerRef.current.pause();
-                setIsPlaying(false);
-              } else if (!audioManagerRef.current.isInitialized) {
-                audioManagerRef.current.play({
-                  time: 0,
-                });
-                setIsPlaying(true);
-              } else {
-                audioManagerRef.current.resume();
-                setIsPlaying(true);
-              }
-            }}>
-            {isPlaying ? (
-              <Pause className="h-6 w-6" />
-            ) : (
-              <Play className="h-6 w-6" />
-            )}
-          </Button>
+          {backButton}
+          {playPauseButton}
           {/* <Button variant="ghost" size="icon" className="rounded-full">
             <Maximize2 className="h-6 w-6" />
           </Button> */}
@@ -405,6 +370,13 @@ export default function Renderer({
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden md:ml-0">
+        {/* Mobile controls - moved here from fixed position */}
+        <div className="md:hidden flex items-center gap-2 px-4 py-3 border-b">
+          {backButton}
+          {playPauseButton}
+          <div className="ml-auto">{menuToggleButton}</div>
+        </div>
+
         <div className="h-12 border-b flex items-center px-4 gap-4">
           <Slider
             value={[currentPlayback]}
@@ -427,7 +399,7 @@ export default function Renderer({
           </span>
         </div>
 
-        <div className="md:p-8 p-4 pt-16 md:pt-8 flex-1 flex flex-col overflow-hidden">
+        <div className="md:p-8 p-4 flex-1 flex flex-col overflow-hidden">
           <h1 className="text-3xl md:text-3xl font-bold mb-4 md:mb-8">
             {metadata.name} by {metadata.artist}
             <span className="block text-lg md:inline md:text-3xl md:ml-1">
