@@ -292,7 +292,7 @@ export default function Renderer({
   );
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden relative">
+    <div className="md:h-screen h-full flex flex-col md:flex-row bg-background relative">
       {/* Mobile overlay */}
       {isSidebarOpen && (
         <div
@@ -306,7 +306,7 @@ export default function Renderer({
         className={cn(
           'w-64 border-r p-4 flex flex-col gap-6 bg-background z-40',
           'fixed inset-y-0 left-0 transition-transform duration-300 ease-in-out',
-          'md:static md:translate-x-0',
+          'md:static md:translate-x-0 md:h-full',
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full',
         )}>
         <div className="md:flex hidden items-center gap-2">
@@ -369,7 +369,7 @@ export default function Renderer({
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden md:ml-0">
+      <div className="flex-1 flex flex-col md:overflow-hidden">
         {/* Mobile controls - moved here from fixed position */}
         <div className="md:hidden flex items-center gap-2 px-4 py-3 border-b">
           {backButton}
@@ -399,7 +399,7 @@ export default function Renderer({
           </span>
         </div>
 
-        <div className="md:p-8 p-4 flex-1 flex flex-col overflow-hidden">
+        <div className="md:p-8 p-4 flex-1 flex flex-col md:overflow-hidden">
           <h1 className="text-3xl md:text-3xl font-bold mb-4 md:mb-8">
             {metadata.name} by {metadata.artist}
             <span className="block text-lg md:inline md:text-3xl md:ml-1">
