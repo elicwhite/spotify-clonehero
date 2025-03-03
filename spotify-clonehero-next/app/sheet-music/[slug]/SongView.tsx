@@ -309,7 +309,7 @@ export default function Renderer({
           'md:static md:translate-x-0',
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full',
         )}>
-        <div className="space-y-4 md:flex hidden">
+        <div className="md:flex hidden items-center gap-2">
           {backButton}
           {playPauseButton}
           {/* <Button variant="ghost" size="icon" className="rounded-full">
