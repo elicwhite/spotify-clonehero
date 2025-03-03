@@ -152,7 +152,7 @@ export default function Search({
               </div>
               <Input
                 type="search"
-                placeholder="Search for songs, artists, or instruments..."
+                placeholder="Search for songs, artists, charters and more..."
                 className="pl-9 sm:pl-10 w-full"
                 value={searchQuery}
                 onChange={handleSearch}
