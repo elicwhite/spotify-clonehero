@@ -1,14 +1,17 @@
-import dynamic from 'next/dynamic';
+import {searchEncore} from '@/lib/search-encore';
+import Typeahead from './Typeahead';
 
-/*
-Pretty much all of the code that powers this page
-is copied from liquid's work!
-*/
-
-const ClientPage = dynamic(() => import('./ClientPage'), {
-  ssr: false,
-});
-
-export default function Page() {
-  return <ClientPage />;
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    q?: string | undefined;
+    instrument?: string | undefined;
+  }>;
+}) {
+  const params = await searchParams;
+  const query = params.q ?? '';
+  const instrument = params.instrument ?? null;
+  const results = await searchEncore(query, instrument);
+  return <Typeahead defaultResults={results} />;
 }
