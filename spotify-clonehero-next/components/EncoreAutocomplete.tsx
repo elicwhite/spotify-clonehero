@@ -6,46 +6,7 @@ import {Button} from './ui/button';
 import {cn} from '@/lib/utils';
 import debounce from 'debounce';
 import {ChartInstruments, preFilterInstruments} from './ChartInstruments';
-
-export type EncoreResponse = {
-  found: number;
-  out_of: number;
-  data: ChartResponseEncore[];
-};
-
-export async function searchEncore(search: string): Promise<EncoreResponse> {
-  const response = await fetch('https://api.enchor.us/search', {
-    headers: {
-      accept: 'application/json, text/plain, */*',
-      'accept-language': 'en-US,en;q=0.9',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      search: search,
-      page: 1,
-      instrument: null,
-      difficulty: null,
-      drumType: null,
-      source: 'website',
-    }),
-    method: 'POST',
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `Search failed with status ${response.status}: ${response.statusText}`,
-    );
-  }
-
-  const json = await response.json();
-  return {
-    ...json,
-    data: json.data.map((chart: ChartResponseEncore) => ({
-      ...chart,
-      file: `https://files.enchor.us/${chart.md5}.sng`,
-    })),
-  };
-}
+import {searchEncore} from '@/lib/search-encore';
 
 export default function EncoreAutocomplete({
   onChartSelected,
@@ -57,7 +18,7 @@ export default function EncoreAutocomplete({
   const onValueChange = useMemo(
     () =>
       debounce(async ({inputValue}: {inputValue: string}) => {
-        const results = (await searchEncore(inputValue)).data;
+        const results = (await searchEncore(inputValue, null)).data;
         console.log(results);
         setItems(results.slice(0, 10) ?? []);
       }, 500),

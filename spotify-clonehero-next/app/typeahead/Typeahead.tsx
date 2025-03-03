@@ -1,13 +1,7 @@
 'use client';
 
-import EncoreAutocomplete, {
-  EncoreResponse,
-  searchEncore,
-} from '@/components/EncoreAutocomplete';
-import getChorusChartDb from '@/lib/chorusChartDb';
-import chorusChartDb from '@/lib/chorusChartDb';
-import {use, useMemo, useEffect, useState} from 'react';
-import {useRouter, useSearchParams} from 'next/navigation';
+import {useMemo, useEffect, useState} from 'react';
+import {useRouter} from 'next/navigation';
 import {parseAsString, useQueryState} from 'nuqs';
 import Image from 'next/image';
 import {Search, Guitar, Drum, Radio, Piano} from 'lucide-react';
@@ -19,136 +13,114 @@ import {
   ChartInstruments,
   preFilterInstruments,
 } from '@/components/ChartInstruments';
-import {Icons} from '@/components/icons';
+import {EncoreResponse, searchEncore} from '@/lib/search-encore';
 
-const DifficultyBadge = ({
-  instrument,
-  difficulties,
-  count,
-}: {
-  instrument: string;
-  difficulties: string[];
-  count: number;
-}) => {
-  const getIcon = (name: string) => {
-    switch (name) {
-      case 'Guitar':
-        return <Guitar className="h-4 w-4 sm:h-5 sm:w-5" />;
-      case 'Drums':
-        return <Drum className="h-4 w-4 sm:h-5 sm:w-5" />;
-      case 'Bass':
-        return <Radio className="h-4 w-4 sm:h-5 sm:w-5" />;
-      case 'Piano':
-        return <Piano className="h-4 w-4 sm:h-5 sm:w-5" />;
-      default:
-        return null;
-    }
-  };
+// const DifficultyBadge = ({
+//   instrument,
+//   difficulties,
+//   count,
+// }: {
+//   instrument: string;
+//   difficulties: string[];
+//   count: number;
+// }) => {
+//   const getIcon = (name: string) => {
+//     switch (name) {
+//       case 'Guitar':
+//         return <Guitar className="h-4 w-4 sm:h-5 sm:w-5" />;
+//       case 'Drums':
+//         return <Drum className="h-4 w-4 sm:h-5 sm:w-5" />;
+//       case 'Bass':
+//         return <Radio className="h-4 w-4 sm:h-5 sm:w-5" />;
+//       case 'Piano':
+//         return <Piano className="h-4 w-4 sm:h-5 sm:w-5" />;
+//       default:
+//         return null;
+//     }
+//   };
 
-  const getDifficultyLabel = (difficulties: string[]) => {
-    if (difficulties.length === 1) {
-      return difficulties[0];
-    }
+//   const getDifficultyLabel = (difficulties: string[]) => {
+//     if (difficulties.length === 1) {
+//       return difficulties[0];
+//     }
 
-    return difficulties
-      .map(d => {
-        switch (d) {
-          case 'Easy':
-            return 'E';
-          case 'Medium':
-            return 'M';
-          case 'Hard':
-            return 'H';
-          case 'Expert':
-            return 'X';
-          default:
-            return '';
-        }
-      })
-      .join('');
-  };
-
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="relative">
-        <div className="bg-black rounded-full p-1.5 sm:p-2">
-          {getIcon(instrument)}
-        </div>
-        <div className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-[10px] sm:text-xs rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center">
-          {count}
-        </div>
-      </div>
-      <span className="text-[10px] sm:text-xs font-medium">
-        {getDifficultyLabel(difficulties)}
-      </span>
-    </div>
-  );
-};
-
-// export default function Typeahead() {
-//   const fetchChorusDb = chorusChartDb();
-
-//   const chorusDbPromise = useMemo(() => getChorusChartDb(), []);
-//   const chorusDb = use(chorusDbPromise);
-//   const latest10 = useMemo(() => {
-//     return chorusDb
-//       .slice()
-//       .sort(
-//         (a, b) =>
-//           new Date(b.modifiedTime).getTime() -
-//           new Date(a.modifiedTime).getTime(),
-//       )
-//       .slice(0, 10);
-//   }, [chorusDb]);
-//   console.log(latest10);
+//     return difficulties
+//       .map(d => {
+//         switch (d) {
+//           case 'Easy':
+//             return 'E';
+//           case 'Medium':
+//             return 'M';
+//           case 'Hard':
+//             return 'H';
+//           case 'Expert':
+//             return 'X';
+//           default:
+//             return '';
+//         }
+//       })
+//       .join('');
+//   };
 
 //   return (
-//     <>
-//       <img
-//         src="https://files.enchor.us/132c9a0eabbe4b87525962c6560d35fc.jpg"
-//         width={100}
-//         height={100}
-//       />
-//       <EncoreAutocomplete onChartSelected={r => console.log(r)} />
-//     </>
+//     <div className="flex flex-col items-center gap-1">
+//       <div className="relative">
+//         <div className="bg-black rounded-full p-1.5 sm:p-2">
+//           {getIcon(instrument)}
+//         </div>
+//         <div className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-[10px] sm:text-xs rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center">
+//           {count}
+//         </div>
+//       </div>
+//       <span className="text-[10px] sm:text-xs font-medium">
+//         {getDifficultyLabel(difficulties)}
+//       </span>
+//     </div>
 //   );
-// }
+// };
 
-export default function Home() {
+export default function Home({
+  defaultResults,
+}: {
+  defaultResults: EncoreResponse;
+}) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useQueryState(
     'q',
     parseAsString.withDefault(''),
   );
-  const [activeInstruments, setActiveInstruments] = useState<string[]>([]);
-
-  // const chorusDbPromise = useMemo(() => getChorusChartDb(), []);
-  // const chorusDb = use(chorusDbPromise);
-  // const latest10 = useMemo(() => {
-  //   return chorusDb
-  //     .slice()
-  //     .sort(
-  //       (a, b) =>
-  //         new Date(b.modifiedTime).getTime() -
-  //         new Date(a.modifiedTime).getTime(),
-  //     )
-  //     .slice(0, 10);
-  // }, [chorusDb]);
-  const [filteredSongs, setFilteredSongs] = useState<EncoreResponse | null>(
-    null,
+  const [instrumentFilter, setInstrumentFilter] = useQueryState(
+    'instrument',
+    parseAsString,
   );
 
-  const filterSongs = async (query: string) => {
-    const results = await searchEncore(query);
-    console.log(results);
-    setFilteredSongs(results);
+  const toggleInstrumentFilter = (instrument: string) => {
+    if (instrumentFilter === instrument) {
+      setInstrumentFilter(null);
+    } else {
+      setInstrumentFilter(instrument);
+    }
   };
 
-  const debouncedFilterSongs = useMemo(() => debounce(filterSongs, 2000), []);
+  const [filteredSongs, setFilteredSongs] =
+    useState<EncoreResponse>(defaultResults);
+
+  const debouncedFilterSongs = useMemo(
+    () =>
+      debounce(async (query: string, instrument: undefined | null | string) => {
+        const results = await searchEncore(query, instrument);
+        setFilteredSongs(results);
+      }, 500),
+    [],
+  );
+  const searchSongs = (query: string) => {
+    debouncedFilterSongs(query, instrumentFilter);
+  };
+
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
     setSearchQuery(query);
-    debouncedFilterSongs(query);
+    searchSongs(query);
   };
 
   const navigateToSong = (songId: string) => {
@@ -157,17 +129,9 @@ export default function Home() {
     router.push(`/songs/${songId}`);
   };
 
-  const toggleInstrument = (instrument: string) => {
-    setActiveInstruments(prev =>
-      prev.includes(instrument)
-        ? prev.filter(i => i !== instrument)
-        : [...prev, instrument],
-    );
-  };
-
   useEffect(() => {
-    filterSongs(searchQuery);
-  }, [searchQuery, activeInstruments]); // Re-filter when instruments or searchQuery change
+    searchSongs(searchQuery);
+  }, [searchQuery, instrumentFilter]);
 
   return (
     <main className="min-h-screen bg-background w-full">
@@ -177,7 +141,7 @@ export default function Home() {
             Sheet Music Search
           </h1>
           <p className="text-muted-foreground mb-6 text-sm sm:text-base">
-            Find sheet music for your favorite songs and instruments
+            Convert Drum Charts to Sheet Music
           </p>
 
           <div className="flex flex-col gap-4">
@@ -196,52 +160,40 @@ export default function Home() {
 
             <div className="flex flex-wrap gap-2">
               <Button
-                variant={
-                  activeInstruments.includes('Guitar') ? 'default' : 'outline'
-                }
+                variant={instrumentFilter === 'guitar' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => {
-                  toggleInstrument('Guitar');
-                  // filterSongs(searchQuery);
+                  toggleInstrumentFilter('guitar');
                 }}
                 className="flex items-center gap-2 text-xs sm:text-sm">
                 <Guitar className="h-3 w-3 sm:h-4 sm:w-4" />
                 Guitar
               </Button>
               <Button
-                variant={
-                  activeInstruments.includes('Drums') ? 'default' : 'outline'
-                }
+                variant={instrumentFilter === 'drums' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => {
-                  toggleInstrument('Drums');
-                  // filterSongs(searchQuery);
+                  toggleInstrumentFilter('drums');
                 }}
                 className="flex items-center gap-2 text-xs sm:text-sm">
                 <Drum className="h-3 w-3 sm:h-4 sm:w-4" />
                 Drums
               </Button>
               <Button
-                variant={
-                  activeInstruments.includes('Bass') ? 'default' : 'outline'
-                }
+                variant={instrumentFilter === 'bass' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => {
-                  toggleInstrument('Bass');
-                  // filterSongs(searchQuery);
+                  toggleInstrumentFilter('bass');
                 }}
                 className="flex items-center gap-2 text-xs sm:text-sm">
                 <Radio className="h-3 w-3 sm:h-4 sm:w-4" />
                 Bass
               </Button>
               <Button
-                variant={
-                  activeInstruments.includes('Piano') ? 'default' : 'outline'
-                }
+                variant={instrumentFilter === 'piano' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => {
-                  toggleInstrument('Piano');
-                  // filterSongs(searchQuery);
+                  toggleInstrumentFilter('piano');
                 }}
                 className="flex items-center gap-2 text-xs sm:text-sm">
                 <Piano className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -274,9 +226,7 @@ export default function Home() {
                     className="flex items-stretch bg-card rounded-lg border border-border hover:bg-accent transition-colors cursor-pointer overflow-hidden">
                     <div className="flex-shrink-0">
                       <Image
-                        src={
-                          'https://files.enchor.us/132c9a0eabbe4b87525962c6560d35fc.jpg'
-                        } //song.albumArt || '/placeholder.svg'}
+                        src={`https://files.enchor.us/${song.albumArtMd5}.jpg`}
                         alt={`${song.name} album art`}
                         width={200}
                         height={200}
