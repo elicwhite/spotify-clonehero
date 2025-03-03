@@ -311,6 +311,9 @@ function markInstalledCharts(
       md5: '',
       name: chart.song,
       hasVideoBackground: false,
+      albumArtMd5: '',
+      // @ts-ignore - notesData is not in the data I have from quick scanning local charts
+      notesData: {},
       isInstalled: isInstalled(chart.artist, chart.song, chart.charter),
     }),
   );
