@@ -9,7 +9,7 @@ import {Icons} from '@/components/icons';
 import {Button} from '@/components/ui/button';
 import {Toaster} from 'sonner';
 
-export const fontSans = FontSans({
+const fontSans = FontSans({
   subsets: ['latin'],
   variable: '--font-sans',
 });
