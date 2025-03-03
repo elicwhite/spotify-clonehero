@@ -695,7 +695,7 @@ async function generateNoteHighway(
       }
     } else {
       for (const note of group) {
-        if (note.flags & noteFlags.strum) {
+        if (note.type === noteTypes.open) {
           const openScale = 0.11;
           const sprite = new THREE.Sprite(
             getTextureForNote(note, {inStarPower}),
