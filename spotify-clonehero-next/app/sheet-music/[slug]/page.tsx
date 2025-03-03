@@ -23,7 +23,6 @@ export default async function Page({
   params: Promise<{slug: string}>;
 }) {
   const slug = getMd5FromSlug((await params).slug);
-  console.log('slug', slug);
   if (!slug) {
     return 'Invalid chart';
   }

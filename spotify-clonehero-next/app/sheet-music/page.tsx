@@ -1,5 +1,5 @@
 import {searchEncore} from '@/lib/search-encore';
-import Typeahead from './Typeahead';
+import Search from './Search';
 
 export default async function Page({
   searchParams,
@@ -13,5 +13,5 @@ export default async function Page({
   const query = params.q ?? '';
   const instrument = params.instrument ?? null;
   const results = await searchEncore(query, instrument);
-  return <Typeahead defaultResults={results} />;
+  return <Search defaultResults={results} />;
 }

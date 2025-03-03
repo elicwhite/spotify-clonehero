@@ -35,6 +35,7 @@ import SheetMusic from './SheetMusic';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import {AudioManager} from '@/lib/preview/audioManager';
 import CloneHeroRenderer from './CloneHeroRenderer';
+import Link from 'next/link';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -246,15 +247,15 @@ export default function Renderer({
       {/* Left Sidebar */}
       <div className="w-64 border-r p-4 flex flex-col gap-6">
         <div className="space-y-4">
-          {/* <Link href="#">
+          <Link href="/sheet-music" className="px-1">
             <Button variant="ghost" size="icon" className="rounded-full">
               <ArrowLeft className="h-6 w-6" />
             </Button>
-          </Link> */}
+          </Link>
           <Button
             size="icon"
             variant="secondary"
-            className="rounded-full"
+            className="rounded-full px-1"
             onClick={() => {
               if (!audioManagerRef.current) {
                 return;
@@ -349,6 +350,7 @@ export default function Renderer({
                 audioManagerRef.current.play({
                   time: newTime,
                 });
+                setIsPlaying(true);
               }
             }}
           />
@@ -363,13 +365,13 @@ export default function Renderer({
             {metadata.name} by {metadata.artist} charted by {metadata.charter}
           </h1>
 
-          <CloneHeroRenderer
+          {/* <CloneHeroRenderer
             metadata={metadata}
             chart={chart}
             difficulty={selectedDifficulty}
             audioManager={audioManagerRef.current!}
-          />
-          {/* <SheetMusic
+          /> */}
+          <SheetMusic
             currentTime={currentPlayback}
             chart={chart}
             difficulty={selectedDifficulty}
@@ -383,7 +385,7 @@ export default function Renderer({
 
               setIsPlaying(true);
             }}
-          /> */}
+          />
         </div>
       </div>
     </div>

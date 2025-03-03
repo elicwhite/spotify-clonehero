@@ -4,7 +4,7 @@ import {useMemo, useEffect, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {parseAsString, useQueryState} from 'nuqs';
 import Image from 'next/image';
-import {Search, Guitar, Drum, Radio, Piano} from 'lucide-react';
+import {Search as SearchIcon, Guitar, Drum, Radio, Piano} from 'lucide-react';
 import {Input} from '@/components/ui/input';
 import {Button} from '@/components/ui/button';
 import Link from 'next/link';
@@ -79,7 +79,7 @@ import {EncoreResponse, searchEncore} from '@/lib/search-encore';
 //   );
 // };
 
-export default function Home({
+export default function Search({
   defaultResults,
 }: {
   defaultResults: EncoreResponse;
@@ -89,17 +89,18 @@ export default function Home({
     'q',
     parseAsString.withDefault(''),
   );
-  const [instrumentFilter, setInstrumentFilter] = useQueryState(
-    'instrument',
-    parseAsString,
-  );
+  // const [instrumentFilter, setInstrumentFilter] = useQueryState(
+  //   'instrument',
+  //   parseAsString,
+  // );
+  const instrumentFilter = 'drums';
 
   const toggleInstrumentFilter = (instrument: string) => {
-    if (instrumentFilter === instrument) {
-      setInstrumentFilter(null);
-    } else {
-      setInstrumentFilter(instrument);
-    }
+    // if (instrumentFilter === instrument) {
+    //   setInstrumentFilter(null);
+    // } else {
+    //   setInstrumentFilter(instrument);
+    // }
   };
 
   const [filteredSongs, setFilteredSongs] =
@@ -147,7 +148,7 @@ export default function Home({
           <div className="flex flex-col gap-4">
             <div className="relative">
               <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <Search className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                <SearchIcon className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
               </div>
               <Input
                 type="search"
@@ -158,7 +159,7 @@ export default function Home({
               />
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            {/* <div className="flex flex-wrap gap-2">
               <Button
                 variant={instrumentFilter === 'guitar' ? 'default' : 'outline'}
                 size="sm"
@@ -199,7 +200,7 @@ export default function Home({
                 <Piano className="h-3 w-3 sm:h-4 sm:w-4" />
                 Piano
               </Button>
-            </div>
+            </div> */}
           </div>
         </header>
 
@@ -220,8 +221,8 @@ export default function Home({
               {filteredSongs &&
                 filteredSongs.data.map(song => (
                   <Link
-                    href="/songs/[id]"
-                    as={`/songs/${song.md5}`}
+                    href="/sheet-music/[slug]"
+                    as={`/sheet-music/${song.name}-${song.artist}-${song.md5}`}
                     key={song.md5}
                     className="flex items-stretch bg-card rounded-lg border border-border hover:bg-accent transition-colors cursor-pointer overflow-hidden">
                     <div className="flex-shrink-0">
