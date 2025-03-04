@@ -292,7 +292,7 @@ export default function Renderer({
   );
 
   return (
-    <div className="overflow-hidden flex flex-col md:flex-row bg-background relative">
+    <div className="md:overflow-hidden flex flex-col md:flex-row bg-background relative">
       {/* Mobile overlay */}
       {isSidebarOpen && (
         <div
