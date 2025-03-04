@@ -259,11 +259,7 @@ export default function Search({
 
                     <Button
                       variant="secondary"
-                      className="hidden sm:flex ml-4 mr-4 self-center"
-                      onClick={e => {
-                        e.stopPropagation();
-                        navigateToSong(song.md5);
-                      }}>
+                      className="hidden sm:flex ml-4 mr-4 self-center">
                       View Sheet
                     </Button>
                   </Link>
