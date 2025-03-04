@@ -22,8 +22,10 @@ export interface RenderData {
   measure: Measure;
 }
 
-const STAVE_WIDTH = 600;
-const STAVE_PER_ROW = 2;
+const MIN_STAVE_WIDTH = 250;
+const MAX_STAVE_WIDTH = 600;
+const MAX_STAVES_PER_ROW = 4;
+const MIN_STAVES_PER_ROW = 1;
 
 const NOTE_COLOR_MAP: {[key: string]: string} = {
   'e/4': '#ff793f', // orange
@@ -47,14 +49,34 @@ export function renderMusic(
     return [];
   }
 
+  const width =
+    elementRef.current?.parentElement?.offsetWidth ?? window.innerWidth;
+
+  // Calculate responsive values based on available width
+  const margin = 30;
+
+  const stavePerRow = Math.min(
+    MAX_STAVES_PER_ROW,
+    Math.max(
+      MIN_STAVES_PER_ROW,
+      Math.floor((width - margin) / MIN_STAVE_WIDTH),
+    ),
+  );
+
+  // Calculate the actual stave width
+  const staveWidth = Math.min(
+    MAX_STAVE_WIDTH,
+    Math.floor((width - margin) / stavePerRow),
+  );
+
   const renderer = new Renderer(elementRef.current, Renderer.Backends.SVG);
 
   const context = renderer.getContext();
   const lineHeight = showBarNumbers ? 180 : 130;
 
   renderer.resize(
-    STAVE_WIDTH * STAVE_PER_ROW + 10,
-    Math.ceil(measures.length / STAVE_PER_ROW) * lineHeight + 50,
+    staveWidth * stavePerRow + 10,
+    Math.ceil(measures.length / stavePerRow) * lineHeight + 50,
   );
 
   return measures.map((measure, index) => ({
@@ -63,8 +85,9 @@ export function renderMusic(
       context,
       measure,
       index,
-      (index % STAVE_PER_ROW) * STAVE_WIDTH,
-      Math.floor(index / STAVE_PER_ROW) * lineHeight,
+      (index % stavePerRow) * staveWidth,
+      Math.floor(index / stavePerRow) * lineHeight,
+      staveWidth,
       index === measures.length - 1,
       showBarNumbers,
       enableColors,
@@ -78,11 +101,12 @@ function renderMeasure(
   index: number,
   xOffset: number,
   yOffset: number,
+  staveWidth: number,
   endMeasure: boolean,
   showBarNumbers: boolean,
   enableColors: boolean,
 ) {
-  const stave = new Stave(xOffset, yOffset, STAVE_WIDTH);
+  const stave = new Stave(xOffset, yOffset, staveWidth);
 
   if (endMeasure) {
     stave.setEndBarType(Barline.type.END);
@@ -154,7 +178,7 @@ function renderMeasure(
     stem_direction: -1,
   });
 
-  new Formatter().joinVoices([voice]).format([voice], STAVE_WIDTH - 40);
+  new Formatter().joinVoices([voice]).format([voice], staveWidth - 40);
 
   voice.draw(context, stave);
 

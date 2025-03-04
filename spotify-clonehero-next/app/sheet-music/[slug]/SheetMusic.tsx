@@ -12,6 +12,7 @@ import convertToVexFlow from './convertToVexflow';
 import {RenderData, renderMusic} from './renderVexflow';
 
 import {cn} from '@/lib/utils';
+import debounce from 'debounce';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -31,7 +32,7 @@ export default function SheetMusic({
   onSelectMeasure: (time: number) => void;
 }) {
   const vexflowContainerRef = useRef<HTMLDivElement>(null);
-
+  const [windowWidth, setWindowWidth] = useState<number>(window.innerWidth);
   const highlightsRef = useRef<RefObject<HTMLButtonElement>[]>([]);
   const [highlightedMeasureIndex, setHighlightedMeasureIndex] =
     useState<number>(1);
@@ -42,10 +43,30 @@ export default function SheetMusic({
 
   const [renderData, setRenderData] = useState<RenderData[]>([]);
 
+  const debouncedOnResize = useMemo(
+    () =>
+      debounce(() => {
+        const width =
+          vexflowContainerRef.current?.offsetWidth ?? window.innerWidth;
+        setWindowWidth(width);
+      }, 50),
+    [],
+  );
+
+  useEffect(() => {
+    window.addEventListener('resize', debouncedOnResize);
+    return () => {
+      window.removeEventListener('resize', debouncedOnResize);
+    };
+  }, [debouncedOnResize]);
+
   useEffect(() => {
     if (!vexflowContainerRef.current) {
       return;
     }
+
+    // Use this to force the sheet music to re-render when the window width changes
+    windowWidth;
 
     if (vexflowContainerRef.current?.children.length > 0) {
       vexflowContainerRef.current.removeChild(
@@ -62,7 +83,7 @@ export default function SheetMusic({
     setRenderData(data);
 
     highlightsRef.current = data.map(() => createRef<HTMLButtonElement>());
-  }, [measures, showBarNumbers, enableColors]);
+  }, [measures, showBarNumbers, enableColors, windowWidth]);
 
   useEffect(() => {
     if (!renderData) {
@@ -112,9 +133,9 @@ export default function SheetMusic({
   });
 
   return (
-    <div className="flex-1 flex justify-center bg-white rounded-lg border md:overflow-y-auto overflow-x-hidden">
-      <div className="relative">
-        <div ref={vexflowContainerRef} className="h-full" />
+    <div className="flex-1 flex justify-center bg-white rounded-lg border md:overflow-y-auto overflow-x-hidden px-4">
+      <div className="relative w-full">
+        <div ref={vexflowContainerRef} className="flex h-full w-full" />
         {measureHighlights}
       </div>
     </div>
