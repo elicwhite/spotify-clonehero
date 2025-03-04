@@ -124,12 +124,6 @@ export default function Search({
     searchSongs(query);
   };
 
-  const navigateToSong = (songId: string) => {
-    // In a real app, this would navigate to the song's sheet music page
-    console.log(`Navigating to song ${songId}`);
-    router.push(`/songs/${songId}`);
-  };
-
   useEffect(() => {
     searchSongs(searchQuery);
   }, [searchQuery, instrumentFilter]);
