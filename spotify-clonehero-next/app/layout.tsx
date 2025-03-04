@@ -27,8 +27,8 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
           'bg-background flex flex-col h-screen font-sans antialiased',
           fontSans.variable,
         )}>
-        <nav className="border-b border-border/60">
-          <div className="max-w-screen-xl flex flex-wrap items-center justify-between mx-auto p-4">
+        <nav className="border-b border-border/60 h-12 md:h-16 px-4 md:px-8">
+          <div className="max-w-screen-xl flex flex-wrap items-center justify-between mx-auto h-full">
             <div className="flex flex-row gap-8">
               <Link
                 href="/"

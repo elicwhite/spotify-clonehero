@@ -292,7 +292,7 @@ export default function Renderer({
   );
 
   return (
-    <div className="md:h-screen h-full flex flex-col md:flex-row bg-background relative">
+    <div className="overflow-hidden flex flex-col md:flex-row bg-background relative">
       {/* Mobile overlay */}
       {isSidebarOpen && (
         <div
@@ -371,13 +371,13 @@ export default function Renderer({
       {/* Main Content */}
       <div className="flex-1 flex flex-col md:overflow-hidden">
         {/* Mobile controls - sticky on scroll */}
-        <div className="md:hidden sticky top-0 z-20 flex items-center gap-2 px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
+        <div className="md:hidden sticky top-0 z-20 flex items-center gap-2 md:px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
           {backButton}
           {playPauseButton}
           <div className="ml-auto">{menuToggleButton}</div>
         </div>
 
-        <div className="h-12 border-b flex items-center px-4 gap-4 md:static sticky top-[60px] z-20 bg-background/95 backdrop-blur-sm">
+        <div className="h-12 border-b flex items-center md:px-4 gap-4 md:static sticky top-[60px] z-20 bg-background/95 backdrop-blur-sm">
           <Slider
             value={[currentPlayback]}
             max={songDuration || 100}
@@ -399,7 +399,7 @@ export default function Renderer({
           </span>
         </div>
 
-        <div className="md:p-8 p-4 flex-1 flex flex-col md:overflow-hidden">
+        <div className="md:p-8 md:px-4 py-4 flex-1 flex flex-col md:overflow-hidden">
           <h1 className="text-3xl md:text-3xl font-bold mb-4 md:mb-8">
             {metadata.name} by {metadata.artist}
             <span className="block text-lg md:inline md:text-3xl md:ml-1">
