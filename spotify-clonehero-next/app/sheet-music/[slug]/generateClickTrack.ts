@@ -15,7 +15,7 @@ export interface ClickOptions {
 // Define an interface for our scheduled click events.
 interface ClickEvent {
   timeMs: number; // when the click should occur (ms)
-  volume: number;
+  type: 'downbeat' | 'quarter' | 'eighth'; // type of click (downbeat or quarter)
 }
 
 interface VolumeConfig {
@@ -28,7 +28,7 @@ interface VolumeConfig {
 const clickOptions: ClickOptions = {
   clickDuration: 0.05, // each click lasts 50ms
   strongTone: 1000, // strong beat frequency (Hz)
-  subdivisionTone: 500, // subdivision frequency (Hz)
+  subdivisionTone: 700, // subdivision frequency (Hz)
   strongVolume: 1.0,
   subdivisionVolume: Math.pow(0.6, 2),
   subdivisions: 2, // click on beat and one subdivision between beats
@@ -41,10 +41,7 @@ const clickOptions: ClickOptions = {
  *
  * If subdivisions > 1 in clickOptions, subdivision clicks are inserted between beats.
  */
-function generateClickEventsFromMeasures(
-  measures: Measure[],
-  volumeConfig: VolumeConfig,
-): ClickEvent[] {
+function generateClickEventsFromMeasures(measures: Measure[]): ClickEvent[] {
   const events: ClickEvent[] = [];
   for (const measure of measures) {
     // If there's only 1 beat, it is effectively the downbeat
@@ -65,11 +62,10 @@ function generateClickEventsFromMeasures(
       const beatTimeMs = measure.startMs + beatFraction * measureDurationMs;
 
       // Decide volume: downbeat if i===0, otherwise quarter
-      const volume = i === 0 ? volumeConfig.downbeat : volumeConfig.quarter;
-      events.push({timeMs: beatTimeMs, volume});
+      events.push({timeMs: beatTimeMs, type: i === 0 ? 'downbeat' : 'quarter'});
 
       // Insert an eighth‐note subdivision if enabled and not the last beat
-      if (volumeConfig.eighth > 0 && i < measure.beats.length - 1) {
+      if (i < measure.beats.length - 1) {
         const nextBeat = measure.beats[i + 1];
         // Time for next beat
         const nextBeatFraction =
@@ -79,7 +75,7 @@ function generateClickEventsFromMeasures(
         // Midpoint between this beat and the next
         const subdivisionTimeMs =
           beatTimeMs + (nextBeatTimeMs - beatTimeMs) / 2;
-        events.push({timeMs: subdivisionTimeMs, volume: volumeConfig.eighth});
+        events.push({timeMs: subdivisionTimeMs, type: 'eighth'});
       }
     }
   }
@@ -112,29 +108,38 @@ export async function generateClickTrackFromMeasures(
   );
 
   // Generate our array of click events.
-  const clickEvents = generateClickEventsFromMeasures(measures, {
+  const clickEvents = generateClickEventsFromMeasures(measures);
+  const volumes = {
     downbeat: 0.7,
     quarter: 0.5,
-    eighth: 0.0,
-  });
+    eighth: 0.2,
+  };
   console.log('clickEvents', clickEvents);
 
   // Schedule each click event into the offline context.
   clickEvents.forEach(event => {
+    if (event.type === 'eighth' && volumes.eighth === 0) {
+      return;
+    }
     const timeSec = event.timeMs / 1000;
     const osc = offlineCtx.createOscillator();
 
-    // For simplicity, let's assume if volume >= 0.9 we use strongTone, else subdivisionTone
-    // Or you can pass the frequency in the event, etc.
     const freq =
-      event.volume >= 0.9
+      event.type === 'downbeat'
         ? clickOptions.strongTone
         : clickOptions.subdivisionTone;
+    const volume =
+      event.type === 'downbeat'
+        ? volumes.downbeat
+        : event.type === 'quarter'
+        ? volumes.quarter
+        : volumes.eighth;
+
     osc.frequency.value = freq;
 
     // Create a gain node
     const gain = offlineCtx.createGain();
-    gain.gain.value = event.volume; // use the event's volume
+    gain.gain.value = volume; // use the event's volume
 
     osc.connect(gain);
     gain.connect(offlineCtx.destination);

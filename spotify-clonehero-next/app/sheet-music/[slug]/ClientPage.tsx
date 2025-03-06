@@ -25,6 +25,8 @@ export default function MyComponent({md5}: {md5: string}) {
     audioFiles: Files;
   }>(null);
 
+  console.log('---', rendering?.chart);
+
   useEffect(() => {
     async function run() {
       const chartResponse = await searchAdvanced({hash: md5});
