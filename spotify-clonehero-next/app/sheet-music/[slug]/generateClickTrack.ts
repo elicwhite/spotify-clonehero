@@ -7,9 +7,6 @@ export interface ClickOptions {
   clickDuration: number; // Duration (in seconds) of each click sound
   strongTone: number; // Frequency (Hz) for the downbeat (strong beat)
   subdivisionTone: number; // Frequency (Hz) for subdivision clicks
-  strongVolume: number; // Gain value for strong beats
-  subdivisionVolume: number; // Gain value for subdivisions
-  subdivisions?: number; // Number of subdivisions per beat (if 1 or undefined, only the beat is clicked)
 }
 
 // Define an interface for our scheduled click events.
@@ -28,11 +25,70 @@ interface VolumeConfig {
 const clickOptions: ClickOptions = {
   clickDuration: 0.05, // each click lasts 50ms
   strongTone: 1000, // strong beat frequency (Hz)
-  subdivisionTone: 700, // subdivision frequency (Hz)
-  strongVolume: 1.0,
-  subdivisionVolume: Math.pow(0.6, 2),
-  subdivisions: 2, // click on beat and one subdivision between beats
+  subdivisionTone: 700, // subdivision frequency (Hz
 };
+
+/**
+ * Generates a click sample using an oscillator.
+ * @param frequency Frequency in Hz for the click.
+ * @param durationSec Duration of the click in seconds.
+ * @param sampleRate Sample rate to use.
+ * @param volume Volume (gain) for the click.
+ * @returns A Promise that resolves to a Float32Array of the PCM data.
+ */
+async function generateClickSample(
+  frequency: number,
+  durationSec: number,
+  sampleRate: number,
+  volume: number,
+): Promise<Float32Array> {
+  const offlineCtx = new OfflineAudioContext(
+    1,
+    sampleRate * durationSec,
+    sampleRate,
+  );
+
+  // Create an oscillator and gain node to shape the click.
+  const oscillator = offlineCtx.createOscillator();
+  oscillator.frequency.value = frequency;
+
+  const gainNode = offlineCtx.createGain();
+  gainNode.gain.setValueAtTime(0, 0);
+  // A quick attack:
+  gainNode.gain.linearRampToValueAtTime(volume, 0.005);
+  // And a quick release:
+  gainNode.gain.setValueAtTime(volume, durationSec - 0.005);
+  gainNode.gain.linearRampToValueAtTime(0, durationSec);
+
+  oscillator.connect(gainNode);
+  gainNode.connect(offlineCtx.destination);
+
+  oscillator.start(0);
+  oscillator.stop(durationSec);
+
+  // Render and extract the PCM data.
+  const audioBuffer = await offlineCtx.startRendering();
+  return audioBuffer.getChannelData(0).slice();
+}
+
+/**
+ * Mixes a source sample into a target buffer at the given offset.
+ * @param target The target Float32Array (your main track).
+ * @param source The click sample to mix in.
+ * @param offset The starting sample index in the target.
+ */
+function mixSamples(
+  target: Float32Array,
+  source: Float32Array,
+  offset: number,
+): void {
+  for (let i = 0; i < source.length; i++) {
+    const targetIndex = offset + i;
+    if (targetIndex < target.length) {
+      target[targetIndex] += source[i];
+    }
+  }
+}
 
 /**
  * Generates an array of click events based on the provided measures.
@@ -96,25 +152,46 @@ export async function generateClickTrackFromMeasures(
   if (measures.length === 0) {
     throw new Error('No measures provided');
   }
-  // Assume the overall duration is defined by the endMs of the last measure.
-  const totalDurationMs = measures[measures.length - 1].endMs;
-  const totalDurationSeconds = totalDurationMs / 1000;
-  // const sampleRate = 44100;
-  const sampleRate = 8000;
-  const offlineCtx = new OfflineAudioContext(
-    1,
-    sampleRate * totalDurationSeconds,
-    sampleRate,
-  );
-
-  // Generate our array of click events.
-  const clickEvents = generateClickEventsFromMeasures(measures);
   const volumes = {
     downbeat: 0.7,
     quarter: 0.5,
     eighth: 0.2,
   };
-  console.log('clickEvents', clickEvents);
+  const before = performance.now();
+  // Assume the overall duration is defined by the endMs of the last measure.
+  const totalDurationMs = measures[measures.length - 1].endMs;
+  const totalDurationSeconds = totalDurationMs / 1000;
+  // const sampleRate = 44100;
+  const sampleRate = 8000;
+  const totalSamples = sampleRate * totalDurationSeconds;
+
+  const trackBuffer = new Float32Array(totalSamples);
+
+  // const offlineCtx = new OfflineAudioContext(1, totalSamples, sampleRate);
+
+  const [downbeatSample, quarterSample, eighthSample] = await Promise.all([
+    generateClickSample(
+      clickOptions.strongTone,
+      clickOptions.clickDuration,
+      sampleRate,
+      volumes.downbeat,
+    ),
+    generateClickSample(
+      clickOptions.subdivisionTone,
+      clickOptions.clickDuration,
+      sampleRate,
+      volumes.quarter,
+    ),
+    generateClickSample(
+      clickOptions.subdivisionTone,
+      clickOptions.clickDuration,
+      sampleRate,
+      volumes.eighth,
+    ),
+  ]);
+
+  // Generate our array of click events.
+  const clickEvents = generateClickEventsFromMeasures(measures);
 
   // Schedule each click event into the offline context.
   clickEvents.forEach(event => {
@@ -122,36 +199,19 @@ export async function generateClickTrackFromMeasures(
       return;
     }
     const timeSec = event.timeMs / 1000;
-    const osc = offlineCtx.createOscillator();
-
-    const freq =
-      event.type === 'downbeat'
-        ? clickOptions.strongTone
-        : clickOptions.subdivisionTone;
-    const volume =
-      event.type === 'downbeat'
-        ? volumes.downbeat
-        : event.type === 'quarter'
-        ? volumes.quarter
-        : volumes.eighth;
-
-    osc.frequency.value = freq;
-
-    // Create a gain node
-    const gain = offlineCtx.createGain();
-    gain.gain.value = volume; // use the event's volume
-
-    osc.connect(gain);
-    gain.connect(offlineCtx.destination);
-
-    osc.start(timeSec);
-    osc.stop(timeSec + clickOptions.clickDuration);
+    const index = Math.floor(timeSec * sampleRate);
+    if (event.type === 'downbeat') {
+      mixSamples(trackBuffer, downbeatSample, index);
+    } else if (event.type === 'quarter') {
+      mixSamples(trackBuffer, quarterSample, index);
+    } else if (event.type === 'eighth') {
+      mixSamples(trackBuffer, eighthSample, index);
+    }
   });
 
   // Render the audio and convert it to a WAV Uint8Array.
-  const before = performance.now();
-  const renderedBuffer = await offlineCtx.startRendering();
-  const buffer = audioBufferToWav(renderedBuffer);
+
+  const buffer = float32ToWav(trackBuffer, sampleRate);
   const after = performance.now();
   console.log('Took ' + (after - before) + 'ms to render');
   // return renderedBuffer;
@@ -159,25 +219,22 @@ export async function generateClickTrackFromMeasures(
 }
 
 /**
- * Converts an AudioBuffer into a 16-bit PCM WAV file represented as a Uint8Array.
- * This is dumb because we convert it right back to AudioBuffer
+ * Converts a mono Float32Array of PCM samples into a 16-bit PCM WAV file
+ * stored in a Uint8Array.
  */
-function audioBufferToWav(
-  audioBuffer: AudioBuffer,
-): Uint8Array<ArrayBufferLike> {
-  const numChannels = audioBuffer.numberOfChannels;
-  const sampleRate = audioBuffer.sampleRate;
-  const numSamples = audioBuffer.length;
+function float32ToWav(samples: Float32Array, sampleRate: number): Uint8Array {
+  const numChannels = 1;
   const bitsPerSample = 16;
-  const blockAlign = numChannels * (bitsPerSample / 8);
-  const byteRate = sampleRate * blockAlign;
-  const dataSize = numSamples * blockAlign;
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const dataSize = samples.length * blockAlign;
   const headerSize = 44;
-  const buffer = new ArrayBuffer(headerSize + dataSize);
-  const view = new DataView(buffer);
+  const totalSize = headerSize + dataSize;
 
-  // Write WAV header.
+  const buffer = new ArrayBuffer(totalSize);
+  const view = new DataView(buffer);
   let offset = 0;
+
   function writeString(s: string) {
     for (let i = 0; i < s.length; i++) {
       view.setUint8(offset++, s.charCodeAt(i));
@@ -194,41 +251,32 @@ function audioBufferToWav(
     offset += 2;
   }
 
-  // "RIFF" chunk descriptor.
+  // RIFF header.
   writeString('RIFF');
-  writeUint32(headerSize + dataSize - 8); // File size minus first 8 bytes.
+  writeUint32(totalSize - 8);
   writeString('WAVE');
 
-  // "fmt " sub-chunk.
+  // "fmt " subchunk.
   writeString('fmt ');
-  writeUint32(16); // Subchunk1Size for PCM.
-  writeUint16(1); // Audio format (1 is PCM)
+  writeUint32(16); // PCM chunk size
+  writeUint16(1); // Audio format: PCM
   writeUint16(numChannels);
   writeUint32(sampleRate);
   writeUint32(byteRate);
   writeUint16(blockAlign);
   writeUint16(bitsPerSample);
 
-  // "data" sub-chunk.
+  // "data" subchunk.
   writeString('data');
   writeUint32(dataSize);
 
-  // Write interleaved PCM samples.
-  const channelData: Float32Array[] = [];
-  for (let i = 0; i < numChannels; i++) {
-    channelData.push(audioBuffer.getChannelData(i));
-  }
-
-  // Interleave and convert samples.
-  for (let i = 0; i < numSamples; i++) {
-    for (let channel = 0; channel < numChannels; channel++) {
-      // Scale the float sample ([-1,1]) to 16-bit PCM.
-      let sample = channelData[channel][i];
-      sample = Math.max(-1, Math.min(1, sample));
-      const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-      view.setInt16(offset, intSample, true);
-      offset += 2;
-    }
+  // Write PCM samples (convert from Float32 to Int16).
+  for (let i = 0; i < samples.length; i++) {
+    let s = samples[i];
+    s = Math.max(-1, Math.min(1, s));
+    const int16 = s < 0 ? s * 0x8000 : s * 0x7fff;
+    view.setInt16(offset, int16, true);
+    offset += 2;
   }
 
   return new Uint8Array(buffer);
