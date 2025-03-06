@@ -8,8 +8,6 @@ import {
   forwardRef,
   createRef,
 } from 'react';
-// import convertToVexFlow from './convertToVexflow';
-// import {RenderData, renderMusic} from './renderVexflow';
 
 import {cn} from '@/lib/utils';
 

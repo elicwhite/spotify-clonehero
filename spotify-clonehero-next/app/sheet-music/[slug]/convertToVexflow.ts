@@ -1,6 +1,7 @@
 // Heavily inspired by https://github.com/tonygoldcrest/drum-hero Thanks!
 
 import {NoteEvent, parseChartFile, noteTypes, noteFlags} from 'scan-chart';
+import {tickToMs} from './chartUtils';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 type TimeSignature = ParsedChart['timeSignatures'][0];
@@ -114,25 +115,6 @@ class Parser {
 
     let startTick = 0;
 
-    const tickToMs = (tick: number) => {
-      // Find the latest tempo event that started at or before 'tick'
-      let currentTempo = this.chart.tempos[0];
-      for (let i = 0; i < this.chart.tempos.length; i++) {
-        if (this.chart.tempos[i].tick <= tick) {
-          currentTempo = this.chart.tempos[i];
-        } else {
-          break;
-        }
-      }
-      // Calculate the difference in ticks from the tempo's start tick
-      const ticksSinceTempo = tick - currentTempo.tick;
-      // Determine how many milliseconds each tick represents at the current BPM.
-      // BPM to ms per beat conversion: 60000 / BPM, then divided by PPQ.
-      const msPerTick = 60000 / currentTempo.beatsPerMinute / ppq;
-      // Return the tempo's start time plus the additional ms from ticks elapsed.
-      return currentTempo.msTime + ticksSinceTempo * msPerTick;
-    };
-
     this.chart.timeSignatures.forEach((timeSig, index) => {
       const pulsesPerDivision = ppq / (timeSig.denominator / 4);
       const totalTimeSigTicks =
@@ -154,8 +136,8 @@ class Parser {
           beats: this.getBeats(timeSig, startTick, endTick),
           startTick,
           endTick,
-          startMs: tickToMs(startTick),
-          endMs: tickToMs(endTick),
+          startMs: tickToMs(this.chart, startTick),
+          endMs: tickToMs(this.chart, endTick),
         });
 
         startTick += timeSig.numerator * pulsesPerDivision;

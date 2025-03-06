@@ -38,6 +38,7 @@ import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import {AudioManager} from '@/lib/preview/audioManager';
 import CloneHeroRenderer from './CloneHeroRenderer';
 import Link from 'next/link';
+import {generateClickTrack} from './generateClickTrack';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -71,6 +72,7 @@ export default function Renderer({
   chart: ParsedChart;
   audioFiles: Files;
 }) {
+  console.log('======', metadata, chart);
   const [showBarNumbers, setShowBarNumbers] = useState(false);
   const [enableColors, setEnableColors] = useState(true);
   const [currentPlayback, setCurrentPlayback] = useState(0);
@@ -85,24 +87,40 @@ export default function Renderer({
 
   const audioManagerRef = useRef<AudioManager | null>(null);
 
+  // const clickTrack = useMemo(async () => {
+  //   const clickTrack = await generateClickTrack(metadata, chart);
+  //   console.log(clickTrack);
+  // }, [chart]);
+
   useEffect(() => {
-    const audioManager = new AudioManager(audioFiles, () => {
-      setIsPlaying(false);
-    });
+    async function run() {
+      const clickTrack = await generateClickTrack(metadata, chart);
+      const files = [
+        ...audioFiles,
+        {
+          fileName: 'click.mp3',
+          data: clickTrack,
+        },
+      ];
+      const audioManager = new AudioManager(files, () => {
+        setIsPlaying(false);
+      });
 
-    setVolumeControls(
-      audioFiles.map(audioFile => ({
-        trackName: getBasename(audioFile.fileName),
-        volume: 100,
-        isMuted: false,
-        isSoloed: false,
-      })),
-    );
+      setVolumeControls(
+        files.map(audioFile => ({
+          trackName: getBasename(audioFile.fileName),
+          volume: 100,
+          isMuted: false,
+          isSoloed: false,
+        })),
+      );
 
-    audioManager.ready.then(() => {
-      audioManagerRef.current = audioManager;
-      window.am = audioManager;
-    });
+      audioManager.ready.then(() => {
+        audioManagerRef.current = audioManager;
+        window.am = audioManager;
+      });
+    }
+    run();
 
     return () => {
       audioManagerRef.current?.destroy();
