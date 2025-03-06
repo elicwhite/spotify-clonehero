@@ -42,11 +42,8 @@ async function generateClickSample(
   sampleRate: number,
   volume: number,
 ): Promise<Float32Array> {
-  const offlineCtx = new OfflineAudioContext(
-    1,
-    sampleRate * durationSec,
-    sampleRate,
-  );
+  const offlineCtx = new (window.OfflineAudioContext ||
+    window.webkitOfflineAudioContext)(1, sampleRate * durationSec, sampleRate);
 
   // Create an oscillator and gain node to shape the click.
   const oscillator = offlineCtx.createOscillator();
