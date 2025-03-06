@@ -15,16 +15,22 @@ export interface ClickOptions {
 // Define an interface for our scheduled click events.
 interface ClickEvent {
   timeMs: number; // when the click should occur (ms)
-  isStrong: boolean;
+  volume: number;
+}
+
+interface VolumeConfig {
+  downbeat: number; // Volume for the "1" of each measure
+  quarter: number; // Volume for other quarter beats (2, 3, 4 in 4/4)
+  eighth: number; // Volume for eighth-note subdivisions
 }
 
 // Click options: Here, we want 2 subdivisions per beat (i.e. a click on the beat and one in between)
 const clickOptions: ClickOptions = {
   clickDuration: 0.05, // each click lasts 50ms
   strongTone: 1000, // strong beat frequency (Hz)
-  subdivisionTone: 800, // subdivision frequency (Hz)
+  subdivisionTone: 500, // subdivision frequency (Hz)
   strongVolume: 1.0,
-  subdivisionVolume: 0.6,
+  subdivisionVolume: Math.pow(0.6, 2),
   subdivisions: 2, // click on beat and one subdivision between beats
 };
 
@@ -37,47 +43,43 @@ const clickOptions: ClickOptions = {
  */
 function generateClickEventsFromMeasures(
   measures: Measure[],
-  clickOptions: ClickOptions,
+  volumeConfig: VolumeConfig,
 ): ClickEvent[] {
   const events: ClickEvent[] = [];
-  // Iterate over each measure.
   for (const measure of measures) {
-    // Calculate the measure duration and tick span.
-    const measureDurationMs = measure.endMs - measure.startMs;
-    const measureTickSpan = measure.endTick - measure.startTick;
-    const beats = measure.beats;
-    // Process each beat in the measure.
-    for (let i = 0; i < beats.length; i++) {
-      const beat = beats[i];
-      // Compute the beat's time by interpolating its startTick between the measure boundaries.
+    // If there's only 1 beat, it is effectively the downbeat
+    if (measure.beats.length === 0) {
+      continue;
+    }
+
+    for (let i = 0; i < measure.beats.length; i++) {
+      const currentBeat = measure.beats[i];
+      // Compute the start time (in ms) of this beat by interpolating
+      // between measure.startMs and measure.endMs, if needed.
+      // If your measure already provides an exact ms for each beat,
+      // you can use that directly. Otherwise, approximate:
+      const measureDurationMs = measure.endMs - measure.startMs;
+      const measureTickSpan = measure.endTick - measure.startTick;
       const beatFraction =
-        (beat.startTick - measure.startTick) / measureTickSpan;
+        (currentBeat.startTick - measure.startTick) / measureTickSpan;
       const beatTimeMs = measure.startMs + beatFraction * measureDurationMs;
-      // Schedule the strong (downbeat) click.
-      events.push({timeMs: beatTimeMs, isStrong: true});
-      // If subdivisions are requested and this is not the last beat in the measure,
-      // insert subdivision clicks between the current beat and the next beat.
-      if (
-        clickOptions.subdivisions &&
-        clickOptions.subdivisions > 1 &&
-        i < beats.length - 1
-      ) {
-        const nextBeat = beats[i + 1];
+
+      // Decide volume: downbeat if i===0, otherwise quarter
+      const volume = i === 0 ? volumeConfig.downbeat : volumeConfig.quarter;
+      events.push({timeMs: beatTimeMs, volume});
+
+      // Insert an eighth‐note subdivision if enabled and not the last beat
+      if (volumeConfig.eighth > 0 && i < measure.beats.length - 1) {
+        const nextBeat = measure.beats[i + 1];
+        // Time for next beat
         const nextBeatFraction =
           (nextBeat.startTick - measure.startTick) / measureTickSpan;
         const nextBeatTimeMs =
           measure.startMs + nextBeatFraction * measureDurationMs;
-        const intervalMs = nextBeatTimeMs - beatTimeMs;
-        // For example, if subdivisions === 2, one subdivision click is inserted halfway.
-        for (
-          let subIndex = 1;
-          subIndex < clickOptions.subdivisions;
-          subIndex++
-        ) {
-          const subTimeMs =
-            beatTimeMs + (intervalMs * subIndex) / clickOptions.subdivisions;
-          events.push({timeMs: subTimeMs, isStrong: false});
-        }
+        // Midpoint between this beat and the next
+        const subdivisionTimeMs =
+          beatTimeMs + (nextBeatTimeMs - beatTimeMs) / 2;
+        events.push({timeMs: subdivisionTimeMs, volume: volumeConfig.eighth});
       }
     }
   }
@@ -101,172 +103,55 @@ export async function generateClickTrackFromMeasures(
   // Assume the overall duration is defined by the endMs of the last measure.
   const totalDurationMs = measures[measures.length - 1].endMs;
   const totalDurationSeconds = totalDurationMs / 1000;
-  const sampleRate = 44100;
+  // const sampleRate = 44100;
+  const sampleRate = 8000;
   const offlineCtx = new OfflineAudioContext(
-    2,
+    1,
     sampleRate * totalDurationSeconds,
     sampleRate,
   );
 
   // Generate our array of click events.
-  const clickEvents = generateClickEventsFromMeasures(measures, clickOptions);
+  const clickEvents = generateClickEventsFromMeasures(measures, {
+    downbeat: 0.7,
+    quarter: 0.5,
+    eighth: 0.0,
+  });
   console.log('clickEvents', clickEvents);
 
   // Schedule each click event into the offline context.
   clickEvents.forEach(event => {
-    const time = event.timeMs / 1000; // convert ms to seconds
+    const timeSec = event.timeMs / 1000;
     const osc = offlineCtx.createOscillator();
-    osc.frequency.value = event.isStrong
-      ? clickOptions.strongTone
-      : clickOptions.subdivisionTone;
-    const gainNode = offlineCtx.createGain();
-    gainNode.gain.value = event.isStrong
-      ? clickOptions.strongVolume
-      : clickOptions.subdivisionVolume;
 
-    osc.connect(gainNode);
-    gainNode.connect(offlineCtx.destination);
+    // For simplicity, let's assume if volume >= 0.9 we use strongTone, else subdivisionTone
+    // Or you can pass the frequency in the event, etc.
+    const freq =
+      event.volume >= 0.9
+        ? clickOptions.strongTone
+        : clickOptions.subdivisionTone;
+    osc.frequency.value = freq;
 
-    osc.start(time);
-    osc.stop(time + clickOptions.clickDuration);
+    // Create a gain node
+    const gain = offlineCtx.createGain();
+    gain.gain.value = event.volume; // use the event's volume
+
+    osc.connect(gain);
+    gain.connect(offlineCtx.destination);
+
+    osc.start(timeSec);
+    osc.stop(timeSec + clickOptions.clickDuration);
   });
 
   // Render the audio and convert it to a WAV Uint8Array.
+  const before = performance.now();
   const renderedBuffer = await offlineCtx.startRendering();
-  return audioBufferToWav(renderedBuffer);
+  const buffer = audioBufferToWav(renderedBuffer);
+  const after = performance.now();
+  console.log('Took ' + (after - before) + 'ms to render');
+  // return renderedBuffer;
+  return buffer;
 }
-
-/**
- * Generate a click track AudioBuffer given tempo events, time signature events,
- * resolution, and click options.
- *
- * @param audioCtx An existing AudioContext (for sample rate reference).
- * @param tempoEvents Sorted array of tempo events.
- * @param timeSignatures Sorted array of time signature events.
- * @param resolution Ticks per quarter note.
- * @param totalTicks Total ticks for the track.
- * @param clickOptions Options for click sound properties.
- * @returns A Promise that resolves to an AudioBuffer containing the rendered click track.
- */
-// export async function generateClickTrack(
-//   metadata: ChartResponseEncore,
-//   chart: ParsedChart,
-//   measures: Measure[],
-//   // audioCtx: AudioContext,
-//   // tempoEvents: TempoEvent[],
-//   // timeSignatures: TimeSignatureEvent[],
-//   // resolution: number,
-//   // totalTicks: number,
-//   // clickOptions: ClickOptions,
-// ): Promise<Uint8Array<ArrayBufferLike>> {
-//   const songLengthSeconds = (metadata?.song_length || 5 * 60 * 1000) / 1000;
-//   const sampleRate = 44100;
-//   const offlineCtx = new OfflineAudioContext(
-//     2,
-//     sampleRate * songLengthSeconds,
-//     sampleRate,
-//   );
-
-//   // Calculate the total duration of the track in seconds
-//   // const totalDuration = tickToMs(chart, totalTicks, tempoEvents, resolution);
-
-//   // Helper: schedule a click sound at a given tick time.
-//   function scheduleClick(tick: number, isStrong: boolean) {
-//     console.log('scheduling click', tickToMs(chart, tick), isStrong);
-//     const time = tickToMs(chart, tick) / 1000;
-//     const osc = offlineCtx.createOscillator();
-//     // Choose frequency based on whether this is a strong (downbeat) or subdivision click.
-//     osc.frequency.value = isStrong
-//       ? clickOptions.strongTone
-//       : clickOptions.subdivisionTone;
-
-//     const gainNode = offlineCtx.createGain();
-//     gainNode.gain.value = isStrong
-//       ? clickOptions.strongVolume
-//       : clickOptions.subdivisionVolume;
-
-//     osc.connect(gainNode);
-//     gainNode.connect(offlineCtx.destination);
-
-//     osc.start(time);
-//     osc.stop(time + clickOptions.clickDuration);
-//   }
-
-//   // const endOfTrackTicks =
-//   //     drumPart.noteEventGroups[drumPart.noteEventGroups.length - 1][0].tick ||
-//   //     0;
-
-//   // chart.timeSignatures.forEach((timeSig, index) => {
-//   //   const pulsesPerDivision = this.chart.resolution / (timeSig.denominator / 4);
-//   //   const totalTimeSigTicks =
-//   //     (chart.timeSignatures[index + 1]?.tick ?? endOfTrackTicks) -
-//   //     timeSig.tick;
-
-//   //   const numberOfMeasures = Math.ceil(
-//   //     totalTimeSigTicks / pulsesPerDivision / timeSig.numerator,
-//   //   );
-
-//   //   for (let measure = 0; measure < numberOfMeasures; measure += 1) {
-//   //     const endTick = startTick + timeSig.numerator * pulsesPerDivision;
-
-//   //     this.measures.push({
-//   //       timeSig: timeSig,
-//   //       hasClef: index === 0 && measure === 0,
-//   //       sigChange: measure === 0,
-//   //       notes: [],
-//   //       beats: this.getBeats(timeSig, startTick, endTick),
-//   //       startTick,
-//   //       endTick,
-//   //       startMs: tickToMs(chart, startTick),
-//   //       endMs: tickToMs(chart, endTick),
-//   //     });
-
-//   //     startTick += timeSig.numerator * pulsesPerDivision;
-//   //   }
-//   // });
-
-//   for (let tsIndex = 0; tsIndex < timeSignatures.length; tsIndex++) {
-//     const ts = timeSignatures[tsIndex];
-//     const startTick = ts.tick;
-//     const endTick =
-//       tsIndex + 1 < timeSignatures.length
-//         ? timeSignatures[tsIndex + 1].tick
-//         : totalTicks;
-//     const beatTicks = resolution * (4 / ts.denominator);
-//     const measureTicks = beatTicks * ts.numerator;
-
-//     let measureStartTick = startTick;
-//     while (measureStartTick < endTick && measureStartTick < totalTicks) {
-//       // Schedule each beat in the measure.
-//       for (let beatIndex = 0; beatIndex < ts.numerator; beatIndex++) {
-//         const beatTick = measureStartTick + beatIndex * beatTicks;
-//         if (beatTick >= totalTicks) break;
-//         scheduleClick(beatTick, true); // strong (downbeat) click
-//         // Schedule subdivisions if required.
-//         if (clickOptions.subdivisions && clickOptions.subdivisions > 1) {
-//           for (
-//             let subIndex = 1;
-//             subIndex < clickOptions.subdivisions;
-//             subIndex++
-//           ) {
-//             const subTick =
-//               beatTick + (beatTicks * subIndex) / clickOptions.subdivisions;
-//             if (
-//               subTick < measureStartTick + measureTicks &&
-//               subTick < totalTicks
-//             ) {
-//               scheduleClick(subTick, false);
-//             }
-//           }
-//         }
-//       }
-//       measureStartTick += measureTicks;
-//     }
-//   }
-
-//   // Render the click track as an AudioBuffer.
-//   return audioBufferToWav(await offlineCtx.startRendering());
-// }
 
 /**
  * Converts an AudioBuffer into a 16-bit PCM WAV file represented as a Uint8Array.
@@ -343,43 +228,3 @@ function audioBufferToWav(
 
   return new Uint8Array(buffer);
 }
-
-/* ----- Example usage ----- */
-
-// // Example tempo events (sorted by tick)
-// const tempoEvents: TempoEvent[] = [
-//   {tick: 0, bpm: 120},
-//   {tick: 1920, bpm: 140}, // Tempo change at tick 1920
-// ];
-
-// // Example time signature events (sorted by tick)
-// // Assuming the first time signature starts at tick 0.
-// const timeSignatures: TimeSignatureEvent[] = [
-//   {tick: 0, numerator: 4, denominator: 4},
-//   {tick: 960, numerator: 3, denominator: 4}, // Change at tick 960
-// ];
-
-// const resolution = 480; // ticks per quarter note
-// const totalTicks = 3840; // total ticks for the track
-
-// Assume we already have an AudioContext (for example, created on user interaction)
-// const audioCtx = new AudioContext();
-
-// generateClickTrack(
-//   audioCtx,
-//   tempoEvents,
-//   timeSignatures,
-//   resolution,
-//   totalTicks,
-//   clickOptions,
-// )
-//   .then((clickBuffer: AudioBuffer) => {
-//     // Now play the click track using a BufferSourceNode.
-//     const bufferSource = audioCtx.createBufferSource();
-//     bufferSource.buffer = clickBuffer;
-//     bufferSource.connect(audioCtx.destination);
-//     bufferSource.start();
-//   })
-//   .catch(error => {
-//     console.error('Error generating click track:', error);
-//   });

@@ -73,7 +73,7 @@ export default function Renderer({
   chart: ParsedChart;
   audioFiles: Files;
 }) {
-  console.log('======', metadata, chart);
+  // console.log('======', metadata, chart);
   const [showBarNumbers, setShowBarNumbers] = useState(false);
   const [enableColors, setEnableColors] = useState(true);
   const [currentPlayback, setCurrentPlayback] = useState(0);
@@ -100,6 +100,7 @@ export default function Renderer({
   useEffect(() => {
     async function run() {
       const clickTrack = await generateClickTrackFromMeasures(measures);
+      console.log('got click track', clickTrack);
       const files = [
         ...audioFiles,
         {
