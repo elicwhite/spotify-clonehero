@@ -112,12 +112,15 @@ export default function Renderer({
       });
 
       setVolumeControls(
-        files.map(audioFile => ({
-          trackName: getBasename(audioFile.fileName),
-          volume: 100,
-          isMuted: false,
-          isSoloed: false,
-        })),
+        files.map(audioFile => {
+          const basename = getBasename(audioFile.fileName);
+          return {
+            trackName: basename,
+            volume: basename === 'click' ? 0 : 100,
+            isMuted: false,
+            isSoloed: false,
+          };
+        }),
       );
 
       audioManager.ready.then(() => {
