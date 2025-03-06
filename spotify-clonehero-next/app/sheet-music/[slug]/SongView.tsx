@@ -38,7 +38,8 @@ import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import {AudioManager} from '@/lib/preview/audioManager';
 import CloneHeroRenderer from './CloneHeroRenderer';
 import Link from 'next/link';
-import {generateClickTrack} from './generateClickTrack';
+import {generateClickTrackFromMeasures} from './generateClickTrack';
+import convertToVexFlow from './convertToVexflow';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -92,9 +93,13 @@ export default function Renderer({
   //   console.log(clickTrack);
   // }, [chart]);
 
+  const measures = useMemo(() => {
+    return convertToVexFlow(chart, selectedDifficulty);
+  }, [chart, selectedDifficulty]);
+
   useEffect(() => {
     async function run() {
-      const clickTrack = await generateClickTrack(metadata, chart);
+      const clickTrack = await generateClickTrackFromMeasures(measures);
       const files = [
         ...audioFiles,
         {
