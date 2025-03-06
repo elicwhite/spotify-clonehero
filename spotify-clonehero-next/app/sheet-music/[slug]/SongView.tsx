@@ -124,6 +124,7 @@ export default function Renderer({
       );
 
       audioManager.ready.then(() => {
+        audioManager.setVolume('click', 0);
         audioManagerRef.current = audioManager;
         window.am = audioManager;
       });
