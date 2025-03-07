@@ -111,17 +111,25 @@ export default function Renderer({
         setIsPlaying(false);
       });
 
-      setVolumeControls(
-        files.map(audioFile => {
-          const basename = getBasename(audioFile.fileName);
-          return {
-            trackName: basename,
-            volume: basename === 'click' ? 0 : 100,
+      const processedTracks = new Set();
+      const volumeControls: VolumeControl[] = [];
+
+      files.forEach(audioFile => {
+        const basename = getBasename(audioFile.fileName);
+        const trackName = basename.includes('drums') ? 'drums' : basename;
+
+        if (!processedTracks.has(trackName)) {
+          processedTracks.add(trackName);
+          volumeControls.push({
+            trackName,
+            volume: trackName === 'click' ? 0 : 100,
             isMuted: false,
             isSoloed: false,
-          };
-        }),
-      );
+          });
+        }
+      });
+
+      setVolumeControls(volumeControls);
 
       audioManager.ready.then(() => {
         audioManager.setVolume('click', 0);

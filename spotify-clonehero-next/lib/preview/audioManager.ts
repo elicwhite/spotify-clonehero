@@ -1,6 +1,11 @@
 import {getBasename} from '../src-shared/utils';
 import {Files} from './chorus-chart-processing';
 
+type GroupedFile = {
+  fileName: string;
+  datas: Uint8Array<ArrayBufferLike>[];
+}[];
+
 export class AudioManager {
   #context: AudioContext;
 
@@ -30,32 +35,53 @@ export class AudioManager {
   }
 
   async #createTracks(audioFiles: Files) {
-    await Promise.all(
-      audioFiles.map(async audioFile => {
-        const trackName = getBasename(audioFile.fileName);
-        const arrayBuffer = audioFile.data;
-
-        const bufferCopy = arrayBuffer.slice(0).buffer;
-        let decodedAudioBuffer: AudioBuffer;
-        try {
-          decodedAudioBuffer = await this.#context.decodeAudioData(
-            bufferCopy as ArrayBuffer,
-          );
-        } catch {
-          try {
-            const decode = await import('audio-decode');
-            decodedAudioBuffer = await decode.default(
-              bufferCopy as ArrayBuffer,
-            );
-          } catch {
-            console.error('Could not decode audio');
-            return;
-          }
+    const groupedFiles: GroupedFile = audioFiles.reduce(
+      (acc, file) => {
+        const isDrums = file.fileName.includes('drums');
+        if (isDrums) {
+          const drumGroup = acc.find(group => group.fileName === 'drums');
+          drumGroup!.datas.push(file.data);
+        } else {
+          acc.push({fileName: file.fileName, datas: [file.data]});
         }
+        return acc;
+      },
+      [{fileName: 'drums', datas: []} as GroupedFile[0]],
+    );
+
+    await Promise.all(
+      groupedFiles.map(async group => {
+        const trackName = getBasename(group.fileName);
+        const arrayBuffers = group.datas;
+        const decodedAudioBuffers = await Promise.all(
+          arrayBuffers.map(async arrayBuffer => {
+            const bufferCopy = arrayBuffer.slice(0).buffer;
+            let decodedAudioBuffer: AudioBuffer;
+            try {
+              decodedAudioBuffer = await this.#context.decodeAudioData(
+                bufferCopy as ArrayBuffer,
+              );
+            } catch {
+              try {
+                const decode = await import('audio-decode');
+                decodedAudioBuffer = await decode.default(
+                  bufferCopy as ArrayBuffer,
+                );
+              } catch {
+                console.error('Could not decode audio');
+                return;
+              }
+            }
+            return decodedAudioBuffer;
+          }),
+        );
+        const filteredAudioBuffers = decodedAudioBuffers.filter(
+          Boolean,
+        ) as AudioBuffer[];
 
         this.#tracks[trackName] = new AudioTrack(
           this.#context,
-          decodedAudioBuffer,
+          filteredAudioBuffers,
           this.#handleTrackEnded.bind(this),
         );
       }),
@@ -163,29 +189,36 @@ export class AudioManager {
 
 class AudioTrack {
   #context: AudioContext;
-  #audioBuffer: AudioBuffer;
+  #gainNodes: GainNode[] = [];
+  #audioBuffers: AudioBuffer[] = [];
+  #sources: AudioBufferSourceNode[] = [];
 
-  #gainNode: GainNode | null;
-
-  #source: AudioBufferSourceNode | null = null;
-
+  #duration: number = 0;
   #onSongEnded: (() => void) | null;
   #songEnded: boolean = false;
 
+  #volume: number = 1;
+
   constructor(
     context: AudioContext,
-    audioBuffer: AudioBuffer,
+    audioBuffers: AudioBuffer[],
     onSongEnded: () => void,
   ) {
     this.#context = context;
-    this.#audioBuffer = audioBuffer;
+    this.#audioBuffers = audioBuffers;
     this.#onSongEnded = onSongEnded;
 
-    const gainNode = this.#context.createGain();
-    gainNode.connect(this.#context.destination);
-    this.#gainNode = gainNode;
+    this.#gainNodes = new Array(audioBuffers.length).fill(null).map(() => {
+      const gainNode = this.#context.createGain();
 
-    this.volume = 1;
+      gainNode.connect(this.#context.destination);
+
+      return gainNode;
+    });
+
+    this.#duration = Math.max(
+      ...this.#audioBuffers.map(buffer => buffer.duration),
+    );
   }
 
   get ended() {
@@ -193,54 +226,73 @@ class AudioTrack {
   }
 
   get duration() {
-    return this.#audioBuffer.duration;
+    return this.#duration;
   }
 
   get volume() {
-    return Math.sqrt(this.#gainNode!.gain.value);
+    return this.#volume;
+    // return Math.sqrt(this.#gainNode!.gain.value);
   }
 
-  set volume(volume: number) {
-    console.log('setting volume', volume);
-    // Let's use an x*x curve (x-squared) since simple linear (x) does not
-    // sound as good.
-    // Taken from https://webaudioapi.com/samples/volume/
-    this.#gainNode!.gain.setValueAtTime(
-      volume * volume,
-      this.#context.currentTime,
-    );
-    // this.#gainNode!.gain.value = 1;
+  set volume(newVolume: number) {
+    this.#gainNodes.forEach(gainNode => {
+      // Let's use an x*x curve (x-squared) since simple linear (x) does not
+      // sound as good.
+      // Taken from https://webaudioapi.com/samples/volume/
+      gainNode.gain.setValueAtTime(
+        newVolume * newVolume,
+        this.#context.currentTime,
+      );
+    });
   }
 
   start(at: number, offset: number) {
-    this.#source = this.#context.createBufferSource();
-    this.#source.buffer = this.#audioBuffer;
-    this.#source.connect(this.#gainNode!);
-    this.#source.addEventListener('ended', this.#endedEventListener);
-    this.#source.start(at, offset);
+    this.#sources = this.#audioBuffers.map((buffer, index) => {
+      const source = this.#context.createBufferSource();
+      source.buffer = buffer;
+
+      source.connect(this.#gainNodes[index]);
+      source.start(at, offset);
+      source.addEventListener('ended', this.#endedEventListener);
+
+      return source;
+    });
+
     this.#songEnded = false;
   }
 
   stop() {
-    if (this.#source != null) {
-      this.#source.stop();
-      this.#source.removeEventListener('ended', this.#endedEventListener);
-      this.#source.disconnect();
-    }
+    this.#sources.forEach(source => this.#stopSource(source));
 
-    this.#source = null;
+    this.#sources = [];
+  }
+
+  #stopSource(source: AudioBufferSourceNode) {
+    source.stop();
+    source.removeEventListener('ended', this.#endedEventListener);
+    source.disconnect();
   }
 
   destroy() {
     this.stop();
-    this.#gainNode!.disconnect();
-    this.#gainNode = null;
+
+    this.#gainNodes.forEach(node => {
+      node.disconnect();
+    });
+    this.#gainNodes = [];
     this.#onSongEnded = null;
   }
 
-  #endedEventListener: () => void = () => {
-    this.stop();
-    this.#songEnded = true;
-    this.#onSongEnded?.();
+  #endedEventListener: (event: Event) => void = (event: Event) => {
+    const source = event.currentTarget as AudioBufferSourceNode;
+
+    this.#stopSource(source);
+    this.#sources.splice(this.#sources.indexOf(source), 1);
+
+    if (this.#sources.length === 0) {
+      this.#songEnded = true;
+
+      this.#onSongEnded?.();
+    }
   };
 }
