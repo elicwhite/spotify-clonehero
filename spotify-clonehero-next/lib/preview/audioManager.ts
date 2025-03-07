@@ -3,7 +3,7 @@ import {Files} from './chorus-chart-processing';
 
 type GroupedFile = {
   fileName: string;
-  datas: Uint8Array<ArrayBufferLike>[];
+  datas: Uint8Array[];
 }[];
 
 export class AudioManager {
@@ -23,6 +23,7 @@ export class AudioManager {
   constructor(audioFiles: Files, onSongEnded: () => void) {
     this.#onSongEnded = onSongEnded;
     this.#context = new (window.AudioContext || window.webkitAudioContext)();
+    window.ctx = this.#context;
     this.#trackOffset = 0;
 
     this.#context.suspend();
