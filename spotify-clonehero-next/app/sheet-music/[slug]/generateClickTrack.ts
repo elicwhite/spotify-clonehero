@@ -12,7 +12,14 @@ export interface ClickOptions {
 // Define an interface for our scheduled click events.
 interface ClickEvent {
   timeMs: number; // when the click should occur (ms)
-  type: 'downbeat' | 'quarter' | 'eighth'; // type of click (downbeat or quarter)
+  type: 'downbeat' | 'quarter' | 'eighth' | 'triplet';
+}
+
+export interface ClickVolumes {
+  wholeNote: number;
+  quarterNote: number;
+  eighthNote: number;
+  tripletNote: number;
 }
 
 interface VolumeConfig {
@@ -125,10 +132,18 @@ function generateClickEventsFromMeasures(measures: Measure[]): ClickEvent[] {
           (nextBeat.startTick - measure.startTick) / measureTickSpan;
         const nextBeatTimeMs =
           measure.startMs + nextBeatFraction * measureDurationMs;
-        // Midpoint between this beat and the next
+
+        // Midpoint between this beat and the next (eighth note)
         const subdivisionTimeMs =
           beatTimeMs + (nextBeatTimeMs - beatTimeMs) / 2;
         events.push({timeMs: subdivisionTimeMs, type: 'eighth'});
+
+        // Add triplet subdivisions - divide the interval into thirds
+        const tripletInterval = nextBeatTimeMs - beatTimeMs;
+        const firstTripletTimeMs = beatTimeMs + tripletInterval / 3;
+        const secondTripletTimeMs = beatTimeMs + (2 * tripletInterval) / 3;
+        events.push({timeMs: firstTripletTimeMs, type: 'triplet'});
+        events.push({timeMs: secondTripletTimeMs, type: 'triplet'});
       }
     }
   }
@@ -145,15 +160,11 @@ function generateClickEventsFromMeasures(measures: Measure[]): ClickEvent[] {
 export async function generateClickTrackFromMeasures(
   measures: Measure[],
   // clickOptions: ClickOptions,
+  clickVolumes: ClickVolumes,
 ): Promise<Uint8Array> {
   if (measures.length === 0) {
     throw new Error('No measures provided');
   }
-  const volumes = {
-    downbeat: 0.7,
-    quarter: 0.5,
-    eighth: 0.2,
-  };
   const before = performance.now();
   // Assume the overall duration is defined by the endMs of the last measure.
   const totalDurationMs = measures[measures.length - 1].endMs;
@@ -166,35 +177,47 @@ export async function generateClickTrackFromMeasures(
 
   // const offlineCtx = new OfflineAudioContext(1, totalSamples, sampleRate);
 
-  const [downbeatSample, quarterSample, eighthSample] = await Promise.all([
-    generateClickSample(
-      clickOptions.strongTone,
-      clickOptions.clickDuration,
-      sampleRate,
-      volumes.downbeat,
-    ),
-    generateClickSample(
-      clickOptions.subdivisionTone,
-      clickOptions.clickDuration,
-      sampleRate,
-      volumes.quarter,
-    ),
-    generateClickSample(
-      clickOptions.subdivisionTone,
-      clickOptions.clickDuration,
-      sampleRate,
-      volumes.eighth,
-    ),
-  ]);
+  const [downbeatSample, quarterSample, eighthSample, tripletSample] =
+    await Promise.all([
+      generateClickSample(
+        clickOptions.strongTone,
+        clickOptions.clickDuration,
+        sampleRate,
+        clickVolumes.wholeNote,
+      ),
+      generateClickSample(
+        clickOptions.subdivisionTone,
+        clickOptions.clickDuration,
+        sampleRate,
+        clickVolumes.quarterNote,
+      ),
+      generateClickSample(
+        clickOptions.subdivisionTone,
+        clickOptions.clickDuration,
+        sampleRate,
+        clickVolumes.eighthNote,
+      ),
+      generateClickSample(
+        clickOptions.subdivisionTone,
+        clickOptions.clickDuration,
+        sampleRate,
+        clickVolumes.tripletNote,
+      ),
+    ]);
 
   // Generate our array of click events.
   const clickEvents = generateClickEventsFromMeasures(measures);
 
   // Schedule each click event into the offline context.
   clickEvents.forEach(event => {
-    if (event.type === 'eighth' && volumes.eighth === 0) {
+    if (event.type === 'eighth' && clickVolumes.eighthNote === 0) {
       return;
     }
+
+    if (event.type === 'triplet' && clickVolumes.triplet === 0) {
+      return;
+    }
+
     const timeSec = event.timeMs / 1000;
     const index = Math.floor(timeSec * sampleRate);
     if (event.type === 'downbeat') {
@@ -203,6 +226,8 @@ export async function generateClickTrackFromMeasures(
       mixSamples(trackBuffer, quarterSample, index);
     } else if (event.type === 'eighth') {
       mixSamples(trackBuffer, eighthSample, index);
+    } else if (event.type === 'triplet') {
+      mixSamples(trackBuffer, tripletSample, index);
     }
   });
 

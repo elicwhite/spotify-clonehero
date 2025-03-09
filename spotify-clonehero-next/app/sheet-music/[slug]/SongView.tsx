@@ -11,6 +11,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -47,7 +48,9 @@ import {AudioManager} from '@/lib/preview/audioManager';
 import CloneHeroRenderer from './CloneHeroRenderer';
 import Link from 'next/link';
 import {generateClickTrackFromMeasures} from './generateClickTrack';
+import type {ClickVolumes} from './generateClickTrack';
 import convertToVexFlow from './convertToVexflow';
+import debounce from 'debounce';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -85,6 +88,14 @@ export default function Renderer({
   const [playClickTrack, setPlayClickTrack] = useState(true);
   const [clickTrackConfigurationOpen, setClickTrackConfigurationOpen] =
     useState(false);
+  const [masterClickVolume, setMasterClickVolume] = useState(1);
+  const [clickVolumes, setClickVolumes] = useState<ClickVolumes>({
+    wholeNote: 1,
+    quarterNote: 0.75, //0.75,
+    eighthNote: 0.1, // 0.5,
+    tripletNote: 0,
+  });
+
   const [showBarNumbers, setShowBarNumbers] = useState(false);
   const [enableColors, setEnableColors] = useState(true);
   const [currentPlayback, setCurrentPlayback] = useState(0);
@@ -99,6 +110,26 @@ export default function Renderer({
 
   const audioManagerRef = useRef<AudioManager | null>(null);
 
+  const handleMasterClickVolumeChange = (value: number) => {
+    if (playClickTrack) {
+      audioManagerRef.current?.setVolume('click', value);
+    }
+    setMasterClickVolume(value);
+  };
+
+  const updatePlayClickTrack = (value: boolean) => {
+    audioManagerRef.current?.setVolume('click', value ? masterClickVolume : 0);
+    setPlayClickTrack(value);
+  };
+
+  const handleClickVolumeChange = useMemo(
+    () =>
+      debounce((value: number, key: keyof typeof clickVolumes) => {
+        setClickVolumes(prev => ({...prev, [key]: value}));
+      }, 300),
+    [setClickVolumes],
+  );
+
   // const clickTrack = useMemo(async () => {
   //   const clickTrack = await generateClickTrack(metadata, chart);
   //   console.log(clickTrack);
@@ -108,9 +139,17 @@ export default function Renderer({
     return convertToVexFlow(chart, selectedDifficulty);
   }, [chart, selectedDifficulty]);
 
+  const lastAudioState = useRef({
+    currentTime: 0,
+    wasPlaying: false,
+  });
+
   useEffect(() => {
     async function run() {
-      const clickTrack = await generateClickTrackFromMeasures(measures);
+      const clickTrack = await generateClickTrackFromMeasures(
+        measures,
+        clickVolumes,
+      );
       const files = [
         ...audioFiles,
         {
@@ -126,6 +165,9 @@ export default function Renderer({
       const volumeControls: VolumeControl[] = [];
 
       files.forEach(audioFile => {
+        if (audioFile.fileName.includes('click')) {
+          return;
+        }
         const basename = getBasename(audioFile.fileName);
         const trackName = basename.includes('drums') ? 'drums' : basename;
 
@@ -133,7 +175,7 @@ export default function Renderer({
           processedTracks.add(trackName);
           volumeControls.push({
             trackName,
-            volume: trackName === 'click' ? 0 : 100,
+            volume: 100,
             isMuted: false,
             isSoloed: false,
           });
@@ -143,18 +185,31 @@ export default function Renderer({
       setVolumeControls(volumeControls);
 
       audioManager.ready.then(() => {
-        audioManager.setVolume('click', 0);
+        if (audioManagerRef.current) {
+          // This effect already ran and has been set up before we got here. Bail.
+          return;
+        }
+        audioManager.setVolume('click', playClickTrack ? masterClickVolume : 0);
         audioManagerRef.current = audioManager;
         window.am = audioManager;
+
+        if (lastAudioState.current.wasPlaying) {
+          audioManager.play({time: lastAudioState.current.currentTime});
+          setIsPlaying(true);
+        }
       });
     }
     run();
 
     return () => {
+      lastAudioState.current = {
+        currentTime: audioManagerRef.current?.currentTime ?? 0,
+        wasPlaying: audioManagerRef.current?.isPlaying ?? false,
+      };
       audioManagerRef.current?.destroy();
       audioManagerRef.current = null;
     };
-  }, [audioFiles]);
+  }, [audioFiles, measures, clickVolumes]);
 
   useInterval(
     () => {
@@ -388,7 +443,7 @@ export default function Renderer({
               <Switch
                 id="clicktrack"
                 checked={playClickTrack}
-                onCheckedChange={setPlayClickTrack}
+                onCheckedChange={updatePlayClickTrack}
               />
               <label htmlFor="clicktrack" className="text-sm font-medium">
                 Enable click track
@@ -403,6 +458,10 @@ export default function Renderer({
               <ClickDialog
                 open={clickTrackConfigurationOpen}
                 setOpen={setClickTrackConfigurationOpen}
+                clickVolumes={clickVolumes}
+                handleClickVolumeChange={handleClickVolumeChange}
+                masterClickVolume={masterClickVolume}
+                setMasterClickVolume={handleMasterClickVolumeChange}
               />
             </div>
             <div className="flex items-center space-x-2">
@@ -415,7 +474,7 @@ export default function Renderer({
                 Enable colors
               </label>
             </div>
-            <div className="flex items-center space-x-2">
+            {/* <div className="flex items-center space-x-2">
               <Switch
                 id="barnumbers"
                 checked={showBarNumbers}
@@ -424,7 +483,7 @@ export default function Renderer({
               <label htmlFor="barnumbers" className="text-sm font-medium">
                 Show bar numbers
               </label>
-            </div>
+            </div> */}
           </div>
         </div>
         <p className="text-xs text-muted-foreground text-center mt-auto">
@@ -619,76 +678,68 @@ export function AudioVolume({
 function ClickDialog({
   open,
   setOpen,
+  clickVolumes,
+  handleClickVolumeChange,
+  masterClickVolume,
+  setMasterClickVolume,
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
+  clickVolumes: ClickVolumes;
+  handleClickVolumeChange: (value: number, key: keyof ClickVolumes) => void;
+  masterClickVolume: number;
+  setMasterClickVolume: (value: number) => void;
 }) {
-  const [volumes, setVolumes] = useState({
-    master: 1,
-    wholeNote: 1,
-    quarterNote: 1,
-    eighthNote: 0.5,
-    dottedEighth: 0.75,
-    triplet: 0,
-  });
-  const handleVolumeChange = (value: number, key: keyof typeof volumes) => {
-    setVolumes(prev => ({...prev, [key]: value}));
-  };
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+        {/* <DialogHeader>
           <DialogTitle className="text-center text-xl font-medium">
             Configure Click Track
           </DialogTitle>
-        </DialogHeader>
+          <DialogDescription>
+            Configure volume levels for the click track.
+          </DialogDescription>
+        </DialogHeader> */}
 
         {/* Mobile layout - stacked with horizontal sliders */}
         <div className="flex flex-col space-y-6 pt-4">
           {/* Master Volume */}
           <ClickVolume
-            name="MASTER"
-            volume={volumes.master}
-            onChange={val => handleVolumeChange(val, 'master')}
+            name="Master"
+            volume={masterClickVolume}
+            onChange={val => setMasterClickVolume(val)}
           />
 
           {/* Separator */}
-          <div className="h-px w-full bg-border/30 my-2"></div>
+          <div className="h-px w-full bg-border my-2"></div>
 
           {/* Whole Note */}
           <ClickVolume
             name="○"
-            volume={volumes.wholeNote}
-            onChange={val => handleVolumeChange(val, 'wholeNote')}
+            volume={clickVolumes.wholeNote}
+            onChange={val => handleClickVolumeChange(val, 'wholeNote')}
           />
 
           {/* Quarter Note */}
           <ClickVolume
             name="♩"
-            volume={volumes.quarterNote}
-            onChange={val => handleVolumeChange(val, 'quarterNote')}
+            volume={clickVolumes.quarterNote}
+            onChange={val => handleClickVolumeChange(val, 'quarterNote')}
           />
 
           {/* Eighth Note */}
           <ClickVolume
             name="♪"
-            volume={volumes.eighthNote}
-            onChange={val => handleVolumeChange(val, 'eighthNote')}
-          />
-
-          {/* Dotted Eighth Note */}
-          <ClickVolume
-            name="♪."
-            volume={volumes.dottedEighth}
-            onChange={val => handleVolumeChange(val, 'dottedEighth')}
+            volume={clickVolumes.eighthNote}
+            onChange={val => handleClickVolumeChange(val, 'eighthNote')}
           />
 
           {/* Triplet */}
           <ClickVolume
             name="♫"
-            volume={volumes.triplet}
-            onChange={val => handleVolumeChange(val, 'triplet')}
+            volume={clickVolumes.tripletNote}
+            onChange={val => handleClickVolumeChange(val, 'tripletNote')}
           />
         </div>
       </DialogContent>
