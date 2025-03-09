@@ -79,7 +79,7 @@ export default function Home() {
         </Card>
         <Card className="flex flex-col justify-between">
           <CardHeader>
-            <CardTitle>Spotify Library Scanner (Beta)</CardTitle>
+            <CardTitle>Spotify Library Scanner</CardTitle>
             <CardDescription>
               Find charts on Chorus that match songs you have saved in your
               Spotify playlists.
@@ -87,9 +87,9 @@ export default function Home() {
           </CardHeader>
           <CardFooter className="grid gap-4 py-4">
             <Link
-              href="/spotify" // /spotify
-              className={buttonVariants({variant: 'default'})}>
-              Go to Tool
+              href="#" // /spotify
+              className={buttonVariants({variant: 'ghost'})}>
+              Under Construction
             </Link>
           </CardFooter>
         </Card>
