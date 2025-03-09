@@ -126,7 +126,7 @@ export default function Search({
 
   useEffect(() => {
     searchSongs(searchQuery);
-  }, [searchQuery, instrumentFilter]);
+  }, [searchQuery, searchSongs]);
 
   return (
     <main className="min-h-screen bg-background w-full">

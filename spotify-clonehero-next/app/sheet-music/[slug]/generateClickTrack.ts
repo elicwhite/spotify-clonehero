@@ -214,7 +214,7 @@ export async function generateClickTrackFromMeasures(
       return;
     }
 
-    if (event.type === 'triplet' && clickVolumes.triplet === 0) {
+    if (event.type === 'triplet' && clickVolumes.tripletNote === 0) {
       return;
     }
 
