@@ -8,6 +8,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {Label} from '@/components/ui/label';
 import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
 import {
@@ -19,6 +26,7 @@ import {
   VolumeX,
   Menu,
   X,
+  Settings2,
 } from 'lucide-react';
 import {
   useCallback,
@@ -74,6 +82,9 @@ export default function Renderer({
   audioFiles: Files;
 }) {
   // console.log('======', metadata, chart);
+  const [playClickTrack, setPlayClickTrack] = useState(true);
+  const [clickTrackConfigurationOpen, setClickTrackConfigurationOpen] =
+    useState(false);
   const [showBarNumbers, setShowBarNumbers] = useState(false);
   const [enableColors, setEnableColors] = useState(true);
   const [currentPlayback, setCurrentPlayback] = useState(0);
@@ -375,6 +386,27 @@ export default function Renderer({
           <div className="space-y-4 pt-4">
             <div className="flex items-center space-x-2">
               <Switch
+                id="clicktrack"
+                checked={playClickTrack}
+                onCheckedChange={setPlayClickTrack}
+              />
+              <label htmlFor="clicktrack" className="text-sm font-medium">
+                Enable click track
+              </label>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setClickTrackConfigurationOpen(true)}>
+                <Settings2 className="h-3 w-3" />
+              </Button>
+              <ClickDialog
+                open={clickTrackConfigurationOpen}
+                setOpen={setClickTrackConfigurationOpen}
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
                 id="colors"
                 checked={enableColors}
                 onCheckedChange={setEnableColors}
@@ -579,6 +611,112 @@ export function AudioVolume({
             S
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ClickDialog({
+  open,
+  setOpen,
+}: {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+}) {
+  const [volumes, setVolumes] = useState({
+    master: 1,
+    wholeNote: 1,
+    quarterNote: 1,
+    eighthNote: 0.5,
+    dottedEighth: 0.75,
+    triplet: 0,
+  });
+  const handleVolumeChange = (value: number, key: keyof typeof volumes) => {
+    setVolumes(prev => ({...prev, [key]: value}));
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-center text-xl font-medium">
+            Configure Click Track
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Mobile layout - stacked with horizontal sliders */}
+        <div className="flex flex-col space-y-6 pt-4">
+          {/* Master Volume */}
+          <ClickVolume
+            name="MASTER"
+            volume={volumes.master}
+            onChange={val => handleVolumeChange(val, 'master')}
+          />
+
+          {/* Separator */}
+          <div className="h-px w-full bg-border/30 my-2"></div>
+
+          {/* Whole Note */}
+          <ClickVolume
+            name="○"
+            volume={volumes.wholeNote}
+            onChange={val => handleVolumeChange(val, 'wholeNote')}
+          />
+
+          {/* Quarter Note */}
+          <ClickVolume
+            name="♩"
+            volume={volumes.quarterNote}
+            onChange={val => handleVolumeChange(val, 'quarterNote')}
+          />
+
+          {/* Eighth Note */}
+          <ClickVolume
+            name="♪"
+            volume={volumes.eighthNote}
+            onChange={val => handleVolumeChange(val, 'eighthNote')}
+          />
+
+          {/* Dotted Eighth Note */}
+          <ClickVolume
+            name="♪."
+            volume={volumes.dottedEighth}
+            onChange={val => handleVolumeChange(val, 'dottedEighth')}
+          />
+
+          {/* Triplet */}
+          <ClickVolume
+            name="♫"
+            volume={volumes.triplet}
+            onChange={val => handleVolumeChange(val, 'triplet')}
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function ClickVolume({
+  name,
+  volume,
+  onChange,
+}: {
+  name: string;
+  volume: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div key={name} className="space-y-2">
+      <label className="text-sm font-medium">{capitalize(name)}</label>
+      <div className="flex items-center gap-2">
+        <Slider
+          defaultValue={[volume]}
+          min={0}
+          max={1}
+          step={0.01}
+          className="flex-1"
+          onValueChange={values => onChange(values[0])}
+        />
       </div>
     </div>
   );
