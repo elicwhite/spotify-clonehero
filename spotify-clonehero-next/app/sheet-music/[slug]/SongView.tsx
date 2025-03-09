@@ -47,10 +47,15 @@ import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import {AudioManager} from '@/lib/preview/audioManager';
 import CloneHeroRenderer from './CloneHeroRenderer';
 import Link from 'next/link';
+import Image from 'next/image';
 import {generateClickTrackFromMeasures} from './generateClickTrack';
 import type {ClickVolumes} from './generateClickTrack';
 import convertToVexFlow from './convertToVexflow';
 import debounce from 'debounce';
+import wholeNote from '@/public/assets/svgs/whole-note.svg';
+import quarterNote from '@/public/assets/svgs/quarter-note.svg';
+import eighthNote from '@/public/assets/svgs/eighth-note.svg';
+import tripletNote from '@/public/assets/svgs/triplet-note.svg';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -557,42 +562,6 @@ export default function Renderer({
         </div>
       </div>
     </div>
-
-    // <div key={name} className="space-y-2">
-    //   <label className="text-sm font-medium">{name}</label>
-    //   <div className="flex items-center gap-2">
-    //     <Slider
-    //       defaultValue={[volume]}
-    //       max={100}
-    //       step={1}
-    //       className="flex-1"
-    //     />
-    //     <Button variant="outline" size="icon" className="h-6 w-6">
-    //       S
-    //     </Button>
-    //   </div>
-    // </div>
-
-    // <Wrapper>
-    //   <FileName>{name}</FileName>
-    //   <VolumeControl>
-    //     <VolumeSlider value={volume} onChange={onChange} />
-    //     <VolumeControlButton
-    //       shape="circle"
-    //       type={isMuted ? 'primary' : 'default'}
-    //       size="small"
-    //       icon={<FontAwesomeIcon size="xs" icon={faVolumeMute} />}
-    //       onClick={onMuteClick}
-    //     />
-    //     <VolumeControlButton
-    //       shape="circle"
-    //       type={isSoloed ? 'primary' : 'default'}
-    //       size="small"
-    //       icon={<FontAwesomeIcon size="xs" icon={faS} />}
-    //       onClick={onSoloClick}
-    //     />
-    //   </VolumeControl>
-    // </Wrapper>
   );
 }
 
@@ -716,28 +685,29 @@ function ClickDialog({
 
           {/* Whole Note */}
           <ClickVolume
-            name="○"
+            // name="○"
+            svg={wholeNote}
             volume={clickVolumes.wholeNote}
             onChange={val => handleClickVolumeChange(val, 'wholeNote')}
           />
 
           {/* Quarter Note */}
           <ClickVolume
-            name="♩"
+            svg={quarterNote}
             volume={clickVolumes.quarterNote}
             onChange={val => handleClickVolumeChange(val, 'quarterNote')}
           />
 
           {/* Eighth Note */}
           <ClickVolume
-            name="♪"
+            svg={eighthNote}
             volume={clickVolumes.eighthNote}
             onChange={val => handleClickVolumeChange(val, 'eighthNote')}
           />
 
           {/* Triplet */}
           <ClickVolume
-            name="♫"
+            svg={tripletNote}
             volume={clickVolumes.tripletNote}
             onChange={val => handleClickVolumeChange(val, 'tripletNote')}
           />
@@ -749,16 +719,27 @@ function ClickDialog({
 
 export function ClickVolume({
   name,
+  svg,
   volume,
   onChange,
 }: {
-  name: string;
+  name?: string;
+  svg?: any;
   volume: number;
   onChange: (value: number) => void;
 }) {
+  const description = name ? (
+    capitalize(name)
+  ) : (
+    <Image
+      src={svg}
+      alt="Whole note"
+      className="foreground h-[26px] max-w-[30px]"
+    />
+  );
   return (
     <div key={name} className="space-y-2">
-      <label className="text-sm font-medium">{capitalize(name)}</label>
+      <label className="text-sm font-medium">{description}</label>
       <div className="flex items-center gap-2">
         <Slider
           defaultValue={[volume]}
