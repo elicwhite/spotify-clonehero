@@ -30,9 +30,9 @@ export default function Home() {
           charts.
         </p>
         <p className="text-lg mt-2">
-          The tools on this website don&apos;t require any downloads or custom
-          applications on your computer. Manage your Songs directory directly
-          from your browser.
+          No downloads required! These tools don&apos;t require any downloads or
+          custom applications on your computer. Manage your Songs directory
+          directly from your browser.
         </p>
 
         <SupportedBrowserWarning />
@@ -40,52 +40,20 @@ export default function Home() {
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
         <Card className="flex flex-col justify-between">
           <CardHeader>
-            <CardTitle>Updater</CardTitle>
+            <CardTitle>Drum Sheet Music Viewer</CardTitle>
             <CardDescription>
-              Check Chorus for newer versions of your installed charts.
+              View drum charts as sheet music! Automatically synced click tracks
+              and individual audio track control lets you practice and play
+              along.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 py-4">
             <Link
-              href="/updates"
+              href="sheet-music"
               className={buttonVariants({variant: 'default'})}>
               Go to Tool
             </Link>
           </CardContent>
-        </Card>
-        <Card className="flex flex-col justify-between">
-          <CardHeader>
-            <CardTitle>Chart Error Checker</CardTitle>
-            <CardDescription>
-              Primarily for charters. Check your charts for quality issues that
-              will get flagged by the Chorus bot before submitting.
-              <span className="font-bold"> The online version no longer works, use the Bridge desktop app.</span>
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 py-4">
-            <Link
-              href="https://github.com/Geomitron/Bridge/releases/latest"
-              target='_blank'
-              className={buttonVariants({variant: 'default'})}>
-              Go to Bridge
-            </Link>
-          </CardContent>
-        </Card>
-        <Card className="flex flex-col justify-between">
-          <CardHeader>
-            <CardTitle>Spotify Library Scanner</CardTitle>
-            <CardDescription>
-              Find charts on Chorus that match songs you have saved in your
-              Spotify playlists.
-            </CardDescription>
-          </CardHeader>
-          <CardFooter className="grid gap-4 py-4">
-            <Link
-              href="#" // /spotify
-              className={buttonVariants({variant: 'ghost'})}>
-              Under Construction
-            </Link>
-          </CardFooter>
         </Card>
         <Card className="flex flex-col justify-between">
           <CardHeader>
@@ -104,6 +72,37 @@ export default function Home() {
           <CardContent className="grid gap-4 py-4">
             <Link
               href="spotifyhistory"
+              className={buttonVariants({variant: 'default'})}>
+              Go to Tool
+            </Link>
+          </CardContent>
+        </Card>
+        <Card className="flex flex-col justify-between">
+          <CardHeader>
+            <CardTitle>Spotify Library Scanner (Beta)</CardTitle>
+            <CardDescription>
+              Find charts on Chorus that match songs you have saved in your
+              Spotify playlists.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="grid gap-4 py-4">
+            <Link
+              href="/spotify" // /spotify
+              className={buttonVariants({variant: 'default'})}>
+              Go to Tool
+            </Link>
+          </CardFooter>
+        </Card>
+        <Card className="flex flex-col justify-between">
+          <CardHeader>
+            <CardTitle>Updater</CardTitle>
+            <CardDescription>
+              Check Chorus for newer versions of your installed charts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 py-4">
+            <Link
+              href="/updates"
               className={buttonVariants({variant: 'default'})}>
               Go to Tool
             </Link>
