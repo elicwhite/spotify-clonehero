@@ -693,14 +693,14 @@ function ClickDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-        {/* <DialogHeader>
+        <DialogHeader>
           <DialogTitle className="text-center text-xl font-medium">
             Configure Click Track
           </DialogTitle>
-          <DialogDescription>
+          {/* <DialogDescription>
             Configure volume levels for the click track.
-          </DialogDescription>
-        </DialogHeader> */}
+          </DialogDescription> */}
+        </DialogHeader>
 
         {/* Mobile layout - stacked with horizontal sliders */}
         <div className="flex flex-col space-y-6 pt-4">
