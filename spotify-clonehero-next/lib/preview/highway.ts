@@ -235,7 +235,11 @@ export const setupRenderer = (
     renderer.setAnimationLoop(animation);
 
     function animation() {
-      if (audioManager != null) {
+      if (
+        audioManager != null &&
+        audioManager.isPlaying &&
+        audioManager.isInitialized
+      ) {
         const SYNC_MS = (audioManager.delay || 0) * 1000;
 
         if (audioManager.isPlaying) {
