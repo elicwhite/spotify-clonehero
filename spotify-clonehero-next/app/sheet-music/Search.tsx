@@ -1,6 +1,6 @@
 'use client';
 
-import {useMemo, useEffect, useState} from 'react';
+import {useMemo, useEffect, useState, useCallback} from 'react';
 import {useRouter} from 'next/navigation';
 import {parseAsString, useQueryState} from 'nuqs';
 import Image from 'next/image';
@@ -114,9 +114,12 @@ export default function Search({
       }, 500),
     [],
   );
-  const searchSongs = (query: string) => {
-    debouncedFilterSongs(query, instrumentFilter);
-  };
+  const searchSongs = useCallback(
+    (query: string) => {
+      debouncedFilterSongs(query, instrumentFilter);
+    },
+    [debouncedFilterSongs],
+  );
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
