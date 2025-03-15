@@ -26,6 +26,7 @@ export async function searchEncore(
       difficulty: null,
       drumType: null,
       source: 'website',
+      ...(instrument === 'drums' ? {drumsReviewed: false} : {}),
     }),
     method: 'POST',
   });
