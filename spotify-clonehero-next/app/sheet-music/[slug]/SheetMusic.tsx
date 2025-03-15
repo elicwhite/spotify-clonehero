@@ -18,14 +18,14 @@ type ParsedChart = ReturnType<typeof parseChartFile>;
 
 export default function SheetMusic({
   chart,
-  difficulty,
+  track,
   currentTime,
   showBarNumbers,
   enableColors,
   onSelectMeasure,
 }: {
   chart: ParsedChart;
-  difficulty: Difficulty;
+  track: ParsedChart['trackData'][0];
   currentTime: number;
   showBarNumbers: boolean;
   enableColors: boolean;
@@ -38,8 +38,8 @@ export default function SheetMusic({
     useState<number>(1);
 
   const measures = useMemo(() => {
-    return convertToVexFlow(chart, difficulty);
-  }, [chart, difficulty]);
+    return convertToVexFlow(chart, track);
+  }, [chart, track]);
 
   const [renderData, setRenderData] = useState<RenderData[]>([]);
 

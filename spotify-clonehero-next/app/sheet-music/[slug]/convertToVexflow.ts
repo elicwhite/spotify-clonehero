@@ -9,16 +9,9 @@ type TimeSignature = ParsedChart['timeSignatures'][0];
 
 export default function convertToVexFlow(
   chart: ParsedChart,
-  difficulty: string,
+  track: ParsedChart['trackData'][0],
 ): Measure[] {
-  const drumPart = chart.trackData.find(
-    part => part.instrument === 'drums' && part.difficulty === difficulty,
-  );
-  if (!drumPart) {
-    throw new Error('Unable to find difficulty');
-  }
-
-  return new Parser(chart, drumPart).getMeasures();
+  return new Parser(chart, track).getMeasures();
 }
 
 export type DrumNoteInstrument =

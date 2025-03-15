@@ -93,7 +93,7 @@ export default function Renderer({
   const [playClickTrack, setPlayClickTrack] = useState(true);
   const [clickTrackConfigurationOpen, setClickTrackConfigurationOpen] =
     useState(false);
-  const [masterClickVolume, setMasterClickVolume] = useState(1);
+  const [masterClickVolume, setMasterClickVolume] = useState(0.7);
   const [clickVolumes, setClickVolumes] = useState<ClickVolumes>({
     wholeNote: 1,
     quarterNote: 0.75, //0.75,
@@ -140,9 +140,23 @@ export default function Renderer({
   //   console.log(clickTrack);
   // }, [chart]);
 
+  const instrument = 'drums';
+
+  const track: ParsedChart['trackData'][0] = useMemo(() => {
+    const drumPart = chart.trackData.find(
+      part =>
+        part.instrument === instrument &&
+        part.difficulty === selectedDifficulty,
+    );
+    if (!drumPart) {
+      throw new Error('Unable to find difficulty');
+    }
+    return drumPart;
+  }, [chart, selectedDifficulty, instrument]);
+
   const measures = useMemo(() => {
-    return convertToVexFlow(chart, selectedDifficulty);
-  }, [chart, selectedDifficulty]);
+    return convertToVexFlow(chart, track);
+  }, [chart, track]);
 
   const lastAudioState = useRef({
     currentTime: 0,
@@ -537,17 +551,10 @@ export default function Renderer({
               charted by {metadata.charter}
             </span>
           </h1>
-
-          {/* <CloneHeroRenderer
-            metadata={metadata}
-            chart={chart}
-            difficulty={selectedDifficulty}
-            audioManager={audioManagerRef.current!}
-          /> */}
           <SheetMusic
             currentTime={currentPlayback}
             chart={chart}
-            difficulty={selectedDifficulty}
+            track={track}
             showBarNumbers={showBarNumbers}
             enableColors={enableColors}
             onSelectMeasure={time => {
@@ -559,6 +566,12 @@ export default function Renderer({
               setIsPlaying(true);
             }}
           />
+          {/* <CloneHeroRenderer
+            metadata={metadata}
+            chart={chart}
+            track={track}
+            audioManager={audioManagerRef.current!}
+          /> */}
         </div>
       </div>
     </div>

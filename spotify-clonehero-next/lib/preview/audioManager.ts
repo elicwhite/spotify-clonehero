@@ -198,7 +198,7 @@ class AudioTrack {
   #onSongEnded: (() => void) | null;
   #songEnded: boolean = false;
 
-  #volume: number = 1;
+  #volume: number = 0;
 
   constructor(
     context: AudioContext,
@@ -220,6 +220,8 @@ class AudioTrack {
     this.#duration = Math.max(
       ...this.#audioBuffers.map(buffer => buffer.duration),
     );
+
+    this.volume = 1;
   }
 
   get ended() {
@@ -241,7 +243,7 @@ class AudioTrack {
       // sound as good.
       // Taken from https://webaudioapi.com/samples/volume/
       gainNode.gain.setValueAtTime(
-        newVolume * newVolume,
+        (newVolume * newVolume) / 2,
         this.#context.currentTime,
       );
     });

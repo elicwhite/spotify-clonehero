@@ -21,12 +21,12 @@ type ParsedChart = ReturnType<typeof parseChartFile>;
 export default function CloneHeroRenderer({
   metadata,
   chart,
-  difficulty,
+  track,
   audioManager,
 }: {
   metadata: ChartResponseEncore;
   chart: ParsedChart;
-  difficulty: Difficulty;
+  track: ParsedChart['trackData'][0];
   audioManager: AudioManager;
 }) {
   const sizingRef = useRef<HTMLDivElement>(null);
@@ -38,24 +38,6 @@ export default function CloneHeroRenderer({
   });
 
   useEffect(() => {
-    const track = chart.trackData.find(
-      parser =>
-        parser.instrument == selectedTrack.instrument &&
-        parser.difficulty == selectedTrack.difficulty,
-    )!;
-
-    if (track == null) {
-      console.log(
-        'No track found for',
-        selectedTrack,
-        'Only found',
-        chart.trackData.map(
-          trackData => `${trackData.instrument} - ${trackData.difficulty}`,
-        ),
-      );
-      return;
-    }
-
     const renderer = setupRenderer(
       metadata,
       chart,
@@ -69,15 +51,15 @@ export default function CloneHeroRenderer({
     return () => {
       renderer.destroy();
     };
-  }, [metadata, audioManager, chart, selectedTrack]);
+  }, [metadata, audioManager, chart, track]);
 
   return (
     <div className="flex-1 flex-col justify-center bg-white rounded-lg border overflow-y-auto">
-      <InstrumentDifficultyPicker
+      {/* <InstrumentDifficultyPicker
         chart={chart}
         selectedTrack={selectedTrack}
         onTrackSelected={setSelectedTrack}
-      />
+      /> */}
 
       <div className="relative h-full" ref={sizingRef}>
         <div ref={ref} className="h-full" />
