@@ -23,6 +23,7 @@ export default function SheetMusic({
   showBarNumbers,
   enableColors,
   onSelectMeasure,
+  triggerRerender,
 }: {
   chart: ParsedChart;
   track: ParsedChart['trackData'][0];
@@ -30,6 +31,7 @@ export default function SheetMusic({
   showBarNumbers: boolean;
   enableColors: boolean;
   onSelectMeasure: (time: number) => void;
+  triggerRerender: boolean;
 }) {
   const vexflowContainerRef = useRef<HTMLDivElement>(null);
   const [windowWidth, setWindowWidth] = useState<number>(window.innerWidth);
@@ -83,7 +85,7 @@ export default function SheetMusic({
     setRenderData(data);
 
     highlightsRef.current = data.map(() => createRef<HTMLButtonElement>());
-  }, [measures, showBarNumbers, enableColors, windowWidth]);
+  }, [measures, showBarNumbers, enableColors, windowWidth, triggerRerender]);
 
   useEffect(() => {
     if (!renderData) {

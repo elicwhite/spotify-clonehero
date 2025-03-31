@@ -103,6 +103,7 @@ export default function Renderer({
 
   const [showBarNumbers, setShowBarNumbers] = useState(false);
   const [enableColors, setEnableColors] = useState(true);
+  const [viewCloneHero, setViewCloneHero] = useState(true);
   const [currentPlayback, setCurrentPlayback] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volumeControls, setVolumeControls] = useState<VolumeControl[]>([]);
@@ -493,6 +494,16 @@ export default function Renderer({
                 Enable colors
               </label>
             </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="colors"
+                checked={viewCloneHero}
+                onCheckedChange={setViewCloneHero}
+              />
+              <label htmlFor="colors" className="text-sm font-medium">
+                View as Clone Hero
+              </label>
+            </div>
             {/* <div className="flex items-center space-x-2">
               <Switch
                 id="barnumbers"
@@ -544,34 +555,39 @@ export default function Renderer({
           </span>
         </div>
 
-        <div className="md:p-8 md:px-4 py-4 flex-1 flex flex-col md:overflow-hidden">
+        <div className="md:p-8 md:px-4 py-4 flex-1 flex flex-col overflow-hidden">
           <h1 className="text-3xl md:text-3xl font-bold mb-4 md:mb-8">
             {metadata.name} by {metadata.artist}
             <span className="block text-lg md:inline md:text-3xl md:ml-1">
               charted by {metadata.charter}
             </span>
           </h1>
-          <SheetMusic
-            currentTime={currentPlayback}
-            chart={chart}
-            track={track}
-            showBarNumbers={showBarNumbers}
-            enableColors={enableColors}
-            onSelectMeasure={time => {
-              if (audioManagerRef.current == null) {
-                return;
-              }
-              audioManagerRef.current.play({time});
+          <div className='flex flex-1 gap-2 mb-4 overflow-hidden'>
+            <div className="flex flex-1">
+              <SheetMusic
+                currentTime={currentPlayback}
+                chart={chart}
+                track={track}
+                showBarNumbers={showBarNumbers}
+                enableColors={enableColors}
+                onSelectMeasure={time => {
+                  if (audioManagerRef.current == null) {
+                    return;
+                  }
+                  audioManagerRef.current.play({time});
 
-              setIsPlaying(true);
-            }}
-          />
-          {/* <CloneHeroRenderer
-            metadata={metadata}
-            chart={chart}
-            track={track}
-            audioManager={audioManagerRef.current!}
-          /> */}
+                  setIsPlaying(true);
+                }}
+                triggerRerender={viewCloneHero}
+              />
+            </div>
+            {viewCloneHero && <CloneHeroRenderer
+              metadata={metadata}
+              chart={chart}
+              track={track}
+              audioManager={audioManagerRef.current!}
+            />}
+          </div>
         </div>
       </div>
     </div>
