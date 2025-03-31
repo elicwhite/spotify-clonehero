@@ -413,7 +413,7 @@ export default function Renderer({
   );
 
   return (
-    <div className="md:overflow-hidden flex flex-col md:flex-row bg-background relative">
+    <div className="md:overflow-hidden flex flex-col flex-1 md:flex-row bg-background relative">
       {/* Mobile overlay */}
       {isSidebarOpen && (
         <div
@@ -563,7 +563,10 @@ export default function Renderer({
             </span>
           </h1>
           <div className='flex flex-1 gap-2 mb-4 overflow-hidden'>
-            <div className="flex flex-1">
+            <div className={cn(
+              viewCloneHero ? "hidden md:flex" : 'flex',
+              'flex-1'
+            )}>
               <SheetMusic
                 currentTime={currentPlayback}
                 chart={chart}
