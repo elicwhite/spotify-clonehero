@@ -103,7 +103,7 @@ export default function Renderer({
 
   const [showBarNumbers, setShowBarNumbers] = useState(false);
   const [enableColors, setEnableColors] = useState(true);
-  const [viewCloneHero, setViewCloneHero] = useState(true);
+  const [viewCloneHero, setViewCloneHero] = useState(false);
   const [currentPlayback, setCurrentPlayback] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volumeControls, setVolumeControls] = useState<VolumeControl[]>([]);
