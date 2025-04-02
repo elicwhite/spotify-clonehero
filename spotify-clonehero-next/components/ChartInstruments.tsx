@@ -1,13 +1,7 @@
 import {ChartResponseEncore} from '@/lib/chartSelection';
-import Image from 'next/image';
 import {
   memo,
   useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
 } from 'react';
 
 export const RENDERED_INSTRUMENTS = [
@@ -47,7 +41,7 @@ export const InstrumentImage = memo(function InstrumentImage({
     }
   }, [instrument, onClick]);
   return (
-    <Image
+    <img
       className={`inline-block ${classNames}`}
       key={instrument}
       alt={`Icon for instrument ${instrument}`}

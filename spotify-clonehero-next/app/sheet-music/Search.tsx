@@ -3,7 +3,6 @@
 import {useMemo, useEffect, useState, useCallback} from 'react';
 import {useRouter} from 'next/navigation';
 import {parseAsString, useQueryState} from 'nuqs';
-import Image from 'next/image';
 import {Search as SearchIcon, Guitar, Drum, Radio, Piano} from 'lucide-react';
 import {Input} from '@/components/ui/input';
 import {Button} from '@/components/ui/button';
@@ -223,12 +222,11 @@ export default function Search({
                     key={song.md5}
                     className="flex items-stretch bg-card rounded-lg border border-border hover:bg-accent transition-colors cursor-pointer overflow-hidden">
                     <div className="flex-shrink-0">
-                      <Image
+                      <img
                         src={`https://files.enchor.us/${song.albumArtMd5}.jpg`}
                         alt={`${song.name} album art`}
                         width={200}
                         height={200}
-                        priority={true}
                         className="h-full w-[120px] sm:w-[160px] lg:w-[200px] object-cover"
                       />
                     </div>
