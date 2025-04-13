@@ -21,8 +21,15 @@ export default async function getChorusChartDb(): Promise<
 
   if (localDataVersion !== serverDataVersion) {
     debugLog('Server data is newer, updating');
-    await root.removeEntry('serverData', {recursive: true});
-    await root.removeEntry('localData', {recursive: true});
+    try {
+      await root.removeEntry('serverData', {recursive: true});
+      await root.removeEntry('localData', {recursive: true});
+    } catch (e) {
+      // Not found if the items don't exist, which is fine
+      if (!(e instanceof DOMException && e.name === 'NotFoundError')) {
+        throw e;
+      }
+    }
     localStorage.setItem('chartsDataVersion', String(serverDataVersion));
   }
 
