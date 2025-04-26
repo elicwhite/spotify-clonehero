@@ -79,7 +79,7 @@ async function getAllPlaylistTracks(
         total = items.total;
       }
       const filteredTracks = items.items
-        .filter(item => item.track.type === 'track')
+        .filter(item => item.track?.type === 'track')
         .map((item: PlaylistedTrack): TrackResult => {
           return {
             name: item.track.name,
@@ -94,10 +94,10 @@ async function getAllPlaylistTracks(
     } catch (error: any) {
       if (error instanceof RateLimitError) {
         console.log(
-          `Rate limited. Retrying after ${error.retryAfter} seconds...`,
+          `Rate limited. Retrying after ${error.retryAfter * 2} seconds...`,
         );
         await new Promise(resolve =>
-          setTimeout(resolve, error.retryAfter * 1000),
+          setTimeout(resolve, error.retryAfter * 1000 * 2),
         );
         continue;
       }
@@ -226,12 +226,13 @@ export function useSpotifyTracks(): [
           foundSnapshots.push(playlist.snapshot_id);
           await setCachedPlaylistTracks(cachedPlaylistTracks);
           return playlistTracks;
-        } catch {
+        } catch (error: any) {
           console.error(
             'Unexpected error fetching tracks for playlist',
             playlist.id,
             'with snapshot',
             playlist.snapshot_id,
+            error
           );
           return [];
         }
