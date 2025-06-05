@@ -79,6 +79,7 @@ export default function SheetMusic({
     const data = renderMusic(
       vexflowContainerRef,
       measures,
+      chart.sections,
       showBarNumbers,
       enableColors,
     );

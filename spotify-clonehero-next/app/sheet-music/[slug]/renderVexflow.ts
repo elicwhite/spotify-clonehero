@@ -42,6 +42,7 @@ const NOTE_COLOR_MAP: {[key: string]: string} = {
 export function renderMusic(
   elementRef: React.RefObject<HTMLDivElement>,
   measures: Measure[],
+  sections: {tick: number; name: string; msTime: number; msLength: number}[],
   showBarNumbers: boolean = true,
   enableColors: boolean = false,
 ): RenderData[] {
@@ -79,6 +80,35 @@ export function renderMusic(
     Math.ceil(measures.length / stavePerRow) * lineHeight + 50,
   );
 
+  // Create a map of measure start times to section names for quick lookup
+  const sectionMap = new Map<number, string>();
+  console.log('Processing sections:', sections.length, sections);
+  sections.forEach(section => {
+    // Find the measure that contains this section's start time, or the closest measure after it
+    let measureIndex = measures.findIndex(measure => 
+      section.msTime >= measure.startMs && section.msTime < measure.endMs
+    );
+    
+    // If section starts before any measure, use the first measure
+    if (measureIndex === -1 && section.msTime < measures[0]?.startMs) {
+      measureIndex = 0;
+    }
+    
+    // If section starts after the last measure ends, find the closest measure
+    if (measureIndex === -1) {
+      measureIndex = measures.findIndex(measure => measure.startMs >= section.msTime);
+      if (measureIndex === -1) {
+        measureIndex = measures.length - 1; // Use last measure if section is after all measures
+      }
+    }
+    
+    if (measureIndex !== -1 && !sectionMap.has(measureIndex)) {
+      console.log(`Adding section "${section.name}" at measure ${measureIndex} (${section.msTime}ms)`);
+      sectionMap.set(measureIndex, section.name);
+    }
+  });
+  console.log('Section map:', Array.from(sectionMap.entries()));
+
   return measures.map((measure, index) => ({
     measure,
     stave: renderMeasure(
@@ -91,6 +121,7 @@ export function renderMusic(
       index === measures.length - 1,
       showBarNumbers,
       enableColors,
+      sectionMap.get(index), // Pass section name if this measure starts a new section
     ),
   }));
 }
@@ -105,6 +136,7 @@ function renderMeasure(
   endMeasure: boolean,
   showBarNumbers: boolean,
   enableColors: boolean,
+  sectionName?: string,
 ) {
   const stave = new Stave(xOffset, yOffset, staveWidth);
 
@@ -120,13 +152,22 @@ function renderMeasure(
     );
   }
 
-  if (showBarNumbers) {
-    stave.setText(`${index}`, ModifierPosition.ABOVE, {
+  // if (showBarNumbers) {
+  //   stave.setText(`${index}`, ModifierPosition.ABOVE, {
+  //     justification: TextJustification.LEFT,
+  //   });
+  // }
+
+  if (sectionName) {
+    stave.setText(sectionName, ModifierPosition.ABOVE, {
       justification: TextJustification.LEFT,
+      shift_y: 10,
+      shift_x: 5,
     });
+    
   }
 
-  stave.setContext(context).draw();
+  stave.setContext(context).draw();// context.restore();
 
   const tuplets: StaveNote[][] = [];
   let currentTuplet: StaveNote[] | null = null;
