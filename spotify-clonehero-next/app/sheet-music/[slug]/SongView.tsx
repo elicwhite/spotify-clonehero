@@ -91,7 +91,6 @@ export default function Renderer({
   chart: ParsedChart;
   audioFiles: Files;
 }) {
-  // console.log('======', metadata, chart);
   const [playClickTrack, setPlayClickTrack] = useState(true);
   const [clickTrackConfigurationOpen, setClickTrackConfigurationOpen] =
     useState(false);
@@ -105,6 +104,7 @@ export default function Renderer({
 
   const [showBarNumbers, setShowBarNumbers] = useState(false);
   const [enableColors, setEnableColors] = useState(true);
+  const [showLyrics, setShowLyrics] = useState(true);
   const [viewCloneHero, setViewCloneHero] = useState(false);
   const [currentPlayback, setCurrentPlayback] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -541,11 +541,21 @@ export default function Renderer({
             </div>
             <div className="flex items-center space-x-2">
               <Switch
-                id="colors"
+                id="lyrics"
+                checked={showLyrics}
+                onCheckedChange={setShowLyrics}
+              />
+              <label htmlFor="lyrics" className="text-sm font-medium">
+                Show lyrics
+              </label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="clonehero"
                 checked={viewCloneHero}
                 onCheckedChange={setViewCloneHero}
               />
-              <label htmlFor="colors" className="text-sm font-medium">
+              <label htmlFor="clonehero" className="text-sm font-medium">
                 View as Clone Hero
               </label>
             </div>
@@ -618,6 +628,7 @@ export default function Renderer({
                 track={track}
                 showBarNumbers={showBarNumbers}
                 enableColors={enableColors}
+                showLyrics={showLyrics}
                 onSelectMeasure={time => {
                   if (audioManagerRef.current == null) {
                     return;

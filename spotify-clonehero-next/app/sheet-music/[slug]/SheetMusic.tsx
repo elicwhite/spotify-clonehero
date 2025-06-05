@@ -22,6 +22,7 @@ export default function SheetMusic({
   currentTime,
   showBarNumbers,
   enableColors,
+  showLyrics,
   onSelectMeasure,
   triggerRerender,
 }: {
@@ -30,6 +31,7 @@ export default function SheetMusic({
   currentTime: number;
   showBarNumbers: boolean;
   enableColors: boolean;
+  showLyrics: boolean;
   onSelectMeasure: (time: number) => void;
   triggerRerender: boolean;
 }) {
@@ -80,13 +82,15 @@ export default function SheetMusic({
       vexflowContainerRef,
       measures,
       chart.sections,
+      // https://github.com/YARC-Official/YARG.Core/blob/6b24334cb6b3588d290e1d5f8231ce70314d097c/YARG.Core/MoonscraperChartParser/IO/Midi/MidReader.cs#L299
+      showLyrics ? chart.lyrics.filter(lyric => !lyric.text.includes('[')) || [] : [],
       showBarNumbers,
       enableColors,
     );
     setRenderData(data);
 
     highlightsRef.current = data.map(() => createRef<HTMLButtonElement>());
-  }, [measures, showBarNumbers, enableColors, windowWidth, triggerRerender]);
+  }, [measures, showBarNumbers, enableColors, windowWidth, triggerRerender, showLyrics]);
 
   useEffect(() => {
     if (!renderData) {
