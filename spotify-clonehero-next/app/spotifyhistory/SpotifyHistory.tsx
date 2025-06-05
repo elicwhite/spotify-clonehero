@@ -4,7 +4,7 @@ import {
   SongAccumulator,
   createIsInstalledFilter,
 } from '@/lib/local-songs-folder/scanLocalCharts';
-import {useCallback, useState} from 'react';
+import {Suspense, useCallback, useState} from 'react';
 import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import {
@@ -81,9 +81,11 @@ export default function Page() {
         and finds all the available charts on Encore for any song you&apos;ve
         ever listened to.
       </p>
+      <Suspense fallback={<div>Loading...</div>}>
       <SupportedBrowserWarning>
         <SpotifyHistory authenticated={session.status === 'authenticated'} />
       </SupportedBrowserWarning>
+      </Suspense>
     </>
   );
 }

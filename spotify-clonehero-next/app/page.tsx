@@ -1,5 +1,4 @@
 import {ReactNode} from 'react';
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
   CardTitle,
@@ -11,13 +10,7 @@ import {
 } from '@/components/ui/card';
 import {Button, buttonVariants} from '@/components/ui/button';
 import {RxExternalLink} from 'react-icons/rx';
-
-const SupportedBrowserWarning = dynamic(
-  () => import('./SupportedBrowserWarning'),
-  {
-    ssr: false,
-  },
-);
+import SupportedBrowserWarning from './SupportedBrowserWarning';
 
 export default function Home() {
   return (

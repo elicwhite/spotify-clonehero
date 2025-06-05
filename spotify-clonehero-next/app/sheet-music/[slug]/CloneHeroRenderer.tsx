@@ -29,8 +29,8 @@ export default function CloneHeroRenderer({
   track: ParsedChart['trackData'][0];
   audioManager: AudioManager;
 }) {
-  const sizingRef = useRef<HTMLDivElement>(null);
-  const ref = useRef<HTMLDivElement>(null);
+  const sizingRef = useRef<HTMLDivElement>(null!);
+  const ref = useRef<HTMLDivElement>(null!);
   const rendererRef = useRef<ReturnType<typeof setupRenderer> | null>(null);
   const [selectedTrack, setSelectedTrack] = useState<SelectedTrack>({
     instrument: chart.trackData[0].instrument,

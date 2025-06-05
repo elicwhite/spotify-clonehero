@@ -35,7 +35,7 @@ export default function SheetMusic({
   onSelectMeasure: (time: number) => void;
   triggerRerender: boolean;
 }) {
-  const vexflowContainerRef = useRef<HTMLDivElement>(null);
+  const vexflowContainerRef = useRef<HTMLDivElement>(null!);
   const [windowWidth, setWindowWidth] = useState<number>(window.innerWidth);
   const highlightsRef = useRef<RefObject<HTMLButtonElement>[]>([]);
   const [highlightedMeasureIndex, setHighlightedMeasureIndex] =
@@ -84,14 +84,14 @@ export default function SheetMusic({
       chart.sections,
       // https://github.com/YARC-Official/YARG.Core/blob/6b24334cb6b3588d290e1d5f8231ce70314d097c/YARG.Core/MoonscraperChartParser/IO/Midi/MidReader.cs#L299
       showLyrics
-        ? chart.lyrics?.filter(lyric => !lyric.text.includes('[')) || []
+        ? (chart as any).lyrics?.filter((lyric: any) => !lyric.text.includes('[')) || []
         : [],
       showBarNumbers,
       enableColors,
     );
     setRenderData(data);
 
-    highlightsRef.current = data.map(() => createRef<HTMLButtonElement>());
+    highlightsRef.current = data.map(() => createRef()) as RefObject<HTMLButtonElement>[];
   }, [
     measures,
     showBarNumbers,
@@ -99,7 +99,7 @@ export default function SheetMusic({
     windowWidth,
     triggerRerender,
     showLyrics,
-    chart.lyrics,
+    (chart as any).lyrics,
     chart.sections,
   ]);
 
