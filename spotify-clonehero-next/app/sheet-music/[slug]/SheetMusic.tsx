@@ -90,7 +90,7 @@ export default function SheetMusic({
     setRenderData(data);
 
     highlightsRef.current = data.map(() => createRef<HTMLButtonElement>());
-  }, [measures, showBarNumbers, enableColors, windowWidth, triggerRerender, showLyrics]);
+  }, [measures, showBarNumbers, enableColors, windowWidth, triggerRerender, showLyrics, chart.lyrics, chart.sections]);
 
   useEffect(() => {
     if (!renderData) {
