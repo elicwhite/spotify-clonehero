@@ -17,7 +17,6 @@ export class AudioManager {
   #tracks: {[trackName: string]: AudioTrack} = {};
   #isInitialized: boolean = false;
   #onSongEnded: (() => void) | null;
-  #playbackRate: number = 1;
 
   ready: Promise<void>;
 
@@ -137,18 +136,6 @@ export class AudioManager {
 
     this.#tracks[trackName].volume = volume > 1 ? 1 : volume < 0 ? 0 : volume;
   }
-
-  async setPlaybackRate(rate: number) {
-    this.#playbackRate = rate;
-    Object.values(this.#tracks).forEach(track => {
-      track.playbackRate = rate;
-    });
-  }
-
-  get playbackRate() {
-    return this.#playbackRate;
-  }
-
   // get tracks() {
   //   return Object.values(this.#tracks);
   // }
@@ -166,7 +153,7 @@ export class AudioManager {
       return 0;
     }
 
-    return (this.#context.currentTime - this.#startedAt) * this.#playbackRate + this.#trackOffset;
+    return this.#context.currentTime - this.#startedAt + this.#trackOffset;
   }
 
   get isInitialized() {
@@ -212,7 +199,6 @@ class AudioTrack {
   #songEnded: boolean = false;
 
   #volume: number = 0;
-  #playbackRate: number = 1;
 
   constructor(
     context: AudioContext,
@@ -263,22 +249,10 @@ class AudioTrack {
     });
   }
 
-  set playbackRate(rate: number) {
-    this.#playbackRate = rate;
-    this.#sources.forEach(source => {
-      source.playbackRate.value = this.#playbackRate;
-    });
-  }
-
-  get playbackRate() {
-    return this.#playbackRate;
-  }
-
   start(at: number, offset: number) {
     this.#sources = this.#audioBuffers.map((buffer, index) => {
       const source = this.#context.createBufferSource();
       source.buffer = buffer;
-      source.playbackRate.value = this.#playbackRate;
 
       source.connect(this.#gainNodes[index]);
       source.start(at, offset);
