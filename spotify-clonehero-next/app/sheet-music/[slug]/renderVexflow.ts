@@ -286,12 +286,16 @@ function renderMeasure(
   //   });
   // }
 
+  // Render section name above the staff in bold
   if (sectionName) {
-    stave.setText(sectionName, ModifierPosition.ABOVE, {
-      justification: TextJustification.LEFT,
-      shift_y: 10,
-      shift_x: 5,
-    });
+    context.setFont('Arial', 14, 'bold');
+    const textWidth = context.measureText(sectionName).width;
+    
+    // Position it above the staff with some offset
+    const sectionX = xOffset + 5;
+    const sectionY = yOffset + 15;
+    
+    context.fillText(sectionName, sectionX, sectionY);
   }
 
   // Render lyrics below the staff

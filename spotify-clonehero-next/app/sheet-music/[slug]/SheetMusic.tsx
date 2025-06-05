@@ -83,7 +83,7 @@ export default function SheetMusic({
       measures,
       chart.sections,
       // https://github.com/YARC-Official/YARG.Core/blob/6b24334cb6b3588d290e1d5f8231ce70314d097c/YARG.Core/MoonscraperChartParser/IO/Midi/MidReader.cs#L299
-      showLyrics ? chart.lyrics.filter(lyric => !lyric.text.includes('[')) || [] : [],
+      showLyrics ? chart.lyrics?.filter(lyric => !lyric.text.includes('[')) || [] : [],
       showBarNumbers,
       enableColors,
     );
