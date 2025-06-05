@@ -28,6 +28,8 @@ import {
   Menu,
   X,
   Settings2,
+  Plus,
+  Minus,
 } from 'lucide-react';
 import {
   useCallback,
@@ -108,6 +110,7 @@ export default function Renderer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [volumeControls, setVolumeControls] = useState<VolumeControl[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
 
   const availableDifficulties = getDrumDifficulties(chart);
   const [selectedDifficulty, setSelectedDifficulty] = useState(
@@ -412,6 +415,22 @@ export default function Renderer({
     </Button>
   );
 
+  const handleSpeedChange = (newSpeed: number) => {
+    const clampedSpeed = Math.max(0.1, Math.min(3.0, newSpeed)); // Clamp between 0.1x and 3.0x
+    setPlaybackSpeed(clampedSpeed);
+    if (audioManagerRef.current) {
+      audioManagerRef.current.setPlaybackRate(clampedSpeed);
+    }
+  };
+
+  const increaseSpeed = () => {
+    handleSpeedChange(playbackSpeed + 0.1);
+  };
+
+  const decreaseSpeed = () => {
+    handleSpeedChange(playbackSpeed - 0.1);
+  };
+
   return (
     <div className="md:overflow-hidden flex flex-col flex-1 md:flex-row bg-background relative">
       {/* Mobile overlay */}
@@ -458,6 +477,32 @@ export default function Renderer({
           </div>
 
           {volumeSliders}
+          
+          <div className="space-y-2 pt-4">
+            <label className="text-sm font-medium">Playback Speed</label>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-6 w-6"
+                onClick={decreaseSpeed}
+                disabled={playbackSpeed <= 0.1}>
+                <Minus className="h-3 w-3" />
+              </Button>
+              <div className="flex-1 text-center text-sm font-medium">
+                {playbackSpeed.toFixed(1)}x
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-6 w-6"
+                onClick={increaseSpeed}
+                disabled={playbackSpeed >= 3.0}>
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+          
           <div className="space-y-4 pt-4">
             <div className="flex items-center space-x-2">
               <Switch
