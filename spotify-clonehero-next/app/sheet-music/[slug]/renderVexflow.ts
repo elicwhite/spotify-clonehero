@@ -45,7 +45,7 @@ function measuresAreEqual(measure1: Measure, measure2: Measure): boolean {
   if (measure1.notes.length !== measure2.notes.length) {
     return false;
   }
-  
+
   return measure1.notes.every((note, index) => {
     const note2 = measure2.notes[index];
     return (
@@ -59,9 +59,7 @@ function measuresAreEqual(measure1: Measure, measure2: Measure): boolean {
 
 // Helper function to check if a measure contains only rests
 function measureIsOnlyRests(measure: Measure): boolean {
-  return measure.notes.every(note => 
-    note.isRest
-  );
+  return measure.notes.every(note => note.isRest);
 }
 
 export function renderMusic(
@@ -110,107 +108,125 @@ export function renderMusic(
   const sectionMap = new Map<number, string>();
   sections.forEach(section => {
     // Find the measure that contains this section's start time, or the closest measure after it
-    let measureIndex = measures.findIndex(measure => 
-      section.msTime >= measure.startMs && section.msTime < measure.endMs
+    let measureIndex = measures.findIndex(
+      measure =>
+        section.msTime >= measure.startMs && section.msTime < measure.endMs,
     );
-    
+
     // If section starts before any measure, use the first measure
     if (measureIndex === -1 && section.msTime < measures[0]?.startMs) {
       measureIndex = 0;
     }
-    
+
     // If section starts after the last measure ends, find the closest measure
     if (measureIndex === -1) {
-      measureIndex = measures.findIndex(measure => measure.startMs >= section.msTime);
+      measureIndex = measures.findIndex(
+        measure => measure.startMs >= section.msTime,
+      );
       if (measureIndex === -1) {
         measureIndex = measures.length - 1; // Use last measure if section is after all measures
       }
     }
-    
+
     if (measureIndex !== -1 && !sectionMap.has(measureIndex)) {
       sectionMap.set(measureIndex, section.name);
     }
   });
 
   // Create a map of measure start times to lyrics for quick lookup
-  const lyricsMap = new Map<number, {text: string; position: number; msTime: number}[]>();
+  const lyricsMap = new Map<
+    number,
+    {text: string; position: number; msTime: number}[]
+  >();
   lyrics.forEach(lyric => {
     // Find the measure that contains this lyric's start time
-    let measureIndex = measures.findIndex(measure => 
-      lyric.msTime >= measure.startMs && lyric.msTime < measure.endMs
+    let measureIndex = measures.findIndex(
+      measure =>
+        lyric.msTime >= measure.startMs && lyric.msTime < measure.endMs,
     );
-    
+
     // If lyric starts before any measure, use the first measure
     if (measureIndex === -1 && lyric.msTime < measures[0]?.startMs) {
       measureIndex = 0;
     }
-    
+
     // If lyric starts after the last measure ends, find the closest measure
     if (measureIndex === -1) {
-      measureIndex = measures.findIndex(measure => measure.startMs >= lyric.msTime);
+      measureIndex = measures.findIndex(
+        measure => measure.startMs >= lyric.msTime,
+      );
       if (measureIndex === -1) {
         measureIndex = measures.length - 1; // Use last measure if lyric is after all measures
       }
     }
-    
+
     if (measureIndex !== -1) {
       const measure = measures[measureIndex];
       // Calculate position within the measure (0.0 to 1.0)
       const measureDuration = measure.endMs - measure.startMs;
       const lyricOffset = lyric.msTime - measure.startMs;
       const position = Math.max(0, Math.min(1, lyricOffset / measureDuration));
-      
+
       if (!lyricsMap.has(measureIndex)) {
         lyricsMap.set(measureIndex, []);
       }
       lyricsMap.get(measureIndex)!.push({
         text: lyric.text,
         position: position,
-        msTime: lyric.msTime
+        msTime: lyric.msTime,
       });
     }
   });
 
   // Process lyrics to combine overlapping ones
-  const processedLyricsMap = new Map<number, {text: string; position: number}[]>();
+  const processedLyricsMap = new Map<
+    number,
+    {text: string; position: number}[]
+  >();
   lyricsMap.forEach((measureLyrics, measureIndex) => {
     // Sort lyrics by position within the measure
     const sortedLyrics = measureLyrics.sort((a, b) => a.position - b.position);
-    
+
     const processed: {text: string; position: number}[] = [];
-    
+
     // Create a temporary canvas context to measure text width
     const canvas = document.createElement('canvas');
     const tempContext = canvas.getContext('2d');
     if (tempContext) {
       tempContext.font = '12px Arial'; // Match the font used for rendering
     }
-    
+
     for (let i = 0; i < sortedLyrics.length; i++) {
       const currentLyric = sortedLyrics[i];
       let combinedText = currentLyric.text;
       let combinedPosition = currentLyric.position;
-      
+
       // Calculate text widths and check for actual overlaps
       while (i + 1 < sortedLyrics.length) {
         const nextLyric = sortedLyrics[i + 1];
-        
+
         // Measure current combined text width
-        const currentTextWidth = tempContext?.measureText(combinedText).width || combinedText.length * 8;
+        const currentTextWidth =
+          tempContext?.measureText(combinedText).width ||
+          combinedText.length * 8;
         const currentPixelWidth = currentTextWidth;
-        
+
         // Calculate current text end position in pixels
         // Estimate content width (typically about 70-80% of stave width after clefs, margins, etc.)
         const estimatedContentWidth = staveWidth * 0.75;
-        const currentEndX = (combinedPosition * estimatedContentWidth) + (currentPixelWidth / 2);
-        
+        const currentEndX =
+          combinedPosition * estimatedContentWidth + currentPixelWidth / 2;
+
         // Calculate next text start position in pixels
-        const nextTextWidth = tempContext?.measureText(nextLyric.text).width || nextLyric.text.length * 8;
-        const nextStartX = (nextLyric.position * estimatedContentWidth) - (nextTextWidth / 2);
-        
+        const nextTextWidth =
+          tempContext?.measureText(nextLyric.text).width ||
+          nextLyric.text.length * 8;
+        const nextStartX =
+          nextLyric.position * estimatedContentWidth - nextTextWidth / 2;
+
         // Add padding between text elements (10 pixels)
         const padding = 10;
-        
+
         // Check if texts would overlap or be too close
         if (currentEndX + padding > nextStartX) {
           // Combine the lyrics
@@ -223,13 +239,13 @@ export function renderMusic(
           break;
         }
       }
-      
+
       processed.push({
         text: combinedText,
-        position: combinedPosition
+        position: combinedPosition,
       });
     }
-    
+
     processedLyricsMap.set(measureIndex, processed);
   });
 
@@ -290,11 +306,11 @@ function renderMeasure(
   if (sectionName) {
     context.setFont('Arial', 14, 'bold');
     const textWidth = context.measureText(sectionName).width;
-    
+
     // Position it above the staff with some offset
     const sectionX = xOffset + 5;
     const sectionY = yOffset + 15;
-    
+
     context.fillText(sectionName, sectionX, sectionY);
   }
 
@@ -305,17 +321,17 @@ function renderMeasure(
       const staveStartX = stave.getNoteStartX();
       const staveEndX = stave.getNoteEndX();
       const contentWidth = staveEndX - staveStartX;
-      
+
       // Calculate the actual x position within the content area based on the lyric's position (0.0 to 1.0)
-      const lyricX = staveStartX + (lyric.position * contentWidth);
-      
+      const lyricX = staveStartX + lyric.position * contentWidth;
+
       // Set font and measure text for centering
       context.setFont('Arial', 12, 'normal');
       const textWidth = context.measureText(lyric.text).width;
-      
+
       // Center the text at the calculated position
-      const centeredX = lyricX - (textWidth / 2);
-      
+      const centeredX = lyricX - textWidth / 2;
+
       context.fillText(lyric.text, centeredX, yOffset + stave.getHeight() + 40);
     });
   }
@@ -323,8 +339,9 @@ function renderMeasure(
   stave.setContext(context).draw();
 
   // Check if this measure is a repeat of the previous measure (excluding rest-only measures)
-  const isRepeat = previousMeasure && 
-    measuresAreEqual(measure, previousMeasure) && 
+  const isRepeat =
+    previousMeasure &&
+    measuresAreEqual(measure, previousMeasure) &&
     !measureIsOnlyRests(measure) &&
     !measureIsOnlyRests(previousMeasure);
 
@@ -341,7 +358,7 @@ function renderMeasure(
 
     new Formatter().joinVoices([voice]).format([voice], staveWidth - 40);
     voice.draw(context, stave);
-    
+
     return stave;
   }
 

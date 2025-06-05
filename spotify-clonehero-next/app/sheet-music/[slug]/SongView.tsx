@@ -572,11 +572,12 @@ export default function Renderer({
               charted by {metadata.charter}
             </span>
           </h1>
-          <div className='flex flex-1 gap-2 mb-4 overflow-hidden'>
-            <div className={cn(
-              viewCloneHero ? "hidden md:flex" : 'flex',
-              'flex-1'
-            )}>
+          <div className="flex flex-1 gap-2 mb-4 overflow-hidden">
+            <div
+              className={cn(
+                viewCloneHero ? 'hidden md:flex' : 'flex',
+                'flex-1',
+              )}>
               <SheetMusic
                 currentTime={currentPlayback}
                 chart={chart}
@@ -595,12 +596,14 @@ export default function Renderer({
                 triggerRerender={viewCloneHero}
               />
             </div>
-            {viewCloneHero && <CloneHeroRenderer
-              metadata={metadata}
-              chart={chart}
-              track={track}
-              audioManager={audioManagerRef.current!}
-            />}
+            {viewCloneHero && (
+              <CloneHeroRenderer
+                metadata={metadata}
+                chart={chart}
+                track={track}
+                audioManager={audioManagerRef.current!}
+              />
+            )}
           </div>
         </div>
       </div>
