@@ -14,6 +14,7 @@ import {
   Barline,
   Tuplet,
   Voice,
+  RepeatNote,
 } from 'vexflow';
 import {Measure} from './convertToVexflow';
 
@@ -38,6 +39,30 @@ const NOTE_COLOR_MAP: {[key: string]: string} = {
   'd/5': '#2980b9', // blue
   'a/4': '#27ae60', // green
 };
+
+// Helper function to check if two measures have identical notes
+function measuresAreEqual(measure1: Measure, measure2: Measure): boolean {
+  if (measure1.notes.length !== measure2.notes.length) {
+    return false;
+  }
+  
+  return measure1.notes.every((note, index) => {
+    const note2 = measure2.notes[index];
+    return (
+      note.duration === note2.duration &&
+      note.dotted === note2.dotted &&
+      note.isTriplet === note2.isTriplet &&
+      JSON.stringify(note.notes) === JSON.stringify(note2.notes)
+    );
+  });
+}
+
+// Helper function to check if a measure contains only rests
+function measureIsOnlyRests(measure: Measure): boolean {
+  return measure.notes.every(note => 
+    note.isRest
+  );
+}
 
 export function renderMusic(
   elementRef: React.RefObject<HTMLDivElement>,
@@ -122,6 +147,7 @@ export function renderMusic(
       showBarNumbers,
       enableColors,
       sectionMap.get(index), // Pass section name if this measure starts a new section
+      index > 0 ? measures[index - 1] : undefined, // Pass previous measure for repeat detection
     ),
   }));
 }
@@ -137,6 +163,7 @@ function renderMeasure(
   showBarNumbers: boolean,
   enableColors: boolean,
   sectionName?: string,
+  previousMeasure?: Measure,
 ) {
   const stave = new Stave(xOffset, yOffset, staveWidth);
 
@@ -169,6 +196,30 @@ function renderMeasure(
 
   stave.setContext(context).draw();// context.restore();
 
+  // Check if this measure is a repeat of the previous measure (excluding rest-only measures)
+  const isRepeat = previousMeasure && 
+    measuresAreEqual(measure, previousMeasure) && 
+    !measureIsOnlyRests(measure) &&
+    !measureIsOnlyRests(previousMeasure);
+
+  if (isRepeat) {
+    // Render repeat symbol instead of notes using VexFlow's RepeatNote
+    const repeatSymbol = new RepeatNote('1');
+
+    const voice = new Voice({
+      num_beats: measure.timeSig.numerator,
+      beat_value: measure.timeSig.denominator,
+    })
+      .setStrict(false)
+      .addTickables([repeatSymbol]);
+
+    new Formatter().joinVoices([voice]).format([voice], staveWidth - 40);
+    voice.draw(context, stave);
+    
+    return stave;
+  }
+
+  // Original note rendering logic
   const tuplets: StaveNote[][] = [];
   let currentTuplet: StaveNote[] | null = null;
 
