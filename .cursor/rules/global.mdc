@@ -1,0 +1,79 @@
+---
+description: spotify-clonehero-next project rules
+alwaysApply: false
+---
++++
+# Overview
+This repository hosts a Next.js **App Router** application located in `spotify-clonehero-next/`.  The codebase uses **TypeScript**, **React Server Components**, **Shadcn UI (Radix + Tailwind)** and absolute imports via the `@` alias.  These rules document the project's implicit conventions so that Cursor can generate code that feels native.
+
+---
+## General principles
+1. **TypeScript-first** – every new source file is `.ts`/`.tsx`.  `strict` mode is on; avoid `any`.
+2. **Functional React** – declare components with the `function Component()` syntax.  Never use `React.FC`.
+3. **Single default export** per component file; helper fns are named exports.
+4. **Early returns** – guard invalid states first and keep the happy-path last.
+5. **Absolute imports** – use `@/` (configured in `tsconfig.json`) instead of relative `../../` traversal.
+6. **Naming**
+   • `PascalCase.tsx` for complex React components.
+   • `lowercase.tsx` for Shadcn primitives inside `components/ui/`.
+   • Variables: camelCase; booleans prefixed with `is/has/can`.
+   • Event handlers start with `handle` (`handleClick`).
+7. **Styling** – Tailwind utility classes or Shadcn UI components.  No global CSS beyond `app/globals.css`; no `@apply`.
+8. **Accessibility** – all interactive elements must be keyboard accessible and expose appropriate `aria-*` props.
+9. **Tests** – colocate Jest tests in `__tests__/` folders; prefer behaviour assertions.
+
+---
+## Directory conventions
+• `app/` – route files (RSCs by default).  Each file begins with either `"use server"` or `"use client"`.
+• `components/` – reusable UI; `components/ui/` mirrors Shadcn structure.
+• `lib/` – framework-agnostic helpers (`spotify-sdk`, filesystem, etc.).
+• `@types/` – ambient type declarations.
+
+---
+## Component template
+```tsx
+// Path: some/FeaturePanel.tsx
+"use client"
+import { Button } from "@/components/ui/button"
+
+export interface FeaturePanelProps {
+  label: string
+  onSelect?: () => void
+}
+
+export default function FeaturePanel({ label, onSelect }: FeaturePanelProps) {
+  if (!label) return null // early guard
+
+  return (
+    <Button onClick={onSelect} className="w-full">
+      {label}
+    </Button>
+  )
+}
+```
+
+---
+## Server Action template
+```ts
+// Path: actions/downloadSong.ts
+"use server"
+import { revalidatePath } from "next/cache"
+import { downloadSong } from "@/lib/local-songs-folder"
+
+type Params = { artist: string; song: string }
+
+export default async function downloadSongAction({ artist, song }: Params) {
+  await downloadSong(artist, song)
+  revalidatePath("/spotify")
+}
+```
+
+---
+## Style-guide cheatsheet
+• Prefer immutable data patterns; use `.map`, `.filter`, spread, etc.
+• Do not commit `console.log`; use project logging helpers.
+• Avoid enums; prefer union string literals (`type Instrument = "guitar" | "bass"`).
+• Long helpers belong in `lib/`, not inside React components.
+
+---
+End of rules.
