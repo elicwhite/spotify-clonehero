@@ -166,6 +166,12 @@ function convertToFillSegments(
       endTick: segment.endTick,
       startMs,
       endMs,
+      // Measure fields are enriched later in the pipeline; set sensible defaults
+      measureStartTick: segment.startTick,
+      measureEndTick: segment.endTick,
+      measureStartMs: startMs,
+      measureEndMs: endMs,
+      measureNumber: 1,
       ...aggregatedFeatures,
     };
   });

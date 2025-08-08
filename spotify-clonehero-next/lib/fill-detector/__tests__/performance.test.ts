@@ -3,7 +3,7 @@
  */
 
 import { extractFills, defaultConfig } from '../index';
-import { ParsedChart, NoteEvent, TempoEvent, TrackData } from '../types';
+import { ParsedChart, NoteEvent, TempoEvent, Track } from '../types';
 
 // Helper to create a large synthetic chart simulating a 5-minute song
 function createLargeChart(durationMinutes = 5): ParsedChart {
@@ -75,10 +75,10 @@ function createLargeChart(durationMinutes = 5): ParsedChart {
   
   // Add some tempo changes to make it more realistic
   const tempos: TempoEvent[] = [
-    { tick: 0, bpm: 140, msTime: 0 },
-    { tick: Math.floor(totalTicks * 0.25), bpm: 160, msTime: 0 }, // Speed up
-    { tick: Math.floor(totalTicks * 0.5), bpm: 120, msTime: 0 },  // Slow down
-    { tick: Math.floor(totalTicks * 0.75), bpm: 140, msTime: 0 }, // Back to normal
+    { tick: 0, beatsPerMinute: 140, msTime: 0 },
+    { tick: Math.floor(totalTicks * 0.25), beatsPerMinute: 160, msTime: 0 }, // Speed up
+    { tick: Math.floor(totalTicks * 0.5), beatsPerMinute: 120, msTime: 0 },  // Slow down
+    { tick: Math.floor(totalTicks * 0.75), beatsPerMinute: 140, msTime: 0 }, // Back to normal
   ];
   
   // Calculate proper msTime for tempo events
@@ -98,7 +98,7 @@ function createLargeChart(durationMinutes = 5): ParsedChart {
     
     tempo.msTime = currentMs;
     currentTick = tempo.tick;
-    currentBpm = tempo.bpm;
+    currentBpm = tempo.beatsPerMinute;
   }
   
   const notesWithTime = notes.map(note => ({
@@ -107,18 +107,24 @@ function createLargeChart(durationMinutes = 5): ParsedChart {
     msLength: (note.length / resolution) * (60000 / bpm),
   }));
 
-  const drumTrack: TrackData = {
+  const drumTrack: Track = {
     instrument: 'drums',
     difficulty: 'expert',
     noteEventGroups: [notesWithTime],
-  };
+    starPowerSections: [],
+    rejectedStarPowerSections: [],
+    soloSections: [],
+    flexLanes: [],
+    drumFreestyleSections: [],
+  } as unknown as Track;
 
   return {
-    name: `Performance Test ${durationMinutes}min`,
     resolution,
     tempos,
+    timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
     trackData: [drumTrack],
-  };
+    metadata: { name: `Performance Test ${durationMinutes}min` },
+  } as unknown as ParsedChart;
 }
 
 describe('Performance Tests', () => {
@@ -131,7 +137,7 @@ describe('Performance Tests', () => {
     console.log(`Created chart with ${chart.trackData[0].noteEventGroups[0].length} notes`);
     
     const startTime = performance.now();
-    const fills = extractFills(chart, defaultConfig);
+    const fills = extractFills(chart, chart.trackData[0] as Track, defaultConfig);
     const endTime = performance.now();
     
     const processingTime = endTime - startTime;
@@ -156,7 +162,7 @@ describe('Performance Tests', () => {
     
     const startTime = performance.now();
     
-    const results = songs.map(chart => extractFills(chart, defaultConfig));
+    const results = songs.map(chart => extractFills(chart, chart.trackData[0] as Track, defaultConfig));
     
     const endTime = performance.now();
     const totalTime = endTime - startTime;
@@ -183,7 +189,7 @@ describe('Performance Tests', () => {
       const chart = createLargeChart(duration);
       
       const startTime = performance.now();
-      const fills = extractFills(chart, defaultConfig);
+      const fills = extractFills(chart, chart.trackData[0] as Track, defaultConfig);
       const endTime = performance.now();
       
       const processingTime = endTime - startTime;
@@ -208,7 +214,7 @@ describe('Performance Tests', () => {
     // Measure memory before
     const memBefore = process.memoryUsage();
     
-    const fills = extractFills(chart, defaultConfig);
+    const fills = extractFills(chart, chart.trackData[0] as Track, defaultConfig);
     
     // Force garbage collection if available
     if (global.gc) {
@@ -242,15 +248,15 @@ describe('Performance Tests', () => {
         msTime: (tick / resolution) * (60000 / 140),
         length: resolution / 16,
         msLength: (resolution / 16 / resolution) * (60000 / 140),
-        type: tick % 5, // Cycle through different drum types
+        type: (tick % 5) as unknown as import('scan-chart').NoteType, // Cycle through different drum types
         flags: 0,
       });
     }
     
     const chart: ParsedChart = {
-      name: 'Dense Chart Test',
       resolution,
-      tempos: [{ tick: 0, bpm: 140, msTime: 0 }],
+      tempos: [{ tick: 0, beatsPerMinute: 140, msTime: 0 }],
+      timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
       trackData: [{
         instrument: 'drums',
         difficulty: 'expert',
@@ -259,13 +265,19 @@ describe('Performance Tests', () => {
           msTime: (note.tick / resolution) * (60000 / 140),
           msLength: (note.length / resolution) * (60000 / 140),
         }))],
-      }],
-    };
+        starPowerSections: [],
+        rejectedStarPowerSections: [],
+        soloSections: [],
+        flexLanes: [],
+        drumFreestyleSections: [],
+      } as unknown as Track],
+      metadata: { name: 'Dense Chart Test' },
+    } as unknown as ParsedChart;
     
     console.log(`Dense chart with ${notes.length} notes`);
     
     const startTime = performance.now();
-    const fills = extractFills(chart, defaultConfig);
+    const fills = extractFills(chart, chart.trackData[0] as Track, defaultConfig);
     const endTime = performance.now();
     
     const processingTime = endTime - startTime;
@@ -289,7 +301,7 @@ describe('Performance Tests', () => {
     
     const startTime = performance.now();
     
-    const results = configs.map(config => extractFills(chart, config));
+    const results = configs.map(config => extractFills(chart, chart.trackData[0] as Track, config));
     
     const endTime = performance.now();
     const totalTime = endTime - startTime;

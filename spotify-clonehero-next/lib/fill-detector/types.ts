@@ -20,6 +20,13 @@ export interface FillSegment {
   startMs: number;
   endMs: number;
 
+  // measure information
+  measureStartTick: number;
+  measureEndTick: number;
+  measureStartMs: number;
+  measureEndMs: number;
+  measureNumber: number; // 1-based measure number
+
   // heuristic scores
   densityZ: number;
   tomRatioJump: number;

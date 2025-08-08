@@ -16,7 +16,8 @@ import {
   ValidatedConfig,
   DrumTrackNotFoundError,
   NoteEvent,
-  TempoEvent
+  TempoEvent,
+  TimeSignature
 } from './types';
 import { validateConfig, defaultConfig } from './config';
 import { validateTempos, buildTempoMap } from './utils/tempoUtils';
@@ -27,6 +28,119 @@ import { detectCandidateWindows, postProcessCandidates } from './detector/candid
 import { mergeWindowsIntoSegments, refineBoundaries, removeOverlaps, sortSegments } from './detector/mergeSegments';
 
 /**
+ * Represents a measure with timing information
+ */
+interface MeasureInfo {
+  measureNumber: number; // 1-based
+  startTick: number;
+  endTick: number;
+  startMs: number;
+  endMs: number;
+  timeSignature: TimeSignature;
+}
+
+/**
+ * Calculates all measures in the chart based on time signatures
+ */
+function calculateMeasures(chart: ParsedChart, tempoMap: TempoEvent[]): MeasureInfo[] {
+  const measures: MeasureInfo[] = [];
+  const ppq = chart.resolution;
+  
+  // Get the last tick from the chart (approximate end of track)
+  const endOfTrackTicks = Math.max(
+    ...chart.trackData.flatMap(track => 
+      track.noteEventGroups.flatMap(group => 
+        group.map(note => note.tick + note.length)
+      )
+    )
+  );
+
+  let measureNumber = 1;
+  let startTick = 0;
+
+  chart.timeSignatures.forEach((timeSig, index) => {
+    const pulsesPerDivision = ppq / (timeSig.denominator / 4);
+    const totalTimeSigTicks =
+      (chart.timeSignatures[index + 1]?.tick ?? endOfTrackTicks) - timeSig.tick;
+
+    const numberOfMeasures = Math.ceil(
+      totalTimeSigTicks / pulsesPerDivision / timeSig.numerator,
+    );
+
+    for (let measure = 0; measure < numberOfMeasures; measure++) {
+      const endTick = startTick + timeSig.numerator * pulsesPerDivision;
+      
+      // Convert ticks to milliseconds using tempo map
+      const startMs = tickToMs(startTick, tempoMap, ppq);
+      const endMs = tickToMs(endTick, tempoMap, ppq);
+
+      measures.push({
+        measureNumber,
+        startTick,
+        endTick,
+        startMs,
+        endMs,
+        timeSignature: timeSig,
+      });
+
+      startTick = endTick;
+      measureNumber++;
+    }
+  });
+
+  return measures;
+}
+
+/**
+ * Converts ticks to milliseconds using the tempo map
+ */
+function tickToMs(tick: number, tempoMap: TempoEvent[], resolution: number): number {
+  if (tempoMap.length === 0) {
+    return 0;
+  }
+
+  // Find the tempo event at or before this tick
+  let currentTempo = tempoMap[0];
+  for (const tempo of tempoMap) {
+    if (tempo.tick <= tick) {
+      currentTempo = tempo;
+    } else {
+      break;
+    }
+  }
+
+  if (tick <= currentTempo.tick) {
+    // Tick is before or at the current tempo event
+    if (currentTempo.tick === 0) {
+      return 0;
+    }
+    // Calculate backwards from first tempo event
+    const tickDelta = currentTempo.tick - tick;
+    const msDelta = (tickDelta / resolution) * (60000 / currentTempo.beatsPerMinute);
+    return Math.max(0, currentTempo.msTime - msDelta);
+  }
+
+  // Calculate time from current tempo event to target tick
+  const tickDelta = tick - currentTempo.tick;
+  const msDelta = (tickDelta / resolution) * (60000 / currentTempo.beatsPerMinute);
+  
+  return currentTempo.msTime + msDelta;
+}
+
+/**
+ * Finds the measure that contains the given tick
+ */
+function findMeasureForTick(tick: number, measures: MeasureInfo[]): MeasureInfo | null {
+  for (const measure of measures) {
+    if (tick >= measure.startTick && tick < measure.endTick) {
+      return measure;
+    }
+  }
+  // If not found, return the last measure (edge case for fills at the very end)
+  return measures.length > 0 ? measures[measures.length - 1] : null;
+}
+
+/**
  * Main API function: extracts drum fills from a chart and track (like convertToVexFlow)
  * 
  * @param chart - The parsed chart data from scan-chart
@@ -34,13 +148,46 @@ import { mergeWindowsIntoSegments, refineBoundaries, removeOverlaps, sortSegment
  * @param userConfig - Optional configuration overrides
  * @returns Array of detected fill segments
  */
+// Overloads to support both (chart, track) and legacy (chart)
 export function extractFills(
   chart: ParsedChart,
   track: Track,
   userConfig?: Partial<Config>
+): FillSegment[];
+export function extractFills(
+  chart: ParsedChart,
+  userConfig?: Partial<Config>
+): FillSegment[];
+
+export function extractFills(
+  chart: ParsedChart,
+  trackOrConfig?: Track | Partial<Config>,
+  maybeConfig?: Partial<Config>
 ): FillSegment[] {
-  // Validate and merge configuration
-  const config = validateConfig(userConfig);
+  // Determine call signature
+  const isLegacyCall = !trackOrConfig || !('instrument' in (trackOrConfig as any));
+  const config = validateConfig(isLegacyCall ? (trackOrConfig as Partial<Config> | undefined) : maybeConfig);
+  
+  // Normalize tempos to ensure beatsPerMinute is present
+  const normalizedTempos: TempoEvent[] = (chart.tempos as any).map((t: any) => ({
+    tick: t.tick,
+    msTime: t.msTime,
+    beatsPerMinute: t.beatsPerMinute ?? t.bpm,
+  }));
+  validateTempos(normalizedTempos);
+  const tempoMap = buildTempoMap(normalizedTempos, chart.resolution);
+
+  // Resolve track
+  let track: Track | null;
+  if (isLegacyCall) {
+    track = (chart.trackData as any as Track[]).find(t => t.instrument === 'drums' && t.difficulty === config.difficulty) || null;
+    if (!track) {
+      throw new DrumTrackNotFoundError(config.difficulty);
+    }
+  } else {
+    track = trackOrConfig as Track;
+  }
+  // We already validated/merged config above
   
   // Check if track is drums
   if (track.instrument !== 'drums') {
@@ -58,9 +205,7 @@ export function extractFills(
     return []; // No notes, no fills
   }
   
-  // Validate and build tempo map
-  validateTempos(chart.tempos);
-  const tempoMap = buildTempoMap(chart.tempos, chart.resolution);
+  // tempoMap already built above
   
   // Determine analysis boundaries
   const { startTick, endTick } = getAnalysisBounds(noteEvents);
@@ -119,7 +264,34 @@ export function extractFills(
   // Sort segments chronologically
   const finalSegments = sortSegments(nonOverlappingSegments);
   
-  return finalSegments;
+  // Calculate measures and enrich segments with measure information
+  const measures = calculateMeasures(chart, tempoMap);
+  const enrichedSegments = finalSegments.map(segment => {
+    const measure = findMeasureForTick(segment.startTick, measures);
+    
+    if (measure) {
+      return {
+        ...segment,
+        measureStartTick: measure.startTick,
+        measureEndTick: measure.endTick,
+        measureStartMs: measure.startMs,
+        measureEndMs: measure.endMs,
+        measureNumber: measure.measureNumber,
+      };
+    } else {
+      // Fallback if no measure found (shouldn't happen, but safety first)
+      return {
+        ...segment,
+        measureStartTick: segment.startTick,
+        measureEndTick: segment.endTick,
+        measureStartMs: segment.startMs,
+        measureEndMs: segment.endMs,
+        measureNumber: 1,
+      };
+    }
+  });
+  
+  return enrichedSegments;
 }
 
 /**

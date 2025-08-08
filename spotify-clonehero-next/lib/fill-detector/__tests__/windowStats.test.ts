@@ -72,7 +72,7 @@ function createTestChart() {
   return {
     name: 'Test Chart',
     resolution,
-    tempos: [{ tick: 0, bpm: 120, msTime: 0 }],
+    tempos: [{ tick: 0, beatsPerMinute: 120, msTime: 0 }],
     trackData: [{
       instrument: 'drums',
       difficulty: 'expert',

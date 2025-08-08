@@ -1,19 +1,29 @@
 import { extractFills, defaultConfig } from '../index';
 import { validateConfig } from '../config';
-import { NoteEvent, ParsedChart, Config } from '../types';
+import { NoteEvent, ParsedChart, Config, Track } from '../types';
+import type { NoteType } from 'scan-chart';
 
 // Helper function to create synthetic charts for testing
-function createSyntheticChart(notes: NoteEvent[], name = 'Test Chart'): ParsedChart {
-  return {
-    name,
+function createSyntheticChart(notes: NoteEvent[], name = 'Test Chart'): { chart: ParsedChart, track: Track } {
+  const chart: ParsedChart = {
     resolution: 192,
-    tempos: [{ tick: 0, bpm: 120, msTime: 0 }],
-    trackData: [{
-      instrument: 'drums',
-      difficulty: 'expert',
-      noteEventGroups: [notes],
-    }],
-  };
+    tempos: [{ tick: 0, beatsPerMinute: 120, msTime: 0 }],
+    timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
+    trackData: [],
+    metadata: { name },
+  } as unknown as ParsedChart;
+  const track: Track = {
+    instrument: 'drums',
+    difficulty: 'expert',
+    noteEventGroups: [notes],
+    starPowerSections: [],
+    rejectedStarPowerSections: [],
+    soloSections: [],
+    flexLanes: [],
+    drumFreestyleSections: [],
+  } as unknown as Track;
+  (chart.trackData as unknown as Track[]).push(track);
+  return { chart, track };
 }
 
 // Helper to create basic drum pattern
@@ -94,8 +104,8 @@ describe('Fill Detection', () => {
         ...createTomFill(4 * resolution * 4, 16, resolution) // Dense tom fill after 4 bars
       ];
       
-      const chart = createSyntheticChart(notes, 'Tom Fill Test');
-      const fills = extractFills(chart);
+      const { chart, track } = createSyntheticChart(notes, 'Tom Fill Test');
+      const fills = extractFills(chart, track);
       
       expect(fills.length).toBeGreaterThan(0);
       
@@ -123,8 +133,8 @@ describe('Fill Detection', () => {
         }
       };
       
-      const chart = createSyntheticChart(notes, 'Sensitive Fill Test');
-      const fills = extractFills(chart, sensitiveConfig);
+      const { chart, track } = createSyntheticChart(notes, 'Sensitive Fill Test');
+      const fills = extractFills(chart, track, sensitiveConfig);
       
       expect(fills.length).toBeGreaterThan(0);
     });
@@ -133,8 +143,8 @@ describe('Fill Detection', () => {
       const resolution = 192;
       const notes = createBasicDrumPattern(8, resolution); // Just steady pattern, no fills
       
-      const chart = createSyntheticChart(notes, 'No Fill Test');
-      const fills = extractFills(chart);
+      const { chart, track } = createSyntheticChart(notes, 'No Fill Test');
+      const fills = extractFills(chart, track);
       
       // Should detect very few or no fills in steady pattern
       expect(fills.length).toBeLessThanOrEqual(1);
@@ -149,7 +159,7 @@ describe('Fill Detection', () => {
         ...createTomFill(9 * resolution * 4, 12, resolution), // Second fill
       ];
       
-      const chart = createSyntheticChart(notes, 'Multiple Fills Test');
+      const { chart, track } = createSyntheticChart(notes, 'Multiple Fills Test');
       
       // Try with sensitive settings first
       const sensitiveConfig: Partial<Config> = {
@@ -163,7 +173,7 @@ describe('Fill Detection', () => {
         }
       };
       
-      const fills = extractFills(chart, sensitiveConfig);
+      const fills = extractFills(chart, track, sensitiveConfig);
       
       // Should detect at least one fill with sensitive settings
       expect(fills.length).toBeGreaterThanOrEqual(0); // Allow 0 fills but test structure
@@ -187,18 +197,18 @@ describe('Fill Detection', () => {
       // Add mixed fill with different drum types
       const fillStart = 2 * resolution * 4;
       const mixedFill = [
-        { tick: fillStart, msTime: 0, length: 48, msLength: 125, type: 3, flags: 0 }, // Tom
-        { tick: fillStart + 48, msTime: 0, length: 48, msLength: 125, type: 4, flags: 0 }, // Cymbal
-        { tick: fillStart + 96, msTime: 0, length: 48, msLength: 125, type: 3, flags: 0 }, // Tom
-        { tick: fillStart + 144, msTime: 0, length: 48, msLength: 125, type: 5, flags: 0 }, // Hi-tom
-        { tick: fillStart + 192, msTime: 0, length: 48, msLength: 125, type: 3, flags: 0 }, // Tom
-        { tick: fillStart + 240, msTime: 0, length: 48, msLength: 125, type: 4, flags: 0 }, // Cymbal
+        { tick: fillStart, msTime: 0, length: 48, msLength: 125, type: 3 as unknown as NoteType, flags: 0 },
+        { tick: fillStart + 48, msTime: 0, length: 48, msLength: 125, type: 4 as unknown as NoteType, flags: 0 },
+        { tick: fillStart + 96, msTime: 0, length: 48, msLength: 125, type: 3 as unknown as NoteType, flags: 0 },
+        { tick: fillStart + 144, msTime: 0, length: 48, msLength: 125, type: 3 as unknown as NoteType, flags: 0 },
+        { tick: fillStart + 192, msTime: 0, length: 48, msLength: 125, type: 3 as unknown as NoteType, flags: 0 },
+        { tick: fillStart + 240, msTime: 0, length: 48, msLength: 125, type: 4 as unknown as NoteType, flags: 0 },
       ];
       
       notes.push(...mixedFill);
       
-      const chart = createSyntheticChart(notes, 'Mixed Fill Test');
-      const fills = extractFills(chart);
+      const { chart, track } = createSyntheticChart(notes, 'Mixed Fill Test');
+      const fills = extractFills(chart, track);
       
       expect(fills.length).toBeGreaterThanOrEqual(0); // Should handle mixed types
     });
@@ -210,8 +220,8 @@ describe('Fill Detection', () => {
         ...createTomFill(4 * resolution * 4, 16, resolution)
       ];
       
-      const chart = createSyntheticChart(notes, 'Validation Test');
-      const fills = extractFills(chart);
+      const { chart, track } = createSyntheticChart(notes, 'Validation Test');
+      const fills = extractFills(chart, track);
       
       fills.forEach(fill => {
         // Basic properties
@@ -240,23 +250,23 @@ describe('Fill Detection', () => {
 
     it('should handle edge cases gracefully', () => {
       // Empty chart
-      const emptyChart = createSyntheticChart([], 'Empty Chart');
-      const emptyFills = extractFills(emptyChart);
+      const { chart: emptyChart, track: emptyTrack } = createSyntheticChart([], 'Empty Chart');
+      const emptyFills = extractFills(emptyChart, emptyTrack);
       expect(emptyFills).toEqual([]);
       
       // Single note
-      const singleNoteChart = createSyntheticChart([
+      const { chart: singleNoteChart, track: singleTrack } = createSyntheticChart([
         { tick: 0, msTime: 0, length: 48, msLength: 125, type: 0, flags: 0 }
       ], 'Single Note');
-      const singleFills = extractFills(singleNoteChart);
+      const singleFills = extractFills(singleNoteChart, singleTrack);
       expect(Array.isArray(singleFills)).toBe(true);
       
       // Very short chart
-      const shortChart = createSyntheticChart(
+      const { chart: shortChart, track: shortTrack } = createSyntheticChart(
         createBasicDrumPattern(1, 192),
         'Short Chart'
       );
-      const shortFills = extractFills(shortChart);
+      const shortFills = extractFills(shortChart, shortTrack);
       expect(Array.isArray(shortFills)).toBe(true);
     });
 
@@ -267,7 +277,7 @@ describe('Fill Detection', () => {
         ...createTomFill(4 * resolution * 4, 8, resolution) // Moderate density fill
       ];
       
-      const chart = createSyntheticChart(notes, 'Threshold Test');
+      const { chart, track } = createSyntheticChart(notes, 'Threshold Test');
       
       // Strict config - should detect fewer fills
       const strictConfig: Partial<Config> = {
@@ -293,8 +303,8 @@ describe('Fill Detection', () => {
         }
       };
       
-      const strictFills = extractFills(chart, strictConfig);
-      const lenientFills = extractFills(chart, lenientConfig);
+      const strictFills = extractFills(chart, track, strictConfig);
+      const lenientFills = extractFills(chart, track, lenientConfig);
       
       expect(lenientFills.length).toBeGreaterThanOrEqual(strictFills.length);
     });
@@ -308,7 +318,7 @@ describe('Fill Detection', () => {
         ...createTomFill(2 * resolution * 4, 16, resolution)
       ];
       
-      const chart = createSyntheticChart(notes, 'Partial Config Test');
+      const { chart, track } = createSyntheticChart(notes, 'Partial Config Test');
       
       // Only override some thresholds
       const partialConfig: Partial<Config> = {
@@ -319,7 +329,7 @@ describe('Fill Detection', () => {
       };
       
       expect(() => {
-        const fills = extractFills(chart, partialConfig);
+        const fills = extractFills(chart, track, partialConfig);
         expect(Array.isArray(fills)).toBe(true);
       }).not.toThrow();
     });
@@ -327,10 +337,10 @@ describe('Fill Detection', () => {
     it('should handle undefined config gracefully', () => {
       const resolution = 192;
       const notes = createBasicDrumPattern(2, resolution);
-      const chart = createSyntheticChart(notes, 'Undefined Config Test');
+      const { chart, track } = createSyntheticChart(notes, 'Undefined Config Test');
       
       expect(() => {
-        const fills = extractFills(chart, undefined);
+        const fills = extractFills(chart, track, undefined as unknown as any);
         expect(Array.isArray(fills)).toBe(true);
       }).not.toThrow();
     });

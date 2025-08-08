@@ -15,6 +15,7 @@ import {
   ROCK_BAND_4_DRUM_MAP,
 } from '../drumLaneMap';
 import { DrumVoice } from '../types';
+import type { NoteType } from 'scan-chart';
 
 describe('Drum Lane Mapping', () => {
   describe('mapNoteToVoice', () => {
@@ -28,7 +29,7 @@ describe('Drum Lane Mapping', () => {
     });
 
     it('should return UNKNOWN for unmapped note types', () => {
-      expect(mapNoteToVoice(99)).toBe(DrumVoice.UNKNOWN);
+      expect(mapNoteToVoice(99 as unknown as NoteType)).toBe(DrumVoice.UNKNOWN);
     });
 
     it('should use custom mapping when provided', () => {
@@ -52,12 +53,12 @@ describe('Drum Lane Mapping', () => {
 
   describe('groupNotesByVoice', () => {
     it('should group notes by voice category', () => {
-      const notes = [
-        { type: 0 }, // KICK
-        { type: 1 }, // SNARE
-        { type: 2 }, // HAT
-        { type: 0 }, // KICK
-        { type: 3 }, // TOM
+      const notes: Array<{ type: NoteType }> = [
+        { type: 0 as unknown as NoteType },
+        { type: 1 as unknown as NoteType },
+        { type: 2 as unknown as NoteType },
+        { type: 0 as unknown as NoteType },
+        { type: 3 as unknown as NoteType },
       ];
 
       const groups = groupNotesByVoice(notes);
@@ -81,13 +82,13 @@ describe('Drum Lane Mapping', () => {
 
   describe('countNotesByVoice', () => {
     it('should count notes by voice category', () => {
-      const notes = [
-        { type: 0 }, // KICK
-        { type: 1 }, // SNARE
-        { type: 2 }, // HAT
-        { type: 0 }, // KICK
-        { type: 3 }, // TOM
-        { type: 99 }, // UNKNOWN
+      const notes: Array<{ type: NoteType }> = [
+        { type: 0 as unknown as NoteType },
+        { type: 1 as unknown as NoteType },
+        { type: 2 as unknown as NoteType },
+        { type: 0 as unknown as NoteType },
+        { type: 3 as unknown as NoteType },
+        { type: 99 as unknown as NoteType },
       ];
 
       const counts = countNotesByVoice(notes);
@@ -103,12 +104,12 @@ describe('Drum Lane Mapping', () => {
 
   describe('getTotalNotesInVoices', () => {
     it('should count total notes in specified voices', () => {
-      const notes = [
-        { type: 0 }, // KICK
-        { type: 1 }, // SNARE
-        { type: 2 }, // HAT
-        { type: 3 }, // TOM
-        { type: 4 }, // CYMBAL
+      const notes: Array<{ type: NoteType }> = [
+        { type: 0 as unknown as NoteType },
+        { type: 1 as unknown as NoteType },
+        { type: 2 as unknown as NoteType },
+        { type: 3 as unknown as NoteType },
+        { type: 4 as unknown as NoteType },
       ];
 
       const tomCount = getTotalNotesInVoices(notes, [DrumVoice.TOM]);

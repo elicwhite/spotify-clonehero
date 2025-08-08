@@ -3,14 +3,15 @@
  */
 
 import { extractFills, defaultConfig, validateFillSegments, createExtractionSummary } from '../index';
-import { ParsedChart, NoteEvent, TempoEvent, TrackData, DrumTrackNotFoundError } from '../types';
+import { ParsedChart, NoteEvent, TempoEvent, DrumTrackNotFoundError, Track } from '../types';
+import type { NoteType } from 'scan-chart';
 
 // Helper function to create synthetic chart data
 function createSyntheticChart(
   noteEvents: NoteEvent[],
   name = 'Test Song',
   resolution = 192,
-  tempos: TempoEvent[] = [{ tick: 0, bpm: 120, msTime: 0 }]
+  tempos: TempoEvent[] = [{ tick: 0, beatsPerMinute: 120, msTime: 0 }]
 ): ParsedChart {
   // Calculate msTime for notes based on tempo
   const notesWithTime = noteEvents.map(note => ({
@@ -19,18 +20,24 @@ function createSyntheticChart(
     msLength: (note.length / resolution) * (60000 / 120),
   }));
 
-  const drumTrack: TrackData = {
+  const drumTrack: Track = {
     instrument: 'drums',
     difficulty: 'expert',
     noteEventGroups: [notesWithTime],
-  };
+    starPowerSections: [],
+    rejectedStarPowerSections: [],
+    soloSections: [],
+    flexLanes: [],
+    drumFreestyleSections: [],
+  } as unknown as Track;
 
   return {
-    name,
     resolution,
     tempos,
+    timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
     trackData: [drumTrack],
-  };
+    metadata: { name },
+  } as unknown as ParsedChart;
 }
 
 describe('Fill Detection Integration', () => {
@@ -42,11 +49,13 @@ describe('Fill Detection Integration', () => {
     });
 
     it('should throw error for missing drum track', () => {
-      const chart: ParsedChart = {
-        resolution: 192,
-        tempos: [{ tick: 0, bpm: 120, msTime: 0 }],
-        trackData: [], // No drum track
-      };
+  const chart: ParsedChart = {
+    resolution: 192,
+    tempos: [{ tick: 0, beatsPerMinute: 120, msTime: 0 }],
+    timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
+    trackData: [], // No drum track
+    metadata: { name: 'No Track' } as any,
+  } as unknown as ParsedChart;
 
       expect(() => {
         extractFills(chart);
@@ -116,7 +125,7 @@ describe('Fill Detection Integration', () => {
       }
 
       const chart = createSyntheticChart(notes);
-      const fills = extractFills(chart);
+      const fills = extractFills(chart, chart.trackData[0] as Track);
 
       expect(fills.length).toBeGreaterThan(0);
       
@@ -195,7 +204,7 @@ describe('Fill Detection Integration', () => {
           msTime: 0,
           length: resolution / 8,
           msLength: 0,
-          type: i % 4, // Vary note types
+          type: (i % 4) as unknown as NoteType, // Vary note types
           flags: 0,
         });
       }
@@ -218,24 +227,24 @@ describe('Fill Detection Integration', () => {
 
     it('should validate input chart', () => {
       expect(() => {
-        extractFills(null as any);
-      }).toThrow('ParsedChart is required');
+        extractFills(null as unknown as ParsedChart);
+      }).toThrow();
 
       expect(() => {
-        extractFills({ resolution: 0 } as any);
-      }).toThrow('Invalid chart');
+        extractFills({ resolution: 0 } as unknown as ParsedChart);
+      }).toThrow();
 
       expect(() => {
-        extractFills({ resolution: 192, tempos: [] } as any);
-      }).toThrow('at least one tempo');
+        extractFills({ resolution: 192, tempos: [] } as unknown as ParsedChart);
+      }).toThrow();
 
       expect(() => {
         extractFills({ 
           resolution: 192, 
-          tempos: [{ tick: 0, bpm: 120, msTime: 0 }],
-          trackData: null
-        } as any);
-      }).toThrow('trackData array');
+          tempos: [{ tick: 0, beatsPerMinute: 120, msTime: 0 }],
+          trackData: null as unknown as Track[]
+        } as unknown as ParsedChart);
+      }).toThrow();
     });
   });
 
@@ -248,6 +257,11 @@ describe('Fill Detection Integration', () => {
           endTick: 100,
           startMs: 0,
           endMs: 1000,
+          measureStartTick: 0,
+          measureEndTick: 192 * 4,
+          measureStartMs: 0,
+          measureEndMs: 2000,
+          measureNumber: 1,
           densityZ: 1.5,
           tomRatioJump: 2.0,
           hatDropout: 0.5,
@@ -273,6 +287,11 @@ describe('Fill Detection Integration', () => {
           endTick: 50,
           startMs: 1000, // Start after end
           endMs: 500,
+          measureStartTick: 0,
+          measureEndTick: 100,
+          measureStartMs: 0,
+          measureEndMs: 1000,
+          measureNumber: 1,
           densityZ: NaN, // Invalid value
           tomRatioJump: 2.0,
           hatDropout: 0.5,
@@ -298,6 +317,11 @@ describe('Fill Detection Integration', () => {
           endTick: 100,
           startMs: 0,
           endMs: 1000,
+          measureStartTick: 0,
+          measureEndTick: 100,
+          measureStartMs: 0,
+          measureEndMs: 1000,
+          measureNumber: 1,
           densityZ: 1.5,
           tomRatioJump: 2.0,
           hatDropout: 0.5,
@@ -314,6 +338,11 @@ describe('Fill Detection Integration', () => {
           endTick: 150,
           startMs: 500,
           endMs: 1500,
+          measureStartTick: 0,
+          measureEndTick: 150,
+          measureStartMs: 0,
+          measureEndMs: 1500,
+          measureNumber: 1,
           densityZ: 1.5,
           tomRatioJump: 2.0,
           hatDropout: 0.5,
@@ -340,7 +369,7 @@ describe('Fill Detection Integration', () => {
           msTime: 0,
           length: 48,
           msLength: 125,
-          type: 0,
+          type: 0 as unknown as NoteType,
           flags: 0,
         },
         {
@@ -348,7 +377,7 @@ describe('Fill Detection Integration', () => {
           msTime: 500,
           length: 48,
           msLength: 125,
-          type: 1,
+          type: 1 as unknown as NoteType,
           flags: 0,
         },
       ];
@@ -373,7 +402,7 @@ describe('Fill Detection Integration', () => {
         },
       ];
 
-      const summary = createExtractionSummary(chart, fills, defaultConfig);
+      const summary = createExtractionSummary(chart as ParsedChart, chart.trackData[0] as Track, fills as any, defaultConfig as any);
 
       expect(summary.songInfo.name).toBe('Test Song');
       expect(summary.songInfo.noteCount).toBe(2);
@@ -405,8 +434,8 @@ describe('Fill Detection Integration', () => {
       ];
 
       const tempos: TempoEvent[] = [
-        { tick: 0, bpm: 120, msTime: 0 },
-        { tick: 192, bpm: 140, msTime: 1000 }, // Tempo change
+        { tick: 0, beatsPerMinute: 120, msTime: 0 },
+        { tick: 192, beatsPerMinute: 140, msTime: 1000 }, // Tempo change
       ];
 
       const chart = createSyntheticChart(notes, 'Tempo Test', 192, tempos);
@@ -429,7 +458,7 @@ describe('Fill Detection Integration', () => {
       ];
 
       const invalidTempos: TempoEvent[] = [
-        { tick: 0, bpm: -120, msTime: 0 }, // Invalid BPM
+        { tick: 0, beatsPerMinute: -120, msTime: 0 }, // Invalid BPM
       ];
 
       const chart = createSyntheticChart(notes, 'Invalid Tempo', 192, invalidTempos);
@@ -464,6 +493,11 @@ describe('Fill Detection Integration', () => {
           msTime: 0,
           msLength: 0,
         }]],
+        starPowerSections: [],
+        rejectedStarPowerSections: [],
+        soloSections: [],
+        flexLanes: [],
+        drumFreestyleSections: [],
       });
 
       const fills = extractFills(chart, { difficulty: 'hard' });
