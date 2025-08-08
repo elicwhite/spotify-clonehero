@@ -29,15 +29,21 @@ function createSyntheticChart(
     soloSections: [],
     flexLanes: [],
     drumFreestyleSections: [],
-  } as unknown as Track;
+  };
 
   return {
     resolution,
     tempos,
-    timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
+    timeSignatures: [{ tick: 0, numerator: 4, denominator: 4, msTime: 0, msLength: 0 }],
     trackData: [drumTrack],
     metadata: { name },
-  } as unknown as ParsedChart;
+    hasLyrics: false,
+    hasVocals: false,
+    hasForcedNotes: false,
+    endEvents: [],
+    sections: [],
+    drumType: 1,
+  };
 }
 
 describe('Fill Detection Integration', () => {
@@ -49,13 +55,19 @@ describe('Fill Detection Integration', () => {
     });
 
     it('should throw error for missing drum track', () => {
-  const chart: ParsedChart = {
-    resolution: 192,
-    tempos: [{ tick: 0, beatsPerMinute: 120, msTime: 0 }],
-    timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
-    trackData: [], // No drum track
-    metadata: { name: 'No Track' } as any,
-  } as unknown as ParsedChart;
+      const chart: ParsedChart = {
+        resolution: 192,
+        tempos: [{ tick: 0, beatsPerMinute: 120, msTime: 0 }],
+        timeSignatures: [{ tick: 0, numerator: 4, denominator: 4, msTime: 0, msLength: 0 }],
+        trackData: [], // No drum track
+        metadata: { name: 'No Track' },
+        hasLyrics: false,
+        hasVocals: false,
+        hasForcedNotes: false,
+        endEvents: [],
+        sections: [],
+        drumType: 1,
+      };
 
       expect(() => {
         extractFills(chart);
@@ -204,7 +216,7 @@ describe('Fill Detection Integration', () => {
           msTime: 0,
           length: resolution / 8,
           msLength: 0,
-          type: (i % 4) as unknown as NoteType, // Vary note types
+          type: [0, 1, 2, 3][i % 4] as NoteType, // Vary note types using valid NoteType values
           flags: 0,
         });
       }
@@ -369,7 +381,7 @@ describe('Fill Detection Integration', () => {
           msTime: 0,
           length: 48,
           msLength: 125,
-          type: 0 as unknown as NoteType,
+          type: 0 as NoteType,
           flags: 0,
         },
         {
@@ -377,7 +389,7 @@ describe('Fill Detection Integration', () => {
           msTime: 500,
           length: 48,
           msLength: 125,
-          type: 1 as unknown as NoteType,
+          type: 1 as NoteType,
           flags: 0,
         },
       ];
@@ -390,6 +402,11 @@ describe('Fill Detection Integration', () => {
           endTick: 192,
           startMs: 0,
           endMs: 500,
+          measureStartTick: 0,
+          measureEndTick: 192 * 4,
+          measureStartMs: 0,
+          measureEndMs: 2000,
+          measureNumber: 1,
           densityZ: 1.5,
           tomRatioJump: 2.0,
           hatDropout: 0.5,
@@ -402,7 +419,7 @@ describe('Fill Detection Integration', () => {
         },
       ];
 
-      const summary = createExtractionSummary(chart as ParsedChart, chart.trackData[0] as Track, fills as any, defaultConfig as any);
+      const summary = createExtractionSummary(chart, chart.trackData[0], fills, defaultConfig);
 
       expect(summary.songInfo.name).toBe('Test Song');
       expect(summary.songInfo.noteCount).toBe(2);
@@ -420,7 +437,7 @@ describe('Fill Detection Integration', () => {
           msTime: 0,
           length: 48,
           msLength: 0,
-          type: 0,
+          type: 0 as NoteType,
           flags: 0,
         },
         {
@@ -428,7 +445,7 @@ describe('Fill Detection Integration', () => {
           msTime: 0,
           length: 48,
           msLength: 0,
-          type: 1,
+          type: 1 as NoteType,
           flags: 0,
         },
       ];
@@ -452,7 +469,7 @@ describe('Fill Detection Integration', () => {
           msTime: 0,
           length: 48,
           msLength: 0,
-          type: 0,
+          type: 0 as NoteType,
           flags: 0,
         },
       ];
@@ -477,7 +494,7 @@ describe('Fill Detection Integration', () => {
           msTime: 0,
           length: 48,
           msLength: 0,
-          type: 0,
+          type: 0 as NoteType,
           flags: 0,
         },
       ];
@@ -492,6 +509,7 @@ describe('Fill Detection Integration', () => {
           ...notes[0],
           msTime: 0,
           msLength: 0,
+          type: 0 as NoteType,
         }]],
         starPowerSections: [],
         rejectedStarPowerSections: [],
