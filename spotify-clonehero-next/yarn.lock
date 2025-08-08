@@ -6185,10 +6185,10 @@ saxes@^5.0.1:
   dependencies:
     xmlchars "^2.2.0"
 
-scan-chart@^6.0.0:
-  version "6.0.0"
-  resolved "https://registry.yarnpkg.com/scan-chart/-/scan-chart-6.0.0.tgz#6520827161e9cc89e9ed0f373b7407b7f83984f8"
-  integrity sha512-j7SdKWmh5/DPKZZQ5t964+EaoTuHjmfOSniwxUWTb1N2e3Og4YkhMS3g9sACBRnnkQgvvz2tapbclqSw9ryU0g==
+scan-chart@^6.1.1:
+  version "6.1.1"
+  resolved "https://registry.yarnpkg.com/scan-chart/-/scan-chart-6.1.1.tgz#8b7cda9336eb352e88ed1952bbdf4c87d8077884"
+  integrity sha512-fuBm/cwzO91sfc+8yHPiZPYGO68XF/xL7BdNyujsbguTZwzjlR+uFr7/aGrGAcQQ8/wt58NAo9ygLyb3zrcQqg==
   dependencies:
     "@noble/hashes" "^1.4.0"
     bottleneck "^2.19.5"
