@@ -70,6 +70,24 @@ export interface Config {
   };
 }
 
+// Type for validated config where all properties are guaranteed to exist
+export interface ValidatedConfig {
+  difficulty: "expert" | "hard" | "medium" | "easy";
+  quantDiv: number;
+  windowBeats: number;
+  strideBeats: number;
+  lookbackBars: number;
+  thresholds: {
+    densityZ: number;
+    dist: number;
+    tomJump: number;
+    minBeats: number;
+    maxBeats: number;
+    mergeGapBeats: number;
+    burstMs: number;
+  };
+}
+
 // Voice categories for drum mapping
 export enum DrumVoice {
   KICK = "kick",

@@ -2,7 +2,7 @@
  * Sliding window feature extraction for drum fill detection
  */
 
-import { NoteEvent, FeatureVector, AnalysisWindow, Config } from '../types';
+import { NoteEvent, FeatureVector, AnalysisWindow, ValidatedConfig } from '../types';
 import { countNotesByVoice, DrumVoice, isTom, isHat, isKick, isCymbal } from '../drumLaneMap';
 import { ticksToBeats, isDownbeat } from '../quantize';
 import { standardDeviation } from '../utils/math';
@@ -12,7 +12,7 @@ import { standardDeviation } from '../utils/math';
  */
 export function computeWindowFeatures(
   window: AnalysisWindow,
-  config: Config,
+  config: ValidatedConfig,
   resolution: number,
   rollingStats?: {
     densityMean: number;
@@ -205,7 +205,7 @@ function detectCrashResolve(window: AnalysisWindow, resolution: number): boolean
  */
 export function extractFeaturesFromWindows(
   windows: AnalysisWindow[],
-  config: Config,
+  config: ValidatedConfig,
   resolution: number
 ): AnalysisWindow[] {
   if (windows.length === 0) return [];
@@ -225,7 +225,7 @@ export function extractFeaturesFromWindows(
 /**
  * Updates windows with rolling statistics for z-score calculations
  */
-function updateRollingStatistics(windows: AnalysisWindow[], config: Config, resolution: number): void {
+function updateRollingStatistics(windows: AnalysisWindow[], config: ValidatedConfig, resolution: number): void {
   const lookbackWindowCount = Math.max(1, Math.floor(config.lookbackBars! * 4 / config.strideBeats!));
   
   for (let i = 0; i < windows.length; i++) {

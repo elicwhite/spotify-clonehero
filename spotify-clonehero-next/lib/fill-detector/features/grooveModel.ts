@@ -2,7 +2,7 @@
  * Adaptive groove model for detecting deviations from established patterns
  */
 
-import { AnalysisWindow, Config } from '../types';
+import { AnalysisWindow, ValidatedConfig } from '../types';
 import { 
   mean, 
   covarianceMatrix, 
@@ -137,7 +137,7 @@ export function calculateGrooveDistance(
  */
 export function updateGrooveDistances(
   windows: AnalysisWindow[],
-  config: Config
+  config: ValidatedConfig
 ): void {
   const lookbackWindowCount = Math.max(1, Math.floor(config.lookbackBars! * 4 / config.strideBeats!));
   const featureCount = 6; // Number of continuous features
@@ -178,7 +178,7 @@ export function updateGrooveDistances(
  */
 export function identifyGrooveWindows(
   windows: AnalysisWindow[],
-  config: Config
+  config: ValidatedConfig
 ): boolean[] {
   const isGrooveWindow = new Array(windows.length).fill(true);
   
@@ -216,7 +216,7 @@ export function identifyGrooveWindows(
  */
 export function buildGlobalGrooveModel(
   windows: AnalysisWindow[],
-  config: Config
+  config: ValidatedConfig
 ): GrooveModel {
   const featureCount = 6;
   

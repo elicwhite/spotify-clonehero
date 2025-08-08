@@ -5,7 +5,7 @@ import {
 } from '../features/windowStats';
 import { validateConfig, defaultConfig } from '../config';
 import { buildTempoMap } from '../utils/tempoUtils';
-import { NoteEvent, AnalysisWindow, Config } from '../types';
+import { NoteEvent, AnalysisWindow, ValidatedConfig } from '../types';
 
 // Helper function to create test chart data
 function createTestChart() {
@@ -84,12 +84,12 @@ function createTestChart() {
 
 describe('Window Statistics', () => {
   let testChart: ReturnType<typeof createTestChart>;
-  let config: Config;
+  let config: ValidatedConfig;
   let tempoMap: any[];
 
   beforeEach(() => {
     testChart = createTestChart();
-    config = validateConfig(defaultConfig);
+    config = validateConfig();
     tempoMap = buildTempoMap(testChart.tempos, testChart.resolution);
   });
 

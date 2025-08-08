@@ -2,9 +2,9 @@
  * Configuration for the drum fill extractor
  */
 
-import { Config, InvalidConfigError } from './types';
+import { Config, ValidatedConfig, InvalidConfigError } from './types';
 
-export const defaultConfig: Config = {
+export const defaultConfig: ValidatedConfig = {
   difficulty: "expert",
   quantDiv: 4,
   windowBeats: 1,
@@ -24,8 +24,8 @@ export const defaultConfig: Config = {
 /**
  * Validates and merges user config with defaults
  */
-export function validateConfig(userConfig?: Partial<Config>): Config {
-  const config = { ...defaultConfig, ...userConfig };
+export function validateConfig(userConfig?: Partial<Config>): ValidatedConfig {
+  const config = { ...defaultConfig, ...userConfig } as ValidatedConfig;
   
   // Merge nested thresholds object properly
   if (userConfig?.thresholds) {

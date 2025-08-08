@@ -2,7 +2,7 @@
  * Merges adjacent candidate windows into fill segments and applies duration filtering
  */
 
-import { AnalysisWindow, FillSegment, Config, TempoEvent } from '../types';
+import { AnalysisWindow, FillSegment, ValidatedConfig, TempoEvent } from '../types';
 import { ticksToBeats } from '../quantize';
 import { tickRangeToMs } from '../utils/tempoUtils';
 import { mean } from '../utils/math';
@@ -22,7 +22,7 @@ interface CandidateSegment {
  */
 export function mergeWindowsIntoSegments(
   windows: AnalysisWindow[],
-  config: Config,
+  config: ValidatedConfig,
   resolution: number,
   tempos: TempoEvent[],
   songId: string
@@ -47,7 +47,7 @@ export function mergeWindowsIntoSegments(
  */
 function groupConsecutiveCandidates(
   windows: AnalysisWindow[],
-  config: Config,
+  config: ValidatedConfig,
   resolution: number
 ): CandidateSegment[] {
   const segments: CandidateSegment[] = [];
@@ -89,7 +89,7 @@ function groupConsecutiveCandidates(
  */
 function mergeNearbySegments(
   segments: CandidateSegment[],
-  config: Config,
+  config: ValidatedConfig,
   resolution: number
 ): CandidateSegment[] {
   if (segments.length <= 1) return segments;
@@ -128,7 +128,7 @@ function mergeNearbySegments(
  */
 function filterSegmentsByDuration(
   segments: CandidateSegment[],
-  config: Config,
+  config: ValidatedConfig,
   resolution: number
 ): CandidateSegment[] {
   return segments.filter(segment => {

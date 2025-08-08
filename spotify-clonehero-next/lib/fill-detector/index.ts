@@ -11,7 +11,8 @@
 import { 
   ParsedChart, 
   FillSegment, 
-  Config, 
+  Config,
+  ValidatedConfig,
   DrumTrackNotFoundError,
   NoteEvent,
   TrackData
@@ -42,9 +43,9 @@ export function extractFills(
   validateParsedChart(parsedChart);
   
   // Find drum track
-  const drumTrack = findDrumTrack(parsedChart, config.difficulty!);
+  const drumTrack = findDrumTrack(parsedChart, config.difficulty);
   if (!drumTrack) {
-    throw new DrumTrackNotFoundError(config.difficulty!);
+    throw new DrumTrackNotFoundError(config.difficulty);
   }
   
   // Extract and flatten note events
@@ -64,8 +65,8 @@ export function extractFills(
   const windowBoundaries = getWindowBoundaries(
     startTick,
     endTick,
-    config.windowBeats!,
-    config.strideBeats!,
+    config.windowBeats,
+    config.strideBeats,
     parsedChart.resolution
   );
   
@@ -74,8 +75,8 @@ export function extractFills(
     noteEvents,
     startTick,
     endTick,
-    config.windowBeats!,
-    config.strideBeats!,
+    config.windowBeats,
+    config.strideBeats,
     parsedChart.resolution,
     tempoMap
   );
@@ -185,7 +186,7 @@ function getAnalysisBounds(noteEvents: NoteEvent[]): { startTick: number; endTic
 export function createExtractionSummary(
   chart: ParsedChart,
   fills: FillSegment[],
-  config: Config
+  config: ValidatedConfig
 ): {
   songInfo: {
     name: string;
@@ -199,9 +200,9 @@ export function createExtractionSummary(
     averageFillDuration: number; // in seconds
     fillDensityRatio: number; // fills per minute
   };
-  configUsed: Config;
+  configUsed: ValidatedConfig;
 } {
-  const drumTrack = findDrumTrack(chart, config.difficulty!);
+  const drumTrack = findDrumTrack(chart, config.difficulty);
   const noteEvents = drumTrack ? flattenNoteEvents(drumTrack) : [];
   
   // Calculate song duration (simplified - uses last note time)
@@ -293,10 +294,13 @@ export function validateFillSegments(fills: FillSegment[]): {
 }
 
 // Re-export key types and utilities for external use
-export {
+export type {
   Config,
   FillSegment,
   ParsedChart,
+} from './types';
+
+export {
   DrumTrackNotFoundError,
 } from './types';
 

@@ -2,7 +2,7 @@
  * Candidate window detection using threshold-based rules
  */
 
-import { AnalysisWindow, Config } from '../types';
+import { AnalysisWindow, ValidatedConfig } from '../types';
 
 /**
  * Detection result for a single window
@@ -18,7 +18,7 @@ export interface DetectionResult {
  */
 export function detectCandidateWindows(
   windows: AnalysisWindow[],
-  config: Config
+  config: ValidatedConfig
 ): AnalysisWindow[] {
   const updatedWindows = windows.map(window => {
     const result = evaluateWindow(window, config);
@@ -34,9 +34,9 @@ export function detectCandidateWindows(
 /**
  * Evaluates a single window against detection criteria
  */
-export function evaluateWindow(window: AnalysisWindow, config: Config): DetectionResult {
+export function evaluateWindow(window: AnalysisWindow, config: ValidatedConfig): DetectionResult {
   const features = window.features;
-  const thresholds = config.thresholds || {};
+  const thresholds = config.thresholds;
   const reasons: string[] = [];
   let confidence = 0;
   
@@ -44,14 +44,14 @@ export function evaluateWindow(window: AnalysisWindow, config: Config): Detectio
   let primaryMatch = false;
   
   // Rule 1: High density + groove deviation
-  if (features.densityZ > (thresholds.densityZ || 1.2) && features.grooveDist > (thresholds.dist || 2.0)) {
+  if (features.densityZ > thresholds.densityZ && features.grooveDist > thresholds.dist) {
     reasons.push('High density with groove deviation');
     confidence += 0.4;
     primaryMatch = true;
   }
   
   // Rule 2: Tom ratio jump
-  if (features.tomRatioJump > (thresholds.tomJump || 1.5)) {
+  if (features.tomRatioJump > thresholds.tomJump) {
     reasons.push('Tom ratio spike');
     confidence += 0.3;
     primaryMatch = true;
@@ -126,7 +126,7 @@ export function evaluateWindow(window: AnalysisWindow, config: Config): Detectio
  */
 function applyAdditionalHeuristics(
   window: AnalysisWindow,
-  config: Config
+  config: ValidatedConfig
 ): { confidenceBonus: number; reasons: string[] } {
   const features = window.features;
   const reasons: string[] = [];
@@ -168,7 +168,7 @@ function applyAdditionalHeuristics(
  */
 export function postProcessCandidates(
   windows: AnalysisWindow[],
-  config: Config
+  config: ValidatedConfig
 ): AnalysisWindow[] {
   let processedWindows = [...windows];
   
@@ -214,7 +214,7 @@ function removeIsolatedCandidates(windows: AnalysisWindow[]): AnalysisWindow[] {
  */
 function applyTemporalConstraints(
   windows: AnalysisWindow[],
-  config: Config
+  config: ValidatedConfig
 ): AnalysisWindow[] {
   const result = [...windows];
   
@@ -299,7 +299,7 @@ export function getCandidateStatistics(windows: AnalysisWindow[]): {
 /**
  * Validates detection parameters
  */
-export function validateDetectionConfig(config: Config): string[] {
+export function validateDetectionConfig(config: ValidatedConfig): string[] {
   const errors: string[] = [];
   const t = config.thresholds;
   
@@ -339,7 +339,7 @@ export function validateDetectionConfig(config: Config): string[] {
  */
 export function createDetectionReport(
   windows: AnalysisWindow[],
-  config: Config
+  config: ValidatedConfig
 ): string {
   const stats = getCandidateStatistics(windows);
   const configErrors = validateDetectionConfig(config);
