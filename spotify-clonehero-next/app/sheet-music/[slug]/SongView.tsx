@@ -109,6 +109,14 @@ export default function Renderer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [volumeControls, setVolumeControls] = useState<VolumeControl[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [detectedFills, setDetectedFills] = useState<Array<{
+    fillNumber: number;
+    startTimeMs: number;
+    endTimeMs: number;
+    durationMs: number;
+    startTick: number;
+    endTick: number;
+  }>>([]);
 
   const availableDifficulties = getDrumDifficulties(chart);
   const [selectedDifficulty, setSelectedDifficulty] = useState(
@@ -249,15 +257,33 @@ export default function Renderer({
     });
   }, [volumeControls, audioManagerRef]);
 
-  // Run fill detection when chart and track are loaded
+  // Run fill detection when chart and track are loaded (dev mode only)
   useEffect(() => {
+    // Only run fill detection in development mode
+    if (process.env.NODE_ENV !== 'development') {
+      return;
+    }
+    
     try {
       // Only run fill detection if we have a drums track
       if (track.instrument !== 'drums') {
+        setDetectedFills([]); // Clear fills for non-drums tracks
         return;
       }
       
       const fills = extractFills(chart, track, defaultConfig);
+      
+      // Store fills in state for UI
+      const fillsForUI = fills.map((fill, index) => ({
+        fillNumber: index + 1,
+        startTimeMs: fill.startMs,
+        endTimeMs: fill.endMs,
+        durationMs: fill.endMs - fill.startMs,
+        startTick: fill.startTick,
+        endTick: fill.endTick,
+      }));
+      setDetectedFills(fillsForUI);
+      
       console.log('🥁 Detected Drum Fills Debug Info:', {
         songName: metadata.name,
         artist: metadata.artist,
@@ -301,8 +327,20 @@ export default function Renderer({
         tempoCount: chart.tempos?.length || 0,
         resolution: chart.resolution,
       });
+      setDetectedFills([]); // Clear fills on error
     }
   }, [chart, track, metadata]);
+
+  // Function to play from a specific fill
+  const playFill = useCallback((fillStartTimeMs: number) => {
+    if (audioManagerRef.current == null) {
+      return;
+    }
+    // Convert milliseconds to seconds for audio manager
+    const timeInSeconds = fillStartTimeMs / 1000;
+    audioManagerRef.current.play({time: timeInSeconds});
+    setIsPlaying(true);
+  }, []);
 
   const songDuration =
     metadata.song_length == null ? 5 * 60 : metadata.song_length / 1000;
@@ -581,6 +619,37 @@ export default function Renderer({
               </label>
             </div> */}
           </div>
+
+          {/* Drum Fills Section - Only in development */}
+          {process.env.NODE_ENV === 'development' && detectedFills.length > 0 && (
+            <div className="space-y-2 pt-4 border-t">
+              <label className="text-sm font-medium">Drum Fills ({detectedFills.length})</label>
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {detectedFills.map((fill) => (
+                  <div
+                    key={fill.fillNumber}
+                    className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">Fill #{fill.fillNumber}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {Math.round(fill.startTimeMs / 1000)}s • {Math.round(fill.durationMs / 1000)}s duration
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 ml-2 flex-shrink-0"
+                      onClick={() => playFill(fill.startTimeMs)}
+                      title={`Play fill #${fill.fillNumber}`}
+                    >
+                      <Play className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <p className="text-xs text-muted-foreground text-center mt-auto">
           Special thanks to{' '}
