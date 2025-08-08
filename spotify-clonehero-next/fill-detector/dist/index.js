@@ -197,11 +197,12 @@ export const version = '1.0.0';
 /**
  * Default export for CommonJS compatibility
  */
-export default {
+const drumFillExtractor = {
     extractFills,
     createExtractionSummary,
     validateFillSegments,
     defaultConfig,
     version,
 };
+export default drumFillExtractor;
 //# sourceMappingURL=index.js.map

@@ -95,7 +95,7 @@ function mergeNearbySegments(
   if (segments.length <= 1) return segments;
   
   const mergedSegments: CandidateSegment[] = [];
-  const mergeGapTicks = config.thresholds.mergeGapBeats * resolution;
+  const mergeGapTicks = (config.thresholds?.mergeGapBeats || 0.25) * resolution;
   
   let currentSegment = segments[0];
   
@@ -135,8 +135,8 @@ function filterSegmentsByDuration(
     const durationTicks = segment.endTick - segment.startTick;
     const durationBeats = ticksToBeats(durationTicks, resolution);
     
-    return durationBeats >= config.thresholds.minBeats && 
-           durationBeats <= config.thresholds.maxBeats;
+    return durationBeats >= (config.thresholds?.minBeats || 0.75) && 
+           durationBeats <= (config.thresholds?.maxBeats || 4);
   });
 }
 

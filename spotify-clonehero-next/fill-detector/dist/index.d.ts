@@ -48,12 +48,12 @@ export declare const version = "1.0.0";
 /**
  * Default export for CommonJS compatibility
  */
-declare const _default: {
+declare const drumFillExtractor: {
     extractFills: typeof extractFills;
     createExtractionSummary: typeof createExtractionSummary;
     validateFillSegments: typeof validateFillSegments;
     defaultConfig: Config;
     version: string;
 };
-export default _default;
+export default drumFillExtractor;
 //# sourceMappingURL=index.d.ts.map

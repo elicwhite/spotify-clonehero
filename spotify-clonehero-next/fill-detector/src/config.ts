@@ -49,22 +49,24 @@ export function validateConfig(userConfig?: Partial<Config>): Config {
     throw new InvalidConfigError('lookbackBars must be positive');
   }
 
-  // Validate thresholds
-  const t = config.thresholds;
-  if (t.minBeats !== undefined && t.minBeats <= 0) {
-    throw new InvalidConfigError('thresholds.minBeats must be positive');
-  }
-  
-  if (t.maxBeats !== undefined && t.minBeats !== undefined && t.maxBeats <= t.minBeats) {
-    throw new InvalidConfigError('thresholds.maxBeats must be greater than minBeats');
-  }
-  
-  if (t.mergeGapBeats !== undefined && t.mergeGapBeats < 0) {
-    throw new InvalidConfigError('thresholds.mergeGapBeats must be non-negative');
-  }
-  
-  if (t.burstMs !== undefined && t.burstMs <= 0) {
-    throw new InvalidConfigError('thresholds.burstMs must be positive');  
+  // Validate thresholds (only if they exist)
+  if (config.thresholds) {
+    const t = config.thresholds;
+    if (t.minBeats !== undefined && t.minBeats <= 0) {
+      throw new InvalidConfigError('thresholds.minBeats must be positive');
+    }
+    
+    if (t.maxBeats !== undefined && t.minBeats !== undefined && t.maxBeats <= t.minBeats) {
+      throw new InvalidConfigError('thresholds.maxBeats must be greater than minBeats');
+    }
+    
+    if (t.mergeGapBeats !== undefined && t.mergeGapBeats < 0) {
+      throw new InvalidConfigError('thresholds.mergeGapBeats must be non-negative');
+    }
+    
+    if (t.burstMs !== undefined && t.burstMs <= 0) {
+      throw new InvalidConfigError('thresholds.burstMs must be positive');  
+    }
   }
 
   return config;

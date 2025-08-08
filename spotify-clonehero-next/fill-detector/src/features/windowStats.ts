@@ -61,7 +61,7 @@ export function computeWindowFeatures(
   
   // Calculate pattern-based features  
   const ngramNovelty = calculateNgramNovelty(notes, resolution);
-  const samePadBurst = detectSamePadBurst(notes, config.thresholds.burstMs);
+  const samePadBurst = detectSamePadBurst(notes, config.thresholds?.burstMs || 120);
   const crashResolve = detectCrashResolve(window, resolution);
   
   return {
@@ -217,7 +217,7 @@ export function extractFeaturesFromWindows(
   }));
   
   // Second pass: calculate rolling statistics and update z-scores
-  updateRollingStatistics(featuredWindows, config);
+  updateRollingStatistics(featuredWindows, config, resolution);
   
   return featuredWindows;
 }
@@ -225,7 +225,7 @@ export function extractFeaturesFromWindows(
 /**
  * Updates windows with rolling statistics for z-score calculations
  */
-function updateRollingStatistics(windows: AnalysisWindow[], config: Config): void {
+function updateRollingStatistics(windows: AnalysisWindow[], config: Config, resolution: number): void {
   const lookbackWindowCount = Math.max(1, Math.floor(config.lookbackBars! * 4 / config.strideBeats!));
   
   for (let i = 0; i < windows.length; i++) {
@@ -255,7 +255,7 @@ function updateRollingStatistics(windows: AnalysisWindow[], config: Config): voi
     windows[i].features = computeWindowFeatures(
       windows[i], 
       config, 
-      0, // resolution not needed for recomputation
+      resolution, // resolution IS needed for density calculation
       rollingStats
     );
   }

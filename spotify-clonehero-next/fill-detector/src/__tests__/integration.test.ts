@@ -104,11 +104,12 @@ describe('Fill Detection Integration', () => {
       // Dense fill pattern (1 bar)
       const fillStart = 4 * resolution * 4;
       for (let i = 0; i < 16; i++) { // 16th notes
+        const tick = fillStart + i * (resolution / 4);
         notes.push({
-          tick: fillStart + i * (resolution / 4),
-          msTime: 0,
+          tick,
+          msTime: (tick / resolution) * (60000 / 120),
           length: resolution / 8,
-          msLength: 0,
+          msLength: (resolution / 8 / resolution) * (60000 / 120),
           type: 3, // Tom
           flags: 0,
         });

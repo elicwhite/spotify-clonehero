@@ -19,22 +19,38 @@ export function detectCandidateWindows(windows, config) {
  */
 export function evaluateWindow(window, config) {
     const features = window.features;
-    const thresholds = config.thresholds;
+    const thresholds = config.thresholds || {};
     const reasons = [];
     let confidence = 0;
     // Primary detection criteria (from design document)
     let primaryMatch = false;
     // Rule 1: High density + groove deviation
-    if (features.densityZ > thresholds.densityZ && features.grooveDist > thresholds.dist) {
+    if (features.densityZ > (thresholds.densityZ || 1.2) && features.grooveDist > (thresholds.dist || 2.0)) {
         reasons.push('High density with groove deviation');
         confidence += 0.4;
         primaryMatch = true;
     }
     // Rule 2: Tom ratio jump
-    if (features.tomRatioJump > thresholds.tomJump) {
+    if (features.tomRatioJump > (thresholds.tomJump || 1.5)) {
         reasons.push('Tom ratio spike');
         confidence += 0.3;
         primaryMatch = true;
+    }
+    // Rule 3: Fallback - very high absolute density (for early song detection)
+    if (features.noteDensity > 8) { // 8+ notes per beat is very dense
+        reasons.push('Very high absolute density');
+        confidence += 0.4;
+        primaryMatch = true;
+    }
+    // Rule 4: Fallback - high tom content without comparison
+    if (features.noteDensity > 4 && window.notes.length > 0) {
+        const tomCount = window.notes.filter(n => n.type === 3 || n.type === 5).length; // Tom notes
+        const tomRatio = tomCount / window.notes.length;
+        if (tomRatio > 0.6) { // 60%+ toms
+            reasons.push('High tom content');
+            confidence += 0.3;
+            primaryMatch = true;
+        }
     }
     // Secondary criteria (bonus scoring but not mandatory)
     if (features.hatDropout > 0.5) {
