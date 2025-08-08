@@ -56,6 +56,7 @@ import wholeNote from '@/public/assets/svgs/whole-note.svg';
 import quarterNote from '@/public/assets/svgs/quarter-note.svg';
 import eighthNote from '@/public/assets/svgs/eighth-note.svg';
 import tripletNote from '@/public/assets/svgs/triplet-note.svg';
+import {extractFills, defaultConfig} from '@/lib/fill-detector';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -247,6 +248,61 @@ export default function Renderer({
       audioManagerRef.current?.setVolume(control.trackName, control.volume);
     });
   }, [volumeControls, audioManagerRef]);
+
+  // Run fill detection when chart and track are loaded
+  useEffect(() => {
+    try {
+      // Only run fill detection if we have a drums track
+      if (track.instrument !== 'drums') {
+        return;
+      }
+      
+      const fills = extractFills(chart, track, defaultConfig);
+      console.log('🥁 Detected Drum Fills Debug Info:', {
+        songName: metadata.name,
+        artist: metadata.artist,
+        charter: metadata.charter,
+        difficulty: track.difficulty,
+        totalFills: fills.length,
+        fillDetails: fills.map((fill, index) => ({
+          fillNumber: index + 1,
+          startTick: fill.startTick,
+          endTick: fill.endTick,
+          startTimeMs: fill.startMs,
+          endTimeMs: fill.endMs,
+          durationMs: fill.endMs - fill.startMs,
+          durationBeats: (fill.endTick - fill.startTick) / chart.resolution,
+          scores: {
+            densityZ: fill.densityZ,
+            grooveDistance: fill.grooveDist,
+            tomRatioJump: fill.tomRatioJump,
+            hatDropout: fill.hatDropout,
+            kickDrop: fill.kickDrop,
+            ioiStdZ: fill.ioiStdZ,
+            ngramNovelty: fill.ngramNovelty,
+            samePadBurst: fill.samePadBurst,
+            crashResolve: fill.crashResolve,
+          },
+          combinedScore: fill.densityZ + fill.grooveDist + fill.tomRatioJump,
+        })),
+        summary: fills.length > 0 ? {
+          shortestFillMs: Math.min(...fills.map(f => f.endMs - f.startMs)),
+          longestFillMs: Math.max(...fills.map(f => f.endMs - f.startMs)),
+          avgFillDurationMs: fills.reduce((sum, f) => sum + (f.endMs - f.startMs), 0) / fills.length,
+          totalFillTimeMs: fills.reduce((sum, f) => sum + (f.endMs - f.startMs), 0),
+        } : null,
+      });
+    } catch (error) {
+      console.warn('⚠️ Fill detection failed:', error);
+      console.log('Chart structure for debugging:', {
+        trackInstrument: track.instrument,
+        trackDifficulty: track.difficulty,
+        hasTempos: !!chart.tempos,
+        tempoCount: chart.tempos?.length || 0,
+        resolution: chart.resolution,
+      });
+    }
+  }, [chart, track, metadata]);
 
   const songDuration =
     metadata.song_length == null ? 5 * 60 : metadata.song_length / 1000;

@@ -10,12 +10,13 @@
 
 import { 
   ParsedChart, 
+  Track,
   FillSegment, 
   Config,
   ValidatedConfig,
   DrumTrackNotFoundError,
   NoteEvent,
-  TrackData
+  TempoEvent
 } from './types';
 import { validateConfig, defaultConfig } from './config';
 import { validateTempos, buildTempoMap } from './utils/tempoUtils';
@@ -26,37 +27,40 @@ import { detectCandidateWindows, postProcessCandidates } from './detector/candid
 import { mergeWindowsIntoSegments, refineBoundaries, removeOverlaps, sortSegments } from './detector/mergeSegments';
 
 /**
- * Main API function: extracts drum fills from a parsed chart
+ * Main API function: extracts drum fills from a chart and track (like convertToVexFlow)
  * 
- * @param parsedChart - The parsed chart data
+ * @param chart - The parsed chart data from scan-chart
+ * @param track - The specific track data from scan-chart
  * @param userConfig - Optional configuration overrides
  * @returns Array of detected fill segments
  */
 export function extractFills(
-  parsedChart: ParsedChart,
+  chart: ParsedChart,
+  track: Track,
   userConfig?: Partial<Config>
 ): FillSegment[] {
   // Validate and merge configuration
   const config = validateConfig(userConfig);
   
-  // Validate input chart
-  validateParsedChart(parsedChart);
+  // Check if track is drums
+  if (track.instrument !== 'drums') {
+    throw new DrumTrackNotFoundError(config.difficulty);
+  }
   
-  // Find drum track
-  const drumTrack = findDrumTrack(parsedChart, config.difficulty);
-  if (!drumTrack) {
+  // Check if track difficulty matches config
+  if (track.difficulty !== config.difficulty) {
     throw new DrumTrackNotFoundError(config.difficulty);
   }
   
   // Extract and flatten note events
-  const noteEvents = flattenNoteEvents(drumTrack);
+  const noteEvents = flattenNoteEvents(track);
   if (noteEvents.length === 0) {
     return []; // No notes, no fills
   }
   
   // Validate and build tempo map
-  validateTempos(parsedChart.tempos);
-  const tempoMap = buildTempoMap(parsedChart.tempos, parsedChart.resolution);
+  validateTempos(chart.tempos);
+  const tempoMap = buildTempoMap(chart.tempos, chart.resolution);
   
   // Determine analysis boundaries
   const { startTick, endTick } = getAnalysisBounds(noteEvents);
@@ -67,7 +71,7 @@ export function extractFills(
     endTick,
     config.windowBeats,
     config.strideBeats,
-    parsedChart.resolution
+    chart.resolution
   );
   
   // Create analysis windows with notes
@@ -77,7 +81,7 @@ export function extractFills(
     endTick,
     config.windowBeats,
     config.strideBeats,
-    parsedChart.resolution,
+    chart.resolution,
     tempoMap
   );
   
@@ -86,7 +90,7 @@ export function extractFills(
   }
   
   // Extract features from all windows
-  const featuredWindows = extractFeaturesFromWindows(windows, config, parsedChart.resolution);
+  const featuredWindows = extractFeaturesFromWindows(windows, config, chart.resolution);
   
   // Update groove distances using rolling model
   updateGrooveDistances(featuredWindows, config);
@@ -101,13 +105,13 @@ export function extractFills(
   const rawSegments = mergeWindowsIntoSegments(
     processedWindows,
     config,
-    parsedChart.resolution,
+    chart.resolution,
     tempoMap,
-    parsedChart.name || 'Unknown'
+    chart.metadata?.name || 'Unknown'
   );
   
   // Refine segment boundaries
-  const refinedSegments = refineBoundaries(rawSegments, parsedChart.resolution, tempoMap);
+  const refinedSegments = refineBoundaries(rawSegments, chart.resolution, tempoMap);
   
   // Remove overlapping segments
   const nonOverlappingSegments = removeOverlaps(refinedSegments);
@@ -119,39 +123,9 @@ export function extractFills(
 }
 
 /**
- * Validates the parsed chart structure
- */
-function validateParsedChart(chart: ParsedChart): void {
-  if (!chart) {
-    throw new Error('ParsedChart is required');
-  }
-  
-  if (typeof chart.resolution !== 'number' || chart.resolution <= 0) {
-    throw new Error('Invalid chart resolution');
-  }
-  
-  if (!Array.isArray(chart.tempos) || chart.tempos.length === 0) {
-    throw new Error('Chart must have at least one tempo event');
-  }
-  
-  if (!Array.isArray(chart.trackData)) {
-    throw new Error('Chart must have trackData array');
-  }
-}
-
-/**
- * Finds the drum track for the specified difficulty
- */
-function findDrumTrack(chart: ParsedChart, difficulty: string): TrackData | null {
-  return chart.trackData.find(track => 
-    track.instrument === 'drums' && track.difficulty === difficulty
-  ) || null;
-}
-
-/**
  * Flattens note event groups into a single chronological array
  */
-function flattenNoteEvents(drumTrack: TrackData): NoteEvent[] {
+function flattenNoteEvents(drumTrack: Track): NoteEvent[] {
   const allNotes: NoteEvent[] = [];
   
   for (const noteGroup of drumTrack.noteEventGroups) {
@@ -185,6 +159,7 @@ function getAnalysisBounds(noteEvents: NoteEvent[]): { startTick: number; endTic
  */
 export function createExtractionSummary(
   chart: ParsedChart,
+  track: Track,
   fills: FillSegment[],
   config: ValidatedConfig
 ): {
@@ -202,8 +177,7 @@ export function createExtractionSummary(
   };
   configUsed: ValidatedConfig;
 } {
-  const drumTrack = findDrumTrack(chart, config.difficulty);
-  const noteEvents = drumTrack ? flattenNoteEvents(drumTrack) : [];
+  const noteEvents = flattenNoteEvents(track);
   
   // Calculate song duration (simplified - uses last note time)
   const duration = noteEvents.length > 0 ? 
@@ -217,8 +191,8 @@ export function createExtractionSummary(
   
   return {
     songInfo: {
-      name: (chart as any).name || 'Unknown',
-      artist: (chart as any).artist,
+      name: chart.metadata?.name || 'Unknown',
+      artist: chart.metadata?.artist,
       duration,
       noteCount: noteEvents.length,
     },

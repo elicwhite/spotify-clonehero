@@ -37,13 +37,13 @@ export function tickToMs(tick: number, tempos: TempoEvent[], resolution: number)
     }
     // Calculate backwards from first tempo event
     const tickDelta = currentTempo.tick - tick;
-    const msDelta = ticksToMsDuration(tickDelta, currentTempo.bpm, resolution);
+    const msDelta = ticksToMsDuration(tickDelta, currentTempo.beatsPerMinute, resolution);
     return Math.max(0, currentTempo.msTime - msDelta);
   }
 
   // Calculate time from current tempo event to target tick
   const tickDelta = tick - currentTempo.tick;
-  const msDelta = ticksToMsDuration(tickDelta, currentTempo.bpm, resolution);
+  const msDelta = ticksToMsDuration(tickDelta, currentTempo.beatsPerMinute, resolution);
   
   return currentTempo.msTime + msDelta;
 }
@@ -115,7 +115,7 @@ export function getTempoAtTick(tick: number, tempos: TempoEvent[]): TempoEvent {
  * @returns BPM value at the given tick
  */
 export function getBpmAtTick(tick: number, tempos: TempoEvent[]): number {
-  return getTempoAtTick(tick, tempos).bpm;
+  return getTempoAtTick(tick, tempos).beatsPerMinute;
 }
 
 /**
@@ -183,7 +183,7 @@ export function buildTempoMap(tempos: TempoEvent[], resolution: number): TempoEv
     const currentTempo = sortedTempos[i];
     
     const tickDelta = currentTempo.tick - prevTempo.tick;
-    const msDelta = ticksToMsDuration(tickDelta, prevTempo.bpm, resolution);
+    const msDelta = ticksToMsDuration(tickDelta, prevTempo.beatsPerMinute, resolution);
     
     tempoMap.push({
       ...currentTempo,
@@ -216,8 +216,8 @@ export function validateTempos(tempos: TempoEvent[]): void {
       throw new Error(`Invalid tick at tempo event ${i}: ${tempo.tick}`);
     }
     
-    if (typeof tempo.bpm !== 'number' || tempo.bpm <= 0) {
-      throw new Error(`Invalid BPM at tempo event ${i}: ${tempo.bpm}`);
+    if (typeof tempo.beatsPerMinute !== 'number' || tempo.beatsPerMinute <= 0) {
+      throw new Error(`Invalid BPM at tempo event ${i}: ${tempo.beatsPerMinute}`);
     }
     
     if (typeof tempo.msTime !== 'number' || tempo.msTime < 0) {

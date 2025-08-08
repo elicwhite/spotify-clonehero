@@ -2,37 +2,16 @@
  * Type definitions for the drum fill extractor
  */
 
-export type NoteType = number;
+import {parseChartFile, NoteEvent} from 'scan-chart';
 
-export interface NoteEvent {
-  tick: number;
-  msTime: number;
-  length: number;
-  msLength: number;
-  type: NoteType;   // e.g. 0-5 for drum lanes, authoring dependent
-  flags: number;
-}
+// Use scan-chart types directly
+export type ParsedChart = ReturnType<typeof parseChartFile>;
+export type Track = ParsedChart['trackData'][0];
+export type TempoEvent = ParsedChart['tempos'][0];
+export type TimeSignature = ParsedChart['timeSignatures'][0];
 
-export interface TempoEvent {
-  tick: number;
-  bpm: number;
-  msTime: number;
-}
-
-export interface TrackData {
-  instrument: "drums" | "guitar" | "bass" | "keys" | "vocals";
-  difficulty: "expert" | "hard" | "medium" | "easy";
-  noteEventGroups: (NoteEvent & { msTime: number; msLength: number })[][];
-}
-
-export interface ParsedChart {
-  resolution: number;                // ticks per quarter note
-  tempos: TempoEvent[];
-  trackData: TrackData[];
-  name?: string;                     // optional song name
-  artist?: string;                   // optional artist name
-  // other fields may exist but are not needed for fill detection
-}
+// Re-export NoteEvent from scan-chart for convenience
+export type { NoteEvent } from 'scan-chart';
 
 export interface FillSegment {
   songId: string;        // caller supplies or derived from file name

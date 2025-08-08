@@ -2,7 +2,8 @@
  * Helpers to map NoteType to voice categories for drum analysis
  */
 
-import { NoteType, DrumVoice } from './types';
+import { DrumVoice } from './types';
+import { NoteType } from 'scan-chart';
 
 // Re-export DrumVoice for use in other modules
 export { DrumVoice };
