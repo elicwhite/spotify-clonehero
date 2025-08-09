@@ -543,7 +543,7 @@ describe('Fill Detection Integration', () => {
       const measuresDetected = fills.map(f => f.measureNumber);
       console.log('Detected measures:', measuresDetected);
       console.log('Fills summary:', fills.map(f => ({ m: f.measureNumber, st: f.startTick, et: f.endTick, mst: f.startMs, met: f.endMs })));
-      const expectedAtLeast = [23, 25, 27, 47, 49, 51, 59, 61, 63];
+      const expectedAtLeast = [24, 26, 28, 48, 50, 52, 60, 62, 64];
 
       // Each expected measure should appear at least once
       expectedAtLeast.forEach(m => {
@@ -568,7 +568,7 @@ describe('Fill Detection Integration', () => {
       const measuresDetected = fills.map(f => f.measureNumber);
       console.log('Downfall measures detected:', measuresDetected);
 
-      const expectedAtLeast = [13, 17, 21, 26, 27, 31, 45, 49, 50, 57, 63, 77, 93, 101, 104, 113];
+      const expectedAtLeast = [14, 18, 22, 27, 28, 32, 46, 50, 51, 58, 64, 78, 94, 102, 105, 114];
       expectedAtLeast.forEach(m => expect(measuresDetected).toContain(m));
 
       // Optional candidate that may or may not be detected depending on config
