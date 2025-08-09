@@ -90,6 +90,19 @@ export default function Renderer({
   chart: ParsedChart;
   audioFiles: Files;
 }) {
+  const SETTINGS_KEY = 'sheetMusic.songView.settings.v1';
+  const TRACK_SETTINGS_KEY = 'sheetMusic.songView.trackVolumes.v1';
+
+  type PersistedSettings = {
+    selectedDifficulty?: Difficulty;
+    playClickTrack?: boolean;
+    masterClickVolume?: number;
+    clickVolumes?: ClickVolumes;
+    showBarNumbers?: boolean;
+    enableColors?: boolean;
+    showLyrics?: boolean;
+    viewCloneHero?: boolean;
+  };
   const [playClickTrack, setPlayClickTrack] = useState(true);
   const [clickTrackConfigurationOpen, setClickTrackConfigurationOpen] =
     useState(false);
@@ -175,6 +188,79 @@ export default function Renderer({
     wasPlaying: false,
   });
 
+  // Load persisted settings on first mount
+  const hasLoadedSettingsRef = useRef(false);
+  useEffect(() => {
+    if (hasLoadedSettingsRef.current) return;
+    hasLoadedSettingsRef.current = true;
+    try {
+      if (typeof window === 'undefined') return;
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) return;
+      const parsed: PersistedSettings = JSON.parse(raw);
+
+      if (parsed.playClickTrack !== undefined) {
+        setPlayClickTrack(parsed.playClickTrack);
+      }
+      if (parsed.masterClickVolume !== undefined) {
+        setMasterClickVolume(parsed.masterClickVolume);
+      }
+      if (parsed.clickVolumes) {
+        setClickVolumes(prev => ({...prev, ...parsed.clickVolumes!}));
+      }
+      if (parsed.enableColors !== undefined) {
+        setEnableColors(parsed.enableColors);
+      }
+      if (parsed.showLyrics !== undefined) {
+        setShowLyrics(parsed.showLyrics);
+      }
+      if (parsed.viewCloneHero !== undefined) {
+        setViewCloneHero(parsed.viewCloneHero);
+      }
+      if (parsed.showBarNumbers !== undefined) {
+        setShowBarNumbers(parsed.showBarNumbers);
+      }
+      if (
+        parsed.selectedDifficulty &&
+        availableDifficulties.includes(parsed.selectedDifficulty)
+      ) {
+        setSelectedDifficulty(parsed.selectedDifficulty);
+      }
+    } catch (e) {
+      // noop on parse errors
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist settings whenever they change
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const settingsToPersist: PersistedSettings = {
+      selectedDifficulty,
+      playClickTrack,
+      masterClickVolume,
+      clickVolumes,
+      showBarNumbers,
+      enableColors,
+      showLyrics,
+      viewCloneHero,
+    };
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsToPersist));
+    } catch (e) {
+      // ignore write errors
+    }
+  }, [
+    selectedDifficulty,
+    playClickTrack,
+    masterClickVolume,
+    clickVolumes,
+    showBarNumbers,
+    enableColors,
+    showLyrics,
+    viewCloneHero,
+  ]);
+
   useEffect(() => {
     async function run() {
       const clickTrack = await generateClickTrackFromMeasures(
@@ -193,7 +279,7 @@ export default function Renderer({
       });
 
       const processedTracks = new Set();
-      const volumeControls: VolumeControl[] = [];
+      let initialVolumeControls: VolumeControl[] = [];
 
       files.forEach(audioFile => {
         if (audioFile.fileName.includes('click')) {
@@ -204,16 +290,52 @@ export default function Renderer({
 
         if (!processedTracks.has(trackName)) {
           processedTracks.add(trackName);
-          volumeControls.push({
+          initialVolumeControls.push({
             trackName,
-            volume: 100,
+            volume: 1,
             isMuted: false,
             isSoloed: false,
           });
         }
       });
 
-      setVolumeControls(volumeControls);
+      // Merge with any persisted track volumes
+      try {
+        if (typeof window !== 'undefined') {
+          const raw = localStorage.getItem(TRACK_SETTINGS_KEY);
+          if (raw) {
+            const persisted: Record<string, Partial<VolumeControl>> = JSON.parse(
+              raw,
+            );
+            initialVolumeControls = initialVolumeControls.map(control => {
+              const saved = persisted[control.trackName];
+              if (!saved) return control;
+              return {
+                ...control,
+                ...saved,
+                // Ensure required fields are present
+                trackName: control.trackName,
+                volume:
+                  typeof saved.volume === 'number' ? saved.volume : control.volume,
+                isMuted:
+                  typeof saved.isMuted === 'boolean'
+                    ? saved.isMuted
+                    : control.isMuted,
+                isSoloed:
+                  typeof saved.isSoloed === 'boolean'
+                    ? saved.isSoloed
+                    : control.isSoloed,
+                previousVolume:
+                  typeof saved.previousVolume === 'number'
+                    ? saved.previousVolume
+                    : control.previousVolume,
+              };
+            });
+          }
+        }
+      } catch {}
+
+      setVolumeControls(initialVolumeControls);
 
       audioManager.ready.then(() => {
         if (audioManagerRef.current) {
@@ -223,6 +345,13 @@ export default function Renderer({
         audioManager.setVolume('click', playClickTrack ? masterClickVolume : 0);
         audioManagerRef.current = audioManager;
         window.am = audioManager;
+
+        // Apply initial per-track volumes loaded from storage
+        try {
+          initialVolumeControls.forEach(control => {
+            audioManager.setVolume(control.trackName, control.volume);
+          });
+        } catch {}
 
         if (lastAudioState.current.wasPlaying) {
           audioManager.play({time: lastAudioState.current.currentTime});
@@ -258,6 +387,23 @@ export default function Renderer({
       audioManagerRef.current?.setVolume(control.trackName, control.volume);
     });
   }, [volumeControls, audioManagerRef]);
+
+  // Persist per-track volumes whenever they change
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const map: Record<string, Partial<VolumeControl>> = {};
+      for (const vc of volumeControls) {
+        map[vc.trackName] = {
+          volume: vc.volume,
+          isMuted: vc.isMuted,
+          isSoloed: vc.isSoloed,
+          previousVolume: vc.previousVolume,
+        };
+      }
+      localStorage.setItem(TRACK_SETTINGS_KEY, JSON.stringify(map));
+    } catch {}
+  }, [volumeControls]);
 
   // Run fill detection when chart and track are loaded (dev mode only)
   useEffect(() => {
@@ -553,7 +699,7 @@ export default function Renderer({
           <div className="space-y-2">
             <label className="text-sm font-medium">Difficulty</label>
             <Select
-              defaultValue="expert"
+              value={selectedDifficulty}
               onValueChange={difficultySelectorOnSelect}>
               <SelectTrigger>
                 <SelectValue />
