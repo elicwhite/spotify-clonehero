@@ -103,20 +103,7 @@ export function evaluateWindow(window: AnalysisWindow, config: ValidatedConfig):
     }
   }
 
-  // Rule 7: Early-song permissive check (limited to first 32 bars)
-  if (!primaryMatch && window.notes.length > 0) {
-    const barTicks = 4 * approxResolution;
-    const measureIndex = Math.floor(window.startTick / barTicks);
-    if (measureIndex < 32) {
-      const tomCount = window.notes.filter(n => n.type === 3 || n.type === 5).length;
-      const tomRatio = window.notes.length > 0 ? tomCount / window.notes.length : 0;
-      if (features.noteDensity > 5 && (tomRatio > 0.6 || features.samePadBurst)) {
-        reasons.push('Early-song tom burst');
-        confidence += 0.25;
-        primaryMatch = true;
-      }
-    }
-  }
+  // Removed permissive early-song rule to avoid promoting repeating early sections
   
   // Secondary criteria (bonus scoring but not mandatory)
   if (features.hatDropout > 0.5) {
@@ -222,6 +209,12 @@ export function postProcessCandidates(
   // Apply temporal constraints
   processedWindows = applyTemporalConstraints(processedWindows, config, resolution);
   
+  // Suppress repeating groove-like spans (data-driven, not song-specific)
+  processedWindows = suppressRepeatingGrooveSpans(processedWindows, resolution, config);
+
+  // Frequency-based per-measure adjustment using hashed measure signatures
+  processedWindows = adjustCandidatesByMeasureFrequency(processedWindows, resolution, config);
+  
   return processedWindows;
 }
 
@@ -251,6 +244,304 @@ function removeIsolatedCandidates(windows: AnalysisWindow[]): AnalysisWindow[] {
   }
   
   return result;
+}
+
+/**
+ * Heuristic: suppress candidates in an early multi-measure repeating section
+ * Detect repeating groove by low novelty and low grooveDist over a span of bars.
+ * If a contiguous block starting near bar 7 shows low novelty/deviation, demote candidates within it.
+ */
+function suppressRepeatingGrooveSpans(
+  windows: AnalysisWindow[],
+  resolution: number,
+  config: ValidatedConfig
+): AnalysisWindow[] {
+  const result = [...windows];
+  if (result.length === 0) return result;
+
+  const barTicks = 4 * resolution;
+
+  // Build per-bar aggregates across the whole song
+  interface BarAgg { startTick: number; endTick: number; novelty: number; groove: number; density: number; }
+  const bars = new Map<number, BarAgg>();
+  for (const w of result) {
+    const barIndex = Math.floor(w.startTick / barTicks);
+    const agg = bars.get(barIndex) || { startTick: barIndex * barTicks, endTick: (barIndex + 1) * barTicks, novelty: 0, groove: 0, density: 0 };
+    agg.novelty += w.features.ngramNovelty || 0;
+    agg.groove += w.features.grooveDist || 0;
+    agg.density += w.features.noteDensity || 0;
+    bars.set(barIndex, agg);
+  }
+
+  // Identify long spans (>= 4 bars) of low novelty and low groove deviation that likely represent repeating sections
+  const barIndices = Array.from(bars.keys()).sort((a,b) => a - b);
+  let spanStart: number | null = null;
+  const spans: Array<{ startBar: number; endBar: number }> = [];
+  const noveltyThreshold = 0.1;
+  const grooveThreshold = Math.max(1.2, config.thresholds.dist * 0.5);
+
+  for (const idx of barIndices) {
+    const agg = bars.get(idx)!;
+    const avgNovelty = agg.novelty; // windows are evenly spaced; relative scale fine
+    const avgGroove = agg.groove;
+    const isGrooveBar = avgNovelty <= noveltyThreshold && avgGroove <= grooveThreshold;
+    if (isGrooveBar) {
+      if (spanStart === null) spanStart = idx;
+    } else {
+      if (spanStart !== null) {
+        const end = idx - 1;
+        if (end - spanStart + 1 >= 4) spans.push({ startBar: spanStart, endBar: end });
+        spanStart = null;
+      }
+    }
+  }
+  if (spanStart !== null) {
+    const end = barIndices[barIndices.length - 1];
+    if (end - spanStart + 1 >= 4) spans.push({ startBar: spanStart, endBar: end });
+  }
+
+  if (spans.length === 0) return result;
+
+  // Demote candidates fully contained in any groove-like span
+  for (const span of spans) {
+    const startTick = span.startBar * barTicks;
+    const endTick = (span.endBar + 1) * barTicks;
+    for (let i = 0; i < result.length; i++) {
+      const w = result[i];
+      if (w.isCandidate && w.startTick >= startTick && w.endTick <= endTick) {
+        result[i] = { ...w, isCandidate: false };
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Measure hashing and frequency-based up/downranking
+ * - Build normalized per-measure signatures (5 voices x 16 slots) ignoring empty measures
+ * - Compute frequencies of each signature across the song
+ * - Cluster frequencies into low/high by largest-gap split
+ * - Downrank candidates in high-frequency bars unless they exhibit strong-fill evidence
+ * - Uprank windows in low-frequency bars if they exhibit moderate fill evidence near bar end
+ */
+function adjustCandidatesByMeasureFrequency(
+  windows: AnalysisWindow[],
+  resolution: number,
+  config: ValidatedConfig
+): AnalysisWindow[] {
+  const result = [...windows];
+  if (result.length === 0) return result;
+
+  const { barIndexToMask, maskToFrequency } = computeMeasureHashFrequencies(result, resolution);
+  if (maskToFrequency.size <= 1) {
+    return result; // nothing to separate
+  }
+
+  // Group similar masks using a data-driven distance threshold
+  const { maskToClusterId, clusterIdToTotalFrequency } = clusterSimilarMasks(maskToFrequency);
+  const { highFreqClusterIds } = splitClustersByFrequency(clusterIdToTotalFrequency);
+
+  const barTicks = 4 * resolution;
+  // Helper to decide strong vs moderate fill cues for a window
+  function hasStrongEvidence(w: AnalysisWindow): boolean {
+    const f = w.features;
+    return (
+      f.noteDensity >= 4.0 ||
+      f.tomRatioJump > config.thresholds.tomJump ||
+      (f.crashResolve && f.noteDensity >= 3.0) ||
+      (f.samePadBurst && f.ioiStdZ >= 0.8)
+    );
+  }
+  function hasModerateEvidence(w: AnalysisWindow, endNearBar: boolean): boolean {
+    const f = w.features;
+    return endNearBar && (
+      f.densityZ > config.thresholds.densityZ * 0.8 ||
+      f.ngramNovelty > 0 ||
+      f.samePadBurst ||
+      f.crashResolve
+    );
+  }
+
+  for (let i = 0; i < result.length; i++) {
+    const w = result[i];
+    const barIndex = Math.floor(w.endTick / barTicks); // bias toward where it resolves
+    const mask = barIndexToMask.get(barIndex);
+    if (!mask) continue; // empty bars ignored
+    const clusterId = maskToClusterId.get(mask);
+    if (clusterId === undefined) continue;
+
+    const posInBarEnd = w.endTick % barTicks;
+    const distanceToBarEnd = barTicks - posInBarEnd;
+    const endNearBar = distanceToBarEnd <= 1.25 * resolution;
+
+    if (highFreqClusterIds.has(clusterId)) {
+      // Groove-like bar: only keep if strong evidence
+      if (w.isCandidate && !hasStrongEvidence(w)) {
+        result[i] = { ...w, isCandidate: false };
+      }
+    }
+  }
+
+  return result;
+}
+
+function computeMeasureHashFrequencies(
+  windows: AnalysisWindow[],
+  resolution: number
+): {
+  barIndexToMask: Map<number, string>;
+  maskToFrequency: Map<string, number>;
+} {
+  const barTicks = 4 * resolution;
+  const grid = Math.max(1, Math.floor(resolution / 4)); // 16th grid
+
+  // Collect notes per bar with de-duplication
+  const barToNotes = new Map<number, Map<string, { tick: number; type: number; flags?: number }>>();
+  for (const w of windows) {
+    for (const n of w.notes) {
+      const barIndex = Math.floor(n.tick / barTicks);
+      if (!barToNotes.has(barIndex)) barToNotes.set(barIndex, new Map());
+      const key = `${n.tick}|${n.type}|${(n as any).flags ?? 0}`;
+      barToNotes.get(barIndex)!.set(key, { tick: n.tick, type: n.type as any, flags: (n as any).flags });
+    }
+  }
+
+  const barIndexToMask = new Map<number, string>();
+  const maskToFrequency = new Map<string, number>();
+
+  // Encode per bar
+  for (const [barIndex, noteMap] of barToNotes.entries()) {
+    if (noteMap.size === 0) continue; // ignore empty measures
+    const startTick = barIndex * barTicks;
+    // voices: KICK,SNARE,HAT,TOM,CYMBAL in fixed order
+    const voiceOrder: DrumVoice[] = [
+      DrumVoice.KICK,
+      DrumVoice.SNARE,
+      DrumVoice.HAT,
+      DrumVoice.TOM,
+      DrumVoice.CYMBAL,
+    ];
+    const voiceToBits = new Map<DrumVoice, number>();
+    for (const v of voiceOrder) voiceToBits.set(v, 0);
+
+    for (const { tick, type, flags } of noteMap.values()) {
+      const slot = Math.floor((tick - startTick) / grid);
+      if (slot < 0 || slot >= 16) continue;
+      const voice = mapScanChartNoteToVoice(type as any, null, flags ?? 0);
+      const current = voiceToBits.get(voice);
+      if (current === undefined) continue; // ignore UNKNOWN and voices outside our set
+      voiceToBits.set(voice, current | (1 << slot));
+    }
+
+    // If all voices are zero, treat as empty and skip
+    const allZero = voiceOrder.every(v => (voiceToBits.get(v) || 0) === 0);
+    if (allZero) continue;
+
+    // Full mask: per-voice 16-bit hex, joined with |
+    const mask = voiceOrder.map(v => (voiceToBits.get(v) || 0).toString(16).padStart(4, '0')).join('|');
+    barIndexToMask.set(barIndex, mask);
+    maskToFrequency.set(mask, (maskToFrequency.get(mask) || 0) + 1);
+  }
+
+  return { barIndexToMask, maskToFrequency };
+}
+
+function hammingDistance(maskA: string, maskB: string): number {
+  const partsA = maskA.split('|');
+  const partsB = maskB.split('|');
+  let dist = 0;
+  const len = Math.min(partsA.length, partsB.length);
+  for (let i = 0; i < len; i++) {
+    const a = parseInt(partsA[i], 16);
+    const b = parseInt(partsB[i], 16);
+    let x = a ^ b;
+    // popcount 16-bit
+    x = x - ((x >>> 1) & 0x5555);
+    x = (x & 0x3333) + ((x >>> 2) & 0x3333);
+    dist += (((x + (x >>> 4)) & 0x0F0F) * 0x0101) >>> 8;
+  }
+  return dist;
+}
+
+function percentile(values: number[], p: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor(p * (sorted.length - 1))));
+  return sorted[idx];
+}
+
+function clusterSimilarMasks(maskToFrequency: Map<string, number>): {
+  maskToClusterId: Map<string, number>;
+  clusterIdToTotalFrequency: Map<number, number>;
+} {
+  const masks = Array.from(maskToFrequency.keys());
+  if (masks.length === 0) return { maskToClusterId: new Map(), clusterIdToTotalFrequency: new Map() };
+
+  // Compute nearest-neighbor distance per mask
+  const nearestDistances: number[] = [];
+  for (let i = 0; i < masks.length; i++) {
+    let best = Infinity;
+    for (let j = 0; j < masks.length; j++) {
+      if (i === j) continue;
+      const d = hammingDistance(masks[i], masks[j]);
+      if (d < best) best = d;
+    }
+    nearestDistances.push(isFinite(best) ? best : 0);
+  }
+  // Data-driven similarity threshold: 25th percentile of nearest-neighbor distances
+  const nnThreshold = Math.max(0, Math.floor(percentile(nearestDistances, 0.25)));
+
+  // Single-linkage clustering with threshold
+  const maskToClusterId = new Map<string, number>();
+  let clusterIdCounter = 0;
+  for (let i = 0; i < masks.length; i++) {
+    if (maskToClusterId.has(masks[i])) continue;
+    const cid = clusterIdCounter++;
+    maskToClusterId.set(masks[i], cid);
+    // expand cluster
+    const queue = [masks[i]];
+    while (queue.length > 0) {
+      const cur = queue.pop()!;
+      for (let j = 0; j < masks.length; j++) {
+        const other = masks[j];
+        if (maskToClusterId.has(other)) continue;
+        const d = hammingDistance(cur, other);
+        if (d <= nnThreshold) {
+          maskToClusterId.set(other, cid);
+          queue.push(other);
+        }
+      }
+    }
+  }
+
+  const clusterIdToTotalFrequency = new Map<number, number>();
+  for (const [mask, freq] of maskToFrequency.entries()) {
+    const cid = maskToClusterId.get(mask)!;
+    clusterIdToTotalFrequency.set(cid, (clusterIdToTotalFrequency.get(cid) || 0) + freq);
+  }
+
+  return { maskToClusterId, clusterIdToTotalFrequency };
+}
+
+function splitClustersByFrequency(clusterIdToTotalFrequency: Map<number, number>): {
+  highFreqClusterIds: Set<number>;
+} {
+  const entries = Array.from(clusterIdToTotalFrequency.entries());
+  if (entries.length <= 1) return { highFreqClusterIds: new Set<number>() };
+  const freqs = entries.map(([, f]) => f).sort((a, b) => a - b);
+  let splitIdx = 0;
+  let maxGap = -Infinity;
+  for (let i = 0; i < freqs.length - 1; i++) {
+    const gap = freqs[i + 1] - freqs[i];
+    if (gap > maxGap) { maxGap = gap; splitIdx = i; }
+  }
+  const threshold = freqs[splitIdx];
+  const highFreqClusterIds = new Set<number>();
+  for (const [cid, f] of entries) {
+    if (f > threshold) highFreqClusterIds.add(cid);
+  }
+  return { highFreqClusterIds };
 }
 
 /**

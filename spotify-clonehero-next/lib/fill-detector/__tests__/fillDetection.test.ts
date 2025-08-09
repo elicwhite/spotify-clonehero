@@ -308,6 +308,51 @@ describe('Fill Detection', () => {
       
       expect(lenientFills.length).toBeGreaterThanOrEqual(strictFills.length);
     });
+
+    it('should collapse multiple detected segments within the same measure into a single fill', () => {
+      const resolution = 192;
+      const barTicks = 4 * resolution;
+
+      // Create a groove for 2 bars
+      const notes: NoteEvent[] = [
+        ...createBasicDrumPattern(2, resolution),
+      ];
+
+      // In bar 3, create two dense clusters separated by < 1 beat to simulate two detections in same measure
+      const bar3Start = 2 * barTicks;
+      // First cluster (early in bar)
+      notes.push(...createTomFill(bar3Start + 0, 6, resolution));
+      // Second cluster (later in same bar)
+      notes.push(...createTomFill(bar3Start + Math.floor(0.75 * resolution), 6, resolution));
+
+      const { chart, track } = createSyntheticChart(notes, 'Collapse Same Measure Test');
+      const fills = extractFills(chart, track);
+
+      // Find fills reported for bar 3 (1-based measure numbering)
+      const measure3Fills = fills.filter(f => f.measureNumber === 3);
+      expect(measure3Fills.length).toBeLessThanOrEqual(1);
+    });
+
+    it('should collapse fills that are separated by half note or less', () => {
+      const resolution = 192;
+      const barTicks = 4 * resolution;
+      const notes: NoteEvent[] = [
+        ...createBasicDrumPattern(2, resolution),
+      ];
+      // Two fills in adjacent quarters within bar 3
+      const bar3Start = 2 * barTicks;
+      notes.push(...createTomFill(bar3Start + 0.0 * resolution, 4, resolution));
+      notes.push(...createTomFill(bar3Start + 1.5 * resolution, 4, resolution)); // 1.5 beats gap
+
+      const { chart, track } = createSyntheticChart(notes, 'Collapse Proximity Test');
+      const fills = extractFills(chart, track);
+      const measure3Fills = fills.filter(f => f.measureNumber === 3);
+      expect(measure3Fills.length).toBeLessThanOrEqual(1);
+      if (measure3Fills.length === 1) {
+        const f = measure3Fills[0];
+        expect(f.endTick - f.startTick).toBeGreaterThanOrEqual(Math.floor(2.5 * resolution));
+      }
+    });
   });
 
   describe('configuration validation', () => {

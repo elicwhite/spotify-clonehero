@@ -21,7 +21,7 @@ import {
 } from './types';
 import { validateConfig, defaultConfig } from './config';
 import { mapScanChartNoteToVoice, DrumVoice } from './drumLaneMap';
-import { validateTempos, buildTempoMap } from './utils/tempoUtils';
+import { validateTempos, buildTempoMap, tickRangeToMs } from './utils/tempoUtils';
 import { getWindowBoundaries } from './quantize';
 import { createAnalysisWindows, extractFeaturesFromWindows } from './features/windowStats';
 import { updateGrooveDistances } from './features/grooveModel';
@@ -253,12 +253,15 @@ export function extractFills(
   
   // Refine segment boundaries
   const refinedSegments = refineBoundaries(rawSegments, chart.resolution, tempoMap);
-  
+
   // Remove overlapping segments
   const nonOverlappingSegments = removeOverlaps(refinedSegments);
-  
+
   // Sort segments chronologically
-  const finalSegments = sortSegments(nonOverlappingSegments);
+  const sortedSegments = sortSegments(nonOverlappingSegments);
+
+  // Collapse segments that are within a half-note (2 beats) gap into a single longer fill
+  const finalSegments = collapseSegmentsByProximity(sortedSegments, chart.resolution, tempoMap, 2);
   
   // Calculate measures and enrich segments with measure information
   const measures = calculateMeasures(chart, tempoMap);
@@ -294,8 +297,10 @@ export function extractFills(
       measureNumber: 1,
     };
   });
+  // Collapse multiple segments detected within the same measure into a single representative
+  const collapsedByMeasure = collapseSegmentsByMeasure(enrichedSegments);
   
-  return enrichedSegments;
+  return collapsedByMeasure;
 }
 
 /**
@@ -441,6 +446,93 @@ export function validateFillSegments(fills: FillSegment[]): {
     errors,
     warnings,
   };
+}
+
+/**
+ * Ensures there is at most one fill per measure by selecting the best segment
+ * when multiple segments fall within the same (songId, measureNumber).
+ * Selection heuristic prefers longer duration, then higher densityZ, then higher grooveDist.
+ */
+function collapseSegmentsByMeasure(segments: FillSegment[]): FillSegment[] {
+  if (segments.length === 0) return segments;
+  const groups = new Map<string, FillSegment[]>();
+  for (const seg of segments) {
+    const key = `${seg.songId}__${seg.measureNumber}`;
+    const list = groups.get(key) || [];
+    list.push(seg);
+    groups.set(key, list);
+  }
+
+  const pickBest = (list: FillSegment[]): FillSegment => {
+    if (list.length === 1) return list[0];
+    // Prefer longest duration; tiebreak on densityZ, then grooveDist
+    return list.sort((a, b) => {
+      const durA = a.endTick - a.startTick;
+      const durB = b.endTick - b.startTick;
+      if (durA !== durB) return durB - durA;
+      if (a.densityZ !== b.densityZ) return b.densityZ - a.densityZ;
+      return b.grooveDist - a.grooveDist;
+    })[0];
+  };
+
+  const result: FillSegment[] = [];
+  for (const [, list] of groups) {
+    result.push(pickBest(list));
+  }
+  // Keep chronological order
+  return sortSegments(result);
+}
+
+/**
+ * Collapse adjacent fills separated by a short gap into a single longer fill.
+ * Gap threshold is specified in beats (default 2 beats = half note in 4/4).
+ */
+function collapseSegmentsByProximity(
+  segments: FillSegment[],
+  resolution: number,
+  tempos: TempoEvent[],
+  gapBeats = 2
+): FillSegment[] {
+  if (segments.length <= 1) return segments;
+  const gapTicks = gapBeats * resolution;
+  const merged: FillSegment[] = [];
+  let current: FillSegment | null = null;
+
+  for (const seg of segments) {
+    if (!current) {
+      current = seg;
+      continue;
+    }
+    const gap = seg.startTick - current.endTick;
+    if (gap <= gapTicks) {
+      // Merge seg into current
+      const newStartTick = Math.min(current.startTick, seg.startTick);
+      const newEndTick = Math.max(current.endTick, seg.endTick);
+      const times = tickRangeToMs(newStartTick, newEndTick, tempos, resolution);
+      current = {
+        ...current,
+        startTick: newStartTick,
+        endTick: newEndTick,
+        startMs: times.startMs,
+        endMs: times.endMs,
+        // Keep stronger evidence across features
+        densityZ: Math.max(current.densityZ, seg.densityZ),
+        tomRatioJump: Math.max(current.tomRatioJump, seg.tomRatioJump),
+        hatDropout: Math.max(current.hatDropout, seg.hatDropout),
+        kickDrop: Math.max(current.kickDrop, seg.kickDrop),
+        ioiStdZ: Math.max(current.ioiStdZ, seg.ioiStdZ),
+        ngramNovelty: Math.max(current.ngramNovelty, seg.ngramNovelty),
+        samePadBurst: current.samePadBurst || seg.samePadBurst,
+        crashResolve: current.crashResolve || seg.crashResolve,
+        grooveDist: Math.max(current.grooveDist, seg.grooveDist),
+      };
+    } else {
+      merged.push(current);
+      current = seg;
+    }
+  }
+  if (current) merged.push(current);
+  return merged;
 }
 
 // Re-export key types and utilities for external use

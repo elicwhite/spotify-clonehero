@@ -583,5 +583,37 @@ describe('Fill Detection Integration', () => {
         expect(f.measureStartMs).toBeLessThanOrEqual(f.startMs);
       });
     });
+
+    it('should not detect fills in the repeating intro section (measures 1-13, 1-based)', async () => {
+      const chart: ParsedChart = require('./__fixtures__/Downfall Of Us All - A Day To Remember.json');
+      const drumTrack = chart.trackData.find(track => track.instrument === 'drums' && track.difficulty === 'expert');
+      if (!drumTrack) throw new Error('No expert drum track found in fixture');
+
+      const fills = extractFills(chart, drumTrack);
+      const measuresDetected = fills.map(f => f.measureNumber);
+
+      // Assert no fills are detected in measures 1..13 inclusive (1-based indexing)
+      for (let m = 1; m <= 13; m++) {
+        expect(measuresDetected).not.toContain(m);
+      }
+    });
+  });
+
+  describe('Unravelling by Muse fixture test', () => {
+    it('should not mark repeating groove bars as fills', async () => {
+      const chart: ParsedChart = require('./__fixtures__/Unravelling by Muse.json');
+      const drumTrack = chart.trackData.find(track => track.instrument === 'drums' && track.difficulty === 'expert');
+      if (!drumTrack) throw new Error('No expert drum track found in fixture');
+
+      const fills = extractFills(chart, drumTrack);
+      const measuresDetected = fills.map(f => f.measureNumber);
+      console.log('Unravelling measures detected:', measuresDetected);
+
+      // These are part of the main beat and repeated many times; they should not be fills
+      const repeatedGrooveMeasures = [8, 10, 12, 14, 16, 20];
+      repeatedGrooveMeasures.forEach(m => {
+        expect(measuresDetected).not.toContain(m);
+      });
+    });
   });
 });
