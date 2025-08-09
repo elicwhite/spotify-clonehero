@@ -296,11 +296,11 @@ function renderMeasure(
     );
   }
 
-  // if (showBarNumbers) {
-  //   stave.setText(`${index}`, ModifierPosition.ABOVE, {
-  //     justification: TextJustification.LEFT,
-  //   });
-  // }
+  if (showBarNumbers) {
+    stave.setText(`${index+1}`, ModifierPosition.ABOVE, {
+      justification: TextJustification.LEFT,
+    });
+  }
 
   // Render section name above the staff in bold
   if (sectionName) {

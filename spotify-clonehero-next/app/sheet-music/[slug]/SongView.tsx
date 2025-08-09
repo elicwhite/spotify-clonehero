@@ -116,6 +116,8 @@ export default function Renderer({
     durationMs: number;
     startTick: number;
     endTick: number;
+    measureStartMs: number;
+    measureNumber: number;
   }>>([]);
 
   const availableDifficulties = getDrumDifficulties(chart);
@@ -281,6 +283,8 @@ export default function Renderer({
         durationMs: fill.endMs - fill.startMs,
         startTick: fill.startTick,
         endTick: fill.endTick,
+        measureStartMs: fill.measureStartMs,
+        measureNumber: fill.measureNumber,
       }));
       setDetectedFills(fillsForUI);
       
@@ -292,6 +296,8 @@ export default function Renderer({
         totalFills: fills.length,
         fillDetails: fills.map((fill, index) => ({
           fillNumber: index + 1,
+          measureNumber: fill.measureNumber,
+          measureStartMs: fill.measureStartMs,
           startTick: fill.startTick,
           endTick: fill.endTick,
           startTimeMs: fill.startMs,
@@ -338,6 +344,17 @@ export default function Renderer({
     }
     // Convert milliseconds to seconds for audio manager
     const timeInSeconds = fillStartTimeMs / 1000;
+    audioManagerRef.current.play({time: timeInSeconds});
+    setIsPlaying(true);
+  }, []);
+
+  // Function to play from the start of the measure containing a fill
+  const playFromMeasure = useCallback((measureStartTimeMs: number) => {
+    if (audioManagerRef.current == null) {
+      return;
+    }
+    // Convert milliseconds to seconds for audio manager
+    const timeInSeconds = measureStartTimeMs / 1000;
     audioManagerRef.current.play({time: timeInSeconds});
     setIsPlaying(true);
   }, []);
@@ -608,23 +625,25 @@ export default function Renderer({
                 View as Clone Hero
               </label>
             </div>
-            {/* <div className="flex items-center space-x-2">
-              <Switch
-                id="barnumbers"
-                checked={showBarNumbers}
-                onCheckedChange={setShowBarNumbers}
-              />
-              <label htmlFor="barnumbers" className="text-sm font-medium">
-                Show bar numbers
-              </label>
-            </div> */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="measurenumbers"
+                  checked={showBarNumbers}
+                  onCheckedChange={setShowBarNumbers}
+                />
+                <label htmlFor="measurenumbers" className="text-sm font-medium">
+                  Show measure numbers
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Drum Fills Section - Only in development */}
           {process.env.NODE_ENV === 'development' && detectedFills.length > 0 && (
             <div className="space-y-2 pt-4 border-t">
               <label className="text-sm font-medium">Drum Fills ({detectedFills.length})</label>
-              <div className="space-y-1 max-h-40 overflow-y-auto">
+              <div className="space-y-1 overflow-y-auto">
                 {detectedFills.map((fill) => (
                   <div
                     key={fill.fillNumber}
@@ -633,18 +652,29 @@ export default function Renderer({
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium">Fill #{fill.fillNumber}</div>
                       <div className="text-xs text-muted-foreground">
-                        {Math.round(fill.startTimeMs / 1000)}s • {Math.round(fill.durationMs / 1000)}s duration
+                        Measure {fill.measureNumber} • {Math.round(fill.startTimeMs / 1000)}s • {Math.round(fill.durationMs / 1000)}s duration
                       </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 ml-2 flex-shrink-0"
-                      onClick={() => playFill(fill.startTimeMs)}
-                      title={`Play fill #${fill.fillNumber}`}
-                    >
-                      <Play className="h-3 w-3" />
-                    </Button>
+                    <div className="flex gap-1 ml-2 flex-shrink-0">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => playFromMeasure(fill.measureStartMs)}
+                        title={`Play from measure ${fill.measureNumber} start`}
+                      >
+                        <Play className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => playFill(fill.startTimeMs)}
+                        title={`Play from fill #${fill.fillNumber} start`}
+                      >
+                        <Play className="h-3 w-3 fill-current" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
