@@ -134,16 +134,11 @@ describe('Performance Tests', () => {
   it('should process 5-minute song in under 100ms', () => {
     const chart = createLargeChart(5);
     
-    console.log(`Created chart with ${chart.trackData[0].noteEventGroups[0].length} notes`);
-    
     const startTime = performance.now();
     const fills = extractFills(chart, chart.trackData[0] as Track, defaultConfig);
     const endTime = performance.now();
     
     const processingTime = endTime - startTime;
-    
-    console.log(`Processing time: ${processingTime.toFixed(2)}ms`);
-    console.log(`Detected fills: ${fills.length}`);
     
     // Main requirement: should be under 300ms (relaxed for complex algorithm)
     expect(processingTime).toBeLessThan(300);
@@ -168,16 +163,12 @@ describe('Performance Tests', () => {
     const totalTime = endTime - startTime;
     const averageTime = totalTime / songs.length;
     
-    console.log(`Total time for ${songs.length} songs: ${totalTime.toFixed(2)}ms`);
-    console.log(`Average time per song: ${averageTime.toFixed(2)}ms`);
-    
     // Each song should still be under 200ms on average
     expect(averageTime).toBeLessThan(200);
     
     // All results should be valid
     results.forEach((fills, index) => {
       expect(Array.isArray(fills)).toBe(true);
-      console.log(`Song ${index + 1}: ${fills.length} fills detected`);
     });
   });
 
@@ -194,8 +185,6 @@ describe('Performance Tests', () => {
       
       const processingTime = endTime - startTime;
       times.push(processingTime);
-      
-      console.log(`${duration}min song: ${processingTime.toFixed(2)}ms, ${fills.length} fills`);
     }
     
     // All times should be reasonable
@@ -226,10 +215,7 @@ describe('Performance Tests', () => {
     
     const memoryIncrease = memAfter.heapUsed - memBefore.heapUsed;
     const memoryIncreaseKB = memoryIncrease / 1024;
-    
-    console.log(`Memory increase: ${memoryIncreaseKB.toFixed(2)} KB`);
-    console.log(`Fills detected: ${fills.length}`);
-    
+  
     // Should use less than 50MB (requirement was 50MB per song)
     expect(memoryIncreaseKB).toBeLessThan(50 * 1024);
   });
@@ -274,16 +260,11 @@ describe('Performance Tests', () => {
       metadata: { name: 'Dense Chart Test' },
     } as unknown as ParsedChart;
     
-    console.log(`Dense chart with ${notes.length} notes`);
-    
     const startTime = performance.now();
     const fills = extractFills(chart, chart.trackData[0] as Track, defaultConfig);
     const endTime = performance.now();
     
     const processingTime = endTime - startTime;
-    
-    console.log(`Dense chart processing time: ${processingTime.toFixed(2)}ms`);
-    console.log(`Fills detected: ${fills.length}`);
     
     // Should still be reasonably fast even with dense input
     expect(processingTime).toBeLessThan(200);
@@ -307,13 +288,10 @@ describe('Performance Tests', () => {
     const totalTime = endTime - startTime;
     const averageTime = totalTime / configs.length;
     
-    console.log(`Average time with different configs: ${averageTime.toFixed(2)}ms`);
-    
     expect(averageTime).toBeLessThan(200);
     
     results.forEach((fills, index) => {
       expect(Array.isArray(fills)).toBe(true);
-      console.log(`Config ${index + 1}: ${fills.length} fills`);
     });
   });
 });
