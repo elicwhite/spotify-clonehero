@@ -3,7 +3,7 @@
  */
 
 import { DrumVoice } from './types';
-import { NoteType } from 'scan-chart';
+import {NoteType, noteFlags, noteTypes} from 'scan-chart';
 
 // Re-export DrumVoice for use in other modules
 export { DrumVoice };
@@ -40,19 +40,55 @@ export const ROCK_BAND_4_DRUM_MAP: Record<number, DrumVoice> = {
 const DEFAULT_DRUM_MAP = CLONE_HERO_DRUM_MAP;
 
 /**
+ * Maps scan-chart NoteType enum values to DrumVoice, handling both 4-lane (RB), 4-lane pro, and 5-lane.
+ */
+export function mapScanChartNoteToVoice(noteType: NoteType, drumType: 0 | 1 | 2 | null = null, flags: number = 0): DrumVoice {
+  // Prefer explicit mapping of drum-specific note types that scan-chart emits
+  const {
+    kick,
+    redDrum,
+    yellowDrum,
+    blueDrum,
+    greenDrum,
+  } = noteTypes;
+
+  if (noteType === kick) return DrumVoice.KICK;
+  if (noteType === redDrum) return DrumVoice.SNARE;
+
+  // drumType: 0=fourLane, 1=fourLanePro, 2=fiveLane
+  if (noteType === yellowDrum) {
+    // Yellow: hi-hat/ride if cymbal flag, otherwise tom
+    return (flags & noteFlags.cymbal) ? DrumVoice.HAT : DrumVoice.TOM;
+  }
+  if (noteType === blueDrum) {
+    return (flags & noteFlags.cymbal) ? DrumVoice.CYMBAL : DrumVoice.TOM;
+  }
+  if (noteType === greenDrum) {
+    return (flags & noteFlags.cymbal) ? DrumVoice.CYMBAL : DrumVoice.TOM;
+  }
+
+  // Fallback to legacy mapping if type matches 0..5
+  if (noteType in CLONE_HERO_DRUM_MAP) {
+    return CLONE_HERO_DRUM_MAP[noteType as unknown as number];
+  }
+  return DrumVoice.UNKNOWN;
+}
+
+/**
  * Maps a NoteType to its corresponding drum voice category
  */
 export function mapNoteToVoice(noteType: NoteType, customMap?: Record<number, DrumVoice>): DrumVoice {
   const drumMap = customMap || DEFAULT_DRUM_MAP;
-  return drumMap[noteType] || DrumVoice.UNKNOWN;
+  return drumMap[noteType as unknown as number] || DrumVoice.UNKNOWN;
 }
 
 /**
  * Groups notes by their voice categories
  */
 export function groupNotesByVoice(
-  notes: { type: NoteType }[], 
-  customMap?: Record<number, DrumVoice>
+  notes: { type: NoteType; flags?: number }[],
+  customMap?: Record<number, DrumVoice>,
+  drumType: 0 | 1 | 2 | null = null
 ): Record<DrumVoice, { type: NoteType }[]> {
   const groups: Record<DrumVoice, { type: NoteType }[]> = {
     [DrumVoice.KICK]: [],
@@ -64,7 +100,7 @@ export function groupNotesByVoice(
   };
 
   for (const note of notes) {
-    const voice = mapNoteToVoice(note.type, customMap);
+    const voice = mapScanChartNoteToVoice(note.type, drumType, note.flags ?? 0) || mapNoteToVoice(note.type, customMap);
     groups[voice].push(note);
   }
 
@@ -75,10 +111,11 @@ export function groupNotesByVoice(
  * Counts notes by voice category
  */
 export function countNotesByVoice(
-  notes: { type: NoteType }[], 
-  customMap?: Record<number, DrumVoice>
+  notes: { type: NoteType }[],
+  customMap?: Record<number, DrumVoice>,
+  drumType: 0 | 1 | 2 | null = null
 ): Record<DrumVoice, number> {
-  const groups = groupNotesByVoice(notes, customMap);
+  const groups = groupNotesByVoice(notes, customMap, drumType);
   
   return {
     [DrumVoice.KICK]: groups[DrumVoice.KICK].length,

@@ -20,6 +20,7 @@ import {
   TimeSignature
 } from './types';
 import { validateConfig, defaultConfig } from './config';
+import { mapScanChartNoteToVoice, DrumVoice } from './drumLaneMap';
 import { validateTempos, buildTempoMap } from './utils/tempoUtils';
 import { getWindowBoundaries } from './quantize';
 import { createAnalysisWindows, extractFeaturesFromWindows } from './features/windowStats';
@@ -56,21 +57,16 @@ function calculateMeasures(chart: ParsedChart, tempoMap: TempoEvent[]): MeasureI
   );
 
   let measureNumber = 1;
-  let startTick = 0;
 
   chart.timeSignatures.forEach((timeSig, index) => {
     const pulsesPerDivision = ppq / (timeSig.denominator / 4);
-    const totalTimeSigTicks =
-      (chart.timeSignatures[index + 1]?.tick ?? endOfTrackTicks) - timeSig.tick;
+    const barTicks = timeSig.numerator * pulsesPerDivision;
+    const segmentEndTick = (chart.timeSignatures[index + 1]?.tick ?? endOfTrackTicks);
+    let startTick = timeSig.tick;
 
-    const numberOfMeasures = Math.ceil(
-      totalTimeSigTicks / pulsesPerDivision / timeSig.numerator,
-    );
+    while (startTick < segmentEndTick) {
+      const endTick = startTick + barTicks;
 
-    for (let measure = 0; measure < numberOfMeasures; measure++) {
-      const endTick = startTick + timeSig.numerator * pulsesPerDivision;
-      
-      // Convert ticks to milliseconds using tempo map
       const startMs = tickToMs(startTick, tempoMap, ppq);
       const endMs = tickToMs(endTick, tempoMap, ppq);
 
@@ -244,7 +240,7 @@ export function extractFills(
   const candidateWindows = detectCandidateWindows(featuredWindows, config);
   
   // Post-process candidates (remove isolated, apply constraints)
-  const processedWindows = postProcessCandidates(candidateWindows, config);
+  const processedWindows = postProcessCandidates(candidateWindows, config, chart.resolution);
   
   // Merge candidate windows into segments
   const rawSegments = mergeWindowsIntoSegments(
@@ -267,8 +263,16 @@ export function extractFills(
   // Calculate measures and enrich segments with measure information
   const measures = calculateMeasures(chart, tempoMap);
   const enrichedSegments = finalSegments.map(segment => {
+    // If segment already contains measure fields (computed from anchor tick), preserve them
+    if (
+      (segment as any).measureStartTick !== undefined &&
+      (segment as any).measureEndTick !== undefined &&
+      (segment as any).measureNumber !== undefined
+    ) {
+      return segment;
+    }
+
     const measure = findMeasureForTick(segment.startTick, measures);
-    
     if (measure) {
       return {
         ...segment,
@@ -278,17 +282,17 @@ export function extractFills(
         measureEndMs: measure.endMs,
         measureNumber: measure.measureNumber,
       };
-    } else {
-      // Fallback if no measure found (shouldn't happen, but safety first)
-      return {
-        ...segment,
-        measureStartTick: segment.startTick,
-        measureEndTick: segment.endTick,
-        measureStartMs: segment.startMs,
-        measureEndMs: segment.endMs,
-        measureNumber: 1,
-      };
     }
+
+    // Fallback if no measure found (shouldn't happen, but safety first)
+    return {
+      ...segment,
+      measureStartTick: segment.startTick,
+      measureEndTick: segment.endTick,
+      measureStartMs: segment.startMs,
+      measureEndMs: segment.endMs,
+      measureNumber: 1,
+    };
   });
   
   return enrichedSegments;

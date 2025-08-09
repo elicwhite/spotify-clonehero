@@ -31,7 +31,9 @@ export function computeWindowFeatures(
   const noteDensity = notes.length / windowDurationBeats;
   
   // Voice-based counts
-  const voiceCounts = countNotesByVoice(notes);
+  // Thread through chart drum type when available on window (AnalysisWindow doesn't currently carry it,
+  // so pass null which triggers scan-chart aware mapping using drum-specific note types)
+  const voiceCounts = countNotesByVoice(notes, undefined, null);
   const totalNotes = notes.length;
   
   // Calculate ratios (avoid division by zero)

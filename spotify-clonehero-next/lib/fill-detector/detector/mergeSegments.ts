@@ -95,7 +95,7 @@ function mergeNearbySegments(
   if (segments.length <= 1) return segments;
   
   const mergedSegments: CandidateSegment[] = [];
-  const mergeGapTicks = (config.thresholds?.mergeGapBeats || 0.25) * resolution;
+  const mergeGapTicks = (config.thresholds?.mergeGapBeats || 0.2) * resolution;
   
   let currentSegment = segments[0];
   
@@ -135,10 +135,12 @@ function filterSegmentsByDuration(
     const durationTicks = segment.endTick - segment.startTick;
     const durationBeats = ticksToBeats(durationTicks, resolution);
     
-    return durationBeats >= (config.thresholds?.minBeats || 0.75) && 
+    return durationBeats >= (config.thresholds?.minBeats || 1.0) && 
            durationBeats <= (config.thresholds?.maxBeats || 4);
   });
 }
+
+// Removed content-alignment step to avoid unintended start shifts
 
 /**
  * Converts candidate segments to final FillSegment format
@@ -159,6 +161,38 @@ function convertToFillSegments(
     
     // Aggregate features from all windows in the segment
     const aggregatedFeatures = aggregateSegmentFeatures(segment.windows);
+
+    // Determine an anchor tick to decide the measure: prefer the first TOM/CYMBAL-heavy onset
+    // within a 1-beat window; fallback to first note tick.
+    const oneBeat = resolution;
+    let firstNoteTick: number | null = null;
+    let tomAnchorTick: number | null = null;
+    
+    const allNotes = segment.windows.flatMap(w => w.notes)
+      .filter(n => n.tick >= segment.startTick && n.tick <= segment.endTick)
+      .sort((a,b) => a.tick - b.tick);
+    
+    for (const note of allNotes) {
+      if (firstNoteTick === null) firstNoteTick = note.tick;
+      // Look ahead 1 beat from this note and compute tom ratio
+      const windowNotes = allNotes.filter(n => n.tick >= note.tick && n.tick < note.tick + oneBeat);
+      if (windowNotes.length >= 3) {
+        const tomCount = windowNotes.filter(n => n.type === 3 || n.type === 5 || n.type === 4).length; // toms/crashes
+        const ratio = tomCount / windowNotes.length;
+        if (ratio >= 0.5) { // tom-heavy
+          tomAnchorTick = note.tick;
+          break;
+        }
+      }
+    }
+    const anchorTick = tomAnchorTick ?? firstNoteTick ?? segment.startTick;
+
+    // Compute measure based on anchor tick (assume 4/4 default)
+    const barTicks = 4 * resolution;
+    const measureIndex = Math.floor(anchorTick / barTicks); // 0-based
+    const measureStartTick = measureIndex * barTicks;
+    const measureEndTick = measureStartTick + barTicks;
+    const measureTimes = tickRangeToMs(measureStartTick, measureEndTick, tempos, resolution);
     
     return {
       songId,
@@ -166,12 +200,12 @@ function convertToFillSegments(
       endTick: segment.endTick,
       startMs,
       endMs,
-      // Measure fields are enriched later in the pipeline; set sensible defaults
-      measureStartTick: segment.startTick,
-      measureEndTick: segment.endTick,
-      measureStartMs: startMs,
-      measureEndMs: endMs,
-      measureNumber: 1,
+      // Measure is defined by where the first beat of the fill takes place
+      measureStartTick,
+      measureEndTick,
+      measureStartMs: measureTimes.startMs,
+      measureEndMs: measureTimes.endMs,
+      measureNumber: measureIndex + 1,
       ...aggregatedFeatures,
     };
   });
@@ -240,9 +274,10 @@ export function refineBoundaries(
   tempos: TempoEvent[]
 ): FillSegment[] {
   return segments.map(segment => {
-    // Attempt to align boundaries to beat or measure boundaries
-    const alignedStart = alignToNearestBeat(segment.startTick, resolution);
-    const alignedEnd = alignToNearestBeat(segment.endTick, resolution);
+    // Keep start at or before the first hit of the fill
+    const alignedStart = alignToBeatFloor(segment.startTick, resolution);
+    // End can be snapped up to ensure we fully capture the fill
+    const alignedEnd = alignToBeatCeil(segment.endTick, resolution);
     
     // Recalculate timing with aligned boundaries
     const { startMs, endMs } = tickRangeToMs(alignedStart, alignedEnd, tempos, resolution);
@@ -260,8 +295,12 @@ export function refineBoundaries(
 /**
  * Aligns a tick to the nearest beat boundary
  */
-function alignToNearestBeat(tick: number, resolution: number): number {
-  return Math.round(tick / resolution) * resolution;
+function alignToBeatCeil(tick: number, resolution: number): number {
+  return Math.ceil(tick / resolution) * resolution;
+}
+
+function alignToBeatFloor(tick: number, resolution: number): number {
+  return Math.floor(tick / resolution) * resolution;
 }
 
 /**

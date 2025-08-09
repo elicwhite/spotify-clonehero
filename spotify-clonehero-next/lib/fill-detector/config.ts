@@ -11,12 +11,12 @@ export const defaultConfig: ValidatedConfig = {
   strideBeats: 0.25,
   lookbackBars: 8,
   thresholds: {
-    densityZ: 1.2,
-    dist: 2.0,
-    tomJump: 1.5,
+    densityZ: 1.3,
+    dist: 2.2,
+    tomJump: 1.6,
     minBeats: 0.75,
     maxBeats: 4,
-    mergeGapBeats: 0.25,
+    mergeGapBeats: 0.2,
     burstMs: 120,
   },
 };
