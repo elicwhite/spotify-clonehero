@@ -16,7 +16,7 @@ import debounce from 'debounce';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
-export interface PracticeMode {
+export interface PracticeModeConfig {
   startMeasureMs: number;
   endMeasureMs: number;
   startTimeMs: number; // 2 seconds before start measure
@@ -44,7 +44,7 @@ export default function SheetMusic({
   showLyrics: boolean;
   onSelectMeasure: (time: number) => void;
   triggerRerender: boolean;
-  practiceMode: PracticeMode | null;
+  practiceMode: PracticeModeConfig | null;
   onPracticeMeasureSelect: (measureStartMs: number) => void;
   isPracticeModeActive: boolean;
 }) {

@@ -45,7 +45,7 @@ import {getBasename} from '@/lib/src-shared/utils';
 import {cn} from '@/lib/utils';
 import SheetMusic from './SheetMusic';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
-import {AudioManager, PracticeMode} from '@/lib/preview/audioManager';
+import {AudioManager, PracticeModeConfig} from '@/lib/preview/audioManager';
 import CloneHeroRenderer from './CloneHeroRenderer';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -136,7 +136,7 @@ export default function Renderer({
   }>>([]);
 
   // Practice mode state
-  const [practiceMode, setPracticeMode] = useState<PracticeMode | null>(null);
+  const [practiceMode, setPracticeMode] = useState<PracticeModeConfig | null>(null);
   const [isPracticeModeActive, setIsPracticeModeActive] = useState(false);
   const [practiceModeStep, setPracticeModeStep] = useState<'idle' | 'selectingStart' | 'selectingEnd'>('idle');
 
@@ -574,7 +574,7 @@ export default function Renderer({
     } else if (practiceModeStep === 'selectingEnd') {
       // Set end measure and complete practice mode setup
       const endMeasureMs = measureStartMs;
-      const updatedPracticeMode: PracticeMode = {
+      const updatedPracticeMode: PracticeModeConfig = {
         startMeasureMs: practiceMode!.startMeasureMs,
         endMeasureMs: endMeasureMs,
         startTimeMs: Math.max(0, practiceMode!.startMeasureMs - 2000), // 2 seconds before
