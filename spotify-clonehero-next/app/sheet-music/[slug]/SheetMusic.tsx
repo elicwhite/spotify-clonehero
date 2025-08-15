@@ -16,6 +16,13 @@ import debounce from 'debounce';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
+export interface PracticeMode {
+  startMeasureMs: number;
+  endMeasureMs: number;
+  startTimeMs: number; // 2 seconds before start measure
+  endTimeMs: number;   // 2 seconds after end measure
+}
+
 export default function SheetMusic({
   chart,
   track,
@@ -25,6 +32,9 @@ export default function SheetMusic({
   showLyrics,
   onSelectMeasure,
   triggerRerender,
+  practiceMode,
+  onPracticeMeasureSelect,
+  isPracticeModeActive,
 }: {
   chart: ParsedChart;
   track: ParsedChart['trackData'][0];
@@ -34,6 +44,9 @@ export default function SheetMusic({
   showLyrics: boolean;
   onSelectMeasure: (time: number) => void;
   triggerRerender: boolean;
+  practiceMode: PracticeMode | null;
+  onPracticeMeasureSelect: (measureStartMs: number) => void;
+  isPracticeModeActive: boolean;
 }) {
   const vexflowContainerRef = useRef<HTMLDivElement>(null!);
   const [windowWidth, setWindowWidth] = useState<number>(window.innerWidth);
@@ -132,6 +145,18 @@ export default function SheetMusic({
 
   const measureHighlights = renderData.map(({measure, stave}, index) => {
     const isHighlighted = index === highlightedMeasureIndex;
+    
+    // Determine if this measure is in practice mode range
+    let isInPracticeRange = false;
+    let isPracticeStart = false;
+    let isPracticeEnd = false;
+    
+    if (practiceMode) {
+      isInPracticeRange = measure.startMs >= practiceMode.startTimeMs && measure.endMs <= practiceMode.endTimeMs;
+      isPracticeStart = Math.abs(measure.startMs - practiceMode.startMeasureMs) < 100; // Within 100ms
+      isPracticeEnd = Math.abs(measure.endMs - practiceMode.endMeasureMs) < 100; // Within 100ms
+    }
+
     return (
       <MeasureHighlight
         key={index}
@@ -143,8 +168,16 @@ export default function SheetMusic({
           height: stave.getHeight(),
         }}
         highlighted={isHighlighted}
+        isInPracticeRange={isInPracticeRange}
+        isPracticeStart={isPracticeStart}
+        isPracticeEnd={isPracticeEnd}
+        isPracticeModeActive={isPracticeModeActive}
         onClick={() => {
-          onSelectMeasure(measure.startMs / 1000);
+          if (isPracticeModeActive) {
+            onPracticeMeasureSelect(measure.startMs);
+          } else {
+            onSelectMeasure(measure.startMs / 1000);
+          }
         }}
       />
     );
@@ -163,18 +196,27 @@ export default function SheetMusic({
 interface MeasureHighlightProps {
   style?: React.CSSProperties;
   highlighted?: boolean;
+  isInPracticeRange?: boolean;
+  isPracticeStart?: boolean;
+  isPracticeEnd?: boolean;
+  isPracticeModeActive?: boolean;
   onClick?: () => void;
 }
 
 const MeasureHighlight = forwardRef<HTMLButtonElement, MeasureHighlightProps>(
-  ({style, highlighted, onClick}, ref) => {
+  ({style, highlighted, isInPracticeRange, isPracticeStart, isPracticeEnd, isPracticeModeActive, onClick}, ref) => {
     return (
       <button
         ref={ref}
         className={cn(
-          'absolute z-[1] rounded-md border-0 bg-transparent cursor-pointer',
+          'absolute z-[1] rounded-md border-0 bg-transparent cursor-pointer transition-all duration-200',
           highlighted && 'bg-primary/10 shadow-md',
           'hover:bg-muted/10 hover:shadow-sm',
+          // Practice mode styling
+          isPracticeModeActive && !isInPracticeRange && 'opacity-30',
+          isInPracticeRange && 'opacity-100',
+          isPracticeStart && 'ring-2 ring-green-500 ring-opacity-70',
+          isPracticeEnd && 'ring-2 ring-red-500 ring-opacity-70',
         )}
         style={style}
         onClick={onClick}

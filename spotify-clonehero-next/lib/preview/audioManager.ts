@@ -6,6 +6,13 @@ type GroupedFile = {
   datas: Uint8Array[];
 }[];
 
+export interface PracticeMode {
+  startMeasureMs: number;
+  endMeasureMs: number;
+  startTimeMs: number; // 2 seconds before start measure
+  endTimeMs: number;   // 2 seconds after end measure
+}
+
 export class AudioManager {
   #context: AudioContext;
 
@@ -17,6 +24,8 @@ export class AudioManager {
   #tracks: {[trackName: string]: AudioTrack} = {};
   #isInitialized: boolean = false;
   #onSongEnded: (() => void) | null;
+  #practiceMode: PracticeMode | null = null;
+  #isPracticeMode: boolean = false;
 
   ready: Promise<void>;
 
@@ -103,7 +112,7 @@ export class AudioManager {
 
   async play({percent, time}: {percent?: number; time?: number}) {
     if (percent == null && time == null) {
-      throw new Error('Must provide percent or ms');
+      throw new Error('Must provide percent or time');
     }
     if (this.#isInitialized) {
       await this.stop();
@@ -178,13 +187,46 @@ export class AudioManager {
     this.#context.close();
   }
 
+  setPracticeMode(practiceMode: PracticeMode | null) {
+    this.#practiceMode = practiceMode;
+    this.#isPracticeMode = practiceMode !== null;
+  }
+
+  getPracticeMode(): PracticeMode | null {
+    return this.#practiceMode;
+  }
+
+  isPracticeMode(): boolean {
+    return this.#isPracticeMode;
+  }
+
   #handleTrackEnded() {
     if (Object.values(this.#tracks).some(track => track.ended === false)) {
       return;
     }
 
+    // If in practice mode, loop back to start of practice section
+    if (this.#isPracticeMode && this.#practiceMode) {
+      this.play({ time: this.#practiceMode.startTimeMs / 1000 });
+      return;
+    }
+
     this.stop();
     this.#onSongEnded?.();
+  }
+
+  // Check if we need to loop in practice mode
+  checkPracticeModeLoop() {
+    if (!this.#isPracticeMode || !this.#practiceMode || !this.#isInitialized) {
+      return;
+    }
+
+    const currentTimeMs = this.currentTime * 1000;
+    
+    // If we've reached the end of the practice section, loop back
+    if (currentTimeMs >= this.#practiceMode.endTimeMs) {
+      this.play({ time: this.#practiceMode.startTimeMs / 1000 });
+    }
   }
 }
 

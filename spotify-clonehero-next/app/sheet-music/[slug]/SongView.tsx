@@ -28,6 +28,7 @@ import {
   Menu,
   X,
   Settings2,
+  Target,
 } from 'lucide-react';
 import {
   useCallback,
@@ -44,7 +45,7 @@ import {getBasename} from '@/lib/src-shared/utils';
 import {cn} from '@/lib/utils';
 import SheetMusic from './SheetMusic';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
-import {AudioManager} from '@/lib/preview/audioManager';
+import {AudioManager, PracticeMode} from '@/lib/preview/audioManager';
 import CloneHeroRenderer from './CloneHeroRenderer';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -57,6 +58,7 @@ import quarterNote from '@/public/assets/svgs/quarter-note.svg';
 import eighthNote from '@/public/assets/svgs/eighth-note.svg';
 import tripletNote from '@/public/assets/svgs/triplet-note.svg';
 import {extractFills, defaultConfig} from '@/lib/fill-detector';
+import {toast} from '@/components/ui/toast';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -132,6 +134,11 @@ export default function Renderer({
     measureStartMs: number;
     measureNumber: number;
   }>>([]);
+
+  // Practice mode state
+  const [practiceMode, setPracticeMode] = useState<PracticeMode | null>(null);
+  const [isPracticeModeActive, setIsPracticeModeActive] = useState(false);
+  const [practiceModeStep, setPracticeModeStep] = useState<'idle' | 'selectingStart' | 'selectingEnd'>('idle');
 
   const availableDifficulties = getDrumDifficulties(chart);
   const [selectedDifficulty, setSelectedDifficulty] = useState(
@@ -374,6 +381,11 @@ export default function Renderer({
   useInterval(
     () => {
       setCurrentPlayback(audioManagerRef.current?.currentTime ?? 0);
+      
+      // Check for practice mode looping
+      if (audioManagerRef.current && isPlaying) {
+        audioManagerRef.current.checkPracticeModeLoop();
+      }
     },
     isPlaying ? 100 : null,
   );
@@ -504,6 +516,82 @@ export default function Renderer({
     audioManagerRef.current.play({time: timeInSeconds});
     setIsPlaying(true);
   }, []);
+
+  // Modify the play function to handle practice mode
+  const handlePlay = useCallback(() => {
+    if (!audioManagerRef.current) {
+      return;
+    }
+
+    if (isPlaying) {
+      audioManagerRef.current.pause();
+      setIsPlaying(false);
+    } else if (!audioManagerRef.current.isInitialized) {
+      // If in practice mode, start from practice start time
+      if (practiceMode && isPracticeModeActive) {
+        audioManagerRef.current.play({ time: practiceMode.startTimeMs / 1000 });
+      } else {
+        audioManagerRef.current.play({ time: 0 });
+      }
+      setIsPlaying(true);
+    } else {
+      audioManagerRef.current.resume();
+      setIsPlaying(true);
+    }
+  }, [isPlaying, practiceMode, isPracticeModeActive]);
+
+  // Practice mode functions
+  const startPracticeMode = useCallback(() => {
+    setPracticeModeStep('selectingStart');
+    setIsPracticeModeActive(true);
+    toast.info('Choose the starting measure');
+  }, []);
+
+  const endPracticeMode = useCallback(() => {
+    setPracticeMode(null);
+    setIsPracticeModeActive(false);
+    setPracticeModeStep('idle');
+    
+    // Update audio manager
+    if (audioManagerRef.current) {
+      audioManagerRef.current.setPracticeMode(null);
+    }
+    
+    toast.info('Practice mode ended');
+  }, []);
+
+  const handlePracticeMeasureSelect = useCallback((measureStartMs: number) => {
+    if (practiceModeStep === 'selectingStart') {
+      // Set start measure and move to selecting end
+      setPracticeMode({
+        startMeasureMs: measureStartMs,
+        endMeasureMs: 0,
+        startTimeMs: Math.max(0, measureStartMs - 2000), // 2 seconds before
+        endTimeMs: 0,
+      });
+      setPracticeModeStep('selectingEnd');
+      toast.info('Choose the ending measure');
+    } else if (practiceModeStep === 'selectingEnd') {
+      // Set end measure and complete practice mode setup
+      const endMeasureMs = measureStartMs;
+      const updatedPracticeMode: PracticeMode = {
+        startMeasureMs: practiceMode!.startMeasureMs,
+        endMeasureMs: endMeasureMs,
+        startTimeMs: Math.max(0, practiceMode!.startMeasureMs - 2000), // 2 seconds before
+        endTimeMs: endMeasureMs + 2000, // 2 seconds after
+      };
+      
+      setPracticeMode(updatedPracticeMode);
+      setPracticeModeStep('idle');
+      
+      // Update audio manager
+      if (audioManagerRef.current) {
+        audioManagerRef.current.setPracticeMode(updatedPracticeMode);
+      }
+      
+      toast.success('Practice mode configured! Click play to start practicing.');
+    }
+  }, [practiceModeStep, practiceMode]);
 
   const songDuration =
     metadata.song_length == null ? 5 * 60 : metadata.song_length / 1000;
@@ -637,24 +725,7 @@ export default function Renderer({
       size="icon"
       variant="secondary"
       className="rounded-full"
-      onClick={() => {
-        if (!audioManagerRef.current) {
-          return;
-        }
-
-        if (isPlaying) {
-          audioManagerRef.current.pause();
-          setIsPlaying(false);
-        } else if (!audioManagerRef.current.isInitialized) {
-          audioManagerRef.current.play({
-            time: 0,
-          });
-          setIsPlaying(true);
-        } else {
-          audioManagerRef.current.resume();
-          setIsPlaying(true);
-        }
-      }}>
+      onClick={handlePlay}>
       {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
     </Button>
   );
@@ -667,6 +738,25 @@ export default function Renderer({
       onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
       {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
     </Button>
+  );
+
+  // Add practice mode button to the sidebar
+  const practiceModeButton = (
+    <div className="space-y-2 pt-4 border-t">
+      <Button
+        variant={isPracticeModeActive ? "destructive" : "default"}
+        className="w-full"
+        onClick={isPracticeModeActive ? endPracticeMode : startPracticeMode}
+      >
+        <Target className="h-4 w-4 mr-2" />
+        {isPracticeModeActive ? 'End Practice' : 'Practice'}
+      </Button>
+      {isPracticeModeActive && practiceMode && (
+        <div className="text-xs text-muted-foreground text-center">
+          Practice Range: {Math.round(practiceMode.startTimeMs / 1000)}s - {Math.round(practiceMode.endTimeMs / 1000)}s
+        </div>
+      )}
+    </div>
   );
 
   return (
@@ -785,6 +875,9 @@ export default function Renderer({
             )}
           </div>
 
+          {/* Practice Mode Button */}
+          {practiceModeButton}
+
           {/* Drum Fills Section - Only in development */}
           {process.env.NODE_ENV === 'development' && detectedFills.length > 0 && (
             <div className="space-y-2 pt-4 border-t">
@@ -895,6 +988,9 @@ export default function Renderer({
                   setIsPlaying(true);
                 }}
                 triggerRerender={viewCloneHero}
+                practiceMode={practiceMode}
+                onPracticeMeasureSelect={handlePracticeMeasureSelect}
+                isPracticeModeActive={isPracticeModeActive}
               />
             </div>
             {viewCloneHero && (
@@ -943,16 +1039,16 @@ export function AudioVolume({
   onChange,
   isMuted,
   isSoloed,
-  onSoloClick,
   onMuteClick,
+  onSoloClick,
 }: {
   name: string;
   volume: number;
   isMuted: boolean;
   isSoloed: boolean;
   onChange: (value: number) => void;
-  onSoloClick: () => void;
   onMuteClick: () => void;
+  onSoloClick: () => void;
 }) {
   return (
     <div key={name} className="space-y-2">
