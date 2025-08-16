@@ -292,8 +292,15 @@ function renderMeasure(
 ) {
   const stave = new Stave(xOffset, yOffset, staveWidth);
 
+  // Check if this measure should be muted for practice mode
+  let shouldMute = false;
+  if (practiceModeConfig?.startTimeMs && practiceModeConfig?.endTimeMs) {
+    const isInPracticeRange = measure.startMs >= practiceModeConfig.startTimeMs && measure.endMs <= practiceModeConfig.endTimeMs;
+    shouldMute = !isInPracticeRange;
+  }
+
   const inactive_measure_color = 'rgba(0, 0, 0, 0.3)';
-  const fill_color = practiceModeConfig == null ? undefined: inactive_measure_color;
+  const fill_color = shouldMute ? inactive_measure_color : undefined;
   
   context.fillStyle = fill_color ?? '';
   context.strokeStyle = fill_color ?? '';
@@ -388,7 +395,8 @@ function renderMeasure(
 
     if (enableColors) {
       staveNote.keys.forEach((n, idx) => {
-        staveNote.setKeyStyle(idx, {fillStyle: NOTE_COLOR_MAP[n]+"4D"});
+        const suffix = shouldMute ? '4D' : '';
+        staveNote.setKeyStyle(idx, {fillStyle: NOTE_COLOR_MAP[n]+suffix});
       });
     }
 
