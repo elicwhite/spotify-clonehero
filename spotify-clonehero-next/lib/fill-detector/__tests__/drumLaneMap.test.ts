@@ -17,11 +17,7 @@ import {
 } from '../drumLaneMap';
 import { DrumVoice } from '../types';
 import type { NoteType } from 'scan-chart';
-// Access runtime enums from scan-chart for robust fixture validation
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const scanChart = require('scan-chart/dist/index.js');
-const noteTypes: Record<string, number> = scanChart.noteTypes || {};
-const noteFlags: Record<string, number> = scanChart.noteFlags || {};
+import {noteTypes, noteFlags} from 'scan-chart';
 
 describe('Drum Lane Mapping', () => {
   describe('mapNoteToVoice', () => {
