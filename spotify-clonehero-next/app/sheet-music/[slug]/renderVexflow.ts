@@ -17,6 +17,7 @@ import {
   RepeatNote,
 } from 'vexflow';
 import {Measure} from './convertToVexflow';
+import {PracticeModeConfig} from '@/lib/preview/audioManager';
 
 export interface RenderData {
   stave: Stave;
@@ -69,6 +70,7 @@ export function renderMusic(
   lyrics: {tick: number; text: string; msTime: number}[] = [],
   showBarNumbers: boolean = true,
   enableColors: boolean = false,
+  practiceModeConfig?: PracticeModeConfig | null,
 ): RenderData[] {
   if (!elementRef.current) {
     return [];
@@ -249,9 +251,8 @@ export function renderMusic(
     processedLyricsMap.set(measureIndex, processed);
   });
 
-  return measures.map((measure, index) => ({
-    measure,
-    stave: renderMeasure(
+  return measures.map((measure, index) => {
+    const stave = renderMeasure(
       context,
       measure,
       index,
@@ -264,8 +265,14 @@ export function renderMusic(
       sectionMap.get(index), // Pass section name if this measure starts a new section
       processedLyricsMap.get(index), // Pass processed lyrics if this measure contains lyrics
       index > 0 ? measures[index - 1] : undefined, // Pass previous measure for repeat detection
-    ),
-  }));
+      practiceModeConfig, // Pass practice mode configuration
+    );
+
+    return {
+      measure,
+      stave,
+    };
+  });
 }
 
 function renderMeasure(
@@ -281,8 +288,15 @@ function renderMeasure(
   sectionName?: string,
   lyrics?: {text: string; position: number}[],
   previousMeasure?: Measure,
+  practiceModeConfig?: PracticeModeConfig | null,
 ) {
   const stave = new Stave(xOffset, yOffset, staveWidth);
+
+  const inactive_measure_color = 'rgba(0, 0, 0, 0.3)';
+  const fill_color = practiceModeConfig == null ? undefined: inactive_measure_color;
+  
+  context.fillStyle = fill_color ?? '';
+  context.strokeStyle = fill_color ?? '';
 
   if (endMeasure) {
     stave.setEndBarType(Barline.type.END);
@@ -305,7 +319,6 @@ function renderMeasure(
   // Render section name above the staff in bold
   if (sectionName) {
     context.setFont('Arial', 14, 'bold');
-    const textWidth = context.measureText(sectionName).width;
 
     // Position it above the staff with some offset
     const sectionX = xOffset + 5;
@@ -375,7 +388,7 @@ function renderMeasure(
 
     if (enableColors) {
       staveNote.keys.forEach((n, idx) => {
-        staveNote.setKeyStyle(idx, {fillStyle: NOTE_COLOR_MAP[n]});
+        staveNote.setKeyStyle(idx, {fillStyle: NOTE_COLOR_MAP[n]+"4D"});
       });
     }
 

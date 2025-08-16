@@ -95,6 +95,7 @@ export default function SheetMusic({
         : [],
       showBarNumbers,
       enableColors,
+      practiceModeConfig,
     );
     setRenderData(data);
 
@@ -108,6 +109,7 @@ export default function SheetMusic({
     showLyrics,
     (chart as any).lyrics,
     chart.sections,
+    practiceModeConfig,
   ]);
 
   useEffect(() => {
@@ -165,7 +167,7 @@ export default function SheetMusic({
         isInPracticeRange={isInPracticeRange}
         isPracticeStart={isPracticeStart}
         isPracticeEnd={isPracticeEnd}
-        isPracticeModeActive={practiceModeStep !== 'idle'}
+        isPracticeModeActive={practiceModeConfig !== null && practiceModeConfig.endMeasureMs > 0}
         onClick={() => {
           if (practiceModeStep === 'selectingStart') {
             // For start measure, use the start time
@@ -209,13 +211,10 @@ const MeasureHighlight = forwardRef<HTMLButtonElement, MeasureHighlightProps>(
         ref={ref}
         className={cn(
           'absolute z-[1] rounded-md border-0 bg-transparent cursor-pointer transition-all duration-200',
-          highlighted && 'bg-primary/10 shadow-md',
-          'hover:bg-muted/10 hover:shadow-sm',
-          // Practice mode styling
-          isPracticeModeActive && !isInPracticeRange && 'opacity-30',
-          isInPracticeRange && 'opacity-100',
-          isPracticeStart && 'ring-2 ring-green-500 ring-opacity-70',
-          isPracticeEnd && 'ring-2 ring-red-500 ring-opacity-70',
+          highlighted && 'bg-primary/10',
+          'hover:bg-muted/40',
+          isPracticeStart && 'border-l-4 border-green-500', 
+          isPracticeEnd && 'border-r-4 border-green-500',
         )}
         style={style}
         onClick={onClick}
