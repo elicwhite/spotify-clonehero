@@ -13,8 +13,16 @@ export interface PracticeModeConfig {
   endTimeMs: number;   // 2 seconds after end measure
 }
 
+export interface TempoConfig {
+  tempo: number;      // 0.25 to 4.0 (0.25x to 4x speed)
+  pitch: number;      // 0.25 to 4.0 (0.25x to 4x pitch)
+  rate: number;       // 0.25 to 4.0 (0.25x to 4x rate)
+}
+
 export class AudioManager {
   #context: AudioContext;
+  #soundTouchWorklet: AudioWorkletNode | null = null;
+  #tempoConfig: TempoConfig = { tempo: 1.0, pitch: 1.0, rate: 1.0 };
 
   #startedAt: number = -1;
   // What was the current time in ms when the song started
@@ -25,6 +33,11 @@ export class AudioManager {
   #isInitialized: boolean = false;
   #onSongEnded: (() => void) | null;
   #practiceModeConfig: PracticeModeConfig | null = null;
+  
+  // Track effective playback time accounting for tempo changes
+  #effectivePlayTime: number = 0;
+  #lastTempoChangeRealTime: number = 0;
+  #lastTempoChangeEffectiveTime: number = 0;
 
   ready: Promise<void>;
 
@@ -44,6 +57,9 @@ export class AudioManager {
   }
 
   async #createTracks(audioFiles: Files) {
+    // Initialize SoundTouch worklet first
+    await this.#initializeSoundTouchWorklet();
+    
     const groupedFiles: GroupedFile = audioFiles.reduce(
       (acc, file) => {
         const isDrums = file.fileName.includes('drums');
@@ -92,9 +108,141 @@ export class AudioManager {
           this.#context,
           filteredAudioBuffers,
           this.#handleTrackEnded.bind(this),
+          this.#soundTouchWorklet,
         );
       }),
     );
+  }
+
+  async #initializeSoundTouchWorklet() {
+    try {
+      // Load the SoundTouch worklet
+      await this.#context.audioWorklet.addModule('/soundtouch-worklet.js');
+      
+      // Create the worklet node
+      this.#soundTouchWorklet = new AudioWorkletNode(this.#context, 'soundtouch-processor', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [2], // Stereo output
+        processorOptions: {}
+      });
+
+      // Set initial parameters
+      const tempoParam = this.#soundTouchWorklet.parameters.get('tempo');
+      const pitchParam = this.#soundTouchWorklet.parameters.get('pitch');
+      const rateParam = this.#soundTouchWorklet.parameters.get('rate');
+      
+      if (tempoParam) tempoParam.setValueAtTime(this.#tempoConfig.tempo, this.#context.currentTime);
+      if (pitchParam) pitchParam.setValueAtTime(this.#tempoConfig.pitch, this.#context.currentTime);
+      if (rateParam) rateParam.setValueAtTime(this.#tempoConfig.rate, this.#context.currentTime);
+
+      // Connect the worklet to destination so audio can flow through
+      this.#soundTouchWorklet.connect(this.#context.destination);
+    } catch (error) {
+      console.error('Failed to initialize SoundTouch worklet:', error);
+      this.#soundTouchWorklet = null;
+    }
+  }
+
+  // Tempo control methods
+  setTempo(tempo: number) {
+    if (tempo < 0.25 || tempo > 4.0) {
+      throw new Error('Tempo must be between 0.25 and 4.0');
+    }
+
+    // Update effective play time when tempo changes
+    if (this.#isInitialized && this.#startedAt >= 0) {
+      const currentRealTime = this.#context.currentTime;
+      const timeSinceLastChange = currentRealTime - this.#lastTempoChangeRealTime;
+      
+      // When tempo is 0.5 (half speed), audio time progresses at half the rate of real time
+      const effectiveTimeSinceLastChange = timeSinceLastChange * this.#tempoConfig.tempo;
+      
+      this.#effectivePlayTime = this.#lastTempoChangeEffectiveTime + effectiveTimeSinceLastChange;
+      this.#lastTempoChangeRealTime = currentRealTime;
+      this.#lastTempoChangeEffectiveTime = this.#effectivePlayTime;
+    }
+    
+    this.#tempoConfig.tempo = tempo;
+    
+    if (this.#soundTouchWorklet) {
+      const tempoParam = this.#soundTouchWorklet.parameters.get('tempo');
+      if (tempoParam) {
+        tempoParam.setValueAtTime(tempo, this.#context.currentTime);
+      }
+    }
+
+    // Update all tracks to use the new tempo
+    Object.values(this.#tracks).forEach(track => {
+      track.setTempo(tempo);
+    });
+  }
+
+  setPitch(pitch: number) {
+    if (pitch < 0.25 || pitch > 4.0) {
+      throw new Error('Pitch must be between 0.25 and 4.0');
+    }
+
+    this.#tempoConfig.pitch = pitch;
+    
+    if (this.#soundTouchWorklet) {
+      const pitchParam = this.#soundTouchWorklet.parameters.get('pitch');
+      if (pitchParam) {
+        pitchParam.setValueAtTime(pitch, this.#context.currentTime);
+      }
+    }
+
+    // Update all tracks to use the new pitch
+    Object.values(this.#tracks).forEach(track => {
+      track.setPitch(pitch);
+    });
+  }
+
+  setRate(rate: number) {
+    if (rate < 0.25 || rate > 4.0) {
+      throw new Error('Rate must be between 0.25 and 4.0');
+    }
+
+    this.#tempoConfig.rate = rate;
+    
+    if (this.#soundTouchWorklet) {
+      const rateParam = this.#soundTouchWorklet.parameters.get('rate');
+      if (rateParam) {
+        rateParam.setValueAtTime(rate, this.#context.currentTime);
+      }
+    }
+
+    // Update all tracks to use the new rate
+    Object.values(this.#tracks).forEach(track => {
+      track.setRate(rate);
+    });
+  }
+
+  // Convenience methods for speed control
+  speedUp(factor: number = 1.25) {
+    const newTempo = Math.min(this.#tempoConfig.tempo * factor, 4.0);
+    this.setTempo(newTempo);
+    return newTempo;
+  }
+
+  slowDown(factor: number = 0.8) {
+    const newTempo = Math.max(this.#tempoConfig.tempo * factor, 0.25);
+    this.setTempo(newTempo);
+    return newTempo;
+  }
+
+  resetSpeed() {
+    this.setTempo(1.0);
+    this.setPitch(1.0);
+    this.setRate(1.0);
+  }
+
+  getTempoConfig(): TempoConfig {
+    return { ...this.#tempoConfig };
+  }
+
+  getCurrentTempo(): number {
+    return this.#tempoConfig.tempo;
   }
 
   async pause() {
@@ -123,6 +271,12 @@ export class AudioManager {
     const percentCalculated: number = percent ?? time! / songLength;
     this.#trackOffset = offset;
     this.#startedAt = currentTime;
+    
+    // Initialize tempo tracking variables
+    this.#effectivePlayTime = offset;
+    this.#lastTempoChangeRealTime = currentTime;
+    this.#lastTempoChangeEffectiveTime = offset;
+    
     Object.values(this.#tracks).forEach(track => {
       track.start(currentTime, offset);
     });
@@ -161,7 +315,16 @@ export class AudioManager {
       return 0;
     }
 
-    return this.#context.currentTime - this.#startedAt + this.#trackOffset;
+    // Calculate effective time since last tempo change
+    const currentRealTime = this.#context.currentTime;
+    const timeSinceLastChange = currentRealTime - this.#lastTempoChangeRealTime;
+    
+    // When tempo is 0.5 (half speed), audio time progresses at half the rate of real time
+    // When tempo is 2.0 (double speed), audio time progresses at double the rate of real time
+    const effectiveTimeSinceLastChange = timeSinceLastChange * this.#tempoConfig.tempo;
+    
+    // Return the effective time from the last change plus the current effective time
+    return this.#lastTempoChangeEffectiveTime + effectiveTimeSinceLastChange;
   }
 
   get isInitialized() {
@@ -174,6 +337,10 @@ export class AudioManager {
     });
 
     this.#isInitialized = false;
+    // Clear tempo tracking variables when stopping
+    this.#effectivePlayTime = 0;
+    this.#lastTempoChangeRealTime = 0;
+    this.#lastTempoChangeEffectiveTime = 0;
   }
 
   destroy() {
@@ -233,6 +400,10 @@ class AudioTrack {
   #gainNodes: GainNode[] = [];
   #audioBuffers: AudioBuffer[] = [];
   #sources: AudioBufferSourceNode[] = [];
+  #tempo: number = 1.0;
+  #pitch: number = 1.0;
+  #rate: number = 1.0;
+  #workletNode: AudioWorkletNode | null = null;
 
   #duration: number = 0;
   #onSongEnded: (() => void) | null;
@@ -244,15 +415,22 @@ class AudioTrack {
     context: AudioContext,
     audioBuffers: AudioBuffer[],
     onSongEnded: () => void,
+    workletNode?: AudioWorkletNode | null,
   ) {
     this.#context = context;
     this.#audioBuffers = audioBuffers;
     this.#onSongEnded = onSongEnded;
+    this.#workletNode = workletNode || null;
 
     this.#gainNodes = new Array(audioBuffers.length).fill(null).map(() => {
       const gainNode = this.#context.createGain();
 
-      gainNode.connect(this.#context.destination);
+      // Connect through the worklet if available, otherwise directly to destination
+      if (this.#workletNode) {
+        gainNode.connect(this.#workletNode);
+      } else {
+        gainNode.connect(this.#context.destination);
+      }
 
       return gainNode;
     });
@@ -287,6 +465,37 @@ class AudioTrack {
         this.#context.currentTime,
       );
     });
+  }
+
+  // Tempo control methods
+  setTempo(tempo: number) {
+    this.#tempo = tempo;
+    // Note: Actual tempo processing is handled by the SoundTouch worklet
+    // This method is for tracking the tempo state
+  }
+
+  setPitch(pitch: number) {
+    this.#pitch = pitch;
+    // Note: Actual pitch processing is handled by the SoundTouch worklet
+    // This method is for tracking the pitch state
+  }
+
+  setRate(rate: number) {
+    this.#rate = rate;
+    // Note: Actual rate processing is handled by the SoundTouch worklet
+    // This method is for tracking the rate state
+  }
+
+  getTempo(): number {
+    return this.#tempo;
+  }
+
+  getPitch(): number {
+    return this.#pitch;
+  }
+
+  getRate(): number {
+    return this.#rate;
   }
 
   start(at: number, offset: number) {

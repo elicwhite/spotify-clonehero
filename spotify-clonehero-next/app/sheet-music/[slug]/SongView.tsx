@@ -58,6 +58,7 @@ import eighthNote from '@/public/assets/svgs/eighth-note.svg';
 import tripletNote from '@/public/assets/svgs/triplet-note.svg';
 import {extractFills, defaultConfig} from '@/lib/fill-detector';
 import {toast} from '@/components/ui/toast';
+import TempoControl from '@/components/TempoControl';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -103,6 +104,11 @@ export default function Renderer({
     enableColors?: boolean;
     showLyrics?: boolean;
     viewCloneHero?: boolean;
+    tempoConfig?: {
+      tempo: number;
+      pitch: number;
+      rate: number;
+    };
   };
   const [playClickTrack, setPlayClickTrack] = useState(true);
   const [clickTrackConfigurationOpen, setClickTrackConfigurationOpen] =
@@ -133,6 +139,13 @@ export default function Renderer({
     measureStartMs: number;
     measureNumber: number;
   }>>([]);
+
+  // Tempo control state
+  const [tempoConfig, setTempoConfig] = useState({
+    tempo: 1.0,
+    pitch: 1.0,
+    rate: 1.0
+  });
 
   // Practice mode state
   const [practiceMode, setPracticeMode] = useState<PracticeModeConfig | null>(null);
@@ -165,6 +178,49 @@ export default function Renderer({
       }, 300),
     [setClickVolumes],
   );
+
+  // Tempo control handlers
+  const handleTempoChange = (tempo: number) => {
+    if (audioManagerRef.current) {
+      audioManagerRef.current.setTempo(tempo);
+      setTempoConfig(prev => ({ ...prev, tempo }));
+    }
+  };
+
+  const handlePitchChange = (pitch: number) => {
+    if (audioManagerRef.current) {
+      audioManagerRef.current.setPitch(pitch);
+      setTempoConfig(prev => ({ ...prev, pitch }));
+    }
+  };
+
+  const handleRateChange = (rate: number) => {
+    if (audioManagerRef.current) {
+      audioManagerRef.current.setRate(rate);
+      setTempoConfig(prev => ({ ...prev, rate }));
+    }
+  };
+
+  const handleSpeedUp = () => {
+    if (audioManagerRef.current) {
+      const newTempo = audioManagerRef.current.speedUp();
+      setTempoConfig(prev => ({ ...prev, tempo: newTempo }));
+    }
+  };
+
+  const handleSlowDown = () => {
+    if (audioManagerRef.current) {
+      const newTempo = audioManagerRef.current.slowDown();
+      setTempoConfig(prev => ({ ...prev, tempo: newTempo }));
+    }
+  };
+
+  const handleResetSpeed = () => {
+    if (audioManagerRef.current) {
+      audioManagerRef.current.resetSpeed();
+      setTempoConfig({ tempo: 1.0, pitch: 1.0, rate: 1.0 });
+    }
+  };
 
   // const clickTrack = useMemo(async () => {
   //   const clickTrack = await generateClickTrack(metadata, chart);
@@ -232,6 +288,11 @@ export default function Renderer({
       ) {
         setSelectedDifficulty(parsed.selectedDifficulty);
       }
+      
+      // Restore tempo config if available
+      if (parsed.tempoConfig) {
+        setTempoConfig(parsed.tempoConfig);
+      }
     } catch (e) {
       // noop on parse errors
     }
@@ -250,6 +311,7 @@ export default function Renderer({
       enableColors,
       showLyrics,
       viewCloneHero,
+      tempoConfig,
     };
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsToPersist));
@@ -265,6 +327,7 @@ export default function Renderer({
     enableColors,
     showLyrics,
     viewCloneHero,
+    tempoConfig,
   ]);
 
   useEffect(() => {
@@ -364,6 +427,13 @@ export default function Renderer({
           });
         } catch {}
 
+        // Apply initial tempo configuration
+        try {
+          audioManager.setTempo(tempoConfig.tempo);
+          audioManager.setPitch(tempoConfig.pitch);
+          audioManager.setRate(tempoConfig.rate);
+        } catch {}
+
         if (lastAudioState.current.wasPlaying) {
           audioManager.play({time: lastAudioState.current.currentTime});
           setIsPlaying(true);
@@ -380,7 +450,7 @@ export default function Renderer({
       audioManagerRef.current?.destroy();
       audioManagerRef.current = null;
     };
-  }, [audioFiles, measures, clickVolumes]);
+  }, [audioFiles, measures, clickVolumes, tempoConfig, playClickTrack, masterClickVolume, practiceMode]);
 
   useInterval(
     () => {
@@ -809,6 +879,22 @@ export default function Renderer({
           </div>
 
           {volumeSliders}
+          
+          {/* Tempo Control */}
+          <div className="space-y-4 pt-4 border-t">
+            <TempoControl
+              tempo={tempoConfig.tempo}
+              pitch={tempoConfig.pitch}
+              rate={tempoConfig.rate}
+              onTempoChange={handleTempoChange}
+              onPitchChange={handlePitchChange}
+              onRateChange={handleRateChange}
+              onSpeedUp={handleSpeedUp}
+              onSlowDown={handleSlowDown}
+              onReset={handleResetSpeed}
+            />
+          </div>
+          
           <div className="space-y-4 pt-4">
             <div className="flex items-center space-x-2">
               <Switch
