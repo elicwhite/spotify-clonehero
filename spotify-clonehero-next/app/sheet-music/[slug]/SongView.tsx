@@ -20,7 +20,6 @@ import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
 import {
   ArrowLeft,
-  Maximize2,
   Play,
   Pause,
   Volume2,
@@ -352,6 +351,11 @@ export default function Renderer({
         audioManager.setVolume('click', playClickTrack ? masterClickVolume : 0);
         audioManagerRef.current = audioManager;
         window.am = audioManager;
+
+        // Restore practice mode configuration if it exists
+        if (practiceMode && practiceMode.endMeasureMs > 0) {
+          audioManager.setPracticeMode(practiceMode);
+        }
 
         // Apply initial per-track volumes loaded from storage
         try {
@@ -879,7 +883,7 @@ export default function Renderer({
           {practiceModeButton}
 
           {/* Drum Fills Section - Only in development */}
-          {process.env.NODE_ENV === 'development' && detectedFills.length > 0 && (
+          {false && process.env.NODE_ENV === 'development' && detectedFills.length > 0 && (
             <div className="space-y-2 pt-4 border-t">
               <label className="text-sm font-medium">Drum Fills ({detectedFills.length})</label>
               <div className="space-y-1 overflow-y-auto">
