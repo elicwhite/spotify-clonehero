@@ -106,8 +106,6 @@ export default function Renderer({
     viewCloneHero?: boolean;
     tempoConfig?: {
       tempo: number;
-      pitch: number;
-      rate: number;
     };
   };
   const [playClickTrack, setPlayClickTrack] = useState(true);
@@ -142,9 +140,7 @@ export default function Renderer({
 
   // Tempo control state
   const [tempoConfig, setTempoConfig] = useState({
-    tempo: 1.0,
-    pitch: 1.0,
-    rate: 1.0
+    tempo: 1.0
   });
 
   // Practice mode state
@@ -187,19 +183,7 @@ export default function Renderer({
     }
   };
 
-  const handlePitchChange = (pitch: number) => {
-    if (audioManagerRef.current) {
-      audioManagerRef.current.setPitch(pitch);
-      setTempoConfig(prev => ({ ...prev, pitch }));
-    }
-  };
 
-  const handleRateChange = (rate: number) => {
-    if (audioManagerRef.current) {
-      audioManagerRef.current.setRate(rate);
-      setTempoConfig(prev => ({ ...prev, rate }));
-    }
-  };
 
   const handleSpeedUp = () => {
     if (audioManagerRef.current) {
@@ -218,7 +202,7 @@ export default function Renderer({
   const handleResetSpeed = () => {
     if (audioManagerRef.current) {
       audioManagerRef.current.resetSpeed();
-      setTempoConfig({ tempo: 1.0, pitch: 1.0, rate: 1.0 });
+      setTempoConfig({ tempo: 1.0 });
     }
   };
 
@@ -430,8 +414,6 @@ export default function Renderer({
         // Apply initial tempo configuration
         try {
           audioManager.setTempo(tempoConfig.tempo);
-          audioManager.setPitch(tempoConfig.pitch);
-          audioManager.setRate(tempoConfig.rate);
         } catch {}
 
         if (lastAudioState.current.wasPlaying) {
@@ -884,11 +866,7 @@ export default function Renderer({
           <div className="space-y-4 pt-4 border-t">
             <TempoControl
               tempo={tempoConfig.tempo}
-              pitch={tempoConfig.pitch}
-              rate={tempoConfig.rate}
               onTempoChange={handleTempoChange}
-              onPitchChange={handlePitchChange}
-              onRateChange={handleRateChange}
               onSpeedUp={handleSpeedUp}
               onSlowDown={handleSlowDown}
               onReset={handleResetSpeed}

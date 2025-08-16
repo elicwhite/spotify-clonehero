@@ -15,14 +15,12 @@ export interface PracticeModeConfig {
 
 export interface TempoConfig {
   tempo: number;      // 0.25 to 4.0 (0.25x to 4x speed)
-  pitch: number;      // 0.25 to 4.0 (0.25x to 4x pitch)
-  rate: number;       // 0.25 to 4.0 (0.25x to 4x rate)
 }
 
 export class AudioManager {
   #context: AudioContext;
   #soundTouchWorklet: AudioWorkletNode | null = null;
-  #tempoConfig: TempoConfig = { tempo: 1.0, pitch: 1.0, rate: 1.0 };
+  #tempoConfig: TempoConfig = { tempo: 1.0 };
 
   #startedAt: number = -1;
   // What was the current time in ms when the song started
@@ -127,14 +125,9 @@ export class AudioManager {
         processorOptions: {}
       });
 
-      // Set initial parameters
+      // Set initial tempo parameter
       const tempoParam = this.#soundTouchWorklet.parameters.get('tempo');
-      const pitchParam = this.#soundTouchWorklet.parameters.get('pitch');
-      const rateParam = this.#soundTouchWorklet.parameters.get('rate');
-      
       if (tempoParam) tempoParam.setValueAtTime(this.#tempoConfig.tempo, this.#context.currentTime);
-      if (pitchParam) pitchParam.setValueAtTime(this.#tempoConfig.pitch, this.#context.currentTime);
-      if (rateParam) rateParam.setValueAtTime(this.#tempoConfig.rate, this.#context.currentTime);
 
       // Connect the worklet to destination so audio can flow through
       this.#soundTouchWorklet.connect(this.#context.destination);
@@ -178,45 +171,7 @@ export class AudioManager {
     });
   }
 
-  setPitch(pitch: number) {
-    if (pitch < 0.25 || pitch > 4.0) {
-      throw new Error('Pitch must be between 0.25 and 4.0');
-    }
 
-    this.#tempoConfig.pitch = pitch;
-    
-    if (this.#soundTouchWorklet) {
-      const pitchParam = this.#soundTouchWorklet.parameters.get('pitch');
-      if (pitchParam) {
-        pitchParam.setValueAtTime(pitch, this.#context.currentTime);
-      }
-    }
-
-    // Update all tracks to use the new pitch
-    Object.values(this.#tracks).forEach(track => {
-      track.setPitch(pitch);
-    });
-  }
-
-  setRate(rate: number) {
-    if (rate < 0.25 || rate > 4.0) {
-      throw new Error('Rate must be between 0.25 and 4.0');
-    }
-
-    this.#tempoConfig.rate = rate;
-    
-    if (this.#soundTouchWorklet) {
-      const rateParam = this.#soundTouchWorklet.parameters.get('rate');
-      if (rateParam) {
-        rateParam.setValueAtTime(rate, this.#context.currentTime);
-      }
-    }
-
-    // Update all tracks to use the new rate
-    Object.values(this.#tracks).forEach(track => {
-      track.setRate(rate);
-    });
-  }
 
   // Convenience methods for speed control
   speedUp(factor: number = 1.25) {
@@ -233,8 +188,6 @@ export class AudioManager {
 
   resetSpeed() {
     this.setTempo(1.0);
-    this.setPitch(1.0);
-    this.setRate(1.0);
   }
 
   getTempoConfig(): TempoConfig {
@@ -401,8 +354,6 @@ class AudioTrack {
   #audioBuffers: AudioBuffer[] = [];
   #sources: AudioBufferSourceNode[] = [];
   #tempo: number = 1.0;
-  #pitch: number = 1.0;
-  #rate: number = 1.0;
   #workletNode: AudioWorkletNode | null = null;
 
   #duration: number = 0;
@@ -474,28 +425,8 @@ class AudioTrack {
     // This method is for tracking the tempo state
   }
 
-  setPitch(pitch: number) {
-    this.#pitch = pitch;
-    // Note: Actual pitch processing is handled by the SoundTouch worklet
-    // This method is for tracking the pitch state
-  }
-
-  setRate(rate: number) {
-    this.#rate = rate;
-    // Note: Actual rate processing is handled by the SoundTouch worklet
-    // This method is for tracking the rate state
-  }
-
   getTempo(): number {
     return this.#tempo;
-  }
-
-  getPitch(): number {
-    return this.#pitch;
-  }
-
-  getRate(): number {
-    return this.#rate;
   }
 
   start(at: number, offset: number) {
