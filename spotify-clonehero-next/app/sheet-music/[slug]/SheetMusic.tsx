@@ -10,18 +10,12 @@ import {
 } from 'react';
 import convertToVexFlow from './convertToVexflow';
 import {RenderData, renderMusic} from './renderVexflow';
+import {PracticeModeConfig} from '@/lib/preview/audioManager';
 
 import {cn} from '@/lib/utils';
 import debounce from 'debounce';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
-
-export interface PracticeModeConfig {
-  startMeasureMs: number;
-  endMeasureMs: number;
-  startTimeMs: number; // 2 seconds before start measure
-  endTimeMs: number;   // 2 seconds after end measure
-}
 
 export default function SheetMusic({
   chart,
@@ -32,9 +26,9 @@ export default function SheetMusic({
   showLyrics,
   onSelectMeasure,
   triggerRerender,
-  practiceMode,
+  practiceModeConfig,
   onPracticeMeasureSelect,
-  isPracticeModeActive,
+  practiceModeStep,
 }: {
   chart: ParsedChart;
   track: ParsedChart['trackData'][0];
@@ -44,9 +38,9 @@ export default function SheetMusic({
   showLyrics: boolean;
   onSelectMeasure: (time: number) => void;
   triggerRerender: boolean;
-  practiceMode: PracticeModeConfig | null;
+  practiceModeConfig: PracticeModeConfig | null;
   onPracticeMeasureSelect: (measureStartMs: number) => void;
-  isPracticeModeActive: boolean;
+  practiceModeStep: 'idle' | 'selectingStart' | 'selectingEnd';
 }) {
   const vexflowContainerRef = useRef<HTMLDivElement>(null!);
   const [windowWidth, setWindowWidth] = useState<number>(window.innerWidth);
@@ -151,10 +145,10 @@ export default function SheetMusic({
     let isPracticeStart = false;
     let isPracticeEnd = false;
     
-    if (practiceMode) {
-      isInPracticeRange = measure.startMs >= practiceMode.startTimeMs && measure.endMs <= practiceMode.endTimeMs;
-      isPracticeStart = Math.abs(measure.startMs - practiceMode.startMeasureMs) < 100; // Within 100ms
-      isPracticeEnd = Math.abs(measure.endMs - practiceMode.endMeasureMs) < 100; // Within 100ms
+    if (practiceModeConfig) {
+      isInPracticeRange = measure.startMs >= practiceModeConfig.startTimeMs && measure.endMs <= practiceModeConfig.endTimeMs;
+      isPracticeStart = Math.abs(measure.startMs - practiceModeConfig.startMeasureMs) < 100; // Within 100ms
+      isPracticeEnd = Math.abs(measure.endMs - practiceModeConfig.endMeasureMs) < 100; // Within 100ms
     }
 
     return (
@@ -171,11 +165,16 @@ export default function SheetMusic({
         isInPracticeRange={isInPracticeRange}
         isPracticeStart={isPracticeStart}
         isPracticeEnd={isPracticeEnd}
-        isPracticeModeActive={isPracticeModeActive}
+        isPracticeModeActive={practiceModeStep !== 'idle'}
         onClick={() => {
-          if (isPracticeModeActive) {
+          if (practiceModeStep === 'selectingStart') {
+            // For start measure, use the start time
             onPracticeMeasureSelect(measure.startMs);
+          } else if (practiceModeStep === 'selectingEnd') {
+            // For end measure, use the end time
+            onPracticeMeasureSelect(measure.endMs);
           } else {
+            // Normal mode - start playing at the measure
             onSelectMeasure(measure.startMs / 1000);
           }
         }}

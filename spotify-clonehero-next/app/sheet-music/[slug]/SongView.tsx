@@ -988,9 +988,9 @@ export default function Renderer({
                   setIsPlaying(true);
                 }}
                 triggerRerender={viewCloneHero}
-                practiceMode={practiceMode}
+                practiceModeConfig={practiceMode}
                 onPracticeMeasureSelect={handlePracticeMeasureSelect}
-                isPracticeModeActive={isPracticeModeActive}
+                practiceModeStep={practiceModeStep}
               />
             </div>
             {viewCloneHero && (
