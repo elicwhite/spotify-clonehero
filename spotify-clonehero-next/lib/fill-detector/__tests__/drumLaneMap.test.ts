@@ -225,9 +225,8 @@ describe('Drum Lane Mapping', () => {
     });
 
     it('maps all drum notes correctly in Downfall Of Us All fixture', async () => {
-      // Using require here mirrors usage in integration tests
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const chart = require('./__fixtures__/Downfall Of Us All - A Day To Remember.json');
+      const fixtureData = await import('./__fixtures__/Downfall Of Us All - A Day To Remember.json');
+      const chart = fixtureData.default;
       const drumTrack = chart.trackData.find((t: any) => t.instrument === 'drums' && t.difficulty === 'expert');
       if (!drumTrack) throw new Error('No expert drum track found');
 
