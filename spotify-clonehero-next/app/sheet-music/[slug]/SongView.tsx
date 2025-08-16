@@ -104,9 +104,7 @@ export default function Renderer({
     enableColors?: boolean;
     showLyrics?: boolean;
     viewCloneHero?: boolean;
-    tempoConfig?: {
-      tempo: number;
-    };
+    tempo?: number;
   };
   const [playClickTrack, setPlayClickTrack] = useState(true);
   const [clickTrackConfigurationOpen, setClickTrackConfigurationOpen] =
@@ -139,9 +137,7 @@ export default function Renderer({
   }>>([]);
 
   // Tempo control state
-  const [tempoConfig, setTempoConfig] = useState({
-    tempo: 1.0
-  });
+  const [tempo, setTempo] = useState(1.0);
 
   // Practice mode state
   const [practiceMode, setPracticeMode] = useState<PracticeModeConfig | null>(null);
@@ -176,33 +172,31 @@ export default function Renderer({
   );
 
   // Tempo control handlers
-  const handleTempoChange = (tempo: number) => {
+  const handleTempoChange = (newTempo: number) => {
     if (audioManagerRef.current) {
-      audioManagerRef.current.setTempo(tempo);
-      setTempoConfig(prev => ({ ...prev, tempo }));
+      audioManagerRef.current.setTempo(newTempo);
+      setTempo(newTempo);
     }
   };
-
-
 
   const handleSpeedUp = () => {
     if (audioManagerRef.current) {
       const newTempo = audioManagerRef.current.speedUp();
-      setTempoConfig(prev => ({ ...prev, tempo: newTempo }));
+      setTempo(newTempo);
     }
   };
 
   const handleSlowDown = () => {
     if (audioManagerRef.current) {
       const newTempo = audioManagerRef.current.slowDown();
-      setTempoConfig(prev => ({ ...prev, tempo: newTempo }));
+      setTempo(newTempo);
     }
   };
 
   const handleResetSpeed = () => {
     if (audioManagerRef.current) {
       audioManagerRef.current.resetSpeed();
-      setTempoConfig({ tempo: 1.0 });
+      setTempo(1.0);
     }
   };
 
@@ -273,9 +267,9 @@ export default function Renderer({
         setSelectedDifficulty(parsed.selectedDifficulty);
       }
       
-      // Restore tempo config if available
-      if (parsed.tempoConfig) {
-        setTempoConfig(parsed.tempoConfig);
+      // Restore tempo if available
+      if (parsed.tempo) {
+        setTempo(parsed.tempo);
       }
     } catch (e) {
       // noop on parse errors
@@ -295,7 +289,7 @@ export default function Renderer({
       enableColors,
       showLyrics,
       viewCloneHero,
-      tempoConfig,
+      tempo,
     };
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsToPersist));
@@ -311,7 +305,7 @@ export default function Renderer({
     enableColors,
     showLyrics,
     viewCloneHero,
-    tempoConfig,
+    tempo,
   ]);
 
   useEffect(() => {
@@ -413,7 +407,7 @@ export default function Renderer({
 
         // Apply initial tempo configuration
         try {
-          audioManager.setTempo(tempoConfig.tempo);
+          audioManager.setTempo(tempo);
         } catch {}
 
         if (lastAudioState.current.wasPlaying) {
@@ -432,7 +426,7 @@ export default function Renderer({
       audioManagerRef.current?.destroy();
       audioManagerRef.current = null;
     };
-  }, [audioFiles, measures, clickVolumes, tempoConfig, playClickTrack, masterClickVolume, practiceMode]);
+  }, [audioFiles, measures, clickVolumes, tempo, playClickTrack, masterClickVolume, practiceMode]);
 
   useInterval(
     () => {
@@ -865,7 +859,7 @@ export default function Renderer({
           {/* Tempo Control */}
           <div className="space-y-4 pt-4 border-t">
             <TempoControl
-              tempo={tempoConfig.tempo}
+              tempo={tempo}
               onTempoChange={handleTempoChange}
               onSpeedUp={handleSpeedUp}
               onSlowDown={handleSlowDown}
