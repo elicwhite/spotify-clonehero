@@ -28,6 +28,9 @@ import {
   X,
   Settings2,
   Target,
+  Plus,
+  Minus,
+  RotateCcw,
 } from 'lucide-react';
 import {
   useCallback,
@@ -58,7 +61,7 @@ import eighthNote from '@/public/assets/svgs/eighth-note.svg';
 import tripletNote from '@/public/assets/svgs/triplet-note.svg';
 import {extractFills, defaultConfig} from '@/lib/fill-detector';
 import {toast} from '@/components/ui/toast';
-import TempoControl from '@/components/TempoControl';
+
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -928,11 +931,36 @@ export default function Renderer({
 
           {/* Tempo Control */}
           <div className="space-y-4 pt-4 border-t">
-            <TempoControl
-              tempo={tempo}
-              onTempoChange={handleTempoChange}
-              onReset={handleResetSpeed}
-            />
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Speed</span>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    const newTempo = Math.max(tempo - 0.1, 0.25);
+                    handleTempoChange(newTempo);
+                  }}
+                  className="h-6 w-6"
+                >
+                  <Minus className="h-3 w-3" />
+                </Button>
+                <span className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[3rem] text-center">
+                  {Math.round(tempo * 100)}%
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    const newTempo = Math.min(tempo + 0.1, 4.0);
+                    handleTempoChange(newTempo);
+                  }}
+                  className="h-6 w-6"
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
           </div>
 
           {/* Practice Mode Button */}
