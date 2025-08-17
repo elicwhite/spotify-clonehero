@@ -125,9 +125,15 @@ export class AudioManager {
         processorOptions: {}
       });
 
-      // Set initial tempo parameter
+      // Option B: Drive speed at the source; worklet performs pitch correction only.
+      // Configure SoundTouch so its combined time scaling is 1 (no additional time change),
+      // and pitch shift equals 1/tempo: set rate = 1/tempo, tempo = tempo, pitch = 1.0
       const tempoParam = this.#soundTouchWorklet.parameters.get('tempo');
+      const rateParam = this.#soundTouchWorklet.parameters.get('rate');
+      const pitchParam = this.#soundTouchWorklet.parameters.get('pitch');
       if (tempoParam) tempoParam.setValueAtTime(this.#tempoConfig.tempo, this.#context.currentTime);
+      if (rateParam) rateParam.setValueAtTime(1.0 / this.#tempoConfig.tempo, this.#context.currentTime);
+      if (pitchParam) pitchParam.setValueAtTime(1.0, this.#context.currentTime);
 
       // Connect the worklet to destination so audio can flow through
       this.#soundTouchWorklet.connect(this.#context.destination);
@@ -159,13 +165,16 @@ export class AudioManager {
     this.#tempoConfig.tempo = tempo;
     
     if (this.#soundTouchWorklet) {
+      // Worklet performs pitch correction only: set rate=1/tempo and tempo=tempo so total time scaling = 1
       const tempoParam = this.#soundTouchWorklet.parameters.get('tempo');
-      if (tempoParam) {
-        tempoParam.setValueAtTime(tempo, this.#context.currentTime);
-      }
+      const rateParam = this.#soundTouchWorklet.parameters.get('rate');
+      const pitchParam = this.#soundTouchWorklet.parameters.get('pitch');
+      if (tempoParam) tempoParam.setValueAtTime(tempo, this.#context.currentTime);
+      if (rateParam) rateParam.setValueAtTime(1.0 / tempo, this.#context.currentTime);
+      if (pitchParam) pitchParam.setValueAtTime(1.0, this.#context.currentTime);
     }
 
-    // Update all tracks to use the new tempo
+    // Update all tracks to use the new tempo (drive playbackRate at the source)
     Object.values(this.#tracks).forEach(track => {
       track.setTempo(tempo);
     });
@@ -421,8 +430,14 @@ class AudioTrack {
   // Tempo control methods
   setTempo(tempo: number) {
     this.#tempo = tempo;
-    // Note: Actual tempo processing is handled by the SoundTouch worklet
-    // This method is for tracking the tempo state
+    // Update live sources so the graph feeds more/fewer samples per second
+    this.#sources.forEach(src => {
+      try {
+        src.playbackRate.setValueAtTime(tempo, this.#context.currentTime);
+      } catch {
+        src.playbackRate.value = tempo;
+      }
+    });
   }
 
   getTempo(): number {
@@ -433,6 +448,14 @@ class AudioTrack {
     this.#sources = this.#audioBuffers.map((buffer, index) => {
       const source = this.#context.createBufferSource();
       source.buffer = buffer;
+
+      // Option B: Drive tempo via playbackRate on the source
+      try {
+        source.playbackRate.setValueAtTime(this.#tempo, this.#context.currentTime);
+      } catch {
+        // Fallback for browsers without setValueAtTime on AudioParam
+        source.playbackRate.value = this.#tempo;
+      }
 
       source.connect(this.#gainNodes[index]);
       source.start(at, offset);
