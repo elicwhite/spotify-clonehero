@@ -856,17 +856,6 @@ export default function Renderer({
 
           {volumeSliders}
           
-          {/* Tempo Control */}
-          <div className="space-y-4 pt-4 border-t">
-            <TempoControl
-              tempo={tempo}
-              onTempoChange={handleTempoChange}
-              onSpeedUp={handleSpeedUp}
-              onSlowDown={handleSlowDown}
-              onReset={handleResetSpeed}
-            />
-          </div>
-          
           <div className="space-y-4 pt-4">
             <div className="flex items-center space-x-2">
               <Switch
@@ -935,6 +924,15 @@ export default function Renderer({
                 </label>
               </div>
             )}
+          </div>
+
+          {/* Tempo Control */}
+          <div className="space-y-4 pt-4 border-t">
+            <TempoControl
+              tempo={tempo}
+              onTempoChange={handleTempoChange}
+              onReset={handleResetSpeed}
+            />
           </div>
 
           {/* Practice Mode Button */}
