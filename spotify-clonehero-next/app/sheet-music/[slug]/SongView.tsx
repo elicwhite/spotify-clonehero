@@ -429,7 +429,7 @@ export default function Renderer({
       audioManagerRef.current?.destroy();
       audioManagerRef.current = null;
     };
-  }, [audioFiles, measures, clickVolumes, tempo, playClickTrack, masterClickVolume, practiceMode]);
+  }, [audioFiles, measures, clickVolumes, playClickTrack, masterClickVolume, practiceMode]);
 
   useInterval(
     () => {
