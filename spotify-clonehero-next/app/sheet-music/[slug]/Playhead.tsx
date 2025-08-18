@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState, memo} from 'react';
+import React, {useEffect, useRef, memo} from 'react';
 import {findPositionForTime} from './renderVexflow';
 
 interface PlayheadProps {
@@ -15,35 +15,39 @@ export const Playhead = memo(function ({
   timePositionMap,
   audioManagerRef,
 }: PlayheadProps) {
-  console.log('timePositionMap', timePositionMap);
   const playheadRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>(null);
+  const lastYRef = useRef<number>(0);
 
-  window.findPos = (time: number) => {
-    return findPositionForTime(timePositionMap, time);
-  };
-  window.audioRef = audioManagerRef;
+  function ensurePlayheadInView(y: number) {
+    playheadRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    });
+  }
 
   useEffect(() => {
     // Set up animation frame loop for smooth movement
     const animate = () => {
       if (audioManagerRef.current != null) {
-        try {
-          // Get current time directly from audio manager
-          const currentTimeMs = audioManagerRef.current.currentTime * 1000;
-          // Find position for current time
-          const newPosition = findPositionForTime(
-            timePositionMap,
-            currentTimeMs,
-          );
-          if (newPosition && playheadRef.current) {
-            // Directly manipulate the DOM style properties
-            playheadRef.current.style.left = `${newPosition.x}px`;
-            playheadRef.current.style.top = `${newPosition.y}px`;
+        // Get current time directly from audio manager
+        const currentTimeMs = audioManagerRef.current.currentTime * 1000;
+        // Find position for current time
+        const newPosition = findPositionForTime(
+          timePositionMap,
+          currentTimeMs,
+        );
+        if (newPosition && playheadRef.current) {
+          // Directly manipulate the DOM style properties
+          playheadRef.current.style.left = `${newPosition.x}px`;
+          playheadRef.current.style.top = `${newPosition.y}px`;
+
+          // Only check scrolling when Y actually changes (with a tiny threshold)
+          const prevY = lastYRef.current;
+          if (prevY == null || Math.abs(newPosition.y - prevY) > 0.5) {
+            lastYRef.current = newPosition.y;
+            ensurePlayheadInView(newPosition.y);
           }
-        } catch (error) {
-          // Audio manager might not be ready yet
-          console.debug('Audio manager not ready for playhead update:', error);
         }
       }
       animationRef.current = requestAnimationFrame(animate);
