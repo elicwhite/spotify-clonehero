@@ -16,8 +16,8 @@ import {
   Voice,
   RepeatNote,
 } from 'vexflow';
-import { Measure } from './convertToVexflow';
-import { PracticeModeConfig } from '@/lib/preview/audioManager';
+import {Measure} from './convertToVexflow';
+import {PracticeModeConfig} from '@/lib/preview/audioManager';
 
 export interface RenderData {
   stave: Stave;
@@ -35,7 +35,7 @@ const MAX_STAVE_WIDTH = 600;
 const MAX_STAVES_PER_ROW = 4;
 const MIN_STAVES_PER_ROW = 1;
 
-const NOTE_COLOR_MAP: { [key: string]: string } = {
+const NOTE_COLOR_MAP: {[key: string]: string} = {
   'e/4': '#ff793f', // orange
   'f/4': '#ff793f', // orange
   'c/5': '#e74c3c', // red
@@ -72,8 +72,8 @@ function measureIsOnlyRests(measure: Measure): boolean {
 export function renderMusic(
   elementRef: React.RefObject<HTMLDivElement | null>,
   measures: Measure[],
-  sections: { tick: number; name: string; msTime: number; msLength: number }[],
-  lyrics: { tick: number; text: string; msTime: number }[] = [],
+  sections: {tick: number; name: string; msTime: number; msLength: number}[],
+  lyrics: {tick: number; text: string; msTime: number}[] = [],
   showBarNumbers: boolean = true,
   enableColors: boolean = false,
   practiceModeConfig?: PracticeModeConfig | null,
@@ -144,7 +144,7 @@ export function renderMusic(
   // Create a map of measure start times to lyrics for quick lookup
   const lyricsMap = new Map<
     number,
-    { text: string; position: number; msTime: number }[]
+    {text: string; position: number; msTime: number}[]
   >();
   lyrics.forEach(lyric => {
     // Find the measure that contains this lyric's start time
@@ -189,13 +189,13 @@ export function renderMusic(
   // Process lyrics to combine overlapping ones
   const processedLyricsMap = new Map<
     number,
-    { text: string; position: number }[]
+    {text: string; position: number}[]
   >();
   lyricsMap.forEach((measureLyrics, measureIndex) => {
     // Sort lyrics by position within the measure
     const sortedLyrics = measureLyrics.sort((a, b) => a.position - b.position);
 
-    const processed: { text: string; position: number }[] = [];
+    const processed: {text: string; position: number}[] = [];
 
     // Create a temporary canvas context to measure text width
     const canvas = document.createElement('canvas');
@@ -258,7 +258,12 @@ export function renderMusic(
   });
 
   // Build time->position map for this measure
-  const timePositionMap: Array<{ ms: number; x: number; y: number; flag: 'measure-start' | 'measure-end' | 'note' }> = [];
+  const timePositionMap: Array<{
+    ms: number;
+    x: number;
+    y: number;
+    flag: 'measure-start' | 'measure-end' | 'note';
+  }> = [];
 
   return measures.map((measure, index) => {
     const stave = renderMeasure(
@@ -286,8 +291,20 @@ export function renderMusic(
   });
 }
 
-export function createConsolidatedTimePositionMap(renderData: RenderData[]): Array<{ ms: number; x: number; y: number; flag: 'measure-start' | 'measure-end' | 'note' }> {
-  const consolidatedMap: Array<{ ms: number; x: number; y: number; flag: 'measure-start' | 'measure-end' | 'note' }> = [];
+export function createConsolidatedTimePositionMap(
+  renderData: RenderData[],
+): Array<{
+  ms: number;
+  x: number;
+  y: number;
+  flag: 'measure-start' | 'measure-end' | 'note';
+}> {
+  const consolidatedMap: Array<{
+    ms: number;
+    x: number;
+    y: number;
+    flag: 'measure-start' | 'measure-end' | 'note';
+  }> = [];
 
   renderData.forEach(renderItem => {
     // Add all time position points from this measure
@@ -298,24 +315,29 @@ export function createConsolidatedTimePositionMap(renderData: RenderData[]): Arr
 }
 
 export function findPositionForTime(
-  timePositionMap: Array<{ ms: number; x: number; y: number; flag: 'measure-start' | 'measure-end' | 'note' }>,
-  currentMs: number
-): { x: number; y: number } | null {
+  timePositionMap: Array<{
+    ms: number;
+    x: number;
+    y: number;
+    flag: 'measure-start' | 'measure-end' | 'note';
+  }>,
+  currentMs: number,
+): {x: number; y: number} | null {
   if (timePositionMap.length === 0) return null;
 
   // Binary search to find the two points that bracket the current time
   let left = 0;
   let right = timePositionMap.length - 1;
-  let beforePoint: { ms: number; x: number; y: number } | null = null;
-  let afterPoint: { ms: number; x: number; y: number } | null = null;
+  let beforePoint: {ms: number; x: number; y: number} | null = null;
+  let afterPoint: {ms: number; x: number; y: number} | null = null;
 
   // Handle edge cases first
   if (currentMs <= timePositionMap[0].ms) {
-    return { x: timePositionMap[0].x, y: timePositionMap[0].y };
+    return {x: timePositionMap[0].x, y: timePositionMap[0].y};
   }
 
   if (currentMs >= timePositionMap[right].ms) {
-    return { x: timePositionMap[right].x, y: timePositionMap[right].y };
+    return {x: timePositionMap[right].x, y: timePositionMap[right].y};
   }
 
   // Binary search to find the insertion point
@@ -325,7 +347,7 @@ export function findPositionForTime(
 
     if (midTime === currentMs) {
       // Exact match found
-      return { x: timePositionMap[mid].x, y: timePositionMap[mid].y };
+      return {x: timePositionMap[mid].x, y: timePositionMap[mid].y};
     } else if (midTime < currentMs) {
       // Current time is after mid, so mid could be our "before" point
       beforePoint = timePositionMap[mid];
@@ -343,15 +365,16 @@ export function findPositionForTime(
 
   if (!beforePoint || !afterPoint) {
     // This shouldn't happen given our edge case handling, but safety first
-    return { x: timePositionMap[0].x, y: timePositionMap[0].y };
+    return {x: timePositionMap[0].x, y: timePositionMap[0].y};
   }
 
   // Interpolate between the two points
-  const timeRatio = (currentMs - beforePoint.ms) / (afterPoint.ms - beforePoint.ms);
+  const timeRatio =
+    (currentMs - beforePoint.ms) / (afterPoint.ms - beforePoint.ms);
   const x = beforePoint.x + timeRatio * (afterPoint.x - beforePoint.x);
   const y = beforePoint.y + timeRatio * (afterPoint.y - beforePoint.y);
 
-  return { x, y };
+  return {x, y};
 }
 
 export function getTotalDuration(renderData: RenderData[]): number {
@@ -371,9 +394,14 @@ function renderMeasure(
   endMeasure: boolean,
   showBarNumbers: boolean,
   enableColors: boolean,
-  timePositionMap: Array<{ ms: number; x: number; y: number; flag: 'measure-start' | 'measure-end' | 'note' }>,
+  timePositionMap: Array<{
+    ms: number;
+    x: number;
+    y: number;
+    flag: 'measure-start' | 'measure-end' | 'note';
+  }>,
   sectionName?: string,
-  lyrics?: { text: string; position: number }[],
+  lyrics?: {text: string; position: number}[],
   previousMeasure?: Measure,
   practiceModeConfig?: PracticeModeConfig | null,
 ) {
@@ -382,7 +410,9 @@ function renderMeasure(
   // Check if this measure should be muted for practice mode
   let shouldMute = false;
   if (practiceModeConfig?.startTimeMs && practiceModeConfig?.endTimeMs) {
-    const isInPracticeRange = measure.startMs >= practiceModeConfig.startMeasureMs && measure.endMs <= practiceModeConfig.endMeasureMs;
+    const isInPracticeRange =
+      measure.startMs >= practiceModeConfig.startMeasureMs &&
+      measure.endMs <= practiceModeConfig.endMeasureMs;
     shouldMute = !isInPracticeRange;
   }
 
@@ -452,7 +482,6 @@ function renderMeasure(
     flag: 'measure-start',
   });
 
-
   // Check if this measure is a repeat of the previous measure (excluding rest-only measures)
   const isRepeat =
     previousMeasure &&
@@ -480,7 +509,7 @@ function renderMeasure(
       y: stave.getY(),
       flag: 'measure-end',
     });
-    
+
     return stave;
   }
 
@@ -501,7 +530,7 @@ function renderMeasure(
     if (enableColors) {
       staveNote.keys.forEach((n, idx) => {
         const suffix = shouldMute ? '4D' : '';
-        staveNote.setKeyStyle(idx, { fillStyle: NOTE_COLOR_MAP[n] + suffix });
+        staveNote.setKeyStyle(idx, {fillStyle: NOTE_COLOR_MAP[n] + suffix});
       });
     }
 

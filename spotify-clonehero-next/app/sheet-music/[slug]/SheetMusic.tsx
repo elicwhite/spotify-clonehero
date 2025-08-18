@@ -9,7 +9,11 @@ import {
   createRef,
 } from 'react';
 import convertToVexFlow from './convertToVexflow';
-import {RenderData, renderMusic, createConsolidatedTimePositionMap} from './renderVexflow';
+import {
+  RenderData,
+  renderMusic,
+  createConsolidatedTimePositionMap,
+} from './renderVexflow';
 import {PracticeModeConfig} from '@/lib/preview/audioManager';
 import {Playhead} from './Playhead';
 
@@ -100,7 +104,9 @@ export default function SheetMusic({
       chart.sections,
       // https://github.com/YARC-Official/YARG.Core/blob/6b24334cb6b3588d290e1d5f8231ce70314d097c/YARG.Core/MoonscraperChartParser/IO/Midi/MidReader.cs#L299
       showLyrics
-        ? (chart as any).lyrics?.filter((lyric: any) => !lyric.text.includes('[')) || []
+        ? (chart as any).lyrics?.filter(
+            (lyric: any) => !lyric.text.includes('['),
+          ) || []
         : [],
       showBarNumbers,
       enableColors,
@@ -108,7 +114,9 @@ export default function SheetMusic({
     );
     setRenderData(data);
 
-    highlightsRef.current = data.map(() => createRef()) as RefObject<HTMLButtonElement>[];
+    highlightsRef.current = data.map(() =>
+      createRef(),
+    ) as RefObject<HTMLButtonElement>[];
   }, [
     measures,
     showBarNumbers,
@@ -131,9 +139,13 @@ export default function SheetMusic({
     let isPracticeEnd = false;
 
     if (practiceModeConfig) {
-      isInPracticeRange = measure.startMs >= practiceModeConfig.startTimeMs && measure.endMs <= practiceModeConfig.endTimeMs;
-      isPracticeStart = Math.abs(measure.startMs - practiceModeConfig.startMeasureMs) < 100; // Within 100ms
-      isPracticeEnd = Math.abs(measure.endMs - practiceModeConfig.endMeasureMs) < 100; // Within 100ms
+      isInPracticeRange =
+        measure.startMs >= practiceModeConfig.startTimeMs &&
+        measure.endMs <= practiceModeConfig.endTimeMs;
+      isPracticeStart =
+        Math.abs(measure.startMs - practiceModeConfig.startMeasureMs) < 100; // Within 100ms
+      isPracticeEnd =
+        Math.abs(measure.endMs - practiceModeConfig.endMeasureMs) < 100; // Within 100ms
     }
 
     return (
@@ -149,7 +161,9 @@ export default function SheetMusic({
         isInPracticeRange={isInPracticeRange}
         isPracticeStart={isPracticeStart}
         isPracticeEnd={isPracticeEnd}
-        isPracticeModeActive={practiceModeConfig !== null && practiceModeConfig.endMeasureMs > 0}
+        isPracticeModeActive={
+          practiceModeConfig !== null && practiceModeConfig.endMeasureMs > 0
+        }
         onClick={() => {
           if (practiceModeStep === 'selectingStart') {
             // For start measure, use the start time
@@ -193,14 +207,24 @@ interface MeasureHighlightProps {
 }
 
 const MeasureHighlight = forwardRef<HTMLButtonElement, MeasureHighlightProps>(
-  ({style, isInPracticeRange, isPracticeStart, isPracticeEnd, isPracticeModeActive, onClick}, ref) => {
+  (
+    {
+      style,
+      isInPracticeRange,
+      isPracticeStart,
+      isPracticeEnd,
+      isPracticeModeActive,
+      onClick,
+    },
+    ref,
+  ) => {
     return (
       <button
         ref={ref}
         className={cn(
           'absolute z-[1] rounded-md border-0 bg-transparent cursor-pointer transition-all duration-200',
           'hover:bg-primary/10',
-          isPracticeStart && 'border-l-4 border-green-500', 
+          isPracticeStart && 'border-l-4 border-green-500',
           isPracticeEnd && 'border-r-4 border-green-500',
         )}
         style={style}

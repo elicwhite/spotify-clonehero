@@ -2,16 +2,27 @@
  * Integration tests for the complete fill detection pipeline
  */
 
-import { extractFills, defaultConfig, validateFillSegments, createExtractionSummary } from '../index';
-import { ParsedChart, NoteEvent, TempoEvent, DrumTrackNotFoundError, Track } from '../types';
-import type { NoteType } from 'scan-chart';
+import {
+  extractFills,
+  defaultConfig,
+  validateFillSegments,
+  createExtractionSummary,
+} from '../index';
+import {
+  ParsedChart,
+  NoteEvent,
+  TempoEvent,
+  DrumTrackNotFoundError,
+  Track,
+} from '../types';
+import type {NoteType} from 'scan-chart';
 
 // Helper function to create synthetic chart data
 function createSyntheticChart(
   noteEvents: NoteEvent[],
   name = 'Test Song',
   resolution = 192,
-  tempos: TempoEvent[] = [{ tick: 0, beatsPerMinute: 120, msTime: 0 }]
+  tempos: TempoEvent[] = [{tick: 0, beatsPerMinute: 120, msTime: 0}],
 ): ParsedChart {
   // Calculate msTime for notes based on tempo
   const notesWithTime = noteEvents.map(note => ({
@@ -34,9 +45,11 @@ function createSyntheticChart(
   return {
     resolution,
     tempos,
-    timeSignatures: [{ tick: 0, numerator: 4, denominator: 4, msTime: 0, msLength: 0 }],
+    timeSignatures: [
+      {tick: 0, numerator: 4, denominator: 4, msTime: 0, msLength: 0},
+    ],
     trackData: [drumTrack],
-    metadata: { name },
+    metadata: {name},
     hasLyrics: false,
     hasVocals: false,
     hasForcedNotes: false,
@@ -57,10 +70,12 @@ describe('Fill Detection Integration', () => {
     it('should throw error for missing drum track', () => {
       const chart: ParsedChart = {
         resolution: 192,
-        tempos: [{ tick: 0, beatsPerMinute: 120, msTime: 0 }],
-        timeSignatures: [{ tick: 0, numerator: 4, denominator: 4, msTime: 0, msLength: 0 }],
+        tempos: [{tick: 0, beatsPerMinute: 120, msTime: 0}],
+        timeSignatures: [
+          {tick: 0, numerator: 4, denominator: 4, msTime: 0, msLength: 0},
+        ],
         trackData: [], // No drum track
-        metadata: { name: 'No Track' },
+        metadata: {name: 'No Track'},
         hasLyrics: false,
         hasVocals: false,
         hasForcedNotes: false,
@@ -82,7 +97,7 @@ describe('Fill Detection Integration', () => {
       // Steady beat pattern (4 bars)
       for (let bar = 0; bar < 4; bar++) {
         const barStart = bar * resolution * 4;
-        
+
         // Kick on 1 and 3
         notes.push({
           tick: barStart,
@@ -92,7 +107,7 @@ describe('Fill Detection Integration', () => {
           type: 0, // Kick
           flags: 0,
         });
-        
+
         notes.push({
           tick: barStart + resolution * 2,
           msTime: 0,
@@ -111,7 +126,7 @@ describe('Fill Detection Integration', () => {
           type: 1, // Snare
           flags: 0,
         });
-        
+
         notes.push({
           tick: barStart + resolution * 3,
           msTime: 0,
@@ -124,7 +139,8 @@ describe('Fill Detection Integration', () => {
 
       // Dense fill pattern (1 bar)
       const fillStart = 4 * resolution * 4;
-      for (let i = 0; i < 16; i++) { // 16th notes
+      for (let i = 0; i < 16; i++) {
+        // 16th notes
         const tick = fillStart + i * (resolution / 4);
         notes.push({
           tick,
@@ -140,10 +156,9 @@ describe('Fill Detection Integration', () => {
       const fills = extractFills(chart, chart.trackData[0] as Track);
 
       expect(fills.length).toBeGreaterThan(0);
-      
+
       if (fills.length > 0) {
         const fill = fills[0];
-
 
         expect(fill.songId).toBe('Test Song');
         expect(fill.startMs).toBeGreaterThanOrEqual(0);
@@ -159,7 +174,7 @@ describe('Fill Detection Integration', () => {
       // Consistent pattern for 8 bars
       for (let bar = 0; bar < 8; bar++) {
         const barStart = bar * resolution * 4;
-        
+
         // Simple rock beat
         notes.push({
           tick: barStart,
@@ -169,7 +184,7 @@ describe('Fill Detection Integration', () => {
           type: 0, // Kick
           flags: 0,
         });
-        
+
         notes.push({
           tick: barStart + resolution,
           msTime: 0,
@@ -178,7 +193,7 @@ describe('Fill Detection Integration', () => {
           type: 1, // Snare
           flags: 0,
         });
-        
+
         notes.push({
           tick: barStart + resolution * 2,
           msTime: 0,
@@ -187,7 +202,7 @@ describe('Fill Detection Integration', () => {
           type: 0, // Kick
           flags: 0,
         });
-        
+
         notes.push({
           tick: barStart + resolution * 3,
           msTime: 0,
@@ -222,7 +237,7 @@ describe('Fill Detection Integration', () => {
       }
 
       const chart = createSyntheticChart(notes);
-      
+
       // Use more sensitive thresholds
       const customConfig = {
         ...defaultConfig,
@@ -243,18 +258,18 @@ describe('Fill Detection Integration', () => {
       }).toThrow();
 
       expect(() => {
-        extractFills({ resolution: 0 } as unknown as ParsedChart);
+        extractFills({resolution: 0} as unknown as ParsedChart);
       }).toThrow();
 
       expect(() => {
-        extractFills({ resolution: 192, tempos: [] } as unknown as ParsedChart);
+        extractFills({resolution: 192, tempos: []} as unknown as ParsedChart);
       }).toThrow();
 
       expect(() => {
-        extractFills({ 
-          resolution: 192, 
-          tempos: [{ tick: 0, beatsPerMinute: 120, msTime: 0 }],
-          trackData: null as unknown as Track[]
+        extractFills({
+          resolution: 192,
+          tempos: [{tick: 0, beatsPerMinute: 120, msTime: 0}],
+          trackData: null as unknown as Track[],
         } as unknown as ParsedChart);
       }).toThrow();
     });
@@ -419,7 +434,12 @@ describe('Fill Detection Integration', () => {
         },
       ];
 
-      const summary = createExtractionSummary(chart, chart.trackData[0], fills, defaultConfig);
+      const summary = createExtractionSummary(
+        chart,
+        chart.trackData[0],
+        fills,
+        defaultConfig,
+      );
 
       expect(summary.songInfo.name).toBe('Test Song');
       expect(summary.songInfo.noteCount).toBe(2);
@@ -451,8 +471,8 @@ describe('Fill Detection Integration', () => {
       ];
 
       const tempos: TempoEvent[] = [
-        { tick: 0, beatsPerMinute: 120, msTime: 0 },
-        { tick: 192, beatsPerMinute: 140, msTime: 1000 }, // Tempo change
+        {tick: 0, beatsPerMinute: 120, msTime: 0},
+        {tick: 192, beatsPerMinute: 140, msTime: 1000}, // Tempo change
       ];
 
       const chart = createSyntheticChart(notes, 'Tempo Test', 192, tempos);
@@ -475,10 +495,15 @@ describe('Fill Detection Integration', () => {
       ];
 
       const invalidTempos: TempoEvent[] = [
-        { tick: 0, beatsPerMinute: -120, msTime: 0 }, // Invalid BPM
+        {tick: 0, beatsPerMinute: -120, msTime: 0}, // Invalid BPM
       ];
 
-      const chart = createSyntheticChart(notes, 'Invalid Tempo', 192, invalidTempos);
+      const chart = createSyntheticChart(
+        notes,
+        'Invalid Tempo',
+        192,
+        invalidTempos,
+      );
 
       expect(() => {
         extractFills(chart);
@@ -500,17 +525,21 @@ describe('Fill Detection Integration', () => {
       ];
 
       const chart = createSyntheticChart(notes);
-      
+
       // Add hard difficulty track
       chart.trackData.push({
         instrument: 'drums',
         difficulty: 'hard',
-        noteEventGroups: [[{
-          ...notes[0],
-          msTime: 0,
-          msLength: 0,
-          type: 0 as NoteType,
-        }]],
+        noteEventGroups: [
+          [
+            {
+              ...notes[0],
+              msTime: 0,
+              msLength: 0,
+              type: 0 as NoteType,
+            },
+          ],
+        ],
         starPowerSections: [],
         rejectedStarPowerSections: [],
         soloSections: [],
@@ -518,31 +547,44 @@ describe('Fill Detection Integration', () => {
         drumFreestyleSections: [],
       });
 
-      const fills = extractFills(chart, { difficulty: 'hard' });
+      const fills = extractFills(chart, {difficulty: 'hard'});
       expect(Array.isArray(fills)).toBe(true);
     });
 
     it('should throw error for missing difficulty', () => {
       const chart = createSyntheticChart([]);
-      
+
       expect(() => {
-        extractFills(chart, { difficulty: 'medium' });
+        extractFills(chart, {difficulty: 'medium'});
       }).toThrow(DrumTrackNotFoundError);
     });
   });
 
   describe('When I Come Around fixture test', () => {
     xit('should detect fills on expected measures', async () => {
-      const fixtureData = await import('./__fixtures__/When I Come Around - Green Day.json');
+      const fixtureData = await import(
+        './__fixtures__/When I Come Around - Green Day.json'
+      );
       const chart: ParsedChart = fixtureData.default as unknown as ParsedChart;
-      const drumTrack = chart.trackData.find(track => track.instrument === 'drums' && track.difficulty === 'expert');
+      const drumTrack = chart.trackData.find(
+        track => track.instrument === 'drums' && track.difficulty === 'expert',
+      );
       if (!drumTrack) throw new Error('No expert drum track found in fixture');
 
       const fills = extractFills(chart, drumTrack);
 
       const measuresDetected = fills.map(f => f.measureNumber);
       console.log('Detected measures:', measuresDetected);
-      console.log('Fills summary:', fills.map(f => ({ m: f.measureNumber, st: f.startTick, et: f.endTick, mst: f.startMs, met: f.endMs })));
+      console.log(
+        'Fills summary:',
+        fills.map(f => ({
+          m: f.measureNumber,
+          st: f.startTick,
+          et: f.endTick,
+          mst: f.startMs,
+          met: f.endMs,
+        })),
+      );
       const expectedAtLeast = [24, 26, 28, 48, 50, 52, 60, 62, 64];
 
       // Each expected measure should appear at least once
@@ -561,14 +603,18 @@ describe('Fill Detection Integration', () => {
     // Expected fills on at least 13, 17, 21, 26-27 (this is a single fill that is a quarter note and full measure), 31, 45, 49 & 50, 57, 63, 77, 93, 101, 104, 113
     xit('should detect fills on expected measures', async () => {
       const chart: ParsedChart = require('./__fixtures__/Downfall Of Us All - A Day To Remember.json');
-      const drumTrack = chart.trackData.find(track => track.instrument === 'drums' && track.difficulty === 'expert');
+      const drumTrack = chart.trackData.find(
+        track => track.instrument === 'drums' && track.difficulty === 'expert',
+      );
       if (!drumTrack) throw new Error('No expert drum track found in fixture');
 
       const fills = extractFills(chart, drumTrack);
       const measuresDetected = fills.map(f => f.measureNumber);
       console.log('Downfall measures detected:', measuresDetected);
 
-      const expectedAtLeast = [14, 18, 22, 27, 28, 32, 46, 50, 51, 58, 64, 78, 94, 102, 105, 114];
+      const expectedAtLeast = [
+        14, 18, 22, 27, 28, 32, 46, 50, 51, 58, 64, 78, 94, 102, 105, 114,
+      ];
       expectedAtLeast.forEach(m => expect(measuresDetected).toContain(m));
 
       // Optional candidate that may or may not be detected depending on config
@@ -586,7 +632,9 @@ describe('Fill Detection Integration', () => {
 
     it('should not detect fills in the repeating intro section (measures 1-13, 1-based)', async () => {
       const chart: ParsedChart = require('./__fixtures__/Downfall Of Us All - A Day To Remember.json');
-      const drumTrack = chart.trackData.find(track => track.instrument === 'drums' && track.difficulty === 'expert');
+      const drumTrack = chart.trackData.find(
+        track => track.instrument === 'drums' && track.difficulty === 'expert',
+      );
       if (!drumTrack) throw new Error('No expert drum track found in fixture');
 
       const fills = extractFills(chart, drumTrack);
@@ -602,7 +650,9 @@ describe('Fill Detection Integration', () => {
   describe('Unravelling by Muse fixture test', () => {
     it('should not mark repeating groove bars as fills', async () => {
       const chart: ParsedChart = require('./__fixtures__/Unravelling by Muse.json');
-      const drumTrack = chart.trackData.find(track => track.instrument === 'drums' && track.difficulty === 'expert');
+      const drumTrack = chart.trackData.find(
+        track => track.instrument === 'drums' && track.difficulty === 'expert',
+      );
       if (!drumTrack) throw new Error('No expert drum track found in fixture');
 
       const fills = extractFills(chart, drumTrack);

@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import {use} from 'react';
 import dynamic from 'next/dynamic';
 import Error from 'next/error';
 
@@ -18,14 +18,10 @@ const ClientPage = dynamic(() => import('./ClientPage'));
 //   return <ClientPage />;
 // }
 
-export default function Page({
-  params,
-}: {
-  params: Promise<{slug: string}>;
-}) {
-  const { slug: slugParam } = use(params);
+export default function Page({params}: {params: Promise<{slug: string}>}) {
+  const {slug: slugParam} = use(params);
   const slug = getMd5FromSlug(slugParam);
-  
+
   if (!slug) {
     return 'Invalid chart';
   }

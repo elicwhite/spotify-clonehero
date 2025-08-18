@@ -174,15 +174,15 @@ export default function CompareView<
                       {currentValue === true
                         ? 'True'
                         : currentValue === false
-                        ? 'False'
-                        : currentValue ?? ''}
+                          ? 'False'
+                          : (currentValue ?? '')}
                     </td>
                     <td className="border-b border-slate-100 dark:border-slate-700 p-1 pl-8 text-slate-500 dark:text-slate-400 text-left">
                       {recommendedValue === true
                         ? 'True'
                         : recommendedValue === false
-                        ? 'False'
-                        : recommendedValue ?? ''}
+                          ? 'False'
+                          : (recommendedValue ?? '')}
                     </td>
                   </tr>
                 );

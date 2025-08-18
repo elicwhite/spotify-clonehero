@@ -82,9 +82,9 @@ export default function Page() {
         ever listened to.
       </p>
       <Suspense fallback={<div>Loading...</div>}>
-      <SupportedBrowserWarning>
-        <SpotifyHistory authenticated={session.status === 'authenticated'} />
-      </SupportedBrowserWarning>
+        <SupportedBrowserWarning>
+          <SpotifyHistory authenticated={session.status === 'authenticated'} />
+        </SupportedBrowserWarning>
       </Suspense>
     </>
   );

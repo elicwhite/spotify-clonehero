@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Suspense } from 'react';
+import {Suspense} from 'react';
 
 /*
 Pretty much all of the code that powers this page

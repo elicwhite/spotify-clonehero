@@ -389,8 +389,8 @@ async function loadNoteTextures(
           note.flags & noteFlags.tap
             ? strumTexturesTap
             : note.flags & noteFlags.hopo
-            ? strumTexturesHopo
-            : strumTextures;
+              ? strumTexturesHopo
+              : strumTextures;
         switch (note.type) {
           case noteTypes.open:
             return openMaterial;
@@ -666,15 +666,15 @@ async function generateNoteHighway(
             note.type == noteTypes.redDrum
               ? 0
               : note.type == noteTypes.yellow ||
-                note.type == noteTypes.yellowDrum
-              ? 1
-              : note.type == noteTypes.blue || note.type == noteTypes.blueDrum
-              ? 2
-              : note.type == noteTypes.green ||
-                note.type == noteTypes.greenDrum ||
-                note.type == noteTypes.orange
-              ? 3
-              : -1;
+                  note.type == noteTypes.yellowDrum
+                ? 1
+                : note.type == noteTypes.blue || note.type == noteTypes.blueDrum
+                  ? 2
+                  : note.type == noteTypes.green ||
+                      note.type == noteTypes.greenDrum ||
+                      note.type == noteTypes.orange
+                    ? 3
+                    : -1;
 
           if (lane != -1) {
             const noteXPosition = calculateNoteXOffset(instrument, lane);
@@ -722,14 +722,14 @@ async function generateNoteHighway(
             note.type == noteTypes.green
               ? 0
               : note.type == noteTypes.red
-              ? 1
-              : note.type == noteTypes.yellow
-              ? 2
-              : note.type == noteTypes.blue
-              ? 3
-              : note.type == noteTypes.orange
-              ? 4
-              : -1;
+                ? 1
+                : note.type == noteTypes.yellow
+                  ? 2
+                  : note.type == noteTypes.blue
+                    ? 3
+                    : note.type == noteTypes.orange
+                      ? 4
+                      : -1;
 
           const noteXPosition = calculateNoteXOffset(instrument, lane);
 

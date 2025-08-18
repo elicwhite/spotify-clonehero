@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import {useState, useEffect} from 'react';
 
 export default function SupportedBrowserWarning({
   children,
@@ -15,7 +15,7 @@ export default function SupportedBrowserWarning({
       typeof window.showDirectoryPicker === 'function';
 
     setIsSupported(DIRECTORY_PICKER_SUPPROTED);
-  }, [])
+  }, []);
 
   if (!isSupported) {
     return (

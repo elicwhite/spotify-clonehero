@@ -15,8 +15,8 @@ import {
   CLONE_HERO_DRUM_MAP,
   ROCK_BAND_4_DRUM_MAP,
 } from '../drumLaneMap';
-import { DrumVoice } from '../types';
-import type { NoteType } from 'scan-chart';
+import {DrumVoice} from '../types';
+import type {NoteType} from 'scan-chart';
 import {noteTypes, noteFlags} from 'scan-chart';
 
 describe('Drum Lane Mapping', () => {
@@ -55,12 +55,12 @@ describe('Drum Lane Mapping', () => {
 
   describe('groupNotesByVoice', () => {
     it('should group notes by voice category', () => {
-      const notes: Array<{ type: NoteType }> = [
-        { type: 0 as unknown as NoteType },
-        { type: 1 as unknown as NoteType },
-        { type: 2 as unknown as NoteType },
-        { type: 0 as unknown as NoteType },
-        { type: 3 as unknown as NoteType },
+      const notes: Array<{type: NoteType}> = [
+        {type: 0 as unknown as NoteType},
+        {type: 1 as unknown as NoteType},
+        {type: 2 as unknown as NoteType},
+        {type: 0 as unknown as NoteType},
+        {type: 3 as unknown as NoteType},
       ];
 
       const groups = groupNotesByVoice(notes);
@@ -84,13 +84,13 @@ describe('Drum Lane Mapping', () => {
 
   describe('countNotesByVoice', () => {
     it('should count notes by voice category', () => {
-      const notes: Array<{ type: NoteType }> = [
-        { type: 0 as unknown as NoteType },
-        { type: 1 as unknown as NoteType },
-        { type: 2 as unknown as NoteType },
-        { type: 0 as unknown as NoteType },
-        { type: 3 as unknown as NoteType },
-        { type: 99 as unknown as NoteType },
+      const notes: Array<{type: NoteType}> = [
+        {type: 0 as unknown as NoteType},
+        {type: 1 as unknown as NoteType},
+        {type: 2 as unknown as NoteType},
+        {type: 0 as unknown as NoteType},
+        {type: 3 as unknown as NoteType},
+        {type: 99 as unknown as NoteType},
       ];
 
       const counts = countNotesByVoice(notes);
@@ -106,21 +106,27 @@ describe('Drum Lane Mapping', () => {
 
   describe('getTotalNotesInVoices', () => {
     it('should count total notes in specified voices', () => {
-      const notes: Array<{ type: NoteType }> = [
-        { type: 0 as unknown as NoteType },
-        { type: 1 as unknown as NoteType },
-        { type: 2 as unknown as NoteType },
-        { type: 3 as unknown as NoteType },
-        { type: 4 as unknown as NoteType },
+      const notes: Array<{type: NoteType}> = [
+        {type: 0 as unknown as NoteType},
+        {type: 1 as unknown as NoteType},
+        {type: 2 as unknown as NoteType},
+        {type: 3 as unknown as NoteType},
+        {type: 4 as unknown as NoteType},
       ];
 
       const tomCount = getTotalNotesInVoices(notes, [DrumVoice.TOM]);
       expect(tomCount).toBe(1);
 
-      const percussionCount = getTotalNotesInVoices(notes, [DrumVoice.TOM, DrumVoice.CYMBAL]);
+      const percussionCount = getTotalNotesInVoices(notes, [
+        DrumVoice.TOM,
+        DrumVoice.CYMBAL,
+      ]);
       expect(percussionCount).toBe(2);
 
-      const rhythmCount = getTotalNotesInVoices(notes, [DrumVoice.KICK, DrumVoice.SNARE]);
+      const rhythmCount = getTotalNotesInVoices(notes, [
+        DrumVoice.KICK,
+        DrumVoice.SNARE,
+      ]);
       expect(rhythmCount).toBe(2);
     });
   });
@@ -187,35 +193,58 @@ describe('Drum Lane Mapping', () => {
     function assertMappingForNote(type: number, flags: number): void {
       // Validate lane/flag mapping semantics using scan-chart runtime enums
       if (type === noteTypes.kick) {
-        expect(mapScanChartNoteToVoice(type as unknown as NoteType, null, flags)).toBe(DrumVoice.KICK);
+        expect(
+          mapScanChartNoteToVoice(type as unknown as NoteType, null, flags),
+        ).toBe(DrumVoice.KICK);
       } else if (type === noteTypes.redDrum) {
-        expect(mapScanChartNoteToVoice(type as unknown as NoteType, null, flags)).toBe(DrumVoice.SNARE);
+        expect(
+          mapScanChartNoteToVoice(type as unknown as NoteType, null, flags),
+        ).toBe(DrumVoice.SNARE);
       } else if (type === noteTypes.yellowDrum) {
-        const expected = (flags & noteFlags.cymbal) ? DrumVoice.HAT : DrumVoice.TOM;
-        expect(mapScanChartNoteToVoice(type as unknown as NoteType, null, flags)).toBe(expected);
+        const expected =
+          flags & noteFlags.cymbal ? DrumVoice.HAT : DrumVoice.TOM;
+        expect(
+          mapScanChartNoteToVoice(type as unknown as NoteType, null, flags),
+        ).toBe(expected);
       } else if (type === noteTypes.blueDrum) {
-        const expected = (flags & noteFlags.cymbal) ? DrumVoice.CYMBAL : DrumVoice.TOM;
-        expect(mapScanChartNoteToVoice(type as unknown as NoteType, null, flags)).toBe(expected);
+        const expected =
+          flags & noteFlags.cymbal ? DrumVoice.CYMBAL : DrumVoice.TOM;
+        expect(
+          mapScanChartNoteToVoice(type as unknown as NoteType, null, flags),
+        ).toBe(expected);
       } else if (type === noteTypes.greenDrum) {
-        const expected = (flags & noteFlags.cymbal) ? DrumVoice.CYMBAL : DrumVoice.TOM;
-        expect(mapScanChartNoteToVoice(type as unknown as NoteType, null, flags)).toBe(expected);
+        const expected =
+          flags & noteFlags.cymbal ? DrumVoice.CYMBAL : DrumVoice.TOM;
+        expect(
+          mapScanChartNoteToVoice(type as unknown as NoteType, null, flags),
+        ).toBe(expected);
       } else {
         // For any other types present, mapping should not produce UNKNOWN in drum tracks
-        expect(mapScanChartNoteToVoice(type as unknown as NoteType, null, flags)).not.toBe(DrumVoice.UNKNOWN);
+        expect(
+          mapScanChartNoteToVoice(type as unknown as NoteType, null, flags),
+        ).not.toBe(DrumVoice.UNKNOWN);
       }
     }
 
     it('maps all drum notes correctly in When I Come Around fixture', async () => {
-      const fixtureData = await import('./__fixtures__/When I Come Around - Green Day.json');
+      const fixtureData = await import(
+        './__fixtures__/When I Come Around - Green Day.json'
+      );
       const chart = fixtureData.default;
-      const drumTrack = chart.trackData.find((t: any) => t.instrument === 'drums' && t.difficulty === 'expert');
+      const drumTrack = chart.trackData.find(
+        (t: any) => t.instrument === 'drums' && t.difficulty === 'expert',
+      );
       if (!drumTrack) throw new Error('No expert drum track found');
 
       const allNotes = drumTrack.noteEventGroups.flat();
       const drumType = (chart.drumType ?? null) as 0 | 1 | 2 | null;
 
       // No UNKNOWN voices should appear
-      const unknowns = allNotes.filter((n: any) => mapScanChartNoteToVoice(n.type, drumType, n.flags ?? 0) === DrumVoice.UNKNOWN);
+      const unknowns = allNotes.filter(
+        (n: any) =>
+          mapScanChartNoteToVoice(n.type, drumType, n.flags ?? 0) ===
+          DrumVoice.UNKNOWN,
+      );
       expect(unknowns.length).toBe(0);
 
       // Validate mapping semantics for each note
@@ -225,15 +254,23 @@ describe('Drum Lane Mapping', () => {
     });
 
     it('maps all drum notes correctly in Downfall Of Us All fixture', async () => {
-      const fixtureData = await import('./__fixtures__/Downfall Of Us All - A Day To Remember.json');
+      const fixtureData = await import(
+        './__fixtures__/Downfall Of Us All - A Day To Remember.json'
+      );
       const chart = fixtureData.default;
-      const drumTrack = chart.trackData.find((t: any) => t.instrument === 'drums' && t.difficulty === 'expert');
+      const drumTrack = chart.trackData.find(
+        (t: any) => t.instrument === 'drums' && t.difficulty === 'expert',
+      );
       if (!drumTrack) throw new Error('No expert drum track found');
 
       const allNotes = drumTrack.noteEventGroups.flat();
       const drumType = (chart.drumType ?? null) as 0 | 1 | 2 | null;
 
-      const unknowns = allNotes.filter((n: any) => mapScanChartNoteToVoice(n.type, drumType, n.flags ?? 0) === DrumVoice.UNKNOWN);
+      const unknowns = allNotes.filter(
+        (n: any) =>
+          mapScanChartNoteToVoice(n.type, drumType, n.flags ?? 0) ===
+          DrumVoice.UNKNOWN,
+      );
       expect(unknowns.length).toBe(0);
 
       for (const note of allNotes) {

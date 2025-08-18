@@ -11,10 +11,10 @@ export type TempoEvent = ParsedChart['tempos'][0];
 export type TimeSignature = ParsedChart['timeSignatures'][0];
 
 // Re-export NoteEvent from scan-chart for convenience
-export type { NoteEvent } from 'scan-chart';
+export type {NoteEvent} from 'scan-chart';
 
 export interface FillSegment {
-  songId: string;        // caller supplies or derived from file name
+  songId: string; // caller supplies or derived from file name
   startTick: number;
   endTick: number;
   startMs: number;
@@ -40,8 +40,8 @@ export interface FillSegment {
 }
 
 export interface Config {
-  difficulty?: "expert" | "hard" | "medium" | "easy";
-  quantDiv?: number;              // smaller → finer grid
+  difficulty?: 'expert' | 'hard' | 'medium' | 'easy';
+  quantDiv?: number; // smaller → finer grid
   windowBeats?: number;
   strideBeats?: number;
   lookbackBars?: number;
@@ -58,7 +58,7 @@ export interface Config {
 
 // Type for validated config where all properties are guaranteed to exist
 export interface ValidatedConfig {
-  difficulty: "expert" | "hard" | "medium" | "easy";
+  difficulty: 'expert' | 'hard' | 'medium' | 'easy';
   quantDiv: number;
   windowBeats: number;
   strideBeats: number;
@@ -76,12 +76,12 @@ export interface ValidatedConfig {
 
 // Voice categories for drum mapping
 export enum DrumVoice {
-  KICK = "kick",
-  SNARE = "snare",
-  HAT = "hat",
-  TOM = "tom",
-  CYMBAL = "cymbal",
-  UNKNOWN = "unknown"
+  KICK = 'kick',
+  SNARE = 'snare',
+  HAT = 'hat',
+  TOM = 'tom',
+  CYMBAL = 'cymbal',
+  UNKNOWN = 'unknown',
 }
 
 // Feature vector for sliding window analysis

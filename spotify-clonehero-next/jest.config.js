@@ -10,13 +10,13 @@ const customJestConfig = {
     '**/__tests__/**/*.test.ts',
     '**/__tests__/**/*.test.tsx',
     '**/?(*.)+(spec|test).ts',
-    '**/?(*.)+(spec|test).tsx'
+    '**/?(*.)+(spec|test).tsx',
   ],
   collectCoverageFrom: [
     'lib/**/*.ts',
     'lib/**/*.tsx',
     '!lib/**/*.d.ts',
-    '!lib/**/__tests__/**'
+    '!lib/**/__tests__/**',
   ],
 };
 

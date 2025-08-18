@@ -1,6 +1,6 @@
 /**
  * Main API for the drum fill extractor
- * 
+ *
  * Usage:
  * ```ts
  * import { extractFills, defaultConfig } from 'drum-fill-extractor';
@@ -8,25 +8,36 @@
  * ```
  */
 
-import { 
-  ParsedChart, 
+import {
+  ParsedChart,
   Track,
-  FillSegment, 
+  FillSegment,
   Config,
   ValidatedConfig,
   DrumTrackNotFoundError,
   NoteEvent,
   TempoEvent,
-  TimeSignature
+  TimeSignature,
 } from './types';
-import { validateConfig, defaultConfig } from './config';
-import { mapScanChartNoteToVoice, DrumVoice } from './drumLaneMap';
-import { validateTempos, buildTempoMap, tickRangeToMs } from './utils/tempoUtils';
-import { getWindowBoundaries } from './quantize';
-import { createAnalysisWindows, extractFeaturesFromWindows } from './features/windowStats';
-import { updateGrooveDistances } from './features/grooveModel';
-import { detectCandidateWindows, postProcessCandidates } from './detector/candidateMask';
-import { mergeWindowsIntoSegments, refineBoundaries, removeOverlaps, sortSegments } from './detector/mergeSegments';
+import {validateConfig, defaultConfig} from './config';
+import {mapScanChartNoteToVoice, DrumVoice} from './drumLaneMap';
+import {validateTempos, buildTempoMap, tickRangeToMs} from './utils/tempoUtils';
+import {getWindowBoundaries} from './quantize';
+import {
+  createAnalysisWindows,
+  extractFeaturesFromWindows,
+} from './features/windowStats';
+import {updateGrooveDistances} from './features/grooveModel';
+import {
+  detectCandidateWindows,
+  postProcessCandidates,
+} from './detector/candidateMask';
+import {
+  mergeWindowsIntoSegments,
+  refineBoundaries,
+  removeOverlaps,
+  sortSegments,
+} from './detector/mergeSegments';
 
 /**
  * Represents a measure with timing information
@@ -43,17 +54,20 @@ interface MeasureInfo {
 /**
  * Calculates all measures in the chart based on time signatures
  */
-function calculateMeasures(chart: ParsedChart, tempoMap: TempoEvent[]): MeasureInfo[] {
+function calculateMeasures(
+  chart: ParsedChart,
+  tempoMap: TempoEvent[],
+): MeasureInfo[] {
   const measures: MeasureInfo[] = [];
   const ppq = chart.resolution;
-  
+
   // Get the last tick from the chart (approximate end of track)
   const endOfTrackTicks = Math.max(
-    ...chart.trackData.flatMap(track => 
-      track.noteEventGroups.flatMap(group => 
-        group.map(note => note.tick + note.length)
-      )
-    )
+    ...chart.trackData.flatMap(track =>
+      track.noteEventGroups.flatMap(group =>
+        group.map(note => note.tick + note.length),
+      ),
+    ),
   );
 
   let measureNumber = 1;
@@ -61,7 +75,8 @@ function calculateMeasures(chart: ParsedChart, tempoMap: TempoEvent[]): MeasureI
   chart.timeSignatures.forEach((timeSig, index) => {
     const pulsesPerDivision = ppq / (timeSig.denominator / 4);
     const barTicks = timeSig.numerator * pulsesPerDivision;
-    const segmentEndTick = (chart.timeSignatures[index + 1]?.tick ?? endOfTrackTicks);
+    const segmentEndTick =
+      chart.timeSignatures[index + 1]?.tick ?? endOfTrackTicks;
     let startTick = timeSig.tick;
 
     while (startTick < segmentEndTick) {
@@ -90,7 +105,11 @@ function calculateMeasures(chart: ParsedChart, tempoMap: TempoEvent[]): MeasureI
 /**
  * Converts ticks to milliseconds using the tempo map
  */
-function tickToMs(tick: number, tempoMap: TempoEvent[], resolution: number): number {
+function tickToMs(
+  tick: number,
+  tempoMap: TempoEvent[],
+  resolution: number,
+): number {
   if (tempoMap.length === 0) {
     return 0;
   }
@@ -112,21 +131,26 @@ function tickToMs(tick: number, tempoMap: TempoEvent[], resolution: number): num
     }
     // Calculate backwards from first tempo event
     const tickDelta = currentTempo.tick - tick;
-    const msDelta = (tickDelta / resolution) * (60000 / currentTempo.beatsPerMinute);
+    const msDelta =
+      (tickDelta / resolution) * (60000 / currentTempo.beatsPerMinute);
     return Math.max(0, currentTempo.msTime - msDelta);
   }
 
   // Calculate time from current tempo event to target tick
   const tickDelta = tick - currentTempo.tick;
-  const msDelta = (tickDelta / resolution) * (60000 / currentTempo.beatsPerMinute);
-  
+  const msDelta =
+    (tickDelta / resolution) * (60000 / currentTempo.beatsPerMinute);
+
   return currentTempo.msTime + msDelta;
 }
 
 /**
  * Finds the measure that contains the given tick
  */
-function findMeasureForTick(tick: number, measures: MeasureInfo[]): MeasureInfo | null {
+function findMeasureForTick(
+  tick: number,
+  measures: MeasureInfo[],
+): MeasureInfo | null {
   for (const measure of measures) {
     if (tick >= measure.startTick && tick < measure.endTick) {
       return measure;
@@ -138,7 +162,7 @@ function findMeasureForTick(tick: number, measures: MeasureInfo[]): MeasureInfo 
 
 /**
  * Main API function: extracts drum fills from a chart and track (like convertToVexFlow)
- * 
+ *
  * @param chart - The parsed chart data from scan-chart
  * @param track - The specific track data from scan-chart
  * @param userConfig - Optional configuration overrides
@@ -148,35 +172,43 @@ function findMeasureForTick(tick: number, measures: MeasureInfo[]): MeasureInfo 
 export function extractFills(
   chart: ParsedChart,
   track: Track,
-  userConfig?: Partial<Config>
+  userConfig?: Partial<Config>,
 ): FillSegment[];
 export function extractFills(
   chart: ParsedChart,
-  userConfig?: Partial<Config>
+  userConfig?: Partial<Config>,
 ): FillSegment[];
 
 export function extractFills(
   chart: ParsedChart,
   trackOrConfig?: Track | Partial<Config>,
-  maybeConfig?: Partial<Config>
+  maybeConfig?: Partial<Config>,
 ): FillSegment[] {
   // Determine call signature
-  const isLegacyCall = !trackOrConfig || !('instrument' in (trackOrConfig as any));
-  const config = validateConfig(isLegacyCall ? (trackOrConfig as Partial<Config> | undefined) : maybeConfig);
-  
+  const isLegacyCall =
+    !trackOrConfig || !('instrument' in (trackOrConfig as any));
+  const config = validateConfig(
+    isLegacyCall ? (trackOrConfig as Partial<Config> | undefined) : maybeConfig,
+  );
+
   // Normalize tempos to ensure beatsPerMinute is present
-  const normalizedTempos: TempoEvent[] = (chart.tempos as any).map((t: any) => ({
-    tick: t.tick,
-    msTime: t.msTime,
-    beatsPerMinute: t.beatsPerMinute ?? t.bpm,
-  }));
+  const normalizedTempos: TempoEvent[] = (chart.tempos as any).map(
+    (t: any) => ({
+      tick: t.tick,
+      msTime: t.msTime,
+      beatsPerMinute: t.beatsPerMinute ?? t.bpm,
+    }),
+  );
   validateTempos(normalizedTempos);
   const tempoMap = buildTempoMap(normalizedTempos, chart.resolution);
 
   // Resolve track
   let track: Track | null;
   if (isLegacyCall) {
-    track = (chart.trackData as any as Track[]).find(t => t.instrument === 'drums' && t.difficulty === config.difficulty) || null;
+    track =
+      (chart.trackData as any as Track[]).find(
+        t => t.instrument === 'drums' && t.difficulty === config.difficulty,
+      ) || null;
     if (!track) {
       throw new DrumTrackNotFoundError(config.difficulty);
     }
@@ -184,37 +216,37 @@ export function extractFills(
     track = trackOrConfig as Track;
   }
   // We already validated/merged config above
-  
+
   // Check if track is drums
   if (track.instrument !== 'drums') {
     throw new DrumTrackNotFoundError(config.difficulty);
   }
-  
+
   // Check if track difficulty matches config
   if (track.difficulty !== config.difficulty) {
     throw new DrumTrackNotFoundError(config.difficulty);
   }
-  
+
   // Extract and flatten note events
   const noteEvents = flattenNoteEvents(track);
   if (noteEvents.length === 0) {
     return []; // No notes, no fills
   }
-  
+
   // tempoMap already built above
-  
+
   // Determine analysis boundaries
-  const { startTick, endTick } = getAnalysisBounds(noteEvents);
-  
+  const {startTick, endTick} = getAnalysisBounds(noteEvents);
+
   // Create sliding analysis windows
   const windowBoundaries = getWindowBoundaries(
     startTick,
     endTick,
     config.windowBeats,
     config.strideBeats,
-    chart.resolution
+    chart.resolution,
   );
-  
+
   // Create analysis windows with notes
   const windows = createAnalysisWindows(
     noteEvents,
@@ -223,36 +255,48 @@ export function extractFills(
     config.windowBeats,
     config.strideBeats,
     chart.resolution,
-    tempoMap
+    tempoMap,
   );
-  
+
   if (windows.length === 0) {
     return []; // No windows to analyze
   }
-  
+
   // Extract features from all windows
-  const featuredWindows = extractFeaturesFromWindows(windows, config, chart.resolution);
-  
+  const featuredWindows = extractFeaturesFromWindows(
+    windows,
+    config,
+    chart.resolution,
+  );
+
   // Update groove distances using rolling model
   updateGrooveDistances(featuredWindows, config);
-  
+
   // Detect candidate windows
   const candidateWindows = detectCandidateWindows(featuredWindows, config);
-  
+
   // Post-process candidates (remove isolated, apply constraints)
-  const processedWindows = postProcessCandidates(candidateWindows, config, chart.resolution);
-  
+  const processedWindows = postProcessCandidates(
+    candidateWindows,
+    config,
+    chart.resolution,
+  );
+
   // Merge candidate windows into segments
   const rawSegments = mergeWindowsIntoSegments(
     processedWindows,
     config,
     chart.resolution,
     tempoMap,
-    chart.metadata?.name || 'Unknown'
+    chart.metadata?.name || 'Unknown',
   );
-  
+
   // Refine segment boundaries
-  const refinedSegments = refineBoundaries(rawSegments, chart.resolution, tempoMap);
+  const refinedSegments = refineBoundaries(
+    rawSegments,
+    chart.resolution,
+    tempoMap,
+  );
 
   // Remove overlapping segments
   const nonOverlappingSegments = removeOverlaps(refinedSegments);
@@ -261,8 +305,13 @@ export function extractFills(
   const sortedSegments = sortSegments(nonOverlappingSegments);
 
   // Collapse segments that are within a half-note (2 beats) gap into a single longer fill
-  const finalSegments = collapseSegmentsByProximity(sortedSegments, chart.resolution, tempoMap, 2);
-  
+  const finalSegments = collapseSegmentsByProximity(
+    sortedSegments,
+    chart.resolution,
+    tempoMap,
+    2,
+  );
+
   // Calculate measures and enrich segments with measure information
   const measures = calculateMeasures(chart, tempoMap);
   const enrichedSegments = finalSegments.map(segment => {
@@ -299,7 +348,7 @@ export function extractFills(
   });
   // Collapse multiple segments detected within the same measure into a single representative
   const collapsedByMeasure = collapseSegmentsByMeasure(enrichedSegments);
-  
+
   return collapsedByMeasure;
 }
 
@@ -308,11 +357,11 @@ export function extractFills(
  */
 function flattenNoteEvents(drumTrack: Track): NoteEvent[] {
   const allNotes: NoteEvent[] = [];
-  
+
   for (const noteGroup of drumTrack.noteEventGroups) {
     allNotes.push(...noteGroup);
   }
-  
+
   // Sort by tick position
   return allNotes.sort((a, b) => a.tick - b.tick);
 }
@@ -320,19 +369,22 @@ function flattenNoteEvents(drumTrack: Track): NoteEvent[] {
 /**
  * Determines the analysis boundaries based on note events
  */
-function getAnalysisBounds(noteEvents: NoteEvent[]): { startTick: number; endTick: number } {
+function getAnalysisBounds(noteEvents: NoteEvent[]): {
+  startTick: number;
+  endTick: number;
+} {
   if (noteEvents.length === 0) {
-    return { startTick: 0, endTick: 0 };
+    return {startTick: 0, endTick: 0};
   }
-  
+
   const firstNote = noteEvents[0];
   const lastNote = noteEvents[noteEvents.length - 1];
-  
+
   if (!firstNote || !lastNote) {
-    return { startTick: 0, endTick: 0 };
+    return {startTick: 0, endTick: 0};
   }
-  
-  return { startTick: firstNote.tick, endTick: lastNote.tick };
+
+  return {startTick: firstNote.tick, endTick: lastNote.tick};
 }
 
 /**
@@ -342,7 +394,7 @@ export function createExtractionSummary(
   chart: ParsedChart,
   track: Track,
   fills: FillSegment[],
-  config: ValidatedConfig
+  config: ValidatedConfig,
 ): {
   songInfo: {
     name: string;
@@ -359,17 +411,20 @@ export function createExtractionSummary(
   configUsed: ValidatedConfig;
 } {
   const noteEvents = flattenNoteEvents(track);
-  
+
   // Calculate song duration (simplified - uses last note time)
-  const duration = noteEvents.length > 0 ? 
-    Math.max(...noteEvents.map(n => n.msTime)) / 1000 : 0;
-  
-  const totalFillDuration = fills.reduce((sum, fill) => 
-    sum + (fill.endMs - fill.startMs), 0) / 1000;
-  
-  const averageFillDuration = fills.length > 0 ? totalFillDuration / fills.length : 0;
+  const duration =
+    noteEvents.length > 0
+      ? Math.max(...noteEvents.map(n => n.msTime)) / 1000
+      : 0;
+
+  const totalFillDuration =
+    fills.reduce((sum, fill) => sum + (fill.endMs - fill.startMs), 0) / 1000;
+
+  const averageFillDuration =
+    fills.length > 0 ? totalFillDuration / fills.length : 0;
   const fillDensityRatio = duration > 0 ? (fills.length / duration) * 60 : 0;
-  
+
   return {
     songInfo: {
       name: chart.metadata?.name || 'Unknown',
@@ -397,50 +452,52 @@ export function validateFillSegments(fills: FillSegment[]): {
 } {
   const errors: string[] = [];
   const warnings: string[] = [];
-  
+
   for (let i = 0; i < fills.length; i++) {
     const fill = fills[i];
-    
+
     if (!fill) {
       errors.push(`Fill ${i}: is null or undefined`);
       continue;
     }
-    
+
     // Check time consistency
     if (fill.startTick >= fill.endTick) {
       errors.push(`Fill ${i}: startTick >= endTick`);
     }
-    
+
     if (fill.startMs >= fill.endMs) {
       errors.push(`Fill ${i}: startMs >= endMs`);
     }
-    
+
     // Check duration reasonableness
     const durationMs = fill.endMs - fill.startMs;
-    if (durationMs > 10000) { // > 10 seconds
+    if (durationMs > 10000) {
+      // > 10 seconds
       warnings.push(`Fill ${i}: very long duration (${durationMs / 1000}s)`);
     }
-    
-    if (durationMs < 100) { // < 100ms
+
+    if (durationMs < 100) {
+      // < 100ms
       warnings.push(`Fill ${i}: very short duration (${durationMs}ms)`);
     }
-    
+
     // Check feature values
     if (!isFinite(fill.densityZ) || !isFinite(fill.grooveDist)) {
       errors.push(`Fill ${i}: invalid feature values`);
     }
   }
-  
+
   // Check for overlaps
   for (let i = 1; i < fills.length; i++) {
     const currentFill = fills[i];
     const prevFill = fills[i - 1];
-    
+
     if (currentFill && prevFill && currentFill.startTick < prevFill.endTick) {
       errors.push(`Fill ${i}: overlaps with previous fill`);
     }
   }
-  
+
   return {
     isValid: errors.length === 0,
     errors,
@@ -491,7 +548,7 @@ function collapseSegmentsByProximity(
   segments: FillSegment[],
   resolution: number,
   tempos: TempoEvent[],
-  gapBeats = 2
+  gapBeats = 2,
 ): FillSegment[] {
   if (segments.length <= 1) return segments;
   const gapTicks = gapBeats * resolution;
@@ -536,17 +593,11 @@ function collapseSegmentsByProximity(
 }
 
 // Re-export key types and utilities for external use
-export type {
-  Config,
-  FillSegment,
-  ParsedChart,
-} from './types';
+export type {Config, FillSegment, ParsedChart} from './types';
 
-export {
-  DrumTrackNotFoundError,
-} from './types';
+export {DrumTrackNotFoundError} from './types';
 
-export { defaultConfig as config, defaultConfig } from './config';
+export {defaultConfig as config, defaultConfig} from './config';
 
 // Export version information
 export const version = '1.0.0';

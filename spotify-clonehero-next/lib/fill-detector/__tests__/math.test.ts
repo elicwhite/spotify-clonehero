@@ -63,7 +63,7 @@ describe('Mathematical Utilities', () => {
     it('should calculate z-scores for an array', () => {
       const values = [1, 2, 3, 4, 5];
       const scores = zScores(values);
-      
+
       expect(scores).toHaveLength(5);
       expect(scores[2]).toBeCloseTo(0, 2); // Middle value should be ~0
       expect(scores[0]).toBeLessThan(0); // First value should be negative
@@ -78,12 +78,12 @@ describe('Mathematical Utilities', () => {
         [3, 4],
         [5, 6],
       ];
-      
+
       const cov = covarianceMatrix(data);
       expect(cov).toHaveLength(2);
       expect(cov[0]).toHaveLength(2);
       expect(cov[1]).toHaveLength(2);
-      
+
       // Covariance matrix should be symmetric
       expect(cov[0][1]).toBeCloseTo(cov[1][0], 6);
     });
@@ -99,17 +99,17 @@ describe('Mathematical Utilities', () => {
         [4, 2],
         [7, 6],
       ];
-      
+
       const inverse = invertMatrix(matrix);
       expect(inverse).not.toBeNull();
-      
+
       if (inverse) {
         // Multiply matrix by its inverse should give identity matrix
         const product = [
           [0, 0],
           [0, 0],
         ];
-        
+
         for (let i = 0; i < 2; i++) {
           for (let j = 0; j < 2; j++) {
             for (let k = 0; k < 2; k++) {
@@ -117,7 +117,7 @@ describe('Mathematical Utilities', () => {
             }
           }
         }
-        
+
         expect(product[0][0]).toBeCloseTo(1, 6);
         expect(product[1][1]).toBeCloseTo(1, 6);
         expect(product[0][1]).toBeCloseTo(0, 6);
@@ -130,7 +130,7 @@ describe('Mathematical Utilities', () => {
         [1, 2],
         [2, 4], // Second row is multiple of first
       ];
-      
+
       expect(invertMatrix(singularMatrix)).toBeNull();
     });
   });
@@ -143,7 +143,7 @@ describe('Mathematical Utilities', () => {
         [1, 0],
         [0, 1],
       ]; // Identity matrix
-      
+
       const distance = mahalanobisDistance(point, mean, covInverse);
       expect(distance).toBeCloseTo(Math.sqrt(5), 6);
     });
@@ -158,7 +158,7 @@ describe('Mathematical Utilities', () => {
   describe('identityMatrix', () => {
     it('should create identity matrix', () => {
       const identity = identityMatrix(3);
-      
+
       expect(identity).toHaveLength(3);
       expect(identity[0]).toEqual([1, 0, 0]);
       expect(identity[1]).toEqual([0, 1, 0]);
@@ -169,7 +169,7 @@ describe('Mathematical Utilities', () => {
   describe('diagonalMatrix', () => {
     it('should create diagonal matrix', () => {
       const diagonal = diagonalMatrix([1, 2, 3]);
-      
+
       expect(diagonal).toHaveLength(3);
       expect(diagonal[0]).toEqual([1, 0, 0]);
       expect(diagonal[1]).toEqual([0, 2, 0]);
@@ -183,9 +183,9 @@ describe('Mathematical Utilities', () => {
         [1, 0.5],
         [0.5, 1],
       ];
-      
+
       const regularized = regularizeCovariance(matrix, 0.1);
-      
+
       expect(regularized[0][0]).toBe(1.1);
       expect(regularized[1][1]).toBe(1.1);
       expect(regularized[0][1]).toBe(0.5);
@@ -197,7 +197,7 @@ describe('Mathematical Utilities', () => {
     it('should calculate rolling mean', () => {
       const values = [1, 2, 3, 4, 5];
       const rolling = rollingMean(values, 3);
-      
+
       expect(rolling).toHaveLength(3);
       expect(rolling[0]).toBe(2); // (1+2+3)/3
       expect(rolling[1]).toBe(3); // (2+3+4)/3
@@ -257,7 +257,7 @@ describe('Mathematical Utilities', () => {
     it('should detect outliers using IQR method', () => {
       const values = [1, 2, 3, 4, 5, 100]; // 100 is an outlier
       const outliers = detectOutliers(values);
-      
+
       expect(outliers).toHaveLength(6);
       expect(outliers[5]).toBe(true); // Last value should be detected as outlier
     });

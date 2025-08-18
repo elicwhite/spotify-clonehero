@@ -13,7 +13,7 @@
 | --- | ----------------------------------------------------------------------------------------------------------------------------- |
 | F-1 | Accept a fully-resolved `ParsedChart` object (see §A) and a config object (optional).                                         |
 | F-2 | Analyse **one drum difficulty level** (default: `"expert"`).                                                                  |
-| F-3 | Detect candidate fills using *chart-agnostic* heuristics: density spike, voice-share change, groove-distance outlier, etc.    |
+| F-3 | Detect candidate fills using _chart-agnostic_ heuristics: density spike, voice-share change, groove-distance outlier, etc.    |
 | F-4 | For every merged fill segment return: start/end **tick**, start/end **ms**, and a score for each heuristic (raw or z-scored). |
 | F-5 | API returns `FillSegment[]` (see §B). No disk output required.                                                                |
 | F-6 | All thresholds / window sizes editable via a JSON config; sensible defaults provided.                                         |
@@ -36,7 +36,7 @@
 
 ### 3 · Domain Model & Type Definitions
 
-#### A.  **Input Types**  (excerpt — already provided)
+#### A. **Input Types** (excerpt — already provided)
 
 ```ts
 interface NoteEvent {
@@ -60,11 +60,11 @@ type ParsedChart = {
 };
 ```
 
-#### B.  **Output Type**
+#### B. **Output Type**
 
 ```ts
 interface FillSegment {
-  songId: string;        // caller supplies or derived from file name
+  songId: string; // caller supplies or derived from file name
   startTick: number;
   endTick: number;
   startMs: number;
@@ -111,20 +111,21 @@ src/
 ### 5 · Algorithmic Flow
 
 > **Tick vs Beat Conversion**
-> `chart.resolution` = ticks per quarter note. One *beat* = 4 × resolution. Tempo changes handled by mapping tick→ms via the provided `tempos[]`.
+> `chart.resolution` = ticks per quarter note. One _beat_ = 4 × resolution. Tempo changes handled by mapping tick→ms via the provided `tempos[]`.
 
 1. **Drum Track Selection**
 
    ```ts
-   const track = chart.trackData.find(t => t.instrument === "drums" && t.difficulty === cfg.difficulty)
+   const track = chart.trackData.find(
+     t => t.instrument === 'drums' && t.difficulty === cfg.difficulty,
+   );
    ```
 
    Flatten `noteEventGroups` into a chronologically sorted `NoteEvent[]`.
 
 2. **Voice Mapping**
    Convert `NoteType` to **VOICE**
-
-   * Kick, Snare, Hat/Ride, Tom, Cymbal/Crash.
+   - Kick, Snare, Hat/Ride, Tom, Cymbal/Crash.
      Provide mapping table for Clone Hero / RB lanes.
 
 3. **Quantisation (optional but fast)**
@@ -132,13 +133,12 @@ src/
    `quant = cfg.ppq / cfg.quantDiv` (default 192 / 4 = 48 ticks ≈ 16th-note).
 
 4. **Sliding-Window Feature Extraction**
-
-   * **Window size**: 1 beat (4 × resolution ticks)
-   * **Stride**: ¼ beat
-   * Compute feature vector *F(t)* (see §6).
+   - **Window size**: 1 beat (4 × resolution ticks)
+   - **Stride**: ¼ beat
+   - Compute feature vector _F(t)_ (see §6).
 
 5. **Adaptive Groove Model**
-   Rolling mean μ and covariance Σ of *F* over the preceding `lookbackBars` (8 bars default), excluding windows already flagged candidate. Calculate Mahalanobis distance → `grooveDist`.
+   Rolling mean μ and covariance Σ of _F_ over the preceding `lookbackBars` (8 bars default), excluding windows already flagged candidate. Calculate Mahalanobis distance → `grooveDist`.
 
 6. **Candidate Window Mask**
    Positive if any of:
@@ -185,8 +185,8 @@ src/
 
 ```ts
 export interface Config {
-  difficulty?: "expert" | "hard" | "medium" | "easy";
-  quantDiv?: 4;              // smaller → finer grid
+  difficulty?: 'expert' | 'hard' | 'medium' | 'easy';
+  quantDiv?: 4; // smaller → finer grid
   windowBeats?: 1;
   strideBeats?: 0.25;
   lookbackBars?: 8;
@@ -202,7 +202,7 @@ export interface Config {
 }
 
 export const defaultConfig: Config = {
-  difficulty: "expert",
+  difficulty: 'expert',
   quantDiv: 4,
   windowBeats: 1,
   strideBeats: 0.25,
@@ -223,9 +223,9 @@ export const defaultConfig: Config = {
 
 ### 8 · Error Handling
 
-* **Missing drum track** → throw `DrumTrackNotFoundError`.
-* **Zero note events** → return `[]`.
-* **Covariance singular** (too few windows) → use diagonal Σ.
+- **Missing drum track** → throw `DrumTrackNotFoundError`.
+- **Zero note events** → return `[]`.
+- **Covariance singular** (too few windows) → use diagonal Σ.
 
 ---
 
@@ -243,10 +243,10 @@ export const defaultConfig: Config = {
 
 ### 10 · Future-Proof Extensions
 
-* Plug-in alternative heuristics via feature middleware.
-* Persist output to SQLite for cross-song queries.
-* Web UI to audition fills (WebAudio + Tone.js).
-* Lightweight ML classifier to replace hand-tuned thresholds.
+- Plug-in alternative heuristics via feature middleware.
+- Persist output to SQLite for cross-song queries.
+- Web UI to audition fills (WebAudio + Tone.js).
+- Lightweight ML classifier to replace hand-tuned thresholds.
 
 ---
 
@@ -263,9 +263,12 @@ export const defaultConfig: Config = {
 ### 12 · Public API Sketch
 
 ```ts
-import { extractFills, defaultConfig } from "drum-fill-extractor";
+import {extractFills, defaultConfig} from 'drum-fill-extractor';
 
-const fills = extractFills(parsedChart, { ...defaultConfig, thresholds: { densityZ: 1.3 } });
+const fills = extractFills(parsedChart, {
+  ...defaultConfig,
+  thresholds: {densityZ: 1.3},
+});
 console.log(fills[0].startMs, fills[0].densityZ);
 ```
 

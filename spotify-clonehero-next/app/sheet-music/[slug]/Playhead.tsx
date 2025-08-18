@@ -1,8 +1,13 @@
-import React, { useEffect, useRef, useState, memo } from 'react';
-import { findPositionForTime } from './renderVexflow';
+import React, {useEffect, useRef, useState, memo} from 'react';
+import {findPositionForTime} from './renderVexflow';
 
 interface PlayheadProps {
-  timePositionMap: Array<{ ms: number; x: number; y: number; flag: 'measure-start' | 'measure-end' | 'note' }>;
+  timePositionMap: Array<{
+    ms: number;
+    x: number;
+    y: number;
+    flag: 'measure-start' | 'measure-end' | 'note';
+  }>;
   audioManagerRef: React.RefObject<any>;
 }
 
@@ -16,7 +21,7 @@ export const Playhead = memo(function ({
 
   window.findPos = (time: number) => {
     return findPositionForTime(timePositionMap, time);
-  }
+  };
   window.audioRef = audioManagerRef;
 
   useEffect(() => {
@@ -27,7 +32,10 @@ export const Playhead = memo(function ({
           // Get current time directly from audio manager
           const currentTimeMs = audioManagerRef.current.currentTime * 1000;
           // Find position for current time
-          const newPosition = findPositionForTime(timePositionMap, currentTimeMs);
+          const newPosition = findPositionForTime(
+            timePositionMap,
+            currentTimeMs,
+          );
           if (newPosition && playheadRef.current) {
             // Directly manipulate the DOM style properties
             playheadRef.current.style.left = `${newPosition.x}px`;
@@ -61,13 +69,14 @@ export const Playhead = memo(function ({
         height: '120px', // Adjust based on your staff height
         zIndex: 1000,
         transform: 'translateX(-50%)',
-      }}
-    >
+      }}>
       {/* Optional: Add a visual indicator at the top */}
       <div
         className="absolute top-0 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-primary rounded-full"
-        style={{ marginTop: '-6px' }}
+        style={{marginTop: '-6px'}}
       />
     </div>
   );
 });
+
+Playhead.displayName = 'Playhead';

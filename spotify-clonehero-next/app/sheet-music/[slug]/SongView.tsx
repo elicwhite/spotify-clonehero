@@ -62,7 +62,6 @@ import tripletNote from '@/public/assets/svgs/triplet-note.svg';
 import {extractFills, defaultConfig} from '@/lib/fill-detector';
 import {toast} from '@/components/ui/toast';
 
-
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
     .filter(part => part.instrument === 'drums')
@@ -128,24 +127,30 @@ export default function Renderer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [volumeControls, setVolumeControls] = useState<VolumeControl[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [detectedFills, setDetectedFills] = useState<Array<{
-    fillNumber: number;
-    startTimeMs: number;
-    endTimeMs: number;
-    durationMs: number;
-    startTick: number;
-    endTick: number;
-    measureStartMs: number;
-    measureNumber: number;
-  }>>([]);
+  const [detectedFills, setDetectedFills] = useState<
+    Array<{
+      fillNumber: number;
+      startTimeMs: number;
+      endTimeMs: number;
+      durationMs: number;
+      startTick: number;
+      endTick: number;
+      measureStartMs: number;
+      measureNumber: number;
+    }>
+  >([]);
 
   // Tempo control state
   const [tempo, setTempo] = useState(1.0);
 
   // Practice mode state
-  const [practiceMode, setPracticeMode] = useState<PracticeModeConfig | null>(null);
+  const [practiceMode, setPracticeMode] = useState<PracticeModeConfig | null>(
+    null,
+  );
   const [isPracticeModeActive, setIsPracticeModeActive] = useState(false);
-  const [practiceModeStep, setPracticeModeStep] = useState<'idle' | 'selectingStart' | 'selectingEnd'>('idle');
+  const [practiceModeStep, setPracticeModeStep] = useState<
+    'idle' | 'selectingStart' | 'selectingEnd'
+  >('idle');
 
   const availableDifficulties = getDrumDifficulties(chart);
   const [selectedDifficulty, setSelectedDifficulty] = useState(
@@ -269,7 +274,7 @@ export default function Renderer({
       ) {
         setSelectedDifficulty(parsed.selectedDifficulty);
       }
-      
+
       // Restore tempo if available
       if (parsed.tempo) {
         setTempo(parsed.tempo);
@@ -354,9 +359,10 @@ export default function Renderer({
         if (typeof window !== 'undefined') {
           const raw = localStorage.getItem(TRACK_SETTINGS_KEY);
           if (raw) {
-            const persisted: Record<string, Partial<VolumeControl>> = JSON.parse(
-              raw,
-            );
+            const persisted: Record<
+              string,
+              Partial<VolumeControl>
+            > = JSON.parse(raw);
             initialVolumeControls = initialVolumeControls.map(control => {
               const saved = persisted[control.trackName];
               if (!saved) return control;
@@ -366,7 +372,9 @@ export default function Renderer({
                 // Ensure required fields are present
                 trackName: control.trackName,
                 volume:
-                  typeof saved.volume === 'number' ? saved.volume : control.volume,
+                  typeof saved.volume === 'number'
+                    ? saved.volume
+                    : control.volume,
                 isMuted:
                   typeof saved.isMuted === 'boolean'
                     ? saved.isMuted
@@ -429,12 +437,19 @@ export default function Renderer({
       audioManagerRef.current?.destroy();
       audioManagerRef.current = null;
     };
-  }, [audioFiles, measures, clickVolumes, playClickTrack, masterClickVolume, practiceMode]);
+  }, [
+    audioFiles,
+    measures,
+    clickVolumes,
+    playClickTrack,
+    masterClickVolume,
+    practiceMode,
+  ]);
 
   useInterval(
     () => {
       setCurrentPlayback(audioManagerRef.current?.currentTime ?? 0);
-      
+
       // Check for practice mode looping
       if (audioManagerRef.current && isPlaying) {
         audioManagerRef.current.checkPracticeModeLoop();
@@ -476,16 +491,16 @@ export default function Renderer({
     if (process.env.NODE_ENV !== 'development') {
       return;
     }
-    
+
     try {
       // Only run fill detection if we have a drums track
       if (track.instrument !== 'drums') {
         setDetectedFills([]); // Clear fills for non-drums tracks
         return;
       }
-      
+
       const fills = extractFills(chart, track, defaultConfig);
-      
+
       // Store fills in state for UI
       const fillsForUI = fills.map((fill, index) => ({
         fillNumber: index + 1,
@@ -498,7 +513,7 @@ export default function Renderer({
         measureNumber: fill.measureNumber,
       }));
       setDetectedFills(fillsForUI);
-      
+
       console.log('🥁 Detected Drum Fills Debug Info:', {
         songName: metadata.name,
         artist: metadata.artist,
@@ -528,12 +543,22 @@ export default function Renderer({
           },
           combinedScore: fill.densityZ + fill.grooveDist + fill.tomRatioJump,
         })),
-        summary: fills.length > 0 ? {
-          shortestFillMs: Math.min(...fills.map(f => f.endMs - f.startMs)),
-          longestFillMs: Math.max(...fills.map(f => f.endMs - f.startMs)),
-          avgFillDurationMs: fills.reduce((sum, f) => sum + (f.endMs - f.startMs), 0) / fills.length,
-          totalFillTimeMs: fills.reduce((sum, f) => sum + (f.endMs - f.startMs), 0),
-        } : null,
+        summary:
+          fills.length > 0
+            ? {
+                shortestFillMs: Math.min(
+                  ...fills.map(f => f.endMs - f.startMs),
+                ),
+                longestFillMs: Math.max(...fills.map(f => f.endMs - f.startMs)),
+                avgFillDurationMs:
+                  fills.reduce((sum, f) => sum + (f.endMs - f.startMs), 0) /
+                  fills.length,
+                totalFillTimeMs: fills.reduce(
+                  (sum, f) => sum + (f.endMs - f.startMs),
+                  0,
+                ),
+              }
+            : null,
       });
     } catch (error) {
       console.warn('⚠️ Fill detection failed:', error);
@@ -582,9 +607,9 @@ export default function Renderer({
     } else if (!audioManagerRef.current.isInitialized) {
       // If in practice mode, start from practice start time
       if (practiceMode && isPracticeModeActive) {
-        audioManagerRef.current.play({ time: practiceMode.startTimeMs / 1000 });
+        audioManagerRef.current.play({time: practiceMode.startTimeMs / 1000});
       } else {
-        audioManagerRef.current.play({ time: 0 });
+        audioManagerRef.current.play({time: 0});
       }
       setIsPlaying(true);
     } else {
@@ -604,47 +629,52 @@ export default function Renderer({
     setPracticeMode(null);
     setIsPracticeModeActive(false);
     setPracticeModeStep('idle');
-    
+
     // Update audio manager
     if (audioManagerRef.current) {
       audioManagerRef.current.setPracticeMode(null);
     }
-    
+
     toast.info('Practice mode ended');
   }, []);
 
-  const handlePracticeMeasureSelect = useCallback((measureStartMs: number) => {
-    if (practiceModeStep === 'selectingStart') {
-      // Set start measure and move to selecting end
-      setPracticeMode({
-        startMeasureMs: measureStartMs,
-        endMeasureMs: 0,
-        startTimeMs: Math.max(0, measureStartMs - 2000), // 2 seconds before
-        endTimeMs: 0,
-      });
-      setPracticeModeStep('selectingEnd');
-      toast.info('Choose the ending measure');
-    } else if (practiceModeStep === 'selectingEnd') {
-      // Set end measure and complete practice mode setup
-      const endMeasureMs = measureStartMs;
-      const updatedPracticeMode: PracticeModeConfig = {
-        startMeasureMs: practiceMode!.startMeasureMs,
-        endMeasureMs: endMeasureMs,
-        startTimeMs: Math.max(0, practiceMode!.startMeasureMs - 2000), // 2 seconds before
-        endTimeMs: endMeasureMs + 2000, // 2 seconds after
-      };
-      
-      setPracticeMode(updatedPracticeMode);
-      setPracticeModeStep('idle');
-      
-      // Update audio manager
-      if (audioManagerRef.current) {
-        audioManagerRef.current.setPracticeMode(updatedPracticeMode);
+  const handlePracticeMeasureSelect = useCallback(
+    (measureStartMs: number) => {
+      if (practiceModeStep === 'selectingStart') {
+        // Set start measure and move to selecting end
+        setPracticeMode({
+          startMeasureMs: measureStartMs,
+          endMeasureMs: 0,
+          startTimeMs: Math.max(0, measureStartMs - 2000), // 2 seconds before
+          endTimeMs: 0,
+        });
+        setPracticeModeStep('selectingEnd');
+        toast.info('Choose the ending measure');
+      } else if (practiceModeStep === 'selectingEnd') {
+        // Set end measure and complete practice mode setup
+        const endMeasureMs = measureStartMs;
+        const updatedPracticeMode: PracticeModeConfig = {
+          startMeasureMs: practiceMode!.startMeasureMs,
+          endMeasureMs: endMeasureMs,
+          startTimeMs: Math.max(0, practiceMode!.startMeasureMs - 2000), // 2 seconds before
+          endTimeMs: endMeasureMs + 2000, // 2 seconds after
+        };
+
+        setPracticeMode(updatedPracticeMode);
+        setPracticeModeStep('idle');
+
+        // Update audio manager
+        if (audioManagerRef.current) {
+          audioManagerRef.current.setPracticeMode(updatedPracticeMode);
+        }
+
+        toast.success(
+          'Practice mode configured! Click play to start practicing.',
+        );
       }
-      
-      toast.success('Practice mode configured! Click play to start practicing.');
-    }
-  }, [practiceModeStep, practiceMode]);
+    },
+    [practiceModeStep, practiceMode],
+  );
 
   const songDuration =
     metadata.song_length == null ? 5 * 60 : metadata.song_length / 1000;
@@ -797,16 +827,16 @@ export default function Renderer({
   const practiceModeButton = (
     <div className="space-y-2 pt-4 border-t">
       <Button
-        variant={isPracticeModeActive ? "destructive" : "default"}
+        variant={isPracticeModeActive ? 'destructive' : 'default'}
         className="w-full"
-        onClick={isPracticeModeActive ? endPracticeMode : startPracticeMode}
-      >
+        onClick={isPracticeModeActive ? endPracticeMode : startPracticeMode}>
         <Target className="h-4 w-4 mr-2" />
         {isPracticeModeActive ? 'End Practice' : 'Practice'}
       </Button>
       {isPracticeModeActive && practiceMode && (
         <div className="text-xs text-muted-foreground text-center">
-          Practice Range: {Math.round(practiceMode.startTimeMs / 1000)}s - {Math.round(practiceMode.endTimeMs / 1000)}s
+          Practice Range: {Math.round(practiceMode.startTimeMs / 1000)}s -{' '}
+          {Math.round(practiceMode.endTimeMs / 1000)}s
         </div>
       )}
     </div>
@@ -858,7 +888,7 @@ export default function Renderer({
           </div>
 
           {volumeSliders}
-          
+
           <div className="space-y-4 pt-4">
             <div className="flex items-center space-x-2">
               <Switch
@@ -895,19 +925,18 @@ export default function Renderer({
                 Enable colors
               </label>
             </div>
-           {
-            (chart as any).lyrics == null ? null : 
-            (<div className="flex items-center space-x-2">
-              <Switch
-                id="lyrics"
-                checked={showLyrics}
-                onCheckedChange={setShowLyrics}
-              />
-              <label htmlFor="lyrics" className="text-sm font-medium">
-                Show lyrics
-              </label>
-            </div>)
-}
+            {(chart as any).lyrics == null ? null : (
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="lyrics"
+                  checked={showLyrics}
+                  onCheckedChange={setShowLyrics}
+                />
+                <label htmlFor="lyrics" className="text-sm font-medium">
+                  Show lyrics
+                </label>
+              </div>
+            )}
             <div className="flex items-center space-x-2">
               <Switch
                 id="clonehero"
@@ -944,8 +973,7 @@ export default function Renderer({
                     const newTempo = Math.max(tempo - 0.1, 0.25);
                     handleTempoChange(newTempo);
                   }}
-                  className="h-6 w-6"
-                >
+                  className="h-6 w-6">
                   <Minus className="h-3 w-3" />
                 </Button>
                 <span className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[3rem] text-center">
@@ -958,8 +986,7 @@ export default function Renderer({
                     const newTempo = Math.min(tempo + 0.1, 4.0);
                     handleTempoChange(newTempo);
                   }}
-                  className="h-6 w-6"
-                >
+                  className="h-6 w-6">
                   <Plus className="h-3 w-3" />
                 </Button>
               </div>
@@ -970,46 +997,51 @@ export default function Renderer({
           {practiceModeButton}
 
           {/* Drum Fills Section - Only in development */}
-          {false && process.env.NODE_ENV === 'development' && detectedFills.length > 0 && (
-            <div className="space-y-2 pt-4 border-t">
-              <label className="text-sm font-medium">Drum Fills ({detectedFills.length})</label>
-              <div className="space-y-1 overflow-y-auto">
-                {detectedFills.map((fill) => (
-                  <div
-                    key={fill.fillNumber}
-                    className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium">Fill #{fill.fillNumber}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Measure {fill.measureNumber} • {Math.round(fill.startTimeMs / 1000)}s • {Math.round(fill.durationMs / 1000)}s duration
+          {false &&
+            process.env.NODE_ENV === 'development' &&
+            detectedFills.length > 0 && (
+              <div className="space-y-2 pt-4 border-t">
+                <label className="text-sm font-medium">
+                  Drum Fills ({detectedFills.length})
+                </label>
+                <div className="space-y-1 overflow-y-auto">
+                  {detectedFills.map(fill => (
+                    <div
+                      key={fill.fillNumber}
+                      className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium">
+                          Fill #{fill.fillNumber}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Measure {fill.measureNumber} •{' '}
+                          {Math.round(fill.startTimeMs / 1000)}s •{' '}
+                          {Math.round(fill.durationMs / 1000)}s duration
+                        </div>
+                      </div>
+                      <div className="flex gap-1 ml-2 flex-shrink-0">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => playFromMeasure(fill.measureStartMs)}
+                          title={`Play from measure ${fill.measureNumber} start`}>
+                          <Play className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => playFill(fill.startTimeMs)}
+                          title={`Play from fill #${fill.fillNumber} start`}>
+                          <Play className="h-3 w-3 fill-current" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex gap-1 ml-2 flex-shrink-0">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => playFromMeasure(fill.measureStartMs)}
-                        title={`Play from measure ${fill.measureNumber} start`}
-                      >
-                        <Play className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => playFill(fill.startTimeMs)}
-                        title={`Play from fill #${fill.fillNumber} start`}
-                      >
-                        <Play className="h-3 w-3 fill-current" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
         <p className="text-xs text-muted-foreground text-center mt-auto">
           Special thanks to{' '}

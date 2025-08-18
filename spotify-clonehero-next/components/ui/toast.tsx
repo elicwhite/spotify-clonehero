@@ -1,6 +1,6 @@
 'use client';
 
-import { toast as sonnerToast, Toaster } from 'sonner';
+import {toast as sonnerToast, Toaster} from 'sonner';
 
 export const toast = sonnerToast;
 

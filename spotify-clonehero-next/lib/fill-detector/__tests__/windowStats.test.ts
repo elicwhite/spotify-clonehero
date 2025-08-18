@@ -1,21 +1,21 @@
-import { 
-  createAnalysisWindows, 
+import {
+  createAnalysisWindows,
   extractFeaturesFromWindows,
-  computeWindowFeatures 
+  computeWindowFeatures,
 } from '../features/windowStats';
-import { validateConfig, defaultConfig } from '../config';
-import { buildTempoMap } from '../utils/tempoUtils';
-import { NoteEvent, AnalysisWindow, ValidatedConfig } from '../types';
+import {validateConfig, defaultConfig} from '../config';
+import {buildTempoMap} from '../utils/tempoUtils';
+import {NoteEvent, AnalysisWindow, ValidatedConfig} from '../types';
 
 // Helper function to create test chart data
 function createTestChart() {
   const resolution = 192;
   const notes: NoteEvent[] = [];
-  
+
   // Simple pattern (4 bars) - kick and snare
   for (let bar = 0; bar < 4; bar++) {
     const barStart = bar * resolution * 4;
-    
+
     // Kick on 1 and 3
     notes.push({
       tick: barStart,
@@ -25,7 +25,7 @@ function createTestChart() {
       type: 0, // Kick
       flags: 0,
     });
-    
+
     notes.push({
       tick: barStart + resolution * 2,
       msTime: ((barStart + resolution * 2) / resolution) * (60000 / 120),
@@ -44,7 +44,7 @@ function createTestChart() {
       type: 1, // Snare
       flags: 0,
     });
-    
+
     notes.push({
       tick: barStart + resolution * 3,
       msTime: ((barStart + resolution * 3) / resolution) * (60000 / 120),
@@ -72,13 +72,15 @@ function createTestChart() {
   return {
     name: 'Test Chart',
     resolution,
-    tempos: [{ tick: 0, beatsPerMinute: 120, msTime: 0 }],
-    trackData: [{
-      instrument: 'drums',
-      difficulty: 'expert',
-      noteEventGroups: [notes],
-    }],
-    notes
+    tempos: [{tick: 0, beatsPerMinute: 120, msTime: 0}],
+    trackData: [
+      {
+        instrument: 'drums',
+        difficulty: 'expert',
+        noteEventGroups: [notes],
+      },
+    ],
+    notes,
   };
 }
 
@@ -102,7 +104,7 @@ describe('Window Statistics', () => {
         config.windowBeats,
         config.strideBeats,
         testChart.resolution,
-        tempoMap
+        tempoMap,
       );
 
       expect(windows.length).toBeGreaterThan(0);
@@ -117,7 +119,7 @@ describe('Window Statistics', () => {
         1, // 1 beat windows
         0.25, // 0.25 beat stride
         testChart.resolution,
-        tempoMap
+        tempoMap,
       );
 
       // Check that windows have correct size (1 beat = 192 ticks)
@@ -141,25 +143,29 @@ describe('Window Statistics', () => {
         config.windowBeats,
         config.strideBeats,
         testChart.resolution,
-        tempoMap
+        tempoMap,
       );
 
       // Find windows in the fill section (ticks 3072-3840)
-      const fillWindows = windows.filter(w => 
-        w.startTick >= 3000 && w.startTick <= 3800
+      const fillWindows = windows.filter(
+        w => w.startTick >= 3000 && w.startTick <= 3800,
       );
 
       expect(fillWindows.length).toBeGreaterThan(0);
 
       // Check that fill windows have more notes than regular windows
-      const regularWindows = windows.filter(w => 
-        w.startTick >= 0 && w.startTick < 3000
+      const regularWindows = windows.filter(
+        w => w.startTick >= 0 && w.startTick < 3000,
       );
 
-      const avgFillNotes = fillWindows.reduce((sum, w) => sum + w.notes.length, 0) / fillWindows.length;
-      const avgRegularNotes = regularWindows.length > 0 
-        ? regularWindows.reduce((sum, w) => sum + w.notes.length, 0) / regularWindows.length
-        : 0;
+      const avgFillNotes =
+        fillWindows.reduce((sum, w) => sum + w.notes.length, 0) /
+        fillWindows.length;
+      const avgRegularNotes =
+        regularWindows.length > 0
+          ? regularWindows.reduce((sum, w) => sum + w.notes.length, 0) /
+            regularWindows.length
+          : 0;
 
       expect(avgFillNotes).toBeGreaterThan(avgRegularNotes);
     });
@@ -174,10 +180,14 @@ describe('Window Statistics', () => {
         config.windowBeats,
         config.strideBeats,
         testChart.resolution,
-        tempoMap
+        tempoMap,
       );
 
-      const featuredWindows = extractFeaturesFromWindows(windows, config, testChart.resolution);
+      const featuredWindows = extractFeaturesFromWindows(
+        windows,
+        config,
+        testChart.resolution,
+      );
 
       expect(featuredWindows.length).toBe(windows.length);
 
@@ -198,14 +208,18 @@ describe('Window Statistics', () => {
         config.windowBeats,
         config.strideBeats,
         testChart.resolution,
-        tempoMap
+        tempoMap,
       );
 
-      const featuredWindows = extractFeaturesFromWindows(windows, config, testChart.resolution);
+      const featuredWindows = extractFeaturesFromWindows(
+        windows,
+        config,
+        testChart.resolution,
+      );
 
       // Find windows in the fill section
-      const fillWindows = featuredWindows.filter(w => 
-        w.startTick >= 3072 && w.startTick <= 3800 && w.notes.length >= 3
+      const fillWindows = featuredWindows.filter(
+        w => w.startTick >= 3072 && w.startTick <= 3800 && w.notes.length >= 3,
       );
 
       expect(fillWindows.length).toBeGreaterThan(0);
@@ -215,7 +229,7 @@ describe('Window Statistics', () => {
         expect(window.features.noteDensity).toBeGreaterThan(0);
         expect(isFinite(window.features.noteDensity)).toBe(true);
         expect(window.features.noteDensity).not.toBe(Infinity);
-        
+
         // Fill windows should have high density (4+ notes per beat)
         expect(window.features.noteDensity).toBeGreaterThanOrEqual(3);
       });
@@ -229,20 +243,26 @@ describe('Window Statistics', () => {
         config.windowBeats,
         config.strideBeats,
         testChart.resolution,
-        tempoMap
+        tempoMap,
       );
 
-      const featuredWindows = extractFeaturesFromWindows(windows, config, testChart.resolution);
+      const featuredWindows = extractFeaturesFromWindows(
+        windows,
+        config,
+        testChart.resolution,
+      );
 
       // Find windows in the fill section
-      const fillWindows = featuredWindows.filter(w => 
-        w.startTick >= 3072 && w.startTick <= 3800 && w.notes.length >= 3
+      const fillWindows = featuredWindows.filter(
+        w => w.startTick >= 3072 && w.startTick <= 3800 && w.notes.length >= 3,
       );
 
       expect(fillWindows.length).toBeGreaterThan(0);
 
       // At least some fill windows should have high densityZ
-      const highDensityWindows = fillWindows.filter(w => w.features.densityZ > 2);
+      const highDensityWindows = fillWindows.filter(
+        w => w.features.densityZ > 2,
+      );
       expect(highDensityWindows.length).toBeGreaterThan(0);
     });
 
@@ -254,14 +274,18 @@ describe('Window Statistics', () => {
         config.windowBeats,
         config.strideBeats,
         testChart.resolution,
-        tempoMap
+        tempoMap,
       );
 
-      const featuredWindows = extractFeaturesFromWindows(windows, config, testChart.resolution);
+      const featuredWindows = extractFeaturesFromWindows(
+        windows,
+        config,
+        testChart.resolution,
+      );
 
       // Find windows in the fill section (should be all toms)
-      const fillWindows = featuredWindows.filter(w => 
-        w.startTick >= 3072 && w.startTick <= 3800 && w.notes.length >= 3
+      const fillWindows = featuredWindows.filter(
+        w => w.startTick >= 3072 && w.startTick <= 3800 && w.notes.length >= 3,
       );
 
       expect(fillWindows.length).toBeGreaterThan(0);
@@ -283,10 +307,38 @@ describe('Window Statistics', () => {
         startMs: 0,
         endMs: 1000,
         notes: [
-          { tick: 3072, msTime: 0, length: 24, msLength: 62.5, type: 3, flags: 0 },
-          { tick: 3120, msTime: 0, length: 24, msLength: 62.5, type: 3, flags: 0 },
-          { tick: 3168, msTime: 0, length: 24, msLength: 62.5, type: 3, flags: 0 },
-          { tick: 3216, msTime: 0, length: 24, msLength: 62.5, type: 3, flags: 0 },
+          {
+            tick: 3072,
+            msTime: 0,
+            length: 24,
+            msLength: 62.5,
+            type: 3,
+            flags: 0,
+          },
+          {
+            tick: 3120,
+            msTime: 0,
+            length: 24,
+            msLength: 62.5,
+            type: 3,
+            flags: 0,
+          },
+          {
+            tick: 3168,
+            msTime: 0,
+            length: 24,
+            msLength: 62.5,
+            type: 3,
+            flags: 0,
+          },
+          {
+            tick: 3216,
+            msTime: 0,
+            length: 24,
+            msLength: 62.5,
+            type: 3,
+            flags: 0,
+          },
         ],
         features: {
           noteDensity: 0,
@@ -300,10 +352,14 @@ describe('Window Statistics', () => {
           crashResolve: false,
           grooveDist: 0,
         },
-        isCandidate: false
+        isCandidate: false,
       };
 
-      const features = computeWindowFeatures(testWindow, config, testChart.resolution);
+      const features = computeWindowFeatures(
+        testWindow,
+        config,
+        testChart.resolution,
+      );
 
       expect(features.noteDensity).toBe(4); // 4 notes in 1 beat
       expect(features.densityZ).toBe(0); // No rolling stats provided
@@ -333,10 +389,14 @@ describe('Window Statistics', () => {
           crashResolve: false,
           grooveDist: 0,
         },
-        isCandidate: false
+        isCandidate: false,
       };
 
-      const features = computeWindowFeatures(emptyWindow, config, testChart.resolution);
+      const features = computeWindowFeatures(
+        emptyWindow,
+        config,
+        testChart.resolution,
+      );
 
       expect(features.noteDensity).toBe(0);
       expect(isFinite(features.noteDensity)).toBe(true);
@@ -351,8 +411,8 @@ describe('Window Statistics', () => {
         startMs: 0,
         endMs: 500,
         notes: [
-          { tick: 48, msTime: 0, length: 24, msLength: 62.5, type: 0, flags: 0 },
-          { tick: 96, msTime: 0, length: 24, msLength: 62.5, type: 1, flags: 0 },
+          {tick: 48, msTime: 0, length: 24, msLength: 62.5, type: 0, flags: 0},
+          {tick: 96, msTime: 0, length: 24, msLength: 62.5, type: 1, flags: 0},
         ],
         features: {
           noteDensity: 0,
@@ -366,10 +426,14 @@ describe('Window Statistics', () => {
           crashResolve: false,
           grooveDist: 0,
         },
-        isCandidate: false
+        isCandidate: false,
       };
 
-      const features = computeWindowFeatures(testWindow, config, testChart.resolution);
+      const features = computeWindowFeatures(
+        testWindow,
+        config,
+        testChart.resolution,
+      );
 
       expect(isFinite(features.noteDensity)).toBe(true);
       expect(features.noteDensity).not.toBe(Infinity);

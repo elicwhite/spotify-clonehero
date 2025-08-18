@@ -2,10 +2,15 @@
  * Merges adjacent candidate windows into fill segments and applies duration filtering
  */
 
-import { AnalysisWindow, FillSegment, ValidatedConfig, TempoEvent } from '../types';
-import { ticksToBeats } from '../quantize';
-import { tickRangeToMs } from '../utils/tempoUtils';
-import { mean } from '../utils/math';
+import {
+  AnalysisWindow,
+  FillSegment,
+  ValidatedConfig,
+  TempoEvent,
+} from '../types';
+import {ticksToBeats} from '../quantize';
+import {tickRangeToMs} from '../utils/tempoUtils';
+import {mean} from '../utils/math';
 
 /**
  * Intermediate segment representation before final conversion
@@ -25,20 +30,37 @@ export function mergeWindowsIntoSegments(
   config: ValidatedConfig,
   resolution: number,
   tempos: TempoEvent[],
-  songId: string
+  songId: string,
 ): FillSegment[] {
   // Step 1: Group consecutive candidate windows
-  const candidateSegments = groupConsecutiveCandidates(windows, config, resolution);
-  
+  const candidateSegments = groupConsecutiveCandidates(
+    windows,
+    config,
+    resolution,
+  );
+
   // Step 2: Merge segments that are close together
-  const mergedSegments = mergeNearbySegments(candidateSegments, config, resolution);
-  
+  const mergedSegments = mergeNearbySegments(
+    candidateSegments,
+    config,
+    resolution,
+  );
+
   // Step 3: Filter segments by duration constraints
-  const filteredSegments = filterSegmentsByDuration(mergedSegments, config, resolution);
-  
+  const filteredSegments = filterSegmentsByDuration(
+    mergedSegments,
+    config,
+    resolution,
+  );
+
   // Step 4: Convert to final FillSegment format
-  const fillSegments = convertToFillSegments(filteredSegments, tempos, resolution, songId);
-  
+  const fillSegments = convertToFillSegments(
+    filteredSegments,
+    tempos,
+    resolution,
+    songId,
+  );
+
   return fillSegments;
 }
 
@@ -48,14 +70,14 @@ export function mergeWindowsIntoSegments(
 function groupConsecutiveCandidates(
   windows: AnalysisWindow[],
   config: ValidatedConfig,
-  resolution: number
+  resolution: number,
 ): CandidateSegment[] {
   const segments: CandidateSegment[] = [];
   let currentSegment: CandidateSegment | null = null;
-  
+
   for (let i = 0; i < windows.length; i++) {
     const window = windows[i];
-    
+
     if (window.isCandidate) {
       if (!currentSegment) {
         // Start new segment
@@ -75,12 +97,12 @@ function groupConsecutiveCandidates(
       currentSegment = null;
     }
   }
-  
+
   // Don't forget the last segment if it ends with candidates
   if (currentSegment) {
     segments.push(currentSegment);
   }
-  
+
   return segments;
 }
 
@@ -90,19 +112,19 @@ function groupConsecutiveCandidates(
 function mergeNearbySegments(
   segments: CandidateSegment[],
   config: ValidatedConfig,
-  resolution: number
+  resolution: number,
 ): CandidateSegment[] {
   if (segments.length <= 1) return segments;
-  
+
   const mergedSegments: CandidateSegment[] = [];
   const mergeGapTicks = (config.thresholds?.mergeGapBeats || 0.2) * resolution;
-  
+
   let currentSegment = segments[0];
-  
+
   for (let i = 1; i < segments.length; i++) {
     const nextSegment = segments[i];
     const gap = nextSegment.startTick - currentSegment.endTick;
-    
+
     if (gap <= mergeGapTicks) {
       // Merge segments
       currentSegment = {
@@ -116,10 +138,10 @@ function mergeNearbySegments(
       currentSegment = nextSegment;
     }
   }
-  
+
   // Add the final segment
   mergedSegments.push(currentSegment);
-  
+
   return mergedSegments;
 }
 
@@ -129,14 +151,16 @@ function mergeNearbySegments(
 function filterSegmentsByDuration(
   segments: CandidateSegment[],
   config: ValidatedConfig,
-  resolution: number
+  resolution: number,
 ): CandidateSegment[] {
   return segments.filter(segment => {
     const durationTicks = segment.endTick - segment.startTick;
     const durationBeats = ticksToBeats(durationTicks, resolution);
-    
-    return durationBeats >= (config.thresholds?.minBeats || 1.0) && 
-           durationBeats <= (config.thresholds?.maxBeats || 4);
+
+    return (
+      durationBeats >= (config.thresholds?.minBeats || 1.0) &&
+      durationBeats <= (config.thresholds?.maxBeats || 4)
+    );
   });
 }
 
@@ -149,16 +173,16 @@ function convertToFillSegments(
   segments: CandidateSegment[],
   tempos: TempoEvent[],
   resolution: number,
-  songId: string
+  songId: string,
 ): FillSegment[] {
   return segments.map(segment => {
-    const { startMs, endMs } = tickRangeToMs(
-      segment.startTick, 
-      segment.endTick, 
-      tempos, 
-      resolution
+    const {startMs, endMs} = tickRangeToMs(
+      segment.startTick,
+      segment.endTick,
+      tempos,
+      resolution,
     );
-    
+
     // Aggregate features from all windows in the segment
     const aggregatedFeatures = aggregateSegmentFeatures(segment.windows);
 
@@ -167,19 +191,25 @@ function convertToFillSegments(
     const oneBeat = resolution;
     let firstNoteTick: number | null = null;
     let tomAnchorTick: number | null = null;
-    
-    const allNotes = segment.windows.flatMap(w => w.notes)
+
+    const allNotes = segment.windows
+      .flatMap(w => w.notes)
       .filter(n => n.tick >= segment.startTick && n.tick <= segment.endTick)
-      .sort((a,b) => a.tick - b.tick);
-    
+      .sort((a, b) => a.tick - b.tick);
+
     for (const note of allNotes) {
       if (firstNoteTick === null) firstNoteTick = note.tick;
       // Look ahead 1 beat from this note and compute tom ratio
-      const windowNotes = allNotes.filter(n => n.tick >= note.tick && n.tick < note.tick + oneBeat);
+      const windowNotes = allNotes.filter(
+        n => n.tick >= note.tick && n.tick < note.tick + oneBeat,
+      );
       if (windowNotes.length >= 3) {
-        const tomCount = windowNotes.filter(n => n.type === 3 || n.type === 5 || n.type === 4).length; // toms/crashes
+        const tomCount = windowNotes.filter(
+          n => n.type === 3 || n.type === 5 || n.type === 4,
+        ).length; // toms/crashes
         const ratio = tomCount / windowNotes.length;
-        if (ratio >= 0.5) { // tom-heavy
+        if (ratio >= 0.5) {
+          // tom-heavy
           tomAnchorTick = note.tick;
           break;
         }
@@ -192,8 +222,13 @@ function convertToFillSegments(
     const measureIndex = Math.floor(anchorTick / barTicks); // 0-based
     const measureStartTick = measureIndex * barTicks;
     const measureEndTick = measureStartTick + barTicks;
-    const measureTimes = tickRangeToMs(measureStartTick, measureEndTick, tempos, resolution);
-    
+    const measureTimes = tickRangeToMs(
+      measureStartTick,
+      measureEndTick,
+      tempos,
+      resolution,
+    );
+
     return {
       songId,
       startTick: segment.startTick,
@@ -238,7 +273,7 @@ function aggregateSegmentFeatures(windows: AnalysisWindow[]): {
       grooveDist: 0,
     };
   }
-  
+
   // For continuous features, take the mean
   const densityZ = mean(windows.map(w => w.features.densityZ));
   const tomRatioJump = mean(windows.map(w => w.features.tomRatioJump));
@@ -247,11 +282,11 @@ function aggregateSegmentFeatures(windows: AnalysisWindow[]): {
   const ioiStdZ = mean(windows.map(w => w.features.ioiStdZ));
   const ngramNovelty = mean(windows.map(w => w.features.ngramNovelty));
   const grooveDist = mean(windows.map(w => w.features.grooveDist));
-  
+
   // For boolean features, use logical OR (any window with the feature)
   const samePadBurst = windows.some(w => w.features.samePadBurst);
   const crashResolve = windows.some(w => w.features.crashResolve);
-  
+
   return {
     densityZ,
     tomRatioJump,
@@ -271,17 +306,22 @@ function aggregateSegmentFeatures(windows: AnalysisWindow[]): {
 export function refineBoundaries(
   segments: FillSegment[],
   resolution: number,
-  tempos: TempoEvent[]
+  tempos: TempoEvent[],
 ): FillSegment[] {
   return segments.map(segment => {
     // Keep start at or before the first hit of the fill
     const alignedStart = alignToBeatFloor(segment.startTick, resolution);
     // End can be snapped up to ensure we fully capture the fill
     const alignedEnd = alignToBeatCeil(segment.endTick, resolution);
-    
+
     // Recalculate timing with aligned boundaries
-    const { startMs, endMs } = tickRangeToMs(alignedStart, alignedEnd, tempos, resolution);
-    
+    const {startMs, endMs} = tickRangeToMs(
+      alignedStart,
+      alignedEnd,
+      tempos,
+      resolution,
+    );
+
     return {
       ...segment,
       startTick: alignedStart,
@@ -308,27 +348,27 @@ function alignToBeatFloor(tick: number, resolution: number): number {
  */
 export function validateFillSegments(segments: FillSegment[]): string[] {
   const errors: string[] = [];
-  
+
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i];
-    
+
     // Check basic constraints
     if (segment.startTick >= segment.endTick) {
       errors.push(`Segment ${i}: startTick >= endTick`);
     }
-    
+
     if (segment.startMs >= segment.endMs) {
       errors.push(`Segment ${i}: startMs >= endMs`);
     }
-    
+
     if (segment.startTick < 0 || segment.endTick < 0) {
       errors.push(`Segment ${i}: negative tick values`);
     }
-    
+
     if (segment.startMs < 0 || segment.endMs < 0) {
       errors.push(`Segment ${i}: negative time values`);
     }
-    
+
     // Check for overlapping segments
     if (i > 0) {
       const prevSegment = segments[i - 1];
@@ -336,13 +376,13 @@ export function validateFillSegments(segments: FillSegment[]): string[] {
         errors.push(`Segment ${i}: overlaps with previous segment`);
       }
     }
-    
+
     // Validate feature values
     if (!isFinite(segment.densityZ) || !isFinite(segment.grooveDist)) {
       errors.push(`Segment ${i}: invalid feature values`);
     }
   }
-  
+
   return errors;
 }
 
@@ -363,13 +403,13 @@ export function sortSegments(segments: FillSegment[]): FillSegment[] {
  */
 export function removeOverlaps(segments: FillSegment[]): FillSegment[] {
   if (segments.length <= 1) return segments;
-  
+
   const sorted = sortSegments(segments);
   const result: FillSegment[] = [];
-  
+
   for (const segment of sorted) {
     const lastSegment = result[result.length - 1];
-    
+
     if (!lastSegment || segment.startTick >= lastSegment.endTick) {
       // No overlap, add segment
       result.push(segment);
@@ -381,7 +421,7 @@ export function removeOverlaps(segments: FillSegment[]): FillSegment[] {
       // Otherwise, keep the existing segment (do nothing)
     }
   }
-  
+
   return result;
 }
 
@@ -390,7 +430,7 @@ export function removeOverlaps(segments: FillSegment[]): FillSegment[] {
  */
 export function getSegmentationStats(
   originalWindows: AnalysisWindow[],
-  finalSegments: FillSegment[]
+  finalSegments: FillSegment[],
 ): {
   totalWindows: number;
   candidateWindows: number;
@@ -401,11 +441,12 @@ export function getSegmentationStats(
   const totalWindows = originalWindows.length;
   const candidateWindows = originalWindows.filter(w => w.isCandidate).length;
   const finalSegmentCount = finalSegments.length;
-  
+
   const segmentLengths = finalSegments.map(s => s.endMs - s.startMs);
-  const averageSegmentLength = segmentLengths.length > 0 ? mean(segmentLengths) : 0;
+  const averageSegmentLength =
+    segmentLengths.length > 0 ? mean(segmentLengths) : 0;
   const totalFillTime = segmentLengths.reduce((sum, length) => sum + length, 0);
-  
+
   return {
     totalWindows,
     candidateWindows,

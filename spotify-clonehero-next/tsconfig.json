@@ -23,7 +23,14 @@
     }
   },
   "typeRoots": ["./node_modules/@types", "src/@types"],
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "lib/chorusChartDb", "lib/fill-detector/**/*"],
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "lib/chorusChartDb",
+    "lib/fill-detector/**/*"
+  ],
   "exclude": ["node_modules"],
   "ts-node": {
     "compilerOptions": {

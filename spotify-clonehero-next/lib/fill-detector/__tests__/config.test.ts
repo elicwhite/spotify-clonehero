@@ -2,8 +2,8 @@
  * Unit tests for configuration validation
  */
 
-import { validateConfig, defaultConfig } from '../config';
-import { InvalidConfigError, ValidatedConfig } from '../types';
+import {validateConfig, defaultConfig} from '../config';
+import {InvalidConfigError, ValidatedConfig} from '../types';
 
 describe('Configuration', () => {
   describe('validateConfig', () => {
@@ -17,9 +17,9 @@ describe('Configuration', () => {
         difficulty: 'hard' as const,
         windowBeats: 2,
       };
-      
+
       const config = validateConfig(userConfig);
-      
+
       expect(config.difficulty).toBe('hard');
       expect(config.windowBeats).toBe(2);
       expect(config.strideBeats).toBe(defaultConfig.strideBeats); // Should keep default
@@ -32,9 +32,9 @@ describe('Configuration', () => {
           // Other thresholds should remain default
         },
       };
-      
+
       const config = validateConfig(userConfig);
-      
+
       expect(config.thresholds.densityZ).toBe(2.0);
       expect(config.thresholds.dist).toBe(defaultConfig.thresholds.dist);
       expect(config.thresholds.tomJump).toBe(defaultConfig.thresholds.tomJump);
@@ -42,54 +42,54 @@ describe('Configuration', () => {
 
     it('should validate quantDiv', () => {
       expect(() => {
-        validateConfig({ quantDiv: 0 });
+        validateConfig({quantDiv: 0});
       }).toThrow(InvalidConfigError);
 
       expect(() => {
-        validateConfig({ quantDiv: -1 });
+        validateConfig({quantDiv: -1});
       }).toThrow(InvalidConfigError);
     });
 
     it('should validate windowBeats', () => {
       expect(() => {
-        validateConfig({ windowBeats: 0 });
+        validateConfig({windowBeats: 0});
       }).toThrow(InvalidConfigError);
 
       expect(() => {
-        validateConfig({ windowBeats: -1 });
+        validateConfig({windowBeats: -1});
       }).toThrow(InvalidConfigError);
     });
 
     it('should validate strideBeats', () => {
       expect(() => {
-        validateConfig({ strideBeats: 0 });
+        validateConfig({strideBeats: 0});
       }).toThrow(InvalidConfigError);
 
       expect(() => {
-        validateConfig({ strideBeats: -1 });
+        validateConfig({strideBeats: -1});
       }).toThrow(InvalidConfigError);
     });
 
     it('should validate lookbackBars', () => {
       expect(() => {
-        validateConfig({ lookbackBars: 0 });
+        validateConfig({lookbackBars: 0});
       }).toThrow(InvalidConfigError);
 
       expect(() => {
-        validateConfig({ lookbackBars: -1 });
+        validateConfig({lookbackBars: -1});
       }).toThrow(InvalidConfigError);
     });
 
     it('should validate thresholds.minBeats', () => {
       expect(() => {
         validateConfig({
-          thresholds: { ...defaultConfig.thresholds, minBeats: 0 }
+          thresholds: {...defaultConfig.thresholds, minBeats: 0},
         });
       }).toThrow(InvalidConfigError);
 
       expect(() => {
         validateConfig({
-          thresholds: { ...defaultConfig.thresholds, minBeats: -1 }
+          thresholds: {...defaultConfig.thresholds, minBeats: -1},
         });
       }).toThrow(InvalidConfigError);
     });
@@ -97,21 +97,21 @@ describe('Configuration', () => {
     it('should validate thresholds.maxBeats > minBeats', () => {
       expect(() => {
         validateConfig({
-          thresholds: { 
-            ...defaultConfig.thresholds, 
+          thresholds: {
+            ...defaultConfig.thresholds,
             minBeats: 5,
-            maxBeats: 3 
-          }
+            maxBeats: 3,
+          },
         });
       }).toThrow(InvalidConfigError);
 
       expect(() => {
         validateConfig({
-          thresholds: { 
-            ...defaultConfig.thresholds, 
+          thresholds: {
+            ...defaultConfig.thresholds,
             minBeats: 2,
-            maxBeats: 2 
-          }
+            maxBeats: 2,
+          },
         });
       }).toThrow(InvalidConfigError);
     });
@@ -119,14 +119,14 @@ describe('Configuration', () => {
     it('should validate thresholds.mergeGapBeats', () => {
       expect(() => {
         validateConfig({
-          thresholds: { ...defaultConfig.thresholds, mergeGapBeats: -1 }
+          thresholds: {...defaultConfig.thresholds, mergeGapBeats: -1},
         });
       }).toThrow(InvalidConfigError);
 
       // Zero should be allowed
       expect(() => {
         validateConfig({
-          thresholds: { ...defaultConfig.thresholds, mergeGapBeats: 0 }
+          thresholds: {...defaultConfig.thresholds, mergeGapBeats: 0},
         });
       }).not.toThrow();
     });
@@ -134,13 +134,13 @@ describe('Configuration', () => {
     it('should validate thresholds.burstMs', () => {
       expect(() => {
         validateConfig({
-          thresholds: { ...defaultConfig.thresholds, burstMs: 0 }
+          thresholds: {...defaultConfig.thresholds, burstMs: 0},
         });
       }).toThrow(InvalidConfigError);
 
       expect(() => {
         validateConfig({
-          thresholds: { ...defaultConfig.thresholds, burstMs: -1 }
+          thresholds: {...defaultConfig.thresholds, burstMs: -1},
         });
       }).toThrow(InvalidConfigError);
     });
@@ -177,7 +177,7 @@ describe('Configuration', () => {
       expect(defaultConfig.windowBeats).toBeGreaterThan(0);
       expect(defaultConfig.strideBeats).toBeGreaterThan(0);
       expect(defaultConfig.lookbackBars).toBeGreaterThan(0);
-      
+
       const t = defaultConfig.thresholds;
       expect(t.densityZ).toBeGreaterThan(0);
       expect(t.dist).toBeGreaterThan(0);

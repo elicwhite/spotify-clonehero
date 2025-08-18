@@ -1,8 +1,5 @@
 import {ChartResponseEncore} from '@/lib/chartSelection';
-import {
-  memo,
-  useCallback,
-} from 'react';
+import {memo, useCallback} from 'react';
 
 export const RENDERED_INSTRUMENTS = [
   'bass',

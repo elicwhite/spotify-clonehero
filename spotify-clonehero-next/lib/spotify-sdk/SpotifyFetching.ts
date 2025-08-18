@@ -232,7 +232,7 @@ export function useSpotifyTracks(): [
             playlist.id,
             'with snapshot',
             playlist.snapshot_id,
-            error
+            error,
           );
           return [];
         }

@@ -2,9 +2,9 @@
  * Candidate window detection using threshold-based rules
  */
 
-import { AnalysisWindow, ValidatedConfig } from '../types';
-import { mapScanChartNoteToVoice, DrumVoice } from '../drumLaneMap';
-import { ticksToBeats } from '../quantize';
+import {AnalysisWindow, ValidatedConfig} from '../types';
+import {mapScanChartNoteToVoice, DrumVoice} from '../drumLaneMap';
+import {ticksToBeats} from '../quantize';
 
 /**
  * Detection result for a single window
@@ -20,7 +20,7 @@ export interface DetectionResult {
  */
 export function detectCandidateWindows(
   windows: AnalysisWindow[],
-  config: ValidatedConfig
+  config: ValidatedConfig,
 ): AnalysisWindow[] {
   const updatedWindows = windows.map(window => {
     const result = evaluateWindow(window, config);
@@ -29,63 +29,85 @@ export function detectCandidateWindows(
       isCandidate: result.isCandidate,
     };
   });
-  
+
   return updatedWindows;
 }
 
 /**
  * Evaluates a single window against detection criteria
  */
-export function evaluateWindow(window: AnalysisWindow, config: ValidatedConfig): DetectionResult {
+export function evaluateWindow(
+  window: AnalysisWindow,
+  config: ValidatedConfig,
+): DetectionResult {
   const features = window.features;
   const thresholds = config.thresholds;
   const reasons: string[] = [];
   let confidence = 0;
-  
+
   // Derive resolution from window size (windowBeats * resolution = window.endTick - window.startTick)
-  const approxResolution = Math.max(1, Math.round((window.endTick - window.startTick) / (config.windowBeats || 1)));
+  const approxResolution = Math.max(
+    1,
+    Math.round((window.endTick - window.startTick) / (config.windowBeats || 1)),
+  );
   const barTicks = 4 * approxResolution; // assume 4/4 for heuristic alignment
   const posInBarStart = window.startTick % barTicks;
   const posInBarEnd = window.endTick % barTicks;
   const nearBarStart = posInBarStart <= approxResolution * 0.5; // within half a beat of bar start
-  const nearBarEnd = (barTicks - posInBarEnd) <= approxResolution * 0.5; // window ends close to bar boundary
-  
+  const nearBarEnd = barTicks - posInBarEnd <= approxResolution * 0.5; // window ends close to bar boundary
+
   // Primary detection criteria (from design document)
   let primaryMatch = false;
-  
+
   // Rule 1: High density + groove deviation
-  if (features.densityZ > thresholds.densityZ && features.grooveDist > thresholds.dist) {
+  if (
+    features.densityZ > thresholds.densityZ &&
+    features.grooveDist > thresholds.dist
+  ) {
     reasons.push('High density with groove deviation');
     confidence += 0.4;
     primaryMatch = true;
   }
-  
+
   // Rule 2: Tom ratio jump
   if (features.tomRatioJump > thresholds.tomJump) {
     reasons.push('Tom ratio spike');
     confidence += 0.3;
     primaryMatch = true;
   }
-  
+
   // Rule 3: Stricter fallback - require extreme density and groove deviation
-  if (features.noteDensity > 10 && features.grooveDist > thresholds.dist * 1.1) {
+  if (
+    features.noteDensity > 10 &&
+    features.grooveDist > thresholds.dist * 1.1
+  ) {
     reasons.push('Extremely high absolute density with groove deviation');
     confidence += 0.35;
     primaryMatch = true;
   }
 
   // Rule 4: Stricter tom content fallback - require density and tom jump together
-  if (features.noteDensity > 5 && features.tomRatioJump > thresholds.tomJump * 1.05) {
+  if (
+    features.noteDensity > 5 &&
+    features.tomRatioJump > thresholds.tomJump * 1.05
+  ) {
     reasons.push('High tom content with jump');
     confidence += 0.25;
     primaryMatch = true;
   }
-  
+
   // Rule 5: Bar-start tom emphasis (captures bar-long fills beginning on downbeat)
   if (!primaryMatch && window.notes.length > 0) {
-    const tomCount = window.notes.filter(n => n.type === 3 || n.type === 5).length;
-    const tomRatio = window.notes.length > 0 ? tomCount / window.notes.length : 0;
-    if (nearBarStart && tomRatio >= 0.7 && features.densityZ > thresholds.densityZ * 0.9) {
+    const tomCount = window.notes.filter(
+      n => n.type === 3 || n.type === 5,
+    ).length;
+    const tomRatio =
+      window.notes.length > 0 ? tomCount / window.notes.length : 0;
+    if (
+      nearBarStart &&
+      tomRatio >= 0.7 &&
+      features.densityZ > thresholds.densityZ * 0.9
+    ) {
       reasons.push('Bar-start tom emphasis');
       confidence += 0.35;
       primaryMatch = true;
@@ -94,9 +116,16 @@ export function evaluateWindow(window: AnalysisWindow, config: ValidatedConfig):
 
   // Rule 6: Bar-end tom burst (captures short fills resolving into next bar)
   if (!primaryMatch && window.notes.length > 0) {
-    const tomCount = window.notes.filter(n => n.type === 3 || n.type === 5).length;
-    const tomRatio = window.notes.length > 0 ? tomCount / window.notes.length : 0;
-    if (nearBarEnd && (tomRatio >= 0.55 || features.noteDensity >= 4.2) && features.densityZ > thresholds.densityZ * 0.8) {
+    const tomCount = window.notes.filter(
+      n => n.type === 3 || n.type === 5,
+    ).length;
+    const tomRatio =
+      window.notes.length > 0 ? tomCount / window.notes.length : 0;
+    if (
+      nearBarEnd &&
+      (tomRatio >= 0.55 || features.noteDensity >= 4.2) &&
+      features.densityZ > thresholds.densityZ * 0.8
+    ) {
       reasons.push('Bar-end tom burst');
       confidence += 0.3;
       primaryMatch = true;
@@ -104,46 +133,46 @@ export function evaluateWindow(window: AnalysisWindow, config: ValidatedConfig):
   }
 
   // Removed permissive early-song rule to avoid promoting repeating early sections
-  
+
   // Secondary criteria (bonus scoring but not mandatory)
   if (features.hatDropout > 0.5) {
     reasons.push('Hat dropout');
     confidence += 0.1;
   }
-  
+
   if (features.kickDrop > 0.3) {
     reasons.push('Kick drop');
     confidence += 0.1;
   }
-  
+
   if (features.ioiStdZ > 1.5) {
     reasons.push('Irregular timing');
     confidence += 0.1;
   }
-  
+
   if (features.ngramNovelty > 0) {
     reasons.push('Novel patterns');
     confidence += 0.1;
   }
-  
+
   if (features.samePadBurst && features.densityZ > thresholds.densityZ * 0.9) {
     reasons.push('Same pad burst');
     confidence += 0.2;
   }
-  
+
   if (features.crashResolve && features.noteDensity >= 3.0) {
     reasons.push('Crash resolution');
     confidence += 0.1;
   }
-  
+
   // Apply additional heuristics
   const heuristicBonus = applyAdditionalHeuristics(window, config);
   confidence += heuristicBonus.confidenceBonus;
   reasons.push(...heuristicBonus.reasons);
-  
+
   // Clamp confidence to [0, 1]
   confidence = Math.min(1, Math.max(0, confidence));
-  
+
   return {
     isCandidate: primaryMatch,
     reasons,
@@ -156,41 +185,42 @@ export function evaluateWindow(window: AnalysisWindow, config: ValidatedConfig):
  */
 function applyAdditionalHeuristics(
   window: AnalysisWindow,
-  config: ValidatedConfig
-): { confidenceBonus: number; reasons: string[] } {
+  config: ValidatedConfig,
+): {confidenceBonus: number; reasons: string[]} {
   const features = window.features;
   const reasons: string[] = [];
   let confidenceBonus = 0;
-  
+
   // Very high density is almost certainly a fill
-  if (features.noteDensity > 8) { // 8 hits per beat is very dense
+  if (features.noteDensity > 8) {
+    // 8 hits per beat is very dense
     reasons.push('Extremely high density');
     confidenceBonus += 0.3;
   }
-  
+
   // Combination rules
   if (features.densityZ > 0.8 && features.tomRatioJump > 1.2) {
     reasons.push('Density + tom combo');
     confidenceBonus += 0.2;
   }
-  
+
   if (features.hatDropout > 0.3 && features.kickDrop > 0.2) {
     reasons.push('Rhythm section dropout');
     confidenceBonus += 0.15;
   }
-  
+
   if (features.samePadBurst && features.ioiStdZ > 0.8) {
     reasons.push('Complex burst pattern');
     confidenceBonus += 0.2;
   }
-  
+
   // Penalize very low activity (likely not a fill)
   if (features.noteDensity < 1.0 && features.grooveDist < 1.0) {
     reasons.push('Low activity penalty');
     confidenceBonus -= 0.2;
   }
-  
-  return { confidenceBonus, reasons };
+
+  return {confidenceBonus, reasons};
 }
 
 /**
@@ -199,22 +229,34 @@ function applyAdditionalHeuristics(
 export function postProcessCandidates(
   windows: AnalysisWindow[],
   config: ValidatedConfig,
-  resolution: number
+  resolution: number,
 ): AnalysisWindow[] {
   let processedWindows = [...windows];
-  
+
   // Remove isolated single candidates (likely false positives)
   processedWindows = removeIsolatedCandidates(processedWindows);
-  
+
   // Apply temporal constraints
-  processedWindows = applyTemporalConstraints(processedWindows, config, resolution);
-  
+  processedWindows = applyTemporalConstraints(
+    processedWindows,
+    config,
+    resolution,
+  );
+
   // Suppress repeating groove-like spans (data-driven, not song-specific)
-  processedWindows = suppressRepeatingGrooveSpans(processedWindows, resolution, config);
+  processedWindows = suppressRepeatingGrooveSpans(
+    processedWindows,
+    resolution,
+    config,
+  );
 
   // Frequency-based per-measure adjustment using hashed measure signatures
-  processedWindows = adjustCandidatesByMeasureFrequency(processedWindows, resolution, config);
-  
+  processedWindows = adjustCandidatesByMeasureFrequency(
+    processedWindows,
+    resolution,
+    config,
+  );
+
   return processedWindows;
 }
 
@@ -223,26 +265,27 @@ export function postProcessCandidates(
  */
 function removeIsolatedCandidates(windows: AnalysisWindow[]): AnalysisWindow[] {
   const result = [...windows];
-  
+
   for (let i = 0; i < result.length; i++) {
     if (!result[i].isCandidate) continue;
-    
+
     // Check if this candidate has neighbors
     const hasLeftNeighbor = i > 0 && result[i - 1].isCandidate;
     const hasRightNeighbor = i < result.length - 1 && result[i + 1].isCandidate;
-    
+
     // If isolated and not extremely confident, remove
     if (!hasLeftNeighbor && !hasRightNeighbor) {
       // Only keep if very high confidence or density
       const features = result[i].features;
-      const isHighConfidence = features.densityZ > 2.0 || features.noteDensity > 10;
-      
+      const isHighConfidence =
+        features.densityZ > 2.0 || features.noteDensity > 10;
+
       if (!isHighConfidence) {
-        result[i] = { ...result[i], isCandidate: false };
+        result[i] = {...result[i], isCandidate: false};
       }
     }
   }
-  
+
   return result;
 }
 
@@ -254,7 +297,7 @@ function removeIsolatedCandidates(windows: AnalysisWindow[]): AnalysisWindow[] {
 function suppressRepeatingGrooveSpans(
   windows: AnalysisWindow[],
   resolution: number,
-  config: ValidatedConfig
+  config: ValidatedConfig,
 ): AnalysisWindow[] {
   const result = [...windows];
   if (result.length === 0) return result;
@@ -262,11 +305,23 @@ function suppressRepeatingGrooveSpans(
   const barTicks = 4 * resolution;
 
   // Build per-bar aggregates across the whole song
-  interface BarAgg { startTick: number; endTick: number; novelty: number; groove: number; density: number; }
+  interface BarAgg {
+    startTick: number;
+    endTick: number;
+    novelty: number;
+    groove: number;
+    density: number;
+  }
   const bars = new Map<number, BarAgg>();
   for (const w of result) {
     const barIndex = Math.floor(w.startTick / barTicks);
-    const agg = bars.get(barIndex) || { startTick: barIndex * barTicks, endTick: (barIndex + 1) * barTicks, novelty: 0, groove: 0, density: 0 };
+    const agg = bars.get(barIndex) || {
+      startTick: barIndex * barTicks,
+      endTick: (barIndex + 1) * barTicks,
+      novelty: 0,
+      groove: 0,
+      density: 0,
+    };
     agg.novelty += w.features.ngramNovelty || 0;
     agg.groove += w.features.grooveDist || 0;
     agg.density += w.features.noteDensity || 0;
@@ -274,9 +329,9 @@ function suppressRepeatingGrooveSpans(
   }
 
   // Identify long spans (>= 4 bars) of low novelty and low groove deviation that likely represent repeating sections
-  const barIndices = Array.from(bars.keys()).sort((a,b) => a - b);
+  const barIndices = Array.from(bars.keys()).sort((a, b) => a - b);
   let spanStart: number | null = null;
-  const spans: Array<{ startBar: number; endBar: number }> = [];
+  const spans: Array<{startBar: number; endBar: number}> = [];
   const noveltyThreshold = 0.1;
   const grooveThreshold = Math.max(1.2, config.thresholds.dist * 0.5);
 
@@ -284,20 +339,23 @@ function suppressRepeatingGrooveSpans(
     const agg = bars.get(idx)!;
     const avgNovelty = agg.novelty; // windows are evenly spaced; relative scale fine
     const avgGroove = agg.groove;
-    const isGrooveBar = avgNovelty <= noveltyThreshold && avgGroove <= grooveThreshold;
+    const isGrooveBar =
+      avgNovelty <= noveltyThreshold && avgGroove <= grooveThreshold;
     if (isGrooveBar) {
       if (spanStart === null) spanStart = idx;
     } else {
       if (spanStart !== null) {
         const end = idx - 1;
-        if (end - spanStart + 1 >= 4) spans.push({ startBar: spanStart, endBar: end });
+        if (end - spanStart + 1 >= 4)
+          spans.push({startBar: spanStart, endBar: end});
         spanStart = null;
       }
     }
   }
   if (spanStart !== null) {
     const end = barIndices[barIndices.length - 1];
-    if (end - spanStart + 1 >= 4) spans.push({ startBar: spanStart, endBar: end });
+    if (end - spanStart + 1 >= 4)
+      spans.push({startBar: spanStart, endBar: end});
   }
 
   if (spans.length === 0) return result;
@@ -309,7 +367,7 @@ function suppressRepeatingGrooveSpans(
     for (let i = 0; i < result.length; i++) {
       const w = result[i];
       if (w.isCandidate && w.startTick >= startTick && w.endTick <= endTick) {
-        result[i] = { ...w, isCandidate: false };
+        result[i] = {...w, isCandidate: false};
       }
     }
   }
@@ -328,19 +386,25 @@ function suppressRepeatingGrooveSpans(
 function adjustCandidatesByMeasureFrequency(
   windows: AnalysisWindow[],
   resolution: number,
-  config: ValidatedConfig
+  config: ValidatedConfig,
 ): AnalysisWindow[] {
   const result = [...windows];
   if (result.length === 0) return result;
 
-  const { barIndexToMask, maskToFrequency } = computeMeasureHashFrequencies(result, resolution);
+  const {barIndexToMask, maskToFrequency} = computeMeasureHashFrequencies(
+    result,
+    resolution,
+  );
   if (maskToFrequency.size <= 1) {
     return result; // nothing to separate
   }
 
   // Group similar masks using a data-driven distance threshold
-  const { maskToClusterId, clusterIdToTotalFrequency } = clusterSimilarMasks(maskToFrequency);
-  const { highFreqClusterIds } = splitClustersByFrequency(clusterIdToTotalFrequency);
+  const {maskToClusterId, clusterIdToTotalFrequency} =
+    clusterSimilarMasks(maskToFrequency);
+  const {highFreqClusterIds} = splitClustersByFrequency(
+    clusterIdToTotalFrequency,
+  );
 
   const barTicks = 4 * resolution;
   // Helper to decide strong vs moderate fill cues for a window
@@ -353,13 +417,17 @@ function adjustCandidatesByMeasureFrequency(
       (f.samePadBurst && f.ioiStdZ >= 0.8)
     );
   }
-  function hasModerateEvidence(w: AnalysisWindow, endNearBar: boolean): boolean {
+  function hasModerateEvidence(
+    w: AnalysisWindow,
+    endNearBar: boolean,
+  ): boolean {
     const f = w.features;
-    return endNearBar && (
-      f.densityZ > config.thresholds.densityZ * 0.8 ||
-      f.ngramNovelty > 0 ||
-      f.samePadBurst ||
-      f.crashResolve
+    return (
+      endNearBar &&
+      (f.densityZ > config.thresholds.densityZ * 0.8 ||
+        f.ngramNovelty > 0 ||
+        f.samePadBurst ||
+        f.crashResolve)
     );
   }
 
@@ -378,7 +446,7 @@ function adjustCandidatesByMeasureFrequency(
     if (highFreqClusterIds.has(clusterId)) {
       // Groove-like bar: only keep if strong evidence
       if (w.isCandidate && !hasStrongEvidence(w)) {
-        result[i] = { ...w, isCandidate: false };
+        result[i] = {...w, isCandidate: false};
       }
     }
   }
@@ -388,7 +456,7 @@ function adjustCandidatesByMeasureFrequency(
 
 function computeMeasureHashFrequencies(
   windows: AnalysisWindow[],
-  resolution: number
+  resolution: number,
 ): {
   barIndexToMask: Map<number, string>;
   maskToFrequency: Map<string, number>;
@@ -397,13 +465,18 @@ function computeMeasureHashFrequencies(
   const grid = Math.max(1, Math.floor(resolution / 4)); // 16th grid
 
   // Collect notes per bar with de-duplication
-  const barToNotes = new Map<number, Map<string, { tick: number; type: number; flags?: number }>>();
+  const barToNotes = new Map<
+    number,
+    Map<string, {tick: number; type: number; flags?: number}>
+  >();
   for (const w of windows) {
     for (const n of w.notes) {
       const barIndex = Math.floor(n.tick / barTicks);
       if (!barToNotes.has(barIndex)) barToNotes.set(barIndex, new Map());
       const key = `${n.tick}|${n.type}|${(n as any).flags ?? 0}`;
-      barToNotes.get(barIndex)!.set(key, { tick: n.tick, type: n.type as any, flags: (n as any).flags });
+      barToNotes
+        .get(barIndex)!
+        .set(key, {tick: n.tick, type: n.type as any, flags: (n as any).flags});
     }
   }
 
@@ -425,7 +498,7 @@ function computeMeasureHashFrequencies(
     const voiceToBits = new Map<DrumVoice, number>();
     for (const v of voiceOrder) voiceToBits.set(v, 0);
 
-    for (const { tick, type, flags } of noteMap.values()) {
+    for (const {tick, type, flags} of noteMap.values()) {
       const slot = Math.floor((tick - startTick) / grid);
       if (slot < 0 || slot >= 16) continue;
       const voice = mapScanChartNoteToVoice(type as any, null, flags ?? 0);
@@ -439,12 +512,14 @@ function computeMeasureHashFrequencies(
     if (allZero) continue;
 
     // Full mask: per-voice 16-bit hex, joined with |
-    const mask = voiceOrder.map(v => (voiceToBits.get(v) || 0).toString(16).padStart(4, '0')).join('|');
+    const mask = voiceOrder
+      .map(v => (voiceToBits.get(v) || 0).toString(16).padStart(4, '0'))
+      .join('|');
     barIndexToMask.set(barIndex, mask);
     maskToFrequency.set(mask, (maskToFrequency.get(mask) || 0) + 1);
   }
 
-  return { barIndexToMask, maskToFrequency };
+  return {barIndexToMask, maskToFrequency};
 }
 
 function hammingDistance(maskA: string, maskB: string): number {
@@ -459,7 +534,7 @@ function hammingDistance(maskA: string, maskB: string): number {
     // popcount 16-bit
     x = x - ((x >>> 1) & 0x5555);
     x = (x & 0x3333) + ((x >>> 2) & 0x3333);
-    dist += (((x + (x >>> 4)) & 0x0F0F) * 0x0101) >>> 8;
+    dist += (((x + (x >>> 4)) & 0x0f0f) * 0x0101) >>> 8;
   }
   return dist;
 }
@@ -467,7 +542,10 @@ function hammingDistance(maskA: string, maskB: string): number {
 function percentile(values: number[], p: number): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor(p * (sorted.length - 1))));
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.floor(p * (sorted.length - 1))),
+  );
   return sorted[idx];
 }
 
@@ -476,7 +554,8 @@ function clusterSimilarMasks(maskToFrequency: Map<string, number>): {
   clusterIdToTotalFrequency: Map<number, number>;
 } {
   const masks = Array.from(maskToFrequency.keys());
-  if (masks.length === 0) return { maskToClusterId: new Map(), clusterIdToTotalFrequency: new Map() };
+  if (masks.length === 0)
+    return {maskToClusterId: new Map(), clusterIdToTotalFrequency: new Map()};
 
   // Compute nearest-neighbor distance per mask
   const nearestDistances: number[] = [];
@@ -490,7 +569,10 @@ function clusterSimilarMasks(maskToFrequency: Map<string, number>): {
     nearestDistances.push(isFinite(best) ? best : 0);
   }
   // Data-driven similarity threshold: 25th percentile of nearest-neighbor distances
-  const nnThreshold = Math.max(0, Math.floor(percentile(nearestDistances, 0.25)));
+  const nnThreshold = Math.max(
+    0,
+    Math.floor(percentile(nearestDistances, 0.25)),
+  );
 
   // Single-linkage clustering with threshold
   const maskToClusterId = new Map<string, number>();
@@ -518,30 +600,38 @@ function clusterSimilarMasks(maskToFrequency: Map<string, number>): {
   const clusterIdToTotalFrequency = new Map<number, number>();
   for (const [mask, freq] of maskToFrequency.entries()) {
     const cid = maskToClusterId.get(mask)!;
-    clusterIdToTotalFrequency.set(cid, (clusterIdToTotalFrequency.get(cid) || 0) + freq);
+    clusterIdToTotalFrequency.set(
+      cid,
+      (clusterIdToTotalFrequency.get(cid) || 0) + freq,
+    );
   }
 
-  return { maskToClusterId, clusterIdToTotalFrequency };
+  return {maskToClusterId, clusterIdToTotalFrequency};
 }
 
-function splitClustersByFrequency(clusterIdToTotalFrequency: Map<number, number>): {
+function splitClustersByFrequency(
+  clusterIdToTotalFrequency: Map<number, number>,
+): {
   highFreqClusterIds: Set<number>;
 } {
   const entries = Array.from(clusterIdToTotalFrequency.entries());
-  if (entries.length <= 1) return { highFreqClusterIds: new Set<number>() };
+  if (entries.length <= 1) return {highFreqClusterIds: new Set<number>()};
   const freqs = entries.map(([, f]) => f).sort((a, b) => a - b);
   let splitIdx = 0;
   let maxGap = -Infinity;
   for (let i = 0; i < freqs.length - 1; i++) {
     const gap = freqs[i + 1] - freqs[i];
-    if (gap > maxGap) { maxGap = gap; splitIdx = i; }
+    if (gap > maxGap) {
+      maxGap = gap;
+      splitIdx = i;
+    }
   }
   const threshold = freqs[splitIdx];
   const highFreqClusterIds = new Set<number>();
   for (const [cid, f] of entries) {
     if (f > threshold) highFreqClusterIds.add(cid);
   }
-  return { highFreqClusterIds };
+  return {highFreqClusterIds};
 }
 
 /**
@@ -550,14 +640,14 @@ function splitClustersByFrequency(clusterIdToTotalFrequency: Map<number, number>
 function applyTemporalConstraints(
   windows: AnalysisWindow[],
   config: ValidatedConfig,
-  resolution: number
+  resolution: number,
 ): AnalysisWindow[] {
   const result = [...windows];
-  
+
   // Group consecutive candidates
   const candidateGroups: number[][] = [];
   let currentGroup: number[] = [];
-  
+
   for (let i = 0; i < result.length; i++) {
     if (result[i].isCandidate) {
       currentGroup.push(i);
@@ -568,29 +658,37 @@ function applyTemporalConstraints(
       }
     }
   }
-  
+
   if (currentGroup.length > 0) {
     candidateGroups.push(currentGroup);
   }
-  
+
   // Apply constraints to each group
   for (const group of candidateGroups) {
     if (group.length === 0) continue;
-    
+
     const startWindow = result[group[0]];
     const endWindow = result[group[group.length - 1]];
-    const durationBeats = ticksToBeats(endWindow.endTick - startWindow.startTick, resolution);
-    
+    const durationBeats = ticksToBeats(
+      endWindow.endTick - startWindow.startTick,
+      resolution,
+    );
+
     // Remove groups that are too short or too long
-    if (durationBeats < config.thresholds.minBeats || durationBeats > config.thresholds.maxBeats) {
+    if (
+      durationBeats < config.thresholds.minBeats ||
+      durationBeats > config.thresholds.maxBeats
+    ) {
       for (const windowIndex of group) {
-        result[windowIndex] = { ...result[windowIndex], isCandidate: false };
+        result[windowIndex] = {...result[windowIndex], isCandidate: false};
       }
       continue;
     }
 
     // Compute group stats used for temporal preference and optional relaxation
-    const avgDensity = group.reduce((s, idx) => s + result[idx].features.noteDensity, 0) / group.length;
+    const avgDensity =
+      group.reduce((s, idx) => s + result[idx].features.noteDensity, 0) /
+      group.length;
     let totalNotes = 0;
     let tomOrCymNotes = 0;
     let avgIoiStdZ = 0;
@@ -599,16 +697,29 @@ function applyTemporalConstraints(
       avgIoiStdZ += w.features.ioiStdZ;
       for (const n of w.notes) {
         totalNotes += 1;
-        const voice = mapScanChartNoteToVoice(n.type as any, null, (n as any).flags ?? 0);
-        if (voice === DrumVoice.TOM || voice === DrumVoice.CYMBAL) tomOrCymNotes += 1;
+        const voice = mapScanChartNoteToVoice(
+          n.type as any,
+          null,
+          (n as any).flags ?? 0,
+        );
+        if (voice === DrumVoice.TOM || voice === DrumVoice.CYMBAL)
+          tomOrCymNotes += 1;
       }
     }
     avgIoiStdZ = group.length > 0 ? avgIoiStdZ / group.length : 0;
     const tomRatio = totalNotes > 0 ? tomOrCymNotes / totalNotes : 0;
     const strongFill = avgDensity >= 4.0 || tomRatio >= 0.6;
-    const avgGrooveDist = group.reduce((s, idx) => s + result[idx].features.grooveDist, 0) / group.length;
-    const avgNovelty = group.reduce((s, idx) => s + result[idx].features.ngramNovelty, 0) / group.length;
-    const hasHatKickDrop = group.some(idx => result[idx].features.hatDropout > 0.5 && result[idx].features.kickDrop > 0.3);
+    const avgGrooveDist =
+      group.reduce((s, idx) => s + result[idx].features.grooveDist, 0) /
+      group.length;
+    const avgNovelty =
+      group.reduce((s, idx) => s + result[idx].features.ngramNovelty, 0) /
+      group.length;
+    const hasHatKickDrop = group.some(
+      idx =>
+        result[idx].features.hatDropout > 0.5 &&
+        result[idx].features.kickDrop > 0.3,
+    );
 
     // Prefer fills that conclude near the end of a bar, with a slightly wider window for strong fills
     const barLengthTicks = 4 * resolution; // assumes common time
@@ -620,10 +731,12 @@ function applyTemporalConstraints(
 
     if (!nearBarEnd) {
       // If not near bar end, allow keeping the group only if it shows strong fill characteristics or crash resolve
-      const hasCrashResolve = group.some(idx => result[idx].features.crashResolve);
+      const hasCrashResolve = group.some(
+        idx => result[idx].features.crashResolve,
+      );
       if (!hasCrashResolve && !strongFill) {
         for (const windowIndex of group) {
-          result[windowIndex] = { ...result[windowIndex], isCandidate: false };
+          result[windowIndex] = {...result[windowIndex], isCandidate: false};
         }
       }
     }
@@ -631,7 +744,11 @@ function applyTemporalConstraints(
     // Additional acceptors:
     // A) Short late-measure tom burst near bar end with timing variance
     // reuse variables defined above: distanceToBarEnd
-    if (distanceToBarEnd <= 1.5 * resolution && tomRatio >= 0.7 && avgIoiStdZ >= 1.0) {
+    if (
+      distanceToBarEnd <= 1.5 * resolution &&
+      tomRatio >= 0.7 &&
+      avgIoiStdZ >= 1.0
+    ) {
       // keep as candidate (no demotion)
     }
 
@@ -642,21 +759,25 @@ function applyTemporalConstraints(
     const isOneBeat = durationBeats >= 0.95 && durationBeats <= 1.2;
     const isBarLong = durationBeats >= 3.8 && durationBeats <= 4.4;
     const samePadBurst = group.some(idx => result[idx].features.samePadBurst);
-    if ((isOneBeat && nearBarStart && tomRatio >= 0.75 && samePadBurst) || (isBarLong && nearBarStart && tomRatio >= 0.6)) {
+    if (
+      (isOneBeat && nearBarStart && tomRatio >= 0.75 && samePadBurst) ||
+      (isBarLong && nearBarStart && tomRatio >= 0.6)
+    ) {
       // keep (no action needed)
     }
 
     // Final acceptance guard: require some groove deviation and either novelty or hat/kick dropout unless it's a strong fill
-    const passesFinalGuard = strongFill || (
-      (avgGrooveDist >= config.thresholds.dist * 0.9) && (avgNovelty > 0 || hasHatKickDrop)
-    );
+    const passesFinalGuard =
+      strongFill ||
+      (avgGrooveDist >= config.thresholds.dist * 0.9 &&
+        (avgNovelty > 0 || hasHatKickDrop));
     if (!passesFinalGuard) {
       for (const windowIndex of group) {
-        result[windowIndex] = { ...result[windowIndex], isCandidate: false };
+        result[windowIndex] = {...result[windowIndex], isCandidate: false};
       }
     }
   }
-  
+
   return result;
 }
 
@@ -673,14 +794,14 @@ export function getCandidateStatistics(windows: AnalysisWindow[]): {
   const totalWindows = windows.length;
   const candidateWindows = windows.filter(w => w.isCandidate).length;
   const candidateRatio = totalWindows > 0 ? candidateWindows / totalWindows : 0;
-  
+
   // Calculate average confidence (would need to store this info)
   const averageConfidence = 0; // Placeholder - would need to modify data structure
-  
+
   // Count candidate groups
   let candidateGroups = 0;
   let inGroup = false;
-  
+
   for (const window of windows) {
     if (window.isCandidate && !inGroup) {
       candidateGroups++;
@@ -689,7 +810,7 @@ export function getCandidateStatistics(windows: AnalysisWindow[]): {
       inGroup = false;
     }
   }
-  
+
   return {
     totalWindows,
     candidateWindows,
@@ -705,35 +826,35 @@ export function getCandidateStatistics(windows: AnalysisWindow[]): {
 export function validateDetectionConfig(config: ValidatedConfig): string[] {
   const errors: string[] = [];
   const t = config.thresholds;
-  
+
   if (t.densityZ <= 0) {
     errors.push('densityZ threshold must be positive');
   }
-  
+
   if (t.dist <= 0) {
     errors.push('dist threshold must be positive');
   }
-  
+
   if (t.tomJump <= 1) {
     errors.push('tomJump threshold should be > 1 (ratio multiplier)');
   }
-  
+
   if (t.minBeats <= 0) {
     errors.push('minBeats must be positive');
   }
-  
+
   if (t.maxBeats <= t.minBeats) {
     errors.push('maxBeats must be greater than minBeats');
   }
-  
+
   if (t.mergeGapBeats < 0) {
     errors.push('mergeGapBeats must be non-negative');
   }
-  
+
   if (t.burstMs <= 0) {
     errors.push('burstMs must be positive');
   }
-  
+
   return errors;
 }
 
@@ -742,18 +863,18 @@ export function validateDetectionConfig(config: ValidatedConfig): string[] {
  */
 export function createDetectionReport(
   windows: AnalysisWindow[],
-  config: ValidatedConfig
+  config: ValidatedConfig,
 ): string {
   const stats = getCandidateStatistics(windows);
   const configErrors = validateDetectionConfig(config);
-  
+
   let report = '=== Fill Detection Report ===\n\n';
-  
+
   report += `Total Windows: ${stats.totalWindows}\n`;
   report += `Candidate Windows: ${stats.candidateWindows}\n`;
   report += `Candidate Ratio: ${(stats.candidateRatio * 100).toFixed(1)}%\n`;
   report += `Candidate Groups: ${stats.candidateGroups}\n\n`;
-  
+
   if (configErrors.length > 0) {
     report += 'Configuration Errors:\n';
     for (const error of configErrors) {
@@ -761,12 +882,12 @@ export function createDetectionReport(
     }
     report += '\n';
   }
-  
+
   report += 'Thresholds Used:\n';
   report += `  Density Z-Score: ${config.thresholds.densityZ}\n`;
   report += `  Groove Distance: ${config.thresholds.dist}\n`;
   report += `  Tom Jump Ratio: ${config.thresholds.tomJump}\n`;
   report += `  Duration Range: ${config.thresholds.minBeats} - ${config.thresholds.maxBeats} beats\n`;
-  
+
   return report;
 }
