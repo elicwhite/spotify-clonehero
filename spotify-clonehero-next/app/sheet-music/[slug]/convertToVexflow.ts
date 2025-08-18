@@ -65,6 +65,7 @@ export interface Note {
   isTriplet: boolean;
   isRest: boolean;
   tick: number;
+  ms: number;
   durationTicks?: number;
 }
 
@@ -180,6 +181,7 @@ class Parser {
               isTriplet: false,
               duration: '32',
               tick: currentTick,
+              ms: tickToMs(this.chart, currentTick),
             });
 
             noteGroupIndex += 1;
@@ -191,6 +193,7 @@ class Parser {
               dotted: false,
               duration: '32r',
               tick: currentTick,
+              ms: tickToMs(this.chart, currentTick),
             });
           }
         }
@@ -255,6 +258,7 @@ class Parser {
       isTriplet: false,
       duration,
       tick: 0,
+      ms: 0,
     };
   }
 
@@ -325,6 +329,7 @@ class Parser {
                   durationTicks,
                   isRest,
                   tick: 0,
+                  ms: 0,
                   duration: `${duration}${isRest ? 'r' : ''}`,
                   notes: isRest ? ['b/4'] : note.notes,
                 };
@@ -359,6 +364,7 @@ class Parser {
         durationTicks: note.durationTicks,
         isRest: note.isRest,
         tick: 0,
+        ms: 0,
         duration: `${duration}${note.isRest ? 'r' : ''}`,
         notes: note.isRest ? ['b/4'] : note.notes,
       },

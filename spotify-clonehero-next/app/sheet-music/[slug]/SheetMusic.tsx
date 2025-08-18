@@ -9,8 +9,9 @@ import {
   createRef,
 } from 'react';
 import convertToVexFlow from './convertToVexflow';
-import {RenderData, renderMusic} from './renderVexflow';
+import {RenderData, renderMusic, createConsolidatedTimePositionMap} from './renderVexflow';
 import {PracticeModeConfig} from '@/lib/preview/audioManager';
+import {Playhead} from './Playhead';
 
 import {cn} from '@/lib/utils';
 import debounce from 'debounce';
@@ -29,6 +30,7 @@ export default function SheetMusic({
   practiceModeConfig,
   onPracticeMeasureSelect,
   practiceModeStep,
+  audioManagerRef,
 }: {
   chart: ParsedChart;
   track: ParsedChart['trackData'][0];
@@ -41,6 +43,7 @@ export default function SheetMusic({
   practiceModeConfig: PracticeModeConfig | null;
   onPracticeMeasureSelect: (measureStartMs: number) => void;
   practiceModeStep: 'idle' | 'selectingStart' | 'selectingEnd';
+  audioManagerRef: RefObject<any>;
 }) {
   const vexflowContainerRef = useRef<HTMLDivElement>(null!);
   const [windowWidth, setWindowWidth] = useState<number>(window.innerWidth);
@@ -53,6 +56,12 @@ export default function SheetMusic({
   }, [chart, track]);
 
   const [renderData, setRenderData] = useState<RenderData[]>([]);
+
+  // Create consolidated time->position map for the playhead
+  const consolidatedTimeMap = useMemo(() => {
+    if (renderData.length === 0) return [];
+    return createConsolidatedTimePositionMap(renderData);
+  }, [renderData]);
 
   const debouncedOnResize = useMemo(
     () =>
@@ -112,41 +121,15 @@ export default function SheetMusic({
     practiceModeConfig,
   ]);
 
-  useEffect(() => {
-    if (!renderData) {
-      return;
-    }
-    const highlightedMeasure = renderData.find(({measure}) => {
-      const currentMs = currentTime * 1000;
-      return currentMs >= measure.startMs && currentMs < measure.endMs;
-    });
-
-    if (!highlightedMeasure) {
-      return;
-    }
-
-    setHighlightedMeasureIndex(renderData.indexOf(highlightedMeasure));
-  }, [currentTime, renderData]);
-
-  useEffect(() => {
-    if (highlightsRef.current.length === 0) {
-      return;
-    }
-
-    highlightsRef.current[highlightedMeasureIndex].current?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center',
-    });
-  }, [highlightedMeasureIndex]);
+  // Remove automatic highlighting of the currently playing measure and auto-scroll
+  // Keeping measure overlay divs clickable only
 
   const measureHighlights = renderData.map(({measure, stave}, index) => {
-    const isHighlighted = index === highlightedMeasureIndex;
-    
     // Determine if this measure is in practice mode range
     let isInPracticeRange = false;
     let isPracticeStart = false;
     let isPracticeEnd = false;
-    
+
     if (practiceModeConfig) {
       isInPracticeRange = measure.startMs >= practiceModeConfig.startTimeMs && measure.endMs <= practiceModeConfig.endTimeMs;
       isPracticeStart = Math.abs(measure.startMs - practiceModeConfig.startMeasureMs) < 100; // Within 100ms
@@ -163,7 +146,6 @@ export default function SheetMusic({
           width: stave.getWidth() + 10,
           height: stave.getHeight(),
         }}
-        highlighted={isHighlighted}
         isInPracticeRange={isInPracticeRange}
         isPracticeStart={isPracticeStart}
         isPracticeEnd={isPracticeEnd}
@@ -188,6 +170,13 @@ export default function SheetMusic({
     <div className="flex-1 flex justify-center bg-white rounded-lg border md:overflow-y-auto overflow-x-hidden px-4">
       <div className="relative w-full">
         <div ref={vexflowContainerRef} className="flex h-full w-full" />
+        {/* Playhead overlay */}
+        {consolidatedTimeMap.length > 0 && (
+          <Playhead
+            timePositionMap={consolidatedTimeMap}
+            audioManagerRef={audioManagerRef}
+          />
+        )}
         {measureHighlights}
       </div>
     </div>
@@ -196,7 +185,6 @@ export default function SheetMusic({
 
 interface MeasureHighlightProps {
   style?: React.CSSProperties;
-  highlighted?: boolean;
   isInPracticeRange?: boolean;
   isPracticeStart?: boolean;
   isPracticeEnd?: boolean;
@@ -205,14 +193,13 @@ interface MeasureHighlightProps {
 }
 
 const MeasureHighlight = forwardRef<HTMLButtonElement, MeasureHighlightProps>(
-  ({style, highlighted, isInPracticeRange, isPracticeStart, isPracticeEnd, isPracticeModeActive, onClick}, ref) => {
+  ({style, isInPracticeRange, isPracticeStart, isPracticeEnd, isPracticeModeActive, onClick}, ref) => {
     return (
       <button
         ref={ref}
         className={cn(
           'absolute z-[1] rounded-md border-0 bg-transparent cursor-pointer transition-all duration-200',
-          highlighted && 'bg-primary/10',
-          'hover:bg-muted/40',
+          'hover:bg-primary/10',
           isPracticeStart && 'border-l-4 border-green-500', 
           isPracticeEnd && 'border-r-4 border-green-500',
         )}

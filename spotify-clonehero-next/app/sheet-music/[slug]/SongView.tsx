@@ -1079,6 +1079,7 @@ export default function Renderer({
                 practiceModeConfig={practiceMode}
                 onPracticeMeasureSelect={handlePracticeMeasureSelect}
                 practiceModeStep={practiceModeStep}
+                audioManagerRef={audioManagerRef}
               />
             </div>
             {viewCloneHero && (

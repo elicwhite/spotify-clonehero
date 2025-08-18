@@ -16,12 +16,18 @@ import {
   Voice,
   RepeatNote,
 } from 'vexflow';
-import {Measure} from './convertToVexflow';
-import {PracticeModeConfig} from '@/lib/preview/audioManager';
+import { Measure } from './convertToVexflow';
+import { PracticeModeConfig } from '@/lib/preview/audioManager';
 
 export interface RenderData {
   stave: Stave;
   measure: Measure;
+  timePositionMap: Array<{
+    ms: number;
+    x: number;
+    y: number;
+    flag: 'measure-start' | 'measure-end' | 'note';
+  }>;
 }
 
 const MIN_STAVE_WIDTH = 250;
@@ -29,7 +35,7 @@ const MAX_STAVE_WIDTH = 600;
 const MAX_STAVES_PER_ROW = 4;
 const MIN_STAVES_PER_ROW = 1;
 
-const NOTE_COLOR_MAP: {[key: string]: string} = {
+const NOTE_COLOR_MAP: { [key: string]: string } = {
   'e/4': '#ff793f', // orange
   'f/4': '#ff793f', // orange
   'c/5': '#e74c3c', // red
@@ -64,10 +70,10 @@ function measureIsOnlyRests(measure: Measure): boolean {
 }
 
 export function renderMusic(
-  elementRef: React.RefObject<HTMLDivElement>,
+  elementRef: React.RefObject<HTMLDivElement | null>,
   measures: Measure[],
-  sections: {tick: number; name: string; msTime: number; msLength: number}[],
-  lyrics: {tick: number; text: string; msTime: number}[] = [],
+  sections: { tick: number; name: string; msTime: number; msLength: number }[],
+  lyrics: { tick: number; text: string; msTime: number }[] = [],
   showBarNumbers: boolean = true,
   enableColors: boolean = false,
   practiceModeConfig?: PracticeModeConfig | null,
@@ -138,7 +144,7 @@ export function renderMusic(
   // Create a map of measure start times to lyrics for quick lookup
   const lyricsMap = new Map<
     number,
-    {text: string; position: number; msTime: number}[]
+    { text: string; position: number; msTime: number }[]
   >();
   lyrics.forEach(lyric => {
     // Find the measure that contains this lyric's start time
@@ -183,13 +189,13 @@ export function renderMusic(
   // Process lyrics to combine overlapping ones
   const processedLyricsMap = new Map<
     number,
-    {text: string; position: number}[]
+    { text: string; position: number }[]
   >();
   lyricsMap.forEach((measureLyrics, measureIndex) => {
     // Sort lyrics by position within the measure
     const sortedLyrics = measureLyrics.sort((a, b) => a.position - b.position);
 
-    const processed: {text: string; position: number}[] = [];
+    const processed: { text: string; position: number }[] = [];
 
     // Create a temporary canvas context to measure text width
     const canvas = document.createElement('canvas');
@@ -251,6 +257,9 @@ export function renderMusic(
     processedLyricsMap.set(measureIndex, processed);
   });
 
+  // Build time->position map for this measure
+  const timePositionMap: Array<{ ms: number; x: number; y: number; flag: 'measure-start' | 'measure-end' | 'note' }> = [];
+
   return measures.map((measure, index) => {
     const stave = renderMeasure(
       context,
@@ -262,6 +271,7 @@ export function renderMusic(
       index === measures.length - 1,
       showBarNumbers,
       enableColors,
+      timePositionMap,
       sectionMap.get(index), // Pass section name if this measure starts a new section
       processedLyricsMap.get(index), // Pass processed lyrics if this measure contains lyrics
       index > 0 ? measures[index - 1] : undefined, // Pass previous measure for repeat detection
@@ -271,8 +281,84 @@ export function renderMusic(
     return {
       measure,
       stave,
+      timePositionMap,
     };
   });
+}
+
+export function createConsolidatedTimePositionMap(renderData: RenderData[]): Array<{ ms: number; x: number; y: number; flag: 'measure-start' | 'measure-end' | 'note' }> {
+  const consolidatedMap: Array<{ ms: number; x: number; y: number; flag: 'measure-start' | 'measure-end' | 'note' }> = [];
+
+  renderData.forEach(renderItem => {
+    // Add all time position points from this measure
+    consolidatedMap.push(...renderItem.timePositionMap);
+  });
+
+  return consolidatedMap;
+}
+
+export function findPositionForTime(
+  timePositionMap: Array<{ ms: number; x: number; y: number; flag: 'measure-start' | 'measure-end' | 'note' }>,
+  currentMs: number
+): { x: number; y: number } | null {
+  if (timePositionMap.length === 0) return null;
+
+  // Binary search to find the two points that bracket the current time
+  let left = 0;
+  let right = timePositionMap.length - 1;
+  let beforePoint: { ms: number; x: number; y: number } | null = null;
+  let afterPoint: { ms: number; x: number; y: number } | null = null;
+
+  // Handle edge cases first
+  if (currentMs <= timePositionMap[0].ms) {
+    return { x: timePositionMap[0].x, y: timePositionMap[0].y };
+  }
+
+  if (currentMs >= timePositionMap[right].ms) {
+    return { x: timePositionMap[right].x, y: timePositionMap[right].y };
+  }
+
+  // Binary search to find the insertion point
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2);
+    const midTime = timePositionMap[mid].ms;
+
+    if (midTime === currentMs) {
+      // Exact match found
+      return { x: timePositionMap[mid].x, y: timePositionMap[mid].y };
+    } else if (midTime < currentMs) {
+      // Current time is after mid, so mid could be our "before" point
+      beforePoint = timePositionMap[mid];
+      left = mid + 1;
+    } else {
+      // Current time is before mid, so mid could be our "after" point
+      afterPoint = timePositionMap[mid];
+      right = mid - 1;
+    }
+  }
+
+  // At this point, we have found the two points that bracket currentMs
+  // beforePoint is the largest time <= currentMs
+  // afterPoint is the smallest time > currentMs
+
+  if (!beforePoint || !afterPoint) {
+    // This shouldn't happen given our edge case handling, but safety first
+    return { x: timePositionMap[0].x, y: timePositionMap[0].y };
+  }
+
+  // Interpolate between the two points
+  const timeRatio = (currentMs - beforePoint.ms) / (afterPoint.ms - beforePoint.ms);
+  const x = beforePoint.x + timeRatio * (afterPoint.x - beforePoint.x);
+  const y = beforePoint.y + timeRatio * (afterPoint.y - beforePoint.y);
+
+  return { x, y };
+}
+
+export function getTotalDuration(renderData: RenderData[]): number {
+  if (renderData.length === 0) return 0;
+
+  const lastMeasure = renderData[renderData.length - 1].measure;
+  return lastMeasure.endMs;
 }
 
 function renderMeasure(
@@ -285,8 +371,9 @@ function renderMeasure(
   endMeasure: boolean,
   showBarNumbers: boolean,
   enableColors: boolean,
+  timePositionMap: Array<{ ms: number; x: number; y: number; flag: 'measure-start' | 'measure-end' | 'note' }>,
   sectionName?: string,
-  lyrics?: {text: string; position: number}[],
+  lyrics?: { text: string; position: number }[],
   previousMeasure?: Measure,
   practiceModeConfig?: PracticeModeConfig | null,
 ) {
@@ -301,7 +388,7 @@ function renderMeasure(
 
   const inactive_measure_color = 'rgba(0, 0, 0, 0.3)';
   const fill_color = shouldMute ? inactive_measure_color : undefined;
-  
+
   context.fillStyle = fill_color ?? '';
   context.strokeStyle = fill_color ?? '';
 
@@ -318,7 +405,7 @@ function renderMeasure(
   }
 
   if (showBarNumbers) {
-    stave.setText(`${index+1}`, ModifierPosition.ABOVE, {
+    stave.setText(`${index + 1}`, ModifierPosition.ABOVE, {
       justification: TextJustification.LEFT,
     });
   }
@@ -358,6 +445,14 @@ function renderMeasure(
 
   stave.setContext(context).draw();
 
+  timePositionMap.push({
+    ms: measure.startMs,
+    x: stave.getTieStartX(),
+    y: stave.getY(),
+    flag: 'measure-start',
+  });
+
+
   // Check if this measure is a repeat of the previous measure (excluding rest-only measures)
   const isRepeat =
     previousMeasure &&
@@ -379,6 +474,13 @@ function renderMeasure(
     new Formatter().joinVoices([voice]).format([voice], staveWidth - 40);
     voice.draw(context, stave);
 
+    timePositionMap.push({
+      ms: measure.endMs,
+      x: stave.getTieEndX(),
+      y: stave.getY(),
+      flag: 'measure-end',
+    });
+    
     return stave;
   }
 
@@ -393,10 +495,13 @@ function renderMeasure(
       align_center: note.duration === 'wr',
     });
 
+    // @ts-ignore Store ms in the stave note for later use
+    staveNote.ms = note.ms;
+
     if (enableColors) {
       staveNote.keys.forEach((n, idx) => {
         const suffix = shouldMute ? '4D' : '';
-        staveNote.setKeyStyle(idx, {fillStyle: NOTE_COLOR_MAP[n]+suffix});
+        staveNote.setKeyStyle(idx, { fillStyle: NOTE_COLOR_MAP[n] + suffix });
       });
     }
 
@@ -437,6 +542,25 @@ function renderMeasure(
   new Formatter().joinVoices([voice]).format([voice], staveWidth - 40);
 
   voice.draw(context, stave);
+
+  notes.forEach(note => {
+    if (!note.isRest()) {
+      timePositionMap.push({
+        // @ts-ignore Use ms from the note object stored above
+        ms: note.ms,
+        x: note.getNoteHeadBeginX(),
+        y: stave.getY(),
+        flag: 'note',
+      });
+    }
+  });
+
+  timePositionMap.push({
+    ms: measure.endMs,
+    x: stave.getTieEndX(),
+    y: stave.getY(),
+    flag: 'measure-end',
+  });
 
   beams.forEach(b => {
     b.setContext(context).draw();
