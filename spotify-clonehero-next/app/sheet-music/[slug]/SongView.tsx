@@ -895,7 +895,9 @@ export default function Renderer({
                 Enable colors
               </label>
             </div>
-            <div className="flex items-center space-x-2">
+           {
+            (chart as any).lyrics == null ? null : 
+            (<div className="flex items-center space-x-2">
               <Switch
                 id="lyrics"
                 checked={showLyrics}
@@ -904,7 +906,8 @@ export default function Renderer({
               <label htmlFor="lyrics" className="text-sm font-medium">
                 Show lyrics
               </label>
-            </div>
+            </div>)
+}
             <div className="flex items-center space-x-2">
               <Switch
                 id="clonehero"
