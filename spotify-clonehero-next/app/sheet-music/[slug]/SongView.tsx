@@ -645,7 +645,7 @@ export default function Renderer({
         setPracticeMode({
           startMeasureMs: measureStartMs,
           endMeasureMs: 0,
-          startTimeMs: Math.max(0, measureStartMs - 2000), // 2 seconds before
+          startTimeMs: Math.max(0, measureStartMs - 500), // 2 seconds before
           endTimeMs: 0,
         });
         setPracticeModeStep('selectingEnd');
@@ -656,8 +656,8 @@ export default function Renderer({
         const updatedPracticeMode: PracticeModeConfig = {
           startMeasureMs: practiceMode!.startMeasureMs,
           endMeasureMs: endMeasureMs,
-          startTimeMs: Math.max(0, practiceMode!.startMeasureMs - 2000), // 2 seconds before
-          endTimeMs: endMeasureMs + 2000, // 2 seconds after
+          startTimeMs: Math.max(0, practiceMode!.startMeasureMs - 500), // 500ms before
+          endTimeMs: endMeasureMs + 500, // 500ms after
         };
 
         setPracticeMode(updatedPracticeMode);
