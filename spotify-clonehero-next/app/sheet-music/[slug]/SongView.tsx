@@ -239,50 +239,53 @@ export default function Renderer({
 
   // Load persisted settings on first mount
   const hasLoadedSettingsRef = useRef(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   useEffect(() => {
     if (hasLoadedSettingsRef.current) return;
     hasLoadedSettingsRef.current = true;
     try {
       if (typeof window === 'undefined') return;
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) return;
-      const parsed: PersistedSettings = JSON.parse(raw);
+      if (raw) {
+        const parsed: PersistedSettings = JSON.parse(raw);
 
-      if (parsed.playClickTrack !== undefined) {
-        setPlayClickTrack(parsed.playClickTrack);
-      }
-      if (parsed.masterClickVolume !== undefined) {
-        setMasterClickVolume(parsed.masterClickVolume);
-      }
-      if (parsed.clickVolumes) {
-        setClickVolumes(prev => ({...prev, ...parsed.clickVolumes!}));
-      }
-      if (parsed.enableColors !== undefined) {
-        setEnableColors(parsed.enableColors);
-      }
-      if (parsed.showLyrics !== undefined) {
-        setShowLyrics(parsed.showLyrics);
-      }
-      if (parsed.viewCloneHero !== undefined) {
-        setViewCloneHero(parsed.viewCloneHero);
-      }
-      if (parsed.showBarNumbers !== undefined) {
-        setShowBarNumbers(parsed.showBarNumbers);
-      }
-      if (
-        parsed.selectedDifficulty &&
-        availableDifficulties.includes(parsed.selectedDifficulty)
-      ) {
-        setSelectedDifficulty(parsed.selectedDifficulty);
-      }
+        if (parsed.playClickTrack !== undefined) {
+          setPlayClickTrack(parsed.playClickTrack);
+        }
+        if (parsed.masterClickVolume !== undefined) {
+          setMasterClickVolume(parsed.masterClickVolume);
+        }
+        if (parsed.clickVolumes) {
+          setClickVolumes(prev => ({...prev, ...parsed.clickVolumes!}));
+        }
+        if (parsed.enableColors !== undefined) {
+          setEnableColors(parsed.enableColors);
+        }
+        if (parsed.showLyrics !== undefined) {
+          setShowLyrics(parsed.showLyrics);
+        }
+        if (parsed.viewCloneHero !== undefined) {
+          setViewCloneHero(parsed.viewCloneHero);
+        }
+        if (parsed.showBarNumbers !== undefined) {
+          setShowBarNumbers(parsed.showBarNumbers);
+        }
+        if (
+          parsed.selectedDifficulty &&
+          availableDifficulties.includes(parsed.selectedDifficulty)
+        ) {
+          setSelectedDifficulty(parsed.selectedDifficulty);
+        }
 
-      // Restore tempo if available
-      if (parsed.tempo) {
-        setTempo(parsed.tempo);
+        // Restore tempo if available
+        if (parsed.tempo) {
+          setTempo(parsed.tempo);
+        }
       }
     } catch (e) {
       // noop on parse errors
     }
+    setSettingsLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -318,6 +321,9 @@ export default function Renderer({
   ]);
 
   useEffect(() => {
+    // Wait for settings to be loaded before initializing audio manager
+    if (!settingsLoaded) return;
+    
     async function run() {
       const clickTrack = await generateClickTrackFromMeasures(
         measures,
@@ -445,6 +451,7 @@ export default function Renderer({
     playClickTrack,
     masterClickVolume,
     practiceMode,
+    settingsLoaded,
   ]);
 
   useInterval(
