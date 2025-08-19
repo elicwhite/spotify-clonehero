@@ -147,7 +147,8 @@ export default function Renderer({
   const [practiceMode, setPracticeMode] = useState<PracticeModeConfig | null>(
     null,
   );
-  const [isPracticeModeActive, setIsPracticeModeActive] = useState(false);
+
+  const practiceModeEnabled = practiceMode != null && practiceMode.endTimeMs > 0;
   const [practiceModeStep, setPracticeModeStep] = useState<
     'idle' | 'selectingStart' | 'selectingEnd'
   >('idle');
@@ -606,7 +607,7 @@ export default function Renderer({
       setIsPlaying(false);
     } else if (!audioManagerRef.current.isInitialized) {
       // If in practice mode, start from practice start time
-      if (practiceMode && isPracticeModeActive) {
+      if (practiceModeEnabled) {
         audioManagerRef.current.play({time: practiceMode.startTimeMs / 1000});
       } else {
         audioManagerRef.current.play({time: 0});
@@ -616,18 +617,16 @@ export default function Renderer({
       audioManagerRef.current.resume();
       setIsPlaying(true);
     }
-  }, [isPlaying, practiceMode, isPracticeModeActive]);
+  }, [isPlaying, practiceMode, practiceModeEnabled]);
 
   // Practice mode functions
   const startPracticeMode = useCallback(() => {
     setPracticeModeStep('selectingStart');
-    setIsPracticeModeActive(true);
     toast.info('Choose the starting measure');
   }, []);
 
   const endPracticeMode = useCallback(() => {
     setPracticeMode(null);
-    setIsPracticeModeActive(false);
     setPracticeModeStep('idle');
 
     // Update audio manager
@@ -656,7 +655,7 @@ export default function Renderer({
         const updatedPracticeMode: PracticeModeConfig = {
           startMeasureMs: practiceMode!.startMeasureMs,
           endMeasureMs: endMeasureMs,
-          startTimeMs: Math.max(0, practiceMode!.startMeasureMs - 500), // 500ms before
+          startTimeMs: practiceMode!.startTimeMs,
           endTimeMs: endMeasureMs + 500, // 500ms after
         };
 
@@ -827,13 +826,13 @@ export default function Renderer({
   const practiceModeButton = (
     <div className="space-y-2 pt-4 border-t">
       <Button
-        variant={isPracticeModeActive ? 'destructive' : 'default'}
+        variant={practiceModeEnabled || practiceModeStep !== 'idle' ? 'destructive' : 'default'}
         className="w-full"
-        onClick={isPracticeModeActive ? endPracticeMode : startPracticeMode}>
+        onClick={practiceModeEnabled ? endPracticeMode : startPracticeMode}>
         <Target className="h-4 w-4 mr-2" />
-        {isPracticeModeActive ? 'End Practice' : 'Practice'}
+        {practiceModeEnabled ? 'End Practice' : 'Practice'}
       </Button>
-      {isPracticeModeActive && practiceMode && (
+      {practiceModeEnabled && practiceMode && (
         <div className="text-xs text-muted-foreground text-center">
           Practice Range: {Math.round(practiceMode.startTimeMs / 1000)}s -{' '}
           {Math.round(practiceMode.endTimeMs / 1000)}s
