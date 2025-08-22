@@ -493,6 +493,13 @@ export default function Renderer({
     } catch {}
   }, [volumeControls]);
 
+  // Update document title when metadata changes
+  useEffect(() => {
+    if (metadata?.name && metadata?.artist) {
+      document.title = `${metadata.name} by ${metadata.artist} - musiccharts.tools`;
+    }
+  }, [metadata]);
+
   // Run fill detection when chart and track are loaded (dev mode only)
   useEffect(() => {
     // Only run fill detection in development mode
