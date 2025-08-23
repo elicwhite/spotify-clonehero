@@ -36,3 +36,7 @@ next-env.d.ts
 
 # Sentry Config File
 .sentryclirc
+
+# supabase
+supabase/.temp
+supabase/.branches
