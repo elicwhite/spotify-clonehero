@@ -53,20 +53,6 @@ export default function Page() {
   let auth = null;
   const session = useSession();
 
-  auth =
-    !session || session.status !== 'authenticated' ? (
-      <div>
-        <Button onClick={() => signIn('spotify')}>
-          Sign in with Spotify for Previews
-        </Button>
-      </div>
-    ) : (
-      <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
-        <span>Logged in as {session.data.user?.name}</span>
-        <Button onClick={() => signOut()}>Sign out</Button>
-      </div>
-    );
-
   return (
     <>
       {auth}
@@ -82,9 +68,7 @@ export default function Page() {
         ever listened to.
       </p>
       <Suspense fallback={<div>Loading...</div>}>
-        <SupportedBrowserWarning>
-          <SpotifyHistory authenticated={session.status === 'authenticated'} />
-        </SupportedBrowserWarning>
+        <SpotifyHistory authenticated={session.status === 'authenticated'} />
       </Suspense>
     </>
   );

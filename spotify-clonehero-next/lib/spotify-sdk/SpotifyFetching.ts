@@ -17,6 +17,13 @@ type CachePlaylistNames = {
   [snapshotId: string]: string;
 };
 
+type CachePlaylistInfo = {
+  [snapshotId: string]: {
+    id: string;
+    name: string;
+  };
+};
+
 export type TrackResult = {
   name: string;
   artists: string[];
@@ -27,6 +34,20 @@ export type TrackResult = {
 async function getCachedPlaylistTracks(): Promise<CachePlaylistTracks> {
   const cachedPlaylistTracks = await get('playlistTracks');
   return cachedPlaylistTracks ?? {};
+}
+
+async function getCachedPlaylistNames(): Promise<CachePlaylistNames> {
+  const cachedPlaylistNames = await get('playlistNames');
+  return cachedPlaylistNames ?? {};
+}
+
+async function getCachedPlaylistInfo(): Promise<CachePlaylistInfo> {
+  const cachedPlaylistInfo = await get('playlistInfo');
+  return cachedPlaylistInfo ?? {};
+}
+
+async function setCachedPlaylistInfo(cachedPlaylistInfo: CachePlaylistInfo) {
+  await set('playlistInfo', cachedPlaylistInfo);
 }
 
 async function setCachedPlaylistTracks(
@@ -151,6 +172,166 @@ export function useTrackUrls(
   }, [sdk, artist, song]);
 
   return getPreviewUrl;
+}
+
+export type PlaylistInfo = {
+  id: string;
+  name: string;
+  snapshotId: string;
+  trackCount: number;
+};
+
+export function useSpotifyPlaylists(): [
+  playlists: PlaylistInfo[],
+  tracks: TrackResult[],
+  selectedPlaylists: Set<string>,
+  setSelectedPlaylists: React.Dispatch<React.SetStateAction<Set<string>>>,
+  updateFromSpotify: () => Promise<void>,
+] {
+  const sdk = useSpotifySdk();
+  const [forceUpdate, setForceUpdate] = useState(0);
+  const [allTracks, setAllTracks] = useState<TrackResult[]>([]);
+  const [playlists, setPlaylists] = useState<PlaylistInfo[]>([]);
+  const [selectedPlaylists, setSelectedPlaylists] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (sdk == null) {
+      return;
+    }
+
+    async function loadPlaylistsAndTracks() {
+      const cachedPlaylistTracks = await getCachedPlaylistTracks();
+      const cachedPlaylistInfo = await getCachedPlaylistInfo();
+      
+      // Load playlist info
+      const cachedPlaylistNames = await getCachedPlaylistNames();
+      const playlistInfos = Object.keys(cachedPlaylistTracks).map(snapshotId => {
+        const tracks = cachedPlaylistTracks[snapshotId] || [];
+        const playlistInfo = cachedPlaylistInfo[snapshotId];
+        return {
+          id: playlistInfo?.id || snapshotId,
+          name: playlistInfo?.name || cachedPlaylistNames[snapshotId] || 'Unknown Playlist',
+          snapshotId,
+          trackCount: tracks.length,
+        };
+      });
+      
+      setPlaylists(playlistInfos);
+
+      // Initialize selection if empty
+      if (selectedPlaylists.size === 0 && playlistInfos.length > 0) {
+        const initialSelection = new Set(playlistInfos.map(p => p.snapshotId));
+        setSelectedPlaylists(initialSelection);
+        
+        // Load tracks from all playlists initially
+        const uniqueSongs = Object.values(cachedPlaylistTracks)
+          .filter(playlistTracks => playlistTracks.length < 1000)
+          .flat()
+          .reduce((acc, track) => {
+            const key = `${track.name} - ${track.artists.join(', ')}`.toLowerCase();
+            if (!acc.has(key)) {
+              acc.set(key, track);
+            }
+            return acc;
+          }, new Map<string, TrackResult>());
+        
+        setAllTracks(Array.from(uniqueSongs.values()));
+      } else if (selectedPlaylists.size > 0) {
+        // Load tracks from selected playlists only
+        const selectedSnapshots = Array.from(selectedPlaylists);
+        const uniqueSongs = Object.entries(cachedPlaylistTracks)
+          .filter(([snapshotId]) => selectedSnapshots.includes(snapshotId))
+          .filter(([, playlistTracks]) => playlistTracks.length < 1000)
+          .flatMap(([, playlistTracks]) => playlistTracks)
+          .reduce((acc, track) => {
+            const key = `${track.name} - ${track.artists.join(', ')}`.toLowerCase();
+            if (!acc.has(key)) {
+              acc.set(key, track);
+            }
+            return acc;
+          }, new Map<string, TrackResult>());
+
+        setAllTracks(Array.from(uniqueSongs.values()));
+      }
+    }
+
+    loadPlaylistsAndTracks();
+  }, [sdk, forceUpdate, selectedPlaylists]);
+
+  const update = useCallback(async () => {
+    if (sdk == null) {
+      return;
+    }
+
+    const allPlaylists = await getAllPlaylists(sdk);
+    const playlistNames = allPlaylists.reduce(
+      (acc: CachePlaylistNames, playlist) => {
+        const snapshot: string = playlist.snapshot_id;
+        acc[snapshot] = playlist.name;
+        return acc;
+      },
+      {},
+    );
+    
+    const playlistInfo = allPlaylists.reduce(
+      (acc: CachePlaylistInfo, playlist) => {
+        const snapshot: string = playlist.snapshot_id;
+        acc[snapshot] = {
+          id: playlist.id,
+          name: playlist.name,
+        };
+        return acc;
+      },
+      {},
+    );
+
+    await setCachedPlaylistNames(playlistNames);
+    await setCachedPlaylistInfo(playlistInfo);
+
+    const cachedPlaylistTracks = await getCachedPlaylistTracks();
+    const cachedSnapshots = Object.keys(cachedPlaylistTracks);
+    const foundSnapshots: string[] = [];
+
+    await pMap(
+      allPlaylists,
+      async playlist => {
+        if (cachedSnapshots.includes(playlist.snapshot_id)) {
+          foundSnapshots.push(playlist.snapshot_id);
+          return cachedPlaylistTracks[playlist.snapshot_id];
+        }
+
+        try {
+          const playlistTracks = await getAllPlaylistTracks(sdk, playlist.id);
+          cachedPlaylistTracks[playlist.snapshot_id] = playlistTracks;
+          foundSnapshots.push(playlist.snapshot_id);
+          await setCachedPlaylistTracks(cachedPlaylistTracks);
+          return playlistTracks;
+        } catch (error: any) {
+          console.error(
+            'Unexpected error fetching tracks for playlist',
+            playlist.id,
+            'with snapshot',
+            playlist.snapshot_id,
+            error,
+          );
+          return [];
+        }
+      },
+      {concurrency: 10},
+    );
+
+    const newCache = foundSnapshots.reduce(
+      (acc: {[snapshotId: string]: TrackResult[]}, snapshot: string) => {
+        acc[snapshot] = cachedPlaylistTracks[snapshot];
+        return acc;
+      },
+      {},
+    );
+    await setCachedPlaylistTracks(newCache);
+    setForceUpdate(n => n + 1);
+  }, [sdk]);
+
+  return [playlists, allTracks, selectedPlaylists, setSelectedPlaylists, update];
 }
 
 export function useSpotifyTracks(): [

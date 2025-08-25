@@ -2,3 +2,4 @@ secrets.env
 .env.local
 .vscode
 spotify-clonehero-next/raw_db_files
+node_modules/

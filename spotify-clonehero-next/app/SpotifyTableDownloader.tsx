@@ -23,7 +23,7 @@ import {
 } from '@tanstack/react-table';
 import {useVirtual} from 'react-virtual';
 import {removeStyleTags} from '@/lib/ui-utils';
-import {downloadSong} from '@/lib/local-songs-folder';
+import {downloadSongCompat, canDownloadFiles} from '@/lib/local-songs-folder/index-compat';
 import {useTrackUrls} from '@/lib/spotify-sdk/SpotifyFetching';
 import {AudioContext} from './AudioProvider';
 import {TableDownloadStates} from './SongsTable';
@@ -119,7 +119,12 @@ const instrumentFilter: FilterFn<RowType> = (
     return subRowsIncluded;
   }
 
-  const songInstruments = Object.keys(row.getValue(columnId));
+  const instrumentsValue = row.getValue(columnId);
+  if (!instrumentsValue || typeof instrumentsValue !== 'object') {
+    return true; // Show all rows when no instruments data
+  }
+  
+  const songInstruments = Object.keys(instrumentsValue);
   const allInstrumentsIncluded = value.every(instrument =>
     songInstruments.includes(instrument),
   );
@@ -420,7 +425,7 @@ export default function SpotifyTableDownloader({
   tracks: SpotifyPlaysRecommendations[];
   showPreview: boolean;
 }) {
-  const hasPlayCount = tracks[0].playCount != null;
+  const hasPlayCount = tracks[0]?.playCount != null;
 
   const [downloadState, setDownloadState] = useState<{
     [key: string]: TableDownloadStates;
@@ -436,13 +441,18 @@ export default function SpotifyTableDownloader({
           ...(hasPlayCount ? {playCount: track.playCount} : {}),
           spotifyUrl: track.spotifyUrl,
           previewUrl: track.previewUrl,
-          modifiedTime: track.matchingCharts.reduce((maxDate, chart) => {
-            const chartDate = new Date(chart.modifiedTime);
-            if (chartDate > maxDate) {
-              return chartDate;
-            }
-            return maxDate;
-          }, new Date(track.matchingCharts[0].modifiedTime)),
+          instruments: track.matchingCharts.length > 0 
+            ? undefined // Let subRows handle instruments
+            : {}, // Empty instruments object when no charts
+          modifiedTime: track.matchingCharts.length > 0 
+            ? track.matchingCharts.reduce((maxDate, chart) => {
+                const chartDate = new Date(chart.modifiedTime);
+                if (chartDate > maxDate) {
+                  return chartDate;
+                }
+                return maxDate;
+              }, new Date(track.matchingCharts[0].modifiedTime))
+            : new Date(), // Default to current date when no charts
           subRows: track.matchingCharts.map((chart, subIndex) => ({
             id: subIndex,
             artist: chart.artist,
@@ -726,16 +736,29 @@ function DownloadButton({
       return;
     }
 
+    if (!canDownloadFiles()) {
+      console.error('Downloads not supported in this browser');
+      updateDownloadState('failed');
+      return;
+    }
+
     try {
       updateDownloadState('downloading');
-      await downloadSong(artist, song, charter, url, {asSng: true});
+      const result = await downloadSongCompat(artist, song, charter, url, {asSng: true});
+      
+      if (result.success) {
+        if (result.mode === 'fallback') {
+          console.log(`Downloaded ${result.filename} using fallback mode`);
+        }
+        updateDownloadState('downloaded');
+      } else {
+        updateDownloadState('failed');
+      }
     } catch (err) {
       console.log('Error while downloading', artist, song, charter, url, err);
       updateDownloadState('failed');
       return;
     }
-
-    updateDownloadState('downloaded');
   }, [state, updateDownloadState, artist, song, charter, url]);
 
   switch (state) {

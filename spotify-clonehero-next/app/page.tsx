@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/card';
 import {Button, buttonVariants} from '@/components/ui/button';
 import {RxExternalLink} from 'react-icons/rx';
-import SupportedBrowserWarning from './SupportedBrowserWarning';
 
 export default function Home() {
   return (
@@ -27,8 +26,6 @@ export default function Home() {
           custom applications on your computer. Manage your Songs directory
           directly from your browser.
         </p>
-
-        <SupportedBrowserWarning />
       </section>
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
         <Card className="flex flex-col justify-between">
@@ -80,9 +77,9 @@ export default function Home() {
           </CardHeader>
           <CardFooter className="grid gap-4 py-4">
             <Link
-              href="#" // /spotify
-              className={buttonVariants({variant: 'ghost'})}>
-              Under Construction
+              href="/spotify" // /spotify
+              className={buttonVariants({variant: 'default'})}>
+              Go to Tool
             </Link>
           </CardFooter>
         </Card>
