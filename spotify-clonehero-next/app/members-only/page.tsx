@@ -60,7 +60,7 @@ export default async function MembersOnlyPage() {
             </CardHeader>
             <CardContent>
               <p className="text-gray-600">
-                Congratulations! You've successfully accessed the protected members area. 
+                Congratulations! You&apos;ve successfully accessed the protected members area. 
                 This page demonstrates that Supabase authentication is working correctly 
                 with magic link login.
               </p>
