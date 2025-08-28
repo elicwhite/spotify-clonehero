@@ -10,7 +10,7 @@
     "format": "prettier --write .",
     "test": "jest",
     "test:fill-detector": "jest lib/fill-detector",
-    "update:db": "ts-node ./downloadDb.ts",
+    "update:db": "ts-node ./downloadDb.ts"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.17",
