@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "yarn run jest && next build && push:supabase",
+    "build": "yarn run jest && next build && yarn run push:supabase",
     "start": "next start",
     "lint": "next lint",
     "format": "prettier --write .",
