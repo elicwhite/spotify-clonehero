@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "yarn run jest && next build",
+    "build": "yarn run jest && next build && push:supabase",
     "start": "next start",
     "lint": "next lint",
     "format": "prettier --write .",
     "test": "jest",
     "test:fill-detector": "jest lib/fill-detector",
-    "update:db": "ts-node ./downloadDb.ts"
+    "update:db": "ts-node ./downloadDb.ts",
+    "push:supabase": "supabase db push"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.17",
