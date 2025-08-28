@@ -46,6 +46,11 @@ export default function AuthCallbackPage() {
           }
 
           if (data.session) {
+            // If we are returning from an OAuth flow (e.g., linking Spotify), the provider tokens
+            // are on the session. Attempt to store them server-side; ignore errors.
+            try {
+              await fetch('/api/spotify/store-tokens', { method: 'POST' })
+            } catch {}
             // Successfully authenticated, redirect to members-only page
             router.push('/members-only')
           } else {

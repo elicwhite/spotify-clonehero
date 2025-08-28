@@ -1,7 +1,45 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { headers } from 'next/headers'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { MembersOnlyClient } from './MembersOnlyClient'
+import {
+  SpotifyApi,
+} from '@spotify/web-api-ts-sdk';
+import { User } from '@supabase/supabase-js'
+
+import {getSpotifyAccessToken} from '@/lib/spotify-server/tokens'
+import ProvidedAccessTokenStrategy from '@/lib/spotify-server/ProvidedAccessTokenStrategy'
+
+async function getSpotifyApi(userId: User["id"]): Promise<SpotifyApi | null> {
+  const maybeAccessToken = await getSpotifyAccessToken(userId)
+
+  if (process.env.SPOTIFY_CLIENT_ID == null) {
+    return null;
+  }
+
+  if (!maybeAccessToken) {
+    return null;
+  }
+
+  try {
+    return new SpotifyApi(new ProvidedAccessTokenStrategy(process.env.SPOTIFY_CLIENT_ID, maybeAccessToken, async () => {
+      const token = await getSpotifyAccessToken(userId)
+
+      if (!token) {
+        throw new Error('Failed to refresh Spotify access token')
+      }
+
+      return token
+    }))
+  }
+  catch (e) {
+    console.error(e)
+  }
+
+
+  return null;
+}
 
 export default async function MembersOnlyPage() {
   const supabase = await createClient()
@@ -12,6 +50,15 @@ export default async function MembersOnlyPage() {
   }
 
   const user = data.user
+  
+
+  const spotify = await getSpotifyApi(user.id)
+  let spotifyDisplayName: string | null = null;
+
+  if (spotify) {
+    const meResp = await spotify.currentUser.profile()
+    spotifyDisplayName = meResp.id;
+  }
   
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -44,6 +91,12 @@ export default async function MembersOnlyPage() {
                 <label className="text-sm font-medium text-gray-700">Last Sign In</label>
                 <p className="text-sm text-gray-900">
                   {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : 'Never'}
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Spotify</label>
+                <p className="text-sm text-gray-900">
+                  {spotifyDisplayName ? `Linked as ${spotifyDisplayName}` : 'Not linked'}
                 </p>
               </div>
             </CardContent>
