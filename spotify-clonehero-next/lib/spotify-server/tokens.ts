@@ -65,4 +65,11 @@ export async function getSpotifyAccessToken(userId: string): Promise<ProtectedAc
   return { access_token: newAccessToken, expires_at: new Date(newExpiresAt.getTime() - 30_000) }
 }
 
+export async function unlinkSpotify(userId: string) {
+  const supabase = await getServerSupabase()
 
+  await supabase
+    .from('spotify_tokens')
+    .delete()
+    .eq('user_id', userId)
+}

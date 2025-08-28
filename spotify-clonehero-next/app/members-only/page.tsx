@@ -8,8 +8,9 @@ import {
 } from '@spotify/web-api-ts-sdk';
 import { User } from '@supabase/supabase-js'
 
-import {getSpotifyAccessToken} from '@/lib/spotify-server/tokens'
+import {getSpotifyAccessToken, unlinkSpotify} from '@/lib/spotify-server/tokens'
 import ProvidedAccessTokenStrategy from '@/lib/spotify-server/ProvidedAccessTokenStrategy'
+import { revalidatePath } from 'next/cache'
 
 async function getSpotifyApi(userId: User["id"]): Promise<SpotifyApi | null> {
   const maybeAccessToken = await getSpotifyAccessToken(userId)
@@ -37,9 +38,33 @@ async function getSpotifyApi(userId: User["id"]): Promise<SpotifyApi | null> {
     console.error(e)
   }
 
-
   return null;
 }
+
+// async function onUnlinkSpotify() {
+//   'use server';
+
+//   const supabase = await createClient()
+//   const { data, error } = await supabase.auth.getUser()
+
+//   if (error || !data?.user) {
+//     return;
+//   }
+
+//   const user = data.user
+
+//   const spotifyIdentity = user.identities?.find(identity => identity.provider === 'spotify');
+//   if (spotifyIdentity) {
+//     const { error } = await supabase.auth.unlinkIdentity(spotifyIdentity)
+//     if (error) {
+//       return error.message;
+//     } else {
+//       unlinkSpotify(user.id)
+//     }
+//   }
+
+//   revalidatePath('/members-only')
+// }
 
 export default async function MembersOnlyPage() {
   const supabase = await createClient()
@@ -51,6 +76,7 @@ export default async function MembersOnlyPage() {
 
   const user = data.user
   
+  const hasSpotifyIdentity = data?.user?.identities?.find(identity => identity.provider === 'spotify') != null;
 
   const spotify = await getSpotifyApi(user.id)
   let spotifyDisplayName: string | null = null;
@@ -102,7 +128,7 @@ export default async function MembersOnlyPage() {
             </CardContent>
           </Card>
 
-          <MembersOnlyClient />
+          <MembersOnlyClient spotifyLinked={hasSpotifyIdentity} />
         </div>
 
         <div className="mt-8">

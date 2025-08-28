@@ -5,10 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { SignOutButton } from './SignOutButton'
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
-export function MembersOnlyClient() {
+export function MembersOnlyClient({ spotifyLinked }: { spotifyLinked: boolean }) {
   const supabase = createClient()
   const [linking, setLinking] = useState(false)
+  const router = useRouter()
 
   const handleLinkSpotify = async () => {
     try {
@@ -29,6 +31,10 @@ export function MembersOnlyClient() {
     }
   }
 
+  const handleGoHome = () => {
+    router.push('/')
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -36,12 +42,14 @@ export function MembersOnlyClient() {
         <CardDescription>Manage your account</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button onClick={handleLinkSpotify} className="w-full" disabled={linking}>
-          {linking ? 'Linking Spotify…' : 'Link Spotify Account'}
-        </Button>
+        {!spotifyLinked ? null : (
+          <Button onClick={handleLinkSpotify} className="w-full" disabled={linking}>
+            {linking ? 'Linking Spotify…' : 'Link Spotify'}
+          </Button>
+        )}
         <SignOutButton />
         <Button
-          onClick={() => window.location.href = '/'}
+          onClick={handleGoHome}
           variant="outline"
           className="w-full"
         >
