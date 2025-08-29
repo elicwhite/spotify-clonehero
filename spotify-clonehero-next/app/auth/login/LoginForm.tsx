@@ -8,25 +8,31 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-export function LoginForm() {
+
+import { cn } from "@/lib/utils"
+import { Icons } from '@/components/icons'
+
+export function LoginForm2({
+  className,
+  ...props
+}: React.ComponentProps<"form">) {
   const [email, setEmail] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState<null | 'email' | 'spotify' | 'discord'>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const supabase = createClient()
-  const router = useRouter()
   const searchParams = useSearchParams()
 
   useEffect(() => {
     const errorParam = searchParams.get('error')
     if (errorParam === 'invalid_token') {
-      setError('Invalid or expired authentication token. Please try logging in again.')
+      setError('Error when logging in. Please try logging in again.')
     }
   }, [searchParams])
 
-  const handleMagicLinkLogin = async (e: React.FormEvent) => {
+  const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+    setLoading('email')
     setError('')
     setMessage('')
 
@@ -43,69 +49,126 @@ export function LoginForm() {
       } else {
         setMessage('Check your email for the magic link!')
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred')
     } finally {
-      setLoading(false)
+      setLoading(null)
+    }
+  }
+
+  const handleOAuth = async (provider: 'spotify' | 'discord') => {
+    try {
+      setLoading(provider)
+      setError('')
+      setMessage('')
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+
+      if (error) {
+        setError(error.message)
+      } else if (data?.url) {
+        window.location.href = data.url
+      }
+    } catch {
+      setError('An unexpected error occurred')
+    } finally {
+      setLoading(null)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-md">
+    <div className={cn("flex flex-col gap-6", className)}>
+      <Card>
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Sign In</CardTitle>
-          <CardDescription>
-            Enter your email to receive a magic link
-          </CardDescription>
+          <CardTitle className="text-xl">Login or Create an Account</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleMagicLinkLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com"
-                required
-                disabled={loading}
-              />
+          <form onSubmit={handleEmailLogin} {...props}>
+            <div className="grid gap-6">
+              <div className="flex flex-col gap-4">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  type="button"
+                  onClick={() => handleOAuth('spotify')}
+                  disabled={!!loading}
+                >
+                  {loading === 'spotify' ? (
+                    <Icons.spinner className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Icons.spotify className="h-6 w-6 mr-2" />
+                  )}
+                  {loading === 'spotify' ? 'Logging in' : 'Login with Spotify'}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  type="button"
+                  onClick={() => handleOAuth('discord')}
+                  disabled={!!loading}
+                >
+                  {loading === 'discord' ? (
+                    <Icons.spinner className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Icons.discord className="h-6 w-6 mr-2" />
+                  )}
+                  {loading === 'discord' ? 'Logging in' : 'Login with Discord'}
+                </Button>
+              </div>
+              <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
+                <span className="bg-card text-muted-foreground relative z-10 px-2">
+                  Or continue with
+                </span>
+              </div>
+              <div className="grid gap-6">
+                <div className="grid gap-3">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="email@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    disabled={!!loading}
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={!!loading || !email}>
+                  {loading === 'email' ? (
+                    <span className="inline-flex items-center justify-center">
+                      <Icons.spinner className="h-4 w-4 mr-2 animate-spin" />
+                      Sending…
+                    </span>
+                  ) : (
+                    'Send Magic Link'
+                  )}
+                </Button>
+              </div>
+
+              {message && (
+                <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-md">
+                  <p className="text-sm text-green-800">{message}</p>
+                </div>
+              )}
+
+              {error && (
+                <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
             </div>
-            
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={loading || !email}
-            >
-              {loading ? 'Sending...' : 'Send Magic Link'}
-            </Button>
           </form>
-
-          {message && (
-            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
-              <p className="text-sm text-green-800">{message}</p>
-            </div>
-          )}
-
-          {error && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
-          )}
-
-          <div className="mt-6 text-center">
-            <Button
-              variant="outline"
-              onClick={() => router.push('/')}
-              className="w-full"
-            >
-              Back to Home
-            </Button>
-          </div>
         </CardContent>
       </Card>
+      <div className="text-muted-foreground *:[a]:hover:text-primary text-center text-xs text-balance *:[a]:underline *:[a]:underline-offset-4">
+        By clicking continue, you agree to our <a href="#">Terms of Service</a>{" "}
+        and <a href="#">Privacy Policy</a>.
+      </div>
     </div>
   )
 }

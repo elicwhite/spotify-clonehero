@@ -41,31 +41,6 @@ async function getSpotifyApi(userId: User["id"]): Promise<SpotifyApi | null> {
   return null;
 }
 
-// async function onUnlinkSpotify() {
-//   'use server';
-
-//   const supabase = await createClient()
-//   const { data, error } = await supabase.auth.getUser()
-
-//   if (error || !data?.user) {
-//     return;
-//   }
-
-//   const user = data.user
-
-//   const spotifyIdentity = user.identities?.find(identity => identity.provider === 'spotify');
-//   if (spotifyIdentity) {
-//     const { error } = await supabase.auth.unlinkIdentity(spotifyIdentity)
-//     if (error) {
-//       return error.message;
-//     } else {
-//       unlinkSpotify(user.id)
-//     }
-//   }
-
-//   revalidatePath('/members-only')
-// }
-
 export default async function MembersOnlyPage() {
   const supabase = await createClient()
   const { data, error } = await supabase.auth.getUser()

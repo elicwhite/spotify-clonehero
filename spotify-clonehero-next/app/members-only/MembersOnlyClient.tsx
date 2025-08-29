@@ -42,7 +42,7 @@ export function MembersOnlyClient({ spotifyLinked }: { spotifyLinked: boolean })
         <CardDescription>Manage your account</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!spotifyLinked ? null : (
+        {spotifyLinked ? null : (
           <Button onClick={handleLinkSpotify} className="w-full" disabled={linking}>
             {linking ? 'Linking Spotify…' : 'Link Spotify'}
           </Button>
