@@ -1,6 +1,7 @@
 import {levenshteinEditDistance} from 'levenshtein-edit-distance';
 import {parse} from '@/lib/ini-parser';
 import * as Sentry from '@sentry/nextjs';
+import {SngStream} from 'parse-sng';
 
 export type SongIniData = {
   name: string;
@@ -47,6 +48,16 @@ export default async function scanLocalCharts(
         accumulator,
         callbackPerSong,
       );
+    } else if (
+      subHandle.kind == 'file' &&
+      subHandle.name.toLowerCase().endsWith('.sng')
+    ) {
+      await scanLocalSngFile(
+        directoryHandle,
+        subHandle,
+        accumulator,
+        callbackPerSong,
+      );
     }
   }
 }
@@ -74,9 +85,17 @@ async function scanLocalChartsDirectory(
           accumulator,
           callbackPerSong,
         );
-      }
+      } else if (subHandle.kind == 'file') {
+        if (subHandle.name.toLowerCase().endsWith('.sng')) {
+          await scanLocalSngFile(
+            currentDirectoryHandle,
+            subHandle,
+            accumulator,
+            callbackPerSong,
+          );
+          continue;
+        }
 
-      if (subHandle.kind == 'file') {
         const file = await subHandle.getFile();
         try {
           if (subHandle.name == 'song.ini') {
@@ -121,6 +140,84 @@ async function scanLocalChartsDirectory(
       handleInfo: {
         parentDir: parentDirectoryHandle,
         fileName: currentDirectoryHandle.name,
+      },
+      file: '',
+    };
+    Object.defineProperty(chart, 'file', {
+      get() {
+        throw new Error('Charts from disk do not have a download URL');
+      },
+      enumerable: false, // Can't serialize to JSON
+    });
+
+    accumulator.push(chart);
+    callbackPerSong();
+  }
+}
+
+async function scanLocalSngFile(
+  parentDirectoryHandle: FileSystemDirectoryHandle,
+  fileHandle: FileSystemFileHandle,
+  accumulator: SongAccumulator[],
+  callbackPerSong: () => void,
+) {
+  let songIniData: SongIniData | null = null;
+  const file = await fileHandle.getFile();
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const sngStream = new SngStream(file.stream(), {generateSongIni: true});
+      sngStream.on('file', async (fileName, fileStream, nextFile) => {
+        try {
+          if (fileName === 'song.ini') {
+            const text = await new Response(fileStream).text();
+            const values = parse(text);
+            // @ts-ignore Assuming JSON matches TypeScript
+            songIniData = values.iniObject?.song || values.iniObject?.Song;
+          } else {
+            const reader = fileStream.getReader();
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+              const result = await reader.read();
+              if (result.done) {
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          console.log('Could not scan song.ini of', fileHandle.name);
+        }
+
+        if (nextFile) {
+          nextFile();
+        } else {
+          resolve();
+        }
+      });
+      sngStream.on('error', err => reject(err));
+      sngStream.start();
+    });
+  } catch (e) {
+    const error = new Error(
+      `Error scanning sng file ${parentDirectoryHandle.name}/${fileHandle.name}`,
+      {cause: e},
+    );
+    Sentry.captureException(error);
+    console.error(error.message);
+    return;
+  }
+
+  if (songIniData != null) {
+    const convertedSongIniData = convertValues(songIniData);
+    const chart = {
+      artist: songIniData.artist,
+      song: songIniData.name,
+      modifiedTime: new Date(file.lastModified).toISOString(),
+      charter: songIniData.charter,
+      data: convertedSongIniData,
+      handleInfo: {
+        parentDir: parentDirectoryHandle,
+        fileName: fileHandle.name,
       },
       file: '',
     };
