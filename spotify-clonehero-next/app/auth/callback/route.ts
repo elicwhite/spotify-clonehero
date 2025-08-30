@@ -22,7 +22,6 @@ export async function GET(request: Request) {
       const { data, error: error2 } = await supabase.auth.getSession()
       const provider = data?.session?.user?.app_metadata?.provider;
 
-      console.log('provider2', provider)
       if (provider === 'spotify') {
         await storeSpotifyToken();
       }
