@@ -132,10 +132,10 @@ async function scanLocalChartsDirectory(
   if (songIniData != null) {
     const convertedSongIniData = convertValues(songIniData);
     const chart = {
-      artist: songIniData?.artist,
-      song: songIniData?.name,
+      artist: songIniData.artist,
+      song: songIniData.name,
       modifiedTime: new Date(newestDate).toISOString(),
-      charter: songIniData?.charter,
+      charter: songIniData.charter,
       data: convertedSongIniData,
       handleInfo: {
         parentDir: parentDirectoryHandle,
@@ -161,11 +161,13 @@ async function scanLocalSngFile(
   accumulator: SongAccumulator[],
   callbackPerSong: () => void,
 ) {
-  let songIniData: SongIniData | null = null;
+  
   const file = await fileHandle.getFile();
+  let songIniData: SongIniData | null;
 
   try {
-    await new Promise<void>((resolve, reject) => {
+    songIniData = await new Promise<SongIniData | null>((resolve, reject) => {
+      let localSongIniData: SongIniData | null = null;
       const sngStream = new SngStream(file.stream(), {generateSongIni: true});
       sngStream.on('file', async (fileName, fileStream, nextFile) => {
         try {
@@ -173,7 +175,7 @@ async function scanLocalSngFile(
             const text = await new Response(fileStream).text();
             const values = parse(text);
             // @ts-ignore Assuming JSON matches TypeScript
-            songIniData = values.iniObject?.song || values.iniObject?.Song;
+            localSongIniData = values.iniObject?.song || values.iniObject?.Song;
           } else {
             const reader = fileStream.getReader();
             // eslint-disable-next-line no-constant-condition
@@ -191,7 +193,7 @@ async function scanLocalSngFile(
         if (nextFile) {
           nextFile();
         } else {
-          resolve();
+          resolve(localSongIniData);
         }
       });
       sngStream.on('error', err => reject(err));
@@ -233,7 +235,7 @@ async function scanLocalSngFile(
   }
 }
 
-function convertValues(songIniData: SongIniData) {
+function convertValues(songIniData: SongIniData): SongIniData {
   const mappedEntries = Object.entries(songIniData).map(([key, value]) => {
     // @ts-ignore Checking if type is int
     const tryIntValue = parseInt(value, 10);
