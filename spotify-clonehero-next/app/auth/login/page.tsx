@@ -2,7 +2,11 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { LoginForm } from './LoginForm'
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: { next?: string }
+}) {
   const supabase = await createClient()
   const { data, error } = await supabase.auth.getUser()
 
@@ -16,6 +20,7 @@ export default async function LoginPage() {
     );
   }
 
-  // User is already authenticated, redirect to members-only
-  redirect('/members-only')
+  // User is already authenticated, redirect to next parameter or members-only
+  const nextUrl = searchParams.next || '/members-only'
+  redirect(nextUrl)
 }

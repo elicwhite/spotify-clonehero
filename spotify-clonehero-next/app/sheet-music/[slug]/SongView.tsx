@@ -31,6 +31,7 @@ import {
   Plus,
   Minus,
   RotateCcw,
+  Star,
 } from 'lucide-react';
 import {
   useCallback,
@@ -40,6 +41,7 @@ import {
   useState,
   forwardRef,
 } from 'react';
+import {useRouter} from 'next/navigation';
 import useInterval from 'use-interval';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 
@@ -61,6 +63,7 @@ import eighthNote from '@/public/assets/svgs/eighth-note.svg';
 import tripletNote from '@/public/assets/svgs/triplet-note.svg';
 import {extractFills, defaultConfig} from '@/lib/fill-detector';
 import {toast} from '@/components/ui/toast';
+import {createClient} from '@/lib/supabase/client';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -159,6 +162,7 @@ export default function Renderer({
   );
 
   const audioManagerRef = useRef<AudioManager | null>(null);
+  const router = useRouter();
 
   const handleMasterClickVolumeChange = (value: number) => {
     if (playClickTrack) {
@@ -206,6 +210,28 @@ export default function Renderer({
     if (audioManagerRef.current) {
       audioManagerRef.current.resetSpeed();
       setTempo(1.0);
+    }
+  };
+
+  // Authentication check for save functionality
+  const handleSaveClick = async () => {
+    try {
+      const supabase = createClient();
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error || !user) {
+        // User not authenticated, redirect to login with current page as next
+        const currentPath = window.location.pathname;
+        router.push(`/auth/login?next=${encodeURIComponent(currentPath)}`);
+        return;
+      }
+      
+      // User is authenticated, proceed with save functionality
+      // TODO: Implement actual save logic here
+      toast.success('Song saved!');
+    } catch (error) {
+      console.error('Authentication check failed:', error);
+      toast.error('Failed to check authentication');
     }
   };
 
@@ -1095,13 +1121,19 @@ export default function Renderer({
           </span>
         </div>
 
-        <div className="md:p-8 md:px-4 py-4 flex-1 flex flex-col overflow-hidden">
-          <h1 className="text-3xl md:text-3xl font-bold mb-4 md:mb-8">
-            {metadata.name} by {metadata.artist}
-            <span className="block text-lg md:inline md:text-3xl md:ml-1">
-              charted by {metadata.charter}
-            </span>
-          </h1>
+        <div className="md:p-4 md:px-4 py-2 flex-1 flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between mb-2 md:mb-4">
+            <h1 className="text-3xl md:text-3xl font-bold">
+              {metadata.name} <span className="text-muted-foreground">by</span> {metadata.artist}
+              <div className="text-sm text-gray-600 dark:text-gray-400 font-normal">
+                Charted by {metadata.charter}
+              </div>
+            </h1>
+            <Button variant="outline" size="sm" className="flex items-center gap-2 px-3 py-1" onClick={handleSaveClick}>
+              <Star className="h-4 w-4" />
+              Save
+            </Button>
+          </div>
           <div className="flex flex-1 gap-2 mb-4 overflow-hidden">
             <div
               className={cn(

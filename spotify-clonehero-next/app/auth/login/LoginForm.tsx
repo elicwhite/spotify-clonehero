@@ -37,10 +37,17 @@ export function LoginForm({
     setMessage('')
 
     try {
+      // Get the next parameter from the URL
+      const nextParam = searchParams.get('next')
+      console.log('nextParam', nextParam)
+      const redirectUrl = nextParam 
+        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextParam)}`
+        : `${window.location.origin}/auth/callback`
+
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: redirectUrl,
         },
       })
 
@@ -62,10 +69,21 @@ export function LoginForm({
       setError('')
       setMessage('')
 
+      // Get the next parameter from the URL
+      const nextParam = searchParams.get('next')
+
+      console.log('nextParam', nextParam)
+
+      const redirectUrl = nextParam 
+        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextParam)}`
+        : `${window.location.origin}/auth/callback`
+
+      console.log('redirectUrl', redirectUrl)
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectUrl,
         },
       })
 
