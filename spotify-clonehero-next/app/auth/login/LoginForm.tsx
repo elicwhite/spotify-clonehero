@@ -12,7 +12,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { cn } from "@/lib/utils"
 import { Icons } from '@/components/icons'
 
-export function LoginForm2({
+export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"form">) {
