@@ -13,6 +13,14 @@ export async function GET(request: Request) {
     next = '/'
   }
 
+  const oauthError = searchParams.get('error')
+  const oauthErrorCode = searchParams.get('error_code')
+  if (oauthError || oauthErrorCode) {
+    const nextParam = next ? `&next=${encodeURIComponent(next)}` : ''
+    const errorParam = oauthErrorCode || oauthError || 'oauth_error'
+    return NextResponse.redirect(`${origin}/auth/login?error=${errorParam}${nextParam}`)
+  }
+
   const supabase = await createClient()
 
   if (code) {

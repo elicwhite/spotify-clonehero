@@ -27,6 +27,8 @@ export function LoginForm({
     const errorParam = searchParams.get('error')
     if (errorParam === 'invalid_token') {
       setError('Error when logging in. Please try logging in again.')
+    } else if (errorParam === 'provider_email_needs_verification') {
+      setMessage('Please check your email and confirm your Spotify email address.')
     }
   }, [searchParams])
 
