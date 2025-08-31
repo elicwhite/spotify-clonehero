@@ -1,103 +1,109 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { useRouter, useSearchParams } from 'next/navigation'
+import {useState, useEffect} from 'react';
+import {createClient} from '@/lib/supabase/client';
+import {Button} from '@/components/ui/button';
+import {Input} from '@/components/ui/input';
+import {Label} from '@/components/ui/label';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {useRouter, useSearchParams} from 'next/navigation';
 
+import {cn} from '@/lib/utils';
+import {Icons} from '@/components/icons';
 
-import { cn } from "@/lib/utils"
-import { Icons } from '@/components/icons'
-
-export function LoginForm({
-  className,
-  ...props
-}: React.ComponentProps<"form">) {
-  const [email, setEmail] = useState('')
-  const [loading, setLoading] = useState<null | 'email' | 'spotify' | 'discord'>(null)
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
-  const supabase = createClient()
-  const searchParams = useSearchParams()
+export function LoginForm({className, ...props}: React.ComponentProps<'form'>) {
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState<
+    null | 'email' | 'spotify' | 'discord'
+  >(null);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const supabase = createClient();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    const errorParam = searchParams.get('error')
+    const errorParam = searchParams.get('error');
     if (errorParam === 'invalid_token') {
-      setError('Error when logging in. Please try logging in again.')
+      setError('Error when logging in. Please try logging in again.');
     } else if (errorParam === 'provider_email_needs_verification') {
-      setMessage('Please check your email and confirm your Spotify email address.')
+      setMessage(
+        'Please check your email and confirm your Spotify email address.',
+      );
     }
-  }, [searchParams])
+  }, [searchParams]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading('email')
-    setError('')
-    setMessage('')
+    e.preventDefault();
+    setLoading('email');
+    setError('');
+    setMessage('');
 
     try {
       // Get the next parameter from the URL
-      const nextParam = searchParams.get('next')
-      const redirectUrl = nextParam 
+      const nextParam = searchParams.get('next');
+      const redirectUrl = nextParam
         ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextParam)}`
-        : `${window.location.origin}/auth/callback`
+        : `${window.location.origin}/auth/callback`;
 
-      const { error } = await supabase.auth.signInWithOtp({
+      const {error} = await supabase.auth.signInWithOtp({
         email,
         options: {
           emailRedirectTo: redirectUrl,
         },
-      })
+      });
 
       if (error) {
-        setError(error.message)
+        setError(error.message);
       } else {
-        setMessage('Check your email for the magic link!')
+        setMessage('Check your email for the magic link!');
       }
     } catch {
-      setError('An unexpected error occurred')
+      setError('An unexpected error occurred');
     } finally {
-      setLoading(null)
+      setLoading(null);
     }
-  }
+  };
 
   const handleOAuth = async (provider: 'spotify' | 'discord') => {
     try {
-      setLoading(provider)
-      setError('')
-      setMessage('')
+      setLoading(provider);
+      setError('');
+      setMessage('');
 
       // Get the next parameter from the URL
-      const nextParam = searchParams.get('next')
+      const nextParam = searchParams.get('next');
 
-      const redirectUrl = nextParam 
+      const redirectUrl = nextParam
         ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextParam)}`
-        : `${window.location.origin}/auth/callback`
+        : `${window.location.origin}/auth/callback`;
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const {data, error} = await supabase.auth.signInWithOAuth({
         provider,
         options: {
           redirectTo: redirectUrl,
         },
-      })
+      });
 
       if (error) {
-        setError(error.message)
+        setError(error.message);
       } else if (data?.url) {
-        window.location.href = data.url
+        window.location.href = data.url;
       }
     } catch {
-      setError('An unexpected error occurred')
+      setError('An unexpected error occurred');
     } finally {
-      setLoading(null)
+      setLoading(null);
     }
-  }
+  };
 
   return (
-    <div className={cn("flex flex-col gap-6", className)}>
+    <div className={cn('flex flex-col gap-6', className)}>
       <Card>
         <CardHeader className="text-center">
           <CardTitle className="text-xl">Login or Create an Account</CardTitle>
@@ -111,8 +117,7 @@ export function LoginForm({
                   className="w-full"
                   type="button"
                   onClick={() => handleOAuth('spotify')}
-                  disabled={!!loading}
-                >
+                  disabled={!!loading}>
                   {loading === 'spotify' ? (
                     <Icons.spinner className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
@@ -125,8 +130,7 @@ export function LoginForm({
                   className="w-full"
                   type="button"
                   onClick={() => handleOAuth('discord')}
-                  disabled={!!loading}
-                >
+                  disabled={!!loading}>
                   {loading === 'discord' ? (
                     <Icons.spinner className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
@@ -148,12 +152,15 @@ export function LoginForm({
                     type="email"
                     placeholder="email@example.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={e => setEmail(e.target.value)}
                     required
                     disabled={!!loading}
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={!!loading || !email}>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={!!loading || !email}>
                   {loading === 'email' ? (
                     <span className="inline-flex items-center justify-center">
                       <Icons.spinner className="h-4 w-4 mr-2 animate-spin" />
@@ -181,5 +188,5 @@ export function LoginForm({
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

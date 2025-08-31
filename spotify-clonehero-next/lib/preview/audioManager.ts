@@ -366,7 +366,12 @@ export class AudioManager {
 
     const currentTimeMs = this.currentTime * 1000;
 
-    console.log('currentTimeMs', currentTimeMs, this.#practiceModeConfig.startTimeMs ,this.#practiceModeConfig.endTimeMs);
+    console.log(
+      'currentTimeMs',
+      currentTimeMs,
+      this.#practiceModeConfig.startTimeMs,
+      this.#practiceModeConfig.endTimeMs,
+    );
 
     // If we've reached the end of the practice section, loop back
     if (currentTimeMs >= this.#practiceModeConfig.endTimeMs) {

@@ -161,7 +161,6 @@ async function scanLocalSngFile(
   accumulator: SongAccumulator[],
   callbackPerSong: () => void,
 ) {
-  
   const file = await fileHandle.getFile();
   let songIniData: SongIniData | null;
 

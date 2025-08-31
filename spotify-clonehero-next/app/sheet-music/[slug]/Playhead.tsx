@@ -33,10 +33,7 @@ export const Playhead = memo(function ({
         // Get current time directly from audio manager
         const currentTimeMs = audioManagerRef.current.currentTime * 1000;
         // Find position for current time
-        const newPosition = findPositionForTime(
-          timePositionMap,
-          currentTimeMs,
-        );
+        const newPosition = findPositionForTime(timePositionMap, currentTimeMs);
         if (newPosition && playheadRef.current) {
           // Directly manipulate the DOM style properties
           playheadRef.current.style.left = `${newPosition.x}px`;

@@ -1,17 +1,16 @@
-import { createClient } from '@/lib/supabase/server'
+import {createClient} from '@/lib/supabase/server';
 
 export default async function storeSpotifyToken() {
-
   try {
-    const supabase = await createClient()
+    const supabase = await createClient();
 
-    const [{ data: sessionData }, { data: userData }] = await Promise.all([
+    const [{data: sessionData}, {data: userData}] = await Promise.all([
       supabase.auth.getSession(),
       supabase.auth.getUser(),
-    ])
+    ]);
 
-    const user = userData?.user
-    const session = sessionData?.session
+    const user = userData?.user;
+    const session = sessionData?.session;
 
     if (!user || !session) {
       // User is not authenticated
@@ -20,8 +19,8 @@ export default async function storeSpotifyToken() {
 
     // Supabase exposes provider tokens on the session immediately after an OAuth flow
     // Fields may be undefined when not returning from an OAuth flow; handle gracefully
-    const accessToken = session.provider_token as string | undefined
-    const refreshToken = session.provider_refresh_token as string | undefined
+    const accessToken = session.provider_token as string | undefined;
+    const refreshToken = session.provider_refresh_token as string | undefined;
 
     if (!accessToken) {
       // No provider token on session
@@ -39,25 +38,33 @@ export default async function storeSpotifyToken() {
 
       if (!resp.ok) {
         // Likely not a Spotify token (or invalid); do not store
-        console.warn('[storeSpotifyToken] Failed to validate token with Spotify /me:', resp.status, resp.statusText);
+        console.warn(
+          '[storeSpotifyToken] Failed to validate token with Spotify /me:',
+          resp.status,
+          resp.statusText,
+        );
         return null;
       }
     } catch (e) {
-      console.warn('[storeSpotifyToken] Error calling Spotify /me. Skipping store.', e);
+      console.warn(
+        '[storeSpotifyToken] Error calling Spotify /me. Skipping store.',
+        e,
+      );
       return null;
     }
 
     // Pick a likely reasonable default expiry when none provided
-    const expiresAt = new Date(Date.now() + 3600 * 1000)
+    const expiresAt = new Date(Date.now() + 3600 * 1000);
 
-    const { error: upsertError } = await supabase
-      .from('spotify_tokens')
-      .upsert({
+    const {error: upsertError} = await supabase.from('spotify_tokens').upsert(
+      {
         user_id: user.id,
         access_token: accessToken,
         refresh_token: refreshToken ?? '',
         expires_at: expiresAt.toISOString(),
-      }, { onConflict: 'user_id' })
+      },
+      {onConflict: 'user_id'},
+    );
 
     if (upsertError) {
       return upsertError.message;

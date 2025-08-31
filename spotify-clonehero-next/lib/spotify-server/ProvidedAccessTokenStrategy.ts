@@ -1,5 +1,9 @@
-import { AccessToken, IAuthStrategy, SdkConfiguration } from "@spotify/web-api-ts-sdk"
-import { ProtectedAccessToken } from "./tokens.js";
+import {
+  AccessToken,
+  IAuthStrategy,
+  SdkConfiguration,
+} from '@spotify/web-api-ts-sdk';
+import {ProtectedAccessToken} from './tokens.js';
 
 /**
  * This strategy is used when you already have an access token and want to use it.
@@ -10,36 +14,35 @@ import { ProtectedAccessToken } from "./tokens.js";
  * @param {string} accessToken - The access token returned from a client side Authorization Code with PKCE flow.
  */
 export default class ProvidedAccessTokenStrategy implements IAuthStrategy {
-    private refreshTokenAction: () => Promise<ProtectedAccessToken>;
+  private refreshTokenAction: () => Promise<ProtectedAccessToken>;
 
-    constructor(
-        protected clientId: string,
-        protected accessToken: ProtectedAccessToken,
-        refreshTokenAction: () => Promise<ProtectedAccessToken>
-    ) {
-        this.refreshTokenAction = refreshTokenAction;
+  constructor(
+    protected clientId: string,
+    protected accessToken: ProtectedAccessToken,
+    refreshTokenAction: () => Promise<ProtectedAccessToken>,
+  ) {
+    this.refreshTokenAction = refreshTokenAction;
+  }
+
+  public setConfiguration(_: SdkConfiguration): void {}
+
+  public async getOrCreateAccessToken(): Promise<AccessToken> {
+    if (this.accessToken.expires_at <= new Date()) {
+      const refreshed = await this.refreshTokenAction();
+      this.accessToken = refreshed;
     }
 
-    public setConfiguration(_: SdkConfiguration): void {
-    }
+    return this.accessToken as unknown as AccessToken;
+  }
 
-    public async getOrCreateAccessToken(): Promise<AccessToken> {
-        if (this.accessToken.expires_at <= new Date()) {
-            const refreshed = await this.refreshTokenAction();
-            this.accessToken = refreshed;
-        }
+  public async getAccessToken(): Promise<AccessToken | null> {
+    return this.accessToken as unknown as AccessToken;
+  }
 
-        return this.accessToken as unknown as AccessToken;
-    }
-
-    public async getAccessToken(): Promise<AccessToken | null> {
-        return this.accessToken as unknown as AccessToken;
-    }
-
-    public removeAccessToken(): void {
-        this.accessToken = {
-            access_token: "",
-            expires_at: new Date(0),
-        };
-    }
+  public removeAccessToken(): void {
+    this.accessToken = {
+      access_token: '',
+      expires_at: new Date(0),
+    };
+  }
 }

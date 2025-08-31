@@ -1,19 +1,26 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
-import { headers } from 'next/headers'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { MembersOnlyClient } from './MembersOnlyClient'
+import {redirect} from 'next/navigation';
+import {createClient} from '@/lib/supabase/server';
+import {headers} from 'next/headers';
 import {
-  SpotifyApi,
-} from '@spotify/web-api-ts-sdk';
-import { User } from '@supabase/supabase-js'
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {MembersOnlyClient} from './MembersOnlyClient';
+import {SpotifyApi} from '@spotify/web-api-ts-sdk';
+import {User} from '@supabase/supabase-js';
 
-import {getSpotifyAccessToken, unlinkSpotify} from '@/lib/spotify-server/tokens'
-import ProvidedAccessTokenStrategy from '@/lib/spotify-server/ProvidedAccessTokenStrategy'
-import { revalidatePath } from 'next/cache'
+import {
+  getSpotifyAccessToken,
+  unlinkSpotify,
+} from '@/lib/spotify-server/tokens';
+import ProvidedAccessTokenStrategy from '@/lib/spotify-server/ProvidedAccessTokenStrategy';
+import {revalidatePath} from 'next/cache';
 
-async function getSpotifyApi(userId: User["id"]): Promise<SpotifyApi | null> {
-  const maybeAccessToken = await getSpotifyAccessToken(userId)
+async function getSpotifyApi(userId: User['id']): Promise<SpotifyApi | null> {
+  const maybeAccessToken = await getSpotifyAccessToken(userId);
 
   if (process.env.SPOTIFY_CLIENT_ID == null) {
     return null;
@@ -24,43 +31,50 @@ async function getSpotifyApi(userId: User["id"]): Promise<SpotifyApi | null> {
   }
 
   try {
-    return new SpotifyApi(new ProvidedAccessTokenStrategy(process.env.SPOTIFY_CLIENT_ID, maybeAccessToken, async () => {
-      const token = await getSpotifyAccessToken(userId)
+    return new SpotifyApi(
+      new ProvidedAccessTokenStrategy(
+        process.env.SPOTIFY_CLIENT_ID,
+        maybeAccessToken,
+        async () => {
+          const token = await getSpotifyAccessToken(userId);
 
-      if (!token) {
-        throw new Error('Failed to refresh Spotify access token')
-      }
+          if (!token) {
+            throw new Error('Failed to refresh Spotify access token');
+          }
 
-      return token
-    }))
-  }
-  catch (e) {
-    console.error(e)
+          return token;
+        },
+      ),
+    );
+  } catch (e) {
+    console.error(e);
   }
 
   return null;
 }
 
 export default async function MembersOnlyPage() {
-  const supabase = await createClient()
-  const { data, error } = await supabase.auth.getUser()
+  const supabase = await createClient();
+  const {data, error} = await supabase.auth.getUser();
 
   if (error || !data?.user) {
-    redirect('/auth/login')
+    redirect('/auth/login');
   }
 
-  const user = data.user
-  
-  const hasSpotifyIdentity = data?.user?.identities?.find(identity => identity.provider === 'spotify') != null;
+  const user = data.user;
 
-  const spotify = await getSpotifyApi(user.id)
+  const hasSpotifyIdentity =
+    data?.user?.identities?.find(identity => identity.provider === 'spotify') !=
+    null;
+
+  const spotify = await getSpotifyApi(user.id);
   let spotifyDisplayName: string | null = null;
 
   if (spotify) {
-    const meResp = await spotify.currentUser.profile()
+    const meResp = await spotify.currentUser.profile();
     spotifyDisplayName = meResp.id;
   }
-  
+
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
@@ -81,23 +95,35 @@ export default async function MembersOnlyPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="text-sm font-medium text-gray-700">Email</label>
+                <label className="text-sm font-medium text-gray-700">
+                  Email
+                </label>
                 <p className="text-sm text-gray-900">{user.email}</p>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700">User ID</label>
+                <label className="text-sm font-medium text-gray-700">
+                  User ID
+                </label>
                 <p className="text-sm text-gray-900 font-mono">{user.id}</p>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700">Last Sign In</label>
+                <label className="text-sm font-medium text-gray-700">
+                  Last Sign In
+                </label>
                 <p className="text-sm text-gray-900">
-                  {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : 'Never'}
+                  {user.last_sign_in_at
+                    ? new Date(user.last_sign_in_at).toLocaleString()
+                    : 'Never'}
                 </p>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700">Spotify</label>
+                <label className="text-sm font-medium text-gray-700">
+                  Spotify
+                </label>
                 <p className="text-sm text-gray-900">
-                  {spotifyDisplayName ? `Linked as ${spotifyDisplayName}` : 'Not linked'}
+                  {spotifyDisplayName
+                    ? `Linked as ${spotifyDisplayName}`
+                    : 'Not linked'}
                 </p>
               </div>
             </CardContent>
@@ -110,19 +136,21 @@ export default async function MembersOnlyPage() {
           <Card>
             <CardHeader>
               <CardTitle>Exclusive Content</CardTitle>
-              <CardDescription>This is where your members-only content would go</CardDescription>
+              <CardDescription>
+                This is where your members-only content would go
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-gray-600">
-                Congratulations! You&apos;ve successfully accessed the protected members area. 
-                This page demonstrates that Supabase authentication is working correctly 
-                with magic link login.
+                Congratulations! You&apos;ve successfully accessed the protected
+                members area. This page demonstrates that Supabase
+                authentication is working correctly with magic link login.
               </p>
               <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
                 <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> This is a demo page. In a real application, 
-                  you would put your exclusive content, premium features, or private 
-                  information here.
+                  <strong>Note:</strong> This is a demo page. In a real
+                  application, you would put your exclusive content, premium
+                  features, or private information here.
                 </p>
               </div>
             </CardContent>
@@ -130,5 +158,5 @@ export default async function MembersOnlyPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -152,7 +152,8 @@ export default function Renderer({
     null,
   );
 
-  const practiceModeEnabled = practiceMode != null && practiceMode.endTimeMs > 0;
+  const practiceModeEnabled =
+    practiceMode != null && practiceMode.endTimeMs > 0;
   const [practiceModeStep, setPracticeModeStep] = useState<
     'idle' | 'selectingStart' | 'selectingEnd'
   >('idle');
@@ -218,22 +219,28 @@ export default function Renderer({
   const handleSaveClick = async () => {
     try {
       const supabase = createClient();
-      const { data: { user }, error } = await supabase.auth.getUser();
-      
+      const {
+        data: {user},
+        error,
+      } = await supabase.auth.getUser();
+
       if (error || !user) {
         // User not authenticated, redirect to login with current page as next
         const currentPath = window.location.pathname;
         router.push(`/auth/login?next=${encodeURIComponent(currentPath)}`);
         return;
       }
-      
+
       // Call server action to persist
-      const result = await saveSongByHash(metadata.md5, selectedDifficulty as unknown as string)
+      const result = await saveSongByHash(
+        metadata.md5,
+        selectedDifficulty as unknown as string,
+      );
       if (!result?.ok) {
-        toast.error(result?.error ?? 'Failed to save song')
-        return
+        toast.error(result?.error ?? 'Failed to save song');
+        return;
       }
-      toast.success('Song saved')
+      toast.success('Song saved');
     } catch (error) {
       console.error('Authentication check failed:', error);
       toast.error('Failed to check authentication');
@@ -354,7 +361,7 @@ export default function Renderer({
   useEffect(() => {
     // Wait for settings to be loaded before initializing audio manager
     if (!settingsLoaded) return;
-    
+
     async function run() {
       const clickTrack = await generateClickTrackFromMeasures(
         measures,
@@ -871,7 +878,11 @@ export default function Renderer({
   const practiceModeButton = (
     <div className="space-y-2 pt-4 border-t">
       <Button
-        variant={practiceModeEnabled || practiceModeStep !== 'idle' ? 'destructive' : 'default'}
+        variant={
+          practiceModeEnabled || practiceModeStep !== 'idle'
+            ? 'destructive'
+            : 'default'
+        }
         className="w-full"
         onClick={practiceModeEnabled ? endPracticeMode : startPracticeMode}>
         <Target className="h-4 w-4 mr-2" />
@@ -1129,7 +1140,8 @@ export default function Renderer({
         <div className="md:p-4 md:px-4 py-2 flex-1 flex flex-col overflow-hidden">
           <div className="flex items-center justify-between mb-2 md:mb-4">
             <h1 className="text-3xl md:text-3xl font-bold">
-              {metadata.name} <span className="text-muted-foreground">by</span> {metadata.artist}
+              {metadata.name} <span className="text-muted-foreground">by</span>{' '}
+              {metadata.artist}
               <div className="text-sm text-gray-600 dark:text-gray-400 font-normal">
                 Charted by {metadata.charter}
               </div>
