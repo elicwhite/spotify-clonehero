@@ -64,6 +64,7 @@ import tripletNote from '@/public/assets/svgs/triplet-note.svg';
 import {extractFills, defaultConfig} from '@/lib/fill-detector';
 import {toast} from '@/components/ui/toast';
 import {createClient} from '@/lib/supabase/client';
+import {saveSongByHash} from './actions';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -226,41 +227,13 @@ export default function Renderer({
         return;
       }
       
-      // Ensure the song exists in enchor_songs, then save relation
-      const { error: upsertSongError } = await supabase
-        .from('enchor_songs')
-        .upsert(
-          {
-            hash: metadata.md5,
-            name: metadata.name,
-            artist: metadata.artist,
-            charter: metadata.charter,
-          },
-          { onConflict: 'hash' },
-        );
-
-      if (upsertSongError) {
-        toast.error('Failed to save song metadata');
-        return;
+      // Call server action to persist
+      const result = await saveSongByHash(metadata.md5, selectedDifficulty as unknown as string)
+      if (!result?.ok) {
+        toast.error(result?.error ?? 'Failed to save song')
+        return
       }
-
-      const { error: saveRelError } = await supabase
-        .from('user_saved_songs')
-        .upsert(
-          {
-            user_id: user.id,
-            song_hash: metadata.md5,
-            difficulty: selectedDifficulty as unknown as string,
-          },
-          { onConflict: 'user_id,song_hash' },
-        );
-
-      if (saveRelError) {
-        toast.error('Failed to save song');
-        return;
-      }
-
-      toast.success('Song saved');
+      toast.success('Song saved')
     } catch (error) {
       console.error('Authentication check failed:', error);
       toast.error('Failed to check authentication');
