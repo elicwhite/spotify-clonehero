@@ -28,11 +28,10 @@ export async function deleteCurrentUser() {
     const uid = userRes?.user?.id;
     if (!uid) return {ok: false, error: 'Unauthorized'};
 
-    // Best-effort cleanup of user-owned rows
-    try { await supabase.from('user_saved_songs').delete().eq('user_id', uid); } catch {}
-    try { await supabase.from('user_saved_song_spans').delete().eq('user_id', uid); } catch {}
-
-    // Without service role we cannot delete auth.users from here. Sign out to complete flow.
+    // Call RPC to delete the user (function runs as definer)
+    const { error: rpcError } = await supabase.rpc('delete_user');
+    if (rpcError) return { ok: false, error: rpcError.message };
+    // Sign out after deletion
     await supabase.auth.signOut();
     return {ok: true};
   } catch (e: any) {
