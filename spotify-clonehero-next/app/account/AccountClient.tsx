@@ -24,6 +24,18 @@ import {
 import {createClient} from '@/lib/supabase/client';
 import {unfavoriteSongByHash} from './actions';
 import {Icons} from '@/components/icons';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {deleteCurrentUser} from './actions';
 
 type SavedSong = {
   hash: string;
@@ -74,9 +86,11 @@ export default function AccountClient({
     }
   };
 
-  const handleDeleteAccount = () => {
-    // placeholder UI action
-    alert('Account deletion is not implemented in this demo.');
+  const handleDeleteAccount = async () => {
+    const res = await deleteCurrentUser();
+    if (res?.ok) {
+      router.push('/');
+    }
   };
 
   return (
@@ -87,9 +101,6 @@ export default function AccountClient({
             <h1 className="text-3xl font-bold text-foreground mb-2">
               My Account
             </h1>
-            <p className="text-muted-foreground">
-              Manage your sheet music collection and preferences
-            </p>
           </div>
           <Button
             variant="outline"
@@ -106,10 +117,10 @@ export default function AccountClient({
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Music className="h-5 w-5 text-primary" />
-                  Favorited Songs ({favoritedSongs.length})
+                  Favorite Songs ({favoritedSongs.length})
                 </CardTitle>
                 <CardDescription>
-                  Your collection of favorite sheet music pieces
+                  Your favorite sheet music songs
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -161,7 +172,7 @@ export default function AccountClient({
           </div>
 
           <div className="space-y-4">
-            {isSpotifyConnected && (
+            {!isSpotifyConnected && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -198,13 +209,35 @@ export default function AccountClient({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Button
-                  variant="destructive"
-                  onClick={handleDeleteAccount}
-                  className="w-full flex items-center gap-2">
-                  <Trash2 className="h-4 w-4" />
-                  Delete Account
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      className="w-full flex items-center gap-2">
+                      <Trash2 className="h-4 w-4" />
+                      Delete Account
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        Are you absolutely sure?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action will permanently remove your account and
+                        associated data. This cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={handleDeleteAccount}>
+                        Confirm Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
                 <p className="text-xs text-muted-foreground mt-2 text-center">
                   This action cannot be undone
                 </p>
