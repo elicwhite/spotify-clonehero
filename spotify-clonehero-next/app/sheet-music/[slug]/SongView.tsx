@@ -1129,10 +1129,16 @@ export default function Renderer({
                 Charted by {metadata.charter}
               </div>
             </h1>
-            <Button variant="outline" size="sm" className="flex items-center gap-2 px-3 py-1" onClick={handleSaveClick}>
-              <Star className="h-4 w-4" />
-              Save
-            </Button>
+            {process.env.NODE_ENV === 'development' && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 px-3 py-1"
+                onClick={handleSaveClick}>
+                <Star className="h-4 w-4" />
+                Save
+              </Button>
+            )}
           </div>
           <div className="flex flex-1 gap-2 mb-4 overflow-hidden">
             <div
