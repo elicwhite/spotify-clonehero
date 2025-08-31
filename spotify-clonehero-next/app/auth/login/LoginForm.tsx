@@ -41,7 +41,6 @@ export function LoginForm({
     try {
       // Get the next parameter from the URL
       const nextParam = searchParams.get('next')
-      console.log('nextParam', nextParam)
       const redirectUrl = nextParam 
         ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextParam)}`
         : `${window.location.origin}/auth/callback`
@@ -74,13 +73,9 @@ export function LoginForm({
       // Get the next parameter from the URL
       const nextParam = searchParams.get('next')
 
-      console.log('nextParam', nextParam)
-
       const redirectUrl = nextParam 
         ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextParam)}`
         : `${window.location.origin}/auth/callback`
-
-      console.log('redirectUrl', redirectUrl)
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,

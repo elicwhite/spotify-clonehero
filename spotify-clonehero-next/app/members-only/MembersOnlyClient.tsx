@@ -15,10 +15,12 @@ export function MembersOnlyClient({ spotifyLinked }: { spotifyLinked: boolean })
   const handleLinkSpotify = async () => {
     try {
       setLinking(true)
+      const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/members-only')}`;
+
       const { error } = await supabase.auth.linkIdentity({
         provider: 'spotify' as any,
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectUrl,
           scopes: 'user-read-email user-library-read playlist-read-private playlist-read-collaborative',
         } as any,
       })

@@ -24,20 +24,19 @@ export async function GET(request: Request) {
   const supabase = await createClient()
 
   if (code) {
-    debugger;
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { error: exchangeCodeError } = await supabase.auth.exchangeCodeForSession(code)
+    const { data, error } = await supabase.auth.getSession()
 
-    if (!error) {
-      const { data, error: error2 } = await supabase.auth.getSession()
-      const provider = data?.session?.user?.app_metadata?.provider;
+    if (!exchangeCodeError) {
+      const appMetadata = data?.session?.user?.app_metadata;
 
-      if (provider === 'spotify') {
+      const providersIncludeSpotify = appMetadata?.provider == 'spotify' || (appMetadata?.providers || []).includes('spotify');
+      if (providersIncludeSpotify) {
         await storeSpotifyToken();
       }
 
       const forwardedHost = request.headers.get('x-forwarded-host') // original origin before load balancer
       const isLocalEnv = process.env.NODE_ENV === 'development'
-      debugger;
       if (isLocalEnv) {
         // we can be sure that there is no load balancer in between, so no need to watch for X-Forwarded-Host
         return NextResponse.redirect(`${origin}${next}`)
@@ -50,14 +49,8 @@ export async function GET(request: Request) {
       console.log('Auth callback error', error)
     }
   } else {
-    const { data, error } = await supabase.auth.getSession()
-    const provider = data?.session?.user?.app_metadata?.provider;
-
-    console.log('provider', provider)
-
     return NextResponse.redirect(`${origin}${next}`)
   }
-
   // return the user to an error page with instructions
   return NextResponse.redirect(`${origin}/auth/login?error=invalid_token`)
 }

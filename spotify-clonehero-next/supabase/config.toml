@@ -311,7 +311,7 @@ enabled = true
 client_id = "env(DISCORD_CLIENT_ID)"
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
 secret = "env(DISCORD_CLIENT_SECRET)"
-#redirect_uri = ""
+# redirect_uri = ""
 
 # Enable Spotify as an external OAuth provider
 [auth.external.spotify]
@@ -319,7 +319,7 @@ enabled = true
 client_id = "env(SPOTIFY_CLIENT_ID)"
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
 secret = "env(SPOTIFY_CLIENT_SECRET)"
-#redirect_uri = ""
+# redirect_uri = ""
 
 [edge_runtime]
 enabled = true

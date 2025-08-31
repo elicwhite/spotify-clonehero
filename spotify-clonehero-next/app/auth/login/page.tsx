@@ -21,6 +21,7 @@ export default async function LoginPage({
   }
 
   // User is already authenticated, redirect to next parameter or members-only
-  const nextUrl = searchParams.next || '/members-only'
+  const params = await searchParams;
+  const nextUrl = params.next || '/members-only'
   redirect(nextUrl)
 }
