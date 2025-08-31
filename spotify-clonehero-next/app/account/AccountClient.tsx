@@ -26,9 +26,10 @@ import {unfavoriteSongByHash} from './actions';
 import {Icons} from '@/components/icons';
 
 type SavedSong = {
-  id: string;
+  hash: string;
   title: string;
-  composer: string;
+  artist: string;
+  charter: string;
   difficulty?: string;
   genre?: string;
 };
@@ -69,7 +70,7 @@ export default function AccountClient({
   const toggleFavorite = async (songId: string) => {
     const res = await unfavoriteSongByHash(songId);
     if (res?.ok) {
-      setFavoritedSongs(songs => songs.filter(s => s.id !== songId));
+      setFavoritedSongs(songs => songs.filter(s => s.hash !== songId));
     }
   };
 
@@ -124,41 +125,30 @@ export default function AccountClient({
                   <div className="space-y-4">
                     {favoritedSongs.map(song => (
                       <div
-                        key={song.id}
+                        key={song.hash}
                         className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors">
                         <div className="flex-1">
                           <Link
-                            href={`/sheet-music/${song.id}`}
+                            href={`/sheet-music/${song.hash}`}
                             className="group flex items-start gap-3">
                             <div className="flex-1">
                               <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                                {song.title}
+                                {song.title}{' '}
+                                <span className="text-muted-foreground">
+                                  by
+                                </span>{' '}
+                                {song.artist}
                               </h3>
                               <p className="text-sm text-muted-foreground mb-2">
-                                by {song.composer}
+                                charted by {song.charter}
                               </p>
-                              <div className="flex gap-2">
-                                {song.difficulty ? (
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-xs">
-                                    {song.difficulty}
-                                  </Badge>
-                                ) : null}
-                                {song.genre ? (
-                                  <Badge variant="outline" className="text-xs">
-                                    {song.genre}
-                                  </Badge>
-                                ) : null}
-                              </div>
                             </div>
-                            <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors mt-1" />
                           </Link>
                         </div>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => toggleFavorite(song.id)}
+                          onClick={() => toggleFavorite(song.hash)}
                           className="ml-4 p-2">
                           <Star className={`h-4 w-4 text-muted-foreground`} />
                         </Button>
