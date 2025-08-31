@@ -226,9 +226,41 @@ export default function Renderer({
         return;
       }
       
-      // User is authenticated, proceed with save functionality
-      // TODO: Implement actual save logic here
-      toast.success('Song saved!');
+      // Ensure the song exists in enchor_songs, then save relation
+      const { error: upsertSongError } = await supabase
+        .from('enchor_songs')
+        .upsert(
+          {
+            hash: metadata.md5,
+            name: metadata.name,
+            artist: metadata.artist,
+            charter: metadata.charter,
+          },
+          { onConflict: 'hash' },
+        );
+
+      if (upsertSongError) {
+        toast.error('Failed to save song metadata');
+        return;
+      }
+
+      const { error: saveRelError } = await supabase
+        .from('user_saved_songs')
+        .upsert(
+          {
+            user_id: user.id,
+            song_hash: metadata.md5,
+            difficulty: selectedDifficulty as unknown as string,
+          },
+          { onConflict: 'user_id,song_hash' },
+        );
+
+      if (saveRelError) {
+        toast.error('Failed to save song');
+        return;
+      }
+
+      toast.success('Song saved');
     } catch (error) {
       console.error('Authentication check failed:', error);
       toast.error('Failed to check authentication');

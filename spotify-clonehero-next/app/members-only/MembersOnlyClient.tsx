@@ -11,6 +11,39 @@ export function MembersOnlyClient({ spotifyLinked }: { spotifyLinked: boolean })
   const supabase = createClient()
   const [linking, setLinking] = useState(false)
   const router = useRouter()
+  const [savedSongs, setSavedSongs] = useState<Array<{ name: string; artist: string; charter: string; hash: string }>>([])
+
+  useEffect(() => {
+    let ignore = false
+    async function loadSaved() {
+      const { data: userRes } = await supabase.auth.getUser()
+      const uid = userRes?.user?.id
+      if (!uid) return
+
+      const { data, error } = await supabase
+        .from('user_saved_songs')
+        .select('song_hash,enchor_songs(name,artist,charter,hash)')
+        .eq('user_id', uid)
+
+      if (error) return
+      if (ignore) return
+
+      const rows = (data || []).map((r: any) => {
+        const s = r.enchor_songs || {}
+        return {
+          name: s.name,
+          artist: s.artist,
+          charter: s.charter,
+          hash: s.hash,
+        }
+      })
+      setSavedSongs(rows)
+    }
+    loadSaved()
+    return () => {
+      ignore = true
+    }
+  }, [supabase])
 
   const handleLinkSpotify = async () => {
     try {
@@ -57,6 +90,23 @@ export function MembersOnlyClient({ spotifyLinked }: { spotifyLinked: boolean })
         >
           Back to Home
         </Button>
+        <div>
+          <div className="font-medium mb-2">Saved Songs</div>
+          {savedSongs.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No saved songs yet.</div>
+          ) : (
+            <ul className="space-y-1">
+              {savedSongs.map(s => (
+                <li key={s.hash} className="text-sm">
+                  {s.name} <span className="text-muted-foreground">by</span> {s.artist}
+                  {s.charter ? (
+                    <span className="text-muted-foreground"> • Charted by {s.charter}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </CardContent>
     </Card>
   )
