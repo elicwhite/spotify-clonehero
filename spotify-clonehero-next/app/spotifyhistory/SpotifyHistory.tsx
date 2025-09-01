@@ -101,17 +101,7 @@ export default function Page() {
         Link Spotify for Previews
       </Button>
     </div>
-  ) : (
-    <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
-      <Button
-        onClick={async () => {
-          await supabase.auth.signOut();
-          window.location.reload();
-        }}>
-        Sign out
-      </Button>
-    </div>
-  );
+  ) : null;
 
   return (
     <>

@@ -123,15 +123,7 @@ export default function Spotify() {
               alt="Spotify"
             />
           </h3>
-          {hasSpotify ? (
-            <Button
-              onClick={async () => {
-                await supabase.auth.signOut();
-                window.location.reload();
-              }}>
-              Sign out
-            </Button>
-          ) : (
+          {hasSpotify ? null : (
             <Button
               onClick={async () => {
                 const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/spotify')}`;
