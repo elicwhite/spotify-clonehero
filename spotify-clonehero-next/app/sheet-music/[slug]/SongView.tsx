@@ -294,10 +294,12 @@ export default function Renderer({
     if (!practiceMode || practiceMode.endMeasureMs === 0) {
       return;
     }
+    const roundedStartMs = Math.round(practiceMode.startMeasureMs);
+    const roundedEndMs = Math.round(practiceMode.endMeasureMs);
     const result = await savePracticeSection(
       metadata.md5,
-      practiceMode.startMeasureMs,
-      practiceMode.endMeasureMs,
+      roundedStartMs,
+      roundedEndMs,
     );
     if (!result?.ok) {
       toast.error(result?.error ?? 'Failed to save section');
@@ -947,6 +949,13 @@ export default function Renderer({
         );
       });
   }, [volumeControls]);
+
+  const isPracticeSectionAlreadySaved = useMemo(() => {
+    if (!practiceMode || !practiceModeEnabled) return false;
+    const s = Math.round(practiceMode.startMeasureMs);
+    const e = Math.round(practiceMode.endMeasureMs);
+    return savedSections.some(sec => sec.start_ms === s && sec.end_ms === e);
+  }, [practiceMode, practiceModeEnabled, savedSections]);
 
   // Define reusable control elements
   const backButton = (
