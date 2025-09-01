@@ -48,7 +48,6 @@
     "lucide-react": "^0.303.0",
     "midifile": "^2.0.0",
     "next": "15.3.3",
-    "next-auth": "^4.24.11",
     "nuqs": "^2.4.0",
     "p-map": "^6.0.0",
     "parse-sng": "^4.0.3",

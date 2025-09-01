@@ -19,13 +19,13 @@ import SpotifyTableDownloader, {
   SpotifyChartData,
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';
-import {signIn, signOut, useSession} from 'next-auth/react';
 import {Button} from '@/components/ui/button';
 import {RxExternalLink} from 'react-icons/rx';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
 import {Searcher} from 'fast-fuzzy';
 import {type ChartResponseEncore} from '@/lib/chartSelection';
 import {toast} from 'sonner';
+import {useAuth} from '@/lib/supabase';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -38,28 +38,10 @@ compare with spotify history
 */
 
 export default function Page() {
-  let auth = null;
-  const session = useSession();
-
-  if (process.env.NODE_ENV === 'development') {
-    auth =
-      !session || session.status !== 'authenticated' ? (
-        <div>
-          <Button onClick={() => signIn('spotify')}>
-            Sign in with Spotify
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
-          <span>Logged in as {session.data.user?.name}</span>
-          <Button onClick={() => signOut()}>Sign out</Button>
-        </div>
-      );
-  }
+  const {user} = useAuth();
 
   return (
     <>
-      {auth}
       <p className="mb-4 text-center">
         This tool scans your Spotify{' '}
         <a
@@ -72,7 +54,7 @@ export default function Page() {
         ever listened to.
       </p>
       <SupportedBrowserWarning>
-        <RockBand4 authenticated={session.status === 'authenticated'} />
+        <RockBand4 authenticated={!!user} />
       </SupportedBrowserWarning>
     </>
   );
