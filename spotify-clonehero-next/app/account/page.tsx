@@ -27,8 +27,6 @@ export default async function AccountPage() {
       const s = row.enchor_songs;
       if (!s) return null;
 
-      console.log(s);
-
       return {
         hash: s.hash as string,
         title: (s.name ?? '') as string,
