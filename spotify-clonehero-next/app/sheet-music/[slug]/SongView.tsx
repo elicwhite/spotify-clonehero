@@ -1006,7 +1006,7 @@ export default function Renderer({
             Practice Range: {Math.round(practiceMode.startTimeMs / 1000)}s -{' '}
             {Math.round(practiceMode.endTimeMs / 1000)}s
           </div>
-          {isAuthenticated && (
+          {isAuthenticated && !isPracticeSectionAlreadySaved && (
             <Button
               variant="secondary"
               className="w-full"
