@@ -1,6 +1,7 @@
 'use server';
 
 import {createClient} from '@/lib/supabase/server';
+import {revalidatePath} from 'next/cache';
 
 export async function unfavoriteSongByHash(hash: string) {
   try {
@@ -29,10 +30,12 @@ export async function deleteCurrentUser() {
     if (!uid) return {ok: false, error: 'Unauthorized'};
 
     // Call RPC to delete the user (function runs as definer)
-    const { error: rpcError } = await supabase.rpc('delete_user');
-    if (rpcError) return { ok: false, error: rpcError.message };
+    const {error: rpcError} = await supabase.rpc('delete_user');
+    if (rpcError) return {ok: false, error: rpcError.message};
     // Sign out after deletion
     await supabase.auth.signOut();
+    // Revalidate the home page after user deletion
+    revalidatePath('/', 'layout');
     return {ok: true};
   } catch (e: any) {
     return {ok: false, error: e?.message ?? 'Unexpected error'};

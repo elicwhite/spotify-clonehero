@@ -167,7 +167,10 @@ export default function AccountClient({
                           size="sm"
                           onClick={() => toggleFavorite(song.hash)}
                           className="ml-4 p-2">
-                          <Star className={`h-4 w-4 text-muted-foreground`} />
+                          <Star
+                            className="h-4 w-4 text-muted-foreground"
+                            fill="currentColor"
+                          />
                         </Button>
                       </div>
                     ))}

@@ -65,6 +65,7 @@ import {extractFills, defaultConfig} from '@/lib/fill-detector';
 import {toast} from '@/components/ui/toast';
 import {createClient} from '@/lib/supabase/client';
 import {saveSongByHash} from './actions';
+import {unfavoriteSongByHash} from '../../account/actions';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -165,6 +166,29 @@ export default function Renderer({
 
   const audioManagerRef = useRef<AudioManager | null>(null);
   const router = useRouter();
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    async function checkSaved() {
+      try {
+        const supabase = createClient();
+        const {
+          data: {user},
+        } = await supabase.auth.getUser();
+        if (!user) return;
+        const {data} = await supabase
+          .from('user_saved_songs')
+          .select('song_hash')
+          .eq('user_id', user.id)
+          .eq('song_hash', metadata.md5)
+          .maybeSingle();
+        setIsSaved(data != null);
+      } catch (e) {
+        console.error('Failed to check saved song', e);
+      }
+    }
+    checkSaved();
+  }, [metadata.md5]);
 
   const handleMasterClickVolumeChange = (value: number) => {
     if (playClickTrack) {
@@ -231,7 +255,17 @@ export default function Renderer({
         return;
       }
 
-      // Call server action to persist
+      if (isSaved) {
+        const result = await unfavoriteSongByHash(metadata.md5);
+        if (!result?.ok) {
+          toast.error(result?.error ?? 'Failed to remove song');
+          return;
+        }
+        setIsSaved(false);
+        toast.success('Song removed');
+        return;
+      }
+
       const result = await saveSongByHash(
         metadata.md5,
         selectedDifficulty as unknown as string,
@@ -240,6 +274,7 @@ export default function Renderer({
         toast.error(result?.error ?? 'Failed to save song');
         return;
       }
+      setIsSaved(true);
       toast.success('Song saved');
     } catch (error) {
       console.error('Authentication check failed:', error);
@@ -1152,8 +1187,11 @@ export default function Renderer({
                 size="sm"
                 className="flex items-center gap-2 px-3 py-1"
                 onClick={handleSaveClick}>
-                <Star className="h-4 w-4" />
-                Save
+                <Star
+                  className="h-4 w-4"
+                  fill={isSaved ? 'currentColor' : 'none'}
+                />
+                {isSaved ? 'Saved' : 'Save'}
               </Button>
             )}
           </div>
