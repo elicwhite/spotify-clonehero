@@ -69,7 +69,6 @@ import {
   savePracticeSection,
   getPracticeSections,
 } from './actions';
-import {tickToMs} from './chartUtils';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -164,7 +163,7 @@ export default function Renderer({
   >('idle');
 
   const [savedSections, setSavedSections] = useState<
-    Array<{id: string; start_tick: number; end_tick: number}>
+    Array<{id: string; start_ms: number; end_ms: number}>
   >([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -242,10 +241,7 @@ export default function Renderer({
       }
 
       // Call server action to persist
-      const result = await saveSongByHash(
-        metadata.md5,
-        selectedDifficulty as unknown as string,
-      );
+      const result = await saveSongByHash(metadata.md5, selectedDifficulty);
       if (!result?.ok) {
         toast.error(result?.error ?? 'Failed to save song');
         return;
@@ -259,43 +255,33 @@ export default function Renderer({
 
   const handleSaveSection = async () => {
     if (!practiceMode) return;
-    const startMeasure = measures.find(
-      m => Math.abs(m.startMs - practiceMode.startMeasureMs) < 1,
-    );
-    const endMeasure = measures.find(
-      m => Math.abs(m.endMs - practiceMode.endMeasureMs) < 1,
-    );
-    if (!startMeasure || !endMeasure) {
-      toast.error('Unable to determine section');
+    if (!practiceMode || practiceMode.endMeasureMs === 0) {
       return;
     }
     const result = await savePracticeSection(
       metadata.md5,
-      selectedDifficulty as unknown as string,
-      startMeasure.startTick,
-      endMeasure.endTick,
+      selectedDifficulty,
+      practiceMode.startMeasureMs,
+      practiceMode.endMeasureMs,
     );
     if (!result?.ok) {
       toast.error(result?.error ?? 'Failed to save section');
       return;
     }
     toast.success('Section saved');
-    const res = await getPracticeSections(
-      metadata.md5,
-      selectedDifficulty as unknown as string,
-    );
+    const res = await getPracticeSections(metadata.md5, selectedDifficulty);
     if (res?.ok)
       setSavedSections(
         (res.sections ?? []).filter(
-          s => s.start_tick != null && s.end_tick != null,
-        ) as Array<{id: string; start_tick: number; end_tick: number}>,
+          s => s.start_ms != null && s.end_ms != null,
+        ) as Array<{id: string; start_ms: number; end_ms: number}>,
       );
   };
 
   const loadSection = useCallback(
-    (section: {start_tick: number; end_tick: number}) => {
-      const startMs = tickToMs(chart, section.start_tick);
-      const endMs = tickToMs(chart, section.end_tick);
+    (section: {start_ms: number; end_ms: number}) => {
+      const startMs = section.start_ms;
+      const endMs = section.end_ms;
       const config: PracticeModeConfig = {
         startMeasureMs: startMs,
         endMeasureMs: endMs,
@@ -306,7 +292,7 @@ export default function Renderer({
       setPracticeModeStep('idle');
       audioManagerRef.current?.setPracticeMode(config);
     },
-    [chart],
+    [],
   );
 
   // const clickTrack = useMemo(async () => {
@@ -808,15 +794,12 @@ export default function Renderer({
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    getPracticeSections(
-      metadata.md5,
-      selectedDifficulty as unknown as string,
-    ).then(res => {
+    getPracticeSections(metadata.md5, selectedDifficulty).then(res => {
       if (res?.ok) {
         setSavedSections(
           (res.sections ?? []).filter(
-            s => s.start_tick != null && s.end_tick != null,
-          ) as Array<{id: string; start_tick: number; end_tick: number}>,
+            s => s.start_ms != null && s.end_ms != null,
+          ) as Array<{id: string; start_ms: number; end_ms: number}>,
         );
       }
     });
@@ -997,8 +980,8 @@ export default function Renderer({
               variant="outline"
               className="w-full text-xs"
               onClick={() => loadSection(section)}>
-              {formatSeconds(tickToMs(chart, section.start_tick) / 1000)} -{' '}
-              {formatSeconds(tickToMs(chart, section.end_tick) / 1000)}
+              {formatSeconds(section.start_ms / 1000)} -{' '}
+              {formatSeconds(section.end_ms / 1000)}
             </Button>
           ))}
         </div>
