@@ -1,10 +1,10 @@
 'use client';
 
-import {signIn, signOut, useSession} from 'next-auth/react';
+import {createClient} from '@/lib/supabase/client';
 
-import {TrackResult, useSpotifyTracks} from '@/lib/spotify-sdk/SpotifyFetching';
+import {useSpotifyTracks} from '@/lib/spotify-sdk/SpotifyFetching';
 import {Button} from '@/components/ui/button';
-import {useCallback, useState} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import {
   SongAccumulator,
   createIsInstalledFilter,
@@ -48,9 +48,22 @@ const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
 */
 
 export default function Spotify() {
-  const session = useSession();
+  const supabase = createClient();
+  const [user, setUser] = useState<any>(null);
+  const [hasSpotify, setHasSpotify] = useState(false);
 
-  if (!session || session.status !== 'authenticated') {
+  useEffect(() => {
+    (async () => {
+      const {data} = await supabase.auth.getUser();
+      setUser(data?.user ?? null);
+      const isLinked = data?.user?.identities?.some(
+        (i: any) => i.provider === 'spotify',
+      );
+      setHasSpotify(!!isLinked);
+    })();
+  }, [supabase]);
+
+  if (!user) {
     return (
       <Card>
         <CardHeader>
@@ -61,9 +74,20 @@ export default function Spotify() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button onClick={() => signIn('spotify')} className="w-full">
+          <Button
+            onClick={async () => {
+              const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/spotify')}`;
+              const {data, error} = await supabase.auth.signInWithOAuth({
+                provider: 'spotify',
+                options: {redirectTo: redirectUrl},
+              });
+              if (!error && data?.url) {
+                window.location.href = data.url;
+              }
+            }}
+            className="w-full">
             <Icons.spotify className="h-4 w-4 mr-2" />
-            Sign in with Spotify
+            Login with Spotify
           </Button>
         </CardContent>
       </Card>
@@ -99,7 +123,26 @@ export default function Spotify() {
               alt="Spotify"
             />
           </h3>
-          <Button onClick={() => signOut()}>Sign out</Button>
+          {hasSpotify ? (
+            <Button
+              onClick={async () => {
+                await supabase.auth.signOut();
+                window.location.reload();
+              }}>
+              Sign out
+            </Button>
+          ) : (
+            <Button
+              onClick={async () => {
+                const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/spotify')}`;
+                await supabase.auth.linkIdentity({
+                  provider: 'spotify',
+                  options: {redirectTo: redirectUrl},
+                });
+              }}>
+              Link Spotify
+            </Button>
+          )}
         </div>
         <LoggedIn />
       </div>

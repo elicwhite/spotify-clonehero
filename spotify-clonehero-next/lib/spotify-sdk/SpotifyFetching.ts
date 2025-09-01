@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
-import {RateLimitError, useSpotifySdk} from './ClientInstance';
+import {RateLimitError, getSpotifySdk} from './ClientInstance';
 import {
   PlaylistedTrack,
   SimplifiedPlaylist,
@@ -140,15 +140,15 @@ export function useTrackUrls(
   previewUrl: string | null;
   spotifyUrl: string;
 }> {
-  const sdk = useSpotifySdk();
-
   const getPreviewUrl = useCallback(async () => {
+    const sdk = await getSpotifySdk();
+
     if (sdk == null) {
       return null;
     }
 
     return await getTrackUrls(sdk, artist, song);
-  }, [sdk, artist, song]);
+  }, [artist, song]);
 
   return getPreviewUrl;
 }
@@ -157,19 +157,20 @@ export function useSpotifyTracks(): [
   tracks: TrackResult[],
   updateFromSpotify: () => Promise<void>,
 ] {
-  const sdk = useSpotifySdk();
   const [forceUpdate, setForceUpdate] = useState(0);
   const [allTracks, setAllTracks] = useState<TrackResult[]>([]);
 
   useEffect(() => {
-    if (sdk == null) {
-      return;
-    }
-
     // use this variable to satisfy eslint
     forceUpdate;
 
     async function calculate() {
+      const sdk = await getSpotifySdk();
+
+      if (sdk == null) {
+        return;
+      }
+
       const cachedPlaylistTracks = await getCachedPlaylistTracks();
 
       const uniqueSongs = Object.values(cachedPlaylistTracks)
@@ -189,9 +190,11 @@ export function useSpotifyTracks(): [
       setAllTracks(tracks);
     }
     calculate();
-  }, [sdk, forceUpdate]);
+  }, [forceUpdate]);
 
   const update = useCallback(async () => {
+    const sdk = await getSpotifySdk();
+
     if (sdk == null) {
       return;
     }
@@ -249,7 +252,7 @@ export function useSpotifyTracks(): [
     );
     await setCachedPlaylistTracks(newCache);
     setForceUpdate(n => n + 1);
-  }, [sdk]);
+  }, []);
 
   return [allTracks, update];
 }

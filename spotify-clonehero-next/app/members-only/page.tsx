@@ -32,19 +32,15 @@ async function getSpotifyApi(userId: User['id']): Promise<SpotifyApi | null> {
 
   try {
     return new SpotifyApi(
-      new ProvidedAccessTokenStrategy(
-        process.env.SPOTIFY_CLIENT_ID,
-        maybeAccessToken,
-        async () => {
-          const token = await getSpotifyAccessToken(userId);
+      new ProvidedAccessTokenStrategy(maybeAccessToken, async () => {
+        const token = await getSpotifyAccessToken(userId);
 
-          if (!token) {
-            throw new Error('Failed to refresh Spotify access token');
-          }
+        if (!token) {
+          throw new Error('Failed to refresh Spotify access token');
+        }
 
-          return token;
-        },
-      ),
+        return token;
+      }),
     );
   } catch (e) {
     console.error(e);

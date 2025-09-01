@@ -17,7 +17,11 @@ import {useRouter, useSearchParams} from 'next/navigation';
 import {cn} from '@/lib/utils';
 import {Icons} from '@/components/icons';
 
-export function LoginForm({className, ...props}: React.ComponentProps<'form'>) {
+export function LoginForm({
+  className,
+  spotifyOnly,
+  ...props
+}: React.ComponentProps<'form'> & {spotifyOnly?: boolean}) {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState<
     null | 'email' | 'spotify' | 'discord'
@@ -125,52 +129,60 @@ export function LoginForm({className, ...props}: React.ComponentProps<'form'>) {
                   )}
                   {loading === 'spotify' ? 'Logging in' : 'Login with Spotify'}
                 </Button>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  type="button"
-                  onClick={() => handleOAuth('discord')}
-                  disabled={!!loading}>
-                  {loading === 'discord' ? (
-                    <Icons.spinner className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Icons.discord className="h-6 w-6 mr-2" />
-                  )}
-                  {loading === 'discord' ? 'Logging in' : 'Login with Discord'}
-                </Button>
-              </div>
-              <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
-                <span className="bg-card text-muted-foreground relative z-10 px-2">
-                  Or continue with
-                </span>
-              </div>
-              <div className="grid gap-6">
-                <div className="grid gap-3">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="email@example.com"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    required
-                    disabled={!!loading}
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={!!loading || !email}>
-                  {loading === 'email' ? (
-                    <span className="inline-flex items-center justify-center">
+                {!spotifyOnly && (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    type="button"
+                    onClick={() => handleOAuth('discord')}
+                    disabled={!!loading}>
+                    {loading === 'discord' ? (
                       <Icons.spinner className="h-4 w-4 mr-2 animate-spin" />
-                      Sending…
-                    </span>
-                  ) : (
-                    'Send Magic Link'
-                  )}
-                </Button>
+                    ) : (
+                      <Icons.discord className="h-6 w-6 mr-2" />
+                    )}
+                    {loading === 'discord'
+                      ? 'Logging in'
+                      : 'Login with Discord'}
+                  </Button>
+                )}
               </div>
+              {!spotifyOnly && (
+                <>
+                  <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
+                    <span className="bg-card text-muted-foreground relative z-10 px-2">
+                      Or continue with
+                    </span>
+                  </div>
+                  <div className="grid gap-6">
+                    <div className="grid gap-3">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="email@example.com"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        required
+                        disabled={!!loading}
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={!!loading || !email}>
+                      {loading === 'email' ? (
+                        <span className="inline-flex items-center justify-center">
+                          <Icons.spinner className="h-4 w-4 mr-2 animate-spin" />
+                          Sending…
+                        </span>
+                      ) : (
+                        'Send Magic Link'
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
 
               {message && (
                 <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-md">

@@ -17,7 +17,6 @@ export default class ProvidedAccessTokenStrategy implements IAuthStrategy {
   private refreshTokenAction: () => Promise<ProtectedAccessToken>;
 
   constructor(
-    protected clientId: string,
     protected accessToken: ProtectedAccessToken,
     refreshTokenAction: () => Promise<ProtectedAccessToken>,
   ) {

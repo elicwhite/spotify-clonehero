@@ -1,16 +1,14 @@
 'use client';
 
 import {
-  AccessToken,
-  IAuthStrategy,
   IHandleErrors,
   IValidateResponses,
-  SdkConfiguration,
   SpotifyApi,
-} from '@spotify/web-api-ts-sdk'; // use "@spotify/web-api-ts-sdk" in your own project
-import {signIn, useSession} from 'next-auth/react';
-import {Session} from 'next-auth';
-import {useMemo} from 'react';
+} from '@spotify/web-api-ts-sdk';
+import {use, useMemo} from 'react';
+import {ProtectedAccessToken} from '../spotify-server/tokens';
+import ProvidedAccessTokenStrategy from '../spotify-server/ProvidedAccessTokenStrategy';
+import {createClient} from '@/lib/supabase/client';
 
 export class RateLimitError extends Error {
   public status: number;
@@ -60,62 +58,15 @@ class MyResponseValidator implements IValidateResponses {
   }
 }
 
-class ReactNextAuthStrategy implements IAuthStrategy {
-  session: Session;
-
-  constructor(session: Session) {
-    this.session = session;
-  }
-
-  public getOrCreateAccessToken(): Promise<AccessToken> {
-    return this.getAccessToken();
-  }
-
-  public async getAccessToken(): Promise<AccessToken> {
-    // const session: any = await getSession();
-    if (!this.session) {
-      return {} as AccessToken;
-    }
-
-    // @ts-ignore
-    if (this.session?.error === 'RefreshAccessTokenError') {
-      await signIn();
-      return this.getAccessToken();
-    }
-
-    const {user} = this.session;
-
-    if (!user) {
-      throw new Error('No user found in session');
-    }
-
-    return {
-      // @ts-ignore
-      access_token: user.access_token,
-      token_type: 'Bearer',
-      // @ts-ignore
-      expires_in: user.expires_in,
-      // @ts-ignore
-      expires: user.expires_at,
-      // @ts-ignore
-      refresh_token: user.refresh_token,
-    } as AccessToken;
-  }
-
-  public removeAccessToken(): void {
-    console.warn('[Spotify-SDK][WARN]\nremoveAccessToken not implemented');
-  }
-
-  public setConfiguration(configuration: SdkConfiguration): void {
-    // console.log('config', configuration);
-    // console.warn('[Spotify-SDK][WARN]\nsetConfiguration not implemented');
-  }
-}
-
-export default class MyErrorHandler implements IHandleErrors {
+export class MyErrorHandler implements IHandleErrors {
   public async handleErrors(error: any): Promise<boolean> {
     if (error.message.includes('Bad or expired token')) {
-      await signIn('spotify');
+      const supabase = createClient();
+      const redirectUrl = `${window.location.origin}/auth/callback}`;
+      const {data, error} = await supabase.auth.signInWithOAuth({
+        provider: 'spotify',
+        options: {redirectTo: redirectUrl},
+      });
       return true;
     }
 
@@ -123,20 +74,45 @@ export default class MyErrorHandler implements IHandleErrors {
   }
 }
 
-export function useSpotifySdk() {
-  const {data, status} = useSession();
+async function fetchAccessToken(): Promise<ProtectedAccessToken | null> {
+  const resp = await fetch('/api/spotify/access-token', {cache: 'no-store'});
+  if (!resp.ok) {
+    throw new Error('Not authenticated or no Spotify token');
+  }
+  const json = await resp.json();
+  return json as ProtectedAccessToken;
+}
 
-  const api = useMemo(() => {
-    if (data == null) {
-      return null;
-    }
+let cachedSharedSdk: SpotifyApi | null = null;
 
-    const strategy = new ReactNextAuthStrategy(data);
-    return new SpotifyApi(strategy, {
-      responseValidator: new MyResponseValidator(),
-      errorHandler: new MyErrorHandler(),
-    });
-  }, [data]);
+export async function getSpotifySdk(): Promise<SpotifyApi | null> {
+  if (cachedSharedSdk) {
+    return cachedSharedSdk;
+  }
+  const maybeAccessToken = await fetchAccessToken();
 
-  return api;
+  if (!maybeAccessToken) {
+    return null;
+  }
+
+  const strategy = new ProvidedAccessTokenStrategy(
+    maybeAccessToken,
+    async () => {
+      console.log('Refreshing Spotify access token!');
+      const token = await fetchAccessToken();
+
+      if (!token) {
+        throw new Error('Failed to refresh Spotify access token');
+      }
+
+      return token;
+    },
+  );
+
+  cachedSharedSdk = new SpotifyApi(strategy, {
+    responseValidator: new MyResponseValidator(),
+    errorHandler: new MyErrorHandler(),
+  });
+
+  return cachedSharedSdk;
 }

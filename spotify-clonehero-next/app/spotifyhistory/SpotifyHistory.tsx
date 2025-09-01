@@ -4,7 +4,7 @@ import {
   SongAccumulator,
   createIsInstalledFilter,
 } from '@/lib/local-songs-folder/scanLocalCharts';
-import {Suspense, useCallback, useState} from 'react';
+import {Suspense, useCallback, useEffect, useState} from 'react';
 import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import {
@@ -16,13 +16,14 @@ import SpotifyTableDownloader, {
   SpotifyChartData,
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';
-import {signIn, signOut, useSession} from 'next-auth/react';
+import {createClient} from '@/lib/supabase/client';
 import {Button} from '@/components/ui/button';
 import {RxExternalLink} from 'react-icons/rx';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
 import {Searcher} from 'fast-fuzzy';
 import {type ChartResponseEncore} from '@/lib/chartSelection';
 import {toast} from 'sonner';
+import {Icons} from '@/components/icons';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -50,22 +51,63 @@ Updates
 */
 
 export default function Page() {
-  let auth = null;
-  const session = useSession();
+  const supabase = createClient();
+  const [user, setUser] = useState<any>(null);
+  const [hasSpotify, setHasSpotify] = useState(false);
 
-  auth =
-    !session || session.status !== 'authenticated' ? (
-      <div>
-        <Button onClick={() => signIn('spotify')}>
-          Sign in with Spotify for Previews
-        </Button>
-      </div>
-    ) : (
-      <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
-        <span>Logged in as {session.data.user?.name}</span>
-        <Button onClick={() => signOut()}>Sign out</Button>
-      </div>
-    );
+  useEffect(() => {
+    (async () => {
+      const {data} = await supabase.auth.getUser();
+      setUser(data?.user ?? null);
+      const isLinked = data?.user?.identities?.some(
+        (i: any) => i.provider === 'spotify',
+      );
+      setHasSpotify(!!isLinked);
+    })();
+  }, [supabase]);
+
+  const authRedirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/spotifyhistory')}`;
+
+  const auth = !user ? (
+    <div>
+      <Button
+        onClick={async () => {
+          const {data, error} = await supabase.auth.signInWithOAuth({
+            provider: 'spotify',
+            options: {redirectTo: authRedirectUrl},
+          });
+          if (!error && data?.url) {
+            window.location.href = data.url;
+          }
+        }}>
+        <Icons.spotify className="h-4 w-4 mr-2" />
+        Login with Spotify for Previews
+      </Button>
+    </div>
+  ) : !hasSpotify ? (
+    <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
+      <Button
+        onClick={async () => {
+          await supabase.auth.linkIdentity({
+            // @ts-ignore
+            provider: 'spotify',
+            options: {redirectTo: authRedirectUrl},
+          });
+        }}>
+        Link Spotify for Previews
+      </Button>
+    </div>
+  ) : (
+    <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
+      <Button
+        onClick={async () => {
+          await supabase.auth.signOut();
+          window.location.reload();
+        }}>
+        Sign out
+      </Button>
+    </div>
+  );
 
   return (
     <>
@@ -83,7 +125,7 @@ export default function Page() {
       </p>
       <Suspense fallback={<div>Loading...</div>}>
         <SupportedBrowserWarning>
-          <SpotifyHistory authenticated={session.status === 'authenticated'} />
+          <SpotifyHistory authenticated={!!user && hasSpotify} />
         </SupportedBrowserWarning>
       </Suspense>
     </>
