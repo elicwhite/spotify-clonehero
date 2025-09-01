@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   const {searchParams} = new URL(request.url);
   const token_hash = searchParams.get('token_hash');
   const type = searchParams.get('type') as EmailOtpType | null;
-  const next = searchParams.get('next') ?? '/members-only';
+  const next = searchParams.get('next') ?? '/account';
 
   if (token_hash && type) {
     const supabase = await createClient();
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!error) {
-      // redirect user to specified redirect URL or members-only page
+      // redirect user to specified redirect URL or account page
       redirect(next);
     }
   }

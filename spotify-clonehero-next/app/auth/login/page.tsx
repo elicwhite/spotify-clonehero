@@ -20,8 +20,8 @@ export default async function LoginPage({
     );
   }
 
-  // User is already authenticated, redirect to next parameter or members-only
+  // User is already authenticated, redirect to next parameter or account page
   const params = await searchParams;
-  const nextUrl = params.next || '/members-only';
+  const nextUrl = params.next || '/account';
   redirect(nextUrl);
 }
