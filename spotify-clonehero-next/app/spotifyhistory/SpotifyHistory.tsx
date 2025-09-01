@@ -66,7 +66,7 @@ export default function Page() {
     })();
   }, [supabase]);
 
-  const authRedirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/spotifyhistory')}`;
+  const authRedirectUrl = `/auth/callback?next=${encodeURIComponent('/spotifyhistory')}`;
 
   const auth = !user ? (
     <div>
@@ -74,7 +74,9 @@ export default function Page() {
         onClick={async () => {
           const {data, error} = await supabase.auth.signInWithOAuth({
             provider: 'spotify',
-            options: {redirectTo: authRedirectUrl},
+            options: {
+              redirectTo: `${window.location.origin}${authRedirectUrl}`,
+            },
           });
           if (!error && data?.url) {
             window.location.href = data.url;
@@ -91,7 +93,9 @@ export default function Page() {
           await supabase.auth.linkIdentity({
             // @ts-ignore
             provider: 'spotify',
-            options: {redirectTo: authRedirectUrl},
+            options: {
+              redirectTo: `${window.location.origin}${authRedirectUrl}`,
+            },
           });
         }}>
         Link Spotify for Previews

@@ -218,7 +218,8 @@ export default function Search({
               {filteredSongs &&
                 filteredSongs.data.map(song => (
                   <Link
-                    href={getSheetMusicUrl(song.artist, song.name, song.md5)}
+                    href="/sheet-music/[slug]"
+                    as={getSheetMusicUrl(song.artist, song.name, song.md5)}
                     key={song.md5}
                     className="flex items-stretch bg-card rounded-lg border border-border hover:bg-accent transition-colors cursor-pointer overflow-hidden">
                     <div className="flex-shrink-0">
