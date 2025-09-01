@@ -13,6 +13,7 @@ import {
   preFilterInstruments,
 } from '@/components/ChartInstruments';
 import {EncoreResponse, searchEncore} from '@/lib/search-encore';
+import {getSheetMusicUrl} from '@/app/buildSheetMusicUrl';
 
 // const DifficultyBadge = ({
 //   instrument,
@@ -217,8 +218,7 @@ export default function Search({
               {filteredSongs &&
                 filteredSongs.data.map(song => (
                   <Link
-                    href="/sheet-music/[slug]"
-                    as={`/sheet-music/${song.name}-${song.artist}-${song.md5}`}
+                    href={getSheetMusicUrl(song.artist, song.name, song.md5)}
                     key={song.md5}
                     className="flex items-stretch bg-card rounded-lg border border-border hover:bg-accent transition-colors cursor-pointer overflow-hidden">
                     <div className="flex-shrink-0">

@@ -36,6 +36,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {deleteCurrentUser} from './actions';
+import {getSheetMusicUrl} from '@/app/buildSheetMusicUrl';
 
 type SavedSong = {
   hash: string;
@@ -140,7 +141,12 @@ export default function AccountClient({
                         className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors">
                         <div className="flex-1">
                           <Link
-                            href={`/sheet-music/${song.hash}`}
+                            href="/sheet-music/[slug]"
+                            as={getSheetMusicUrl(
+                              song.artist,
+                              song.title,
+                              song.hash,
+                            )}
                             className="group flex items-start gap-3">
                             <div className="flex-1">
                               <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
