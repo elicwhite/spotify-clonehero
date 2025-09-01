@@ -60,7 +60,6 @@ export async function saveSongByHash(
 
 export async function savePracticeSection(
   hash: string,
-  difficulty: string,
   startMs: number,
   endMs: number,
 ) {
@@ -77,13 +76,12 @@ export async function savePracticeSection(
     song_hash: hash,
     start_ms: startMs,
     end_ms: endMs,
-    difficulty,
   });
   if (error) return {ok: false, error: error.message};
   return {ok: true};
 }
 
-export async function getPracticeSections(hash: string, difficulty: string) {
+export async function getPracticeSections(hash: string) {
   const supabase = await createClient();
   const {data: userRes} = await supabase.auth.getUser();
   const user = userRes?.user;
@@ -96,7 +94,6 @@ export async function getPracticeSections(hash: string, difficulty: string) {
     .select('id,start_ms,end_ms')
     .eq('user_id', user.id)
     .eq('song_hash', hash)
-    .eq('difficulty', difficulty)
     .order('start_ms', {ascending: true});
 
   if (error) return {ok: false, sections: [], error: error.message};

@@ -296,7 +296,6 @@ export default function Renderer({
     }
     const result = await savePracticeSection(
       metadata.md5,
-      selectedDifficulty,
       practiceMode.startMeasureMs,
       practiceMode.endMeasureMs,
     );
@@ -305,7 +304,7 @@ export default function Renderer({
       return;
     }
     toast.success('Section saved');
-    const res = await getPracticeSections(metadata.md5, selectedDifficulty);
+    const res = await getPracticeSections(metadata.md5);
     if (res?.ok)
       setSavedSections(
         (res.sections ?? []).filter(
@@ -830,7 +829,7 @@ export default function Renderer({
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    getPracticeSections(metadata.md5, selectedDifficulty).then(res => {
+    getPracticeSections(metadata.md5).then(res => {
       if (res?.ok) {
         setSavedSections(
           (res.sections ?? []).filter(
@@ -839,7 +838,7 @@ export default function Renderer({
         );
       }
     });
-  }, [isAuthenticated, metadata.md5, selectedDifficulty]);
+  }, [isAuthenticated, metadata.md5]);
 
   const volumeSliders = useMemo(() => {
     if (volumeControls.length === 0) {
