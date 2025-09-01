@@ -64,7 +64,12 @@ import tripletNote from '@/public/assets/svgs/triplet-note.svg';
 import {extractFills, defaultConfig} from '@/lib/fill-detector';
 import {toast} from '@/components/ui/toast';
 import {createClient} from '@/lib/supabase/client';
-import {saveSongByHash} from './actions';
+import {
+  saveSongByHash,
+  savePracticeSection,
+  getPracticeSections,
+} from './actions';
+import {tickToMs} from './chartUtils';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
   return chart.trackData
@@ -158,6 +163,11 @@ export default function Renderer({
     'idle' | 'selectingStart' | 'selectingEnd'
   >('idle');
 
+  const [savedSections, setSavedSections] = useState<
+    Array<{id: string; start_tick: number; end_tick: number}>
+  >([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   const availableDifficulties = getDrumDifficulties(chart);
   const [selectedDifficulty, setSelectedDifficulty] = useState(
     availableDifficulties[0],
@@ -246,6 +256,58 @@ export default function Renderer({
       toast.error('Failed to check authentication');
     }
   };
+
+  const handleSaveSection = async () => {
+    if (!practiceMode) return;
+    const startMeasure = measures.find(
+      m => Math.abs(m.startMs - practiceMode.startMeasureMs) < 1,
+    );
+    const endMeasure = measures.find(
+      m => Math.abs(m.endMs - practiceMode.endMeasureMs) < 1,
+    );
+    if (!startMeasure || !endMeasure) {
+      toast.error('Unable to determine section');
+      return;
+    }
+    const result = await savePracticeSection(
+      metadata.md5,
+      selectedDifficulty as unknown as string,
+      startMeasure.startTick,
+      endMeasure.endTick,
+    );
+    if (!result?.ok) {
+      toast.error(result?.error ?? 'Failed to save section');
+      return;
+    }
+    toast.success('Section saved');
+    const res = await getPracticeSections(
+      metadata.md5,
+      selectedDifficulty as unknown as string,
+    );
+    if (res?.ok)
+      setSavedSections(
+        (res.sections ?? []).filter(
+          s => s.start_tick != null && s.end_tick != null,
+        ) as Array<{id: string; start_tick: number; end_tick: number}>,
+      );
+  };
+
+  const loadSection = useCallback(
+    (section: {start_tick: number; end_tick: number}) => {
+      const startMs = tickToMs(chart, section.start_tick);
+      const endMs = tickToMs(chart, section.end_tick);
+      const config: PracticeModeConfig = {
+        startMeasureMs: startMs,
+        endMeasureMs: endMs,
+        startTimeMs: Math.max(0, startMs - 500),
+        endTimeMs: endMs + 500,
+      };
+      setPracticeMode(config);
+      setPracticeModeStep('idle');
+      audioManagerRef.current?.setPracticeMode(config);
+    },
+    [chart],
+  );
 
   // const clickTrack = useMemo(async () => {
   //   const clickTrack = await generateClickTrack(metadata, chart);
@@ -737,6 +799,29 @@ export default function Renderer({
     [],
   );
 
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({data: {user}}) => {
+      setIsAuthenticated(!!user);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    getPracticeSections(
+      metadata.md5,
+      selectedDifficulty as unknown as string,
+    ).then(res => {
+      if (res?.ok) {
+        setSavedSections(
+          (res.sections ?? []).filter(
+            s => s.start_tick != null && s.end_tick != null,
+          ) as Array<{id: string; start_tick: number; end_tick: number}>,
+        );
+      }
+    });
+  }, [isAuthenticated, metadata.md5, selectedDifficulty]);
+
   const volumeSliders = useMemo(() => {
     if (volumeControls.length === 0) {
       return [];
@@ -889,9 +974,33 @@ export default function Renderer({
         {practiceModeEnabled ? 'End Practice' : 'Practice'}
       </Button>
       {practiceModeEnabled && practiceMode && (
-        <div className="text-xs text-muted-foreground text-center">
-          Practice Range: {Math.round(practiceMode.startTimeMs / 1000)}s -{' '}
-          {Math.round(practiceMode.endTimeMs / 1000)}s
+        <>
+          <div className="text-xs text-muted-foreground text-center">
+            Practice Range: {Math.round(practiceMode.startTimeMs / 1000)}s -{' '}
+            {Math.round(practiceMode.endTimeMs / 1000)}s
+          </div>
+          {isAuthenticated && (
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={handleSaveSection}>
+              Save Section
+            </Button>
+          )}
+        </>
+      )}
+      {isAuthenticated && savedSections.length > 0 && (
+        <div className="space-y-1">
+          {savedSections.map(section => (
+            <Button
+              key={section.id}
+              variant="outline"
+              className="w-full text-xs"
+              onClick={() => loadSection(section)}>
+              {formatSeconds(tickToMs(chart, section.start_tick) / 1000)} -{' '}
+              {formatSeconds(tickToMs(chart, section.end_tick) / 1000)}
+            </Button>
+          ))}
         </div>
       )}
     </div>
