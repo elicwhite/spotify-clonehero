@@ -39,19 +39,26 @@ export async function getSpotifyAccessToken(
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
   if (!clientId || !clientSecret) return null;
 
-  const tokenResp = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Authorization:
-        'Basic ' +
-        Buffer.from(clientId + ':' + clientSecret).toString('base64'),
-    },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: data.refresh_token,
-    }),
-  });
+  let tokenResp: Response | null = null;
+
+  try {
+    tokenResp = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization:
+          'Basic ' +
+          Buffer.from(clientId + ':' + clientSecret).toString('base64'),
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: data.refresh_token,
+      }),
+    });
+  } catch (error) {
+    console.error('Failed to refresh Spotify access token', error);
+    return null;
+  }
 
   if (!tokenResp.ok) return null;
 
