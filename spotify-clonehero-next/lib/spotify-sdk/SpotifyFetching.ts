@@ -499,9 +499,17 @@ export function useSpotifyLibraryUpdate(): {
                 () => cancelledRef.current,
                 cachedLen,
               );
+              const finalFetched = cached[snapshot]?.length ?? cachedLen;
               setPlaylists(prev =>
                 prev.map(pl =>
-                  pl.snapshotId === snapshot ? {...pl, status: 'done'} : pl,
+                  pl.snapshotId === snapshot
+                    ? {
+                        ...pl,
+                        status: 'done',
+                        fetched: finalFetched,
+                        total: finalFetched,
+                      }
+                    : pl,
                 ),
               );
               setRateLimit(null);
@@ -555,9 +563,17 @@ export function useSpotifyLibraryUpdate(): {
               () => cancelledRef.current,
               0,
             );
+            const finalFetched = cached[snapshot]?.length ?? 0;
             setPlaylists(prev =>
               prev.map(pl =>
-                pl.snapshotId === snapshot ? {...pl, status: 'done'} : pl,
+                pl.snapshotId === snapshot
+                  ? {
+                      ...pl,
+                      status: 'done',
+                      fetched: finalFetched,
+                      total: finalFetched,
+                    }
+                  : pl,
               ),
             );
             setRateLimit(null);
