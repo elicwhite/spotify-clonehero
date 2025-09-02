@@ -37,6 +37,7 @@ import {ChartResponseEncore} from '@/lib/chartSelection';
 import {Searcher} from 'fast-fuzzy';
 import {toast} from 'sonner';
 import SpotifyLoaderCard from './SpotifyLoaderCard';
+import LocalScanLoaderCard from './LocalScanLoaderCard';
 import dynamic from 'next/dynamic';
 import {useMemo} from 'react';
 
@@ -327,6 +328,12 @@ function LoggedIn() {
           rateLimitCountdown={rateLimit?.retryAfterSeconds ?? 0}
         />
       )}
+      {(status.status === 'scanning' || status.status === 'done-scanning') && (
+        <LocalScanLoaderCard
+          count={status.songsCounted}
+          isScanning={status.status === 'scanning'}
+        />
+      )}
       <div className="flex justify-center">
         {renderStatus(status, calculate)}
       </div>
@@ -344,7 +351,7 @@ function renderStatus(status: Status, scanHandler: () => void) {
       );
     case 'scanning':
     case 'done-scanning':
-      return `${status.songsCounted} songs scanned`;
+      return null;
     case 'fetching-spotify-data':
       return 'Scanning your Spotify Library';
     case 'songs-from-encore':

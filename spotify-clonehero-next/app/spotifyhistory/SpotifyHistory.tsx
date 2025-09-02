@@ -24,6 +24,7 @@ import {Searcher} from 'fast-fuzzy';
 import {type ChartResponseEncore} from '@/lib/chartSelection';
 import {toast} from 'sonner';
 import {Icons} from '@/components/icons';
+import LocalScanLoaderCard from '../spotify/LocalScanLoaderCard';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -303,6 +304,13 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     <>
       <div className="flex justify-center">{renderStatus(status, handler)}</div>
 
+      {(status.status === 'scanning' || status.status === 'done-scanning') && (
+        <LocalScanLoaderCard
+          count={status.songsCounted}
+          isScanning={status.status === 'scanning'}
+        />
+      )}
+
       {songs && (
         <SpotifyTableDownloader tracks={songs} showPreview={authenticated} />
       )}
@@ -316,7 +324,7 @@ function renderStatus(status: Status, scanHandler: () => void) {
       return <Button onClick={scanHandler}>Scan Spotify Dump</Button>;
     case 'scanning':
     case 'done-scanning':
-      return `${status.songsCounted} songs scanned`;
+      return null;
     case 'processing-spotify-dump':
       return 'Processing Spotify Extended Streaming History';
     case 'songs-from-encore':
