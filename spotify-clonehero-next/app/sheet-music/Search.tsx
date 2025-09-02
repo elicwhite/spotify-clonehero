@@ -214,7 +214,7 @@ export default function Search({
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-2">
               {filteredSongs &&
                 filteredSongs.data.map(song => (
                   <Link
@@ -226,38 +226,33 @@ export default function Search({
                       <img
                         src={`https://files.enchor.us/${song.albumArtMd5}.jpg`}
                         alt={`${song.name} album art`}
-                        width={200}
-                        height={200}
-                        className="h-full w-[120px] sm:w-[160px] lg:w-[200px] object-cover"
+                        width={160}
+                        height={160}
+                        className="h-full w-[96px] sm:w-[120px] lg:w-[160px] object-cover"
                       />
                     </div>
 
-                    <div className="flex flex-col flex-grow p-4">
+                    <div className="flex flex-col flex-grow p-3">
                       <div className="flex-grow">
-                        <h3 className="font-medium text-base sm:text-lg lg:text-xl">
-                          {song.name}
-                        </h3>
-                        <p className="text-muted-foreground text-sm sm:text-base">
+                        <h3 className="text-sm sm:text-base lg:text-lg font-bold">
+                          {song.name}{' '}
+                          <span className="text-muted-foreground">by</span>{' '}
                           {song.artist}
-                        </p>
-                        <p className="text-sm text-muted-foreground hidden sm:block">
-                          Charted by {song.charter}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          charted by {song.charter}
                         </p>
                       </div>
-                      <div className="flex flex-wrap gap-2 sm:gap-3 mt-2 sm:mt-3">
+                      <div className="flex flex-wrap gap-1 sm:gap-2 mt-1 sm:mt-2">
                         <ChartInstruments
-                          size="lg"
-                          classNames="h-7 w-7 lg:h-10 lg:w-10 sm:h-8 sm:w-8"
+                          size="md"
+                          classNames="h-5 w-5 sm:h-6 sm:w-6 lg:h-7 lg:w-7"
                           instruments={preFilterInstruments(song)}
                         />
                       </div>
                     </div>
 
-                    <Button
-                      variant="secondary"
-                      className="hidden sm:flex ml-4 mr-4 self-center">
-                      View Sheet
-                    </Button>
+                    <Button className="hidden">View Sheet</Button>
                   </Link>
                 ))}
             </div>
