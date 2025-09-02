@@ -9,6 +9,7 @@ import {Icons} from '@/components/icons';
 import {Button} from '@/components/ui/button';
 import {Toaster} from 'sonner';
 import HeaderAuthControls from '@/components/HeaderAuthControls';
+import {Suspense} from 'react';
 
 const fontSans = FontSans({
   subsets: ['latin'],
@@ -65,7 +66,9 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
                     <span className="sr-only">GitHub</span>
                   </Button>
                 </Link>
-                <HeaderAuthControls />
+                <Suspense>
+                  <HeaderAuthControls />
+                </Suspense>
               </nav>
             </div>
           </nav>
