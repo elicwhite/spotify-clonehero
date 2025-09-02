@@ -90,9 +90,14 @@ interface VolumeControl {
 }
 
 function formatSeconds(seconds: number): string {
-  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(
-    Math.floor(seconds % 60),
-  ).padStart(2, '0')}`;
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${String(mins)}:${String(secs).padStart(2, '0')}`;
+}
+
+function formatTimeMs(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  return formatSeconds(seconds);
 }
 export default function Renderer({
   metadata,
@@ -159,9 +164,7 @@ export default function Renderer({
 
   const practiceModeEnabled =
     practiceMode != null && practiceMode.endTimeMs > 0;
-  const [practiceModeStep, setPracticeModeStep] = useState<
-    'idle' | 'selectingStart' | 'selectingEnd'
-  >('idle');
+  const [selectionIndex, setSelectionIndex] = useState<number | null>(null);
 
   const [savedSections, setSavedSections] = useState<
     Array<{id: string; start_ms: number; end_ms: number}>
@@ -294,8 +297,8 @@ export default function Renderer({
     if (!practiceMode || practiceMode.endMeasureMs === 0) {
       return;
     }
-    const roundedStartMs = Math.round(practiceMode.startMeasureMs);
-    const roundedEndMs = Math.round(practiceMode.endMeasureMs);
+    const roundedStartMs = Math.ceil(practiceMode.startMeasureMs);
+    const roundedEndMs = Math.floor(practiceMode.endMeasureMs);
     const result = await savePracticeSection(
       metadata.md5,
       roundedStartMs,
@@ -326,7 +329,7 @@ export default function Renderer({
         endTimeMs: endMs + 500,
       };
       setPracticeMode(config);
-      setPracticeModeStep('idle');
+      setSelectionIndex(null);
       audioManagerRef.current?.setPracticeMode(config);
     },
     [],
@@ -758,13 +761,19 @@ export default function Renderer({
 
   // Practice mode functions
   const startPracticeMode = useCallback(() => {
-    setPracticeModeStep('selectingStart');
+    setSelectionIndex(-1);
+    setPracticeMode({
+      startMeasureMs: 0,
+      endMeasureMs: 0,
+      startTimeMs: 0,
+      endTimeMs: 0,
+    });
     toast.info('Choose the starting measure');
   }, []);
 
   const endPracticeMode = useCallback(() => {
     setPracticeMode(null);
-    setPracticeModeStep('idle');
+    setSelectionIndex(null);
 
     // Update audio manager
     if (audioManagerRef.current) {
@@ -775,41 +784,45 @@ export default function Renderer({
   }, []);
 
   const handlePracticeMeasureSelect = useCallback(
-    (measureStartMs: number) => {
-      if (practiceModeStep === 'selectingStart') {
-        // Set start measure and move to selecting end
+    (measureIndex: number) => {
+      if (selectionIndex === null) return; // Not in selection mode
+      if (selectionIndex === -1) {
+        // Start index chosen
+        setSelectionIndex(measureIndex);
+        const startMs = measures[measureIndex].startMs;
+        const endMs = measures[measureIndex].endMs;
+        // Set a temporary practice range so renderVexflow can fade others
         setPracticeMode({
-          startMeasureMs: measureStartMs,
-          endMeasureMs: 0,
-          startTimeMs: Math.max(0, measureStartMs - 500), // 2 seconds before
-          endTimeMs: 0,
+          startMeasureMs: startMs,
+          endMeasureMs: endMs,
+          startTimeMs: startMs,
+          endTimeMs: endMs,
         });
-        setPracticeModeStep('selectingEnd');
         toast.info('Choose the ending measure');
-      } else if (practiceModeStep === 'selectingEnd') {
-        // Set end measure and complete practice mode setup
-        const endMeasureMs = measureStartMs;
-        const updatedPracticeMode: PracticeModeConfig = {
-          startMeasureMs: practiceMode!.startMeasureMs,
-          endMeasureMs: endMeasureMs,
-          startTimeMs: practiceMode!.startTimeMs,
-          endTimeMs: endMeasureMs + 500, // 500ms after
-        };
-
-        setPracticeMode(updatedPracticeMode);
-        setPracticeModeStep('idle');
-
-        // Update audio manager
-        if (audioManagerRef.current) {
-          audioManagerRef.current.setPracticeMode(updatedPracticeMode);
-        }
-
-        toast.success(
-          'Practice mode configured! Click play to start practicing.',
-        );
+        return;
       }
+
+      // End index chosen
+      const startIndex = Math.min(selectionIndex, measureIndex);
+      const endIndex = Math.max(selectionIndex, measureIndex);
+      const startMs = measures[startIndex].startMs;
+      const endMs = measures[endIndex].endMs;
+
+      const updated: PracticeModeConfig = {
+        startMeasureMs: startMs,
+        startTimeMs: Math.max(0, startMs - 500),
+        endMeasureMs: endMs,
+        endTimeMs: endMs + 500,
+      };
+
+      setPracticeMode(updated);
+      setSelectionIndex(null);
+      audioManagerRef.current?.setPracticeMode(updated);
+      toast.success(
+        'Practice mode configured! Click play to start practicing.',
+      );
     },
-    [practiceModeStep, practiceMode],
+    [selectionIndex, measures],
   );
 
   const songDuration =
@@ -952,9 +965,13 @@ export default function Renderer({
 
   const isPracticeSectionAlreadySaved = useMemo(() => {
     if (!practiceMode || !practiceModeEnabled) return false;
-    const s = Math.round(practiceMode.startMeasureMs);
-    const e = Math.round(practiceMode.endMeasureMs);
-    return savedSections.some(sec => sec.start_ms === s && sec.end_ms === e);
+    const s = Math.ceil(practiceMode.startMeasureMs);
+    const e = Math.floor(practiceMode.endMeasureMs);
+    const within = (a: number, b: number, tol: number) =>
+      Math.abs(a - b) <= tol;
+    return savedSections.some(
+      sec => within(sec.start_ms, s, 5) && within(sec.end_ms, e, 5),
+    );
   }, [practiceMode, practiceModeEnabled, savedSections]);
 
   // Define reusable control elements
@@ -991,7 +1008,7 @@ export default function Renderer({
     <div className="space-y-2 pt-4 border-t">
       <Button
         variant={
-          practiceModeEnabled || practiceModeStep !== 'idle'
+          practiceModeEnabled || selectionIndex !== null
             ? 'destructive'
             : 'default'
         }
@@ -1003,8 +1020,8 @@ export default function Renderer({
       {practiceModeEnabled && practiceMode && (
         <>
           <div className="text-xs text-muted-foreground text-center">
-            Practice Range: {Math.round(practiceMode.startTimeMs / 1000)}s -{' '}
-            {Math.round(practiceMode.endTimeMs / 1000)}s
+            Practice Range: {formatTimeMs(practiceMode.startTimeMs)} -{' '}
+            {formatTimeMs(practiceMode.endTimeMs)}
           </div>
           {isAuthenticated && !isPracticeSectionAlreadySaved && (
             <Button
@@ -1024,8 +1041,7 @@ export default function Renderer({
               variant="outline"
               className="w-full text-xs"
               onClick={() => loadSection(section)}>
-              {formatSeconds(section.start_ms / 1000)} -{' '}
-              {formatSeconds(section.end_ms / 1000)}
+              {formatTimeMs(section.start_ms)} - {formatTimeMs(section.end_ms)}
             </Button>
           ))}
         </div>
@@ -1318,7 +1334,7 @@ export default function Renderer({
                 triggerRerender={viewCloneHero}
                 practiceModeConfig={practiceMode}
                 onPracticeMeasureSelect={handlePracticeMeasureSelect}
-                practiceModeStep={practiceModeStep}
+                selectionIndex={selectionIndex}
                 audioManagerRef={audioManagerRef}
               />
             </div>

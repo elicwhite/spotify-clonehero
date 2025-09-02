@@ -33,7 +33,7 @@ export default function SheetMusic({
   triggerRerender,
   practiceModeConfig,
   onPracticeMeasureSelect,
-  practiceModeStep,
+  selectionIndex,
   audioManagerRef,
 }: {
   chart: ParsedChart;
@@ -45,8 +45,8 @@ export default function SheetMusic({
   onSelectMeasure: (time: number) => void;
   triggerRerender: boolean;
   practiceModeConfig: PracticeModeConfig | null;
-  onPracticeMeasureSelect: (measureStartMs: number) => void;
-  practiceModeStep: 'idle' | 'selectingStart' | 'selectingEnd';
+  onPracticeMeasureSelect: (measureIndex: number) => void;
+  selectionIndex: number | null;
   audioManagerRef: RefObject<any>;
 }) {
   const vexflowContainerRef = useRef<HTMLDivElement>(null!);
@@ -145,6 +145,7 @@ export default function SheetMusic({
       isPracticeStart =
         Math.abs(measure.startMs - practiceModeConfig.startMeasureMs) < 100; // Within 100ms
       isPracticeEnd =
+        (selectionIndex == null || selectionIndex === -1) &&
         Math.abs(measure.endMs - practiceModeConfig.endMeasureMs) < 100; // Within 100ms
     }
 
@@ -165,16 +166,12 @@ export default function SheetMusic({
           practiceModeConfig !== null && practiceModeConfig.endMeasureMs > 0
         }
         onClick={() => {
-          if (practiceModeStep === 'selectingStart') {
-            // For start measure, use the start time
-            onPracticeMeasureSelect(measure.startMs);
-          } else if (practiceModeStep === 'selectingEnd') {
-            // For end measure, use the end time
-            onPracticeMeasureSelect(measure.endMs);
-          } else {
-            // Normal mode - start playing at the measure
-            onSelectMeasure(measure.startMs / 1000);
+          if (selectionIndex !== null) {
+            onPracticeMeasureSelect(index);
+            return;
           }
+          // Normal mode - start playing at the measure
+          onSelectMeasure(measure.startMs / 1000);
         }}
       />
     );
