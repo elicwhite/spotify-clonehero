@@ -1,87 +1,25 @@
 'use client';
 
-import {useState, useEffect} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import {Loader2, User, Clock, Check} from 'lucide-react';
 import {Icons} from '@/components/icons';
 
-interface Playlist {
+export type LoaderPlaylist = {
   id: string;
   name: string;
-  creator: string;
   totalSongs: number;
   scannedSongs: number;
   isScanning: boolean;
+  creator?: string;
   coverUrl?: string;
-}
+};
 
-// Mock data for demonstration
-const mockPlaylists: Playlist[] = [
-  {
-    id: '1',
-    name: 'Discover Weekly',
-    creator: 'Spotify',
-    totalSongs: 30,
-    scannedSongs: 18,
-    isScanning: true,
-  },
-  {
-    id: '2',
-    name: 'My Liked Songs',
-    creator: 'You',
-    totalSongs: 247,
-    scannedSongs: 247,
-    isScanning: false,
-  },
-  {
-    id: '3',
-    name: 'Road Trip Vibes',
-    creator: 'You',
-    totalSongs: 45,
-    scannedSongs: 32,
-    isScanning: true,
-  },
-  {
-    id: '4',
-    name: 'Release Radar',
-    creator: 'Spotify',
-    totalSongs: 30,
-    scannedSongs: 30,
-    isScanning: false,
-  },
-  {
-    id: '5',
-    name: 'Chill Indie Folk',
-    creator: 'You',
-    totalSongs: 89,
-    scannedSongs: 12,
-    isScanning: true,
-  },
-  {
-    id: '6',
-    name: 'Daily Mix 1',
-    creator: 'Spotify',
-    totalSongs: 50,
-    scannedSongs: 50,
-    isScanning: false,
-  },
-  {
-    id: '7',
-    name: 'Workout Hits',
-    creator: 'You',
-    totalSongs: 67,
-    scannedSongs: 45,
-    isScanning: true,
-  },
-  {
-    id: '8',
-    name: 'Jazz Classics',
-    creator: 'You',
-    totalSongs: 156,
-    scannedSongs: 156,
-    isScanning: false,
-  },
-];
+type Props = {
+  playlists: LoaderPlaylist[];
+  rateLimitCountdown?: number;
+  title?: string;
+};
 
 const CircularProgress = ({
   value,
@@ -137,76 +75,43 @@ const CircularProgress = ({
   );
 };
 
-export default function SpotifyLoaderCard() {
-  const [playlists, setPlaylists] = useState<Playlist[]>(mockPlaylists);
-  const [isRateLimited, setIsRateLimited] = useState(false);
-  const [rateLimitCountdown, setRateLimitCountdown] = useState(0);
+export default function SpotifyLoaderCard({
+  playlists,
+  rateLimitCountdown,
+  title,
+}: Props) {
+  const isRateLimited = (rateLimitCountdown ?? 0) > 0;
+  const [countdown, setCountdown] = useState(rateLimitCountdown ?? 0);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setPlaylists(prev =>
-        prev.map(playlist => {
-          if (
-            playlist.isScanning &&
-            playlist.scannedSongs < playlist.totalSongs
-          ) {
-            const newScanned = Math.min(
-              playlist.scannedSongs + Math.floor(Math.random() * 3) + 1,
-              playlist.totalSongs,
-            );
-            return {
-              ...playlist,
-              scannedSongs: newScanned,
-              isScanning: newScanned < playlist.totalSongs,
-            };
-          }
-          return playlist;
-        }),
-      );
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, []);
+    setCountdown(rateLimitCountdown ?? 0);
+  }, [rateLimitCountdown]);
 
   useEffect(() => {
-    const rateLimitInterval = setInterval(() => {
-      if (Math.random() < 0.1 && !isRateLimited) {
-        setIsRateLimited(true);
-        setRateLimitCountdown(15);
-      }
-    }, 5000);
-
-    return () => clearInterval(rateLimitInterval);
-  }, [isRateLimited]);
-
-  useEffect(() => {
-    if (isRateLimited && rateLimitCountdown > 0) {
-      const countdownInterval = setInterval(() => {
-        setRateLimitCountdown(prev => {
-          if (prev <= 1) {
-            setIsRateLimited(false);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      return () => clearInterval(countdownInterval);
-    }
-  }, [isRateLimited, rateLimitCountdown]);
+    if (!isRateLimited || countdown <= 0) return;
+    const t = setInterval(() => {
+      setCountdown(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [isRateLimited, countdown]);
 
   const getProgressPercentage = (scanned: number, total: number) => {
+    if (total === 0) return 0;
     return Math.round((scanned / total) * 100);
   };
 
-  const fullyFetchedPlaylists = playlists.filter(
-    p => p.scannedSongs === p.totalSongs,
-  ).length;
+  const fullyFetchedPlaylists = useMemo(
+    () => playlists.filter(p => p.scannedSongs === p.totalSongs).length,
+    [playlists],
+  );
   const totalPlaylists = playlists.length;
-  const scanningPlaylists = playlists.filter(p => p.isScanning);
+  const scanningPlaylists = useMemo(
+    () => playlists.filter(p => p.isScanning),
+    [playlists],
+  );
 
   const totalRemainingSongs = scanningPlaylists.reduce(
-    (acc, p) => acc + (p.totalSongs - p.scannedSongs),
+    (acc, p) => acc + Math.max(0, p.totalSongs - p.scannedSongs),
     0,
   );
   const estimatedMinutesRemaining = Math.ceil(totalRemainingSongs / 10);
@@ -221,7 +126,7 @@ export default function SpotifyLoaderCard() {
         <CardHeader className="pb-4">
           <CardTitle className="text-2xl font-bold text-center flex items-center justify-center gap-2">
             <Icons.spotify className="h-6 w-6 text-primary" />
-            Inspecting Spotify Library
+            {title ?? 'Inspecting Spotify Library'}
           </CardTitle>
           <p className="text-muted-foreground text-center text-sm">
             Scanning your playlists for analysis...
@@ -252,7 +157,7 @@ export default function SpotifyLoaderCard() {
               <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
                 <Clock className="h-4 w-4" />
                 <span className="text-sm font-medium">
-                  Rate limited - continuing in {rateLimitCountdown} seconds
+                  Rate limited - continuing in {countdown} seconds
                 </span>
               </div>
             </div>
@@ -268,16 +173,18 @@ export default function SpotifyLoaderCard() {
                     <h3 className="font-medium text-sm truncate text-foreground">
                       {playlist.name}
                     </h3>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
-                      {playlist.creator === 'You' ? (
-                        <User className="h-3 w-3" />
-                      ) : (
-                        <div className="w-3 h-3 bg-primary rounded-full flex items-center justify-center">
-                          <div className="w-1.5 h-1.5 bg-primary-foreground rounded-full" />
-                        </div>
-                      )}
-                      {playlist.creator}
-                    </span>
+                    {playlist.creator && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
+                        {playlist.creator === 'You' ? (
+                          <User className="h-3 w-3" />
+                        ) : (
+                          <div className="w-3 h-3 bg-primary rounded-full flex items-center justify-center">
+                            <div className="w-1.5 h-1.5 bg-primary-foreground rounded-full" />
+                          </div>
+                        )}
+                        {playlist.creator}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 flex-shrink-0">

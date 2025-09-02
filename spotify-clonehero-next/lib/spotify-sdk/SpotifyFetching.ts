@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {RateLimitError, getSpotifySdk} from './ClientInstance';
 import {
   PlaylistedTrack,
@@ -24,6 +24,39 @@ export type TrackResult = {
   spotify_url: string;
 };
 
+export type PlaylistProgressStatus = 'pending' | 'fetching' | 'done' | 'error';
+
+export type PlaylistProgressItem = {
+  id: string;
+  name: string;
+  snapshotId: string;
+  total: number;
+  fetched: number;
+  status: PlaylistProgressStatus;
+  lastError?: string;
+};
+
+export type RateLimitState = {retryAfterSeconds: number} | null;
+
+const cacheUpdateListeners: Set<() => void> = new Set();
+
+export function onPlaylistCacheUpdated(listener: () => void): () => void {
+  cacheUpdateListeners.add(listener);
+  return () => {
+    cacheUpdateListeners.delete(listener);
+  };
+}
+
+function emitPlaylistCacheUpdated() {
+  cacheUpdateListeners.forEach(listener => {
+    try {
+      listener();
+    } catch (e) {
+      // ignore listener errors
+    }
+  });
+}
+
 async function getCachedPlaylistTracks(): Promise<CachePlaylistTracks> {
   const cachedPlaylistTracks = await get('playlistTracks');
   return cachedPlaylistTracks ?? {};
@@ -33,13 +66,16 @@ async function setCachedPlaylistTracks(
   cachedPlaylistTracks: CachePlaylistTracks,
 ) {
   await set('playlistTracks', cachedPlaylistTracks);
+  emitPlaylistCacheUpdated();
 }
 
 async function setCachedPlaylistNames(cachedPlaylistNames: CachePlaylistNames) {
   await set('playlistNames', cachedPlaylistNames);
 }
 
-async function getAllPlaylists(sdk: SpotifyApi): Promise<SimplifiedPlaylist[]> {
+export async function getAllPlaylists(
+  sdk: SpotifyApi,
+): Promise<SimplifiedPlaylist[]> {
   const playlists: SimplifiedPlaylist[] = [];
   const limit = 50;
   let offset = 0;
@@ -54,6 +90,65 @@ async function getAllPlaylists(sdk: SpotifyApi): Promise<SimplifiedPlaylist[]> {
   } while (total == null || offset < total);
 
   return playlists;
+}
+
+async function getAllPlaylistTracksWithProgress(
+  sdk: SpotifyApi,
+  playlistId: string,
+  onPage: (
+    pageTracks: TrackResult[],
+    pageIndex: number,
+  ) => Promise<void> | void,
+  onRateLimit?: (retryAfterSeconds: number) => void,
+  isCancelled?: () => boolean,
+  startingOffset: number = 0,
+): Promise<TrackResult[]> {
+  const tracks: TrackResult[] = [];
+  const limit = 50;
+  let offset = startingOffset;
+  let total: number | null = null;
+  let pageIndex = Math.floor(startingOffset / limit);
+
+  do {
+    if (isCancelled?.()) {
+      break;
+    }
+    try {
+      const items = await sdk.playlists.getPlaylistItems(
+        playlistId,
+        undefined,
+        'total,limit,items(track(type,artists(type,name),name,preview_url, external_urls(spotify)))',
+        limit,
+        offset,
+      );
+      if (total == null) {
+        total = items.total;
+      }
+      const filteredTracks = items.items
+        .filter(item => item.track?.type === 'track')
+        .map((item: PlaylistedTrack): TrackResult => {
+          return {
+            name: item.track.name,
+            artists: (item.track as Track).artists.map(artist => artist.name),
+            preview_url: (item.track as Track).preview_url,
+            spotify_url: (item.track as Track).external_urls.spotify,
+          };
+        });
+      tracks.push(...filteredTracks);
+      await onPage(filteredTracks, pageIndex++);
+      offset += limit;
+    } catch (error: any) {
+      if (error instanceof RateLimitError) {
+        const retry = Math.max(1, Math.ceil(error.retryAfter * 2));
+        onRateLimit?.(retry);
+        await new Promise(resolve => setTimeout(resolve, retry * 1000));
+        continue;
+      }
+      throw error;
+    }
+  } while (total == null || offset < total);
+
+  return tracks;
 }
 
 async function getAllPlaylistTracks(
@@ -190,6 +285,12 @@ export function useSpotifyTracks(): [
       setAllTracks(tracks);
     }
     calculate();
+    const unsubscribe = onPlaylistCacheUpdated(() => {
+      setForceUpdate(n => n + 1);
+    });
+    return () => {
+      unsubscribe();
+    };
   }, [forceUpdate]);
 
   const update = useCallback(async () => {
@@ -255,4 +356,251 @@ export function useSpotifyTracks(): [
   }, []);
 
   return [allTracks, update];
+}
+
+export function useSpotifyLibraryUpdate(): {
+  playlists: PlaylistProgressItem[];
+  isUpdating: boolean;
+  rateLimit: RateLimitState;
+  prepare: () => Promise<void>;
+  startUpdate: (options?: {
+    concurrency?: number;
+    forceRefresh?: boolean;
+  }) => Promise<void>;
+  cancel: () => void;
+} {
+  const [playlists, setPlaylists] = useState<PlaylistProgressItem[]>([]);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [rateLimit, setRateLimit] = useState<RateLimitState>(null);
+  const cancelledRef = useRef(false);
+
+  const prepare = useCallback(async () => {
+    const sdk = await getSpotifySdk();
+    if (sdk == null) {
+      return;
+    }
+    const lists = await getAllPlaylists(sdk);
+    const names = lists.reduce((acc: CachePlaylistNames, p) => {
+      acc[p.snapshot_id] = p.name;
+      return acc;
+    }, {} as CachePlaylistNames);
+    await setCachedPlaylistNames(names);
+
+    const cached = await getCachedPlaylistTracks();
+    const initial: PlaylistProgressItem[] = lists.map(p => {
+      const total = (p as any)?.tracks?.total ?? 0;
+      const fetched = cached[p.snapshot_id]?.length ?? 0;
+      const status: PlaylistProgressStatus =
+        fetched >= total && total > 0 ? 'done' : 'pending';
+      return {
+        id: p.id,
+        name: p.name,
+        snapshotId: p.snapshot_id,
+        total,
+        fetched,
+        status,
+      };
+    });
+    setPlaylists(initial);
+  }, []);
+
+  const startUpdate = useCallback(
+    async (options?: {concurrency?: number; forceRefresh?: boolean}) => {
+      const concurrency = options?.concurrency ?? 2;
+      const forceRefresh = options?.forceRefresh ?? false;
+      cancelledRef.current = false;
+      const sdk = await getSpotifySdk();
+      if (sdk == null) {
+        return;
+      }
+      setIsUpdating(true);
+
+      const cached = await getCachedPlaylistTracks();
+      const foundSnapshots: string[] = [];
+
+      const lists = await getAllPlaylists(sdk);
+
+      console.log(
+        '[Spotify] Integrity check starting for',
+        lists.length,
+        'playlists',
+      );
+      const integrity = {total: lists.length, complete: 0, resume: 0, fresh: 0};
+
+      await pMap(
+        lists,
+        async p => {
+          if (cancelledRef.current) return;
+          const snapshot = p.snapshot_id;
+          foundSnapshots.push(snapshot);
+          const alreadyCached = cached[snapshot];
+          const total = (p as any)?.tracks?.total ?? 0;
+          const cachedLen = alreadyCached?.length ?? 0;
+
+          // Integrity check & control flow
+          if (alreadyCached && !forceRefresh) {
+            if (total > 0 && cachedLen >= total) {
+              // Cache is complete: mark done and skip
+              setPlaylists(prev =>
+                prev.map(pl =>
+                  pl.snapshotId === snapshot
+                    ? {
+                        ...pl,
+                        total,
+                        fetched: cachedLen,
+                        status: 'done',
+                      }
+                    : pl,
+                ),
+              );
+              integrity.complete += 1;
+              return;
+            }
+
+            // Cache incomplete or total unknown: resume fetching from current length
+            setPlaylists(prev =>
+              prev.map(pl =>
+                pl.snapshotId === snapshot
+                  ? {
+                      ...pl,
+                      total,
+                      fetched: cachedLen,
+                      status: 'fetching',
+                    }
+                  : pl,
+              ),
+            );
+
+            if (total > 0 && cachedLen !== total) {
+              console.log(
+                '[Spotify] Playlist cache incomplete:',
+                p.name,
+                `${cachedLen}/${total}`,
+              );
+            }
+
+            try {
+              await getAllPlaylistTracksWithProgress(
+                sdk,
+                p.id,
+                async (pageTracks, _pageIndex) => {
+                  if (cancelledRef.current) return;
+                  const current = cached[snapshot] ?? [];
+                  cached[snapshot] = current.concat(pageTracks);
+                  await setCachedPlaylistTracks(cached);
+                  const fetched = cached[snapshot].length;
+                  setPlaylists(prev =>
+                    prev.map(pl =>
+                      pl.snapshotId === snapshot ? {...pl, fetched} : pl,
+                    ),
+                  );
+                },
+                retryAfterSeconds => setRateLimit({retryAfterSeconds}),
+                () => cancelledRef.current,
+                cachedLen,
+              );
+              setPlaylists(prev =>
+                prev.map(pl =>
+                  pl.snapshotId === snapshot ? {...pl, status: 'done'} : pl,
+                ),
+              );
+              setRateLimit(null);
+            } catch (e: any) {
+              console.error('Error resuming playlist', p.id, e);
+              setPlaylists(prev =>
+                prev.map(pl =>
+                  pl.snapshotId === snapshot
+                    ? {
+                        ...pl,
+                        status: 'error',
+                        lastError: String(e?.message ?? e),
+                      }
+                    : pl,
+                ),
+              );
+            }
+            integrity.resume += 1;
+            return;
+          }
+
+          // Fresh fetch (no cache or forceRefresh)
+          setPlaylists(prev =>
+            prev.map(pl =>
+              pl.snapshotId === snapshot ? {...pl, status: 'fetching'} : pl,
+            ),
+          );
+
+          if (forceRefresh || !alreadyCached) {
+            cached[snapshot] = [];
+            await setCachedPlaylistTracks(cached);
+          }
+
+          try {
+            await getAllPlaylistTracksWithProgress(
+              sdk,
+              p.id,
+              async (pageTracks, _pageIndex) => {
+                if (cancelledRef.current) return;
+                const current = cached[snapshot] ?? [];
+                cached[snapshot] = current.concat(pageTracks);
+                await setCachedPlaylistTracks(cached);
+                const fetched = cached[snapshot].length;
+                setPlaylists(prev =>
+                  prev.map(pl =>
+                    pl.snapshotId === snapshot ? {...pl, fetched} : pl,
+                  ),
+                );
+              },
+              retryAfterSeconds => setRateLimit({retryAfterSeconds}),
+              () => cancelledRef.current,
+              0,
+            );
+            setPlaylists(prev =>
+              prev.map(pl =>
+                pl.snapshotId === snapshot ? {...pl, status: 'done'} : pl,
+              ),
+            );
+            setRateLimit(null);
+          } catch (e: any) {
+            console.error('Error fetching playlist', p.id, e);
+            setPlaylists(prev =>
+              prev.map(pl =>
+                pl.snapshotId === snapshot
+                  ? {...pl, status: 'error', lastError: String(e?.message ?? e)}
+                  : pl,
+              ),
+            );
+          }
+          integrity.fresh += 1;
+        },
+        {concurrency},
+      );
+
+      console.log(
+        '[Spotify] Integrity check result:',
+        `total=${integrity.total}`,
+        `complete=${integrity.complete}`,
+        `resume=${integrity.resume}`,
+        `fresh=${integrity.fresh}`,
+      );
+
+      // Compact cache to only include found snapshots
+      const newCache = foundSnapshots.reduce(
+        (acc: {[snapshotId: string]: TrackResult[]}, snapshot: string) => {
+          acc[snapshot] = cached[snapshot];
+          return acc;
+        },
+        {},
+      );
+      await setCachedPlaylistTracks(newCache);
+      setIsUpdating(false);
+    },
+    [],
+  );
+
+  const cancel = useCallback(() => {
+    cancelledRef.current = true;
+  }, []);
+
+  return {playlists, isUpdating, rateLimit, prepare, startUpdate, cancel};
 }

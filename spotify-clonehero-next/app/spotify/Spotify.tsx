@@ -2,7 +2,10 @@
 
 import {createClient} from '@/lib/supabase/client';
 
-import {useSpotifyTracks} from '@/lib/spotify-sdk/SpotifyFetching';
+import {
+  useSpotifyTracks,
+  useSpotifyLibraryUpdate,
+} from '@/lib/spotify-sdk/SpotifyFetching';
 import {Button} from '@/components/ui/button';
 import {useCallback, useEffect, useState} from 'react';
 import {
@@ -33,6 +36,13 @@ import SupportedBrowserWarning from '../SupportedBrowserWarning';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import {Searcher} from 'fast-fuzzy';
 import {toast} from 'sonner';
+import SpotifyLoaderCard from './SpotifyLoaderCard';
+import dynamic from 'next/dynamic';
+import {useMemo} from 'react';
+
+const SpotifyLoaderMock = dynamic(() => import('./SpotifyLoaderMock'), {
+  ssr: false,
+});
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -167,11 +177,33 @@ function LoggedIn() {
 
   const [calculating, setCalculating] = useState(false);
 
+  const {playlists, isUpdating, rateLimit, prepare, startUpdate} =
+    useSpotifyLibraryUpdate();
+
+  useEffect(() => {
+    prepare();
+  }, [prepare]);
+
+  const [useMockLoader, setUseMockLoader] = useState(false);
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') {
+      setUseMockLoader(false);
+      return;
+    }
+    try {
+      const url = new URL(window.location.href);
+      const fromQuery = url.searchParams.get('mockLoader') === '1';
+      const fromStorage = localStorage.getItem('spotifyLoaderMock') === '1';
+      setUseMockLoader(Boolean(fromQuery || fromStorage));
+    } catch {}
+  }, []);
+
   const calculate = useCallback(async () => {
     const fetchDb = chorusChartDb();
 
     setCalculating(true);
-    const updatePromise = update();
+    const updatePromise = startUpdate({concurrency: 2});
+    setStatus(prev => ({...prev, status: 'fetching-spotify-data'}));
     let installedCharts: SongAccumulator[] | undefined;
 
     try {
@@ -267,6 +299,24 @@ function LoggedIn() {
 
   return (
     <>
+      {useMockLoader ? (
+        <SpotifyLoaderMock />
+      ) : (
+        <SpotifyLoaderCard
+          playlists={useMemo(
+            () =>
+              playlists.map(p => ({
+                id: p.id,
+                name: p.name,
+                totalSongs: p.total,
+                scannedSongs: p.fetched,
+                isScanning: p.status === 'fetching',
+              })),
+            [playlists],
+          )}
+          rateLimitCountdown={rateLimit?.retryAfterSeconds ?? 0}
+        />
+      )}
       <div className="flex justify-center">
         {renderStatus(status, calculate)}
       </div>
