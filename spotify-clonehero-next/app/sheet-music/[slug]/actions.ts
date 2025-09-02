@@ -85,6 +85,17 @@ export async function savePracticeSection(
   const ensured = await ensureSongExists(supabase, hash);
   if (!ensured.ok) return ensured;
 
+  // Ensure the song is favorited for this user as well
+  const {error: favErr} = await supabase.from('user_saved_songs').upsert(
+    {
+      user_id: user.id,
+      song_hash: hash,
+      difficulty: 'expert',
+    },
+    {onConflict: 'user_id,song_hash'},
+  );
+  if (favErr) return {ok: false, error: favErr.message};
+
   const {error} = await supabase.from('user_saved_song_spans').insert({
     user_id: user.id,
     song_hash: hash,
@@ -112,4 +123,22 @@ export async function getPracticeSections(hash: string) {
 
   if (error) return {ok: false, sections: [], error: error.message};
   return {ok: true, sections: data ?? []};
+}
+
+export async function deletePracticeSection(id: string) {
+  const supabase = await createClient();
+  const {data: userRes} = await supabase.auth.getUser();
+  const user = userRes?.user;
+  if (!user) {
+    return {ok: false, error: 'Unauthorized'};
+  }
+
+  const {error} = await supabase
+    .from('user_saved_song_spans')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id);
+
+  if (error) return {ok: false, error: error.message};
+  return {ok: true};
 }

@@ -32,6 +32,7 @@ import {
   Minus,
   RotateCcw,
   Star,
+  Trash2,
 } from 'lucide-react';
 import {
   useCallback,
@@ -69,6 +70,7 @@ import {
   saveSongByHash,
   savePracticeSection,
   getPracticeSections,
+  deletePracticeSection,
 } from './actions';
 
 function getDrumDifficulties(chart: ParsedChart): Difficulty[] {
@@ -1036,13 +1038,41 @@ export default function Renderer({
       {isAuthenticated && savedSections.length > 0 && (
         <div className="space-y-1">
           {savedSections.map(section => (
-            <Button
-              key={section.id}
-              variant="outline"
-              className="w-full text-xs"
-              onClick={() => loadSection(section)}>
-              {formatTimeMs(section.start_ms)} - {formatTimeMs(section.end_ms)}
-            </Button>
+            <div key={section.id} className="flex gap-1 items-center">
+              <Button
+                variant="outline"
+                className="flex-1 text-xs"
+                onClick={() => loadSection(section)}>
+                {formatTimeMs(section.start_ms)} -{' '}
+                {formatTimeMs(section.end_ms)}
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                // className="h-6 w-6"
+                onClick={async () => {
+                  const res = await deletePracticeSection(section.id);
+                  if (!res?.ok) {
+                    toast.error(res?.error ?? 'Failed to delete section');
+                    return;
+                  }
+                  const fresh = await getPracticeSections(metadata.md5);
+                  if (fresh?.ok) {
+                    setSavedSections(
+                      (fresh.sections ?? []).filter(
+                        s => s.start_ms != null && s.end_ms != null,
+                      ) as Array<{
+                        id: string;
+                        start_ms: number;
+                        end_ms: number;
+                      }>,
+                    );
+                    toast.success('Section deleted');
+                  }
+                }}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
           ))}
         </div>
       )}
