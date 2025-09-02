@@ -1,6 +1,7 @@
 'use client';
 
-import {useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useInView} from 'react-intersection-observer';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import {Loader2, User, Clock, Check} from 'lucide-react';
 import {Icons} from '@/components/icons';
@@ -19,6 +20,7 @@ type Props = {
   playlists: LoaderPlaylist[];
   rateLimitCountdown?: number;
   title?: string;
+  autoScroll?: boolean;
 };
 
 const CircularProgress = ({
@@ -79,9 +81,24 @@ export default function SpotifyLoaderCard({
   playlists,
   rateLimitCountdown,
   title,
+  autoScroll = true,
 }: Props) {
   const isRateLimited = (rateLimitCountdown ?? 0) > 0;
   const [countdown, setCountdown] = useState(rateLimitCountdown ?? 0);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<{[id: string]: HTMLDivElement | null}>({});
+  const prevFirstScanningId = useRef<string | null>(null);
+  const [inViewMap, setInViewMap] = useState<{[id: string]: boolean}>({});
+
+  const handleRowRef = useCallback((id: string, el: HTMLDivElement | null) => {
+    itemRefs.current[id] = el;
+  }, []);
+
+  const handleInViewChange = useCallback((id: string, inView: boolean) => {
+    setInViewMap(prev =>
+      prev[id] === inView ? prev : {...prev, [id]: inView},
+    );
+  }, []);
 
   useEffect(() => {
     setCountdown(rateLimitCountdown ?? 0);
@@ -119,6 +136,32 @@ export default function SpotifyLoaderCard({
     estimatedMinutesRemaining > 0
       ? `~${estimatedMinutesRemaining}m remaining`
       : 'Almost done!';
+
+  useEffect(() => {
+    // Find the first in-progress playlist
+    const firstScanning = playlists.find(p => p.isScanning) || null;
+    const currentId = firstScanning?.id ?? null;
+
+    if (!autoScroll) {
+      prevFirstScanningId.current = currentId;
+      return;
+    }
+
+    // Only act when the first in-progress changes (i.e., previous completed)
+    if (currentId === prevFirstScanningId.current) return;
+
+    prevFirstScanningId.current = currentId;
+    if (!currentId) return;
+
+    const container = containerRef.current;
+    const target = itemRefs.current[currentId];
+    if (!container || !target) return;
+
+    const isVisible = inViewMap[currentId];
+    if (!isVisible) {
+      target.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    }
+  }, [playlists]);
 
   return (
     <div className="bg-background flex items-center justify-center p-4">
@@ -163,52 +206,90 @@ export default function SpotifyLoaderCard({
             </div>
           )}
 
-          <div className="h-96 overflow-y-auto px-6 pb-6">
+          <div ref={containerRef} className="h-96 overflow-y-auto px-6 pb-6">
             <div className="space-y-2">
               {playlists.map(playlist => (
-                <div
+                <PlaylistRow
                   key={playlist.id}
-                  className="flex items-center gap-3 p-2 rounded-md border bg-card hover:bg-accent/5 transition-colors">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <h3 className="font-medium text-sm truncate text-foreground">
-                      {playlist.name}
-                    </h3>
-                    {playlist.creator && (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
-                        {playlist.creator === 'You' ? (
-                          <User className="h-3 w-3" />
-                        ) : (
-                          <div className="w-3 h-3 bg-primary rounded-full flex items-center justify-center">
-                            <div className="w-1.5 h-1.5 bg-primary-foreground rounded-full" />
-                          </div>
-                        )}
-                        {playlist.creator}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-xs text-muted-foreground">
-                      {playlist.scannedSongs} / {playlist.totalSongs}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <CircularProgress
-                        value={getProgressPercentage(
-                          playlist.scannedSongs,
-                          playlist.totalSongs,
-                        )}
-                      />
-                      {playlist.isScanning && (
-                        <Loader2 className="h-3 w-3 animate-spin text-accent" />
-                      )}
-                    </div>
-                  </div>
-                </div>
+                  playlist={playlist}
+                  onRef={handleRowRef}
+                  onInViewChange={handleInViewChange}
+                  root={containerRef.current}
+                />
               ))}
             </div>
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function PlaylistRow({
+  playlist,
+  onRef,
+  onInViewChange,
+  root,
+}: {
+  playlist: LoaderPlaylist;
+  onRef: (id: string, el: HTMLDivElement | null) => void;
+  onInViewChange: (id: string, inView: boolean) => void;
+  root: Element | null;
+}) {
+  const {ref, inView} = useInView({root, threshold: 0});
+
+  useEffect(() => {
+    onInViewChange(playlist.id, inView);
+  }, [inView, onInViewChange, playlist.id]);
+
+  const setRefs = useCallback(
+    (el: HTMLDivElement | null) => {
+      onRef(playlist.id, el);
+      // forward to intersection observer ref
+      (ref as (el: Element | null) => void)(el);
+    },
+    [onRef, playlist.id, ref],
+  );
+
+  return (
+    <div
+      ref={setRefs}
+      className="flex items-center gap-3 p-2 rounded-md border bg-card hover:bg-accent/5 transition-colors">
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        <h3 className="font-medium text-sm truncate text-foreground">
+          {playlist.name}
+        </h3>
+        {playlist.creator && (
+          <span className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
+            {playlist.creator === 'You' ? (
+              <User className="h-3 w-3" />
+            ) : (
+              <div className="w-3 h-3 bg-primary rounded-full flex items-center justify-center">
+                <div className="w-1.5 h-1.5 bg-primary-foreground rounded-full" />
+              </div>
+            )}
+            {playlist.creator}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <span className="text-xs text-muted-foreground">
+          {playlist.scannedSongs} / {playlist.totalSongs}
+        </span>
+        <div className="flex items-center gap-1">
+          <CircularProgress
+            value={Math.round(
+              (Math.min(playlist.scannedSongs, playlist.totalSongs) /
+                Math.max(1, playlist.totalSongs)) *
+                100,
+            )}
+          />
+          {playlist.isScanning && (
+            <Loader2 className="h-3 w-3 animate-spin text-accent" />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
