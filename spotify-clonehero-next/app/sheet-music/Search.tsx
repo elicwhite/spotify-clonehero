@@ -1,6 +1,7 @@
 'use client';
 
 import {useMemo, useEffect, useState, useCallback} from 'react';
+import {useInView} from 'react-intersection-observer';
 import {useRouter} from 'next/navigation';
 import {parseAsString, useQueryState} from 'nuqs';
 import {Search as SearchIcon, Guitar, Drum, Radio, Piano} from 'lucide-react';
@@ -81,8 +82,10 @@ import {getSheetMusicUrl} from '@/app/buildSheetMusicUrl';
 
 export default function Search({
   defaultResults,
+  initialQuery,
 }: {
   defaultResults: EncoreResponse;
+  initialQuery?: string;
 }) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useQueryState(
@@ -105,12 +108,20 @@ export default function Search({
 
   const [filteredSongs, setFilteredSongs] =
     useState<EncoreResponse>(defaultResults);
+  const [page, setPage] = useState<number>(1);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  const {ref: sentinelRef, inView} = useInView({
+    root: null,
+    rootMargin: '200px',
+    threshold: 0,
+  });
 
   const debouncedFilterSongs = useMemo(
     () =>
       debounce(async (query: string, instrument: undefined | null | string) => {
-        const results = await searchEncore(query, instrument);
+        const results = await searchEncore(query, instrument, 1);
         setFilteredSongs(results);
+        setPage(1);
       }, 500),
     [],
   );
@@ -128,8 +139,53 @@ export default function Search({
   };
 
   useEffect(() => {
-    searchSongs(searchQuery);
-  }, [searchQuery, searchSongs]);
+    // initialize query from server if provided
+    if (initialQuery && initialQuery !== searchQuery) {
+      setSearchQuery(initialQuery);
+      searchSongs(initialQuery);
+    } else {
+      searchSongs(searchQuery);
+    }
+  }, [searchQuery, searchSongs, initialQuery, setSearchQuery]);
+
+  const loadMore = useCallback(async () => {
+    if (isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const results = await searchEncore(
+        searchQuery,
+        instrumentFilter,
+        nextPage,
+      );
+      setFilteredSongs(prev => {
+        const prevData = prev?.data ?? [];
+        // Deduplicate across the combined list to be resilient to duplicate Appends or StrictMode
+        const combined = [...prevData, ...results.data];
+        const deduped = Array.from(
+          new Map(combined.map(chart => [chart.md5, chart])).values(),
+        );
+        return {
+          ...results,
+          data: deduped,
+          found: results.found,
+          out_of: results.out_of,
+        };
+      });
+      setPage(nextPage);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [page, searchQuery, instrumentFilter, isLoadingMore]);
+
+  // Infinite scroll: observe sentinel and load next page when visible
+  useEffect(() => {
+    if (!filteredSongs) return;
+    const hasMore = filteredSongs.data.length < filteredSongs.found;
+    if (hasMore && inView && !isLoadingMore) {
+      loadMore();
+    }
+  }, [filteredSongs, inView, isLoadingMore, loadMore]);
 
   return (
     <main className="min-h-screen bg-background w-full">
@@ -155,49 +211,6 @@ export default function Search({
                 onChange={handleSearch}
               />
             </div>
-
-            {/* <div className="flex flex-wrap gap-2">
-              <Button
-                variant={instrumentFilter === 'guitar' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => {
-                  toggleInstrumentFilter('guitar');
-                }}
-                className="flex items-center gap-2 text-xs sm:text-sm">
-                <Guitar className="h-3 w-3 sm:h-4 sm:w-4" />
-                Guitar
-              </Button>
-              <Button
-                variant={instrumentFilter === 'drums' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => {
-                  toggleInstrumentFilter('drums');
-                }}
-                className="flex items-center gap-2 text-xs sm:text-sm">
-                <Drum className="h-3 w-3 sm:h-4 sm:w-4" />
-                Drums
-              </Button>
-              <Button
-                variant={instrumentFilter === 'bass' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => {
-                  toggleInstrumentFilter('bass');
-                }}
-                className="flex items-center gap-2 text-xs sm:text-sm">
-                <Radio className="h-3 w-3 sm:h-4 sm:w-4" />
-                Bass
-              </Button>
-              <Button
-                variant={instrumentFilter === 'piano' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => {
-                  toggleInstrumentFilter('piano');
-                }}
-                className="flex items-center gap-2 text-xs sm:text-sm">
-                <Piano className="h-3 w-3 sm:h-4 sm:w-4" />
-                Piano
-              </Button>
-            </div> */}
           </div>
         </header>
 
@@ -214,48 +227,51 @@ export default function Search({
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {filteredSongs &&
-                filteredSongs.data.map(song => (
-                  <Link
-                    href="/sheet-music/[slug]"
-                    as={getSheetMusicUrl(song.artist, song.name, song.md5)}
-                    key={song.md5}
-                    className="flex items-stretch bg-card rounded-lg border border-border hover:bg-accent transition-colors cursor-pointer overflow-hidden">
-                    <div className="flex-shrink-0">
-                      <img
-                        src={`https://files.enchor.us/${song.albumArtMd5}.jpg`}
-                        alt={`${song.name} album art`}
-                        width={160}
-                        height={160}
-                        className="h-full w-[96px] sm:w-[120px] lg:w-[160px] object-cover"
-                      />
-                    </div>
-
-                    <div className="flex flex-col flex-grow p-3">
-                      <div className="flex-grow">
-                        <h3 className="text-sm sm:text-base lg:text-lg font-bold">
-                          {song.name}{' '}
-                          <span className="text-muted-foreground">by</span>{' '}
-                          {song.artist}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          charted by {song.charter}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-1 sm:gap-2 mt-1 sm:mt-2">
-                        <ChartInstruments
-                          size="md"
-                          classNames="h-5 w-5 sm:h-6 sm:w-6 lg:h-7 lg:w-7"
-                          instruments={preFilterInstruments(song)}
+            <>
+              <div className="space-y-2">
+                {filteredSongs &&
+                  filteredSongs.data.map(song => (
+                    <Link
+                      href="/sheet-music/[slug]"
+                      as={getSheetMusicUrl(song.artist, song.name, song.md5)}
+                      key={song.md5}
+                      className="flex items-stretch bg-card rounded-lg border border-border hover:bg-accent transition-colors cursor-pointer overflow-hidden">
+                      <div className="flex-shrink-0">
+                        <img
+                          src={`https://files.enchor.us/${song.albumArtMd5}.jpg`}
+                          alt={`${song.name} album art`}
+                          width={160}
+                          height={160}
+                          className="h-full w-[96px] sm:w-[120px] lg:w-[160px] object-cover"
                         />
                       </div>
-                    </div>
 
-                    <Button className="hidden">View Sheet</Button>
-                  </Link>
-                ))}
-            </div>
+                      <div className="flex flex-col flex-grow p-3">
+                        <div className="flex-grow">
+                          <h3 className="text-sm sm:text-base lg:text-lg font-bold">
+                            {song.name}{' '}
+                            <span className="text-muted-foreground">by</span>{' '}
+                            {song.artist}
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            charted by {song.charter}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-1 sm:gap-2 mt-1 sm:mt-2">
+                          <ChartInstruments
+                            size="md"
+                            classNames="h-5 w-5 sm:h-6 sm:w-6 lg:h-7 lg:w-7"
+                            instruments={preFilterInstruments(song)}
+                          />
+                        </div>
+                      </div>
+
+                      <Button className="hidden">View Sheet</Button>
+                    </Link>
+                  ))}
+              </div>
+              <div ref={sentinelRef} className="h-8" />
+            </>
           )}
         </section>
       </div>

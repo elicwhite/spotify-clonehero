@@ -13,6 +13,6 @@ export default async function Page({
   const query = params.q ?? '';
   // const instrument = params.instrument ?? null;
   const instrument = 'drums';
-  const results = await searchEncore(query, instrument);
-  return <Search defaultResults={results} />;
+  const results = await searchEncore(query, instrument, 1);
+  return <Search defaultResults={results} initialQuery={query} />;
 }

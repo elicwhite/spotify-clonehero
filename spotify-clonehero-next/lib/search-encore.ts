@@ -12,6 +12,7 @@ export type EncoreResponse = {
 export async function searchEncore(
   search: string,
   instrument: undefined | null | string,
+  page: number = 1,
 ): Promise<EncoreResponse> {
   const response = await fetch('https://api.enchor.us/search', {
     headers: {
@@ -21,7 +22,7 @@ export async function searchEncore(
     },
     body: JSON.stringify({
       search: search,
-      page: 1,
+      page: page,
       instrument: instrument ?? null,
       difficulty: null,
       drumType: null,
