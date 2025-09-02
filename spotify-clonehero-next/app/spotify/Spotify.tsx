@@ -198,17 +198,25 @@ function LoggedIn() {
     } catch {}
   }, []);
 
-  const loaderPlaylists = useMemo(
-    () =>
-      playlists.map(p => ({
+  const loaderPlaylists = useMemo(() => {
+    return playlists.map(p => {
+      const owner = (p.ownerDisplayName || '').trim();
+      const creator = owner
+        ? owner.toLowerCase() === 'spotify'
+          ? 'Spotify'
+          : owner
+        : 'You';
+      return {
         id: p.id,
         name: p.name,
         totalSongs: p.total,
         scannedSongs: p.fetched,
         isScanning: p.status === 'fetching',
-      })),
-    [playlists],
-  );
+        creator,
+        isCollaborative: Boolean(p.collaborative),
+      };
+    });
+  }, [playlists]);
 
   const calculate = useCallback(async () => {
     const fetchDb = chorusChartDb();

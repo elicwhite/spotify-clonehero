@@ -3,7 +3,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useInView} from 'react-intersection-observer';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
-import {Loader2, User, Clock, Check} from 'lucide-react';
+import {Loader2, User, Users, Clock, Check} from 'lucide-react';
 import {Icons} from '@/components/icons';
 
 export type LoaderPlaylist = {
@@ -14,6 +14,7 @@ export type LoaderPlaylist = {
   isScanning: boolean;
   creator?: string;
   coverUrl?: string;
+  isCollaborative?: boolean;
 };
 
 type Props = {
@@ -113,7 +114,7 @@ export default function SpotifyLoaderCard({
   }, [isRateLimited, countdown]);
 
   const getProgressPercentage = (scanned: number, total: number) => {
-    if (total === 0) return 0;
+    if (total === 0) return 100;
     return Math.round((scanned / total) * 100);
   };
 
@@ -207,7 +208,7 @@ export default function SpotifyLoaderCard({
           )}
 
           <div ref={containerRef} className="h-96 overflow-y-auto px-6 pb-6">
-            <div className="space-y-2">
+            <div className="border rounded-lg bg-card overflow-hidden">
               {playlists.map(playlist => (
                 <PlaylistRow
                   key={playlist.id}
@@ -237,6 +238,13 @@ function PlaylistRow({
   root: Element | null;
 }) {
   const {ref, inView} = useInView({root, threshold: 0});
+  const getProgressPercentage = useCallback(
+    (scanned: number, total: number) => {
+      if (total === 0) return 100;
+      return Math.round((scanned / total) * 100);
+    },
+    [],
+  );
 
   useEffect(() => {
     onInViewChange(playlist.id, inView);
@@ -254,19 +262,17 @@ function PlaylistRow({
   return (
     <div
       ref={setRefs}
-      className="flex items-center gap-3 p-2 rounded-md border bg-card hover:bg-accent/5 transition-colors">
+      className="flex items-center gap-3 p-3 hover:bg-accent/5 transition-colors border-b">
       <div className="flex items-center gap-2 flex-1 min-w-0">
         <h3 className="font-medium text-sm truncate text-foreground">
           {playlist.name}
         </h3>
         {playlist.creator && (
           <span className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
-            {playlist.creator === 'You' ? (
-              <User className="h-3 w-3" />
+            {playlist.isCollaborative ? (
+              <Users className="h-3 w-3" />
             ) : (
-              <div className="w-3 h-3 bg-primary rounded-full flex items-center justify-center">
-                <div className="w-1.5 h-1.5 bg-primary-foreground rounded-full" />
-              </div>
+              <User className="h-3 w-3" />
             )}
             {playlist.creator}
           </span>
@@ -279,10 +285,9 @@ function PlaylistRow({
         </span>
         <div className="flex items-center gap-1">
           <CircularProgress
-            value={Math.round(
-              (Math.min(playlist.scannedSongs, playlist.totalSongs) /
-                Math.max(1, playlist.totalSongs)) *
-                100,
+            value={getProgressPercentage(
+              Math.min(playlist.scannedSongs, playlist.totalSongs),
+              playlist.totalSongs,
             )}
           />
           {playlist.isScanning && (

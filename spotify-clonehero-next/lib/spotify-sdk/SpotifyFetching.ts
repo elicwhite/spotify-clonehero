@@ -13,8 +13,16 @@ type CachePlaylistTracks = {
   [snapshotId: string]: TrackResult[];
 };
 
-type CachePlaylistNames = {
-  [snapshotId: string]: string;
+type CachePlaylistMetadata = {
+  [snapshotId: string]: {
+    name: string;
+    collaborative: boolean;
+    externalUrl?: string;
+    owner?: {
+      displayName?: string;
+      externalUrl?: string;
+    };
+  };
 };
 
 export type TrackResult = {
@@ -34,6 +42,8 @@ export type PlaylistProgressItem = {
   fetched: number;
   status: PlaylistProgressStatus;
   lastError?: string;
+  ownerDisplayName?: string;
+  collaborative?: boolean;
 };
 
 export type RateLimitState = {retryAfterSeconds: number} | null;
@@ -69,8 +79,15 @@ async function setCachedPlaylistTracks(
   emitPlaylistCacheUpdated();
 }
 
-async function setCachedPlaylistNames(cachedPlaylistNames: CachePlaylistNames) {
-  await set('playlistNames', cachedPlaylistNames);
+async function setCachedPlaylistMetadata(
+  cachedPlaylistMetadata: CachePlaylistMetadata,
+) {
+  await set('playlistMetadata', cachedPlaylistMetadata);
+}
+
+async function getCachedPlaylistMetadata(): Promise<CachePlaylistMetadata> {
+  const meta = await get('playlistMetadata');
+  return meta ?? {};
 }
 
 export async function getAllPlaylists(
@@ -302,15 +319,23 @@ export function useSpotifyTracks(): [
 
     const playlists = await getAllPlaylists(sdk);
     const playlistNames = playlists.reduce(
-      (acc: CachePlaylistNames, playlist) => {
+      (acc: CachePlaylistMetadata, playlist) => {
         const snapshot: string = playlist.snapshot_id;
-        acc[snapshot] = playlist.name;
+        acc[snapshot] = {
+          name: playlist.name,
+          collaborative: playlist.collaborative,
+          externalUrl: playlist.external_urls.spotify,
+          owner: {
+            displayName: playlist.owner.display_name,
+            externalUrl: playlist.owner.external_urls.spotify,
+          },
+        };
         return acc;
       },
       {},
     );
 
-    await setCachedPlaylistNames(playlistNames);
+    await setCachedPlaylistMetadata(playlistNames);
 
     const cachedPlaylistTracks = await getCachedPlaylistTracks();
     const cachedSnapshots = Object.keys(cachedPlaylistTracks);
@@ -373,6 +398,9 @@ export function useSpotifyLibraryUpdate(): {
   const [isUpdating, setIsUpdating] = useState(false);
   const [rateLimit, setRateLimit] = useState<RateLimitState>(null);
   const cancelledRef = useRef(false);
+  const [currentUserDisplayName, setCurrentUserDisplayName] = useState<
+    string | undefined
+  >(undefined);
 
   const prepare = useCallback(async () => {
     const sdk = await getSpotifySdk();
@@ -380,18 +408,39 @@ export function useSpotifyLibraryUpdate(): {
       return;
     }
     const lists = await getAllPlaylists(sdk);
-    const names = lists.reduce((acc: CachePlaylistNames, p) => {
-      acc[p.snapshot_id] = p.name;
+    const names = lists.reduce((acc: CachePlaylistMetadata, p) => {
+      const snapshot: string = p.snapshot_id;
+      acc[snapshot] = {
+        name: p.name,
+        collaborative: Boolean((p as any)?.collaborative),
+        externalUrl: (p as any)?.external_urls?.spotify,
+        owner: {
+          displayName: (p as any)?.owner?.display_name,
+          externalUrl: (p as any)?.owner?.external_urls?.spotify,
+        },
+      };
       return acc;
-    }, {} as CachePlaylistNames);
-    await setCachedPlaylistNames(names);
+    }, {} as CachePlaylistMetadata);
+    await setCachedPlaylistMetadata(names);
+
+    const me = await (async () => {
+      try {
+        const profile = await (sdk as any).currentUser.profile.me();
+        return profile?.display_name as string | undefined;
+      } catch {
+        return undefined;
+      }
+    })();
+    setCurrentUserDisplayName(me);
 
     const cached = await getCachedPlaylistTracks();
+    const cachedMeta = await getCachedPlaylistMetadata();
     const initial: PlaylistProgressItem[] = lists.map(p => {
       const total = (p as any)?.tracks?.total ?? 0;
       const fetched = cached[p.snapshot_id]?.length ?? 0;
       const status: PlaylistProgressStatus =
-        fetched >= total && total > 0 ? 'done' : 'pending';
+        total === 0 ? 'done' : fetched >= total ? 'done' : 'pending';
+      const meta = cachedMeta[p.snapshot_id];
       return {
         id: p.id,
         name: p.name,
@@ -399,6 +448,9 @@ export function useSpotifyLibraryUpdate(): {
         total,
         fetched,
         status,
+        collaborative: meta?.collaborative ?? (p as any)?.collaborative,
+        ownerDisplayName:
+          meta?.owner?.displayName ?? (p as any)?.owner?.display_name,
       };
     });
     setPlaylists(initial);
@@ -439,6 +491,23 @@ export function useSpotifyLibraryUpdate(): {
 
           // Integrity check & control flow
           if (alreadyCached && !forceRefresh) {
+            if (total === 0) {
+              // Nothing to fetch; mark complete immediately
+              setPlaylists(prev =>
+                prev.map(pl =>
+                  pl.snapshotId === snapshot
+                    ? {
+                        ...pl,
+                        total: 0,
+                        fetched: 0,
+                        status: 'done',
+                      }
+                    : pl,
+                ),
+              );
+              integrity.complete += 1;
+              return;
+            }
             if (total > 0 && cachedLen >= total) {
               // Cache is complete: mark done and skip
               setPlaylists(prev =>
@@ -537,6 +606,19 @@ export function useSpotifyLibraryUpdate(): {
               pl.snapshotId === snapshot ? {...pl, status: 'fetching'} : pl,
             ),
           );
+
+          if (total === 0) {
+            // Nothing to fetch
+            setPlaylists(prev =>
+              prev.map(pl =>
+                pl.snapshotId === snapshot
+                  ? {...pl, total: 0, fetched: 0, status: 'done'}
+                  : pl,
+              ),
+            );
+            integrity.complete += 1;
+            return;
+          }
 
           if (forceRefresh || !alreadyCached) {
             cached[snapshot] = [];
