@@ -3,8 +3,15 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useInView} from 'react-intersection-observer';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
-import {Loader2, User, Users, Clock, Check} from 'lucide-react';
+import {Loader2, User, Users, Clock, Check, Info} from 'lucide-react';
 import {Icons} from '@/components/icons';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {MAX_PLAYLIST_TRACKS_TO_FETCH} from '@/lib/spotify-sdk/SpotifyFetching';
 
 export type LoaderPlaylist = {
   id: string;
@@ -280,18 +287,40 @@ function PlaylistRow({
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
-        <span className="text-xs text-muted-foreground">
-          {playlist.scannedSongs} / {playlist.totalSongs}
-        </span>
+        {playlist.totalSongs > MAX_PLAYLIST_TRACKS_TO_FETCH ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-xs text-muted-foreground underline decoration-dotted cursor-default">
+                  Skipping Playlist. Too long.
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                Skipping playlists with over {MAX_PLAYLIST_TRACKS_TO_FETCH}{' '}
+                songs. Has {playlist.totalSongs} songs
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            {playlist.scannedSongs} / {playlist.totalSongs}
+          </span>
+        )}
         <div className="flex items-center gap-1">
-          <CircularProgress
-            value={getProgressPercentage(
-              Math.min(playlist.scannedSongs, playlist.totalSongs),
-              playlist.totalSongs,
-            )}
-          />
-          {playlist.isScanning && (
-            <Loader2 className="h-3 w-3 animate-spin text-accent" />
+          {playlist.totalSongs > MAX_PLAYLIST_TRACKS_TO_FETCH ? (
+            <Info className="h-3 w-3 text-muted-foreground" />
+          ) : (
+            <>
+              <CircularProgress
+                value={getProgressPercentage(
+                  Math.min(playlist.scannedSongs, playlist.totalSongs),
+                  playlist.totalSongs,
+                )}
+              />
+              {playlist.isScanning && (
+                <Loader2 className="h-3 w-3 animate-spin text-accent" />
+              )}
+            </>
           )}
         </div>
       </div>

@@ -9,6 +9,9 @@ import {
 import pMap from 'p-map';
 import {get, set} from 'idb-keyval';
 
+// Configurable threshold for maximum playlist size to fetch in detail
+export const MAX_PLAYLIST_TRACKS_TO_FETCH = 5000;
+
 type CachePlaylistTracks = {
   [snapshotId: string]: TrackResult[];
 };
@@ -32,7 +35,12 @@ export type TrackResult = {
   spotify_url: string;
 };
 
-export type PlaylistProgressStatus = 'pending' | 'fetching' | 'done' | 'error';
+export type PlaylistProgressStatus =
+  | 'pending'
+  | 'fetching'
+  | 'done'
+  | 'error'
+  | 'skipped';
 
 export type PlaylistProgressItem = {
   id: string;
@@ -412,11 +420,11 @@ export function useSpotifyLibraryUpdate(): {
       const snapshot: string = p.snapshot_id;
       acc[snapshot] = {
         name: p.name,
-        collaborative: Boolean((p as any)?.collaborative),
-        externalUrl: (p as any)?.external_urls?.spotify,
+        collaborative: p?.collaborative,
+        externalUrl: p?.external_urls?.spotify,
         owner: {
-          displayName: (p as any)?.owner?.display_name,
-          externalUrl: (p as any)?.owner?.external_urls?.spotify,
+          displayName: p?.owner?.display_name,
+          externalUrl: p?.owner?.external_urls?.spotify,
         },
       };
       return acc;
@@ -425,7 +433,7 @@ export function useSpotifyLibraryUpdate(): {
 
     const me = await (async () => {
       try {
-        const profile = await (sdk as any).currentUser.profile.me();
+        const profile = await sdk.currentUser.profile();
         return profile?.display_name as string | undefined;
       } catch {
         return undefined;
@@ -436,10 +444,16 @@ export function useSpotifyLibraryUpdate(): {
     const cached = await getCachedPlaylistTracks();
     const cachedMeta = await getCachedPlaylistMetadata();
     const initial: PlaylistProgressItem[] = lists.map(p => {
-      const total = (p as any)?.tracks?.total ?? 0;
+      const total = p?.tracks?.total ?? 0;
       const fetched = cached[p.snapshot_id]?.length ?? 0;
       const status: PlaylistProgressStatus =
-        total === 0 ? 'done' : fetched >= total ? 'done' : 'pending';
+        total > MAX_PLAYLIST_TRACKS_TO_FETCH
+          ? 'skipped'
+          : total === 0
+            ? 'done'
+            : fetched >= total
+              ? 'done'
+              : 'pending';
       const meta = cachedMeta[p.snapshot_id];
       return {
         id: p.id,
@@ -448,9 +462,8 @@ export function useSpotifyLibraryUpdate(): {
         total,
         fetched,
         status,
-        collaborative: meta?.collaborative ?? (p as any)?.collaborative,
-        ownerDisplayName:
-          meta?.owner?.displayName ?? (p as any)?.owner?.display_name,
+        collaborative: meta?.collaborative ?? p?.collaborative,
+        ownerDisplayName: meta?.owner?.displayName ?? p?.owner?.display_name,
       };
     });
     setPlaylists(initial);
@@ -486,11 +499,28 @@ export function useSpotifyLibraryUpdate(): {
           const snapshot = p.snapshot_id;
           foundSnapshots.push(snapshot);
           const alreadyCached = cached[snapshot];
-          const total = (p as any)?.tracks?.total ?? 0;
+          const total = p?.tracks?.total ?? 0;
           const cachedLen = alreadyCached?.length ?? 0;
 
           // Integrity check & control flow
           if (alreadyCached && !forceRefresh) {
+            if (total > MAX_PLAYLIST_TRACKS_TO_FETCH) {
+              // Skip long playlists
+              setPlaylists(prev =>
+                prev.map(pl =>
+                  pl.snapshotId === snapshot
+                    ? {
+                        ...pl,
+                        total,
+                        fetched: 0,
+                        status: 'skipped',
+                      }
+                    : pl,
+                ),
+              );
+              integrity.complete += 1;
+              return;
+            }
             if (total === 0) {
               // Nothing to fetch; mark complete immediately
               setPlaylists(prev =>
@@ -606,6 +636,18 @@ export function useSpotifyLibraryUpdate(): {
               pl.snapshotId === snapshot ? {...pl, status: 'fetching'} : pl,
             ),
           );
+
+          if (total > MAX_PLAYLIST_TRACKS_TO_FETCH) {
+            setPlaylists(prev =>
+              prev.map(pl =>
+                pl.snapshotId === snapshot
+                  ? {...pl, total, fetched: 0, status: 'skipped'}
+                  : pl,
+              ),
+            );
+            integrity.complete += 1;
+            return;
+          }
 
           if (total === 0) {
             // Nothing to fetch
