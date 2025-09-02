@@ -160,7 +160,7 @@ export default function SpotifyLoaderCard({
 
     const isVisible = inViewMap[currentId];
     if (!isVisible) {
-      target.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+      target.scrollIntoView({behavior: 'smooth', block: 'center'});
     }
   }, [playlists]);
 
