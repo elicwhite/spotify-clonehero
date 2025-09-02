@@ -178,7 +178,7 @@ function LoggedIn() {
 
   const [calculating, setCalculating] = useState(false);
 
-  const {playlists, isUpdating, rateLimit, prepare, startUpdate} =
+  const {playlists, isUpdating, rateLimit, prepare, startUpdate, albums} =
     useSpotifyLibraryUpdate();
 
   useEffect(() => {
@@ -326,6 +326,7 @@ function LoggedIn() {
         <SpotifyLoaderCard
           playlists={loaderPlaylists}
           rateLimitCountdown={rateLimit?.retryAfterSeconds ?? 0}
+          albums={albums}
         />
       )}
       {(status.status === 'scanning' || status.status === 'done-scanning') && (

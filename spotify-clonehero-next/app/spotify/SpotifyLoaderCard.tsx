@@ -3,7 +3,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useInView} from 'react-intersection-observer';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
-import {Loader2, User, Users, Clock, Check, Info} from 'lucide-react';
+import {Loader2, User, Users, Clock, Check, Info, Disc3} from 'lucide-react';
 import {Icons} from '@/components/icons';
 import {
   Tooltip,
@@ -11,7 +11,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import {MAX_PLAYLIST_TRACKS_TO_FETCH} from '@/lib/spotify-sdk/SpotifyFetching';
+import {
+  MAX_PLAYLIST_TRACKS_TO_FETCH,
+  type SavedAlbumItem,
+} from '@/lib/spotify-sdk/SpotifyFetching';
 
 export type LoaderPlaylist = {
   id: string;
@@ -22,6 +25,7 @@ export type LoaderPlaylist = {
   creator?: string;
   coverUrl?: string;
   isCollaborative?: boolean;
+  isAlbum?: boolean;
 };
 
 type Props = {
@@ -29,6 +33,7 @@ type Props = {
   rateLimitCountdown?: number;
   title?: string;
   autoScroll?: boolean;
+  albums?: SavedAlbumItem[];
 };
 
 const CircularProgress = ({
@@ -90,6 +95,7 @@ export default function SpotifyLoaderCard({
   rateLimitCountdown,
   title,
   autoScroll = true,
+  albums,
 }: Props) {
   const isRateLimited = (rateLimitCountdown ?? 0) > 0;
   const [countdown, setCountdown] = useState(rateLimitCountdown ?? 0);
@@ -125,14 +131,27 @@ export default function SpotifyLoaderCard({
     return Math.round((scanned / total) * 100);
   };
 
+  const allItems = useMemo(() => {
+    const albumAsPlaylists: LoaderPlaylist[] = (albums ?? []).map(a => ({
+      id: a.id,
+      name: a.name,
+      totalSongs: a.totalTracks ?? 0,
+      scannedSongs: a.fetched ?? 0,
+      isScanning: a.status === 'fetching',
+      creator: a.artistName,
+      isAlbum: true,
+    }));
+    return [...playlists, ...albumAsPlaylists];
+  }, [playlists, albums]);
+
   const fullyFetchedPlaylists = useMemo(
-    () => playlists.filter(p => p.scannedSongs === p.totalSongs).length,
-    [playlists],
+    () => allItems.filter(p => p.scannedSongs === p.totalSongs).length,
+    [allItems],
   );
-  const totalPlaylists = playlists.length;
+  const totalPlaylists = allItems.length;
   const scanningPlaylists = useMemo(
-    () => playlists.filter(p => p.isScanning),
-    [playlists],
+    () => allItems.filter(p => p.isScanning),
+    [allItems],
   );
 
   const totalRemainingSongs = scanningPlaylists.reduce(
@@ -216,7 +235,7 @@ export default function SpotifyLoaderCard({
 
           <div ref={containerRef} className="h-96 overflow-y-auto px-6 pb-6">
             <div className="border rounded-lg bg-card overflow-hidden">
-              {playlists.map(playlist => (
+              {allItems.map(playlist => (
                 <PlaylistRow
                   key={playlist.id}
                   playlist={playlist}
@@ -226,6 +245,7 @@ export default function SpotifyLoaderCard({
                 />
               ))}
             </div>
+            {/* Albums are merged into the same list above */}
           </div>
         </CardContent>
       </Card>
@@ -276,7 +296,9 @@ function PlaylistRow({
         </h3>
         {playlist.creator && (
           <span className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
-            {playlist.isCollaborative ? (
+            {playlist.isAlbum ? (
+              <Disc3 className="h-3 w-3" />
+            ) : playlist.isCollaborative ? (
               <Users className="h-3 w-3" />
             ) : (
               <User className="h-3 w-3" />
