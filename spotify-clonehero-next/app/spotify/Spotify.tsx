@@ -198,6 +198,18 @@ function LoggedIn() {
     } catch {}
   }, []);
 
+  const loaderPlaylists = useMemo(
+    () =>
+      playlists.map(p => ({
+        id: p.id,
+        name: p.name,
+        totalSongs: p.total,
+        scannedSongs: p.fetched,
+        isScanning: p.status === 'fetching',
+      })),
+    [playlists],
+  );
+
   const calculate = useCallback(async () => {
     const fetchDb = chorusChartDb();
 
@@ -303,17 +315,7 @@ function LoggedIn() {
         <SpotifyLoaderMock />
       ) : (
         <SpotifyLoaderCard
-          playlists={useMemo(
-            () =>
-              playlists.map(p => ({
-                id: p.id,
-                name: p.name,
-                totalSongs: p.total,
-                scannedSongs: p.fetched,
-                isScanning: p.status === 'fetching',
-              })),
-            [playlists],
-          )}
+          playlists={loaderPlaylists}
           rateLimitCountdown={rateLimit?.retryAfterSeconds ?? 0}
         />
       )}
