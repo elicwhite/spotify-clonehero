@@ -248,7 +248,8 @@ async function getAllAlbumTracks(
   do {
     try {
       // @ts-ignore albums.tracks not in typed surface
-      const page = await sdk.albums.tracks(albumId, limit, offset);
+      const market = undefined;
+      const page = await sdk.albums.tracks(albumId, market, limit, offset);
       if (total == null) total = page.total;
       const mapped: TrackResult[] = page.items.map((t: any) => ({
         name: t.name,
