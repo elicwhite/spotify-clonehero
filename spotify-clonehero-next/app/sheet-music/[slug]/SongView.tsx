@@ -333,6 +333,10 @@ export default function Renderer({
       setPracticeMode(config);
       setSelectionIndex(null);
       audioManagerRef.current?.setPracticeMode(config);
+      if (audioManagerRef.current) {
+        audioManagerRef.current.play({time: config.startTimeMs / 1000});
+        setIsPlaying(true);
+      }
     },
     [],
   );
@@ -578,9 +582,20 @@ export default function Renderer({
     clickVolumes,
     playClickTrack,
     masterClickVolume,
-    practiceMode,
     settingsLoaded,
   ]);
+
+  // Apply practice mode changes to the existing audio manager without recreating it
+  useEffect(() => {
+    if (!audioManagerRef.current) return;
+    if (
+      selectionIndex == null &&
+      practiceMode?.endTimeMs != null &&
+      practiceMode?.endTimeMs > 0
+    ) {
+      audioManagerRef.current.setPracticeMode(practiceMode);
+    }
+  }, [practiceMode]);
 
   useInterval(
     () => {
@@ -764,12 +779,6 @@ export default function Renderer({
   // Practice mode functions
   const startPracticeMode = useCallback(() => {
     setSelectionIndex(-1);
-    setPracticeMode({
-      startMeasureMs: 0,
-      endMeasureMs: 0,
-      startTimeMs: 0,
-      endTimeMs: 0,
-    });
     toast.info('Choose the starting measure');
   }, []);
 
@@ -1015,9 +1024,15 @@ export default function Renderer({
             : 'default'
         }
         className="w-full"
-        onClick={practiceModeEnabled ? endPracticeMode : startPracticeMode}>
+        onClick={
+          practiceModeEnabled || selectionIndex !== null
+            ? endPracticeMode
+            : startPracticeMode
+        }>
         <Target className="h-4 w-4 mr-2" />
-        {practiceModeEnabled ? 'End Practice' : 'Practice'}
+        {practiceModeEnabled || selectionIndex !== null
+          ? 'End Practice'
+          : 'Practice'}
       </Button>
       {practiceModeEnabled && practiceMode && (
         <>

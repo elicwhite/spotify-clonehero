@@ -409,10 +409,10 @@ function renderMeasure(
 
   // Check if this measure should be muted for practice mode
   let shouldMute = false;
-  if (practiceModeConfig?.startTimeMs && practiceModeConfig?.endTimeMs) {
+  if (practiceModeConfig != null && practiceModeConfig.endTimeMs > 0) {
     const isInPracticeRange =
-      measure.startMs >= practiceModeConfig.startMeasureMs &&
-      measure.endMs <= practiceModeConfig.endMeasureMs;
+      measure.startMs >= practiceModeConfig.startMeasureMs - 1 &&
+      measure.endMs <= practiceModeConfig.endMeasureMs + 1;
     shouldMute = !isInPracticeRange;
   }
 
