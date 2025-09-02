@@ -145,7 +145,12 @@ export default function SpotifyLoaderCard({
   }, [playlists, albums]);
 
   const fullyFetchedPlaylists = useMemo(
-    () => allItems.filter(p => p.scannedSongs === p.totalSongs).length,
+    () =>
+      allItems.filter(
+        p =>
+          p.scannedSongs === p.totalSongs ||
+          (p.scannedSongs === 0 && !p.isScanning),
+      ).length,
     [allItems],
   );
   const totalPlaylists = allItems.length;
@@ -160,9 +165,11 @@ export default function SpotifyLoaderCard({
   );
   const estimatedMinutesRemaining = Math.ceil(totalRemainingSongs / 10);
   const timeRemainingText =
-    estimatedMinutesRemaining > 0
+    scanningPlaylists.length > 0 && estimatedMinutesRemaining > 0
       ? `~${estimatedMinutesRemaining}m remaining`
-      : 'Almost done!';
+      : scanningPlaylists.length > 0
+        ? 'Almost done!'
+        : 'Finished!';
 
   useEffect(() => {
     // Find the first in-progress playlist

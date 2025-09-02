@@ -50,12 +50,7 @@ export type TrackResult = {
   spotify_url: string;
 };
 
-export type PlaylistProgressStatus =
-  | 'pending'
-  | 'fetching'
-  | 'done'
-  | 'error'
-  | 'skipped';
+export type PlaylistProgressStatus = 'pending' | 'fetching' | 'done' | 'error';
 
 export type PlaylistProgressItem = {
   id: string;
@@ -564,7 +559,7 @@ export function useSpotifyLibraryUpdate(): {
       const fetched = cached[p.snapshot_id]?.length ?? 0;
       const status: PlaylistProgressStatus =
         total > MAX_PLAYLIST_TRACKS_TO_FETCH
-          ? 'skipped'
+          ? 'done'
           : total === 0
             ? 'done'
             : fetched >= total
@@ -657,7 +652,7 @@ export function useSpotifyLibraryUpdate(): {
                         ...pl,
                         total,
                         fetched: 0,
-                        status: 'skipped',
+                        status: 'done',
                       }
                     : pl,
                 ),
@@ -785,7 +780,7 @@ export function useSpotifyLibraryUpdate(): {
             setPlaylists(prev =>
               prev.map(pl =>
                 pl.snapshotId === snapshot
-                  ? {...pl, total, fetched: 0, status: 'skipped'}
+                  ? {...pl, total, fetched: 0, status: 'done'}
                   : pl,
               ),
             );
