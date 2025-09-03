@@ -1,7 +1,6 @@
 'use client';
 
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
-import {Loader2} from 'lucide-react';
 
 export default function LocalScanLoaderCard({
   count,
@@ -15,7 +14,6 @@ export default function LocalScanLoaderCard({
       <Card className="w-full max-w-2xl">
         <CardHeader className="pb-2">
           <CardTitle className="text-2xl font-bold text-center flex items-center justify-center gap-2">
-            {/* <Icons.spotify className="h-6 w-6 text-primary" /> */}
             Scanning Local Charts
           </CardTitle>
           <p className="text-muted-foreground text-center text-sm">

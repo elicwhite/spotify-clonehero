@@ -40,7 +40,7 @@ import SpotifyLoaderCard from './SpotifyLoaderCard';
 import LocalScanLoaderCard from './LocalScanLoaderCard';
 import dynamic from 'next/dynamic';
 import {useMemo} from 'react';
-import WelcomeCard from '../WelcomeCard';
+import {SupabaseClient, User} from '@supabase/supabase-js';
 
 const SpotifyLoaderMock = dynamic(() => import('./SpotifyLoaderMock'), {
   ssr: false,
@@ -51,17 +51,12 @@ const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
   Boolean(v);
 
 /* TODO:
-+ Add Spotify logos
-- Add progress messages for scanning
-- Make header prettier?
-+ Make table buttons match theme
 - List what Spotify Playlist the song is in
-- Make spotify logo light in dark mode
 */
 
 export default function Spotify() {
   const supabase = createClient();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [hasSpotify, setHasSpotify] = useState(false);
 
   useEffect(() => {
@@ -75,79 +70,19 @@ export default function Spotify() {
     })();
   }, [supabase]);
 
-  if (!user) {
+  if (!user || !hasSpotify) {
+    const needsToLink = user != null && !hasSpotify;
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Sign in with Spotify</CardTitle>
-          <CardDescription>
-            Sign in with your Spotify account for the tool to scan your
-            playlists and find matching charts on Chorus.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button
-            onClick={async () => {
-              const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/spotify')}`;
-              const {data, error} = await supabase.auth.signInWithOAuth({
-                provider: 'spotify',
-                options: {redirectTo: redirectUrl},
-              });
-              if (!error && data?.url) {
-                window.location.href = data.url;
-              }
-            }}
-            className="w-full">
-            <Icons.spotify className="h-4 w-4 mr-2" />
-            Login with Spotify
-          </Button>
-        </CardContent>
-      </Card>
+      <SignInWithSpotifyCard
+        supabaseClient={supabase}
+        needsToLink={needsToLink}
+      />
     );
   }
 
   return (
     <SupportedBrowserWarning>
       <div className="w-full">
-        <div className="flex flex-col items-end px-6">
-          <h3 className="text-xl">
-            All data provided by
-            <Image
-              src={spotifyLogoBlack}
-              sizes="8em"
-              className="inline dark:hidden px-2"
-              priority={true}
-              style={{
-                width: 'auto',
-                height: 'auto',
-              }}
-              alt="Spotify"
-            />
-            <Image
-              src={spotifyLogoWhite}
-              sizes="8em"
-              className="dark:inline px-2"
-              priority={true}
-              style={{
-                width: 'auto',
-                height: 'auto',
-              }}
-              alt="Spotify"
-            />
-          </h3>
-          {hasSpotify ? null : (
-            <Button
-              onClick={async () => {
-                const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/spotify')}`;
-                await supabase.auth.linkIdentity({
-                  provider: 'spotify',
-                  options: {redirectTo: redirectUrl},
-                });
-              }}>
-              Link Spotify
-            </Button>
-          )}
-        </div>
         <LoggedIn />
       </div>
     </SupportedBrowserWarning>
@@ -176,8 +111,6 @@ function LoggedIn() {
     status: 'not-started',
     songsCounted: 0,
   });
-
-  const [calculating, setCalculating] = useState(false);
 
   const {playlists, updateStatus, rateLimit, prepare, startUpdate, albums} =
     useSpotifyLibraryUpdate();
@@ -223,8 +156,6 @@ function LoggedIn() {
   const calculate = useCallback(async () => {
     const fetchDb = chorusChartDb();
 
-    setCalculating(true);
-    const updatePromise = startUpdate({concurrency: 2});
     setStatus(prev => ({...prev, status: 'fetching-spotify-data'}));
     let installedCharts: SongAccumulator[] | undefined;
 
@@ -316,7 +247,6 @@ function LoggedIn() {
       setSongs(recommendedCharts);
       console.log(recommendedCharts);
     }
-    setCalculating(false);
   }, [tracks, update]);
 
   return (
@@ -349,9 +279,7 @@ function LoggedIn() {
 function renderStatus(status: Status, scanHandler: () => void) {
   switch (status.status) {
     case 'not-started':
-      return (
-        <Button onClick={scanHandler}>Select Clone Hero Songs Folder</Button>
-      );
+      return <ScanLocalFoldersCTACard onClick={scanHandler} />;
     case 'scanning':
     case 'done-scanning':
       return null;
@@ -383,4 +311,97 @@ async function pause() {
   await new Promise(resolve => {
     setTimeout(resolve, 10);
   });
+}
+
+function SignInWithSpotifyCard({
+  supabaseClient,
+  needsToLink,
+}: {
+  needsToLink: boolean;
+  supabaseClient: SupabaseClient;
+}) {
+  return (
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader className="text-center">
+        <CardTitle>
+          Sign in with
+          <Image
+            src={spotifyLogoBlack}
+            sizes="8em"
+            className="inline dark:hidden px-2"
+            priority={true}
+            style={{
+              width: 'auto',
+              height: 'auto',
+            }}
+            alt="Spotify"
+          />
+          <Image
+            src={spotifyLogoWhite}
+            sizes="8em"
+            className="hidden dark:inline px-2"
+            priority={true}
+            style={{
+              width: 'auto',
+              height: 'auto',
+            }}
+            alt="Spotify"
+          />
+        </CardTitle>
+        <CardDescription>
+          Sign in with your Spotify account for the tool to scan your playlists
+          and find matching charts on Chorus.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Button
+          onClick={async () => {
+            const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/spotify')}`;
+
+            let result;
+            if (needsToLink) {
+              result = await supabaseClient.auth.linkIdentity({
+                provider: 'spotify',
+                options: {redirectTo: redirectUrl},
+              });
+            } else {
+              result = await supabaseClient.auth.signInWithOAuth({
+                provider: 'spotify',
+                options: {redirectTo: redirectUrl},
+              });
+            }
+
+            const {data, error} = result;
+
+            if (!error && data?.url) {
+              window.location.href = data.url;
+            }
+          }}
+          className="w-full">
+          <Icons.spotify className="h-4 w-4 mr-2" />
+          Login with Spotify
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ScanLocalFoldersCTACard({onClick}: {onClick: () => void}) {
+  return (
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader className="text-center">
+        <CardTitle>Select Local Songs Folder</CardTitle>
+        <CardDescription>
+          We scan your local songs folder to find installed charts, enabling you
+          to avoid downloading duplicate charts. Downloading a chart installs it
+          into this folder, no need to copy from Downloads!
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Button onClick={onClick} className="w-full">
+          Select Songs Folder
+        </Button>
+      </CardContent>
+    </Card>
+  );
 }
