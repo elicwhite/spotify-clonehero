@@ -105,6 +105,8 @@ export default function SpotifyLoaderCard({
   const itemRefs = useRef<{[id: string]: HTMLDivElement | null}>({});
   const prevFirstScanningId = useRef<string | null>(null);
   const [inViewMap, setInViewMap] = useState<{[id: string]: boolean}>({});
+  const [etaTick, setEtaTick] = useState(0);
+  const scanStartTimeRef = useRef<number | null>(null);
 
   const handleRowRef = useCallback((id: string, el: HTMLDivElement | null) => {
     itemRefs.current[id] = el;
@@ -127,11 +129,6 @@ export default function SpotifyLoaderCard({
     }, 1000);
     return () => clearInterval(t);
   }, [isRateLimited, countdown]);
-
-  const getProgressPercentage = (scanned: number, total: number) => {
-    if (total === 0) return 100;
-    return Math.round((scanned / total) * 100);
-  };
 
   const allItems = useMemo(() => {
     const albumAsPlaylists: LoaderPlaylist[] = (albums ?? []).map(a => ({
@@ -162,22 +159,87 @@ export default function SpotifyLoaderCard({
     [allItems],
   );
 
+  // Aggregate song counts for fresh scanning only (excluding cached songs and skipped playlists)
+  const {totalSongsToScan, totalSongsScannedFresh} = useMemo(() => {
+    return allItems.reduce(
+      (acc, playlist) => {
+        if (playlist.totalSongs > MAX_PLAYLIST_TRACKS_TO_FETCH) return acc;
+        
+        // Only count songs that need fresh scanning (total - already cached)
+        const songsToScan = Math.max(0, playlist.totalSongs - (playlist.scannedSongs || 0));
+        const songsScannedFresh = Math.max(0, playlist.scannedSongs - (playlist.scannedSongs || 0));
+        
+        acc.totalSongsToScan += songsToScan;
+        acc.totalSongsScannedFresh += songsScannedFresh;
+        return acc;
+      },
+      {totalSongsToScan: 0, totalSongsScannedFresh: 0},
+    );
+  }, [allItems]);
+
   const totalRemainingSongs = scanningPlaylists.reduce(
     (acc, p) => acc + Math.max(0, p.totalSongs - p.scannedSongs),
     0,
   );
-  const estimatedMinutesRemaining = Math.ceil(totalRemainingSongs / 10);
+  const estimatedSecondsRemainingHeuristic = Math.ceil(
+    (totalRemainingSongs / 10) * 60,
+  );
   const hasStarted = useMemo(
     () => allItems.some(p => p.isScanning || p.scannedSongs > 0),
     [allItems],
   );
+
+  // Helper function to format seconds into a pretty time string
+  const formatTimeRemaining = (seconds: number): string => {
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.ceil(seconds / 60)}m`;
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.ceil((seconds % 3600) / 60);
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  };
+
+  // Initialize scan start timestamp when scanning begins
+  useEffect(() => {
+    if (
+      (updateStatus === 'fetching' || hasStarted) &&
+      !scanStartTimeRef.current
+    ) {
+      scanStartTimeRef.current = Date.now();
+    }
+    if (updateStatus === 'complete') {
+      // keep the timestamp for now; could be reset if needed later
+    }
+  }, [updateStatus, hasStarted]);
+
+  // Tick periodically during fetching to refresh ETA calculations
+  useEffect(() => {
+    if (updateStatus !== 'fetching') return;
+    const interval = setInterval(() => setEtaTick(t => t + 1), 5000);
+    return () => clearInterval(interval);
+  }, [updateStatus]);
+
+  // Compute ETA using observed rate since scan started
+  const observedEtaSeconds = useMemo(() => {
+    if (!scanStartTimeRef.current) return null;
+    const elapsedMs = Date.now() - scanStartTimeRef.current;
+    const elapsedSeconds = elapsedMs / 1000;
+    const songsFound = totalScannedSongsInScope;
+    const totalSongs = totalSongsInScope;
+    const remaining = Math.max(0, totalSongs - songsFound);
+    if (elapsedSeconds <= 0 || songsFound <= 0) return null;
+    const ratePerSecond = songsFound / elapsedSeconds;
+    if (ratePerSecond <= 0) return null;
+    return Math.ceil(remaining / ratePerSecond);
+  }, [totalScannedSongsInScope, totalSongsInScope, etaTick]);
   const timeRemainingText = (() => {
     // Prefer explicit update status when provided
     if (updateStatus === 'idle') return 'Ready to scan';
     if (updateStatus === 'complete') return 'Finished!';
     if (updateStatus === 'fetching') {
-      if (scanningPlaylists.length > 0 && estimatedMinutesRemaining > 0) {
-        return `~${estimatedMinutesRemaining}m remaining`;
+      const etaSeconds =
+        observedEtaSeconds ?? estimatedSecondsRemainingHeuristic;
+      if (scanningPlaylists.length > 0 && etaSeconds > 0) {
+        return `~${formatTimeRemaining(etaSeconds)} remaining`;
       }
       if (scanningPlaylists.length > 0) return 'Almost done!';
       return 'Scanning...';
