@@ -24,7 +24,7 @@ import {Searcher} from 'fast-fuzzy';
 import {type ChartResponseEncore} from '@/lib/chartSelection';
 import {toast} from 'sonner';
 import {Icons} from '@/components/icons';
-import LocalScanLoaderCard from '../spotify/LocalScanLoaderCard';
+import LocalScanLoaderCard from '../spotify/app/LocalScanLoaderCard';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>

@@ -20,7 +20,7 @@ import chorusChartDb, {
 import SpotifyTableDownloader, {
   SpotifyChartData,
   SpotifyPlaysRecommendations,
-} from '../SpotifyTableDownloader';
+} from '../../SpotifyTableDownloader';
 import {
   Card,
   CardContent,
@@ -32,7 +32,7 @@ import {Icons} from '@/components/icons';
 import Image from 'next/image';
 import spotifyLogoBlack from '@/public/assets/spotify/logo_black.png';
 import spotifyLogoWhite from '@/public/assets/spotify/logo_white.png';
-import SupportedBrowserWarning from '../SupportedBrowserWarning';
+import SupportedBrowserWarning from '../../SupportedBrowserWarning';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import {Searcher} from 'fast-fuzzy';
 import {toast} from 'sonner';
@@ -40,6 +40,7 @@ import SpotifyLoaderCard from './SpotifyLoaderCard';
 import LocalScanLoaderCard from './LocalScanLoaderCard';
 import dynamic from 'next/dynamic';
 import {useMemo} from 'react';
+import WelcomeCard from '../WelcomeCard';
 
 const SpotifyLoaderMock = dynamic(() => import('./SpotifyLoaderMock'), {
   ssr: false,

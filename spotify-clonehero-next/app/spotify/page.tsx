@@ -1,9 +1,5 @@
-'use client';
-
-import dynamic from 'next/dynamic';
-
-const Spotify = dynamic(() => import('./Spotify'));
+import WelcomeCard from './WelcomeCard';
 
 export default function Page() {
-  return <Spotify />;
+  return <WelcomeCard />;
 }
