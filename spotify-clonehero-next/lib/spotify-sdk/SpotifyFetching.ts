@@ -386,10 +386,12 @@ export function useSpotifyTracks(): [
 
       const uniqueSongs = [
         ...Object.values(cachedPlaylistTracks)
-          .filter(
-            playlistTracks =>
-              playlistTracks.length < MAX_PLAYLIST_TRACKS_TO_FETCH,
-          )
+          .filter(playlistTracks => {
+            if (playlistTracks?.length == null) {
+              debugger;
+            }
+            return playlistTracks.length < MAX_PLAYLIST_TRACKS_TO_FETCH;
+          })
           .flat(),
         ...Object.values(cachedAlbumTracks).flat(),
       ].reduce((acc, track) => {
@@ -453,6 +455,10 @@ export function useSpotifyTracks(): [
 
         try {
           const playlistTracks = await getAllPlaylistTracks(sdk, playlist.id);
+          if (playlistTracks == null) {
+            console.error('Trying to cache null playlist tracks', playlist.id);
+            return [];
+          }
           cachedPlaylistTracks[playlist.snapshot_id] = playlistTracks;
           foundSnapshots.push(playlist.snapshot_id);
           await setCachedPlaylistTracks(cachedPlaylistTracks);
