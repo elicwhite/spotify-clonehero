@@ -284,11 +284,11 @@ function renderStatus(status: Status, scanHandler: () => void) {
     case 'done-scanning':
       return null;
     case 'fetching-spotify-data':
-      return 'Scanning your Spotify Library';
+      return <ProgressMessage message="Scanning your Spotify Library" />;
     case 'songs-from-encore':
-      return 'Downloading songs from Encore';
+      return <ProgressMessage message="Downloading songs from Encore" />;
     case 'finding-matches':
-      return 'Checking for song matches';
+      return <ProgressMessage message="Checking for song matches" />;
     case 'done':
       return <Button onClick={scanHandler}>Rescan</Button>;
   }
@@ -402,6 +402,16 @@ function ScanLocalFoldersCTACard({onClick}: {onClick: () => void}) {
           Select Songs Folder
         </Button>
       </CardContent>
+    </Card>
+  );
+}
+
+function ProgressMessage({message}: {message: string}) {
+  return (
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader className="text-center">
+        <CardTitle>{message}</CardTitle>
+      </CardHeader>
     </Card>
   );
 }
