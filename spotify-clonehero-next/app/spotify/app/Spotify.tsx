@@ -365,7 +365,7 @@ function SignInWithSpotifyCard({
       <CardContent className="space-y-4">
         <Button
           onClick={async () => {
-            const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/spotify')}`;
+            const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/spotify/app')}`;
 
             let result;
             if (needsToLink) {
