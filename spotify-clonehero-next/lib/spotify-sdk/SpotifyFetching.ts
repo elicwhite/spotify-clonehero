@@ -388,7 +388,7 @@ export function useSpotifyTracks(): [
         ...Object.values(cachedPlaylistTracks)
           .filter(playlistTracks => {
             if (playlistTracks?.length == null) {
-              debugger;
+              return false;
             }
             return playlistTracks.length < MAX_PLAYLIST_TRACKS_TO_FETCH;
           })

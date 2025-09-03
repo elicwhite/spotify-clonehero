@@ -107,6 +107,7 @@ export default function SpotifyLoaderCard({
   const [inViewMap, setInViewMap] = useState<{[id: string]: boolean}>({});
   const [etaTick, setEtaTick] = useState(0);
   const scanStartTimeRef = useRef<number | null>(null);
+  const initialCachedCountsRef = useRef<{[id: string]: number}>({});
 
   const handleRowRef = useCallback((id: string, el: HTMLDivElement | null) => {
     itemRefs.current[id] = el;
@@ -164,11 +165,19 @@ export default function SpotifyLoaderCard({
     return allItems.reduce(
       (acc, playlist) => {
         if (playlist.totalSongs > MAX_PLAYLIST_TRACKS_TO_FETCH) return acc;
-        
-        // Only count songs that need fresh scanning (total - already cached)
-        const songsToScan = Math.max(0, playlist.totalSongs - (playlist.scannedSongs || 0));
-        const songsScannedFresh = Math.max(0, playlist.scannedSongs - (playlist.scannedSongs || 0));
-        
+
+        // Get initial cached count (stored when scanning started)
+        const initialCached = initialCachedCountsRef.current[playlist.id] || 0;
+
+        // Songs that need fresh scanning = total - initially cached
+        const songsToScan = Math.max(0, playlist.totalSongs - initialCached);
+
+        // Songs scanned fresh = current scanned - initially cached
+        const songsScannedFresh = Math.max(
+          0,
+          (playlist.scannedSongs || 0) - initialCached,
+        );
+
         acc.totalSongsToScan += songsToScan;
         acc.totalSongsScannedFresh += songsScannedFresh;
         return acc;
@@ -198,18 +207,25 @@ export default function SpotifyLoaderCard({
     return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   };
 
-  // Initialize scan start timestamp when scanning begins
+  // Initialize scan start timestamp and cache initial cached counts when scanning begins
   useEffect(() => {
     if (
       (updateStatus === 'fetching' || hasStarted) &&
       !scanStartTimeRef.current
     ) {
       scanStartTimeRef.current = Date.now();
+
+      // Store initial cached counts for each item
+      allItems.forEach(item => {
+        if (!initialCachedCountsRef.current[item.id]) {
+          initialCachedCountsRef.current[item.id] = item.scannedSongs || 0;
+        }
+      });
     }
     if (updateStatus === 'complete') {
       // keep the timestamp for now; could be reset if needed later
     }
-  }, [updateStatus, hasStarted]);
+  }, [updateStatus, hasStarted, allItems]);
 
   // Tick periodically during fetching to refresh ETA calculations
   useEffect(() => {
@@ -218,19 +234,19 @@ export default function SpotifyLoaderCard({
     return () => clearInterval(interval);
   }, [updateStatus]);
 
-  // Compute ETA using observed rate since scan started
+  // Compute ETA using observed rate since scan started (only for fresh scanning)
   const observedEtaSeconds = useMemo(() => {
     if (!scanStartTimeRef.current) return null;
     const elapsedMs = Date.now() - scanStartTimeRef.current;
     const elapsedSeconds = elapsedMs / 1000;
-    const songsFound = totalScannedSongsInScope;
-    const totalSongs = totalSongsInScope;
-    const remaining = Math.max(0, totalSongs - songsFound);
-    if (elapsedSeconds <= 0 || songsFound <= 0) return null;
-    const ratePerSecond = songsFound / elapsedSeconds;
+    const songsScannedFresh = totalSongsScannedFresh;
+    const totalSongsToScanCount = totalSongsToScan;
+    const remaining = Math.max(0, totalSongsToScanCount - songsScannedFresh);
+    if (elapsedSeconds <= 0 || songsScannedFresh <= 0) return null;
+    const ratePerSecond = songsScannedFresh / elapsedSeconds;
     if (ratePerSecond <= 0) return null;
     return Math.ceil(remaining / ratePerSecond);
-  }, [totalScannedSongsInScope, totalSongsInScope, etaTick]);
+  }, [totalSongsScannedFresh, totalSongsToScan, etaTick]);
   const timeRemainingText = (() => {
     // Prefer explicit update status when provided
     if (updateStatus === 'idle') return 'Ready to scan';
