@@ -16,6 +16,7 @@ import {useRouter, useSearchParams} from 'next/navigation';
 
 import {cn} from '@/lib/utils';
 import {Icons} from '@/components/icons';
+import {SPOTIFY_SCOPES} from '../spotifyScopes';
 
 export function LoginForm({
   className,
@@ -87,10 +88,18 @@ export function LoginForm({
         ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextParam)}`
         : `${window.location.origin}/auth/callback`;
 
+      const scopes =
+        provider === 'spotify'
+          ? {
+              scopes: SPOTIFY_SCOPES,
+            }
+          : {};
+
       const {data, error} = await supabase.auth.signInWithOAuth({
         provider,
         options: {
           redirectTo: redirectUrl,
+          ...scopes,
         },
       });
 

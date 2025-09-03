@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {deleteCurrentUser} from './actions';
 import {getSheetMusicUrl} from '@/app/buildSheetMusicUrl';
+import {SPOTIFY_SCOPES} from '../auth/spotifyScopes';
 
 type SavedSong = {
   hash: string;
@@ -73,8 +74,7 @@ export default function AccountClient({
       provider: 'spotify',
       options: {
         redirectTo: redirectUrl,
-        scopes:
-          'user-read-email user-library-read playlist-read-private playlist-read-collaborative',
+        scopes: SPOTIFY_SCOPES,
       } as any,
     });
     if (!error) setIsSpotifyConnected(true);
