@@ -487,7 +487,7 @@ export function useSpotifyTracks(): [
 
 export function useSpotifyLibraryUpdate(): {
   playlists: PlaylistProgressItem[];
-  isUpdating: boolean;
+  updateStatus: 'idle' | 'fetching' | 'complete';
   rateLimit: RateLimitState;
   prepare: () => Promise<void>;
   startUpdate: (options?: {
@@ -498,7 +498,9 @@ export function useSpotifyLibraryUpdate(): {
   albums: SavedAlbumItem[];
 } {
   const [playlists, setPlaylists] = useState<PlaylistProgressItem[]>([]);
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<
+    'idle' | 'fetching' | 'complete'
+  >('idle');
   const [rateLimit, setRateLimit] = useState<RateLimitState>(null);
   const cancelledRef = useRef(false);
   const [currentUserDisplayName, setCurrentUserDisplayName] = useState<
@@ -615,7 +617,7 @@ export function useSpotifyLibraryUpdate(): {
       if (sdk == null) {
         return;
       }
-      setIsUpdating(true);
+      setUpdateStatus('fetching');
 
       const cached = await getCachedPlaylistTracks();
       const cachedAlbum = await getCachedAlbumTracks();
@@ -927,7 +929,7 @@ export function useSpotifyLibraryUpdate(): {
         {},
       );
       await setCachedPlaylistTracks(newCache);
-      setIsUpdating(false);
+      setUpdateStatus('complete');
     },
     [],
   );
@@ -938,7 +940,7 @@ export function useSpotifyLibraryUpdate(): {
 
   return {
     playlists,
-    isUpdating,
+    updateStatus,
     rateLimit,
     prepare,
     startUpdate,

@@ -34,6 +34,7 @@ type Props = {
   title?: string;
   autoScroll?: boolean;
   albums?: SavedAlbumItem[];
+  updateStatus?: 'idle' | 'fetching' | 'complete';
 };
 
 const CircularProgress = ({
@@ -96,6 +97,7 @@ export default function SpotifyLoaderCard({
   title,
   autoScroll = true,
   albums,
+  updateStatus,
 }: Props) {
   const isRateLimited = (rateLimitCountdown ?? 0) > 0;
   const [countdown, setCountdown] = useState(rateLimitCountdown ?? 0);
@@ -148,8 +150,9 @@ export default function SpotifyLoaderCard({
     () =>
       allItems.filter(
         p =>
-          p.scannedSongs === p.totalSongs ||
-          (p.scannedSongs === 0 && !p.isScanning),
+          p.totalSongs === 0 ||
+          p.scannedSongs >= p.totalSongs ||
+          p.totalSongs > MAX_PLAYLIST_TRACKS_TO_FETCH,
       ).length,
     [allItems],
   );
@@ -164,12 +167,32 @@ export default function SpotifyLoaderCard({
     0,
   );
   const estimatedMinutesRemaining = Math.ceil(totalRemainingSongs / 10);
-  const timeRemainingText =
-    scanningPlaylists.length > 0 && estimatedMinutesRemaining > 0
-      ? `~${estimatedMinutesRemaining}m remaining`
-      : scanningPlaylists.length > 0
-        ? 'Almost done!'
-        : 'Finished!';
+  const hasStarted = useMemo(
+    () => allItems.some(p => p.isScanning || p.scannedSongs > 0),
+    [allItems],
+  );
+  const timeRemainingText = (() => {
+    // Prefer explicit update status when provided
+    if (updateStatus === 'idle') return 'Ready to scan';
+    if (updateStatus === 'complete') return 'Finished!';
+    if (updateStatus === 'fetching') {
+      if (scanningPlaylists.length > 0 && estimatedMinutesRemaining > 0) {
+        return `~${estimatedMinutesRemaining}m remaining`;
+      }
+      if (scanningPlaylists.length > 0) return 'Almost done!';
+      return 'Scanning...';
+    }
+
+    return 'Ready to scan';
+
+    // // Fallback to inferred heuristics
+    // if (!hasStarted) return 'Ready to scan';
+    // if (fullyFetchedPlaylists === totalPlaylists) return 'Finished!';
+    // if (scanningPlaylists.length > 0 && estimatedMinutesRemaining > 0)
+    //   return `~${estimatedMinutesRemaining}m remaining`;
+    // if (scanningPlaylists.length > 0) return 'Almost done!';
+    // return 'Ready to scan';
+  })();
 
   useEffect(() => {
     // Find the first in-progress playlist
