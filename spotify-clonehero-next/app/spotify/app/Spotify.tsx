@@ -12,7 +12,12 @@ import {
   SongAccumulator,
   createIsInstalledFilter,
 } from '@/lib/local-songs-folder/scanLocalCharts';
-import {scanForInstalledCharts} from '@/lib/local-songs-folder';
+import {
+  getSongsDirectoryHandle,
+  scanDirectoryForCharts,
+} from '@/lib/local-songs-folder';
+import {writeFile} from '@/lib/fileSystemHelpers';
+import {sendGAEvent} from '@next/third-parties/google';
 import chorusChartDb, {
   findMatchingCharts,
   findMatchingChartsExact,
@@ -115,6 +120,8 @@ function LoggedIn() {
   const {playlists, updateStatus, rateLimit, prepare, startUpdate, albums} =
     useSpotifyLibraryUpdate();
 
+  const [started, setStarted] = useState(false);
+
   useEffect(() => {
     prepare();
   }, [prepare]);
@@ -154,46 +161,44 @@ function LoggedIn() {
   }, [playlists]);
 
   const calculate = useCallback(async () => {
+    let directoryHandle: FileSystemDirectoryHandle;
+    try {
+      directoryHandle = await getSongsDirectoryHandle();
+    } catch (err) {
+      if (err instanceof Error && err.message == 'User canceled picker') {
+        toast.info('Directory picker canceled');
+        setStatus({status: 'not-started', songsCounted: 0});
+        return;
+      }
+      toast.error('Error selecting songs folder', {duration: 8000});
+      setStatus({status: 'not-started', songsCounted: 0});
+      throw err;
+    }
+
+    setStarted(true);
+    try {
+      startUpdate();
+    } catch {}
+
     const fetchDb = chorusChartDb();
 
-    setStatus(prev => ({...prev, status: 'fetching-spotify-data'}));
+    setStatus({status: 'scanning', songsCounted: 0});
     let installedCharts: SongAccumulator[] | undefined;
 
     try {
-      setStatus({
-        status: 'scanning',
-        songsCounted: 0,
-      });
-
-      const scanResult = await scanForInstalledCharts(() => {
+      const scanResult = await scanDirectoryForCharts(() => {
         setStatus(prevStatus => ({
           ...prevStatus,
           songsCounted: prevStatus.songsCounted + 1,
         }));
-      });
+      }, directoryHandle);
       installedCharts = scanResult.installedCharts;
-      setStatus(prevStatus => ({
-        ...prevStatus,
-        status: 'done-scanning',
-      }));
-      // Yield to React to let it update State
+      setStatus(prevStatus => ({...prevStatus, status: 'done-scanning'}));
       await pause();
     } catch (err) {
-      if (err instanceof Error && err.message == 'User canceled picker') {
-        toast.info('Directory picker canceled');
-        setStatus({
-          status: 'not-started',
-          songsCounted: 0,
-        });
-        return;
-      } else {
-        toast.error('Error scanning local charts', {duration: 8000});
-        setStatus({
-          status: 'not-started',
-          songsCounted: 0,
-        });
-        throw err;
-      }
+      toast.error('Error scanning local charts', {duration: 8000});
+      setStatus({status: 'not-started', songsCounted: 0});
+      throw err;
     }
 
     const isInstalled = await createIsInstalledFilter(installedCharts);
@@ -247,31 +252,35 @@ function LoggedIn() {
       setSongs(recommendedCharts);
       console.log(recommendedCharts);
     }
-  }, [tracks, update]);
+  }, [tracks, update, startUpdate]);
 
   return (
     <>
-      {useMockLoader ? (
-        <SpotifyLoaderMock />
-      ) : (
-        <SpotifyLoaderCard
-          playlists={loaderPlaylists}
-          rateLimitCountdown={rateLimit?.retryAfterSeconds ?? 0}
-          albums={albums}
-          updateStatus={updateStatus}
-        />
-      )}
-      {(status.status === 'scanning' || status.status === 'done-scanning') && (
-        <LocalScanLoaderCard
-          count={status.songsCounted}
-          isScanning={status.status === 'scanning'}
-        />
-      )}
-      <div className="flex justify-center">
-        {renderStatus(status, calculate)}
-      </div>
+      {!started && <ScanLocalFoldersCTACard onClick={calculate} />}
 
-      {songs && <SpotifyTableDownloader tracks={songs} showPreview={true} />}
+      {started &&
+        !(updateStatus === 'complete' && status.status === 'done') && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {useMockLoader ? (
+              <SpotifyLoaderMock />
+            ) : (
+              <SpotifyLoaderCard
+                playlists={loaderPlaylists}
+                rateLimitCountdown={rateLimit?.retryAfterSeconds ?? 0}
+                albums={albums}
+                updateStatus={updateStatus}
+              />
+            )}
+            <LocalScanLoaderCard
+              count={status.songsCounted}
+              isScanning={status.status === 'scanning'}
+            />
+          </div>
+        )}
+
+      {updateStatus === 'complete' && status.status === 'done' && songs && (
+        <SpotifyTableDownloader tracks={songs} showPreview={true} />
+      )}
     </>
   );
 }
