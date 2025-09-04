@@ -16,8 +16,6 @@ import {
   getSongsDirectoryHandle,
   scanDirectoryForCharts,
 } from '@/lib/local-songs-folder';
-import {writeFile} from '@/lib/fileSystemHelpers';
-import {sendGAEvent} from '@next/third-parties/google';
 import chorusChartDb, {
   findMatchingCharts,
   findMatchingChartsExact,
@@ -46,6 +44,7 @@ import LocalScanLoaderCard from './LocalScanLoaderCard';
 import dynamic from 'next/dynamic';
 import {useMemo} from 'react';
 import {SupabaseClient, User} from '@supabase/supabase-js';
+import {SPOTIFY_SCOPES} from '@/app/auth/spotifyScopes';
 
 const SpotifyLoaderMock = dynamic(() => import('./SpotifyLoaderMock'), {
   ssr: false,
@@ -371,12 +370,12 @@ function SignInWithSpotifyCard({
             if (needsToLink) {
               result = await supabaseClient.auth.linkIdentity({
                 provider: 'spotify',
-                options: {redirectTo: redirectUrl},
+                options: {redirectTo: redirectUrl, scopes: SPOTIFY_SCOPES},
               });
             } else {
               result = await supabaseClient.auth.signInWithOAuth({
                 provider: 'spotify',
-                options: {redirectTo: redirectUrl},
+                options: {redirectTo: redirectUrl, scopes: SPOTIFY_SCOPES},
               });
             }
 
