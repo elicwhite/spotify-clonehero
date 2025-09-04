@@ -1,0 +1,129 @@
+---
+description: API pattern for long running processes in React components with progress udpates
+globs:
+alwaysApply: false
+---
+
+In this project, sometimes we need to do long running processes. For example, when fetching a user's entire spotify library, or downloading information about available charts on chorus, or scanning the user's local songs folder.
+
+When implementing these long running processes you must support a few requirements:
+
+- Progress can be rendered as the long running task executes
+- The long running task can be kicked off early, and awaited later
+- The long running task can be canceled using an AbortController
+
+Here is an example scaffolding of how a hook supporting a long running task should look.
+
+```
+// Whatever you want to store in here
+type Progress = {
+  finished: number;
+  total: number;
+  status: "idle" | "fetching" | "complete" | "error";
+};
+
+function useLongTaskWithProgress() {
+  const [progress, setProgress] = useState<Progress>({
+    finished: 0,
+    total: 0,
+    status: "idle",
+  });
+
+  function run(abortController: AbortController) {
+    // Whatever the result type should be
+    return new Promise<number[]>((resolve, reject) => {
+      setProgress({
+        finished: 0,
+        total: 100,
+        status: "fetching",
+      });
+
+      // This interval and timeout is to fake some long running process
+      // You likely shouldn't use an interval or timeout. You will likely
+      // be fetching data
+      const interval = setInterval(() => {
+        setProgress((progress) => ({
+          ...progress,
+          finished: progress.finished + 1,
+        }));
+      }, 100);
+
+      const timeout = setTimeout(() => {
+        clearInterval(interval);
+
+        // When the long running process is complete, call resolve with the
+        // results
+        setProgress((progress) => ({
+          ...progress,
+          status: "complete",
+        }));
+
+        resolve([1, 2, 3, 4, 5, 6]);
+      }, 3000);
+
+      abortController.signal.addEventListener("abort", () => {
+        // Clear your fetches or any long running process
+        clearInterval(interval);
+        clearTimeout(timeout);
+
+        setProgress((progress) => ({
+          ...progress,
+          status: "error",
+        }));
+
+        // Reject so that we go into the catch mode in the parent
+        reject(abortController.signal.reason);
+      });
+    });
+  }
+
+  return { progress, run };
+}
+```
+
+And this is an example of how to use that hook within a component to render progress, kick off the request early, and are able to cancel the task with an AbortController:
+
+```
+export default function App() {
+  const { progress, run } = useLongTaskWithProgress();
+  const [results, setResults] = useState<number[]>([]);
+  const abort = useRef<AbortController>();
+
+  async function onClick() {
+    if (progress.status === "fetching") {
+      abort.current?.abort();
+    }
+    else {
+      try {
+        abort.current = new AbortController();
+
+        const result = run(abort.current);
+        setResults([]);
+
+        // Do other work
+
+        const results = await result;
+        setResults(results);
+      } catch (err: any) {
+        if (err.name === "AbortError") {
+          console.warn("Long running process manually aborted");
+          return;
+        } else {
+          throw err;
+        }
+      }
+    }
+  }
+
+  return (
+    <div>
+      <p>{progress.status}</p>
+      <p>
+        {progress.finished} / {progress.total}
+      </p>
+      <p>Results: {results.join(",")}</p>
+      <button onClick={onClick}>Start</button>
+    </div>
+  );
+}
+```
