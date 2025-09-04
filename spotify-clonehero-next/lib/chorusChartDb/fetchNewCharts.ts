@@ -30,9 +30,16 @@ export default async function fetchNewCharts(
   let newSongs = 0;
   let iterations = 0;
 
+  let totalSongsToFetch = -1;
+
   do {
     newSongs = 0;
     const json = await fetchSongsAfter(afterTime, lastChartId);
+
+    if (totalSongsToFetch === -1) {
+      totalSongsToFetch = json.found;
+      console.log('New songs on chorus:', totalSongsToFetch);
+    }
 
     let thisRunLatestChartId = lastChartId;
     for (const song of json.data) {
