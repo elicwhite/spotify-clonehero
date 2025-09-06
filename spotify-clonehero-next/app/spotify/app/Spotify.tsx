@@ -129,6 +129,8 @@ function LoggedIn() {
   const calculate = useCallback(async () => {
     const abortController = new AbortController();
 
+    setStarted(true);
+
     const updateSpotifyLibraryPromise = updateSpotifyLibrary(abortController, {
       concurrency: 3,
     });
@@ -140,7 +142,6 @@ function LoggedIn() {
 
     try {
       const scanResult = await scanForInstalledCharts(() => {
-        setStarted(true);
         setStatus(prevStatus => ({
           ...prevStatus,
           songsCounted: prevStatus.songsCounted + 1,
@@ -221,17 +222,19 @@ function LoggedIn() {
           spotifyLibraryProgress.updateStatus === 'complete' &&
           status.status === 'done'
         ) && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {useMockLoader ? (
               <SpotifyLoaderMock />
             ) : (
               <SpotifyLoaderCard progress={spotifyLibraryProgress} />
             )}
-            <LocalScanLoaderCard
-              count={status.songsCounted}
-              isScanning={status.status === 'scanning'}
-            />
-            <UpdateChorusLoaderCard progress={chorusChartProgress} />
+            <div className="space-y-4">
+              <LocalScanLoaderCard
+                count={status.songsCounted}
+                isScanning={status.status === 'scanning'}
+              />
+              <UpdateChorusLoaderCard progress={chorusChartProgress} />
+            </div>
           </div>
         )}
 
