@@ -53,7 +53,6 @@ export default function LocalScanLoaderCard({
 
   function formatETA() {
     if (progress.status === 'idle') return 'Ready to scan';
-    if (progress.status === 'reading-cache') return 'Reading cache...';
     if (progress.status === 'fetching-dump') return 'Fetching dump...';
     if (progress.status === 'fetching') return 'Fetching...';
     if (progress.status === 'complete') return 'Finished!';
