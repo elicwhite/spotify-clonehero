@@ -28,7 +28,7 @@ async function promptForSongsDirectory() {
 
 let currentSongDirectoryCache: FileSystemDirectoryHandle | undefined;
 
-export async function getSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle> {
+async function getSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle> {
   // const handle: FileSystemDirectoryHandle | undefined = await get(
   //   'songsDirectoryHandle',
   // );
@@ -56,12 +56,6 @@ export async function getSongsDirectoryHandle(): Promise<FileSystemDirectoryHand
   // } else {
   //   return await promptForSongsDirectory();
   // }
-}
-
-export async function setSongsDirectoryHandle(
-  handle: FileSystemDirectoryHandle,
-) {
-  await set('songsDirectoryHandle', handle);
 }
 
 type InstalledChartsResponse = {
@@ -103,12 +97,10 @@ export async function scanForInstalledCharts(
   };
 }
 
-export async function scanDirectoryForCharts(
+async function scanDirectoryForCharts(
   callbackPerSong: () => void = () => {},
   directoryHandle: FileSystemDirectoryHandle,
 ): Promise<InstalledChartsResponse> {
-  const root = await navigator.storage.getDirectory();
-
   const beforeScan = Date.now();
   const installedCharts: SongAccumulator[] = [];
   await scanLocalCharts(directoryHandle, installedCharts, callbackPerSong);
@@ -126,7 +118,7 @@ export async function scanDirectoryForCharts(
   };
 }
 
-export async function getDefaultDownloadDirectory(): Promise<FileSystemDirectoryHandle> {
+async function getDefaultDownloadDirectory(): Promise<FileSystemDirectoryHandle> {
   const songsDirHandle = await getSongsDirectoryHandle();
   const downloadsHandle = await songsDirHandle.getDirectoryHandle(
     'musiccharts-dot-tools-downloads',
@@ -155,14 +147,6 @@ async function getBackupDirectory() {
   return backupDirHandle;
 }
 
-export async function emptyDirectory(directory: FileSystemDirectoryHandle) {
-  console.log('removing', directory.name);
-  for await (const entry of directory.values()) {
-    console.log('entry', entry);
-    await directory.removeEntry(entry.name, {recursive: true});
-  }
-}
-
 async function getFileOrDirectoryHandle(
   parentHandle: FileSystemDirectoryHandle,
   name: string,
@@ -186,7 +170,7 @@ async function getFileOrDirectoryHandle(
   return null;
 }
 
-export async function moveToFolder(
+async function moveToFolder(
   parentDirectoryHandle: FileSystemDirectoryHandle,
   fileOrFolderName: string,
   toFolder: FileSystemDirectoryHandle,
@@ -283,7 +267,7 @@ async function fileExists(
   }
 }
 
-export async function backupSong(
+async function backupSong(
   parentDirectoryHandle: FileSystemDirectoryHandle,
   fileOrFolderName: string,
 ): Promise<{

@@ -126,7 +126,6 @@ export default function SpotifyLoaderCard({
   );
 
   const allItems: LoaderPlaylist[] = useMemo(() => {
-    console.log('recalcuating playlist+album items');
     return progress.playlists
       .map(p => {
         return {

@@ -9,14 +9,8 @@ import {
   SongAccumulator,
   createIsInstalledFilter,
 } from '@/lib/local-songs-folder/scanLocalCharts';
-import {
-  getSongsDirectoryHandle,
-  scanDirectoryForCharts,
-} from '@/lib/local-songs-folder';
-import chorusChartDb, {
-  findMatchingCharts,
-  findMatchingChartsExact,
-} from '@/lib/chorusChartDb';
+import {scanForInstalledCharts} from '@/lib/local-songs-folder';
+import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
 import SpotifyTableDownloader, {
   SpotifyChartData,
   SpotifyPlaysRecommendations,
@@ -39,7 +33,6 @@ import {toast} from 'sonner';
 import SpotifyLoaderCard from './SpotifyLoaderCard';
 import LocalScanLoaderCard from './LocalScanLoaderCard';
 import dynamic from 'next/dynamic';
-import {useMemo} from 'react';
 import {SupabaseClient, User} from '@supabase/supabase-js';
 import {SPOTIFY_SCOPES} from '@/app/auth/spotifyScopes';
 
@@ -132,20 +125,6 @@ function LoggedIn() {
   }, []);
 
   const calculate = useCallback(async () => {
-    let directoryHandle: FileSystemDirectoryHandle;
-    try {
-      directoryHandle = await getSongsDirectoryHandle();
-    } catch (err) {
-      if (err instanceof Error && err.message == 'User canceled picker') {
-        toast.info('Directory picker canceled');
-        setStatus({status: 'not-started', songsCounted: 0});
-        return;
-      }
-      toast.error('Error selecting songs folder', {duration: 8000});
-      setStatus({status: 'not-started', songsCounted: 0});
-      throw err;
-    }
-
     setStarted(true);
 
     const abortController = new AbortController();
@@ -159,12 +138,12 @@ function LoggedIn() {
     let installedCharts: SongAccumulator[] | undefined;
 
     try {
-      const scanResult = await scanDirectoryForCharts(() => {
+      const scanResult = await scanForInstalledCharts(() => {
         setStatus(prevStatus => ({
           ...prevStatus,
           songsCounted: prevStatus.songsCounted + 1,
         }));
-      }, directoryHandle);
+      });
       installedCharts = scanResult.installedCharts;
       setStatus(prevStatus => ({...prevStatus, status: 'done-scanning'}));
       await pause();
