@@ -315,7 +315,7 @@ export default function SpotifyLoaderCard({
       <Card className="w-full max-w-2xl">
         <CardHeader className="pb-4">
           <CardTitle className="text-2xl font-bold text-center flex items-center justify-center gap-2">
-            <Icons.spotify className="h-6 w-6 text-primary" />
+            <Icons.spotify className="h-6 w-6" style={{color: '#1ED760'}} />
             Inspecting Spotify Library
           </CardTitle>
           <p className="text-muted-foreground text-center text-sm">
