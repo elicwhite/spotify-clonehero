@@ -4,7 +4,8 @@ import {useCallback, useReducer} from 'react';
 import SongsTable from './SongsTable';
 
 import {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
-import getChorusChartDb, {
+import {
+  useChorusChartDb,
   findMatchingCharts,
   findMatchingChartsExact,
 } from '@/lib/chorusChartDb';
@@ -86,6 +87,8 @@ export default function CompareChartsToLocal({
     chorusCharts: null,
   });
 
+  const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb();
+
   const handler = useCallback(async () => {
     const before = Date.now();
     songsDispatch({
@@ -97,7 +100,9 @@ export default function CompareChartsToLocal({
     });
 
     // Start this early, await it later;
-    const chorusChartsPromise = getChorusChartDb();
+
+    const abortController = new AbortController();
+    const chorusChartsPromise = fetchChorusCharts(abortController);
 
     let songs: SongAccumulator[] = [];
 

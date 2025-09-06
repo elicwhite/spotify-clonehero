@@ -18,7 +18,16 @@ class TooManyRetriesError extends Error {
 
 export default async function fetchNewCharts(
   afterTime: Date,
-  onEachResponse: (json: any[], lastChartId: number) => void,
+  onEachResponse: (
+    json: any[],
+    stats: {
+      lastChartId: number;
+      newSongsFound: number;
+      totalSongsFound: number;
+      totalChartsFound: number;
+      totalSongsToFetch: number;
+    },
+  ) => void,
 ) {
   const results = new Map<number, any>();
   const runStartTime = new Date();
@@ -60,18 +69,24 @@ export default async function fetchNewCharts(
       }
     }
 
-    iterations++;
-    console.log({
-      fetchAfter: afterTime.toISOString(),
-      fetchChartIDAfter: lastChartId,
-      lastChartIDFetched: thisRunLatestChartId,
+    const stats = {
+      lastChartId,
       newSongsFound: newSongs,
       totalSongsFound: totalSongs,
       totalChartsFound: totalCharts,
+      totalSongsToFetch,
+    };
+
+    iterations++;
+    console.log({
+      fetchAfter: afterTime.toISOString(),
+      lastChartIDFetched: thisRunLatestChartId,
+
+      ...stats,
     });
 
     lastChartId = thisRunLatestChartId;
-    onEachResponse(json.data.map(filterKeys), lastChartId);
+    onEachResponse(json.data.map(filterKeys), stats);
   } while (newSongs > 0 && iterations < MAX_ITERATIONS);
 
   return {

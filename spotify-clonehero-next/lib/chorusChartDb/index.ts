@@ -4,48 +4,105 @@ import {ChartResponseEncore} from '@/lib/chartSelection';
 import fetchNewCharts from './fetchNewCharts';
 import {readJsonFile, writeFile} from '@/lib/fileSystemHelpers';
 import {search, Searcher} from 'fast-fuzzy';
+import {useCallback, useState} from 'react';
 
 const DEBUG = false;
 
-export default async function getChorusChartDb(): Promise<
-  ChartResponseEncore[]
-> {
-  const root = await navigator.storage.getDirectory();
+export type ChorusChartProgress = {
+  status:
+    | 'idle'
+    | 'fetching'
+    | 'fetching-dump'
+    | 'updating-db'
+    | 'complete'
+    | 'error';
+  numFetched: number;
+  numTotal: number;
+};
+export function useChorusChartDb(): [
+  ChorusChartProgress,
+  (abort: AbortController) => Promise<ChartResponseEncore[]>,
+] {
+  const [progress, setProgress] = useState<ChorusChartProgress>({
+    status: 'idle',
+    numFetched: 0,
+    numTotal: 0,
+  });
 
-  debugLog('Checking for server data updates');
-  const localDataVersion = parseInt(
-    localStorage.getItem('chartsDataVersion') ?? '',
-    10,
+  const run = useCallback(
+    async (abort: AbortController): Promise<ChartResponseEncore[]> => {
+      return new Promise(async (resolve, reject) => {
+        const charts: ChartResponseEncore[] = [];
+        setProgress(progress => ({
+          ...progress,
+          status: 'fetching',
+        }));
+
+        const root = await navigator.storage.getDirectory();
+
+        debugLog('Checking for server data updates');
+        const localDataVersion = parseInt(
+          localStorage.getItem('chartsDataVersion') ?? '',
+          10,
+        );
+        const serverDataVersion = await getServerChartsDataVersion();
+
+        if (localDataVersion !== serverDataVersion) {
+          setProgress(progress => ({
+            ...progress,
+            status: 'fetching-dump',
+          }));
+          try {
+            await root.removeEntry('serverData', {recursive: true});
+            await root.removeEntry('localData', {recursive: true});
+          } catch (e) {
+            // Not found if the items don't exist, which is fine
+            if (!(e instanceof DOMException && e.name === 'NotFoundError')) {
+              reject(e);
+            }
+          }
+          localStorage.setItem('chartsDataVersion', String(serverDataVersion));
+        }
+
+        debugLog('Fetching local charts from server');
+        const {serverCharts} = await getServerCharts(root);
+        debugLog('Fetching local cache of charts');
+
+        const localCharts = await getLocalCharts(root);
+        let updatedCharts = [];
+
+        if (navigator.onLine) {
+          setProgress(progress => ({
+            ...progress,
+            status: 'updating-db',
+          }));
+          debugLog('Fetching updated charts');
+          updatedCharts = await getUpdatedCharts(root, (json, stats) => {
+            setProgress(progress => ({
+              ...progress,
+              numFetched: stats.totalSongsFound,
+              numTotal: stats.totalSongsToFetch,
+            }));
+          });
+          debugLog('Done fetching charts');
+        }
+
+        const finalCharts = reduceCharts(
+          serverCharts,
+          localCharts,
+          updatedCharts,
+        );
+        setProgress(progress => ({
+          ...progress,
+          status: 'complete',
+        }));
+        resolve(finalCharts);
+      });
+    },
+    [],
   );
-  const serverDataVersion = await getServerChartsDataVersion();
 
-  if (localDataVersion !== serverDataVersion) {
-    debugLog('Server data is newer, updating');
-    try {
-      await root.removeEntry('serverData', {recursive: true});
-      await root.removeEntry('localData', {recursive: true});
-    } catch (e) {
-      // Not found if the items don't exist, which is fine
-      if (!(e instanceof DOMException && e.name === 'NotFoundError')) {
-        throw e;
-      }
-    }
-    localStorage.setItem('chartsDataVersion', String(serverDataVersion));
-  }
-
-  debugLog('Fetching local charts from server');
-  const {serverCharts} = await getServerCharts(root);
-  debugLog('Fetching local cache of charts');
-  const localCharts = await getLocalCharts(root);
-  let updatedCharts = [];
-  if (navigator.onLine) {
-    debugLog('Fetching updated charts');
-    updatedCharts = await getUpdatedCharts(root);
-    debugLog('Done fetching charts');
-  }
-
-  const finalCharts = reduceCharts(serverCharts, localCharts, updatedCharts);
-  return finalCharts;
+  return [progress, run];
 }
 
 export function findMatchingChartsExact(
@@ -193,7 +250,10 @@ async function getLocalCharts(rootHandle: FileSystemDirectoryHandle) {
   return charts;
 }
 
-async function getUpdatedCharts(rootHandle: FileSystemDirectoryHandle) {
+async function getUpdatedCharts(
+  rootHandle: FileSystemDirectoryHandle,
+  onEachResponse: Parameters<typeof fetchNewCharts>[1],
+) {
   const localDataHandle = await rootHandle.getDirectoryHandle('localData', {
     create: true,
   });
@@ -202,7 +262,7 @@ async function getUpdatedCharts(rootHandle: FileSystemDirectoryHandle) {
 
   const {charts, metadata} = await fetchNewCharts(
     lastUpdateTime,
-    (json, lastChartId) => {},
+    onEachResponse,
   );
 
   if (charts.length !== 0) {

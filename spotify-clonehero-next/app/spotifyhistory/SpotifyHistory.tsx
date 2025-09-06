@@ -5,7 +5,7 @@ import {
   createIsInstalledFilter,
 } from '@/lib/local-songs-folder/scanLocalCharts';
 import {Suspense, useCallback, useEffect, useState} from 'react';
-import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
+import {useChorusChartDb, findMatchingCharts} from '@/lib/chorusChartDb';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import {
   ArtistTrackPlays,
@@ -147,11 +147,13 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     status: 'not-started',
     songsCounted: 0,
   });
+  const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb();
 
   const handler = useCallback(async () => {
     let installedCharts: SongAccumulator[] | undefined;
 
-    const fetchChorusDb = chorusChartDb();
+    const abortController = new AbortController();
+    const chorusChartsPromise = fetchChorusCharts(abortController);
 
     let artistTrackPlays = await getSpotifyDumpArtistTrackPlays();
     let spotifyDataHandle;
@@ -236,7 +238,8 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
 
     const flatTrackPlays = flattenArtistTrackPlays(artistTrackPlays);
     const isInstalled = await createIsInstalledFilter(installedCharts);
-    const allChorusCharts = await fetchChorusDb;
+
+    const allChorusCharts = await chorusChartsPromise;
     const markedCharts = markInstalledCharts(allChorusCharts, isInstalled);
 
     setStatus(prevStatus => ({

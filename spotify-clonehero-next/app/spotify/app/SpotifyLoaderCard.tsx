@@ -15,6 +15,7 @@ import {
   MAX_PLAYLIST_TRACKS_TO_FETCH,
   SpotifyLibraryUpdateProgress,
 } from '@/lib/spotify-sdk/SpotifyFetching';
+import useInterval from 'use-interval';
 
 /* 
 For some reason this isn't actually updating in real time when clearing the indexeddb cache.
@@ -467,26 +468,4 @@ function PlaylistRow({
       </div>
     </div>
   );
-}
-
-function useInterval(callback: () => void, delay: number | null) {
-  const savedCallback = useRef<() => void | null>(null);
-
-  // Remember the latest function.
-  useEffect(() => {
-    savedCallback.current = callback;
-  }, [callback]);
-
-  // Set up the interval.
-  useEffect(() => {
-    function tick() {
-      if (savedCallback.current != null) {
-        savedCallback.current();
-      }
-    }
-    if (delay !== null) {
-      let id = setInterval(tick, delay);
-      return () => clearInterval(id);
-    }
-  }, [delay]);
 }

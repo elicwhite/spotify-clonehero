@@ -10,7 +10,7 @@ import {
   createIsInstalledFilter,
 } from '@/lib/local-songs-folder/scanLocalCharts';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
-import chorusChartDb, {findMatchingCharts} from '@/lib/chorusChartDb';
+import {useChorusChartDb, findMatchingCharts} from '@/lib/chorusChartDb';
 import SpotifyTableDownloader, {
   SpotifyChartData,
   SpotifyPlaysRecommendations,
@@ -35,6 +35,7 @@ import LocalScanLoaderCard from './LocalScanLoaderCard';
 import dynamic from 'next/dynamic';
 import {SupabaseClient, User} from '@supabase/supabase-js';
 import {SPOTIFY_SCOPES} from '@/app/auth/spotifyScopes';
+import UpdateChorusLoaderCard from './UpdateChorusLoaderCard';
 
 const SpotifyLoaderMock = dynamic(() => import('./SpotifyLoaderMock'), {
   ssr: false,
@@ -107,6 +108,7 @@ function LoggedIn() {
 
   const [spotifyLibraryProgress, updateSpotifyLibrary] =
     useSpotifyLibraryUpdate();
+  const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb();
 
   const [started, setStarted] = useState(false);
 
@@ -125,20 +127,20 @@ function LoggedIn() {
   }, []);
 
   const calculate = useCallback(async () => {
-    setStarted(true);
-
     const abortController = new AbortController();
 
     const updateSpotifyLibraryPromise = updateSpotifyLibrary(abortController, {
       concurrency: 3,
     });
-    const fetchDb = chorusChartDb();
+
+    const chorusChartsPromise = fetchChorusCharts(abortController);
 
     setStatus({status: 'scanning', songsCounted: 0});
     let installedCharts: SongAccumulator[] | undefined;
 
     try {
       const scanResult = await scanForInstalledCharts(() => {
+        setStarted(true);
         setStatus(prevStatus => ({
           ...prevStatus,
           songsCounted: prevStatus.songsCounted + 1,
@@ -158,8 +160,10 @@ function LoggedIn() {
       ...prevStatus,
       status: 'songs-from-encore',
     }));
-    const allChorusCharts = await fetchDb;
-    const updateSpotifyLibraryResult = await updateSpotifyLibraryPromise;
+    const [allChorusCharts, updateSpotifyLibraryResult] = await Promise.all([
+      chorusChartsPromise,
+      updateSpotifyLibraryPromise,
+    ]);
 
     const markedCharts = markInstalledCharts(allChorusCharts, isInstalled);
 
@@ -217,7 +221,7 @@ function LoggedIn() {
           spotifyLibraryProgress.updateStatus === 'complete' &&
           status.status === 'done'
         ) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {useMockLoader ? (
               <SpotifyLoaderMock />
             ) : (
@@ -227,6 +231,7 @@ function LoggedIn() {
               count={status.songsCounted}
               isScanning={status.status === 'scanning'}
             />
+            <UpdateChorusLoaderCard progress={chorusChartProgress} />
           </div>
         )}
 
