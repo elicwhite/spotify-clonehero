@@ -319,7 +319,7 @@ export default function SpotifyLoaderCard({
             Inspecting Spotify Library
           </CardTitle>
           <p className="text-muted-foreground text-center text-sm">
-            Scanning your playlists for analysis...
+            Scanning your playlists for songs...
           </p>
 
           <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t">
