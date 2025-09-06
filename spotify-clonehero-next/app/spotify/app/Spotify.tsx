@@ -112,7 +112,7 @@ function LoggedIn() {
     songsCounted: 0,
   });
 
-  const {progress: spotifyLibraryProgress, run: updateSpotifyLibrary} =
+  const [spotifyLibraryProgress, updateSpotifyLibrary] =
     useSpotifyLibraryUpdate();
 
   const [started, setStarted] = useState(false);

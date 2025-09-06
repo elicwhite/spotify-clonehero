@@ -372,13 +372,13 @@ export type SpotifyLibraryUpdateProgress = {
   updateStatus?: 'idle' | 'fetching' | 'complete' | 'error';
 };
 
-export function useSpotifyLibraryUpdate(): {
-  progress: SpotifyLibraryUpdateProgress;
+export function useSpotifyLibraryUpdate(): [
+  progress: SpotifyLibraryUpdateProgress,
   run: (
     abort: AbortController,
     options: {concurrency?: number},
-  ) => Promise<TrackResult[]>;
-} {
+  ) => Promise<TrackResult[]>,
+] {
   const [progress, setProgress] = useState<SpotifyLibraryUpdateProgress>({
     playlists: [],
     albums: [],
@@ -947,8 +947,5 @@ export function useSpotifyLibraryUpdate(): {
     [],
   );
 
-  return {
-    progress,
-    run,
-  };
+  return [progress, run];
 }
