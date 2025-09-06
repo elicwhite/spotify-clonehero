@@ -459,9 +459,6 @@ function PlaylistRow({
                   playlist.totalSongs,
                 )}
               />
-              {playlist.isScanning && (
-                <Loader2 className="h-3 w-3 animate-spin text-accent" />
-              )}
             </>
           )}
         </div>
