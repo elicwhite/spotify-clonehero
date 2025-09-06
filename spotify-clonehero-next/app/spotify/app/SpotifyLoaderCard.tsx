@@ -13,8 +13,12 @@ import {
 } from '@/components/ui/tooltip';
 import {
   MAX_PLAYLIST_TRACKS_TO_FETCH,
-  type SavedAlbumItem,
+  SpotifyLibraryUpdateProgress,
 } from '@/lib/spotify-sdk/SpotifyFetching';
+
+/* 
+For some reason this isn't actually updating in real time when clearing the indexeddb cache.
+*/
 
 export type LoaderPlaylist = {
   id: string;
@@ -29,12 +33,8 @@ export type LoaderPlaylist = {
 };
 
 type Props = {
-  playlists: LoaderPlaylist[];
-  rateLimitCountdown?: number;
-  title?: string;
+  progress: SpotifyLibraryUpdateProgress;
   autoScroll?: boolean;
-  albums?: SavedAlbumItem[];
-  updateStatus?: 'idle' | 'fetching' | 'complete';
 };
 
 const CircularProgress = ({
@@ -92,15 +92,14 @@ const CircularProgress = ({
 };
 
 export default function SpotifyLoaderCard({
-  playlists,
-  rateLimitCountdown,
-  title,
+  progress,
   autoScroll = true,
-  albums,
-  updateStatus,
 }: Props) {
-  const isRateLimited = (rateLimitCountdown ?? 0) > 0;
-  const [countdown, setCountdown] = useState(rateLimitCountdown ?? 0);
+  const rateLimitCountdown =
+    progress.rateLimitCountdown?.retryAfterSeconds ?? 0;
+  const isRateLimited = rateLimitCountdown > 0;
+
+  const [countdown, setCountdown] = useState(rateLimitCountdown);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<{[id: string]: HTMLDivElement | null}>({});
   const prevFirstScanningId = useRef<string | null>(null);
@@ -119,30 +118,43 @@ export default function SpotifyLoaderCard({
     );
   }, []);
 
-  useEffect(() => {
-    setCountdown(rateLimitCountdown ?? 0);
-  }, [rateLimitCountdown]);
-
-  useEffect(() => {
-    if (!isRateLimited || countdown <= 0) return;
-    const t = setInterval(() => {
+  useInterval(
+    () => {
       setCountdown(prev => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(t);
-  }, [isRateLimited, countdown]);
+    },
+    countdown > 0 ? 1000 : null,
+  );
 
-  const allItems = useMemo(() => {
-    const albumAsPlaylists: LoaderPlaylist[] = (albums ?? []).map(a => ({
-      id: a.id,
-      name: a.name,
-      totalSongs: a.totalTracks ?? 0,
-      scannedSongs: a.fetched ?? 0,
-      isScanning: a.status === 'fetching',
-      creator: a.artistName,
-      isAlbum: true,
-    }));
-    return [...playlists, ...albumAsPlaylists];
-  }, [playlists, albums]);
+  const allItems: LoaderPlaylist[] = useMemo(() => {
+    console.log('recalcuating playlist+album items');
+    return progress.playlists
+      .map(p => {
+        return {
+          id: p.id,
+          name: p.name,
+          totalSongs: p.total,
+          scannedSongs: p.fetched,
+          isScanning: p.status === 'fetching',
+          creator: p.ownerDisplayName,
+          isCollaborative: p.collaborative,
+          isAlbum: false,
+        };
+      })
+      .concat(
+        progress.albums.map(a => {
+          return {
+            id: a.id,
+            name: a.name,
+            totalSongs: a.totalTracks ?? 0,
+            scannedSongs: a.fetched ?? 0,
+            isScanning: a.status === 'fetching',
+            creator: a.artistName,
+            isAlbum: true,
+            isCollaborative: false,
+          };
+        }),
+      );
+  }, [progress.playlists, progress.albums]);
 
   const fullyFetchedPlaylists = useMemo(
     () =>
@@ -210,7 +222,7 @@ export default function SpotifyLoaderCard({
   // Initialize scan start timestamp and cache initial cached counts when scanning begins
   useEffect(() => {
     if (
-      (updateStatus === 'fetching' || hasStarted) &&
+      (progress.updateStatus === 'fetching' || hasStarted) &&
       !scanStartTimeRef.current
     ) {
       scanStartTimeRef.current = Date.now();
@@ -222,17 +234,17 @@ export default function SpotifyLoaderCard({
         }
       });
     }
-    if (updateStatus === 'complete') {
+    if (progress.updateStatus === 'complete') {
       // keep the timestamp for now; could be reset if needed later
     }
-  }, [updateStatus, hasStarted, allItems]);
+  }, [progress.updateStatus, hasStarted, allItems]);
 
   // Tick periodically during fetching to refresh ETA calculations
   useEffect(() => {
-    if (updateStatus !== 'fetching') return;
+    if (progress.updateStatus !== 'fetching') return;
     const interval = setInterval(() => setEtaTick(t => t + 1), 5000);
     return () => clearInterval(interval);
-  }, [updateStatus]);
+  }, [progress.updateStatus]);
 
   // Compute ETA using observed rate since scan started (only for fresh scanning)
   const observedEtaSeconds = useMemo(() => {
@@ -249,9 +261,9 @@ export default function SpotifyLoaderCard({
   }, [totalSongsScannedFresh, totalSongsToScan, etaTick]);
   const timeRemainingText = (() => {
     // Prefer explicit update status when provided
-    if (updateStatus === 'idle') return 'Ready to scan';
-    if (updateStatus === 'complete') return 'Finished!';
-    if (updateStatus === 'fetching') {
+    if (progress.updateStatus === 'idle') return 'Ready to scan';
+    if (progress.updateStatus === 'complete') return 'Finished!';
+    if (progress.updateStatus === 'fetching') {
       const etaSeconds =
         observedEtaSeconds ?? estimatedSecondsRemainingHeuristic;
       if (scanningPlaylists.length > 0 && etaSeconds > 0) {
@@ -274,7 +286,7 @@ export default function SpotifyLoaderCard({
 
   useEffect(() => {
     // Find the first in-progress playlist
-    const firstScanning = playlists.find(p => p.isScanning) || null;
+    const firstScanning = allItems.find(p => p.isScanning) || null;
     const currentId = firstScanning?.id ?? null;
 
     if (!autoScroll) {
@@ -296,7 +308,7 @@ export default function SpotifyLoaderCard({
     if (!isVisible) {
       target.scrollIntoView({behavior: 'smooth', block: 'center'});
     }
-  }, [playlists]);
+  }, [allItems]);
 
   return (
     <div className="bg-background flex items-center justify-center p-4">
@@ -304,7 +316,7 @@ export default function SpotifyLoaderCard({
         <CardHeader className="pb-4">
           <CardTitle className="text-2xl font-bold text-center flex items-center justify-center gap-2">
             <Icons.spotify className="h-6 w-6 text-primary" />
-            {title ?? 'Inspecting Spotify Library'}
+            Inspecting Spotify Library
           </CardTitle>
           <p className="text-muted-foreground text-center text-sm">
             Scanning your playlists for analysis...
@@ -456,4 +468,26 @@ function PlaylistRow({
       </div>
     </div>
   );
+}
+
+function useInterval(callback: () => void, delay: number | null) {
+  const savedCallback = useRef<() => void | null>(null);
+
+  // Remember the latest function.
+  useEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
+
+  // Set up the interval.
+  useEffect(() => {
+    function tick() {
+      if (savedCallback.current != null) {
+        savedCallback.current();
+      }
+    }
+    if (delay !== null) {
+      let id = setInterval(tick, delay);
+      return () => clearInterval(id);
+    }
+  }, [delay]);
 }

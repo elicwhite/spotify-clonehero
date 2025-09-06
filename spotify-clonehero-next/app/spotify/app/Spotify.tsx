@@ -2,10 +2,7 @@
 
 import {createClient} from '@/lib/supabase/client';
 
-import {
-  useSpotifyTracks,
-  useSpotifyLibraryUpdate,
-} from '@/lib/spotify-sdk/SpotifyFetching';
+import {useSpotifyLibraryUpdate} from '@/lib/spotify-sdk/SpotifyFetching';
 import {Button} from '@/components/ui/button';
 import {useCallback, useEffect, useState} from 'react';
 import {
@@ -106,7 +103,6 @@ type Status = {
 };
 
 function LoggedIn() {
-  const [tracks, update] = useSpotifyTracks();
   const [songs, setSongs] = useState<SpotifyPlaysRecommendations[] | null>(
     null,
   );
@@ -116,14 +112,10 @@ function LoggedIn() {
     songsCounted: 0,
   });
 
-  const {playlists, updateStatus, rateLimit, prepare, startUpdate, albums} =
+  const {progress: spotifyLibraryProgress, run: updateSpotifyLibrary} =
     useSpotifyLibraryUpdate();
 
   const [started, setStarted] = useState(false);
-
-  useEffect(() => {
-    prepare();
-  }, [prepare]);
 
   const [useMockLoader, setUseMockLoader] = useState(false);
   useEffect(() => {
@@ -138,26 +130,6 @@ function LoggedIn() {
       setUseMockLoader(Boolean(fromQuery || fromStorage));
     } catch {}
   }, []);
-
-  const loaderPlaylists = useMemo(() => {
-    return playlists.map(p => {
-      const owner = (p.ownerDisplayName || '').trim();
-      const creator = owner
-        ? owner.toLowerCase() === 'spotify'
-          ? 'Spotify'
-          : owner
-        : 'You';
-      return {
-        id: p.id,
-        name: p.name,
-        totalSongs: p.total,
-        scannedSongs: p.fetched,
-        isScanning: p.status === 'fetching',
-        creator,
-        isCollaborative: Boolean(p.collaborative),
-      };
-    });
-  }, [playlists]);
 
   const calculate = useCallback(async () => {
     let directoryHandle: FileSystemDirectoryHandle;
@@ -175,10 +147,12 @@ function LoggedIn() {
     }
 
     setStarted(true);
-    try {
-      startUpdate();
-    } catch {}
 
+    const abortController = new AbortController();
+
+    const updateSpotifyLibraryPromise = updateSpotifyLibrary(abortController, {
+      concurrency: 3,
+    });
     const fetchDb = chorusChartDb();
 
     setStatus({status: 'scanning', songsCounted: 0});
@@ -206,6 +180,8 @@ function LoggedIn() {
       status: 'songs-from-encore',
     }));
     const allChorusCharts = await fetchDb;
+    const updateSpotifyLibraryResult = await updateSpotifyLibraryPromise;
+
     const markedCharts = markInstalledCharts(allChorusCharts, isInstalled);
 
     setStatus(prevStatus => ({
@@ -219,7 +195,7 @@ function LoggedIn() {
       useSellers: false,
     });
 
-    const recommendedCharts = tracks
+    const recommendedCharts = updateSpotifyLibraryResult
       .map(({name, artists, spotify_url, preview_url}) => {
         const artist = artists[0];
 
@@ -251,24 +227,22 @@ function LoggedIn() {
       setSongs(recommendedCharts);
       console.log(recommendedCharts);
     }
-  }, [tracks, update, startUpdate]);
+  }, []);
 
   return (
     <>
       {!started && <ScanLocalFoldersCTACard onClick={calculate} />}
 
       {started &&
-        !(updateStatus === 'complete' && status.status === 'done') && (
+        !(
+          spotifyLibraryProgress.updateStatus === 'complete' &&
+          status.status === 'done'
+        ) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {useMockLoader ? (
               <SpotifyLoaderMock />
             ) : (
-              <SpotifyLoaderCard
-                playlists={loaderPlaylists}
-                rateLimitCountdown={rateLimit?.retryAfterSeconds ?? 0}
-                albums={albums}
-                updateStatus={updateStatus}
-              />
+              <SpotifyLoaderCard progress={spotifyLibraryProgress} />
             )}
             <LocalScanLoaderCard
               count={status.songsCounted}
@@ -277,9 +251,9 @@ function LoggedIn() {
           </div>
         )}
 
-      {updateStatus === 'complete' && status.status === 'done' && songs && (
-        <SpotifyTableDownloader tracks={songs} showPreview={true} />
-      )}
+      {spotifyLibraryProgress.updateStatus === 'complete' &&
+        status.status === 'done' &&
+        songs && <SpotifyTableDownloader tracks={songs} showPreview={true} />}
     </>
   );
 }

@@ -22,13 +22,15 @@ type CacheAlbumTracks = {
 
 type CachePlaylistMetadata = {
   [snapshotId: string]: {
+    id: string;
     name: string;
     collaborative: boolean;
-    externalUrl?: string;
-    owner?: {
-      displayName?: string;
-      externalUrl?: string;
+    externalUrl: string;
+    owner: {
+      displayName: string;
+      externalUrl: string;
     };
+    total: number;
   };
 };
 
@@ -36,10 +38,10 @@ type CacheAlbumMetadata = {
   [albumId: string]: {
     id: string;
     name: string;
-    externalUrl?: string;
-    artistName?: string;
+    externalUrl: string;
+    artistName: string;
     addedAt: string;
-    totalTracks?: number;
+    totalTracks: number;
   };
 };
 
@@ -74,7 +76,7 @@ export type SavedAlbumItem = {
   addedAt: string; // ISO string
   totalTracks?: number;
   fetched?: number;
-  status?: PlaylistProgressStatus; // reuse statuses
+  status?: PlaylistProgressStatus;
 };
 
 const cacheUpdateListeners: Set<() => void> = new Set();
@@ -180,8 +182,8 @@ async function getAllPlaylistTracksWithProgress(
     pageTracks: TrackResult[],
     pageIndex: number,
   ) => Promise<void> | void,
+  abortSignal: AbortController,
   onRateLimit?: (retryAfterSeconds: number) => void,
-  isCancelled?: () => boolean,
   startingOffset: number = 0,
 ): Promise<TrackResult[]> {
   const tracks: TrackResult[] = [];
@@ -191,7 +193,7 @@ async function getAllPlaylistTracksWithProgress(
   let pageIndex = Math.floor(startingOffset / limit);
 
   do {
-    if (isCancelled?.()) {
+    if (abortSignal.signal.aborted) {
       break;
     }
     try {
@@ -363,391 +365,336 @@ export function useTrackUrls(
   return getPreviewUrl;
 }
 
-export function useSpotifyTracks(): [
-  tracks: TrackResult[],
-  updateFromSpotify: () => Promise<void>,
-] {
-  const [forceUpdate, setForceUpdate] = useState(0);
-  const [allTracks, setAllTracks] = useState<TrackResult[]>([]);
-
-  useEffect(() => {
-    // use this variable to satisfy eslint
-    forceUpdate;
-
-    async function calculate() {
-      const sdk = await getSpotifySdk();
-
-      if (sdk == null) {
-        return;
-      }
-
-      const cachedPlaylistTracks = await getCachedPlaylistTracks();
-      const cachedAlbumTracks = await getCachedAlbumTracks();
-
-      const uniqueSongs = [
-        ...Object.values(cachedPlaylistTracks)
-          .filter(playlistTracks => {
-            if (playlistTracks?.length == null) {
-              return false;
-            }
-            return playlistTracks.length < MAX_PLAYLIST_TRACKS_TO_FETCH;
-          })
-          .flat(),
-        ...Object.values(cachedAlbumTracks).flat(),
-      ].reduce((acc, track) => {
-        const key = `${track.name} - ${track.artists.join(', ')}`.toLowerCase();
-        if (!acc.has(key)) {
-          acc.set(key, track);
-        }
-        return acc;
-      }, new Map<string, TrackResult>());
-
-      const tracks = Array.from(uniqueSongs.values());
-      setAllTracks(tracks);
-    }
-    calculate();
-    const unsubscribe = onPlaylistCacheUpdated(() => {
-      setForceUpdate(n => n + 1);
-    });
-    return () => {
-      unsubscribe();
-    };
-  }, [forceUpdate]);
-
-  const update = useCallback(async () => {
-    const sdk = await getSpotifySdk();
-
-    if (sdk == null) {
-      return;
-    }
-
-    const playlists = await getAllPlaylists(sdk);
-    const playlistNames = playlists.reduce(
-      (acc: CachePlaylistMetadata, playlist) => {
-        const snapshot: string = playlist.snapshot_id;
-        acc[snapshot] = {
-          name: playlist.name,
-          collaborative: playlist.collaborative,
-          externalUrl: playlist.external_urls.spotify,
-          owner: {
-            displayName: playlist.owner.display_name,
-            externalUrl: playlist.owner.external_urls.spotify,
-          },
-        };
-        return acc;
-      },
-      {},
-    );
-
-    await setCachedPlaylistMetadata(playlistNames);
-
-    const cachedPlaylistTracks = await getCachedPlaylistTracks();
-    const cachedSnapshots = Object.keys(cachedPlaylistTracks);
-    const foundSnapshots: string[] = [];
-
-    await pMap(
-      playlists,
-      async playlist => {
-        if (cachedSnapshots.includes(playlist.snapshot_id)) {
-          foundSnapshots.push(playlist.snapshot_id);
-          return cachedPlaylistTracks[playlist.snapshot_id];
-        }
-
-        try {
-          const playlistTracks = await getAllPlaylistTracks(sdk, playlist.id);
-          if (playlistTracks == null) {
-            console.error('Trying to cache null playlist tracks', playlist.id);
-            return [];
-          }
-          cachedPlaylistTracks[playlist.snapshot_id] = playlistTracks;
-          foundSnapshots.push(playlist.snapshot_id);
-          await setCachedPlaylistTracks(cachedPlaylistTracks);
-          return playlistTracks;
-        } catch (error: any) {
-          console.error(
-            'Unexpected error fetching tracks for playlist',
-            playlist.id,
-            'with snapshot',
-            playlist.snapshot_id,
-            error,
-          );
-          return [];
-        }
-      },
-      {concurrency: 10},
-    );
-
-    const newCache = foundSnapshots.reduce(
-      (acc: {[snapshotId: string]: TrackResult[]}, snapshot: string) => {
-        acc[snapshot] = cachedPlaylistTracks[snapshot];
-        return acc;
-      },
-      {},
-    );
-    await setCachedPlaylistTracks(newCache);
-    setForceUpdate(n => n + 1);
-  }, []);
-
-  return [allTracks, update];
-}
+export type SpotifyLibraryUpdateProgress = {
+  playlists: PlaylistProgressItem[];
+  albums: SavedAlbumItem[];
+  rateLimitCountdown?: RateLimitState;
+  updateStatus?: 'idle' | 'fetching' | 'complete' | 'error';
+};
 
 export function useSpotifyLibraryUpdate(): {
-  playlists: PlaylistProgressItem[];
-  updateStatus: 'idle' | 'fetching' | 'complete';
-  rateLimit: RateLimitState;
-  prepare: () => Promise<void>;
-  startUpdate: (options?: {
-    concurrency?: number;
-    forceRefresh?: boolean;
-  }) => Promise<void>;
-  cancel: () => void;
-  albums: SavedAlbumItem[];
+  progress: SpotifyLibraryUpdateProgress;
+  run: (
+    abort: AbortController,
+    options: {concurrency?: number},
+  ) => Promise<TrackResult[]>;
 } {
-  const [playlists, setPlaylists] = useState<PlaylistProgressItem[]>([]);
-  const [updateStatus, setUpdateStatus] = useState<
-    'idle' | 'fetching' | 'complete'
-  >('idle');
-  const [rateLimit, setRateLimit] = useState<RateLimitState>(null);
-  const cancelledRef = useRef(false);
-  const [currentUserDisplayName, setCurrentUserDisplayName] = useState<
-    string | undefined
-  >(undefined);
-  const [albums, setAlbums] = useState<SavedAlbumItem[]>([]);
+  const [progress, setProgress] = useState<SpotifyLibraryUpdateProgress>({
+    playlists: [],
+    albums: [],
+    rateLimitCountdown: null,
+    updateStatus: 'idle',
+  });
 
-  const prepare = useCallback(async () => {
-    const sdk = await getSpotifySdk();
-    if (sdk == null) {
-      return;
-    }
-    const lists = await getAllPlaylists(sdk);
-    const savedAlbums = await getAllSavedAlbums(sdk);
-    const names = lists.reduce((acc: CachePlaylistMetadata, p) => {
-      const snapshot: string = p.snapshot_id;
-      acc[snapshot] = {
-        name: p.name,
-        collaborative: p.collaborative,
-        externalUrl: p.external_urls.spotify,
-        owner: {
-          displayName: p.owner.display_name,
-          externalUrl: p.owner.external_urls.spotify,
-        },
-      };
-      return acc;
-    }, {} as CachePlaylistMetadata);
-    await setCachedPlaylistMetadata(names);
+  useEffect(() => {
+    async function loadFromCache() {
+      const cachedPlaylistTracks = await getCachedPlaylistTracks();
+      const cachedPlaylistMetadata = await getCachedPlaylistMetadata();
 
-    // Persist albums metadata
-    const albumMeta = savedAlbums.reduce((acc: CacheAlbumMetadata, s) => {
-      acc[s.album.id] = {
-        id: s.album.id,
-        name: s.album.name,
-        externalUrl: s.album.external_urls.spotify,
-        artistName: s.album.artists[0].name,
-        addedAt: s.added_at,
-        totalTracks: s.album.total_tracks,
-      };
-      return acc;
-    }, {} as CacheAlbumMetadata);
-    await setCachedAlbumMetadata(albumMeta);
+      const cachedAlbumTracks = await getCachedAlbumTracks();
+      const cachedAlbumMetadata = await getCachedAlbumMetadata();
 
-    const me = await (async () => {
-      try {
-        const profile = await sdk.currentUser.profile();
-        return profile.display_name;
-      } catch {
-        return undefined;
-      }
-    })();
-    setCurrentUserDisplayName(me);
+      const initialPlaylistProgress: PlaylistProgressItem[] = Object.entries(
+        cachedPlaylistMetadata,
+      ).map(([snapshotId, playlistMetadata]) => {
+        const tracks = cachedPlaylistTracks[snapshotId] || [];
 
-    const cached = await getCachedPlaylistTracks();
-    const cachedMeta = await getCachedPlaylistMetadata();
-    const initial: PlaylistProgressItem[] = lists.map(p => {
-      const total = p?.tracks?.total ?? 0;
-      const fetched = cached[p.snapshot_id]?.length ?? 0;
-      const status: PlaylistProgressStatus =
-        total > MAX_PLAYLIST_TRACKS_TO_FETCH
-          ? 'done'
-          : total === 0
-            ? 'done'
-            : fetched >= total
-              ? 'done'
-              : 'pending';
-      const meta = cachedMeta[p.snapshot_id];
-      return {
-        id: p.id,
-        name: p.name,
-        snapshotId: p.snapshot_id,
-        total,
-        fetched,
-        status,
-        collaborative: meta?.collaborative ?? p?.collaborative,
-        ownerDisplayName: meta?.owner?.displayName ?? p?.owner?.display_name,
-      };
-    });
-    setPlaylists(initial);
+        const total = playlistMetadata.total ?? 0;
+        const fetched = tracks.length ?? 0;
 
-    const cachedAlbums = await getCachedAlbumMetadata();
-    const cachedAlbumTracks = await getCachedAlbumTracks();
-    const albumsList: SavedAlbumItem[] = Object.values(cachedAlbums)
-      .map(a => {
-        const fetched = cachedAlbumTracks[a.id]?.length ?? 0;
-        const total = a.totalTracks ?? 0;
         const status: PlaylistProgressStatus =
-          total === 0
+          total > MAX_PLAYLIST_TRACKS_TO_FETCH
             ? 'done'
-            : fetched >= total && total > 0
+            : total === 0
               ? 'done'
-              : 'pending';
+              : fetched >= total
+                ? 'done'
+                : 'pending';
+
         return {
-          id: a.id,
-          name: a.name,
-          externalUrl: a.externalUrl,
-          artistName: a.artistName,
-          addedAt: a.addedAt,
-          totalTracks: total,
+          id: playlistMetadata.id ?? snapshotId,
+          snapshotId: snapshotId,
+          name: playlistMetadata.name,
+          total,
           fetched,
           status,
+          collaborative: playlistMetadata.collaborative,
+          ownerDisplayName: playlistMetadata.owner?.displayName,
         };
-      })
-      .sort((a, b) => (a.addedAt < b.addedAt ? 1 : -1));
-    setAlbums(albumsList);
+      });
+
+      const initialAlbumProgress: SavedAlbumItem[] = Object.entries(
+        cachedAlbumMetadata,
+      )
+        .map(([albumId, albumMetadata]) => {
+          const tracks = cachedAlbumTracks[albumId] || [];
+          const total = albumMetadata.totalTracks ?? 0;
+          const fetched = tracks.length ?? 0;
+          const status: PlaylistProgressStatus =
+            total === 0 ? 'done' : fetched >= total ? 'done' : 'pending';
+          return {
+            id: albumId,
+            name: albumMetadata.name,
+            totalTracks: total,
+            fetched,
+            status,
+            addedAt: albumMetadata.addedAt,
+            externalUrl: albumMetadata.externalUrl,
+            artistName: albumMetadata.artistName,
+          };
+        })
+        .sort((a, b) => (a.addedAt < b.addedAt ? 1 : -1));
+
+      setProgress({
+        playlists: initialPlaylistProgress,
+        albums: initialAlbumProgress,
+        rateLimitCountdown: null,
+        updateStatus: 'idle',
+      });
+    }
+    loadFromCache();
   }, []);
 
-  const startUpdate = useCallback(
-    async (options?: {concurrency?: number; forceRefresh?: boolean}) => {
-      const concurrency = options?.concurrency ?? 2;
-      const forceRefresh = options?.forceRefresh ?? false;
-      cancelledRef.current = false;
-      const sdk = await getSpotifySdk();
-      if (sdk == null) {
-        return;
-      }
-      setUpdateStatus('fetching');
+  const run = useCallback(
+    (
+      abortController: AbortController,
+      options: {concurrency?: number},
+    ): Promise<TrackResult[]> => {
+      return new Promise(async (resolve, reject) => {
+        const sdk = await getSpotifySdk();
+        if (sdk == null) {
+          reject(new Error('Spotify SDK not found'));
+          return;
+        }
 
-      const cached = await getCachedPlaylistTracks();
-      const cachedAlbum = await getCachedAlbumTracks();
-      const foundSnapshots: string[] = [];
+        const [cachedPlaylistsTracks, cachedAlbumsTracks] = await Promise.all([
+          getCachedPlaylistTracks(),
+          getCachedAlbumTracks(),
+        ]);
 
-      const lists = await getAllPlaylists(sdk);
-      const savedAlbums = await getAllSavedAlbums(sdk);
+        setProgress(progress => ({
+          ...progress,
+          updateStatus: 'fetching',
+        }));
 
-      console.log(
-        '[Spotify] Integrity check starting for',
-        lists.length,
-        'playlists',
-      );
-      const integrity = {total: lists.length, complete: 0, resume: 0, fresh: 0};
+        const [playlists, savedAlbums] = await Promise.all([
+          getAllPlaylists(sdk),
+          getAllSavedAlbums(sdk),
+        ]);
+        const playlistMetadata = playlists.reduce(
+          (acc: CachePlaylistMetadata, p) => {
+            const snapshot: string = p.snapshot_id;
+            acc[snapshot] = {
+              id: p.id,
+              name: p.name,
+              collaborative: p.collaborative,
+              externalUrl: p.external_urls.spotify,
+              owner: {
+                displayName: p.owner.display_name,
+                externalUrl: p.owner.external_urls.spotify,
+              },
+              total: p.tracks?.total ?? 0,
+            };
+            return acc;
+          },
+          {} as CachePlaylistMetadata,
+        );
+        await setCachedPlaylistMetadata(playlistMetadata);
 
-      await pMap(
-        lists,
-        async p => {
-          if (cancelledRef.current) return;
-          const snapshot = p.snapshot_id;
-          foundSnapshots.push(snapshot);
-          const alreadyCached = cached[snapshot];
-          const total = p?.tracks?.total ?? 0;
-          const cachedLen = alreadyCached?.length ?? 0;
+        // Persist albums metadata
+        const albumMetadata = savedAlbums.reduce(
+          (acc: CacheAlbumMetadata, s) => {
+            acc[s.album.id] = {
+              id: s.album.id,
+              name: s.album.name,
+              externalUrl: s.album.external_urls.spotify,
+              artistName: s.album.artists[0].name,
+              addedAt: s.added_at,
+              totalTracks: s.album.total_tracks,
+            };
+            return acc;
+          },
+          {} as CacheAlbumMetadata,
+        );
+        await setCachedAlbumMetadata(albumMetadata);
 
-          // Integrity check & control flow
-          if (alreadyCached && !forceRefresh) {
-            if (total > MAX_PLAYLIST_TRACKS_TO_FETCH) {
-              // Skip long playlists
-              setPlaylists(prev =>
-                prev.map(pl =>
-                  pl.snapshotId === snapshot
-                    ? {
-                        ...pl,
-                        total,
-                        fetched: 0,
-                        status: 'done',
-                      }
-                    : pl,
-                ),
-              );
-              integrity.complete += 1;
-              return;
-            }
-            if (total === 0) {
-              // Nothing to fetch; mark complete immediately
-              setPlaylists(prev =>
-                prev.map(pl =>
-                  pl.snapshotId === snapshot
-                    ? {
-                        ...pl,
-                        total: 0,
-                        fetched: 0,
-                        status: 'done',
-                      }
-                    : pl,
-                ),
-              );
-              integrity.complete += 1;
-              return;
-            }
-            if (total > 0 && cachedLen >= total) {
-              // Cache is complete: mark done and skip
-              setPlaylists(prev =>
-                prev.map(pl =>
+        /* Set the progress to the new playlists and albums */
+        setProgress(prev => ({
+          ...prev,
+          playlists: Object.entries(playlistMetadata).map(
+            ([snapshotId, p]) => ({
+              ...p,
+              owner: p.owner.displayName,
+              snapshotId,
+              fetched: 0,
+              status: 'pending',
+            }),
+          ),
+          albums: Object.values(albumMetadata).map(album => ({
+            ...album,
+            fetched: 0,
+            status: 'pending',
+          })),
+          rateLimitCountdown: null,
+          updateStatus: 'idle',
+        }));
+
+        console.log(
+          '[Spotify] Integrity check starting for',
+          playlists.length,
+          'playlists',
+        );
+        const integrity = {
+          total: playlists.length,
+          complete: 0,
+          resume: 0,
+          fresh: 0,
+        };
+
+        const foundSnapshots: string[] = [];
+        const foundAlbums: string[] = [];
+
+        await pMap(
+          playlists,
+          async p => {
+            if (abortController.signal.aborted) return;
+
+            const snapshot = p.snapshot_id;
+            foundSnapshots.push(snapshot);
+            const cachedPlaylistTracks = cachedPlaylistsTracks[snapshot];
+
+            const total = p?.tracks?.total ?? 0;
+            const cachedLen = cachedPlaylistTracks?.length ?? 0;
+
+            // Integrity check & control flow
+            if (cachedPlaylistTracks != null) {
+              if (total > MAX_PLAYLIST_TRACKS_TO_FETCH) {
+                // Skip long playlists
+                setProgress(prev => ({
+                  ...prev,
+                  playlists: prev.playlists.map(pl =>
+                    pl.snapshotId === snapshot
+                      ? {
+                          ...pl,
+                          total,
+                          fetched: 0,
+                          status: 'done',
+                        }
+                      : pl,
+                  ),
+                }));
+                integrity.complete += 1;
+                return;
+              }
+              if (total === 0) {
+                // Nothing to fetch; mark complete immediately
+                setProgress(prev => ({
+                  ...prev,
+                  playlists: prev.playlists.map(pl =>
+                    pl.snapshotId === snapshot
+                      ? {
+                          ...pl,
+                          total: 0,
+                          fetched: 0,
+                          status: 'done',
+                        }
+                      : pl,
+                  ),
+                }));
+                integrity.complete += 1;
+                return;
+              }
+              if (total > 0 && cachedLen >= total) {
+                // Cache is complete: mark done and skip
+
+                setProgress(prev => ({
+                  ...prev,
+                  playlists: prev.playlists.map(pl =>
+                    pl.snapshotId === snapshot
+                      ? {
+                          ...pl,
+                          total,
+                          fetched: cachedLen,
+                          status: 'done',
+                        }
+                      : pl,
+                  ),
+                }));
+                integrity.complete += 1;
+                return;
+              }
+
+              // Cache incomplete or total unknown: resume fetching from current length
+              setProgress(prev => ({
+                ...prev,
+                playlists: prev.playlists.map(pl =>
                   pl.snapshotId === snapshot
                     ? {
                         ...pl,
                         total,
                         fetched: cachedLen,
-                        status: 'done',
+                        status: 'fetching',
                       }
                     : pl,
                 ),
-              );
-              integrity.complete += 1;
-              return;
-            }
+              }));
 
-            // Cache incomplete or total unknown: resume fetching from current length
-            setPlaylists(prev =>
-              prev.map(pl =>
-                pl.snapshotId === snapshot
-                  ? {
-                      ...pl,
-                      total,
-                      fetched: cachedLen,
-                      status: 'fetching',
-                    }
-                  : pl,
-              ),
-            );
+              if (total > 0 && cachedLen !== total) {
+                console.log(
+                  '[Spotify] Playlist cache incomplete:',
+                  p.name,
+                  `${cachedLen}/${total}`,
+                );
+              }
 
-            if (total > 0 && cachedLen !== total) {
-              console.log(
-                '[Spotify] Playlist cache incomplete:',
-                p.name,
-                `${cachedLen}/${total}`,
-              );
-            }
+              try {
+                await getAllPlaylistTracksWithProgress(
+                  sdk,
+                  p.id,
+                  async (pageTracks, _pageIndex) => {
+                    cachedPlaylistsTracks[snapshot] =
+                      cachedPlaylistsTracks[snapshot].concat(pageTracks);
+                    await setCachedPlaylistTracks(cachedPlaylistsTracks);
 
-            try {
-              await getAllPlaylistTracksWithProgress(
-                sdk,
-                p.id,
-                async (pageTracks, _pageIndex) => {
-                  if (cancelledRef.current) return;
-                  const current = cached[snapshot] ?? [];
-                  cached[snapshot] = current.concat(pageTracks);
-                  await setCachedPlaylistTracks(cached);
-                  const fetched = cached[snapshot].length;
-                  setPlaylists(prev =>
-                    prev.map(pl =>
-                      pl.snapshotId === snapshot ? {...pl, fetched} : pl,
-                    ),
-                  );
-                },
-                retryAfterSeconds => setRateLimit({retryAfterSeconds}),
-                () => cancelledRef.current,
-                cachedLen,
-              );
-              const finalFetched = cached[snapshot]?.length ?? cachedLen;
-              setPlaylists(prev =>
-                prev.map(pl =>
+                    const fetched = cachedPlaylistsTracks[snapshot].length;
+                    setProgress(prev => ({
+                      ...prev,
+                      playlists: prev.playlists.map(pl =>
+                        pl.snapshotId === snapshot ? {...pl, fetched} : pl,
+                      ),
+                    }));
+                  },
+                  abortController,
+                  retryAfterSeconds => {
+                    setProgress(prev => ({
+                      ...prev,
+                      rateLimitCountdown: {retryAfterSeconds},
+                    }));
+                  },
+                  cachedLen,
+                );
+              } catch (e: any) {
+                console.error('Error resuming playlist', p.id, e);
+                setProgress(prev => ({
+                  ...prev,
+                  playlists: prev.playlists.map(pl =>
+                    pl.snapshotId === snapshot
+                      ? {
+                          ...pl,
+                          status: 'error',
+                          lastError: String(e?.message ?? e),
+                        }
+                      : pl,
+                  ),
+                }));
+              }
+
+              const finalFetched =
+                cachedPlaylistsTracks[snapshot]?.length ?? cachedLen;
+
+              setProgress(prev => ({
+                ...prev,
+                playlists: prev.playlists.map(pl =>
                   pl.snapshotId === snapshot
                     ? {
                         ...pl,
@@ -757,12 +704,87 @@ export function useSpotifyLibraryUpdate(): {
                       }
                     : pl,
                 ),
+              }));
+              setProgress(prev => ({
+                ...prev,
+                rateLimitCountdown: null,
+              }));
+
+              integrity.resume += 1;
+              return;
+            }
+
+            // Fresh fetch (no cache)
+            setProgress(prev => ({
+              ...prev,
+              playlists: prev.playlists.map(pl =>
+                pl.snapshotId === snapshot ? {...pl, status: 'fetching'} : pl,
+              ),
+            }));
+
+            if (total > MAX_PLAYLIST_TRACKS_TO_FETCH) {
+              setProgress(prev => ({
+                ...prev,
+                playlists: prev.playlists.map(pl =>
+                  pl.snapshotId === snapshot
+                    ? {...pl, total, fetched: 0, status: 'done'}
+                    : pl,
+                ),
+              }));
+              integrity.complete += 1;
+              return;
+            }
+
+            if (total === 0) {
+              // Nothing to fetch
+              setProgress(prev => ({
+                ...prev,
+                playlists: prev.playlists.map(pl =>
+                  pl.snapshotId === snapshot
+                    ? {...pl, total: 0, fetched: 0, status: 'done'}
+                    : pl,
+                ),
+              }));
+              integrity.complete += 1;
+              return;
+            }
+
+            if (cachedPlaylistsTracks[snapshot] == null) {
+              cachedPlaylistsTracks[snapshot] = [];
+              await setCachedPlaylistTracks(cachedPlaylistsTracks);
+            }
+
+            try {
+              await getAllPlaylistTracksWithProgress(
+                sdk,
+                p.id,
+                async (pageTracks, _pageIndex) => {
+                  cachedPlaylistsTracks[snapshot] =
+                    cachedPlaylistsTracks[snapshot].concat(pageTracks);
+                  await setCachedPlaylistTracks(cachedPlaylistsTracks);
+
+                  const fetched = cachedPlaylistsTracks[snapshot].length;
+                  setProgress(prev => ({
+                    ...prev,
+                    playlists: prev.playlists.map(pl =>
+                      pl.snapshotId === snapshot ? {...pl, fetched} : pl,
+                    ),
+                  }));
+                },
+                abortController,
+                retryAfterSeconds => {
+                  setProgress(prev => ({
+                    ...prev,
+                    rateLimitCountdown: {retryAfterSeconds},
+                  }));
+                },
+                0,
               );
-              setRateLimit(null);
             } catch (e: any) {
-              console.error('Error resuming playlist', p.id, e);
-              setPlaylists(prev =>
-                prev.map(pl =>
+              console.error('Error fetching playlist', p.id, e);
+              setProgress(prev => ({
+                ...prev,
+                playlists: prev.playlists.map(pl =>
                   pl.snapshotId === snapshot
                     ? {
                         ...pl,
@@ -771,72 +793,15 @@ export function useSpotifyLibraryUpdate(): {
                       }
                     : pl,
                 ),
-              );
+              }));
             }
-            integrity.resume += 1;
-            return;
-          }
 
-          // Fresh fetch (no cache or forceRefresh)
-          setPlaylists(prev =>
-            prev.map(pl =>
-              pl.snapshotId === snapshot ? {...pl, status: 'fetching'} : pl,
-            ),
-          );
+            const finalFetched =
+              cachedPlaylistsTracks[snapshot]?.length ?? cachedLen;
 
-          if (total > MAX_PLAYLIST_TRACKS_TO_FETCH) {
-            setPlaylists(prev =>
-              prev.map(pl =>
-                pl.snapshotId === snapshot
-                  ? {...pl, total, fetched: 0, status: 'done'}
-                  : pl,
-              ),
-            );
-            integrity.complete += 1;
-            return;
-          }
-
-          if (total === 0) {
-            // Nothing to fetch
-            setPlaylists(prev =>
-              prev.map(pl =>
-                pl.snapshotId === snapshot
-                  ? {...pl, total: 0, fetched: 0, status: 'done'}
-                  : pl,
-              ),
-            );
-            integrity.complete += 1;
-            return;
-          }
-
-          if (forceRefresh || !alreadyCached) {
-            cached[snapshot] = [];
-            await setCachedPlaylistTracks(cached);
-          }
-
-          try {
-            await getAllPlaylistTracksWithProgress(
-              sdk,
-              p.id,
-              async (pageTracks, _pageIndex) => {
-                if (cancelledRef.current) return;
-                const current = cached[snapshot] ?? [];
-                cached[snapshot] = current.concat(pageTracks);
-                await setCachedPlaylistTracks(cached);
-                const fetched = cached[snapshot].length;
-                setPlaylists(prev =>
-                  prev.map(pl =>
-                    pl.snapshotId === snapshot ? {...pl, fetched} : pl,
-                  ),
-                );
-              },
-              retryAfterSeconds => setRateLimit({retryAfterSeconds}),
-              () => cancelledRef.current,
-              0,
-            );
-            const finalFetched = cached[snapshot]?.length ?? 0;
-            setPlaylists(prev =>
-              prev.map(pl =>
+            setProgress(prev => ({
+              ...prev,
+              playlists: prev.playlists.map(pl =>
                 pl.snapshotId === snapshot
                   ? {
                       ...pl,
@@ -846,111 +811,144 @@ export function useSpotifyLibraryUpdate(): {
                     }
                   : pl,
               ),
-            );
-            setRateLimit(null);
-          } catch (e: any) {
-            console.error('Error fetching playlist', p.id, e);
-            setPlaylists(prev =>
-              prev.map(pl =>
-                pl.snapshotId === snapshot
-                  ? {...pl, status: 'error', lastError: String(e?.message ?? e)}
-                  : pl,
-              ),
-            );
-          }
-          integrity.fresh += 1;
-        },
-        {concurrency},
-      );
+            }));
+            setProgress(prev => ({
+              ...prev,
+              rateLimitCountdown: null,
+            }));
 
-      // Fetch saved album tracks
-      await pMap(
-        savedAlbums,
-        async s => {
-          if (cancelledRef.current) return;
-          const albumId = s.album.id;
-          const total = s.album.total_tracks ?? 0;
-          if (cachedAlbum[albumId] && !forceRefresh) {
-            setAlbums(prev =>
-              prev.map(a =>
-                a.id === albumId
-                  ? {
-                      ...a,
-                      totalTracks: total,
-                      fetched: cachedAlbum[albumId]?.length ?? 0,
-                      status:
-                        (cachedAlbum[albumId]?.length ?? 0) >= total &&
-                        total > 0
-                          ? 'done'
-                          : 'pending',
-                    }
-                  : a,
-              ),
-            );
-            return;
-          }
-          setAlbums(prev =>
-            prev.map(a => (a.id === albumId ? {...a, status: 'fetching'} : a)),
-          );
-          try {
-            const tracks = await getAllAlbumTracks(sdk, albumId);
-            cachedAlbum[albumId] = tracks;
-            await setCachedAlbumTracks(cachedAlbum);
-            setAlbums(prev =>
-              prev.map(a =>
-                a.id === albumId
-                  ? {
-                      ...a,
-                      fetched: tracks.length,
-                      totalTracks: total,
-                      status: 'done',
-                    }
-                  : a,
-              ),
-            );
-          } catch (e) {
-            console.error('Error fetching album tracks', albumId, e);
-            setAlbums(prev =>
-              prev.map(a => (a.id === albumId ? {...a, status: 'error'} : a)),
-            );
-          }
-        },
-        {concurrency},
-      );
+            integrity.fresh += 1;
+          },
+          {concurrency: options.concurrency ?? 3},
+        );
 
-      console.log(
-        '[Spotify] Integrity check result:',
-        `total=${integrity.total}`,
-        `complete=${integrity.complete}`,
-        `resume=${integrity.resume}`,
-        `fresh=${integrity.fresh}`,
-      );
+        // Fetch saved album tracks
+        await pMap(
+          savedAlbums,
+          async s => {
+            if (abortController.signal.aborted) return;
 
-      // Compact cache to only include found snapshots
-      const newCache = foundSnapshots.reduce(
-        (acc: {[snapshotId: string]: TrackResult[]}, snapshot: string) => {
-          acc[snapshot] = cached[snapshot];
+            const albumId = s.album.id;
+            foundAlbums.push(albumId);
+            const total = s.album.total_tracks;
+            const cachedAlbumTracks = cachedAlbumsTracks[albumId];
+            if (cachedAlbumTracks) {
+              setProgress(prev => ({
+                ...prev,
+                albums: prev.albums.map(a =>
+                  a.id === albumId
+                    ? {
+                        ...a,
+                        totalTracks: total,
+                        fetched: cachedAlbumTracks.length,
+                        status:
+                          cachedAlbumTracks.length >= total && total > 0
+                            ? 'done'
+                            : 'pending',
+                      }
+                    : a,
+                ),
+              }));
+              return;
+            }
+            setProgress(prev => ({
+              ...prev,
+              albums: prev.albums.map(a =>
+                a.id === albumId ? {...a, status: 'fetching'} : a,
+              ),
+            }));
+
+            try {
+              const tracks = await getAllAlbumTracks(sdk, albumId);
+              cachedAlbumsTracks[albumId] = tracks;
+              await setCachedAlbumTracks(cachedAlbumsTracks);
+
+              setProgress(prev => ({
+                ...prev,
+                albums: prev.albums.map(a =>
+                  a.id === albumId
+                    ? {
+                        ...a,
+                        fetched: tracks.length,
+                        totalTracks: total,
+                        status: 'done',
+                      }
+                    : a,
+                ),
+              }));
+            } catch (e) {
+              console.error('Error fetching album tracks', albumId, e);
+              setProgress(prev => ({
+                ...prev,
+                albums: prev.albums.map(a =>
+                  a.id === albumId ? {...a, status: 'error'} : a,
+                ),
+              }));
+            }
+          },
+          {concurrency: options.concurrency ?? 3},
+        );
+
+        console.log(
+          '[Spotify] Integrity check result:',
+          `total=${integrity.total}`,
+          `complete=${integrity.complete}`,
+          `resume=${integrity.resume}`,
+          `fresh=${integrity.fresh}`,
+        );
+
+        // We want to remove all snapshots and albums from the cache that are not in the foundSnapshots and foundAlbums arrays
+        const newPlaylistCache = foundSnapshots.reduce(
+          (acc: {[snapshotId: string]: TrackResult[]}, snapshot: string) => {
+            acc[snapshot] = cachedPlaylistsTracks[snapshot];
+            return acc;
+          },
+          {},
+        );
+        await setCachedPlaylistTracks(newPlaylistCache);
+
+        const newAlbumCache = foundAlbums.reduce(
+          (acc: {[albumId: string]: TrackResult[]}, albumId: string) => {
+            acc[albumId] = cachedAlbumsTracks[albumId];
+            return acc;
+          },
+          {},
+        );
+        await setCachedAlbumTracks(newAlbumCache);
+        setProgress(prev => ({
+          ...prev,
+          updateStatus: 'complete',
+        }));
+
+        const uniqueSongs = [
+          ...Object.values(newPlaylistCache)
+            .filter(playlistTracks => {
+              if (playlistTracks?.length == null) {
+                return false;
+              }
+              return playlistTracks.length < MAX_PLAYLIST_TRACKS_TO_FETCH;
+            })
+            .flat(),
+          ...Object.values(newAlbumCache).flat(),
+        ].reduce((acc, track) => {
+          const key =
+            `${track.name} - ${track.artists.join(', ')}`.toLowerCase();
+          if (!acc.has(key)) {
+            acc.set(key, track);
+          }
           return acc;
-        },
-        {},
-      );
-      await setCachedPlaylistTracks(newCache);
-      setUpdateStatus('complete');
+        }, new Map<string, TrackResult>());
+
+        const tracks = Array.from(uniqueSongs.values());
+
+        resolve(tracks);
+      });
     },
     [],
   );
 
-  const cancel = useCallback(() => {
-    cancelledRef.current = true;
-  }, []);
-
   return {
-    playlists,
-    updateStatus,
-    rateLimit,
-    prepare,
-    startUpdate,
-    cancel,
-    albums,
+    progress,
+    run,
   };
 }
