@@ -20,31 +20,6 @@ type CacheAlbumTracks = {
   [albumId: string]: TrackResult[];
 };
 
-type CachePlaylistMetadata = {
-  [snapshotId: string]: {
-    id: string;
-    name: string;
-    collaborative: boolean;
-    externalUrl: string;
-    owner: {
-      displayName: string;
-      externalUrl: string;
-    };
-    total: number;
-  };
-};
-
-type CacheAlbumMetadata = {
-  [albumId: string]: {
-    id: string;
-    name: string;
-    externalUrl: string;
-    artistName: string;
-    addedAt: string;
-    totalTracks: number;
-  };
-};
-
 export type TrackResult = {
   name: string;
   artists: string[];
@@ -52,31 +27,48 @@ export type TrackResult = {
   spotify_url: string;
 };
 
-export type PlaylistProgressStatus = 'pending' | 'fetching' | 'done' | 'error';
-
-export type PlaylistProgressItem = {
-  id: string;
-  name: string;
-  snapshotId: string;
-  total: number;
-  fetched: number;
-  status: PlaylistProgressStatus;
-  lastError?: string;
-  ownerDisplayName?: string;
-  collaborative?: boolean;
+type PlaylistMetadata = {
+  [snapshotId: string]: PlaylistItem;
 };
 
-export type RateLimitState = {retryAfterSeconds: number} | null;
+type AlbumMetadata = {
+  [albumId: string]: AlbumItem;
+};
 
-export type SavedAlbumItem = {
+type PlaylistItem = {
+  id: string;
+  name: string;
+  externalUrl: string;
+  total: number;
+  owner: {
+    displayName: string;
+    externalUrl: string;
+  };
+  collaborative: boolean;
+};
+
+type AlbumItem = {
   id: string;
   name: string;
   externalUrl?: string;
   artistName?: string;
   addedAt: string; // ISO string
   totalTracks?: number;
+};
+
+export type ProgressStatus = 'pending' | 'fetching' | 'done' | 'error';
+
+export type PlaylistProgressItem = PlaylistItem & {
+  fetched: number;
+  status: ProgressStatus;
+  lastError?: string;
+};
+
+export type RateLimitState = {retryAfterSeconds: number} | null;
+
+export type SavedAlbumItem = AlbumItem & {
   fetched?: number;
-  status?: PlaylistProgressStatus;
+  status?: ProgressStatus;
 };
 
 const cacheUpdateListeners: Set<() => void> = new Set();
@@ -121,21 +113,21 @@ async function setCachedAlbumTracks(cachedAlbumTracks: CacheAlbumTracks) {
 }
 
 async function setCachedPlaylistMetadata(
-  cachedPlaylistMetadata: CachePlaylistMetadata,
+  cachedPlaylistMetadata: PlaylistMetadata,
 ) {
   await set('playlistMetadata', cachedPlaylistMetadata);
 }
 
-async function getCachedPlaylistMetadata(): Promise<CachePlaylistMetadata> {
+async function getCachedPlaylistMetadata(): Promise<PlaylistMetadata> {
   const meta = await get('playlistMetadata');
   return meta ?? {};
 }
 
-async function setCachedAlbumMetadata(cachedAlbumMetadata: CacheAlbumMetadata) {
+async function setCachedAlbumMetadata(cachedAlbumMetadata: AlbumMetadata) {
   await set('albumMetadata', cachedAlbumMetadata);
 }
 
-async function getCachedAlbumMetadata(): Promise<CacheAlbumMetadata> {
+async function getCachedAlbumMetadata(): Promise<AlbumMetadata> {
   const meta = await get('albumMetadata');
   return meta ?? {};
 }
@@ -372,12 +364,17 @@ export type SpotifyLibraryUpdateProgress = {
   updateStatus?: 'idle' | 'fetching' | 'complete' | 'error';
 };
 
+export type SpotifyLibrary = {
+  playlists: PlaylistProgressItem[];
+  albums: SavedAlbumItem[];
+};
+
 export function useSpotifyLibraryUpdate(): [
   progress: SpotifyLibraryUpdateProgress,
   run: (
     abort: AbortController,
     options: {concurrency?: number},
-  ) => Promise<TrackResult[]>,
+  ) => Promise<SpotifyLibrary>,
 ] {
   const [progress, setProgress] = useState<SpotifyLibraryUpdateProgress>({
     playlists: [],
@@ -402,7 +399,7 @@ export function useSpotifyLibraryUpdate(): [
         const total = playlistMetadata.total ?? 0;
         const fetched = tracks.length ?? 0;
 
-        const status: PlaylistProgressStatus =
+        const status: ProgressStatus =
           total > MAX_PLAYLIST_TRACKS_TO_FETCH
             ? 'done'
             : total === 0
@@ -418,8 +415,9 @@ export function useSpotifyLibraryUpdate(): [
           total,
           fetched,
           status,
+          externalUrl: playlistMetadata.externalUrl,
           collaborative: playlistMetadata.collaborative,
-          ownerDisplayName: playlistMetadata.owner?.displayName,
+          owner: playlistMetadata.owner,
         };
       });
 
@@ -430,7 +428,7 @@ export function useSpotifyLibraryUpdate(): [
           const tracks = cachedAlbumTracks[albumId] || [];
           const total = albumMetadata.totalTracks ?? 0;
           const fetched = tracks.length ?? 0;
-          const status: PlaylistProgressStatus =
+          const status: ProgressStatus =
             total === 0 ? 'done' : fetched >= total ? 'done' : 'pending';
           return {
             id: albumId,
@@ -459,7 +457,7 @@ export function useSpotifyLibraryUpdate(): [
     (
       abortController: AbortController,
       options: {concurrency?: number},
-    ): Promise<TrackResult[]> => {
+    ): Promise<SpotifyLibrary> => {
       return new Promise(async (resolve, reject) => {
         const sdk = await getSpotifySdk();
         if (sdk == null) {
@@ -482,12 +480,11 @@ export function useSpotifyLibraryUpdate(): [
           getAllSavedAlbums(sdk),
         ]);
         const playlistMetadata = playlists.reduce(
-          (acc: CachePlaylistMetadata, p) => {
+          (acc: PlaylistMetadata, p) => {
             const snapshot: string = p.snapshot_id;
+
             acc[snapshot] = {
-              id: p.id,
-              name: p.name,
-              collaborative: p.collaborative,
+              ...p,
               externalUrl: p.external_urls.spotify,
               owner: {
                 displayName: p.owner.display_name,
@@ -497,39 +494,32 @@ export function useSpotifyLibraryUpdate(): [
             };
             return acc;
           },
-          {} as CachePlaylistMetadata,
+          {} as PlaylistMetadata,
         );
         await setCachedPlaylistMetadata(playlistMetadata);
 
         // Persist albums metadata
-        const albumMetadata = savedAlbums.reduce(
-          (acc: CacheAlbumMetadata, s) => {
-            acc[s.album.id] = {
-              id: s.album.id,
-              name: s.album.name,
-              externalUrl: s.album.external_urls.spotify,
-              artistName: s.album.artists[0].name,
-              addedAt: s.added_at,
-              totalTracks: s.album.total_tracks,
-            };
-            return acc;
-          },
-          {} as CacheAlbumMetadata,
-        );
+        const albumMetadata = savedAlbums.reduce((acc: AlbumMetadata, s) => {
+          acc[s.album.id] = {
+            id: s.album.id,
+            name: s.album.name,
+            externalUrl: s.album.external_urls.spotify,
+            artistName: s.album.artists[0].name,
+            addedAt: s.added_at,
+            totalTracks: s.album.total_tracks,
+          };
+          return acc;
+        }, {} as AlbumMetadata);
         await setCachedAlbumMetadata(albumMetadata);
 
         /* Set the progress to the new playlists and albums */
         setProgress(prev => ({
           ...prev,
-          playlists: Object.entries(playlistMetadata).map(
-            ([snapshotId, p]) => ({
-              ...p,
-              owner: p.owner.displayName,
-              snapshotId,
-              fetched: 0,
-              status: 'pending',
-            }),
-          ),
+          playlists: Object.values(playlistMetadata).map(p => ({
+            ...p,
+            fetched: 0,
+            status: 'pending',
+          })),
           albums: Object.values(albumMetadata).map(album => ({
             ...album,
             fetched: 0,
