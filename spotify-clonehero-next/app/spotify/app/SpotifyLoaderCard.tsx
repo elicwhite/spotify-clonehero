@@ -1,6 +1,6 @@
 'use client';
 
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState, memo} from 'react';
 import {useInView} from 'react-intersection-observer';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import {Loader2, User, Users, Clock, Check, Info, Disc3} from 'lucide-react';
@@ -127,7 +127,7 @@ export default function SpotifyLoaderCard({
   );
 
   const allItems: LoaderPlaylist[] = useMemo(() => {
-    return progress.playlists
+    return Object.values(progress.playlists)
       .map(p => {
         return {
           id: p.id,
@@ -135,20 +135,20 @@ export default function SpotifyLoaderCard({
           totalSongs: p.total,
           scannedSongs: p.fetched,
           isScanning: p.status === 'fetching',
-          creator: p.ownerDisplayName,
+          creator: p.owner.displayName,
           isCollaborative: p.collaborative,
           isAlbum: false,
         };
       })
       .concat(
-        progress.albums.map(a => {
+        Object.values(progress.albums).map(a => {
           return {
             id: a.id,
             name: a.name,
             totalSongs: a.totalTracks ?? 0,
             scannedSongs: a.fetched ?? 0,
             isScanning: a.status === 'fetching',
-            creator: a.artistName,
+            creator: a.artistName ?? '',
             isAlbum: true,
             isCollaborative: false,
           };
@@ -373,7 +373,7 @@ export default function SpotifyLoaderCard({
   );
 }
 
-function PlaylistRow({
+const PlaylistRow = memo(function PlaylistRow({
   playlist,
   onRef,
   onInViewChange,
@@ -465,4 +465,6 @@ function PlaylistRow({
       </div>
     </div>
   );
-}
+});
+
+PlaylistRow.displayName = 'PlaylistRow';

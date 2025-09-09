@@ -2,7 +2,10 @@
 
 import {createClient} from '@/lib/supabase/client';
 
-import {useSpotifyLibraryUpdate} from '@/lib/spotify-sdk/SpotifyFetching';
+import {
+  getTrackMap,
+  useSpotifyLibraryUpdate,
+} from '@/lib/spotify-sdk/SpotifyFetching';
 import {Button} from '@/components/ui/button';
 import {useCallback, useEffect, useState} from 'react';
 import {
@@ -166,6 +169,8 @@ function LoggedIn() {
       updateSpotifyLibraryPromise,
     ]);
 
+    const trackMap = getTrackMap(updateSpotifyLibraryResult);
+
     const markedCharts = markInstalledCharts(allChorusCharts, isInstalled);
 
     setStatus(prevStatus => ({
@@ -179,7 +184,7 @@ function LoggedIn() {
       useSellers: false,
     });
 
-    const recommendedCharts = updateSpotifyLibraryResult
+    const recommendedCharts = Array.from(trackMap.values())
       .map(({name, artists, spotify_url, preview_url}) => {
         const artist = artists[0];
 

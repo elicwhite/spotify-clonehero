@@ -56,6 +56,14 @@ type AlbumItem = {
   totalTracks?: number;
 };
 
+type PlaylistProgressMetadata = {
+  [snapshotId: string]: PlaylistProgressItem;
+};
+
+type AlbumProgressMetadata = {
+  [albumId: string]: SavedAlbumItem;
+};
+
 export type ProgressStatus = 'pending' | 'fetching' | 'done' | 'error';
 
 export type PlaylistProgressItem = PlaylistItem & {
@@ -212,7 +220,7 @@ async function getAllPlaylistTracksWithProgress(
       tracks.push(...filteredTracks);
       await onPage(filteredTracks, pageIndex++);
       offset += limit;
-    } catch (error: any) {
+    } catch (error) {
       if (error instanceof RateLimitError) {
         const retry = Math.max(1, Math.ceil(error.retryAfter * 2));
         onRateLimit?.(retry);
@@ -240,15 +248,21 @@ async function getAllAlbumTracks(
       const market = undefined;
       const page = await sdk.albums.tracks(albumId, market, limit, offset);
       if (total == null) total = page.total;
-      const mapped: TrackResult[] = page.items.map((t: any) => ({
+      type AlbumTrack = {
+        name: string;
+        artists: {name: string}[];
+        preview_url: string | null;
+        external_urls: {spotify: string};
+      };
+      const mapped: TrackResult[] = page.items.map((t: AlbumTrack) => ({
         name: t.name,
-        artists: (t.artists || []).map((a: any) => a.name),
+        artists: (t.artists || []).map((a: {name: string}) => a.name),
         preview_url: t.preview_url ?? null,
         spotify_url: t.external_urls.spotify,
       }));
       tracks.push(...mapped);
       offset += limit;
-    } catch (error: any) {
+    } catch (error) {
       if (error instanceof RateLimitError) {
         const retry = Math.max(1, Math.ceil(error.retryAfter * 2));
         await new Promise(resolve => setTimeout(resolve, retry * 1000));
@@ -295,17 +309,18 @@ async function getAllPlaylistTracks(
 
       tracks.push(...filteredTracks);
       offset += limit;
-    } catch (error: any) {
-      if (error instanceof RateLimitError) {
+    } catch (error) {
+      if (isRateLimitError(error)) {
+        const retryAfter = error.retryAfter;
         console.log(
-          `Rate limited. Retrying after ${error.retryAfter * 2} seconds...`,
+          `Rate limited. Retrying after ${retryAfter * 2} seconds...`,
         );
         await new Promise(resolve =>
-          setTimeout(resolve, error.retryAfter * 1000 * 2),
+          setTimeout(resolve, retryAfter * 1000 * 2),
         );
         continue;
       }
-      throw error;
+      throw error instanceof Error ? error : new Error(String(error));
     }
   } while (total == null || offset < total);
 
@@ -358,15 +373,17 @@ export function useTrackUrls(
 }
 
 export type SpotifyLibraryUpdateProgress = {
-  playlists: PlaylistProgressItem[];
-  albums: SavedAlbumItem[];
+  playlists: PlaylistProgressMetadata;
+  albums: AlbumProgressMetadata;
   rateLimitCountdown?: RateLimitState;
   updateStatus?: 'idle' | 'fetching' | 'complete' | 'error';
 };
 
 export type SpotifyLibrary = {
-  playlists: PlaylistProgressItem[];
-  albums: SavedAlbumItem[];
+  playlistMetadata: PlaylistMetadata;
+  albumMetadata: AlbumMetadata;
+  playlistTracks: CachePlaylistTracks;
+  albumTracks: CacheAlbumTracks;
 };
 
 export function useSpotifyLibraryUpdate(): [
@@ -377,8 +394,8 @@ export function useSpotifyLibraryUpdate(): [
   ) => Promise<SpotifyLibrary>,
 ] {
   const [progress, setProgress] = useState<SpotifyLibraryUpdateProgress>({
-    playlists: [],
-    albums: [],
+    playlists: {},
+    albums: {},
     rateLimitCountdown: null,
     updateStatus: 'idle',
   });
@@ -391,14 +408,12 @@ export function useSpotifyLibraryUpdate(): [
       const cachedAlbumTracks = await getCachedAlbumTracks();
       const cachedAlbumMetadata = await getCachedAlbumMetadata();
 
-      const initialPlaylistProgress: PlaylistProgressItem[] = Object.entries(
+      const initialPlaylistProgress: PlaylistProgressMetadata = Object.entries(
         cachedPlaylistMetadata,
-      ).map(([snapshotId, playlistMetadata]) => {
+      ).reduce((acc, [snapshotId, playlistMetadata]) => {
         const tracks = cachedPlaylistTracks[snapshotId] || [];
-
         const total = playlistMetadata.total ?? 0;
         const fetched = tracks.length ?? 0;
-
         const status: ProgressStatus =
           total > MAX_PLAYLIST_TRACKS_TO_FETCH
             ? 'done'
@@ -407,10 +422,8 @@ export function useSpotifyLibraryUpdate(): [
               : fetched >= total
                 ? 'done'
                 : 'pending';
-
-        return {
+        acc[snapshotId] = {
           id: playlistMetadata.id ?? snapshotId,
-          snapshotId: snapshotId,
           name: playlistMetadata.name,
           total,
           fetched,
@@ -419,29 +432,29 @@ export function useSpotifyLibraryUpdate(): [
           collaborative: playlistMetadata.collaborative,
           owner: playlistMetadata.owner,
         };
-      });
+        return acc;
+      }, {} as PlaylistProgressMetadata);
 
-      const initialAlbumProgress: SavedAlbumItem[] = Object.entries(
+      const initialAlbumProgress: AlbumProgressMetadata = Object.entries(
         cachedAlbumMetadata,
-      )
-        .map(([albumId, albumMetadata]) => {
-          const tracks = cachedAlbumTracks[albumId] || [];
-          const total = albumMetadata.totalTracks ?? 0;
-          const fetched = tracks.length ?? 0;
-          const status: ProgressStatus =
-            total === 0 ? 'done' : fetched >= total ? 'done' : 'pending';
-          return {
-            id: albumId,
-            name: albumMetadata.name,
-            totalTracks: total,
-            fetched,
-            status,
-            addedAt: albumMetadata.addedAt,
-            externalUrl: albumMetadata.externalUrl,
-            artistName: albumMetadata.artistName,
-          };
-        })
-        .sort((a, b) => (a.addedAt < b.addedAt ? 1 : -1));
+      ).reduce((acc, [albumId, albumMetadata]) => {
+        const tracks = cachedAlbumTracks[albumId] || [];
+        const total = albumMetadata.totalTracks ?? 0;
+        const fetched = tracks.length ?? 0;
+        const status: ProgressStatus =
+          total === 0 ? 'done' : fetched >= total ? 'done' : 'pending';
+        acc[albumId] = {
+          id: albumId,
+          name: albumMetadata.name,
+          totalTracks: total,
+          fetched,
+          status,
+          addedAt: albumMetadata.addedAt,
+          externalUrl: albumMetadata.externalUrl,
+          artistName: albumMetadata.artistName,
+        };
+        return acc;
+      }, {} as AlbumProgressMetadata);
 
       setProgress({
         playlists: initialPlaylistProgress,
@@ -515,16 +528,28 @@ export function useSpotifyLibraryUpdate(): [
         /* Set the progress to the new playlists and albums */
         setProgress(prev => ({
           ...prev,
-          playlists: Object.values(playlistMetadata).map(p => ({
-            ...p,
-            fetched: 0,
-            status: 'pending',
-          })),
-          albums: Object.values(albumMetadata).map(album => ({
-            ...album,
-            fetched: 0,
-            status: 'pending',
-          })),
+          playlists: Object.entries(playlistMetadata).reduce(
+            (acc, [snapshot, p]) => {
+              acc[snapshot] = {
+                ...p,
+                fetched: 0,
+                status: 'pending',
+              };
+              return acc;
+            },
+            {} as PlaylistProgressMetadata,
+          ),
+          albums: Object.entries(albumMetadata).reduce(
+            (acc, [albumId, album]) => {
+              acc[albumId] = {
+                ...album,
+                fetched: 0,
+                status: 'pending',
+              };
+              return acc;
+            },
+            {} as AlbumProgressMetadata,
+          ),
           rateLimitCountdown: null,
           updateStatus: 'idle',
         }));
@@ -562,16 +587,15 @@ export function useSpotifyLibraryUpdate(): [
                 // Skip long playlists
                 setProgress(prev => ({
                   ...prev,
-                  playlists: prev.playlists.map(pl =>
-                    pl.snapshotId === snapshot
-                      ? {
-                          ...pl,
-                          total,
-                          fetched: 0,
-                          status: 'done',
-                        }
-                      : pl,
-                  ),
+                  playlists: {
+                    ...prev.playlists,
+                    [snapshot]: {
+                      ...prev.playlists[snapshot],
+                      total,
+                      fetched: 0,
+                      status: 'done',
+                    },
+                  },
                 }));
                 integrity.complete += 1;
                 return;
@@ -580,16 +604,15 @@ export function useSpotifyLibraryUpdate(): [
                 // Nothing to fetch; mark complete immediately
                 setProgress(prev => ({
                   ...prev,
-                  playlists: prev.playlists.map(pl =>
-                    pl.snapshotId === snapshot
-                      ? {
-                          ...pl,
-                          total: 0,
-                          fetched: 0,
-                          status: 'done',
-                        }
-                      : pl,
-                  ),
+                  playlists: {
+                    ...prev.playlists,
+                    [snapshot]: {
+                      ...prev.playlists[snapshot],
+                      total: 0,
+                      fetched: 0,
+                      status: 'done',
+                    },
+                  },
                 }));
                 integrity.complete += 1;
                 return;
@@ -599,16 +622,15 @@ export function useSpotifyLibraryUpdate(): [
 
                 setProgress(prev => ({
                   ...prev,
-                  playlists: prev.playlists.map(pl =>
-                    pl.snapshotId === snapshot
-                      ? {
-                          ...pl,
-                          total,
-                          fetched: cachedLen,
-                          status: 'done',
-                        }
-                      : pl,
-                  ),
+                  playlists: {
+                    ...prev.playlists,
+                    [snapshot]: {
+                      ...prev.playlists[snapshot],
+                      total,
+                      fetched: cachedLen,
+                      status: 'done',
+                    },
+                  },
                 }));
                 integrity.complete += 1;
                 return;
@@ -617,16 +639,15 @@ export function useSpotifyLibraryUpdate(): [
               // Cache incomplete or total unknown: resume fetching from current length
               setProgress(prev => ({
                 ...prev,
-                playlists: prev.playlists.map(pl =>
-                  pl.snapshotId === snapshot
-                    ? {
-                        ...pl,
-                        total,
-                        fetched: cachedLen,
-                        status: 'fetching',
-                      }
-                    : pl,
-                ),
+                playlists: {
+                  ...prev.playlists,
+                  [snapshot]: {
+                    ...prev.playlists[snapshot],
+                    total,
+                    fetched: cachedLen,
+                    status: 'fetching',
+                  },
+                },
               }));
 
               if (total > 0 && cachedLen !== total) {
@@ -649,9 +670,13 @@ export function useSpotifyLibraryUpdate(): [
                     const fetched = cachedPlaylistsTracks[snapshot].length;
                     setProgress(prev => ({
                       ...prev,
-                      playlists: prev.playlists.map(pl =>
-                        pl.snapshotId === snapshot ? {...pl, fetched} : pl,
-                      ),
+                      playlists: {
+                        ...prev.playlists,
+                        [snapshot]: {
+                          ...prev.playlists[snapshot],
+                          fetched,
+                        },
+                      },
                     }));
                   },
                   abortController,
@@ -663,19 +688,18 @@ export function useSpotifyLibraryUpdate(): [
                   },
                   cachedLen,
                 );
-              } catch (e: any) {
+              } catch (e) {
                 console.error('Error resuming playlist', p.id, e);
                 setProgress(prev => ({
                   ...prev,
-                  playlists: prev.playlists.map(pl =>
-                    pl.snapshotId === snapshot
-                      ? {
-                          ...pl,
-                          status: 'error',
-                          lastError: String(e?.message ?? e),
-                        }
-                      : pl,
-                  ),
+                  playlists: {
+                    ...prev.playlists,
+                    [snapshot]: {
+                      ...prev.playlists[snapshot],
+                      status: 'error',
+                      lastError: e instanceof Error ? e.message : String(e),
+                    },
+                  },
                 }));
               }
 
@@ -684,16 +708,15 @@ export function useSpotifyLibraryUpdate(): [
 
               setProgress(prev => ({
                 ...prev,
-                playlists: prev.playlists.map(pl =>
-                  pl.snapshotId === snapshot
-                    ? {
-                        ...pl,
-                        status: 'done',
-                        fetched: finalFetched,
-                        total: finalFetched,
-                      }
-                    : pl,
-                ),
+                playlists: {
+                  ...prev.playlists,
+                  [snapshot]: {
+                    ...prev.playlists[snapshot],
+                    status: 'done',
+                    fetched: finalFetched,
+                    total: finalFetched,
+                  },
+                },
               }));
               setProgress(prev => ({
                 ...prev,
@@ -707,19 +730,27 @@ export function useSpotifyLibraryUpdate(): [
             // Fresh fetch (no cache)
             setProgress(prev => ({
               ...prev,
-              playlists: prev.playlists.map(pl =>
-                pl.snapshotId === snapshot ? {...pl, status: 'fetching'} : pl,
-              ),
+              playlists: {
+                ...prev.playlists,
+                [snapshot]: {
+                  ...prev.playlists[snapshot],
+                  status: 'fetching',
+                },
+              },
             }));
 
             if (total > MAX_PLAYLIST_TRACKS_TO_FETCH) {
               setProgress(prev => ({
                 ...prev,
-                playlists: prev.playlists.map(pl =>
-                  pl.snapshotId === snapshot
-                    ? {...pl, total, fetched: 0, status: 'done'}
-                    : pl,
-                ),
+                playlists: {
+                  ...prev.playlists,
+                  [snapshot]: {
+                    ...prev.playlists[snapshot],
+                    total,
+                    fetched: 0,
+                    status: 'done',
+                  },
+                },
               }));
               integrity.complete += 1;
               return;
@@ -729,11 +760,15 @@ export function useSpotifyLibraryUpdate(): [
               // Nothing to fetch
               setProgress(prev => ({
                 ...prev,
-                playlists: prev.playlists.map(pl =>
-                  pl.snapshotId === snapshot
-                    ? {...pl, total: 0, fetched: 0, status: 'done'}
-                    : pl,
-                ),
+                playlists: {
+                  ...prev.playlists,
+                  [snapshot]: {
+                    ...prev.playlists[snapshot],
+                    total: 0,
+                    fetched: 0,
+                    status: 'done',
+                  },
+                },
               }));
               integrity.complete += 1;
               return;
@@ -756,9 +791,13 @@ export function useSpotifyLibraryUpdate(): [
                   const fetched = cachedPlaylistsTracks[snapshot].length;
                   setProgress(prev => ({
                     ...prev,
-                    playlists: prev.playlists.map(pl =>
-                      pl.snapshotId === snapshot ? {...pl, fetched} : pl,
-                    ),
+                    playlists: {
+                      ...prev.playlists,
+                      [snapshot]: {
+                        ...prev.playlists[snapshot],
+                        fetched,
+                      },
+                    },
                   }));
                 },
                 abortController,
@@ -770,19 +809,18 @@ export function useSpotifyLibraryUpdate(): [
                 },
                 0,
               );
-            } catch (e: any) {
+            } catch (e) {
               console.error('Error fetching playlist', p.id, e);
               setProgress(prev => ({
                 ...prev,
-                playlists: prev.playlists.map(pl =>
-                  pl.snapshotId === snapshot
-                    ? {
-                        ...pl,
-                        status: 'error',
-                        lastError: String(e?.message ?? e),
-                      }
-                    : pl,
-                ),
+                playlists: {
+                  ...prev.playlists,
+                  [snapshot]: {
+                    ...prev.playlists[snapshot],
+                    status: 'error',
+                    lastError: e instanceof Error ? e.message : String(e),
+                  },
+                },
               }));
             }
 
@@ -791,16 +829,15 @@ export function useSpotifyLibraryUpdate(): [
 
             setProgress(prev => ({
               ...prev,
-              playlists: prev.playlists.map(pl =>
-                pl.snapshotId === snapshot
-                  ? {
-                      ...pl,
-                      status: 'done',
-                      fetched: finalFetched,
-                      total: finalFetched,
-                    }
-                  : pl,
-              ),
+              playlists: {
+                ...prev.playlists,
+                [snapshot]: {
+                  ...prev.playlists[snapshot],
+                  status: 'done',
+                  fetched: finalFetched,
+                  total: finalFetched,
+                },
+              },
             }));
             setProgress(prev => ({
               ...prev,
@@ -825,27 +862,30 @@ export function useSpotifyLibraryUpdate(): [
             if (cachedAlbumTracks) {
               setProgress(prev => ({
                 ...prev,
-                albums: prev.albums.map(a =>
-                  a.id === albumId
-                    ? {
-                        ...a,
-                        totalTracks: total,
-                        fetched: cachedAlbumTracks.length,
-                        status:
-                          cachedAlbumTracks.length >= total && total > 0
-                            ? 'done'
-                            : 'pending',
-                      }
-                    : a,
-                ),
+                albums: {
+                  ...prev.albums,
+                  [albumId]: {
+                    ...prev.albums[albumId],
+                    totalTracks: total,
+                    fetched: cachedAlbumTracks.length,
+                    status:
+                      cachedAlbumTracks.length >= total && total > 0
+                        ? 'done'
+                        : 'pending',
+                  },
+                },
               }));
               return;
             }
             setProgress(prev => ({
               ...prev,
-              albums: prev.albums.map(a =>
-                a.id === albumId ? {...a, status: 'fetching'} : a,
-              ),
+              albums: {
+                ...prev.albums,
+                [albumId]: {
+                  ...prev.albums[albumId],
+                  status: 'fetching',
+                },
+              },
             }));
 
             try {
@@ -855,24 +895,27 @@ export function useSpotifyLibraryUpdate(): [
 
               setProgress(prev => ({
                 ...prev,
-                albums: prev.albums.map(a =>
-                  a.id === albumId
-                    ? {
-                        ...a,
-                        fetched: tracks.length,
-                        totalTracks: total,
-                        status: 'done',
-                      }
-                    : a,
-                ),
+                albums: {
+                  ...prev.albums,
+                  [albumId]: {
+                    ...prev.albums[albumId],
+                    fetched: tracks.length,
+                    totalTracks: total,
+                    status: 'done',
+                  },
+                },
               }));
             } catch (e) {
               console.error('Error fetching album tracks', albumId, e);
               setProgress(prev => ({
                 ...prev,
-                albums: prev.albums.map(a =>
-                  a.id === albumId ? {...a, status: 'error'} : a,
-                ),
+                albums: {
+                  ...prev.albums,
+                  [albumId]: {
+                    ...prev.albums[albumId],
+                    status: 'error',
+                  },
+                },
               }));
             }
           },
@@ -910,6 +953,7 @@ export function useSpotifyLibraryUpdate(): [
           updateStatus: 'complete',
         }));
 
+        // Build unique track list to return (preserving previous API)
         const uniqueSongs = [
           ...Object.values(newPlaylistCache)
             .filter(playlistTracks => {
@@ -931,11 +975,45 @@ export function useSpotifyLibraryUpdate(): [
 
         const tracks = Array.from(uniqueSongs.values());
 
-        resolve(tracks);
+        resolve({
+          playlistMetadata: progress.playlists,
+          albumMetadata: progress.albums,
+          playlistTracks: newPlaylistCache,
+          albumTracks: newAlbumCache,
+        });
       });
     },
     [],
   );
 
   return [progress, run];
+}
+
+function isRateLimitError(err: unknown): err is RateLimitError {
+  return (
+    typeof err === 'object' &&
+    err != null &&
+    'retryAfter' in err &&
+    typeof (err as {retryAfter?: unknown}).retryAfter === 'number'
+  );
+}
+
+export function getTrackMap(library: SpotifyLibrary): Map<string, TrackResult> {
+  return [
+    ...Object.values(library.playlistTracks)
+      .filter(playlistTracks => {
+        if (playlistTracks?.length == null) {
+          return false;
+        }
+        return playlistTracks.length < MAX_PLAYLIST_TRACKS_TO_FETCH;
+      })
+      .flat(),
+    ...Object.values(library.albumTracks).flat(),
+  ].reduce((acc, track) => {
+    const key = `${track.name} - ${track.artists.join(', ')}`.toLowerCase();
+    if (!acc.has(key)) {
+      acc.set(key, track);
+    }
+    return acc;
+  }, new Map<string, TrackResult>());
 }

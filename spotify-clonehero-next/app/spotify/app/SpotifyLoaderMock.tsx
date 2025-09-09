@@ -6,90 +6,90 @@ import {SpotifyLibraryUpdateProgress} from '@/lib/spotify-sdk/SpotifyFetching';
 
 function generateMockProgress(): SpotifyLibraryUpdateProgress {
   return {
-    playlists: [
-      {
+    playlists: {
+      snapshot1: {
         id: '1',
         name: 'Discover Weekly',
-        snapshotId: 'snapshot1',
         total: 30,
         fetched: 18,
         status: 'fetching',
-        ownerDisplayName: 'Spotify',
+        owner: {displayName: 'Spotify', externalUrl: ''},
+        externalUrl: '',
         collaborative: false,
       },
-      {
+      snapshot2: {
         id: '2',
         name: 'My Liked Songs',
-        snapshotId: 'snapshot2',
         total: 247,
         fetched: 247,
         status: 'done',
-        ownerDisplayName: 'You',
+        owner: {displayName: 'You', externalUrl: ''},
+        externalUrl: '',
         collaborative: false,
       },
-      {
+      snapshot3: {
         id: '3',
         name: 'Road Trip Vibes',
-        snapshotId: 'snapshot3',
         total: 45,
         fetched: 32,
         status: 'fetching',
-        ownerDisplayName: 'You',
+        owner: {displayName: 'You', externalUrl: ''},
+        externalUrl: '',
         collaborative: false,
       },
-      {
+      snapshot4: {
         id: '4',
         name: 'Release Radar',
-        snapshotId: 'snapshot4',
         total: 30,
         fetched: 30,
         status: 'done',
-        ownerDisplayName: 'Spotify',
+        owner: {displayName: 'Spotify', externalUrl: ''},
+        externalUrl: '',
         collaborative: false,
       },
-      {
+      snapshot5: {
         id: '5',
         name: 'Chill Indie Folk',
-        snapshotId: 'snapshot5',
         total: 89,
         fetched: 12,
         status: 'fetching',
-        ownerDisplayName: 'You',
+        owner: {displayName: 'You', externalUrl: ''},
+        externalUrl: '',
         collaborative: false,
       },
-      {
+      snapshot6: {
         id: '6',
         name: 'Daily Mix 1',
-        snapshotId: 'snapshot6',
         total: 50,
         fetched: 50,
         status: 'done',
-        ownerDisplayName: 'Spotify',
+        owner: {displayName: 'Spotify', externalUrl: ''},
+        externalUrl: '',
         collaborative: false,
       },
-      {
+      snapshot7: {
         id: '7',
         name: 'Workout Hits',
-        snapshotId: 'snapshot7',
         total: 67,
         fetched: 45,
         status: 'fetching',
-        ownerDisplayName: 'You',
+        owner: {displayName: 'You', externalUrl: ''},
+        externalUrl: '',
         collaborative: false,
       },
-      {
+      snapshot8: {
         id: '8',
         name: 'Jazz Classics',
-        snapshotId: 'snapshot8',
         total: 156,
         fetched: 156,
         status: 'done',
-        ownerDisplayName: 'You',
+        owner: {displayName: 'You', externalUrl: ''},
+        externalUrl: '',
         collaborative: false,
       },
-    ],
-    albums: [
-      {
+    },
+    albums: {
+      album1: {
         id: 'album1',
         name: 'Random Access Memories',
         artistName: 'Daft Punk',
@@ -98,7 +98,7 @@ function generateMockProgress(): SpotifyLibraryUpdateProgress {
         status: 'fetching',
         addedAt: '2023-01-15T10:30:00Z',
       },
-      {
+      album2: {
         id: 'album2',
         name: 'Abbey Road',
         artistName: 'The Beatles',
@@ -107,7 +107,7 @@ function generateMockProgress(): SpotifyLibraryUpdateProgress {
         status: 'done',
         addedAt: '2023-02-20T14:45:00Z',
       },
-    ],
+    },
     rateLimitCountdown: null,
     updateStatus: 'fetching',
   };
@@ -122,43 +122,53 @@ export default function SpotifyLoaderMock() {
     const interval = setInterval(() => {
       setProgress(prev => ({
         ...prev,
-        playlists: prev.playlists.map(playlist => {
-          if (
-            playlist.status === 'fetching' &&
-            playlist.fetched < playlist.total
-          ) {
-            const increment = Math.floor(Math.random() * 3) + 1;
-            const newFetched = Math.min(
-              playlist.fetched + increment,
-              playlist.total,
-            );
-            return {
-              ...playlist,
-              fetched: newFetched,
-              status: newFetched < playlist.total ? 'fetching' : 'done',
-            };
-          }
-          return playlist;
-        }),
-        albums: prev.albums.map(album => {
-          if (
-            album.status === 'fetching' &&
-            (album.fetched ?? 0) < (album.totalTracks ?? 0)
-          ) {
-            const increment = Math.floor(Math.random() * 2) + 1;
-            const newFetched = Math.min(
-              (album.fetched ?? 0) + increment,
-              album.totalTracks ?? 0,
-            );
-            return {
-              ...album,
-              fetched: newFetched,
-              status:
-                newFetched < (album.totalTracks ?? 0) ? 'fetching' : 'done',
-            };
-          }
-          return album;
-        }),
+        playlists: Object.fromEntries(
+          Object.entries(prev.playlists).map(([snapshotId, playlist]) => {
+            if (
+              playlist.status === 'fetching' &&
+              playlist.fetched < playlist.total
+            ) {
+              const increment = Math.floor(Math.random() * 3) + 1;
+              const newFetched = Math.min(
+                playlist.fetched + increment,
+                playlist.total,
+              );
+              return [
+                snapshotId,
+                {
+                  ...playlist,
+                  fetched: newFetched,
+                  status: newFetched < playlist.total ? 'fetching' : 'done',
+                },
+              ];
+            }
+            return [snapshotId, playlist];
+          }),
+        ),
+        albums: Object.fromEntries(
+          Object.entries(prev.albums).map(([albumId, album]) => {
+            if (
+              album.status === 'fetching' &&
+              (album.fetched ?? 0) < (album.totalTracks ?? 0)
+            ) {
+              const increment = Math.floor(Math.random() * 2) + 1;
+              const newFetched = Math.min(
+                (album.fetched ?? 0) + increment,
+                album.totalTracks ?? 0,
+              );
+              return [
+                albumId,
+                {
+                  ...album,
+                  fetched: newFetched,
+                  status:
+                    newFetched < (album.totalTracks ?? 0) ? 'fetching' : 'done',
+                },
+              ];
+            }
+            return [albumId, album];
+          }),
+        ),
       }));
     }, 1500);
     return () => clearInterval(interval);
