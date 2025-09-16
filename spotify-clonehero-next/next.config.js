@@ -10,16 +10,51 @@ const nextConfig = {
     ],
   },
   allowedDevOrigins: ['localhost', '127.0.0.1'],
+  async headers() {
+    // https://nextjs.org/docs/13/app/building-your-application/routing/middleware#setting-headers
+    // https://sqlocal.dev/guide/setup#cross-origin-isolation
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Cross-Origin-Embedder-Policy',
+            value: 'require-corp',
+          },
+          {
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'same-origin',
+          },
+        ],
+      },
+      // Specific headers for WASM files
+      {
+        source: '/_next/static/media/:path*',
+        headers: [
+          {
+            key: 'Cross-Origin-Embedder-Policy',
+            value: 'require-corp',
+          },
+          {
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'same-origin',
+          },
+          {
+            key: 'Cross-Origin-Resource-Policy',
+            value: 'cross-origin',
+          },
+        ],
+      },
+    ];
+  },
 };
-
-module.exports = nextConfig;
 
 // Injected content via Sentry wizard below
 
 const { withSentryConfig } = require("@sentry/nextjs");
 
 module.exports = withSentryConfig(
-  module.exports,
+  nextConfig,
   {
     // For all available options, see:
     // https://www.npmjs.com/package/@sentry/webpack-plugin#options
