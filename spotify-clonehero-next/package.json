@@ -24,7 +24,7 @@
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-switch": "^1.1.3",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@sentry/nextjs": "^10.11.0",
+    "@sentry/nextjs": "^10",
     "@spotify/web-api-ts-sdk": "^1.1.2",
     "@supabase/auth-ui-react": "^0.4.7",
     "@supabase/auth-ui-shared": "^0.1.8",
