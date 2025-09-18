@@ -1,28 +1,22 @@
 import {SQLocalKysely} from 'sqlocal/kysely';
 import {Kysely, Migrator} from 'kysely';
-import type {Database} from './types';
+import type {DB} from './types';
 
 // Database client - will be initialized in initializeLocalDb()
-let localDb: Kysely<Database> | null = null;
-
-// Get the database client (throws if not initialized)
-export function getLocalDb(): Kysely<Database> {
-  if (!localDb) {
-    throw new Error(
-      'Local database not initialized. Call initializeLocalDb() first.',
-    );
-  }
-  return localDb;
-}
+let localDb: Kysely<DB> | null = null;
 
 // Initialize the database with migrations
-export async function initializeLocalDb(): Promise<void> {
+export async function getLocalDb(): Promise<Kysely<DB>> {
+  if (localDb) {
+    return localDb;
+  }
+
   try {
     console.log('Initializing SQLocal database...');
 
     // Create the SQLocal database client
     const {dialect} = new SQLocalKysely('spotify-clonehero-local.sqlite3');
-    localDb = new Kysely<Database>({dialect});
+    localDb = new Kysely<DB>({dialect});
 
     // Create migrator
     const migrator = new Migrator({
@@ -55,12 +49,14 @@ export async function initializeLocalDb(): Promise<void> {
     console.error('Failed to initialize local database:', error);
     throw error;
   }
+
+  return localDb;
 }
 
 // Health check function
 export async function checkLocalDbHealth(): Promise<boolean> {
   try {
-    const db = getLocalDb();
+    const db = await getLocalDb();
     await db.selectFrom('spotify_playlists').select('id').limit(1).execute();
     return true;
   } catch (error) {
@@ -72,7 +68,7 @@ export async function checkLocalDbHealth(): Promise<boolean> {
 // Get database statistics
 export async function getLocalDbStats() {
   try {
-    const db = getLocalDb();
+    const db = await getLocalDb();
     const [playlists, albums, tracks] = await Promise.all([
       db
         .selectFrom('spotify_playlists')
