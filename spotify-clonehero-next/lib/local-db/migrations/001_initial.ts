@@ -37,9 +37,12 @@ export const InitialMigration: Migration = {
     // spotify_playlist_tracks
     await db.schema
       .createTable('spotify_playlist_tracks')
-      .addColumn('id', 'text', cb => cb.primaryKey().notNull())
       .addColumn('playlist_id', 'text', cb => cb.notNull())
       .addColumn('track_id', 'text', cb => cb.notNull())
+      .addPrimaryKeyConstraint('spotify_playlist_tracks_pk', [
+        'playlist_id',
+        'track_id',
+      ])
       .addForeignKeyConstraint(
         'spt_playlist_id_fk',
         ['playlist_id'],
@@ -59,10 +62,13 @@ export const InitialMigration: Migration = {
     // spotify_album_tracks
     await db.schema
       .createTable('spotify_album_tracks')
-      .addColumn('id', 'text', cb => cb.primaryKey().notNull())
       .addColumn('album_id', 'text', cb => cb.notNull())
       .addColumn('track_id', 'text', cb => cb.notNull())
       .addColumn('updated_at', 'text', cb => cb.notNull())
+      .addPrimaryKeyConstraint('spotify_album_tracks_pk', [
+        'album_id',
+        'track_id',
+      ])
       .addForeignKeyConstraint(
         'sat_album_id_fk',
         ['album_id'],

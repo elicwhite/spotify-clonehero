@@ -2,7 +2,6 @@
 
 import {useState} from 'react';
 import {
-  initializeLocalDb,
   getLocalDb,
   checkLocalDbHealth,
   getLocalDbStats,
@@ -22,7 +21,6 @@ export default function TestSQLocalPage() {
     setError(null);
 
     try {
-      await initializeLocalDb();
       setStatus('ready');
 
       // Check health

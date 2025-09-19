@@ -19,7 +19,6 @@ export interface SpotifyAlbums {
 
 export interface SpotifyAlbumTracks {
   album_id: string;
-  id: string;
   track_id: string;
   updated_at: string;
 }
@@ -36,7 +35,6 @@ export interface SpotifyPlaylists {
 }
 
 export interface SpotifyPlaylistTracks {
-  id: string;
   playlist_id: string;
   track_id: string;
 }

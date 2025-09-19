@@ -8,6 +8,14 @@ import {
 } from '@spotify/web-api-ts-sdk';
 import pMap from 'p-map';
 import {get, set} from 'idb-keyval';
+import {
+  appendPlaylistTracks,
+  deleteMissingAlbums,
+  deleteMissingPlaylistsBySnapshot,
+  replaceAlbumTracks,
+  upsertAlbums,
+  upsertPlaylists,
+} from '../local-db/spotify';
 
 // Configurable threshold for maximum playlist size to fetch in detail
 export const MAX_PLAYLIST_TRACKS_TO_FETCH = 5000;
@@ -21,6 +29,7 @@ type CacheAlbumTracks = {
 };
 
 export type TrackResult = {
+  id: string;
   name: string;
   artists: string[];
   preview_url: string | null;
@@ -200,7 +209,7 @@ async function getAllPlaylistTracksWithProgress(
       const items = await sdk.playlists.getPlaylistItems(
         playlistId,
         undefined,
-        'total,limit,items(track(type,artists(type,name),name,preview_url, external_urls(spotify)))',
+        'total,limit,items(track(type,id,artists(type,name),name,preview_url, external_urls(spotify)))',
         limit,
         offset,
       );
@@ -211,6 +220,7 @@ async function getAllPlaylistTracksWithProgress(
         .filter(item => item.track?.type === 'track')
         .map((item: PlaylistedTrack): TrackResult => {
           return {
+            id: item.track.id,
             name: item.track.name,
             artists: (item.track as Track).artists.map(artist => artist.name),
             preview_url: (item.track as Track).preview_url,
@@ -249,12 +259,14 @@ async function getAllAlbumTracks(
       const page = await sdk.albums.tracks(albumId, market, limit, offset);
       if (total == null) total = page.total;
       type AlbumTrack = {
+        id: string;
         name: string;
         artists: {name: string}[];
         preview_url: string | null;
         external_urls: {spotify: string};
       };
       const mapped: TrackResult[] = page.items.map((t: AlbumTrack) => ({
+        id: t.id,
         name: t.name,
         artists: (t.artists || []).map((a: {name: string}) => a.name),
         preview_url: t.preview_url ?? null,
@@ -288,7 +300,7 @@ async function getAllPlaylistTracks(
       const items = await sdk.playlists.getPlaylistItems(
         playlistId,
         undefined,
-        'total,limit,items(track(type,artists(type,name),name,preview_url, external_urls(spotify)))',
+        'total,limit,items(track(type,id,artists(type,name),name,preview_url, external_urls(spotify)))',
         limit,
         offset,
       );
@@ -300,6 +312,7 @@ async function getAllPlaylistTracks(
         .filter(item => item.track?.type === 'track')
         .map((item: PlaylistedTrack): TrackResult => {
           return {
+            id: item.track.id,
             name: item.track.name,
             artists: (item.track as Track).artists.map(artist => artist.name),
             preview_url: (item.track as Track).preview_url,
@@ -509,7 +522,20 @@ export function useSpotifyLibraryUpdate(): [
           },
           {} as PlaylistMetadata,
         );
-        await setCachedPlaylistMetadata(playlistMetadata);
+        await Promise.all([
+          setCachedPlaylistMetadata(playlistMetadata),
+          upsertPlaylists(
+            playlists.map(p => ({
+              id: p.id,
+              snapshot_id: p.snapshot_id,
+              name: p.name,
+              collaborative: Boolean(p.collaborative),
+              owner_display_name: p.owner.display_name,
+              owner_external_url: p.owner.external_urls.spotify,
+              total_tracks: p.tracks?.total ?? 0,
+            })),
+          ),
+        ]);
 
         // Persist albums metadata
         const albumMetadata = savedAlbums.reduce((acc: AlbumMetadata, s) => {
@@ -523,7 +549,17 @@ export function useSpotifyLibraryUpdate(): [
           };
           return acc;
         }, {} as AlbumMetadata);
-        await setCachedAlbumMetadata(albumMetadata);
+        await Promise.all([
+          setCachedAlbumMetadata(albumMetadata),
+          upsertAlbums(
+            savedAlbums.map(s => ({
+              id: s.album.id,
+              name: s.album.name,
+              artist_name: s.album.artists[0]?.name ?? '',
+              total_tracks: s.album.total_tracks,
+            })),
+          ),
+        ]);
 
         /* Set the progress to the new playlists and albums */
         setProgress(prev => ({
@@ -678,6 +714,16 @@ export function useSpotifyLibraryUpdate(): [
                         },
                       },
                     }));
+
+                    // Persist to DB
+                    await appendPlaylistTracks(
+                      p.id,
+                      pageTracks.map(t => ({
+                        id: t.id,
+                        name: t.name,
+                        artists: t.artists,
+                      })),
+                    );
                   },
                   abortController,
                   retryAfterSeconds => {
@@ -799,6 +845,16 @@ export function useSpotifyLibraryUpdate(): [
                       },
                     },
                   }));
+
+                  // Persist to DB
+                  await appendPlaylistTracks(
+                    p.id,
+                    pageTracks.map(t => ({
+                      id: t.id,
+                      name: t.name,
+                      artists: t.artists,
+                    })),
+                  );
                 },
                 abortController,
                 retryAfterSeconds => {
@@ -905,6 +961,12 @@ export function useSpotifyLibraryUpdate(): [
                   },
                 },
               }));
+
+              // Persist album tracks to DB atomically replacing links
+              await replaceAlbumTracks(
+                albumId,
+                tracks.map(t => ({id: t.id, name: t.name, artists: t.artists})),
+              );
             } catch (e) {
               console.error('Error fetching album tracks', albumId, e);
               setProgress(prev => ({
@@ -939,6 +1001,7 @@ export function useSpotifyLibraryUpdate(): [
           {},
         );
         await setCachedPlaylistTracks(newPlaylistCache);
+        await deleteMissingPlaylistsBySnapshot(foundSnapshots);
 
         const newAlbumCache = foundAlbums.reduce(
           (acc: {[albumId: string]: TrackResult[]}, albumId: string) => {
@@ -948,6 +1011,7 @@ export function useSpotifyLibraryUpdate(): [
           {},
         );
         await setCachedAlbumTracks(newAlbumCache);
+        await deleteMissingAlbums(foundAlbums);
         setProgress(prev => ({
           ...prev,
           updateStatus: 'complete',
