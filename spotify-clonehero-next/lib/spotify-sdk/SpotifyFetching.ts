@@ -12,10 +12,16 @@ import {
   appendPlaylistTracks,
   deleteMissingAlbums,
   deleteMissingPlaylistsBySnapshot,
+  getAlbumMetadataMap,
+  getAlbumTracksMap,
+  getPlaylistMetadataMapBySnapshot,
+  getPlaylistTracksBySnapshot,
   replaceAlbumTracks,
   upsertAlbums,
   upsertPlaylists,
+  type TrackResult,
 } from '../local-db/spotify';
+import {getLocalDb} from '../local-db/client';
 
 // Configurable threshold for maximum playlist size to fetch in detail
 export const MAX_PLAYLIST_TRACKS_TO_FETCH = 5000;
@@ -26,14 +32,6 @@ type CachePlaylistTracks = {
 
 type CacheAlbumTracks = {
   [albumId: string]: TrackResult[];
-};
-
-export type TrackResult = {
-  id: string;
-  name: string;
-  artists: string[];
-  preview_url: string | null;
-  spotify_url: string;
 };
 
 type PlaylistMetadata = {
@@ -105,6 +103,41 @@ function emitPlaylistCacheUpdated() {
       // ignore listener errors
     }
   });
+}
+
+async function isDatabaseEmpty(): Promise<boolean> {
+  try {
+    const db = await getLocalDb();
+
+    // Try to query the table directly - if it doesn't exist, we'll get an error
+    const trackCount = await db
+      .selectFrom('spotify_tracks')
+      .select(db.fn.count('id').as('count'))
+      .executeTakeFirst();
+    return Number(trackCount?.count || 0) === 0;
+  } catch (error) {
+    // If we get a "no such table" error, the database is empty (no tables created yet)
+    if (error instanceof Error && error.message.includes('no such table')) {
+      console.log('[Spotify] Database tables not yet created, assuming empty');
+      return true;
+    }
+    console.warn('[Spotify] Failed to check database state:', error);
+    return true; // Assume empty if we can't check
+  }
+}
+
+async function clearIndexedDBCache() {
+  try {
+    await Promise.all([
+      setCachedPlaylistTracks({}),
+      setCachedPlaylistMetadata({}),
+      setCachedAlbumTracks({}),
+      setCachedAlbumMetadata({}),
+    ]);
+    console.log('[Spotify] Cleared IndexedDB cache for fresh database sync');
+  } catch (error) {
+    console.warn('[Spotify] Failed to clear IndexedDB cache:', error);
+  }
 }
 
 async function getCachedPlaylistTracks(): Promise<CachePlaylistTracks> {
@@ -415,16 +448,69 @@ export function useSpotifyLibraryUpdate(): [
 
   useEffect(() => {
     async function loadFromCache() {
+      // Load from IndexedDB cache first
       const cachedPlaylistTracks = await getCachedPlaylistTracks();
       const cachedPlaylistMetadata = await getCachedPlaylistMetadata();
-
       const cachedAlbumTracks = await getCachedAlbumTracks();
       const cachedAlbumMetadata = await getCachedAlbumMetadata();
 
+      // Try to load from database, but handle errors gracefully
+      let dbPlaylistTracksBySnapshot: CachePlaylistTracks = {};
+      let dbPlaylistMetadataBySnapshot: PlaylistMetadata = {};
+      let dbAlbumTracksMap: CacheAlbumTracks = {};
+      let dbAlbumMetadataMap: AlbumMetadata = {};
+      let dbEmpty = true;
+
+      try {
+        // Check if database is empty and clear IndexedDB cache if needed
+        dbEmpty = await isDatabaseEmpty();
+        if (dbEmpty) {
+          await clearIndexedDBCache();
+        }
+
+        // Load from database
+        [
+          dbPlaylistTracksBySnapshot,
+          dbPlaylistMetadataBySnapshot,
+          dbAlbumTracksMap,
+          dbAlbumMetadataMap,
+        ] = await Promise.all([
+          getPlaylistTracksBySnapshot(),
+          getPlaylistMetadataMapBySnapshot(),
+          getAlbumTracksMap(),
+          getAlbumMetadataMap(),
+        ]);
+      } catch (error) {
+        console.warn(
+          '[Spotify] Failed to load from database, using cache only:',
+          error,
+        );
+        // If database fails, we'll just use the cache data
+      }
+
+      // Merge DB into cache-derived maps (DB takes precedence where present)
+      const mergedPlaylistTracks = {
+        ...cachedPlaylistTracks,
+        ...dbPlaylistTracksBySnapshot,
+      };
+      const mergedPlaylistMetadata = {
+        ...cachedPlaylistMetadata,
+        ...dbPlaylistMetadataBySnapshot,
+      };
+
+      const mergedAlbumTracks = {
+        ...cachedAlbumTracks,
+        ...dbAlbumTracksMap,
+      };
+      const mergedAlbumMetadata = {
+        ...cachedAlbumMetadata,
+        ...dbAlbumMetadataMap,
+      };
+
       const initialPlaylistProgress: PlaylistProgressMetadata = Object.entries(
-        cachedPlaylistMetadata,
+        mergedPlaylistMetadata,
       ).reduce((acc, [snapshotId, playlistMetadata]) => {
-        const tracks = cachedPlaylistTracks[snapshotId] || [];
+        const tracks = mergedPlaylistTracks[snapshotId] || [];
         const total = playlistMetadata.total ?? 0;
         const fetched = tracks.length ?? 0;
         const status: ProgressStatus =
@@ -449,9 +535,9 @@ export function useSpotifyLibraryUpdate(): [
       }, {} as PlaylistProgressMetadata);
 
       const initialAlbumProgress: AlbumProgressMetadata = Object.entries(
-        cachedAlbumMetadata,
+        mergedAlbumMetadata,
       ).reduce((acc, [albumId, albumMetadata]) => {
-        const tracks = cachedAlbumTracks[albumId] || [];
+        const tracks = mergedAlbumTracks[albumId] || [];
         const total = albumMetadata.totalTracks ?? 0;
         const fetched = tracks.length ?? 0;
         const status: ProgressStatus =

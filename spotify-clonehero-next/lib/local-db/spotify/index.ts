@@ -17,6 +17,14 @@ export type TrackLike = {
   artists: string[];
 };
 
+export type TrackResult = {
+  id: string;
+  name: string;
+  artists: string[];
+  preview_url: string | null; // Fetched on-demand when user wants to preview
+  spotify_url: string; // Always https://open.spotify.com/track/{id}
+};
+
 export type PlaylistLike = {
   id: string;
   snapshot_id: string;
@@ -163,108 +171,120 @@ export async function replaceAlbumTracks(albumId: string, tracks: TrackLike[]) {
     .execute();
 }
 
-// export async function getPlaylistMetadataMapBySnapshot(): Promise<{
-//   [snapshotId: string]: {
-//     id: string;
-//     name: string;
-//     externalUrl: string;
-//     total: number;
-//     owner: {displayName: string; externalUrl: string};
-//     collaborative: boolean;
-//   };
-// }> {
-//   const db = await getLocalDb();
-//   const rows = await db.selectFrom('spotify_playlists').selectAll().execute();
-//   return rows.reduce((acc, r) => {
-//     acc[r.snapshot_id] = {
-//       id: r.id,
-//       name: r.name,
-//       externalUrl: '',
-//       total: r.total_tracks,
-//       owner: {
-//         displayName: r.owner_display_name,
-//         externalUrl: r.owner_external_url,
-//       },
-//       collaborative: Boolean(r.collaborative),
-//     };
-//     return acc;
-//   }, {} as any);
-// }
+export async function getPlaylistMetadataMapBySnapshot(): Promise<{
+  [snapshotId: string]: {
+    id: string;
+    name: string;
+    externalUrl: string;
+    total: number;
+    owner: {displayName: string; externalUrl: string};
+    collaborative: boolean;
+  };
+}> {
+  const db = await getLocalDb();
+  const rows = await db.selectFrom('spotify_playlists').selectAll().execute();
+  return rows.reduce((acc, r) => {
+    acc[r.snapshot_id] = {
+      id: r.id,
+      name: r.name,
+      externalUrl: '',
+      total: r.total_tracks,
+      owner: {
+        displayName: r.owner_display_name,
+        externalUrl: r.owner_external_url,
+      },
+      collaborative: Boolean(r.collaborative),
+    };
+    return acc;
+  }, {} as any);
+}
 
-// export async function getAlbumMetadataMap(): Promise<{
-//   [albumId: string]: {
-//     id: string;
-//     name: string;
-//     externalUrl?: string;
-//     artistName?: string;
-//     addedAt: string;
-//     totalTracks?: number;
-//   };
-// }> {
-//   const db = await getLocalDb();
-//   const rows = await db.selectFrom('spotify_albums').selectAll().execute();
-//   return rows.reduce((acc, r) => {
-//     acc[r.id] = {
-//       id: r.id,
-//       name: r.name,
-//       artistName: r.artist_name,
-//       addedAt: r.updated_at,
-//       totalTracks: r.total_tracks,
-//     };
-//     return acc;
-//   }, {} as any);
-// }
+export async function getAlbumMetadataMap(): Promise<{
+  [albumId: string]: {
+    id: string;
+    name: string;
+    externalUrl?: string;
+    artistName?: string;
+    addedAt: string;
+    totalTracks?: number;
+  };
+}> {
+  const db = await getLocalDb();
+  const rows = await db.selectFrom('spotify_albums').selectAll().execute();
+  return rows.reduce((acc, r) => {
+    acc[r.id] = {
+      id: r.id,
+      name: r.name,
+      artistName: r.artist_name,
+      addedAt: r.updated_at,
+      totalTracks: r.total_tracks,
+    };
+    return acc;
+  }, {} as any);
+}
 
-// export async function getPlaylistTracksBySnapshot(): Promise<{
-//   [snapshotId: string]: TrackLike[];
-// }> {
-//   const db = await getLocalDb();
-//   const rows = await db
-//     .selectFrom('spotify_playlist_tracks as spt')
-//     .innerJoin('spotify_playlists as sp', 'sp.id', 'spt.playlist_id')
-//     .innerJoin('spotify_tracks as st', 'st.id', 'spt.track_id')
-//     .select([
-//       'sp.snapshot_id as snapshot_id',
-//       'st.id as id',
-//       'st.name as name',
-//       'st.artist as artist',
-//     ])
-//     .execute();
-//   const map: {[snapshot: string]: TrackLike[]} = {};
-//   for (const r of rows) {
-//     const artists =
-//       (r as any).artist?.split(',').map((s: string) => s.trim()) || [];
-//     const snapshot = (r as any).snapshot_id as string;
-//     if (!map[snapshot]) map[snapshot] = [];
-//     map[snapshot].push({id: (r as any).id, name: (r as any).name, artists});
-//   }
-//   return map;
-// }
+export async function getPlaylistTracksBySnapshot(): Promise<{
+  [snapshotId: string]: TrackResult[];
+}> {
+  const db = await getLocalDb();
+  const rows = await db
+    .selectFrom('spotify_playlist_tracks as spt')
+    .innerJoin('spotify_playlists as sp', 'sp.id', 'spt.playlist_id')
+    .innerJoin('spotify_tracks as st', 'st.id', 'spt.track_id')
+    .select([
+      'sp.snapshot_id as snapshot_id',
+      'st.id as id',
+      'st.name as name',
+      'st.artist as artist',
+    ])
+    .execute();
+  const map: {[snapshot: string]: TrackResult[]} = {};
+  for (const r of rows) {
+    const artists =
+      (r as any).artist?.split(',').map((s: string) => s.trim()) || [];
+    const snapshot = (r as any).snapshot_id as string;
+    if (!map[snapshot]) map[snapshot] = [];
+    map[snapshot].push({
+      id: (r as any).id,
+      name: (r as any).name,
+      artists,
+      preview_url: null, // Will be fetched on-demand when user wants to preview
+      spotify_url: `https://open.spotify.com/track/${(r as any).id}`,
+    });
+  }
+  return map;
+}
 
-// export async function getAlbumTracksMap(): Promise<{
-//   [albumId: string]: TrackLike[];
-// }> {
-//   const db = await getLocalDb();
-//   const rows = await db
-//     .selectFrom('spotify_album_tracks as sat')
-//     .innerJoin('spotify_tracks as st', 'st.id', 'sat.track_id')
-//     .select([
-//       'sat.album_id as album_id',
-//       'st.id as id',
-//       'st.name as name',
-//       'st.artist as artist',
-//     ])
-//     .execute();
-//   const map: {[albumId: string]: TrackLike[]} = {};
-//   for (const r of rows) {
-//     const artists =
-//       (r as any).artist?.split(',').map((s: string) => s.trim()) || [];
-//     const albumId = (r as any).album_id as string;
-//     if (!map[albumId]) map[albumId] = [];
-//     map[albumId].push({id: (r as any).id, name: (r as any).name, artists});
-//   }
-//   return map;
-// }
+export async function getAlbumTracksMap(): Promise<{
+  [albumId: string]: TrackResult[];
+}> {
+  const db = await getLocalDb();
+  const rows = await db
+    .selectFrom('spotify_album_tracks as sat')
+    .innerJoin('spotify_tracks as st', 'st.id', 'sat.track_id')
+    .select([
+      'sat.album_id as album_id',
+      'st.id as id',
+      'st.name as name',
+      'st.artist as artist',
+    ])
+    .execute();
+  const map: {[albumId: string]: TrackResult[]} = {};
+  for (const r of rows) {
+    const artists =
+      (r as any).artist?.split(',').map((s: string) => s.trim()) || [];
+    const albumId = (r as any).album_id as string;
+    if (!map[albumId]) map[albumId] = [];
+    map[albumId].push({
+      id: (r as any).id,
+      name: (r as any).name,
+      artists,
+      preview_url: null, // Will be fetched on-demand when user wants to preview
+      spotify_url: `https://open.spotify.com/track/${(r as any).id}`,
+    });
+  }
+  return map;
+}
 
 export async function deleteMissingPlaylistsBySnapshot(
   existingSnapshots: string[],

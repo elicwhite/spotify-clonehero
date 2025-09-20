@@ -4,23 +4,36 @@ import type {DB} from './types';
 
 // Database client - will be initialized in initializeLocalDb()
 let localDb: Kysely<DB> | null = null;
+let dbInitializationPromise: Promise<Kysely<DB>> | null = null;
 
 // Initialize the database with migrations
 export async function getLocalDb(): Promise<Kysely<DB>> {
+  // If database is already initialized, return it immediately
   if (localDb) {
     return localDb;
   }
 
+  // If initialization is already in progress, return the existing promise
+  if (dbInitializationPromise) {
+    return dbInitializationPromise;
+  }
+
+  // Start initialization and store the promise
+  dbInitializationPromise = initializeDatabase();
+  return dbInitializationPromise;
+}
+
+async function initializeDatabase(): Promise<Kysely<DB>> {
   try {
     console.log('Initializing SQLocal database...');
 
     // Create the SQLocal database client
     const {dialect} = new SQLocalKysely('spotify-clonehero-local.sqlite3');
-    localDb = new Kysely<DB>({dialect});
+    const db = new Kysely<DB>({dialect});
 
     // Create migrator
     const migrator = new Migrator({
-      db: localDb,
+      db,
       provider: {
         async getMigrations() {
           const {migrations} = await import('./migrations/');
@@ -45,12 +58,15 @@ export async function getLocalDb(): Promise<Kysely<DB>> {
     }
 
     console.log('Local database initialized successfully');
+
+    localDb = db;
+    return localDb;
   } catch (error) {
     console.error('Failed to initialize local database:', error);
+    // Reset the promise so we can retry on next call
+    dbInitializationPromise = null;
     throw error;
   }
-
-  return localDb;
 }
 
 // Health check function
