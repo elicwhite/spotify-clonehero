@@ -103,12 +103,14 @@ export async function upsertAlbums(albums: AlbumLike[]) {
 export async function upsertTracks(tracks: TrackLike[]) {
   if (tracks.length === 0) return;
   const db = await getLocalDb();
-  const rows = tracks.map(t => ({
-    id: t.id,
-    name: t.name,
-    artist: t.artists.join(', '),
-    updated_at: nowIso(),
-  }));
+  const rows = tracks
+    .filter(t => t.id != null)
+    .map(t => ({
+      id: t.id,
+      name: t.name,
+      artist: t.artists[0],
+      updated_at: nowIso(),
+    }));
   await db
     .insertInto('spotify_tracks')
     .values(rows)

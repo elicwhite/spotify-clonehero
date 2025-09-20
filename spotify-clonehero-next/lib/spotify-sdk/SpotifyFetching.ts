@@ -250,7 +250,7 @@ async function getAllPlaylistTracksWithProgress(
         total = items.total;
       }
       const filteredTracks = items.items
-        .filter(item => item.track?.type === 'track')
+        .filter(item => item.track?.type === 'track' && item.track.id != null)
         .map((item: PlaylistedTrack): TrackResult => {
           return {
             id: item.track.id,
@@ -298,13 +298,15 @@ async function getAllAlbumTracks(
         preview_url: string | null;
         external_urls: {spotify: string};
       };
-      const mapped: TrackResult[] = page.items.map((t: AlbumTrack) => ({
-        id: t.id,
-        name: t.name,
-        artists: (t.artists || []).map((a: {name: string}) => a.name),
-        preview_url: t.preview_url ?? null,
-        spotify_url: t.external_urls.spotify,
-      }));
+      const mapped: TrackResult[] = page.items
+        .filter((t: AlbumTrack) => t.id != null)
+        .map((t: AlbumTrack) => ({
+          id: t.id,
+          name: t.name,
+          artists: (t.artists || []).map((a: {name: string}) => a.name),
+          preview_url: t.preview_url ?? null,
+          spotify_url: t.external_urls.spotify,
+        }));
       tracks.push(...mapped);
       offset += limit;
     } catch (error) {
@@ -316,60 +318,6 @@ async function getAllAlbumTracks(
       throw error;
     }
   } while (total == null || offset < total);
-  return tracks;
-}
-
-async function getAllPlaylistTracks(
-  sdk: SpotifyApi,
-  playlistId: string,
-): Promise<TrackResult[]> {
-  const tracks: TrackResult[] = [];
-  const limit = 50;
-  let offset = 0;
-  let total = null;
-
-  do {
-    try {
-      const items = await sdk.playlists.getPlaylistItems(
-        playlistId,
-        undefined,
-        'total,limit,items(track(type,id,artists(type,name),name,preview_url, external_urls(spotify)))',
-        limit,
-        offset,
-      );
-
-      if (total == null) {
-        total = items.total;
-      }
-      const filteredTracks = items.items
-        .filter(item => item.track?.type === 'track')
-        .map((item: PlaylistedTrack): TrackResult => {
-          return {
-            id: item.track.id,
-            name: item.track.name,
-            artists: (item.track as Track).artists.map(artist => artist.name),
-            preview_url: (item.track as Track).preview_url,
-            spotify_url: (item.track as Track).external_urls.spotify,
-          };
-        });
-
-      tracks.push(...filteredTracks);
-      offset += limit;
-    } catch (error) {
-      if (isRateLimitError(error)) {
-        const retryAfter = error.retryAfter;
-        console.log(
-          `Rate limited. Retrying after ${retryAfter * 2} seconds...`,
-        );
-        await new Promise(resolve =>
-          setTimeout(resolve, retryAfter * 1000 * 2),
-        );
-        continue;
-      }
-      throw error instanceof Error ? error : new Error(String(error));
-    }
-  } while (total == null || offset < total);
-
   return tracks;
 }
 
