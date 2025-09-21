@@ -21,6 +21,7 @@ import {
   setLastInstalledChartsScan,
   migrateFromIndexedDB,
 } from '@/lib/local-db/chorus';
+import {getServerChartsDataVersion} from './index';
 
 const DEBUG = false;
 
@@ -83,7 +84,7 @@ export function useChorusChartDb(): [
             resumeFromChartId = incompleteSession.last_chart_id || 0;
           } else {
             debugLog('Starting new scan session');
-            sessionId = await createScanSession(serverDataVersion);
+            sessionId = await createScanSession();
           }
 
           debugLog('Fetching charts from database');
@@ -239,16 +240,5 @@ export async function migrateChartsToDatabase(): Promise<void> {
 function debugLog(...args: any[]) {
   if (DEBUG) {
     console.log('[ChorusChartDb]', ...args);
-  }
-}
-
-async function getServerChartsDataVersion(): Promise<number> {
-  try {
-    const response = await fetch('/data/charts.json');
-    const data = await response.json();
-    return parseInt(data.chartsDataVersion, 10);
-  } catch (error) {
-    console.error('Failed to get server charts data version:', error);
-    return 0;
   }
 }

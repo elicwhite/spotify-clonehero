@@ -51,7 +51,6 @@ export interface ChorusScanSessions {
   total_songs_found: number | null;
   total_charts_found: number | null;
   last_chart_id: number | null;
-  data_version: number;
   error_message: string | null;
   created_at: string;
 }

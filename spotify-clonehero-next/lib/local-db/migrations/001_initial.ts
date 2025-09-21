@@ -5,6 +5,7 @@ export const InitialMigration: Migration = {
     // spotify_playlists
     await db.schema
       .createTable('spotify_playlists')
+      .ifNotExists()
       .addColumn('id', 'text', cb => cb.primaryKey().notNull())
       .addColumn('snapshot_id', 'text', cb => cb.notNull())
       .addColumn('name', 'text', cb => cb.notNull())
@@ -18,6 +19,7 @@ export const InitialMigration: Migration = {
     // spotify_albums
     await db.schema
       .createTable('spotify_albums')
+      .ifNotExists()
       .addColumn('id', 'text', cb => cb.primaryKey().notNull())
       .addColumn('name', 'text', cb => cb.notNull())
       .addColumn('artist_name', 'text', cb => cb.notNull())
@@ -28,6 +30,7 @@ export const InitialMigration: Migration = {
     // spotify_tracks
     await db.schema
       .createTable('spotify_tracks')
+      .ifNotExists()
       .addColumn('id', 'text', cb => cb.primaryKey().notNull())
       .addColumn('name', 'text', cb => cb.notNull())
       .addColumn('artist', 'text', cb => cb.notNull())
@@ -37,6 +40,7 @@ export const InitialMigration: Migration = {
     // spotify_playlist_tracks
     await db.schema
       .createTable('spotify_playlist_tracks')
+      .ifNotExists()
       .addColumn('playlist_id', 'text', cb => cb.notNull())
       .addColumn('track_id', 'text', cb => cb.notNull())
       .addPrimaryKeyConstraint('spotify_playlist_tracks_pk', [
@@ -62,6 +66,7 @@ export const InitialMigration: Migration = {
     // spotify_album_tracks
     await db.schema
       .createTable('spotify_album_tracks')
+      .ifNotExists()
       .addColumn('album_id', 'text', cb => cb.notNull())
       .addColumn('track_id', 'text', cb => cb.notNull())
       .addColumn('updated_at', 'text', cb => cb.notNull())

@@ -5,6 +5,7 @@ export const migration_002_chorus_charts = {
     // Create chorus_charts table
     await db.schema
       .createTable('chorus_charts')
+      .ifNotExists()
       .addColumn('md5', 'text', col => col.primaryKey())
       .addColumn('name', 'text', col => col.notNull())
       .addColumn('artist', 'text', col => col.notNull())
@@ -26,6 +27,7 @@ export const migration_002_chorus_charts = {
     // Create chorus_scan_sessions table
     await db.schema
       .createTable('chorus_scan_sessions')
+      .ifNotExists()
       .addColumn('id', 'integer', col => col.primaryKey().autoIncrement())
       .addColumn('session_id', 'text', col => col.notNull().unique())
       .addColumn('status', 'text', col => col.notNull())
@@ -35,50 +37,55 @@ export const migration_002_chorus_charts = {
       .addColumn('total_songs_found', 'integer')
       .addColumn('total_charts_found', 'integer')
       .addColumn('last_chart_id', 'integer')
-      .addColumn('data_version', 'integer', col => col.notNull())
       .addColumn('error_message', 'text')
       .addColumn('created_at', 'text', col =>
-        col.notNull().defaultTo(sql`datetime('now')`),
+        col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`),
       )
       .execute();
 
     // Create chorus_metadata table
     await db.schema
       .createTable('chorus_metadata')
+      .ifNotExists()
       .addColumn('key', 'text', col => col.primaryKey())
       .addColumn('value', 'text', col => col.notNull())
       .addColumn('updated_at', 'text', col =>
-        col.notNull().defaultTo(sql`datetime('now')`),
+        col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`),
       )
       .execute();
 
     // Create indexes for performance
     await db.schema
       .createIndex('idx_chorus_charts_modified_time')
+      .ifNotExists()
       .on('chorus_charts')
       .column('modified_time')
       .execute();
 
     await db.schema
       .createIndex('idx_chorus_charts_artist_modified')
+      .ifNotExists()
       .on('chorus_charts')
       .columns(['artist', 'modified_time'])
       .execute();
 
     await db.schema
       .createIndex('idx_chorus_charts_name_artist')
+      .ifNotExists()
       .on('chorus_charts')
       .columns(['name', 'artist'])
       .execute();
 
     await db.schema
       .createIndex('idx_chorus_scan_sessions_status')
+      .ifNotExists()
       .on('chorus_scan_sessions')
       .column('status')
       .execute();
 
     await db.schema
       .createIndex('idx_chorus_scan_sessions_started_at')
+      .ifNotExists()
       .on('chorus_scan_sessions')
       .column('started_at')
       .execute();

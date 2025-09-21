@@ -23,6 +23,10 @@ export async function getLocalDb(): Promise<Kysely<DB>> {
   return dbInitializationPromise;
 }
 
+if (typeof window !== 'undefined') {
+  window.getLocalDb = getLocalDb;
+}
+
 async function initializeDatabase(): Promise<Kysely<DB>> {
   try {
     console.log('Initializing SQLocal database...');

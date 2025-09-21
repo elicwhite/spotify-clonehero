@@ -8,7 +8,7 @@ function nowIso(): string {
 }
 
 // Scan session operations
-export async function createScanSession(dataVersion: number): Promise<string> {
+export async function createScanSession(): Promise<string> {
   const db = await getLocalDb();
   const sessionId = crypto.randomUUID();
 
@@ -18,10 +18,10 @@ export async function createScanSession(dataVersion: number): Promise<string> {
       session_id: sessionId,
       status: 'in_progress',
       started_at: nowIso(),
-      data_version: dataVersion,
       total_songs_found: 0,
       total_charts_found: 0,
       last_chart_id: 0,
+      created_at: nowIso(),
     } as Insertable<ChorusScanSessions>)
     .execute();
 

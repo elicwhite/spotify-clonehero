@@ -27,7 +27,7 @@ function debugLog(message: string) {
   }
 }
 
-async function getServerChartsDataVersion(): Promise<number> {
+export async function getServerChartsDataVersion(): Promise<number> {
   const response = await fetch('/api/data');
   const json = await response.json();
   return parseInt(json.chartsDataVersion, 10);
