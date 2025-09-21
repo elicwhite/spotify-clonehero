@@ -1,41 +1,9 @@
-import {levenshteinEditDistance} from 'levenshtein-edit-distance';
-import {ChartResponseEncore} from '@/lib/chartSelection';
+import {useState, useCallback} from 'react';
+import {ChorusChartProgress} from '.';
+import {ChartResponseEncore} from '../chartSelection';
 import fetchNewCharts from './fetchNewCharts';
-import {search, Searcher} from 'fast-fuzzy';
-import {useCallback, useState} from 'react';
-import {
-  upsertCharts,
-  getAllCharts,
-  findChartsByArtistAndName,
-  clearAllCharts,
-  createScanSession,
-  updateScanProgress,
-  completeScanSession,
-  failScanSession,
-  getIncompleteScanSession,
-  cancelOldScanSessions,
-  getChartsDataVersion,
-  setChartsDataVersion,
-  getLastSuccessfulScan,
-  getLastInstalledChartsScan,
-  setLastInstalledChartsScan,
-  migrateFromIndexedDB,
-} from '@/lib/local-db/chorus';
-import {getServerChartsDataVersion} from './index';
 
-const DEBUG = false;
-
-export type ChorusChartProgress = {
-  status:
-    | 'idle'
-    | 'fetching'
-    | 'fetching-dump'
-    | 'updating-db'
-    | 'complete'
-    | 'error';
-  numFetched: number;
-  numTotal: number;
-};
+const DEBUG = true;
 
 export function useChorusChartDb(): [
   ChorusChartProgress,
@@ -50,128 +18,51 @@ export function useChorusChartDb(): [
   const run = useCallback(
     async (abort: AbortController): Promise<ChartResponseEncore[]> => {
       return new Promise(async (resolve, reject) => {
-        try {
+        const charts: ChartResponseEncore[] = [];
+        setProgress(progress => ({
+          ...progress,
+          status: 'fetching',
+        }));
+
+        debugLog('Checking for server data updates');
+        // TODO: get the latest data version from database metadata
+        // const localDataVersion =
+        const serverDataVersion = await getServerChartsDataVersion();
+
+        if (localDataVersion !== serverDataVersion) {
           setProgress(progress => ({
             ...progress,
-            status: 'fetching',
+            status: 'fetching-dump',
           }));
-
-          debugLog('Checking for server data updates');
-          const localDataVersion = await getChartsDataVersion();
-          const serverDataVersion = await getServerChartsDataVersion();
-
-          if (localDataVersion !== serverDataVersion) {
-            setProgress(progress => ({
-              ...progress,
-              status: 'fetching-dump',
-            }));
-
-            debugLog('Data version changed, clearing all data');
-            await clearAllCharts();
-            await setChartsDataVersion(serverDataVersion);
-          }
-
-          debugLog('Checking for incomplete scan sessions');
-          await cancelOldScanSessions();
-          const incompleteSession = await getIncompleteScanSession();
-
-          let sessionId: string;
-          let resumeFromChartId = 0;
-
-          if (incompleteSession) {
-            debugLog('Resuming incomplete scan session');
-            sessionId = incompleteSession.session_id;
-            resumeFromChartId = incompleteSession.last_chart_id || 0;
-          } else {
-            debugLog('Starting new scan session');
-            sessionId = await createScanSession();
-          }
-
-          debugLog('Fetching charts from database');
-          const charts = await getAllCharts();
-
-          if (charts.length > 0) {
-            debugLog(`Found ${charts.length} charts in database`);
-            setProgress(progress => ({
-              ...progress,
-              status: 'complete',
-              numFetched: charts.length,
-              numTotal: charts.length,
-            }));
-            resolve(charts);
-            return;
-          }
-
-          // Database is empty, try to migrate from IndexedDB
-          debugLog('Database is empty, attempting migration from IndexedDB');
-          const migratedCharts = await migrateFromIndexedDB();
-
-          if (migratedCharts.length > 0) {
-            debugLog(`Migrated ${migratedCharts.length} charts from IndexedDB`);
-            setProgress(progress => ({
-              ...progress,
-              status: 'complete',
-              numFetched: migratedCharts.length,
-              numTotal: migratedCharts.length,
-            }));
-            resolve(migratedCharts);
-            return;
-          }
-
-          debugLog('No charts in database, fetching from server');
-          setProgress(progress => ({
-            ...progress,
-            status: 'updating-db',
-          }));
-
-          // Fetch charts from server
-          const lastScan = await getLastSuccessfulScan();
-          const afterTime = lastScan || new Date(0);
-
-          const updatedCharts = await fetchNewCharts(
-            afterTime,
-            async (json, stats) => {
-              // Update scan progress
-              await updateScanProgress(sessionId, {
-                totalSongsToFetch: stats.totalSongsToFetch,
-                totalSongsFound: stats.totalSongsFound,
-                totalChartsFound: stats.totalChartsFound,
-                lastChartId: stats.lastChartId,
-              });
-
-              setProgress(progress => ({
-                ...progress,
-                numFetched: stats.totalSongsFound,
-                numTotal: stats.totalSongsToFetch,
-              }));
-
-              // Store charts in database
-              await upsertCharts(json);
-            },
-          );
-
-          // Complete the scan session
-          await completeScanSession(sessionId);
-
-          // Get all charts from database
-          const finalCharts = await getAllCharts();
-
-          setProgress(progress => ({
-            ...progress,
-            status: 'complete',
-            numFetched: finalCharts.length,
-            numTotal: finalCharts.length,
-          }));
-
-          resolve(finalCharts);
-        } catch (error) {
-          debugLog('Error in chorus chart fetch:', error);
-          setProgress(progress => ({
-            ...progress,
-            status: 'error',
-          }));
-          reject(error);
+          // TODO: Clear all chorus charts from the database
+          // TODO: Set the data version in the database metadata
         }
+
+        setProgress(progress => ({
+          ...progress,
+          status: 'updating-db',
+        }));
+        debugLog('Fetching updated charts');
+
+        updatedCharts = await getUpdatedCharts(root, (json, stats) => {
+          setProgress(progress => ({
+            ...progress,
+            numFetched: stats.totalSongsFound,
+            numTotal: stats.totalSongsToFetch,
+          }));
+        });
+        debugLog('Done fetching charts');
+
+        const finalCharts = reduceCharts(
+          serverCharts,
+          localCharts,
+          updatedCharts,
+        );
+        setProgress(progress => ({
+          ...progress,
+          status: 'complete',
+        }));
+        resolve(finalCharts);
       });
     },
     [],
@@ -180,65 +71,54 @@ export function useChorusChartDb(): [
   return [progress, run];
 }
 
-export function findMatchingChartsExact(
-  artist: string,
-  song: string,
-  charts: ChartResponseEncore[],
+async function getUpdatedCharts(
+  rootHandle: FileSystemDirectoryHandle,
+  onEachResponse: Parameters<typeof fetchNewCharts>[2],
 ) {
-  return charts.filter(chart => {
-    return chart.artist == artist && chart.name == song;
-  });
+  // TODO: get the latest scan from the database
+
+  // if there are no scans, that means we need to fetch the initial dump from the server
+
+  // If the status is in_progress, we'll continue from there
+  // if so, get the scan_since_time and last_chart_id
+  // if the status is completed, we'll use that's started at time
+
+  // create a new scan session
+  // scan_since_time will be the latest scan's started_at
+  // last_chart_id will be the latest scan's last_chart_id
+
+  const {charts, metadata} = await fetchNewCharts(
+    scan_since_time,
+    last_chart_id,
+    (json, stats) => {
+      // store these charts in the database
+      // update the scan session with the new last_chart_id
+
+      onEachResponse(json, stats);
+    },
+  );
+
+  // Mark the scan session as completed
 }
 
-export function findMatchingCharts<T extends ChartResponseEncore>(
-  artist: string,
-  song: string,
-  artistSearcher: Searcher<
-    T,
-    {
-      keySelector: (chart: T) => string[];
-      threshold: number;
-    }
-  >,
-) {
-  const artistResult = artistSearcher.search(artist);
+async function fetchInitialDump() {
+  const results = await Promise.all([
+    fetch('/data/charts.json'),
+    fetch('/data/metadata.json'),
+  ]);
 
-  const nameResult = search(song, artistResult, {
-    keySelector: chart => [chart.name],
-    threshold: 1,
-  });
+  const [charts, metadata] = await Promise.all(results.map(r => r.json()));
 
-  return nameResult;
+  // TODO: store the charts in the database
+  // Create a new scan session with status complete,
+  // started at and scan_since_time should be metadata.lastRun which is a string in the format 2025-02-10T00:40:59.863Z
+  // last_chart_id should simply be 1. We'll make the next scan start from there
+
+  return {charts, metadata};
 }
 
-// Database-specific search functions
-export async function findMatchingChartsInDatabase(
-  artist: string,
-  song: string,
-): Promise<ChartResponseEncore[]> {
-  return await findChartsByArtistAndName(artist, song);
-}
-
-export async function createChartsSearcher(): Promise<ChartResponseEncore[]> {
-  // For now, just return all charts and let the caller create the searcher
-  // This avoids the complex Searcher type issues
-  return await getAllCharts();
-}
-
-// Migration function
-export async function migrateChartsToDatabase(): Promise<void> {
-  try {
-    await migrateFromIndexedDB();
-    console.log('[Chorus] Migration completed successfully');
-  } catch (error) {
-    console.error('[Chorus] Migration failed:', error);
-    throw error;
-  }
-}
-
-// Helper functions
-function debugLog(...args: any[]) {
+function debugLog(message: string) {
   if (DEBUG) {
-    console.log('[ChorusChartDb]', ...args);
+    console.log(message);
   }
 }

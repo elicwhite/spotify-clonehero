@@ -42,7 +42,7 @@ export interface ChorusCharts {
 }
 
 export interface ChorusScanSessions {
-  id: number;
+  id: Generated<number>;
   status: 'in_progress' | 'completed' | 'failed' | 'cancelled';
   started_at: string;
   scan_since_time: string;

@@ -6,9 +6,6 @@ import {
   createScanSession,
   updateScanProgress,
   completeScanSession,
-  failScanSession,
-  getIncompleteScanSession,
-  cancelOldScanSessions,
 } from './scanning';
 
 // Helper function to get current timestamp
@@ -65,68 +62,6 @@ export async function upsertCharts(
   });
 }
 
-export async function getAllCharts(): Promise<ChartResponseEncore[]> {
-  const db = await getLocalDb();
-  const rows = await db
-    .selectFrom('chorus_charts')
-    .selectAll()
-    .orderBy('modified_time', 'desc')
-    .execute();
-
-  return rows.map(row => ({
-    md5: row.md5,
-    name: row.name,
-    artist: row.artist,
-    charter: row.charter,
-    diff_drums: row.diff_drums,
-    diff_guitar: row.diff_guitar,
-    diff_bass: row.diff_bass,
-    diff_keys: row.diff_keys,
-    diff_drums_real: row.diff_drums_real,
-    modifiedTime: row.modified_time,
-    song_length: row.song_length,
-    hasVideoBackground: row.has_video_background,
-    albumArtMd5: row.album_art_md5 ?? '',
-    groupId: row.group_id,
-    // These fields are calculated dynamically
-    file: '', // Will be calculated when needed
-    notesData: null as any, // Not stored in database
-  }));
-}
-
-export async function findChartsByArtistAndName(
-  artist: string,
-  name: string,
-): Promise<ChartResponseEncore[]> {
-  const db = await getLocalDb();
-  const rows = await db
-    .selectFrom('chorus_charts')
-    .selectAll()
-    .where('artist', '=', artist)
-    .where('name', '=', name)
-    .orderBy('modified_time', 'desc')
-    .execute();
-
-  return rows.map(row => ({
-    md5: row.md5,
-    name: row.name,
-    artist: row.artist,
-    charter: row.charter,
-    diff_drums: row.diff_drums,
-    diff_guitar: row.diff_guitar,
-    diff_bass: row.diff_bass,
-    diff_keys: row.diff_keys,
-    diff_drums_real: row.diff_drums_real,
-    modifiedTime: row.modified_time,
-    song_length: row.song_length,
-    hasVideoBackground: row.has_video_background,
-    albumArtMd5: row.album_art_md5 ?? '',
-    groupId: row.group_id,
-    file: '',
-    notesData: null as any,
-  }));
-}
-
 export async function clearAllCharts(): Promise<void> {
   const db = await getLocalDb();
   await db.deleteFrom('chorus_charts').execute();
@@ -170,6 +105,7 @@ export async function getChartsDataVersion(): Promise<number> {
 }
 
 export async function setChartsDataVersion(version: number): Promise<void> {
+  console.log('Setting charts data version to', version);
   await setMetadata('charts_data_version', version.toString());
 }
 
@@ -187,100 +123,6 @@ export async function setLastInstalledChartsScan(): Promise<void> {
   await setMetadata('last_installed_charts_scan', nowIso());
 }
 
-// Migration helper functions
-export async function migrateFromIndexedDB(): Promise<ChartResponseEncore[]> {
-  const db = await getLocalDb();
-
-  // Check if we already have charts in the database
-  const existingCharts = await db
-    .selectFrom('chorus_charts')
-    .select(db.fn.count('md5').as('count'))
-    .executeTakeFirst();
-
-  if (Number(existingCharts?.count || 0) > 0) {
-    console.log('[Chorus] Charts already migrated to database');
-    return await getAllCharts();
-  }
-
-  console.log('[Chorus] Starting migration from IndexedDB to SQLite');
-
-  try {
-    // Get the OPFS root directory
-    const root = await navigator.storage.getDirectory();
-
-    // Load charts from IndexedDB/OPFS
-    const indexedDbCharts = await loadChartsFromIndexedDB(root);
-
-    if (indexedDbCharts.length === 0) {
-      console.log('[Chorus] No charts found in IndexedDB');
-      return [];
-    }
-
-    console.log(
-      `[Chorus] Found ${indexedDbCharts.length} charts in IndexedDB, migrating to SQLite`,
-    );
-
-    // Upsert all charts to the database
-    await upsertCharts(indexedDbCharts);
-
-    console.log(
-      `[Chorus] Successfully migrated ${indexedDbCharts.length} charts to SQLite`,
-    );
-
-    // Return the migrated charts
-    return indexedDbCharts;
-  } catch (error) {
-    console.error('[Chorus] Migration failed:', error);
-    return [];
-  }
-}
-
-// Helper function to load charts from IndexedDB/OPFS
-async function loadChartsFromIndexedDB(
-  root: FileSystemDirectoryHandle,
-): Promise<ChartResponseEncore[]> {
-  const charts: ChartResponseEncore[] = [];
-
-  try {
-    // Try to load from localData directory (updated charts)
-    const localDataHandle = await root.getDirectoryHandle('localData', {
-      create: false,
-    });
-
-    for await (const subHandle of localDataHandle.values()) {
-      if (subHandle.kind === 'file' && subHandle.name.endsWith('.json')) {
-        const file = await subHandle.getFile();
-        const text = await file.text();
-        const json = JSON.parse(text);
-        charts.push(...json);
-      }
-    }
-  } catch (error) {
-    console.log('[Chorus] No localData directory found, trying serverData');
-  }
-
-  // If no local charts, try server data
-  if (charts.length === 0) {
-    try {
-      const serverDataHandle = await root.getDirectoryHandle('serverData', {
-        create: false,
-      });
-      const serverChartsHandle = await serverDataHandle.getFileHandle(
-        'charts.json',
-        {create: false},
-      );
-      const file = await serverChartsHandle.getFile();
-      const text = await file.text();
-      const json = JSON.parse(text);
-      charts.push(...json);
-    } catch (error) {
-      console.log('[Chorus] No serverData found either');
-    }
-  }
-
-  return charts;
-}
-
 export async function clearAllData(): Promise<void> {
   const db = await getLocalDb();
 
@@ -292,11 +134,4 @@ export async function clearAllData(): Promise<void> {
 }
 
 // Re-export scan session functions
-export {
-  createScanSession,
-  updateScanProgress,
-  completeScanSession,
-  failScanSession,
-  getIncompleteScanSession,
-  cancelOldScanSessions,
-};
+export {createScanSession, updateScanProgress, completeScanSession};

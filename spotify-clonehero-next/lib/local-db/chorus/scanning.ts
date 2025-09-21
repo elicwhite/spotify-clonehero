@@ -18,10 +18,7 @@ export async function createScanSession(): Promise<string> {
       session_id: sessionId,
       status: 'in_progress',
       started_at: nowIso(),
-      total_songs_found: 0,
-      total_charts_found: 0,
       last_chart_id: 0,
-      created_at: nowIso(),
     } as Insertable<ChorusScanSessions>)
     .execute();
 
@@ -92,55 +89,16 @@ export async function completeScanSession(sessionId: string): Promise<void> {
   });
 }
 
-export async function failScanSession(
-  sessionId: string,
-  errorMessage: string,
-): Promise<void> {
+export async function getLastScanSession(): Promise<ChorusScanSessions | null> {
   const db = await getLocalDb();
-
-  await db
-    .updateTable('chorus_scan_sessions')
-    .set({
-      status: 'failed',
-      error_message: errorMessage,
-    })
-    .where('session_id', '=', sessionId)
-    .execute();
-}
-
-export async function getIncompleteScanSession(): Promise<ChorusScanSessions | null> {
-  const db = await getLocalDb();
-
-  // Look for in-progress sessions from the last 24 hours
-  const twentyFourHoursAgo = new Date(
-    Date.now() - 24 * 60 * 60 * 1000,
-  ).toISOString();
-
-  const session = await db
+  const latest = await db
     .selectFrom('chorus_scan_sessions')
     .selectAll()
-    .where('status', '=', 'in_progress')
-    .where('started_at', '>', twentyFourHoursAgo)
+    .where(eb =>
+      eb.or([eb('status', '=', 'completed'), eb('status', '=', 'in_progress')]),
+    )
     .orderBy('started_at', 'desc')
     .executeTakeFirst();
 
-  return session || null;
-}
-
-export async function cancelOldScanSessions(): Promise<void> {
-  const db = await getLocalDb();
-
-  // Cancel in-progress sessions older than 24 hours
-  const twentyFourHoursAgo = new Date(
-    Date.now() - 24 * 60 * 60 * 1000,
-  ).toISOString();
-
-  await db
-    .updateTable('chorus_scan_sessions')
-    .set({
-      status: 'cancelled',
-    })
-    .where('status', '=', 'in_progress')
-    .where('started_at', '<', twentyFourHoursAgo)
-    .execute();
+  return latest || null;
 }
