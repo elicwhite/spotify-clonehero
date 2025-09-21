@@ -19,6 +19,7 @@ async function run() {
 
   const {charts, metadata} = await fetchNewCharts(
     START_TIME,
+    1,
     (json, lastChartId) => {
       fs.writeFileSync(
         path.join(

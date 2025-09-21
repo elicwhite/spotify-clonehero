@@ -18,6 +18,7 @@ class TooManyRetriesError extends Error {
 
 export default async function fetchNewCharts(
   afterTime: Date,
+  scanFromId: number,
   onEachResponse: (
     json: any[],
     stats: {
@@ -32,7 +33,7 @@ export default async function fetchNewCharts(
   const results = new Map<number, any>();
   const runStartTime = new Date();
 
-  let lastChartId = 1;
+  let lastChartId = scanFromId;
 
   let totalSongs = 0;
   let totalCharts = 0;
