@@ -24,6 +24,44 @@ export interface SpotifyAlbumTracks {
   updated_at: string;
 }
 
+export interface ChorusCharts {
+  md5: string;
+  name: string;
+  artist: string;
+  charter: string;
+  diff_drums: number | null;
+  diff_guitar: number | null;
+  diff_bass: number | null;
+  diff_keys: number | null;
+  diff_drums_real: number | null;
+  modified_time: string;
+  song_length: number | null;
+  has_video_background: boolean;
+  album_art_md5: string | null;
+  group_id: number;
+}
+
+export interface ChorusScanSessions {
+  id: number;
+  session_id: string;
+  status: 'in_progress' | 'completed' | 'failed' | 'cancelled';
+  started_at: string;
+  completed_at: string | null;
+  total_songs_to_fetch: number | null;
+  total_songs_found: number | null;
+  total_charts_found: number | null;
+  last_chart_id: number | null;
+  data_version: number;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface ChorusMetadata {
+  key: string;
+  value: string;
+  updated_at: string;
+}
+
 export interface SpotifyPlaylists {
   collaborative: Generated<number>;
   id: string;
@@ -53,4 +91,7 @@ export interface DB {
   spotify_playlist_tracks: SpotifyPlaylistTracks;
   spotify_playlists: SpotifyPlaylists;
   spotify_tracks: SpotifyTracks;
+  chorus_charts: ChorusCharts;
+  chorus_scan_sessions: ChorusScanSessions;
+  chorus_metadata: ChorusMetadata;
 }

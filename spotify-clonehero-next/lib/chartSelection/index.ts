@@ -27,6 +27,7 @@ export type ChartInfo = {
   diff_drums_real?: number | null;
   modifiedTime: string;
   song_length?: number | null;
+  groupId?: number;
 
   file: string; // Not sent by Encore, calculated locally
 };
