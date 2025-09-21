@@ -10,6 +10,38 @@ export type Generated<T> =
     ? ColumnType<S, I | undefined, U>
     : ColumnType<T, T | undefined, T>;
 
+export interface ChorusCharts {
+  album_art_md5: string | null;
+  artist: string;
+  charter: string;
+  diff_bass: number | null;
+  diff_drums: number | null;
+  diff_drums_real: number | null;
+  diff_guitar: number | null;
+  diff_keys: number | null;
+  group_id: number;
+  has_video_background: Generated<number>;
+  md5: string | null;
+  modified_time: string;
+  name: string;
+  song_length: number | null;
+}
+
+export interface ChorusMetadata {
+  key: string | null;
+  updated_at: Generated<string>;
+  value: string;
+}
+
+export interface ChorusScanSessions {
+  completed_at: string | null;
+  id: Generated<number | null>;
+  last_chart_id: number | null;
+  scan_since_time: string;
+  started_at: string;
+  status: string;
+}
+
 export interface SpotifyAlbums {
   artist_name: string;
   id: string;
@@ -21,38 +53,6 @@ export interface SpotifyAlbums {
 export interface SpotifyAlbumTracks {
   album_id: string;
   track_id: string;
-  updated_at: string;
-}
-
-export interface ChorusCharts {
-  md5: string;
-  name: string;
-  artist: string;
-  charter: string;
-  diff_drums: number | null;
-  diff_guitar: number | null;
-  diff_bass: number | null;
-  diff_keys: number | null;
-  diff_drums_real: number | null;
-  modified_time: string;
-  song_length: number | null;
-  has_video_background: boolean;
-  album_art_md5: string | null;
-  group_id: number;
-}
-
-export interface ChorusScanSessions {
-  id: Generated<number>;
-  status: 'in_progress' | 'completed' | 'failed' | 'cancelled';
-  started_at: string;
-  scan_since_time: string;
-  completed_at: string | null;
-  last_chart_id: number | null;
-}
-
-export interface ChorusMetadata {
-  key: string;
-  value: string;
   updated_at: string;
 }
 
@@ -80,12 +80,12 @@ export interface SpotifyTracks {
 }
 
 export interface DB {
+  chorus_charts: ChorusCharts;
+  chorus_metadata: ChorusMetadata;
+  chorus_scan_sessions: ChorusScanSessions;
   spotify_album_tracks: SpotifyAlbumTracks;
   spotify_albums: SpotifyAlbums;
   spotify_playlist_tracks: SpotifyPlaylistTracks;
   spotify_playlists: SpotifyPlaylists;
   spotify_tracks: SpotifyTracks;
-  chorus_charts: ChorusCharts;
-  chorus_scan_sessions: ChorusScanSessions;
-  chorus_metadata: ChorusMetadata;
 }

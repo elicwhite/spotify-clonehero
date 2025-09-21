@@ -8,7 +8,10 @@ function nowIso(): string {
 }
 
 // Scan session operations
-export async function createScanSession(): Promise<number> {
+export async function createScanSession(
+  scanSinceTime: Date,
+  lastChartId: number,
+): Promise<number> {
   const db = await getLocalDb();
 
   const result = await db
@@ -16,10 +19,15 @@ export async function createScanSession(): Promise<number> {
     .values({
       status: 'in_progress',
       started_at: nowIso(),
-      last_chart_id: 0,
-    } as Insertable<ChorusScanSessions>)
+      scan_since_time: scanSinceTime.toISOString(),
+      last_chart_id: lastChartId,
+    })
     .returning('id')
     .execute();
+
+  if (!result[0].id) {
+    throw new Error('Failed to create scan session');
+  }
 
   return result[0].id;
 }

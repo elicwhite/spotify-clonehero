@@ -49,13 +49,7 @@ export function useChorusChartDb(): [
           await setChartsDataVersion(serverDataVersion);
 
           // Fetch initial dump and store it
-          const initial = await fetchInitialDump();
-          await upsertCharts(initial.charts);
-
-          // Mark an initial scan session as completed
-          const id = await createScanSession();
-          await updateScanProgress(id, 1);
-          await completeScanSession(id);
+          await fetchInitialDump();
         }
 
         setProgress(progress => ({
@@ -105,7 +99,7 @@ async function getUpdatedCharts(
   }
 
   // Start a new scan session
-  const id = await createScanSession();
+  const id = await createScanSession(scan_since_time, last_chart_id);
 
   let updatePromises = Promise.resolve();
 
@@ -144,10 +138,8 @@ async function fetchInitialDump() {
   // last_chart_id should simply be 1. We'll make the next scan start from there
 
   await upsertCharts(charts as unknown as ChartResponseEncore[]);
-  const id = await createScanSession();
-  await updateScanProgress(id, 1);
+  const id = await createScanSession(new Date(metadata.lastRun), 1);
   await completeScanSession(id, metadata.lastRun);
-
   return {charts, metadata};
 }
 

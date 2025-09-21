@@ -33,7 +33,8 @@ export async function upsertCharts(
       diff_drums_real: chart.diff_drums_real ?? null,
       modified_time: chart.modifiedTime,
       song_length: chart.song_length ?? null,
-      has_video_background: chart.hasVideoBackground,
+      // types currently define boolean columns as numbers in generated types
+      has_video_background: chart.hasVideoBackground ? 1 : 0,
       album_art_md5: chart.albumArtMd5 ?? null,
       group_id: chart.groupId ?? 0,
     }));
