@@ -429,7 +429,44 @@ export function useChorusChartDb(): [
       writeFile(metadataHandle, JSON.stringify(metadata)),
     ]);
 
-    return {charts, metadata};
+  return {charts, metadata};
+}
+
+export async function getServerChartsDataVersion(): Promise<number> {
+  const response = await fetch('/api/data');
+  const json = await response.json();
+  return parseInt(json.chartsDataVersion, 10);
+}
+
+async function getLastUpdateTime(
+  rootHandle: FileSystemDirectoryHandle,
+): Promise<Date> {
+  try {
+    // Check if we have existing client data
+    const localMetadataHandle = await rootHandle.getFileHandle(
+      'localMetadata.json',
+      {
+        create: false,
+      },
+    );
+
+    const metadata = await readJsonFile(localMetadataHandle);
+    return new Date(metadata.lastRun);
+  } catch {
+    console.log('No local metadata found');
+    // No existing client data, use server time
+    const serverDataHandle = await rootHandle.getDirectoryHandle('serverData', {
+      create: false,
+    });
+    const serverMetadataHandle = await serverDataHandle.getFileHandle(
+      'metadata.json',
+      {
+        create: false,
+      },
+    );
+    const serverMetadata = await readJsonFile(serverMetadataHandle);
+
+    return new Date(serverMetadata.lastRun);
   }
 
   async function getLastUpdateTime(

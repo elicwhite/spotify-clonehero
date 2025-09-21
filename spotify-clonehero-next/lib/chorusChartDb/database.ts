@@ -1,5 +1,5 @@
 import {useState, useCallback} from 'react';
-import {ChorusChartProgress} from '.';
+import {ChorusChartProgress, getServerChartsDataVersion} from '.';
 import {ChartResponseEncore} from '../chartSelection';
 import fetchNewCharts from './fetchNewCharts';
 
@@ -44,7 +44,7 @@ export function useChorusChartDb(): [
         }));
         debugLog('Fetching updated charts');
 
-        updatedCharts = await getUpdatedCharts(root, (json, stats) => {
+        updatedCharts = await getUpdatedCharts((json, stats) => {
           setProgress(progress => ({
             ...progress,
             numFetched: stats.totalSongsFound,
@@ -53,16 +53,15 @@ export function useChorusChartDb(): [
         });
         debugLog('Done fetching charts');
 
-        const finalCharts = reduceCharts(
-          serverCharts,
-          localCharts,
-          updatedCharts,
-        );
         setProgress(progress => ({
           ...progress,
           status: 'complete',
         }));
-        resolve(finalCharts);
+
+        // Don't fill this in. We won't return charts here. We'll
+        // change this later to do a more complicated sql.
+        // For now, leave this blank.
+        resolve([]);
       });
     },
     [],
@@ -72,12 +71,12 @@ export function useChorusChartDb(): [
 }
 
 async function getUpdatedCharts(
-  rootHandle: FileSystemDirectoryHandle,
   onEachResponse: Parameters<typeof fetchNewCharts>[2],
 ) {
   // TODO: get the latest scan from the database
 
   // if there are no scans, that means we need to fetch the initial dump from the server
+  // call fetchInitialDump()
 
   // If the status is in_progress, we'll continue from there
   // if so, get the scan_since_time and last_chart_id
