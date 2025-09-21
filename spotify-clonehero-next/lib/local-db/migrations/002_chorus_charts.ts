@@ -29,18 +29,11 @@ export const migration_002_chorus_charts = {
       .createTable('chorus_scan_sessions')
       .ifNotExists()
       .addColumn('id', 'integer', col => col.primaryKey().autoIncrement())
-      .addColumn('session_id', 'text', col => col.notNull().unique())
       .addColumn('status', 'text', col => col.notNull())
       .addColumn('started_at', 'text', col => col.notNull())
+      .addColumn('scan_since_time', 'text', col => col.notNull())
       .addColumn('completed_at', 'text')
-      .addColumn('total_songs_to_fetch', 'integer')
-      .addColumn('total_songs_found', 'integer')
-      .addColumn('total_charts_found', 'integer')
       .addColumn('last_chart_id', 'integer')
-      .addColumn('error_message', 'text')
-      .addColumn('created_at', 'text', col =>
-        col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`),
-      )
       .execute();
 
     // Create chorus_metadata table

@@ -43,16 +43,11 @@ export interface ChorusCharts {
 
 export interface ChorusScanSessions {
   id: number;
-  session_id: string;
   status: 'in_progress' | 'completed' | 'failed' | 'cancelled';
   started_at: string;
+  scan_since_time: string;
   completed_at: string | null;
-  total_songs_to_fetch: number | null;
-  total_songs_found: number | null;
-  total_charts_found: number | null;
   last_chart_id: number | null;
-  error_message: string | null;
-  created_at: string;
 }
 
 export interface ChorusMetadata {
