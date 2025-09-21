@@ -2,6 +2,16 @@ import {useState, useCallback} from 'react';
 import {ChorusChartProgress, getServerChartsDataVersion} from '.';
 import {ChartResponseEncore} from '../chartSelection';
 import fetchNewCharts from './fetchNewCharts';
+import {
+  upsertCharts,
+  clearAllCharts,
+  getChartsDataVersion,
+  setChartsDataVersion,
+  createScanSession,
+  updateScanProgress,
+  completeScanSession,
+} from '@/lib/local-db/chorus';
+import {getLastScanSession} from '../local-db/chorus/scanning';
 
 const DEBUG = true;
 
@@ -25,8 +35,8 @@ export function useChorusChartDb(): [
         }));
 
         debugLog('Checking for server data updates');
-        // TODO: get the latest data version from database metadata
-        // const localDataVersion =
+        // Get the latest data version from database metadata
+        const localDataVersion = await getChartsDataVersion();
         const serverDataVersion = await getServerChartsDataVersion();
 
         if (localDataVersion !== serverDataVersion) {
@@ -34,8 +44,18 @@ export function useChorusChartDb(): [
             ...progress,
             status: 'fetching-dump',
           }));
-          // TODO: Clear all chorus charts from the database
-          // TODO: Set the data version in the database metadata
+          // Clear all data and set the new data version
+          await clearAllCharts();
+          await setChartsDataVersion(serverDataVersion);
+
+          // Fetch initial dump and store it
+          const initial = await fetchInitialDump();
+          await upsertCharts(initial.charts);
+
+          // Mark an initial scan session as completed
+          const id = await createScanSession();
+          await updateScanProgress(id, 1);
+          await completeScanSession(id);
         }
 
         setProgress(progress => ({
@@ -44,7 +64,7 @@ export function useChorusChartDb(): [
         }));
         debugLog('Fetching updated charts');
 
-        updatedCharts = await getUpdatedCharts((json, stats) => {
+        await getUpdatedCharts((_, stats) => {
           setProgress(progress => ({
             ...progress,
             numFetched: stats.totalSongsFound,
@@ -58,9 +78,6 @@ export function useChorusChartDb(): [
           status: 'complete',
         }));
 
-        // Don't fill this in. We won't return charts here. We'll
-        // change this later to do a more complicated sql.
-        // For now, leave this blank.
         resolve([]);
       });
     },
@@ -73,31 +90,44 @@ export function useChorusChartDb(): [
 async function getUpdatedCharts(
   onEachResponse: Parameters<typeof fetchNewCharts>[2],
 ) {
-  // TODO: get the latest scan from the database
+  // Determine the point-in-time to scan from
+  // Prefer the last successful scan time recorded in metadata
+  const lastScanSession = await getLastScanSession();
+  let scan_since_time = new Date(0);
+  let last_chart_id = 0;
 
-  // if there are no scans, that means we need to fetch the initial dump from the server
-  // call fetchInitialDump()
+  if (lastScanSession?.status === 'completed') {
+    scan_since_time = new Date(lastScanSession.completed_at ?? 0);
+    last_chart_id = lastScanSession.last_chart_id ?? 0;
+  } else if (lastScanSession?.status === 'in_progress') {
+    scan_since_time = new Date(lastScanSession.started_at);
+    last_chart_id = lastScanSession.last_chart_id ?? 0;
+  }
 
-  // If the status is in_progress, we'll continue from there
-  // if so, get the scan_since_time and last_chart_id
-  // if the status is completed, we'll use that's started at time
+  // Start a new scan session
+  const id = await createScanSession();
 
-  // create a new scan session
-  // scan_since_time will be the latest scan's started_at
-  // last_chart_id will be the latest scan's last_chart_id
+  let updatePromises = Promise.resolve();
 
   const {charts, metadata} = await fetchNewCharts(
     scan_since_time,
     last_chart_id,
     (json, stats) => {
-      // store these charts in the database
-      // update the scan session with the new last_chart_id
+      // Store charts and update scan progress
+      updatePromises = updatePromises.then(async () => {
+        await upsertCharts(json as unknown as ChartResponseEncore[]);
+        last_chart_id = stats.lastChartId;
+        await updateScanProgress(id, stats.lastChartId);
+      });
 
       onEachResponse(json, stats);
     },
   );
 
+  await updatePromises;
+
   // Mark the scan session as completed
+  await completeScanSession(id);
 }
 
 async function fetchInitialDump() {
@@ -112,6 +142,11 @@ async function fetchInitialDump() {
   // Create a new scan session with status complete,
   // started at and scan_since_time should be metadata.lastRun which is a string in the format 2025-02-10T00:40:59.863Z
   // last_chart_id should simply be 1. We'll make the next scan start from there
+
+  await upsertCharts(charts as unknown as ChartResponseEncore[]);
+  const id = await createScanSession();
+  await updateScanProgress(id, 1);
+  await completeScanSession(id, metadata.lastRun);
 
   return {charts, metadata};
 }

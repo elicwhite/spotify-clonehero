@@ -109,20 +109,6 @@ export async function setChartsDataVersion(version: number): Promise<void> {
   await setMetadata('charts_data_version', version.toString());
 }
 
-export async function getLastSuccessfulScan(): Promise<Date | null> {
-  const lastScan = await getMetadata('last_successful_scan');
-  return lastScan ? new Date(lastScan) : null;
-}
-
-export async function getLastInstalledChartsScan(): Promise<Date | null> {
-  const lastScan = await getMetadata('last_installed_charts_scan');
-  return lastScan ? new Date(lastScan) : null;
-}
-
-export async function setLastInstalledChartsScan(): Promise<void> {
-  await setMetadata('last_installed_charts_scan', nowIso());
-}
-
 export async function clearAllData(): Promise<void> {
   const db = await getLocalDb();
 

@@ -1,6 +1,6 @@
 import {getLocalDb} from '../client';
 import {ChorusScanSessions} from '../types';
-import {Insertable} from 'kysely';
+import {Insertable, Selectable} from 'kysely';
 
 // Helper function to get current timestamp
 function nowIso(): string {
@@ -8,56 +8,41 @@ function nowIso(): string {
 }
 
 // Scan session operations
-export async function createScanSession(): Promise<string> {
+export async function createScanSession(): Promise<number> {
   const db = await getLocalDb();
-  const sessionId = crypto.randomUUID();
 
-  await db
+  const result = await db
     .insertInto('chorus_scan_sessions')
     .values({
-      session_id: sessionId,
       status: 'in_progress',
       started_at: nowIso(),
       last_chart_id: 0,
     } as Insertable<ChorusScanSessions>)
+    .returning('id')
     .execute();
 
-  return sessionId;
+  return result[0].id;
 }
 
 export async function updateScanProgress(
-  sessionId: string,
-  progress: {
-    totalSongsToFetch?: number;
-    totalSongsFound?: number;
-    totalChartsFound?: number;
-    lastChartId?: number;
-  },
+  id: number,
+  lastChartId: number,
 ): Promise<void> {
   const db = await getLocalDb();
 
-  const updateData: Partial<ChorusScanSessions> = {};
-  if (progress.totalSongsToFetch !== undefined) {
-    updateData.total_songs_to_fetch = progress.totalSongsToFetch;
-  }
-  if (progress.totalSongsFound !== undefined) {
-    updateData.total_songs_found = progress.totalSongsFound;
-  }
-  if (progress.totalChartsFound !== undefined) {
-    updateData.total_charts_found = progress.totalChartsFound;
-  }
-  if (progress.lastChartId !== undefined) {
-    updateData.last_chart_id = progress.lastChartId;
-  }
-
   await db
     .updateTable('chorus_scan_sessions')
-    .set(updateData)
-    .where('session_id', '=', sessionId)
+    .set({
+      last_chart_id: lastChartId,
+    })
+    .where(eb => eb('id', '=', id))
     .execute();
 }
 
-export async function completeScanSession(sessionId: string): Promise<void> {
+export async function completeScanSession(
+  id: number,
+  completedAt: string = nowIso(),
+): Promise<void> {
   const db = await getLocalDb();
 
   await db.transaction().execute(async trx => {
@@ -66,9 +51,9 @@ export async function completeScanSession(sessionId: string): Promise<void> {
       .updateTable('chorus_scan_sessions')
       .set({
         status: 'completed',
-        completed_at: nowIso(),
+        completed_at: completedAt,
       })
-      .where('session_id', '=', sessionId)
+      .where(eb => eb('id', '=', id))
       .execute();
 
     // Update metadata
@@ -76,20 +61,20 @@ export async function completeScanSession(sessionId: string): Promise<void> {
       .insertInto('chorus_metadata')
       .values({
         key: 'last_successful_scan',
-        value: nowIso(),
+        value: completedAt,
         updated_at: nowIso(),
       })
       .onConflict(oc =>
         oc.column('key').doUpdateSet(eb => ({
           value: eb.ref('excluded.value'),
-          updated_at: nowIso(),
+          updated_at: completedAt,
         })),
       )
       .execute();
   });
 }
 
-export async function getLastScanSession(): Promise<ChorusScanSessions | null> {
+export async function getLastScanSession(): Promise<Selectable<ChorusScanSessions> | null> {
   const db = await getLocalDb();
   const latest = await db
     .selectFrom('chorus_scan_sessions')
