@@ -88,14 +88,14 @@ async function getUpdatedCharts(
   // Prefer the last successful scan time recorded in metadata
   const lastScanSession = await getLastScanSession();
   let scan_since_time = new Date(0);
-  let last_chart_id = 0;
+  let last_chart_id = 1;
 
   if (lastScanSession?.status === 'completed') {
     scan_since_time = new Date(lastScanSession.completed_at ?? 0);
-    last_chart_id = lastScanSession.last_chart_id ?? 0;
+    last_chart_id = 1;
   } else if (lastScanSession?.status === 'in_progress') {
     scan_since_time = new Date(lastScanSession.started_at);
-    last_chart_id = lastScanSession.last_chart_id ?? 0;
+    last_chart_id = lastScanSession.last_chart_id ?? 1;
   }
 
   // Start a new scan session

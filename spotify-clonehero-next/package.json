@@ -10,7 +10,7 @@
     "format": "prettier --write .",
     "test": "jest",
     "test:fill-detector": "jest lib/fill-detector",
-    "update:db": "ts-node ./downloadDb.ts",
+    "update:db": "tsx ./downloadDb.ts",
     "update:db-types": "kysely-codegen --out-file ./lib/local-db/types.ts"
   },
   "dependencies": {
