@@ -2,6 +2,7 @@ import {levenshteinEditDistance} from 'levenshtein-edit-distance';
 import {parse} from '@/lib/ini-parser';
 import * as Sentry from '@sentry/nextjs';
 import {SngStream} from 'parse-sng';
+import {removeStyleTags} from '@/lib/ui-utils';
 
 export type SongIniData = {
   name: string;
@@ -133,10 +134,10 @@ async function scanLocalChartsDirectory(
   if (songIniData != null) {
     const convertedSongIniData = convertValues(songIniData);
     const chart = {
-      artist: songIniData.artist,
-      song: songIniData.name,
+      artist: removeStyleTags(songIniData.artist),
+      song: removeStyleTags(songIniData.name),
       modifiedTime: new Date(newestDate).toISOString(),
-      charter: songIniData.charter || songIniData.frets || '',
+      charter: removeStyleTags(songIniData.charter || songIniData.frets || ''),
       data: convertedSongIniData,
       handleInfo: {
         parentDir: parentDirectoryHandle,
@@ -212,10 +213,10 @@ async function scanLocalSngFile(
   if (songIniData != null) {
     const convertedSongIniData = convertValues(songIniData);
     const chart = {
-      artist: songIniData.artist,
-      song: songIniData.name,
+      artist: removeStyleTags(songIniData.artist),
+      song: removeStyleTags(songIniData.name),
       modifiedTime: new Date(file.lastModified).toISOString(),
-      charter: songIniData.charter,
+      charter: removeStyleTags(songIniData.charter || songIniData.frets || ''),
       data: convertedSongIniData,
       handleInfo: {
         parentDir: parentDirectoryHandle,
