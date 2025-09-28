@@ -44,11 +44,14 @@ export interface ChorusScanSessions {
 
 export interface LocalCharts {
   artist: string;
+  artist_normalized: string | null;
   charter: string;
+  charter_normalized: string | null;
   data: string;
   id: Generated<number | null>;
   modified_time: string;
   song: string;
+  song_normalized: string | null;
   updated_at: string;
 }
 

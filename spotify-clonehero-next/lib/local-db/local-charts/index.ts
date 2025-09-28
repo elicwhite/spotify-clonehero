@@ -1,5 +1,6 @@
 import {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 import {getLocalDb} from '../client';
+import {normalizeStrForMatching} from '../normalize';
 
 const BATCH_SIZE = 50;
 
@@ -14,6 +15,9 @@ export async function upsertLocalCharts(charts: SongAccumulator[]) {
       artist: chart.artist,
       song: chart.song,
       charter: chart.charter || '',
+      artist_normalized: normalizeStrForMatching(chart.artist),
+      song_normalized: normalizeStrForMatching(chart.song),
+      charter_normalized: normalizeStrForMatching(chart.charter),
       modified_time: chart.modifiedTime,
       data: JSON.stringify(chart.data),
       updated_at: updatedAt,
@@ -33,6 +37,9 @@ export async function upsertLocalCharts(charts: SongAccumulator[]) {
         .values(batch)
         .onConflict(oc =>
           oc.columns(['artist', 'song', 'charter']).doUpdateSet(eb => ({
+            artist_normalized: eb.ref('excluded.artist_normalized'),
+            song_normalized: eb.ref('excluded.song_normalized'),
+            charter_normalized: eb.ref('excluded.charter_normalized'),
             modified_time: eb.ref('excluded.modified_time'),
             data: eb.ref('excluded.data'),
             updated_at: updatedAt,
