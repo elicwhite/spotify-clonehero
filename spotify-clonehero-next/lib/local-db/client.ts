@@ -5,6 +5,7 @@ import type {DB} from './types';
 // Database client - will be initialized in initializeLocalDb()
 let localDb: Kysely<DB> | null = null;
 let dbInitializationPromise: Promise<Kysely<DB>> | null = null;
+let sqlocalClient: SQLocalKysely | null = null;
 
 // Initialize the database with migrations
 export async function getLocalDb(): Promise<Kysely<DB>> {
@@ -32,7 +33,9 @@ async function initializeDatabase(): Promise<Kysely<DB>> {
     console.log('Initializing SQLocal database...');
 
     // Create the SQLocal database client
-    const {dialect} = new SQLocalKysely('spotify-clonehero-local.sqlite3');
+    const client = new SQLocalKysely('spotify-clonehero-local.sqlite3');
+    const {dialect} = client;
+    sqlocalClient = client;
     const db = new Kysely<DB>({dialect});
 
     // Create migrator
@@ -115,4 +118,38 @@ export async function getLocalDbStats() {
     console.error('Failed to get database stats:', error);
     return null;
   }
+}
+
+// Run a raw SQL query directly via SQLocal (bypassing Kysely query builder)
+export async function runRawSql(sql: string): Promise<any[]> {
+  if (!sql || !sql.trim()) return [];
+  // Ensure DB (and sqlocalClient) is initialized
+  await getLocalDb();
+  if (!sqlocalClient) throw new Error('SQLocal client not initialized');
+  return await sqlocalClient.sql(sql);
+}
+
+// Export the current OPFS database file
+export async function exportLocalDbFile(): Promise<File> {
+  await getLocalDb();
+  if (!sqlocalClient) throw new Error('SQLocal client not initialized');
+  return await sqlocalClient.getDatabaseFile();
+}
+
+// Overwrite the OPFS database file with provided contents and reinitialize
+export async function overwriteLocalDbFile(
+  databaseFile:
+    | File
+    | Blob
+    | ArrayBuffer
+    | Uint8Array
+    | ReadableStream<Uint8Array>,
+): Promise<void> {
+  await getLocalDb();
+  if (!sqlocalClient) throw new Error('SQLocal client not initialized');
+  await sqlocalClient.overwriteDatabaseFile(databaseFile);
+  // Force a fresh Kysely instance so connections see the new file
+  localDb = null;
+  dbInitializationPromise = null;
+  await getLocalDb();
 }

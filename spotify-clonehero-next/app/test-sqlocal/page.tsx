@@ -5,6 +5,9 @@ import {
   getLocalDb,
   checkLocalDbHealth,
   getLocalDbStats,
+  runRawSql,
+  exportLocalDbFile,
+  overwriteLocalDbFile,
 } from '@/lib/local-db/client';
 import {
   analyzeDataConsistency,
@@ -21,6 +24,11 @@ export default function TestSQLocalPage() {
   const [consistency, setConsistency] = useState<any>(null);
   const [cleaning, setCleaning] = useState<boolean>(false);
   const [newItem, setNewItem] = useState('');
+  const [sqlInput, setSqlInput] = useState('select 1 as ok;');
+  const [sqlExecuting, setSqlExecuting] = useState(false);
+  const [sqlResult, setSqlResult] = useState<any[] | null>(null);
+  const [sqlError, setSqlError] = useState<string | null>(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
 
   const initializeDatabase = async () => {
     setStatus('initializing');
@@ -71,6 +79,58 @@ export default function TestSQLocalPage() {
 
   // Demo inputs kept for layout; not used with Spotify-only schema
 
+  const executeSql = async () => {
+    setSqlError(null);
+    setSqlExecuting(true);
+    try {
+      const rows = await runRawSql(sqlInput);
+      setSqlResult(rows as any[]);
+    } catch (e) {
+      setSqlError(e instanceof Error ? e.message : String(e));
+      setSqlResult(null);
+    } finally {
+      setSqlExecuting(false);
+    }
+  };
+
+  const downloadDb = async () => {
+    try {
+      const file = await exportLocalDbFile();
+      const url = URL.createObjectURL(file);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name || 'spotify-clonehero-local.sqlite3';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(
+        'Failed to export DB: ' + (e instanceof Error ? e.message : String(e)),
+      );
+    }
+  };
+
+  const onUploadDb = async (file?: File) => {
+    if (!file) return;
+    setUploadBusy(true);
+    try {
+      await overwriteLocalDbFile(file);
+      // Refresh indicators
+      const isHealthy = await checkLocalDbHealth();
+      setHealth(isHealthy);
+      const dbStats = await getLocalDbStats();
+      setStats(dbStats);
+    } catch (e) {
+      alert(
+        'Failed to overwrite DB: ' +
+          (e instanceof Error ? e.message : String(e)),
+      );
+    } finally {
+      setUploadBusy(false);
+    }
+  };
+
   return (
     <div className="container mx-auto p-8">
       <h1 className="text-3xl font-bold mb-6">SQLocal Test Page</h1>
@@ -118,6 +178,73 @@ export default function TestSQLocalPage() {
               <h2 className="text-xl font-semibold mb-4">Local DB Ready</h2>
               <p className="text-gray-600">
                 Migrations have been applied and the database is ready.
+              </p>
+            </div>
+
+            {/* SQL Runner */}
+            <div className="bg-white border rounded-lg p-4">
+              <h2 className="text-xl font-semibold mb-4">SQL Runner</h2>
+              <textarea
+                className="w-full border rounded p-2 font-mono text-sm min-h-[120px]"
+                value={sqlInput}
+                onChange={e => setSqlInput(e.target.value)}
+                placeholder="Enter SQL (multiple statements supported if semicolon separated)"
+              />
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={executeSql}
+                  disabled={sqlExecuting}
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded">
+                  {sqlExecuting ? 'Executing...' : 'Run SQL'}
+                </button>
+                {sqlError && (
+                  <span className="text-red-600 text-sm">{sqlError}</span>
+                )}
+              </div>
+              {sqlResult && (
+                <div className="mt-4">
+                  <div className="text-sm text-gray-600 mb-2">
+                    {Array.isArray(sqlResult)
+                      ? `${sqlResult.length} row(s)`
+                      : ''}
+                  </div>
+                  <pre className="bg-gray-50 border rounded p-3 overflow-auto text-xs">
+                    {JSON.stringify(sqlResult, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            {/* OPFS DB Import/Export */}
+            <div className="bg-white border rounded-lg p-4">
+              <h2 className="text-xl font-semibold mb-4">
+                Database File (OPFS)
+              </h2>
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                <button
+                  onClick={downloadDb}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                  Download current DB
+                </button>
+                <label className="text-sm text-gray-700">
+                  <span className="block mb-1 font-medium">
+                    Upload and replace DB
+                  </span>
+                  <input
+                    type="file"
+                    accept=".sqlite,.db,application/octet-stream,application/x-sqlite3"
+                    onChange={e => onUploadDb(e.target.files?.[0])}
+                    disabled={uploadBusy}
+                  />
+                </label>
+                {uploadBusy && (
+                  <span className="text-gray-600 text-sm">Uploading...</span>
+                )}
+              </div>
+              <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                Replacing the database will delete the current OPFS file and
+                load the uploaded one. You may need to refresh open views that
+                depend on the local DB.
               </p>
             </div>
 

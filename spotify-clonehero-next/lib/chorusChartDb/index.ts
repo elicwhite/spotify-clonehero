@@ -1,4 +1,4 @@
-import {levenshteinEditDistance} from 'levenshtein-edit-distance';
+'use client';
 
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import fetchNewCharts from './fetchNewCharts';
@@ -7,19 +7,12 @@ import {search, Searcher} from 'fast-fuzzy';
 import {useCallback, useState} from 'react';
 
 // Import database version
-import {
-  useChorusChartDb as useChorusChartDbDatabase,
-  findMatchingChartsExact as findMatchingChartsExactDatabase,
-  findMatchingCharts as findMatchingChartsDatabase,
-  findMatchingChartsInDatabase,
-  createChartsSearcher,
-  migrateChartsToDatabase,
-} from './database';
+import {useChorusChartDb as useChorusChartDbDatabase} from './database';
 
 const DEBUG = false;
 
 // Feature flag to control database vs IndexedDB usage
-const USE_DATABASE = true;
+const USE_DATABASE = false;
 
 function debugLog(message: string) {
   if (DEBUG) {
@@ -105,7 +98,7 @@ async function getLocalCharts(rootHandle: FileSystemDirectoryHandle) {
 
 async function getUpdatedCharts(
   rootHandle: FileSystemDirectoryHandle,
-  onEachResponse: Parameters<typeof fetchNewCharts>[1],
+  onEachResponse: Parameters<typeof fetchNewCharts>[2],
 ) {
   const localDataHandle = await rootHandle.getDirectoryHandle('localData', {
     create: true,
@@ -115,6 +108,7 @@ async function getUpdatedCharts(
 
   const {charts, metadata} = await fetchNewCharts(
     lastUpdateTime,
+    1,
     onEachResponse,
   );
 
@@ -358,13 +352,6 @@ export function findMatchingCharts<T extends ChartResponseEncore>(
   return nameResult;
 }
 
-// Export database-specific functions
-export {
-  findMatchingChartsInDatabase,
-  createChartsSearcher,
-  migrateChartsToDatabase,
-};
-
 // Main export function - always call hooks at the top level
 export function useChorusChartDb(): [
   ChorusChartProgress,
@@ -411,157 +398,5 @@ export function useChorusChartDb(): [
       }
     }
     return Array.from(results.values());
-  }
-
-  async function fetchServerData(
-    chartsHandle: FileSystemFileHandle,
-    metadataHandle: FileSystemFileHandle,
-  ) {
-    const results = await Promise.all([
-      fetch('/data/charts.json'),
-      fetch('/data/metadata.json'),
-    ]);
-
-    const [charts, metadata] = await Promise.all(results.map(r => r.json()));
-
-    await Promise.all([
-      writeFile(chartsHandle, JSON.stringify(charts)),
-      writeFile(metadataHandle, JSON.stringify(metadata)),
-    ]);
-
-  return {charts, metadata};
-}
-
-export async function getServerChartsDataVersion(): Promise<number> {
-  const response = await fetch('/api/data');
-  const json = await response.json();
-  return parseInt(json.chartsDataVersion, 10);
-}
-
-async function getLastUpdateTime(
-  rootHandle: FileSystemDirectoryHandle,
-): Promise<Date> {
-  try {
-    // Check if we have existing client data
-    const localMetadataHandle = await rootHandle.getFileHandle(
-      'localMetadata.json',
-      {
-        create: false,
-      },
-    );
-
-    const metadata = await readJsonFile(localMetadataHandle);
-    return new Date(metadata.lastRun);
-  } catch {
-    console.log('No local metadata found');
-    // No existing client data, use server time
-    const serverDataHandle = await rootHandle.getDirectoryHandle('serverData', {
-      create: false,
-    });
-    const serverMetadataHandle = await serverDataHandle.getFileHandle(
-      'metadata.json',
-      {
-        create: false,
-      },
-    );
-    const serverMetadata = await readJsonFile(serverMetadataHandle);
-
-    return new Date(serverMetadata.lastRun);
-  }
-
-  async function getLastUpdateTime(
-    rootHandle: FileSystemDirectoryHandle,
-  ): Promise<Date> {
-    try {
-      // Check if we have existing client data
-      const localMetadataHandle = await rootHandle.getFileHandle(
-        'localMetadata.json',
-        {
-          create: false,
-        },
-      );
-
-      const metadata = await readJsonFile(localMetadataHandle);
-      return new Date(metadata.lastRun);
-    } catch {
-      console.log('No local metadata found');
-      // No existing client data, use server time
-      const serverDataHandle = await rootHandle.getDirectoryHandle(
-        'serverData',
-        {
-          create: false,
-        },
-      );
-      const serverMetadataHandle = await serverDataHandle.getFileHandle(
-        'metadata.json',
-        {
-          create: false,
-        },
-      );
-      const serverMetadata = await readJsonFile(serverMetadataHandle);
-
-      return new Date(serverMetadata.lastRun);
-    }
-  }
-
-  async function getLocalCharts(rootHandle: FileSystemDirectoryHandle) {
-    const localDataHandle = await rootHandle.getDirectoryHandle('localData', {
-      create: true,
-    });
-
-    let charts: any[] = [];
-
-    for await (const subHandle of localDataHandle.values()) {
-      if (subHandle.kind !== 'file') {
-        throw new Error('There should not be any subdirectories in localData');
-      }
-
-      const file = await subHandle.getFile();
-      const text = await file.text();
-      const json = JSON.parse(text);
-      charts = charts.concat(json);
-    }
-
-    return charts;
-  }
-
-  async function getUpdatedCharts(
-    rootHandle: FileSystemDirectoryHandle,
-    onEachResponse: Parameters<typeof fetchNewCharts>[1],
-  ) {
-    const localDataHandle = await rootHandle.getDirectoryHandle('localData', {
-      create: true,
-    });
-
-    let lastUpdateTime = await getLastUpdateTime(rootHandle);
-
-    const {charts, metadata} = await fetchNewCharts(
-      lastUpdateTime,
-      onEachResponse,
-    );
-
-    if (charts.length !== 0) {
-      const localMetadataHandle = await rootHandle.getFileHandle(
-        'localMetadata.json',
-        {
-          create: true,
-        },
-      );
-      await writeFile(localMetadataHandle, JSON.stringify(metadata));
-
-      // Don't bother writing an empty file
-      const fileName = `charts-${new Date(metadata.lastRun)
-        .toISOString()
-        .replace(/[:.]/g, '-')}.json`;
-      // replace : and . with - to avoid issues with file names
-
-      console.log('Writing file', fileName);
-      const chartsFile = await localDataHandle.getFileHandle(fileName, {
-        create: true,
-      });
-      await writeFile(chartsFile, JSON.stringify(charts));
-    }
-
-    return charts;
   }
 }
