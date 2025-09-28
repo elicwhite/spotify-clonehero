@@ -92,24 +92,32 @@ export async function checkLocalDbHealth(): Promise<boolean> {
 export async function getLocalDbStats() {
   try {
     const db = await getLocalDb();
-    const [playlists, albums, tracks, chorusCharts] = await Promise.all([
-      db
-        .selectFrom('spotify_playlists')
-        .select(db.fn.count('id').as('count'))
-        .executeTakeFirst(),
-      db
-        .selectFrom('spotify_albums')
-        .select(db.fn.count('id').as('count'))
-        .executeTakeFirst(),
-      db
-        .selectFrom('spotify_tracks')
-        .select(db.fn.count('id').as('count'))
-        .executeTakeFirst(),
-      db
-        .selectFrom('chorus_charts')
-        .select(db.fn.count('md5').as('count'))
-        .executeTakeFirst(),
-    ]);
+
+    // Add the number of local charts and the time of latest scan
+    const [playlists, albums, tracks, chorusCharts, localCharts] =
+      await Promise.all([
+        db
+          .selectFrom('spotify_playlists')
+          .select(db.fn.count('id').as('count'))
+          .executeTakeFirst(),
+        db
+          .selectFrom('spotify_albums')
+          .select(db.fn.count('id').as('count'))
+          .executeTakeFirst(),
+        db
+          .selectFrom('spotify_tracks')
+          .select(db.fn.count('id').as('count'))
+          .executeTakeFirst(),
+        db
+          .selectFrom('chorus_charts')
+          .select(db.fn.count('md5').as('count'))
+          .executeTakeFirst(),
+        db
+          .selectFrom('local_charts')
+          .select(db.fn.count('id').as('count'))
+          .select(db.fn.max('updated_at').as('latest_scan'))
+          .executeTakeFirst(),
+      ]);
 
     return {
       spotify: {
@@ -119,6 +127,10 @@ export async function getLocalDbStats() {
       },
       chorus: {
         charts: Number(chorusCharts?.count || 0),
+      },
+      local: {
+        charts: Number(localCharts?.count || 0),
+        latest_scan: localCharts?.latest_scan || null,
       },
     };
   } catch (error) {

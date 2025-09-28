@@ -156,9 +156,10 @@ export default function TestSQLocalPage() {
             </p>
           )}
           {stats && (
-            <p>
-              Stats: <span className="font-mono">{JSON.stringify(stats)}</span>
-            </p>
+            <>
+              <p>Stats:</p>
+              <pre className="font-mono">{JSON.stringify(stats, null, 2)}</pre>
+            </>
           )}
         </div>
 
