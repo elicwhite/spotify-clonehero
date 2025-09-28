@@ -2,6 +2,7 @@ import {getLocalDb} from '../client';
 import {ChorusCharts, ChorusMetadata} from '../types';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import {Insertable} from 'kysely';
+import {normalizeStrForMatching} from '../normalize';
 import {
   createScanSession,
   updateScanProgress,
@@ -28,6 +29,9 @@ export async function upsertCharts(
       name: chart.name,
       artist: chart.artist,
       charter: chart.charter,
+      artist_normalized: normalizeStrForMatching(chart.artist),
+      charter_normalized: normalizeStrForMatching(chart.charter),
+      name_normalized: normalizeStrForMatching(chart.name),
       diff_drums: chart.diff_drums ?? null,
       diff_guitar: chart.diff_guitar ?? null,
       diff_bass: chart.diff_bass ?? null,
@@ -54,6 +58,9 @@ export async function upsertCharts(
               name: eb.ref('excluded.name'),
               artist: eb.ref('excluded.artist'),
               charter: eb.ref('excluded.charter'),
+              artist_normalized: eb.ref('excluded.artist_normalized'),
+              charter_normalized: eb.ref('excluded.charter_normalized'),
+              name_normalized: eb.ref('excluded.name_normalized'),
               diff_drums: eb.ref('excluded.diff_drums'),
               diff_guitar: eb.ref('excluded.diff_guitar'),
               diff_bass: eb.ref('excluded.diff_bass'),

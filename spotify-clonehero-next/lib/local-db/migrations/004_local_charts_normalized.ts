@@ -26,37 +26,13 @@ export const migration_004_local_charts_normalized: Migration = {
       )
       .execute();
 
-    // Populate normalized columns in batches of 50
-    const BATCH_SIZE = 50;
-    let hasMore = true;
-
-    while (hasMore) {
-      const rows = await db
-        .selectFrom('local_charts')
-        .select(['id', 'artist', 'song', 'charter'])
-        .where('artist_normalized', 'is', null)
-        .limit(BATCH_SIZE)
-        .execute();
-
-      if (rows.length === 0) {
-        hasMore = false;
-        break;
-      }
-
-      // Update each row with normalized values
-      for (const row of rows) {
-        console.log();
-        await db
-          .updateTable('local_charts')
-          .set({
-            artist_normalized: normalizeStrForMatching(row.artist),
-            song_normalized: normalizeStrForMatching(row.song),
-            charter_normalized: normalizeStrForMatching(row.charter),
-          })
-          .where('id', '=', row.id)
-          .execute();
-      }
-    }
+    await sql`
+      UPDATE local_charts 
+      SET artist_normalized = normalize(artist),
+          song_normalized = normalize(song),
+          charter_normalized = normalize(charter)
+      WHERE artist_normalized IS NULL;
+    `.execute(db);
 
     // Create indexes
     await db.schema

@@ -1,6 +1,7 @@
 import {SQLocalKysely} from 'sqlocal/kysely';
 import {Kysely, Migrator} from 'kysely';
 import type {DB} from './types';
+import {normalizeStrForMatching} from './normalize';
 
 // Database client - will be initialized in initializeLocalDb()
 let localDb: Kysely<DB> | null = null;
@@ -37,6 +38,10 @@ async function initializeDatabase(): Promise<Kysely<DB>> {
     const {dialect} = client;
     sqlocalClient = client;
     const db = new Kysely<DB>({dialect});
+
+    await client.createScalarFunction('normalize', (str: string) => {
+      return normalizeStrForMatching(str);
+    });
 
     // Create migrator
     const migrator = new Migrator({

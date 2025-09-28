@@ -1,5 +1,6 @@
 import {Kysely, sql} from 'kysely';
 import {getLocalDb} from '../client';
+import {normalizeStrForMatching} from '../normalize';
 import type {
   DB,
   SpotifyAlbums,
@@ -109,6 +110,8 @@ export async function upsertTracks(tracks: TrackLike[]) {
       id: t.id,
       name: t.name,
       artist: t.artists[0],
+      artist_normalized: normalizeStrForMatching(t.artists[0]),
+      name_normalized: normalizeStrForMatching(t.name),
       updated_at: nowIso(),
     }));
   await db
@@ -118,6 +121,8 @@ export async function upsertTracks(tracks: TrackLike[]) {
       oc.column('id').doUpdateSet(eb => ({
         name: eb.ref('excluded.name'),
         artist: eb.ref('excluded.artist'),
+        artist_normalized: eb.ref('excluded.artist_normalized'),
+        name_normalized: eb.ref('excluded.name_normalized'),
         updated_at: eb.ref('excluded.updated_at'),
       })),
     )
@@ -139,6 +144,8 @@ export async function appendPlaylistTracks(
         id: t.id,
         name: t.name,
         artist: t.artists[0],
+        artist_normalized: normalizeStrForMatching(t.artists[0]),
+        name_normalized: normalizeStrForMatching(t.name),
         updated_at: nowIso(),
       }));
       await trx
@@ -148,6 +155,8 @@ export async function appendPlaylistTracks(
           oc.column('id').doUpdateSet(eb => ({
             name: eb.ref('excluded.name'),
             artist: eb.ref('excluded.artist'),
+            artist_normalized: eb.ref('excluded.artist_normalized'),
+            name_normalized: eb.ref('excluded.name_normalized'),
             updated_at: eb.ref('excluded.updated_at'),
           })),
         )
@@ -187,6 +196,8 @@ export async function replacePlaylistTracks(
         id: t.id,
         name: t.name,
         artist: t.artists[0],
+        artist_normalized: normalizeStrForMatching(t.artists[0]),
+        name_normalized: normalizeStrForMatching(t.name),
         updated_at: nowIso(),
       }));
       await trx
@@ -196,6 +207,8 @@ export async function replacePlaylistTracks(
           oc.column('id').doUpdateSet(eb => ({
             name: eb.ref('excluded.name'),
             artist: eb.ref('excluded.artist'),
+            artist_normalized: eb.ref('excluded.artist_normalized'),
+            name_normalized: eb.ref('excluded.name_normalized'),
             updated_at: eb.ref('excluded.updated_at'),
           })),
         )
@@ -226,6 +239,8 @@ export async function replaceAlbumTracks(albumId: string, tracks: TrackLike[]) {
         id: t.id,
         name: t.name,
         artist: t.artists[0],
+        artist_normalized: normalizeStrForMatching(t.artists[0]),
+        name_normalized: normalizeStrForMatching(t.name),
         updated_at: nowIso(),
       }));
       await trx
@@ -235,6 +250,8 @@ export async function replaceAlbumTracks(albumId: string, tracks: TrackLike[]) {
           oc.column('id').doUpdateSet(eb => ({
             name: eb.ref('excluded.name'),
             artist: eb.ref('excluded.artist'),
+            artist_normalized: eb.ref('excluded.artist_normalized'),
+            name_normalized: eb.ref('excluded.name_normalized'),
             updated_at: eb.ref('excluded.updated_at'),
           })),
         )

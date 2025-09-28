@@ -13,7 +13,9 @@ export type Generated<T> =
 export interface ChorusCharts {
   album_art_md5: string | null;
   artist: string;
+  artist_normalized: string | null;
   charter: string;
+  charter_normalized: string | null;
   diff_bass: number | null;
   diff_drums: number | null;
   diff_drums_real: number | null;
@@ -24,6 +26,7 @@ export interface ChorusCharts {
   md5: string | null;
   modified_time: string;
   name: string;
+  name_normalized: string | null;
   song_length: number | null;
 }
 
@@ -87,8 +90,10 @@ export interface SpotifyPlaylistTracks {
 
 export interface SpotifyTracks {
   artist: string;
+  artist_normalized: string | null;
   id: string;
   name: string;
+  name_normalized: string | null;
   updated_at: string;
 }
 
