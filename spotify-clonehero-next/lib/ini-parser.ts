@@ -32,7 +32,7 @@ export function parse(data: string) {
       }
     } else if (line.includes('=')) {
       const delimeterPos = line.indexOf('=');
-      const key = line.slice(0, delimeterPos).trim();
+      const key = line.slice(0, delimeterPos).trim().toLowerCase();
       const value = line.slice(delimeterPos + 1).trim();
 
       if (currentSection === '') {

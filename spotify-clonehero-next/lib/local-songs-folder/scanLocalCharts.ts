@@ -11,6 +11,7 @@ export type SongIniData = {
   diff_drums_real?: number | null;
   diff_guitar?: number | null;
   song_length?: number | null;
+  frets?: string | null;
 };
 
 export type SongAccumulator = {
@@ -135,7 +136,7 @@ async function scanLocalChartsDirectory(
       artist: songIniData.artist,
       song: songIniData.name,
       modifiedTime: new Date(newestDate).toISOString(),
-      charter: songIniData.charter,
+      charter: songIniData.charter || songIniData.frets || '',
       data: convertedSongIniData,
       handleInfo: {
         parentDir: parentDirectoryHandle,

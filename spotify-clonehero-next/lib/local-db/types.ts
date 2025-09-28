@@ -42,6 +42,16 @@ export interface ChorusScanSessions {
   status: string;
 }
 
+export interface LocalCharts {
+  artist: string;
+  charter: string;
+  data: string;
+  id: Generated<number | null>;
+  modified_time: string;
+  song: string;
+  updated_at: string;
+}
+
 export interface SpotifyAlbums {
   artist_name: string;
   id: string;
@@ -83,6 +93,7 @@ export interface DB {
   chorus_charts: ChorusCharts;
   chorus_metadata: ChorusMetadata;
   chorus_scan_sessions: ChorusScanSessions;
+  local_charts: LocalCharts;
   spotify_album_tracks: SpotifyAlbumTracks;
   spotify_albums: SpotifyAlbums;
   spotify_playlist_tracks: SpotifyPlaylistTracks;

@@ -5,6 +5,7 @@ import {sendGAEvent} from '@next/third-parties/google';
 import {writeFile} from '@/lib/fileSystemHelpers';
 import scanLocalCharts, {SongAccumulator} from './scanLocalCharts';
 import {SngStream} from 'parse-sng';
+import {upsertLocalCharts} from '@/lib/local-db/local-charts';
 
 async function promptForSongsDirectory() {
   alert('Select your Songs directory');
@@ -86,6 +87,10 @@ export async function scanForInstalledCharts(
       create: true,
     },
   );
+
+  // Write the charts to the local db
+  await upsertLocalCharts(installedCharts);
+
   writeFile(installedChartsCacheHandle, JSON.stringify(installedCharts));
   localStorage.setItem(
     'lastScannedInstalledCharts',
