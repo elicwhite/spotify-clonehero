@@ -92,7 +92,7 @@ export async function checkLocalDbHealth(): Promise<boolean> {
 export async function getLocalDbStats() {
   try {
     const db = await getLocalDb();
-    const [playlists, albums, tracks] = await Promise.all([
+    const [playlists, albums, tracks, chorusCharts] = await Promise.all([
       db
         .selectFrom('spotify_playlists')
         .select(db.fn.count('id').as('count'))
@@ -105,6 +105,10 @@ export async function getLocalDbStats() {
         .selectFrom('spotify_tracks')
         .select(db.fn.count('id').as('count'))
         .executeTakeFirst(),
+      db
+        .selectFrom('chorus_charts')
+        .select(db.fn.count('md5').as('count'))
+        .executeTakeFirst(),
     ]);
 
     return {
@@ -112,6 +116,9 @@ export async function getLocalDbStats() {
         playlists: Number(playlists?.count || 0),
         albums: Number(albums?.count || 0),
         tracks: Number(tracks?.count || 0),
+      },
+      chorus: {
+        charts: Number(chorusCharts?.count || 0),
       },
     };
   } catch (error) {
