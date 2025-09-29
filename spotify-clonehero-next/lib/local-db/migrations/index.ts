@@ -5,6 +5,7 @@ import {migration_003_local_charts} from './003_local_charts';
 import {migration_004_local_charts_normalized} from './004_local_charts_normalized';
 import {migration_005_add_normalized_columns} from './005_add_normalized_columns';
 import {migration_006_add_normalized_indexes} from './006_add_normalized_indexes';
+import {migration_007_add_track_chart_matches} from './007_add_track_chart_matches';
 
 export const migrations: Record<string, Migration> = {
   '001_initial': InitialMigration,
@@ -13,4 +14,5 @@ export const migrations: Record<string, Migration> = {
   '004_local_charts_normalized': migration_004_local_charts_normalized,
   '005_add_normalized_columns': migration_005_add_normalized_columns,
   '006_add_normalized_indexes': migration_006_add_normalized_indexes,
+  '007_add_track_chart_matches': migration_007_add_track_chart_matches,
 };

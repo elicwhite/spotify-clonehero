@@ -97,6 +97,12 @@ export interface SpotifyTracks {
   updated_at: string;
 }
 
+export interface SpotifyTrackChartMatches {
+  spotify_id: string;
+  chart_md5: string;
+  matched_at: number;
+}
+
 export interface DB {
   chorus_charts: ChorusCharts;
   chorus_metadata: ChorusMetadata;
@@ -106,5 +112,6 @@ export interface DB {
   spotify_albums: SpotifyAlbums;
   spotify_playlist_tracks: SpotifyPlaylistTracks;
   spotify_playlists: SpotifyPlaylists;
+  spotify_track_chart_matches: SpotifyTrackChartMatches;
   spotify_tracks: SpotifyTracks;
 }
