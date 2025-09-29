@@ -1,6 +1,6 @@
 'use client';
 
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import {
   getLocalDb,
   checkLocalDbHealth,
@@ -29,6 +29,16 @@ export default function TestSQLocalPage() {
   const [sqlResult, setSqlResult] = useState<any[] | null>(null);
   const [sqlError, setSqlError] = useState<string | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
+
+  const sqlStorageKey = 'test-sqlocal:sqlInput';
+
+  // Load saved SQL from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(sqlStorageKey);
+      if (saved !== null) setSqlInput(saved);
+    } catch {}
+  }, []);
 
   const initializeDatabase = async () => {
     setStatus('initializing');
@@ -188,7 +198,11 @@ export default function TestSQLocalPage() {
               <textarea
                 className="w-full border rounded p-2 font-mono text-sm min-h-[120px]"
                 value={sqlInput}
-                onChange={e => setSqlInput(e.target.value)}
+                onChange={e => {
+                  const sqlInput = e.target.value;
+                  localStorage.setItem(sqlStorageKey, sqlInput);
+                  setSqlInput(sqlInput);
+                }}
                 placeholder="Enter SQL (multiple statements supported if semicolon separated)"
               />
               <div className="mt-3 flex items-center gap-2">
