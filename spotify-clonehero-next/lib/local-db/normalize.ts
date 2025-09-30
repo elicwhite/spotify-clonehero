@@ -1,6 +1,6 @@
 const RE_PARENS = /\([^)]*\)/g;
 const RE_BRACKETS = /\[[^\]]*\]/g;
-const RE_NON_ALPHANUMERIC = /[^a-z0-9]/g;
+const RE_NON_ALPHANUMERIC = /[^a-z0-9 ]/g;
 const RE_EXTRA_SPACES = /\s+/g;
 
 const RE_ACCENTS = /[\u0300-\u036f]/g;
