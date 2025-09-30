@@ -103,6 +103,14 @@ export interface SpotifyTrackChartMatches {
   matched_at: number;
 }
 
+export interface SpotifyHistory {
+  artist: string;
+  artist_normalized: string;
+  name: string;
+  name_normalized: string;
+  play_count: number;
+}
+
 export interface DB {
   chorus_charts: ChorusCharts;
   chorus_metadata: ChorusMetadata;
@@ -110,6 +118,7 @@ export interface DB {
   local_charts: LocalCharts;
   spotify_album_tracks: SpotifyAlbumTracks;
   spotify_albums: SpotifyAlbums;
+  spotify_history: SpotifyHistory;
   spotify_playlist_tracks: SpotifyPlaylistTracks;
   spotify_playlists: SpotifyPlaylists;
   spotify_track_chart_matches: SpotifyTrackChartMatches;

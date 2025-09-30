@@ -1,4 +1,9 @@
 import {readJsonFile, writeFile} from '@/lib/fileSystemHelpers';
+import {
+  hasSpotifyHistory,
+  upsertSpotifyHistory,
+} from '@/lib/local-db/spotify-history';
+import {getLocalDb} from '@/lib/local-db/client';
 
 export type ArtistTrackPlays = Map<string, Map<string, number>>;
 
@@ -15,7 +20,20 @@ export async function getSpotifyDumpArtistTrackPlays() {
   }
 
   const cachedInstalledCharts = await readJsonFile(installedChartsCacheHandle);
-  return deserialize(cachedInstalledCharts);
+  const artistTrackPlays = deserialize(cachedInstalledCharts);
+
+  if (artistTrackPlays != null) {
+    const hasHistoryInDb = await hasSpotifyHistory();
+
+    if (!hasHistoryInDb) {
+      const db = await getLocalDb();
+      await db.transaction().execute(async trx => {
+        await upsertSpotifyHistory(trx, artistTrackPlays);
+      });
+    }
+  }
+
+  return artistTrackPlays;
 }
 
 export async function processSpotifyDump(
@@ -37,7 +55,15 @@ async function cacheArtistTrackPlays(artistTrackPlays: ArtistTrackPlays) {
       create: true,
     },
   );
-  await writeFile(installedChartsCacheHandle, serialized);
+
+  await Promise.all([
+    writeFile(installedChartsCacheHandle, serialized),
+    getLocalDb().then(db => {
+      return db.transaction().execute(async trx => {
+        await upsertSpotifyHistory(trx, artistTrackPlays);
+      });
+    }),
+  ]);
 }
 
 function deserialize(cachedInstalledCharts: any): ArtistTrackPlays | null {
