@@ -363,40 +363,4 @@ export function useChorusChartDb(): [
 
   // Return the appropriate result based on feature flag
   return USE_DATABASE ? databaseResult : indexedDBResult;
-
-  function reduceCharts(
-    ...chartSets: {
-      artist: string;
-      name: string;
-      groupId: number;
-      md5: string;
-      modifiedTime: string;
-    }[][]
-  ) {
-    const results = new Map<number, any>();
-    for (const chartSet of chartSets) {
-      for (const chart of chartSet) {
-        // Invalid charts can get uploaded to encore and have 30 days to get fixed
-        if (chart.artist == null || chart.name == null) {
-          continue;
-        }
-
-        if (!results.has(chart.groupId)) {
-          results.set(chart.groupId, {
-            ...chart,
-            file: `https://files.enchor.us/${chart.md5}.sng`,
-          });
-        } else if (
-          new Date(results.get(chart.groupId).modifiedTime) <
-          new Date(chart.modifiedTime)
-        ) {
-          results.set(chart.groupId, {
-            ...chart,
-            file: `https://files.enchor.us/${chart.md5}.sng`,
-          });
-        }
-      }
-    }
-    return Array.from(results.values());
-  }
 }

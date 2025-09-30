@@ -1,4 +1,5 @@
 import {type Kysely, type Migration} from 'kysely';
+import {recalculateTrackChartMatches} from '../queries';
 
 export const migration_007_add_track_chart_matches: Migration = {
   async up(db: Kysely<any>) {
@@ -52,24 +53,7 @@ export const migration_007_add_track_chart_matches: Migration = {
       .execute();
 
     // Populate the table with existing matches based on normalized artist and name
-    await db
-      .insertInto('spotify_track_chart_matches')
-      .columns(['spotify_id', 'chart_md5', 'matched_at'])
-      .expression(eb =>
-        eb
-          .selectFrom('spotify_tracks as s')
-          .innerJoin('chorus_charts as c', join =>
-            join
-              .onRef('c.artist_normalized', '=', 's.artist_normalized')
-              .onRef('c.name_normalized', '=', 's.name_normalized'),
-          )
-          .select([
-            's.id as spotify_id',
-            'c.md5 as chart_md5',
-            eb.fn('unixepoch').as('matched_at'),
-          ]),
-      )
-      .execute();
+    await recalculateTrackChartMatches(db);
   },
 
   async down(db: Kysely<any>) {

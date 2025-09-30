@@ -12,6 +12,9 @@ import {
   completeScanSession,
 } from '@/lib/local-db/chorus';
 import {getLastScanSession} from '../local-db/chorus/scanning';
+import {getLocalDb} from '@/lib/local-db/client';
+import {Kysely, Transaction} from 'kysely';
+import {DB} from '@/lib/local-db/types';
 
 const DEBUG = true;
 
@@ -44,12 +47,17 @@ export function useChorusChartDb(): [
             ...progress,
             status: 'fetching-dump',
           }));
-          // Clear all data and set the new data version
-          await clearAllCharts();
-          await setChartsDataVersion(serverDataVersion);
 
-          // Fetch initial dump and store it
-          await fetchInitialDump();
+          const db = await getLocalDb();
+
+          await db.transaction().execute(async trx => {
+            // Clear all data and set the new data version
+            await clearAllCharts(trx);
+            await setChartsDataVersion(trx, serverDataVersion);
+
+            // Fetch initial dump and store it
+            await fetchInitialDump(trx);
+          });
         }
 
         setProgress(progress => ({
@@ -99,32 +107,35 @@ async function getUpdatedCharts(
   }
 
   // Start a new scan session
-  const id = await createScanSession(scan_since_time, last_chart_id);
+  const db = await getLocalDb();
+  db.transaction().execute(async trx => {
+    const id = await createScanSession(trx, scan_since_time, last_chart_id);
 
-  let updatePromises = Promise.resolve();
+    let updatePromises = Promise.resolve();
 
-  const {charts, metadata} = await fetchNewCharts(
-    scan_since_time,
-    last_chart_id,
-    (json, stats) => {
-      // Store charts and update scan progress
-      updatePromises = updatePromises.then(async () => {
-        await upsertCharts(json as unknown as ChartResponseEncore[]);
-        last_chart_id = stats.lastChartId;
-        await updateScanProgress(id, stats.lastChartId);
-      });
+    const {charts, metadata} = await fetchNewCharts(
+      scan_since_time,
+      last_chart_id,
+      (json, stats) => {
+        // Store charts and update scan progress
+        updatePromises = updatePromises.then(async () => {
+          await upsertCharts(trx, json as unknown as ChartResponseEncore[]);
+          last_chart_id = stats.lastChartId;
+          await updateScanProgress(trx, id, stats.lastChartId);
+        });
 
-      onEachResponse(json, stats);
-    },
-  );
+        onEachResponse(json, stats);
+      },
+    );
 
-  await updatePromises;
+    await updatePromises;
 
-  // Mark the scan session as completed
-  await completeScanSession(id);
+    // Mark the scan session as completed
+    await completeScanSession(trx, id);
+  });
 }
 
-async function fetchInitialDump() {
+async function fetchInitialDump(db: Transaction<DB>) {
   const results = await Promise.all([
     fetch('/data/charts.json'),
     fetch('/data/metadata.json'),
@@ -137,9 +148,9 @@ async function fetchInitialDump() {
   // started at and scan_since_time should be metadata.lastRun which is a string in the format 2025-02-10T00:40:59.863Z
   // last_chart_id should simply be 1. We'll make the next scan start from there
 
-  await upsertCharts(charts as unknown as ChartResponseEncore[]);
-  const id = await createScanSession(new Date(metadata.lastRun), 1);
-  await completeScanSession(id, metadata.lastRun);
+  await upsertCharts(db, charts as unknown as ChartResponseEncore[]);
+  const id = await createScanSession(db, new Date(metadata.lastRun), 1);
+  await completeScanSession(db, id, metadata.lastRun);
   return {charts, metadata};
 }
 

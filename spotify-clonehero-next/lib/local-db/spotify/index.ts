@@ -7,6 +7,7 @@ import type {
   SpotifyPlaylists,
   SpotifyTracks,
 } from '../types';
+import {recalculateTrackChartMatches} from '../queries';
 
 export type DbPlaylistRow = SpotifyPlaylists;
 export type DbAlbumRow = SpotifyAlbums;
@@ -104,16 +105,24 @@ export async function upsertAlbums(albums: AlbumLike[]) {
 export async function upsertTracks(tracks: TrackLike[]) {
   if (tracks.length === 0) return;
   const db = await getLocalDb();
-  const rows = tracks
-    .filter(t => t.id != null)
-    .map(t => ({
-      id: t.id,
-      name: t.name,
-      artist: t.artists[0],
-      artist_normalized: normalizeStrForMatching(t.artists[0]),
-      name_normalized: normalizeStrForMatching(t.name),
-      updated_at: nowIso(),
-    }));
+
+  upsertTracksPrivate(
+    db,
+    tracks.filter(t => t.id != null),
+  );
+}
+
+async function upsertTracksPrivate(db: Kysely<DB>, tracks: TrackLike[]) {
+  if (tracks.length === 0) return;
+
+  const rows = tracks.map(t => ({
+    id: t.id,
+    name: t.name,
+    artist: t.artists[0],
+    artist_normalized: normalizeStrForMatching(t.artists[0]),
+    name_normalized: normalizeStrForMatching(t.name),
+    updated_at: nowIso(),
+  }));
   await db
     .insertInto('spotify_tracks')
     .values(rows)
@@ -127,6 +136,8 @@ export async function upsertTracks(tracks: TrackLike[]) {
       })),
     )
     .execute();
+
+  await recalculateTrackChartMatches(db);
 }
 
 export async function appendPlaylistTracks(
@@ -139,29 +150,7 @@ export async function appendPlaylistTracks(
   await db.transaction().execute(async trx => {
     // Upsert tracks first
     const filteredTracks = tracks.filter(t => t.id != null);
-    if (filteredTracks.length > 0) {
-      const trackRows = filteredTracks.map(t => ({
-        id: t.id,
-        name: t.name,
-        artist: t.artists[0],
-        artist_normalized: normalizeStrForMatching(t.artists[0]),
-        name_normalized: normalizeStrForMatching(t.name),
-        updated_at: nowIso(),
-      }));
-      await trx
-        .insertInto('spotify_tracks')
-        .values(trackRows)
-        .onConflict(oc =>
-          oc.column('id').doUpdateSet(eb => ({
-            name: eb.ref('excluded.name'),
-            artist: eb.ref('excluded.artist'),
-            artist_normalized: eb.ref('excluded.artist_normalized'),
-            name_normalized: eb.ref('excluded.name_normalized'),
-            updated_at: eb.ref('excluded.updated_at'),
-          })),
-        )
-        .execute();
-    }
+    await upsertTracksPrivate(trx, filteredTracks);
 
     // Then link tracks to playlist
     const linkRows = filteredTracks.map(t => ({
@@ -192,27 +181,7 @@ export async function replacePlaylistTracks(
     // Upsert tracks and link them to playlist
     const filteredTracks = tracks.filter(t => t.id != null);
     if (filteredTracks.length > 0) {
-      const trackRows = filteredTracks.map(t => ({
-        id: t.id,
-        name: t.name,
-        artist: t.artists[0],
-        artist_normalized: normalizeStrForMatching(t.artists[0]),
-        name_normalized: normalizeStrForMatching(t.name),
-        updated_at: nowIso(),
-      }));
-      await trx
-        .insertInto('spotify_tracks')
-        .values(trackRows)
-        .onConflict(oc =>
-          oc.column('id').doUpdateSet(eb => ({
-            name: eb.ref('excluded.name'),
-            artist: eb.ref('excluded.artist'),
-            artist_normalized: eb.ref('excluded.artist_normalized'),
-            name_normalized: eb.ref('excluded.name_normalized'),
-            updated_at: eb.ref('excluded.updated_at'),
-          })),
-        )
-        .execute();
+      await upsertTracksPrivate(trx, filteredTracks);
 
       // Link tracks to playlist
       const linkRows = filteredTracks.map(t => ({
@@ -234,29 +203,7 @@ export async function replaceAlbumTracks(albumId: string, tracks: TrackLike[]) {
   await db.transaction().execute(async trx => {
     // Upsert tracks first
     const filteredTracks = tracks.filter(t => t.id != null);
-    if (filteredTracks.length > 0) {
-      const trackRows = filteredTracks.map(t => ({
-        id: t.id,
-        name: t.name,
-        artist: t.artists[0],
-        artist_normalized: normalizeStrForMatching(t.artists[0]),
-        name_normalized: normalizeStrForMatching(t.name),
-        updated_at: nowIso(),
-      }));
-      await trx
-        .insertInto('spotify_tracks')
-        .values(trackRows)
-        .onConflict(oc =>
-          oc.column('id').doUpdateSet(eb => ({
-            name: eb.ref('excluded.name'),
-            artist: eb.ref('excluded.artist'),
-            artist_normalized: eb.ref('excluded.artist_normalized'),
-            name_normalized: eb.ref('excluded.name_normalized'),
-            updated_at: eb.ref('excluded.updated_at'),
-          })),
-        )
-        .execute();
-    }
+    await upsertTracksPrivate(trx, filteredTracks);
 
     // Delete existing album tracks
     await trx

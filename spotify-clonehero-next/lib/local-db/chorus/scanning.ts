@@ -1,6 +1,6 @@
 import {getLocalDb} from '../client';
-import {ChorusScanSessions} from '../types';
-import {Insertable, Selectable} from 'kysely';
+import {ChorusScanSessions, DB} from '../types';
+import {Insertable, Kysely, Selectable, Transaction} from 'kysely';
 
 // Helper function to get current timestamp
 function nowIso(): string {
@@ -9,12 +9,11 @@ function nowIso(): string {
 
 // Scan session operations
 export async function createScanSession(
+  trx: Transaction<DB>,
   scanSinceTime: Date,
   lastChartId: number,
 ): Promise<number> {
-  const db = await getLocalDb();
-
-  const result = await db
+  const result = await trx
     .insertInto('chorus_scan_sessions')
     .values({
       status: 'in_progress',
@@ -33,12 +32,11 @@ export async function createScanSession(
 }
 
 export async function updateScanProgress(
+  trx: Transaction<DB>,
   id: number,
   lastChartId: number,
 ): Promise<void> {
-  const db = await getLocalDb();
-
-  await db
+  await trx
     .updateTable('chorus_scan_sessions')
     .set({
       last_chart_id: lastChartId,
@@ -48,38 +46,35 @@ export async function updateScanProgress(
 }
 
 export async function completeScanSession(
+  trx: Transaction<DB>,
   id: number,
   completedAt: string = nowIso(),
 ): Promise<void> {
-  const db = await getLocalDb();
+  // Mark session as completed
+  await trx
+    .updateTable('chorus_scan_sessions')
+    .set({
+      status: 'completed',
+      completed_at: completedAt,
+    })
+    .where(eb => eb('id', '=', id))
+    .execute();
 
-  await db.transaction().execute(async trx => {
-    // Mark session as completed
-    await trx
-      .updateTable('chorus_scan_sessions')
-      .set({
-        status: 'completed',
-        completed_at: completedAt,
-      })
-      .where(eb => eb('id', '=', id))
-      .execute();
-
-    // Update metadata
-    await trx
-      .insertInto('chorus_metadata')
-      .values({
-        key: 'last_successful_scan',
-        value: completedAt,
-        updated_at: nowIso(),
-      })
-      .onConflict(oc =>
-        oc.column('key').doUpdateSet(eb => ({
-          value: eb.ref('excluded.value'),
-          updated_at: completedAt,
-        })),
-      )
-      .execute();
-  });
+  // Update metadata
+  await trx
+    .insertInto('chorus_metadata')
+    .values({
+      key: 'last_successful_scan',
+      value: completedAt,
+      updated_at: nowIso(),
+    })
+    .onConflict(oc =>
+      oc.column('key').doUpdateSet(eb => ({
+        value: eb.ref('excluded.value'),
+        updated_at: completedAt,
+      })),
+    )
+    .execute();
 }
 
 export async function getLastScanSession(): Promise<Selectable<ChorusScanSessions> | null> {
