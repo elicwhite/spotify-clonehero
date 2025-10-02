@@ -121,7 +121,8 @@ type Status = {
   songsCounted: number;
 };
 
-async function getData(db: Kysely<DB>) {
+async function getData() {
+  const db = await getLocalDb();
   // return db.selectFrom('spotify_tracks').selectAll().execute();
 
   // return await db
@@ -241,20 +242,16 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     songsCounted: 0,
   });
 
-  const dbRef = useRef(getLocalDb());
-  const db = use(dbRef.current);
-  window.db = db;
-
   console.log('getting data');
 
   useEffect(() => {
     async function run() {
-      const data = await getData(db);
+      const data = await getData();
       console.log('data', data);
     }
 
     run();
-  }, [db]);
+  }, []);
   // const data = use(getData(db));
 
   // console.log('data', data);
