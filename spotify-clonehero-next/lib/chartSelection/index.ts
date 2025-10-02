@@ -1,4 +1,4 @@
-import {NotesData} from 'scan-chart';
+import {NotesData} from '@eliwhite/scan-chart';
 import {
   ChartTest,
   testPreferDrums,

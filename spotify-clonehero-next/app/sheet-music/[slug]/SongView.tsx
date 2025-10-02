@@ -1,4 +1,4 @@
-import {Difficulty} from 'scan-chart';
+import {Difficulty} from '@eliwhite/scan-chart';
 
 import {Button} from '@/components/ui/button';
 import {

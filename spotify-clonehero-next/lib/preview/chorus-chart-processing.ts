@@ -1,6 +1,6 @@
 import _ from 'lodash';
 import {SngHeader, SngStream} from 'parse-sng';
-import {parseChartFile} from 'scan-chart';
+import {parseChartFile} from '@eliwhite/scan-chart';
 
 import {
   getBasename,

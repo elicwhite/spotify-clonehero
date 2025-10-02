@@ -460,6 +460,23 @@
   resolved "https://registry.yarnpkg.com/@bcoe/v8-coverage/-/v8-coverage-0.2.3.tgz#75a2e8b51cb758a7553d6804a5932d7aace75c39"
   integrity sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==
 
+"@eliwhite/scan-chart@7.0.1":
+  version "7.0.1"
+  resolved "https://registry.yarnpkg.com/@eliwhite/scan-chart/-/scan-chart-7.0.1.tgz#71541bdd277f9242ee121643371e7a2c620d5e3e"
+  integrity sha512-P1Rd8vbe9co+boQddD7APq2NQyrZ1z6w2sqPyDBFVfgiW0DQEYEwc6E6FuNr25P05hiiaKLcY2f8edcgCGhQ6A==
+  dependencies:
+    "@noble/hashes" "^1.4.0"
+    bottleneck "^2.19.5"
+    exifreader "^4.23.2"
+    fluent-ffmpeg "^2.1.2"
+    js-md5 "^0.8.3"
+    lodash "^4.17.21"
+    midi-file "^1.2.4"
+    rfc4648 "^1.5.3"
+    sanitize-filename "^1.6.3"
+    stream-audio-fingerprint "git+https://github.com/Geomitron/stream-audio-fingerprint.git"
+    workerpool "^6.4.0"
+
 "@emnapi/runtime@^1.4.4":
   version "1.5.0"
   resolved "https://registry.yarnpkg.com/@emnapi/runtime/-/runtime-1.5.0.tgz#9aebfcb9b17195dce3ab53c86787a6b7d058db73"
@@ -7725,28 +7742,19 @@ safe-regex-test@^1.0.3, safe-regex-test@^1.1.0:
     es-errors "^1.3.0"
     is-regex "^1.2.1"
 
+sanitize-filename@^1.6.3:
+  version "1.6.3"
+  resolved "https://registry.yarnpkg.com/sanitize-filename/-/sanitize-filename-1.6.3.tgz#755ebd752045931977e30b2025d340d7c9090378"
+  integrity sha512-y/52Mcy7aw3gRm7IrcGDFx/bCk4AhRh2eI9luHOQM86nZsqwiRkkq2GekHXBBD+SmPidc8i2PqtYZl+pWJ8Oeg==
+  dependencies:
+    truncate-utf8-bytes "^1.0.0"
+
 saxes@^5.0.1:
   version "5.0.1"
   resolved "https://registry.yarnpkg.com/saxes/-/saxes-5.0.1.tgz#eebab953fa3b7608dbe94e5dadb15c888fa6696d"
   integrity sha512-5LBh1Tls8c9xgGjw3QrMwETmTMVk0oFgvrFSvWx62llR2hcEInrKNZ2GZCCuuy2lvWrdl5jhbpeqc5hRYKFOcw==
   dependencies:
     xmlchars "^2.2.0"
-
-scan-chart@^6.1.1:
-  version "6.1.1"
-  resolved "https://registry.yarnpkg.com/scan-chart/-/scan-chart-6.1.1.tgz#8b7cda9336eb352e88ed1952bbdf4c87d8077884"
-  integrity sha512-fuBm/cwzO91sfc+8yHPiZPYGO68XF/xL7BdNyujsbguTZwzjlR+uFr7/aGrGAcQQ8/wt58NAo9ygLyb3zrcQqg==
-  dependencies:
-    "@noble/hashes" "^1.4.0"
-    bottleneck "^2.19.5"
-    exifreader "^4.23.2"
-    fluent-ffmpeg "^2.1.2"
-    js-md5 "^0.8.3"
-    lodash "^4.17.21"
-    midi-file "^1.2.4"
-    rfc4648 "^1.5.3"
-    stream-audio-fingerprint "git+https://github.com/Geomitron/stream-audio-fingerprint.git"
-    workerpool "^6.4.0"
 
 scheduler@^0.23.2:
   version "0.23.2"
@@ -8418,6 +8426,13 @@ tr46@~0.0.3:
   resolved "https://registry.yarnpkg.com/traverse/-/traverse-0.3.9.tgz#717b8f220cc0bb7b44e40514c22b2e8bbc70d8b9"
   integrity sha512-iawgk0hLP3SxGKDfnDJf8wTz4p2qImnyihM5Hh/sGvQ3K37dPi/w8sRhdNIxYA1TwFwc5mDhIJq+O0RsvXBKdQ==
 
+truncate-utf8-bytes@^1.0.0:
+  version "1.0.2"
+  resolved "https://registry.yarnpkg.com/truncate-utf8-bytes/-/truncate-utf8-bytes-1.0.2.tgz#405923909592d56f78a5818434b0b78489ca5f2b"
+  integrity sha512-95Pu1QXQvruGEhv62XCMO3Mm90GscOCClvrIUwCM0PYOXK3kaF3l3sIHxx71ThJfcbM2O5Au6SO3AWCSEfW4mQ==
+  dependencies:
+    utf8-byte-length "^1.0.1"
+
 ts-api-utils@^2.1.0:
   version "2.1.0"
   resolved "https://registry.yarnpkg.com/ts-api-utils/-/ts-api-utils-2.1.0.tgz#595f7094e46eed364c13fd23e75f9513d29baf91"
@@ -8697,6 +8712,11 @@ utf-8@^2.0.0:
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/utf-8/-/utf-8-2.0.0.tgz#6c2a309d683958862a01b5bf8e1d2dff46d36bf9"
   integrity sha512-DItg/Z20ltBzugPrb8Mx1oN0F8CqN5bD38T57YM/pF/GOzUsNVXiellI0PbJPq3e1Z7BEDNoWP1H1+4n7g54Cg==
+
+utf8-byte-length@^1.0.1:
+  version "1.0.5"
+  resolved "https://registry.yarnpkg.com/utf8-byte-length/-/utf8-byte-length-1.0.5.tgz#f9f63910d15536ee2b2d5dd4665389715eac5c1e"
+  integrity sha512-Xn0w3MtiQ6zoz2vFyUVruaCL53O/DwUvkEeOvj+uulMm0BkUGYWmBYVyElqZaSLhY6ZD0ulfU3aBra2aVT4xfA==
 
 util-deprecate@^1.0.1, util-deprecate@^1.0.2, util-deprecate@~1.0.1:
   version "1.0.2"

@@ -1,7 +1,12 @@
 import {RefObject} from 'react';
 import * as THREE from 'three';
 import {Files, ParsedChart} from './chorus-chart-processing';
-import {Difficulty, Instrument, noteFlags, noteTypes} from 'scan-chart';
+import {
+  Difficulty,
+  Instrument,
+  noteFlags,
+  noteTypes,
+} from '@eliwhite/scan-chart';
 import {ChartResponseEncore} from '../chartSelection';
 import {AudioManager} from './audioManager';
 

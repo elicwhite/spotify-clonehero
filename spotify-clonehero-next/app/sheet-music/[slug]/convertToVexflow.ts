@@ -1,6 +1,11 @@
 // Heavily inspired by https://github.com/tonygoldcrest/drum-hero Thanks!
 
-import {NoteEvent, parseChartFile, noteTypes, noteFlags} from 'scan-chart';
+import {
+  NoteEvent,
+  parseChartFile,
+  noteTypes,
+  noteFlags,
+} from '@eliwhite/scan-chart';
 import {tickToMs} from './chartUtils';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;

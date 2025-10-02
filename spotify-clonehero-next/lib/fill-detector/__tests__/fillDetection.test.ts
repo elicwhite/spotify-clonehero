@@ -1,7 +1,7 @@
 import {extractFills, defaultConfig} from '../index';
 import {validateConfig} from '../config';
 import {NoteEvent, ParsedChart, Config, Track} from '../types';
-import type {NoteType} from 'scan-chart';
+import type {NoteType} from '@eliwhite/scan-chart';
 
 // Helper function to create synthetic charts for testing
 function createSyntheticChart(

@@ -15,7 +15,7 @@ import {
   DrumTrackNotFoundError,
   Track,
 } from '../types';
-import type {NoteType} from 'scan-chart';
+import type {NoteType} from '@eliwhite/scan-chart';
 
 // Helper function to create synthetic chart data
 function createSyntheticChart(

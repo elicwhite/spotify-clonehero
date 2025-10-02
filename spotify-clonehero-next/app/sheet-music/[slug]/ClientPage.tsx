@@ -1,7 +1,7 @@
 'use client';
 
 import _ from 'lodash';
-import {parseChartFile} from 'scan-chart';
+import {parseChartFile} from '@eliwhite/scan-chart';
 import {useSearchParams} from 'next/navigation';
 
 import EncoreAutocomplete from '@/components/EncoreAutocomplete';

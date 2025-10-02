@@ -2,7 +2,7 @@
  * Type definitions for the drum fill extractor
  */
 
-import {parseChartFile, NoteEvent} from 'scan-chart';
+import {parseChartFile, NoteEvent} from '@eliwhite/scan-chart';
 
 // Use scan-chart types directly
 export type ParsedChart = ReturnType<typeof parseChartFile>;
@@ -11,7 +11,7 @@ export type TempoEvent = ParsedChart['tempos'][0];
 export type TimeSignature = ParsedChart['timeSignatures'][0];
 
 // Re-export NoteEvent from scan-chart for convenience
-export type {NoteEvent} from 'scan-chart';
+export type {NoteEvent} from '@eliwhite/scan-chart';
 
 export interface FillSegment {
   songId: string; // caller supplies or derived from file name

@@ -3,7 +3,7 @@
  */
 
 import {DrumVoice} from './types';
-import {NoteType, noteFlags, noteTypes} from 'scan-chart';
+import {NoteType, noteFlags, noteTypes} from '@eliwhite/scan-chart';
 
 // Re-export DrumVoice for use in other modules
 export {DrumVoice};

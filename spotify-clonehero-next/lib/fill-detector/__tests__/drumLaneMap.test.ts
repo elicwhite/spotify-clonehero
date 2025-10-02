@@ -16,8 +16,8 @@ import {
   ROCK_BAND_4_DRUM_MAP,
 } from '../drumLaneMap';
 import {DrumVoice} from '../types';
-import type {NoteType} from 'scan-chart';
-import {noteTypes, noteFlags} from 'scan-chart';
+import type {NoteType} from '@eliwhite/scan-chart';
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 
 describe('Drum Lane Mapping', () => {
   describe('mapNoteToVoice', () => {

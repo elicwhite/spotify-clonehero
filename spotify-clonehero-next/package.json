@@ -14,6 +14,7 @@
     "update:db-types": "kysely-codegen --out-file ./lib/local-db/types.ts"
   },
   "dependencies": {
+    "@eliwhite/scan-chart": "7.0.1",
     "@headlessui/react": "^1.7.17",
     "@next/third-parties": "15.5.3",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -62,7 +63,6 @@
     "react-intersection-observer": "^9.16.0",
     "react-loading-icons": "^1.1.0",
     "react-virtual": "^2.10.4",
-    "scan-chart": "^6.1.1",
     "sonner": "^1.3.1",
     "sqlocal": "^0.14.2",
     "tailwind-merge": "^2.2.0",
