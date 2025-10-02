@@ -19,6 +19,7 @@ import {Playhead} from './Playhead';
 
 import {cn} from '@/lib/utils';
 import debounce from 'debounce';
+import cleanLyrics from './cleanLyrics';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -104,9 +105,14 @@ export default function SheetMusic({
       chart.sections,
       // https://github.com/YARC-Official/YARG.Core/blob/6b24334cb6b3588d290e1d5f8231ce70314d097c/YARG.Core/MoonscraperChartParser/IO/Midi/MidReader.cs#L299
       showLyrics
-        ? (chart as any).lyrics?.filter(
-            (lyric: any) => !lyric.text.includes('['),
-          ) || []
+        ? (chart as any).lyrics
+            ?.filter((lyric: any) => !lyric.text.includes('['))
+            .map((lyric: any) => {
+              return {
+                ...lyric,
+                text: cleanLyrics(lyric.text),
+              }; //,
+            }) || []
         : [],
       showBarNumbers,
       enableColors,
