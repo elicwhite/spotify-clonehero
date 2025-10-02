@@ -22,7 +22,13 @@ describe('normalizeStrForMatching', () => {
     expect(normalizeStrForMatching('P.O.D.')).toBe('pod');
   });
 
-  it('should remove accents', () => {
+  it('should preserve non-Latin scripts while folding Latin diacritics', () => {
+    // Cyrillic should be preserved (only lowercased)
+    expect(normalizeStrForMatching('Дурной Вкус')).toBe('дурной вкус');
+    expect(normalizeStrForMatching('Светомузыка')).toBe('светомузыка');
+
+    // Latin with diacritics should be folded
+    expect(normalizeStrForMatching('Beyoncé')).toBe('beyonce');
     expect(normalizeStrForMatching('Mélissa')).toBe('melissa');
     expect(normalizeStrForMatching('Noël')).toBe('noel');
     expect(normalizeStrForMatching('Inyección')).toBe('inyeccion');
