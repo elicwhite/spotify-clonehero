@@ -82,17 +82,23 @@ export function renderMusic(
     return [];
   }
 
+  const renderer = new Renderer(elementRef.current, Renderer.Backends.SVG);
+  const context = renderer.getContext();
+
   const width =
     elementRef.current?.parentElement?.offsetWidth ?? window.innerWidth;
 
   // Calculate responsive values based on available width
   const margin = 30;
 
+  const zoom = 1.0;
+  const lineHeight = showBarNumbers ? 180 : 130;
+
   const stavePerRow = Math.min(
     MAX_STAVES_PER_ROW,
     Math.max(
       MIN_STAVES_PER_ROW,
-      Math.floor((width - margin) / MIN_STAVE_WIDTH),
+      Math.floor((width / zoom - margin) / MIN_STAVE_WIDTH),
     ),
   );
 
@@ -102,15 +108,12 @@ export function renderMusic(
     Math.floor((width - margin) / stavePerRow),
   );
 
-  const renderer = new Renderer(elementRef.current, Renderer.Backends.SVG);
-
-  const context = renderer.getContext();
-  const lineHeight = showBarNumbers ? 180 : 130;
-
   renderer.resize(
     staveWidth * stavePerRow + 10,
     Math.ceil(measures.length / stavePerRow) * lineHeight + 50,
   );
+
+  context.scale(zoom, zoom);
 
   // Create a map of measure start times to section names for quick lookup
   const sectionMap = new Map<number, string>();
@@ -270,9 +273,9 @@ export function renderMusic(
       context,
       measure,
       index,
-      (index % stavePerRow) * staveWidth,
+      ((index % stavePerRow) * staveWidth) / zoom,
       Math.floor(index / stavePerRow) * lineHeight,
-      staveWidth,
+      staveWidth / zoom,
       index === measures.length - 1,
       showBarNumbers,
       enableColors,
