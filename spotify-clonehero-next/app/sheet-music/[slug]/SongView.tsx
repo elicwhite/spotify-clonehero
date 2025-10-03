@@ -34,6 +34,7 @@ import {
   Star,
   Trash2,
   Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import {
   useCallback,
@@ -1043,7 +1044,11 @@ export default function Renderer({
         !isMobileMode && 'md:inline-flex hidden',
       )}
       onClick={() => setIsMobileMode(!isMobileMode)}>
-      <Maximize2 className="h-6 w-6" />
+      {isMobileMode ? (
+        <Minimize2 className="h-6 w-6" />
+      ) : (
+        <Maximize2 className="h-6 w-6" />
+      )}
     </Button>
   );
 

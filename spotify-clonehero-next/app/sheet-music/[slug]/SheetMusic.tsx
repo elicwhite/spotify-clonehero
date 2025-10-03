@@ -196,6 +196,7 @@ export default function SheetMusic({
           <Playhead
             timePositionMap={consolidatedTimeMap}
             audioManagerRef={audioManagerRef}
+            zoom={zoom}
           />
         )}
         {measureHighlights}

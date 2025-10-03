@@ -9,11 +9,13 @@ interface PlayheadProps {
     flag: 'measure-start' | 'measure-end' | 'note';
   }>;
   audioManagerRef: React.RefObject<any>;
+  zoom: number;
 }
 
 export const Playhead = memo(function ({
   timePositionMap,
   audioManagerRef,
+  zoom,
 }: PlayheadProps) {
   const playheadRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>(null);
@@ -67,7 +69,7 @@ export const Playhead = memo(function ({
         left: 0,
         top: 0,
         width: '2px',
-        height: '120px', // Adjust based on your staff height
+        height: `${120 * zoom}px`, // Adjust based on your staff height
         zIndex: 30,
         transform: 'translateX(-50%)',
       }}>
