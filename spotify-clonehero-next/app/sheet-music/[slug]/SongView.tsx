@@ -1294,11 +1294,10 @@ export default function Renderer({
                     className="h-6 w-6">
                     <Minus className="h-3 w-3" />
                   </Button>
-                  <span 
+                  <span
                     className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[3rem] text-center cursor-pointer hover:bg-muted/80 transition-colors"
                     onClick={() => handleTempoChange(1.0)}
-                    title="Click to reset to 100%"
-                  >
+                    title="Click to reset to 100%">
                     {Math.round(tempo * 100)}%
                   </span>
                   <Button
@@ -1327,11 +1326,10 @@ export default function Renderer({
                     className="h-6 w-6">
                     <Minus className="h-3 w-3" />
                   </Button>
-                  <span 
+                  <span
                     className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[3rem] text-center cursor-pointer hover:bg-muted/80 transition-colors"
                     onClick={() => handleZoomChange(1.0)}
-                    title="Click to reset to 100%"
-                  >
+                    title="Click to reset to 100%">
                     {Math.round(zoom * 100)}%
                   </span>
                   <Button
