@@ -68,7 +68,7 @@ export const Playhead = memo(function ({
         top: 0,
         width: '2px',
         height: '120px', // Adjust based on your staff height
-        zIndex: 1000,
+        zIndex: 30,
         transform: 'translateX(-50%)',
       }}>
       {/* Optional: Add a visual indicator at the top */}
