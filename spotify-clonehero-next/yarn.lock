@@ -460,10 +460,10 @@
   resolved "https://registry.yarnpkg.com/@bcoe/v8-coverage/-/v8-coverage-0.2.3.tgz#75a2e8b51cb758a7553d6804a5932d7aace75c39"
   integrity sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==
 
-"@eliwhite/scan-chart@7.0.1":
-  version "7.0.1"
-  resolved "https://registry.yarnpkg.com/@eliwhite/scan-chart/-/scan-chart-7.0.1.tgz#71541bdd277f9242ee121643371e7a2c620d5e3e"
-  integrity sha512-P1Rd8vbe9co+boQddD7APq2NQyrZ1z6w2sqPyDBFVfgiW0DQEYEwc6E6FuNr25P05hiiaKLcY2f8edcgCGhQ6A==
+"@eliwhite/scan-chart@7.0.2":
+  version "7.0.2"
+  resolved "https://registry.yarnpkg.com/@eliwhite/scan-chart/-/scan-chart-7.0.2.tgz#5d19facc33e450593f9509131a41d4aadbbcb929"
+  integrity sha512-49neorbRFV2tOlsYkITxbYXuyd09mtKcVqWY2kMxilaTqPV7+ikCB/ow0VstdsBdcDQj08wJccTOFRcUJczQIw==
   dependencies:
     "@noble/hashes" "^1.4.0"
     bottleneck "^2.19.5"
