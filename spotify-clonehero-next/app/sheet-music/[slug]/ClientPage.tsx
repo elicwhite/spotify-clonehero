@@ -47,13 +47,13 @@ export default function MyComponent({md5}: {md5: string}) {
   }, [md5]);
 
   return (
-    <div className="flex flex-col w-full flex-1 md:overflow-hidden">
+    <>
       {rendering != null && (
         <SongView
           metadata={rendering.metadata}
           chart={rendering.chart}
           audioFiles={rendering.audioFiles}></SongView>
       )}
-    </div>
+    </>
   );
 }
