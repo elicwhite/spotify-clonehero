@@ -1033,7 +1033,6 @@ export default function Renderer({
     </Button>
   );
 
-  console.log('isMobileMode', isMobileMode);
   const maximizeButton = (
     <Button
       size="icon"
