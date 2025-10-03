@@ -124,6 +124,7 @@ export default function Renderer({
     showLyrics?: boolean;
     viewCloneHero?: boolean;
     tempo?: number;
+    zoom?: number;
   };
   const [playClickTrack, setPlayClickTrack] = useState(true);
   const [clickTrackConfigurationOpen, setClickTrackConfigurationOpen] =
@@ -160,6 +161,9 @@ export default function Renderer({
 
   // Tempo control state
   const [tempo, setTempo] = useState(1.0);
+
+  // Zoom control state
+  const [zoom, setZoom] = useState(1.0);
 
   // Practice mode state
   const [practiceMode, setPracticeMode] = useState<PracticeModeConfig | null>(
@@ -253,6 +257,21 @@ export default function Renderer({
       audioManagerRef.current.resetSpeed();
       setTempo(1.0);
     }
+  };
+
+  // Zoom control handlers
+  const handleZoomChange = (newZoom: number) => {
+    setZoom(newZoom);
+  };
+
+  const handleZoomIn = () => {
+    const newZoom = Math.min(zoom + 0.1, 3.0);
+    handleZoomChange(newZoom);
+  };
+
+  const handleZoomOut = () => {
+    const newZoom = Math.max(zoom - 0.1, 0.3);
+    handleZoomChange(newZoom);
   };
 
   // Authentication check for save functionality
@@ -415,6 +434,11 @@ export default function Renderer({
         if (parsed.tempo) {
           setTempo(parsed.tempo);
         }
+
+        // Restore zoom if available
+        if (parsed.zoom) {
+          setZoom(parsed.zoom);
+        }
       }
     } catch (e) {
       // noop on parse errors
@@ -436,6 +460,7 @@ export default function Renderer({
       showLyrics,
       viewCloneHero,
       tempo,
+      zoom,
     };
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsToPersist));
@@ -452,6 +477,7 @@ export default function Renderer({
     showLyrics,
     viewCloneHero,
     tempo,
+    zoom,
   ]);
 
   useEffect(() => {
@@ -1268,7 +1294,11 @@ export default function Renderer({
                     className="h-6 w-6">
                     <Minus className="h-3 w-3" />
                   </Button>
-                  <span className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[3rem] text-center">
+                  <span 
+                    className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[3rem] text-center cursor-pointer hover:bg-muted/80 transition-colors"
+                    onClick={() => handleTempoChange(1.0)}
+                    title="Click to reset to 100%"
+                  >
                     {Math.round(tempo * 100)}%
                   </span>
                   <Button
@@ -1278,6 +1308,36 @@ export default function Renderer({
                       const newTempo = Math.min(tempo + 0.1, 4.0);
                       handleTempoChange(newTempo);
                     }}
+                    className="h-6 w-6">
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Zoom Control */}
+            <div className="space-y-4 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Zoom</span>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleZoomOut}
+                    className="h-6 w-6">
+                    <Minus className="h-3 w-3" />
+                  </Button>
+                  <span 
+                    className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[3rem] text-center cursor-pointer hover:bg-muted/80 transition-colors"
+                    onClick={() => handleZoomChange(1.0)}
+                    title="Click to reset to 100%"
+                  >
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleZoomIn}
                     className="h-6 w-6">
                     <Plus className="h-3 w-3" />
                   </Button>
@@ -1430,6 +1490,7 @@ export default function Renderer({
                   showBarNumbers={showBarNumbers}
                   enableColors={enableColors}
                   showLyrics={showLyrics}
+                  zoom={zoom}
                   onSelectMeasure={time => {
                     if (audioManagerRef.current == null) {
                       return;
@@ -1438,7 +1499,9 @@ export default function Renderer({
 
                     setIsPlaying(true);
                   }}
-                  triggerRerender={viewCloneHero || isMobileMode}
+                  triggerRerender={
+                    String(viewCloneHero) + String(isMobileMode) + String(zoom)
+                  }
                   practiceModeConfig={practiceMode}
                   onPracticeMeasureSelect={handlePracticeMeasureSelect}
                   selectionIndex={selectionIndex}
@@ -1460,31 +1523,6 @@ export default function Renderer({
     </div>
   );
 }
-
-interface MeasureHighlightProps {
-  style?: React.CSSProperties;
-  highlighted?: boolean;
-  onClick?: () => void;
-}
-
-const MeasureHighlight = forwardRef<HTMLButtonElement, MeasureHighlightProps>(
-  ({style, highlighted, onClick}, ref) => {
-    return (
-      <button
-        ref={ref}
-        className={cn(
-          'absolute z-[-3] rounded-md border-0 bg-transparent cursor-pointer',
-          highlighted && 'bg-primary/10 shadow-md z-[-2]',
-          'hover:bg-muted hover:shadow-sm hover:z-[-1]',
-        )}
-        style={style}
-        onClick={onClick}
-      />
-    );
-  },
-);
-
-MeasureHighlight.displayName = 'MeasureHighlight';
 
 export function AudioVolume({
   name,

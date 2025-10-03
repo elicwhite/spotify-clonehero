@@ -30,6 +30,7 @@ export default function SheetMusic({
   showBarNumbers,
   enableColors,
   showLyrics,
+  zoom,
   onSelectMeasure,
   triggerRerender,
   practiceModeConfig,
@@ -43,8 +44,9 @@ export default function SheetMusic({
   showBarNumbers: boolean;
   enableColors: boolean;
   showLyrics: boolean;
+  zoom: number;
   onSelectMeasure: (time: number) => void;
-  triggerRerender: boolean;
+  triggerRerender: string;
   practiceModeConfig: PracticeModeConfig | null;
   onPracticeMeasureSelect: (measureIndex: number) => void;
   selectionIndex: number | null;
@@ -104,6 +106,7 @@ export default function SheetMusic({
       measures,
       chart.sections,
       // https://github.com/YARC-Official/YARG.Core/blob/6b24334cb6b3588d290e1d5f8231ce70314d097c/YARG.Core/MoonscraperChartParser/IO/Midi/MidReader.cs#L299
+      zoom,
       showLyrics
         ? (chart as any).lyrics
             ?.filter((lyric: any) => !lyric.text.includes('['))
@@ -133,6 +136,7 @@ export default function SheetMusic({
     (chart as any).lyrics,
     chart.sections,
     practiceModeConfig,
+    zoom,
   ]);
 
   // Remove automatic highlighting of the currently playing measure and auto-scroll
@@ -160,10 +164,10 @@ export default function SheetMusic({
         key={index}
         ref={highlightsRef.current[index]}
         style={{
-          top: stave.getY() + 10,
-          left: stave.getX() - 5,
-          width: stave.getWidth() + 10,
-          height: stave.getHeight(),
+          top: stave.getY() * zoom + 10,
+          left: stave.getX() * zoom - 5,
+          width: stave.getWidth() * zoom + 10,
+          height: stave.getHeight() * zoom,
         }}
         isInPracticeRange={isInPracticeRange}
         isPracticeStart={isPracticeStart}

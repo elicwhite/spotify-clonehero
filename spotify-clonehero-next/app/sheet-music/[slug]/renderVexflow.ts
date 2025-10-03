@@ -73,6 +73,7 @@ export function renderMusic(
   elementRef: React.RefObject<HTMLDivElement | null>,
   measures: Measure[],
   sections: {tick: number; name: string; msTime: number; msLength: number}[],
+  zoom: number,
   lyrics: {tick: number; text: string; msTime: number}[] = [],
   showBarNumbers: boolean = true,
   enableColors: boolean = false,
@@ -91,7 +92,6 @@ export function renderMusic(
   // Calculate responsive values based on available width
   const margin = 30;
 
-  const zoom = 1.0;
   const lineHeight = showBarNumbers ? 180 : 130;
 
   const stavePerRow = Math.min(
@@ -109,8 +109,10 @@ export function renderMusic(
   );
 
   renderer.resize(
+    // This doesn't include zoom because the width is scaled already
     staveWidth * stavePerRow + 10,
-    Math.ceil(measures.length / stavePerRow) * lineHeight + 50,
+    // The height is scaled so that it doesn't crop the height of the sheet
+    (Math.ceil(measures.length / stavePerRow) * lineHeight + 50) * zoom,
   );
 
   context.scale(zoom, zoom);
@@ -276,6 +278,7 @@ export function renderMusic(
       ((index % stavePerRow) * staveWidth) / zoom,
       Math.floor(index / stavePerRow) * lineHeight,
       staveWidth / zoom,
+      zoom,
       index === measures.length - 1,
       showBarNumbers,
       enableColors,
@@ -394,6 +397,7 @@ function renderMeasure(
   xOffset: number,
   yOffset: number,
   staveWidth: number,
+  zoom: number,
   endMeasure: boolean,
   showBarNumbers: boolean,
   enableColors: boolean,
@@ -480,8 +484,8 @@ function renderMeasure(
 
   timePositionMap.push({
     ms: measure.startMs,
-    x: stave.getTieStartX(),
-    y: stave.getY(),
+    x: stave.getTieStartX() * zoom,
+    y: stave.getY() * zoom,
     flag: 'measure-start',
   });
 
@@ -508,8 +512,8 @@ function renderMeasure(
 
     timePositionMap.push({
       ms: measure.endMs,
-      x: stave.getTieEndX(),
-      y: stave.getY(),
+      x: stave.getTieEndX() * zoom,
+      y: stave.getY() * zoom,
       flag: 'measure-end',
     });
 
@@ -580,8 +584,8 @@ function renderMeasure(
       timePositionMap.push({
         // @ts-ignore Use ms from the note object stored above
         ms: note.ms,
-        x: note.getNoteHeadBeginX(),
-        y: stave.getY(),
+        x: note.getNoteHeadBeginX() * zoom,
+        y: stave.getY() * zoom,
         flag: 'note',
       });
     }
@@ -589,8 +593,8 @@ function renderMeasure(
 
   timePositionMap.push({
     ms: measure.endMs,
-    x: stave.getTieEndX(),
-    y: stave.getY(),
+    x: stave.getTieEndX() * zoom,
+    y: stave.getY() * zoom,
     flag: 'measure-end',
   });
 
