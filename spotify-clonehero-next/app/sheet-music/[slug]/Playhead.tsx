@@ -64,13 +64,12 @@ export const Playhead = memo(function ({
   return (
     <div
       ref={playheadRef}
-      className="absolute pointer-events-auto cursor-pointer bg-primary"
+      className="absolute pointer-events-auto cursor-pointer bg-primary z-20"
       style={{
         left: 0,
         top: 0,
         width: '2px',
         height: `${120 * zoom}px`, // Adjust based on your staff height
-        zIndex: 30,
         transform: 'translateX(-50%)',
       }}>
       {/* Optional: Add a visual indicator at the top */}

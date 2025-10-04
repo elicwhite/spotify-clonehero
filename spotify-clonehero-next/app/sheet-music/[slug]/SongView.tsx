@@ -1417,7 +1417,7 @@ export default function Renderer({
           {/* Mobile controls - sticky on scroll */}
           <div
             className={cn(
-              'sticky top-0 z-20 flex items-center gap-2 md:px-4 py-3 border-b bg-background/95 backdrop-blur-sm',
+              'sticky top-0 z-30 flex items-center gap-2 md:px-4 py-3 border-b bg-background/95 backdrop-blur-sm',
               // Show on mobile OR when in mobile mode
               'md:hidden',
               isMobileMode && 'md:flex',
@@ -1432,9 +1432,9 @@ export default function Renderer({
             className={cn(
               'h-12 border-b flex items-center md:px-4 gap-4 bg-background/95 backdrop-blur-sm',
               // Normal behavior: static on desktop, sticky on mobile
-              'md:static sticky top-[60px] z-20',
-              // In mobile mode on desktop, also make it sticky
-              isMobileMode && 'md:sticky md:top-[60px] md:z-20',
+              'sticky top-[60px] z-30',
+              // If not in mobile mode, then it's just static, otherwise it's sticky
+              !isMobileMode && 'md:static',
             )}>
             <Slider
               value={[currentPlayback]}
