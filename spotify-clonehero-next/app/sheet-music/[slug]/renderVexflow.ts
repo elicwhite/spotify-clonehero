@@ -102,15 +102,19 @@ export function renderMusic(
     ),
   );
 
+  // We have to subtract 1 from the width because if we are exactly the same size
+  // Then the chart will only resize larger, and won't let the parent size shrink
+  // when the window is resized smaller.
+
   // Calculate the actual stave width
   const staveWidth = Math.min(
     MAX_STAVE_WIDTH,
-    Math.floor((width - margin) / stavePerRow),
+    Math.floor(width / stavePerRow) - 1,
   );
 
   renderer.resize(
     // This doesn't include zoom because the width is scaled already
-    staveWidth * stavePerRow + 10,
+    width - 1, //staveWidth * stavePerRow + 10,
     // The height is scaled so that it doesn't crop the height of the sheet
     (Math.ceil(measures.length / stavePerRow) * lineHeight + 50) * zoom,
   );
