@@ -1457,7 +1457,7 @@ export default function Renderer({
             </span>
           </div>
 
-          <div className="md:p-4 md:px-4 py-2 flex-1 flex flex-col overflow-hidden">
+          <div className="md:pt-4 md:px-4 pt-2 flex-1 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between mb-2 md:mb-4">
               <h1 className="text-3xl md:text-3xl font-bold">
                 {metadata.name}{' '}
@@ -1479,7 +1479,7 @@ export default function Renderer({
                 {isSaved ? 'Saved' : 'Save'}
               </Button>
             </div>
-            <div className="flex flex-1 gap-2 mb-4 overflow-hidden">
+            <div className="flex flex-1 gap-2 overflow-hidden">
               <div
                 className={cn(
                   viewCloneHero ? 'hidden md:flex' : 'flex',
