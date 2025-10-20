@@ -556,20 +556,6 @@ export function useSpotifyLibraryUpdate(): [
           },
           {} as PlaylistMetadata,
         );
-        await Promise.all([
-          setCachedPlaylistMetadata(playlistMetadata),
-          upsertPlaylists(
-            playlists.map(p => ({
-              id: p.id,
-              snapshot_id: p.snapshot_id,
-              name: p.name,
-              collaborative: Boolean(p.collaborative),
-              owner_display_name: p.owner.display_name,
-              owner_external_url: p.owner.external_urls.spotify,
-              total_tracks: p.tracks?.total ?? 0,
-            })),
-          ),
-        ]);
 
         // Persist albums metadata
         const albumMetadata = savedAlbums.reduce((acc: AlbumMetadata, s) => {
@@ -583,8 +569,21 @@ export function useSpotifyLibraryUpdate(): [
           };
           return acc;
         }, {} as AlbumMetadata);
+
         await Promise.all([
+          setCachedPlaylistMetadata(playlistMetadata),
           setCachedAlbumMetadata(albumMetadata),
+          upsertPlaylists(
+            playlists.map(p => ({
+              id: p.id,
+              snapshot_id: p.snapshot_id,
+              name: p.name,
+              collaborative: Boolean(p.collaborative),
+              owner_display_name: p.owner.display_name,
+              owner_external_url: p.owner.external_urls.spotify,
+              total_tracks: p.tracks?.total ?? 0,
+            })),
+          ),
           upsertAlbums(
             savedAlbums.map(s => ({
               id: s.album.id,
