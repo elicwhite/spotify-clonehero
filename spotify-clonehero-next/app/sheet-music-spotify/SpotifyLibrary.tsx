@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/card';
 import SpotifyLoaderCard from '../spotify/app/SpotifyLoaderCard';
 import UpdateChorusLoaderCard from '../spotify/app/UpdateChorusLoaderCard';
-import {User, Disc3, Music} from 'lucide-react';
+import {User, Disc3, Music, ChevronDown} from 'lucide-react';
 import {getSpotifySdk} from '@/lib/spotify-sdk/ClientInstance';
 import {SpotifyApi} from '@spotify/web-api-ts-sdk';
 import {ErrorBoundary} from '@sentry/nextjs';
@@ -215,47 +215,95 @@ function RenderSpotifyLibrary() {
 }
 
 function PlaylistRow({item}: {item: PlaylistAlbumData}) {
-  return (
-    <div className="flex items-center gap-3 p-3 hover:bg-accent/5 transition-colors border-b">
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <h3 className="font-medium text-sm truncate text-foreground">
-          {item.name}
-        </h3>
-        {item.creator && (
-          <span className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
-            {item.type === 'album' ? (
-              <Disc3 className="h-3 w-3" />
-            ) : (
-              <User className="h-3 w-3" />
-            )}
-            {item.creator}
-          </span>
-        )}
-      </div>
+  const [isExpanded, setIsExpanded] = useState(false);
 
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <span className="text-xs text-foreground">
-          {item.matching_charts_count} charts for {item.total_tracks} tracks
-        </span>
-      </div>
+  return (
+    <>
+      <Row onClick={() => setIsExpanded(!isExpanded)}>
+        <Row.Left>
+          <Row.Title>{item.name}</Row.Title>
+          {item.creator && (
+            <Row.Accessory>
+              {item.type === 'album' ? (
+                <Disc3 className="h-3 w-3" />
+              ) : (
+                <User className="h-3 w-3" />
+              )}
+              {item.creator}
+            </Row.Accessory>
+          )}
+        </Row.Left>
+
+        <Row.Right>
+          <span className="text-xs text-foreground">
+            {item.matching_charts_count} charts for {item.total_tracks} tracks
+          </span>
+        </Row.Right>
+      </Row>
+      {isExpanded && (
+        <Suspense
+          fallback={
+            <Row>
+              <Row.Left>
+                <Row.Title>Loading Tracks...</Row.Title>
+              </Row.Left>
+            </Row>
+          }>
+          <RenderPlaylistTracks playlist={item.id} />
+        </Suspense>
+      )}
+    </>
+  );
+}
+
+function RenderPlaylistTracks({playlist}: {playlist: string}) {
+  return (
+    <Row>
+      <Row.Left>
+        <Row.Title>Tracks</Row.Title>
+      </Row.Left>
+    </Row>
+  );
+}
+
+function Row({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      className="flex items-center gap-3 p-3 hover:bg-accent/5 transition-colors border-b">
+      {children}
     </div>
   );
 }
 
-function ScanSpotifyCTACard({onClick}: {onClick: () => void}) {
+Row.Left = function RowLeft({children}: {children: React.ReactNode}) {
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader className="text-center">
-        <CardTitle>Scan Spotify Library</CardTitle>
-        <CardDescription>
-          Scan your Spotify library to find matching sheet music.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Button onClick={onClick} className="w-full">
-          Scan Spotify Library
-        </Button>
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-2 flex-1 min-w-0">{children}</div>
   );
-}
+};
+
+Row.Right = function RowRight({children}: {children: React.ReactNode}) {
+  return (
+    <div className="flex items-center gap-2 flex-shrink-0">{children}</div>
+  );
+};
+
+Row.Title = function RowTitle({children}: {children: React.ReactNode}) {
+  return (
+    <h3 className="font-medium text-sm truncate text-foreground">{children}</h3>
+  );
+};
+
+Row.Accessory = function RowAccessory({children}: {children: React.ReactNode}) {
+  return (
+    <span className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
+      {children}
+    </span>
+  );
+};
