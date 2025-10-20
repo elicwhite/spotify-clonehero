@@ -373,9 +373,12 @@ export type SpotifyLibraryUpdateProgress = {
   updateStatus?: 'idle' | 'fetching' | 'complete' | 'error';
 };
 
-export type SpotifyLibrary = {
+export type SpotifyLibraryMetadata = {
   playlistMetadata: PlaylistMetadata;
   albumMetadata: AlbumMetadata;
+};
+
+export type SpotifyLibrary = SpotifyLibraryMetadata & {
   playlistTracks: CachePlaylistTracks;
   albumTracks: CacheAlbumTracks;
 };
@@ -535,64 +538,8 @@ export function useSpotifyLibraryUpdate(): [
           updateStatus: 'fetching',
         }));
 
-        const [playlists, savedAlbums] = await Promise.all([
-          getAllPlaylists(sdk),
-          getAllSavedAlbums(sdk),
-        ]);
-        const playlistMetadata = playlists.reduce(
-          (acc: PlaylistMetadata, p) => {
-            const snapshot: string = p.snapshot_id;
-
-            acc[snapshot] = {
-              ...p,
-              externalUrl: p.external_urls.spotify,
-              owner: {
-                displayName: p.owner.display_name,
-                externalUrl: p.owner.external_urls.spotify,
-              },
-              total: p.tracks?.total ?? 0,
-            };
-            return acc;
-          },
-          {} as PlaylistMetadata,
-        );
-
-        // Persist albums metadata
-        const albumMetadata = savedAlbums.reduce((acc: AlbumMetadata, s) => {
-          acc[s.album.id] = {
-            id: s.album.id,
-            name: s.album.name,
-            externalUrl: s.album.external_urls.spotify,
-            artistName: s.album.artists[0].name,
-            addedAt: s.added_at,
-            totalTracks: s.album.total_tracks,
-          };
-          return acc;
-        }, {} as AlbumMetadata);
-
-        await Promise.all([
-          setCachedPlaylistMetadata(playlistMetadata),
-          setCachedAlbumMetadata(albumMetadata),
-          upsertPlaylists(
-            playlists.map(p => ({
-              id: p.id,
-              snapshot_id: p.snapshot_id,
-              name: p.name,
-              collaborative: Boolean(p.collaborative),
-              owner_display_name: p.owner.display_name,
-              owner_external_url: p.owner.external_urls.spotify,
-              total_tracks: p.tracks?.total ?? 0,
-            })),
-          ),
-          upsertAlbums(
-            savedAlbums.map(s => ({
-              id: s.album.id,
-              name: s.album.name,
-              artist_name: s.album.artists[0]?.name ?? '',
-              total_tracks: s.album.total_tracks,
-            })),
-          ),
-        ]);
+        const {playlistMetadata, albumMetadata} =
+          await getSpotifyLibraryMetadata(sdk);
 
         /* Set the progress to the new playlists and albums */
         setProgress(prev => ({
@@ -625,11 +572,11 @@ export function useSpotifyLibraryUpdate(): [
 
         console.log(
           '[Spotify] Integrity check starting for',
-          playlists.length,
+          playlistMetadata.length,
           'playlists',
         );
         const integrity = {
-          total: playlists.length,
+          total: playlistMetadata.length,
           complete: 0,
           resume: 0,
           fresh: 0,
@@ -639,15 +586,14 @@ export function useSpotifyLibraryUpdate(): [
         const foundAlbums: string[] = [];
 
         await pMap(
-          playlists,
-          async p => {
+          Object.entries(playlistMetadata),
+          async ([snapshot, p]) => {
             if (abortController.signal.aborted) return;
 
-            const snapshot = p.snapshot_id;
             foundSnapshots.push(snapshot);
             const cachedPlaylistTracks = cachedPlaylistsTracks[snapshot];
 
-            const total = p?.tracks?.total ?? 0;
+            const total = p.total;
             const cachedLen = cachedPlaylistTracks?.length ?? 0;
 
             // Integrity check & control flow
@@ -940,13 +886,12 @@ export function useSpotifyLibraryUpdate(): [
 
         // Fetch saved album tracks
         await pMap(
-          savedAlbums,
-          async s => {
+          Object.entries(albumMetadata),
+          async ([albumId, album]) => {
             if (abortController.signal.aborted) return;
 
-            const albumId = s.album.id;
             foundAlbums.push(albumId);
-            const total = s.album.total_tracks;
+            const total = album.totalTracks ?? 0;
             const cachedAlbumTracks = cachedAlbumsTracks[albumId];
             if (cachedAlbumTracks) {
               setProgress(prev => ({
@@ -1084,6 +1029,71 @@ export function useSpotifyLibraryUpdate(): [
   );
 
   return [progress, run];
+}
+
+export async function getSpotifyLibraryMetadata(
+  sdk: SpotifyApi,
+): Promise<SpotifyLibraryMetadata> {
+  const [playlists, savedAlbums] = await Promise.all([
+    getAllPlaylists(sdk),
+    getAllSavedAlbums(sdk),
+  ]);
+  const playlistMetadata = playlists.reduce((acc: PlaylistMetadata, p) => {
+    const snapshot: string = p.snapshot_id;
+
+    acc[snapshot] = {
+      ...p,
+      externalUrl: p.external_urls.spotify,
+      owner: {
+        displayName: p.owner.display_name,
+        externalUrl: p.owner.external_urls.spotify,
+      },
+      total: p.tracks?.total ?? 0,
+    };
+    return acc;
+  }, {} as PlaylistMetadata);
+
+  // Persist albums metadata
+  const albumMetadata = savedAlbums.reduce((acc: AlbumMetadata, s) => {
+    acc[s.album.id] = {
+      id: s.album.id,
+      name: s.album.name,
+      externalUrl: s.album.external_urls.spotify,
+      artistName: s.album.artists[0].name,
+      addedAt: s.added_at,
+      totalTracks: s.album.total_tracks,
+    };
+    return acc;
+  }, {} as AlbumMetadata);
+
+  await Promise.all([
+    setCachedPlaylistMetadata(playlistMetadata),
+    setCachedAlbumMetadata(albumMetadata),
+    upsertPlaylists(
+      playlists.map(p => ({
+        id: p.id,
+        snapshot_id: p.snapshot_id,
+        name: p.name,
+        collaborative: Boolean(p.collaborative),
+        owner_display_name: p.owner.display_name,
+        owner_external_url: p.owner.external_urls.spotify,
+        total_tracks: p.tracks?.total ?? 0,
+      })),
+    ),
+    upsertAlbums(
+      savedAlbums.map(s => ({
+        id: s.album.id,
+        name: s.album.name,
+        artist_name: s.album.artists[0]?.name ?? '',
+        total_tracks: s.album.total_tracks,
+      })),
+    ),
+  ]);
+
+  return {
+    playlistMetadata,
+    albumMetadata,
+  };
 }
 
 function isRateLimitError(err: unknown): err is RateLimitError {
