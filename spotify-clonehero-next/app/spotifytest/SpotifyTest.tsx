@@ -130,22 +130,32 @@ function LoggedIn() {
     const chorusChartsPromise = fetchChorusCharts(abortController);
 
     setStatus({status: 'scanning', songsCounted: 0});
-    let installedCharts: SongAccumulator[] | undefined;
 
     try {
-      const scanResult = await scanForInstalledCharts(() => {
+      await scanForInstalledCharts(() => {
         setStatus(prevStatus => ({
           ...prevStatus,
           songsCounted: prevStatus.songsCounted + 1,
         }));
       });
-      installedCharts = scanResult.installedCharts;
       setStatus(prevStatus => ({...prevStatus, status: 'done-scanning'}));
       await pause();
     } catch (err) {
-      toast.error('Error scanning local charts', {duration: 8000});
-      setStatus({status: 'not-started', songsCounted: 0});
-      throw err;
+      if (err instanceof Error && err.message == 'User canceled picker') {
+        toast.info('Directory picker canceled');
+        setStatus({
+          status: 'not-started',
+          songsCounted: 0,
+        });
+        return;
+      } else {
+        toast.error('Error scanning local charts', {duration: 8000});
+        setStatus({
+          status: 'not-started',
+          songsCounted: 0,
+        });
+        throw err;
+      }
     }
 
     const [allChorusCharts, updateSpotifyLibraryResult] = await Promise.all([
@@ -310,7 +320,8 @@ async function getData() {
               'song_length',       ${sql.ref('deduped_charts.chart_song_length')},
               'hasVideoBackground',${sql.ref('deduped_charts.has_video_background')},
               'albumArtMd5',       ${sql.ref('deduped_charts.album_art_md5')},
-              'group_id',          ${sql.ref('deduped_charts.chart_group_id')}
+              'group_id',          ${sql.ref('deduped_charts.chart_group_id')},
+              'isInstalled',       ${sql.ref('deduped_charts.isInstalled')}
             )
           )
         `.as('matching_charts'),
@@ -450,8 +461,10 @@ function SpotifyHistory() {
 
   const songs: SpotifyPlaysRecommendations[] = data.map(item => {
     return {
+      spotifyTrackId: item.spotify_track_id,
       artist: item.spotify_artist_name,
       song: item.spotify_track_name,
+      isAnyInstalled: item.is_any_local_chart_installed === 1,
       matchingCharts: item.matching_charts.map((chart): SpotifyChartData => {
         return {
           ...chart,
