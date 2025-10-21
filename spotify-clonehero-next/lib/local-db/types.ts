@@ -22,8 +22,8 @@ export interface ChorusCharts {
   diff_guitar: number | null;
   diff_keys: number | null;
   group_id: number;
-  has_video_background: Generated<number>;
-  md5: string | null;
+  has_video_background: number;
+  md5: string;
   modified_time: string;
   name: string;
   name_normalized: string | null;

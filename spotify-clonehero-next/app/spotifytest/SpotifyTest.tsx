@@ -1,19 +1,38 @@
 'use client';
 
-import {Suspense, useEffect, useState} from 'react';
+import {Suspense, useCallback, useEffect, useState} from 'react';
 import SpotifyTableDownloader, {
   SpotifyChartData,
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';
 import {createClient} from '@/lib/supabase/client';
 import {Button} from '@/components/ui/button';
-import {RxExternalLink} from 'react-icons/rx';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
-import {Icons} from '@/components/icons';
 import {getLocalDb} from '@/lib/local-db/client';
 import {sql} from 'kysely';
 import {useData} from '@/lib/suspense-data';
 import {SignInWithSpotifyCard} from '../spotify/app/SignInWithSpotifyCard';
+import {useChorusChartDb} from '@/lib/chorusChartDb';
+import {scanForInstalledCharts} from '@/lib/local-songs-folder';
+import {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
+import {useSpotifyLibraryUpdate} from '@/lib/spotify-sdk/SpotifyFetching';
+import {toast} from 'sonner';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import SpotifyLoaderMock from '../spotify/app/SpotifyLoaderMock';
+import SpotifyLoaderCard from '../spotify/app/SpotifyLoaderCard';
+import LocalScanLoaderCard from '../spotify/app/LocalScanLoaderCard';
+import UpdateChorusLoaderCard from '../spotify/app/UpdateChorusLoaderCard';
+import {
+  ChorusCharts,
+  SpotifyAlbums,
+  SpotifyPlaylists,
+} from '@/lib/local-db/types';
 
 export default function Page() {
   const supabase = createClient();
@@ -43,24 +62,11 @@ export default function Page() {
   }
 
   return (
-    <>
-      <p className="mb-4 text-center">
-        This tool scans your Spotify{' '}
-        <a
-          href="https://www.spotify.com/us/account/privacy/"
-          className="text-accent-foreground">
-          Extended Streaming History <RxExternalLink className="inline" />
-        </a>
-        <br />
-        and finds all the available charts on Encore for any song you&apos;ve
-        ever listened to.
-      </p>
-      <Suspense fallback={<div>Loading...</div>}>
-        <SupportedBrowserWarning>
-          <SpotifyHistory authenticated={!!user && hasSpotify} />
-        </SupportedBrowserWarning>
-      </Suspense>
-    </>
+    <SupportedBrowserWarning>
+      <div className="w-full">
+        <LoggedIn />
+      </div>
+    </SupportedBrowserWarning>
   );
 }
 
@@ -69,108 +75,363 @@ type Status = {
     | 'not-started'
     | 'scanning'
     | 'done-scanning'
-    | 'processing-spotify-dump'
     | 'songs-from-encore'
     | 'finding-matches'
     | 'done';
   songsCounted: number;
 };
 
+function LoggedIn() {
+  const [status, setStatus] = useState<Status>({
+    status: 'not-started',
+    songsCounted: 0,
+  });
+
+  const [spotifyLibraryProgress, updateSpotifyLibrary] =
+    useSpotifyLibraryUpdate();
+  const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb();
+
+  const [started, setStarted] = useState(false);
+
+  const [useMockLoader, setUseMockLoader] = useState(false);
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') {
+      setUseMockLoader(false);
+      return;
+    }
+    try {
+      const url = new URL(window.location.href);
+      const fromQuery = url.searchParams.get('mockLoader') === '1';
+      const fromStorage = localStorage.getItem('spotifyLoaderMock') === '1';
+      setUseMockLoader(Boolean(fromQuery || fromStorage));
+    } catch {}
+  }, []);
+
+  const calculate = useCallback(async () => {
+    const abortController = new AbortController();
+
+    setStarted(true);
+
+    const updateSpotifyLibraryPromise = updateSpotifyLibrary(abortController, {
+      concurrency: 3,
+    });
+
+    const chorusChartsPromise = fetchChorusCharts(abortController);
+
+    setStatus({status: 'scanning', songsCounted: 0});
+    let installedCharts: SongAccumulator[] | undefined;
+
+    try {
+      const scanResult = await scanForInstalledCharts(() => {
+        setStatus(prevStatus => ({
+          ...prevStatus,
+          songsCounted: prevStatus.songsCounted + 1,
+        }));
+      });
+      installedCharts = scanResult.installedCharts;
+      setStatus(prevStatus => ({...prevStatus, status: 'done-scanning'}));
+      await pause();
+    } catch (err) {
+      toast.error('Error scanning local charts', {duration: 8000});
+      setStatus({status: 'not-started', songsCounted: 0});
+      throw err;
+    }
+
+    const [allChorusCharts, updateSpotifyLibraryResult] = await Promise.all([
+      chorusChartsPromise,
+      updateSpotifyLibraryPromise,
+    ]);
+
+    setStatus(prevStatus => ({
+      ...prevStatus,
+      status: 'done',
+    }));
+  }, []);
+
+  return (
+    <>
+      {!started && <ScanLocalFoldersCTACard onClick={calculate} />}
+
+      {started &&
+        !(
+          spotifyLibraryProgress.updateStatus === 'complete' &&
+          status.status === 'done'
+        ) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {useMockLoader ? (
+              <SpotifyLoaderMock />
+            ) : (
+              <SpotifyLoaderCard progress={spotifyLibraryProgress} />
+            )}
+            <div className="space-y-4">
+              <LocalScanLoaderCard
+                count={status.songsCounted}
+                isScanning={status.status === 'scanning'}
+              />
+              <UpdateChorusLoaderCard progress={chorusChartProgress} />
+            </div>
+          </div>
+        )}
+
+      {status.status === 'done' && (
+        <Suspense fallback={<div>Loading...</div>}>
+          <SupportedBrowserWarning>
+            <SpotifyHistory />
+          </SupportedBrowserWarning>
+        </Suspense>
+      )}
+    </>
+  );
+}
+
+type PickedChorusCharts = Pick<
+  ChorusCharts,
+  | 'md5'
+  | 'name'
+  | 'artist'
+  | 'charter'
+  | 'diff_drums'
+  | 'diff_guitar'
+  | 'diff_bass'
+  | 'diff_keys'
+  | 'diff_drums_real'
+  | 'modified_time'
+  | 'song_length'
+  | 'has_video_background'
+  | 'album_art_md5'
+  | 'group_id'
+> & {
+  isInstalled: number;
+};
+
+type PickedSpotifyPlaylists = Pick<
+  SpotifyPlaylists,
+  | 'id'
+  | 'snapshot_id'
+  | 'name'
+  | 'collaborative'
+  | 'owner_display_name'
+  | 'owner_external_url'
+  | 'total_tracks'
+  | 'updated_at'
+>;
+
+type PickedSpotifyAlbums = Pick<
+  SpotifyAlbums,
+  'id' | 'name' | 'artist_name' | 'total_tracks' | 'updated_at'
+>;
+
 async function getData() {
   const db = await getLocalDb();
 
-  console.log('db', db);
+  const before = performance.now();
 
-  const base = db
-    .selectFrom('spotify_tracks as spot')
-    .innerJoin('spotify_track_chart_matches as sc', 'spot.id', 'sc.spotify_id')
-    .innerJoin('chorus_charts as cc', 'sc.chart_md5', 'cc.md5')
+  const result = await db
+    // matched_tracks: Spotify tracks that appear in chart matches
+    .with('matched_tracks', qb =>
+      qb
+        .selectFrom('spotify_track_chart_matches as track_chart_link')
+        .innerJoin(
+          'spotify_tracks as track',
+          'track.id',
+          'track_chart_link.spotify_id',
+        )
+        .select([
+          'track.id as spotify_track_id',
+          'track.name as spotify_track_name',
+          'track.artist as spotify_artist_name',
+        ])
+        .distinct(),
+    )
+
+    // chart_aggregates: one JSON array of ChorusChart objects per Spotify track
+    .with('chart_aggregates', qb =>
+      qb
+        .selectFrom(sub =>
+          sub
+            .selectFrom('spotify_track_chart_matches as link')
+            .innerJoin('chorus_charts as chart', 'chart.md5', 'link.chart_md5')
+            .select([
+              'link.spotify_id as spotify_track_id',
+              'chart.md5 as chart_md5',
+              'chart.name as chart_name',
+              'chart.artist as chart_artist_name',
+              'chart.charter as chart_charter_name',
+              'chart.diff_drums as difficulty_drums',
+              'chart.diff_guitar as difficulty_guitar',
+              'chart.diff_bass as difficulty_bass',
+              'chart.diff_keys as difficulty_keys',
+              'chart.diff_drums_real as difficulty_drums_real',
+              'chart.modified_time as chart_modified_time',
+              'chart.song_length as chart_song_length',
+              'chart.has_video_background as has_video_background',
+              'chart.album_art_md5 as album_art_md5',
+              'chart.group_id as chart_group_id',
+              // per-chart installed flag without multiplying rows
+              sql<number>`
+                CASE WHEN EXISTS (
+                  SELECT 1
+                  FROM local_charts lc
+                  WHERE lc.artist_normalized  = chart.artist_normalized
+                    AND lc.song_normalized    = chart.name_normalized
+                    AND lc.charter_normalized = chart.charter_normalized
+                ) THEN 1 ELSE 0 END
+              `.as('isInstalled'),
+            ])
+            .groupBy(['link.spotify_id', 'chart.md5'])
+            .as('deduped_charts'),
+        )
+        .select([
+          'deduped_charts.spotify_track_id',
+          sql<PickedChorusCharts[]>`
+          json_group_array(
+            json_object(
+              'md5',               ${sql.ref('deduped_charts.chart_md5')},
+              'name',              ${sql.ref('deduped_charts.chart_name')},
+              'artist',            ${sql.ref('deduped_charts.chart_artist_name')},
+              'charter',           ${sql.ref('deduped_charts.chart_charter_name')},
+              'diff_drums',        ${sql.ref('deduped_charts.difficulty_drums')},
+              'diff_guitar',       ${sql.ref('deduped_charts.difficulty_guitar')},
+              'diff_bass',         ${sql.ref('deduped_charts.difficulty_bass')},
+              'diff_keys',         ${sql.ref('deduped_charts.difficulty_keys')},
+              'diff_drums_real',   ${sql.ref('deduped_charts.difficulty_drums_real')},
+              'modified_time',     ${sql.ref('deduped_charts.chart_modified_time')},
+              'song_length',       ${sql.ref('deduped_charts.chart_song_length')},
+              'hasVideoBackground',${sql.ref('deduped_charts.has_video_background')},
+              'albumArtMd5',       ${sql.ref('deduped_charts.album_art_md5')},
+              'group_id',          ${sql.ref('deduped_charts.chart_group_id')}
+            )
+          )
+        `.as('matching_charts'),
+        ])
+        .groupBy('deduped_charts.spotify_track_id'),
+    )
+
+    // playlist_aggregates: one JSON array of SpotifyPlaylist objects per track
+    .with('playlist_aggregates', qb =>
+      qb
+        .selectFrom('spotify_playlist_tracks as playlist_link')
+        .innerJoin(
+          'spotify_playlists as playlist',
+          'playlist.id',
+          'playlist_link.playlist_id',
+        )
+        .select([
+          'playlist_link.track_id as spotify_track_id',
+          sql<PickedSpotifyPlaylists[]>`
+          json_group_array(
+            json_object(
+              'id',                ${sql.ref('playlist.id')},
+              'snapshot_id',       ${sql.ref('playlist.snapshot_id')},
+              'name',              ${sql.ref('playlist.name')},
+              'collaborative',     ${sql.ref('playlist.collaborative')},
+              'owner_display_name',${sql.ref('playlist.owner_display_name')},
+              'owner_external_url',${sql.ref('playlist.owner_external_url')},
+              'total_tracks',      ${sql.ref('playlist.total_tracks')},
+              'updated_at',        ${sql.ref('playlist.updated_at')}
+            )
+          )
+        `.as('playlist_memberships'),
+        ])
+        .groupBy('playlist_link.track_id'),
+    )
+
+    // album_aggregates: one JSON array of SpotifyAlbum objects per track
+    .with('album_aggregates', qb =>
+      qb
+        .selectFrom('spotify_album_tracks as album_link')
+        .innerJoin('spotify_albums as album', 'album.id', 'album_link.album_id')
+        .select([
+          'album_link.track_id as spotify_track_id',
+          sql<PickedSpotifyAlbums[]>`
+          json_group_array(
+            json_object(
+              'id',           ${sql.ref('album.id')},
+              'name',         ${sql.ref('album.name')},
+              'artist_name',  ${sql.ref('album.artist_name')},
+              'total_tracks', ${sql.ref('album.total_tracks')},
+              'updated_at',   ${sql.ref('album.updated_at')}
+            )
+          )
+        `.as('album_memberships'),
+        ])
+        .groupBy('album_link.track_id'),
+    )
+
+    // local_chart_flags: one boolean flag per track
+    .with('local_chart_flags', qb =>
+      qb
+        .selectFrom('spotify_track_chart_matches as link')
+        .innerJoin('chorus_charts as chart', 'chart.md5', 'link.chart_md5')
+        .innerJoin('local_charts as local', join =>
+          join
+            .onRef('local.artist_normalized', '=', 'chart.artist_normalized')
+            .onRef('local.song_normalized', '=', 'chart.name_normalized')
+            .onRef('local.charter_normalized', '=', 'chart.charter_normalized'),
+        )
+        .select([
+          'link.spotify_id as spotify_track_id',
+          sql<number>`1`.as('is_any_local_chart_installed'),
+        ])
+        .groupBy('link.spotify_id')
+        .distinct(),
+    )
+
+    // Final: only include tracks that have matching charts
+    .selectFrom('chart_aggregates as chart_data')
+    .innerJoin(
+      'matched_tracks as track',
+      'track.spotify_track_id',
+      'chart_data.spotify_track_id',
+    )
+    .leftJoin(
+      'playlist_aggregates as playlist_data',
+      'playlist_data.spotify_track_id',
+      'chart_data.spotify_track_id',
+    )
+    .leftJoin(
+      'album_aggregates as album_data',
+      'album_data.spotify_track_id',
+      'chart_data.spotify_track_id',
+    )
+    .leftJoin(
+      'local_chart_flags as installed_flag',
+      'installed_flag.spotify_track_id',
+      'chart_data.spotify_track_id',
+    )
     .select([
-      'spot.id as spotify_id',
-      'spot.name as spotify_name',
-      'spot.artist as spotify_artist',
-      'cc.artist_normalized as an',
-      'cc.name_normalized as tn',
-      'cc.charter_normalized as cn',
-    ])
-    .where('cc.artist_normalized', '!=', '')
-    .where('cc.name_normalized', '!=', '')
-    .where('cc.charter_normalized', '!=', '')
-    .as('b');
-
-  const rows = await db
-    .selectFrom(base)
-    .innerJoin('chorus_charts as cc2', j =>
-      j
-        .onRef('cc2.artist_normalized', '=', 'b.an')
-        .onRef('cc2.name_normalized', '=', 'b.tn')
-        .onRef('cc2.charter_normalized', '=', 'b.cn'),
-    )
-    .leftJoin('local_charts as lc', j =>
-      j
-        .onRef('lc.artist_normalized', '=', 'cc2.artist_normalized')
-        .onRef('lc.song_normalized', '=', 'cc2.name_normalized')
-        .onRef('lc.charter_normalized', '=', 'cc2.charter_normalized'),
-    )
-    .select(eb => [
-      'b.spotify_id',
-      'b.spotify_name',
-      'b.spotify_artist',
-      // is_any_installed: 1 if any matching chart is present in local_charts
-      sql<number>`coalesce(max(case when lc.artist_normalized is not null then 1 else 0 end), 0)`.as(
-        'is_any_installed',
+      'track.spotify_track_id',
+      'track.spotify_track_name',
+      'track.spotify_artist_name',
+      sql<number>`COALESCE(installed_flag.is_any_local_chart_installed, 0)`.as(
+        'is_any_local_chart_installed',
+      ),
+      sql<PickedChorusCharts[]>`chart_data.matching_charts`.as(
+        'matching_charts',
       ),
       sql<
-        {
-          md5: string;
-          name: string;
-          artist: string;
-          charter: string;
-          diff_drums: number;
-          diff_guitar: number;
-          diff_bass: number;
-          diff_keys: number;
-          diff_drums_real: number;
-          modified_time: string;
-          song_length: number;
-          hasVideoBackground: boolean;
-          albumArtMd5: string;
-          group_id: string;
-          isInstalled: number;
-        }[]
-      >`
-      json_group_array(
-        json_object(
-          'md5', cc2.md5,
-          'name', cc2.name,
-          'artist', cc2.artist,
-          'charter', cc2.charter,
-          'diff_drums', cc2.diff_drums,
-          'diff_guitar', cc2.diff_guitar,
-          'diff_bass', cc2.diff_bass,
-          'diff_keys', cc2.diff_keys,
-          'diff_drums_real', cc2.diff_drums_real,
-          'modified_time', cc2.modified_time,
-          'song_length', cc2.song_length,
-          'hasVideoBackground', cc2.has_video_background,
-          'albumArtMd5', cc2.album_art_md5,
-          'group_id', cc2.group_id,
-          'isInstalled', case when lc.charter_normalized is not null then 1 else 0 end
-        )
-      )
-      `.as('matching_charts'),
+        PickedSpotifyPlaylists[]
+      >`COALESCE(playlist_data.playlist_memberships, json('[]'))`.as(
+        'playlist_memberships',
+      ),
+      sql<
+        PickedSpotifyAlbums[]
+      >`COALESCE(album_data.album_memberships, json('[]'))`.as(
+        'album_memberships',
+      ),
     ])
-    .where('spotify_name', '!=', '')
-    .where('spotify_artist', '!=', '')
-    .groupBy(['b.spotify_id', 'b.spotify_name', 'b.spotify_artist'])
-    .orderBy('b.spotify_artist')
-    .orderBy('b.spotify_name')
+    .where('spotify_track_name', '!=', '')
+    .where('spotify_artist_name', '!=', '')
+    .orderBy('track.spotify_artist_name')
+    .orderBy('track.spotify_track_name')
     .execute();
 
-  return rows;
+  const after = performance.now();
+  console.log('query time', after - before, 'ms');
+  return result;
 }
 
-function SpotifyHistory({authenticated}: {authenticated: boolean}) {
+function SpotifyHistory() {
   const {data} = useData({
     key: 'spotify-history-tracks-data',
     fn: getData,
@@ -178,22 +439,65 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
 
   const songs: SpotifyPlaysRecommendations[] = data.map(item => {
     return {
-      artist: item.spotify_artist,
-      song: item.spotify_name,
+      artist: item.spotify_artist_name,
+      song: item.spotify_track_name,
       matchingCharts: item.matching_charts.map((chart): SpotifyChartData => {
         return {
           ...chart,
+          albumArtMd5: chart.album_art_md5 ?? '',
+          hasVideoBackground: chart.has_video_background === 1,
           isInstalled: chart.isInstalled === 1,
           modifiedTime: chart.modified_time,
           file: `https://files.enchor.us/${chart.md5}.sng`,
         };
       }),
+      playlistMemberships: item.playlist_memberships,
+      albumMemberships: item.album_memberships,
     };
   });
 
+  console.log(songs);
+
   return (
     <>
-      <SpotifyTableDownloader tracks={songs} showPreview={authenticated} />
+      <SpotifyTableDownloader tracks={songs} showPreview={true} />
     </>
+  );
+}
+
+async function pause() {
+  // Yield to React to let it update State
+  await new Promise(resolve => {
+    setTimeout(resolve, 10);
+  });
+}
+
+function ScanLocalFoldersCTACard({onClick}: {onClick: () => void}) {
+  return (
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader className="text-center">
+        <CardTitle>Select Local Songs Folder</CardTitle>
+        <CardDescription>
+          We scan your local songs folder to find installed charts, enabling you
+          to avoid downloading duplicate charts. Downloading a chart installs it
+          into this folder, no need to copy from Downloads!
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Button onClick={onClick} className="w-full">
+          Select Songs Folder
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProgressMessage({message}: {message: string}) {
+  return (
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader className="text-center">
+        <CardTitle>{message}</CardTitle>
+      </CardHeader>
+    </Card>
   );
 }
