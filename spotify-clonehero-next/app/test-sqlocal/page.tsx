@@ -247,7 +247,7 @@ export default function TestSQLocalPage() {
                   </span>
                   <input
                     type="file"
-                    accept=".sqlite,.db,application/octet-stream,application/x-sqlite3"
+                    accept=".sqlite3"
                     onChange={e => onUploadDb(e.target.files?.[0])}
                     disabled={uploadBusy}
                   />
