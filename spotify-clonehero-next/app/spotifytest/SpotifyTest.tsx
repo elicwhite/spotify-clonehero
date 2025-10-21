@@ -98,7 +98,9 @@ function LoggedIn() {
 
   const [spotifyLibraryProgress, updateSpotifyLibrary] =
     useSpotifyLibraryUpdate();
-  const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb();
+  const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb(
+    true /* force database */,
+  );
 
   const [started, setStarted] = useState(false);
 

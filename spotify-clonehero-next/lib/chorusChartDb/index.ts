@@ -353,7 +353,9 @@ export function findMatchingCharts<T extends ChartInfo>(
 }
 
 // Main export function - always call hooks at the top level
-export function useChorusChartDb(): [
+export function useChorusChartDb(
+  forceDatabase?: boolean,
+): [
   ChorusChartProgress,
   (abort: AbortController) => Promise<ChartResponseEncore[]>,
 ] {
@@ -362,5 +364,5 @@ export function useChorusChartDb(): [
   const indexedDBResult = useChorusChartDbIndexedDB();
 
   // Return the appropriate result based on feature flag
-  return USE_DATABASE ? databaseResult : indexedDBResult;
+  return USE_DATABASE || forceDatabase ? databaseResult : indexedDBResult;
 }
