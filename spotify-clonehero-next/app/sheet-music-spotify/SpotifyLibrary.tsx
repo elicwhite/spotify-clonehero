@@ -25,6 +25,7 @@ import {User, Disc3, Music, ChevronDown} from 'lucide-react';
 import {getSpotifySdk} from '@/lib/spotify-sdk/ClientInstance';
 import {SpotifyApi} from '@spotify/web-api-ts-sdk';
 import {ErrorBoundary} from '@sentry/nextjs';
+import {useData} from '@/lib/suspense-data';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
@@ -113,28 +114,6 @@ type PlaylistAlbumData = {
   matching_charts_count: number;
   type: 'playlist' | 'album';
 };
-
-const dataCache = new Map<string, Promise<any>>();
-
-type UseDataResult<T> = {
-  data: T;
-};
-function useData<T>({
-  key,
-  fn,
-}: {
-  key: string;
-  fn: () => Promise<T>;
-}): UseDataResult<T> {
-  if (!dataCache.has(key)) {
-    dataCache.set(key, fn());
-  }
-
-  const promise = dataCache.get(key) as Promise<T>;
-
-  const data = use(promise);
-  return {data: data};
-}
 
 async function getPlaylistAlbumData(): Promise<PlaylistAlbumData[]> {
   const sdk = await getSpotifySdk();
