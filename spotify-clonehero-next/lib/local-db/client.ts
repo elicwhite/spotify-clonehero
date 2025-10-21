@@ -1,5 +1,5 @@
 import {SQLocalKysely} from 'sqlocal/kysely';
-import {Kysely, Migrator} from 'kysely';
+import {Kysely, Migrator, ParseJSONResultsPlugin} from 'kysely';
 import type {DB} from './types';
 import {normalizeStrForMatching} from './normalize';
 
@@ -37,7 +37,10 @@ async function initializeDatabase(): Promise<Kysely<DB>> {
     const client = new SQLocalKysely('spotify-clonehero-local.sqlite3');
     const {dialect} = client;
     sqlocalClient = client;
-    const db = new Kysely<DB>({dialect});
+    const db = new Kysely<DB>({
+      dialect,
+      plugins: [new ParseJSONResultsPlugin()],
+    });
 
     await client.createScalarFunction('normalize', (str: string) => {
       return normalizeStrForMatching(str);
