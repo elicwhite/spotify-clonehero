@@ -46,6 +46,7 @@ export default function Page() {
       <SignInWithSpotifyCard
         supabaseClient={supabase}
         needsToLink={needsToLink}
+        redirectPath="/sheet-music-spotify"
       />
     );
   }
