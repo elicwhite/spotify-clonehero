@@ -151,9 +151,21 @@ function LoggedIn() {
       setStatus(prevStatus => ({...prevStatus, status: 'done-scanning'}));
       await pause();
     } catch (err) {
-      toast.error('Error scanning local charts', {duration: 8000});
-      setStatus({status: 'not-started', songsCounted: 0});
-      throw err;
+      if (err instanceof Error && err.message == 'User canceled picker') {
+        toast.info('Directory picker canceled');
+        setStatus({
+          status: 'not-started',
+          songsCounted: 0,
+        });
+        return;
+      } else {
+        toast.error('Error scanning local charts', {duration: 8000});
+        setStatus({
+          status: 'not-started',
+          songsCounted: 0,
+        });
+        throw err;
+      }
     }
 
     const isInstalled = await createIsInstalledFilter(installedCharts);
