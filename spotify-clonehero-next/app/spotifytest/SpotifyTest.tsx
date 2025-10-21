@@ -33,6 +33,15 @@ import {
   SpotifyAlbums,
   SpotifyPlaylists,
 } from '@/lib/local-db/types';
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
+import {FileMusic} from 'lucide-react';
 
 export default function Page() {
   const supabase = createClient();
@@ -460,7 +469,11 @@ function SpotifyHistory() {
 
   return (
     <>
-      <SpotifyTableDownloader tracks={songs} showPreview={true} />
+      {songs.length === 0 ? (
+        <NoMatches />
+      ) : (
+        <SpotifyTableDownloader tracks={songs} showPreview={true} />
+      )}
     </>
   );
 }
@@ -499,5 +512,31 @@ function ProgressMessage({message}: {message: string}) {
         <CardTitle>{message}</CardTitle>
       </CardHeader>
     </Card>
+  );
+}
+
+export function NoMatches() {
+  return (
+    <div className="flex justify-center">
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <FileMusic />
+          </EmptyMedia>
+          <EmptyTitle>No Matching Charts</EmptyTitle>
+          <EmptyDescription>
+            We couldn't find any matching charts for your Spotify library.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.location.reload()}>
+            Retry
+          </Button>
+        </EmptyContent>
+      </Empty>
+    </div>
   );
 }
