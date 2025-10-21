@@ -525,7 +525,7 @@ export function NoMatches() {
           </EmptyMedia>
           <EmptyTitle>No Matching Charts</EmptyTitle>
           <EmptyDescription>
-            We couldn't find any matching charts for your Spotify library.
+            We couldn&apos;t find any matching charts for your Spotify library.
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
