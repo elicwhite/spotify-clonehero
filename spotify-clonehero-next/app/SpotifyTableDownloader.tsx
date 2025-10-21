@@ -46,6 +46,7 @@ import {
   preFilterInstruments,
 } from '@/components/ChartInstruments';
 import {RxExternalLink} from 'react-icons/rx';
+import {NotesData} from '@eliwhite/scan-chart';
 
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {
@@ -55,7 +56,7 @@ declare module '@tanstack/react-table' {
 
 export type SpotifyChartData = {
   isInstalled: boolean;
-} & ChartResponseEncore;
+} & Omit<ChartResponseEncore, 'notesData'> & {notesData?: NotesData};
 
 export type SpotifyPlaysRecommendations = {
   artist: string;

@@ -70,6 +70,7 @@ export default function Spotify() {
       <SignInWithSpotifyCard
         supabaseClient={supabase}
         needsToLink={needsToLink}
+        redirectPath="/spotify/app"
       />
     );
   }

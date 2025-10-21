@@ -1,6 +1,6 @@
 'use client';
 
-import {ChartResponseEncore} from '@/lib/chartSelection';
+import {ChartInfo, ChartResponseEncore} from '@/lib/chartSelection';
 import fetchNewCharts from './fetchNewCharts';
 import {readJsonFile, writeFile} from '@/lib/fileSystemHelpers';
 import {search, Searcher} from 'fast-fuzzy';
@@ -331,7 +331,7 @@ export function findMatchingChartsExact(
   });
 }
 
-export function findMatchingCharts<T extends ChartResponseEncore>(
+export function findMatchingCharts<T extends ChartInfo>(
   artist: string,
   song: string,
   artistSearcher: Searcher<

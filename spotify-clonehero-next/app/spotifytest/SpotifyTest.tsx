@@ -1,17 +1,6 @@
 'use client';
 
-import {
-  SongAccumulator,
-  createIsInstalledFilter,
-} from '@/lib/local-songs-folder/scanLocalCharts';
-import {Suspense, use, useCallback, useEffect, useRef, useState} from 'react';
-import {useChorusChartDb, findMatchingCharts} from '@/lib/chorusChartDb';
-import {scanForInstalledCharts} from '@/lib/local-songs-folder';
-import {
-  ArtistTrackPlays,
-  getSpotifyDumpArtistTrackPlays,
-  processSpotifyDump,
-} from '@/lib/spotify-sdk/HistoryDumpParsing';
+import {Suspense, useEffect, useState} from 'react';
 import SpotifyTableDownloader, {
   SpotifyChartData,
   SpotifyPlaysRecommendations,
@@ -20,20 +9,11 @@ import {createClient} from '@/lib/supabase/client';
 import {Button} from '@/components/ui/button';
 import {RxExternalLink} from 'react-icons/rx';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
-import {Searcher} from 'fast-fuzzy';
-import {type ChartResponseEncore} from '@/lib/chartSelection';
-import {toast} from 'sonner';
 import {Icons} from '@/components/icons';
-import LocalScanLoaderCard from '../spotify/app/LocalScanLoaderCard';
 import {getLocalDb} from '@/lib/local-db/client';
-import {Kysely, sql} from 'kysely';
-import {DB} from '@/lib/local-db/types';
+import {sql} from 'kysely';
 import {useData} from '@/lib/suspense-data';
-import {jsonArrayFrom} from 'kysely/helpers/sqlite';
-
-type Falsy = false | 0 | '' | null | undefined;
-const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
-  Boolean(v);
+import {SignInWithSpotifyCard} from '../spotify/app/SignInWithSpotifyCard';
 
 export default function Page() {
   const supabase = createClient();
@@ -51,46 +31,19 @@ export default function Page() {
     })();
   }, [supabase]);
 
-  const authRedirectUrl = `/auth/callback?next=${encodeURIComponent('/spotifyhistory')}`;
-
-  const auth = !user ? (
-    <div>
-      <Button
-        onClick={async () => {
-          const {data, error} = await supabase.auth.signInWithOAuth({
-            provider: 'spotify',
-            options: {
-              redirectTo: `${window.location.origin}${authRedirectUrl}`,
-            },
-          });
-          if (!error && data?.url) {
-            window.location.href = data.url;
-          }
-        }}>
-        <Icons.spotify className="h-4 w-4 mr-2" />
-        Login with Spotify for Previews
-      </Button>
-    </div>
-  ) : !hasSpotify ? (
-    <div className="space-y-4 sm:space-y-0 sm:space-x-4 w-full text-start sm:text-start">
-      <Button
-        onClick={async () => {
-          await supabase.auth.linkIdentity({
-            // @ts-ignore
-            provider: 'spotify',
-            options: {
-              redirectTo: `${window.location.origin}${authRedirectUrl}`,
-            },
-          });
-        }}>
-        Link Spotify for Previews
-      </Button>
-    </div>
-  ) : null;
+  if (!user || !hasSpotify) {
+    const needsToLink = user != null && !hasSpotify;
+    return (
+      <SignInWithSpotifyCard
+        supabaseClient={supabase}
+        needsToLink={needsToLink}
+        redirectPath="/spotifytest"
+      />
+    );
+  }
 
   return (
     <>
-      {auth}
       <p className="mb-4 text-center">
         This tool scans your Spotify{' '}
         <a
@@ -145,21 +98,6 @@ async function getData() {
     .where('cc.charter_normalized', '!=', '')
     .as('b');
 
-  // const result = await db
-  // .selectFrom('person')
-  // .select((eb) => [
-  //   'id',
-  //   jsonArrayFrom(
-  //     eb.selectFrom('pet')
-  //       .select(['pet.id as pet_id', 'pet.name'])
-  //       .whereRef('pet.owner_id', '=', 'person.id')
-  //       .orderBy('pet.name')
-  //   ).as('pets')
-  // ])
-  // .execute()
-
-  // Now join to *all* charts that match those normalized keys, join lc to see if any installed,
-  // and aggregate to one row per spotify track.
   const rows = await db
     .selectFrom(base)
     .innerJoin('chorus_charts as cc2', j =>
@@ -182,25 +120,6 @@ async function getData() {
       sql<number>`coalesce(max(case when lc.artist_normalized is not null then 1 else 0 end), 0)`.as(
         'is_any_installed',
       ),
-      // jsonArrayFrom(
-      //   eb
-      //     .selectFrom('cc2')
-      //     .select([
-      //       'cc2.md5',
-      //       'cc2.name',
-      //       'cc2.artist',
-      //       'cc2.charter',
-      //       'cc2.name_normalized',
-      //       'cc2.artist_normalized',
-      //       'cc2.charter_normalized',
-      //       'cc2.song_length',
-      //       'cc2.has_video_background',
-      //       'cc2.album_art_md5',
-      //       'cc2.group_id',
-      //     ])
-      //     .orderBy('cc2.charter'),
-      // ).as('matching_charts'),
-      // matching_charts: JSON array of all matching cc2 rows (pick fields you need)
       sql<
         {
           md5: string;
@@ -214,10 +133,10 @@ async function getData() {
           diff_drums_real: number;
           modified_time: string;
           song_length: number;
-          has_video_background: boolean;
-          album_art_md5: string;
+          hasVideoBackground: boolean;
+          albumArtMd5: string;
           group_id: string;
-          is_installed: number;
+          isInstalled: number;
         }[]
       >`
       json_group_array(
@@ -233,19 +152,17 @@ async function getData() {
           'diff_drums_real', cc2.diff_drums_real,
           'modified_time', cc2.modified_time,
           'song_length', cc2.song_length,
-          'has_video_background', cc2.has_video_background,
-          'album_art_md5', cc2.album_art_md5,
+          'hasVideoBackground', cc2.has_video_background,
+          'albumArtMd5', cc2.album_art_md5,
           'group_id', cc2.group_id,
-          'is_installed', case when lc.charter_normalized is not null then 1 else 0 end
+          'isInstalled', case when lc.charter_normalized is not null then 1 else 0 end
         )
       )
       `.as('matching_charts'),
-      // 'name_normalized', cc2.name_normalized,
-      // 'artist_normalized', cc2.artist_normalized,
-      // 'charter_normalized', cc2.charter_normalized,
     ])
+    .where('spotify_name', '!=', '')
+    .where('spotify_artist', '!=', '')
     .groupBy(['b.spotify_id', 'b.spotify_name', 'b.spotify_artist'])
-    // Optional: stable order
     .orderBy('b.spotify_artist')
     .orderBy('b.spotify_name')
     .execute();
@@ -254,292 +171,29 @@ async function getData() {
 }
 
 function SpotifyHistory({authenticated}: {authenticated: boolean}) {
-  // const [songs, setSongs] = useState<SpotifyPlaysRecommendations[] | null>(
-  //   null,
-  // );
-  const [status, setStatus] = useState<Status>({
-    status: 'not-started',
-    songsCounted: 0,
-  });
-
-  console.log('getting data');
-
   const {data} = useData({
     key: 'spotify-history-tracks-data',
     fn: getData,
   });
 
-  console.log(data);
-
-  const formattedSongs: SpotifyPlaysRecommendations[] = data.map(item => {
+  const songs: SpotifyPlaysRecommendations[] = data.map(item => {
     return {
       artist: item.spotify_artist,
       song: item.spotify_name,
       matchingCharts: item.matching_charts.map((chart): SpotifyChartData => {
         return {
           ...chart,
-          isInstalled: chart.is_installed === 1,
-          modifiedTime: new Date(chart.modified_time),
+          isInstalled: chart.isInstalled === 1,
+          modifiedTime: chart.modified_time,
+          file: `https://files.enchor.us/${chart.md5}.sng`,
         };
       }),
-      // .map(chart => {
-      //   ...chart,
-
-      // }),
     };
   });
 
-  // console.log('data', formattedSongs);
-
-  const songs = formattedSongs;
-
-  // return {
-  //         artist,
-  //         song,
-  //         playCount,
-  //         matchingCharts,
-  //       };
-  //     })
-  //     .filter(_Boolean);
-
-  //   console.log('Found matches in', Date.now() - beforeMatching, 'ms');
-
-  //   setStatus(prevStatus => ({
-  //     ...prevStatus,
-  //     status: 'done',
-  //   }));
-
-  //   if (recommendedCharts.length > 0) {
-  //     setSongs(recommendedCharts);
-  //     console.log(recommendedCharts);
-  //   }
-
-  // return null;
-
-  // const data = use(getData(db));
-
-  // console.log('data', data);
-
-  const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb();
-
-  // const handler = useCallback(async () => {
-  //   let installedCharts: SongAccumulator[] | undefined;
-
-  //   const abortController = new AbortController();
-  //   const chorusChartsPromise = fetchChorusCharts(abortController);
-
-  //   let artistTrackPlays = await getSpotifyDumpArtistTrackPlays();
-  //   let spotifyDataHandle;
-  //   if (artistTrackPlays == null) {
-  //     alert(
-  //       'Select the folder containing your extracted Spotify Extended Streaming History',
-  //     );
-  //     try {
-  //       spotifyDataHandle = await window.showDirectoryPicker({
-  //         id: 'spotify-dump',
-  //       });
-  //     } catch (err) {
-  //       toast.info('Directory picker canceled');
-  //       console.log('User canceled picker');
-  //       return;
-  //     }
-  //   }
-
-  //   console.log('scan local charts');
-  //   try {
-  //     setStatus({
-  //       status: 'scanning',
-  //       songsCounted: 0,
-  //     });
-
-  //     const scanResult = await scanForInstalledCharts(() => {
-  //       setStatus(prevStatus => ({
-  //         ...prevStatus,
-  //         songsCounted: prevStatus.songsCounted + 1,
-  //       }));
-  //     });
-  //     installedCharts = scanResult.installedCharts;
-  //     setStatus(prevStatus => ({
-  //       ...prevStatus,
-  //       status: 'done-scanning',
-  //     }));
-  //     // Yield to React to let it update State
-  //     await pause();
-  //   } catch (err) {
-  //     if (err instanceof Error && err.message == 'User canceled picker') {
-  //       toast.info('Directory picker canceled');
-  //       setStatus({
-  //         status: 'not-started',
-  //         songsCounted: 0,
-  //       });
-  //       return;
-  //     } else {
-  //       toast.error('Error scanning local charts', {duration: 8000});
-  //       setStatus({
-  //         status: 'not-started',
-  //         songsCounted: 0,
-  //       });
-  //       throw err;
-  //     }
-  //   }
-
-  //   console.log('get spotify listens');
-  //   if (artistTrackPlays == null) {
-  //     if (spotifyDataHandle == null) {
-  //       throw new Error('Spotify data handle is null');
-  //     }
-  //     setStatus(prevStatus => ({
-  //       ...prevStatus,
-  //       status: 'processing-spotify-dump',
-  //     }));
-  //     // Yield to React to let it update State
-  //     await pause();
-  //     try {
-  //       artistTrackPlays = await processSpotifyDump(spotifyDataHandle);
-  //     } catch (err) {
-  //       setStatus({
-  //         status: 'not-started',
-  //         songsCounted: 0,
-  //       });
-
-  //       if (err instanceof Error) {
-  //         toast.error(err.message, {duration: 8000});
-  //       }
-  //       return;
-  //     }
-  //   }
-
-  //   const flatTrackPlays = flattenArtistTrackPlays(artistTrackPlays);
-  //   const isInstalled = await createIsInstalledFilter(installedCharts);
-
-  //   const allChorusCharts = await chorusChartsPromise;
-  //   const markedCharts = markInstalledCharts(allChorusCharts, isInstalled);
-
-  //   setStatus(prevStatus => ({
-  //     ...prevStatus,
-  //     status: 'songs-from-encore',
-  //   }));
-
-  //   // Yield to React to let it update State
-  //   await pause();
-
-  //   console.log('finding matches');
-  //   setStatus(prevStatus => ({
-  //     ...prevStatus,
-  //     status: 'finding-matches',
-  //   }));
-
-  //   // Yield to React to let it update State
-  //   await pause();
-
-  //   const beforeSearcher = Date.now();
-
-  //   const artistSearcher = new Searcher(markedCharts, {
-  //     keySelector: chart => chart.artist,
-  //     threshold: 1,
-  //     useDamerau: false,
-  //     useSellers: false,
-  //   });
-  //   console.log('Created index in', Date.now() - beforeSearcher, 'ms');
-
-  //   const beforeMatching = Date.now();
-  //   const recommendedCharts = flatTrackPlays
-  //     .map(([artist, song, playCount]) => {
-  //       const matchingCharts = findMatchingCharts(artist, song, artistSearcher);
-
-  //       if (
-  //         matchingCharts.length == 0 ||
-  //         !matchingCharts.some(chart => !chart.isInstalled)
-  //       ) {
-  //         return null;
-  //       }
-
-  //       return {
-  //         artist,
-  //         song,
-  //         playCount,
-  //         matchingCharts,
-  //       };
-  //     })
-  //     .filter(_Boolean);
-
-  //   console.log('Found matches in', Date.now() - beforeMatching, 'ms');
-
-  //   setStatus(prevStatus => ({
-  //     ...prevStatus,
-  //     status: 'done',
-  //   }));
-
-  //   if (recommendedCharts.length > 0) {
-  //     setSongs(recommendedCharts);
-  //     console.log(recommendedCharts);
-  //   }
-  // }, []);
-
   return (
     <>
-      {/* <div className="flex justify-center">{renderStatus(status, handler)}</div> */}
-
-      {/* {(status.status === 'scanning' || status.status === 'done-scanning') && (
-        <LocalScanLoaderCard
-          count={status.songsCounted}
-          isScanning={status.status === 'scanning'}
-        />
-      )} */}
-
-      {songs && (
-        <SpotifyTableDownloader tracks={songs} showPreview={authenticated} />
-      )}
+      <SpotifyTableDownloader tracks={songs} showPreview={authenticated} />
     </>
   );
-}
-
-function renderStatus(status: Status, scanHandler: () => void) {
-  switch (status.status) {
-    case 'not-started':
-      return <Button onClick={scanHandler}>Scan Spotify Dump</Button>;
-    case 'scanning':
-    case 'done-scanning':
-      return null;
-    case 'processing-spotify-dump':
-      return 'Processing Spotify Extended Streaming History';
-    case 'songs-from-encore':
-      return 'Downloading songs from Encore';
-    case 'finding-matches':
-      return 'Checking for song matches';
-    case 'done':
-      return <Button onClick={scanHandler}>Rescan</Button>;
-  }
-}
-
-function markInstalledCharts(
-  allCharts: ChartResponseEncore[],
-  isInstalled: (artist: string, song: string, charter: string) => boolean,
-): SpotifyChartData[] {
-  return allCharts.map(
-    (chart): SpotifyChartData => ({
-      ...chart,
-      isInstalled: isInstalled(chart.artist, chart.name, chart.charter),
-    }),
-  );
-}
-
-async function pause() {
-  // Yield to React to let it update State
-  await new Promise(resolve => {
-    setTimeout(resolve, 10);
-  });
-}
-
-function flattenArtistTrackPlays(
-  artistTrackPlays: ArtistTrackPlays,
-): [artist: string, song: string, playCount: number][] {
-  const results: [artist: string, song: string, playCount: number][] = [];
-  for (const [artist, songs] of artistTrackPlays.entries()) {
-    for (const [song, playCount] of songs.entries()) {
-      results.push([artist, song, playCount]);
-    }
-  }
-
-  return results;
 }

@@ -17,9 +17,11 @@ import {SPOTIFY_SCOPES} from '@/app/auth/spotifyScopes';
 export function SignInWithSpotifyCard({
   supabaseClient,
   needsToLink,
+  redirectPath,
 }: {
   needsToLink: boolean;
   supabaseClient: SupabaseClient;
+  redirectPath: string;
 }) {
   return (
     <Card className="w-full max-w-md mx-auto">
@@ -57,7 +59,7 @@ export function SignInWithSpotifyCard({
       <CardContent className="space-y-4">
         <Button
           onClick={async () => {
-            const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/spotify/app')}`;
+            const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectPath)}`;
 
             let result;
             if (needsToLink) {

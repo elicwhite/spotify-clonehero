@@ -1,4 +1,4 @@
-import {ChartResponseEncore} from '@/lib/chartSelection';
+import {ChartInfo, ChartResponseEncore} from '@/lib/chartSelection';
 import {memo, useCallback} from 'react';
 
 export const RENDERED_INSTRUMENTS = [
@@ -50,17 +50,15 @@ export const InstrumentImage = memo(function InstrumentImage({
   );
 });
 
-export function preFilterInstruments(chartData: ChartResponseEncore) {
+export function preFilterInstruments(chartData: ChartInfo) {
   return Object.keys(chartData)
     .filter(
       key =>
         key.startsWith('diff_') &&
-        (chartData[key as keyof ChartResponseEncore] as number) >= 0,
+        (chartData[key as keyof ChartInfo] as number) >= 0,
     )
     .map(key => ({
-      [key.replace('diff_', '')]: chartData[
-        key as keyof ChartResponseEncore
-      ] as number,
+      [key.replace('diff_', '')]: chartData[key as keyof ChartInfo] as number,
     }))
     .reduce((a, b) => ({...a, ...b}), {});
 }
