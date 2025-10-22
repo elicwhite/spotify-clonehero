@@ -257,7 +257,7 @@ async function getData() {
 
   const before = performance.now();
 
-  const result = await db
+  const withCtes = db
     // matched_tracks: Spotify tracks that appear in chart matches
     .with('matched_tracks', qb =>
       qb
@@ -271,6 +271,9 @@ async function getData() {
           'track.id as spotify_track_id',
           'track.name as spotify_track_name',
           'track.artist as spotify_artist_name',
+          // normalized keys for deduping with history
+          'track.artist_normalized as artist_normalized',
+          'track.name_normalized as name_normalized',
         ])
         .distinct(),
     )
@@ -409,7 +412,126 @@ async function getData() {
         .distinct(),
     )
 
-    // Final: only include tracks that have matching charts
+    // history_tracks: distinct plays with normalized keys and counts
+    .with('history_tracks', qb =>
+      qb
+        .selectFrom('spotify_history as h')
+        .select([
+          'h.artist',
+          'h.name',
+          'h.artist_normalized',
+          'h.name_normalized',
+          'h.play_count',
+        ])
+        .distinct(),
+    )
+
+    // history_chart_aggregates: charts matched from spotify_history by normalized keys
+    .with('history_chart_aggregates', qb =>
+      qb
+        .selectFrom(sub =>
+          sub
+            .selectFrom('spotify_history as history')
+            .innerJoin('chorus_charts as chart', join =>
+              join
+                .onRef(
+                  'chart.artist_normalized',
+                  '=',
+                  'history.artist_normalized',
+                )
+                .onRef('chart.name_normalized', '=', 'history.name_normalized'),
+            )
+            .select([
+              'history.artist_normalized as artist_normalized',
+              'history.name_normalized as name_normalized',
+              'chart.md5 as chart_md5',
+              'chart.name as chart_name',
+              'chart.artist as chart_artist_name',
+              'chart.charter as chart_charter_name',
+              'chart.diff_drums as difficulty_drums',
+              'chart.diff_guitar as difficulty_guitar',
+              'chart.diff_bass as difficulty_bass',
+              'chart.diff_keys as difficulty_keys',
+              'chart.diff_drums_real as difficulty_drums_real',
+              'chart.modified_time as chart_modified_time',
+              'chart.song_length as chart_song_length',
+              'chart.has_video_background as has_video_background',
+              'chart.album_art_md5 as album_art_md5',
+              'chart.group_id as chart_group_id',
+              sql<number>`
+                  CASE WHEN EXISTS (
+                    SELECT 1
+                    FROM local_charts lc
+                    WHERE lc.artist_normalized  = chart.artist_normalized
+                      AND lc.song_normalized    = chart.name_normalized
+                      AND lc.charter_normalized = chart.charter_normalized
+                  ) THEN 1 ELSE 0 END
+                `.as('isInstalled'),
+            ])
+            .groupBy([
+              'history.artist_normalized',
+              'history.name_normalized',
+              'chart.md5',
+            ])
+            .as('deduped_history_charts'),
+        )
+        .select([
+          'deduped_history_charts.artist_normalized',
+          'deduped_history_charts.name_normalized',
+          sql<PickedChorusCharts[]>`
+            json_group_array(
+              json_object(
+                'md5',               ${sql.ref('deduped_history_charts.chart_md5')},
+                'name',              ${sql.ref('deduped_history_charts.chart_name')},
+                'artist',            ${sql.ref('deduped_history_charts.chart_artist_name')},
+                'charter',           ${sql.ref('deduped_history_charts.chart_charter_name')},
+                'diff_drums',        ${sql.ref('deduped_history_charts.difficulty_drums')},
+                'diff_guitar',       ${sql.ref('deduped_history_charts.difficulty_guitar')},
+                'diff_bass',         ${sql.ref('deduped_history_charts.difficulty_bass')},
+                'diff_keys',         ${sql.ref('deduped_history_charts.difficulty_keys')},
+                'diff_drums_real',   ${sql.ref('deduped_history_charts.difficulty_drums_real')},
+                'modified_time',     ${sql.ref('deduped_history_charts.chart_modified_time')},
+                'song_length',       ${sql.ref('deduped_history_charts.chart_song_length')},
+                'hasVideoBackground',${sql.ref('deduped_history_charts.has_video_background')},
+                'albumArtMd5',       ${sql.ref('deduped_history_charts.album_art_md5')},
+                'group_id',          ${sql.ref('deduped_history_charts.chart_group_id')},
+                'isInstalled',       ${sql.ref('deduped_history_charts.isInstalled')}
+              )
+            )
+          `.as('matching_charts'),
+        ])
+        .groupBy([
+          'deduped_history_charts.artist_normalized',
+          'deduped_history_charts.name_normalized',
+        ]),
+    )
+
+    // history_local_chart_flags: installed flag per (artist_norm, name_norm)
+    .with('history_local_chart_flags', qb =>
+      qb
+        .selectFrom('spotify_history as history')
+        .innerJoin('chorus_charts as chart', join =>
+          join
+            .onRef('chart.artist_normalized', '=', 'history.artist_normalized')
+            .onRef('chart.name_normalized', '=', 'history.name_normalized'),
+        )
+        .innerJoin('local_charts as local', join =>
+          join
+            .onRef('local.artist_normalized', '=', 'chart.artist_normalized')
+            .onRef('local.song_normalized', '=', 'chart.name_normalized')
+            .onRef('local.charter_normalized', '=', 'chart.charter_normalized'),
+        )
+        .select([
+          'history.artist_normalized as artist_normalized',
+          'history.name_normalized as name_normalized',
+          sql<number>`1`.as('is_any_local_chart_installed'),
+        ])
+        .groupBy(['history.artist_normalized', 'history.name_normalized'])
+        .distinct(),
+    );
+
+  // Final (part 1): spotify tracks with matching charts, plus history play counts
+  const spotifySelect = withCtes
     .selectFrom('chart_aggregates as chart_data')
     .innerJoin(
       'matched_tracks as track',
@@ -431,6 +553,11 @@ async function getData() {
       'installed_flag.spotify_track_id',
       'chart_data.spotify_track_id',
     )
+    .leftJoin('history_tracks as hist', join =>
+      join
+        .onRef('hist.artist_normalized', '=', 'track.artist_normalized')
+        .onRef('hist.name_normalized', '=', 'track.name_normalized'),
+    )
     .select([
       'track.spotify_track_id',
       'track.spotify_track_name',
@@ -451,11 +578,70 @@ async function getData() {
       >`COALESCE(album_data.album_memberships, json('[]'))`.as(
         'album_memberships',
       ),
+      sql<number | null>`hist.play_count`.as('spotify_history_play_count'),
     ])
     .where('spotify_track_name', '!=', '')
-    .where('spotify_artist_name', '!=', '')
-    .orderBy('track.spotify_artist_name')
-    .orderBy('track.spotify_track_name')
+    .where('spotify_artist_name', '!=', '');
+
+  const result = await spotifySelect
+    // Final (part 2): history-only tracks with matching charts (not present above)
+    .unionAll(qb =>
+      qb
+        .selectFrom('history_chart_aggregates as chart_data')
+        .innerJoin('history_tracks as ht', join =>
+          join
+            .onRef('ht.artist_normalized', '=', 'chart_data.artist_normalized')
+            .onRef('ht.name_normalized', '=', 'chart_data.name_normalized'),
+        )
+        .leftJoin('history_local_chart_flags as installed_flag', join =>
+          join
+            .onRef(
+              'installed_flag.artist_normalized',
+              '=',
+              'chart_data.artist_normalized',
+            )
+            .onRef(
+              'installed_flag.name_normalized',
+              '=',
+              'chart_data.name_normalized',
+            ),
+        )
+        .where(eb =>
+          eb.not(
+            eb.exists(
+              eb
+                .selectFrom('matched_tracks as mt')
+                .select('mt.spotify_track_id')
+                .whereRef(
+                  'mt.artist_normalized',
+                  '=',
+                  'chart_data.artist_normalized',
+                )
+                .whereRef(
+                  'mt.name_normalized',
+                  '=',
+                  'chart_data.name_normalized',
+                ),
+            ),
+          ),
+        )
+        .select([
+          sql<string>`''`.as('spotify_track_id'),
+          'ht.name as spotify_track_name',
+          'ht.artist as spotify_artist_name',
+          sql<number>`COALESCE(installed_flag.is_any_local_chart_installed, 0)`.as(
+            'is_any_local_chart_installed',
+          ),
+          sql<PickedChorusCharts[]>`chart_data.matching_charts`.as(
+            'matching_charts',
+          ),
+          sql<PickedSpotifyPlaylists[]>`json('[]')`.as('playlist_memberships'),
+          sql<PickedSpotifyAlbums[]>`json('[]')`.as('album_memberships'),
+          sql<number | null>`ht.play_count`.as('spotify_history_play_count'),
+        ]),
+    )
+    .orderBy('spotify_artist_name')
+    .orderBy('spotify_track_name')
     .execute();
 
   const after = performance.now();
@@ -487,6 +673,14 @@ function SpotifyHistory() {
       }),
       playlistMemberships: item.playlist_memberships,
       albumMemberships: item.album_memberships,
+
+      // Add this back in once the table doesn't just look at the first song
+      // to see if they all have a playcount.
+      // Instead it should look at the spotify_history table and see if there are any rows
+      // If there are, then it should render playcount (which could be empty), otherwise don't render the column
+      // ...(item.spotify_history_play_count != null
+      //   ? {playCount: item.spotify_history_play_count}
+      //   : {}),
     };
   });
 
