@@ -42,10 +42,19 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import {FileMusic} from 'lucide-react';
+import {User} from '@supabase/supabase-js';
 
-export default function Page() {
+type Falsy = false | 0 | '' | null | undefined;
+const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>
+  Boolean(v);
+
+/* TODO:
+- List what Spotify Playlist the song is in
+*/
+
+export default function Spotify() {
   const supabase = createClient();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [hasSpotify, setHasSpotify] = useState(false);
 
   useEffect(() => {
@@ -65,7 +74,7 @@ export default function Page() {
       <SignInWithSpotifyCard
         supabaseClient={supabase}
         needsToLink={needsToLink}
-        redirectPath="/spotifytest"
+        redirectPath="/spotify/app"
       />
     );
   }
@@ -84,6 +93,7 @@ type Status = {
     | 'not-started'
     | 'scanning'
     | 'done-scanning'
+    | 'fetching-spotify-data'
     | 'songs-from-encore'
     | 'finding-matches'
     | 'done';
