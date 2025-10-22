@@ -81,7 +81,7 @@ export default function Spotify() {
 
   return (
     <SupportedBrowserWarning>
-      <div className="w-full">
+      <div className="flex flex-1 flex-col w-full overflow-y-hidden">
         <LoggedIn />
       </div>
     </SupportedBrowserWarning>
