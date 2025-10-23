@@ -417,11 +417,13 @@ function PreviewButton({
 export default function SpotifyTableDownloader({
   tracks,
   showPreview,
+  showPlayCount,
 }: {
   tracks: SpotifyPlaysRecommendations[];
   showPreview: boolean;
+  showPlayCount?: boolean;
 }) {
-  const hasPlayCount = tracks[0].playCount != null;
+  const hasPlayCount = showPlayCount ?? tracks[0].playCount != null;
 
   const [downloadState, setDownloadState] = useState<{
     [key: string]: TableDownloadStates;

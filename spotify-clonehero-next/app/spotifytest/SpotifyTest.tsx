@@ -817,10 +817,25 @@ async function getData() {
   return result;
 }
 
+async function hasSpotifyHistory() {
+  const db = await getLocalDb();
+
+  const result = await db
+    .selectFrom('spotify_history')
+    .select(db.fn.countAll().as('count'))
+    .execute();
+  return Number(result[0].count) > 0;
+}
+
 function SpotifyHistory() {
   const {data} = useData({
     key: 'spotify-history-tracks-data',
     fn: getData,
+  });
+
+  const {data: hasSpotifyHistoryData} = useData({
+    key: 'has-spotify-history-data',
+    fn: hasSpotifyHistory,
   });
 
   const songs: SpotifyPlaysRecommendations[] = data.map(item => {
@@ -864,7 +879,11 @@ function SpotifyHistory() {
       {songs.length === 0 ? (
         <NoMatches />
       ) : (
-        <SpotifyTableDownloader tracks={songs} showPreview={true} />
+        <SpotifyTableDownloader
+          tracks={songs}
+          showPreview={true}
+          showPlayCount={hasSpotifyHistoryData}
+        />
       )}
     </>
   );
