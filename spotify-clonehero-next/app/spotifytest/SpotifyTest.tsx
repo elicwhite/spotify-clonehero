@@ -8,7 +8,7 @@ import SpotifyTableDownloader, {
 import {createClient} from '@/lib/supabase/client';
 import {Button} from '@/components/ui/button';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
-import {getLocalDb} from '@/lib/local-db/client';
+import {getLocalDb, runRawSql} from '@/lib/local-db/client';
 import {sql} from 'kysely';
 import {useData} from '@/lib/suspense-data';
 import {SignInWithSpotifyCard} from '../spotify/app/SignInWithSpotifyCard';
@@ -68,6 +68,8 @@ export default function Spotify() {
     })();
   }, [supabase]);
 
+  // runRawSqlSpotifyQuery();
+
   if (!user || !hasSpotify) {
     const needsToLink = user != null && !hasSpotify;
     return (
@@ -97,6 +99,221 @@ type Status = {
     | 'done';
   songsCounted: number;
 };
+
+async function runRawSqlSpotifyQuery() {
+  console.log('running sql');
+  const rawResult = await runRawSql(`
+    WITH
+-- 1) Canonical key space: any song that has either a chart match (via tracks) or appears in history
+keys AS (
+  SELECT DISTINCT st.artist_normalized, st.name_normalized
+  FROM spotify_track_chart_matches link
+  JOIN spotify_tracks st ON st.id = link.spotify_id
+  UNION
+  SELECT DISTINCT h.artist_normalized, h.name_normalized
+  FROM spotify_history h
+),
+
+-- 2) All chart rows reachable either via track matches or via history → mapped to keys
+combined_chart_rows AS (
+  SELECT
+    st.artist_normalized,
+    st.name_normalized,
+    c.md5            AS chart_md5,
+    c.name           AS chart_name,
+    c.artist         AS chart_artist_name,
+    c.charter        AS chart_charter_name,
+    c.diff_drums     AS difficulty_drums,
+    c.diff_guitar    AS difficulty_guitar,
+    c.diff_bass      AS difficulty_bass,
+    c.diff_keys      AS difficulty_keys,
+    c.diff_drums_real AS difficulty_drums_real,
+    c.modified_time  AS chart_modified_time,
+    c.song_length    AS chart_song_length,
+    c.has_video_background,
+    c.album_art_md5,
+    c.group_id       AS chart_group_id
+  FROM spotify_track_chart_matches link
+  JOIN chorus_charts c ON c.md5 = link.chart_md5
+  JOIN spotify_tracks st ON st.id = link.spotify_id
+
+  UNION ALL
+
+  SELECT
+    h.artist_normalized,
+    h.name_normalized,
+    c.md5, c.name, c.artist, c.charter,
+    c.diff_drums, c.diff_guitar, c.diff_bass, c.diff_keys, c.diff_drums_real,
+    c.modified_time, c.song_length, c.has_video_background, c.album_art_md5, c.group_id
+  FROM spotify_history h
+  JOIN chorus_charts c
+    ON c.artist_normalized = h.artist_normalized
+   AND c.name_normalized   = h.name_normalized
+),
+
+-- 3) Distinct local chart keys once (robust isInstalled without row multiplication)
+local_keys AS (
+  SELECT DISTINCT
+    artist_normalized AS la,
+    song_normalized   AS ls,
+    charter_normalized AS lc
+  FROM local_charts
+),
+
+-- 4) Charts per key, dedup by (key, md5), and compute isInstalled via LEFT JOIN to local_keys
+chart_aggregates_by_key AS (
+  SELECT
+    d.artist_normalized,
+    d.name_normalized,
+    json_group_array(
+      json_object(
+        'md5',               d.chart_md5,
+        'name',              d.chart_name,
+        'artist',            d.chart_artist_name,
+        'charter',           d.chart_charter_name,
+        'diff_drums',        d.difficulty_drums,
+        'diff_guitar',       d.difficulty_guitar,
+        'diff_bass',         d.difficulty_bass,
+        'diff_keys',         d.difficulty_keys,
+        'diff_drums_real',   d.difficulty_drums_real,
+        'modified_time',     d.chart_modified_time,
+        'song_length',       d.chart_song_length,
+        'hasVideoBackground',d.has_video_background,
+        'albumArtMd5',       d.album_art_md5,
+        'group_id',          d.chart_group_id,
+        'isInstalled',       CASE WHEN lk.la IS NULL THEN 0 ELSE 1 END
+      )
+    ) AS matching_charts
+  FROM (
+    SELECT
+      r.artist_normalized,
+      r.name_normalized,
+      r.chart_md5,
+      MIN(r.chart_name)           AS chart_name,
+      MIN(r.chart_artist_name)    AS chart_artist_name,
+      MIN(r.chart_charter_name)   AS chart_charter_name,
+      MIN(r.difficulty_drums)     AS difficulty_drums,
+      MIN(r.difficulty_guitar)    AS difficulty_guitar,
+      MIN(r.difficulty_bass)      AS difficulty_bass,
+      MIN(r.difficulty_keys)      AS difficulty_keys,
+      MIN(r.difficulty_drums_real) AS difficulty_drums_real,
+      MIN(r.chart_modified_time)  AS chart_modified_time,
+      MIN(r.chart_song_length)    AS chart_song_length,
+      MIN(r.has_video_background) AS has_video_background,
+      MIN(r.album_art_md5)        AS album_art_md5,
+      MIN(r.chart_group_id)       AS chart_group_id
+    FROM combined_chart_rows r
+    GROUP BY r.artist_normalized, r.name_normalized, r.chart_md5
+  ) AS d
+  LEFT JOIN local_keys lk
+    ON lk.la = d.artist_normalized
+   AND lk.ls = d.name_normalized
+   AND lk.lc = d.chart_charter_name
+  GROUP BY d.artist_normalized, d.name_normalized
+),
+
+-- 5) Track metadata per key (if the same key maps to multiple track ids, keep a stable one)
+track_info_by_key AS (
+  SELECT
+    st.artist_normalized,
+    st.name_normalized,
+    MIN(st.id)    AS spotify_track_id,
+    MIN(st.name)  AS spotify_track_name,
+    MIN(st.artist) AS spotify_artist_name
+  FROM spotify_tracks st
+  JOIN spotify_track_chart_matches m ON m.spotify_id = st.id
+  GROUP BY st.artist_normalized, st.name_normalized
+),
+
+-- 6) Playlist memberships per key (distinct container per key to avoid dup objects)
+playlist_aggregates_by_key AS (
+  SELECT
+    st.artist_normalized,
+    st.name_normalized,
+    json_group_array(
+      json_object(
+        'id',                p.id,
+        'snapshot_id',       p.snapshot_id,
+        'name',              p.name,
+        'collaborative',     p.collaborative,
+        'owner_display_name',p.owner_display_name,
+        'owner_external_url',p.owner_external_url,
+        'total_tracks',      p.total_tracks,
+        'updated_at',        p.updated_at
+      )
+    ) AS playlist_memberships
+  FROM (
+    SELECT DISTINCT plt.track_id, plt.playlist_id
+    FROM spotify_playlist_tracks plt
+  ) dplt
+  JOIN spotify_tracks st ON st.id = dplt.track_id
+  JOIN spotify_playlists p ON p.id = dplt.playlist_id
+  GROUP BY st.artist_normalized, st.name_normalized
+),
+
+-- 7) Album memberships per key
+album_aggregates_by_key AS (
+  SELECT
+    st.artist_normalized,
+    st.name_normalized,
+    json_group_array(
+      json_object(
+        'id',           a.id,
+        'name',         a.name,
+        'artist_name',  a.artist_name,
+        'total_tracks', a.total_tracks,
+        'updated_at',   a.updated_at
+      )
+    ) AS album_memberships
+  FROM (
+    SELECT DISTINCT at.track_id, at.album_id
+    FROM spotify_album_tracks at
+  ) dat
+  JOIN spotify_tracks st ON st.id = dat.track_id
+  JOIN spotify_albums a ON a.id = dat.album_id
+  GROUP BY st.artist_normalized, st.name_normalized
+),
+
+-- 8) History aggregates per key
+history_by_key AS (
+  SELECT
+    h.artist_normalized,
+    h.name_normalized,
+    MIN(h.artist) AS artist,
+    MIN(h.name)   AS name,
+    SUM(h.play_count) AS play_count
+  FROM spotify_history h
+  GROUP BY h.artist_normalized, h.name_normalized
+),
+
+-- 9) Any key that actually has charts (this guarantees only songs with charts come out)
+keys_with_charts AS (
+  SELECT artist_normalized, name_normalized
+  FROM chart_aggregates_by_key
+)
+
+SELECT
+  COALESCE(t.spotify_track_id, '')                                      AS spotify_track_id,
+  COALESCE(t.spotify_track_name, hb.name, '')                           AS spotify_track_name,
+  COALESCE(t.spotify_artist_name, hb.artist, '')                        AS spotify_artist_name,
+  COALESCE(cabk.matching_charts, json('[]'))                            AS matching_charts,
+  COALESCE(pabk.playlist_memberships, json('[]'))                       AS playlist_memberships,
+  COALESCE(aabk.album_memberships, json('[]'))                          AS album_memberships,
+  hb.play_count                                                         AS spotify_history_play_count
+FROM keys_with_charts k
+LEFT JOIN track_info_by_key        t    ON t.artist_normalized = k.artist_normalized AND t.name_normalized = k.name_normalized
+LEFT JOIN chart_aggregates_by_key  cabk ON cabk.artist_normalized = k.artist_normalized AND cabk.name_normalized = k.name_normalized
+LEFT JOIN playlist_aggregates_by_key pabk ON pabk.artist_normalized = k.artist_normalized AND pabk.name_normalized = k.name_normalized
+LEFT JOIN album_aggregates_by_key  aabk ON aabk.artist_normalized = k.artist_normalized AND aabk.name_normalized = k.name_normalized
+LEFT JOIN history_by_key           hb   ON hb.artist_normalized  = k.artist_normalized AND hb.name_normalized  = k.name_normalized
+WHERE COALESCE(t.spotify_track_name, hb.name, '')   <> ''
+  AND COALESCE(t.spotify_artist_name, hb.artist, '') <> ''
+ORDER BY LOWER(COALESCE(t.spotify_artist_name, hb.artist, '')),
+         LOWER(COALESCE(t.spotify_track_name,  hb.name,   ''));
+    `);
+
+  console.log(rawResult);
+}
 
 function LoggedIn() {
   const [status, setStatus] = useState<Status>({
@@ -727,28 +944,29 @@ async function getData() {
         .groupBy(['r.artist_normalized', 'r.name_normalized'])
         .distinct(),
     )
-    // track info by key (from spotify side)
+    // track info by key (from spotify side), deduping multiple track ids per key
     .with('track_info_by_key', qb =>
       qb
-        .selectFrom('spotify_tracks_with_matching_charts as t')
+        .selectFrom('spotify_tracks as st')
+        .innerJoin('spotify_track_chart_matches as m', 'm.spotify_id', 'st.id')
         .select([
-          't.artist_normalized as artist_normalized',
-          't.name_normalized as name_normalized',
-          't.spotify_track_id',
-          't.spotify_track_name',
-          't.spotify_artist_name',
+          'st.artist_normalized as artist_normalized',
+          'st.name_normalized as name_normalized',
+          sql<string>`min(st.id)`.as('spotify_track_id'),
+          sql<string>`min(st.name)`.as('spotify_track_name'),
+          sql<string>`min(st.artist)`.as('spotify_artist_name'),
         ])
-        .distinct(),
+        .groupBy(['st.artist_normalized', 'st.name_normalized']),
     )
     // keys from any side that actually have matching charts
-    .with('all_song_keys', qb =>
+    .with('keys_with_charts', qb =>
       qb
         .selectFrom('chart_aggregates_by_key as c')
         .select(['c.artist_normalized', 'c.name_normalized'])
         .distinct(),
     )
     // final merged select
-    .selectFrom('all_song_keys as k')
+    .selectFrom('keys_with_charts as k')
     .leftJoin('track_info_by_key as t', join =>
       join
         .onRef('t.artist_normalized', '=', 'k.artist_normalized')
@@ -805,8 +1023,8 @@ async function getData() {
       ),
       sql<number | null>`hist.play_count`.as('spotify_history_play_count'),
     ])
-    .where('spotify_track_name', '!=', '')
-    .where('spotify_artist_name', '!=', '')
+    .where(sql<boolean>`COALESCE(t.spotify_track_name, hist.name, '') <> ''`)
+    .where(sql<boolean>`COALESCE(t.spotify_artist_name, hist.artist, '') <> ''`)
     .orderBy(sql`lower(COALESCE(t.spotify_artist_name, hist.artist, ''))`)
     .orderBy(sql`lower(COALESCE(t.spotify_track_name, hist.name, ''))`)
     .execute();
