@@ -671,6 +671,11 @@ function SpotifyHistory() {
           file: `https://files.enchor.us/${chart.md5}.sng`,
         };
       }),
+      ...(item.spotify_track_id != null
+        ? {
+            spotifyUrl: `https://open.spotify.com/track/${item.spotify_track_id}`,
+          }
+        : {}),
       playlistMemberships: item.playlist_memberships,
       albumMemberships: item.album_memberships,
 
