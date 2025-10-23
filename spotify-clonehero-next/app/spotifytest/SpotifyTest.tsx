@@ -258,8 +258,7 @@ async function getData() {
   const before = performance.now();
 
   const withCtes = db
-    // matched_tracks: Spotify tracks that appear in chart matches
-    .with('matched_tracks', qb =>
+    .with('spotify_tracks_with_matching_charts', qb =>
       qb
         .selectFrom('spotify_track_chart_matches as track_chart_link')
         .innerJoin(
@@ -534,8 +533,8 @@ async function getData() {
   const spotifySelect = withCtes
     .selectFrom('chart_aggregates as chart_data')
     .innerJoin(
-      'matched_tracks as track',
-      'track.spotify_track_id',
+      'spotify_tracks_with_matching_charts as spotify_track',
+      'spotify_track.spotify_track_id',
       'chart_data.spotify_track_id',
     )
     .leftJoin(
@@ -555,13 +554,13 @@ async function getData() {
     )
     .leftJoin('history_tracks as hist', join =>
       join
-        .onRef('hist.artist_normalized', '=', 'track.artist_normalized')
-        .onRef('hist.name_normalized', '=', 'track.name_normalized'),
+        .onRef('hist.artist_normalized', '=', 'spotify_track.artist_normalized')
+        .onRef('hist.name_normalized', '=', 'spotify_track.name_normalized'),
     )
     .select([
-      'track.spotify_track_id',
-      'track.spotify_track_name',
-      'track.spotify_artist_name',
+      'spotify_track.spotify_track_id',
+      'spotify_track.spotify_track_name',
+      'spotify_track.spotify_artist_name',
       sql<number>`COALESCE(installed_flag.is_any_local_chart_installed, 0)`.as(
         'is_any_local_chart_installed',
       ),
@@ -583,7 +582,7 @@ async function getData() {
     .where('spotify_track_name', '!=', '')
     .where('spotify_artist_name', '!=', '');
 
-  const result = await spotifySelect
+  const query = spotifySelect
     // Final (part 2): history-only tracks with matching charts (not present above)
     .unionAll(qb =>
       qb
@@ -610,7 +609,7 @@ async function getData() {
           eb.not(
             eb.exists(
               eb
-                .selectFrom('matched_tracks as mt')
+                .selectFrom('spotify_tracks_with_matching_charts as mt')
                 .select('mt.spotify_track_id')
                 .whereRef(
                   'mt.artist_normalized',
@@ -641,8 +640,11 @@ async function getData() {
         ]),
     )
     .orderBy('spotify_artist_name')
-    .orderBy('spotify_track_name')
-    .execute();
+    .orderBy('spotify_track_name');
+
+  console.log(query.compile());
+
+  const result = await query.execute();
 
   const after = performance.now();
   console.log('query time', after - before, 'ms');
