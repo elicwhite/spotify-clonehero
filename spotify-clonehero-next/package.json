@@ -14,7 +14,7 @@
     "update:db-types": "kysely-codegen --out-file ./lib/local-db/types.ts"
   },
   "dependencies": {
-    "@eliwhite/scan-chart": "7.0.2",
+    "@eliwhite/scan-chart": "7.1.0",
     "@headlessui/react": "^1.7.17",
     "@next/third-parties": "15.5.3",
     "@radix-ui/react-alert-dialog": "^1.1.15",
