@@ -1,6 +1,10 @@
 import {searchEncore} from '@/lib/search-encore';
 import Search from './Search';
 
+export const metadata = {
+  title: 'Sheet Music for Drums',
+};
+
 export default async function Page({
   searchParams,
 }: {
