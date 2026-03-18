@@ -10,7 +10,9 @@
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": true,
     "network": {
-      "allowedDomains": ["http://registry.npmjs.org/"]
+      "allowedDomains": [
+        "http://registry.npmjs.org/"
+      ]
     },
     "filesystem": {
       "allowWrite": [

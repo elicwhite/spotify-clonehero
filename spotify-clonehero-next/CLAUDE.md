@@ -1,122 +1,127 @@
 # Music Charts Tools (spotify-clonehero-next)
 
-Next.js 15 app with multiple Clone Hero tools. The drum transcription feature is the primary active development area.
+Next.js 15 app with Clone Hero chart tools. Active development: adding a drum transcription feature as a new page at `/drum-transcription`.
+
+## Getting Started
+
+```bash
+yarn install
+yarn dev        # Start dev server
+yarn test       # Run Jest tests
+yarn lint       # ESLint
+```
 
 ## Tech Stack
 
 - **Framework:** Next.js 15 (App Router) + React 19 + TypeScript (strict)
-- **Styling:** Tailwind CSS + shadcn/ui (Radix primitives)
-- **Database:** SQLocal (SQLite in OPFS) + Kysely (type-safe queries)
-- **Charts:** `@eliwhite/scan-chart` (parse .chart/.mid), `parse-sng` (parse .sng archives)
-- **3D Preview:** THREE.js (Clone Hero highway renderer)
-- **Notation:** VexFlow (sheet music rendering)
-- **Auth:** Supabase
+- **Package manager:** yarn
+- **Styling:** Tailwind CSS + shadcn/ui (Radix primitives in `components/ui/`)
+- **State:** React state + context (`useState`, `useReducer`, context). No zustand or other state libraries.
+- **Database:** SQLocal (SQLite in OPFS) + Kysely
+- **Charts:** `@eliwhite/scan-chart` (parse .chart/.mid), `parse-sng` (parse .sng)
+- **3D Preview:** THREE.js highway renderer (`lib/preview/highway.ts`, `app/sheet-music/[slug]/CloneHeroRenderer.tsx`)
+- **Audio:** `AudioManager` (`lib/preview/audioManager.ts`) — Web Audio API, multiple stems, speed control
+- **Notation:** VexFlow (`app/sheet-music/[slug]/SheetMusic.tsx`)
 - **Testing:** Jest
+- **Auth:** Supabase
 
 ## Drum Transcription Feature
 
-Fully browser-based drum transcription: upload a song, separate the drum stem via WebGPU-accelerated Demucs, run an ML model for automatic transcription, then edit and correct the result. The final output is a Clone Hero `.chart` file. No backend — everything runs client-side.
+Fully browser-based: upload a song → separate stems via Demucs (ONNX + WebGPU) → transcribe drums via ADTOF model (ONNX + WebGPU) → edit on a Clone Hero highway (like Moonscraper) → export as .zip or .sng.
 
-### Pipeline Overview
+### Hard Constraints
 
-1. **Audio input** — User uploads an audio file (or uses the built-in demo `drumsample.mp3`)
-2. **Stem separation** — Demucs via ONNX Runtime Web + WebGPU isolates the drum track
-3. **Automatic transcription** — Drum transcription ML model via ONNX Runtime Web + WebGPU
-4. **Human editing** — Web-based editor for reviewing and correcting the transcription
-5. **Export** — Download as a packaged Clone Hero archive (.zip or .sng)
+- **WebGPU required.** No WASM fallback. Block access with a clear message if WebGPU is unavailable.
+- **No backend.** Everything runs client-side in the browser as a Next.js page.
+- **No zustand.** Use React state + context, same patterns as `app/sheet-music/`.
+- **No chart-preview npm package.** Use the project's own `CloneHeroRenderer.tsx` and `lib/preview/highway.ts`.
+- **AudioManager is the primary audio source.** WaveSurfer is for waveform visualization and seeking only, not playback.
+- **Editing happens on the Clone Hero highway** (like Moonscraper), not on a separate grid or sheet music UI.
+- **All stems stored separately** in OPFS: `drums.pcm`, `bass.pcm`, `other.pcm`, `vocals.pcm`. No merged `no_drums.pcm`.
+- **OPFS for storage** (`navigator.storage.getDirectory()`). No IndexedDB for audio/chart data. Namespace under `drum-transcription/` to avoid collisions.
+- **Demo audio** at `public/drumsample.mp3`.
+- **Don't duplicate code.** If a utility exists elsewhere in the project, extract it to a shared lib and update the original callsite first (in its own commit), then use it from the new code.
+- **Tests required** for all business logic. Use Jest (`yarn test`).
 
-### Architecture Constraints
-
-- **Fully browser-based.** No backend, no server logic, no CLI. Runs as a Next.js page.
-- **WebGPU first, WASM fallback.** Use ONNX Runtime Web with WebGPU EP. Fall back to WASM (in a Web Worker) when WebGPU is unavailable.
-- **OPFS for storage.** Use `navigator.storage.getDirectory()` for file handles. No IndexedDB for audio/chart data. Existing `lib/fileSystemHelpers.ts` patterns.
-- **Demo audio included.** `public/drumsample.mp3` ships as a default demo.
-- **Cross-origin headers** already configured in `next.config.js` for SharedArrayBuffer.
-
-### Key Existing Utilities to Reuse
-
-| Utility | Location | Use |
-|---------|----------|-----|
-| Chart parsing | `@eliwhite/scan-chart` | `parseChartFile()`, `NoteEvent`, `noteTypes`, `noteFlags` |
-| SNG parsing | `parse-sng` | Extract `.sng` archives |
-| Tick↔ms conversion | `app/sheet-music/[slug]/chartUtils.ts` | `tickToMs()` |
-| Drum lane mapping | `lib/fill-detector/drumLaneMap.ts` | `NoteType` → drum voice |
-| VexFlow conversion | `app/sheet-music/[slug]/convertToVexflow.ts` | Chart → notation |
-| OPFS helpers | `lib/fileSystemHelpers.ts` | `writeFile()`, `readJsonFile()`, `readTextFile()` |
-| Audio playback | `lib/preview/audioManager.ts` | Web Audio API + playback speed |
-| Chart loading | `lib/preview/chorus-chart-processing.ts` | `getChartAndAudioFiles()` |
-| INI parsing | `lib/ini-parser.ts` | Parse `song.ini` |
-| Fill detection | `lib/fill-detector/` | Drum fill analysis |
-| UI components | `components/ui/` | shadcn/ui (Button, Dialog, Card, etc.) |
-
-### New Code Locations
+### Code Locations
 
 ```
-app/drum-transcription/          # Next.js page + components
-  page.tsx                       # Entry page
-  components/                    # Editor UI components
-lib/drum-transcription/          # Core logic (chart I/O, ML, audio processing)
-  chart-io/                      # .chart writer, timing, validation
-  ml/                            # ONNX runtime, Demucs, transcription model
-  audio/                         # Audio decoding, STFT/iSTFT, WAV encoding
-  export/                        # ZIP/SNG packaging
-  storage/                       # OPFS project management
+app/drum-transcription/            # Next.js page + React components
+  page.tsx                         # Entry: upload → process → edit
+  components/                      # UI components (EditorApp, AudioUploader, etc.)
+  contexts/                        # React context (EditorContext)
+  hooks/                           # useEditorState, useUndoRedo
+  commands.ts                      # Undo/redo command pattern
+
+lib/drum-transcription/            # Core logic (testable, no React)
+  chart-io/                        # .chart writer, reader, timing, validation, types
+  ml/                              # ONNX runtime (WebGPU only), Demucs, ADTOF transcriber
+  audio/                           # Decoder, STFT/iSTFT (fft.js), WAV encoder
+  export/                          # ZIP (fflate), SNG packaging
+  storage/                         # OPFS project management
+  __tests__/                       # Jest tests
 ```
+
+### Existing Utilities — Reuse, Don't Reimplement
+
+| Need | Location |
+|------|----------|
+| Chart parsing, types (`NoteEvent`, `noteTypes`, `noteFlags`) | `@eliwhite/scan-chart` |
+| SNG parsing | `parse-sng` |
+| Tick → ms conversion | `app/sheet-music/[slug]/chartUtils.ts` → `tickToMs()` |
+| Drum note → instrument mapping | `lib/fill-detector/drumLaneMap.ts` |
+| Drum note → VexFlow notation | `app/sheet-music/[slug]/convertToVexflow.ts` |
+| OPFS file read/write | `lib/fileSystemHelpers.ts` |
+| Audio playback (primary) | `lib/preview/audioManager.ts` |
+| Highway 3D renderer | `lib/preview/highway.ts` + `app/sheet-music/[slug]/CloneHeroRenderer.tsx` |
+| Sheet music notation | `app/sheet-music/[slug]/SheetMusic.tsx` |
+| INI parsing | `lib/ini-parser.ts` |
+| UI components | `components/ui/` (shadcn: Button, Dialog, Card, Select, Slider, etc.) |
+| CSS class merging | `lib/utils.ts` → `cn()` |
+| Toasts | `sonner` (configured in root layout) |
 
 ### Reference Projects
 
-- `~/projects/demucs-next` — Browser Demucs via ONNX + WebGPU. Key files: `web/src/hooks/useDemucs.ts`, `web/src/utils/audio-processor.ts`, `web/src/utils/onnx-runtime.ts`
-- `~/projects/Moonscraper-Chart-Editor` — `.chart` file format reference: `ChartWriter.cs`, `ChartIOHelper.cs`
-- `~/projects/drum-transcription` — ML model README, project context
+| Project | Use |
+|---------|-----|
+| `~/projects/demucs-next` | Browser Demucs via ONNX + WebGPU. Reference for STFT/iSTFT, segmentation, ONNX session management |
+| `~/projects/ADTOF` | Drum transcription model (Frame_RNN). Must be exported to ONNX via tf2onnx |
+| `~/projects/Moonscraper-Chart-Editor` | Chart writing, highway editing UX, hotkeys, command pattern |
+| `~/projects/GuitarGame_ChartFormats` | Chart format spec (.chart, .mid, .sng, zip), audio file naming |
+| `~/projects/SngFileFormat` | SNG binary format spec + reference C# serializer |
+| `~/projects/drum-transcription` | ML model README and training context |
 
-### Clone Hero Chart Format
+## Plans
 
-Charts use a text-based `.chart` format with INI-like sections. Drum note encoding:
-
-| Note # | Meaning |
-|--------|---------|
-| 0 | Kick |
-| 1 | Red (snare) |
-| 2 | Yellow (hi-hat/tom) |
-| 3 | Blue (tom/ride) |
-| 4 | Orange (tom/crash) |
-| 32 | Double kick (Expert+) |
-| 64-68 | Pro drums cymbal markers |
-| 33-37 | Accent flags |
-| 39-43 | Ghost flags |
-
-### Export Format
-
-The final export is a **packaged archive** (`.zip` or `.sng`) containing:
-- `notes.chart` — the drum chart
-- `song.ini` — Clone Hero metadata
-- `drums.wav` — drum stem audio
-- `song.wav` — full mix or accompaniment
-
-All export code must have unit tests verifying round-trip through `scan-chart`'s `scanChartFolder` / `parse-sng`.
-
-## Workflow: Plan-Driven Development
-
-All work on the drum transcription feature follows a plan-driven workflow using `plans/`.
-
-### Plan structure
-
-```
-plans/
-  todo/         # Planned work, not yet started
-  in-progress/  # Actively being worked on
-  completed/    # Finished work
-```
-
-Plans are numbered markdown files: `0001-descriptive-name.md`.
+All work follows the plan-driven workflow in `plans/`. Read the plan before starting work.
 
 ### Rules
 
-1. **All work must have a plan.** Before writing any code, create or identify the corresponding plan in `plans/todo/`. If no plan exists for the work you're about to do, create one first.
-2. **Claim work by moving to in-progress.** When starting work on a plan, move it from `todo/` to `in-progress/`.
-3. **Commit on completion.** When a plan's work is done and verified, move it from `in-progress/` to `completed/` and create a git commit with all changes from that plan.
-4. **One plan at a time.** Only one plan should be in `in-progress/` at a time to keep commits focused.
+1. **All work must have a plan.** Find or create one in `plans/todo/` before writing code.
+2. **Claim by moving to `in-progress/`.** Only one plan in-progress at a time.
+3. **Commit on completion.** Move to `plans/completed/` and commit all changes together.
 
-### Testing
+### Current Plans (dependency order)
 
-**Tests are required for all business logic.** Any module containing logic (chart serialization, tick/time conversion, audio processing helpers, STFT/iSTFT, etc.) must have corresponding tests. Tests should be written alongside the implementation, not after. Use `yarn test` (Jest) for unit tests.
+| Plan | Description | Depends On |
+|------|-------------|------------|
+| `0001-project-scaffolding` | Page shell, dependencies, directory structure | — |
+| `0002-chart-file-writing` | .chart serializer with scan-chart round-trip tests | 0001 |
+| `0003-audio-acquisition` | File upload, Web Audio decode, OPFS storage, demo file | 0001 |
+| `0004-stem-separation` | Demucs via ONNX + WebGPU, STFT/iSTFT in JS | 0001, 0003 |
+| `0005-ml-model-integration` | ADTOF Frame_RNN via ONNX + WebGPU, post-processing | 0002, 0004 |
+| `0006-chart-preview-integration` | CloneHeroRenderer + AudioManager integration | 0002 |
+| `0007-editor-core` | Read-only editor page, SheetMusic + highway views, transport | 0005, 0006 |
+| `0007a-highway-editing` | Note editing on highway (Moonscraper-style), BPM/TS editing | 0007 |
+| `0007b-editor-workflow` | Confidence viz, undo/redo, auto-save, stem volume controls | 0007a |
+| `0008-pipeline-orchestration` | End-to-end flow: upload → process → edit → export | 0003-0007 |
+| `0009-chart-export-packaging` | ZIP export with chart + stems + song.ini | 0002, 0007 |
+| `0010-sng-export` | SNG binary export | 0009 |
+
+### Parallelizable Work
+
+After 0001, these tracks can proceed in parallel:
+- **Track A:** 0002 (chart I/O) → 0006 (preview integration)
+- **Track B:** 0003 (audio input) → 0004 (Demucs) → 0005 (ADTOF)
+
+Both tracks merge at 0007 (editor core).
