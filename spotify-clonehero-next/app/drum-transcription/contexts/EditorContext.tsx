@@ -10,7 +10,6 @@ import {
 } from 'react';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type WaveSurfer from 'wavesurfer.js';
 import type {ChartDocument, DrumNote} from '@/lib/drum-transcription/chart-io/types';
 import type {EditCommand} from '../commands';
 
@@ -142,7 +141,6 @@ export interface EditorContextValue {
   state: EditorState;
   dispatch: React.Dispatch<EditorAction>;
   audioManagerRef: RefObject<AudioManager | null>;
-  wavesurferRef: RefObject<WaveSurfer | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -363,11 +361,10 @@ const EditorContext = createContext<EditorContextValue | null>(null);
 export function EditorProvider({children}: {children: ReactNode}) {
   const [state, dispatch] = useReducer(editorReducer, initialState);
   const audioManagerRef = useRef<AudioManager | null>(null);
-  const wavesurferRef = useRef<WaveSurfer | null>(null);
 
   return (
     <EditorContext.Provider
-      value={{state, dispatch, audioManagerRef, wavesurferRef}}>
+      value={{state, dispatch, audioManagerRef}}>
       {children}
     </EditorContext.Provider>
   );

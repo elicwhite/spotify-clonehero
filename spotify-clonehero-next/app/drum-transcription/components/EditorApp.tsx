@@ -65,7 +65,8 @@ export default function EditorApp({projectId}: EditorAppProps) {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [projectMeta, setProjectMeta] = useState<ProjectMetadata | null>(null);
   const [audioMeta, setAudioMeta] = useState<AudioStorageMeta | null>(null);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioPcm, setAudioPcm] = useState<Float32Array | null>(null);
+  const [audioChannels, setAudioChannels] = useState(2);
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [rerenderKey, setRerenderKey] = useState('initial');
   const [chartText, setChartText] = useState<string>('');
@@ -188,21 +189,21 @@ export default function EditorApp({projectId}: EditorAppProps) {
         setAudioMeta(aMeta);
         setDurationSeconds(aMeta.durationMs / 1000);
 
-        // 9. Create audio blob from stored PCM for WaveSurfer visualization
+        // 9. Load raw PCM for waveform visualization
         const audioDir = await getAudioDir(projectId);
         const pcmHandle = await audioDir.getFileHandle('full.pcm');
         const pcmFile = await pcmHandle.getFile();
         const pcmData = new Float32Array(await pcmFile.arrayBuffer());
+        if (cancelled) return;
+        setAudioPcm(pcmData);
+        setAudioChannels(aMeta.channels);
 
+        // 10. Create AudioManager from the audio files
         const wavBlob = encodeWavBlob(
           pcmData,
           aMeta.sampleRate,
           aMeta.channels,
         );
-        if (cancelled) return;
-        setAudioBlob(wavBlob);
-
-        // 10. Create AudioManager from the audio files
         const wavArray = new Uint8Array(await wavBlob.arrayBuffer());
         const audioFiles = [{fileName: 'song.wav', data: wavArray}];
 
@@ -366,11 +367,12 @@ export default function EditorApp({projectId}: EditorAppProps) {
         </div>
       </div>
 
-      {/* WaveSurfer Panel */}
-      {audioBlob && (
+      {/* Waveform Panel */}
+      {audioPcm && (
         <div className="shrink-0">
           <WaveformDisplay
-            audioData={audioBlob}
+            audioData={audioPcm}
+            channels={audioChannels}
             audioManager={audioManagerRef.current}
             durationSeconds={durationSeconds}
           />
