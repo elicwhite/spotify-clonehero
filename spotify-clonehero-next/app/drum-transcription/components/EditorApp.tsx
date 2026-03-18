@@ -14,11 +14,13 @@ import {
   type ProjectMetadata,
   type AudioStorageMeta,
 } from '@/lib/drum-transcription/storage/opfs';
+import {encodeWavBlob} from '@/lib/drum-transcription/audio/wav-encoder';
 import {useEditorContext} from '../contexts/EditorContext';
 import SheetMusic from '@/app/sheet-music/[slug]/SheetMusic';
 import CloneHeroRenderer from '@/app/sheet-music/[slug]/CloneHeroRenderer';
 import TransportControls from './TransportControls';
 import WaveformDisplay from './WaveformDisplay';
+import ExportDialog from './ExportDialog';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -116,7 +118,7 @@ export default function EditorApp({projectId}: EditorAppProps) {
         const pcmData = new Float32Array(await pcmFile.arrayBuffer());
 
         // Create a WAV blob from PCM data for WaveSurfer
-        const wavBlob = pcmToWavBlob(pcmData, aMeta.sampleRate, aMeta.channels);
+        const wavBlob = encodeWavBlob(pcmData, aMeta.sampleRate, aMeta.channels);
         if (cancelled) return;
         setAudioBlob(wavBlob);
 
@@ -133,7 +135,7 @@ export default function EditorApp({projectId}: EditorAppProps) {
             const stemHandle = await stemDir.getFileHandle(`${stemName}.pcm`);
             const stemFile = await stemHandle.getFile();
             const stemPcm = new Float32Array(await stemFile.arrayBuffer());
-            const stemWav = pcmToWavBlob(
+            const stemWav = encodeWavBlob(
               stemPcm,
               aMeta.sampleRate,
               aMeta.channels,
@@ -273,6 +275,12 @@ export default function EditorApp({projectId}: EditorAppProps) {
             {projectMeta?.name ?? 'Untitled'}
           </h2>
         </div>
+        <div className="flex items-center gap-2">
+          <ExportDialog
+            projectId={projectId}
+            songName={projectMeta?.name ?? 'Untitled'}
+          />
+        </div>
       </div>
 
       {/* WaveSurfer Panel */}
@@ -358,56 +366,3 @@ async function getStemsDir(
   return projectDir.getDirectoryHandle('stems');
 }
 
-// ---------------------------------------------------------------------------
-// PCM to WAV conversion (for WaveSurfer / AudioManager)
-// ---------------------------------------------------------------------------
-
-/**
- * Convert interleaved Float32 PCM data to a WAV Blob.
- */
-function pcmToWavBlob(
-  pcmData: Float32Array,
-  sampleRate: number,
-  channels: number,
-): Blob {
-  const bytesPerSample = 2; // 16-bit
-  const dataLength = pcmData.length * bytesPerSample;
-  const headerLength = 44;
-  const buffer = new ArrayBuffer(headerLength + dataLength);
-  const view = new DataView(buffer);
-
-  // RIFF header
-  writeString(view, 0, 'RIFF');
-  view.setUint32(4, 36 + dataLength, true);
-  writeString(view, 8, 'WAVE');
-
-  // fmt chunk
-  writeString(view, 12, 'fmt ');
-  view.setUint32(16, 16, true); // chunk size
-  view.setUint16(20, 1, true); // PCM format
-  view.setUint16(22, channels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * channels * bytesPerSample, true);
-  view.setUint16(32, channels * bytesPerSample, true);
-  view.setUint16(34, bytesPerSample * 8, true);
-
-  // data chunk
-  writeString(view, 36, 'data');
-  view.setUint32(40, dataLength, true);
-
-  // Convert float32 to int16
-  const offset = 44;
-  for (let i = 0; i < pcmData.length; i++) {
-    const sample = Math.max(-1, Math.min(1, pcmData[i]));
-    const int16 = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-    view.setInt16(offset + i * 2, int16, true);
-  }
-
-  return new Blob([buffer], {type: 'audio/wav'});
-}
-
-function writeString(view: DataView, offset: number, str: string) {
-  for (let i = 0; i < str.length; i++) {
-    view.setUint8(offset + i, str.charCodeAt(i));
-  }
-}
