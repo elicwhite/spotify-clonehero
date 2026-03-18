@@ -28,6 +28,7 @@
     ; Home directory tools
     (subpath (string-append (param "HOME") "/.npm"))
     (subpath (string-append (param "HOME") "/.cache"))
+    (subpath (string-append (param "HOME") "/.webmcp"))
     (subpath (string-append (param "HOME") "/Library/Caches"))
 
     ; Devices

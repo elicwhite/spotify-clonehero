@@ -10,6 +10,7 @@ import {Button} from '@/components/ui/button';
 import {Toaster} from 'sonner';
 import HeaderAuthControls from '@/components/HeaderAuthControls';
 import {Suspense} from 'react';
+import WebMCPTools from './WebMCPTools';
 
 const fontSans = FontSans({
   subsets: ['latin'],
@@ -77,6 +78,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
           </main>
         </ContextProviders>
         <Toaster />
+        <WebMCPTools />
         <GoogleAnalytics gaId="G-LEE7EDJH14" />
       </body>
     </html>
