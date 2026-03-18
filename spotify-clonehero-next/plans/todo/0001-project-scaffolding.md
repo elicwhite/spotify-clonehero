@@ -104,21 +104,6 @@ ONNX Runtime Web is loaded from CDN (not bundled), following demucs-next's patte
 
 ## 4. Page Registration
 
-Add a card on the home page (`app/page.tsx`) linking to `/drum-transcription`:
-
-```tsx
-<Link href="/drum-transcription">
-  <Card>
-    <CardHeader>
-      <CardTitle>Drum Transcription</CardTitle>
-      <CardDescription>
-        Upload a song, separate drums, auto-transcribe, and export as a Clone Hero chart
-      </CardDescription>
-    </CardHeader>
-  </Card>
-</Link>
-```
-
 The page is a client component (`'use client'`) since it uses Web Audio API, ONNX Runtime, OPFS, and canvas rendering.
 
 ---
