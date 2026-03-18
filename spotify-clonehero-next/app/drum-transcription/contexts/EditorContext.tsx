@@ -193,8 +193,10 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
     case 'SET_CHART_DOC':
       return {...state, chartDoc: action.chartDoc};
     case 'SET_PLAYING':
+      if (state.isPlaying === action.isPlaying) return state;
       return {...state, isPlaying: action.isPlaying};
     case 'SET_CURRENT_TIME':
+      if (state.currentTimeMs === action.timeMs) return state;
       return {...state, currentTimeMs: action.timeMs};
     case 'SET_PLAYBACK_SPEED':
       return {...state, playbackSpeed: action.speed};

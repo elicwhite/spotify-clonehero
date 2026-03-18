@@ -82,7 +82,7 @@ export function useEditorKeyboard(onSave?: () => void) {
       if (!track || state.confidence.size === 0) return;
 
       const threshold = state.confidenceThreshold;
-      const currentMs = state.currentTimeMs;
+      const currentMs = (audioManagerRef.current?.currentTime ?? 0) * 1000;
 
       // Build timed tempos for tick->ms conversion
       if (!state.chartDoc) return;
@@ -149,7 +149,6 @@ export function useEditorKeyboard(onSave?: () => void) {
       getExpertTrack,
       state.confidence,
       state.confidenceThreshold,
-      state.currentTimeMs,
       state.chartDoc,
       audioManagerRef,
       dispatch,
@@ -255,8 +254,10 @@ export function useEditorKeyboard(onSave?: () => void) {
             state.chartDoc.resolution,
           );
           const resolution = state.chartDoc.resolution;
+          const currentMs =
+            (audioManagerRef.current?.currentTime ?? 0) * 1000;
           const cursorTick = snapToGrid(
-            msToTick(state.currentTimeMs, timedTempos, resolution),
+            msToTick(currentMs, timedTempos, resolution),
             resolution,
             state.gridDivision === 0 ? 1 : state.gridDivision,
           );
@@ -433,7 +434,6 @@ export function useEditorKeyboard(onSave?: () => void) {
     state.selectedNoteIds,
     state.chartDoc,
     state.clipboard,
-    state.currentTimeMs,
     state.gridDivision,
     state.confidence,
     state.confidenceThreshold,

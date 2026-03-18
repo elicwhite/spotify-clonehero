@@ -34,7 +34,7 @@ export default function LoopControls({
   const {state, dispatch} = useEditorContext();
 
   const setLoopStart = useCallback(() => {
-    const currentMs = state.currentTimeMs;
+    const currentMs = audioManager.currentTime * 1000;
     const endMs = state.loopRegion?.endMs ?? currentMs + 4000;
 
     const region = {startMs: currentMs, endMs: Math.max(currentMs + 100, endMs)};
@@ -47,10 +47,10 @@ export default function LoopControls({
       startTimeMs: Math.max(0, region.startMs - 2000),
       endTimeMs: region.endMs,
     });
-  }, [state.currentTimeMs, state.loopRegion, audioManager, dispatch]);
+  }, [state.loopRegion, audioManager, dispatch]);
 
   const setLoopEnd = useCallback(() => {
-    const currentMs = state.currentTimeMs;
+    const currentMs = audioManager.currentTime * 1000;
     const startMs = state.loopRegion?.startMs ?? Math.max(0, currentMs - 4000);
 
     const region = {startMs: Math.min(startMs, currentMs - 100), endMs: currentMs};
@@ -62,7 +62,7 @@ export default function LoopControls({
       startTimeMs: Math.max(0, region.startMs - 2000),
       endTimeMs: region.endMs,
     });
-  }, [state.currentTimeMs, state.loopRegion, audioManager, dispatch]);
+  }, [state.loopRegion, audioManager, dispatch]);
 
   const clearLoop = useCallback(() => {
     dispatch({type: 'SET_LOOP_REGION', region: null});

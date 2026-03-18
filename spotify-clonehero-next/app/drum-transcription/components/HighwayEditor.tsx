@@ -109,9 +109,10 @@ export default function HighwayEditor({
   const [dragStart, setDragStart] = useState<{x: number; y: number} | null>(
     null,
   );
-  const [dragCurrent, setDragCurrent] = useState<{x: number; y: number} | null>(
-    null,
-  );
+  const [dragCurrent, setDragCurrent] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [isErasing, setIsErasing] = useState(false);
 
   // Popover state for BPM/TimeSig editing
@@ -144,48 +145,38 @@ export default function HighwayEditor({
 
   // ---------------------------------------------------------------------------
   // Coordinate mapping
+  //
+  // IMPORTANT: yToMs and tickToY read the current playback time from
+  // audioManager.currentTime directly rather than React state. This means
+  // these functions do NOT need to be recreated when the time changes,
+  // preventing the overlay useEffect from tearing down and restarting
+  // its requestAnimationFrame loop every frame.
   // ---------------------------------------------------------------------------
 
   /** Map pixel X position on the overlay to a lane index (0-4). */
-  const xToLane = useCallback(
-    (x: number): number => {
-      const canvas = overlayRef.current;
-      if (!canvas) return 0;
-      const laneWidth = canvas.width / NUM_LANES;
-      return Math.max(0, Math.min(NUM_LANES - 1, Math.floor(x / laneWidth)));
-    },
-    [],
-  );
+  const xToLane = useCallback((x: number): number => {
+    const canvas = overlayRef.current;
+    if (!canvas) return 0;
+    const laneWidth = canvas.width / NUM_LANES;
+    return Math.max(0, Math.min(NUM_LANES - 1, Math.floor(x / laneWidth)));
+  }, []);
 
   /**
-   * Map pixel Y position on the overlay to a tick position.
+   * Map pixel Y position on the overlay to a ms timestamp.
    *
-   * The highway scrolls based on audioManager.currentTime. The hit box
-   * (bottom) is at the current time, and notes scroll down toward it.
-   * Y=bottom of canvas corresponds to currentTimeMs.
-   * Y=top of canvas corresponds to a time further in the future.
-   *
-   * The highway renderer positions notes at:
-   *   notesGroup.position.y = (msTime / 1000) * highwaySpeed - 1
-   * And scrolls the group by:
-   *   highwayGroups.position.y = -1 * (elapsedTime / 1000) * highwaySpeed
-   *
-   * For the overlay, we approximate:
-   * - The visible range spans roughly 2 seconds of audio
-   * - bottom = current time, top = current time + visible window
+   * Reads currentTime from audioManager directly (not React state)
+   * so this callback is stable and doesn't trigger re-renders.
    */
   const yToMs = useCallback(
     (y: number): number => {
       const canvas = overlayRef.current;
       if (!canvas) return 0;
-      const currentMs = state.currentTimeMs;
-      // The highway shows ~2.5s of content from bottom to top
+      const currentMs = audioManager.currentTime * 1000;
       const visibleWindowMs = 2500;
-      // Y=0 is top (future), Y=height is bottom (current time)
       const fraction = 1 - y / canvas.height;
       return currentMs + fraction * visibleWindowMs;
     },
-    [state.currentTimeMs],
+    [audioManager],
   );
 
   const yToTick = useCallback(
@@ -201,6 +192,8 @@ export default function HighwayEditor({
 
   /**
    * Reverse: map a tick to a Y pixel position on the overlay canvas.
+   *
+   * Reads currentTime from audioManager directly so this callback is stable.
    */
   const tickToY = useCallback(
     (tick: number): number => {
@@ -218,12 +211,12 @@ export default function HighwayEditor({
         tempo.msTime +
         ((tick - tempo.tick) * 60000) / (tempo.bpm * resolution);
 
-      const currentMs = state.currentTimeMs;
+      const currentMs = audioManager.currentTime * 1000;
       const visibleWindowMs = 2500;
       const fraction = (ms - currentMs) / visibleWindowMs;
       return canvas.height * (1 - fraction);
     },
-    [timedTempos, resolution, state.currentTimeMs],
+    [timedTempos, resolution, audioManager],
   );
 
   // ---------------------------------------------------------------------------
@@ -265,7 +258,9 @@ export default function HighwayEditor({
   // Mouse handlers
   // ---------------------------------------------------------------------------
 
-  const getCanvasCoords = (e: ReactMouseEvent<HTMLCanvasElement>): {x: number; y: number} => {
+  const getCanvasCoords = (
+    e: ReactMouseEvent<HTMLCanvasElement>,
+  ): {x: number; y: number} => {
     const canvas = overlayRef.current!;
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
@@ -438,8 +433,7 @@ export default function HighwayEditor({
           const dy = coords.y - dragStart.y;
           // Only apply if moved more than a small threshold
           if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-            const laneDelta =
-              xToLane(coords.x) - xToLane(dragStart.x);
+            const laneDelta = xToLane(coords.x) - xToLane(dragStart.x);
             const startTick = yToTick(dragStart.y);
             const endTick = yToTick(coords.y);
             const tickDelta = endTick - startTick;
@@ -557,7 +551,49 @@ export default function HighwayEditor({
   };
 
   // ---------------------------------------------------------------------------
+  // Refs that mirror state for use inside the draw loop.
+  //
+  // The overlay's requestAnimationFrame loop needs to read current values of
+  // state that changes frequently (hover, drag, selection, tool, etc.) WITHOUT
+  // the useEffect being torn down and restarted every time those values change.
+  // We keep refs in sync via simple assignments and read them in draw().
+  // ---------------------------------------------------------------------------
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const hoverLaneRef = useRef(hoverLane);
+  hoverLaneRef.current = hoverLane;
+
+  const hoverTickRef = useRef(hoverTick);
+  hoverTickRef.current = hoverTick;
+
+  const dragStartRef = useRef(dragStart);
+  dragStartRef.current = dragStart;
+
+  const dragCurrentRef = useRef(dragCurrent);
+  dragCurrentRef.current = dragCurrent;
+
+  const isDraggingRef = useRef(isDragging);
+  isDraggingRef.current = isDragging;
+
+  const expertNotesRef = useRef(expertNotes);
+  expertNotesRef.current = expertNotes;
+
+  const timedTemposRef = useRef(timedTempos);
+  timedTemposRef.current = timedTempos;
+
+  const resolutionRef = useRef(resolution);
+  resolutionRef.current = resolution;
+
+  // ---------------------------------------------------------------------------
   // Overlay rendering loop
+  //
+  // This runs a single requestAnimationFrame loop for the lifetime of the
+  // component. It reads all needed values from refs (synced above) and
+  // audioManager.currentTime directly, so it never needs to be torn down
+  // and restarted due to state changes. This is the key fix for the
+  // re-render loop.
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
@@ -566,7 +602,39 @@ export default function HighwayEditor({
 
     function draw() {
       const ctx = canvas!.getContext('2d');
-      if (!ctx) return;
+      if (!ctx) {
+        animFrameRef.current = requestAnimationFrame(draw);
+        return;
+      }
+
+      // Read all values from refs (no React dependency tracking)
+      const st = stateRef.current;
+      const curHoverLane = hoverLaneRef.current;
+      const curHoverTick = hoverTickRef.current;
+      const curDragStart = dragStartRef.current;
+      const curDragCurrent = dragCurrentRef.current;
+      const curIsDragging = isDraggingRef.current;
+      const notes = expertNotesRef.current;
+      const tempos = timedTemposRef.current;
+      const res = resolutionRef.current;
+      const currentMs = audioManager.currentTime * 1000;
+
+      // Local tickToY that reads from the captured values
+      function localTickToY(tick: number): number {
+        if (!canvas || tempos.length === 0) return 0;
+        let tempoIdx = 0;
+        for (let i = 1; i < tempos.length; i++) {
+          if (tempos[i].tick <= tick) tempoIdx = i;
+          else break;
+        }
+        const tempo = tempos[tempoIdx];
+        const ms =
+          tempo.msTime +
+          ((tick - tempo.tick) * 60000) / (tempo.bpm * res);
+        const visibleWindowMs = 2500;
+        const fraction = (ms - currentMs) / visibleWindowMs;
+        return canvas.height * (1 - fraction);
+      }
 
       const w = canvas!.width;
       const h = canvas!.height;
@@ -586,14 +654,14 @@ export default function HighwayEditor({
       }
 
       // Draw confidence overlays and review indicators
-      if (state.showConfidence && state.confidence.size > 0) {
-        for (const note of expertNotes) {
+      if (st.showConfidence && st.confidence.size > 0) {
+        for (const note of notes) {
           const lane = typeToLane(note.type);
-          const y = tickToY(note.tick);
+          const y = localTickToY(note.tick);
           if (y < -20 || y > h + 20) continue;
 
           const id = noteId(note);
-          const conf = state.confidence.get(id);
+          const conf = st.confidence.get(id);
 
           if (conf !== undefined && conf < 0.9) {
             const cx = lane * laneWidth + laneWidth / 2;
@@ -611,7 +679,7 @@ export default function HighwayEditor({
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
               ctx.fillText('?', cx, y);
-            } else if (conf < state.confidenceThreshold) {
+            } else if (conf < st.confidenceThreshold) {
               // Low: amber glow
               ctx.strokeStyle = 'rgba(245, 158, 11, 0.6)';
               ctx.lineWidth = 2;
@@ -631,12 +699,12 @@ export default function HighwayEditor({
       }
 
       // Draw review indicators (small green check mark)
-      if (state.reviewedNoteIds.size > 0) {
-        for (const note of expertNotes) {
+      if (st.reviewedNoteIds.size > 0) {
+        for (const note of notes) {
           const id = noteId(note);
-          if (!state.reviewedNoteIds.has(id)) continue;
+          if (!st.reviewedNoteIds.has(id)) continue;
           const lane = typeToLane(note.type);
-          const y = tickToY(note.tick);
+          const y = localTickToY(note.tick);
           if (y < -20 || y > h + 20) continue;
 
           // Green dot at bottom-right of note
@@ -649,43 +717,33 @@ export default function HighwayEditor({
       }
 
       // Draw selection highlights
-      if (state.selectedNoteIds.size > 0) {
-        for (const note of expertNotes) {
-          if (!state.selectedNoteIds.has(noteId(note))) continue;
+      if (st.selectedNoteIds.size > 0) {
+        for (const note of notes) {
+          if (!st.selectedNoteIds.has(noteId(note))) continue;
           const lane = typeToLane(note.type);
-          const y = tickToY(note.tick);
+          const y = localTickToY(note.tick);
           if (y < -20 || y > h + 20) continue;
 
           ctx.fillStyle = SELECTION_COLOR;
-          ctx.fillRect(
-            lane * laneWidth + 2,
-            y - 8,
-            laneWidth - 4,
-            16,
-          );
+          ctx.fillRect(lane * laneWidth + 2, y - 8, laneWidth - 4, 16);
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
           ctx.lineWidth = 1.5;
-          ctx.strokeRect(
-            lane * laneWidth + 2,
-            y - 8,
-            laneWidth - 4,
-            16,
-          );
+          ctx.strokeRect(lane * laneWidth + 2, y - 8, laneWidth - 4, 16);
         }
       }
 
       // Draw ghost note preview (Place mode)
       if (
-        state.activeTool === 'place' &&
-        hoverLane !== null &&
-        hoverTick !== null
+        st.activeTool === 'place' &&
+        curHoverLane !== null &&
+        curHoverTick !== null
       ) {
-        const y = tickToY(hoverTick);
+        const y = localTickToY(curHoverTick);
         if (y > 0 && y < h) {
-          ctx.fillStyle = LANE_COLORS[hoverLane];
+          ctx.fillStyle = LANE_COLORS[curHoverLane];
           ctx.beginPath();
           ctx.ellipse(
-            hoverLane * laneWidth + laneWidth / 2,
+            curHoverLane * laneWidth + laneWidth / 2,
             y,
             laneWidth / 3,
             6,
@@ -699,15 +757,15 @@ export default function HighwayEditor({
 
       // Draw box selection rectangle (Cursor mode)
       if (
-        state.activeTool === 'cursor' &&
-        dragStart &&
-        dragCurrent &&
-        !isDragging
+        st.activeTool === 'cursor' &&
+        curDragStart &&
+        curDragCurrent &&
+        !curIsDragging
       ) {
-        const x1 = Math.min(dragStart.x, dragCurrent.x);
-        const y1 = Math.min(dragStart.y, dragCurrent.y);
-        const bw = Math.abs(dragCurrent.x - dragStart.x);
-        const bh = Math.abs(dragCurrent.y - dragStart.y);
+        const x1 = Math.min(curDragStart.x, curDragCurrent.x);
+        const y1 = Math.min(curDragStart.y, curDragCurrent.y);
+        const bw = Math.abs(curDragCurrent.x - curDragStart.x);
+        const bh = Math.abs(curDragCurrent.y - curDragStart.y);
         if (bw > 3 || bh > 3) {
           ctx.fillStyle = BOX_SELECT_COLOR;
           ctx.fillRect(x1, y1, bw, bh);
@@ -718,28 +776,20 @@ export default function HighwayEditor({
       }
 
       // Draw hover highlight for eraser
-      if (state.activeTool === 'erase' && hoverLane !== null) {
-        const canvas2 = overlayRef.current;
-        if (canvas2) {
-          ctx.fillStyle = 'rgba(255, 0, 0, 0.15)';
-          ctx.fillRect(
-            hoverLane * laneWidth,
-            0,
-            laneWidth,
-            h,
-          );
-        }
+      if (st.activeTool === 'erase' && curHoverLane !== null) {
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.15)';
+        ctx.fillRect(curHoverLane * laneWidth, 0, laneWidth, h);
       }
 
       // Draw cursor crosshair for BPM/TimeSig modes
       if (
-        (state.activeTool === 'bpm' || state.activeTool === 'timesig') &&
-        hoverTick !== null
+        (st.activeTool === 'bpm' || st.activeTool === 'timesig') &&
+        curHoverTick !== null
       ) {
-        const y = tickToY(hoverTick);
+        const y = localTickToY(curHoverTick);
         if (y > 0 && y < h) {
           ctx.strokeStyle =
-            state.activeTool === 'bpm'
+            st.activeTool === 'bpm'
               ? 'rgba(255, 165, 0, 0.7)'
               : 'rgba(147, 112, 219, 0.7)';
           ctx.lineWidth = 2;
@@ -754,9 +804,9 @@ export default function HighwayEditor({
           ctx.fillStyle = ctx.strokeStyle;
           ctx.font = '11px monospace';
           ctx.fillText(
-            state.activeTool === 'bpm'
-              ? `BPM @ tick ${hoverTick}`
-              : `TS @ tick ${hoverTick}`,
+            st.activeTool === 'bpm'
+              ? `BPM @ tick ${curHoverTick}`
+              : `TS @ tick ${curHoverTick}`,
             4,
             y - 6,
           );
@@ -764,21 +814,25 @@ export default function HighwayEditor({
       }
 
       // Draw loop region markers
-      if (state.loopRegion) {
-        const currentMs = state.currentTimeMs;
+      if (st.loopRegion) {
         const visibleWindowMs = 2500;
 
         const startFraction =
-          (state.loopRegion.startMs - currentMs) / visibleWindowMs;
+          (st.loopRegion.startMs - currentMs) / visibleWindowMs;
         const endFraction =
-          (state.loopRegion.endMs - currentMs) / visibleWindowMs;
+          (st.loopRegion.endMs - currentMs) / visibleWindowMs;
         const startY = h * (1 - startFraction);
         const endY = h * (1 - endFraction);
 
         // Loop region background tint
         if (endY < h && startY > 0) {
           ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
-          ctx.fillRect(0, Math.max(0, endY), w, Math.min(h, startY) - Math.max(0, endY));
+          ctx.fillRect(
+            0,
+            Math.max(0, endY),
+            w,
+            Math.min(h, startY) - Math.max(0, endY),
+          );
         }
 
         // Loop start line
@@ -817,23 +871,10 @@ export default function HighwayEditor({
 
     animFrameRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [
-    state.activeTool,
-    state.selectedNoteIds,
-    state.showConfidence,
-    state.confidence,
-    state.confidenceThreshold,
-    state.reviewedNoteIds,
-    state.loopRegion,
-    state.currentTimeMs,
-    hoverLane,
-    hoverTick,
-    dragStart,
-    dragCurrent,
-    isDragging,
-    expertNotes,
-    tickToY,
-  ]);
+    // This effect intentionally has a minimal dependency array.
+    // All mutable values are read from refs inside the draw loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioManager]);
 
   // ---------------------------------------------------------------------------
   // Resize observer to keep overlay canvas sized to container

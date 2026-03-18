@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect, useRef} from 'react';
+import {memo, useEffect, useMemo, useRef} from 'react';
 import {setupRenderer} from '@/lib/preview/highway';
 import {AudioManager} from '@/lib/preview/audioManager';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
@@ -20,10 +20,14 @@ interface DrumHighwayPreviewProps {
  * reads audioManager.currentTime in its animation loop, so it stays
  * in sync with all other views automatically.
  *
+ * Wrapped in React.memo so that parent re-renders (e.g. from context
+ * state changes like currentTimeMs or selectedNoteIds) do NOT tear down
+ * the Three.js renderer as long as the props remain referentially stable.
+ *
  * Automatically finds and renders the Expert Drums track. If no drum
  * track is found, displays a placeholder message.
  */
-export default function DrumHighwayPreview({
+const DrumHighwayPreview = memo(function DrumHighwayPreview({
   metadata,
   chart,
   audioManager,
@@ -33,9 +37,13 @@ export default function DrumHighwayPreview({
   const canvasRef = useRef<HTMLDivElement>(null!);
   const rendererRef = useRef<ReturnType<typeof setupRenderer> | null>(null);
 
-  // Find the expert drums track
-  const drumTrack = chart.trackData.find(
-    t => t.instrument === 'drums' && t.difficulty === 'expert',
+  // Memoize so the reference is stable when chart hasn't changed.
+  const drumTrack = useMemo(
+    () =>
+      chart.trackData.find(
+        t => t.instrument === 'drums' && t.difficulty === 'expert',
+      ),
+    [chart],
   );
 
   useEffect(() => {
@@ -77,4 +85,6 @@ export default function DrumHighwayPreview({
       <div ref={canvasRef} className="h-full w-full" />
     </div>
   );
-}
+});
+
+export default DrumHighwayPreview;
