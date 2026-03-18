@@ -35,3 +35,48 @@ export function useExecuteCommand() {
 
   return executeCommand;
 }
+
+/**
+ * Hook that provides undo and redo functions.
+ *
+ * Undo pops the last command from the undo stack and restores the
+ * previous chart document. Redo re-applies the last undone command.
+ */
+export function useUndoRedo() {
+  const {state, dispatch} = useEditorContext();
+
+  const undo = useCallback(() => {
+    if (state.undoStack.length === 0 || state.undoDocStack.length === 0) return;
+
+    // The previous doc is stored in undoDocStack
+    const prevDoc = state.undoDocStack[state.undoDocStack.length - 1];
+    const prevChart = chartDocumentToParsedChart(prevDoc);
+
+    dispatch({
+      type: 'UNDO',
+      chart: prevChart,
+      chartDoc: prevDoc,
+    });
+  }, [state.undoStack, state.undoDocStack, dispatch]);
+
+  const redo = useCallback(() => {
+    if (state.redoStack.length === 0 || state.redoDocStack.length === 0) return;
+
+    // The redo doc is stored in redoDocStack
+    const redoDoc = state.redoDocStack[state.redoDocStack.length - 1];
+    const redoChart = chartDocumentToParsedChart(redoDoc);
+
+    dispatch({
+      type: 'REDO',
+      chart: redoChart,
+      chartDoc: redoDoc,
+    });
+  }, [state.redoStack, state.redoDocStack, dispatch]);
+
+  return {
+    undo,
+    redo,
+    canUndo: state.undoStack.length > 0,
+    canRedo: state.redoStack.length > 0,
+  };
+}

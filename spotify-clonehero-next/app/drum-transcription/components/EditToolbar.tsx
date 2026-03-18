@@ -7,6 +7,8 @@ import {
   Activity,
   Timer,
   Grid3X3,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {
@@ -23,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {useEditorContext, type ToolMode} from '../contexts/EditorContext';
+import {useUndoRedo} from '../hooks/useEditCommands';
 import {cn} from '@/lib/utils';
 
 const TOOL_ITEMS: {
@@ -53,10 +56,12 @@ interface EditToolbarProps {
 }
 
 /**
- * Toolbar for selecting the active editing tool and grid snap division.
+ * Toolbar for selecting the active editing tool, grid snap division,
+ * and undo/redo controls.
  */
 export default function EditToolbar({className}: EditToolbarProps) {
   const {state, dispatch} = useEditorContext();
+  const {undo, redo, canUndo, canRedo} = useUndoRedo();
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -65,6 +70,38 @@ export default function EditToolbar({className}: EditToolbarProps) {
           'flex items-center gap-1 rounded-lg border bg-background px-2 py-1',
           className,
         )}>
+        {/* Undo/Redo buttons */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              disabled={!canUndo}
+              onClick={undo}>
+              <Undo2 className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Undo (Ctrl+Z)</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              disabled={!canRedo}
+              onClick={redo}>
+              <Redo2 className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Redo (Ctrl+Shift+Z)</TooltipContent>
+        </Tooltip>
+
+        {/* Separator */}
+        <div className="mx-1 h-6 w-px bg-border" />
+
         {/* Tool mode buttons */}
         {TOOL_ITEMS.map(({mode, icon: Icon, label, shortcut}) => (
           <Tooltip key={mode}>
@@ -120,9 +157,17 @@ export default function EditToolbar({className}: EditToolbarProps) {
 
         {/* Dirty indicator */}
         {state.dirty && (
-          <span className="ml-2 text-xs text-muted-foreground">
-            (unsaved)
-          </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="ml-2 flex items-center gap-1 text-xs text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                Unsaved
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              Unsaved changes. Press Ctrl+S to save.
+            </TooltipContent>
+          </Tooltip>
         )}
       </div>
     </TooltipProvider>

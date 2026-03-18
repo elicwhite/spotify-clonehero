@@ -585,6 +585,69 @@ export default function HighwayEditor({
         ctx.stroke();
       }
 
+      // Draw confidence overlays and review indicators
+      if (state.showConfidence && state.confidence.size > 0) {
+        for (const note of expertNotes) {
+          const lane = typeToLane(note.type);
+          const y = tickToY(note.tick);
+          if (y < -20 || y > h + 20) continue;
+
+          const id = noteId(note);
+          const conf = state.confidence.get(id);
+
+          if (conf !== undefined && conf < 0.9) {
+            const cx = lane * laneWidth + laneWidth / 2;
+
+            if (conf < 0.5) {
+              // Very low: red pulsing glow
+              ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.arc(cx, y, laneWidth / 3 + 3, 0, Math.PI * 2);
+              ctx.stroke();
+              // ? overlay
+              ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
+              ctx.font = 'bold 10px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('?', cx, y);
+            } else if (conf < state.confidenceThreshold) {
+              // Low: amber glow
+              ctx.strokeStyle = 'rgba(245, 158, 11, 0.6)';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.arc(cx, y, laneWidth / 3 + 2, 0, Math.PI * 2);
+              ctx.stroke();
+            } else {
+              // Medium: slight amber tint
+              ctx.strokeStyle = 'rgba(245, 158, 11, 0.3)';
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.arc(cx, y, laneWidth / 3 + 1, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+          }
+        }
+      }
+
+      // Draw review indicators (small green check mark)
+      if (state.reviewedNoteIds.size > 0) {
+        for (const note of expertNotes) {
+          const id = noteId(note);
+          if (!state.reviewedNoteIds.has(id)) continue;
+          const lane = typeToLane(note.type);
+          const y = tickToY(note.tick);
+          if (y < -20 || y > h + 20) continue;
+
+          // Green dot at bottom-right of note
+          const cx = lane * laneWidth + laneWidth - 6;
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.7)';
+          ctx.beginPath();
+          ctx.arc(cx, y + 4, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
       // Draw selection highlights
       if (state.selectedNoteIds.size > 0) {
         for (const note of expertNotes) {
@@ -700,6 +763,55 @@ export default function HighwayEditor({
         }
       }
 
+      // Draw loop region markers
+      if (state.loopRegion) {
+        const currentMs = state.currentTimeMs;
+        const visibleWindowMs = 2500;
+
+        const startFraction =
+          (state.loopRegion.startMs - currentMs) / visibleWindowMs;
+        const endFraction =
+          (state.loopRegion.endMs - currentMs) / visibleWindowMs;
+        const startY = h * (1 - startFraction);
+        const endY = h * (1 - endFraction);
+
+        // Loop region background tint
+        if (endY < h && startY > 0) {
+          ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+          ctx.fillRect(0, Math.max(0, endY), w, Math.min(h, startY) - Math.max(0, endY));
+        }
+
+        // Loop start line
+        if (startY > 0 && startY < h) {
+          ctx.strokeStyle = 'rgba(59, 130, 246, 0.7)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(0, startY);
+          ctx.lineTo(w, startY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = 'rgba(59, 130, 246, 0.8)';
+          ctx.font = '10px sans-serif';
+          ctx.fillText('A', 4, startY - 4);
+        }
+
+        // Loop end line
+        if (endY > 0 && endY < h) {
+          ctx.strokeStyle = 'rgba(59, 130, 246, 0.7)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(0, endY);
+          ctx.lineTo(w, endY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = 'rgba(59, 130, 246, 0.8)';
+          ctx.font = '10px sans-serif';
+          ctx.fillText('B', 4, endY - 4);
+        }
+      }
+
       animFrameRef.current = requestAnimationFrame(draw);
     }
 
@@ -708,6 +820,12 @@ export default function HighwayEditor({
   }, [
     state.activeTool,
     state.selectedNoteIds,
+    state.showConfidence,
+    state.confidence,
+    state.confidenceThreshold,
+    state.reviewedNoteIds,
+    state.loopRegion,
+    state.currentTimeMs,
     hoverLane,
     hoverTick,
     dragStart,

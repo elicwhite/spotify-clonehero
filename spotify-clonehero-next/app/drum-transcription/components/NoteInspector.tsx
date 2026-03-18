@@ -68,10 +68,14 @@ export default function NoteInspector({className}: NoteInspectorProps) {
   const handleToggleFlag = (flag: FlagName) => {
     const ids = selectedNotes.map(n => noteId(n));
     executeCommand(new ToggleFlagCommand(ids, flag));
+    // Mark as reviewed on edit
+    dispatch({type: 'MARK_REVIEWED', noteIds: ids});
   };
 
   const handleDelete = () => {
     const ids = new Set(selectedNotes.map(n => noteId(n)));
+    // Mark as reviewed on delete
+    dispatch({type: 'MARK_REVIEWED', noteIds: Array.from(ids)});
     executeCommand(new DeleteNotesCommand(ids));
     dispatch({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
   };
