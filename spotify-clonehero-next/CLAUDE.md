@@ -42,6 +42,7 @@ Fully browser-based: upload a song → separate stems via Demucs (ONNX + WebGPU)
 - **Demo audio** at `public/drumsample.mp3`.
 - **Don't duplicate code.** If a utility exists elsewhere in the project, extract it to a shared lib and update the original callsite first (in its own commit), then use it from the new code.
 - **Tests required** for all business logic. Use Jest (`yarn test`).
+- **Validate in the browser.** Use chrome-devtools MCP tools to test changes as you make them (see Browser Validation section below).
 
 ### Code Locations
 
@@ -125,3 +126,36 @@ After 0001, these tracks can proceed in parallel:
 - **Track B:** 0003 (audio input) → 0004 (Demucs) → 0005 (ADTOF)
 
 Both tracks merge at 0007 (editor core).
+
+## Browser Validation
+
+Use the **chrome-devtools MCP** tools to validate all UI work in the browser as you build it. Don't just write code and assume it works — verify it visually and functionally.
+
+### After every meaningful UI change:
+
+1. **Navigate to the page** — `navigate_page` to `http://localhost:3000/drum-transcription` (or whatever route you're working on)
+2. **Take a screenshot** — `take_screenshot` to verify the UI renders correctly and looks right
+3. **Check for console errors** — `list_console_messages` to catch React errors, failed imports, runtime exceptions, type errors, CORS issues, etc. Fix any errors before moving on.
+4. **Check network failures** — `list_network_requests` to verify assets, ONNX models, and audio files load successfully. Look for 404s, CORS blocks, or failed fetches.
+
+### When building interactive features:
+
+5. **Test user flows** — Use `click`, `fill`, `type_text`, `press_key` to simulate user interactions (clicking buttons, uploading files, pressing keyboard shortcuts)
+6. **Verify state changes** — After interactions, `take_screenshot` to confirm the UI updated correctly
+7. **Test error states** — Try invalid inputs, missing files, and edge cases. Verify error messages appear and console stays clean.
+
+### When working with audio/WebGPU:
+
+8. **Check WebGPU availability** — `evaluate_script` with `!!navigator.gpu` to verify WebGPU is available in the test browser
+9. **Monitor memory** — `take_memory_snapshot` if doing heavy processing (Demucs, ONNX inference) to check for leaks
+10. **Check OPFS operations** — `evaluate_script` to verify files were written/read correctly from OPFS
+
+### Key things to catch:
+
+- React hydration mismatches (SSR vs client)
+- Missing `'use client'` directives causing server component errors
+- Broken imports or circular dependencies
+- Canvas/WebGL rendering issues (blank highway, missing textures)
+- AudioContext errors (user gesture required, suspended context)
+- CORS errors from cross-origin headers misconfiguration
+- OPFS permission errors
