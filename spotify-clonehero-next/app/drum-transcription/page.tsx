@@ -3,6 +3,7 @@
 import {Suspense, useCallback, useEffect, useState} from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
 import {AlertTriangle, Loader2, ArrowLeft, FolderOpen} from 'lucide-react';
+import {toast} from 'sonner';
 import {
   Card,
   CardContent,
@@ -11,15 +12,20 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
-import AudioUploader, {
-  type AudioUploadResult,
-} from './components/AudioUploader';
+import AudioUploader from './components/AudioUploader';
+import ProcessingView from './components/ProcessingView';
 import EditorApp from './components/EditorApp';
 import {EditorProvider} from './contexts/EditorContext';
 import {
   listProjects,
+  getProject,
   type ProjectSummary,
 } from '@/lib/drum-transcription/storage/opfs';
+import {
+  runPipeline,
+  resumePipeline,
+  type PipelineProgress,
+} from '@/lib/drum-transcription/pipeline/runner';
 
 function useWebGPUCheck() {
   const [supported, setSupported] = useState<boolean | null>(null);
@@ -45,30 +51,176 @@ function DrumTranscriptionInner() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
 
-  // Load project list when no project is selected
+  // Pipeline state
+  const [pipelineProgress, setPipelineProgress] =
+    useState<PipelineProgress | null>(null);
+  const [pipelineAudioFile, setPipelineAudioFile] = useState<File | null>(null);
+
+  const isProcessing =
+    pipelineProgress !== null &&
+    pipelineProgress.step !== 'ready' &&
+    pipelineProgress.step !== 'error' &&
+    pipelineProgress.step !== 'idle';
+
+  // Load project list when no project is selected and not processing
   useEffect(() => {
-    if (!projectId) {
+    if (!projectId && !isProcessing) {
       setLoadingProjects(true);
       listProjects()
         .then(setProjects)
         .catch(() => setProjects([]))
         .finally(() => setLoadingProjects(false));
     }
-  }, [projectId]);
+  }, [projectId, isProcessing]);
 
-  const handleAudioReady = useCallback(
-    (result: AudioUploadResult) => {
-      router.push(`/drum-transcription?project=${result.projectId}`);
+  // Handle audio upload -> start pipeline
+  const handleStartPipeline = useCallback(
+    async (file: File) => {
+      setPipelineAudioFile(file);
+      setPipelineProgress({
+        step: 'decoding',
+        progress: 0,
+        projectName: file.name,
+      });
+
+      try {
+        const finalProjectId = await runPipeline(
+          file,
+          file.name,
+          (progress) => {
+            setPipelineProgress(progress);
+          },
+        );
+
+        // Pipeline complete -- navigate to editor
+        toast.success('Processing complete! Opening editor.');
+        setPipelineProgress(null);
+        setPipelineAudioFile(null);
+        router.push(`/drum-transcription?project=${finalProjectId}`);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Pipeline failed';
+        console.error('Pipeline error:', err);
+        setPipelineProgress((prev) => ({
+          step: 'error',
+          progress: 0,
+          projectId: prev?.projectId,
+          projectName: prev?.projectName,
+          error: message,
+        }));
+        toast.error(message);
+      }
     },
     [router],
   );
 
+  // Handle selecting an existing project
   const handleSelectProject = useCallback(
-    (id: string) => {
-      router.push(`/drum-transcription?project=${id}`);
+    async (id: string) => {
+      try {
+        const meta = await getProject(id);
+
+        // If project is already in editing stage, go straight to editor
+        if (meta.stage === 'editing' || meta.stage === 'exported') {
+          router.push(`/drum-transcription?project=${id}`);
+          return;
+        }
+
+        // Otherwise, resume the pipeline
+        setPipelineProgress({
+          step: meta.stage === 'separating' ? 'separating' : 'transcribing',
+          progress: 0,
+          projectId: id,
+          projectName: meta.name,
+        });
+
+        try {
+          await resumePipeline(id, (progress) => {
+            setPipelineProgress(progress);
+          });
+
+          toast.success('Processing complete! Opening editor.');
+          setPipelineProgress(null);
+          router.push(`/drum-transcription?project=${id}`);
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : 'Pipeline failed';
+          console.error('Resume pipeline error:', err);
+          setPipelineProgress({
+            step: 'error',
+            progress: 0,
+            projectId: id,
+            projectName: meta.name,
+            error: message,
+          });
+          toast.error(message);
+        }
+      } catch {
+        // If we can't even load the project metadata, just try the editor
+        router.push(`/drum-transcription?project=${id}`);
+      }
     },
     [router],
   );
+
+  // Handle demo button
+  const handleTryDemo = useCallback(async () => {
+    setPipelineProgress({
+      step: 'decoding',
+      progress: 0,
+      projectName: 'Demo Drum Sample',
+    });
+
+    try {
+      const response = await fetch('/drumsample.mp3');
+      if (!response.ok) {
+        throw new Error('Failed to fetch demo audio file');
+      }
+      const blob = await response.blob();
+      const file = new File([blob], 'Demo Drum Sample.mp3', {
+        type: 'audio/mpeg',
+      });
+
+      const finalProjectId = await runPipeline(
+        file,
+        file.name,
+        (progress) => {
+          setPipelineProgress(progress);
+        },
+      );
+
+      toast.success('Processing complete! Opening editor.');
+      setPipelineProgress(null);
+      router.push(`/drum-transcription?project=${finalProjectId}`);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to process demo';
+      console.error('Demo pipeline error:', err);
+      setPipelineProgress((prev) => ({
+        step: 'error',
+        progress: 0,
+        projectId: prev?.projectId,
+        projectName: prev?.projectName ?? 'Demo Drum Sample',
+        error: message,
+      }));
+      toast.error(message);
+    }
+  }, [router]);
+
+  const handleRetryPipeline = useCallback(() => {
+    if (pipelineProgress?.projectId) {
+      // Resume existing project
+      handleSelectProject(pipelineProgress.projectId);
+    } else if (pipelineAudioFile) {
+      // Re-run with the same file
+      handleStartPipeline(pipelineAudioFile);
+    }
+  }, [pipelineProgress, pipelineAudioFile, handleSelectProject, handleStartPipeline]);
+
+  const handleCancelPipeline = useCallback(() => {
+    setPipelineProgress(null);
+    setPipelineAudioFile(null);
+  }, []);
 
   const handleBackToProjects = useCallback(() => {
     router.push('/drum-transcription');
@@ -126,6 +278,19 @@ function DrumTranscriptionInner() {
     );
   }
 
+  // Processing view -- shown when pipeline is running
+  if (isProcessing || pipelineProgress?.step === 'error') {
+    return (
+      <div className="flex flex-col items-center justify-center flex-1 w-full gap-6">
+        <ProcessingView
+          progress={pipelineProgress!}
+          onRetry={handleRetryPipeline}
+          onCancel={handleCancelPipeline}
+        />
+      </div>
+    );
+  }
+
   // No project selected -- show upload + project list
   return (
     <div className="flex flex-col items-center justify-center flex-1 w-full max-w-2xl gap-6">
@@ -139,7 +304,10 @@ function DrumTranscriptionInner() {
         </p>
       </div>
 
-      <AudioUploader onAudioReady={handleAudioReady} />
+      <AudioUploader
+        onFileSelected={handleStartPipeline}
+        onTryDemo={handleTryDemo}
+      />
 
       {/* Existing projects */}
       {loadingProjects && (
@@ -162,7 +330,7 @@ function DrumTranscriptionInner() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {projects.map(project => (
+              {projects.map((project) => (
                 <button
                   key={project.id}
                   onClick={() => handleSelectProject(project.id)}
@@ -170,7 +338,7 @@ function DrumTranscriptionInner() {
                   <div>
                     <p className="text-sm font-medium">{project.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {project.stage} &middot; Updated{' '}
+                      {formatStage(project.stage)} &middot; Updated{' '}
                       {new Date(project.updatedAt).toLocaleDateString()}
                     </p>
                   </div>
@@ -193,6 +361,26 @@ function DrumTranscriptionInner() {
       </div>
     </div>
   );
+}
+
+/**
+ * Format a project stage for display.
+ */
+function formatStage(stage: string): string {
+  switch (stage) {
+    case 'uploaded':
+      return 'Uploaded (processing needed)';
+    case 'separating':
+      return 'Separating stems...';
+    case 'transcribing':
+      return 'Transcribing drums...';
+    case 'editing':
+      return 'Ready to edit';
+    case 'exported':
+      return 'Exported';
+    default:
+      return stage;
+  }
 }
 
 export default function DrumTranscriptionPage() {
