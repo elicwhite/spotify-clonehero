@@ -35,6 +35,9 @@ export default function WaveformDisplay({
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const animationFrameRef = useRef<number>(0);
+  // Guard flag: when true, seeking events from ws.seekTo() are ignored
+  // to prevent a feedback loop (animation syncs cursor -> seeking fires -> play() called)
+  const isProgrammaticSeekRef = useRef(false);
 
   // Sync WaveSurfer cursor to AudioManager's current time
   const syncCursor = useCallback(() => {
@@ -44,7 +47,10 @@ export default function WaveformDisplay({
     if (audioManager.isPlaying && audioManager.isInitialized) {
       const currentTimeSec = audioManager.currentTime;
       const progress = Math.max(0, Math.min(1, currentTimeSec / durationSeconds));
+      // Set guard flag before programmatic seek to suppress the 'seeking' event handler
+      isProgrammaticSeekRef.current = true;
       ws.seekTo(progress);
+      isProgrammaticSeekRef.current = false;
     }
 
     animationFrameRef.current = requestAnimationFrame(syncCursor);
@@ -78,8 +84,10 @@ export default function WaveformDisplay({
         : new Blob([audioData], {type: 'audio/wav'});
     ws.loadBlob(blob);
 
-    // When user clicks the waveform, seek AudioManager
+    // When user clicks the waveform, seek AudioManager.
+    // Only handle user-initiated seeks (not programmatic cursor syncs).
     ws.on('seeking', (progress: number) => {
+      if (isProgrammaticSeekRef.current) return;
       const timeSec = progress * durationSeconds;
       audioManager.play({time: timeSec});
     });

@@ -37,6 +37,11 @@ export class AudioManager {
   #lastTempoChangeRealTime: number = 0;
   #lastTempoChangeEffectiveTime: number = 0;
 
+  // Generation counter to prevent concurrent play() calls from creating
+  // orphaned audio sources. Each play() call increments this and checks
+  // it after async operations to bail out if a newer call has started.
+  #playGeneration: number = 0;
+
   ready: Promise<void>;
 
   constructor(audioFiles: Files, onSongEnded: () => void) {
@@ -238,14 +243,20 @@ export class AudioManager {
     if (percent == null && time == null) {
       throw new Error('Must provide percent or time');
     }
+
+    // Increment generation so any earlier in-flight play() call will bail out
+    // after its async operations complete.
+    const generation = ++this.#playGeneration;
+
+    // Always stop existing sources to prevent stacking audio on top of
+    // already-playing sources.
     if (this.#isInitialized) {
-      await this.stop();
+      this.stop();
     }
 
     const currentTime = this.#context.currentTime;
     const songLength = this.#duration;
     const offset: number = time ?? songLength * percent!;
-    const percentCalculated: number = percent ?? time! / songLength;
     this.#trackOffset = offset;
     this.#startedAt = currentTime;
 
@@ -261,6 +272,11 @@ export class AudioManager {
 
     if (this.#context.state === 'suspended') {
       await this.#context.resume();
+      // If a newer play() call started while we were awaiting resume(),
+      // our sources have already been stopped. Don't do anything else.
+      if (generation !== this.#playGeneration) {
+        return;
+      }
     }
   }
 
@@ -463,6 +479,11 @@ class AudioTrack {
   }
 
   start(at: number, offset: number) {
+    // Defensively stop any existing sources to prevent stacking
+    if (this.#sources.length > 0) {
+      this.stop();
+    }
+
     this.#sources = this.#audioBuffers.map((buffer, index) => {
       const source = this.#context.createBufferSource();
       source.buffer = buffer;
