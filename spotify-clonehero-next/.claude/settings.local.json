@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:pypi.org)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": true,
+    "network": {
+      "allowedDomains": ["http://registry.npmjs.org/"]
+    },
+    "filesystem": {
+      "allowWrite": [
+        ".",
+        "//private/tmp"
+      ],
+      "denyRead": [
+        "~/.ssh",
+        "~/.aws",
+        "~/.gnupg",
+        "~/.config",
+        "~/.netrc",
+        "~/.npmrc",
+        "~/.docker",
+        "~/.kube",
+        "~/.bash_history",
+        "~/.zsh_history",
+        "~/.zshrc",
+        "~/.zshenv",
+        "~/.zprofile",
+        "~/.zlogin",
+        "~/.zlogout",
+        "~/.zsh_sessions",
+        "~/.zsh"
+      ]
+    }
+  }
+}

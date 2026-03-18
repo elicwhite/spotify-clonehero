@@ -1,0 +1,59 @@
+(version 1)
+
+(allow default)
+
+; =============================================
+; Filesystem: deny all writes, then allow selectively
+; =============================================
+(deny file-write*)
+
+(allow mach-lookup (global-name "com.apple.diagnosticd"))
+
+(allow file-write*
+    ; Project directory
+    (subpath (param "PROJECT"))
+
+    ; Claude state
+    (regex (string-append "^" (param "HOME") "/\\.claude"))
+
+    ; Keychain access for Claude Code credentials
+    (subpath (string-append (param "HOME") "/Library/Keychains"))
+
+    ; Temporary directories
+    (subpath "/tmp")
+    (subpath "/var/folders")
+    (subpath "/private/tmp")
+    (subpath "/private/var/folders")
+
+    ; Home directory tools
+    (subpath (string-append (param "HOME") "/.npm"))
+    (subpath (string-append (param "HOME") "/.cache"))
+    (subpath (string-append (param "HOME") "/Library/Caches"))
+
+    ; Devices
+    (literal "/dev/stdout")
+    (literal "/dev/stderr")
+    (literal "/dev/null")
+    (literal "/dev/dtracehelper")
+    (regex #"^/dev/tty*")
+)
+
+; Prevent modification of sandbox config
+(deny file-write*
+    (literal (string-append (param "PROJECT") "/.claude/sandbox.sb"))
+)
+
+; =============================================
+; Filesystem: deny reads to sensitive dotfiles
+; =============================================
+(deny file-read*
+    (subpath (string-append (param "HOME") "/.ssh"))
+    (subpath (string-append (param "HOME") "/.aws"))
+    (subpath (string-append (param "HOME") "/.gnupg"))
+    (subpath (string-append (param "HOME") "/.docker"))
+    (subpath (string-append (param "HOME") "/.kube"))
+    (subpath (string-append (param "HOME") "/.npmrc"))
+    (subpath (string-append (param "HOME") "/.yarnrc"))
+    
+    (subpath (string-append (param "PROJECT") "/.env"))
+)
