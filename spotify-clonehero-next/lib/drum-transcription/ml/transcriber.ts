@@ -61,9 +61,8 @@ export interface DrumTranscriber {
 // ONNX Transcriber (real inference)
 // ---------------------------------------------------------------------------
 
-/** URL for the ADTOF Frame_RNN ONNX model. */
-const ADTOF_MODEL_URL =
-  'https://huggingface.co/placeholder/adtof-frame-rnn/resolve/main/frame_rnn.onnx';
+/** URL for the ADTOF Frame_RNN ONNX model (served from /public/models/). */
+const ADTOF_MODEL_URL = '/models/adtof_frame_rnn.onnx';
 
 /**
  * Real ONNX-based drum transcriber using the ADTOF Frame_RNN model.
