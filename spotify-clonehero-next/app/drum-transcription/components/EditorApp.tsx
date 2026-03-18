@@ -15,12 +15,16 @@ import {
   type AudioStorageMeta,
 } from '@/lib/drum-transcription/storage/opfs';
 import {encodeWavBlob} from '@/lib/drum-transcription/audio/wav-encoder';
+import {parsedChartToDocument} from '@/lib/drum-transcription/chart-io/parsed-to-doc';
 import {useEditorContext} from '../contexts/EditorContext';
+import {useEditorKeyboard} from '../hooks/useEditorKeyboard';
 import SheetMusic from '@/app/sheet-music/[slug]/SheetMusic';
-import CloneHeroRenderer from '@/app/sheet-music/[slug]/CloneHeroRenderer';
 import TransportControls from './TransportControls';
 import WaveformDisplay from './WaveformDisplay';
 import ExportDialog from './ExportDialog';
+import HighwayEditor from './HighwayEditor';
+import EditToolbar from './EditToolbar';
+import NoteInspector from './NoteInspector';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -44,8 +48,8 @@ interface EditorAppProps {
 
 /**
  * Top-level editor layout. Loads chart + audio from OPFS,
- * creates AudioManager, and renders SheetMusic + CloneHeroRenderer
- * side by side with transport controls.
+ * creates AudioManager, and renders the editing UI with
+ * HighwayEditor, SheetMusic, transport controls, and editing tools.
  */
 export default function EditorApp({projectId}: EditorAppProps) {
   const {state, dispatch, audioManagerRef, wavesurferRef} = useEditorContext();
@@ -56,8 +60,12 @@ export default function EditorApp({projectId}: EditorAppProps) {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [rerenderKey, setRerenderKey] = useState('initial');
+  const [chartText, setChartText] = useState<string>('');
   const animationFrameRef = useRef<number>(0);
   const lastDispatchTimeRef = useRef(0);
+
+  // Register keyboard shortcuts for editing
+  useEditorKeyboard();
 
   // Load data from OPFS
   useEffect(() => {
@@ -71,20 +79,21 @@ export default function EditorApp({projectId}: EditorAppProps) {
         setProjectMeta(meta);
 
         // 2. Load chart - prefer edited version, fall back to generated
-        let chartText: string;
+        let loadedChartText: string;
         const hasEdited = await projectFileExists(
           projectId,
           'notes.edited.chart',
         );
         if (hasEdited) {
-          chartText = await readProjectText(projectId, 'notes.edited.chart');
+          loadedChartText = await readProjectText(projectId, 'notes.edited.chart');
         } else {
-          chartText = await readProjectText(projectId, 'notes.chart');
+          loadedChartText = await readProjectText(projectId, 'notes.chart');
         }
         if (cancelled) return;
+        setChartText(loadedChartText);
 
         // 3. Parse chart
-        const chartBytes = new TextEncoder().encode(chartText);
+        const chartBytes = new TextEncoder().encode(loadedChartText);
         const parsed = parseChartFile(
           chartBytes,
           'chart',
@@ -104,7 +113,10 @@ export default function EditorApp({projectId}: EditorAppProps) {
           );
         }
 
-        // 5. Load audio metadata
+        // 5. Build editable ChartDocument from parsed chart
+        const chartDoc = parsedChartToDocument(parsed, loadedChartText);
+
+        // 6. Load audio metadata
         const aMeta = await loadAudioMeta(projectId);
         if (cancelled) return;
         setAudioMeta(aMeta);
@@ -158,8 +170,9 @@ export default function EditorApp({projectId}: EditorAppProps) {
 
         audioManagerRef.current = audioManager;
 
-        // 8. Update editor state
+        // 9. Update editor state
         dispatch({type: 'SET_CHART', chart: parsed, track: drumTrack});
+        dispatch({type: 'SET_CHART_DOC', chartDoc});
         setLoadingState('ready');
       } catch (err) {
         if (cancelled) return;
@@ -220,6 +233,13 @@ export default function EditorApp({projectId}: EditorAppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [durationSeconds]);
 
+  // Trigger SheetMusic re-render when chart changes via editing
+  useEffect(() => {
+    if (state.dirty) {
+      setRerenderKey(prev => prev + '-edited');
+    }
+  }, [state.chart, state.dirty]);
+
   // Handle measure click in SheetMusic
   const handleSelectMeasure = useCallback(
     (time: number) => {
@@ -268,14 +288,15 @@ export default function EditorApp({projectId}: EditorAppProps) {
 
   return (
     <div className="flex flex-col h-full w-full gap-2 p-2">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 rounded-lg border bg-background">
-        <div className="flex items-center gap-2">
+      {/* Toolbar row: project name + editing tools + export */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 px-2">
           <h2 className="text-sm font-semibold truncate">
             {projectMeta?.name ?? 'Untitled'}
           </h2>
         </div>
         <div className="flex items-center gap-2">
+          <EditToolbar />
           <ExportDialog
             projectId={projectId}
             songName={projectMeta?.name ?? 'Untitled'}
@@ -292,8 +313,9 @@ export default function EditorApp({projectId}: EditorAppProps) {
         />
       )}
 
-      {/* Main content: SheetMusic + CloneHeroRenderer side by side */}
+      {/* Main content: SheetMusic + HighwayEditor + NoteInspector */}
       <div className="flex flex-1 gap-2 min-h-0">
+        {/* Sheet music (read-only notation view) */}
         <div className="flex-1 min-w-0 overflow-auto">
           <SheetMusic
             chart={chart}
@@ -312,13 +334,17 @@ export default function EditorApp({projectId}: EditorAppProps) {
           />
         </div>
 
-        <div className="w-[300px] shrink-0 h-full">
-          <CloneHeroRenderer
+        {/* Highway editor (primary editing surface) + note inspector */}
+        <div className="w-[300px] shrink-0 h-full flex flex-col gap-2">
+          <HighwayEditor
             metadata={cloneHeroMetadata}
             chart={chart}
-            track={track}
             audioManager={audioManagerRef.current}
+            className="flex-1 min-h-0"
           />
+
+          {/* Note properties inspector */}
+          <NoteInspector />
         </div>
       </div>
 

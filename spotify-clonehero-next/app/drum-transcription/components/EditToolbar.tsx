@@ -1,0 +1,130 @@
+'use client';
+
+import {
+  MousePointer2,
+  Plus,
+  Eraser,
+  Activity,
+  Timer,
+  Grid3X3,
+} from 'lucide-react';
+import {Button} from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {useEditorContext, type ToolMode} from '../contexts/EditorContext';
+import {cn} from '@/lib/utils';
+
+const TOOL_ITEMS: {
+  mode: ToolMode;
+  icon: React.ElementType;
+  label: string;
+  shortcut: string;
+}[] = [
+  {mode: 'cursor', icon: MousePointer2, label: 'Cursor', shortcut: '1'},
+  {mode: 'place', icon: Plus, label: 'Place Note', shortcut: '2'},
+  {mode: 'erase', icon: Eraser, label: 'Eraser', shortcut: '3'},
+  {mode: 'bpm', icon: Activity, label: 'BPM', shortcut: '4'},
+  {mode: 'timesig', icon: Timer, label: 'Time Sig', shortcut: '5'},
+];
+
+const GRID_OPTIONS: {value: string; label: string; shortcut: string}[] = [
+  {value: '4', label: '1/4', shortcut: 'Shift+1'},
+  {value: '8', label: '1/8', shortcut: 'Shift+2'},
+  {value: '12', label: '1/12', shortcut: 'Shift+3'},
+  {value: '16', label: '1/16', shortcut: 'Shift+4'},
+  {value: '32', label: '1/32', shortcut: 'Shift+5'},
+  {value: '64', label: '1/64', shortcut: 'Shift+6'},
+  {value: '0', label: 'Free', shortcut: 'Shift+0'},
+];
+
+interface EditToolbarProps {
+  className?: string;
+}
+
+/**
+ * Toolbar for selecting the active editing tool and grid snap division.
+ */
+export default function EditToolbar({className}: EditToolbarProps) {
+  const {state, dispatch} = useEditorContext();
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <div
+        className={cn(
+          'flex items-center gap-1 rounded-lg border bg-background px-2 py-1',
+          className,
+        )}>
+        {/* Tool mode buttons */}
+        {TOOL_ITEMS.map(({mode, icon: Icon, label, shortcut}) => (
+          <Tooltip key={mode}>
+            <TooltipTrigger asChild>
+              <Button
+                variant={state.activeTool === mode ? 'secondary' : 'ghost'}
+                size="icon"
+                className={cn(
+                  'h-8 w-8',
+                  state.activeTool === mode && 'ring-1 ring-primary',
+                )}
+                onClick={() => dispatch({type: 'SET_ACTIVE_TOOL', tool: mode})}>
+                <Icon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {label} ({shortcut})
+            </TooltipContent>
+          </Tooltip>
+        ))}
+
+        {/* Separator */}
+        <div className="mx-1 h-6 w-px bg-border" />
+
+        {/* Grid snap selector */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-1">
+              <Grid3X3 className="h-4 w-4 text-muted-foreground" />
+              <Select
+                value={String(state.gridDivision)}
+                onValueChange={value =>
+                  dispatch({
+                    type: 'SET_GRID_DIVISION',
+                    division: Number(value),
+                  })
+                }>
+                <SelectTrigger className="h-8 w-[70px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {GRID_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>Grid Snap</TooltipContent>
+        </Tooltip>
+
+        {/* Dirty indicator */}
+        {state.dirty && (
+          <span className="ml-2 text-xs text-muted-foreground">
+            (unsaved)
+          </span>
+        )}
+      </div>
+    </TooltipProvider>
+  );
+}
