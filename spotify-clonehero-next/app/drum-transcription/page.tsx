@@ -1,6 +1,6 @@
 'use client';
 
-import {useCallback, useState} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import {AlertTriangle} from 'lucide-react';
 import {
   Card,
@@ -18,14 +18,10 @@ type PageState = 'upload' | 'processing' | 'editing';
 function useWebGPUCheck() {
   const [supported, setSupported] = useState<boolean | null>(null);
 
-  // Check on first render (client-side only)
-  if (supported === null && typeof navigator !== 'undefined') {
-    if ('gpu' in navigator) {
-      setSupported(true);
-    } else {
-      setSupported(false);
-    }
-  }
+  // Check after hydration to avoid server/client mismatch
+  useEffect(() => {
+    setSupported('gpu' in navigator);
+  }, []);
 
   return supported;
 }
