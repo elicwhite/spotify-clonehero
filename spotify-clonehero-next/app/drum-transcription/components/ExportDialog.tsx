@@ -28,6 +28,8 @@ import {encodeWav} from '@/lib/drum-transcription/audio/wav-encoder';
 import {serializeSongIni} from '@/lib/drum-transcription/chart-io/song-ini';
 import type {SongMetadata} from '@/lib/drum-transcription/chart-io/song-ini';
 import {exportAsZip} from '@/lib/drum-transcription/export/zip';
+import {buildSngFile} from '@/lib/drum-transcription/export/sng';
+import type {SngMetadata, SngFileEntry} from '@/lib/drum-transcription/export/sng';
 import {
   readProjectText,
   readProjectBinary,
@@ -49,17 +51,18 @@ interface ExportDialogProps {
 }
 
 type AudioFormat = 'wav';
+type PackageFormat = 'zip' | 'sng';
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 /**
- * Export dialog for downloading the chart as a .zip package.
+ * Export dialog for downloading the chart as a .zip or .sng package.
  *
- * Allows the user to select audio format and choose which audio stems
- * to include. Reads chart and audio data from OPFS, packages them
- * with fflate, and triggers a browser download.
+ * Allows the user to select package format (ZIP or SNG), audio format,
+ * and choose which audio stems to include. Reads chart and audio data
+ * from OPFS, packages them, and triggers a browser download.
  */
 export default function ExportDialog({
   projectId,
@@ -67,6 +70,7 @@ export default function ExportDialog({
   artistName,
 }: ExportDialogProps) {
   const [open, setOpen] = useState(false);
+  const [packageFormat, setPackageFormat] = useState<PackageFormat>('zip');
   const [audioFormat, setAudioFormat] = useState<AudioFormat>('wav');
   const [includeDrumStem, setIncludeDrumStem] = useState(true);
   const [includeAccompaniment, setIncludeAccompaniment] = useState(true);
@@ -166,14 +170,53 @@ export default function ExportDialog({
         }
       }
 
-      // 5. Package as ZIP
-      const zipBlob = exportAsZip(chartText, songIni, audioFiles);
+      // 5. Package as ZIP or SNG
+      let blob: Blob;
+      let extension: string;
+
+      if (packageFormat === 'sng') {
+        // Build SNG metadata from song metadata (replaces song.ini)
+        const sngMetadata: SngMetadata = {
+          name: songMetadata.name,
+          artist: songMetadata.artist,
+          album: songMetadata.album ?? '',
+          genre: songMetadata.genre ?? '',
+          year: songMetadata.year ?? '',
+          charter: songMetadata.charter ?? 'AutoDrums',
+          song_length: String(Math.round(songMetadata.durationMs)),
+          diff_drums: String(songMetadata.diffDrums ?? -1),
+          pro_drums: 'True',
+          delay: String(songMetadata.delay ?? 0),
+          preview_start_time: String(songMetadata.previewStartTime ?? -1),
+        };
+
+        // Filter out empty values (matching reference implementation)
+        const filteredMetadata: SngMetadata = {};
+        for (const [key, value] of Object.entries(sngMetadata)) {
+          if (key && value) filteredMetadata[key] = value;
+        }
+
+        const sngFiles: SngFileEntry[] = [
+          {filename: 'notes.chart', data: new TextEncoder().encode(chartText)},
+        ];
+
+        for (const [name, data] of audioFiles) {
+          sngFiles.push({filename: name, data: new Uint8Array(data)});
+        }
+
+        const sngBytes = buildSngFile(filteredMetadata, sngFiles);
+        blob = new Blob([sngBytes], {type: 'application/octet-stream'});
+        extension = 'sng';
+      } else {
+        blob = exportAsZip(chartText, songIni, audioFiles);
+        extension = 'zip';
+      }
 
       // 6. Trigger browser download
-      const url = URL.createObjectURL(zipBlob);
+      const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `${songName.replace(/[^a-zA-Z0-9_-]/g, '_')}.zip`;
+      anchor.download = `${songName.replace(/[^a-zA-Z0-9_-]/g, '_')}.${extension}`;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
@@ -192,6 +235,7 @@ export default function ExportDialog({
     projectId,
     songName,
     artistName,
+    packageFormat,
     audioFormat,
     includeDrumStem,
     includeAccompaniment,
@@ -216,6 +260,24 @@ export default function ExportDialog({
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
+          {/* Package format selector */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="package-format" className="text-right">
+              Format
+            </Label>
+            <Select
+              value={packageFormat}
+              onValueChange={v => setPackageFormat(v as PackageFormat)}>
+              <SelectTrigger className="col-span-3" id="package-format">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="zip">ZIP (standard)</SelectItem>
+                <SelectItem value="sng">SNG (Clone Hero / YARG)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Audio format selector */}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="audio-format" className="text-right">
@@ -271,7 +333,7 @@ export default function ExportDialog({
             ) : (
               <>
                 <Download className="h-4 w-4 mr-1" />
-                Download .zip
+                Download .{packageFormat}
               </>
             )}
           </Button>
