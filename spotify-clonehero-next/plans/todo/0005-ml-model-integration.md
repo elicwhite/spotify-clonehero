@@ -3,89 +3,133 @@
 > **Dependencies:** 0001 (types, ONNX runtime setup), 0002 (chart writing for output), 0004 (stem separation for input)
 > **Unlocks:** 0007 (web editor - confidence data), 0008 (pipeline orchestration)
 >
-> **Integration:** Shares ONNX runtime from `lib/drum-transcription/ml/onnx-runtime.ts` with Demucs (plan 0004). Transcription pipeline in `lib/drum-transcription/ml/transcriber.ts`. Post-processing output uses chart types from `lib/drum-transcription/chart-io/types.ts`. Drum lane mapping references existing `lib/fill-detector/drumLaneMap.ts`.
+> **Integration:** Shares ONNX runtime (WebGPU only, no WASM fallback) from `lib/drum-transcription/ml/onnx-runtime.ts` with Demucs (plan 0004). Transcription pipeline in `lib/drum-transcription/ml/transcriber.ts`. Post-processing output uses chart types from `lib/drum-transcription/chart-io/types.ts`. Drum lane mapping references existing `lib/fill-detector/drumLaneMap.ts`.
 
 ## Overview
 
-Run the drum transcription ML model in the browser via ONNX Runtime Web + WebGPU. The model takes the separated drum stem from Demucs, produces per-frame multi-label predictions, and post-processing converts those into discrete drum events for the chart.
+Run the ADTOF drum transcription model (Frame_RNN) in the browser via ONNX Runtime Web + WebGPU. This is an interim solution using the pre-trained ADTOF model while the custom ML model (in `~/projects/drum-transcription`) is still under development.
 
-The ONNX runtime infrastructure (WebGPU/WASM backend selection, worker fallback) is shared with the Demucs step — the same `onnx-runtime.ts` module handles both models.
+ADTOF is a CRNN (Convolutional Recurrent Neural Network) built in TensorFlow/Keras. It takes a log-filtered spectrogram, processes it through CNN layers followed by 3 bidirectional GRU layers, and outputs per-frame sigmoid probabilities for 5 drum classes. The model must be converted from TensorFlow to ONNX for browser inference.
+
+The ONNX runtime infrastructure (WebGPU only — no WASM fallback, per plan 0004) is shared with the Demucs step — the same `onnx-runtime.ts` module handles both models.
 
 ---
 
 ## 1. Model Export to ONNX
 
-The drum transcription model (CNN + transformer, developed separately in PyTorch) must be exported to ONNX for browser inference:
+The ADTOF Frame_RNN model is a TensorFlow/Keras model. The pre-trained weights live at `~/projects/ADTOF/adtof/models/Frame_RNN_adtofAll_0` (~5.2 MB). Export via `tf2onnx`:
 
 ```python
-# In the model's repository
-import torch
+# export_adtof_onnx.py — run in the ADTOF project environment
+# Requires: pip install tf2onnx
 
-model = load_trained_model("checkpoints/best.pt")
-model.eval()
+from adtof.model.model import Model
+import tf2onnx
+import tensorflow as tf
 
-# Example input shapes (adjust to match actual model)
-dummy_input = torch.randn(1, 1, 128, 431)  # [batch, channels, mel_bins, time_frames]
-
-torch.onnx.export(
-    model,
-    dummy_input,
-    "drum_transcription.onnx",
-    input_names=["mel_spectrogram"],
-    output_names=["predictions"],
-    dynamic_axes={
-        "mel_spectrogram": {3: "time_frames"},
-        "predictions": {1: "time_frames"},
-    },
-    opset_version=17,
+# Load the pre-trained model
+model, hparams = Model.modelFactory(
+    modelName="Frame_RNN", scenario="adtofAll", fold=0
 )
+assert model.weightLoadedFlag, "Pre-trained weights not found"
+
+keras_model = model.model
+
+# The model input shape is (batch, time_frames, n_bins, 1)
+# n_bins = 84 (12 bands/octave, fmin=20, fmax=20000, frameSize=2048, sr=44100)
+# time_frames is variable (None)
+input_spec = (tf.TensorSpec((1, None, 84, 1), tf.float32, name="spectrogram"),)
+
+onnx_model, _ = tf2onnx.convert.from_keras(
+    keras_model,
+    input_signature=input_spec,
+    opset=17,
+    output_path="adtof_frame_rnn.onnx",
+)
+print("Exported to adtof_frame_rnn.onnx")
 ```
 
-### ONNX vs PyTorch Boundary
+### Verifying the export
 
-**Like Demucs, the ONNX model should contain only the neural network.** Audio preprocessing (mel spectrogram computation) runs in JavaScript. This keeps the model portable and avoids ONNX operator limitations.
+```python
+import onnxruntime as ort
+import numpy as np
+
+session = ort.InferenceSession("adtof_frame_rnn.onnx")
+# Test with a dummy input: 10 seconds at 100 fps = 1000 frames, 84 frequency bins
+dummy = np.random.randn(1, 1000, 84, 1).astype(np.float32)
+result = session.run(None, {"spectrogram": dummy})
+print(result[0].shape)  # Expected: (1, 1000, 5)
+```
+
+### ONNX vs TensorFlow Boundary
+
+**Like Demucs, the ONNX model contains only the neural network.** Audio preprocessing (spectrogram computation) runs in JavaScript. This keeps the model portable and avoids ONNX operator limitations with madmom's custom signal processing.
+
+### Model Architecture Summary
+
+The Frame_RNN is a CRNN with same-padding:
+- **CNN encoder:** 2 conv blocks, each with 2x Conv2D(3x3) + BatchNorm + MaxPool(1x3) + Dropout(0.3). Filter counts: [32, 64].
+- **Context stacking:** Flatten CNN output per time step (no additional context frames needed since context=9 equals the CNN receptive field).
+- **RNN:** 3x Bidirectional GRU layers with 60 units each.
+- **Output:** Dense layer with sigmoid activation, 5 classes.
+- **Total size:** ~5.2 MB weights. ONNX model expected to be ~5-8 MB.
 
 ---
 
 ## 2. Audio Preprocessing in JavaScript
 
-The browser-side preprocessing converts the drum stem PCM into mel spectrograms:
+ADTOF uses madmom's `LogarithmicFilteredSpectrogram` for preprocessing. This must be replicated in JavaScript.
 
 ```typescript
-async function computeMelSpectrogram(
-  audioData: Float32Array,  // Mono, 44.1kHz
+async function computeLogFilteredSpectrogram(
+  audioData: Float32Array,  // Mono, 44100 Hz
   config: SpectrogramConfig
 ): Promise<Float32Array> {
-  // 1. STFT via fft.js (same library used by Demucs step)
-  // 2. Compute mel filterbank
-  // 3. Apply filterbank to get mel spectrogram
-  // 4. Log compression: log(1 + mel)
-  // 5. Normalize (using training statistics from model repo)
-  // Returns: Float32Array of shape [n_mels, n_frames]
+  // 1. STFT via fft.js: frame_size=2048, hop_length=441 (fps=100)
+  // 2. Compute magnitude spectrogram
+  // 3. Apply logarithmic filterbank (triangular filters, 12 bands/octave)
+  //    - 84 frequency bins from 20 Hz to 20000 Hz
+  //    - Normalized triangular filters (norm=True, overlap=True)
+  // 4. Log compression: log(magnitude + 1) (madmom's LogarithmicFilteredSpectrogram default)
+  // Returns: Float32Array of shape [n_frames, 84]
 }
 
 interface SpectrogramConfig {
   sampleRate: number      // 44100
-  nFft: number            // 2048
-  hopLength: number       // 441 (10ms) or 512 (~11.6ms) — must match model training
-  nMels: number           // 128 or 256 — must match model training
+  frameSize: number       // 2048
+  fps: number             // 100 (frames per second, so hop_length = 44100/100 = 441)
+  bandsPerOctave: number  // 12
   fMin: number            // 20
-  fMax: number            // 16000
+  fMax: number            // 20000
 }
 ```
 
-**Critical:** These parameters must exactly match the model's training configuration. Get them from the model repository.
+**Critical:** These parameters must exactly match ADTOF's training configuration. The values above come from `adtof/model/hyperparameters.py` (the `Frame_RNN` model inherits from `default`).
 
-### Mel Filterbank
+### Logarithmic Filterbank
 
-Compute the mel filterbank matrix once and cache it:
+ADTOF uses madmom's `LogarithmicFilterbank` rather than a standard mel filterbank. The key differences:
+- Frequency bands are spaced logarithmically (12 bands per octave) rather than on the mel scale
+- Triangular filters with normalization
+- This produces 84 frequency bins for the given fmin/fmax/bandsPerOctave
+
+Port the filterbank computation from madmom:
 ```typescript
-function createMelFilterbank(
-  sampleRate: number, nFft: number, nMels: number, fMin: number, fMax: number
-): Float32Array[]
+function createLogFilterbank(
+  sampleRate: number,   // 44100
+  frameSize: number,    // 2048
+  bandsPerOctave: number, // 12
+  fMin: number,         // 20
+  fMax: number          // 20000
+): Float32Array[]       // 84 triangular filters
 ```
 
-This is a pure math function — port from `librosa.filters.mel`.
+The filterbank matrix is computed once and cached. This is deterministic pure math -- port from `madmom.audio.filters.LogarithmicFilterbank`.
+
+### Hop Length / FPS
+
+ADTOF uses `fps=100` (frames per second), which at 44100 Hz sample rate gives `hop_length = Math.round(44100 / 100) = 441`. This is the same library used by the madmom processors internally.
 
 ---
 
@@ -95,18 +139,22 @@ Use the same runtime setup from plan 0004 (shared with Demucs):
 
 ```typescript
 async function runTranscriptionInference(
-  melSpectrogram: Float32Array,
-  nMels: number,
+  spectrogram: Float32Array,  // shape: [n_frames, 84]
   nFrames: number,
   session: ort.InferenceSession
 ): Promise<Float32Array> {
-  const inputTensor = new ort.Tensor('float32', melSpectrogram, [1, 1, nMels, nFrames])
-  const results = await session.run({ mel_spectrogram: inputTensor })
+  // ADTOF input shape: [batch=1, time_frames, n_bins=84, channels=1]
+  const inputTensor = new ort.Tensor(
+    'float32',
+    spectrogram,
+    [1, nFrames, 84, 1]
+  )
+  const results = await session.run({ spectrogram: inputTensor })
   inputTensor.dispose()
 
-  // Output shape: [1, n_frames, n_classes]
+  // Output shape: [1, n_frames, 5]
   // Values: sigmoid probabilities per class per frame
-  const predictions = results.predictions
+  const predictions = results[Object.keys(results)[0]]
   const data = predictions.data as Float32Array
   predictions.dispose()
   return data
@@ -115,36 +163,48 @@ async function runTranscriptionInference(
 
 ### Chunked Inference
 
-For long songs, process in overlapping chunks (e.g., 10-second windows) and stitch predictions:
-- Use the center region of each chunk (discard edge predictions)
-- No crossfade needed for predictions — just take the most confident prediction at overlap boundaries
+For long songs, ADTOF's own inference code processes in overlapping windows. The Frame_RNN uses:
+- Window size: 60000 frames (10 minutes at 100 fps) -- effectively the whole song for most tracks
+- Warmup (overlap): `trainingSequence` = 412 frames at each end
+- Step: `window - 2 * warmup`
+
+For browser inference, use a simpler strategy since most songs fit in a single window at 100 fps (a 5-minute song is only 30,000 frames). If chunking is needed:
+- Process in windows of 30,000 frames with 412-frame overlap
+- Use the center region of each chunk (discard the warmup region at edges)
 
 ---
 
 ## 4. Output Parsing
 
-The model outputs per-frame probabilities for each drum class:
+The model outputs per-frame probabilities for 5 drum classes. ADTOF's class labels are defined by General MIDI pitch numbers:
 
 ```typescript
+/** ADTOF's 5 output classes, in order */
+const ADTOF_CLASSES = [
+  { index: 0, midiPitch: 35, name: 'BD',    description: 'Bass Drum' },
+  { index: 1, midiPitch: 38, name: 'SD',    description: 'Snare Drum' },
+  { index: 2, midiPitch: 47, name: 'TT',    description: 'Tom-Tom (all toms grouped)' },
+  { index: 3, midiPitch: 42, name: 'HH',    description: 'Hi-Hat (open + closed grouped)' },
+  { index: 4, midiPitch: 49, name: 'CY+RD', description: 'Cymbal + Ride (all cymbals grouped)' },
+] as const
+
 interface ModelOutput {
-  /** Per-frame predictions: shape [n_frames, n_classes] */
+  /** Per-frame predictions: shape [n_frames, 5] */
   predictions: Float32Array
-  /** Number of time frames */
   nFrames: number
-  /** Number of drum classes */
-  nClasses: number
-  /** Class names in order */
-  classNames: string[]  // ['kick', 'snare', 'closedHiHat', 'openHiHat', 'tom', 'ride', 'crash']
+  nClasses: 5
+  classes: typeof ADTOF_CLASSES
 }
 
 interface RawDrumEvent {
   timeSeconds: number
-  drumClass: string
+  drumClass: string       // 'BD' | 'SD' | 'TT' | 'HH' | 'CY+RD'
+  midiPitch: number       // 35, 38, 47, 42, or 49
   confidence: number
 }
 
-function parseModelOutput(output: ModelOutput, hopLength: number, sampleRate: number): RawDrumEvent[] {
-  const frameDuration = hopLength / sampleRate
+function parseModelOutput(output: ModelOutput, fps: number): RawDrumEvent[] {
+  const frameDuration = 1.0 / fps  // 1/100 = 0.01 seconds
   const events: RawDrumEvent[] = []
 
   for (let frame = 0; frame < output.nFrames; frame++) {
@@ -153,7 +213,8 @@ function parseModelOutput(output: ModelOutput, hopLength: number, sampleRate: nu
       if (confidence > 0.1) {  // Low initial threshold; refined in post-processing
         events.push({
           timeSeconds: frame * frameDuration,
-          drumClass: output.classNames[cls],
+          drumClass: output.classes[cls].name,
+          midiPitch: output.classes[cls].midiPitch,
           confidence,
         })
       }
@@ -167,54 +228,81 @@ function parseModelOutput(output: ModelOutput, hopLength: number, sampleRate: nu
 
 ## 5. Post-Processing Pipeline
 
-Same as the original plan — pure JavaScript, no external dependencies:
+ADTOF uses madmom's `NotePeakPickingProcessor` for post-processing. This must be ported to JavaScript:
 
 ```
-Raw predictions (per-frame probabilities)
-  → Per-class thresholding (configurable per instrument)
-  → Peak picking (local maxima in confidence curve)
-  → Refractory period filtering (prevent double-triggers)
-  → Multi-label conflict resolution (hi-hat open/closed exclusivity)
-  → Discrete drum events with timestamps and confidence scores
+Raw predictions (per-frame sigmoid probabilities, shape [n_frames, 5])
+  -> Per-class peak picking (madmom-style, with per-class thresholds)
+  -> Discrete drum events with timestamps and confidence scores
 ```
 
-### Default Thresholds
+### Peak Picking Algorithm
+
+ADTOF's peak picking uses madmom's `NotePeakPickingProcessor` with these parameters:
 ```typescript
-const DEFAULT_THRESHOLDS: Record<string, number> = {
-  kick: 0.5, snare: 0.5, closedHiHat: 0.4,
-  openHiHat: 0.5, tom: 0.5, ride: 0.45, crash: 0.5,
+interface PeakPickingParams {
+  smooth: number     // 0 (no smoothing)
+  preAvg: number     // 0.1 seconds (pre-average window)
+  postAvg: number    // 0.01 seconds (post-average window)
+  preMax: number     // 0.02 seconds (pre-max window)
+  postMax: number    // 0.01 seconds (post-max window)
+  combine: number    // 0.02 seconds (combine window)
+  fps: number        // 100
 }
 ```
 
-### Refractory Periods
+The algorithm (from madmom source):
+1. **Moving average:** Compute local average using `preAvg` and `postAvg` windows
+2. **Moving maximum:** Compute local max using `preMax` and `postMax` windows
+3. **Threshold + local max test:** A frame is a peak if:
+   - Its value exceeds the threshold
+   - Its value equals the local maximum
+   - Its value exceeds the local average
+4. **Combine:** Merge detections within `combine` window (keep the one with highest activation)
+
+### Default Thresholds (from trained model)
+
+ADTOF's Frame_RNN model has per-class optimized thresholds:
 ```typescript
-const REFRACTORY_MS: Record<string, number> = {
-  kick: 50, snare: 40, closedHiHat: 30,
-  openHiHat: 80, tom: 50, ride: 30, crash: 100,
+const ADTOF_THRESHOLDS: Record<string, number> = {
+  BD:      0.22,   // Bass Drum
+  SD:      0.24,   // Snare Drum
+  TT:      0.32,   // Tom-Tom
+  HH:      0.22,   // Hi-Hat
+  'CY+RD': 0.30,   // Cymbal + Ride
 }
 ```
+
+These thresholds were optimized during ADTOF's validation and are stored in `hyperparameters.py` under the `Frame_RNN` model definition.
 
 ---
 
 ## 6. Class-to-Chart Mapping
 
-Same mapping as before — this is pure logic, unchanged by browser architecture:
+ADTOF outputs 5 classes. Note that ADTOF groups all toms together and all cymbals (including ride) together, so chart mapping is slightly less granular than an ideal 7-class model:
 
-| Model Class | Chart Note | Cymbal Marker | Notes |
-|-------------|-----------|---------------|-------|
-| kick | 0 | — | |
-| snare | 1 | — | |
-| closedHiHat | 2 | 66 | Yellow cymbal |
-| openHiHat | 2 | 66 | Yellow cymbal (same lane) |
-| tom | 3 | — | Default to blue; editor can reassign |
-| ride | 3 | 67 | Blue cymbal |
-| crash | 4 | 68 | Green cymbal |
+| ADTOF Class | MIDI Pitch | Chart Note | Cymbal Marker | Notes |
+|-------------|-----------|-----------|---------------|-------|
+| BD (Bass Drum) | 35 | 0 | -- | |
+| SD (Snare Drum) | 38 | 1 | -- | |
+| HH (Hi-Hat) | 42 | 2 | 66 | Yellow cymbal. Open/closed not distinguished. |
+| TT (Tom-Tom) | 47 | 3 | -- | Blue pad. All toms grouped into one class. |
+| CY+RD (Cymbal+Ride) | 49 | 4 | 68 | Green cymbal. Crash and ride not distinguished. |
+
+### Limitations of 5-class output
+
+ADTOF's 5-class grouping means:
+- **No open/closed hi-hat distinction** -- both map to the same HH class. The editor can let users manually split these.
+- **No crash vs ride distinction** -- both map to CY+RD. Could be post-processed with heuristics (sustained hits = crash, repeated 8th/16th notes = ride) or left for manual editing.
+- **All toms grouped** -- high, mid, and floor toms are one class. The editor can let users reassign to different tom lanes.
+
+When the custom ML model from `~/projects/drum-transcription` is ready, it should target more classes (7-8) to address these limitations.
 
 ---
 
 ## 7. Tick Quantization
 
-Convert seconds → ticks using the tempo map. Same algorithm as plan 0002's `msToTick`, unchanged by browser architecture.
+Convert seconds to ticks using the tempo map. Same algorithm as plan 0002's `msToTick`, unchanged by browser architecture.
 
 ---
 
@@ -227,7 +315,7 @@ interface EditorDrumEvent {
   msTime: number
   noteNumber: number
   cymbalMarker: number | null
-  modelClass: string
+  modelClass: string         // 'BD' | 'SD' | 'TT' | 'HH' | 'CY+RD'
   confidence: number | null  // null for manually added
   reviewed: boolean
   source: 'model' | 'manual'
@@ -240,16 +328,16 @@ interface EditorDrumEvent {
 
 | Song Duration | WebGPU | WASM |
 |--------------|--------|------|
-| 3 min | 2-8 sec | 10-30 sec |
-| 5 min | 4-15 sec | 20-60 sec |
+| 3 min | 1-4 sec | 5-15 sec |
+| 5 min | 2-8 sec | 10-30 sec |
 
-The drum transcription model is much smaller than Demucs, so inference is faster. The bottleneck is mel spectrogram computation in JavaScript.
+The ADTOF Frame_RNN model is very small (~5 MB ONNX). At 100 fps, a 5-minute song produces 30,000 frames with 84 frequency bins -- this is a modest input. The CRNN architecture (2 conv blocks + 3 BiGRU layers) is lightweight. The main bottleneck will be the spectrogram computation in JavaScript, not the model inference.
 
 ---
 
 ## 10. Fallback: Mock Transcription
 
-Until the real model is exported to ONNX, use mock implementations:
+Until the ADTOF model is exported to ONNX and the spectrogram preprocessing is ported, use mock implementations:
 
 ### Option A: Static fixtures
 Ship pre-generated prediction JSONs in `test/fixtures/` for development:
@@ -269,17 +357,31 @@ interface DrumTranscriber {
   transcribe(audioData: Float32Array, sampleRate: number): Promise<RawDrumEvent[]>
 }
 
-class OnnxTranscriber implements DrumTranscriber { /* real ONNX inference */ }
+class OnnxTranscriber implements DrumTranscriber { /* real ONNX inference with ADTOF */ }
 class FixtureTranscriber implements DrumTranscriber { /* load from JSON */ }
 class ChartTranscriber implements DrumTranscriber { /* parse existing chart */ }
 ```
 
-All implementations conform to the same interface — the pipeline swaps them without code changes.
+All implementations conform to the same interface -- the pipeline swaps them without code changes. When the custom model from `~/projects/drum-transcription` is ready, it will be another implementation of this same interface.
 
 ---
 
 ## 11. Model Hosting
 
-Host the ONNX model on a CDN (HuggingFace, GitHub Releases, or Cloudflare R2). The browser downloads and caches it on first use. Estimated model size: 20-100 MB depending on architecture.
+Host the ONNX model on a CDN (HuggingFace, GitHub Releases, or Cloudflare R2). The browser downloads and caches it on first use. Expected ONNX model size: ~5-8 MB (the TF checkpoint is 5.2 MB).
 
 ONNX Runtime's `InferenceSession.create()` accepts a URL directly and handles caching.
+
+**License note:** ADTOF is licensed under CC BY-NC-SA 4.0. This is a non-commercial license. Verify this is acceptable for the intended use of the web app.
+
+---
+
+## 12. Future: Custom Model Replacement
+
+The ADTOF integration is an interim solution. The custom ML model being developed in `~/projects/drum-transcription` will eventually replace it. When ready, the custom model should:
+- Target 7-8 drum classes (separating open/closed hi-hat, crash vs ride, multiple tom positions)
+- Be trained on the same ADTOF dataset plus additional sources
+- Export directly to ONNX from PyTorch
+- Implement the same `DrumTranscriber` interface
+
+The preprocessing pipeline may differ (mel spectrogram vs log-filtered spectrogram), but the post-processing and chart mapping stages will remain largely the same.

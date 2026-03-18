@@ -21,14 +21,19 @@ app/drum-transcription/
     ProcessingView.tsx           # Progress bars during Demucs + ML inference
     EditorApp.tsx                # Top-level editor layout
     WaveformPanel.tsx            # WaveSurfer waveform display
-    DrumLaneGrid.tsx             # Primary editing canvas
-    HighwayPreview.tsx           # chart-preview 3D highway
+    HighwayEditor.tsx            # Clone Hero highway with editing (extends CloneHeroRenderer)
     TransportControls.tsx        # Play/pause/seek/speed
     NoteInspector.tsx            # Selected note properties
     ExportDialog.tsx             # Export format selection + download
-  store.ts                       # Zustand editor state
+  contexts/
+    EditorContext.tsx            # React context for editor state (notes, selection, playback)
+  hooks/
+    useEditorState.ts            # Custom hook wrapping editor context
+    useUndoRedo.ts               # Undo/redo stack using useReducer
   commands.ts                    # Undo/redo command pattern
 ```
+
+State is managed via React state (`useState`, `useReducer`) and context, following the same pattern as the sheet-music page (`app/sheet-music/[slug]/SongView.tsx`, `ClientPage.tsx`). State lives in the top-level `EditorApp` component and is passed down via props and context as needed.
 
 ### Library (shared logic, testable)
 
@@ -42,9 +47,7 @@ lib/drum-transcription/
     song-ini.ts                  # song.ini serializer
     types.ts                     # ChartDocument, DrumNote, etc.
   ml/
-    onnx-runtime.ts              # ONNX session creation, WebGPU/WASM backend
-    onnx-worker.ts               # Web Worker for WASM fallback
-    onnx-worker-client.ts        # Promise wrapper for worker
+    onnx-runtime.ts              # ONNX session creation (WebGPU only — no WASM fallback)
     demucs.ts                    # Demucs separation pipeline
     transcriber.ts               # Drum transcription inference + post-processing
   audio/
@@ -53,7 +56,6 @@ lib/drum-transcription/
     wav-encoder.ts               # PCM → WAV encoding
   export/
     zip.ts                       # ZIP packaging via fflate
-    sng.ts                       # SNG packaging
   storage/
     opfs.ts                      # OPFS project management (extends existing helpers)
   __tests__/
@@ -61,7 +63,7 @@ lib/drum-transcription/
     timing.test.ts               # msToTick / tickToMs consistency
     stft.test.ts                 # STFT/iSTFT correctness
     wav-encoder.test.ts          # WAV header validity
-    export.test.ts               # ZIP/SNG round-trip tests
+    export.test.ts               # ZIP round-trip tests
     song-ini.test.ts             # INI serialization
 ```
 
@@ -78,10 +80,13 @@ lib/drum-transcription/
 | OPFS helpers | `lib/fileSystemHelpers.ts` | `writeFile()`, `readJsonFile()`, `readTextFile()` |
 | INI parsing | `lib/ini-parser.ts` | Parse song.ini |
 | Audio playback | `lib/preview/audioManager.ts` | Web Audio API, speed control |
+| Highway rendering | `app/sheet-music/[slug]/CloneHeroRenderer.tsx` | Clone Hero 3D highway renderer |
 | UI components | `components/ui/` | Button, Dialog, Card, Select, Slider, etc. |
 | Icons | `lucide-react` | Already installed |
 | Toasts | `sonner` | Already configured in root layout |
 | CSS utility | `lib/utils.ts` → `cn()` | Tailwind class merging |
+
+> **Shared utility policy:** Any utilities or libraries needed by the drum transcription feature that already exist elsewhere in the project should first be extracted into a shared lib location, and the original callsite should be updated. This refactoring should happen in its own commit before being used by new code.
 
 ---
 
@@ -90,7 +95,6 @@ lib/drum-transcription/
 | Package | Purpose |
 |---------|---------|
 | `fft.js` | Pure JS FFT for STFT/iSTFT (Demucs preprocessing) |
-| `zustand` | Editor state management with undo/redo |
 | `fflate` | Browser-native ZIP compression for export |
 | `wavesurfer.js` | Waveform display in editor |
 
@@ -132,7 +136,7 @@ See plan 0002 for full type definitions.
 
 ## 6. Implementation Order
 
-1. **Add dependencies** — `fft.js`, `zustand`, `fflate`, `wavesurfer.js`
+1. **Add dependencies** — `fft.js`, `fflate`, `wavesurfer.js`
 2. **Create page shell** — `app/drum-transcription/page.tsx` with upload UI
 3. **OPFS storage** — `lib/drum-transcription/storage/opfs.ts`
 4. **Chart I/O** — writer + types (plan 0002)

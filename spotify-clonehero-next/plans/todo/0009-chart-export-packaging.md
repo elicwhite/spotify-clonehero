@@ -1,13 +1,17 @@
-# 0009 - Chart Export Packaging (.zip and .sng)
+# 0009 - Chart Export Packaging (.zip)
 
 > **Dependencies:** 0002 (chart writing), 0007 (editor provides the finalized chart)
 > **Unlocks:** Complete end-to-end pipeline
 >
-> **Integration:** Export code in `lib/drum-transcription/export/`. Uses existing `parse-sng` (already a dependency) as reference for `.sng` format. INI writing in `lib/drum-transcription/chart-io/song-ini.ts` (reading already exists in `lib/ini-parser.ts`). WAV encoder in `lib/drum-transcription/audio/wav-encoder.ts`. ZIP via `fflate` (new dependency). Tests in `lib/drum-transcription/__tests__/export.test.ts` using Jest (existing test setup). UI in `app/drum-transcription/components/ExportDialog.tsx` using shadcn `Dialog`, `Select`, `Button`.
+> **Integration:** Export code in `lib/drum-transcription/export/`. INI writing in `lib/drum-transcription/chart-io/song-ini.ts` (reading already exists in `lib/ini-parser.ts`). WAV encoder in `lib/drum-transcription/audio/wav-encoder.ts`. ZIP via `fflate` (new dependency). Tests in `lib/drum-transcription/__tests__/export.test.ts` using Jest (existing test setup). UI in `app/drum-transcription/components/ExportDialog.tsx` using shadcn `Dialog`, `Select`, `Button`.
 
 ## Overview
 
-The final output isn't a standalone `.chart` file — it's a **packaged archive** containing the chart, audio stems, and metadata. Users choose between `.zip` (standard) and `.sng` (Clone Hero/YARG native binary format). Both must produce output that `scan-chart`'s `scanChartFolder` / `parse-sng` can read back.
+The final output isn't a standalone `.chart` file — it's a **packaged archive** containing the chart, audio stems, and metadata. The `.zip` format is the standard chart distribution format. The exported zip must produce output that `scan-chart`'s `scanChartFolder` can read back.
+
+The complete spec for the chart zip format can be found at `~/projects/GuitarGame_ChartFormats`, which also contains a CLI tool with logic for how to create these files.
+
+Reference `~/projects/Moonscraper-Chart-Editor` for how Moonscraper writes chart packages.
 
 ---
 
@@ -163,39 +167,7 @@ async function exportAsZip(projectName: string, metadata: SongMetadata): Promise
 
 ---
 
-## 5. .sng Export
-
-The `.sng` format is a binary container used by Clone Hero and YARG. Reference `parse-sng` for the format.
-
-### SNG Format Structure
-
-The `.sng` file is a binary container with:
-1. **Header** — magic bytes, version, metadata
-2. **File table** — names and offsets of contained files
-3. **File data** — raw bytes of each contained file (chart, audio, ini, album art)
-
-Reference `~/projects/Moonscraper-Chart-Editor` for how Moonscraper writes SNG, and `parse-sng` source for reading.
-
-### SNG Serializer
-
-```typescript
-async function exportAsSng(projectName: string, metadata: SongMetadata): Promise<Blob> {
-  const files: { name: string; data: Uint8Array }[] = [
-    { name: 'notes.chart', data: new TextEncoder().encode(await readEditedChart(projectName)) },
-    { name: 'song.ini', data: new TextEncoder().encode(serializeSongIni(metadata)) },
-    { name: 'drums.wav', data: new Uint8Array(await encodeStemAsWav(projectName, 'drums')) },
-    { name: 'song.wav', data: new Uint8Array(await encodeStemAsWav(projectName, 'no_drums')) },
-  ]
-
-  return serializeSng(files)  // Binary serializer — see implementation below
-}
-```
-
-The exact binary format will be reverse-engineered from the `parse-sng` package source.
-
----
-
-## 6. Testing Strategy
+## 5. Testing Strategy
 
 **Every export capability must have unit tests that verify round-trip integrity.**
 
@@ -203,7 +175,6 @@ The exact binary format will be reverse-engineered from the `parse-sng` package 
 
 ```typescript
 import { scanChartFolder } from 'scan-chart'
-import { parseSng } from 'parse-sng'
 
 describe('zip export', () => {
   test('exported zip round-trips through scanChartFolder', async () => {
@@ -252,25 +223,6 @@ describe('zip export', () => {
     expect(view.getUint32(24, true)).toBe(44100) // sample rate
   })
 })
-
-describe('sng export', () => {
-  test('exported sng round-trips through parse-sng', async () => {
-    const sngBlob = await exportAsSng(/* ... */)
-    const sngData = new Uint8Array(await sngBlob.arrayBuffer())
-
-    // parse-sng can read it back
-    const parsed = parseSng(sngData)
-    expect(parsed.files).toContainKey('notes.chart')
-    expect(parsed.files).toContainKey('song.ini')
-    expect(parsed.files).toContainKey('drums.wav')
-
-    // Chart content is valid
-    const chartData = parsed.files['notes.chart']
-    const chart = parseChartFile(chartData, 'chart', { pro_drums: true })
-    expect(chart.resolution).toBe(480)
-    expect(chart.trackData.length).toBeGreaterThan(0)
-  })
-})
 ```
 
 ### Test Cases
@@ -282,19 +234,16 @@ describe('sng export', () => {
 5. **Large chart** — 10,000+ notes, verify performance
 6. **Empty chart** — no notes, still produces valid package
 7. **Special characters** — song name with unicode, quotes, etc.
-8. **SNG binary format** — verify parse-sng can read our output
 
 ---
 
-## 7. Export UI
+## 6. Export UI
 
 ```
 +--------------------------------------------+
 |  Export Chart                               |
 |                                             |
 |  Song: "My Song" - Artist Name              |
-|                                             |
-|  Format: [.zip ▼] / [.sng ▼]               |
 |                                             |
 |  Audio: [WAV (lossless)] / [OGG (smaller)]  |
 |                                             |
@@ -303,17 +252,16 @@ describe('sng export', () => {
 |    [x] Accompaniment (song.wav)             |
 |    [ ] Album art                            |
 |                                             |
-|  [Download]                                 |
+|  [Download .zip]                            |
 +--------------------------------------------+
 ```
 
 ---
 
-## 8. Implementation Order
+## 7. Implementation Order
 
 1. **WAV encoder** (`src/audio/wav-encoder.ts`) + tests
 2. **song.ini serializer** (`src/chart-io/song-ini.ts`) + tests
 3. **ZIP packaging** (`src/export/zip.ts` using fflate) + round-trip tests
-4. **SNG packaging** (`src/export/sng.ts`) + round-trip tests with parse-sng
-5. **Export UI** component
-6. **OGG encoding** (v2, WASM-based) — optional, can ship without
+4. **Export UI** component
+5. **OGG encoding** (v2, WASM-based) — optional, can ship without

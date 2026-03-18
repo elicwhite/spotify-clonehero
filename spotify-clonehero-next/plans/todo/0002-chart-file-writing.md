@@ -11,14 +11,38 @@ Write `.chart` files (Clone Hero format) from an in-memory representation. The s
 
 **Integration:** Reuse existing `tickToMs()` from `app/sheet-music/[slug]/chartUtils.ts` (consider moving to `lib/` for sharing). The inverse `msToTick()` is new. Reuse `noteTypes` and `noteFlags` from `@eliwhite/scan-chart`. Reuse drum lane mapping from `lib/fill-detector/drumLaneMap.ts`. All new code goes in `lib/drum-transcription/chart-io/`.
 
+## References
+
+- **Moonscraper Chart Editor:** Any behavior not explicitly defined in this plan should match the behavior of Moonscraper Chart Editor at `~/projects/Moonscraper-Chart-Editor`. The most important constraint is that all data must round-trip cleanly through scan-chart's `parseChartFile()`.
+- **Chart format spec:** The complete chart format specification can be found at `~/projects/GuitarGame_ChartFormats`.
+- **scan-chart types:** Types should be imported from `@eliwhite/scan-chart` wherever possible. The package exports: `Instrument`, `Difficulty`, `NoteType`, `NoteEvent`, `EventType`, `RawChartData`, `NotesData`, `DrumType`, along with the value objects `noteTypes`, `noteFlags`, `eventTypes`, `instruments`, `difficulties`, `drumTypes`, and the `parseChartFile` function. Custom types should only be defined where scan-chart does not export a suitable type.
+
 ---
 
 ## 1. Data Model (TypeScript Interfaces)
 
 The in-memory model is designed to be easy to construct from the ML transcription output (which produces millisecond-timed onsets with drum labels) while also being complete enough to serialize a valid `.chart` file.
 
+**scan-chart type reuse:** Many of these types align with structures in `@eliwhite/scan-chart`. Where noted below, use the scan-chart type directly rather than defining a parallel type. Import from `@eliwhite/scan-chart`:
+- `Instrument` — union type for instrument names (includes `'drums'`)
+- `Difficulty` — union type `'expert' | 'hard' | 'medium' | 'easy'`
+- `NoteType`, `noteTypes` — note type enum values (e.g. `noteTypes.kick`, `noteTypes.redDrum`)
+- `noteFlags` — bitmask constants for cymbal, tom, doubleKick, ghost, accent, etc.
+- `RawChartData` — scan-chart's intermediate parsed representation; its sub-types for `tempos`, `timeSignatures`, `sections`, `endEvents`, and `trackData` should be used as the structural reference
+
 ```typescript
-/** Top-level chart document. Everything needed to write a .chart file. */
+import type { Instrument, Difficulty } from '@eliwhite/scan-chart';
+
+/**
+ * Top-level chart document. Everything needed to write a .chart file.
+ *
+ * This mirrors the shape of scan-chart's `RawChartData` (exported from
+ * `@eliwhite/scan-chart`). Fields like `tempos`, `timeSignatures`,
+ * `sections`, and `endEvents` use the same structure as `RawChartData`
+ * so that data can move between parsing and serialization without
+ * transformation. `ChartDocument` is NOT directly exported by scan-chart,
+ * so we define it here.
+ */
 interface ChartDocument {
   /** Ticks per quarter note. Use 480 for our pipeline (see Section 7). */
   resolution: number;
@@ -41,6 +65,15 @@ interface ChartDocument {
   tracks: TrackData[];
 }
 
+/**
+ * Chart metadata for the [Song] section.
+ *
+ * scan-chart exports `RawChartData['metadata']` with a subset of these
+ * fields (name, artist, album, genre, year, charter, delay,
+ * preview_start_time). We extend beyond that for serialization-specific
+ * fields (musicStream, drumStream, etc.) that scan-chart does not model.
+ * This type is NOT exported by scan-chart.
+ */
 interface ChartMetadata {
   name: string;
   artist: string;
@@ -58,12 +91,21 @@ interface ChartMetadata {
   drumStream?: string;      // e.g. "drums.ogg"
 }
 
+/**
+ * Matches the shape of `RawChartData['tempos'][number]` from scan-chart,
+ * except scan-chart uses `beatsPerMinute` instead of `bpm`. Use `bpm` here
+ * for brevity; convert to/from `beatsPerMinute` at the boundary.
+ */
 interface TempoEvent {
   tick: number;
   /** BPM as a float (e.g. 120.0). Serialized as millibeats (120000). */
   bpm: number;
 }
 
+/**
+ * Same shape as `RawChartData['timeSignatures'][number]` from scan-chart.
+ * Use scan-chart's type directly if convenient.
+ */
 interface TimeSignatureEvent {
   tick: number;
   numerator: number;
@@ -71,14 +113,24 @@ interface TimeSignatureEvent {
   denominator: number;
 }
 
+/**
+ * Same shape as `RawChartData['sections'][number]` from scan-chart.
+ * Use scan-chart's type directly if convenient.
+ */
 interface SectionEvent {
   tick: number;
   name: string;
 }
 
+/**
+ * Uses `Instrument` and `Difficulty` from `@eliwhite/scan-chart`.
+ * The `starPower` and `activationLanes` shapes match
+ * `RawChartData['trackData'][number]['starPowerSections']` and
+ * `RawChartData['trackData'][number]['drumFreestyleSections']` respectively.
+ */
 interface TrackData {
-  instrument: 'drums';
-  difficulty: 'expert' | 'hard' | 'medium' | 'easy';
+  instrument: Instrument;   // Use scan-chart's Instrument type (constrained to 'drums' for our pipeline)
+  difficulty: Difficulty;    // Use scan-chart's Difficulty type
   notes: DrumNote[];
   /** Star power phrases. */
   starPower?: { tick: number; length: number }[];
@@ -86,6 +138,16 @@ interface TrackData {
   activationLanes?: { tick: number; length: number }[];
 }
 
+/**
+ * Note: scan-chart's `NoteEvent` (exported) uses numeric `NoteType` and a
+ * bitmask `flags` field. Our `DrumNote` uses string-based `DrumNoteType`
+ * and a boolean-based `DrumNoteFlags` for ergonomic construction from ML
+ * output. Conversion between these representations happens at
+ * serialization time (see `drumNoteTypeToScanChartType()` in Section 9)
+ * and uses `noteTypes` / `noteFlags` from scan-chart.
+ *
+ * `DrumNote` is NOT exported by scan-chart — it is specific to our writer.
+ */
 interface DrumNote {
   tick: number;
   /** Note type determines which .chart note number(s) to emit. */
@@ -96,8 +158,18 @@ interface DrumNote {
   flags: DrumNoteFlags;
 }
 
+/**
+ * String-based drum note type for ergonomic construction. Maps to
+ * scan-chart's numeric `noteTypes.kick`, `noteTypes.redDrum`, etc.
+ * NOT exported by scan-chart.
+ */
 type DrumNoteType = 'kick' | 'red' | 'yellow' | 'blue' | 'green';
 
+/**
+ * Boolean-based flags for ergonomic construction. Maps to scan-chart's
+ * bitmask `noteFlags` (cymbal=32, doubleKick=8, ghost=512, accent=1024).
+ * NOT exported by scan-chart.
+ */
 interface DrumNoteFlags {
   cymbal?: boolean;     // For yellow/blue/green in pro drums mode
   doubleKick?: boolean; // Expert+ double kick (note 32)
@@ -978,7 +1050,7 @@ describe('chart-writer', () => {
 
 ## 10. Implementation Order
 
-1. **Data model types** (`lib/drum-transcription/chart-io/types.ts`) — reuse `NoteType`/`noteFlags` from `@eliwhite/scan-chart`
+1. **Data model types** (`lib/drum-transcription/chart-io/types.ts`) — import `Instrument`, `Difficulty`, `NoteType`, `noteTypes`, `noteFlags`, `EventType`, `eventTypes` from `@eliwhite/scan-chart`. Only define `ChartDocument`, `ChartMetadata`, `DrumNote`, `DrumNoteType`, and `DrumNoteFlags` locally (these are not exported by scan-chart)
 2. **Note number mapping** (`lib/drum-transcription/chart-io/note-mapping.ts`) — reference existing `lib/fill-detector/drumLaneMap.ts`
 3. **Tick calculation** (`lib/drum-transcription/chart-io/timing.ts`) — `msToTick` (inverse of existing `tickToMs` from `app/sheet-music/[slug]/chartUtils.ts`)
 4. **Serialization** (`lib/drum-transcription/chart-io/writer.ts`) — serializeChart and section serializers
@@ -1047,6 +1119,8 @@ This represents a simple rock beat at 120 BPM:
 ---
 
 ## Appendix B: scan-chart Note Type Mapping Reference
+
+These values are all available via `import { noteTypes, noteFlags, eventTypes } from '@eliwhite/scan-chart'`. Do not redefine them — import and use them directly.
 
 From `scan-chart/src/chart/note-parsing-interfaces.ts`, the `noteTypes` used after parsing:
 

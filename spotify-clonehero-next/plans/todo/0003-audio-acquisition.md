@@ -113,7 +113,9 @@ async function storeAudio(
         meta.json             # Sample rate, channels, duration
       stems/
         drums.pcm             # Separated drum stem
-        no_drums.pcm          # Everything except drums
+        bass.pcm              # Separated bass stem
+        other.pcm             # Separated other stem
+        vocals.pcm            # Separated vocals stem
       chart/
         notes.chart           # ML-generated chart
         notes.edited.chart    # Human-edited chart

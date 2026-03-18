@@ -15,7 +15,7 @@ Orchestrate the full browser-based pipeline within the Next.js page at `/drum-tr
 User uploads audio (or clicks "Try Demo" → fetch('/drumsample.mp3'))
   → Decode to 44.1kHz stereo Float32 (Web Audio API)
   → Store decoded PCM in OPFS via lib/fileSystemHelpers.ts patterns
-  → Run Demucs (ONNX + WebGPU) → drums.pcm + no_drums.pcm in OPFS
+  → Run Demucs (ONNX + WebGPU) → drums.pcm, bass.pcm, other.pcm, vocals.pcm in OPFS
   → Run drum transcription (ONNX + WebGPU) → notes.chart in OPFS
   → Switch to editor view (React state change, same page)
   → User edits chart
@@ -27,8 +27,8 @@ User uploads audio (or clicks "Try Demo" → fetch('/drumsample.mp3'))
 ## 2. State Management
 
 ```typescript
-// app/drum-transcription/store.ts
-import { create } from 'zustand'
+// app/drum-transcription/contexts/PipelineContext.tsx
+// Uses React state + context (no zustand) — same pattern as the rest of the app
 
 interface PipelineState {
   step: 'idle' | 'decoding' | 'separating' | 'transcribing' | 'ready' | 'editing' | 'exporting' | 'error'
@@ -94,7 +94,9 @@ export async function runPipeline(
         meta.json                 # Duration, sample rate, etc.
       stems/
         drums.pcm                 # Separated drum stem
-        no_drums.pcm              # Accompaniment
+        bass.pcm                  # Separated bass stem
+        other.pcm                 # Separated other stem
+        vocals.pcm                # Separated vocals stem
       chart/
         notes.chart               # ML-generated chart
         confidence.json           # Per-note ML confidence scores
