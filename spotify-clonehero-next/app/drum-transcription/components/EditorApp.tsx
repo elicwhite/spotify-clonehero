@@ -1,6 +1,6 @@
 'use client';
 
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import {Loader2, AlertCircle} from 'lucide-react';
 import {toast} from 'sonner';
@@ -57,8 +57,11 @@ interface EditorAppProps {
  * confidence panel, stem controls, and loop controls.
  */
 export default function EditorApp({projectId}: EditorAppProps) {
-  const {state, dispatch, audioManagerRef, wavesurferRef} = useEditorContext();
+  const {state, dispatch, audioManagerRef} = useEditorContext();
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
+  const [loadingStep, setLoadingStep] = useState<string>(
+    'Loading project metadata...',
+  );
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [projectMeta, setProjectMeta] = useState<ProjectMetadata | null>(null);
   const [audioMeta, setAudioMeta] = useState<AudioStorageMeta | null>(null);
@@ -66,8 +69,14 @@ export default function EditorApp({projectId}: EditorAppProps) {
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [rerenderKey, setRerenderKey] = useState('initial');
   const [chartText, setChartText] = useState<string>('');
-  const animationFrameRef = useRef<number>(0);
-  const lastDispatchTimeRef = useRef(0);
+
+  // Local playback time for SheetMusic — polled from AudioManager at a
+  // low frequency (~4 fps). This does NOT go through the global context,
+  // so it only re-renders SheetMusic, not the highway or other panels.
+  const [sheetMusicTime, setSheetMusicTime] = useState(0);
+  const sheetMusicTimerRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
 
   // Auto-save hook
   const {save} = useAutoSave(loadingState === 'ready' ? projectId : null);
@@ -82,18 +91,23 @@ export default function EditorApp({projectId}: EditorAppProps) {
     async function loadProject() {
       try {
         // 1. Load project metadata
+        setLoadingStep('Loading project metadata...');
         const meta = await getProject(projectId);
         if (cancelled) return;
         setProjectMeta(meta);
 
         // 2. Load chart - prefer edited version, fall back to generated
+        setLoadingStep('Loading chart data...');
         let loadedChartText: string;
         const hasEdited = await projectFileExists(
           projectId,
           'notes.edited.chart',
         );
         if (hasEdited) {
-          loadedChartText = await readProjectText(projectId, 'notes.edited.chart');
+          loadedChartText = await readProjectText(
+            projectId,
+            'notes.edited.chart',
+          );
         } else {
           loadedChartText = await readProjectText(projectId, 'notes.chart');
         }
@@ -131,7 +145,10 @@ export default function EditorApp({projectId}: EditorAppProps) {
             'confidence.json',
           );
           if (hasConfidence) {
-            const confText = await readProjectText(projectId, 'confidence.json');
+            const confText = await readProjectText(
+              projectId,
+              'confidence.json',
+            );
             const confData = JSON.parse(confText) as {
               notes: Record<string, number>;
             };
@@ -177,7 +194,11 @@ export default function EditorApp({projectId}: EditorAppProps) {
         const pcmFile = await pcmHandle.getFile();
         const pcmData = new Float32Array(await pcmFile.arrayBuffer());
 
-        const wavBlob = encodeWavBlob(pcmData, aMeta.sampleRate, aMeta.channels);
+        const wavBlob = encodeWavBlob(
+          pcmData,
+          aMeta.sampleRate,
+          aMeta.channels,
+        );
         if (cancelled) return;
         setAudioBlob(wavBlob);
 
@@ -242,42 +263,25 @@ export default function EditorApp({projectId}: EditorAppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  // Animation frame loop to sync current time from AudioManager to context
+  // Low-frequency polling (~4 fps) to keep SheetMusic's currentTime prop
+  // roughly in sync. SheetMusic only uses this for measure highlighting,
+  // so high precision is not needed. This does NOT dispatch to the global
+  // context — it only sets a local state that triggers SheetMusic re-render.
   useEffect(() => {
-    function animationLoop() {
+    sheetMusicTimerRef.current = setInterval(() => {
       const am = audioManagerRef.current;
       if (am) {
-        const playing = am.isPlaying;
-        const currentTimeMs = am.currentTime * 1000;
-
-        // Update playing state
-        dispatch({type: 'SET_PLAYING', isPlaying: playing});
-
-        // Throttle time updates to ~30fps to avoid excess renders
-        const now = performance.now();
-        if (now - lastDispatchTimeRef.current > 33) {
-          dispatch({type: 'SET_CURRENT_TIME', timeMs: currentTimeMs});
-          lastDispatchTimeRef.current = now;
-        }
-
-        // Sync WaveSurfer visual position
-        const ws = wavesurferRef.current;
-        if (ws && durationSeconds > 0 && playing) {
-          const progress = Math.max(
-            0,
-            Math.min(1, am.currentTime / durationSeconds),
-          );
-          ws.seekTo(progress);
-        }
+        setSheetMusicTime(am.currentTime);
       }
+    }, 250);
 
-      animationFrameRef.current = requestAnimationFrame(animationLoop);
-    }
-
-    animationFrameRef.current = requestAnimationFrame(animationLoop);
-    return () => cancelAnimationFrame(animationFrameRef.current);
+    return () => {
+      if (sheetMusicTimerRef.current) {
+        clearInterval(sheetMusicTimerRef.current);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [durationSeconds]);
+  }, []);
 
   // Trigger SheetMusic re-render when chart changes via editing
   useEffect(() => {
@@ -294,20 +298,26 @@ export default function EditorApp({projectId}: EditorAppProps) {
     [audioManagerRef],
   );
 
-  // Build a minimal metadata object for CloneHeroRenderer
-  const cloneHeroMetadata = projectMeta
-    ? {
-        name: projectMeta.name,
-        artist: '',
-        charter: '',
-        md5: '',
-        hasVideoBackground: false,
-        albumArtMd5: '',
-        notesData: {} as any,
-        modifiedTime: projectMeta.updatedAt,
-        file: '',
-      }
-    : null;
+  // Build a minimal metadata object for CloneHeroRenderer.
+  // Memoized so the reference is stable across renders (prevents
+  // DrumHighwayPreview from tearing down and rebuilding the 3D renderer).
+  const cloneHeroMetadata = useMemo(
+    () =>
+      projectMeta
+        ? {
+            name: projectMeta.name,
+            artist: '',
+            charter: '',
+            md5: '',
+            hasVideoBackground: false,
+            albumArtMd5: '',
+            notesData: {} as any,
+            modifiedTime: projectMeta.updatedAt,
+            file: '',
+          }
+        : null,
+    [projectMeta],
+  );
 
   if (loadingState === 'loading') {
     return (
@@ -333,9 +343,9 @@ export default function EditorApp({projectId}: EditorAppProps) {
   }
 
   return (
-    <div className="flex flex-col h-full w-full gap-2 p-2">
+    <div className="flex flex-col h-full w-full gap-2 p-2 overflow-hidden">
       {/* Toolbar row: project name + editing tools + loop + export */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2 px-2">
           <h2 className="text-sm font-semibold truncate">
             {projectMeta?.name ?? 'Untitled'}
@@ -358,11 +368,13 @@ export default function EditorApp({projectId}: EditorAppProps) {
 
       {/* WaveSurfer Panel */}
       {audioBlob && (
-        <WaveformDisplay
-          audioData={audioBlob}
-          audioManager={audioManagerRef.current}
-          durationSeconds={durationSeconds}
-        />
+        <div className="shrink-0">
+          <WaveformDisplay
+            audioData={audioBlob}
+            audioManager={audioManagerRef.current}
+            durationSeconds={durationSeconds}
+          />
+        </div>
       )}
 
       {/* Main content: SheetMusic + HighwayEditor + Side panels */}
@@ -372,7 +384,7 @@ export default function EditorApp({projectId}: EditorAppProps) {
           <SheetMusic
             chart={chart}
             track={track}
-            currentTime={state.currentTimeMs / 1000}
+            currentTime={sheetMusicTime}
             showBarNumbers={true}
             enableColors={true}
             showLyrics={false}
@@ -410,11 +422,13 @@ export default function EditorApp({projectId}: EditorAppProps) {
       </div>
 
       {/* Transport Controls */}
-      <TransportControls
-        audioManager={audioManagerRef.current}
-        durationSeconds={durationSeconds}
-        sections={chart.sections}
-      />
+      <div className="shrink-0">
+        <TransportControls
+          audioManager={audioManagerRef.current}
+          durationSeconds={durationSeconds}
+          sections={chart.sections}
+        />
+      </div>
     </div>
   );
 }

@@ -25,6 +25,7 @@ import {
   runPipeline,
   resumePipeline,
   type PipelineProgress,
+  type PipelineStep,
 } from '@/lib/drum-transcription/pipeline/runner';
 
 function useWebGPUCheck() {
@@ -56,11 +57,98 @@ function DrumTranscriptionInner() {
     useState<PipelineProgress | null>(null);
   const [pipelineAudioFile, setPipelineAudioFile] = useState<File | null>(null);
 
+  // Track whether a project opened via URL needs pipeline processing.
+  // While checkingProject is true, we show a brief "Checking project..." state.
+  // If projectNeedsProcessing becomes true, we show ProcessingView instead of EditorApp.
+  const [checkingProject, setCheckingProject] = useState(false);
+  const [projectNeedsProcessing, setProjectNeedsProcessing] = useState(false);
+
   const isProcessing =
     pipelineProgress !== null &&
     pipelineProgress.step !== 'ready' &&
     pipelineProgress.step !== 'error' &&
     pipelineProgress.step !== 'idle';
+
+  // When projectId is set via URL, check if the project needs pipeline work
+  // before rendering EditorApp (which would show a generic spinner and fail
+  // because chart files don't exist yet for incomplete projects).
+  useEffect(() => {
+    if (!projectId) {
+      setProjectNeedsProcessing(false);
+      setCheckingProject(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function checkProjectStage() {
+      setCheckingProject(true);
+      try {
+        const meta = await getProject(projectId!);
+        if (cancelled) return;
+
+        if (meta.stage === 'editing' || meta.stage === 'exported') {
+          // Project is ready for the editor
+          setProjectNeedsProcessing(false);
+          setCheckingProject(false);
+          return;
+        }
+
+        // Project needs pipeline processing — show ProcessingView and resume
+        setProjectNeedsProcessing(true);
+        setCheckingProject(false);
+
+        const initialStep: PipelineStep =
+          meta.stage === 'uploaded'
+            ? 'decoding'
+            : meta.stage === 'separating'
+              ? 'separating'
+              : 'transcribing';
+
+        setPipelineProgress({
+          step: initialStep,
+          progress: 0,
+          projectId: projectId!,
+          projectName: meta.name,
+        });
+
+        try {
+          await resumePipeline(projectId!, (progress) => {
+            if (!cancelled) setPipelineProgress(progress);
+          });
+
+          if (cancelled) return;
+
+          toast.success('Processing complete! Opening editor.');
+          setPipelineProgress(null);
+          setProjectNeedsProcessing(false);
+        } catch (err) {
+          if (cancelled) return;
+          const message =
+            err instanceof Error ? err.message : 'Pipeline failed';
+          console.error('Resume pipeline error (URL):', err);
+          setPipelineProgress({
+            step: 'error',
+            progress: 0,
+            projectId: projectId!,
+            projectName: meta.name,
+            error: message,
+          });
+          toast.error(message);
+        }
+      } catch {
+        if (cancelled) return;
+        // Can't load metadata — let EditorApp handle the error
+        setProjectNeedsProcessing(false);
+        setCheckingProject(false);
+      }
+    }
+
+    checkProjectStage();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   // Load project list when no project is selected and not processing
   useEffect(() => {
@@ -126,9 +214,17 @@ function DrumTranscriptionInner() {
           return;
         }
 
-        // Otherwise, resume the pipeline
+        // Otherwise, resume the pipeline — map the project stage to the
+        // correct pipeline step so ProcessingView highlights the right stage.
+        const initialStep: PipelineStep =
+          meta.stage === 'uploaded'
+            ? 'decoding'
+            : meta.stage === 'separating'
+              ? 'separating'
+              : 'transcribing';
+
         setPipelineProgress({
-          step: meta.stage === 'separating' ? 'separating' : 'transcribing',
+          step: initialStep,
           progress: 0,
           projectId: id,
           projectName: meta.name,
@@ -220,6 +316,7 @@ function DrumTranscriptionInner() {
   const handleCancelPipeline = useCallback(() => {
     setPipelineProgress(null);
     setPipelineAudioFile(null);
+    setProjectNeedsProcessing(false);
   }, []);
 
   const handleBackToProjects = useCallback(() => {
@@ -257,11 +354,56 @@ function DrumTranscriptionInner() {
     return null;
   }
 
-  // If a project is selected, show the editor
-  if (projectId) {
+  // Processing view -- shown when pipeline is running (from upload, project list, or URL-based resume)
+  if (isProcessing || pipelineProgress?.step === 'error') {
     return (
-      <div className="flex flex-col h-[calc(100vh-4rem)] w-full">
-        <div className="px-4 py-2">
+      <div className="flex flex-col items-center justify-center flex-1 w-full gap-6">
+        <div className="px-4 py-2 self-start">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleBackToProjects}
+            className="gap-1">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Projects
+          </Button>
+        </div>
+        <ProcessingView
+          progress={pipelineProgress!}
+          onRetry={handleRetryPipeline}
+          onCancel={handleCancelPipeline}
+        />
+      </div>
+    );
+  }
+
+  // If a project is selected, show the editor (or brief checking state)
+  if (projectId) {
+    // Still checking the project stage — show brief loading state
+    if (checkingProject) {
+      return (
+        <div className="flex flex-col items-center justify-center flex-1 gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Checking project status...</p>
+        </div>
+      );
+    }
+
+    // Project needs processing but pipeline hasn't started yet (shouldn't normally
+    // happen since checkProjectStage sets pipelineProgress which triggers the
+    // isProcessing branch above, but guard against the brief gap)
+    if (projectNeedsProcessing) {
+      return (
+        <div className="flex flex-col items-center justify-center flex-1 gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Preparing pipeline...</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden">
+        <div className="px-4 py-2 shrink-0">
           <Button
             variant="ghost"
             size="sm"
@@ -274,19 +416,6 @@ function DrumTranscriptionInner() {
         <EditorProvider>
           <EditorApp projectId={projectId} />
         </EditorProvider>
-      </div>
-    );
-  }
-
-  // Processing view -- shown when pipeline is running
-  if (isProcessing || pipelineProgress?.step === 'error') {
-    return (
-      <div className="flex flex-col items-center justify-center flex-1 w-full gap-6">
-        <ProcessingView
-          progress={pipelineProgress!}
-          onRetry={handleRetryPipeline}
-          onCancel={handleCancelPipeline}
-        />
       </div>
     );
   }
