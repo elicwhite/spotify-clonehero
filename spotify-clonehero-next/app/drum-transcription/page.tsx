@@ -1,7 +1,8 @@
 'use client';
 
-import {useCallback, useEffect, useState} from 'react';
-import {AlertTriangle} from 'lucide-react';
+import {Suspense, useCallback, useEffect, useState} from 'react';
+import {useSearchParams, useRouter} from 'next/navigation';
+import {AlertTriangle, Loader2, ArrowLeft, FolderOpen} from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -9,11 +10,16 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {Button} from '@/components/ui/button';
 import AudioUploader, {
   type AudioUploadResult,
 } from './components/AudioUploader';
-
-type PageState = 'upload' | 'processing' | 'editing';
+import EditorApp from './components/EditorApp';
+import {EditorProvider} from './contexts/EditorContext';
+import {
+  listProjects,
+  type ProjectSummary,
+} from '@/lib/drum-transcription/storage/opfs';
 
 function useWebGPUCheck() {
   const [supported, setSupported] = useState<boolean | null>(null);
@@ -26,15 +32,47 @@ function useWebGPUCheck() {
   return supported;
 }
 
-export default function DrumTranscriptionPage() {
+/**
+ * Inner component that reads search params.
+ * Must be wrapped in Suspense because useSearchParams() requires it.
+ */
+function DrumTranscriptionInner() {
   const webGPUSupported = useWebGPUCheck();
-  const [pageState, setPageState] = useState<PageState>('upload');
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const projectId = searchParams.get('project');
 
-  const handleAudioReady = useCallback((result: AudioUploadResult) => {
-    setProjectId(result.projectId);
-    setPageState('processing');
-  }, []);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+
+  // Load project list when no project is selected
+  useEffect(() => {
+    if (!projectId) {
+      setLoadingProjects(true);
+      listProjects()
+        .then(setProjects)
+        .catch(() => setProjects([]))
+        .finally(() => setLoadingProjects(false));
+    }
+  }, [projectId]);
+
+  const handleAudioReady = useCallback(
+    (result: AudioUploadResult) => {
+      router.push(`/drum-transcription?project=${result.projectId}`);
+    },
+    [router],
+  );
+
+  const handleSelectProject = useCallback(
+    (id: string) => {
+      router.push(`/drum-transcription?project=${id}`);
+    },
+    [router],
+  );
+
+  const handleBackToProjects = useCallback(() => {
+    router.push('/drum-transcription');
+  }, [router]);
 
   // WebGPU check -- block access if not supported
   if (webGPUSupported === false) {
@@ -67,6 +105,28 @@ export default function DrumTranscriptionPage() {
     return null;
   }
 
+  // If a project is selected, show the editor
+  if (projectId) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-4rem)] w-full">
+        <div className="px-4 py-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleBackToProjects}
+            className="gap-1">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Projects
+          </Button>
+        </div>
+        <EditorProvider>
+          <EditorApp projectId={projectId} />
+        </EditorProvider>
+      </div>
+    );
+  }
+
+  // No project selected -- show upload + project list
   return (
     <div className="flex flex-col items-center justify-center flex-1 w-full max-w-2xl gap-6">
       <div className="text-center space-y-2">
@@ -79,20 +139,43 @@ export default function DrumTranscriptionPage() {
         </p>
       </div>
 
-      {pageState === 'upload' && (
-        <AudioUploader onAudioReady={handleAudioReady} />
+      <AudioUploader onAudioReady={handleAudioReady} />
+
+      {/* Existing projects */}
+      {loadingProjects && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading projects...
+        </div>
       )}
 
-      {pageState === 'processing' && projectId && (
+      {!loadingProjects && projects.length > 0 && (
         <Card className="w-full">
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center justify-center gap-4 py-12">
-              <p className="text-sm font-medium">
-                Audio stored. Next step: stem separation.
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Project ID: {projectId}
-              </p>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <FolderOpen className="h-5 w-5" />
+              Existing Projects
+            </CardTitle>
+            <CardDescription>
+              Open a previously created project.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {projects.map(project => (
+                <button
+                  key={project.id}
+                  onClick={() => handleSelectProject(project.id)}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-lg border hover:bg-accent/50 transition-colors text-left">
+                  <div>
+                    <p className="text-sm font-medium">{project.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {project.stage} &middot; Updated{' '}
+                      {new Date(project.updatedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </button>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -109,5 +192,13 @@ export default function DrumTranscriptionPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function DrumTranscriptionPage() {
+  return (
+    <Suspense fallback={null}>
+      <DrumTranscriptionInner />
+    </Suspense>
   );
 }

@@ -1,12 +1,14 @@
 // Heavily inspired by https://github.com/tonygoldcrest/drum-hero Thanks!
 
+import {parseChartFile} from '@eliwhite/scan-chart';
+import {tickToMs} from '@/lib/chart-utils/tickToMs';
 import {
-  NoteEvent,
-  parseChartFile,
-  noteTypes,
-  noteFlags,
-} from '@eliwhite/scan-chart';
-import {tickToMs} from './chartUtils';
+  noteEventToInstrument,
+  type DrumNoteInstrument,
+} from '@/lib/drum-mapping/noteToInstrument';
+
+// Re-export for any existing consumers
+export type {DrumNoteInstrument};
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 type TimeSignature = ParsedChart['timeSignatures'][0];
@@ -18,16 +20,6 @@ export default function convertToVexFlow(
 ): Measure[] {
   return new Parser(chart, track).getMeasures();
 }
-
-export type DrumNoteInstrument =
-  | 'kick'
-  | 'snare'
-  | 'high-tom'
-  | 'mid-tom'
-  | 'floor-tom'
-  | 'hihat'
-  | 'crash'
-  | 'ride';
 
 type InstrumentMapping = {
   [key in DrumNoteInstrument]: string;
@@ -179,7 +171,7 @@ class Parser {
           ) {
             beat.notes.push({
               notes: noteGroups[noteGroupIndex].map(
-                note => mapping[convertNoteToString(note)],
+                note => mapping[noteEventToInstrument(note)],
               ),
               isRest: false,
               dotted: false,
@@ -419,40 +411,3 @@ class Parser {
   }
 }
 
-function convertNoteToString(note: NoteEvent): DrumNoteInstrument {
-  switch (note.type) {
-    case noteTypes.kick:
-      return 'kick';
-    case noteTypes.redDrum:
-      return 'snare';
-    case noteTypes.yellowDrum:
-      if (note.flags & noteFlags.cymbal && note.flags & noteFlags.accent) {
-        // Could be open-hat or a harder hit
-        return 'hihat';
-      } else if (note.flags & noteFlags.cymbal) {
-        return 'hihat';
-      } else if (note.flags & noteFlags.tom) {
-        return 'high-tom';
-      } else {
-        throw new Error(`Unexpected Yellow note flags ${note.flags}`);
-      }
-    case noteTypes.blueDrum:
-      if (note.flags & noteFlags.cymbal) {
-        return 'ride';
-      } else if (note.flags & noteFlags.tom) {
-        return 'mid-tom';
-      } else {
-        throw new Error(`Unexpected Blue note flags ${note.flags}`);
-      }
-    case noteTypes.greenDrum:
-      if (note.flags & noteFlags.cymbal) {
-        return 'crash';
-      } else if (note.flags & noteFlags.tom) {
-        return 'floor-tom';
-      } else {
-        throw new Error(`Unexpected Green note flags ${note.flags}`);
-      }
-    default:
-      throw new Error(`Unexpected note type ${note.type}`);
-  }
-}
