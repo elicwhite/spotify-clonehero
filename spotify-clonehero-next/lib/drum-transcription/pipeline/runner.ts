@@ -145,12 +145,18 @@ export async function runPipeline(
         });
       });
     } catch (err) {
-      // Stem separation failed (likely ONNX not loaded).
-      // Log and continue -- transcription will use full mix instead.
+      // Stem separation failed. Log the full error for debugging,
+      // then continue — transcription will use the full audio mix.
       console.warn(
-        'Stem separation skipped (ONNX unavailable):',
-        err instanceof Error ? err.message : err,
+        'Stem separation failed, continuing with full mix:',
+        err,
       );
+      onProgress({
+        step: 'separating',
+        progress: 1,
+        projectId,
+        projectName: metadata.name,
+      });
     }
   }
 
@@ -290,9 +296,15 @@ export async function resumePipeline(
       });
     } catch (err) {
       console.warn(
-        'Stem separation skipped (ONNX unavailable):',
-        err instanceof Error ? err.message : err,
+        'Stem separation failed, continuing with full mix:',
+        err,
       );
+      onProgress({
+        step: 'separating',
+        progress: 1,
+        projectId,
+        projectName: meta.name,
+      });
     }
   }
 
