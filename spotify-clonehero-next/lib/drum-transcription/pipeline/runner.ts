@@ -22,7 +22,7 @@ import {
   type ProjectMetadata,
 } from '../storage/opfs';
 import {separateStems, hasSeparatedStems} from '../ml/demucs';
-import {MockTranscriber, type DrumTranscriber} from '../ml/transcriber';
+import {OnnxTranscriber, MockTranscriber, type DrumTranscriber} from '../ml/transcriber';
 import {rawEventsToDrumNotes} from '../ml/class-mapping';
 import {serializeChart} from '../chart-io/writer';
 import type {
@@ -69,7 +69,8 @@ export type PipelineProgressCallback = (progress: PipelineProgress) => void;
  * @param audioFile - The audio file (File or ArrayBuffer) to process.
  * @param fileName - Display name for the project.
  * @param onProgress - Callback for progress updates.
- * @param transcriber - Optional transcriber implementation (defaults to MockTranscriber).
+ * @param transcriber - Optional transcriber implementation. If omitted, tries
+ *   OnnxTranscriber (real ONNX model) first, falling back to MockTranscriber.
  * @returns The project ID.
  */
 export async function runPipeline(
@@ -78,7 +79,7 @@ export async function runPipeline(
   onProgress: PipelineProgressCallback,
   transcriber?: DrumTranscriber,
 ): Promise<string> {
-  const txr = transcriber ?? new MockTranscriber(120);
+  const txr = transcriber ?? createDefaultTranscriber();
 
   // Step 1: Decode audio and create project
   onProgress({step: 'decoding', progress: 0, projectName: fileName});
@@ -249,7 +250,7 @@ export async function resumePipeline(
   onProgress: PipelineProgressCallback,
   transcriber?: DrumTranscriber,
 ): Promise<string> {
-  const txr = transcriber ?? new MockTranscriber(120);
+  const txr = transcriber ?? createDefaultTranscriber();
 
   const {getProject} = await import('../storage/opfs');
   const meta = await getProject(projectId);
@@ -361,6 +362,19 @@ export async function resumePipeline(
   });
 
   return projectId;
+}
+
+// ---------------------------------------------------------------------------
+// Transcriber selection
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates the default transcriber — always uses OnnxTranscriber (real ADTOF
+ * model). The constructor is safe to call without ONNX loaded; it only
+ * accesses the runtime during transcribe().
+ */
+function createDefaultTranscriber(): DrumTranscriber {
+  return new OnnxTranscriber();
 }
 
 // ---------------------------------------------------------------------------

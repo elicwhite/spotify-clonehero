@@ -55,6 +55,12 @@ export interface OrtInferenceSession {
  * Returns the `ort` global injected by the CDN script.
  * Throws if the script has not been loaded yet.
  */
+/** CDN base URL — must match the version loaded via <Script> in page.tsx. */
+const ORT_CDN_BASE =
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.0-dev.20251116-b39e144322/dist/';
+
+let ortConfigured = false;
+
 export function getOrt(): OrtGlobal {
   const g = globalThis as unknown as {ort?: OrtGlobal};
   if (!g.ort) {
@@ -62,6 +68,16 @@ export function getOrt(): OrtGlobal {
       'ONNX Runtime not found. Make sure the CDN script is loaded before calling getOrt().',
     );
   }
+
+  // Configure WASM paths once (needed even for WebGPU — ORT may fall back
+  // to WASM for certain ops, and needs to know where to find the files).
+  if (!ortConfigured) {
+    g.ort.env.wasm.wasmPaths = ORT_CDN_BASE;
+    g.ort.env.wasm.numThreads = 4;
+    g.ort.env.logLevel = 'warning';
+    ortConfigured = true;
+  }
+
   return g.ort;
 }
 

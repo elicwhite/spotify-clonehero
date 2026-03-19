@@ -2,6 +2,7 @@
 
 import {Suspense, useCallback, useEffect, useState} from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
+import Script from 'next/script';
 import {AlertTriangle, Loader2, ArrowLeft, FolderOpen} from 'lucide-react';
 import {toast} from 'sonner';
 import {
@@ -512,10 +513,19 @@ function formatStage(stage: string): string {
   }
 }
 
+/** ONNX Runtime CDN URL — must match the version used by demucs-next. */
+const ORT_CDN_URL =
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.0-dev.20251116-b39e144322/dist/ort.min.js';
+
 export default function DrumTranscriptionPage() {
   return (
-    <Suspense fallback={null}>
-      <DrumTranscriptionInner />
-    </Suspense>
+    <>
+      {/* Load ONNX Runtime Web from CDN (avoids bundling ~20MB WASM files).
+          Must load before any Demucs or ADTOF inference. */}
+      <Script src={ORT_CDN_URL} strategy="beforeInteractive" />
+      <Suspense fallback={null}>
+        <DrumTranscriptionInner />
+      </Suspense>
+    </>
   );
 }
