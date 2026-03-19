@@ -187,15 +187,12 @@ export default function EditorApp({projectId}: EditorAppProps) {
         setAudioChannels(aMeta.channels);
 
         // 10. Create AudioManager from the audio files
-        const wavBlob = encodeWavBlob(
-          pcmData,
-          aMeta.sampleRate,
-          aMeta.channels,
-        );
-        const wavArray = new Uint8Array(await wavBlob.arrayBuffer());
-        const audioFiles = [{fileName: 'song.wav', data: wavArray}];
+        // Try to load individual stems first. If stems exist (from Demucs
+        // separation), use them. Otherwise fall back to the full mix as
+        // "drums" (since this is a drum transcription tool).
+        const audioFiles: {fileName: string; data: Uint8Array}[] = [];
+        let hasSeparatedStems = false;
 
-        // Check for individual stems
         const stemNames = ['drums', 'bass', 'other', 'vocals'];
         for (const stemName of stemNames) {
           try {
@@ -213,9 +210,23 @@ export default function EditorApp({projectId}: EditorAppProps) {
               fileName: `${stemName}.wav`,
               data: stemArray,
             });
+            hasSeparatedStems = true;
           } catch {
             // Stem not available, skip
           }
+        }
+
+        if (!hasSeparatedStems) {
+          // No separated stems — use the full mix as the only audio track.
+          // Name it "drums.wav" so AudioManager puts it in the "drums" track
+          // (this is a drum transcription tool, so "drums" is the primary track).
+          const wavBlob = encodeWavBlob(
+            pcmData,
+            aMeta.sampleRate,
+            aMeta.channels,
+          );
+          const wavArray = new Uint8Array(await wavBlob.arrayBuffer());
+          audioFiles.push({fileName: 'drums.wav', data: wavArray});
         }
 
         const audioManager = new AudioManager(audioFiles, () => {
