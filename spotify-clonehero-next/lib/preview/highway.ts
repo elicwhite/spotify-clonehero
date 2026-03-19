@@ -51,8 +51,8 @@ let instanceCounter = 0;
  */
 const SP_FLAG = 2147483648;
 
-/** Base URL for drum textures hosted on static.enchor.us. */
-const DRUM_TEXTURE_BASE = 'https://static.enchor.us/preview-';
+/** Base path for drum textures in local assets. */
+const DRUM_TEXTURE_BASE = '/assets/preview/assets2/';
 
 // ---------------------------------------------------------------------------
 // Animated WebP texture support (Chrome-only, graceful fallback)
