@@ -51,8 +51,8 @@ let instanceCounter = 0;
  */
 const SP_FLAG = 2147483648;
 
-/** Base URL for drum textures hosted on static.enchor.us. */
-const DRUM_TEXTURE_BASE = 'https://static.enchor.us/preview-';
+/** Base path for drum textures in local assets. */
+const DRUM_TEXTURE_PATH = '/assets/preview/assets2/';
 
 // ---------------------------------------------------------------------------
 // Animated WebP texture support (Chrome-only, graceful fallback)
@@ -1080,12 +1080,12 @@ async function loadKickTextures(
 ): Promise<Map<number, THREE.SpriteMaterial>> {
   const normalTexture = await loadTexture(
     textureLoader,
-    `${DRUM_TEXTURE_BASE}drums-kick.webp`,
+    `${DRUM_TEXTURE_PATH}drum-kick.webp`,
     animatedTextureManager,
   );
   const spTexture = await loadDrumTextureWithFallback(
     textureLoader,
-    `${DRUM_TEXTURE_BASE}drums-kick-sp.webp`,
+    `${DRUM_TEXTURE_PATH}drum-kick-sp.webp`,
     normalTexture,
     animatedTextureManager,
   );
@@ -1336,7 +1336,7 @@ async function loadTomTextures(
   const normalTextures = new Map<number, THREE.Texture>();
   await Promise.all(
     Array.from(colors.entries()).map(async ([noteType, colorName]) => {
-      const url = `${DRUM_TEXTURE_BASE}drums-${colorName}-tom.webp`;
+      const url = `${DRUM_TEXTURE_PATH}drum-tom-${colorName}.webp`;
       const texture = await loadTexture(textureLoader, url, animatedTextureManager);
       normalTextures.set(noteType, texture);
     }),
@@ -1351,7 +1351,10 @@ async function loadTomTextures(
     for (const [dynamicFlagKey, dynamicFlagName] of dynamicFlags) {
       for (const [spFlagKey, spFlagName] of spFlags) {
         const combinedFlags = spFlagKey | dynamicFlagKey | noteFlags.tom;
-        const url = `${DRUM_TEXTURE_BASE}drums-${colorName}-tom${dynamicFlagName}${spFlagName}.webp`;
+        const variantSuffix = `${dynamicFlagName}${spFlagName}`;
+        const url = variantSuffix
+          ? `${DRUM_TEXTURE_PATH}drum-tom-${colorName}${variantSuffix}.webp`
+          : `${DRUM_TEXTURE_PATH}drum-tom-${colorName}.webp`;
         const fallback = normalTextures.get(noteType)!;
 
         promises.push(
@@ -1395,7 +1398,7 @@ async function loadCymbalTextures(
   const normalTextures = new Map<number, THREE.Texture>();
   await Promise.all(
     Array.from(colors.entries()).map(async ([noteType, colorName]) => {
-      const url = `${DRUM_TEXTURE_BASE}drums-${colorName}-cymbal.webp`;
+      const url = `${DRUM_TEXTURE_PATH}drum-cymbal-${colorName}.webp`;
       const texture = await loadTexture(textureLoader, url, animatedTextureManager);
       normalTextures.set(noteType, texture);
     }),
@@ -1410,7 +1413,10 @@ async function loadCymbalTextures(
     for (const [dynamicFlagKey, dynamicFlagName] of dynamicFlags) {
       for (const [spFlagKey, spFlagName] of spFlags) {
         const combinedFlags = spFlagKey | dynamicFlagKey | noteFlags.cymbal;
-        const url = `${DRUM_TEXTURE_BASE}drums-${colorName}-cymbal${dynamicFlagName}${spFlagName}.webp`;
+        const variantSuffix = `${dynamicFlagName}${spFlagName}`;
+        const url = variantSuffix
+          ? `${DRUM_TEXTURE_PATH}drum-cymbal-${colorName}${variantSuffix}.webp`
+          : `${DRUM_TEXTURE_PATH}drum-cymbal-${colorName}.webp`;
         const fallback = normalTextures.get(noteType)!;
 
         promises.push(
