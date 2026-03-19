@@ -975,14 +975,13 @@ export const setupRenderer = (
     renderer.setAnimationLoop(animation);
 
     function animation() {
-      // Update animated textures (for animated WebP notes)
-      animatedTextureManager.tick();
-
       if (
         audioManager != null &&
         audioManager.isPlaying &&
         audioManager.isInitialized
       ) {
+        // Update animated textures only during playback
+        animatedTextureManager.tick();
         const SYNC_MS = (audioManager.delay || 0) * 1000;
 
         if (audioManager.isPlaying) {
