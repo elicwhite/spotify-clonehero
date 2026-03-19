@@ -24,6 +24,8 @@ export type Song = {};
 
 const SCALE = 0.105;
 const NOTE_SPAN_WIDTH = 0.95;
+/** How far ahead (in ms) to render notes beyond the strikeline. */
+const HIGHWAY_DURATION_MS = 1500;
 
 const NOTE_COLORS = {
   green: '#01B11A',
@@ -42,6 +44,530 @@ const GUITAR_LANE_COLORS = [
 ];
 
 let instanceCounter = 0;
+
+// ---------------------------------------------------------------------------
+// Interpolation helper (maps a value from one range to another)
+// ---------------------------------------------------------------------------
+function interpolate(
+  val: number,
+  fromStart: number,
+  fromEnd: number,
+  toStart: number,
+  toEnd: number,
+): number {
+  return (
+    ((val - fromStart) / (fromEnd - fromStart)) * (toEnd - toStart) + toStart
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EventSequence – cursor-based O(1) amortised lookup for visible notes
+// ---------------------------------------------------------------------------
+type NoteType = Note['type'];
+
+class EventSequence<
+  T extends {msTime: number; msLength: number; type?: NoteType},
+> {
+  /** Contains the closest events before msTime, grouped by type */
+  private lastPrecedingEventIndexesOfType = new Map<
+    NoteType | undefined,
+    number
+  >();
+  private lastPrecedingEventIndex = -1;
+
+  /** Assumes `events` are already sorted in `msTime` order. */
+  constructor(private events: T[]) {}
+
+  /**
+   * Returns the index of the earliest event that is active (or starts at)
+   * `startMs`. "Active" means the event started before `startMs` but its
+   * sustain tail extends past it.
+   *
+   * On forward playback this is O(1) amortised because the cursor only
+   * advances forward. On seek-backward it resets and re-scans (still fast
+   * for the typical case).
+   */
+  getEarliestActiveEventIndex(startMs: number): number {
+    // Detect seek-backward: reset cursor
+    if (
+      this.lastPrecedingEventIndex !== -1 &&
+      startMs < this.events[this.lastPrecedingEventIndex].msTime
+    ) {
+      this.lastPrecedingEventIndexesOfType = new Map<
+        NoteType | undefined,
+        number
+      >();
+      this.lastPrecedingEventIndex = -1;
+    }
+
+    // Advance cursor forward
+    while (
+      this.events[this.lastPrecedingEventIndex + 1] &&
+      this.events[this.lastPrecedingEventIndex + 1].msTime < startMs
+    ) {
+      this.lastPrecedingEventIndexesOfType.set(
+        this.events[this.lastPrecedingEventIndex + 1].type,
+        this.lastPrecedingEventIndex + 1,
+      );
+      this.lastPrecedingEventIndex++;
+    }
+
+    // Find the earliest event whose sustain tail is still active
+    let earliestActiveEventIndex: number | null = null;
+    for (const [, index] of this.lastPrecedingEventIndexesOfType) {
+      if (this.events[index].msTime + this.events[index].msLength > startMs) {
+        if (
+          earliestActiveEventIndex === null ||
+          earliestActiveEventIndex > index
+        ) {
+          earliestActiveEventIndex = index;
+        }
+      }
+    }
+
+    return earliestActiveEventIndex === null
+      ? this.lastPrecedingEventIndex + 1
+      : earliestActiveEventIndex;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pre-computed note data (created once in prepTrack, no sprites)
+// ---------------------------------------------------------------------------
+
+/** Flattened, pre-computed data for a single note. */
+interface PreparedNote {
+  /** Original note object (needed for getTextureForNote) */
+  note: Note;
+  /** Time in ms */
+  msTime: number;
+  /** Sustain length in ms */
+  msLength: number;
+  /** Pre-computed X position in world space */
+  xPosition: number;
+  /** Whether this note falls inside a star power section */
+  inStarPower: boolean;
+  /** True if this is a kick drum note (different scale/center) */
+  isKick: boolean;
+  /** True if this is an open guitar note (different scale) */
+  isOpen: boolean;
+  /** Lane index (for sustain colour lookup) — -1 for kick/open */
+  lane: number;
+}
+
+// ---------------------------------------------------------------------------
+// NotesManager – windowed rendering with sprite pool
+// ---------------------------------------------------------------------------
+
+class NotesManager {
+  private scene: THREE.Scene;
+  private instrument: Instrument;
+  private highwaySpeed: number;
+  private clippingPlanes: THREE.Plane[];
+
+  /** Flattened, sorted array of all notes. */
+  private preparedNotes: PreparedNote[] = [];
+  /** Cursor for efficient windowed lookup. */
+  private noteSequence!: EventSequence<PreparedNote>;
+
+  /** Map from preparedNotes index -> active THREE.Group in the scene. */
+  private activeNoteGroups = new Map<number, THREE.Group>();
+
+  /** Pool of idle THREE.Group objects ready for reuse. */
+  private groupPool: THREE.Group[] = [];
+
+  /** Pre-loaded shared SpriteMaterial getter. */
+  private getTextureForNote!: (
+    note: Note,
+    opts: {inStarPower: boolean},
+  ) => THREE.SpriteMaterial;
+
+  constructor(
+    scene: THREE.Scene,
+    instrument: Instrument,
+    highwaySpeed: number,
+    clippingPlanes: THREE.Plane[],
+  ) {
+    this.scene = scene;
+    this.instrument = instrument;
+    this.highwaySpeed = highwaySpeed;
+    this.clippingPlanes = clippingPlanes;
+  }
+
+  /** Load textures and pre-compute note data. No sprites are created yet. */
+  async prepare(textureLoader: THREE.TextureLoader, track: Track) {
+    const {getTextureForNote} = await loadNoteTextures(
+      textureLoader,
+      this.instrument,
+    );
+    this.getTextureForNote = getTextureForNote;
+
+    const isDrums = this.instrument === 'drums';
+    const starPowerSections = track.starPowerSections;
+
+    // Build a sorted list of star power section start times for binary search
+    const spStarts = starPowerSections.map(s => s.msTime);
+    const spEnds = starPowerSections.map(s => s.msTime + s.msLength);
+
+    function inStarPowerSection(time: number): boolean {
+      // Binary search: find the last section that starts <= time
+      let lo = 0;
+      let hi = spStarts.length - 1;
+      let idx = -1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >>> 1;
+        if (spStarts[mid] <= time) {
+          idx = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      return idx >= 0 && time <= spEnds[idx];
+    }
+
+    // Flatten all note event groups into a single sorted array
+    const prepared: PreparedNote[] = [];
+
+    for (const group of track.noteEventGroups) {
+      const time = group[0].msTime;
+      const starPower = inStarPowerSection(time);
+
+      for (const note of group) {
+        if (isDrums) {
+          const {type: discoType} = applyDiscoFlip(note);
+
+          if (discoType === noteTypes.kick) {
+            prepared.push({
+              note,
+              msTime: note.msTime,
+              msLength: note.msLength,
+              xPosition: 0, // kick has no lane X offset — centered via sprite center
+              inStarPower: starPower,
+              isKick: true,
+              isOpen: false,
+              lane: -1,
+            });
+          } else {
+            const lane =
+              discoType === noteTypes.redDrum
+                ? 0
+                : discoType === noteTypes.yellow ||
+                    discoType === noteTypes.yellowDrum
+                  ? 1
+                  : discoType === noteTypes.blue ||
+                      discoType === noteTypes.blueDrum
+                    ? 2
+                    : discoType === noteTypes.green ||
+                        discoType === noteTypes.greenDrum ||
+                        discoType === noteTypes.orange
+                      ? 3
+                      : -1;
+
+            if (lane !== -1) {
+              prepared.push({
+                note,
+                msTime: note.msTime,
+                msLength: note.msLength,
+                xPosition: calculateNoteXOffset(this.instrument, lane),
+                inStarPower: starPower,
+                isKick: false,
+                isOpen: false,
+                lane,
+              });
+            }
+          }
+        } else {
+          // Guitar / bass
+          if (note.type === noteTypes.open) {
+            prepared.push({
+              note,
+              msTime: note.msTime,
+              msLength: note.msLength,
+              xPosition: 0,
+              inStarPower: starPower,
+              isKick: false,
+              isOpen: true,
+              lane: -1,
+            });
+          } else {
+            const lane =
+              note.type === noteTypes.green
+                ? 0
+                : note.type === noteTypes.red
+                  ? 1
+                  : note.type === noteTypes.yellow
+                    ? 2
+                    : note.type === noteTypes.blue
+                      ? 3
+                      : note.type === noteTypes.orange
+                        ? 4
+                        : -1;
+
+            if (lane !== -1) {
+              prepared.push({
+                note,
+                msTime: note.msTime,
+                msLength: note.msLength,
+                xPosition: calculateNoteXOffset(this.instrument, lane),
+                inStarPower: starPower,
+                isKick: false,
+                isOpen: false,
+                lane,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Already sorted because noteEventGroups is sorted by time
+    this.preparedNotes = prepared;
+    this.noteSequence = new EventSequence(prepared);
+  }
+
+  /**
+   * Called every frame. Adds/removes/repositions sprites so that only notes
+   * within the visible time window are in the scene.
+   */
+  updateDisplayedNotes(currentTimeMs: number) {
+    const renderEndTimeMs = currentTimeMs + HIGHWAY_DURATION_MS;
+    const noteStartIndex =
+      this.noteSequence.getEarliestActiveEventIndex(currentTimeMs);
+
+    let maxNoteIndex = noteStartIndex - 1;
+
+    // Update existing active notes — reposition or remove
+    for (const [noteIndex, group] of this.activeNoteGroups) {
+      const pn = this.preparedNotes[noteIndex];
+      if (
+        noteIndex < noteStartIndex ||
+        pn.msTime > renderEndTimeMs
+      ) {
+        // Off-screen — recycle
+        this.scene.remove(group);
+        this.recycleGroup(group);
+        this.activeNoteGroups.delete(noteIndex);
+      } else {
+        // Still visible — reposition
+        group.position.y = this.noteYPosition(pn.msTime, currentTimeMs, renderEndTimeMs);
+
+        // Reposition sustain tail if present
+        if (pn.msLength > 0 && group.children.length > 1) {
+          const sustainMesh = group.children[1] as THREE.Mesh;
+          const sustainWorldHeight = 2 * (pn.msLength / HIGHWAY_DURATION_MS);
+          // Update geometry in case HIGHWAY_DURATION_MS or sizing changed
+          // (for now it's constant, but the geometry was created with the
+          // current value so this is a no-op repositioning)
+          sustainMesh.position.y = 0.03 + pn.msLength / HIGHWAY_DURATION_MS;
+        }
+
+        if (noteIndex > maxNoteIndex) {
+          maxNoteIndex = noteIndex;
+        }
+      }
+    }
+
+    // Add new notes that entered the window
+    for (
+      let i = maxNoteIndex + 1;
+      i < this.preparedNotes.length &&
+      this.preparedNotes[i].msTime < renderEndTimeMs;
+      i++
+    ) {
+      // Skip if already active (shouldn't happen, but be safe)
+      if (this.activeNoteGroups.has(i)) continue;
+
+      const pn = this.preparedNotes[i];
+      const noteGroup = this.acquireGroup();
+
+      // Configure the sprite
+      const material = this.getTextureForNote(pn.note, {
+        inStarPower: pn.inStarPower,
+      });
+      const sprite = this.ensureSprite(noteGroup, material);
+
+      if (pn.isKick) {
+        const kickScale = 0.045;
+        sprite.center.set(0.62, -0.5);
+        const aspectRatio =
+          sprite.material.map!.image.width / sprite.material.map!.image.height;
+        sprite.scale.set(kickScale * aspectRatio, kickScale, kickScale);
+        sprite.renderOrder = 1;
+        noteGroup.position.x = 0;
+      } else if (pn.isOpen) {
+        const openScale = 0.11;
+        sprite.center.set(0.5, 0);
+        const aspectRatio =
+          sprite.material.map!.image.width / sprite.material.map!.image.height;
+        sprite.scale.set(openScale * aspectRatio, openScale, openScale);
+        sprite.renderOrder = 4;
+        noteGroup.position.x = 0;
+      } else {
+        sprite.center.set(0.5, 0);
+        const aspectRatio =
+          sprite.material.map!.image.width / sprite.material.map!.image.height;
+        sprite.scale.set(SCALE * aspectRatio, SCALE, SCALE);
+        sprite.renderOrder = 4;
+        noteGroup.position.x = pn.xPosition;
+      }
+
+      sprite.position.x = 0;
+      sprite.position.z = 0;
+      sprite.material.clippingPlanes = this.clippingPlanes;
+      sprite.material.depthTest = false;
+      sprite.material.transparent = true;
+
+      noteGroup.position.y = this.noteYPosition(pn.msTime, currentTimeMs, renderEndTimeMs);
+      noteGroup.position.z = 0;
+
+      // Sustain tail (guitar only, non-kick, non-open with length > 0)
+      if (pn.msLength > 0 && !pn.isKick && pn.lane >= 0) {
+        const sustainMesh = this.ensureSustain(noteGroup, pn);
+        sustainMesh.visible = true;
+      } else {
+        // Hide sustain if this pooled group had one from a previous use
+        if (noteGroup.children.length > 1) {
+          noteGroup.children[1].visible = false;
+        }
+      }
+
+      this.activeNoteGroups.set(i, noteGroup);
+      this.scene.add(noteGroup);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Coordinate helpers
+  // -----------------------------------------------------------------------
+
+  /**
+   * Computes the world-space Y for a note.
+   *
+   * IMPORTANT: This must produce the same Y that the HighwayEditor overlay
+   * computes via `((ms - elapsedMs) / 1000) * highwaySpeed - 1`. We use
+   * interpolate() for clarity but the algebra is identical:
+   *
+   *   interpolate(noteMs, currentMs, currentMs + HIGHWAY_DURATION_MS, -1, 1)
+   *   = ((noteMs - currentMs) / HIGHWAY_DURATION_MS) * 2 - 1
+   *
+   * However the HighwayEditor uses:
+   *   ((noteMs - currentMs) / 1000) * highwaySpeed - 1
+   *
+   * For these to agree we need:
+   *   ((noteMs - currentMs) / HIGHWAY_DURATION_MS) * 2 = ((noteMs - currentMs) / 1000) * highwaySpeed
+   *   => 2 / HIGHWAY_DURATION_MS = highwaySpeed / 1000
+   *   => HIGHWAY_DURATION_MS = 2000 / highwaySpeed
+   *
+   * With highwaySpeed = 1.5, HIGHWAY_DURATION_MS = 1333.33.
+   *
+   * But we want HIGHWAY_DURATION_MS = 1500 for the buffer beyond clipping.
+   * So instead of using interpolate(-1, 1) we directly compute using
+   * highwaySpeed, matching the HighwayEditor formula exactly.
+   */
+  private noteYPosition(
+    noteMs: number,
+    _currentMs: number,
+    _renderEndMs: number,
+  ): number {
+    return ((noteMs - _currentMs) / 1000) * this.highwaySpeed - 1;
+  }
+
+  // -----------------------------------------------------------------------
+  // Sprite pool management
+  // -----------------------------------------------------------------------
+
+  /** Get an idle group from the pool or create a new one. */
+  private acquireGroup(): THREE.Group {
+    const group = this.groupPool.pop();
+    if (group) {
+      return group;
+    }
+    return new THREE.Group();
+  }
+
+  /** Return a group to the pool after removing it from the scene. */
+  private recycleGroup(group: THREE.Group) {
+    // Don't dispose materials/geometries — they're shared or will be reused.
+    // Just hide sustain children and push back.
+    for (let i = 1; i < group.children.length; i++) {
+      group.children[i].visible = false;
+    }
+    this.groupPool.push(group);
+  }
+
+  /**
+   * Ensures the group has a Sprite as its first child, configured with
+   * the given material. Reuses existing sprite if present.
+   */
+  private ensureSprite(
+    group: THREE.Group,
+    material: THREE.SpriteMaterial,
+  ): THREE.Sprite {
+    if (group.children.length > 0 && group.children[0] instanceof THREE.Sprite) {
+      const sprite = group.children[0] as THREE.Sprite;
+      sprite.material = material;
+      sprite.visible = true;
+      return sprite;
+    }
+    const sprite = new THREE.Sprite(material);
+    group.add(sprite);
+    return sprite;
+  }
+
+  /**
+   * Ensures the group has a sustain-tail mesh as its second child.
+   * Creates one if needed, or reconfigures the existing one.
+   */
+  private ensureSustain(
+    group: THREE.Group,
+    pn: PreparedNote,
+  ): THREE.Mesh {
+    const sustainWorldHeight = 2 * (pn.msLength / HIGHWAY_DURATION_MS);
+    const color =
+      pn.lane >= 0 && pn.lane < GUITAR_LANE_COLORS.length
+        ? GUITAR_LANE_COLORS[pn.lane]
+        : '#FFFFFF';
+    const sustainWidth = pn.isOpen ? SCALE * 5 : SCALE * 0.3;
+
+    if (
+      group.children.length > 1 &&
+      group.children[1] instanceof THREE.Mesh
+    ) {
+      const mesh = group.children[1] as THREE.Mesh<
+        THREE.PlaneGeometry,
+        THREE.MeshBasicMaterial
+      >;
+      // Reconfigure geometry (dispose old, create new)
+      mesh.geometry.dispose();
+      mesh.geometry = new THREE.PlaneGeometry(sustainWidth, sustainWorldHeight);
+      (mesh.material as THREE.MeshBasicMaterial).color.set(color);
+      mesh.position.y = 0.03 + pn.msLength / HIGHWAY_DURATION_MS;
+      mesh.visible = true;
+      return mesh;
+    }
+
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      side: THREE.DoubleSide,
+    });
+    mat.clippingPlanes = this.clippingPlanes;
+    mat.depthTest = false;
+    mat.transparent = true;
+
+    const geometry = new THREE.PlaneGeometry(sustainWidth, sustainWorldHeight);
+    const plane = new THREE.Mesh(geometry, mat);
+    plane.position.z = 0;
+    plane.position.y = 0.03 + pn.msLength / HIGHWAY_DURATION_MS;
+    plane.renderOrder = 2;
+    group.add(plane);
+    return plane;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// setupRenderer (public API – signature unchanged)
+// ---------------------------------------------------------------------------
 
 export const setupRenderer = (
   metadata: ChartResponseEncore,
@@ -79,25 +605,6 @@ export const setupRenderer = (
   ref.current?.children.item(0)?.remove();
   ref.current?.appendChild(renderer.domElement);
 
-  // let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  // let trackOffset = 0;
-  // audioCtx.suspend();
-
-  // async function sizingRefClicked() {
-  //   if (audioCtx.state === 'running') {
-  //     await audioCtx.suspend();
-  //     console.log('Paused at', trackOffset + audioCtx.currentTime * 1000);
-  //   } else if (audioCtx.state === 'suspended') {
-  //     await audioCtx.resume();
-  //   } else if (audioCtx.state === 'closed') {
-  //     if (isSongOver()) {
-  //       await methods.seek({percent: 0});
-  //     }
-  //   }
-  // }
-
-  let progressInterval: number;
-
   const textureLoader = new THREE.TextureLoader();
 
   const highwayBeginningPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1);
@@ -125,63 +632,19 @@ export const setupRenderer = (
     },
 
     async startRender() {
-      const {scene, highwayGroups, highwayTexture} = await trackPromise;
-      // const {audioCtx: audioContext, audioSources} =
-      //   await setupAudioContext(audioFiles);
-      // // Update the audio context
-      // audioCtx = audioContext;
-      // audioCtx.onstatechange = () => {
-      //   playPauseListener(audioCtx.state === 'running');
-      // };
+      const {scene, notesManager, highwayTexture} = await trackPromise;
 
       await startRender(
         scene,
         highwayTexture,
-        highwayGroups,
-        // audioSources,
+        notesManager,
         metadata.song_length || 60 * 5 * 1000,
       );
     },
-    // play() {
-    //   sizingRefClicked();
-    // },
-    // pause() {
-    //   sizingRefClicked();
-    // },
-    // async seek({percent, ms}: {percent?: number; ms?: number}) {
-    //   if (percent == null && ms == null) {
-    //     throw new Error('Must provide percent or ms');
-    //   }
 
-    //   const songLength = metadata.song_length || 60 * 5 * 1000;
-    //   const offset: number = ms ?? songLength * percent!;
-    //   const percentCalculated: number = percent ?? ms! / songLength;
-    //   trackOffset = offset;
-
-    //   progressListener(percentCalculated);
-
-    //   if (audioCtx.state !== 'closed') {
-    //     audioCtx.close();
-    //   }
-    //   const {audioCtx: audioContext, audioSources} =
-    //     await setupAudioContext(audioFiles);
-    //   // Update the audio context
-    //   audioCtx = audioContext;
-    //   audioCtx.onstatechange = () => {
-    //     playPauseListener(audioCtx.state === 'running');
-    //   };
-    //   audioSources.forEach(source => {
-    //     source.start(0, offset / 1000);
-    //   });
-
-    //   await audioCtx.resume();
-    // },
     destroy: () => {
-      // I can't figure out where this was used
-      // window.clearInterval(progressInterval);
       console.log('Tearing down the renderer');
       window.removeEventListener('resize', onResize, false);
-      // audioCtx.close();
       renderer.setAnimationLoop(null);
       renderer.renderLists.dispose();
       renderer.dispose();
@@ -199,17 +662,10 @@ export const setupRenderer = (
 
   return methods;
 
-  // function isSongOver() {
-  //   const elapsedTime = trackOffset + audioCtx.currentTime * 1000;
-  //   const songLength = metadata.song_length || 60 * 5 * 1000;
-
-  //   return elapsedTime > songLength + 2000;
-  // }
-
   async function prepTrack(scene: THREE.Scene, track: Track) {
     const {highwayTexture} = await initPromise;
 
-    if (track.instrument == 'drums') {
+    if (track.instrument === 'drums') {
       scene.add(createDrumHighway(highwayTexture));
       scene.add(await loadAndCreateDrumHitBox(textureLoader));
     } else {
@@ -217,38 +673,27 @@ export const setupRenderer = (
       scene.add(await loadAndCreateHitBox(textureLoader));
     }
 
-    const highwayGroups = await generateNoteHighway(
-      textureLoader,
+    const notesManager = new NotesManager(
+      scene,
       track.instrument,
       highwaySpeed,
       clippingPlanes,
-      track,
     );
-    scene.add(highwayGroups);
+    await notesManager.prepare(textureLoader, track);
 
     return {
       scene,
       highwayTexture,
-      highwayGroups,
+      notesManager,
     };
   }
 
   async function startRender(
     scene: THREE.Scene,
     highwayTexture: THREE.Texture,
-    highwayGroups: THREE.Group,
-    // audioSources: AudioBufferSourceNode[],
+    notesManager: NotesManager,
     songLength: number,
   ) {
-    // If this was cleaned up before running
-    // if (audioCtx.state === 'closed') {
-    //   return;
-    // }
-
-    // audioSources.forEach(source => {
-    //   source.start();
-    // });
-
     renderer.setAnimationLoop(animation);
 
     function animation() {
@@ -262,15 +707,14 @@ export const setupRenderer = (
         if (audioManager.isPlaying) {
           const elapsedTime = audioManager.currentTime * 1000 - SYNC_MS;
 
+          // Scroll the highway background texture
           const scrollPosition = -1 * (elapsedTime / 1000) * highwaySpeed;
-
           if (highwayTexture) {
             highwayTexture.offset.y = -1 * scrollPosition;
           }
 
-          highwayGroups.position.y = scrollPosition;
-
-          // progressListener(elapsedTime / songLength);
+          // Update windowed note rendering
+          notesManager.updateDisplayedNotes(elapsedTime);
         }
       }
 
@@ -279,53 +723,9 @@ export const setupRenderer = (
   }
 };
 
-// async function setupAudioContext(audioFiles: Files) {
-//   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-//   audioCtx.suspend();
-
-//   // 0 to 1
-//   const volume = 0.5;
-
-//   const gainNode = audioCtx.createGain();
-//   gainNode.connect(audioCtx.destination);
-//   // Let's use an x*x curve (x-squared) since simple linear (x) does not
-//   // sound as good.
-//   // Taken from https://webaudioapi.com/samples/volume/
-//   gainNode.gain.value = volume * volume;
-
-//   const audioSources = (
-//     await Promise.all(
-//       audioFiles.map(async file => {
-//         const arrayBuffer = file.data;
-//         if (audioCtx.state === 'closed') {
-//           // Can happen if cleaned up before setup is done
-//           return;
-//         }
-
-//         // If we don't copy this, we can only play it once. decode destroys the buffer
-//         const bufferCopy = arrayBuffer.slice(0).buffer;
-//         let decodedAudioBuffer;
-//         try {
-//           decodedAudioBuffer = await audioCtx.decodeAudioData(bufferCopy);
-//         } catch {
-//           try {
-//             const decode = await import('audio-decode');
-//             decodedAudioBuffer = await decode.default(bufferCopy);
-//           } catch {
-//             console.error('Could not decode audio');
-//             return;
-//           }
-//         }
-//         const source = audioCtx.createBufferSource();
-//         source.buffer = decodedAudioBuffer;
-//         source.connect(gainNode);
-//         return source;
-//       }),
-//     )
-//   ).filter(Boolean) as AudioBufferSourceNode[];
-
-//   return {audioCtx, audioSources};
-// }
+// ---------------------------------------------------------------------------
+// Texture loading helpers (unchanged)
+// ---------------------------------------------------------------------------
 
 /**
  * Creates a placeholder texture (magenta square) for missing textures.
@@ -661,191 +1061,4 @@ function calculateNoteXOffset(instrument: Instrument, lane: number) {
     SCALE +
     ((NOTE_SPAN_WIDTH - SCALE) / 5) * lane
   );
-}
-
-async function generateNoteHighway(
-  textureLoader: THREE.TextureLoader,
-  instrument: Instrument,
-  highwaySpeed: number,
-  clippingPlanes: THREE.Plane[],
-  track: Track,
-): Promise<THREE.Group> {
-  const groupedNotes = track.noteEventGroups;
-  const starPowerSections = track.starPowerSections;
-
-  function inStarPowerSection(time: number) {
-    return starPowerSections.some(
-      section =>
-        time >= section.msTime && time <= section.msTime + section.msLength,
-    );
-  }
-
-  const highwayGroups = new THREE.Group();
-
-  const {getTextureForNote} = await loadNoteTextures(textureLoader, instrument);
-
-  for (const group of groupedNotes) {
-    const time = group[0].msTime;
-    const inStarPower = inStarPowerSection(time);
-
-    // const events = new Map<EventType, number>(
-    //   group.events.map(event => [event.type, event.length]),
-    // );
-
-    const notesGroup = new THREE.Group();
-    notesGroup.position.y = (time / 1000) * highwaySpeed - 1;
-    highwayGroups.add(notesGroup);
-
-    // Calculate modifiers
-    if (instrument == 'drums') {
-      // normalizeDrumEvents(events, format);
-      for (const note of group) {
-        // Apply disco flip for lane calculation
-        const {type: discoType} = applyDiscoFlip(note);
-
-        if (discoType === noteTypes.kick) {
-          const kickScale = 0.045;
-          const sprite = new THREE.Sprite(
-            getTextureForNote(note, {inStarPower}),
-          );
-          sprite.center = new THREE.Vector2(0.62, -0.5);
-          const aspectRatio =
-            sprite.material.map!.image.width /
-            sprite.material.map!.image.height;
-          sprite.scale.set(kickScale * aspectRatio, kickScale, kickScale);
-          sprite.position.z = 0;
-          sprite.material.clippingPlanes = clippingPlanes;
-          sprite.material.depthTest = false;
-          sprite.material.transparent = true;
-          sprite.renderOrder = 1;
-          notesGroup.add(sprite);
-        } else {
-          const lane =
-            discoType == noteTypes.redDrum
-              ? 0
-              : discoType == noteTypes.yellow ||
-                  discoType == noteTypes.yellowDrum
-                ? 1
-                : discoType == noteTypes.blue ||
-                    discoType == noteTypes.blueDrum
-                  ? 2
-                  : discoType == noteTypes.green ||
-                      discoType == noteTypes.greenDrum ||
-                      discoType == noteTypes.orange
-                    ? 3
-                    : -1;
-
-          if (lane != -1) {
-            const noteXPosition = calculateNoteXOffset(instrument, lane);
-            const sprite = new THREE.Sprite(
-              getTextureForNote(note, {inStarPower}),
-            );
-            sprite.position.x = noteXPosition;
-
-            sprite.center = new THREE.Vector2(0.5, 0);
-            const aspectRatio =
-              sprite.material.map!.image.width /
-              sprite.material.map!.image.height;
-            sprite.scale.set(SCALE * aspectRatio, SCALE, SCALE);
-            sprite.position.z = 0;
-            sprite.material.clippingPlanes = clippingPlanes;
-            sprite.material.depthTest = false;
-            sprite.material.transparent = true;
-            sprite.renderOrder = 4;
-            notesGroup.add(sprite);
-          }
-        }
-      }
-    } else {
-      for (const note of group) {
-        if (note.type === noteTypes.open) {
-          const openScale = 0.11;
-          const sprite = new THREE.Sprite(
-            getTextureForNote(note, {inStarPower}),
-          );
-          sprite.center = new THREE.Vector2(0.5, 0);
-          const aspectRatio =
-            sprite.material.map!.image.width /
-            sprite.material.map!.image.height;
-          sprite.scale.set(openScale * aspectRatio, openScale, openScale);
-          // sprite.position.x = -0.9;
-          sprite.position.z = 0;
-          sprite.material.clippingPlanes = clippingPlanes;
-          sprite.material.depthTest = false;
-          sprite.material.transparent = true;
-          sprite.renderOrder = 4;
-          notesGroup.add(sprite);
-        } else {
-          // Standard note
-          const lane =
-            note.type == noteTypes.green
-              ? 0
-              : note.type == noteTypes.red
-                ? 1
-                : note.type == noteTypes.yellow
-                  ? 2
-                  : note.type == noteTypes.blue
-                    ? 3
-                    : note.type == noteTypes.orange
-                      ? 4
-                      : -1;
-
-          const noteXPosition = calculateNoteXOffset(instrument, lane);
-
-          if (lane != -1) {
-            // We should investigate how -1 happens, we probably are missing support for something
-            const noteGroup = new THREE.Group();
-            notesGroup.add(noteGroup);
-            // This likely needs to change from being absolute to being relative to the note
-            noteGroup.position.x = noteXPosition;
-
-            const sprite = new THREE.Sprite(
-              getTextureForNote(note, {inStarPower}),
-            );
-
-            sprite.center = new THREE.Vector2(0.5, 0);
-            const aspectRatio =
-              sprite.material.map!.image.width /
-              sprite.material.map!.image.height;
-            sprite.scale.set(SCALE * aspectRatio, SCALE, SCALE);
-            sprite.position.z = 0;
-            sprite.material.clippingPlanes = clippingPlanes;
-            sprite.material.depthTest = false;
-            sprite.material.transparent = true;
-            sprite.renderOrder = 4;
-            noteGroup.add(sprite);
-
-            // Add the sustain
-
-            const length = note.msLength;
-            if (length > 0) {
-              const mat = new THREE.MeshBasicMaterial({
-                color: GUITAR_LANE_COLORS[lane],
-                side: THREE.DoubleSide,
-              });
-
-              mat.clippingPlanes = clippingPlanes;
-              mat.depthTest = false;
-              mat.transparent = true;
-
-              const geometry = new THREE.PlaneGeometry(
-                SCALE * 0.3,
-                (length / 1000) * highwaySpeed,
-              );
-              const plane = new THREE.Mesh(geometry, mat);
-
-              plane.position.z = 0;
-              // This probably needs to change to be relative to the group
-              plane.position.y =
-                (length! / 1000 / 2) * highwaySpeed + SCALE / 2;
-              plane.renderOrder = 2;
-              noteGroup.add(plane);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return highwayGroups;
 }
