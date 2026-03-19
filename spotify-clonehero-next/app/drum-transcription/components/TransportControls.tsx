@@ -29,6 +29,8 @@ interface TransportControlsProps {
   durationSeconds: number;
   /** Chart sections for section jumping (optional). */
   sections?: Section[];
+  /** Content rendered between the time display and speed controls (e.g. waveform). */
+  children?: React.ReactNode;
   /** Optional CSS class for the container. */
   className?: string;
 }
@@ -67,6 +69,7 @@ export default function TransportControls({
   audioManager,
   durationSeconds,
   sections = [],
+  children,
   className,
 }: TransportControlsProps) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -204,7 +207,7 @@ export default function TransportControls({
     <TooltipProvider delayDuration={300}>
       <div
         ref={containerRef}
-        className={`flex items-center gap-2 shrink-0 ${className ?? ''}`}>
+        className={`flex items-center gap-2 w-full ${className ?? ''}`}>
         {/* Section skip back */}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -259,6 +262,9 @@ export default function TransportControls({
         <span className="min-w-[5rem] text-xs font-mono text-muted-foreground tabular-nums whitespace-nowrap">
           {formatTime(currentTime)} / {formatTime(durationSeconds)}
         </span>
+
+        {/* Slot for waveform or other content between controls */}
+        {children ?? <div className="flex-1" />}
 
         {/* Speed control */}
         <div className="flex items-center gap-1">

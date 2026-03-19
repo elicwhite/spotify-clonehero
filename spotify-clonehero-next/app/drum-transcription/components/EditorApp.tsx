@@ -305,54 +305,55 @@ export default function EditorApp({projectId}: EditorAppProps) {
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-black">
-      {/* Highway — full width/height, the primary editing surface */}
-      <HighwayEditor
-        metadata={cloneHeroMetadata}
-        chart={chart}
-        audioManager={audioManagerRef.current}
-        className="h-full w-full"
-      />
+    <div className="flex flex-col h-full w-full overflow-hidden bg-black">
+      {/* Main area: highway + overlaid panels */}
+      <div className="relative flex-1 min-h-0">
+        {/* Highway — fills available space above the bottom bar */}
+        <HighwayEditor
+          metadata={cloneHeroMetadata}
+          chart={chart}
+          audioManager={audioManagerRef.current}
+          className="h-full w-full"
+        />
 
-      {/* Overlaid panels — positioned on edges over the dark highway space */}
+        {/* Overlaid panels on the dark highway edges */}
 
-      {/* Top bar: toolbar + project name + export */}
-      <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between gap-2 px-3 py-2 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
-        <div className="flex items-center gap-2 pointer-events-auto">
-          <h2 className="text-sm font-semibold text-white/90 truncate">
-            {projectMeta?.name ?? 'Untitled'}
-          </h2>
-          {state.dirty && (
-            <span className="text-xs text-amber-400" title="Unsaved changes">
-              *
-            </span>
-          )}
+        {/* Top bar: toolbar + project name + export */}
+        <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between gap-2 px-3 py-2 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+          <div className="flex items-center gap-2 pointer-events-auto">
+            <h2 className="text-sm font-semibold text-white/90 truncate">
+              {projectMeta?.name ?? 'Untitled'}
+            </h2>
+            {state.dirty && (
+              <span className="text-xs text-amber-400" title="Unsaved changes">
+                *
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 pointer-events-auto">
+            <EditToolbar />
+            <LoopControls audioManager={audioManagerRef.current} />
+            <ExportDialog
+              projectId={projectId}
+              songName={projectMeta?.name ?? 'Untitled'}
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-2 pointer-events-auto">
-          <EditToolbar />
-          <LoopControls audioManager={audioManagerRef.current} />
-          <ExportDialog
-            projectId={projectId}
-            songName={projectMeta?.name ?? 'Untitled'}
-          />
+
+        {/* Left panel: note inspector + confidence + stem controls */}
+        <div className="absolute top-12 left-2 bottom-2 z-10 w-[260px] flex flex-col gap-2 overflow-y-auto pointer-events-auto">
+          <NoteInspector />
+          <ConfidencePanel />
+          <StemVolumeControls audioManager={audioManagerRef.current} />
         </div>
       </div>
 
-      {/* Left panel: note inspector + confidence + stem controls */}
-      <div className="absolute top-12 left-2 bottom-24 z-10 w-[260px] flex flex-col gap-2 overflow-y-auto pointer-events-auto">
-        <NoteInspector />
-        <ConfidencePanel />
-        <StemVolumeControls audioManager={audioManagerRef.current} />
-      </div>
-
-      {/* Bottom bar: transport + waveform in a single row */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-auto">
-        <div className="flex items-center gap-2 px-3 py-2 bg-black/80 backdrop-blur-sm">
-          <TransportControls
-            audioManager={audioManagerRef.current}
-            durationSeconds={durationSeconds}
-            sections={chart.sections}
-          />
+      {/* Bottom bar: transport + waveform + speed — not overlapping the highway */}
+      <div className="shrink-0 rounded-t-lg border border-b-0 bg-card px-3 py-2">
+        <TransportControls
+          audioManager={audioManagerRef.current}
+          durationSeconds={durationSeconds}
+          sections={chart.sections}>
           {audioPcm && (
             <WaveformDisplay
               audioData={audioPcm}
@@ -362,7 +363,7 @@ export default function EditorApp({projectId}: EditorAppProps) {
               className="flex-1 min-w-0"
             />
           )}
-        </div>
+        </TransportControls>
       </div>
     </div>
   );
