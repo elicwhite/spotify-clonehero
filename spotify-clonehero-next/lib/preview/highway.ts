@@ -537,7 +537,8 @@ async function loadTomTextures(textureLoader: THREE.TextureLoader) {
 async function loadCymbalTextures(textureLoader: THREE.TextureLoader) {
   const textures = await Promise.all(
     ['blue', 'green', 'red', 'yellow'].map(async color => {
-      const texture = await textureLoader.loadAsync(
+      const texture = await loadTexture(
+        textureLoader,
         `/assets/preview/assets2/drum-cymbal-${color}.webp`,
       );
       return new THREE.SpriteMaterial({
@@ -555,7 +556,8 @@ async function loadCymbalTextures(textureLoader: THREE.TextureLoader) {
 }
 
 async function getHighwayTexture(textureLoader: THREE.TextureLoader) {
-  const texture = await textureLoader.loadAsync(
+  const texture = await loadTexture(
+    textureLoader,
     '/assets/preview/assets/highways/wor.png',
   );
 
@@ -587,7 +589,8 @@ function createDrumHighway(highwayTexture: THREE.Texture) {
 }
 
 async function loadAndCreateHitBox(textureLoader: THREE.TextureLoader) {
-  const texture = await textureLoader.loadAsync(
+  const texture = await loadTexture(
+    textureLoader,
     '/assets/preview/assets/isolated.png',
   );
 
@@ -618,7 +621,8 @@ async function loadAndCreateHitBox(textureLoader: THREE.TextureLoader) {
 }
 
 async function loadAndCreateDrumHitBox(textureLoader: THREE.TextureLoader) {
-  const texture = await textureLoader.loadAsync(
+  const texture = await loadTexture(
+    textureLoader,
     '/assets/preview/assets/isolated-drums.png',
   );
 
