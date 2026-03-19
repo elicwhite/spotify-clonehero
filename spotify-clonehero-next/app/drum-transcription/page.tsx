@@ -3,7 +3,7 @@
 import {Suspense, useCallback, useEffect, useState} from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
 import Script from 'next/script';
-import {AlertTriangle, Loader2, ArrowLeft, FolderOpen} from 'lucide-react';
+import {AlertTriangle, Loader2, ArrowLeft, FolderOpen, Trash2} from 'lucide-react';
 import {toast} from 'sonner';
 import {
   Card,
@@ -13,6 +13,16 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import AudioUploader from './components/AudioUploader';
 import ProcessingView from './components/ProcessingView';
 import EditorApp from './components/EditorApp';
@@ -20,6 +30,7 @@ import {EditorProvider} from './contexts/EditorContext';
 import {
   listProjects,
   getProject,
+  deleteProject,
   type ProjectSummary,
 } from '@/lib/drum-transcription/storage/opfs';
 import {
@@ -63,6 +74,9 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
   // If projectNeedsProcessing becomes true, we show ProcessingView instead of EditorApp.
   const [checkingProject, setCheckingProject] = useState(false);
   const [projectNeedsProcessing, setProjectNeedsProcessing] = useState(false);
+
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
 
   const isProcessing =
     pipelineProgress !== null &&
@@ -365,6 +379,20 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
     router.push('/drum-transcription');
   }, [router]);
 
+  const handleDeleteProject = useCallback(async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteProject(deleteTarget.id);
+      setProjects((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      toast.success(`Deleted "${deleteTarget.name}"`);
+    } catch (err) {
+      console.error('Failed to delete project:', err);
+      toast.error('Failed to delete project');
+    } finally {
+      setDeleteTarget(null);
+    }
+  }, [deleteTarget]);
+
   // WebGPU check -- block access if not supported
   if (webGPUSupported === false) {
     return (
@@ -502,18 +530,30 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
           <CardContent>
             <div className="space-y-2">
               {projects.map((project) => (
-                <button
+                <div
                   key={project.id}
-                  onClick={() => handleSelectProject(project.id)}
-                  className="w-full flex items-center justify-between px-4 py-3 rounded-lg border hover:bg-accent/50 transition-colors text-left">
-                  <div>
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-lg border hover:bg-accent/50 transition-colors">
+                  <button
+                    onClick={() => handleSelectProject(project.id)}
+                    className="flex-1 text-left min-w-0">
                     <p className="text-sm font-medium">{project.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {formatStage(project.stage)} &middot; Updated{' '}
                       {new Date(project.updatedAt).toLocaleDateString()}
                     </p>
-                  </div>
-                </button>
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="ml-2 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(project);
+                    }}>
+                    <Trash2 className="h-4 w-4" />
+                    <span className="sr-only">Delete {project.name}</span>
+                  </Button>
+                </div>
               ))}
             </div>
           </CardContent>
@@ -530,6 +570,30 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
           ONNX + WebGPU.
         </p>
       </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this project on this website.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteProject}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
