@@ -204,7 +204,7 @@ export default function TransportControls({
     <TooltipProvider delayDuration={300}>
       <div
         ref={containerRef}
-        className={`flex items-center gap-3 rounded-lg border bg-background px-4 py-2 ${className ?? ''}`}>
+        className={`flex items-center gap-2 shrink-0 ${className ?? ''}`}>
         {/* Section skip back */}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -256,12 +256,9 @@ export default function TransportControls({
         </Tooltip>
 
         {/* Time display */}
-        <span className="min-w-[5rem] text-xs font-mono text-muted-foreground tabular-nums">
+        <span className="min-w-[5rem] text-xs font-mono text-muted-foreground tabular-nums whitespace-nowrap">
           {formatTime(currentTime)} / {formatTime(durationSeconds)}
         </span>
-
-        {/* Spacer — waveform above acts as the seek scrubber */}
-        <div className="flex-1" />
 
         {/* Speed control */}
         <div className="flex items-center gap-1">

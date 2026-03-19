@@ -345,27 +345,23 @@ export default function EditorApp({projectId}: EditorAppProps) {
         <StemVolumeControls audioManager={audioManagerRef.current} />
       </div>
 
-      {/* Bottom bar: waveform + transport controls */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 to-transparent pointer-events-none">
-        {/* Waveform */}
-        {audioPcm && (
-          <div className="px-3 pt-2 pointer-events-auto">
-            <WaveformDisplay
-              audioData={audioPcm}
-              channels={audioChannels}
-              audioManager={audioManagerRef.current}
-              durationSeconds={durationSeconds}
-            />
-          </div>
-        )}
-
-        {/* Transport */}
-        <div className="px-3 pb-2 pt-1 pointer-events-auto">
+      {/* Bottom bar: transport + waveform in a single row */}
+      <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-auto">
+        <div className="flex items-center gap-2 px-3 py-2 bg-black/80 backdrop-blur-sm">
           <TransportControls
             audioManager={audioManagerRef.current}
             durationSeconds={durationSeconds}
             sections={chart.sections}
           />
+          {audioPcm && (
+            <WaveformDisplay
+              audioData={audioPcm}
+              channels={audioChannels}
+              audioManager={audioManagerRef.current}
+              durationSeconds={durationSeconds}
+              className="flex-1 min-w-0"
+            />
+          )}
         </div>
       </div>
     </div>

@@ -20,7 +20,7 @@ interface WaveformDisplayProps {
 const BAR_WIDTH = 2;
 const BAR_GAP = 1;
 const BAR_RADIUS = 2;
-const WAVEFORM_HEIGHT = 80;
+const WAVEFORM_HEIGHT = 48;
 const WAVE_COLOR = '#4a90d9';
 const PROGRESS_COLOR = '#1e5aa0';
 const CURSOR_COLOR = '#ef4444';
@@ -190,7 +190,7 @@ export default function WaveformDisplay({
   return (
     <div
       ref={containerRef}
-      className={`rounded-lg border bg-background p-2 ${className ?? ''}`}>
+      className={className ?? ''}>
       <canvas
         ref={canvasRef}
         className="w-full cursor-pointer"
