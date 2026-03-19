@@ -187,12 +187,23 @@ export default function EditorApp({projectId}: EditorAppProps) {
         setAudioChannels(aMeta.channels);
 
         // 10. Create AudioManager from the audio files
-        // Try to load individual stems first. If stems exist (from Demucs
-        // separation), use them. Otherwise fall back to the full mix as
-        // "drums" (since this is a drum transcription tool).
-        const audioFiles: {fileName: string; data: Uint8Array}[] = [];
-        let hasSeparatedStems = false;
+        // Always load the full mix as "song.wav" so there's always a
+        // complete audio track. Then load any separated stems on top —
+        // AudioManager merges all files with "drums" in the name into
+        // a single drums track, and other stems become separate tracks.
+        setLoadingStep('Preparing audio...');
+        const fullMixWav = encodeWavBlob(
+          pcmData,
+          aMeta.sampleRate,
+          aMeta.channels,
+        );
+        const fullMixArray = new Uint8Array(await fullMixWav.arrayBuffer());
+        const audioFiles: {fileName: string; data: Uint8Array}[] = [
+          {fileName: 'song.wav', data: fullMixArray},
+        ];
 
+        // Load separated stems if Demucs has run
+        setLoadingStep('Loading stems...');
         const stemNames = ['drums', 'bass', 'other', 'vocals'];
         for (const stemName of stemNames) {
           try {
@@ -210,23 +221,9 @@ export default function EditorApp({projectId}: EditorAppProps) {
               fileName: `${stemName}.wav`,
               data: stemArray,
             });
-            hasSeparatedStems = true;
           } catch {
             // Stem not available, skip
           }
-        }
-
-        if (!hasSeparatedStems) {
-          // No separated stems — use the full mix as the only audio track.
-          // Name it "drums.wav" so AudioManager puts it in the "drums" track
-          // (this is a drum transcription tool, so "drums" is the primary track).
-          const wavBlob = encodeWavBlob(
-            pcmData,
-            aMeta.sampleRate,
-            aMeta.channels,
-          );
-          const wavArray = new Uint8Array(await wavBlob.arrayBuffer());
-          audioFiles.push({fileName: 'drums.wav', data: wavArray});
         }
 
         const audioManager = new AudioManager(audioFiles, () => {
