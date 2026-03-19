@@ -4,7 +4,49 @@
  * Used by both the SheetMusic VexFlow renderer and the drum transcription editor.
  */
 
-import {NoteEvent, noteTypes, noteFlags} from '@eliwhite/scan-chart';
+import {NoteEvent, NoteType, noteTypes, noteFlags} from '@eliwhite/scan-chart';
+
+/**
+ * Applies the disco flip transformation to a drum note's type and flags.
+ *
+ * Notes with the `disco` flag have red and yellow swapped visually:
+ * - Red tom becomes yellow cymbal (snare -> hihat)
+ * - Yellow cymbal becomes red tom (hihat -> snare)
+ *
+ * Notes with the `discoNoflip` flag just have the flag stripped (no swap).
+ *
+ * Returns a new {type, flags} object — does NOT mutate the input note.
+ */
+export function applyDiscoFlip(note: {
+  type: NoteType;
+  flags: number;
+}): {type: NoteType; flags: number} {
+  let {type, flags} = note;
+
+  if (flags & noteFlags.discoNoflip) {
+    flags &= ~noteFlags.discoNoflip;
+    return {type, flags};
+  }
+
+  if (flags & noteFlags.disco) {
+    flags &= ~noteFlags.disco;
+    switch (type) {
+      case noteTypes.redDrum:
+        type = noteTypes.yellowDrum;
+        flags &= ~noteFlags.tom;
+        flags |= noteFlags.cymbal;
+        break;
+      case noteTypes.yellowDrum:
+        type = noteTypes.redDrum;
+        flags &= ~noteFlags.cymbal;
+        flags |= noteFlags.tom;
+        break;
+    }
+    return {type, flags};
+  }
+
+  return {type, flags};
+}
 
 export type DrumNoteInstrument =
   | 'kick'

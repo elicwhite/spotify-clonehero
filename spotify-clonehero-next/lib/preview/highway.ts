@@ -7,6 +7,7 @@ import {
   noteFlags,
   noteTypes,
 } from '@eliwhite/scan-chart';
+import {applyDiscoFlip} from '../drum-mapping/noteToInstrument';
 import {ChartResponseEncore} from '../chartSelection';
 import {AudioManager} from './audioManager';
 
@@ -22,7 +23,7 @@ export type SelectedTrack = {
 export type Song = {};
 
 const SCALE = 0.105;
-const NOTE_SPAN_WIDTH = 0.99;
+const NOTE_SPAN_WIDTH = 0.95;
 
 const NOTE_COLORS = {
   green: '#01B11A',
@@ -182,6 +183,9 @@ export const setupRenderer = (
       window.removeEventListener('resize', onResize, false);
       // audioCtx.close();
       renderer.setAnimationLoop(null);
+      renderer.renderLists.dispose();
+      renderer.dispose();
+      renderer.forceContextLoss();
     },
     /** Expose the camera for overlay coordinate mapping (unprojection). */
     getCamera() {
@@ -323,6 +327,39 @@ export const setupRenderer = (
 //   return {audioCtx, audioSources};
 // }
 
+/**
+ * Creates a placeholder texture (magenta square) for missing textures.
+ * This ensures notes always render even if texture loading fails.
+ */
+function createPlaceholderTexture(): THREE.Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 32;
+  canvas.height = 32;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#FF00FF';
+  ctx.fillRect(0, 0, 32, 32);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/**
+ * Loads a texture with proper colorSpace and placeholder fallback.
+ */
+async function loadTexture(
+  textureLoader: THREE.TextureLoader,
+  url: string,
+): Promise<THREE.Texture> {
+  try {
+    const texture = await textureLoader.loadAsync(url);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  } catch (error) {
+    console.warn(`Failed to load texture from ${url}:`, error);
+    return createPlaceholderTexture();
+  }
+}
+
 type DrumModifiers = {};
 
 type GuitarModifiers = {
@@ -351,7 +388,8 @@ async function loadNoteTextures(
     tomTextures = await loadTomTextures(textureLoader);
     cymbalTextures = await loadCymbalTextures(textureLoader);
     kickMaterial = new THREE.SpriteMaterial({
-      map: await textureLoader.loadAsync(
+      map: await loadTexture(
+        textureLoader,
         `/assets/preview/assets2/drum-kick.webp`,
       ),
     });
@@ -360,42 +398,38 @@ async function loadNoteTextures(
     strumTexturesHopo = await loadStrumHopoNoteTextures(textureLoader);
     strumTexturesTap = await loadStrumTapNoteTextures(textureLoader);
     openMaterial = new THREE.SpriteMaterial({
-      map: await textureLoader.loadAsync(`/assets/preview/assets2/strum5.webp`),
+      map: await loadTexture(
+        textureLoader,
+        `/assets/preview/assets2/strum5.webp`,
+      ),
     });
   }
 
   return {
     getTextureForNote(note: Note, {inStarPower}: {inStarPower: boolean}) {
       if (isDrums) {
-        if (note.type == noteTypes.greenDrum && note.flags & noteFlags.cymbal) {
+        // Apply disco flip: swaps red↔yellow and tom↔cymbal flags for disco notes
+        const {type, flags} = applyDiscoFlip(note);
+
+        if (type == noteTypes.greenDrum && flags & noteFlags.cymbal) {
           return cymbalTextures.green;
-        } else if (
-          note.type == noteTypes.greenDrum &&
-          note.flags & noteFlags.cymbal
-        ) {
-          return cymbalTextures.green;
-        } else if (
-          note.type == noteTypes.blueDrum &&
-          note.flags & noteFlags.cymbal
-        ) {
+        } else if (type == noteTypes.blueDrum && flags & noteFlags.cymbal) {
           return cymbalTextures.blue;
-        } else if (
-          note.type == noteTypes.yellowDrum &&
-          note.flags & noteFlags.cymbal
-        ) {
+        } else if (type == noteTypes.yellowDrum && flags & noteFlags.cymbal) {
           return cymbalTextures.yellow;
-        } else if (note.type == noteTypes.kick) {
+        } else if (type == noteTypes.kick) {
           return kickMaterial;
-        } else if (note.type == noteTypes.redDrum) {
+        } else if (type == noteTypes.redDrum) {
+          // Red is always tom in pro drums — ignore cymbal flag
           return tomTextures.red;
-        } else if (note.type == noteTypes.greenDrum) {
+        } else if (type == noteTypes.greenDrum) {
           return tomTextures.green;
-        } else if (note.type == noteTypes.blueDrum) {
+        } else if (type == noteTypes.blueDrum) {
           return tomTextures.blue;
-        } else if (note.type == noteTypes.yellowDrum) {
+        } else if (type == noteTypes.yellowDrum) {
           return tomTextures.yellow;
         } else {
-          throw new Error(`Invalid sprite requested: ${note.type}`);
+          throw new Error(`Invalid sprite requested: ${type}`);
         }
       } else {
         const textures =
@@ -429,7 +463,8 @@ async function loadStrumNoteTextures(textureLoader: THREE.TextureLoader) {
   const noteTextures = [];
 
   for await (const num of [0, 1, 2, 3, 4]) {
-    const texture = await textureLoader.loadAsync(
+    const texture = await loadTexture(
+      textureLoader,
       `/assets/preview/assets2/strum${num}.webp`,
     );
     noteTextures.push(
@@ -446,7 +481,8 @@ async function loadStrumHopoNoteTextures(textureLoader: THREE.TextureLoader) {
   const hopoNoteTextures = [];
 
   for await (const num of [0, 1, 2, 3, 4]) {
-    const texture = await textureLoader.loadAsync(
+    const texture = await loadTexture(
+      textureLoader,
       `/assets/preview/assets2/hopo${num}.webp`,
     );
     hopoNoteTextures.push(
@@ -463,7 +499,8 @@ async function loadStrumTapNoteTextures(textureLoader: THREE.TextureLoader) {
   const hopoNoteTextures = [];
 
   for await (const num of [0, 1, 2, 3, 4]) {
-    const texture = await textureLoader.loadAsync(
+    const texture = await loadTexture(
+      textureLoader,
       `/assets/preview/assets2/tap${num}.png`,
     );
     hopoNoteTextures.push(
@@ -479,7 +516,8 @@ async function loadStrumTapNoteTextures(textureLoader: THREE.TextureLoader) {
 async function loadTomTextures(textureLoader: THREE.TextureLoader) {
   const textures = await Promise.all(
     ['blue', 'green', 'red', 'yellow'].map(async color => {
-      const texture = await textureLoader.loadAsync(
+      const texture = await loadTexture(
+        textureLoader,
         `/assets/preview/assets2/drum-tom-${color}.webp`,
       );
       return new THREE.SpriteMaterial({
@@ -658,12 +696,15 @@ async function generateNoteHighway(
     if (instrument == 'drums') {
       // normalizeDrumEvents(events, format);
       for (const note of group) {
-        if (note.type === noteTypes.kick) {
+        // Apply disco flip for lane calculation
+        const {type: discoType} = applyDiscoFlip(note);
+
+        if (discoType === noteTypes.kick) {
           const kickScale = 0.045;
           const sprite = new THREE.Sprite(
             getTextureForNote(note, {inStarPower}),
           );
-          sprite.center = new THREE.Vector2(0.5, -0.5);
+          sprite.center = new THREE.Vector2(0.62, -0.5);
           const aspectRatio =
             sprite.material.map!.image.width /
             sprite.material.map!.image.height;
@@ -676,16 +717,17 @@ async function generateNoteHighway(
           notesGroup.add(sprite);
         } else {
           const lane =
-            note.type == noteTypes.redDrum
+            discoType == noteTypes.redDrum
               ? 0
-              : note.type == noteTypes.yellow ||
-                  note.type == noteTypes.yellowDrum
+              : discoType == noteTypes.yellow ||
+                  discoType == noteTypes.yellowDrum
                 ? 1
-                : note.type == noteTypes.blue || note.type == noteTypes.blueDrum
+                : discoType == noteTypes.blue ||
+                    discoType == noteTypes.blueDrum
                   ? 2
-                  : note.type == noteTypes.green ||
-                      note.type == noteTypes.greenDrum ||
-                      note.type == noteTypes.orange
+                  : discoType == noteTypes.green ||
+                      discoType == noteTypes.greenDrum ||
+                      discoType == noteTypes.orange
                     ? 3
                     : -1;
 
@@ -783,7 +825,7 @@ async function generateNoteHighway(
               mat.transparent = true;
 
               const geometry = new THREE.PlaneGeometry(
-                SCALE * 0.175,
+                SCALE * 0.3,
                 (length / 1000) * highwaySpeed,
               );
               const plane = new THREE.Mesh(geometry, mat);
