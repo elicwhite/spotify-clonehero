@@ -10,7 +10,6 @@ import {
   Plus,
 } from 'lucide-react';
 import {Button} from '@/components/ui/button';
-import {Slider} from '@/components/ui/slider';
 import {
   Tooltip,
   TooltipContent,
@@ -100,15 +99,6 @@ export default function TransportControls({
       await audioManager.play({time: currentTime});
     }
   }, [audioManager, currentTime]);
-
-  // Seek to position
-  const handleSeek = useCallback(
-    (value: number[]) => {
-      const timeSec = (value[0] / 100) * durationSeconds;
-      audioManager.play({time: timeSec});
-    },
-    [audioManager, durationSeconds],
-  );
 
   // Speed control
   const handleSpeedChange = useCallback(
@@ -210,9 +200,6 @@ export default function TransportControls({
     durationSeconds,
   ]);
 
-  const seekPercent =
-    durationSeconds > 0 ? (currentTime / durationSeconds) * 100 : 0;
-
   return (
     <TooltipProvider delayDuration={300}>
       <div
@@ -273,16 +260,8 @@ export default function TransportControls({
           {formatTime(currentTime)} / {formatTime(durationSeconds)}
         </span>
 
-        {/* Seek slider */}
-        <div className="flex-1 min-w-[100px]">
-          <Slider
-            value={[seekPercent]}
-            min={0}
-            max={100}
-            step={0.1}
-            onValueChange={handleSeek}
-          />
-        </div>
+        {/* Spacer — waveform above acts as the seek scrubber */}
+        <div className="flex-1" />
 
         {/* Speed control */}
         <div className="flex items-center gap-1">
