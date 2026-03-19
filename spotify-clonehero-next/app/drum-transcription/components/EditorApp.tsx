@@ -1,6 +1,6 @@
 'use client';
 
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import {Loader2, AlertCircle} from 'lucide-react';
 import {toast} from 'sonner';
@@ -19,7 +19,6 @@ import {parsedChartToDocument} from '@/lib/drum-transcription/chart-io/parsed-to
 import {useEditorContext} from '../contexts/EditorContext';
 import {useEditorKeyboard} from '../hooks/useEditorKeyboard';
 import {useAutoSave} from '../hooks/useAutoSave';
-import SheetMusic from '@/app/sheet-music/[slug]/SheetMusic';
 import TransportControls from './TransportControls';
 import WaveformDisplay from './WaveformDisplay';
 import ExportDialog from './ExportDialog';
@@ -68,16 +67,6 @@ export default function EditorApp({projectId}: EditorAppProps) {
   const [audioPcm, setAudioPcm] = useState<Float32Array | null>(null);
   const [audioChannels, setAudioChannels] = useState(2);
   const [durationSeconds, setDurationSeconds] = useState(0);
-  const [rerenderKey, setRerenderKey] = useState('initial');
-  const [chartText, setChartText] = useState<string>('');
-
-  // Local playback time for SheetMusic — polled from AudioManager at a
-  // low frequency (~4 fps). This does NOT go through the global context,
-  // so it only re-renders SheetMusic, not the highway or other panels.
-  const [sheetMusicTime, setSheetMusicTime] = useState(0);
-  const sheetMusicTimerRef = useRef<ReturnType<typeof setInterval> | null>(
-    null,
-  );
 
   // Auto-save hook
   const {save} = useAutoSave(loadingState === 'ready' ? projectId : null);
@@ -113,7 +102,6 @@ export default function EditorApp({projectId}: EditorAppProps) {
           loadedChartText = await readProjectText(projectId, 'notes.chart');
         }
         if (cancelled) return;
-        setChartText(loadedChartText);
 
         // 3. Parse chart
         const chartBytes = new TextEncoder().encode(loadedChartText);
@@ -264,41 +252,6 @@ export default function EditorApp({projectId}: EditorAppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  // Low-frequency polling (~4 fps) to keep SheetMusic's currentTime prop
-  // roughly in sync. SheetMusic only uses this for measure highlighting,
-  // so high precision is not needed. This does NOT dispatch to the global
-  // context — it only sets a local state that triggers SheetMusic re-render.
-  useEffect(() => {
-    sheetMusicTimerRef.current = setInterval(() => {
-      const am = audioManagerRef.current;
-      if (am) {
-        setSheetMusicTime(am.currentTime);
-      }
-    }, 250);
-
-    return () => {
-      if (sheetMusicTimerRef.current) {
-        clearInterval(sheetMusicTimerRef.current);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Trigger SheetMusic re-render when chart changes via editing
-  useEffect(() => {
-    if (state.dirty) {
-      setRerenderKey(prev => prev + '-edited');
-    }
-  }, [state.chart, state.dirty]);
-
-  // Handle measure click in SheetMusic
-  const handleSelectMeasure = useCallback(
-    (time: number) => {
-      audioManagerRef.current?.play({time});
-    },
-    [audioManagerRef],
-  );
-
   // Build a minimal metadata object for CloneHeroRenderer.
   // Memoized so the reference is stable across renders (prevents
   // DrumHighwayPreview from tearing down and rebuilding the 3D renderer).
@@ -344,11 +297,21 @@ export default function EditorApp({projectId}: EditorAppProps) {
   }
 
   return (
-    <div className="flex flex-col h-full w-full gap-2 p-2 overflow-hidden">
-      {/* Toolbar row: project name + editing tools + loop + export */}
-      <div className="flex items-center justify-between gap-2 shrink-0">
-        <div className="flex items-center gap-2 px-2">
-          <h2 className="text-sm font-semibold truncate">
+    <div className="relative h-full w-full overflow-hidden bg-black">
+      {/* Highway — full width/height, the primary editing surface */}
+      <HighwayEditor
+        metadata={cloneHeroMetadata}
+        chart={chart}
+        audioManager={audioManagerRef.current}
+        className="h-full w-full"
+      />
+
+      {/* Overlaid panels — positioned on edges over the dark highway space */}
+
+      {/* Top bar: toolbar + project name + export */}
+      <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between gap-2 px-3 py-2 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+        <div className="flex items-center gap-2 pointer-events-auto">
+          <h2 className="text-sm font-semibold text-white/90 truncate">
             {projectMeta?.name ?? 'Untitled'}
           </h2>
           {state.dirty && (
@@ -357,7 +320,7 @@ export default function EditorApp({projectId}: EditorAppProps) {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 pointer-events-auto">
           <EditToolbar />
           <LoopControls audioManager={audioManagerRef.current} />
           <ExportDialog
@@ -367,69 +330,35 @@ export default function EditorApp({projectId}: EditorAppProps) {
         </div>
       </div>
 
-      {/* Waveform Panel */}
-      {audioPcm && (
-        <div className="shrink-0">
-          <WaveformDisplay
-            audioData={audioPcm}
-            channels={audioChannels}
-            audioManager={audioManagerRef.current}
-            durationSeconds={durationSeconds}
-          />
-        </div>
-      )}
-
-      {/* Main content: SheetMusic + HighwayEditor + Side panels */}
-      <div className="flex flex-1 gap-2 min-h-0">
-        {/* Sheet music (read-only notation view) */}
-        <div className="flex-1 min-w-0 overflow-auto">
-          <SheetMusic
-            chart={chart}
-            track={track}
-            currentTime={sheetMusicTime}
-            showBarNumbers={true}
-            enableColors={true}
-            showLyrics={false}
-            zoom={state.zoom}
-            onSelectMeasure={handleSelectMeasure}
-            triggerRerender={rerenderKey}
-            practiceModeConfig={null}
-            onPracticeMeasureSelect={() => {}}
-            selectionIndex={null}
-            audioManagerRef={audioManagerRef}
-          />
-        </div>
-
-        {/* Highway editor + side panels */}
-        <div className="w-[300px] shrink-0 h-full flex flex-col gap-2">
-          <HighwayEditor
-            metadata={cloneHeroMetadata}
-            chart={chart}
-            audioManager={audioManagerRef.current}
-            className="flex-1 min-h-0"
-          />
-
-          {/* Side panels (scrollable) */}
-          <div className="flex flex-col gap-2 overflow-y-auto max-h-[300px]">
-            {/* Note properties inspector */}
-            <NoteInspector />
-
-            {/* Confidence panel */}
-            <ConfidencePanel />
-
-            {/* Stem volume controls */}
-            <StemVolumeControls audioManager={audioManagerRef.current} />
-          </div>
-        </div>
+      {/* Left panel: note inspector + confidence + stem controls */}
+      <div className="absolute top-12 left-2 bottom-24 z-10 w-[260px] flex flex-col gap-2 overflow-y-auto pointer-events-auto">
+        <NoteInspector />
+        <ConfidencePanel />
+        <StemVolumeControls audioManager={audioManagerRef.current} />
       </div>
 
-      {/* Transport Controls */}
-      <div className="shrink-0">
-        <TransportControls
-          audioManager={audioManagerRef.current}
-          durationSeconds={durationSeconds}
-          sections={chart.sections}
-        />
+      {/* Bottom bar: waveform + transport controls */}
+      <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 to-transparent pointer-events-none">
+        {/* Waveform */}
+        {audioPcm && (
+          <div className="px-3 pt-2 pointer-events-auto">
+            <WaveformDisplay
+              audioData={audioPcm}
+              channels={audioChannels}
+              audioManager={audioManagerRef.current}
+              durationSeconds={durationSeconds}
+            />
+          </div>
+        )}
+
+        {/* Transport */}
+        <div className="px-3 pb-2 pt-1 pointer-events-auto">
+          <TransportControls
+            audioManager={audioManagerRef.current}
+            durationSeconds={durationSeconds}
+            sections={chart.sections}
+          />
+        </div>
       </div>
     </div>
   );
