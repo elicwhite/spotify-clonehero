@@ -45,6 +45,15 @@ const GUITAR_LANE_COLORS = [
 
 let instanceCounter = 0;
 
+/**
+ * Internal flag for star power notes. Uses a high bit that doesn't collide
+ * with any noteFlags value from scan-chart.  Matches chart-preview's SP_FLAG.
+ */
+const SP_FLAG = 2147483648;
+
+/** Base URL for drum textures hosted on static.enchor.us. */
+const DRUM_TEXTURE_BASE = 'https://static.enchor.us/preview-';
+
 // ---------------------------------------------------------------------------
 // Animated WebP texture support (Chrome-only, graceful fallback)
 // ---------------------------------------------------------------------------
@@ -1062,6 +1071,34 @@ type GuitarModifiers = {
   isOpen: boolean;
 };
 
+/**
+ * Loads kick drum textures (normal + SP variant).
+ * Returns a Map<flags, SpriteMaterial>.
+ */
+async function loadKickTextures(
+  textureLoader: THREE.TextureLoader,
+  animatedTextureManager?: AnimatedTextureManager,
+): Promise<Map<number, THREE.SpriteMaterial>> {
+  const normalTexture = await loadTexture(
+    textureLoader,
+    `${DRUM_TEXTURE_BASE}drums-kick.webp`,
+    animatedTextureManager,
+  );
+  const spTexture = await loadDrumTextureWithFallback(
+    textureLoader,
+    `${DRUM_TEXTURE_BASE}drums-kick-sp.webp`,
+    normalTexture,
+    animatedTextureManager,
+  );
+
+  const result = new Map<number, THREE.SpriteMaterial>();
+  result.set(noteFlags.none, new THREE.SpriteMaterial({map: normalTexture}));
+  result.set(noteFlags.doubleKick, new THREE.SpriteMaterial({map: normalTexture}));
+  result.set(noteFlags.none | SP_FLAG, new THREE.SpriteMaterial({map: spTexture}));
+  result.set(noteFlags.doubleKick | SP_FLAG, new THREE.SpriteMaterial({map: spTexture}));
+  return result;
+}
+
 async function loadNoteTextures(
   textureLoader: THREE.TextureLoader,
   instrument: Instrument,
@@ -1074,20 +1111,16 @@ async function loadNoteTextures(
   let strumTexturesTap: THREE.SpriteMaterial[];
   let openMaterial: THREE.SpriteMaterial;
 
-  let tomTextures: Awaited<ReturnType<typeof loadTomTextures>>;
-  let cymbalTextures: Awaited<ReturnType<typeof loadCymbalTextures>>;
-  let kickMaterial: THREE.SpriteMaterial;
+  let tomTextures: DrumTextureMap;
+  let cymbalTextures: DrumTextureMap;
+  let kickTextures: Map<number, THREE.SpriteMaterial>;
 
   if (isDrums) {
-    tomTextures = await loadTomTextures(textureLoader, animatedTextureManager);
-    cymbalTextures = await loadCymbalTextures(textureLoader, animatedTextureManager);
-    kickMaterial = new THREE.SpriteMaterial({
-      map: await loadTexture(
-        textureLoader,
-        `/assets/preview/assets2/drum-kick.webp`,
-        animatedTextureManager,
-      ),
-    });
+    [tomTextures, cymbalTextures, kickTextures] = await Promise.all([
+      loadTomTextures(textureLoader, animatedTextureManager),
+      loadCymbalTextures(textureLoader, animatedTextureManager),
+      loadKickTextures(textureLoader, animatedTextureManager),
+    ]);
   } else {
     strumTextures = await loadStrumNoteTextures(textureLoader, animatedTextureManager);
     strumTexturesHopo = await loadStrumHopoNoteTextures(textureLoader, animatedTextureManager);
@@ -1107,26 +1140,39 @@ async function loadNoteTextures(
         // Apply disco flip: swaps red↔yellow and tom↔cymbal flags for disco notes
         const {type, flags} = applyDiscoFlip(note);
 
-        if (type == noteTypes.greenDrum && flags & noteFlags.cymbal) {
-          return cymbalTextures.green;
-        } else if (type == noteTypes.blueDrum && flags & noteFlags.cymbal) {
-          return cymbalTextures.blue;
-        } else if (type == noteTypes.yellowDrum && flags & noteFlags.cymbal) {
-          return cymbalTextures.yellow;
-        } else if (type == noteTypes.kick) {
-          return kickMaterial;
-        } else if (type == noteTypes.redDrum) {
-          // Red is always tom in pro drums — ignore cymbal flag
-          return tomTextures.red;
-        } else if (type == noteTypes.greenDrum) {
-          return tomTextures.green;
-        } else if (type == noteTypes.blueDrum) {
-          return tomTextures.blue;
-        } else if (type == noteTypes.yellowDrum) {
-          return tomTextures.yellow;
-        } else {
+        if (type === noteTypes.kick) {
+          // Build lookup flags for kick: preserve doubleKick, add SP if needed
+          const lookupFlags =
+            (flags & noteFlags.doubleKick) | (inStarPower ? SP_FLAG : 0);
+          return kickTextures.get(lookupFlags) ?? kickTextures.get(noteFlags.none)!;
+        }
+
+        // Determine if this is a cymbal or tom
+        const isCymbal = !!(flags & noteFlags.cymbal) && type !== noteTypes.redDrum;
+        const textureMap = isCymbal ? cymbalTextures : tomTextures;
+        const typeFlag = isCymbal ? noteFlags.cymbal : noteFlags.tom;
+
+        // Build lookup flags: type flag + dynamic (ghost/accent) + SP
+        const dynamicFlag = flags & noteFlags.ghost
+          ? noteFlags.ghost
+          : flags & noteFlags.accent
+            ? noteFlags.accent
+            : noteFlags.none;
+        const spFlag = inStarPower ? SP_FLAG : 0;
+        const lookupFlags = typeFlag | dynamicFlag | spFlag;
+
+        const flagMap = textureMap.get(type);
+        if (!flagMap) {
           throw new Error(`Invalid sprite requested: ${type}`);
         }
+
+        // Try exact match first, then fall back without SP, then without dynamic, then plain
+        return (
+          flagMap.get(lookupFlags) ??
+          flagMap.get(typeFlag | dynamicFlag) ??
+          flagMap.get(typeFlag | spFlag) ??
+          flagMap.get(typeFlag)!
+        );
       } else {
         const textures =
           note.flags & noteFlags.tap
@@ -1221,54 +1267,166 @@ async function loadStrumTapNoteTextures(
   return hopoNoteTextures;
 }
 
+/**
+ * Loads a drum texture variant from static.enchor.us.
+ * Falls back to the normal (unflagged) texture on failure,
+ * or to a placeholder if even the normal texture fails.
+ *
+ * Unlike `loadTexture`, this function treats load failures as a fallback
+ * to the provided normal texture rather than returning a magenta placeholder.
+ */
+async function loadDrumTextureWithFallback(
+  textureLoader: THREE.TextureLoader,
+  variantUrl: string,
+  fallbackTexture: THREE.Texture | null,
+  animatedTextureManager?: AnimatedTextureManager,
+): Promise<THREE.Texture> {
+  // For .webp files, try animated loading first
+  if (animatedTextureManager && variantUrl.endsWith('.webp') && isImageDecoderSupported()) {
+    try {
+      const result = await AnimatedTexture.create(textureLoader, variantUrl);
+      if (result instanceof AnimatedTexture) {
+        animatedTextureManager.register(result);
+        return result.texture;
+      }
+      return result;
+    } catch {
+      // Fall through to static loading
+    }
+  }
+
+  try {
+    const texture = await textureLoader.loadAsync(variantUrl);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  } catch {
+    console.warn(
+      `Failed to load drum texture variant ${variantUrl}, using fallback`,
+    );
+    if (fallbackTexture) return fallbackTexture;
+    return createPlaceholderTexture();
+  }
+}
+
+/** Result type for drum texture loaders: type -> flags -> SpriteMaterial */
+type DrumTextureMap = Map<number, Map<number, THREE.SpriteMaterial>>;
+
 async function loadTomTextures(
   textureLoader: THREE.TextureLoader,
   animatedTextureManager?: AnimatedTextureManager,
-) {
-  const textures = await Promise.all(
-    ['blue', 'green', 'red', 'yellow'].map(async color => {
-      const texture = await loadTexture(
-        textureLoader,
-        `/assets/preview/assets2/drum-tom-${color}.webp`,
-        animatedTextureManager,
-      );
-      return new THREE.SpriteMaterial({
-        map: texture,
-      });
+): Promise<DrumTextureMap> {
+  const colors = new Map([
+    [noteTypes.redDrum, 'red'],
+    [noteTypes.yellowDrum, 'yellow'],
+    [noteTypes.blueDrum, 'blue'],
+    [noteTypes.greenDrum, 'green'],
+  ]);
+  const dynamicFlags: [number, string][] = [
+    [noteFlags.none, ''],
+    [noteFlags.ghost, '-ghost'],
+    [noteFlags.accent, '-accent'],
+  ];
+  const spFlags: [number, string][] = [
+    [noteFlags.none, ''],
+    [SP_FLAG, '-sp'],
+  ];
+
+  const result: DrumTextureMap = new Map();
+
+  // First pass: load all normal (no dynamic, no SP) textures for fallback
+  const normalTextures = new Map<number, THREE.Texture>();
+  await Promise.all(
+    Array.from(colors.entries()).map(async ([noteType, colorName]) => {
+      const url = `${DRUM_TEXTURE_BASE}drums-${colorName}-tom.webp`;
+      const texture = await loadTexture(textureLoader, url, animatedTextureManager);
+      normalTextures.set(noteType, texture);
     }),
   );
 
-  return {
-    blue: textures[0],
-    green: textures[1],
-    red: textures[2],
-    yellow: textures[3],
-  };
+  // Second pass: load all variants, falling back to normal on failure
+  const promises: Promise<void>[] = [];
+  for (const [noteType, colorName] of colors) {
+    const flagMap = new Map<number, THREE.SpriteMaterial>();
+    result.set(noteType, flagMap);
+
+    for (const [dynamicFlagKey, dynamicFlagName] of dynamicFlags) {
+      for (const [spFlagKey, spFlagName] of spFlags) {
+        const combinedFlags = spFlagKey | dynamicFlagKey | noteFlags.tom;
+        const url = `${DRUM_TEXTURE_BASE}drums-${colorName}-tom${dynamicFlagName}${spFlagName}.webp`;
+        const fallback = normalTextures.get(noteType)!;
+
+        promises.push(
+          loadDrumTextureWithFallback(textureLoader, url, fallback, animatedTextureManager).then(
+            texture => {
+              flagMap.set(combinedFlags, new THREE.SpriteMaterial({map: texture}));
+            },
+          ),
+        );
+      }
+    }
+  }
+
+  await Promise.all(promises);
+  return result;
 }
 
 async function loadCymbalTextures(
   textureLoader: THREE.TextureLoader,
   animatedTextureManager?: AnimatedTextureManager,
-) {
-  const textures = await Promise.all(
-    ['blue', 'green', 'red', 'yellow'].map(async color => {
-      const texture = await loadTexture(
-        textureLoader,
-        `/assets/preview/assets2/drum-cymbal-${color}.webp`,
-        animatedTextureManager,
-      );
-      return new THREE.SpriteMaterial({
-        map: texture,
-      });
+): Promise<DrumTextureMap> {
+  // No red cymbal in pro drums — only yellow, blue, green
+  const colors = new Map([
+    [noteTypes.yellowDrum, 'yellow'],
+    [noteTypes.blueDrum, 'blue'],
+    [noteTypes.greenDrum, 'green'],
+  ]);
+  const dynamicFlags: [number, string][] = [
+    [noteFlags.none, ''],
+    [noteFlags.ghost, '-ghost'],
+    [noteFlags.accent, '-accent'],
+  ];
+  const spFlags: [number, string][] = [
+    [noteFlags.none, ''],
+    [SP_FLAG, '-sp'],
+  ];
+
+  const result: DrumTextureMap = new Map();
+
+  // First pass: load normal textures for fallback
+  const normalTextures = new Map<number, THREE.Texture>();
+  await Promise.all(
+    Array.from(colors.entries()).map(async ([noteType, colorName]) => {
+      const url = `${DRUM_TEXTURE_BASE}drums-${colorName}-cymbal.webp`;
+      const texture = await loadTexture(textureLoader, url, animatedTextureManager);
+      normalTextures.set(noteType, texture);
     }),
   );
 
-  return {
-    blue: textures[0],
-    green: textures[1],
-    red: textures[2],
-    yellow: textures[3],
-  };
+  // Second pass: load all variants
+  const promises: Promise<void>[] = [];
+  for (const [noteType, colorName] of colors) {
+    const flagMap = new Map<number, THREE.SpriteMaterial>();
+    result.set(noteType, flagMap);
+
+    for (const [dynamicFlagKey, dynamicFlagName] of dynamicFlags) {
+      for (const [spFlagKey, spFlagName] of spFlags) {
+        const combinedFlags = spFlagKey | dynamicFlagKey | noteFlags.cymbal;
+        const url = `${DRUM_TEXTURE_BASE}drums-${colorName}-cymbal${dynamicFlagName}${spFlagName}.webp`;
+        const fallback = normalTextures.get(noteType)!;
+
+        promises.push(
+          loadDrumTextureWithFallback(textureLoader, url, fallback, animatedTextureManager).then(
+            texture => {
+              flagMap.set(combinedFlags, new THREE.SpriteMaterial({map: texture}));
+            },
+          ),
+        );
+      }
+    }
+  }
+
+  await Promise.all(promises);
+  return result;
 }
 
 async function getHighwayTexture(textureLoader: THREE.TextureLoader) {
