@@ -39,6 +39,7 @@ import type {RawDrumEvent, TranscriptionResult} from '../ml/types';
 
 export type PipelineStep =
   | 'idle'
+  | 'loading-runtime'
   | 'decoding'
   | 'separating'
   | 'transcribing'

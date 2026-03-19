@@ -44,7 +44,7 @@ function useWebGPUCheck() {
  * Inner component that reads search params.
  * Must be wrapped in Suspense because useSearchParams() requires it.
  */
-function DrumTranscriptionInner() {
+function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
   const webGPUSupported = useWebGPUCheck();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -162,17 +162,52 @@ function DrumTranscriptionInner() {
     }
   }, [projectId, isProcessing]);
 
+  // Wait for ORT to be ready, showing loading-runtime step.
+  // Returns a promise that resolves once ortReady is true.
+  const waitForOrt = useCallback(
+    (projectName: string, projectId?: string) => {
+      return new Promise<void>((resolve) => {
+        // Check immediately — ORT may already be loaded
+        if ((globalThis as any).ort) {
+          resolve();
+          return;
+        }
+
+        setPipelineProgress({
+          step: 'loading-runtime',
+          progress: 0,
+          projectId,
+          projectName,
+        });
+
+        // Poll for ORT availability (the Script onReady will set it,
+        // but we also check the global directly for robustness)
+        const interval = setInterval(() => {
+          if ((globalThis as any).ort) {
+            clearInterval(interval);
+            resolve();
+          }
+        }, 100);
+      });
+    },
+    [],
+  );
+
   // Handle audio upload -> start pipeline
   const handleStartPipeline = useCallback(
     async (file: File) => {
       setPipelineAudioFile(file);
-      setPipelineProgress({
-        step: 'decoding',
-        progress: 0,
-        projectName: file.name,
-      });
 
       try {
+        // Wait for ONNX Runtime to load
+        await waitForOrt(file.name);
+
+        setPipelineProgress({
+          step: 'decoding',
+          progress: 0,
+          projectName: file.name,
+        });
+
         const finalProjectId = await runPipeline(
           file,
           file.name,
@@ -200,7 +235,7 @@ function DrumTranscriptionInner() {
         toast.error(message);
       }
     },
-    [router],
+    [router, waitForOrt],
   );
 
   // Handle selecting an existing project
@@ -215,7 +250,10 @@ function DrumTranscriptionInner() {
           return;
         }
 
-        // Otherwise, resume the pipeline — map the project stage to the
+        // Wait for ONNX Runtime before resuming pipeline
+        await waitForOrt(meta.name, id);
+
+        // Resume the pipeline — map the project stage to the
         // correct pipeline step so ProcessingView highlights the right stage.
         const initialStep: PipelineStep =
           meta.stage === 'uploaded'
@@ -257,18 +295,21 @@ function DrumTranscriptionInner() {
         router.push(`/drum-transcription?project=${id}`);
       }
     },
-    [router],
+    [router, waitForOrt],
   );
 
   // Handle demo button
   const handleTryDemo = useCallback(async () => {
-    setPipelineProgress({
-      step: 'decoding',
-      progress: 0,
-      projectName: 'Demo Drum Sample',
-    });
-
     try {
+      // Wait for ONNX Runtime to load
+      await waitForOrt('Demo Drum Sample');
+
+      setPipelineProgress({
+        step: 'decoding',
+        progress: 0,
+        projectName: 'Demo Drum Sample',
+      });
+
       const response = await fetch('/drumsample.mp3');
       if (!response.ok) {
         throw new Error('Failed to fetch demo audio file');
@@ -302,7 +343,7 @@ function DrumTranscriptionInner() {
       }));
       toast.error(message);
     }
-  }, [router]);
+  }, [router, waitForOrt]);
 
   const handleRetryPipeline = useCallback(() => {
     if (pipelineProgress?.projectId) {
@@ -518,13 +559,29 @@ const ORT_CDN_URL =
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.0-dev.20251116-b39e144322/dist/ort.min.js';
 
 export default function DrumTranscriptionPage() {
+  const [ortReady, setOrtReady] = useState(false);
+
+  const handleOrtLoad = useCallback(() => {
+    console.log('[ORT] Script loaded from CDN');
+  }, []);
+
+  const handleOrtReady = useCallback(() => {
+    console.log('[ORT] Runtime ready');
+    setOrtReady(true);
+  }, []);
+
   return (
     <>
       {/* Load ONNX Runtime Web from CDN (avoids bundling ~20MB WASM files).
-          Must load before any Demucs or ADTOF inference. */}
-      <Script src={ORT_CDN_URL} strategy="beforeInteractive" />
+          Uses afterInteractive so the page renders first, then the script loads. */}
+      <Script
+        src={ORT_CDN_URL}
+        strategy="afterInteractive"
+        onLoad={handleOrtLoad}
+        onReady={handleOrtReady}
+      />
       <Suspense fallback={null}>
-        <DrumTranscriptionInner />
+        <DrumTranscriptionInner ortReady={ortReady} />
       </Suspense>
     </>
   );

@@ -34,6 +34,11 @@ interface StepConfig {
 
 const PIPELINE_STEPS: StepConfig[] = [
   {
+    key: 'loading-runtime',
+    label: 'Loading ML Runtime',
+    description: 'Loading ONNX Runtime and ML models',
+  },
+  {
     key: 'decoding',
     label: 'Decoding Audio',
     description: 'Converting to 44.1kHz stereo PCM',
@@ -41,12 +46,12 @@ const PIPELINE_STEPS: StepConfig[] = [
   {
     key: 'separating',
     label: 'Separating Stems',
-    description: 'Running Demucs to isolate drum track',
+    description: 'Running Demucs to isolate drum track (~161 MB model)',
   },
   {
     key: 'transcribing',
     label: 'Transcribing Drums',
-    description: 'Detecting drum hits with ML model',
+    description: 'Detecting drum hits with ADTOF model',
   },
 ];
 
