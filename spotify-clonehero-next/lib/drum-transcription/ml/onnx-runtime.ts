@@ -2,9 +2,10 @@
  * ONNX Runtime Web setup for the drum transcription pipeline.
  *
  * Loads ONNX Runtime from CDN as a global script (avoids bundling ~20MB of
- * WASM files). WebGPU is the only supported execution provider -- there is
- * no WASM fallback. If WebGPU is unavailable the caller must block access
- * to the transcription feature.
+ * WASM files). WebGPU is the primary execution provider with WASM as an
+ * explicit fallback for ops that WebGPU does not support (e.g. Shape,
+ * Gather). If WebGPU is unavailable the caller must block access to the
+ * transcription feature.
  *
  * Usage:
  *   1. Include the CDN script in your page's <head>:
@@ -74,7 +75,7 @@ export function getOrt(): OrtGlobal {
   if (!ortConfigured) {
     g.ort.env.wasm.wasmPaths = ORT_CDN_BASE;
     g.ort.env.wasm.numThreads = 4;
-    g.ort.env.logLevel = 'warning';
+    g.ort.env.logLevel = 'error';
     ortConfigured = true;
   }
 
@@ -105,7 +106,11 @@ export async function isWebGPUAvailable(): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 /**
- * Creates an ONNX InferenceSession using the WebGPU execution provider.
+ * Creates an ONNX InferenceSession using WebGPU with WASM fallback.
+ *
+ * WebGPU handles the heavy compute ops; WASM covers ops that WebGPU does
+ * not support (e.g. Shape, Gather). This dual-EP configuration silences
+ * the "nodes not assigned to preferred EP" warning from ORT.
  *
  * @param modelUrl - URL to the `.onnx` model file (e.g. on HuggingFace).
  *   The browser will cache the download after the first fetch.
@@ -125,7 +130,7 @@ export async function createInferenceSession(
 
   const ort = getOrt();
   return ort.InferenceSession.create(modelUrl, {
-    executionProviders: ['webgpu'],
+    executionProviders: ['webgpu', 'wasm'],
     graphOptimizationLevel: 'all',
   });
 }
