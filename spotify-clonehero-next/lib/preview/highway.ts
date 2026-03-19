@@ -183,6 +183,14 @@ export const setupRenderer = (
       // audioCtx.close();
       renderer.setAnimationLoop(null);
     },
+    /** Expose the camera for overlay coordinate mapping (unprojection). */
+    getCamera() {
+      return camera;
+    },
+    /** Expose the highway speed constant. */
+    getHighwaySpeed() {
+      return highwaySpeed;
+    },
   };
 
   return methods;

@@ -6,11 +6,19 @@ import {AudioManager} from '@/lib/preview/audioManager';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {ParsedChart} from '@/lib/drum-transcription/chart-io/reader';
 
+/** The subset of the renderer API that the overlay needs for coordinate mapping. */
+export interface HighwayRendererHandle {
+  getCamera(): import('three').PerspectiveCamera;
+  getHighwaySpeed(): number;
+}
+
 interface DrumHighwayPreviewProps {
   metadata: ChartResponseEncore;
   chart: ParsedChart;
   audioManager: AudioManager;
   className?: string;
+  /** Called when the renderer is ready (or destroyed). */
+  onRendererReady?: (handle: HighwayRendererHandle | null) => void;
 }
 
 /**
@@ -32,6 +40,7 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
   chart,
   audioManager,
   className,
+  onRendererReady,
 }: DrumHighwayPreviewProps) {
   const sizingRef = useRef<HTMLDivElement>(null!);
   const canvasRef = useRef<HTMLDivElement>(null!);
@@ -63,11 +72,18 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
     renderer.prepTrack(drumTrack);
     renderer.startRender();
 
+    // Expose camera/speed to the overlay
+    onRendererReady?.({
+      getCamera: () => renderer.getCamera(),
+      getHighwaySpeed: () => renderer.getHighwaySpeed(),
+    });
+
     return () => {
       renderer.destroy();
       rendererRef.current = null;
+      onRendererReady?.(null);
     };
-  }, [metadata, chart, drumTrack, audioManager]);
+  }, [metadata, chart, drumTrack, audioManager, onRendererReady]);
 
   if (!drumTrack) {
     return (
