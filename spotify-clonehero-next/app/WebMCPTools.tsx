@@ -1,6 +1,7 @@
 'use client';
 
 import {useEffect} from 'react';
+import {runRawSql} from '@/lib/local-db/client';
 
 /**
  * Registers WebMCP tools for OPFS inspection via navigator.modelContext.
@@ -292,6 +293,45 @@ export default function WebMCPTools() {
                 type: 'text',
                 text: JSON.stringify({
                   error: `Cannot delete: ${path}`,
+                  message: String(e),
+                }),
+              },
+            ],
+          };
+        }
+      },
+    });
+
+    navigator.modelContext.registerTool({
+      name: 'run_sql',
+      description:
+        'Run a raw SQL query against the local SQLocal SQLite database. Returns rows as JSON.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sql: {
+            type: 'string',
+            description: 'SQL query to execute',
+          },
+        },
+        required: ['sql'],
+      },
+      execute: async (args: Record<string, unknown>) => {
+        const sql = args.sql as string;
+        try {
+          const rows = await runRawSql(sql);
+          return {
+            content: [
+              {type: 'text', text: JSON.stringify(rows, null, 2)},
+            ],
+          };
+        } catch (e) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  error: 'SQL query failed',
                   message: String(e),
                 }),
               },
