@@ -261,7 +261,30 @@ async function getData() {
   const before = performance.now();
 
   const result = await db
-    // matched_tracks: Spotify tracks that appear in chart matches
+    // track_dedup: map each spotify track ID to a canonical one per unique song
+    .with('track_dedup', qb =>
+      qb
+        .selectFrom('spotify_tracks as st')
+        .innerJoin(
+          sub =>
+            sub
+              .selectFrom('spotify_tracks')
+              .select([
+                'artist_normalized',
+                'name_normalized',
+                sql<string>`MIN(id)`.as('canonical_id'),
+              ])
+              .groupBy(['artist_normalized', 'name_normalized'])
+              .as('canon'),
+          join =>
+            join
+              .onRef('canon.artist_normalized', '=', 'st.artist_normalized')
+              .onRef('canon.name_normalized', '=', 'st.name_normalized'),
+        )
+        .select(['st.id as original_id', 'canon.canonical_id']),
+    )
+
+    // matched_tracks: deduplicated Spotify tracks that appear in chart matches
     .with('matched_tracks', qb =>
       qb
         .selectFrom('spotify_track_chart_matches as track_chart_link')
@@ -270,23 +293,29 @@ async function getData() {
           'track.id',
           'track_chart_link.spotify_id',
         )
+        .innerJoin(
+          'track_dedup as td',
+          'td.original_id',
+          'track.id',
+        )
         .select([
-          'track.id as spotify_track_id',
-          'track.name as spotify_track_name',
-          'track.artist as spotify_artist_name',
+          'td.canonical_id as spotify_track_id',
+          sql<string>`MIN(track.name)`.as('spotify_track_name'),
+          sql<string>`MIN(track.artist)`.as('spotify_artist_name'),
         ])
-        .distinct(),
+        .groupBy('td.canonical_id'),
     )
 
-    // chart_aggregates: one JSON array of ChorusChart objects per Spotify track
+    // chart_aggregates: one JSON array of ChorusChart objects per canonical track
     .with('chart_aggregates', qb =>
       qb
         .selectFrom(sub =>
           sub
             .selectFrom('spotify_track_chart_matches as link')
+            .innerJoin('track_dedup as td', 'td.original_id', 'link.spotify_id')
             .innerJoin('chorus_charts as chart', 'chart.md5', 'link.chart_md5')
             .select([
-              'link.spotify_id as spotify_track_id',
+              'td.canonical_id as spotify_track_id',
               'chart.md5 as chart_md5',
               'chart.name as chart_name',
               'chart.artist as chart_artist_name',
@@ -312,7 +341,7 @@ async function getData() {
                 ) THEN 1 ELSE 0 END
               `.as('isInstalled'),
             ])
-            .groupBy(['link.spotify_id', 'chart.md5'])
+            .groupBy(['td.canonical_id', 'chart.md5'])
             .as('deduped_charts'),
         )
         .select([
@@ -342,61 +371,105 @@ async function getData() {
         .groupBy('deduped_charts.spotify_track_id'),
     )
 
-    // playlist_aggregates: one JSON array of SpotifyPlaylist objects per track
+    // playlist_aggregates: one JSON array of SpotifyPlaylist objects per canonical track
     .with('playlist_aggregates', qb =>
       qb
-        .selectFrom('spotify_playlist_tracks as playlist_link')
-        .innerJoin(
-          'spotify_playlists as playlist',
-          'playlist.id',
-          'playlist_link.playlist_id',
+        .selectFrom(sub =>
+          sub
+            .selectFrom('spotify_playlist_tracks as playlist_link')
+            .innerJoin(
+              'track_dedup as td',
+              'td.original_id',
+              'playlist_link.track_id',
+            )
+            .innerJoin(
+              'spotify_playlists as playlist',
+              'playlist.id',
+              'playlist_link.playlist_id',
+            )
+            .select([
+              'td.canonical_id as spotify_track_id',
+              'playlist.id as playlist_id',
+              'playlist.snapshot_id as snapshot_id',
+              'playlist.name as name',
+              'playlist.collaborative as collaborative',
+              'playlist.owner_display_name as owner_display_name',
+              'playlist.owner_external_url as owner_external_url',
+              'playlist.total_tracks as total_tracks',
+              'playlist.updated_at as updated_at',
+            ])
+            .groupBy(['td.canonical_id', 'playlist.id'])
+            .as('deduped_playlists'),
         )
         .select([
-          'playlist_link.track_id as spotify_track_id',
+          'deduped_playlists.spotify_track_id',
           sql<PickedSpotifyPlaylists[]>`
           json_group_array(
             json_object(
-              'id',                ${sql.ref('playlist.id')},
-              'snapshot_id',       ${sql.ref('playlist.snapshot_id')},
-              'name',              ${sql.ref('playlist.name')},
-              'collaborative',     ${sql.ref('playlist.collaborative')},
-              'owner_display_name',${sql.ref('playlist.owner_display_name')},
-              'owner_external_url',${sql.ref('playlist.owner_external_url')},
-              'total_tracks',      ${sql.ref('playlist.total_tracks')},
-              'updated_at',        ${sql.ref('playlist.updated_at')}
+              'id',                ${sql.ref('deduped_playlists.playlist_id')},
+              'snapshot_id',       ${sql.ref('deduped_playlists.snapshot_id')},
+              'name',              ${sql.ref('deduped_playlists.name')},
+              'collaborative',     ${sql.ref('deduped_playlists.collaborative')},
+              'owner_display_name',${sql.ref('deduped_playlists.owner_display_name')},
+              'owner_external_url',${sql.ref('deduped_playlists.owner_external_url')},
+              'total_tracks',      ${sql.ref('deduped_playlists.total_tracks')},
+              'updated_at',        ${sql.ref('deduped_playlists.updated_at')}
             )
           )
         `.as('playlist_memberships'),
         ])
-        .groupBy('playlist_link.track_id'),
+        .groupBy('deduped_playlists.spotify_track_id'),
     )
 
-    // album_aggregates: one JSON array of SpotifyAlbum objects per track
+    // album_aggregates: one JSON array of SpotifyAlbum objects per canonical track
     .with('album_aggregates', qb =>
       qb
-        .selectFrom('spotify_album_tracks as album_link')
-        .innerJoin('spotify_albums as album', 'album.id', 'album_link.album_id')
+        .selectFrom(sub =>
+          sub
+            .selectFrom('spotify_album_tracks as album_link')
+            .innerJoin(
+              'track_dedup as td',
+              'td.original_id',
+              'album_link.track_id',
+            )
+            .innerJoin(
+              'spotify_albums as album',
+              'album.id',
+              'album_link.album_id',
+            )
+            .select([
+              'td.canonical_id as spotify_track_id',
+              'album.id as album_id',
+              'album.name as name',
+              'album.artist_name as artist_name',
+              'album.total_tracks as total_tracks',
+              'album.updated_at as updated_at',
+            ])
+            .groupBy(['td.canonical_id', 'album.id'])
+            .as('deduped_albums'),
+        )
         .select([
-          'album_link.track_id as spotify_track_id',
+          'deduped_albums.spotify_track_id',
           sql<PickedSpotifyAlbums[]>`
           json_group_array(
             json_object(
-              'id',           ${sql.ref('album.id')},
-              'name',         ${sql.ref('album.name')},
-              'artist_name',  ${sql.ref('album.artist_name')},
-              'total_tracks', ${sql.ref('album.total_tracks')},
-              'updated_at',   ${sql.ref('album.updated_at')}
+              'id',           ${sql.ref('deduped_albums.album_id')},
+              'name',         ${sql.ref('deduped_albums.name')},
+              'artist_name',  ${sql.ref('deduped_albums.artist_name')},
+              'total_tracks', ${sql.ref('deduped_albums.total_tracks')},
+              'updated_at',   ${sql.ref('deduped_albums.updated_at')}
             )
           )
         `.as('album_memberships'),
         ])
-        .groupBy('album_link.track_id'),
+        .groupBy('deduped_albums.spotify_track_id'),
     )
 
-    // local_chart_flags: one boolean flag per track
+    // local_chart_flags: one boolean flag per canonical track
     .with('local_chart_flags', qb =>
       qb
         .selectFrom('spotify_track_chart_matches as link')
+        .innerJoin('track_dedup as td', 'td.original_id', 'link.spotify_id')
         .innerJoin('chorus_charts as chart', 'chart.md5', 'link.chart_md5')
         .innerJoin('local_charts as local', join =>
           join
@@ -404,10 +477,10 @@ async function getData() {
             .onRef('local.song_normalized', '=', 'chart.name_normalized'),
         )
         .select([
-          'link.spotify_id as spotify_track_id',
+          'td.canonical_id as spotify_track_id',
           sql<number>`1`.as('is_any_local_chart_installed'),
         ])
-        .groupBy('link.spotify_id')
+        .groupBy('td.canonical_id')
         .distinct(),
     )
 
