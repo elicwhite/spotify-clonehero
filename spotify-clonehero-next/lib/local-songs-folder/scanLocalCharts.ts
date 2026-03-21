@@ -262,24 +262,34 @@ export type ChartInstalledChecker = (
   charter: string,
 ) => boolean;
 
-function createLookupKey(artist: string, song: string, charter: string) {
+export type SongInstalledChecker = (artist: string, song: string) => boolean;
+
+function createChartLookupKey(artist: string, song: string, charter: string) {
   return `${artist} - ${song} - ${charter}`;
 }
+
+function createSongLookupKey(artist: string, song: string) {
+  return `${artist} - ${song}`;
+}
+
 export function createIsInstalledFilter(
   installedSongs: SongAccumulator[],
-): ChartInstalledChecker {
+): {isChartInstalled: ChartInstalledChecker; isSongInstalled: SongInstalledChecker} {
   const installedCharts = new Set<string>();
+  const installedSongKeys = new Set<string>();
 
   for (const installedSong of installedSongs) {
     const {artist, song, charter} = installedSong;
-    installedCharts.add(createLookupKey(artist, song, charter));
+    installedCharts.add(createChartLookupKey(artist, song, charter));
+    installedSongKeys.add(createSongLookupKey(artist, song));
   }
 
-  return function isChartInstalled(
-    artist: string,
-    song: string,
-    charter: string,
-  ) {
-    return installedCharts.has(createLookupKey(artist, song, charter));
+  return {
+    isChartInstalled(artist: string, song: string, charter: string) {
+      return installedCharts.has(createChartLookupKey(artist, song, charter));
+    },
+    isSongInstalled(artist: string, song: string) {
+      return installedSongKeys.has(createSongLookupKey(artist, song));
+    },
   };
 }

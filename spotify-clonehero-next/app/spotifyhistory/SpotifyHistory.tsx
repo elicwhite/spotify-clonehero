@@ -237,10 +237,10 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     }
 
     const flatTrackPlays = flattenArtistTrackPlays(artistTrackPlays);
-    const isInstalled = await createIsInstalledFilter(installedCharts);
+    const {isChartInstalled, isSongInstalled} = await createIsInstalledFilter(installedCharts);
 
     const allChorusCharts = await chorusChartsPromise;
-    const markedCharts = markInstalledCharts(allChorusCharts, isInstalled);
+    const markedCharts = markInstalledCharts(allChorusCharts, isChartInstalled, isSongInstalled);
 
     setStatus(prevStatus => ({
       ...prevStatus,
@@ -341,12 +341,14 @@ function renderStatus(status: Status, scanHandler: () => void) {
 
 function markInstalledCharts(
   allCharts: ChartResponseEncore[],
-  isInstalled: (artist: string, song: string, charter: string) => boolean,
+  isChartInstalled: (artist: string, song: string, charter: string) => boolean,
+  isSongInstalled: (artist: string, song: string) => boolean,
 ): SpotifyChartData[] {
   return allCharts.map(
     (chart): SpotifyChartData => ({
       ...chart,
-      isInstalled: isInstalled(chart.artist, chart.name, chart.charter),
+      isInstalled: isChartInstalled(chart.artist, chart.name, chart.charter),
+      isSongInstalled: isSongInstalled(chart.artist, chart.name),
     }),
   );
 }

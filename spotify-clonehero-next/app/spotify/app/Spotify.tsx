@@ -401,8 +401,7 @@ async function getData() {
         .innerJoin('local_charts as local', join =>
           join
             .onRef('local.artist_normalized', '=', 'chart.artist_normalized')
-            .onRef('local.song_normalized', '=', 'chart.name_normalized')
-            .onRef('local.charter_normalized', '=', 'chart.charter_normalized'),
+            .onRef('local.song_normalized', '=', 'chart.name_normalized'),
         )
         .select([
           'link.spotify_id as spotify_track_id',
@@ -484,6 +483,7 @@ function SpotifyHistory() {
           albumArtMd5: chart.album_art_md5 ?? '',
           hasVideoBackground: chart.has_video_background === 1,
           isInstalled: chart.isInstalled === 1,
+          isSongInstalled: item.is_any_local_chart_installed === 1,
           modifiedTime: chart.modified_time,
           file: `https://files.enchor.us/${chart.md5}.sng`,
         };

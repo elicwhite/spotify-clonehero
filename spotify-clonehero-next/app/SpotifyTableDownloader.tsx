@@ -66,6 +66,7 @@ declare module '@tanstack/react-table' {
 
 export type SpotifyChartData = {
   isInstalled: boolean;
+  isSongInstalled: boolean;
 } & Omit<ChartResponseEncore, 'notesData'> & {notesData?: NotesData};
 
 export type PickedSpotifyPlaylists = Pick<
@@ -119,6 +120,7 @@ type ChartRow = {
   instruments: {[instrument: string]: number};
   modifiedTime: Date;
   isInstalled: boolean;
+  isSongInstalled: boolean;
   download: {
     artist: string;
     song: string;
@@ -172,7 +174,7 @@ const downloadedFilter: FilterFn<RowType> = (
     return true;
   }
 
-  if (row.subRows.some(subRow => subRow.original.isInstalled)) {
+  if (row.subRows.some(subRow => subRow.original.isSongInstalled)) {
     return false;
   }
   return true;
@@ -513,6 +515,7 @@ export default function SpotifyTableDownloader({
             instruments: preFilterInstruments(chart),
             modifiedTime: new Date(chart.modifiedTime),
             isInstalled: chart.isInstalled,
+            isSongInstalled: chart.isSongInstalled,
             download: {
               artist: chart.artist,
               song: chart.name,
