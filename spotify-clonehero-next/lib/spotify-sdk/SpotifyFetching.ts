@@ -567,7 +567,7 @@ export function useSpotifyLibraryUpdate(): [
             {} as AlbumProgressMetadata,
           ),
           rateLimitCountdown: null,
-          updateStatus: 'idle',
+          updateStatus: 'fetching',
         }));
 
         console.log(
