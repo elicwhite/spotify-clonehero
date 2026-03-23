@@ -365,7 +365,7 @@ const columns = [
           song={song}
           url={url}
           spotifyUrl={spotifyUrl}
-          autoplay={false}
+
         />
       );
     },
@@ -374,6 +374,7 @@ const columns = [
 
 function LookUpPreviewButton({artist, song}: {artist: string; song: string}) {
   const getTrackUrls = useTrackUrls(artist, song);
+  const {playTrack} = useContext(AudioContext);
   const [urls, setUrls] =
     useState<Awaited<ReturnType<typeof getTrackUrls>>>(null);
   const [fetched, setFetched] = useState(false);
@@ -382,7 +383,10 @@ function LookUpPreviewButton({artist, song}: {artist: string; song: string}) {
     const urls = await getTrackUrls();
     setUrls(urls);
     setFetched(true);
-  }, [getTrackUrls]);
+    if (urls?.previewUrl) {
+      playTrack(artist, song, urls.previewUrl);
+    }
+  }, [getTrackUrls, artist, song, playTrack]);
 
   return (
     <>
@@ -408,7 +412,6 @@ function LookUpPreviewButton({artist, song}: {artist: string; song: string}) {
           song={song}
           url={urls.previewUrl}
           spotifyUrl={urls.spotifyUrl}
-          autoplay={true}
         />
       )}
     </>
@@ -420,27 +423,16 @@ function PreviewButton({
   song,
   url,
   spotifyUrl,
-  autoplay,
 }: {
   artist: string;
   song: string;
   url: string;
   spotifyUrl: string;
-  autoplay: boolean;
 }) {
   const {isPlaying, currentTrack, playTrack, pause} = useContext(AudioContext);
 
   const thisTrackPlaying =
     isPlaying && currentTrack?.artist === artist && currentTrack?.song === song;
-  useEffect(() => {
-    if (autoplay) {
-      playTrack(artist, song, url);
-    }
-
-    () => {
-      pause();
-    };
-  }, [autoplay, artist, song, url, playTrack, pause]);
 
   const handler = useCallback(() => {
     if (thisTrackPlaying) {
