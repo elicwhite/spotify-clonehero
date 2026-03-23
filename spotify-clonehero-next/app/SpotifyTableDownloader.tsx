@@ -468,6 +468,11 @@ export default function SpotifyTableDownloader({
   showPlayCount?: boolean;
 }) {
   const hasPlayCount = showPlayCount ?? tracks[0].playCount != null;
+  const hasSource = tracks.some(
+    t =>
+      (t.playlistMemberships != null && t.playlistMemberships.length > 0) ||
+      (t.albumMemberships != null && t.albumMemberships.length > 0),
+  );
 
   const [downloadState, setDownloadState] = useState<{
     [key: string]: TableDownloadStates;
@@ -490,12 +495,12 @@ export default function SpotifyTableDownloader({
             }
             return maxDate;
           }, new Date(track.matchingCharts[0].modifiedTime)),
-          ...(track.albumMemberships != null &&
+          ...(track.albumMemberships != null ||
           track.playlistMemberships != null
             ? {
                 source: {
-                  albums: track.albumMemberships,
-                  playlists: track.playlistMemberships,
+                  albums: track.albumMemberships ?? [],
+                  playlists: track.playlistMemberships ?? [],
                 },
               }
             : {}),
@@ -552,6 +557,7 @@ export default function SpotifyTableDownloader({
       columnVisibility: {
         playCount: hasPlayCount,
         previewUrl: showPreview,
+        source: hasSource,
       },
       columnFilters,
       expanded: true,

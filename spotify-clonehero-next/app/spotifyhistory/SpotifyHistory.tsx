@@ -8,6 +8,7 @@ import {
   processSpotifyDump,
 } from '@/lib/spotify-sdk/HistoryDumpParsing';
 import SpotifyTableDownloader, {
+  PickedSpotifyPlaylists,
   SpotifyChartData,
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';
@@ -246,6 +247,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
           file: `https://files.enchor.us/${chart.md5}.sng`,
         }),
       ),
+      playlistMemberships: item.playlist_memberships,
     }));
 
     setStatus(prevStatus => ({
@@ -386,6 +388,66 @@ async function getHistoryData() {
         ]),
     )
 
+    // playlist_aggregates: one JSON array of playlists per history song
+    .with('playlist_aggregates', qb =>
+      qb
+        .selectFrom(sub =>
+          sub
+            .selectFrom('spotify_history as h')
+            .innerJoin('spotify_tracks as st', join =>
+              join
+                .onRef('st.artist_normalized', '=', 'h.artist_normalized')
+                .onRef('st.name_normalized', '=', 'h.name_normalized'),
+            )
+            .innerJoin(
+              'spotify_playlist_tracks as plt',
+              'plt.track_id',
+              'st.id',
+            )
+            .innerJoin(
+              'spotify_playlists as playlist',
+              'playlist.id',
+              'plt.playlist_id',
+            )
+            .select([
+              'h.artist_normalized',
+              'h.name_normalized',
+              'playlist.id as playlist_id',
+              'playlist.snapshot_id as snapshot_id',
+              'playlist.name as name',
+              'playlist.collaborative as collaborative',
+              'playlist.owner_display_name as owner_display_name',
+              'playlist.owner_external_url as owner_external_url',
+              'playlist.total_tracks as total_tracks',
+              'playlist.updated_at as updated_at',
+            ])
+            .groupBy(['h.artist_normalized', 'h.name_normalized', 'playlist.id'])
+            .as('deduped_playlists'),
+        )
+        .select([
+          'deduped_playlists.artist_normalized',
+          'deduped_playlists.name_normalized',
+          sql<PickedSpotifyPlaylists[]>`
+          json_group_array(
+            json_object(
+              'id',                ${sql.ref('deduped_playlists.playlist_id')},
+              'snapshot_id',       ${sql.ref('deduped_playlists.snapshot_id')},
+              'name',              ${sql.ref('deduped_playlists.name')},
+              'collaborative',     ${sql.ref('deduped_playlists.collaborative')},
+              'owner_display_name',${sql.ref('deduped_playlists.owner_display_name')},
+              'owner_external_url',${sql.ref('deduped_playlists.owner_external_url')},
+              'total_tracks',      ${sql.ref('deduped_playlists.total_tracks')},
+              'updated_at',        ${sql.ref('deduped_playlists.updated_at')}
+            )
+          )
+        `.as('playlist_memberships'),
+        ])
+        .groupBy([
+          'deduped_playlists.artist_normalized',
+          'deduped_playlists.name_normalized',
+        ]),
+    )
+
     // local_chart_flags: song-level installed flag
     .with('local_chart_flags', qb =>
       qb
@@ -424,6 +486,19 @@ async function getHistoryData() {
         )
         .onRef('chart_data.name_normalized', '=', 'h.name_normalized'),
     )
+    .leftJoin('playlist_aggregates as playlist_data', join =>
+      join
+        .onRef(
+          'playlist_data.artist_normalized',
+          '=',
+          'h.artist_normalized',
+        )
+        .onRef(
+          'playlist_data.name_normalized',
+          '=',
+          'h.name_normalized',
+        ),
+    )
     .leftJoin('local_chart_flags as installed_flag', join =>
       join
         .onRef(
@@ -446,6 +521,11 @@ async function getHistoryData() {
       ),
       sql<PickedChorusCharts[]>`chart_data.matching_charts`.as(
         'matching_charts',
+      ),
+      sql<
+        PickedSpotifyPlaylists[]
+      >`COALESCE(playlist_data.playlist_memberships, json('[]'))`.as(
+        'playlist_memberships',
       ),
     ])
     .where('h.artist', '!=', '')
