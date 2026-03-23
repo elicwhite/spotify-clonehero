@@ -2,6 +2,7 @@ const RE_PARENS = /\([^)]*\)/g;
 const RE_BRACKETS = /\[[^\]]*\]/g;
 const RE_NON_ALPHANUMERIC = /[^\p{L}\p{N} ]/gu;
 const RE_EXTRA_SPACES = /\s+/g;
+const RE_LEADING_ARTICLE = /^(the|a|an) /;
 
 const RE_MARK = /\p{M}/u;
 const RE_LATIN = /\p{Script=Latin}/u;
@@ -42,6 +43,9 @@ export function normalizeStrForMatching(str: string) {
 
   // Clean up extra spaces
   normalized = normalized.replace(RE_EXTRA_SPACES, ' ').trim();
+
+  // Strip leading articles ("the", "a", "an")
+  normalized = normalized.replace(RE_LEADING_ARTICLE, '');
 
   return normalized;
 }

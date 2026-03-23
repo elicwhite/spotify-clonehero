@@ -22,6 +22,22 @@ describe('normalizeStrForMatching', () => {
     expect(normalizeStrForMatching('P.O.D.')).toBe('pod');
   });
 
+  it('should strip leading articles', () => {
+    expect(normalizeStrForMatching('The Feel Good Drag')).toBe(
+      'feel good drag',
+    );
+    expect(normalizeStrForMatching('A Day to Remember')).toBe(
+      'day to remember',
+    );
+    expect(normalizeStrForMatching('An Ending')).toBe('ending');
+    // Should not strip articles in the middle
+    expect(normalizeStrForMatching('End of the World')).toBe(
+      'end of the world',
+    );
+    // Should not strip if it's the entire string
+    expect(normalizeStrForMatching('The')).toBe('the');
+  });
+
   it('should preserve non-Latin scripts while folding Latin diacritics', () => {
     // Cyrillic should be preserved (only lowercased)
     expect(normalizeStrForMatching('Дурной Вкус')).toBe('дурной вкус');
