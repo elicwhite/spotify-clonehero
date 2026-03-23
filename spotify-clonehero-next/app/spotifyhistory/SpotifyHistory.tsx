@@ -161,13 +161,21 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       }
     }
 
-    console.log('scan local charts');
-    try {
-      setStatus({
-        status: 'scanning',
-        songsCounted: 0,
-      });
+    // Kick off chorus chart fetch and spotify dump processing in parallel
+    const chorusChartsPromise = fetchChorusCharts(abortController);
 
+    const spotifyDumpPromise = (async () => {
+      if (artistTrackPlays != null) return artistTrackPlays;
+      if (spotifyDataHandle == null) {
+        throw new Error('Spotify data handle is null');
+      }
+      return await processSpotifyDump(spotifyDataHandle);
+    })();
+
+    // Scan local charts in parallel with the above
+    setStatus({status: 'scanning', songsCounted: 0});
+
+    try {
       await scanForInstalledCharts(() => {
         setStatus(prevStatus => ({
           ...prevStatus,
@@ -197,38 +205,22 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       }
     }
 
-    console.log('get spotify listens');
-    if (artistTrackPlays == null) {
-      if (spotifyDataHandle == null) {
-        throw new Error('Spotify data handle is null');
+    // Wait for parallel tasks to finish
+    try {
+      [artistTrackPlays] = await Promise.all([
+        spotifyDumpPromise,
+        chorusChartsPromise,
+      ]);
+    } catch (err) {
+      setStatus({
+        status: 'not-started',
+        songsCounted: 0,
+      });
+      if (err instanceof Error) {
+        toast.error(err.message, {duration: 8000});
       }
-      setStatus(prevStatus => ({
-        ...prevStatus,
-        status: 'processing-spotify-dump',
-      }));
-      await pause();
-      try {
-        artistTrackPlays = await processSpotifyDump(spotifyDataHandle);
-      } catch (err) {
-        setStatus({
-          status: 'not-started',
-          songsCounted: 0,
-        });
-
-        if (err instanceof Error) {
-          toast.error(err.message, {duration: 8000});
-        }
-        return;
-      }
+      return;
     }
-
-    // Fetch/update chorus charts into SQL database
-    setStatus(prevStatus => ({
-      ...prevStatus,
-      status: 'fetching-chorus',
-    }));
-    await pause();
-    await fetchChorusCharts(abortController);
 
     // Query matches from the database
     setStatus(prevStatus => ({
@@ -267,19 +259,43 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     }
   }, []);
 
+  const isLoading =
+    status.status !== 'not-started' && status.status !== 'done';
+
   return (
     <>
-      <div className="flex justify-center">{renderStatus(status, handler)}</div>
-
-      {(status.status === 'scanning' || status.status === 'done-scanning') && (
-        <LocalScanLoaderCard
-          count={status.songsCounted}
-          isScanning={status.status === 'scanning'}
-        />
+      {status.status === 'not-started' && (
+        <div className="flex justify-center">
+          <Button onClick={handler}>Scan Spotify Dump</Button>
+        </div>
       )}
 
-      {status.status === 'fetching-chorus' && (
-        <UpdateChorusLoaderCard progress={chorusChartProgress} />
+      {isLoading && (
+        <>
+          {status.status === 'processing-spotify-dump' && (
+            <div className="flex justify-center">
+              Processing Spotify Extended Streaming History
+            </div>
+          )}
+          {status.status === 'finding-matches' && (
+            <div className="flex justify-center">
+              Checking for song matches
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <LocalScanLoaderCard
+              count={status.songsCounted}
+              isScanning={status.status === 'scanning'}
+            />
+            <UpdateChorusLoaderCard progress={chorusChartProgress} />
+          </div>
+        </>
+      )}
+
+      {status.status === 'done' && (
+        <div className="flex justify-center">
+          <Button onClick={handler}>Rescan</Button>
+        </div>
       )}
 
       {songs && (
@@ -289,23 +305,6 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
   );
 }
 
-function renderStatus(status: Status, scanHandler: () => void) {
-  switch (status.status) {
-    case 'not-started':
-      return <Button onClick={scanHandler}>Scan Spotify Dump</Button>;
-    case 'scanning':
-    case 'done-scanning':
-      return null;
-    case 'processing-spotify-dump':
-      return 'Processing Spotify Extended Streaming History';
-    case 'fetching-chorus':
-      return null;
-    case 'finding-matches':
-      return 'Checking for song matches';
-    case 'done':
-      return <Button onClick={scanHandler}>Rescan</Button>;
-  }
-}
 
 async function getHistoryData() {
   const db = await getLocalDb();
