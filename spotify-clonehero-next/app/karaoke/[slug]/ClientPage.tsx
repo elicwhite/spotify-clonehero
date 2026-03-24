@@ -1,7 +1,6 @@
 'use client';
 
 import {useEffect, useState} from 'react';
-import Link from 'next/link';
 import {Player} from '@remotion/player';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import {
@@ -13,6 +12,8 @@ import {searchAdvanced} from '@/lib/search-encore';
 import {parseLyrics, type LyricLine} from '@/lib/karaoke/parse-lyrics';
 import {KaraokeVideo} from '../KaraokeVideo';
 import {TREATMENTS, type TreatmentId} from '../treatments/types';
+import ChartDetailLayout from '@/components/chart-detail/ChartDetailLayout';
+import SongHeader from '@/components/chart-detail/SongHeader';
 
 const FPS = 30;
 
@@ -139,61 +140,59 @@ export default function ClientPage({md5}: {md5: string}) {
   const durationInFrames = Math.ceil((karaokeData.songLength / 1000) * FPS);
 
   return (
-    <div className="flex flex-col items-center gap-4 w-full max-w-5xl py-4">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold">
-          {karaokeData.metadata.name}{' '}
-          <span className="text-muted-foreground font-normal">by</span>{' '}
-          {karaokeData.metadata.artist}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          charted by {karaokeData.metadata.charter}
-        </p>
-      </div>
-
-      <Player
-        component={KaraokeVideo}
-        inputProps={{
-          lines: karaokeData.lines,
-          audioUrls: karaokeData.audioUrls,
-          albumArtUrl: karaokeData.albumArtUrl,
-          treatment,
-        }}
-        durationInFrames={durationInFrames}
-        compositionWidth={1920}
-        compositionHeight={1080}
-        fps={FPS}
-        controls
-        numberOfSharedAudioTags={8}
-        acknowledgeRemotionLicense
-        errorFallback={({error}) => (
-          <div className="flex items-center justify-center h-full bg-black text-red-400 p-8 text-center">
-            <p>{error.message}</p>
+    <ChartDetailLayout
+      backHref="/karaoke"
+      sidebar={
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Video Style</label>
+          <div className="flex flex-col gap-2">
+            {TREATMENTS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTreatment(t.id)}
+                className={`px-4 py-2 rounded font-medium cursor-pointer transition-colors text-left ${
+                  treatment === t.id
+                    ? 'bg-foreground text-background'
+                    : 'bg-muted text-foreground hover:bg-accent'
+                }`}>
+                {t.label}
+              </button>
+            ))}
           </div>
-        )}
-        style={{width: '100%', aspectRatio: '16/9'}}
-      />
+        </div>
+      }>
+      <div className="md:pt-4 md:px-4 pt-2 flex-1 flex flex-col overflow-hidden">
+        <SongHeader
+          name={karaokeData.metadata.name}
+          artist={karaokeData.metadata.artist}
+          charter={karaokeData.metadata.charter}
+        />
 
-      <div className="flex gap-3 items-center flex-wrap justify-center">
-        {TREATMENTS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTreatment(t.id)}
-            className={`px-4 py-2 rounded font-medium cursor-pointer transition-colors ${
-              treatment === t.id
-                ? 'bg-foreground text-background'
-                : 'bg-muted text-foreground hover:bg-accent'
-            }`}>
-            {t.label}
-          </button>
-        ))}
-        <span className="text-muted-foreground mx-1">|</span>
-        <Link
-          href="/karaoke"
-          className="px-4 py-2 rounded font-medium cursor-pointer transition-colors bg-muted text-foreground hover:bg-accent">
-          Back to Search
-        </Link>
+        <div className="flex-1 flex items-start justify-center">
+          <Player
+            component={KaraokeVideo}
+            inputProps={{
+              lines: karaokeData.lines,
+              audioUrls: karaokeData.audioUrls,
+              albumArtUrl: karaokeData.albumArtUrl,
+              treatment,
+            }}
+            durationInFrames={durationInFrames}
+            compositionWidth={1920}
+            compositionHeight={1080}
+            fps={FPS}
+            controls
+            numberOfSharedAudioTags={8}
+            acknowledgeRemotionLicense
+            errorFallback={({error}) => (
+              <div className="flex items-center justify-center h-full bg-black text-red-400 p-8 text-center">
+                <p>{error.message}</p>
+              </div>
+            )}
+            style={{width: '100%', maxWidth: 1280, aspectRatio: '16/9'}}
+          />
+        </div>
       </div>
-    </div>
+    </ChartDetailLayout>
   );
 }
