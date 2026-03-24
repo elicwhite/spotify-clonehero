@@ -19,13 +19,10 @@ import {Label} from '@/components/ui/label';
 import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
 import {
-  ArrowLeft,
   Play,
   Pause,
   Volume2,
   VolumeX,
-  Menu,
-  X,
   Settings2,
   Target,
   Plus,
@@ -54,8 +51,9 @@ import SheetMusic from './SheetMusic';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import {AudioManager, PracticeModeConfig} from '@/lib/preview/audioManager';
 import CloneHeroRenderer from './CloneHeroRenderer';
-import Link from 'next/link';
 import Image from 'next/image';
+import ChartDetailLayout from '@/components/chart-detail/ChartDetailLayout';
+import SongHeader from '@/components/chart-detail/SongHeader';
 import {generateClickTrackFromMeasures} from './generateClickTrack';
 import type {ClickVolumes} from './generateClickTrack';
 import convertToVexFlow from './convertToVexflow';
@@ -145,7 +143,6 @@ export default function Renderer({
   const [currentPlayback, setCurrentPlayback] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volumeControls, setVolumeControls] = useState<VolumeControl[]>([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobileMode, setIsMobileMode] = useState(false);
   const [detectedFills, setDetectedFills] = useState<
     Array<{
@@ -1015,50 +1012,35 @@ export default function Renderer({
   }, [practiceMode, practiceModeEnabled, savedSections]);
 
   // Define reusable control elements
-  const backButton = (
-    <Link href="/sheet-music">
-      <Button variant="ghost" size="icon" className="rounded-full">
-        <ArrowLeft className="h-6 w-6" />
+  const sidebarControls = (
+    <>
+      <Button
+        size="icon"
+        variant="secondary"
+        className="rounded-full"
+        onClick={handlePlay}>
+        {isPlaying ? (
+          <Pause className="h-6 w-6" />
+        ) : (
+          <Play className="h-6 w-6" />
+        )}
       </Button>
-    </Link>
-  );
-
-  const playPauseButton = (
-    <Button
-      size="icon"
-      variant="secondary"
-      className="rounded-full"
-      onClick={handlePlay}>
-      {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
-    </Button>
-  );
-
-  const maximizeButton = (
-    <Button
-      size="icon"
-      variant="secondary"
-      className={cn(
-        'rounded-full',
-        isMobileMode && 'inline-flex',
-        !isMobileMode && 'md:inline-flex hidden',
-      )}
-      onClick={() => setIsMobileMode(!isMobileMode)}>
-      {isMobileMode ? (
-        <Minimize2 className="h-6 w-6" />
-      ) : (
-        <Maximize2 className="h-6 w-6" />
-      )}
-    </Button>
-  );
-
-  const menuToggleButton = (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="rounded-full"
-      onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
-      {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-    </Button>
+      <Button
+        size="icon"
+        variant="secondary"
+        className={cn(
+          'rounded-full',
+          isMobileMode && 'inline-flex',
+          !isMobileMode && 'md:inline-flex hidden',
+        )}
+        onClick={() => setIsMobileMode(!isMobileMode)}>
+        {isMobileMode ? (
+          <Minimize2 className="h-6 w-6" />
+        ) : (
+          <Maximize2 className="h-6 w-6" />
+        )}
+      </Button>
+    </>
   );
 
   // Add practice mode button to the sidebar
@@ -1142,387 +1124,317 @@ export default function Renderer({
   );
 
   return (
-    <div
-      className={cn(
-        'flex flex-col w-full flex-1',
-        !isMobileMode && 'md:overflow-hidden',
-      )}>
-      <div
-        className={cn(
-          'flex flex-col flex-1 bg-background relative',
-          // Normal desktop behavior
-          'md:flex-row md:overflow-hidden',
-          // Mobile mode on desktop - allow scrolling
-          isMobileMode && 'md:overflow-visible',
-        )}>
-        {/* Mobile overlay */}
-        {isSidebarOpen && (
-          <div
-            className={cn(
-              'fixed inset-0 bg-black/50 z-30',
-              // Show on mobile OR when in mobile mode
-              'md:hidden',
-              isMobileMode && 'md:block',
-            )}
-            onClick={() => setIsSidebarOpen(false)}
-          />
-        )}
-
-        {/* Left Sidebar */}
-        <div
-          className={cn(
-            'w-64 border-r p-4 flex flex-col gap-6 bg-background z-40',
-            'transition-transform duration-300 ease-in-out',
-            // Mobile behavior (always)
-            'fixed inset-y-0 left-0',
-            // Desktop behavior - static unless in mobile mode
-            !isMobileMode && 'md:static md:translate-x-0 md:h-full',
-            // Mobile mode on desktop - use mobile behavior
-            isMobileMode && 'md:fixed md:inset-y-0 md:left-0',
-            // Show/hide logic
-            isSidebarOpen ? 'translate-x-0' : '-translate-x-full',
-          )}>
-          <div className="md:flex hidden items-center gap-2">
-            {backButton}
-            {playPauseButton}
-            {maximizeButton}
+    <ChartDetailLayout
+      backHref="/sheet-music"
+      sidebarControls={sidebarControls}
+      forceMobileLayout={isMobileMode}
+      sidebar={
+        <>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Difficulty</label>
+            <Select
+              value={selectedDifficulty}
+              onValueChange={difficultySelectorOnSelect}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableDifficulties.map(difficulty => (
+                  <SelectItem key={difficulty} value={difficulty}>
+                    {capitalize(difficulty)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="space-y-4 overflow-y-auto">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Difficulty</label>
-              <Select
-                value={selectedDifficulty}
-                onValueChange={difficultySelectorOnSelect}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableDifficulties.map(difficulty => (
-                    <SelectItem key={difficulty} value={difficulty}>
-                      {capitalize(difficulty)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {volumeSliders}
+
+          <div className="space-y-4 pt-4">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="clicktrack"
+                checked={playClickTrack}
+                onCheckedChange={updatePlayClickTrack}
+              />
+              <label htmlFor="clicktrack" className="text-sm font-medium">
+                Enable click track
+              </label>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setClickTrackConfigurationOpen(true)}>
+                <Settings2 className="h-3 w-3" />
+              </Button>
+              <ClickDialog
+                open={clickTrackConfigurationOpen}
+                setOpen={setClickTrackConfigurationOpen}
+                clickVolumes={clickVolumes}
+                handleClickVolumeChange={handleClickVolumeChange}
+                masterClickVolume={masterClickVolume}
+                setMasterClickVolume={handleMasterClickVolumeChange}
+              />
             </div>
-
-            {volumeSliders}
-
-            <div className="space-y-4 pt-4">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="colors"
+                checked={enableColors}
+                onCheckedChange={setEnableColors}
+              />
+              <label htmlFor="colors" className="text-sm font-medium">
+                Enable colors
+              </label>
+            </div>
+            {(chart as any).lyrics == null ? null : (
               <div className="flex items-center space-x-2">
                 <Switch
-                  id="clicktrack"
-                  checked={playClickTrack}
-                  onCheckedChange={updatePlayClickTrack}
+                  id="lyrics"
+                  checked={showLyrics}
+                  onCheckedChange={setShowLyrics}
                 />
-                <label htmlFor="clicktrack" className="text-sm font-medium">
-                  Enable click track
+                <label htmlFor="lyrics" className="text-sm font-medium">
+                  Show lyrics
                 </label>
+              </div>
+            )}
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="clonehero"
+                checked={viewCloneHero}
+                onCheckedChange={setViewCloneHero}
+              />
+              <label htmlFor="clonehero" className="text-sm font-medium">
+                View as Clone Hero
+              </label>
+            </div>
+            {process.env.NODE_ENV === 'development' && (
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="measurenumbers"
+                  checked={showBarNumbers}
+                  onCheckedChange={setShowBarNumbers}
+                />
+                <label
+                  htmlFor="measurenumbers"
+                  className="text-sm font-medium">
+                  Show measure numbers
+                </label>
+              </div>
+            )}
+          </div>
+
+          {/* Tempo Control */}
+          <div className="space-y-4 pt-4 border-t">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Speed</span>
+              <div className="flex items-center space-x-2">
                 <Button
                   variant="outline"
                   size="icon"
-                  className="h-6 w-6"
-                  onClick={() => setClickTrackConfigurationOpen(true)}>
-                  <Settings2 className="h-3 w-3" />
+                  onClick={() => {
+                    const newTempo = Math.max(tempo - 0.1, 0.25);
+                    handleTempoChange(newTempo);
+                  }}
+                  className="h-6 w-6">
+                  <Minus className="h-3 w-3" />
                 </Button>
-                <ClickDialog
-                  open={clickTrackConfigurationOpen}
-                  setOpen={setClickTrackConfigurationOpen}
-                  clickVolumes={clickVolumes}
-                  handleClickVolumeChange={handleClickVolumeChange}
-                  masterClickVolume={masterClickVolume}
-                  setMasterClickVolume={handleMasterClickVolumeChange}
-                />
+                <span
+                  className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[3rem] text-center cursor-pointer hover:bg-muted/80 transition-colors"
+                  onClick={() => handleTempoChange(1.0)}
+                  title="Click to reset to 100%">
+                  {Math.round(tempo * 100)}%
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    const newTempo = Math.min(tempo + 0.1, 4.0);
+                    handleTempoChange(newTempo);
+                  }}
+                  className="h-6 w-6">
+                  <Plus className="h-3 w-3" />
+                </Button>
               </div>
+            </div>
+          </div>
+
+          {/* Zoom Control */}
+          <div className="space-y-4 pt-4 border-t">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Zoom</span>
               <div className="flex items-center space-x-2">
-                <Switch
-                  id="colors"
-                  checked={enableColors}
-                  onCheckedChange={setEnableColors}
-                />
-                <label htmlFor="colors" className="text-sm font-medium">
-                  Enable colors
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleZoomOut}
+                  className="h-6 w-6">
+                  <Minus className="h-3 w-3" />
+                </Button>
+                <span
+                  className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[3rem] text-center cursor-pointer hover:bg-muted/80 transition-colors"
+                  onClick={() => handleZoomChange(1.0)}
+                  title="Click to reset to 100%">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleZoomIn}
+                  className="h-6 w-6">
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Practice Mode Button */}
+          {practiceModeButton}
+
+          {/* Drum Fills Section - Only in development */}
+          {false &&
+            process.env.NODE_ENV === 'development' &&
+            detectedFills.length > 0 && (
+              <div className="space-y-2 pt-4 border-t">
+                <label className="text-sm font-medium">
+                  Drum Fills ({detectedFills.length})
                 </label>
-              </div>
-              {(chart as any).lyrics == null ? null : (
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="lyrics"
-                    checked={showLyrics}
-                    onCheckedChange={setShowLyrics}
-                  />
-                  <label htmlFor="lyrics" className="text-sm font-medium">
-                    Show lyrics
-                  </label>
-                </div>
-              )}
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="clonehero"
-                  checked={viewCloneHero}
-                  onCheckedChange={setViewCloneHero}
-                />
-                <label htmlFor="clonehero" className="text-sm font-medium">
-                  View as Clone Hero
-                </label>
-              </div>
-              {process.env.NODE_ENV === 'development' && (
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="measurenumbers"
-                    checked={showBarNumbers}
-                    onCheckedChange={setShowBarNumbers}
-                  />
-                  <label
-                    htmlFor="measurenumbers"
-                    className="text-sm font-medium">
-                    Show measure numbers
-                  </label>
-                </div>
-              )}
-            </div>
-
-            {/* Tempo Control */}
-            <div className="space-y-4 pt-4 border-t">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Speed</span>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => {
-                      const newTempo = Math.max(tempo - 0.1, 0.25);
-                      handleTempoChange(newTempo);
-                    }}
-                    className="h-6 w-6">
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span
-                    className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[3rem] text-center cursor-pointer hover:bg-muted/80 transition-colors"
-                    onClick={() => handleTempoChange(1.0)}
-                    title="Click to reset to 100%">
-                    {Math.round(tempo * 100)}%
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => {
-                      const newTempo = Math.min(tempo + 0.1, 4.0);
-                      handleTempoChange(newTempo);
-                    }}
-                    className="h-6 w-6">
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Zoom Control */}
-            <div className="space-y-4 pt-4 border-t">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Zoom</span>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={handleZoomOut}
-                    className="h-6 w-6">
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span
-                    className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[3rem] text-center cursor-pointer hover:bg-muted/80 transition-colors"
-                    onClick={() => handleZoomChange(1.0)}
-                    title="Click to reset to 100%">
-                    {Math.round(zoom * 100)}%
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={handleZoomIn}
-                    className="h-6 w-6">
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Practice Mode Button */}
-            {practiceModeButton}
-
-            {/* Drum Fills Section - Only in development */}
-            {false &&
-              process.env.NODE_ENV === 'development' &&
-              detectedFills.length > 0 && (
-                <div className="space-y-2 pt-4 border-t">
-                  <label className="text-sm font-medium">
-                    Drum Fills ({detectedFills.length})
-                  </label>
-                  <div className="space-y-1 overflow-y-auto">
-                    {detectedFills.map(fill => (
-                      <div
-                        key={fill.fillNumber}
-                        className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium">
-                            Fill #{fill.fillNumber}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            Measure {fill.measureNumber} •{' '}
-                            {Math.round(fill.startTimeMs / 1000)}s •{' '}
-                            {Math.round(fill.durationMs / 1000)}s duration
-                          </div>
+                <div className="space-y-1 overflow-y-auto">
+                  {detectedFills.map(fill => (
+                    <div
+                      key={fill.fillNumber}
+                      className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium">
+                          Fill #{fill.fillNumber}
                         </div>
-                        <div className="flex gap-1 ml-2 flex-shrink-0">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => playFromMeasure(fill.measureStartMs)}
-                            title={`Play from measure ${fill.measureNumber} start`}>
-                            <Play className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => playFill(fill.startTimeMs)}
-                            title={`Play from fill #${fill.fillNumber} start`}>
-                            <Play className="h-3 w-3 fill-current" />
-                          </Button>
+                        <div className="text-xs text-muted-foreground">
+                          Measure {fill.measureNumber} •{' '}
+                          {Math.round(fill.startTimeMs / 1000)}s •{' '}
+                          {Math.round(fill.durationMs / 1000)}s duration
                         </div>
                       </div>
-                    ))}
-                  </div>
+                      <div className="flex gap-1 ml-2 flex-shrink-0">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => playFromMeasure(fill.measureStartMs)}
+                          title={`Play from measure ${fill.measureNumber} start`}>
+                          <Play className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => playFill(fill.startTimeMs)}
+                          title={`Play from fill #${fill.fillNumber} start`}>
+                          <Play className="h-3 w-3 fill-current" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )}
-          </div>
-          <p className="text-xs text-muted-foreground text-center mt-auto">
-            Special thanks to{' '}
-            <a href="https://github.com/tonygoldcrest">@tonygoldcrest</a>&apos;s{' '}
-            <a href="https://github.com/tonygoldcrest/drum-hero">drum-hero</a>{' '}
-            for providing much of this tool.
-          </p>
-        </div>
-
-        {/* Main Content */}
-        <div
-          className={cn(
-            'flex-1 flex flex-col',
-            // Normal desktop behavior - hide overflow
-            'md:overflow-hidden',
-            // Mobile mode on desktop - allow scrolling
-            isMobileMode && 'md:overflow-visible',
-          )}>
-          {/* Mobile controls - sticky on scroll */}
-          <div
-            className={cn(
-              'sticky top-0 z-30 flex items-center gap-2 md:px-4 py-3 border-b bg-background/95 backdrop-blur-sm',
-              // Show on mobile OR when in mobile mode
-              'md:hidden',
-              isMobileMode && 'md:flex',
-            )}>
-            {backButton}
-            {playPauseButton}
-            {maximizeButton}
-            <div className="ml-auto">{menuToggleButton}</div>
-          </div>
-
-          <div
-            className={cn(
-              'h-12 border-b flex items-center md:px-4 gap-4 bg-background/95 backdrop-blur-sm',
-              // Normal behavior: static on desktop, sticky on mobile
-              'sticky top-[60px] z-30',
-              // If not in mobile mode, then it's just static, otherwise it's sticky
-              !isMobileMode && 'md:static',
-            )}>
-            <Slider
-              value={[currentPlayback]}
-              max={songDuration || 100}
-              min={0}
-              onValueChange={values => {
-                const newTime = values[0];
-                setCurrentPlayback(newTime);
-                if (audioManagerRef.current) {
-                  audioManagerRef.current.play({
-                    time: newTime,
-                  });
-                  setIsPlaying(true);
-                }
-              }}
-            />
-            <span className="text-sm text-muted-foreground whitespace-nowrap">
-              {formatSeconds(currentPlayback)} /{' '}
-              {formatSeconds((metadata.song_length || 0) / 1000)}
-            </span>
-          </div>
-
-          <div className="md:pt-4 md:px-4 pt-2 flex-1 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between mb-2 md:mb-4">
-              <h1 className="text-3xl md:text-3xl font-bold">
-                {metadata.name}{' '}
-                <span className="text-muted-foreground">by</span>{' '}
-                {metadata.artist}
-                <div className="text-sm text-gray-600 dark:text-gray-400 font-normal">
-                  Charted by {metadata.charter}
-                </div>
-              </h1>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2 px-3 py-1"
-                onClick={handleSaveClick}>
-                <Star
-                  className="h-4 w-4"
-                  fill={isSaved ? 'currentColor' : 'none'}
-                />
-                {isSaved ? 'Saved' : 'Save'}
-              </Button>
-            </div>
-            <div className="flex flex-1 gap-2 overflow-hidden">
-              <div
-                className={cn(
-                  viewCloneHero ? 'hidden md:flex' : 'flex',
-                  'flex-1',
-                )}>
-                <SheetMusic
-                  currentTime={currentPlayback}
-                  chart={chart}
-                  track={track}
-                  showBarNumbers={showBarNumbers}
-                  enableColors={enableColors}
-                  showLyrics={showLyrics}
-                  zoom={zoom}
-                  onSelectMeasure={time => {
-                    if (audioManagerRef.current == null) {
-                      return;
-                    }
-                    audioManagerRef.current.play({time});
-
-                    setIsPlaying(true);
-                  }}
-                  triggerRerender={
-                    String(viewCloneHero) + String(isMobileMode) + String(zoom)
-                  }
-                  practiceModeConfig={practiceMode}
-                  onPracticeMeasureSelect={handlePracticeMeasureSelect}
-                  selectionIndex={selectionIndex}
-                  audioManagerRef={audioManagerRef}
-                />
               </div>
-              {viewCloneHero && (
-                <CloneHeroRenderer
-                  metadata={metadata}
-                  chart={chart}
-                  track={track}
-                  audioManager={audioManagerRef.current!}
-                />
-              )}
-            </div>
+            )}
+        </>
+      }
+      sidebarFooter={
+        <p className="text-xs text-muted-foreground text-center mt-auto">
+          Special thanks to{' '}
+          <a href="https://github.com/tonygoldcrest">@tonygoldcrest</a>&apos;s{' '}
+          <a href="https://github.com/tonygoldcrest/drum-hero">drum-hero</a>{' '}
+          for providing much of this tool.
+        </p>
+      }>
+      <div
+        className={cn(
+          'h-12 border-b flex items-center md:px-4 gap-4 bg-background/95 backdrop-blur-sm',
+          'sticky top-[60px] z-30',
+          !isMobileMode && 'md:static',
+        )}>
+        <Slider
+          value={[currentPlayback]}
+          max={songDuration || 100}
+          min={0}
+          onValueChange={values => {
+            const newTime = values[0];
+            setCurrentPlayback(newTime);
+            if (audioManagerRef.current) {
+              audioManagerRef.current.play({
+                time: newTime,
+              });
+              setIsPlaying(true);
+            }
+          }}
+        />
+        <span className="text-sm text-muted-foreground whitespace-nowrap">
+          {formatSeconds(currentPlayback)} /{' '}
+          {formatSeconds((metadata.song_length || 0) / 1000)}
+        </span>
+      </div>
+
+      <div className="md:pt-4 md:px-4 pt-2 flex-1 flex flex-col overflow-hidden">
+        <SongHeader
+          name={metadata.name}
+          artist={metadata.artist}
+          charter={metadata.charter}
+          actions={
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 px-3 py-1"
+              onClick={handleSaveClick}>
+              <Star
+                className="h-4 w-4"
+                fill={isSaved ? 'currentColor' : 'none'}
+              />
+              {isSaved ? 'Saved' : 'Save'}
+            </Button>
+          }
+        />
+        <div className="flex flex-1 gap-2 overflow-hidden">
+          <div
+            className={cn(
+              viewCloneHero ? 'hidden md:flex' : 'flex',
+              'flex-1',
+            )}>
+            <SheetMusic
+              currentTime={currentPlayback}
+              chart={chart}
+              track={track}
+              showBarNumbers={showBarNumbers}
+              enableColors={enableColors}
+              showLyrics={showLyrics}
+              zoom={zoom}
+              onSelectMeasure={time => {
+                if (audioManagerRef.current == null) {
+                  return;
+                }
+                audioManagerRef.current.play({time});
+
+                setIsPlaying(true);
+              }}
+              triggerRerender={
+                String(viewCloneHero) + String(isMobileMode) + String(zoom)
+              }
+              practiceModeConfig={practiceMode}
+              onPracticeMeasureSelect={handlePracticeMeasureSelect}
+              selectionIndex={selectionIndex}
+              audioManagerRef={audioManagerRef}
+            />
           </div>
+          {viewCloneHero && (
+            <CloneHeroRenderer
+              metadata={metadata}
+              chart={chart}
+              track={track}
+              audioManager={audioManagerRef.current!}
+            />
+          )}
         </div>
       </div>
-    </div>
+    </ChartDetailLayout>
   );
 }
 
