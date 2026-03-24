@@ -1,4 +1,4 @@
-import {searchAdvanced} from '@/lib/search-encore';
+import {searchKaraoke} from './searchKaraoke';
 import Search from './Search';
 
 export const metadata = {
@@ -12,10 +12,6 @@ export default async function Page({
 }) {
   const params = await searchParams;
   const query = params.q ?? '';
-  const results = await searchAdvanced({
-    name: {value: query, exact: false, exclude: false},
-    hasLyrics: true,
-    per_page: 50,
-  });
+  const results = await searchKaraoke(query);
   return <Search defaultResults={results} initialQuery={query} />;
 }

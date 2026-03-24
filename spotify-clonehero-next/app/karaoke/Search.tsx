@@ -1,7 +1,6 @@
 'use client';
 
 import {useMemo, useEffect, useState, useCallback} from 'react';
-import {useInView} from 'react-intersection-observer';
 import {parseAsString, useQueryState} from 'nuqs';
 import {Search as SearchIcon} from 'lucide-react';
 import {Input} from '@/components/ui/input';
@@ -11,8 +10,9 @@ import {
   ChartInstruments,
   preFilterInstruments,
 } from '@/components/ChartInstruments';
-import {EncoreResponse, searchAdvanced} from '@/lib/search-encore';
+import {EncoreResponse} from '@/lib/search-encore';
 import {getKaraokeUrl} from './buildKaraokeUrl';
+import {searchKaraoke} from './searchKaraoke';
 
 export default function Search({
   defaultResults,
@@ -34,11 +34,7 @@ export default function Search({
       debounce(async (query: string) => {
         setIsLoading(true);
         try {
-          const results = await searchAdvanced({
-            name: {value: query, exact: false, exclude: false},
-            hasLyrics: true,
-            per_page: 50,
-          });
+          const results = await searchKaraoke(query);
           setFilteredSongs(results);
         } finally {
           setIsLoading(false);
