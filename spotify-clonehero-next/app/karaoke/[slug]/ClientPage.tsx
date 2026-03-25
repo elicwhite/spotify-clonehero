@@ -60,13 +60,7 @@ export default function ClientPage({md5}: {md5: string}) {
 
         if (cancelled) return;
 
-        // Extract lyrics and vocal phrases from the parsed chart
-        if (!chart.hasLyrics || !chart.lyrics || chart.lyrics.length === 0) {
-          setError('No lyrics found in this chart');
-          return;
-        }
-
-        const lines = parseLyrics(chart.lyrics, chart.vocalPhrases ?? []);
+        const lines = parseLyrics(chart.lyrics, chart.vocalPhrases);
 
         if (lines.length === 0) {
           setError('Could not parse lyrics from this chart');
