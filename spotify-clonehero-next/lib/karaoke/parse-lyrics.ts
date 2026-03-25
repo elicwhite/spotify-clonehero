@@ -197,7 +197,9 @@ function splitLongLines(lines: LyricLine[]): LyricLine[] {
 
 /**
  * Deduplicate overlapping phrases (MIDI often has both note 105 and 106
- * for the same phrase region).
+ * for the same phrase region) and clamp lengths so no phrase extends past
+ * the next phrase's start (phrase end is optional in karaoke; a new phrase
+ * start implicitly ends the previous phrase).
  */
 function deduplicatePhrases(
   phrases: {msTime: number; msLength: number}[],
@@ -216,6 +218,14 @@ function deduplicatePhrases(
       }
     } else {
       result.push(curr);
+    }
+  }
+
+  // Clamp each phrase so it doesn't extend past the next phrase's start
+  for (let i = 0; i < result.length - 1; i++) {
+    const maxLength = result[i + 1].msTime - result[i].msTime;
+    if (result[i].msLength > maxLength) {
+      result[i] = {...result[i], msLength: maxLength};
     }
   }
 
