@@ -1,3 +1,5 @@
+import {removeStyleTags} from '@/lib/ui-utils';
+
 export interface Syllable {
   text: string;
   msTime: number;
@@ -52,6 +54,9 @@ function buildSyllables(
     while (t.length > 0 && '-=#^*%/+'.includes(t[t.length - 1])) {
       t = t.slice(0, -1);
     }
+
+    // Remove rich text style tags (e.g. <i>, <color=#FF0000>)
+    t = removeStyleTags(t);
 
     // Replace inline symbols
     t = t.split('§').join(' ');
