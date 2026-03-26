@@ -43,3 +43,6 @@ supabase/.temp
 supabase/.branches
 # Sentry Config File
 .env.sentry-build-plugin
+
+# Large ONNX model files (downloaded at runtime and cached in OPFS)
+public/models/*.onnx

@@ -159,7 +159,7 @@ async function getIniContents(files: Files) {
   return new TextDecoder().decode(iniFile.data);
 }
 
-function findChartData(files: {fileName: string; data: Uint8Array}[]) {
+export function findChartData(files: {fileName: string; data: Uint8Array}[]) {
   const chartFiles = _.chain(files)
     .filter(f => hasChartExtension(f.fileName))
     .orderBy(
@@ -179,7 +179,7 @@ function findChartData(files: {fileName: string; data: Uint8Array}[]) {
   };
 }
 
-function findAudioFiles(files: Files): Files {
+export function findAudioFiles(files: Files): Files {
   return files.filter(
     f =>
       hasAudioExtension(f.fileName) &&

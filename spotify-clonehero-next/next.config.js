@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Prevent onnxruntime-web from being bundled server-side (it uses browser APIs)
+  serverExternalPackages: ['onnxruntime-web'],
   images: {
     remotePatterns: [
       {
