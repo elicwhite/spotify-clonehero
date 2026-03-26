@@ -11,7 +11,8 @@
     "test": "jest",
     "test:fill-detector": "jest lib/fill-detector",
     "update:db": "tsx ./downloadDb.ts",
-    "update:db-types": "kysely-codegen --out-file ./lib/local-db/types.ts"
+    "update:db-types": "kysely-codegen --out-file ./lib/local-db/types.ts",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@eliwhite/scan-chart": "7.2.1",
@@ -60,6 +61,7 @@
     "onnxruntime-web": "^1.24.3",
     "p-map": "^6.0.0",
     "parse-sng": "^4.0.3",
+    "patch-package": "^8.0.1",
     "prettier": "^3.6.2",
     "ratelimit-header-parser": "^0.1.0",
     "react": "19.1.1",
