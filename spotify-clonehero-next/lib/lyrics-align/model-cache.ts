@@ -9,10 +9,19 @@
  * Get a model as an ArrayBuffer, loading from OPFS cache if available,
  * otherwise downloading and caching.
  */
+/**
+ * @param url        Fetch URL for the model.
+ * @param cacheKey   Filename used inside the OPFS `model-cache/` directory.
+ * @param onProgress Optional log callback.
+ * @param minBytes   Minimum valid file size. Cached files smaller than this
+ *                   are treated as corrupt (e.g. a cached 404 HTML page) and
+ *                   re-downloaded. Defaults to 1 MB.
+ */
 export async function getCachedModel(
   url: string,
   cacheKey: string,
   onProgress?: (msg: string) => void,
+  minBytes: number = 1_000_000,
 ): Promise<ArrayBuffer> {
   const log = onProgress ?? console.log;
 
@@ -26,12 +35,14 @@ export async function getCachedModel(
     try {
       const fileHandle = await dirHandle.getFileHandle(cacheKey);
       const file = await fileHandle.getFile();
-      if (file.size > 0) {
+      if (file.size >= minBytes) {
         log(`Loading from cache (${(file.size / 1e6).toFixed(0)} MB)...`);
         const buffer = await file.arrayBuffer();
         log(`Loaded from cache`);
         return buffer;
       }
+      // Cached file too small — likely a corrupt/stale entry, re-download
+      log(`Cached file too small (${file.size} bytes), re-downloading...`);
     } catch {
       // File doesn't exist in cache — will download
     }

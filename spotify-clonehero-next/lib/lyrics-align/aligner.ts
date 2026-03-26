@@ -43,13 +43,27 @@ export interface AlignedSyllable {
 const ORT_WASM_CDN =
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
 
+// wav2vec2-base-960h quantized ONNX — hosted on HuggingFace.
+const WAV2VEC2_MODEL_URL =
+  'https://huggingface.co/onnx-community/wav2vec2-base-960h-ONNX/resolve/main/onnx/model_quantized.onnx';
+
+// CTC vocabulary for wav2vec2-base-960h (32 tokens, inlined to avoid an extra fetch).
+const VOCAB: string[] = [
+  '<pad>', '<s>', '</s>', '<unk>', '|',
+  'E', 'T', 'A', 'O', 'N', 'I', 'H', 'S', 'R', 'D', 'L',
+  'U', 'M', 'W', 'C', 'F', 'G', 'Y', 'P', 'B', 'V', 'K',
+  "'", 'X', 'J', 'Q', 'Z',
+];
+
 let session: ort.InferenceSession | null = null;
-let vocab: string[] = [];
+/** Detected I/O names — varies between ONNX exports. */
+let inputName = 'input';
+let outputName = 'output';
 let label2idx: Record<string, number> = {};
 let modelBuffer: ArrayBuffer | null = null;
 
 /**
- * Phase 1: Download and cache the model + load vocabulary.
+ * Phase 1: Download and cache the model + build vocabulary index.
  * Does NOT create the ONNX session (to save memory for demucs).
  */
 export async function init(
@@ -60,17 +74,14 @@ export async function init(
   ort.env.wasm.wasmPaths = ORT_WASM_CDN;
   ort.env.wasm.numThreads = 1;
 
-  log('Loading vocabulary...');
-  const vocabResp = await fetch('/models/vocab-base.json');
-  vocab = await vocabResp.json();
   label2idx = {};
-  for (let i = 0; i < vocab.length; i++) {
-    if (vocab[i]) label2idx[vocab[i]] = i;
+  for (let i = 0; i < VOCAB.length; i++) {
+    if (VOCAB[i]) label2idx[VOCAB[i]] = i;
   }
 
   log('Downloading alignment model (91 MB)...');
   modelBuffer = await getCachedModel(
-    '/models/wav2vec2-base-960h-quantized.onnx',
+    WAV2VEC2_MODEL_URL,
     'wav2vec2-base-960h-quantized.onnx',
     log,
   );
@@ -93,7 +104,12 @@ export async function ensureSession(
     executionProviders: ['wasm'],
     graphOptimizationLevel: 'all',
   });
-  log('Alignment model ready!');
+
+  // Auto-detect I/O names so we work with both custom exports
+  // (input/output) and HuggingFace Optimum exports (input_values/logits).
+  inputName = session.inputNames[0] ?? 'input';
+  outputName = session.outputNames[0] ?? 'output';
+  log(`Alignment model ready! (I/O: ${inputName} → ${outputName})`);
 }
 
 /**
@@ -122,8 +138,8 @@ async function getEmissions(
     onProgress?.(`CTC inference: chunk ${i + 1}/${numChunks}`);
 
     const inputTensor = new ort.Tensor('float32', chunk, [1, chunk.length]);
-    const results = await session.run({input: inputTensor});
-    const output = results['output'];
+    const results = await session.run({[inputName]: inputTensor});
+    const output = results[outputName];
 
     const dims = output.dims as number[];
     const T = dims[1];
