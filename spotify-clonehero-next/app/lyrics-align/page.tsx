@@ -181,7 +181,6 @@ export default function LyricsAlignPage() {
   const [treatment, setTreatment] = useState<TreatmentId>('highlight');
   const [alignedLines, setAlignedLines] = useState<LyricLine[]>([]);
   const [alignSteps, setAlignSteps] = useState<PipelineStep[]>(ALIGN_STEPS);
-  const [modelReady, setModelReady] = useState(false);
   const initStartedRef = useRef(false);
 
   const updateAlignStep = useCallback(
@@ -193,7 +192,7 @@ export default function LyricsAlignPage() {
     [],
   );
 
-  // Preload alignment model once chart is loaded
+  // Preload alignment model in worker once chart is loaded
   useEffect(() => {
     if (status !== 'input' || initStartedRef.current) return;
     initStartedRef.current = true;
@@ -202,7 +201,6 @@ export default function LyricsAlignPage() {
       try {
         const {init} = await import('@/lib/lyrics-align/aligner');
         await init(msg => console.log('[aligner init]', msg));
-        setModelReady(true);
       } catch (e: any) {
         console.warn('Failed to preload alignment model:', e.message);
       }
@@ -332,18 +330,14 @@ export default function LyricsAlignPage() {
         });
       }
 
-      // CTC alignment
+      // CTC alignment (runs in worker — UI stays responsive)
       updateAlignStep('ctc', {
         status: 'active',
         detail: 'Loading wav2vec2 model...',
         startTime: Date.now(),
       });
 
-      const {alignVocals, init} = await import('@/lib/lyrics-align/aligner');
-
-      if (!modelReady) {
-        await init(msg => updateAlignStep('ctc', {detail: msg}));
-      }
+      const {alignVocals} = await import('@/lib/lyrics-align/aligner');
 
       const result = await alignVocals(vocals16k, lyrics, msg => {
         if (msg.startsWith('Running Viterbi')) {
@@ -395,7 +389,7 @@ export default function LyricsAlignPage() {
         ),
       );
     }
-  }, [chart, lyrics, modelReady, updateAlignStep]);
+  }, [chart, lyrics, updateAlignStep]);
 
   const showKaraoke = status === 'done' && alignedLines.length > 0;
   const songLength =
@@ -479,24 +473,12 @@ export default function LyricsAlignPage() {
               />
             </div>
 
-            <div className="flex items-center gap-4">
-              <Button
-                onClick={handleAlign}
-                disabled={!lyrics.trim()}
-                size="lg">
-                Align Lyrics
-              </Button>
-              {modelReady && (
-                <span className="text-sm text-muted-foreground">
-                  Alignment model ready
-                </span>
-              )}
-              {!modelReady && (
-                <span className="text-sm text-muted-foreground">
-                  Alignment model loading in background...
-                </span>
-              )}
-            </div>
+            <Button
+              onClick={handleAlign}
+              disabled={!lyrics.trim()}
+              size="lg">
+              Align Lyrics
+            </Button>
 
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
