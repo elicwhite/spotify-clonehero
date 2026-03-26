@@ -88,7 +88,11 @@ const IMAGE_EXTENSIONS = new Set([
 
 function parseMetadataFromIni(iniText: string): ChartMetadata {
   const { iniObject } = parseIni(iniText);
-  const section = iniObject['song'] ?? {};
+  // Case-insensitive section lookup — real charts use [song], [Song], or [SONG]
+  const sectionKey = Object.keys(iniObject).find(
+    (k) => k.toLowerCase() === 'song',
+  );
+  const section = sectionKey ? iniObject[sectionKey] : {};
   const metadata: ChartMetadata = {};
 
   for (const key of INI_STRING_FIELDS) {

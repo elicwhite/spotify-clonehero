@@ -17,7 +17,7 @@ import type { ChartDocument, TrackData } from '../types';
 import { serializeMidi } from '../writer-mid';
 import { parseMidi } from 'midi-file';
 import type { MidiEvent } from 'midi-file';
-import { parseChartFile } from '@eliwhite/scan-chart';
+import { parseChartFile, noteFlags } from '@eliwhite/scan-chart';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -273,7 +273,7 @@ describe('serializeMidi', () => {
   // ENABLE_CHART_DYNAMICS
   // ---------------------------------------------------------------------------
 
-  it('emits ENABLE_CHART_DYNAMICS text event when accents present', () => {
+  it('emits [ENABLE_CHART_DYNAMICS] text event when accents present', () => {
     const doc = makeDocWithDrumTrack('expert');
     addDrumNote(getTrack(doc), {
       tick: 0,
@@ -284,7 +284,7 @@ describe('serializeMidi', () => {
     const drumTrack = midi.tracks[2];
     const textEvents = findEvents(drumTrack, 'text');
     const dynamicsEvent = textEvents.find(
-      (e) => (e as any).text === 'ENABLE_CHART_DYNAMICS',
+      (e) => (e as any).text === '[ENABLE_CHART_DYNAMICS]',
     );
     expect(dynamicsEvent).toBeDefined();
   });
@@ -324,6 +324,303 @@ describe('serializeMidi', () => {
       }
     }
     expect(noteOnTicks).toEqual([0, 480, 960]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // C7: Tom marker round-trip through MIDI
+  // ---------------------------------------------------------------------------
+
+  it('tom markers round-trip with correct MIDI note numbers', () => {
+    const doc = makeDocWithDrumTrack('expert', 480);
+    const track = getTrack(doc);
+
+    // Add drum notes covered by tom markers
+    addDrumNote(track, { tick: 0, type: 'yellowDrum', length: 1 });
+    addDrumNote(track, { tick: 480, type: 'blueDrum', length: 1 });
+
+    // Add tom markers as track events (instrument-wide)
+    track.trackEvents.push(
+      { tick: 0, length: 480, type: eventTypes.yellowTomMarker },
+      { tick: 480, length: 480, type: eventTypes.blueTomMarker },
+    );
+
+    const bytes = serializeMidi(doc);
+    const parsed = parseChartFile(bytes, 'mid');
+
+    const drumTrack = parsed.trackData.find(
+      (t) => t.instrument === 'drums' && t.difficulty === 'expert',
+    );
+    expect(drumTrack).toBeDefined();
+
+    // Verify tom markers survived: parseChartFile resolves tom markers into
+    // noteFlags.tom on the corresponding noteEventGroups notes
+    const allNotes = drumTrack!.noteEventGroups.flat();
+    const tomNotes = allNotes.filter(
+      (n) => (n.flags & noteFlags.tom) !== 0,
+    );
+    expect(tomNotes.length).toBe(2);
+
+    // Also verify the raw MIDI uses the correct note numbers
+    const midi = parseMidi(bytes);
+    const midiDrumTrack = midi.tracks[2];
+    expect(findNoteOns(midiDrumTrack, 110).length).toBe(1); // yellow tom
+    expect(findNoteOns(midiDrumTrack, 111).length).toBe(1); // blue tom
+  });
+
+  it('green tom marker uses MIDI note 112', () => {
+    const doc = makeDocWithDrumTrack('expert', 480);
+    const track = getTrack(doc);
+
+    track.trackEvents.push(
+      { tick: 0, length: 480, type: eventTypes.greenTomMarker },
+    );
+
+    const midi = serializeAndParse(doc);
+    const drumTrack = midi.tracks[2];
+    expect(findNoteOns(drumTrack, 112).length).toBe(1);
+  });
+
+  // ---------------------------------------------------------------------------
+  // C8: Accent/ghost MIDI velocity round-trip
+  // ---------------------------------------------------------------------------
+
+  it('accent/ghost velocities: 127 for accent, 1 for ghost, 100 for normal', () => {
+    const doc = makeDocWithDrumTrack('expert', 480);
+    const track = getTrack(doc);
+
+    // Normal note
+    addDrumNote(track, { tick: 0, type: 'kick', length: 1 });
+    // Accented note
+    addDrumNote(track, { tick: 480, type: 'redDrum', length: 1, flags: { accent: true } });
+    // Ghosted note
+    addDrumNote(track, { tick: 960, type: 'yellowDrum', length: 1, flags: { ghost: true } });
+
+    const bytes = serializeMidi(doc);
+    const midi = parseMidi(bytes);
+    const drumTrack = midi.tracks[2];
+
+    // kick at note 96 — normal velocity
+    const kickNoteOns = findNoteOns(drumTrack, 96);
+    expect(kickNoteOns.length).toBe(1);
+    expect((kickNoteOns[0] as any).velocity).toBe(100);
+
+    // redDrum at note 97 — accent velocity
+    const redNoteOns = findNoteOns(drumTrack, 97);
+    expect(redNoteOns.length).toBe(1);
+    expect((redNoteOns[0] as any).velocity).toBe(127);
+
+    // yellowDrum at note 98 — ghost velocity
+    const yellowNoteOns = findNoteOns(drumTrack, 98);
+    expect(yellowNoteOns.length).toBe(1);
+    expect((yellowNoteOns[0] as any).velocity).toBe(1);
+
+    // Verify [ENABLE_CHART_DYNAMICS] text event is present
+    const textEvents = findEvents(drumTrack, 'text');
+    const dynamicsEvent = textEvents.find(
+      (e) => (e as any).text === '[ENABLE_CHART_DYNAMICS]',
+    );
+    expect(dynamicsEvent).toBeDefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // A4 Test: Tom marker dedup across difficulties
+  // ---------------------------------------------------------------------------
+
+  it('deduplicates tom markers across difficulties', () => {
+    const doc = createChart({ format: 'mid', resolution: 480 });
+
+    // Add Expert and Hard drum tracks, both with the same yellow tom marker
+    doc.trackData.push({
+      instrument: 'drums',
+      difficulty: 'expert',
+      starPowerSections: [],
+      rejectedStarPowerSections: [],
+      soloSections: [],
+      flexLanes: [],
+      drumFreestyleSections: [],
+      trackEvents: [
+        { tick: 0, length: 480, type: eventTypes.yellowTomMarker },
+        { tick: 0, length: 1, type: eventTypes.yellowDrum },
+      ],
+    });
+    doc.trackData.push({
+      instrument: 'drums',
+      difficulty: 'hard',
+      starPowerSections: [],
+      rejectedStarPowerSections: [],
+      soloSections: [],
+      flexLanes: [],
+      drumFreestyleSections: [],
+      trackEvents: [
+        { tick: 0, length: 480, type: eventTypes.yellowTomMarker },
+        { tick: 0, length: 1, type: eventTypes.yellowDrum },
+      ],
+    });
+
+    const bytes = serializeMidi(doc);
+    const midi = parseMidi(bytes);
+    const drumTrack = midi.tracks[2];
+
+    // Only ONE noteOn at MIDI note 110, not two
+    const tomNoteOns = findNoteOns(drumTrack, 110);
+    expect(tomNoteOns.length).toBe(1);
+  });
+
+  // ---------------------------------------------------------------------------
+  // A5 Test: Coda sections
+  // ---------------------------------------------------------------------------
+
+  it('coda freestyle sections emit [coda] text on EVENTS track, not note 120 on instrument track', () => {
+    const doc = createChart({ format: 'mid', resolution: 480 });
+
+    doc.trackData.push({
+      instrument: 'drums',
+      difficulty: 'expert',
+      starPowerSections: [],
+      rejectedStarPowerSections: [],
+      soloSections: [],
+      flexLanes: [],
+      drumFreestyleSections: [
+        { tick: 960, length: 480, isCoda: true },
+      ],
+      trackEvents: [
+        { tick: 0, length: 1, type: eventTypes.kick },
+      ],
+    });
+
+    const bytes = serializeMidi(doc);
+    const midi = parseMidi(bytes);
+
+    // Instrument track (track 2) should NOT have note 120
+    const drumTrack = midi.tracks[2];
+    const activationNoteOns = findNoteOns(drumTrack, 120);
+    expect(activationNoteOns.length).toBe(0);
+
+    // EVENTS track (track 1) should have [coda] text event
+    const eventsTrack = midi.tracks[1];
+    const textEvents = findEvents(eventsTrack, 'text');
+    const codaEvent = textEvents.find((e) => (e as any).text === '[coda]');
+    expect(codaEvent).toBeDefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // C6: Multi-difficulty round-trip
+  // ---------------------------------------------------------------------------
+
+  describe('multi-difficulty', () => {
+    function makeMultiDiffDoc(): ChartDocument {
+      const doc = createChart({ format: 'mid', resolution: 480 });
+
+      // Expert difficulty
+      doc.trackData.push({
+        instrument: 'drums',
+        difficulty: 'expert',
+        starPowerSections: [{ tick: 0, length: 960 }],
+        rejectedStarPowerSections: [],
+        soloSections: [],
+        flexLanes: [],
+        drumFreestyleSections: [],
+        trackEvents: [
+          { tick: 0, length: 1, type: eventTypes.kick },
+          { tick: 480, length: 1, type: eventTypes.yellowDrum },
+          { tick: 480, length: 0, type: eventTypes.yellowTomMarker },
+          { tick: 960, length: 1, type: eventTypes.blueDrum },
+        ],
+      });
+
+      // Hard difficulty
+      doc.trackData.push({
+        instrument: 'drums',
+        difficulty: 'hard',
+        starPowerSections: [{ tick: 0, length: 960 }],
+        rejectedStarPowerSections: [],
+        soloSections: [],
+        flexLanes: [],
+        drumFreestyleSections: [],
+        trackEvents: [
+          { tick: 0, length: 1, type: eventTypes.kick },
+          { tick: 480, length: 1, type: eventTypes.redDrum },
+          { tick: 480, length: 0, type: eventTypes.yellowTomMarker },
+        ],
+      });
+
+      return doc;
+    }
+
+    it('round-trips Expert + Hard drum notes through MIDI', () => {
+      const doc = makeMultiDiffDoc();
+      const bytes = serializeMidi(doc);
+      const parsed = parseChartFile(bytes, 'mid');
+
+      const expertTrack = parsed.trackData.find(
+        (t) => t.instrument === 'drums' && t.difficulty === 'expert',
+      );
+      const hardTrack = parsed.trackData.find(
+        (t) => t.instrument === 'drums' && t.difficulty === 'hard',
+      );
+      expect(expertTrack).toBeDefined();
+      expect(hardTrack).toBeDefined();
+
+      // Expert: 3 note event groups (kick@0, yellow@480, blue@960)
+      expect(expertTrack!.noteEventGroups.length).toBe(3);
+      // Hard: 2 note event groups (kick@0, red@480)
+      expect(hardTrack!.noteEventGroups.length).toBe(2);
+    });
+
+    it('Expert notes use correct MIDI base (96), Hard uses base (84)', () => {
+      const doc = makeMultiDiffDoc();
+      const bytes = serializeMidi(doc);
+      const midi = parseMidi(bytes);
+      const drumTrack = midi.tracks[2];
+
+      // Expert kick = 96 + 0 = 96
+      expect(findNoteOns(drumTrack, 96).length).toBe(1);
+      // Expert yellow = 96 + 2 = 98
+      expect(findNoteOns(drumTrack, 98).length).toBe(1);
+      // Expert blue = 96 + 3 = 99
+      expect(findNoteOns(drumTrack, 99).length).toBe(1);
+
+      // Hard kick = 84 + 0 = 84
+      expect(findNoteOns(drumTrack, 84).length).toBe(1);
+      // Hard red = 84 + 1 = 85
+      expect(findNoteOns(drumTrack, 85).length).toBe(1);
+    });
+
+    it('star power and tom markers are not duplicated across difficulties', () => {
+      const doc = makeMultiDiffDoc();
+      const bytes = serializeMidi(doc);
+      const midi = parseMidi(bytes);
+      const drumTrack = midi.tracks[2];
+
+      // Star power note 116 should appear only ONCE despite being in both difficulties
+      const spNoteOns = findNoteOns(drumTrack, 116);
+      expect(spNoteOns.length).toBe(1);
+
+      // Yellow tom marker (110) should appear only ONCE despite being in both difficulties
+      const tomNoteOns = findNoteOns(drumTrack, 110);
+      expect(tomNoteOns.length).toBe(1);
+    });
+
+    it('both difficulties have star power when parsed back', () => {
+      const doc = makeMultiDiffDoc();
+      const bytes = serializeMidi(doc);
+      const parsed = parseChartFile(bytes, 'mid');
+
+      const expertTrack = parsed.trackData.find(
+        (t) => t.instrument === 'drums' && t.difficulty === 'expert',
+      );
+      const hardTrack = parsed.trackData.find(
+        (t) => t.instrument === 'drums' && t.difficulty === 'hard',
+      );
+
+      expect(expertTrack!.starPowerSections.length).toBe(1);
+      expect(expertTrack!.starPowerSections[0].tick).toBe(0);
+      expect(expertTrack!.starPowerSections[0].length).toBe(960);
+
+      expect(hardTrack!.starPowerSections.length).toBe(1);
+      expect(hardTrack!.starPowerSections[0].tick).toBe(0);
+      expect(hardTrack!.starPowerSections[0].length).toBe(960);
+    });
   });
 
   // ---------------------------------------------------------------------------

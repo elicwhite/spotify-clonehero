@@ -290,6 +290,22 @@ function buildEventsTrack(doc: ChartDocument): MidiEvent[] {
     });
   }
 
+  // Coda events (from drum freestyle sections marked as coda)
+  const codaSections = doc.trackData.flatMap(td =>
+    td.drumFreestyleSections.filter(fs => fs.isCoda)
+  );
+  const emittedCoda = new Set<string>();
+  for (const cs of codaSections) {
+    const key = `${cs.tick}`;
+    if (!emittedCoda.has(key)) {
+      emittedCoda.add(key);
+      events.push({
+        tick: cs.tick,
+        event: { deltaTime: 0, meta: true, type: 'text', text: '[coda]' } as MidiEvent,
+      });
+    }
+  }
+
   return finalizeMidiTrack(events);
 }
 
@@ -328,6 +344,9 @@ function buildInstrumentTrack(
   const emittedSolo = new Set<string>();
   const emittedActivation = new Set<string>();
   const emittedFlexLane = new Set<string>();
+  const emittedTomMarker = new Set<string>();
+  const emittedFlam = new Set<string>();
+  const emittedKick2x = new Set<string>();
 
   for (const td of trackDataEntries) {
     const difficulty = td.difficulty;
@@ -374,20 +393,32 @@ function buildInstrumentTrack(
         if (tomMarkerEventTypes.has(ev.type)) {
           const midiNote = tomMarkerNotes[ev.type];
           if (midiNote !== undefined) {
-            addNoteOnOff(events, ev.tick, ev.length, midiNote, 100);
+            const key = `${ev.tick}:${ev.length}:${midiNote}`;
+            if (!emittedTomMarker.has(key)) {
+              emittedTomMarker.add(key);
+              addNoteOnOff(events, ev.tick, ev.length, midiNote, 100);
+            }
           }
           continue;
         }
 
         // Flam → instrument-wide MIDI note 109
         if (ev.type === eventTypes.forceFlam) {
-          addNoteOnOff(events, ev.tick, ev.length, 109, 100);
+          const key = `${ev.tick}:${ev.length}`;
+          if (!emittedFlam.has(key)) {
+            emittedFlam.add(key);
+            addNoteOnOff(events, ev.tick, ev.length, 109, 100);
+          }
           continue;
         }
 
         // kick2x → Expert+ double kick: note 95
         if (ev.type === eventTypes.kick2x) {
-          addNoteOnOff(events, ev.tick, ev.length, drumDiffBases.expert - 1, 100);
+          const key = `${ev.tick}:${ev.length}`;
+          if (!emittedKick2x.has(key)) {
+            emittedKick2x.add(key);
+            addNoteOnOff(events, ev.tick, ev.length, drumDiffBases.expert - 1, 100);
+          }
           continue;
         }
 
@@ -464,8 +495,9 @@ function buildInstrumentTrack(
       }
     }
 
-    // Drum freestyle / activation lanes → note 120
+    // Drum freestyle / activation lanes → note 120 (skip coda sections)
     for (const fs of td.drumFreestyleSections) {
+      if (fs.isCoda) continue;
       const key = `${fs.tick}:${fs.length}`;
       if (!emittedActivation.has(key)) {
         emittedActivation.add(key);
@@ -482,6 +514,57 @@ function buildInstrumentTrack(
         addNoteOnOff(events, fl.tick, fl.length, note, 100);
       }
     }
+
+    // Cross-format conversion: .chart uses cymbal markers, MIDI uses tom markers.
+    // If data has cymbal markers but no tom markers, generate tom markers for non-cymbal notes.
+    if (isDrums) {
+      const hasCymbalMarkers = td.trackEvents.some(e =>
+        e.type === eventTypes.yellowCymbalMarker ||
+        e.type === eventTypes.blueCymbalMarker ||
+        e.type === eventTypes.greenCymbalMarker
+      );
+      const hasTomMarkers = td.trackEvents.some(e =>
+        e.type === eventTypes.yellowTomMarker ||
+        e.type === eventTypes.blueTomMarker ||
+        e.type === eventTypes.greenTomMarker
+      );
+
+      if (hasCymbalMarkers && !hasTomMarkers) {
+        // Collect cymbal marker ticks per lane
+        const cymbalTicks = {
+          yellow: new Set<number>(),
+          blue: new Set<number>(),
+          green: new Set<number>(),
+        };
+        for (const ev of td.trackEvents) {
+          if (ev.type === eventTypes.yellowCymbalMarker) cymbalTicks.yellow.add(ev.tick);
+          if (ev.type === eventTypes.blueCymbalMarker) cymbalTicks.blue.add(ev.tick);
+          if (ev.type === eventTypes.greenCymbalMarker) cymbalTicks.green.add(ev.tick);
+        }
+
+        // For each drum note without a cymbal marker, emit a tom marker
+        const noteToTom: [EventType, Set<number>, number][] = [
+          [eventTypes.yellowDrum, cymbalTicks.yellow, 110],
+          [eventTypes.blueDrum, cymbalTicks.blue, 111],
+          [eventTypes.fiveOrangeFourGreenDrum, cymbalTicks.green, 112],
+        ];
+        for (const [noteType, cymbals, midiNote] of noteToTom) {
+          for (const ev of td.trackEvents) {
+            if (ev.type === noteType && !cymbals.has(ev.tick)) {
+              // Use length 1 so the noteOff is at tick+1, ensuring correct
+              // noteOn/noteOff ordering (zero-length notes have their noteOff
+              // sorted before noteOn at the same tick, which breaks parsing).
+              const tomLen = 1;
+              const key = `${ev.tick}:${tomLen}:${midiNote}`;
+              if (!emittedTomMarker.has(key)) {
+                emittedTomMarker.add(key);
+                addNoteOnOff(events, ev.tick, tomLen, midiNote, 100);
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   // Emit [ENABLE_CHART_DYNAMICS] text event at tick 0 if any accents/ghosts are present
@@ -492,7 +575,7 @@ function buildInstrumentTrack(
         deltaTime: 0,
         meta: true,
         type: 'text',
-        text: 'ENABLE_CHART_DYNAMICS',
+        text: '[ENABLE_CHART_DYNAMICS]',
       } as MidiEvent,
     });
   }
@@ -509,17 +592,15 @@ function buildInstrumentTrack(
           deltaTime: 0,
           meta: true,
           type: 'text',
-          text: 'ENHANCED_OPENS',
+          text: '[ENHANCED_OPENS]',
         } as MidiEvent,
       });
     }
   }
 
-  // Emit vocal phrases on the instrument track if this is a vocals-related track
-  // (vocal phrases are stored in doc.vocalPhrases, not per-instrument)
-  // Actually, vocal phrases are on the PART VOCALS track. We don't have a
-  // "vocals" instrument in scan-chart's instrument list, so they'd only appear
-  // if we explicitly build a vocals track. For now, skip.
+  // v1: vocalPhrases are intentionally not written. The vocals instrument track
+  // is not supported in v1 (drums-only). vocalPhrases would go on PART VOCALS
+  // as note 105/106 phrase markers.
 
   return finalizeMidiTrack(events);
 }

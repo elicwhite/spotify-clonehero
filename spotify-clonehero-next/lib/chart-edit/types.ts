@@ -175,6 +175,7 @@ export const drumAccentEventType: Partial<Record<DrumNoteType, EventType>> = {
   yellowDrum: eventTypes.yellowAccent,
   blueDrum: eventTypes.blueAccent,
   greenDrum: eventTypes.fiveOrangeFourGreenAccent,
+  fiveGreenDrum: eventTypes.fiveGreenAccent,
 };
 
 /** Ghost marker EventTypes per DrumNoteType. */
@@ -183,6 +184,7 @@ export const drumGhostEventType: Partial<Record<DrumNoteType, EventType>> = {
   yellowDrum: eventTypes.yellowGhost,
   blueDrum: eventTypes.blueGhost,
   greenDrum: eventTypes.fiveOrangeFourGreenGhost,
+  fiveGreenDrum: eventTypes.fiveGreenGhost,
 };
 
 /** Set of EventTypes that are base drum note types (not modifiers). */
@@ -208,9 +210,11 @@ export const drumModifierEventTypes = new Set<EventType>([
   eventTypes.yellowAccent,
   eventTypes.blueAccent,
   eventTypes.fiveOrangeFourGreenAccent,
+  eventTypes.fiveGreenAccent,
   eventTypes.redGhost,
   eventTypes.yellowGhost,
   eventTypes.blueGhost,
   eventTypes.fiveOrangeFourGreenGhost,
+  eventTypes.fiveGreenGhost,
   eventTypes.forceFlam,
 ]);

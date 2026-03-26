@@ -55,6 +55,7 @@
     "levenshtein-edit-distance": "^3.0.1",
     "lodash": "^4.17.21",
     "lucide-react": "^0.546.0",
+    "midi-file": "^1.2.4",
     "midifile": "^2.0.0",
     "next": "15.5.9",
     "nuqs": "^2.4.0",

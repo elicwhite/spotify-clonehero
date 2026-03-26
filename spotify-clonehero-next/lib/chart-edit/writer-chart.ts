@@ -225,7 +225,17 @@ function serializeSyncTrack(doc: ChartDocument): string[] {
     return a.order - b.order;
   });
 
-  for (const event of events) {
+  // Deduplicate
+  const deduped = events.filter((event, i) => {
+    if (i === 0) return true;
+    const prev = events[i - 1];
+    if (prev.tick !== event.tick || prev.kind !== event.kind) return true;
+    if (event.kind === 'bpm' && prev.kind === 'bpm') return prev.beatsPerMinute !== event.beatsPerMinute;
+    if (event.kind === 'ts' && prev.kind === 'ts') return prev.numerator !== event.numerator || prev.denominator !== event.denominator;
+    return true;
+  });
+
+  for (const event of deduped) {
     if (event.kind === 'bpm') {
       const millibeats = Math.round(event.beatsPerMinute * 1000);
       lines.push(`  ${event.tick} = B ${millibeats}`);
@@ -250,14 +260,26 @@ function serializeSyncTrack(doc: ChartDocument): string[] {
 function serializeEventsSection(doc: ChartDocument): string[] {
   const lines = ['[Events]', '{'];
 
+  // v1: vocalPhrases (doc.vocalPhrases) are intentionally not written.
+  // The vocals instrument track is not supported in v1 (drums-only).
+  // If added later, phrases would be emitted as E "phrase_start" / E "phrase_end".
+
   const events: { tick: number; text: string }[] = [
     ...doc.sections.map((s) => ({ tick: s.tick, text: `section ${s.name}` })),
     ...doc.endEvents.map((e) => ({ tick: e.tick, text: 'end' })),
+    ...doc.lyrics.map((l) => ({ tick: l.tick, text: `lyric ${l.text}` })),
   ];
 
   events.sort((a, b) => a.tick - b.tick);
 
-  for (const event of events) {
+  // Deduplicate
+  const deduped = events.filter((event, i) => {
+    if (i === 0) return true;
+    const prev = events[i - 1];
+    return !(prev.tick === event.tick && prev.text === event.text);
+  });
+
+  for (const event of deduped) {
     lines.push(`  ${event.tick} = E "${event.text}"`);
   }
 
@@ -323,6 +345,47 @@ function serializeTrackSection(track: TrackData): string[] {
     // and are handled via the dedicated sections above — skip them here.
   }
 
+  // Cross-format conversion: MIDI uses tom markers, .chart uses cymbal markers.
+  // If data has tom markers but no cymbal markers, generate cymbal markers for non-tom notes.
+  if (track.instrument === 'drums') {
+    const hasTomMarkers = track.trackEvents.some(e =>
+      e.type === eventTypes.yellowTomMarker ||
+      e.type === eventTypes.blueTomMarker ||
+      e.type === eventTypes.greenTomMarker
+    );
+    const hasCymbalMarkers = track.trackEvents.some(e =>
+      e.type === eventTypes.yellowCymbalMarker ||
+      e.type === eventTypes.blueCymbalMarker ||
+      e.type === eventTypes.greenCymbalMarker
+    );
+
+    if (hasTomMarkers && !hasCymbalMarkers) {
+      const tomTicks = {
+        yellow: new Set<number>(),
+        blue: new Set<number>(),
+        green: new Set<number>(),
+      };
+      for (const ev of track.trackEvents) {
+        if (ev.type === eventTypes.yellowTomMarker) tomTicks.yellow.add(ev.tick);
+        if (ev.type === eventTypes.blueTomMarker) tomTicks.blue.add(ev.tick);
+        if (ev.type === eventTypes.greenTomMarker) tomTicks.green.add(ev.tick);
+      }
+
+      const noteToChartCymbal: [EventType, Set<number>, number][] = [
+        [eventTypes.yellowDrum, tomTicks.yellow, 66],
+        [eventTypes.blueDrum, tomTicks.blue, 67],
+        [eventTypes.fiveOrangeFourGreenDrum, tomTicks.green, 68],
+      ];
+      for (const [noteType, toms, chartNote] of noteToChartCymbal) {
+        for (const ev of track.trackEvents) {
+          if (ev.type === noteType && !toms.has(ev.tick)) {
+            events.push({ tick: ev.tick, sortKey: 1, kind: 'N', value: chartNote, length: 0 });
+          }
+        }
+      }
+    }
+  }
+
   // Sort: by tick, then S before N before E, then by value
   events.sort((a, b) => {
     if (a.tick !== b.tick) return a.tick - b.tick;
@@ -334,7 +397,18 @@ function serializeTrackSection(track: TrackData): string[] {
     return 0;
   });
 
+  // Deduplicate: remove exact duplicate events (same tick + kind + value/text)
+  const deduped: TrackLineEvent[] = [];
   for (const event of events) {
+    const prev = deduped[deduped.length - 1];
+    if (prev && prev.tick === event.tick && prev.kind === event.kind) {
+      if (event.kind === 'E' && prev.kind === 'E' && prev.text === event.text) continue;
+      if (event.kind !== 'E' && prev.kind !== 'E' && prev.value === event.value && prev.length === event.length) continue;
+    }
+    deduped.push(event);
+  }
+
+  for (const event of deduped) {
     if (event.kind === 'E') {
       lines.push(`  ${event.tick} = E "${event.text}"`);
     } else {

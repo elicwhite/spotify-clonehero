@@ -48,8 +48,8 @@ function getModifierTypesForNote(type: DrumNoteType): Set<EventType> {
   const ghost = drumGhostEventType[type];
   if (ghost !== undefined) modifiers.add(ghost);
 
-  // forceFlam applies to all note types
-  modifiers.add(eventTypes.forceFlam);
+  // forceFlam is shared across all notes at a tick — handled separately
+  // in removeDrumNote and setDrumNoteFlags to avoid corrupting other notes.
 
   // kick2x only applies to kick
   if (type === 'kick') {
@@ -118,9 +118,14 @@ export function addDrumNote(
     }
   }
 
-  // Flam
+  // Flam (shared across all notes at this tick — only add if not already present)
   if (flags.flam) {
-    pushEvent(track, tick, 0, eventTypes.forceFlam);
+    const flamExists = track.trackEvents.some(
+      (e) => e.tick === tick && e.type === eventTypes.forceFlam,
+    );
+    if (!flamExists) {
+      pushEvent(track, tick, 0, eventTypes.forceFlam);
+    }
   }
 }
 
@@ -140,6 +145,16 @@ export function removeDrumNote(
       e.tick !== tick ||
       (e.type !== baseType && !modifierTypes.has(e.type)),
   );
+
+  // Only remove forceFlam if no other base drum note remains at this tick
+  const remainingBasesAtTick = track.trackEvents.some(
+    (e) => e.tick === tick && baseDrumEventTypes.has(e.type),
+  );
+  if (!remainingBasesAtTick) {
+    track.trackEvents = track.trackEvents.filter(
+      (e) => e.tick !== tick || e.type !== eventTypes.forceFlam,
+    );
+  }
 }
 
 /**
@@ -281,7 +296,24 @@ export function setDrumNoteFlags(
     }
   }
 
-  if (flags.flam) {
-    pushEvent(track, tick, 0, eventTypes.forceFlam);
+  // Flam is shared across all notes at a tick — handle carefully
+  if (flags.flam === true) {
+    const flamExists = track.trackEvents.some(
+      (e) => e.tick === tick && e.type === eventTypes.forceFlam,
+    );
+    if (!flamExists) {
+      pushEvent(track, tick, 0, eventTypes.forceFlam);
+    }
+  } else if (flags.flam === false) {
+    // Only remove forceFlam if no other base drum note exists at this tick
+    const otherBasesAtTick = track.trackEvents.some(
+      (e) => e.tick === tick && baseDrumEventTypes.has(e.type) && e.type !== baseType,
+    );
+    if (!otherBasesAtTick) {
+      track.trackEvents = track.trackEvents.filter(
+        (e) => e.tick !== tick || e.type !== eventTypes.forceFlam,
+      );
+    }
   }
+  // When flags.flam is undefined, leave existing forceFlam untouched
 }

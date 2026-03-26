@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { readChart, writeChart } from '../index';
-import type { ChartDocument, FileEntry } from '../types';
+import { readChart, writeChart, createChart } from '../index';
+import type { ChartDocument, ChartMetadata, FileEntry } from '../types';
 import { parseChartFile } from '@eliwhite/scan-chart';
 
 // ---------------------------------------------------------------------------
@@ -475,5 +475,104 @@ describe('metadata round-trip', () => {
     expect(iniText).toContain('diff_drums = 2');
     expect(iniText).toContain('loading_phrase = Test loading phrase');
     expect(iniText).toContain('icon = haggis');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C2: readChart without song.ini — metadata from .chart [Song] section
+// ---------------------------------------------------------------------------
+
+describe('readChart without song.ini', () => {
+  it('falls back to .chart [Song] section metadata when no song.ini', () => {
+    const files: FileEntry[] = [
+      makeFileEntry('notes.chart', loadFixture('drums-basic.chart')),
+    ];
+    const doc = readChart(files);
+
+    // These values come from scan-chart parsing the [Song] section
+    expect(doc.metadata.name).toBe('Test Chart Song');
+    expect(doc.metadata.artist).toBe('Test Artist');
+    expect(doc.metadata.charter).toBe('TestCharter');
+    expect(doc.metadata.album).toBe('Test Album');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A7: Case-insensitive INI section lookup
+// ---------------------------------------------------------------------------
+
+describe('readChart with uppercase [Song] in INI', () => {
+  it('reads metadata from [Song] (uppercase) in song.ini', () => {
+    const iniText = '[Song]\r\nname = Test Uppercase\r\nartist = UpperArtist\r\n';
+    const encoder = new TextEncoder();
+    const files: FileEntry[] = [
+      makeFileEntry('notes.chart', loadFixture('drums-basic.chart')),
+      makeFileEntry('song.ini', encoder.encode(iniText)),
+    ];
+    const doc = readChart(files);
+    expect(doc.metadata.name).toBe('Test Uppercase');
+    expect(doc.metadata.artist).toBe('UpperArtist');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C3: Boolean metadata round-trip
+// ---------------------------------------------------------------------------
+
+describe('boolean metadata round-trip', () => {
+  it('round-trips boolean metadata through song.ini', () => {
+    const doc = createChart({ format: 'chart' });
+    doc.metadata.modchart = true;
+    doc.metadata.pro_drums = true;
+    doc.metadata.five_lane_drums = false;
+
+    const outputFiles = writeChart(doc);
+    const iniFile = outputFiles.find((f) => f.fileName === 'song.ini')!;
+    const iniText = new TextDecoder().decode(iniFile.data);
+
+    // Verify INI output uses Python-style True/False
+    expect(iniText).toContain('modchart = True');
+    expect(iniText).toContain('pro_drums = True');
+    expect(iniText).toContain('five_lane_drums = False');
+
+    // Re-read and verify round-trip
+    const chartFile = outputFiles.find((f) => f.fileName === 'notes.chart')!;
+    const reRead = readChart([chartFile, iniFile]);
+    expect(reRead.metadata.modchart).toBe(true);
+    expect(reRead.metadata.pro_drums).toBe(true);
+    expect(reRead.metadata.five_lane_drums).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C5: Image asset classification
+// ---------------------------------------------------------------------------
+
+describe('image asset classification', () => {
+  it('classifies image files as assets on read', () => {
+    const dummyImage = new Uint8Array([0x01]);
+    const files: FileEntry[] = [
+      ...chartFixtureFiles(),
+      makeFileEntry('album.png', dummyImage),
+      makeFileEntry('background.jpg', dummyImage),
+    ];
+    const doc = readChart(files);
+    const assetNames = doc.assets.map((a) => a.fileName);
+    expect(assetNames).toContain('album.png');
+    expect(assetNames).toContain('background.jpg');
+  });
+
+  it('passes through image assets in writeChart output', () => {
+    const dummyImage = new Uint8Array([0x01]);
+    const files: FileEntry[] = [
+      ...chartFixtureFiles(),
+      makeFileEntry('album.png', dummyImage),
+      makeFileEntry('background.jpg', dummyImage),
+    ];
+    const doc = readChart(files);
+    const outputFiles = writeChart(doc);
+    const outputNames = outputFiles.map((f) => f.fileName);
+    expect(outputNames).toContain('album.png');
+    expect(outputNames).toContain('background.jpg');
   });
 });

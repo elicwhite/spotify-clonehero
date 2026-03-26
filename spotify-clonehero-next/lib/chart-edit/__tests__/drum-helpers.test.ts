@@ -259,6 +259,93 @@ describe('drum notes', () => {
     }).toThrow('No kick note found at tick 0');
   });
 
+  // C4: greenDrum / fiveGreenDrum tests
+  it('addDrumNote with greenDrum produces fiveOrangeFourGreenDrum event', () => {
+    const track = makeTrack();
+    addDrumNote(track, { tick: 0, type: 'greenDrum' });
+
+    expect(track.trackEvents).toHaveLength(1);
+    expect(track.trackEvents[0].type).toBe(eventTypes.fiveOrangeFourGreenDrum);
+  });
+
+  it('addDrumNote with fiveGreenDrum produces fiveGreenDrum event', () => {
+    const track = makeTrack();
+    addDrumNote(track, { tick: 0, type: 'fiveGreenDrum' });
+
+    expect(track.trackEvents).toHaveLength(1);
+    expect(track.trackEvents[0].type).toBe(eventTypes.fiveGreenDrum);
+  });
+
+  it('addDrumNote with greenDrum cymbal produces greenCymbalMarker event', () => {
+    const track = makeTrack();
+    addDrumNote(track, { tick: 0, type: 'greenDrum', flags: { cymbal: true } });
+
+    expect(track.trackEvents).toHaveLength(2);
+    const types = track.trackEvents.map((e) => e.type);
+    expect(types).toContain(eventTypes.fiveOrangeFourGreenDrum);
+    expect(types).toContain(eventTypes.greenCymbalMarker);
+  });
+
+  it('getDrumNotes returns correct DrumNoteType for greenDrum and fiveGreenDrum', () => {
+    const track = makeTrack();
+    track.trackEvents.push(
+      { tick: 0, length: 0, type: eventTypes.fiveOrangeFourGreenDrum },
+      { tick: 480, length: 0, type: eventTypes.fiveGreenDrum },
+    );
+
+    const notes = getDrumNotes(track);
+    expect(notes).toHaveLength(2);
+    expect(notes[0].type).toBe('greenDrum');
+    expect(notes[0].tick).toBe(0);
+    expect(notes[1].type).toBe('fiveGreenDrum');
+    expect(notes[1].tick).toBe(480);
+  });
+
+  // A3: Duplicate forceFlam prevention
+  it('addDrumNote with flam does not create duplicate forceFlam events', () => {
+    const track = makeTrack();
+    addDrumNote(track, { tick: 0, type: 'kick', flags: { flam: true } });
+    addDrumNote(track, { tick: 0, type: 'redDrum', flags: { flam: true } });
+
+    const flamEvents = track.trackEvents.filter(
+      (e) => e.type === eventTypes.forceFlam,
+    );
+    expect(flamEvents).toHaveLength(1);
+
+    const notes = getDrumNotes(track);
+    const kick = notes.find((n) => n.type === 'kick');
+    const red = notes.find((n) => n.type === 'redDrum');
+    expect(kick!.flags.flam).toBe(true);
+    expect(red!.flags.flam).toBe(true);
+  });
+
+  // A1: Shared forceFlam corruption in removeDrumNote
+  it('removeDrumNote preserves forceFlam for remaining notes at same tick', () => {
+    const track = makeTrack();
+    addDrumNote(track, { tick: 0, type: 'kick', flags: { flam: true } });
+    addDrumNote(track, { tick: 0, type: 'redDrum', flags: { flam: true } });
+
+    removeDrumNote(track, 0, 'kick');
+
+    const notes = getDrumNotes(track);
+    expect(notes).toHaveLength(1);
+    expect(notes[0].type).toBe('redDrum');
+    expect(notes[0].flags.flam).toBe(true);
+  });
+
+  // A2: Shared forceFlam corruption in setDrumNoteFlags
+  it('setDrumNoteFlags flam:false preserves forceFlam when other notes remain', () => {
+    const track = makeTrack();
+    addDrumNote(track, { tick: 0, type: 'kick', flags: { flam: true } });
+    addDrumNote(track, { tick: 0, type: 'redDrum', flags: { flam: true } });
+
+    setDrumNoteFlags(track, 0, 'kick', { flam: false });
+
+    const notes = getDrumNotes(track);
+    const red = notes.find((n) => n.type === 'redDrum');
+    expect(red!.flags.flam).toBe(true);
+  });
+
   it('addDrumNote -> getDrumNotes round-trip', () => {
     const track = makeTrack();
 
