@@ -694,7 +694,6 @@ if (!CHART_DIR) {
 }
 
 // Early-exit: the rest of the file requires CHART_DIR
-// eslint-disable-next-line jest/no-conditional-in-test
 if (!CHART_DIR) {
   // Already registered the placeholder test above
 } else {
