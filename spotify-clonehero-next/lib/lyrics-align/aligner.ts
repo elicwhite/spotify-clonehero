@@ -77,6 +77,10 @@ export function init(
 /**
  * Align plain-text lyrics to pre-separated vocals (16 kHz mono).
  * Runs entirely in a worker — the main thread stays free.
+ *
+ * Lyrics are automatically syllabified using TeX hyphenation patterns.
+ * Returns per-syllable timestamps (with joinNext markers) in addition to
+ * word-level timestamps and karaoke display lines.
  */
 export async function alignVocals(
   vocals16k: Float32Array,
@@ -85,6 +89,7 @@ export async function alignVocals(
 ): Promise<{
   lines: LyricLine[];
   words: AlignedWord[];
+  syllables: AlignedSyllable[];
   durationMs: number;
 }> {
   // Ensure model is downloaded (no-op if already done)
@@ -102,6 +107,7 @@ export async function alignVocals(
         resolve({
           lines: msg.lines,
           words: msg.words,
+          syllables: msg.syllables,
           durationMs: msg.durationMs,
         });
       } else if (msg.type === 'error') {

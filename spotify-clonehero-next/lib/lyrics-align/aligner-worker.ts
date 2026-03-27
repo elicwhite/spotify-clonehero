@@ -4,6 +4,10 @@
  * Session creation and inference block for seconds — running them here
  * keeps the UI responsive.
  *
+ * Now supports syllable-level alignment: lyrics are automatically syllabified
+ * using TeX hyphenation patterns, aligned at the character level, then merged
+ * where syllables are too close together.
+ *
  * Messages:
  *   IN:  { type: "init" }
  *   OUT: { type: "progress", message: string }
@@ -11,7 +15,7 @@
  *
  *   IN:  { type: "align", vocals16k: Float32Array, lyrics: string }
  *   OUT: { type: "progress", message: string }
- *   OUT: { type: "result", lines, words, durationMs }
+ *   OUT: { type: "result", lines, words, syllables, durationMs }
  *
  *   OUT: { type: "error", message: string }
  */
@@ -19,6 +23,7 @@
 import * as ort from 'onnxruntime-web';
 import {forcedAlign} from './viterbi';
 import {getCachedModel} from './model-cache';
+import {syllabifyLyrics, mergeCloseSyllables} from './syllabify';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -165,30 +170,18 @@ async function getEmissions(
 }
 
 // ---------------------------------------------------------------------------
-// Tokenize
-// ---------------------------------------------------------------------------
-
-function tokenize(text: string): {tokens: number[]; chars: string[]} {
-  const upper = text.toUpperCase().replace(/\s+/g, '|');
-  const tokens: number[] = [];
-  const chars: string[] = [];
-  for (const ch of upper) {
-    const idx = label2idx[ch];
-    if (idx !== undefined) {
-      tokens.push(idx);
-      chars.push(ch);
-    }
-  }
-  return {tokens, chars};
-}
-
-// ---------------------------------------------------------------------------
-// Full alignment pipeline
+// Types
 // ---------------------------------------------------------------------------
 
 interface AlignedWord {
   text: string;
   startMs: number;
+}
+
+interface AlignedSyllable {
+  text: string;
+  startMs: number;
+  joinNext: boolean;
 }
 
 interface LyricLine {
@@ -197,6 +190,10 @@ interface LyricLine {
   syllables: {text: string; msTime: number}[];
   text: string;
 }
+
+// ---------------------------------------------------------------------------
+// Group words into display lines
+// ---------------------------------------------------------------------------
 
 function groupIntoLines(words: AlignedWord[]): LyricLine[] {
   if (words.length === 0) return [];
@@ -251,13 +248,23 @@ function groupIntoLines(words: AlignedWord[]): LyricLine[] {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Full alignment pipeline (syllable-level)
+// ---------------------------------------------------------------------------
+
 async function handleAlign(vocals16k: Float32Array, lyrics: string) {
   const durationMs = (vocals16k.length / 16000) * 1000;
   progress(`Vocals: ${(durationMs / 1000).toFixed(1)}s`);
 
+  // Syllabify lyrics text into structured syllables
+  const syls = syllabifyLyrics(lyrics);
+  progress(
+    `Syllabified: ${lyrics.trim().split(/\s+/).length} words → ${syls.length} syllables`,
+  );
+
   await ensureSession();
 
-  // CTC emissions
+  // 1. CTC emissions
   progress('Running CTC model...');
   const t0 = performance.now();
   const {logProbs, T, C} = await getEmissions(vocals16k);
@@ -266,28 +273,67 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
     `Emissions: ${T} frames x ${C} classes (${(modelMs / 1000).toFixed(1)}s)`,
   );
 
-  // Tokenize
-  const words = lyrics.trim().split(/\s+/).filter(Boolean);
-  const text = words.join(' ');
-  const {tokens} = tokenize(text);
+  // 2. Build character token sequence from syllables
+  //    Insert | between words (where joinNext=false → next syllable starts new word)
+  const sylStartPositions: number[] = [];
+  const tokens: number[] = [];
+  const pipeIdx = label2idx['|'];
 
-  if (tokens.length === 0) throw new Error('No valid tokens in lyrics');
-  progress(`Tokens: ${tokens.length} characters for ${words.length} words`);
-
-  // Word start positions
-  const wordStartPositions: number[] = [];
-  let charIdx = 0;
-  for (let wi = 0; wi < words.length; wi++) {
-    wordStartPositions.push(charIdx);
-    for (const ch of words[wi].toUpperCase()) {
-      if (label2idx[ch] !== undefined) charIdx++;
+  for (let si = 0; si < syls.length; si++) {
+    // Insert | word separator before new words (except the first syllable)
+    if (si > 0 && !syls[si - 1].joinNext && pipeIdx !== undefined) {
+      tokens.push(pipeIdx);
     }
-    if (wi < words.length - 1 && label2idx['|'] !== undefined) {
-      charIdx++;
+
+    sylStartPositions.push(tokens.length);
+
+    // Tokenize this syllable's characters
+    for (const ch of syls[si].text.toUpperCase()) {
+      const idx = label2idx[ch];
+      if (idx !== undefined) {
+        tokens.push(idx);
+      }
     }
   }
 
-  // Viterbi
+  if (tokens.length === 0) throw new Error('No valid tokens in syllables');
+  progress(
+    `Tokens: ${tokens.length} characters for ${syls.length} syllables`,
+  );
+
+  // 2.5. Compute RMS energy per frame and boost blank in quiet frames
+  const SAMPLES_PER_FRAME = 320;
+  const rmsEnergy = new Float32Array(T);
+  for (let f = 0; f < T; f++) {
+    const start = f * SAMPLES_PER_FRAME;
+    const end = Math.min(start + SAMPLES_PER_FRAME, vocals16k.length);
+    if (start < vocals16k.length) {
+      let sumSq = 0;
+      for (let s = start; s < end; s++) sumSq += vocals16k[s] * vocals16k[s];
+      rmsEnergy[f] = Math.sqrt(sumSq / (end - start));
+    }
+  }
+
+  // Find median RMS to set threshold
+  const sortedRms = Float32Array.from(rmsEnergy).sort();
+  const medianRms = sortedRms[Math.floor(sortedRms.length / 2)];
+  const silenceThreshold = medianRms * 0.1;
+  const silentFrames = rmsEnergy.filter(v => v < silenceThreshold).length;
+
+  // Only apply boost if there are meaningful gaps (>2% silent frames)
+  if (silentFrames > T * 0.02) {
+    const BLANK_BOOST = 15;
+    for (let f = 0; f < T; f++) {
+      if (rmsEnergy[f] < silenceThreshold) {
+        logProbs[f * C + 0] += BLANK_BOOST; // index 0 = blank
+      }
+    }
+    progress(
+      `RMS gap boost: ${silentFrames} silent frames (${((silentFrames / T) * 100).toFixed(0)}%)`,
+    );
+  }
+
+  // 3. Viterbi
   progress('Running Viterbi alignment...');
   const t1 = performance.now();
   const aligned = forcedAlign(logProbs, T, C, tokens, 0);
@@ -296,35 +342,121 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
     `Viterbi: ${aligned.length} tokens aligned (${(viterbiMs / 1000).toFixed(1)}s)`,
   );
 
-  // Extract word timestamps
-  const alignedWords: AlignedWord[] = [];
-  for (let i = 0; i < words.length; i++) {
-    const pos = wordStartPositions[i];
-    if (pos < aligned.length) {
-      const ms = (aligned[pos].startFrame / T) * durationMs;
-      alignedWords.push({text: words[i], startMs: ms});
-    } else if (alignedWords.length > 0) {
-      alignedWords.push({
-        text: words[i],
-        startMs: alignedWords[alignedWords.length - 1].startMs,
+  // 4. Extract per-syllable timestamps
+  // Build token→frame lookup from aligned results (keyed by tokenPos)
+  const tokenFrame = new Map<number, number>();
+  for (const a of aligned) {
+    tokenFrame.set(a.tokenPos, a.startFrame);
+  }
+
+  // Smooth RMS for onset detection
+  const rmsSmoothed = new Float32Array(T);
+  if (T > 5) {
+    const kernel = [0.06, 0.24, 0.4, 0.24, 0.06];
+    for (let f = 0; f < T; f++) {
+      let sum = 0;
+      for (let k = 0; k < 5; k++) {
+        const idx = f - 2 + k;
+        if (idx >= 0 && idx < T) sum += rmsEnergy[idx] * kernel[k];
+      }
+      rmsSmoothed[f] = sum;
+    }
+  } else {
+    rmsSmoothed.set(rmsEnergy);
+  }
+
+  const alignedSyls: AlignedSyllable[] = [];
+  for (let si = 0; si < syls.length; si++) {
+    const pos = sylStartPositions[si];
+    const frame = tokenFrame.get(pos);
+    if (frame !== undefined) {
+      // Onset refinement: snap to steepest RMS rise within ±4 frames
+      let bestFrame = frame;
+      let bestRise = 0;
+      for (let f = Math.max(1, frame - 4); f < Math.min(T, frame + 5); f++) {
+        const rise = rmsSmoothed[f] - rmsSmoothed[f - 1];
+        if (rise > bestRise) {
+          bestRise = rise;
+          bestFrame = f;
+        }
+      }
+      const ms = (bestFrame / T) * durationMs;
+      alignedSyls.push({
+        text: syls[si].text,
+        startMs: ms,
+        joinNext: syls[si].joinNext,
+      });
+    } else if (alignedSyls.length > 0) {
+      alignedSyls.push({
+        text: syls[si].text,
+        startMs: alignedSyls[alignedSyls.length - 1].startMs,
+        joinNext: syls[si].joinNext,
       });
     }
   }
 
   // Enforce monotonicity
-  for (let i = 1; i < alignedWords.length; i++) {
-    if (alignedWords[i].startMs < alignedWords[i - 1].startMs) {
-      alignedWords[i].startMs = alignedWords[i - 1].startMs;
+  for (let i = 1; i < alignedSyls.length; i++) {
+    if (alignedSyls[i].startMs < alignedSyls[i - 1].startMs) {
+      alignedSyls[i].startMs = alignedSyls[i - 1].startMs;
     }
   }
 
-  // Group into lines
-  const lines = groupIntoLines(alignedWords);
+  // Merge syllables that are too close together (matching chart behavior)
+  const mergedSyls = mergeCloseSyllables(alignedSyls);
+
+  // 5. Build words from merged syllables and track which belong to each word
+  const words: AlignedWord[] = [];
+  const wordSylRanges: [number, number][] = []; // [startSylIdx, endSylIdx) per word
+  let wordText = '';
+  let wordStartMs = 0;
+  let wordStartSyl = 0;
+  for (let si = 0; si < mergedSyls.length; si++) {
+    if (wordText === '') {
+      wordStartMs = mergedSyls[si].startMs;
+      wordStartSyl = si;
+    }
+    wordText += mergedSyls[si].text;
+    if (!mergedSyls[si].joinNext) {
+      words.push({text: wordText, startMs: wordStartMs});
+      wordSylRanges.push([wordStartSyl, si + 1]);
+      wordText = '';
+    }
+  }
+  if (wordText) {
+    words.push({text: wordText, startMs: wordStartMs});
+    wordSylRanges.push([wordStartSyl, mergedSyls.length]);
+  }
+
+  // Group words into display lines
+  const lines = groupIntoLines(words);
+
+  // Replace word-level syllables in each line with actual syllable-level data.
+  // groupIntoLines produces lines with word-level syllables — replace them.
+  let wordIdx = 0;
+  for (const line of lines) {
+    const lineSyls: {text: string; msTime: number}[] = [];
+    const lineWordCount = line.syllables.length; // each "syllable" from groupIntoLines is a word
+    for (let w = 0; w < lineWordCount && wordIdx < words.length; w++, wordIdx++) {
+      const [ss, se] = wordSylRanges[wordIdx];
+      for (let si = ss; si < se; si++) {
+        // Add space before first syllable of non-first words
+        const prefix = lineSyls.length > 0 && si === ss ? ' ' : '';
+        lineSyls.push({
+          text: prefix + mergedSyls[si].text,
+          msTime: mergedSyls[si].startMs,
+        });
+      }
+    }
+    line.syllables = lineSyls;
+    line.text = lineSyls.map(s => s.text).join('');
+  }
+
   progress(
-    `Done: ${alignedWords.length} words, ${lines.length} lines (model: ${(modelMs / 1000).toFixed(1)}s, viterbi: ${(viterbiMs / 1000).toFixed(1)}s)`,
+    `Done: ${mergedSyls.length} syllables (${alignedSyls.length - mergedSyls.length} merged), ${lines.length} lines`,
   );
 
-  post({type: 'result', lines, words: alignedWords, durationMs});
+  post({type: 'result', lines, words, syllables: mergedSyls, durationMs});
 }
 
 // ---------------------------------------------------------------------------
