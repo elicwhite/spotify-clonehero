@@ -45,6 +45,12 @@ const ALIGN_STEPS: PipelineStep[] = [
     detail: 'Runs in isolated worker',
   },
   {
+    id: 'syllabify',
+    label: 'Syllabify lyrics',
+    status: 'pending',
+    detail: '',
+  },
+  {
     id: 'ctc',
     label: 'Run CTC model (wav2vec2)',
     status: 'pending',
@@ -340,7 +346,14 @@ export default function LyricsAlignPage() {
       const {alignVocals} = await import('@/lib/lyrics-align/aligner');
 
       const result = await alignVocals(vocals16k, lyrics, msg => {
-        if (msg.startsWith('Running Viterbi')) {
+        if (msg.startsWith('Syllabified:')) {
+          updateAlignStep('syllabify', {
+            status: 'done',
+            detail: msg,
+            startTime: Date.now(),
+            endTime: Date.now(),
+          });
+        } else if (msg.startsWith('Running Viterbi')) {
           updateAlignStep('ctc', {status: 'done', endTime: Date.now()});
           updateAlignStep('viterbi', {
             status: 'active',
@@ -356,7 +369,8 @@ export default function LyricsAlignPage() {
           });
         } else if (
           msg.startsWith('Emissions:') ||
-          msg.startsWith('Tokens:')
+          msg.startsWith('Tokens:') ||
+          msg.startsWith('RMS gap boost:')
         ) {
           updateAlignStep('ctc', {detail: msg});
         } else if (msg.startsWith('Viterbi:')) {

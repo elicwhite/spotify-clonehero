@@ -49,6 +49,7 @@
     "fflate": "^0.8.2",
     "fft.js": "^4.0.4",
     "filenamify": "^6.0.0",
+    "hypher": "^0.2.5",
     "idb-keyval": "^6.2.1",
     "ini": "^4.1.1",
     "kysely": "^0.28.7",
