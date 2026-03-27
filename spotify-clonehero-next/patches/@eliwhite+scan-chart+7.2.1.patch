@@ -1,6 +1,8 @@
---- a/dist/index.d.ts
-+++ b/dist/index.d.ts
-@@ -590,4 +590,7 @@
+diff --git a/node_modules/@eliwhite/scan-chart/dist/index.d.ts b/node_modules/@eliwhite/scan-chart/dist/index.d.ts
+index 20f075f..e166aff 100644
+--- a/node_modules/@eliwhite/scan-chart/dist/index.d.ts
++++ b/node_modules/@eliwhite/scan-chart/dist/index.d.ts
+@@ -590,4 +590,7 @@ declare function scanChartFolder(files: {
      data: Uint8Array;
  }[], config?: ScanChartFolderConfig): ScannedChart;
  
@@ -9,9 +11,11 @@
 +declare function parseNotesFromMidi(data: Uint8Array, iniChartModifiers: IniChartModifiers): RawChartData;
 +
 +export { AlbumArt, ChartIssueType, Difficulty, DrumType, EventType, FolderIssueType, IniChartModifiers, Instrument, InstrumentType, MetadataIssueType, NoteEvent, NoteType, NotesData, RawChartData, ScanChartFolderConfig, ScannedChart, calculateTrackHash, defaultIniChartModifiers, difficulties, drumTypes, eventTypes, getInstrumentType, instrumentTypes, instruments, noteFlags, noteTypes, parseChartFile, parseNotesFromChart, parseNotesFromMidi, scanChartFolder };
---- a/dist/index.js
-+++ b/dist/index.js
-@@ -54,6 +54,8 @@
+diff --git a/node_modules/@eliwhite/scan-chart/dist/index.js b/node_modules/@eliwhite/scan-chart/dist/index.js
+index 08d2852..cb98dc8 100644
+--- a/node_modules/@eliwhite/scan-chart/dist/index.js
++++ b/node_modules/@eliwhite/scan-chart/dist/index.js
+@@ -54,6 +54,8 @@ __export(src_exports, {
    noteFlags: () => noteFlags,
    noteTypes: () => noteTypes,
    parseChartFile: () => parseChartFile,
@@ -20,7 +24,7 @@
    scanChartFolder: () => scanChartFolder
  });
  module.exports = __toCommonJS(src_exports);
-@@ -781,7 +783,7 @@
+@@ -781,7 +783,7 @@ function parseNotesFromChart(data) {
      })).value(),
      trackData: _4.chain(fileSections).pick(_4.keys(trackNameMap)).toPairs().map(([trackName, lines]) => {
        const { instrument, difficulty } = trackNameMap[trackName];
@@ -29,7 +33,7 @@
          const type = getEventType(typeCode, value, instrument, difficulty);
          return type !== null ? { tick: Number(tickString), type, length: Number(lengthString) || 0 } : null;
        }).compact().orderBy("tick").thru((events) => mergeSoloEvents(events)).value();
-@@ -864,6 +866,7 @@
+@@ -864,6 +866,7 @@ function getFileSections(chartText) {
    return sections;
  }
  function getEventType(typeCode, value, instrument, difficulty) {
@@ -37,7 +41,7 @@
    switch (typeCode) {
      case "E": {
        switch (value) {
-@@ -916,6 +919,8 @@
+@@ -916,6 +919,8 @@ function getEventType(typeCode, value, instrument, difficulty) {
                return eventTypes.fiveGreenDrum;
              case "32":
                return eventTypes.kick2x;
@@ -46,7 +50,7 @@
              case "34":
                return eventTypes.redAccent;
              case "35":
-@@ -926,6 +931,8 @@
+@@ -926,6 +931,8 @@ function getEventType(typeCode, value, instrument, difficulty) {
                return eventTypes.fiveOrangeFourGreenAccent;
              case "38":
                return eventTypes.fiveGreenAccent;
@@ -55,7 +59,7 @@
              case "40":
                return eventTypes.redGhost;
              case "41":
-@@ -942,6 +949,8 @@
+@@ -942,6 +949,8 @@ function getEventType(typeCode, value, instrument, difficulty) {
                return eventTypes.blueCymbalMarker;
              case "68":
                return eventTypes.greenCymbalMarker;
@@ -64,17 +68,11 @@
              default:
                return null;
            }
-@@ -2888,5 +2897,7 @@
-   noteFlags,
-   noteTypes,
-   parseChartFile,
-+  parseNotesFromChart,
-+  parseNotesFromMidi,
-   scanChartFolder
- });
---- a/dist/index.mjs
-+++ b/dist/index.mjs
-@@ -2846,5 +2846,7 @@
+diff --git a/node_modules/@eliwhite/scan-chart/dist/index.mjs b/node_modules/@eliwhite/scan-chart/dist/index.mjs
+index 8e3382d..977beed 100644
+--- a/node_modules/@eliwhite/scan-chart/dist/index.mjs
++++ b/node_modules/@eliwhite/scan-chart/dist/index.mjs
+@@ -2846,5 +2846,7 @@ export {
    noteFlags,
    noteTypes,
    parseChartFile,

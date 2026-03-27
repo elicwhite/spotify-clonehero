@@ -1,0 +1,101 @@
+--- a/lib/midi-parser.js
++++ b/lib/midi-parser.js
+@@ -309,8 +309,15 @@
+ }
+ 
+ Parser.prototype.readString = function(len) {
++  // Strings can be multibyte-encoded or not.
++  // Decode using both ways and return the most relevant one.
+   var bytes = this.readBytes(len)
+-  return String.fromCharCode.apply(null, bytes)
++  var multibyteString = new TextDecoder().decode(bytes)
++  var singlebyteString = String.fromCharCode.apply(null, bytes)
++  if (singlebyteString.length > multibyteString.length) {
++    return multibyteString
++  }
++  return singlebyteString
+ }
+ 
+ Parser.prototype.readVarInt = function() {
+--- a/lib/midi-writer.js
++++ b/lib/midi-writer.js
+@@ -80,50 +80,43 @@
+     case 'text':
+       w.writeUInt8(0xFF)
+       w.writeUInt8(0x01)
+-      w.writeVarInt(text.length)
+-      w.writeString(text)
++      w.writeStringWithLength(text)
+       break;
+ 
+     case 'copyrightNotice':
+       w.writeUInt8(0xFF)
+       w.writeUInt8(0x02)
+-      w.writeVarInt(text.length)
+-      w.writeString(text)
++      w.writeStringWithLength(text)
+       break;
+ 
+     case 'trackName':
+       w.writeUInt8(0xFF)
+       w.writeUInt8(0x03)
+-      w.writeVarInt(text.length)
+-      w.writeString(text)
++      w.writeStringWithLength(text)
+       break;
+ 
+     case 'instrumentName':
+       w.writeUInt8(0xFF)
+       w.writeUInt8(0x04)
+-      w.writeVarInt(text.length)
+-      w.writeString(text)
++      w.writeStringWithLength(text)
+       break;
+ 
+     case 'lyrics':
+       w.writeUInt8(0xFF)
+       w.writeUInt8(0x05)
+-      w.writeVarInt(text.length)
+-      w.writeString(text)
++      w.writeStringWithLength(text)
+       break;
+ 
+     case 'marker':
+       w.writeUInt8(0xFF)
+       w.writeUInt8(0x06)
+-      w.writeVarInt(text.length)
+-      w.writeString(text)
++      w.writeStringWithLength(text)
+       break;
+ 
+     case 'cuePoint':
+       w.writeUInt8(0xFF)
+       w.writeUInt8(0x07)
+-      w.writeVarInt(text.length)
+-      w.writeString(text)
++      w.writeStringWithLength(text)
+       break;
+ 
+     case 'channelPrefix':
+@@ -325,13 +318,16 @@
+ }
+ 
+ Writer.prototype.writeString = function(str) {
+-  var i, len = str.length, arr = []
+-  for (i=0; i < len; i++) {
+-    arr.push(str.codePointAt(i))
+-  }
+-  this.writeBytes(arr)
++  var bytes = new TextEncoder().encode(str)
++  this.writeBytes(bytes)
+ }
+ 
++Writer.prototype.writeStringWithLength = function(str) {
++  var bytes = new TextEncoder().encode(str)
++  this.writeVarInt(bytes.length)
++  this.writeBytes(bytes)
++}
++
+ Writer.prototype.writeVarInt = function(v) {
+   if (v < 0) throw "Cannot write negative variable-length integer"
+ 
