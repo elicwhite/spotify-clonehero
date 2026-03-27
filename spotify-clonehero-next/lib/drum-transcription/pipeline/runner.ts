@@ -23,8 +23,9 @@ import {
 } from '../storage/opfs';
 import {separateStems, hasSeparatedStems} from '../ml/demucs';
 import {CrnnTranscriber, MockTranscriber, type DrumTranscriber} from '../ml/transcriber';
-import {rawEventsToDrumNotes} from '../ml/class-mapping';
+import {rawEventsToDrumNotes, getChartMapping} from '../ml/class-mapping';
 import {serializeChart} from '../chart-io/writer';
+import {buildTimedTempos, msToTick} from '../chart-io/timing';
 import type {
   ChartDocument,
   TempoEvent,
@@ -217,7 +218,7 @@ export async function runPipeline(
     await writeProjectText(projectId, 'notes.chart', chartText);
 
     // Store confidence scores
-    const confidenceData = buildConfidenceData(result.events, chartDoc);
+    const confidenceData = buildConfidenceData(result.events, [{tick: 0, bpm: DEFAULT_BPM}], RESOLUTION);
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
   }
 
@@ -338,7 +339,7 @@ export async function resumePipeline(
     const chartText = serializeChart(chartDoc);
     await writeProjectText(projectId, 'notes.chart', chartText);
 
-    const confidenceData = buildConfidenceData(result.events, chartDoc);
+    const confidenceData = buildConfidenceData(result.events, [{tick: 0, bpm: DEFAULT_BPM}], RESOLUTION);
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
   }
 
@@ -452,22 +453,23 @@ function buildChartDocument(
  */
 function buildConfidenceData(
   events: RawDrumEvent[],
-  chartDoc: ChartDocument,
+  tempos: TempoEvent[],
+  resolution: number,
 ): {notes: Record<string, number>} {
   const notes: Record<string, number> = {};
 
-  // The chart's expert drum track has notes at quantized tick positions.
-  // We match each note with its corresponding raw event by index,
-  // since rawEventsToDrumNotes preserves event order.
-  const track = chartDoc.tracks.find(
-    (t) => t.instrument === 'drums' && t.difficulty === 'expert',
-  );
+  // Build confidence by converting each raw event to its tick+type key directly,
+  // rather than matching by index (which breaks after the sort in rawEventsToDrumNotes).
+  const timedTempos = buildTimedTempos(tempos, resolution);
 
-  if (track) {
-    for (let i = 0; i < track.notes.length && i < events.length; i++) {
-      const note = track.notes[i];
-      const key = `${note.tick}-${note.type}`;
-      notes[key] = events[i].confidence;
+  for (const event of events) {
+    const mapping = getChartMapping(event.drumClass);
+    const ms = event.timeSeconds * 1000;
+    const tick = msToTick(ms, timedTempos, resolution);
+    const key = `${tick}-${mapping.noteType}`;
+    // If multiple events map to the same tick+type, keep the highest confidence
+    if (notes[key] === undefined || event.confidence > notes[key]) {
+      notes[key] = event.confidence;
     }
   }
 

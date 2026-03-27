@@ -14,7 +14,7 @@
  *   Band 3: 8000–20000 Hz
  */
 
-import FFT from 'fft.js';
+import WebFFT from 'webfft';
 import type {MelSpectrogramConfig} from './types';
 import {DEFAULT_MEL_CONFIG, PANNING_BANDS_HZ} from './types';
 
@@ -38,7 +38,7 @@ export function computePanningFeatures(
     return {panning: new Float32Array(0), nFrames: 0};
   }
 
-  const fft = new FFT(nFft);
+  const fft = new WebFFT(nFft);
 
   // Pre-compute Hann window
   const hannWindow = new Float32Array(nFft);
@@ -62,10 +62,8 @@ export function computePanningFeatures(
   // Output: [4, nFrames] band-major
   const panning = new Float32Array(4 * nFrames);
 
-  const fftInputL = fft.createComplexArray();
-  const fftOutputL = fft.createComplexArray();
-  const fftInputR = fft.createComplexArray();
-  const fftOutputR = fft.createComplexArray();
+  const fftInputL = new Float32Array(nFft * 2);
+  const fftInputR = new Float32Array(nFft * 2);
 
   for (let frame = 0; frame < nFrames; frame++) {
     const frameStart = frame * hopLength;
@@ -88,8 +86,8 @@ export function computePanningFeatures(
       fftInputR[i * 2 + 1] = 0;
     }
 
-    fft.transform(fftOutputL, fftInputL);
-    fft.transform(fftOutputR, fftInputR);
+    const fftOutputL = fft.fft(fftInputL);
+    const fftOutputR = fft.fft(fftInputR);
 
     // Accumulate power per band
     const lBandPower = [0, 0, 0, 0];

@@ -1,7 +1,7 @@
 /**
  * STFT / iSTFT for the Demucs stem-separation pipeline.
  *
- * Uses fft.js (pure JS FFT) to compute the Short-Time Fourier Transform and
+ * Uses webfft (WASM-accelerated FFT) to compute the Short-Time Fourier Transform and
  * its inverse. The parameters and padding logic exactly match PyTorch's
  * `torch.stft` / `torch.istft` as used by the Demucs ONNX model.
  *

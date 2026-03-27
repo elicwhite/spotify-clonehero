@@ -7,7 +7,7 @@
  *   3. Logarithmic filterbank (12 bands/octave, fmin=20, fmax=20000 -> 84 bins)
  *   4. Log compression: log(magnitude + 1)
  *
- * Uses fft.js for the STFT (same FFT library as the Demucs STFT in
+ * Uses webfft for the STFT (same FFT library as the Demucs STFT in
  * lib/drum-transcription/audio/stft.ts, but with different parameters).
  *
  * The filterbank matrix is computed once and cached for reuse.
@@ -18,7 +18,7 @@
  * fall within the same FFT bin and get merged, reducing 120 nominal bands to 84.
  */
 
-import FFT from 'fft.js';
+import WebFFT from 'webfft';
 import type {SpectrogramConfig, MelSpectrogramConfig} from './types';
 import {DEFAULT_SPECTROGRAM_CONFIG, DEFAULT_MEL_CONFIG} from './types';
 
@@ -272,7 +272,7 @@ export function computeMagnitudeSpectrogram(
     };
   }
 
-  const fft = new FFT(frameSize);
+  const fft = new WebFFT(frameSize);
 
   // Pre-compute Hann window (periodic)
   const hannWindow = new Float32Array(frameSize);
@@ -281,8 +281,7 @@ export function computeMagnitudeSpectrogram(
   }
 
   const magnitudes = new Float32Array(nFrames * numFftBins);
-  const fftInput = fft.createComplexArray();
-  const fftOutput = fft.createComplexArray();
+  const fftInput = new Float32Array(frameSize * 2);
 
   for (let frame = 0; frame < nFrames; frame++) {
     const frameStart = frame * hopLength;
@@ -295,7 +294,7 @@ export function computeMagnitudeSpectrogram(
       fftInput[i * 2 + 1] = 0;
     }
 
-    fft.transform(fftOutput, fftInput);
+    const fftOutput = fft.fft(fftInput);
 
     // Compute magnitude for positive frequencies only
     const offset = frame * numFftBins;
