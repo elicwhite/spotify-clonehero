@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/tooltip';
 import {useEditorContext} from '../contexts/EditorContext';
 import {noteId} from '../commands';
+import {getDrumNotes} from '@/lib/chart-edit';
 import {cn} from '@/lib/utils';
 
 interface ConfidencePanelProps {
@@ -44,20 +45,21 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
       return {total: 0, high: 0, medium: 0, low: 0, reviewed: 0, lowIds: 0};
     }
 
-    const track = state.chartDoc.tracks.find(
-      t => t.instrument === 'drums' && t.difficulty === 'expert',
+    const track = state.chartDoc.trackData.find(
+      (t: {instrument: string; difficulty: string}) => t.instrument === 'drums' && t.difficulty === 'expert',
     );
     if (!track) {
       return {total: 0, high: 0, medium: 0, low: 0, reviewed: 0, lowIds: 0};
     }
 
-    const total = track.notes.length;
+    const notes = getDrumNotes(track);
+    const total = notes.length;
     let high = 0;
     let medium = 0;
     let low = 0;
     let reviewed = 0;
 
-    for (const note of track.notes) {
+    for (const note of notes) {
       const id = noteId(note);
       const conf = state.confidence.get(id);
 
@@ -217,14 +219,14 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
                       {/* Count low-confidence notes that are reviewed */}
                       {(() => {
                         if (!state.chartDoc) return 0;
-                        const track = state.chartDoc.tracks.find(
-                          t =>
+                        const track = state.chartDoc.trackData.find(
+                          (t: {instrument: string; difficulty: string}) =>
                             t.instrument === 'drums' &&
                             t.difficulty === 'expert',
                         );
                         if (!track) return 0;
                         let count = 0;
-                        for (const note of track.notes) {
+                        for (const note of getDrumNotes(track)) {
                           const id = noteId(note);
                           const conf = state.confidence.get(id);
                           if (

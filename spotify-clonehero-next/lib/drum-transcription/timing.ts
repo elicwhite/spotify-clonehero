@@ -6,27 +6,41 @@
  * scan-chart uses in getTimedTempos).
  */
 
-import type {TempoEvent, TimedTempo} from './types';
+import type { TimedTempo } from './chart-types';
+
+interface TempoInput {
+  tick: number;
+  beatsPerMinute: number;
+}
 
 /**
- * Build an array of TimedTempo from TempoEvents by computing the absolute
+ * Build an array of TimedTempo from tempo events by computing the absolute
  * msTime for each tempo change. This matches scan-chart's getTimedTempos.
  */
 export function buildTimedTempos(
-  tempos: TempoEvent[],
+  tempos: TempoInput[],
   resolution: number,
 ): TimedTempo[] {
   const timed: TimedTempo[] = [];
 
   for (let i = 0; i < tempos.length; i++) {
     if (i === 0) {
-      timed.push({tick: tempos[0].tick, bpm: tempos[0].bpm, msTime: 0});
+      timed.push({
+        tick: tempos[0].tick,
+        beatsPerMinute: tempos[0].beatsPerMinute,
+        msTime: 0,
+      });
     } else {
       const prev = timed[i - 1];
       const msTime =
         prev.msTime +
-        ((tempos[i].tick - prev.tick) * 60000) / (prev.bpm * resolution);
-      timed.push({tick: tempos[i].tick, bpm: tempos[i].bpm, msTime});
+        ((tempos[i].tick - prev.tick) * 60000) /
+          (prev.beatsPerMinute * resolution);
+      timed.push({
+        tick: tempos[i].tick,
+        beatsPerMinute: tempos[i].beatsPerMinute,
+        msTime,
+      });
     }
   }
 
@@ -59,7 +73,7 @@ export function msToTick(
 
   const tempo = timedTempos[tempoIndex];
   const elapsedMs = msTime - tempo.msTime;
-  const tickOffset = (elapsedMs * tempo.bpm * resolution) / 60000;
+  const tickOffset = (elapsedMs * tempo.beatsPerMinute * resolution) / 60000;
 
   return Math.round(tempo.tick + tickOffset);
 }

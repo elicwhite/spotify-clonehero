@@ -25,8 +25,7 @@ import {Label} from '@/components/ui/label';
 import {Switch} from '@/components/ui/switch';
 
 import {encodeWav} from '@/lib/drum-transcription/audio/wav-encoder';
-import {serializeSongIni} from '@/lib/drum-transcription/chart-io/song-ini';
-import type {SongMetadata} from '@/lib/drum-transcription/chart-io/song-ini';
+import {readChart, writeChart} from '@/lib/chart-edit';
 import {exportAsZip, exportAsSng} from '@/lib/chart-export';
 import {
   readProjectText,
@@ -92,13 +91,19 @@ export default function ExportDialog({
       // 2. Load audio metadata
       const audioMeta = await loadAudioMeta(projectId);
 
-      // 3. Build song.ini
-      const songMetadata: SongMetadata = {
+      // 3. Parse chart into a ChartDocument, set metadata, and use writeChart
+      //    to produce both notes.chart and song.ini
+      const chartBytes = new TextEncoder().encode(chartText);
+      const chartDoc = readChart([{fileName: 'notes.chart', data: chartBytes}]);
+      chartDoc.metadata = {
+        ...chartDoc.metadata,
         name: songName,
         artist: artistName ?? '',
-        durationMs: audioMeta.durationMs,
+        song_length: Math.round(audioMeta.durationMs),
+        pro_drums: true,
+        charter: chartDoc.metadata.charter ?? 'AutoDrums',
       };
-      const songIni = serializeSongIni(songMetadata);
+      const chartFiles = writeChart(chartDoc);
 
       // 4. Encode audio stems as WAV
       const audioFiles = new Map<string, ArrayBuffer>();
@@ -169,11 +174,10 @@ export default function ExportDialog({
       }
 
       // 5. Build file entries and package as ZIP or SNG
-      const encoder = new TextEncoder();
-      const fileEntries = [
-        {filename: 'notes.chart', data: encoder.encode(chartText)},
-        {filename: 'song.ini', data: encoder.encode(songIni)},
-      ];
+      const fileEntries = chartFiles.map(f => ({
+        filename: f.fileName,
+        data: f.data,
+      }));
       for (const [name, data] of audioFiles) {
         fileEntries.push({filename: name, data: new Uint8Array(data)});
       }

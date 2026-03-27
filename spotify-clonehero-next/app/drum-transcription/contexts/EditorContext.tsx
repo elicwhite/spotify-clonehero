@@ -10,7 +10,7 @@ import {
 } from 'react';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type {ChartDocument, DrumNote} from '@/lib/drum-transcription/chart-io/types';
+import type {ChartDocument, DrumNote} from '@/lib/chart-edit';
 import type {EditCommand} from '../commands';
 
 // ---------------------------------------------------------------------------

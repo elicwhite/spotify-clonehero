@@ -24,14 +24,9 @@ import {
 import {separateStems, hasSeparatedStems} from '../ml/demucs';
 import {CrnnTranscriber, MockTranscriber, type DrumTranscriber} from '../ml/transcriber';
 import {rawEventsToDrumNotes, getChartMapping} from '../ml/class-mapping';
-import {serializeChart} from '../chart-io/writer';
-import {buildTimedTempos, msToTick} from '../chart-io/timing';
-import type {
-  ChartDocument,
-  TempoEvent,
-  TimeSignatureEvent,
-  TrackData,
-} from '../chart-io/types';
+import {createChart, writeChart, addDrumNote, addSection} from '@/lib/chart-edit';
+import type {ChartDocument, DrumNoteType} from '@/lib/chart-edit';
+import {buildTimedTempos, msToTick} from '../timing';
 import type {RawDrumEvent, TranscriptionResult} from '../ml/types';
 
 // ---------------------------------------------------------------------------
@@ -214,11 +209,16 @@ export async function runPipeline(
     );
 
     // Serialize chart to .chart format and store
-    const chartText = serializeChart(chartDoc);
+    const files = writeChart(chartDoc);
+    const chartFile = files.find(f => f.fileName === 'notes.chart');
+    if (!chartFile) {
+      throw new Error('writeChart did not produce notes.chart');
+    }
+    const chartText = new TextDecoder().decode(chartFile.data);
     await writeProjectText(projectId, 'notes.chart', chartText);
 
     // Store confidence scores
-    const confidenceData = buildConfidenceData(result.events, [{tick: 0, bpm: DEFAULT_BPM}], RESOLUTION);
+    const confidenceData = buildConfidenceData(result.events, [{tick: 0, beatsPerMinute: DEFAULT_BPM}], RESOLUTION);
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
   }
 
@@ -336,10 +336,15 @@ export async function resumePipeline(
       result.durationSeconds,
     );
 
-    const chartText = serializeChart(chartDoc);
+    const files = writeChart(chartDoc);
+    const chartFile = files.find(f => f.fileName === 'notes.chart');
+    if (!chartFile) {
+      throw new Error('writeChart did not produce notes.chart');
+    }
+    const chartText = new TextDecoder().decode(chartFile.data);
     await writeProjectText(projectId, 'notes.chart', chartText);
 
-    const confidenceData = buildConfidenceData(result.events, [{tick: 0, bpm: DEFAULT_BPM}], RESOLUTION);
+    const confidenceData = buildConfidenceData(result.events, [{tick: 0, beatsPerMinute: DEFAULT_BPM}], RESOLUTION);
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
   }
 
@@ -390,13 +395,54 @@ function buildChartDocument(
 ): ChartDocument {
   const bpm = DEFAULT_BPM;
 
-  const tempos: TempoEvent[] = [{tick: 0, bpm}];
-  const timeSignatures: TimeSignatureEvent[] = [
-    {tick: 0, numerator: 4, denominator: 4},
-  ];
+  // Create chart document with chart-edit
+  const doc = createChart({
+    format: 'chart',
+    resolution: RESOLUTION,
+    bpm,
+    timeSignature: {numerator: 4, denominator: 4},
+  });
+
+  // Set metadata
+  doc.metadata = {
+    name: songName,
+    artist: 'Unknown',
+    charter: 'Drum Transcription AI',
+    diff_drums: 0,
+  };
 
   // Convert raw events to chart drum notes using the tempo map
+  const tempos = [{tick: 0, beatsPerMinute: bpm}];
   const drumNotes = rawEventsToDrumNotes(events, tempos, RESOLUTION);
+
+  // Add an ExpertDrums track
+  doc.trackData.push({
+    instrument: 'drums',
+    difficulty: 'expert',
+    trackEvents: [],
+    starPowerSections: [],
+    rejectedStarPowerSections: [],
+    drumFreestyleSections: [],
+    soloSections: [],
+    flexLanes: [],
+  });
+
+  const track = doc.trackData[0];
+
+  // Add each drum note using chart-edit's addDrumNote
+  for (const note of drumNotes) {
+    addDrumNote(track, {
+      tick: note.tick,
+      type: note.type,
+      length: note.length,
+      flags: {
+        cymbal: note.flags.cymbal,
+        doubleKick: note.flags.doubleKick,
+        accent: note.flags.accent,
+        ghost: note.flags.ghost,
+      },
+    });
+  }
 
   // Calculate end tick (slightly after last note or based on duration)
   const lastNoteTick =
@@ -406,43 +452,22 @@ function buildChartDocument(
   );
   const endTick = Math.max(lastNoteTick + RESOLUTION, durationTicks);
 
+  // Add end event
+  doc.endEvents = [{tick: endTick}];
+
   // Create section markers every 4 bars
   const ticksPerBar = RESOLUTION * 4; // 4/4 time
-  const sections = [];
   const totalBars = Math.ceil(endTick / ticksPerBar);
   for (let bar = 0; bar < totalBars; bar += 4) {
     const sectionTick = bar * ticksPerBar;
     if (bar === 0) {
-      sections.push({tick: sectionTick, name: 'Intro'});
+      addSection(doc, sectionTick, 'Intro');
     } else {
-      sections.push({tick: sectionTick, name: `Section ${Math.floor(bar / 4) + 1}`});
+      addSection(doc, sectionTick, `Section ${Math.floor(bar / 4) + 1}`);
     }
   }
 
-  const track: TrackData = {
-    instrument: 'drums' as const,
-    difficulty: 'expert' as const,
-    notes: drumNotes,
-  };
-
-  return {
-    resolution: RESOLUTION,
-    metadata: {
-      name: songName,
-      artist: 'Unknown',
-      charter: 'Drum Transcription AI',
-      resolution: RESOLUTION,
-      offset: 0,
-      difficulty: 0,
-      previewStart: 0,
-      previewEnd: 0,
-    },
-    tempos,
-    timeSignatures,
-    sections,
-    endEvents: [{tick: endTick}],
-    tracks: [track],
-  };
+  return doc;
 }
 
 /**
@@ -453,7 +478,7 @@ function buildChartDocument(
  */
 function buildConfidenceData(
   events: RawDrumEvent[],
-  tempos: TempoEvent[],
+  tempos: {tick: number; beatsPerMinute: number}[],
   resolution: number,
 ): {notes: Record<string, number>} {
   const notes: Record<string, number> = {};

@@ -134,8 +134,8 @@ describe('serializeChart', () => {
 
   it('writes lyrics in [Events] section', () => {
     const doc = createChart({ format: 'chart' });
-    doc.lyrics.push({ tick: 0, text: 'Hello' });
-    doc.lyrics.push({ tick: 480, text: 'World' });
+    doc.lyrics.push({ tick: 0, length: 0, text: 'Hello' });
+    doc.lyrics.push({ tick: 480, length: 0, text: 'World' });
     const text = serializeChart(doc);
     expect(text).toContain('0 = E "lyric Hello"');
     expect(text).toContain('480 = E "lyric World"');

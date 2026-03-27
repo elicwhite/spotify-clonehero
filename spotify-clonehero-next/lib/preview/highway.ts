@@ -998,7 +998,14 @@ export const setupRenderer = (
         }
       }
 
-      renderer.render(scene, camera);
+      try {
+        renderer.render(scene, camera);
+      } catch (e) {
+        // WebGL context lost or shader compilation failed — stop the loop
+        // to avoid flooding the console with errors every frame.
+        renderer.setAnimationLoop(null);
+        console.error('Highway render error (animation loop stopped):', e);
+      }
     }
   }
 };

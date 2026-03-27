@@ -26,17 +26,19 @@ import {
   buildTimedTempos,
   msToTick,
   snapToGrid,
-} from '@/lib/drum-transcription/chart-io/timing';
+} from '@/lib/drum-transcription/timing';
 import type {
   DrumNote,
   DrumNoteType,
-} from '@/lib/drum-transcription/chart-io/types';
+} from '@/lib/chart-edit';
+import {getDrumNotes} from '@/lib/chart-edit';
 import DrumHighwayPreview, {
   type HighwayRendererHandle,
 } from './DrumHighwayPreview';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type {ParsedChart} from '@/lib/drum-transcription/chart-io/reader';
+import {parseChartFile} from '@eliwhite/scan-chart';
+type ParsedChart = ReturnType<typeof parseChartFile>;
 import {Input} from '@/components/ui/input';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
@@ -265,18 +267,18 @@ export default function HighwayEditor({
   // Compute timed tempos for coordinate mapping
   const timedTempos = useMemo(() => {
     if (!state.chartDoc) return [];
-    return buildTimedTempos(state.chartDoc.tempos, state.chartDoc.resolution);
+    return buildTimedTempos(state.chartDoc.tempos, state.chartDoc.chartTicksPerBeat);
   }, [state.chartDoc]);
 
-  const resolution = state.chartDoc?.resolution ?? 480;
+  const resolution = state.chartDoc?.chartTicksPerBeat ?? 480;
 
   // Get the expert drums notes for hit-testing
   const expertNotes = useMemo(() => {
     if (!state.chartDoc) return [];
-    const track = state.chartDoc.tracks.find(
+    const track = state.chartDoc.trackData.find(
       t => t.instrument === 'drums' && t.difficulty === 'expert',
     );
-    return track?.notes ?? [];
+    return track ? getDrumNotes(track) : [];
   }, [state.chartDoc]);
 
   // ---------------------------------------------------------------------------
@@ -371,7 +373,7 @@ export default function HighwayEditor({
       const tempo = timedTempos[tempoIdx];
       const ms =
         tempo.msTime +
-        ((tick - tempo.tick) * 60000) / (tempo.bpm * resolution);
+        ((tick - tempo.tick) * 60000) / (tempo.beatsPerMinute * resolution);
 
       // Compute world Y
       const currentMs = audioManager.currentTime * 1000;
@@ -413,7 +415,7 @@ export default function HighwayEditor({
         const tempo = timedTempos[tempoIdx];
         const noteMs =
           tempo.msTime +
-          ((note.tick - tempo.tick) * 60000) / (tempo.bpm * resolution);
+          ((note.tick - tempo.tick) * 60000) / (tempo.beatsPerMinute * resolution);
 
         if (Math.abs(noteMs - targetMs) <= toleranceMs) {
           return note;
@@ -530,7 +532,7 @@ export default function HighwayEditor({
               if (timedTempos[i].tick <= tick) idx = i;
               else break;
             }
-            setBpmInput(String(timedTempos[idx].bpm));
+            setBpmInput(String(timedTempos[idx].beatsPerMinute));
           }
           break;
         }
@@ -652,7 +654,7 @@ export default function HighwayEditor({
               const noteMs =
                 tempo.msTime +
                 ((note.tick - tempo.tick) * 60000) /
-                  (tempo.bpm * resolution);
+                  (tempo.beatsPerMinute * resolution);
 
               if (noteMs >= ms1 && noteMs <= ms2) {
                 selected.add(noteId(note));
@@ -818,7 +820,7 @@ export default function HighwayEditor({
         const tempo = tempos[tempoIdx];
         const ms =
           tempo.msTime +
-          ((tick - tempo.tick) * 60000) / (tempo.bpm * res);
+          ((tick - tempo.tick) * 60000) / (tempo.beatsPerMinute * res);
 
         const worldY = ((ms - elapsedMs) / 1000) * highwaySpeed - 1;
         const worldX = LANE_X_POSITIONS[lane] ?? 0;
@@ -1136,7 +1138,7 @@ export default function HighwayEditor({
         const tempo = tempos[tempoIdx];
         const ms =
           tempo.msTime +
-          ((curHoverTick - tempo.tick) * 60000) / (tempo.bpm * res);
+          ((curHoverTick - tempo.tick) * 60000) / (tempo.beatsPerMinute * res);
         const worldY = ((ms - elapsedMs) / 1000) * highwaySpeed - 1;
 
         const leftPt = worldToScreen(

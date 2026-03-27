@@ -15,7 +15,7 @@ import {
   type AudioStorageMeta,
 } from '@/lib/drum-transcription/storage/opfs';
 import {encodeWavBlob} from '@/lib/drum-transcription/audio/wav-encoder';
-import {parsedChartToDocument} from '@/lib/drum-transcription/chart-io/parsed-to-doc';
+import {readChart} from '@/lib/chart-edit';
 import {useEditorContext} from '../contexts/EditorContext';
 import {useEditorKeyboard} from '../hooks/useEditorKeyboard';
 import {useAutoSave} from '../hooks/useAutoSave';
@@ -124,8 +124,8 @@ export default function EditorApp({projectId}: EditorAppProps) {
           );
         }
 
-        // 5. Build editable ChartDocument from parsed chart
-        const chartDoc = parsedChartToDocument(parsed, loadedChartText);
+        // 5. Build editable ChartDocument from chart bytes
+        const chartDoc = readChart([{fileName: 'notes.chart', data: chartBytes}]);
 
         // 6. Load confidence data (if available)
         try {

@@ -48,7 +48,7 @@ let ort: any = null;
 async function loadOrt() {
   if (ort) return ort;
   // In a worker, use importScripts to load ONNX Runtime
-  importScripts(ORT_CDN_URL);
+  (self as unknown as { importScripts: (...urls: string[]) => void }).importScripts(ORT_CDN_URL);
     ort = (self as any).ort;
   if (!ort) throw new Error('Failed to load ONNX Runtime in worker');
   ort.env.wasm.wasmPaths = ORT_CDN_BASE;
@@ -299,7 +299,7 @@ async function transcribe(
       durationSeconds,
     };
 
-    self.postMessage(result, [result.modelOutput.predictions.buffer]);
+    self.postMessage(result, {transfer: [result.modelOutput.predictions.buffer]});
   } catch (err) {
     self.postMessage({
       type: 'error',

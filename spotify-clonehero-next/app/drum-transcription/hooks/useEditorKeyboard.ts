@@ -11,8 +11,9 @@ import {
   noteId,
   type FlagName,
 } from '../commands';
-import type {DrumNote} from '@/lib/drum-transcription/chart-io/types';
-import {buildTimedTempos, msToTick, snapToGrid} from '@/lib/drum-transcription/chart-io/timing';
+import type {DrumNote} from '@/lib/chart-edit';
+import {getDrumNotes} from '@/lib/chart-edit';
+import {buildTimedTempos, msToTick, snapToGrid} from '@/lib/drum-transcription/timing';
 
 /**
  * Grid division values mapped to Shift+N shortcuts.
@@ -70,7 +71,7 @@ export function useEditorKeyboard(onSave?: () => void) {
   // Get expert notes for clipboard and navigation
   const getExpertTrack = useCallback(() => {
     if (!state.chartDoc) return null;
-    return state.chartDoc.tracks.find(
+    return state.chartDoc.trackData.find(
       t => t.instrument === 'drums' && t.difficulty === 'expert',
     ) ?? null;
   }, [state.chartDoc]);
@@ -88,13 +89,13 @@ export function useEditorKeyboard(onSave?: () => void) {
       if (!state.chartDoc) return;
       const timedTempos = buildTimedTempos(
         state.chartDoc.tempos,
-        state.chartDoc.resolution,
+        state.chartDoc.chartTicksPerBeat,
       );
-      const resolution = state.chartDoc.resolution;
+      const resolution = state.chartDoc.chartTicksPerBeat;
 
       // Get low-confidence notes with their ms times
       const lowConfNotes: {note: DrumNote; ms: number}[] = [];
-      for (const note of track.notes) {
+      for (const note of getDrumNotes(track)) {
         const id = noteId(note);
         const conf = state.confidence.get(id);
         if (conf !== undefined && conf < threshold) {
@@ -107,7 +108,7 @@ export function useEditorKeyboard(onSave?: () => void) {
           const tempo = timedTempos[tempoIdx];
           const ms =
             tempo.msTime +
-            ((note.tick - tempo.tick) * 60000) / (tempo.bpm * resolution);
+            ((note.tick - tempo.tick) * 60000) / (tempo.beatsPerMinute * resolution);
           lowConfNotes.push({note, ms});
         }
       }
@@ -200,7 +201,7 @@ export function useEditorKeyboard(onSave?: () => void) {
           e.preventDefault();
           const track = getExpertTrack();
           if (!track) return;
-          const selected = track.notes.filter(n =>
+          const selected = getDrumNotes(track).filter(n =>
             state.selectedNoteIds.has(noteId(n)),
           );
           if (selected.length === 0) return;
@@ -223,7 +224,7 @@ export function useEditorKeyboard(onSave?: () => void) {
           e.preventDefault();
           const track = getExpertTrack();
           if (!track) return;
-          const selected = track.notes.filter(n =>
+          const selected = getDrumNotes(track).filter(n =>
             state.selectedNoteIds.has(noteId(n)),
           );
           if (selected.length === 0) return;
@@ -251,9 +252,9 @@ export function useEditorKeyboard(onSave?: () => void) {
           // Calculate the tick at the current cursor/playhead position
           const timedTempos = buildTimedTempos(
             state.chartDoc.tempos,
-            state.chartDoc.resolution,
+            state.chartDoc.chartTicksPerBeat,
           );
-          const resolution = state.chartDoc.resolution;
+          const resolution = state.chartDoc.chartTicksPerBeat;
           const currentMs =
             (audioManagerRef.current?.currentTime ?? 0) * 1000;
           const cursorTick = snapToGrid(
@@ -356,7 +357,7 @@ export function useEditorKeyboard(onSave?: () => void) {
         e.preventDefault();
         const track = getExpertTrack();
         if (track) {
-          const allIds = new Set(track.notes.map(n => noteId(n)));
+          const allIds = new Set(getDrumNotes(track).map(n => noteId(n)));
           dispatch({type: 'SET_SELECTED_NOTES', noteIds: allIds});
         }
         return;

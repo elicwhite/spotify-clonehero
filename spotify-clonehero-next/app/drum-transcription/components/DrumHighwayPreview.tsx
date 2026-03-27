@@ -4,7 +4,8 @@ import {memo, useEffect, useMemo, useRef} from 'react';
 import {setupRenderer} from '@/lib/preview/highway';
 import {AudioManager} from '@/lib/preview/audioManager';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
-import type {ParsedChart} from '@/lib/drum-transcription/chart-io/reader';
+import {parseChartFile} from '@eliwhite/scan-chart';
+type ParsedChart = ReturnType<typeof parseChartFile>;
 
 /** The subset of the renderer API that the overlay needs for coordinate mapping. */
 export interface HighwayRendererHandle {

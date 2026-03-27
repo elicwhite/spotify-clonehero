@@ -14,14 +14,16 @@ import {
 import type {
   DrumNote,
   DrumNoteType,
-} from '@/lib/drum-transcription/chart-io/types';
+} from '@/lib/chart-edit';
+import {getDrumNotes} from '@/lib/chart-edit';
 
 const DRUM_TYPE_LABELS: Record<DrumNoteType, string> = {
   kick: 'Kick',
-  red: 'Snare',
-  yellow: 'Hi-Hat / Hi-Tom',
-  blue: 'Ride / Mid-Tom',
-  green: 'Crash / Floor-Tom',
+  redDrum: 'Snare',
+  yellowDrum: 'Hi-Hat / Hi-Tom',
+  blueDrum: 'Ride / Mid-Tom',
+  greenDrum: 'Crash / Floor-Tom',
+  fiveGreenDrum: '5-Lane Green',
 };
 
 const FLAG_ITEMS: {key: FlagName; label: string; shortcut: string}[] = [
@@ -44,11 +46,11 @@ export default function NoteInspector({className}: NoteInspectorProps) {
 
   const selectedNotes = useMemo(() => {
     if (!state.chartDoc) return [];
-    const expertTrack = state.chartDoc.tracks.find(
+    const expertTrack = state.chartDoc.trackData.find(
       t => t.instrument === 'drums' && t.difficulty === 'expert',
     );
     if (!expertTrack) return [];
-    return expertTrack.notes.filter(n =>
+    return getDrumNotes(expertTrack).filter(n =>
       state.selectedNoteIds.has(noteId(n)),
     );
   }, [state.chartDoc, state.selectedNoteIds]);
@@ -82,7 +84,7 @@ export default function NoteInspector({className}: NoteInspectorProps) {
 
   // Check if cymbal is applicable (only for yellow/blue/green)
   const hasCymbalApplicable = selectedNotes.some(n =>
-    ['yellow', 'blue', 'green'].includes(n.type),
+    ['yellowDrum', 'blueDrum', 'greenDrum'].includes(n.type),
   );
 
   return (

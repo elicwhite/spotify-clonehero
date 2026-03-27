@@ -4,30 +4,29 @@
  * The CRNN outputs 9 instrument classes. This module maps them to the 5-lane
  * chart note types and cymbal markers used in .chart files (pro drums):
  *
- *   | CRNN Class | Chart Note | Cymbal Marker | DrumNoteType |
- *   |------------|-----------|---------------|--------------|
- *   | BD (kick)  | 0 (kick)  | --            | kick         |
- *   | SD (snare) | 1 (red)   | --            | red          |
- *   | HT (hi-tom)| 2 (yellow)| --            | yellow       |
- *   | MT (mid-tom)| 3 (blue) | --            | blue         |
- *   | FT (floor-tom)| 4 (green)| --          | green        |
- *   | HH (hihat) | 2 (yellow)| 66            | yellow       |
- *   | CR (crash) | 4 (green) | 68            | green        |
- *   | CR2 (crash2)| 3 (blue) | 67            | blue         |
- *   | RD (ride)  | 3 (blue)  | 67            | blue         |
+ *   | CRNN Class | Chart Note | Cymbal Marker | DrumNoteType  |
+ *   |------------|-----------|---------------|---------------|
+ *   | BD (kick)  | 0 (kick)  | --            | kick          |
+ *   | SD (snare) | 1 (red)   | --            | redDrum       |
+ *   | HT (hi-tom)| 2 (yellow)| --            | yellowDrum    |
+ *   | MT (mid-tom)| 3 (blue) | --            | blueDrum      |
+ *   | FT (floor-tom)| 4 (green)| --          | greenDrum     |
+ *   | HH (hihat) | 2 (yellow)| 66            | yellowDrum    |
+ *   | CR (crash) | 4 (green) | 68            | greenDrum     |
+ *   | CR2 (crash2)| 3 (blue) | 67            | blueDrum      |
+ *   | RD (ride)  | 3 (blue)  | 67            | blueDrum      |
  *
- * Uses chart-io types (DrumNote, DrumNoteType, DrumNoteFlags) and timing
- * utilities (msToTick, buildTimedTempos) from the chart-io module.
+ * Uses chart-edit types (DrumNote, DrumNoteType, DrumNoteFlags) via
+ * chart-types, and timing utilities (msToTick, buildTimedTempos) from timing.
  */
 
 import type {
   DrumNote,
   DrumNoteType,
   DrumNoteFlags,
-  TempoEvent,
   TimedTempo,
-} from '../chart-io/types';
-import {buildTimedTempos, msToTick} from '../chart-io/timing';
+} from '../chart-types';
+import {buildTimedTempos, msToTick} from '../timing';
 import type {RawDrumEvent, DrumClassName} from './types';
 
 // ---------------------------------------------------------------------------
@@ -54,49 +53,49 @@ const CLASS_TO_CHART: Record<DrumClassName, ChartNoteMapping> = {
     isCymbal: false,
   },
   SD: {
-    noteType: 'red',
+    noteType: 'redDrum',
     noteNumber: 1,
     cymbalMarker: null,
     isCymbal: false,
   },
   HT: {
-    noteType: 'yellow',
+    noteType: 'yellowDrum',
     noteNumber: 2,
     cymbalMarker: null,
     isCymbal: false,
   },
   MT: {
-    noteType: 'blue',
+    noteType: 'blueDrum',
     noteNumber: 3,
     cymbalMarker: null,
     isCymbal: false,
   },
   FT: {
-    noteType: 'green',
+    noteType: 'greenDrum',
     noteNumber: 4,
     cymbalMarker: null,
     isCymbal: false,
   },
   HH: {
-    noteType: 'yellow',
+    noteType: 'yellowDrum',
     noteNumber: 2,
     cymbalMarker: 66,
     isCymbal: true,
   },
   CR: {
-    noteType: 'green',
+    noteType: 'greenDrum',
     noteNumber: 4,
     cymbalMarker: 68,
     isCymbal: true,
   },
   CR2: {
-    noteType: 'blue',
+    noteType: 'blueDrum',
     noteNumber: 3,
     cymbalMarker: 67,
     isCymbal: true,
   },
   RD: {
-    noteType: 'blue',
+    noteType: 'blueDrum',
     noteNumber: 3,
     cymbalMarker: 67,
     isCymbal: true,
@@ -145,13 +144,13 @@ export function drumClassToDrumNoteType(
  * Uses the tempo map to convert seconds -> ticks via msToTick.
  *
  * @param events - Raw drum events from peak picking.
- * @param tempos - Tempo events from the chart document.
+ * @param tempos - Tempo events from the chart document (tick + beatsPerMinute).
  * @param resolution - Ticks per quarter note (e.g. 480).
  * @returns Array of DrumNote sorted by tick.
  */
 export function rawEventsToDrumNotes(
   events: RawDrumEvent[],
-  tempos: TempoEvent[],
+  tempos: {tick: number; beatsPerMinute: number}[],
   resolution: number,
 ): DrumNote[] {
   const timedTempos: TimedTempo[] = buildTimedTempos(tempos, resolution);
@@ -190,14 +189,16 @@ function noteTypeOrder(type: DrumNoteType): number {
   switch (type) {
     case 'kick':
       return 0;
-    case 'red':
+    case 'redDrum':
       return 1;
-    case 'yellow':
+    case 'yellowDrum':
       return 2;
-    case 'blue':
+    case 'blueDrum':
       return 3;
-    case 'green':
+    case 'greenDrum':
       return 4;
+    case 'fiveGreenDrum':
+      return 5;
   }
 }
 
@@ -211,13 +212,13 @@ function noteTypeOrder(type: DrumNoteType): number {
  * Each event gets a unique ID, tick position, and editor metadata.
  *
  * @param events - Raw drum events from peak picking.
- * @param tempos - Tempo events from the chart document.
+ * @param tempos - Tempo events from the chart document (tick + beatsPerMinute).
  * @param resolution - Ticks per quarter note (e.g. 480).
  * @returns Array of EditorDrumEvent sorted by tick.
  */
 export function rawEventsToEditorEvents(
   events: RawDrumEvent[],
-  tempos: TempoEvent[],
+  tempos: {tick: number; beatsPerMinute: number}[],
   resolution: number,
 ): import('./types').EditorDrumEvent[] {
   const timedTempos: TimedTempo[] = buildTimedTempos(tempos, resolution);

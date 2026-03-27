@@ -18,7 +18,6 @@ import {
   rawEventsToEditorEvents,
 } from '../ml/class-mapping';
 import type {RawDrumEvent, DrumClassName} from '../ml/types';
-import type {TempoEvent} from '../chart-io/types';
 
 // ---------------------------------------------------------------------------
 // drumClassToNoteNumber
@@ -99,14 +98,14 @@ describe('drumClassToCymbalMarker', () => {
 describe('drumClassToDrumNoteType', () => {
   const expected: Record<DrumClassName, string> = {
     BD: 'kick',
-    SD: 'red',
-    HT: 'yellow',
-    MT: 'blue',
-    FT: 'green',
-    HH: 'yellow',
-    CR: 'green',
-    CR2: 'blue',
-    RD: 'blue',
+    SD: 'redDrum',
+    HT: 'yellowDrum',
+    MT: 'blueDrum',
+    FT: 'greenDrum',
+    HH: 'yellowDrum',
+    CR: 'greenDrum',
+    CR2: 'blueDrum',
+    RD: 'blueDrum',
   };
 
   for (const [cls, type] of Object.entries(expected)) {
@@ -172,7 +171,7 @@ describe('getChartMapping', () => {
 // ---------------------------------------------------------------------------
 
 describe('rawEventsToDrumNotes', () => {
-  const tempos: TempoEvent[] = [{tick: 0, bpm: 120}];
+  const tempos = [{tick: 0, beatsPerMinute: 120}];
   const resolution = 480;
 
   it('converts events to drum notes with correct types', () => {
@@ -186,8 +185,8 @@ describe('rawEventsToDrumNotes', () => {
 
     expect(notes.length).toBe(3);
     expect(notes[0].type).toBe('kick');
-    expect(notes[1].type).toBe('red');
-    expect(notes[2].type).toBe('yellow');
+    expect(notes[1].type).toBe('redDrum');
+    expect(notes[2].type).toBe('yellowDrum');
   });
 
   it('computes correct tick positions at 120 BPM', () => {
@@ -255,9 +254,9 @@ describe('rawEventsToDrumNotes', () => {
   });
 
   it('handles tempo changes', () => {
-    const temposWithChange: TempoEvent[] = [
-      {tick: 0, bpm: 120},
-      {tick: 480, bpm: 60},
+    const temposWithChange = [
+      {tick: 0, beatsPerMinute: 120},
+      {tick: 480, beatsPerMinute: 60},
     ];
 
     const events: RawDrumEvent[] = [
@@ -279,7 +278,7 @@ describe('rawEventsToDrumNotes', () => {
 // ---------------------------------------------------------------------------
 
 describe('rawEventsToEditorEvents', () => {
-  const tempos: TempoEvent[] = [{tick: 0, bpm: 120}];
+  const tempos = [{tick: 0, beatsPerMinute: 120}];
   const resolution = 480;
 
   it('creates editor events with unique IDs', () => {

@@ -1,9 +1,30 @@
 'use client';
 
 import {useCallback} from 'react';
+import {parseChartFile} from '@eliwhite/scan-chart';
 import {useEditorContext} from '../contexts/EditorContext';
-import {chartDocumentToParsedChart} from '@/lib/drum-transcription/chart-io/reader';
+import {writeChart} from '@/lib/chart-edit';
+import type {ChartDocument} from '@/lib/chart-edit';
 import type {EditCommand} from '../commands';
+
+/** Default modifiers for pro drums chart parsing. */
+const PRO_DRUMS_MODIFIERS = {
+  song_length: 0,
+  hopo_frequency: 0,
+  eighthnote_hopo: false,
+  multiplier_note: 0,
+  sustain_cutoff_threshold: -1,
+  chord_snap_threshold: 0,
+  five_lane_drums: false,
+  pro_drums: true,
+} as const;
+
+/** Convert a ChartDocument to a ParsedChart via serialize -> parse round-trip. */
+function chartDocumentToParsedChart(doc: ChartDocument) {
+  const files = writeChart(doc);
+  const chartFile = files.find(f => f.fileName === 'notes.chart')!;
+  return parseChartFile(chartFile.data, 'chart', PRO_DRUMS_MODIFIERS);
+}
 
 /**
  * Hook that provides a function to execute an EditCommand.

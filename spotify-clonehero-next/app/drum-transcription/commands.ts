@@ -6,16 +6,57 @@
  *
  * Commands are immutable -- execute() and undo() return new state rather
  * than mutating in place. This works naturally with React's reducer pattern.
+ *
+ * Internally we use chart-edit's in-place helpers on shallow-cloned data
+ * so that the original document is never mutated.
  */
 
 import type {
   ChartDocument,
+  TrackData,
   DrumNote,
   DrumNoteType,
   DrumNoteFlags,
-  TempoEvent,
-  TimeSignatureEvent,
-} from '@/lib/drum-transcription/chart-io/types';
+} from '@/lib/chart-edit';
+import {
+  addDrumNote,
+  removeDrumNote,
+  getDrumNotes,
+  setDrumNoteFlags,
+  addTempo,
+  removeTempo,
+  addTimeSignature,
+  removeTimeSignature,
+} from '@/lib/chart-edit';
+
+// ---------------------------------------------------------------------------
+// Clone helpers — chart-edit mutates in place, so we clone before calling
+// ---------------------------------------------------------------------------
+
+/** Shallow-clone a TrackData so in-place helpers don't mutate the original. */
+function cloneTrack(track: TrackData): TrackData {
+  return {
+    ...track,
+    trackEvents: [...track.trackEvents.map(e => ({...e}))],
+  };
+}
+
+/** Clone a doc with a freshly-cloned trackData array. */
+function cloneDocWithTracks(doc: ChartDocument): ChartDocument {
+  return {
+    ...doc,
+    trackData: doc.trackData.map(t => cloneTrack(t)),
+    tempos: doc.tempos.map(t => ({...t})),
+    timeSignatures: doc.timeSignatures.map(ts => ({...ts})),
+  };
+}
+
+/** Find the expert drums track index. */
+function findExpertDrumsIndex(doc: ChartDocument): number {
+  return doc.trackData.findIndex(
+    t => t.instrument === 'drums' && t.difficulty === 'expert',
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Note ID helper
@@ -48,34 +89,35 @@ export class AddNoteCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    const tracks = doc.tracks.map(track => {
-      if (track.instrument !== 'drums' || track.difficulty !== 'expert') {
-        return track;
-      }
-      // Insert note maintaining sort order, avoid duplicates
-      const existing = track.notes.find(
-        n => n.tick === this.note.tick && n.type === this.note.type,
-      );
-      if (existing) return track; // already exists
+    const idx = findExpertDrumsIndex(doc);
+    if (idx === -1) return doc;
 
-      const notes = [...track.notes, {...this.note, flags: {...this.note.flags}}];
-      notes.sort((a, b) => a.tick - b.tick);
-      return {...track, notes};
+    const newDoc = cloneDocWithTracks(doc);
+    const track = newDoc.trackData[idx];
+
+    // Check for duplicates via getDrumNotes
+    const existing = getDrumNotes(track).find(
+      n => n.tick === this.note.tick && n.type === this.note.type,
+    );
+    if (existing) return doc; // already exists, return unchanged
+
+    addDrumNote(track, {
+      tick: this.note.tick,
+      type: this.note.type,
+      length: this.note.length,
+      flags: {...this.note.flags},
     });
-    return {...doc, tracks};
+    return newDoc;
   }
 
   undo(doc: ChartDocument): ChartDocument {
-    const tracks = doc.tracks.map(track => {
-      if (track.instrument !== 'drums' || track.difficulty !== 'expert') {
-        return track;
-      }
-      const notes = track.notes.filter(
-        n => !(n.tick === this.note.tick && n.type === this.note.type),
-      );
-      return {...track, notes};
-    });
-    return {...doc, tracks};
+    const idx = findExpertDrumsIndex(doc);
+    if (idx === -1) return doc;
+
+    const newDoc = cloneDocWithTracks(doc);
+    const track = newDoc.trackData[idx];
+    removeDrumNote(track, this.note.tick, this.note.type);
+    return newDoc;
   }
 }
 
@@ -92,36 +134,41 @@ export class DeleteNotesCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    const tracks = doc.tracks.map(track => {
-      if (track.instrument !== 'drums' || track.difficulty !== 'expert') {
-        return track;
+    const idx = findExpertDrumsIndex(doc);
+    if (idx === -1) return doc;
+
+    const newDoc = cloneDocWithTracks(doc);
+    const track = newDoc.trackData[idx];
+
+    // Get current notes to find which ones match the IDs
+    const currentNotes = getDrumNotes(track);
+    this.deletedNotes = [];
+
+    for (const note of currentNotes) {
+      if (this.noteIds.has(noteId(note))) {
+        this.deletedNotes.push({...note, flags: {...note.flags}});
+        removeDrumNote(track, note.tick, note.type);
       }
-      const remaining: DrumNote[] = [];
-      for (const note of track.notes) {
-        if (this.noteIds.has(noteId(note))) {
-          this.deletedNotes.push({...note, flags: {...note.flags}});
-        } else {
-          remaining.push(note);
-        }
-      }
-      return {...track, notes: remaining};
-    });
-    return {...doc, tracks};
+    }
+    return newDoc;
   }
 
   undo(doc: ChartDocument): ChartDocument {
-    const tracks = doc.tracks.map(track => {
-      if (track.instrument !== 'drums' || track.difficulty !== 'expert') {
-        return track;
-      }
-      const notes = [
-        ...track.notes,
-        ...this.deletedNotes.map(n => ({...n, flags: {...n.flags}})),
-      ];
-      notes.sort((a, b) => a.tick - b.tick);
-      return {...track, notes};
-    });
-    return {...doc, tracks};
+    const idx = findExpertDrumsIndex(doc);
+    if (idx === -1) return doc;
+
+    const newDoc = cloneDocWithTracks(doc);
+    const track = newDoc.trackData[idx];
+
+    for (const note of this.deletedNotes) {
+      addDrumNote(track, {
+        tick: note.tick,
+        type: note.type,
+        length: note.length,
+        flags: {...note.flags},
+      });
+    }
+    return newDoc;
   }
 }
 
@@ -143,53 +190,88 @@ export class MoveNotesCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
+    const idx = findExpertDrumsIndex(doc);
+    if (idx === -1) return doc;
+
+    const newDoc = cloneDocWithTracks(doc);
+    const track = newDoc.trackData[idx];
+
     const idSet = new Set(this.noteIds);
     this.movedIds = [];
-    const tracks = doc.tracks.map(track => {
-      if (track.instrument !== 'drums' || track.difficulty !== 'expert') {
-        return track;
+
+    // Get current notes, find matching ones, remove them, then re-add at new positions
+    const currentNotes = getDrumNotes(track);
+    const toMove: DrumNote[] = [];
+
+    for (const note of currentNotes) {
+      if (idSet.has(noteId(note))) {
+        toMove.push({...note, flags: {...note.flags}});
       }
-      const notes = track.notes.map(note => {
-        if (!idSet.has(noteId(note))) return note;
-        const newType = shiftLane(note.type, this.laneDelta);
-        const newTick = Math.max(0, note.tick + this.tickDelta);
-        const moved = {
-          ...note,
-          tick: newTick,
-          type: newType,
-          flags: {...note.flags},
-        };
-        this.movedIds.push(noteId(moved));
-        return moved;
+    }
+
+    // Remove originals
+    for (const note of toMove) {
+      removeDrumNote(track, note.tick, note.type);
+    }
+
+    // Re-add at new positions
+    for (const note of toMove) {
+      const newType = shiftLane(note.type, this.laneDelta);
+      const newTick = Math.max(0, note.tick + this.tickDelta);
+      const moved: DrumNote = {
+        ...note,
+        tick: newTick,
+        type: newType,
+        flags: {...note.flags},
+      };
+      this.movedIds.push(noteId(moved));
+      addDrumNote(track, {
+        tick: moved.tick,
+        type: moved.type,
+        length: moved.length,
+        flags: moved.flags,
       });
-      notes.sort((a, b) => a.tick - b.tick);
-      return {...track, notes};
-    });
-    return {...doc, tracks};
+    }
+
+    return newDoc;
   }
 
   undo(doc: ChartDocument): ChartDocument {
+    const idx = findExpertDrumsIndex(doc);
+    if (idx === -1) return doc;
+
+    const newDoc = cloneDocWithTracks(doc);
+    const track = newDoc.trackData[idx];
+
     // Reverse: find notes by their moved IDs and apply negative deltas
     const idSet = new Set(this.movedIds);
-    const tracks = doc.tracks.map(track => {
-      if (track.instrument !== 'drums' || track.difficulty !== 'expert') {
-        return track;
+    const currentNotes = getDrumNotes(track);
+    const toRevert: DrumNote[] = [];
+
+    for (const note of currentNotes) {
+      if (idSet.has(noteId(note))) {
+        toRevert.push({...note, flags: {...note.flags}});
       }
-      const notes = track.notes.map(note => {
-        if (!idSet.has(noteId(note))) return note;
-        const newType = shiftLane(note.type, -this.laneDelta);
-        const newTick = Math.max(0, note.tick - this.tickDelta);
-        return {
-          ...note,
-          tick: newTick,
-          type: newType,
-          flags: {...note.flags},
-        };
+    }
+
+    // Remove moved notes
+    for (const note of toRevert) {
+      removeDrumNote(track, note.tick, note.type);
+    }
+
+    // Re-add at original positions
+    for (const note of toRevert) {
+      const newType = shiftLane(note.type, -this.laneDelta);
+      const newTick = Math.max(0, note.tick - this.tickDelta);
+      addDrumNote(track, {
+        tick: newTick,
+        type: newType,
+        length: note.length,
+        flags: {...note.flags},
       });
-      notes.sort((a, b) => a.tick - b.tick);
-      return {...track, notes};
-    });
-    return {...doc, tracks};
+    }
+
+    return newDoc;
   }
 }
 
@@ -218,20 +300,23 @@ export class ToggleFlagCommand implements EditCommand {
   }
 
   private toggle(doc: ChartDocument): ChartDocument {
+    const idx = findExpertDrumsIndex(doc);
+    if (idx === -1) return doc;
+
+    const newDoc = cloneDocWithTracks(doc);
+    const track = newDoc.trackData[idx];
+
     const idSet = new Set(this.noteIds);
-    const tracks = doc.tracks.map(track => {
-      if (track.instrument !== 'drums' || track.difficulty !== 'expert') {
-        return track;
-      }
-      const notes = track.notes.map(note => {
-        if (!idSet.has(noteId(note))) return note;
-        const flags: DrumNoteFlags = {...note.flags};
-        flags[this.flag] = !flags[this.flag];
-        return {...note, flags};
-      });
-      return {...track, notes};
-    });
-    return {...doc, tracks};
+    const currentNotes = getDrumNotes(track);
+
+    for (const note of currentNotes) {
+      if (!idSet.has(noteId(note))) continue;
+      const flags: DrumNoteFlags = {...note.flags};
+      flags[this.flag] = !flags[this.flag];
+      setDrumNoteFlags(track, note.tick, note.type, flags);
+    }
+
+    return newDoc;
   }
 }
 
@@ -250,24 +335,17 @@ export class AddBPMCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    // Don't add duplicate at same tick
-    if (doc.tempos.some(t => t.tick === this.tick)) {
-      // Update existing
-      const tempos = doc.tempos.map(t =>
-        t.tick === this.tick ? {...t, bpm: this.bpm} : t,
-      );
-      return {...doc, tempos};
-    }
-    const tempos = [...doc.tempos, {tick: this.tick, bpm: this.bpm}];
-    tempos.sort((a, b) => a.tick - b.tick);
-    return {...doc, tempos};
+    const newDoc = cloneDocWithTracks(doc);
+    addTempo(newDoc, this.tick, this.bpm);
+    return newDoc;
   }
 
   undo(doc: ChartDocument): ChartDocument {
     // Remove the BPM marker we added (unless it was at tick 0)
     if (this.tick === 0) return doc;
-    const tempos = doc.tempos.filter(t => t.tick !== this.tick);
-    return {...doc, tempos};
+    const newDoc = cloneDocWithTracks(doc);
+    removeTempo(newDoc, this.tick);
+    return newDoc;
   }
 }
 
@@ -287,28 +365,16 @@ export class AddTimeSignatureCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    if (doc.timeSignatures.some(ts => ts.tick === this.tick)) {
-      const timeSignatures = doc.timeSignatures.map(ts =>
-        ts.tick === this.tick
-          ? {...ts, numerator: this.numerator, denominator: this.denominator}
-          : ts,
-      );
-      return {...doc, timeSignatures};
-    }
-    const timeSignatures = [
-      ...doc.timeSignatures,
-      {tick: this.tick, numerator: this.numerator, denominator: this.denominator},
-    ];
-    timeSignatures.sort((a, b) => a.tick - b.tick);
-    return {...doc, timeSignatures};
+    const newDoc = cloneDocWithTracks(doc);
+    addTimeSignature(newDoc, this.tick, this.numerator, this.denominator);
+    return newDoc;
   }
 
   undo(doc: ChartDocument): ChartDocument {
     if (this.tick === 0) return doc;
-    const timeSignatures = doc.timeSignatures.filter(
-      ts => ts.tick !== this.tick,
-    );
-    return {...doc, timeSignatures};
+    const newDoc = cloneDocWithTracks(doc);
+    removeTimeSignature(newDoc, this.tick);
+    return newDoc;
   }
 }
 
@@ -348,7 +414,7 @@ export class BatchCommand implements EditCommand {
 // Lane helpers
 // ---------------------------------------------------------------------------
 
-const LANE_ORDER: DrumNoteType[] = ['kick', 'red', 'yellow', 'blue', 'green'];
+const LANE_ORDER: DrumNoteType[] = ['kick', 'redDrum', 'yellowDrum', 'blueDrum', 'greenDrum'];
 
 /** Map a DrumNoteType to a lane index (0-4). */
 export function typeToLane(type: DrumNoteType): number {
@@ -368,7 +434,7 @@ export function shiftLane(type: DrumNoteType, delta: number): DrumNoteType {
 
 /** Default flags for a new note in a given lane. Yellow/blue/green default to cymbal. */
 export function defaultFlagsForType(type: DrumNoteType): DrumNoteFlags {
-  if (type === 'yellow' || type === 'blue' || type === 'green') {
+  if (type === 'yellowDrum' || type === 'blueDrum' || type === 'greenDrum') {
     return {cymbal: true};
   }
   return {};

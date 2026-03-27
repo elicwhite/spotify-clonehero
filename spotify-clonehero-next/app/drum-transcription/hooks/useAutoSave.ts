@@ -2,7 +2,7 @@
 
 import {useCallback, useEffect, useRef} from 'react';
 import {useEditorContext} from '../contexts/EditorContext';
-import {serializeChart} from '@/lib/drum-transcription/chart-io/writer';
+import {writeChart} from '@/lib/chart-edit';
 
 /** Auto-save interval in milliseconds. */
 const AUTO_SAVE_INTERVAL_MS = 30_000;
@@ -34,7 +34,8 @@ export function useAutoSave(projectId: string | null) {
       const projectDir = await nsDir.getDirectoryHandle(projectId);
 
       // Save edited chart
-      const chartText = serializeChart(state.chartDoc);
+      const files = writeChart(state.chartDoc);
+      const chartText = new TextDecoder().decode(files.find(f => f.fileName === 'notes.chart')!.data);
       const chartFile = await projectDir.getFileHandle(
         'notes.edited.chart',
         {create: true},
