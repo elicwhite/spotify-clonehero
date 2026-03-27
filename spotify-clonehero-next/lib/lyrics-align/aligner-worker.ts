@@ -176,12 +176,14 @@ async function getEmissions(
 interface AlignedWord {
   text: string;
   startMs: number;
+  newLine: boolean;
 }
 
 interface AlignedSyllable {
   text: string;
   startMs: number;
   joinNext: boolean;
+  newLine: boolean;
 }
 
 interface LyricLine {
@@ -195,33 +197,36 @@ interface LyricLine {
 // Group words into display lines
 // ---------------------------------------------------------------------------
 
+/**
+ * Group words into display lines.
+ *
+ * Primary breaks come from the user's input line breaks (newLine flag).
+ * Lines are only further split if they exceed MAX_LINE_CHARS.
+ */
 function groupIntoLines(words: AlignedWord[]): LyricLine[] {
   if (words.length === 0) return [];
 
+  const MAX_LINE_CHARS = 60;
   const lines: LyricLine[] = [];
   let current: AlignedWord[] = [];
-  let lineStartTime = 0;
 
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
-    if (current.length === 0) lineStartTime = w.startMs;
-    current.push(w);
 
-    const nextTime = i < words.length - 1 ? words[i + 1].startMs : Infinity;
-    const gapToNext = nextTime - w.startMs;
-
-    if (gapToNext > 2000) {
+    // Break at input line boundaries
+    if (w.newLine && current.length > 0) {
       flush();
-    } else {
-      const charLen = current.map(x => x.text).join(' ').length;
-      const lineAge = w.startMs - lineStartTime;
-      if (
-        (charLen >= 40 && gapToNext > 490) ||
-        (lineAge > 4500 && gapToNext > 650)
-      ) {
+    }
+
+    // If adding this word would make the line too long, flush first
+    if (current.length > 0) {
+      const testLen = current.map(x => x.text).join(' ').length + 1 + w.text.length;
+      if (testLen > MAX_LINE_CHARS) {
         flush();
       }
     }
+
+    current.push(w);
   }
   flush();
 
@@ -385,12 +390,14 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
         text: syls[si].text,
         startMs: ms,
         joinNext: syls[si].joinNext,
+        newLine: syls[si].newLine,
       });
     } else if (alignedSyls.length > 0) {
       alignedSyls.push({
         text: syls[si].text,
         startMs: alignedSyls[alignedSyls.length - 1].startMs,
         joinNext: syls[si].joinNext,
+        newLine: syls[si].newLine,
       });
     }
   }
@@ -411,20 +418,22 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
   let wordText = '';
   let wordStartMs = 0;
   let wordStartSyl = 0;
+  let wordNewLine = false;
   for (let si = 0; si < mergedSyls.length; si++) {
     if (wordText === '') {
       wordStartMs = mergedSyls[si].startMs;
       wordStartSyl = si;
+      wordNewLine = mergedSyls[si].newLine;
     }
     wordText += mergedSyls[si].text;
     if (!mergedSyls[si].joinNext) {
-      words.push({text: wordText, startMs: wordStartMs});
+      words.push({text: wordText, startMs: wordStartMs, newLine: wordNewLine});
       wordSylRanges.push([wordStartSyl, si + 1]);
       wordText = '';
     }
   }
   if (wordText) {
-    words.push({text: wordText, startMs: wordStartMs});
+    words.push({text: wordText, startMs: wordStartMs, newLine: wordNewLine});
     wordSylRanges.push([wordStartSyl, mergedSyls.length]);
   }
 

@@ -37,21 +37,31 @@ export function syllabify(word: string): string[] {
 }
 
 /**
- * Split lyrics text into syllables with joinNext markers.
+ * Split lyrics text into syllables with joinNext and newLine markers.
+ *
+ * Preserves line breaks from the input: the first syllable of each input line
+ * gets `newLine: true` so downstream line-grouping can respect the user's
+ * intended phrasing.
  */
 export function syllabifyLyrics(
   lyrics: string,
-): {text: string; joinNext: boolean}[] {
-  const words = lyrics.trim().split(/\s+/).filter(Boolean);
-  const result: {text: string; joinNext: boolean}[] = [];
+): {text: string; joinNext: boolean; newLine: boolean}[] {
+  const inputLines = lyrics.split(/\n/).map(l => l.trim()).filter(Boolean);
+  const result: {text: string; joinNext: boolean; newLine: boolean}[] = [];
 
-  for (const word of words) {
-    const syls = syllabify(word);
-    for (let i = 0; i < syls.length; i++) {
-      result.push({
-        text: syls[i],
-        joinNext: i < syls.length - 1,
-      });
+  for (const line of inputLines) {
+    const words = line.split(/\s+/).filter(Boolean);
+    const lineStartIdx = result.length;
+
+    for (const word of words) {
+      const syls = syllabify(word);
+      for (let i = 0; i < syls.length; i++) {
+        result.push({
+          text: syls[i],
+          joinNext: i < syls.length - 1,
+          newLine: result.length === lineStartIdx,
+        });
+      }
     }
   }
 
