@@ -20,13 +20,13 @@ import type {
   ModelOutput,
   RawDrumEvent,
   PeakPickingParams,
-  AdtofClassName,
+  DrumClassName,
 } from './types';
 import {
-  ADTOF_CLASSES,
-  NUM_ADTOF_CLASSES,
+  DRUM_CLASSES,
+  NUM_DRUM_CLASSES,
   DEFAULT_PEAK_PICKING_PARAMS,
-  ADTOF_THRESHOLDS,
+  CRNN_THRESHOLDS,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -170,22 +170,22 @@ export function pickPeaks(
  */
 export function pickPeaksFromModelOutput(
   modelOutput: ModelOutput,
-  thresholds: Record<AdtofClassName, number> = ADTOF_THRESHOLDS,
+  thresholds: Record<DrumClassName, number> = CRNN_THRESHOLDS,
   params: PeakPickingParams = DEFAULT_PEAK_PICKING_PARAMS,
 ): RawDrumEvent[] {
   const {predictions, nFrames, nClasses} = modelOutput;
   const events: RawDrumEvent[] = [];
   const frameDuration = 1.0 / params.fps;
 
-  for (let cls = 0; cls < Math.min(nClasses, NUM_ADTOF_CLASSES); cls++) {
+  for (let cls = 0; cls < Math.min(nClasses, NUM_DRUM_CLASSES); cls++) {
     // Extract the activation function for this class
     const activations = new Float32Array(nFrames);
     for (let frame = 0; frame < nFrames; frame++) {
       activations[frame] = predictions[frame * nClasses + cls];
     }
 
-    const adtofClass = ADTOF_CLASSES[cls];
-    const className = adtofClass.name as AdtofClassName;
+    const drumClass = DRUM_CLASSES[cls];
+    const className = drumClass.name as DrumClassName;
     const threshold = thresholds[className];
 
     // Pick peaks for this class
@@ -196,7 +196,7 @@ export function pickPeaksFromModelOutput(
       events.push({
         timeSeconds: peak.frame * frameDuration,
         drumClass: className,
-        midiPitch: adtofClass.midiPitch,
+        midiPitch: drumClass.midiPitch,
         confidence: peak.value,
       });
     }

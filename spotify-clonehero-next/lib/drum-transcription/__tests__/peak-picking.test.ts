@@ -4,7 +4,7 @@
  * Verifies:
  * - Moving average and moving maximum computations
  * - Single-class peak detection
- * - Full model output peak picking
+ * - Full model output peak picking (9 classes)
  * - Combine window behavior
  * - Edge cases (empty input, all zeros, all above threshold)
  */
@@ -18,8 +18,8 @@ import {
 import type {ModelOutput, PeakPickingParams} from '../ml/types';
 import {
   DEFAULT_PEAK_PICKING_PARAMS,
-  ADTOF_THRESHOLDS,
-  NUM_ADTOF_CLASSES,
+  CRNN_THRESHOLDS,
+  NUM_DRUM_CLASSES,
 } from '../ml/types';
 
 // ---------------------------------------------------------------------------
@@ -161,31 +161,24 @@ describe('pickPeaks', () => {
   });
 
   it('combines nearby peaks within combine window', () => {
-    // Two well-separated gaussian peaks that individually pass all peak tests,
-    // but are within the combine window (0.02s = 2 frames at 100fps).
-    // Use spread=1 so each peak is a clear local maximum.
     const activations = new Float32Array(200);
-    // Peak 1 at frame 100, peak 2 at frame 102 (within combine=2 frames)
     activations[99] = 0.3;
     activations[100] = 0.7;
     activations[101] = 0.3;
-    // Gap
     activations[102] = 0.4;
     activations[103] = 0.9;
     activations[104] = 0.4;
 
-    // Use very tight windows so both peaks are detected before combining
     const tightParams: PeakPickingParams = {
       preAvg: 0.01,
       postAvg: 0.01,
       preMax: 0.01,
       postMax: 0.01,
-      combine: 0.05, // 5 frames: will combine the peaks at 100 and 103
+      combine: 0.05,
       fps: 100,
     };
     const peaks = pickPeaks(activations, 0.3, tightParams);
 
-    // Should combine to 1 peak (the higher one at 103)
     expect(peaks.length).toBe(1);
     expect(peaks[0].value).toBeCloseTo(0.9);
   });
@@ -210,13 +203,13 @@ describe('pickPeaks', () => {
 });
 
 // ---------------------------------------------------------------------------
-// pickPeaksFromModelOutput
+// pickPeaksFromModelOutput (9 classes)
 // ---------------------------------------------------------------------------
 
 describe('pickPeaksFromModelOutput', () => {
   it('extracts events from multi-class model output', () => {
     const nFrames = 500;
-    const nClasses = NUM_ADTOF_CLASSES;
+    const nClasses = NUM_DRUM_CLASSES;
     const predictions = new Float32Array(nFrames * nClasses);
 
     // Place a BD peak at frame 100
@@ -240,32 +233,26 @@ describe('pickPeaksFromModelOutput', () => {
     const modelOutput: ModelOutput = {predictions, nFrames, nClasses};
     const events = pickPeaksFromModelOutput(modelOutput);
 
-    // Should find at least 2 events (BD and SD)
     expect(events.length).toBeGreaterThanOrEqual(2);
 
-    // Check that we got BD and SD events
     const bdEvents = events.filter((e) => e.drumClass === 'BD');
     const sdEvents = events.filter((e) => e.drumClass === 'SD');
     expect(bdEvents.length).toBeGreaterThanOrEqual(1);
     expect(sdEvents.length).toBeGreaterThanOrEqual(1);
 
-    // BD event should be near frame 100 (1.0 seconds at fps=100)
     expect(bdEvents[0].timeSeconds).toBeCloseTo(1.0, 1);
-
-    // SD event should be near frame 200 (2.0 seconds)
     expect(sdEvents[0].timeSeconds).toBeCloseTo(2.0, 1);
   });
 
   it('events are sorted by time', () => {
     const nFrames = 500;
-    const nClasses = NUM_ADTOF_CLASSES;
+    const nClasses = NUM_DRUM_CLASSES;
     const predictions = new Float32Array(nFrames * nClasses);
 
-    // Place events at various times and classes
     const placements = [
       {frame: 300, cls: 0, value: 0.8}, // BD at 3s
       {frame: 100, cls: 1, value: 0.9}, // SD at 1s
-      {frame: 200, cls: 3, value: 0.7}, // HH at 2s
+      {frame: 200, cls: 5, value: 0.7}, // HH at 2s
     ];
 
     for (const p of placements) {
@@ -284,7 +271,7 @@ describe('pickPeaksFromModelOutput', () => {
 
   it('returns empty for silent model output', () => {
     const nFrames = 100;
-    const nClasses = NUM_ADTOF_CLASSES;
+    const nClasses = NUM_DRUM_CLASSES;
     const predictions = new Float32Array(nFrames * nClasses);
 
     const modelOutput: ModelOutput = {predictions, nFrames, nClasses};
@@ -292,13 +279,13 @@ describe('pickPeaksFromModelOutput', () => {
     expect(events.length).toBe(0);
   });
 
-  it('events have correct MIDI pitch mappings', () => {
-    const nFrames = 500;
-    const nClasses = NUM_ADTOF_CLASSES;
+  it('events have correct MIDI pitch mappings for all 9 classes', () => {
+    const nFrames = 1000;
+    const nClasses = NUM_DRUM_CLASSES;
     const predictions = new Float32Array(nFrames * nClasses);
 
-    // Place one strong peak per class
-    const expectedPitches = [35, 38, 47, 42, 49]; // BD, SD, TT, HH, CY+RD
+    // Expected MIDI pitches for the 9 CRNN classes
+    const expectedPitches = [36, 38, 50, 47, 43, 42, 49, 57, 51];
     for (let cls = 0; cls < nClasses; cls++) {
       const frame = 50 + cls * 100; // Widely spaced
       predictions[frame * nClasses + cls] = 0.9;
@@ -307,7 +294,6 @@ describe('pickPeaksFromModelOutput', () => {
     const modelOutput: ModelOutput = {predictions, nFrames, nClasses};
     const events = pickPeaksFromModelOutput(modelOutput);
 
-    // Each class should produce at least one event
     for (let cls = 0; cls < nClasses; cls++) {
       const classEvents = events.filter(
         (e) => e.midiPitch === expectedPitches[cls],
@@ -318,21 +304,20 @@ describe('pickPeaksFromModelOutput', () => {
 
   it('respects per-class thresholds', () => {
     const nFrames = 300;
-    const nClasses = NUM_ADTOF_CLASSES;
+    const nClasses = NUM_DRUM_CLASSES;
     const predictions = new Float32Array(nFrames * nClasses);
 
-    // BD threshold is 0.22, TT threshold is 0.32
-    // Place a peak at 0.25 for both BD (index 0) and TT (index 2)
-    predictions[100 * nClasses + 0] = 0.25; // BD: above 0.22 threshold
-    predictions[100 * nClasses + 2] = 0.25; // TT: below 0.32 threshold
+    // BD threshold is 0.25, HT threshold is 0.3
+    // Place a peak at 0.27 for both BD (index 0) and HT (index 2)
+    predictions[100 * nClasses + 0] = 0.27; // BD: above 0.25 threshold
+    predictions[100 * nClasses + 2] = 0.27; // HT: below 0.3 threshold
 
     const modelOutput: ModelOutput = {predictions, nFrames, nClasses};
     const events = pickPeaksFromModelOutput(modelOutput);
 
-    // BD should be detected, TT should not
     const bdEvents = events.filter((e) => e.drumClass === 'BD');
-    const ttEvents = events.filter((e) => e.drumClass === 'TT');
+    const htEvents = events.filter((e) => e.drumClass === 'HT');
     expect(bdEvents.length).toBeGreaterThanOrEqual(1);
-    expect(ttEvents.length).toBe(0);
+    expect(htEvents.length).toBe(0);
   });
 });

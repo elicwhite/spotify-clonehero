@@ -1,93 +1,117 @@
 /**
- * Tests for the ADTOF class to chart note mapping.
+ * Tests for the CRNN class to chart note mapping.
  *
  * Verifies:
- * - ADTOF class -> note number mapping
- * - ADTOF class -> cymbal marker mapping
- * - ADTOF class -> DrumNoteType mapping
+ * - 9-class -> note number mapping
+ * - 9-class -> cymbal marker mapping
+ * - 9-class -> DrumNoteType mapping
  * - RawDrumEvent[] -> DrumNote[] conversion (with tick quantization)
  * - RawDrumEvent[] -> EditorDrumEvent[] conversion
  */
 
 import {
   getChartMapping,
-  adtofClassToNoteNumber,
-  adtofClassToCymbalMarker,
-  adtofClassToDrumNoteType,
+  drumClassToNoteNumber,
+  drumClassToCymbalMarker,
+  drumClassToDrumNoteType,
   rawEventsToDrumNotes,
   rawEventsToEditorEvents,
 } from '../ml/class-mapping';
-import type {RawDrumEvent, AdtofClassName} from '../ml/types';
+import type {RawDrumEvent, DrumClassName} from '../ml/types';
 import type {TempoEvent} from '../chart-io/types';
 
 // ---------------------------------------------------------------------------
-// adtofClassToNoteNumber
+// drumClassToNoteNumber
 // ---------------------------------------------------------------------------
 
-describe('adtofClassToNoteNumber', () => {
+describe('drumClassToNoteNumber', () => {
   it('maps BD to note 0 (kick)', () => {
-    expect(adtofClassToNoteNumber('BD')).toBe(0);
+    expect(drumClassToNoteNumber('BD')).toBe(0);
   });
 
   it('maps SD to note 1 (red/snare)', () => {
-    expect(adtofClassToNoteNumber('SD')).toBe(1);
+    expect(drumClassToNoteNumber('SD')).toBe(1);
   });
 
-  it('maps HH to note 2 (yellow)', () => {
-    expect(adtofClassToNoteNumber('HH')).toBe(2);
+  it('maps HT to note 2 (yellow/hi-tom)', () => {
+    expect(drumClassToNoteNumber('HT')).toBe(2);
   });
 
-  it('maps TT to note 3 (blue)', () => {
-    expect(adtofClassToNoteNumber('TT')).toBe(3);
+  it('maps MT to note 3 (blue/mid-tom)', () => {
+    expect(drumClassToNoteNumber('MT')).toBe(3);
   });
 
-  it('maps CY+RD to note 4 (green)', () => {
-    expect(adtofClassToNoteNumber('CY+RD')).toBe(4);
+  it('maps FT to note 4 (green/floor-tom)', () => {
+    expect(drumClassToNoteNumber('FT')).toBe(4);
+  });
+
+  it('maps HH to note 2 (yellow/hihat)', () => {
+    expect(drumClassToNoteNumber('HH')).toBe(2);
+  });
+
+  it('maps CR to note 4 (green/crash)', () => {
+    expect(drumClassToNoteNumber('CR')).toBe(4);
+  });
+
+  it('maps CR2 to note 3 (blue/crash-2)', () => {
+    expect(drumClassToNoteNumber('CR2')).toBe(3);
+  });
+
+  it('maps RD to note 3 (blue/ride)', () => {
+    expect(drumClassToNoteNumber('RD')).toBe(3);
   });
 });
 
 // ---------------------------------------------------------------------------
-// adtofClassToCymbalMarker
+// drumClassToCymbalMarker
 // ---------------------------------------------------------------------------
 
-describe('adtofClassToCymbalMarker', () => {
-  it('returns null for BD (no cymbal)', () => {
-    expect(adtofClassToCymbalMarker('BD')).toBeNull();
-  });
-
-  it('returns null for SD (no cymbal)', () => {
-    expect(adtofClassToCymbalMarker('SD')).toBeNull();
+describe('drumClassToCymbalMarker', () => {
+  it('returns null for pads (BD, SD, HT, MT, FT)', () => {
+    expect(drumClassToCymbalMarker('BD')).toBeNull();
+    expect(drumClassToCymbalMarker('SD')).toBeNull();
+    expect(drumClassToCymbalMarker('HT')).toBeNull();
+    expect(drumClassToCymbalMarker('MT')).toBeNull();
+    expect(drumClassToCymbalMarker('FT')).toBeNull();
   });
 
   it('returns 66 for HH (yellow cymbal)', () => {
-    expect(adtofClassToCymbalMarker('HH')).toBe(66);
+    expect(drumClassToCymbalMarker('HH')).toBe(66);
   });
 
-  it('returns null for TT (no cymbal)', () => {
-    expect(adtofClassToCymbalMarker('TT')).toBeNull();
+  it('returns 68 for CR (green cymbal)', () => {
+    expect(drumClassToCymbalMarker('CR')).toBe(68);
   });
 
-  it('returns 68 for CY+RD (green cymbal)', () => {
-    expect(adtofClassToCymbalMarker('CY+RD')).toBe(68);
+  it('returns 67 for CR2 (blue cymbal)', () => {
+    expect(drumClassToCymbalMarker('CR2')).toBe(67);
+  });
+
+  it('returns 67 for RD (blue cymbal)', () => {
+    expect(drumClassToCymbalMarker('RD')).toBe(67);
   });
 });
 
 // ---------------------------------------------------------------------------
-// adtofClassToDrumNoteType
+// drumClassToDrumNoteType
 // ---------------------------------------------------------------------------
 
-describe('adtofClassToDrumNoteType', () => {
-  const expected: Record<AdtofClassName, string> = {
+describe('drumClassToDrumNoteType', () => {
+  const expected: Record<DrumClassName, string> = {
     BD: 'kick',
     SD: 'red',
+    HT: 'yellow',
+    MT: 'blue',
+    FT: 'green',
     HH: 'yellow',
-    TT: 'blue',
-    'CY+RD': 'green',
+    CR: 'green',
+    CR2: 'blue',
+    RD: 'blue',
   };
 
   for (const [cls, type] of Object.entries(expected)) {
     it(`maps ${cls} to ${type}`, () => {
-      expect(adtofClassToDrumNoteType(cls as AdtofClassName)).toBe(type);
+      expect(drumClassToDrumNoteType(cls as DrumClassName)).toBe(type);
     });
   }
 });
@@ -98,7 +122,9 @@ describe('adtofClassToDrumNoteType', () => {
 
 describe('getChartMapping', () => {
   it('returns complete mapping for each class', () => {
-    const classes: AdtofClassName[] = ['BD', 'SD', 'HH', 'TT', 'CY+RD'];
+    const classes: DrumClassName[] = [
+      'BD', 'SD', 'HT', 'MT', 'FT', 'HH', 'CR', 'CR2', 'RD',
+    ];
 
     for (const cls of classes) {
       const mapping = getChartMapping(cls);
@@ -109,21 +135,35 @@ describe('getChartMapping', () => {
     }
   });
 
-  it('cymbal classes have cymbal markers, non-cymbal classes do not', () => {
+  it('cymbal classes have cymbal markers, pad classes do not', () => {
+    // Cymbals
     expect(getChartMapping('HH').isCymbal).toBe(true);
     expect(getChartMapping('HH').cymbalMarker).toBe(66);
 
-    expect(getChartMapping('CY+RD').isCymbal).toBe(true);
-    expect(getChartMapping('CY+RD').cymbalMarker).toBe(68);
+    expect(getChartMapping('CR').isCymbal).toBe(true);
+    expect(getChartMapping('CR').cymbalMarker).toBe(68);
 
+    expect(getChartMapping('CR2').isCymbal).toBe(true);
+    expect(getChartMapping('CR2').cymbalMarker).toBe(67);
+
+    expect(getChartMapping('RD').isCymbal).toBe(true);
+    expect(getChartMapping('RD').cymbalMarker).toBe(67);
+
+    // Pads
     expect(getChartMapping('BD').isCymbal).toBe(false);
     expect(getChartMapping('BD').cymbalMarker).toBeNull();
 
     expect(getChartMapping('SD').isCymbal).toBe(false);
     expect(getChartMapping('SD').cymbalMarker).toBeNull();
 
-    expect(getChartMapping('TT').isCymbal).toBe(false);
-    expect(getChartMapping('TT').cymbalMarker).toBeNull();
+    expect(getChartMapping('HT').isCymbal).toBe(false);
+    expect(getChartMapping('HT').cymbalMarker).toBeNull();
+
+    expect(getChartMapping('MT').isCymbal).toBe(false);
+    expect(getChartMapping('MT').cymbalMarker).toBeNull();
+
+    expect(getChartMapping('FT').isCymbal).toBe(false);
+    expect(getChartMapping('FT').cymbalMarker).toBeNull();
   });
 });
 
@@ -137,7 +177,7 @@ describe('rawEventsToDrumNotes', () => {
 
   it('converts events to drum notes with correct types', () => {
     const events: RawDrumEvent[] = [
-      {timeSeconds: 0, drumClass: 'BD', midiPitch: 35, confidence: 0.9},
+      {timeSeconds: 0, drumClass: 'BD', midiPitch: 36, confidence: 0.9},
       {timeSeconds: 0.5, drumClass: 'SD', midiPitch: 38, confidence: 0.85},
       {timeSeconds: 1.0, drumClass: 'HH', midiPitch: 42, confidence: 0.7},
     ];
@@ -151,39 +191,40 @@ describe('rawEventsToDrumNotes', () => {
   });
 
   it('computes correct tick positions at 120 BPM', () => {
-    // At 120 BPM, 1 beat = 0.5 seconds
-    // At resolution 480, 1 beat = 480 ticks
-    // So 1 second = 960 ticks
     const events: RawDrumEvent[] = [
-      {timeSeconds: 0, drumClass: 'BD', midiPitch: 35, confidence: 0.9},
+      {timeSeconds: 0, drumClass: 'BD', midiPitch: 36, confidence: 0.9},
       {timeSeconds: 0.5, drumClass: 'SD', midiPitch: 38, confidence: 0.85},
-      {timeSeconds: 1.0, drumClass: 'BD', midiPitch: 35, confidence: 0.8},
+      {timeSeconds: 1.0, drumClass: 'BD', midiPitch: 36, confidence: 0.8},
     ];
 
     const notes = rawEventsToDrumNotes(events, tempos, resolution);
 
     expect(notes[0].tick).toBe(0);
-    expect(notes[1].tick).toBe(480); // 0.5s at 120 BPM = 1 beat = 480 ticks
-    expect(notes[2].tick).toBe(960); // 1.0s at 120 BPM = 2 beats = 960 ticks
+    expect(notes[1].tick).toBe(480);
+    expect(notes[2].tick).toBe(960);
   });
 
-  it('sets cymbal flag for HH and CY+RD', () => {
+  it('sets cymbal flag for HH, CR, CR2, RD', () => {
     const events: RawDrumEvent[] = [
       {timeSeconds: 0, drumClass: 'HH', midiPitch: 42, confidence: 0.8},
-      {timeSeconds: 0.5, drumClass: 'CY+RD', midiPitch: 49, confidence: 0.7},
-      {timeSeconds: 1.0, drumClass: 'TT', midiPitch: 47, confidence: 0.6},
+      {timeSeconds: 0.5, drumClass: 'CR', midiPitch: 49, confidence: 0.7},
+      {timeSeconds: 1.0, drumClass: 'HT', midiPitch: 50, confidence: 0.6},
+      {timeSeconds: 1.5, drumClass: 'RD', midiPitch: 51, confidence: 0.7},
+      {timeSeconds: 2.0, drumClass: 'CR2', midiPitch: 57, confidence: 0.6},
     ];
 
     const notes = rawEventsToDrumNotes(events, tempos, resolution);
 
     expect(notes[0].flags.cymbal).toBe(true); // HH
-    expect(notes[1].flags.cymbal).toBe(true); // CY+RD
-    expect(notes[2].flags.cymbal).toBeUndefined(); // TT
+    expect(notes[1].flags.cymbal).toBe(true); // CR
+    expect(notes[2].flags.cymbal).toBeUndefined(); // HT (tom pad)
+    expect(notes[3].flags.cymbal).toBe(true); // RD
+    expect(notes[4].flags.cymbal).toBe(true); // CR2
   });
 
   it('all notes have length 0 (non-sustained drums)', () => {
     const events: RawDrumEvent[] = [
-      {timeSeconds: 0, drumClass: 'BD', midiPitch: 35, confidence: 0.9},
+      {timeSeconds: 0, drumClass: 'BD', midiPitch: 36, confidence: 0.9},
       {timeSeconds: 0.5, drumClass: 'SD', midiPitch: 38, confidence: 0.85},
     ];
 
@@ -196,7 +237,7 @@ describe('rawEventsToDrumNotes', () => {
 
   it('sorts notes by tick', () => {
     const events: RawDrumEvent[] = [
-      {timeSeconds: 1.0, drumClass: 'BD', midiPitch: 35, confidence: 0.9},
+      {timeSeconds: 1.0, drumClass: 'BD', midiPitch: 36, confidence: 0.9},
       {timeSeconds: 0, drumClass: 'SD', midiPitch: 38, confidence: 0.85},
       {timeSeconds: 0.5, drumClass: 'HH', midiPitch: 42, confidence: 0.7},
     ];
@@ -214,22 +255,15 @@ describe('rawEventsToDrumNotes', () => {
   });
 
   it('handles tempo changes', () => {
-    // Starts at 120 BPM, changes to 60 BPM at tick 480
     const temposWithChange: TempoEvent[] = [
       {tick: 0, bpm: 120},
       {tick: 480, bpm: 60},
     ];
 
-    // At 120 BPM: 1 beat = 0.5s
-    // 480 ticks (1 beat) takes 0.5s
-    // tempo change happens at 0.5s
-    // At 60 BPM after that: 1 beat = 1.0s
-    // So 1.5s into the song = 0.5s in the first tempo + 1.0s at 60 BPM = 1 beat at 60 = 480 ticks
-    // Total tick = 480 + 480 = 960
     const events: RawDrumEvent[] = [
-      {timeSeconds: 0.0, drumClass: 'BD', midiPitch: 35, confidence: 0.9},
+      {timeSeconds: 0.0, drumClass: 'BD', midiPitch: 36, confidence: 0.9},
       {timeSeconds: 0.5, drumClass: 'SD', midiPitch: 38, confidence: 0.8},
-      {timeSeconds: 1.5, drumClass: 'BD', midiPitch: 35, confidence: 0.7},
+      {timeSeconds: 1.5, drumClass: 'BD', midiPitch: 36, confidence: 0.7},
     ];
 
     const notes = rawEventsToDrumNotes(events, temposWithChange, resolution);
@@ -250,7 +284,7 @@ describe('rawEventsToEditorEvents', () => {
 
   it('creates editor events with unique IDs', () => {
     const events: RawDrumEvent[] = [
-      {timeSeconds: 0, drumClass: 'BD', midiPitch: 35, confidence: 0.9},
+      {timeSeconds: 0, drumClass: 'BD', midiPitch: 36, confidence: 0.9},
       {timeSeconds: 0.5, drumClass: 'SD', midiPitch: 38, confidence: 0.85},
     ];
 
@@ -262,7 +296,7 @@ describe('rawEventsToEditorEvents', () => {
 
   it('preserves confidence scores', () => {
     const events: RawDrumEvent[] = [
-      {timeSeconds: 0, drumClass: 'BD', midiPitch: 35, confidence: 0.9},
+      {timeSeconds: 0, drumClass: 'BD', midiPitch: 36, confidence: 0.9},
       {timeSeconds: 0.5, drumClass: 'SD', midiPitch: 38, confidence: 0.42},
     ];
 
@@ -272,11 +306,13 @@ describe('rawEventsToEditorEvents', () => {
     expect(editorEvents[1].confidence).toBe(0.42);
   });
 
-  it('sets correct note numbers and cymbal markers', () => {
+  it('sets correct note numbers and cymbal markers for all 9 classes', () => {
     const events: RawDrumEvent[] = [
-      {timeSeconds: 0, drumClass: 'BD', midiPitch: 35, confidence: 0.9},
+      {timeSeconds: 0, drumClass: 'BD', midiPitch: 36, confidence: 0.9},
       {timeSeconds: 0.1, drumClass: 'HH', midiPitch: 42, confidence: 0.8},
-      {timeSeconds: 0.2, drumClass: 'CY+RD', midiPitch: 49, confidence: 0.7},
+      {timeSeconds: 0.2, drumClass: 'CR', midiPitch: 49, confidence: 0.7},
+      {timeSeconds: 0.3, drumClass: 'RD', midiPitch: 51, confidence: 0.7},
+      {timeSeconds: 0.4, drumClass: 'CR2', midiPitch: 57, confidence: 0.6},
     ];
 
     const editorEvents = rawEventsToEditorEvents(events, tempos, resolution);
@@ -289,14 +325,22 @@ describe('rawEventsToEditorEvents', () => {
     expect(editorEvents[1].noteNumber).toBe(2);
     expect(editorEvents[1].cymbalMarker).toBe(66);
 
-    // CY+RD: note 4, cymbal marker 68
+    // CR: note 4, cymbal marker 68
     expect(editorEvents[2].noteNumber).toBe(4);
     expect(editorEvents[2].cymbalMarker).toBe(68);
+
+    // RD: note 3, cymbal marker 67
+    expect(editorEvents[3].noteNumber).toBe(3);
+    expect(editorEvents[3].cymbalMarker).toBe(67);
+
+    // CR2: note 3, cymbal marker 67
+    expect(editorEvents[4].noteNumber).toBe(3);
+    expect(editorEvents[4].cymbalMarker).toBe(67);
   });
 
   it('marks all events as model-sourced and unreviewed', () => {
     const events: RawDrumEvent[] = [
-      {timeSeconds: 0, drumClass: 'BD', midiPitch: 35, confidence: 0.9},
+      {timeSeconds: 0, drumClass: 'BD', midiPitch: 36, confidence: 0.9},
     ];
 
     const editorEvents = rawEventsToEditorEvents(events, tempos, resolution);
@@ -307,7 +351,7 @@ describe('rawEventsToEditorEvents', () => {
 
   it('computes correct msTime', () => {
     const events: RawDrumEvent[] = [
-      {timeSeconds: 1.5, drumClass: 'BD', midiPitch: 35, confidence: 0.9},
+      {timeSeconds: 1.5, drumClass: 'BD', midiPitch: 36, confidence: 0.9},
     ];
 
     const editorEvents = rawEventsToEditorEvents(events, tempos, resolution);
@@ -317,11 +361,11 @@ describe('rawEventsToEditorEvents', () => {
 
   it('preserves modelClass name', () => {
     const events: RawDrumEvent[] = [
-      {timeSeconds: 0, drumClass: 'CY+RD', midiPitch: 49, confidence: 0.7},
+      {timeSeconds: 0, drumClass: 'CR', midiPitch: 49, confidence: 0.7},
     ];
 
     const editorEvents = rawEventsToEditorEvents(events, tempos, resolution);
 
-    expect(editorEvents[0].modelClass).toBe('CY+RD');
+    expect(editorEvents[0].modelClass).toBe('CR');
   });
 });

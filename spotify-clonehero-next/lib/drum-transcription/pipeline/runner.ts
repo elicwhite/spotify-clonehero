@@ -22,7 +22,7 @@ import {
   type ProjectMetadata,
 } from '../storage/opfs';
 import {separateStems, hasSeparatedStems} from '../ml/demucs';
-import {OnnxTranscriber, MockTranscriber, type DrumTranscriber} from '../ml/transcriber';
+import {CrnnTranscriber, MockTranscriber, type DrumTranscriber} from '../ml/transcriber';
 import {rawEventsToDrumNotes} from '../ml/class-mapping';
 import {serializeChart} from '../chart-io/writer';
 import type {
@@ -70,8 +70,7 @@ export type PipelineProgressCallback = (progress: PipelineProgress) => void;
  * @param audioFile - The audio file (File or ArrayBuffer) to process.
  * @param fileName - Display name for the project.
  * @param onProgress - Callback for progress updates.
- * @param transcriber - Optional transcriber implementation. If omitted, tries
- *   OnnxTranscriber (real ONNX model) first, falling back to MockTranscriber.
+ * @param transcriber - Optional transcriber implementation. If omitted, uses CrnnTranscriber.
  * @returns The project ID.
  */
 export async function runPipeline(
@@ -180,33 +179,21 @@ export async function runPipeline(
 
     await updateProject(projectId, {stage: 'transcribing'});
 
-    // Load the drum stem for transcription.
-    // The transcriber expects mono audio, so we'll average the stereo channels.
-    let drumAudioMono: Float32Array;
+    // Load the drum stem for transcription (stereo interleaved).
+    // The CrnnTranscriber expects stereo audio and handles mono conversion internally.
+    let drumAudioStereo: Float32Array;
     try {
       const {loadStem} = await import('../ml/demucs');
-      const drumsStereo = await loadStem(projectId, 'drums');
-      // Convert interleaved stereo to mono by averaging L+R
-      const numSamples = drumsStereo.length / 2;
-      drumAudioMono = new Float32Array(numSamples);
-      for (let i = 0; i < numSamples; i++) {
-        drumAudioMono[i] =
-          (drumsStereo[i * 2] + drumsStereo[i * 2 + 1]) * 0.5;
-      }
+      drumAudioStereo = await loadStem(projectId, 'drums');
     } catch {
       // If stems aren't available (e.g. separation was skipped),
-      // use the full audio mix converted to mono
-      const fullAudio = await loadAudioForDemucs(projectId);
-      const numSamples = fullAudio.length / 2;
-      drumAudioMono = new Float32Array(numSamples);
-      for (let i = 0; i < numSamples; i++) {
-        drumAudioMono[i] = (fullAudio[i * 2] + fullAudio[i * 2 + 1]) * 0.5;
-      }
+      // use the full audio mix (already stereo interleaved)
+      drumAudioStereo = await loadAudioForDemucs(projectId);
     }
 
     // Run transcription
     const result: TranscriptionResult = await txr.transcribe(
-      drumAudioMono,
+      drumAudioStereo,
       TARGET_SAMPLE_RATE,
       (txrProgress) => {
         onProgress({
@@ -320,27 +307,17 @@ export async function resumePipeline(
 
     await updateProject(projectId, {stage: 'transcribing'});
 
-    let drumAudioMono: Float32Array;
+    // Load stereo audio for transcription
+    let drumAudioStereo: Float32Array;
     try {
       const {loadStem} = await import('../ml/demucs');
-      const drumsStereo = await loadStem(projectId, 'drums');
-      const numSamples = drumsStereo.length / 2;
-      drumAudioMono = new Float32Array(numSamples);
-      for (let i = 0; i < numSamples; i++) {
-        drumAudioMono[i] =
-          (drumsStereo[i * 2] + drumsStereo[i * 2 + 1]) * 0.5;
-      }
+      drumAudioStereo = await loadStem(projectId, 'drums');
     } catch {
-      const fullAudio = await loadAudioForDemucs(projectId);
-      const numSamples = fullAudio.length / 2;
-      drumAudioMono = new Float32Array(numSamples);
-      for (let i = 0; i < numSamples; i++) {
-        drumAudioMono[i] = (fullAudio[i * 2] + fullAudio[i * 2 + 1]) * 0.5;
-      }
+      drumAudioStereo = await loadAudioForDemucs(projectId);
     }
 
     const result: TranscriptionResult = await txr.transcribe(
-      drumAudioMono,
+      drumAudioStereo,
       TARGET_SAMPLE_RATE,
       (txrProgress) => {
         onProgress({
@@ -382,12 +359,12 @@ export async function resumePipeline(
 // ---------------------------------------------------------------------------
 
 /**
- * Creates the default transcriber — always uses OnnxTranscriber (real ADTOF
- * model). The constructor is safe to call without ONNX loaded; it only
- * accesses the runtime during transcribe().
+ * Creates the default transcriber — uses CrnnTranscriber (CRNN model).
+ * The constructor is safe to call without ONNX loaded; it only
+ * accesses the runtime during transcribe() via the Web Worker.
  */
 function createDefaultTranscriber(): DrumTranscriber {
-  return new OnnxTranscriber();
+  return new CrnnTranscriber();
 }
 
 // ---------------------------------------------------------------------------

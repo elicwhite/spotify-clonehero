@@ -10,9 +10,7 @@
 // ---------------------------------------------------------------------------
 
 /**
- * Parameters for the log-filtered spectrogram computation.
- * These must exactly match ADTOF's training configuration from
- * `adtof/model/hyperparameters.py`.
+ * Parameters for the log-filtered spectrogram computation (legacy ADTOF).
  */
 export interface SpectrogramConfig {
   /** Sample rate in Hz. */
@@ -39,37 +37,73 @@ export const DEFAULT_SPECTROGRAM_CONFIG: SpectrogramConfig = {
   fMax: 20000,
 };
 
+/**
+ * Parameters for the mel spectrogram computation (CRNN model).
+ */
+export interface MelSpectrogramConfig {
+  /** Sample rate in Hz. */
+  sampleRate: number;
+  /** FFT size in samples. */
+  nFft: number;
+  /** Hop length in samples (sampleRate / fps). */
+  hopLength: number;
+  /** Number of mel frequency bands. */
+  nMels: number;
+  /** Minimum frequency for the filterbank in Hz. */
+  fMin: number;
+  /** Maximum frequency for the filterbank in Hz (Nyquist). */
+  fMax: number;
+}
+
+/** Default mel spectrogram config matching the CRNN training pipeline. */
+export const DEFAULT_MEL_CONFIG: MelSpectrogramConfig = {
+  sampleRate: 44100,
+  nFft: 2048,
+  hopLength: 441, // 100 fps
+  nMels: 128,
+  fMin: 0,
+  fMax: 22050, // Nyquist
+};
+
 // ---------------------------------------------------------------------------
-// ADTOF Model Classes
+// CRNN Model Classes (9 instruments)
 // ---------------------------------------------------------------------------
 
-/** A single ADTOF output class definition. */
-export interface AdtofClass {
+/** A single drum class definition. */
+export interface DrumClass {
   readonly index: number;
   readonly midiPitch: number;
   readonly name: string;
   readonly description: string;
 }
 
-/** ADTOF's 5 output classes, in the order the model outputs them. */
-export const ADTOF_CLASSES: readonly AdtofClass[] = [
-  {index: 0, midiPitch: 35, name: 'BD', description: 'Bass Drum'},
+/** The CRNN model's 9 output classes, in model output order. */
+export const DRUM_CLASSES: readonly DrumClass[] = [
+  {index: 0, midiPitch: 36, name: 'BD', description: 'Bass Drum (kick)'},
   {index: 1, midiPitch: 38, name: 'SD', description: 'Snare Drum'},
-  {index: 2, midiPitch: 47, name: 'TT', description: 'Tom-Tom (all toms grouped)'},
-  {index: 3, midiPitch: 42, name: 'HH', description: 'Hi-Hat (open + closed grouped)'},
-  {
-    index: 4,
-    midiPitch: 49,
-    name: 'CY+RD',
-    description: 'Cymbal + Ride (all cymbals grouped)',
-  },
+  {index: 2, midiPitch: 50, name: 'HT', description: 'High Tom'},
+  {index: 3, midiPitch: 47, name: 'MT', description: 'Mid Tom'},
+  {index: 4, midiPitch: 43, name: 'FT', description: 'Floor Tom'},
+  {index: 5, midiPitch: 42, name: 'HH', description: 'Hi-Hat'},
+  {index: 6, midiPitch: 49, name: 'CR', description: 'Crash Cymbal'},
+  {index: 7, midiPitch: 57, name: 'CR2', description: 'Crash Cymbal 2'},
+  {index: 8, midiPitch: 51, name: 'RD', description: 'Ride Cymbal'},
 ] as const;
 
-/** Number of output classes from the ADTOF model. */
-export const NUM_ADTOF_CLASSES = 5;
+/** Number of output classes from the CRNN model. */
+export const NUM_DRUM_CLASSES = 9;
 
-/** ADTOF class name union type. */
-export type AdtofClassName = 'BD' | 'SD' | 'TT' | 'HH' | 'CY+RD';
+/** CRNN drum class name union type. */
+export type DrumClassName =
+  | 'BD'
+  | 'SD'
+  | 'HT'
+  | 'MT'
+  | 'FT'
+  | 'HH'
+  | 'CR'
+  | 'CR2'
+  | 'RD';
 
 // ---------------------------------------------------------------------------
 // Model Output
@@ -77,11 +111,11 @@ export type AdtofClassName = 'BD' | 'SD' | 'TT' | 'HH' | 'CY+RD';
 
 /** Raw output from the ONNX model before post-processing. */
 export interface ModelOutput {
-  /** Per-frame sigmoid predictions, shape [n_frames, 5], row-major. */
+  /** Per-frame sigmoid predictions, shape [n_frames, 9], row-major. */
   predictions: Float32Array;
   /** Number of time frames. */
   nFrames: number;
-  /** Number of output classes (always 5). */
+  /** Number of output classes (9). */
   nClasses: number;
 }
 
@@ -96,8 +130,8 @@ export interface ModelOutput {
 export interface RawDrumEvent {
   /** Time in seconds from the start of the audio. */
   timeSeconds: number;
-  /** ADTOF class name. */
-  drumClass: AdtofClassName;
+  /** CRNN drum class name. */
+  drumClass: DrumClassName;
   /** General MIDI pitch number for this drum class. */
   midiPitch: number;
   /** Peak confidence score from the model, 0.0 to 1.0. */
@@ -119,8 +153,8 @@ export interface EditorDrumEvent {
   noteNumber: number;
   /** Pro drums cymbal marker (66, 67, 68) or null. */
   cymbalMarker: number | null;
-  /** Source ADTOF class name. */
-  modelClass: AdtofClassName;
+  /** Source CRNN class name. */
+  modelClass: DrumClassName;
   /** Confidence from the model, or null for manually added notes. */
   confidence: number | null;
   /** Whether the note has been reviewed by the user. */
@@ -152,7 +186,9 @@ export interface TranscriptionProgress {
   step:
     | 'loading-model'
     | 'computing-spectrogram'
-    | 'running-inference'
+    | 'computing-panning'
+    | 'inference-pass-1'
+    | 'inference-pass-2'
     | 'post-processing'
     | 'done';
   /** Overall progress from 0 to 1. */
@@ -182,11 +218,11 @@ export interface PeakPickingParams {
   postMax: number;
   /** Combine window in seconds (merge detections within this window). */
   combine: number;
-  /** Frames per second (100 for ADTOF). */
+  /** Frames per second (100 for CRNN). */
   fps: number;
 }
 
-/** Default peak picking parameters from ADTOF. */
+/** Default peak picking parameters. */
 export const DEFAULT_PEAK_PICKING_PARAMS: PeakPickingParams = {
   preAvg: 0.1,
   postAvg: 0.01,
@@ -196,11 +232,47 @@ export const DEFAULT_PEAK_PICKING_PARAMS: PeakPickingParams = {
   fps: 100,
 };
 
-/** Per-class detection thresholds, optimized during ADTOF validation. */
-export const ADTOF_THRESHOLDS: Record<AdtofClassName, number> = {
-  BD: 0.22,
-  SD: 0.24,
-  TT: 0.32,
-  HH: 0.22,
-  'CY+RD': 0.3,
+/** Per-class detection thresholds for the CRNN model (initial values, tune later). */
+export const CRNN_THRESHOLDS: Record<DrumClassName, number> = {
+  BD: 0.25,
+  SD: 0.25,
+  HT: 0.3,
+  MT: 0.3,
+  FT: 0.3,
+  HH: 0.25,
+  CR: 0.3,
+  CR2: 0.3,
+  RD: 0.3,
 };
+
+// ---------------------------------------------------------------------------
+// Panning configuration
+// ---------------------------------------------------------------------------
+
+/** Frequency bands for panning feature computation (Hz). */
+export const PANNING_BANDS_HZ: readonly [number, number][] = [
+  [0, 300],
+  [300, 3000],
+  [3000, 8000],
+  [8000, 20000],
+];
+
+// ---------------------------------------------------------------------------
+// Song context configuration
+// ---------------------------------------------------------------------------
+
+/** Dimensionality of the song context vector. */
+export const SONG_CONTEXT_DIM = 1280; // 128 (mean mel) + 9 * 128 (per-instrument onset mel)
+
+/** Radius (in frames) around each onset for computing per-instrument mel profiles. */
+export const ONSET_RADIUS = 5;
+
+// ---------------------------------------------------------------------------
+// Windowed inference configuration
+// ---------------------------------------------------------------------------
+
+/** Number of frames per inference window (5 seconds at 100 fps). */
+export const WINDOW_SIZE = 500;
+
+/** Stride between windows (25% overlap). */
+export const WINDOW_STRIDE = 375; // WINDOW_SIZE * 3 / 4

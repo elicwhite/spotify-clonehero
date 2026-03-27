@@ -3,8 +3,8 @@
  *
  * Provides a `DrumTranscriber` interface with two implementations:
  *
- * - `OnnxTranscriber` — real ONNX inference with the ADTOF Frame_RNN model.
- *   Uses the shared ONNX runtime from onnx-runtime.ts (WebGPU only).
+ * - `CrnnTranscriber` — real ONNX inference with the CRNN model.
+ *   All heavy computation runs in a Web Worker to avoid blocking the main thread.
  *
  * - `MockTranscriber` — generates realistic mock drum events for
  *   development and testing without requiring a GPU or ONNX model.
@@ -18,21 +18,12 @@ import type {
   TranscriptionProgressCallback,
   ModelOutput,
   RawDrumEvent,
-  AdtofClassName,
-  SpectrogramConfig,
+  DrumClassName,
 } from './types';
 import {
-  DEFAULT_SPECTROGRAM_CONFIG,
-  ADTOF_CLASSES,
-  NUM_ADTOF_CLASSES,
+  DRUM_CLASSES,
+  NUM_DRUM_CLASSES,
 } from './types';
-import {computeLogFilteredSpectrogram} from './spectrogram';
-import {pickPeaksFromModelOutput} from './peak-picking';
-import {
-  createInferenceSession,
-  getOrt,
-  type OrtInferenceSession,
-} from './onnx-runtime';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -45,121 +36,102 @@ export interface DrumTranscriber {
   /**
    * Transcribe drum events from audio data.
    *
-   * @param audioData - Mono audio at the expected sample rate (44100 Hz).
+   * @param stereoAudio - Interleaved stereo audio [L0, R0, L1, R1, ...] at the expected sample rate (44100 Hz).
    * @param sampleRate - Sample rate of the audio.
    * @param onProgress - Optional progress callback.
    * @returns The transcription result with raw events and model output.
    */
   transcribe(
-    audioData: Float32Array,
+    stereoAudio: Float32Array,
     sampleRate: number,
     onProgress?: TranscriptionProgressCallback,
   ): Promise<TranscriptionResult>;
 }
 
 // ---------------------------------------------------------------------------
-// ONNX Transcriber (real inference)
+// CRNN Transcriber (Web Worker-based inference)
 // ---------------------------------------------------------------------------
 
-/** URL for the ADTOF Frame_RNN ONNX model (served from /public/models/). */
-const ADTOF_MODEL_URL = '/models/adtof_frame_rnn.onnx';
+/** URL for the CRNN ONNX model (served from /public/models/). */
+const CRNN_MODEL_URL = '/models/crnn_drum_transcriber.onnx';
 
 /**
- * Real ONNX-based drum transcriber using the ADTOF Frame_RNN model.
+ * Real ONNX-based drum transcriber using the CRNN model.
  *
- * Pipeline:
- *   1. Compute log-filtered spectrogram
- *   2. Run ONNX inference (WebGPU)
- *   3. Peak picking
+ * All heavy computation (mel spectrogram, panning, ONNX inference, peak picking)
+ * runs in a Web Worker to keep the main thread responsive.
+ *
+ * Pipeline (inside worker):
+ *   1. Compute mel spectrogram (128 bands, 100 fps)
+ *   2. Compute panning features (4-band L/R ratio)
+ *   3. Pass 1: inference with fallback context
+ *   4. Compute real context from Pass 1 onsets
+ *   5. Pass 2: inference with real context
+ *   6. Peak picking on Pass 2 output
  */
-export class OnnxTranscriber implements DrumTranscriber {
+export class CrnnTranscriber implements DrumTranscriber {
   private modelUrl: string;
-  private spectrogramConfig: SpectrogramConfig;
 
-  constructor(
-    modelUrl: string = ADTOF_MODEL_URL,
-    spectrogramConfig: SpectrogramConfig = DEFAULT_SPECTROGRAM_CONFIG,
-  ) {
+  constructor(modelUrl: string = CRNN_MODEL_URL) {
     this.modelUrl = modelUrl;
-    this.spectrogramConfig = spectrogramConfig;
   }
 
   async transcribe(
-    audioData: Float32Array,
+    stereoAudio: Float32Array,
     sampleRate: number,
     onProgress?: TranscriptionProgressCallback,
   ): Promise<TranscriptionResult> {
-    const durationSeconds = audioData.length / sampleRate;
-
-    // Step 1: Compute spectrogram
-    onProgress?.({step: 'computing-spectrogram', percent: 0.05});
-    const {spectrogram, nFrames, numBands} = computeLogFilteredSpectrogram(
-      audioData,
-      this.spectrogramConfig,
-    );
-
-    // Step 2: Load model and run inference
-    onProgress?.({step: 'loading-model', percent: 0.1});
-    const session = await createInferenceSession(this.modelUrl);
-
-    try {
-      onProgress?.({step: 'running-inference', percent: 0.2});
-
-      const predictions = await this.runInference(
-        session,
-        spectrogram,
-        nFrames,
-        numBands,
+    return new Promise((resolve, reject) => {
+      const worker = new Worker(
+        new URL('./crnn-worker.ts', import.meta.url),
       );
 
-      const modelOutput: ModelOutput = {
-        predictions,
-        nFrames,
-        nClasses: NUM_ADTOF_CLASSES,
+      worker.onmessage = (e: MessageEvent) => {
+        const msg = e.data;
+
+        switch (msg.type) {
+          case 'progress':
+            onProgress?.({
+              step: msg.step,
+              percent: msg.percent,
+              detail: msg.detail,
+            });
+            break;
+
+          case 'result': {
+            const result: TranscriptionResult = {
+              events: msg.events as RawDrumEvent[],
+              modelOutput: msg.modelOutput as ModelOutput,
+              durationSeconds: msg.durationSeconds as number,
+            };
+            worker.terminate();
+            resolve(result);
+            break;
+          }
+
+          case 'error':
+            worker.terminate();
+            reject(new Error(msg.message));
+            break;
+        }
       };
 
-      // Step 3: Peak picking
-      onProgress?.({step: 'post-processing', percent: 0.9});
-      const events = pickPeaksFromModelOutput(modelOutput);
+      worker.onerror = (err) => {
+        worker.terminate();
+        reject(new Error(`Worker error: ${err.message}`));
+      };
 
-      onProgress?.({step: 'done', percent: 1});
-
-      return {events, modelOutput, durationSeconds};
-    } finally {
-      await session.release();
-    }
-  }
-
-  /**
-   * Run the ADTOF model inference.
-   *
-   * Input shape: [1, n_frames, 84, 1]
-   * Output shape: [1, n_frames, 5]
-   */
-  private async runInference(
-    session: OrtInferenceSession,
-    spectrogram: Float32Array,
-    nFrames: number,
-    numBands: number,
-  ): Promise<Float32Array> {
-    const ort = getOrt();
-
-    const inputTensor = new ort.Tensor('float32', spectrogram, [
-      1,
-      nFrames,
-      numBands,
-      1,
-    ]);
-
-    const results = await session.run({spectrogram: inputTensor});
-    inputTensor.dispose();
-
-    const outputKey = Object.keys(results)[0];
-    const outputTensor = results[outputKey];
-    const predictions = new Float32Array(outputTensor.data);
-    outputTensor.dispose();
-
-    return predictions;
+      // Send audio to worker — transfer the buffer for zero-copy
+      worker.postMessage(
+        {
+          type: 'transcribe',
+          stereoAudio,
+          sampleRate,
+          modelUrl: this.modelUrl,
+        },
+        [stereoAudio.buffer],
+      );
+    });
   }
 }
 
@@ -185,18 +157,18 @@ export class MockTranscriber implements DrumTranscriber {
   }
 
   async transcribe(
-    audioData: Float32Array,
+    stereoAudio: Float32Array,
     sampleRate: number,
     onProgress?: TranscriptionProgressCallback,
   ): Promise<TranscriptionResult> {
-    const durationSeconds = audioData.length / sampleRate;
+    const durationSeconds = stereoAudio.length / 2 / sampleRate;
 
     onProgress?.({step: 'computing-spectrogram', percent: 0.1});
 
     // Simulate processing time
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
 
-    onProgress?.({step: 'running-inference', percent: 0.5});
+    onProgress?.({step: 'inference-pass-1', percent: 0.5});
 
     const events = this.generateMockPattern(durationSeconds);
     const modelOutput = this.generateMockModelOutput(durationSeconds, events);
@@ -211,7 +183,7 @@ export class MockTranscriber implements DrumTranscriber {
   }
 
   /**
-   * Generate a realistic rock beat pattern.
+   * Generate a realistic rock beat pattern with 9-class events.
    *
    * Pattern (per bar, 4/4 time):
    *   Beat 1:   BD + HH
@@ -247,10 +219,8 @@ export class MockTranscriber implements DrumTranscriber {
         if (noteTime >= durationSeconds) break;
 
         if (isFillBar) {
-          // Fill pattern: toms descending, then crash on next beat 1
           this.addFillEvents(events, noteTime, eighth, durationSeconds);
         } else {
-          // Normal rock beat
           this.addRockBeatEvents(events, noteTime, eighth);
         }
       }
@@ -274,7 +244,7 @@ export class MockTranscriber implements DrumTranscriber {
 
     // Kick on beats 1 and 3 (eighth indices 0 and 4)
     if (eighthIndex === 0 || eighthIndex === 4) {
-      events.push(this.makeEvent(time, 'BD', 35, 0.85 + Math.random() * 0.15));
+      events.push(this.makeEvent(time, 'BD', 36, 0.85 + Math.random() * 0.15));
     }
 
     // Snare on beats 2 and 4 (eighth indices 2 and 6)
@@ -294,7 +264,7 @@ export class MockTranscriber implements DrumTranscriber {
       events.push(this.makeEvent(time, 'HH', 42, 0.7 + Math.random() * 0.2));
       if (eighthIndex === 0) {
         events.push(
-          this.makeEvent(time, 'BD', 35, 0.85 + Math.random() * 0.15),
+          this.makeEvent(time, 'BD', 36, 0.85 + Math.random() * 0.15),
         );
       }
       if (eighthIndex === 2) {
@@ -303,20 +273,25 @@ export class MockTranscriber implements DrumTranscriber {
         );
       }
     } else {
-      // Second half: tom fill (descending)
-      if (eighthIndex === 4 || eighthIndex === 5) {
+      // Second half: tom fill (descending) using 3 tom types
+      if (eighthIndex === 4) {
         events.push(
           this.makeEvent(time, 'SD', 38, 0.7 + Math.random() * 0.2),
         );
       }
+      if (eighthIndex === 5) {
+        events.push(
+          this.makeEvent(time, 'HT', 50, 0.75 + Math.random() * 0.2),
+        );
+      }
       if (eighthIndex === 6) {
         events.push(
-          this.makeEvent(time, 'TT', 47, 0.75 + Math.random() * 0.2),
+          this.makeEvent(time, 'MT', 47, 0.75 + Math.random() * 0.2),
         );
       }
       if (eighthIndex === 7) {
         events.push(
-          this.makeEvent(time, 'TT', 47, 0.7 + Math.random() * 0.2),
+          this.makeEvent(time, 'FT', 43, 0.7 + Math.random() * 0.2),
         );
         // Crash on the "next" beat 1 (but only if within duration)
         const crashTime = time + 60 / this.bpm / 2;
@@ -324,7 +299,7 @@ export class MockTranscriber implements DrumTranscriber {
           events.push(
             this.makeEvent(
               crashTime,
-              'CY+RD',
+              'CR',
               49,
               0.85 + Math.random() * 0.15,
             ),
@@ -333,7 +308,7 @@ export class MockTranscriber implements DrumTranscriber {
             this.makeEvent(
               crashTime,
               'BD',
-              35,
+              36,
               0.9 + Math.random() * 0.1,
             ),
           );
@@ -344,7 +319,7 @@ export class MockTranscriber implements DrumTranscriber {
 
   private makeEvent(
     timeSeconds: number,
-    drumClass: AdtofClassName,
+    drumClass: DrumClassName,
     midiPitch: number,
     confidence: number,
   ): RawDrumEvent {
@@ -368,13 +343,13 @@ export class MockTranscriber implements DrumTranscriber {
   ): ModelOutput {
     const fps = 100;
     const nFrames = Math.ceil(durationSeconds * fps);
-    const nClasses = NUM_ADTOF_CLASSES;
+    const nClasses = NUM_DRUM_CLASSES;
     const predictions = new Float32Array(nFrames * nClasses);
 
     // For each event, create a gaussian-like activation peak
     for (const event of events) {
       const centerFrame = Math.round(event.timeSeconds * fps);
-      const classIdx = ADTOF_CLASSES.findIndex(
+      const classIdx = DRUM_CLASSES.findIndex(
         (c) => c.name === event.drumClass,
       );
       if (classIdx < 0) continue;

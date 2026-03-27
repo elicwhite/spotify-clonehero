@@ -1,16 +1,20 @@
 /**
- * Map ADTOF model output classes to Clone Hero chart notes.
+ * Map CRNN model output classes to Clone Hero chart notes.
  *
- * ADTOF outputs 5 classes. This module maps them to the chart note types
- * and cymbal markers used in .chart files:
+ * The CRNN outputs 9 instrument classes. This module maps them to the 5-lane
+ * chart note types and cymbal markers used in .chart files (pro drums):
  *
- *   | ADTOF Class | Chart Note | Cymbal Marker | DrumNoteType |
- *   |-------------|-----------|---------------|--------------|
- *   | BD (35)     | 0 (kick)  | --            | kick         |
- *   | SD (38)     | 1 (red)   | --            | red          |
- *   | HH (42)     | 2 (yellow)| 66            | yellow       |
- *   | TT (47)     | 3 (blue)  | --            | blue         |
- *   | CY+RD (49)  | 4 (green) | 68            | green        |
+ *   | CRNN Class | Chart Note | Cymbal Marker | DrumNoteType |
+ *   |------------|-----------|---------------|--------------|
+ *   | BD (kick)  | 0 (kick)  | --            | kick         |
+ *   | SD (snare) | 1 (red)   | --            | red          |
+ *   | HT (hi-tom)| 2 (yellow)| --            | yellow       |
+ *   | MT (mid-tom)| 3 (blue) | --            | blue         |
+ *   | FT (floor-tom)| 4 (green)| --          | green        |
+ *   | HH (hihat) | 2 (yellow)| 66            | yellow       |
+ *   | CR (crash) | 4 (green) | 68            | green        |
+ *   | CR2 (crash2)| 3 (blue) | 67            | blue         |
+ *   | RD (ride)  | 3 (blue)  | 67            | blue         |
  *
  * Uses chart-io types (DrumNote, DrumNoteType, DrumNoteFlags) and timing
  * utilities (msToTick, buildTimedTempos) from the chart-io module.
@@ -24,10 +28,10 @@ import type {
   TimedTempo,
 } from '../chart-io/types';
 import {buildTimedTempos, msToTick} from '../chart-io/timing';
-import type {RawDrumEvent, AdtofClassName} from './types';
+import type {RawDrumEvent, DrumClassName} from './types';
 
 // ---------------------------------------------------------------------------
-// ADTOF class -> chart note mapping
+// CRNN class -> chart note mapping
 // ---------------------------------------------------------------------------
 
 interface ChartNoteMapping {
@@ -41,8 +45,8 @@ interface ChartNoteMapping {
   isCymbal: boolean;
 }
 
-/** Map from ADTOF class name to chart note properties. */
-const CLASS_TO_CHART: Record<AdtofClassName, ChartNoteMapping> = {
+/** Map from CRNN class name to chart note properties. */
+const CLASS_TO_CHART: Record<DrumClassName, ChartNoteMapping> = {
   BD: {
     noteType: 'kick',
     noteNumber: 0,
@@ -55,54 +59,78 @@ const CLASS_TO_CHART: Record<AdtofClassName, ChartNoteMapping> = {
     cymbalMarker: null,
     isCymbal: false,
   },
+  HT: {
+    noteType: 'yellow',
+    noteNumber: 2,
+    cymbalMarker: null,
+    isCymbal: false,
+  },
+  MT: {
+    noteType: 'blue',
+    noteNumber: 3,
+    cymbalMarker: null,
+    isCymbal: false,
+  },
+  FT: {
+    noteType: 'green',
+    noteNumber: 4,
+    cymbalMarker: null,
+    isCymbal: false,
+  },
   HH: {
     noteType: 'yellow',
     noteNumber: 2,
     cymbalMarker: 66,
     isCymbal: true,
   },
-  TT: {
-    noteType: 'blue',
-    noteNumber: 3,
-    cymbalMarker: null,
-    isCymbal: false,
-  },
-  'CY+RD': {
+  CR: {
     noteType: 'green',
     noteNumber: 4,
     cymbalMarker: 68,
     isCymbal: true,
   },
+  CR2: {
+    noteType: 'blue',
+    noteNumber: 3,
+    cymbalMarker: 67,
+    isCymbal: true,
+  },
+  RD: {
+    noteType: 'blue',
+    noteNumber: 3,
+    cymbalMarker: 67,
+    isCymbal: true,
+  },
 };
 
 /**
- * Get the chart note mapping for an ADTOF class.
+ * Get the chart note mapping for a drum class.
  */
-export function getChartMapping(drumClass: AdtofClassName): ChartNoteMapping {
+export function getChartMapping(drumClass: DrumClassName): ChartNoteMapping {
   return CLASS_TO_CHART[drumClass];
 }
 
 /**
- * Get the .chart note number for an ADTOF class.
+ * Get the .chart note number for a drum class.
  */
-export function adtofClassToNoteNumber(drumClass: AdtofClassName): number {
+export function drumClassToNoteNumber(drumClass: DrumClassName): number {
   return CLASS_TO_CHART[drumClass].noteNumber;
 }
 
 /**
- * Get the cymbal marker for an ADTOF class (or null if not a cymbal).
+ * Get the cymbal marker for a drum class (or null if not a cymbal).
  */
-export function adtofClassToCymbalMarker(
-  drumClass: AdtofClassName,
+export function drumClassToCymbalMarker(
+  drumClass: DrumClassName,
 ): number | null {
   return CLASS_TO_CHART[drumClass].cymbalMarker;
 }
 
 /**
- * Get the DrumNoteType for an ADTOF class.
+ * Get the DrumNoteType for a drum class.
  */
-export function adtofClassToDrumNoteType(
-  drumClass: AdtofClassName,
+export function drumClassToDrumNoteType(
+  drumClass: DrumClassName,
 ): DrumNoteType {
   return CLASS_TO_CHART[drumClass].noteType;
 }

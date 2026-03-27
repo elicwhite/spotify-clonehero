@@ -19,8 +19,8 @@
  */
 
 import FFT from 'fft.js';
-import type {SpectrogramConfig} from './types';
-import {DEFAULT_SPECTROGRAM_CONFIG} from './types';
+import type {SpectrogramConfig, MelSpectrogramConfig} from './types';
+import {DEFAULT_SPECTROGRAM_CONFIG, DEFAULT_MEL_CONFIG} from './types';
 
 // ---------------------------------------------------------------------------
 // Logarithmic Filterbank
@@ -404,4 +404,166 @@ export function computeLogFilteredSpectrogram(
   }
 
   return {spectrogram, nFrames, numBands};
+}
+
+// ---------------------------------------------------------------------------
+// Mel Filterbank (for CRNN model)
+// ---------------------------------------------------------------------------
+
+/** Convert frequency in Hz to mel scale (HTK formula). */
+export function hzToMel(hz: number): number {
+  return 2595.0 * Math.log10(1.0 + hz / 700.0);
+}
+
+/** Convert mel scale to frequency in Hz (HTK formula). */
+export function melToHz(mel: number): number {
+  return 700.0 * (Math.pow(10.0, mel / 2595.0) - 1.0);
+}
+
+/**
+ * Create a mel filterbank matrix.
+ *
+ * Produces nMels triangular filters on the mel scale, matching the
+ * training code in pipeline/build_training_data.py.
+ *
+ * @returns Array of nMels filters, each of length nFft/2+1.
+ */
+export function createMelFilterbank(
+  nFft: number,
+  sampleRate: number,
+  nMels: number,
+  fMin: number,
+  fMax: number,
+): Float32Array[] {
+  const nFreqs = Math.floor(nFft / 2) + 1;
+
+  const melMin = hzToMel(fMin);
+  const melMax = hzToMel(fMax);
+
+  // nMels + 2 evenly spaced mel points (includes left/right edges)
+  const melPoints = new Float64Array(nMels + 2);
+  for (let i = 0; i < nMels + 2; i++) {
+    melPoints[i] = melMin + (i * (melMax - melMin)) / (nMels + 1);
+  }
+
+  // Convert mel points to Hz
+  const hzPoints = new Float64Array(nMels + 2);
+  for (let i = 0; i < nMels + 2; i++) {
+    hzPoints[i] = melToHz(melPoints[i]);
+  }
+
+  // FFT bin frequencies: k * sampleRate / nFft for k = 0..nFreqs-1
+  // Equivalent to np.linspace(0, sampleRate/2, nFreqs)
+  const freqBins = new Float64Array(nFreqs);
+  for (let k = 0; k < nFreqs; k++) {
+    freqBins[k] = (k * sampleRate) / nFft;
+  }
+
+  // Build triangular filters
+  const filters: Float32Array[] = [];
+  for (let i = 0; i < nMels; i++) {
+    const filter = new Float32Array(nFreqs);
+    const lo = hzPoints[i];
+    const center = hzPoints[i + 1];
+    const hi = hzPoints[i + 2];
+
+    for (let j = 0; j < nFreqs; j++) {
+      const f = freqBins[j];
+      if (f >= lo && f <= center) {
+        filter[j] = (f - lo) / (center - lo + 1e-10);
+      } else if (f > center && f <= hi) {
+        filter[j] = (hi - f) / (hi - center + 1e-10);
+      }
+    }
+
+    filters.push(filter);
+  }
+
+  return filters;
+}
+
+/** Cached mel filterbank. */
+let cachedMelFilterbank: {
+  config: MelSpectrogramConfig;
+  filters: Float32Array[];
+} | null = null;
+
+/**
+ * Get or create the cached mel filterbank for the given config.
+ */
+export function getMelFilterbank(config: MelSpectrogramConfig): Float32Array[] {
+  if (
+    cachedMelFilterbank &&
+    cachedMelFilterbank.config.nFft === config.nFft &&
+    cachedMelFilterbank.config.sampleRate === config.sampleRate &&
+    cachedMelFilterbank.config.nMels === config.nMels &&
+    cachedMelFilterbank.config.fMin === config.fMin &&
+    cachedMelFilterbank.config.fMax === config.fMax
+  ) {
+    return cachedMelFilterbank.filters;
+  }
+
+  const filters = createMelFilterbank(
+    config.nFft,
+    config.sampleRate,
+    config.nMels,
+    config.fMin,
+    config.fMax,
+  );
+
+  cachedMelFilterbank = {config: {...config}, filters};
+  return filters;
+}
+
+/**
+ * Compute the mel spectrogram for the CRNN model.
+ *
+ * Pipeline:
+ *   1. STFT (nFft=2048, hop=441)
+ *   2. Power spectrogram (|STFT|²)
+ *   3. Apply mel filterbank (128 bands)
+ *   4. Log compression: log(power + 1e-6)
+ *
+ * @param audioData - Mono audio signal at the configured sample rate.
+ * @param config - Mel spectrogram configuration.
+ * @returns Float32Array of shape [nFrames, nMels] (row-major), plus nFrames and nMels.
+ */
+export function computeMelSpectrogram(
+  audioData: Float32Array,
+  config: MelSpectrogramConfig = DEFAULT_MEL_CONFIG,
+): {spectrogram: Float32Array; nFrames: number; nMels: number} {
+  // Step 1-2: STFT + magnitude
+  const {magnitudes, nFrames, numFftBins} = computeMagnitudeSpectrogram(
+    audioData,
+    config.nFft,
+    config.hopLength,
+  );
+
+  if (nFrames === 0) {
+    return {spectrogram: new Float32Array(0), nFrames: 0, nMels: config.nMels};
+  }
+
+  // Step 3: Apply mel filterbank to power spectrum
+  const filters = getMelFilterbank(config);
+  const nMels = filters.length;
+  const spectrogram = new Float32Array(nFrames * nMels);
+
+  for (let frame = 0; frame < nFrames; frame++) {
+    const magOffset = frame * numFftBins;
+    const specOffset = frame * nMels;
+
+    for (let band = 0; band < nMels; band++) {
+      let sum = 0;
+      const filter = filters[band];
+      for (let bin = 0; bin < numFftBins; bin++) {
+        // Power = magnitude² (magnitudes from computeMagnitudeSpectrogram are |STFT|)
+        const mag = magnitudes[magOffset + bin];
+        sum += mag * mag * filter[bin];
+      }
+      // Step 4: Log compression matching training code: log(power + 1e-6)
+      spectrogram[specOffset + band] = Math.log(sum + 1e-6);
+    }
+  }
+
+  return {spectrogram, nFrames, nMels};
 }

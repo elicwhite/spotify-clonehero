@@ -43,5 +43,14 @@
         "~/.zsh"
       ]
     }
+  },
+  "pluginConfigs": {
+    "chrome-devtools-mcp@claude-plugins-official": {
+      "mcpServers": {
+        "chrome-devtools": {
+          "browserUrl": "http://127.0.0.1:9222"
+        }
+      }
+    }
   }
 }
