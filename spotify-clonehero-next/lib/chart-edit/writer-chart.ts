@@ -55,11 +55,13 @@ const drumEventTypeToNoteNumber: Partial<Record<EventType, number>> = {
   [eventTypes.fiveOrangeFourGreenDrum]: 4,
   [eventTypes.fiveGreenDrum]: 5,
   [eventTypes.kick2x]: 32,
+  [eventTypes.kickAccent]: 33,
   [eventTypes.redAccent]: 34,
   [eventTypes.yellowAccent]: 35,
   [eventTypes.blueAccent]: 36,
   [eventTypes.fiveOrangeFourGreenAccent]: 37,
   [eventTypes.fiveGreenAccent]: 38,
+  [eventTypes.kickGhost]: 39,
   [eventTypes.redGhost]: 40,
   [eventTypes.yellowGhost]: 41,
   [eventTypes.blueGhost]: 42,
@@ -264,10 +266,19 @@ function serializeEventsSection(doc: ChartDocument): string[] {
   // The vocals instrument track is not supported in v1 (drums-only).
   // If added later, phrases would be emitted as E "phrase_start" / E "phrase_end".
 
+  // Collect coda ticks from drum freestyle sections (deduplicated)
+  const codaTicks = new Set<number>();
+  for (const track of doc.trackData) {
+    for (const fs of track.drumFreestyleSections) {
+      if (fs.isCoda) codaTicks.add(fs.tick);
+    }
+  }
+
   const events: { tick: number; text: string }[] = [
     ...doc.sections.map((s) => ({ tick: s.tick, text: `section ${s.name}` })),
     ...doc.endEvents.map((e) => ({ tick: e.tick, text: 'end' })),
     ...doc.lyrics.map((l) => ({ tick: l.tick, text: `lyric ${l.text}` })),
+    ...[...codaTicks].map((tick) => ({ tick, text: 'coda' })),
   ];
 
   events.sort((a, b) => a.tick - b.tick);
@@ -316,11 +327,12 @@ function serializeTrackSection(track: TrackData): string[] {
     events.push({ tick: sp.tick, sortKey: 0, kind: 'S', value: 2, length: sp.length });
   }
 
-  // Drum freestyle sections (non-coda) → S 64
+  // Drum freestyle sections → S 64
+  // Coda sections are also written as S 64; the isCoda flag is determined
+  // on parse by whether the section's tick >= the first [coda] text event
+  // in the [Events] section (see serializeEventsSection for coda events).
   for (const fs of track.drumFreestyleSections) {
-    if (!fs.isCoda) {
-      events.push({ tick: fs.tick, sortKey: 0, kind: 'S', value: 64, length: fs.length });
-    }
+    events.push({ tick: fs.tick, sortKey: 0, kind: 'S', value: 64, length: fs.length });
   }
 
   // Flex lanes → S 65 (single) or S 66 (double)

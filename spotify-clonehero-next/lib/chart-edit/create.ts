@@ -40,7 +40,7 @@ export function createChart(options?: {
     vocalPhrases: [],
     hasLyrics: false,
     hasVocals: false,
-    originalFormat: options?.format ?? 'mid',
+    originalFormat: options?.format ?? 'chart',
     metadata: {},
     assets: [],
   };

@@ -184,8 +184,13 @@ export function serializeMidi(doc: ChartDocument): Uint8Array {
   // Track 0: tempo map
   tracks.push(buildTempoTrack(doc));
 
-  // Track 1: events (sections, end events, lyrics)
+  // Track 1: events (sections, end events)
   tracks.push(buildEventsTrack(doc));
+
+  // PART VOCALS track (lyrics + phrase markers)
+  if (doc.lyrics.length > 0 || doc.vocalPhrases.length > 0) {
+    tracks.push(buildVocalsTrack(doc));
+  }
 
   // Group trackData by instrument
   const byInstrument = groupByInstrument(doc.trackData);
@@ -279,14 +284,6 @@ function buildEventsTrack(doc: ChartDocument): MidiEvent[] {
     events.push({
       tick: endEvent.tick,
       event: { deltaTime: 0, meta: true, type: 'text', text: '[end]' } as MidiEvent,
-    });
-  }
-
-  // Lyrics (on the events track — separate from vocal track)
-  for (const lyric of doc.lyrics) {
-    events.push({
-      tick: lyric.tick,
-      event: { deltaTime: 0, meta: true, type: 'lyrics', text: lyric.text } as MidiEvent,
     });
   }
 
@@ -495,9 +492,12 @@ function buildInstrumentTrack(
       }
     }
 
-    // Drum freestyle / activation lanes → note 120 (skip coda sections)
+    // Drum freestyle / activation lanes → note 120
+    // Write ALL sections (including coda) as note 120 so they survive
+    // round-trip. Coda sections are ALSO emitted as [coda] text events
+    // on the EVENTS track (in buildEventsTrack), which scan-chart uses
+    // to set the isCoda flag on re-parse.
     for (const fs of td.drumFreestyleSections) {
-      if (fs.isCoda) continue;
       const key = `${fs.tick}:${fs.length}`;
       if (!emittedActivation.has(key)) {
         emittedActivation.add(key);
@@ -598,9 +598,33 @@ function buildInstrumentTrack(
     }
   }
 
-  // v1: vocalPhrases are intentionally not written. The vocals instrument track
-  // is not supported in v1 (drums-only). vocalPhrases would go on PART VOCALS
-  // as note 105/106 phrase markers.
+  return finalizeMidiTrack(events);
+}
+
+/**
+ * Build the PART VOCALS track: lyrics as meta events + phrase markers as
+ * note 105 on/off pairs.
+ */
+function buildVocalsTrack(doc: ChartDocument): MidiEvent[] {
+  const events: AbsoluteEvent[] = [];
+
+  events.push({
+    tick: 0,
+    event: { deltaTime: 0, meta: true, type: 'trackName', text: 'PART VOCALS' } as MidiEvent,
+  });
+
+  // Lyrics as MIDI lyric meta events (type 0x05)
+  for (const lyric of doc.lyrics) {
+    events.push({
+      tick: lyric.tick,
+      event: { deltaTime: 0, meta: true, type: 'lyrics', text: lyric.text } as MidiEvent,
+    });
+  }
+
+  // Vocal phrase markers as note 105 on/off pairs
+  for (const phrase of doc.vocalPhrases) {
+    addNoteOnOff(events, phrase.tick, phrase.length, 105, 100);
+  }
 
   return finalizeMidiTrack(events);
 }
@@ -627,8 +651,12 @@ function addNoteOnOff(
       velocity,
     } as MidiEvent,
   });
+  // Use length of at least 1 so noteOff is at tick+1, ensuring correct
+  // noteOn/noteOff ordering. Zero-length notes place noteOff at the same
+  // tick, and finalizeMidiTrack sorts noteOff before noteOn at equal ticks,
+  // which causes scan-chart to discard the note.
   events.push({
-    tick: tick + length,
+    tick: tick + Math.max(length, 1),
     event: {
       deltaTime: 0,
       channel: 0,

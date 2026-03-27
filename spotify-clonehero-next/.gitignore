@@ -46,3 +46,6 @@ supabase/.branches
 
 # Large ONNX model files (downloaded at runtime and cached in OPFS)
 public/models/*.onnx
+
+# Real-charts test report (generated, user-specific)
+real-charts-report.json

@@ -491,10 +491,11 @@ describe('serializeMidi', () => {
     const bytes = serializeMidi(doc);
     const midi = parseMidi(bytes);
 
-    // Instrument track (track 2) should NOT have note 120
+    // Instrument track (track 2) should ALSO have note 120 for the coda section
+    // (so it round-trips as a drumFreestyleSection; the [coda] text sets isCoda)
     const drumTrack = midi.tracks[2];
     const activationNoteOns = findNoteOns(drumTrack, 120);
-    expect(activationNoteOns.length).toBe(0);
+    expect(activationNoteOns.length).toBe(1);
 
     // EVENTS track (track 1) should have [coda] text event
     const eventsTrack = midi.tracks[1];

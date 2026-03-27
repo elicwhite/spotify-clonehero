@@ -14,8 +14,8 @@ describe('createChart', () => {
       expect(doc.chartTicksPerBeat).toBe(480);
     });
 
-    it('defaults to mid format', () => {
-      expect(doc.originalFormat).toBe('mid');
+    it('defaults to chart format', () => {
+      expect(doc.originalFormat).toBe('chart');
     });
 
     it('has one tempo at tick 0 with 120 BPM', () => {
@@ -108,12 +108,12 @@ describe('createChart', () => {
   });
 
   describe('createChart -> writeChart round-trip', () => {
-    it('produces notes.mid and song.ini for default (mid) format', () => {
+    it('produces notes.chart and song.ini for default (chart) format', () => {
       const doc = createChart();
       const files = writeChart(doc);
       const fileNames = files.map((f) => f.fileName);
 
-      expect(fileNames).toContain('notes.mid');
+      expect(fileNames).toContain('notes.chart');
       expect(fileNames).toContain('song.ini');
     });
 
@@ -129,9 +129,9 @@ describe('createChart', () => {
     it('produces non-empty chart file', () => {
       const doc = createChart();
       const files = writeChart(doc);
-      const midFile = files.find((f) => f.fileName === 'notes.mid');
-      expect(midFile).toBeDefined();
-      expect(midFile!.data.length).toBeGreaterThan(0);
+      const chartFile = files.find((f) => f.fileName === 'notes.chart');
+      expect(chartFile).toBeDefined();
+      expect(chartFile!.data.length).toBeGreaterThan(0);
     });
   });
 
