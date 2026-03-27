@@ -43,15 +43,13 @@ const ORT_CDN_URL =
 const ORT_CDN_BASE =
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.0-dev.20251116-b39e144322/dist/';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let ort: any = null;
 
 async function loadOrt() {
   if (ort) return ort;
   // In a worker, use importScripts to load ONNX Runtime
   importScripts(ORT_CDN_URL);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ort = (self as any).ort;
+    ort = (self as any).ort;
   if (!ort) throw new Error('Failed to load ONNX Runtime in worker');
   ort.env.wasm.wasmPaths = ORT_CDN_BASE;
   ort.env.wasm.numThreads = 1; // Workers don't need multi-threaded WASM
@@ -85,8 +83,7 @@ function stereoToMono(stereo: Float32Array): Float32Array {
 // ---------------------------------------------------------------------------
 
 async function windowedInference(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  session: any,
+    session: any,
   mel: Float32Array,
   nFrames: number,
   nMels: number,
