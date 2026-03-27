@@ -688,12 +688,20 @@ function validateChart(
 // Main test suite — one it() per chart for Jest sharding
 // ---------------------------------------------------------------------------
 
-const describeFn = CHART_DIR ? describe : describe.skip;
+if (!CHART_DIR) {
+  // Placeholder so the suite isn't empty when CHART_DIR is unset (e.g. CI)
+  it('skipped — CHART_DIR not set', () => {});
+}
 
-describeFn('real-chart cross-format validation', () => {
-  if (!CHART_DIR) return;
+// Early-exit: the rest of the file requires CHART_DIR
+// eslint-disable-next-line jest/no-conditional-in-test
+if (!CHART_DIR) {
+  // Already registered the placeholder test above
+} else {
 
-  const chartDir = CHART_DIR.replace(/^~/, process.env.HOME || '~');
+const chartDir = CHART_DIR.replace(/^~/, process.env.HOME || '~');
+
+describe('real-chart cross-format validation', () => {
 
   if (!existsSync(chartDir)) {
     throw new Error(`CHART_DIR does not exist: ${chartDir}`);
@@ -755,3 +763,5 @@ describeFn('real-chart cross-format validation', () => {
     },
   );
 });
+
+} // end if (CHART_DIR)
