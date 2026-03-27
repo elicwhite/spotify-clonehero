@@ -1,11 +1,6 @@
 /**
  * Syllable splitter using Hypher (TeX hyphenation patterns).
  *
- * Strategy: split all words at hyphenation points, then after CTC alignment,
- * merge syllables whose timestamps are too close together. This matches how
- * music charts work — they only split syllables that are actually drawn out
- * in the singing, not every linguistic syllable.
- *
  * Ported from ~/projects/vocal-alignment/browser-aligner/src/syllabify.ts
  */
 
@@ -62,43 +57,6 @@ export function syllabifyLyrics(
           newLine: result.length === lineStartIdx,
         });
       }
-    }
-  }
-
-  return result;
-}
-
-/**
- * Merge aligned syllables that are too close together.
- *
- * After CTC alignment, syllables within a word that have nearly identical
- * timestamps should be merged back into one — they weren't drawn out enough
- * to warrant separate timing. This matches how music charts only split
- * syllables for long, drawn-out words.
- *
- * @param minGapMs Minimum gap between syllables to keep them split (default 80ms)
- */
-export function mergeCloseSyllables<
-  T extends {text: string; startMs: number; joinNext: boolean},
->(syllables: T[], minGapMs: number = 80): T[] {
-  if (syllables.length <= 1) return syllables;
-
-  const result: T[] = [syllables[0]];
-
-  for (let i = 1; i < syllables.length; i++) {
-    const prev = result[result.length - 1];
-    const curr = syllables[i];
-
-    // Merge if: same word (prev.joinNext) AND gap is too small
-    if (prev.joinNext && curr.startMs - prev.startMs < minGapMs) {
-      // Merge into previous: combine text, keep prev's startMs
-      result[result.length - 1] = {
-        ...prev,
-        text: prev.text + curr.text,
-        joinNext: curr.joinNext,
-      };
-    } else {
-      result.push(curr);
     }
   }
 

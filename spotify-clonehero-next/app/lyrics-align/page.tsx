@@ -1,14 +1,24 @@
 'use client';
 
 import {useEffect, useState, useCallback, useRef} from 'react';
+import {Download} from 'lucide-react';
 import {Player} from '@remotion/player';
-import {parseChartFile} from '@eliwhite/scan-chart';
+import {toast} from 'sonner';
 import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
 import {KaraokeVideo} from '@/app/karaoke/KaraokeVideo';
-import {TREATMENTS, type TreatmentId} from '@/app/karaoke/treatments/types';
+import type {TreatmentId} from '@/app/karaoke/treatments/types';
 import {Button} from '@/components/ui/button';
-import {getExtension, getBasename, hasAudioName, hasChartExtension, hasIniName} from '@/lib/src-shared/utils';
-import {findChartData, findAudioFiles, type Files} from '@/lib/preview/chorus-chart-processing';
+import {getExtension, getBasename} from '@/lib/src-shared/utils';
+import {findAudioFiles, type Files} from '@/lib/preview/chorus-chart-processing';
+import {readChart, writeChart, type ChartDocument} from '@/lib/chart-edit';
+import {exportAsZip, exportAsSng} from '@/lib/chart-export';
+import {alignedSyllablesToChartLyrics} from '@/lib/lyrics-align/chart-lyrics';
+import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
+import type {
+  LoadedFiles,
+  SourceFormat,
+} from '@/lib/lyrics-align/chart-file-readers';
+import ChartDropZone from './ChartDropZone';
 
 const FPS = 30;
 
@@ -22,9 +32,14 @@ interface LoadedChart {
   charter: string;
   audioFiles: Files;
   audioUrls: string[];
-  /** Pre-existing vocals file if available (skip Demucs) */
   vocalsFile: {data: Uint8Array; mimeType: string} | null;
   songLength: number;
+  chartDoc: ChartDocument;
+  /** All raw files from the input — needed for re-export. */
+  rawFiles: LoadedFiles['files'];
+  sourceFormat: SourceFormat;
+  originalName: string;
+  sngMetadata?: Record<string, string>;
 }
 
 interface PipelineStep {
@@ -44,12 +59,7 @@ const ALIGN_STEPS: PipelineStep[] = [
     status: 'pending',
     detail: 'Runs in isolated worker',
   },
-  {
-    id: 'syllabify',
-    label: 'Syllabify lyrics',
-    status: 'pending',
-    detail: '',
-  },
+  {id: 'syllabify', label: 'Syllabify lyrics', status: 'pending', detail: ''},
   {
     id: 'ctc',
     label: 'Run CTC model (wav2vec2)',
@@ -103,46 +113,17 @@ function filesToBlobUrls(files: Files): string[] {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Directory scanner — uses shared helpers from lib/
-// ---------------------------------------------------------------------------
+function loadChartFromFiles(loaded: LoadedFiles): LoadedChart {
+  const {files, sourceFormat, originalName, sngMetadata} = loaded;
 
-async function readChartDirectory(
-  dirHandle: FileSystemDirectoryHandle,
-): Promise<Files> {
-  const files: Files = [];
-  for await (const [name, handle] of dirHandle.entries()) {
-    if (handle.kind !== 'file') continue;
-    if (hasChartExtension(name) || hasAudioName(name) || hasIniName(name)) {
-      const file = await (handle as FileSystemFileHandle).getFile();
-      files.push({fileName: name, data: new Uint8Array(await file.arrayBuffer())});
-    }
-  }
-  return files;
-}
-
-async function loadChartFromDirectory(
-  dirHandle: FileSystemDirectoryHandle,
-): Promise<LoadedChart> {
-  const files = await readChartDirectory(dirHandle);
-
-  // Parse chart file using shared helper
-  const {chartData, format} = findChartData(files);
-  const parsed = parseChartFile(chartData, format, {
-    song_length: 0,
-    hopo_frequency: 0,
-    eighthnote_hopo: false,
-    multiplier_note: 0,
-    sustain_cutoff_threshold: -1,
-    chord_snap_threshold: 0,
-    five_lane_drums: false,
-    pro_drums: false,
-  });
+  // chart-edit's readChart expects { fileName, data }
+  // Our chart-file-readers already produce that shape
+  const chartDoc = readChart(files);
 
   // Find audio files using shared helper
   const audioFiles = findAudioFiles(files);
   if (audioFiles.length === 0) {
-    throw new Error('No audio files found in this chart directory');
+    throw new Error('No audio files found');
   }
 
   // Check for pre-existing vocals stem
@@ -150,14 +131,13 @@ async function loadChartFromDirectory(
     f => getBasename(f.fileName).toLowerCase() === 'vocals',
   );
 
-  // Metadata from scan-chart, with directory name as fallback
-  const name = parsed.metadata?.name ?? dirHandle.name;
-  const artist = parsed.metadata?.artist ?? 'Unknown';
-  const charter = parsed.metadata?.charter ?? 'Unknown';
+  const name = chartDoc.metadata.name ?? 'Unknown';
+  const artist = chartDoc.metadata.artist ?? 'Unknown';
+  const charter = chartDoc.metadata.charter ?? 'Unknown';
 
   // Estimate song length from last tempo marker
-  const lastTempo = parsed.tempos[parsed.tempos.length - 1];
-  const songLength = lastTempo ? lastTempo.msTime + 60000 : 180000;
+  const lastTempo = chartDoc.tempos[chartDoc.tempos.length - 1];
+  const songLength = lastTempo ? (lastTempo as any).msTime + 60000 : 180000;
 
   return {
     name,
@@ -172,6 +152,11 @@ async function loadChartFromDirectory(
         }
       : null,
     songLength,
+    chartDoc,
+    rawFiles: files,
+    sourceFormat,
+    originalName,
+    sngMetadata,
   };
 }
 
@@ -184,9 +169,13 @@ export default function LyricsAlignPage() {
   const [error, setError] = useState<string | null>(null);
   const [chart, setChart] = useState<LoadedChart | null>(null);
   const [lyrics, setLyrics] = useState('');
-  const [treatment, setTreatment] = useState<TreatmentId>('highlight');
+  const treatment: TreatmentId = 'scroll';
   const [alignedLines, setAlignedLines] = useState<LyricLine[]>([]);
+  const [alignedSyllables, setAlignedSyllables] = useState<AlignedSyllable[]>(
+    [],
+  );
   const [alignSteps, setAlignSteps] = useState<PipelineStep[]>(ALIGN_STEPS);
+  const [showLyricsWarning, setShowLyricsWarning] = useState(false);
   const initStartedRef = useRef(false);
 
   const updateAlignStep = useCallback(
@@ -220,24 +209,22 @@ export default function LyricsAlignPage() {
     };
   }, [chart]);
 
-  const handlePickDirectory = useCallback(async () => {
+  const handleChartLoaded = useCallback((loaded: LoadedFiles) => {
+    setStatus('loading-chart');
+    setError(null);
+
     try {
-      const dirHandle = await window.showDirectoryPicker({
-        id: 'lyrics-align-chart',
-      });
+      const result = loadChartFromFiles(loaded);
+      setChart(result);
 
-      setStatus('loading-chart');
-      setError(null);
+      // Check for existing lyrics and warn
+      if (result.chartDoc.hasLyrics && result.chartDoc.lyrics.length > 0) {
+        setShowLyricsWarning(true);
+      }
 
-      const loaded = await loadChartFromDirectory(dirHandle);
-      setChart(loaded);
       setStatus('input');
     } catch (e: any) {
-      if (e.name === 'AbortError') {
-        // User cancelled the picker
-        return;
-      }
-      setError(e.message ?? 'Failed to load chart directory');
+      setError(e.message ?? 'Failed to load chart');
       setStatus('error');
     }
   }, []);
@@ -247,6 +234,8 @@ export default function LyricsAlignPage() {
 
     setError(null);
     setAlignedLines([]);
+    setAlignedSyllables([]);
+    setShowLyricsWarning(false);
     setAlignSteps(
       ALIGN_STEPS.map(s => ({
         ...s,
@@ -262,7 +251,6 @@ export default function LyricsAlignPage() {
       let vocals16k: Float32Array;
 
       if (chart.vocalsFile) {
-        // Vocals stem available — skip Demucs
         updateAlignStep('decode', {
           status: 'done',
           detail: 'Vocals stem found in chart',
@@ -288,14 +276,12 @@ export default function LyricsAlignPage() {
           endTime: Date.now(),
         });
       } else {
-        // No vocals stem — run full Demucs separation
         updateAlignStep('decode', {
           status: 'active',
           detail: 'Decoding audio file...',
           startTime: Date.now(),
         });
 
-        // Prefer "song" audio, then first available
         const songFile =
           chart.audioFiles.find(
             f => getBasename(f.fileName).toLowerCase() === 'song',
@@ -336,7 +322,6 @@ export default function LyricsAlignPage() {
         });
       }
 
-      // CTC alignment (runs in worker — UI stays responsive)
       updateAlignStep('ctc', {
         status: 'active',
         detail: 'Loading wav2vec2 model...',
@@ -392,6 +377,7 @@ export default function LyricsAlignPage() {
       );
 
       setAlignedLines(result.lines);
+      setAlignedSyllables(result.syllables);
       setStatus('done');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -404,6 +390,69 @@ export default function LyricsAlignPage() {
       );
     }
   }, [chart, lyrics, updateAlignStep]);
+
+  const handleDownload = useCallback(() => {
+    if (!chart || alignedSyllables.length === 0) return;
+
+    try {
+      // Convert aligned syllables to chart lyrics format
+      const {lyrics: chartLyrics, vocalPhrases} =
+        alignedSyllablesToChartLyrics(
+          alignedSyllables,
+          chart.chartDoc.tempos,
+          chart.chartDoc.chartTicksPerBeat,
+        );
+
+      // Update the chart document with lyrics
+      const doc = {...chart.chartDoc};
+      doc.lyrics = chartLyrics;
+      doc.vocalPhrases = vocalPhrases;
+      doc.hasLyrics = true;
+
+      // Write chart back to files
+      const chartFiles = writeChart(doc);
+
+      // Build export file list: chart files + original audio files
+      const exportFiles: {filename: string; data: Uint8Array}[] = [];
+      for (const f of chartFiles) {
+        exportFiles.push({filename: f.fileName, data: f.data});
+      }
+      // Add audio files from the original input that writeChart doesn't include
+      // (writeChart returns chart + ini + assets; assets already include audio passed through)
+      // Check if audio files are already in the output via assets
+      const outputNames = new Set(exportFiles.map(f => f.filename.toLowerCase()));
+      for (const f of chart.rawFiles) {
+        if (!outputNames.has(f.fileName.toLowerCase())) {
+          exportFiles.push({filename: f.fileName, data: f.data});
+        }
+      }
+
+      // Package in original format, using the original filename
+      const ext = chart.sourceFormat === 'sng' ? '.sng' : '.zip';
+
+      let blob: Blob;
+      if (chart.sourceFormat === 'sng') {
+        const sngBytes = exportAsSng(exportFiles);
+        blob = new Blob([sngBytes], {type: 'application/octet-stream'});
+      } else {
+        blob = exportAsZip(exportFiles);
+      }
+
+      const filename = chart.originalName + ext;
+
+      // Trigger browser download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast.success('Chart exported with lyrics');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Export failed');
+    }
+  }, [chart, alignedSyllables]);
 
   const showKaraoke = status === 'done' && alignedLines.length > 0;
   const songLength =
@@ -420,20 +469,14 @@ export default function LyricsAlignPage() {
             Lyrics Alignment Tool
           </h1>
           <p className="text-muted-foreground text-sm sm:text-base">
-            Select a chart folder, paste lyrics, and align them to the audio
+            Open a chart, paste lyrics, align them to the audio, and export
           </p>
         </header>
 
-        {/* Step 1: Pick a chart directory */}
+        {/* Step 1: Pick a chart */}
         {(status === 'idle' || (status === 'error' && !chart)) && (
           <div className="space-y-4">
-            <Button size="lg" onClick={handlePickDirectory}>
-              Select Chart Folder
-            </Button>
-            <p className="text-sm text-muted-foreground">
-              Choose a Clone Hero song directory containing a chart file
-              (notes.chart / notes.mid) and audio files.
-            </p>
+            <ChartDropZone onLoaded={handleChartLoaded} />
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
         )}
@@ -442,9 +485,7 @@ export default function LyricsAlignPage() {
         {status === 'loading-chart' && (
           <div className="flex items-center gap-3">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-foreground" />
-            <p className="text-muted-foreground">
-              Reading chart directory...
-            </p>
+            <p className="text-muted-foreground">Reading chart files...</p>
           </div>
         )}
 
@@ -466,12 +507,27 @@ export default function LyricsAlignPage() {
                   {chart.audioFiles.length} audio file
                   {chart.audioFiles.length !== 1 ? 's' : ''}
                   {chart.vocalsFile && ' (vocals stem available)'}
+                  {' '}&middot; {chart.sourceFormat === 'sng' ? '.sng' : chart.sourceFormat === 'zip' ? '.zip' : 'folder'}
                 </p>
               </div>
-              <Button variant="outline" size="sm" onClick={handlePickDirectory}>
-                Change
-              </Button>
+              <ChartDropZone onLoaded={handleChartLoaded} />
             </div>
+
+            {/* Existing lyrics warning */}
+            {showLyricsWarning && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+                <p className="text-sm text-yellow-200">
+                  This chart already has lyrics. Aligning will replace them.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => setShowLyricsWarning(false)}>
+                  OK, continue
+                </Button>
+              </div>
+            )}
 
             {/* Lyrics textarea */}
             <div>
@@ -489,7 +545,7 @@ export default function LyricsAlignPage() {
 
             <Button
               onClick={handleAlign}
-              disabled={!lyrics.trim()}
+              disabled={!lyrics.trim() || showLyricsWarning}
               size="lg">
               Align Lyrics
             </Button>
@@ -503,35 +559,34 @@ export default function LyricsAlignPage() {
           <ProgressCard steps={alignSteps} error={error} />
         )}
 
-        {/* Step 3: Results — karaoke viewer */}
+        {/* Step 3: Results — karaoke viewer + download */}
         {showKaraoke && chart && (
           <div className="space-y-4">
             <div className="flex items-center gap-4 flex-wrap">
               <span className="text-sm text-muted-foreground">
                 {alignedLines.reduce((n, l) => n + l.syllables.length, 0)}{' '}
-                words aligned into {alignedLines.length} lines
+                syllables aligned into {alignedLines.length} lines
               </span>
-              <div className="flex gap-2">
-                {TREATMENTS.map(t => (
-                  <Button
-                    key={t.id}
-                    variant={treatment === t.id ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setTreatment(t.id)}>
-                    {t.label}
-                  </Button>
-                ))}
-              </div>
+              <div className="flex-1" />
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
                   setAlignedLines([]);
+                  setAlignedSyllables([]);
                   setStatus('input');
                 }}>
                 Re-align
               </Button>
+              <Button size="sm" onClick={handleDownload}>
+                <Download className="h-4 w-4 mr-1" />
+                Download updated .{chart.sourceFormat === 'sng' ? 'sng' : 'zip'}
+              </Button>
             </div>
+
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Preview
+            </h3>
 
             <Player
               component={KaraokeVideo}

@@ -4,9 +4,8 @@
  * Session creation and inference block for seconds — running them here
  * keeps the UI responsive.
  *
- * Now supports syllable-level alignment: lyrics are automatically syllabified
- * using TeX hyphenation patterns, aligned at the character level, then merged
- * where syllables are too close together.
+ * Supports syllable-level alignment: lyrics are automatically syllabified
+ * using TeX hyphenation patterns and aligned at the character level.
  *
  * Messages:
  *   IN:  { type: "init" }
@@ -23,7 +22,7 @@
 import * as ort from 'onnxruntime-web';
 import {forcedAlign} from './viterbi';
 import {getCachedModel} from './model-cache';
-import {syllabifyLyrics, mergeCloseSyllables} from './syllabify';
+import {syllabifyLyrics} from './syllabify';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -430,24 +429,21 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
     }
   }
 
-  // Merge syllables that are too close together (matching chart behavior)
-  const mergedSyls = mergeCloseSyllables(alignedSyls);
-
-  // 5. Build words from merged syllables and track which belong to each word
+  // 5. Build words from syllables and track which belong to each word
   const words: AlignedWord[] = [];
   const wordSylRanges: [number, number][] = []; // [startSylIdx, endSylIdx) per word
   let wordText = '';
   let wordStartMs = 0;
   let wordStartSyl = 0;
   let wordNewLine = false;
-  for (let si = 0; si < mergedSyls.length; si++) {
+  for (let si = 0; si < alignedSyls.length; si++) {
     if (wordText === '') {
-      wordStartMs = mergedSyls[si].startMs;
+      wordStartMs = alignedSyls[si].startMs;
       wordStartSyl = si;
-      wordNewLine = mergedSyls[si].newLine;
+      wordNewLine = alignedSyls[si].newLine;
     }
-    wordText += mergedSyls[si].text;
-    if (!mergedSyls[si].joinNext) {
+    wordText += alignedSyls[si].text;
+    if (!alignedSyls[si].joinNext) {
       words.push({text: wordText, startMs: wordStartMs, newLine: wordNewLine});
       wordSylRanges.push([wordStartSyl, si + 1]);
       wordText = '';
@@ -455,7 +451,7 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
   }
   if (wordText) {
     words.push({text: wordText, startMs: wordStartMs, newLine: wordNewLine});
-    wordSylRanges.push([wordStartSyl, mergedSyls.length]);
+    wordSylRanges.push([wordStartSyl, alignedSyls.length]);
   }
 
   // Group words into display lines
@@ -473,8 +469,8 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
         // Add space before first syllable of non-first words
         const prefix = lineSyls.length > 0 && si === ss ? ' ' : '';
         lineSyls.push({
-          text: prefix + mergedSyls[si].text,
-          msTime: mergedSyls[si].startMs,
+          text: prefix + alignedSyls[si].text,
+          msTime: alignedSyls[si].startMs,
         });
       }
     }
@@ -483,10 +479,10 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
   }
 
   progress(
-    `Done: ${mergedSyls.length} syllables (${alignedSyls.length - mergedSyls.length} merged), ${lines.length} lines`,
+    `Done: ${alignedSyls.length} syllables, ${lines.length} lines`,
   );
 
-  post({type: 'result', lines, words, syllables: mergedSyls, durationMs});
+  post({type: 'result', lines, words, syllables: alignedSyls, durationMs});
 }
 
 // ---------------------------------------------------------------------------

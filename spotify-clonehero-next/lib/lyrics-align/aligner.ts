@@ -23,6 +23,8 @@ export interface AlignedSyllable {
   text: string;
   startMs: number;
   joinNext: boolean;
+  /** True if this syllable starts a new input lyrics line. */
+  newLine: boolean;
 }
 
 // ---------------------------------------------------------------------------
