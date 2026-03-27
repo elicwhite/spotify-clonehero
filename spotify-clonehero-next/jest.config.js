@@ -5,7 +5,7 @@ const createJestConfig = nextJest({dir: './'});
 
 // Any custom config you want to pass to Jest
 const customJestConfig = {
-  // setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  // setupFilesAfterSetup: ['<rootDir>/jest.setup.js'],
   testMatch: [
     '**/__tests__/**/*.test.ts',
     '**/__tests__/**/*.test.tsx',
@@ -18,7 +18,19 @@ const customJestConfig = {
     '!lib/**/*.d.ts',
     '!lib/**/__tests__/**',
   ],
+  // webfft is ESM-only; transform it through SWC like our own code
+  transformIgnorePatterns: ['/node_modules/(?!webfft/)'],
 };
 
 // createJestConfig is exported in this way to ensure that next/jest can load the Next.js configuration, which is async
-module.exports = createJestConfig(customJestConfig);
+// Wrap to override transformIgnorePatterns AFTER next/jest sets its defaults,
+// since next/jest prepends its own node_modules pattern that would shadow ours.
+const baseConfig = createJestConfig(customJestConfig);
+module.exports = async () => {
+  const config = await baseConfig();
+  config.transformIgnorePatterns = [
+    '/node_modules/(?!webfft/).+\\.js$',
+    '^.+\\.module\\.(css|sass|scss)$',
+  ];
+  return config;
+};

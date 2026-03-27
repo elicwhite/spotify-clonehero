@@ -32,9 +32,6 @@ import {syllabifyLyrics, mergeCloseSyllables} from './syllabify';
 const ORT_WASM_CDN =
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
 
-const WAV2VEC2_MODEL_URL =
-  'https://huggingface.co/onnx-community/wav2vec2-base-960h-ONNX/resolve/main/onnx/model_quantized.onnx';
-
 const VOCAB: string[] = [
   '<pad>', '<s>', '</s>', '<unk>', '|',
   'E', 'T', 'A', 'O', 'N', 'I', 'H', 'S', 'R', 'D', 'L',
@@ -47,10 +44,9 @@ const VOCAB: string[] = [
 // ---------------------------------------------------------------------------
 
 let session: ort.InferenceSession | null = null;
-let inputName = 'input';
-let outputName = 'output';
 const label2idx: Record<string, number> = {};
 let modelBuffer: ArrayBuffer | null = null;
+let useWebGPU = false;
 
 for (let i = 0; i < VOCAB.length; i++) {
   if (VOCAB[i]) label2idx[VOCAB[i]] = i;
@@ -74,12 +70,22 @@ function progress(message: string) {
 
 async function handleInit() {
   ort.env.wasm.wasmPaths = ORT_WASM_CDN;
+  // Multi-threading requires nested pthread workers which fail inside a bundled
+  // web worker. WebGPU is the primary speed path; WASM stays single-threaded.
   ort.env.wasm.numThreads = 1;
 
-  progress('Downloading alignment model (91 MB)...');
+  // Use fp16 model for WebGPU (INT8 quantized only works on WASM)
+  useWebGPU = typeof navigator !== 'undefined' && 'gpu' in navigator;
+  const modelFile = useWebGPU
+    ? 'wav2vec2-base-960h-fp16.onnx'
+    : 'wav2vec2-base-960h-quantized.onnx';
+  const modelSize = useWebGPU ? '189 MB' : '91 MB';
+  progress(
+    `Downloading alignment model (${modelSize}, ${useWebGPU ? 'fp16/WebGPU' : 'int8/WASM'})...`,
+  );
   modelBuffer = await getCachedModel(
-    WAV2VEC2_MODEL_URL,
-    'wav2vec2-base-960h-quantized.onnx',
+    `/models/${modelFile}`,
+    modelFile,
     progress,
   );
   progress('Model cached — will load when needed');
@@ -93,14 +99,29 @@ async function handleInit() {
 async function ensureSession() {
   if (session) return;
   if (!modelBuffer) throw new Error('Model not downloaded — call init first');
-  progress('Loading alignment model into WASM...');
-  session = await ort.InferenceSession.create(modelBuffer, {
-    executionProviders: ['wasm'],
-    graphOptimizationLevel: 'all',
-  });
-  inputName = session.inputNames[0] ?? 'input';
-  outputName = session.outputNames[0] ?? 'output';
-  progress(`Alignment model ready! (I/O: ${inputName} → ${outputName})`);
+
+  // Prefer WebGPU (5-10x faster), fall back to WASM
+  const provider = useWebGPU ? 'webgpu' : 'wasm';
+  progress(`Loading alignment model (${provider})...`);
+
+  try {
+    session = await ort.InferenceSession.create(modelBuffer, {
+      executionProviders: [provider],
+      graphOptimizationLevel: 'all',
+    });
+    progress(`Alignment model ready (${provider})!`);
+  } catch (e) {
+    if (provider === 'webgpu') {
+      progress('WebGPU failed, falling back to WASM...');
+      session = await ort.InferenceSession.create(modelBuffer, {
+        executionProviders: ['wasm'],
+        graphOptimizationLevel: 'all',
+      });
+      progress('Alignment model ready (wasm fallback)!');
+    } else {
+      throw e;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -129,8 +150,8 @@ async function getEmissions(
     progress(`CTC inference: chunk ${i + 1}/${numChunks}`);
 
     const inputTensor = new ort.Tensor('float32', chunk, [1, chunk.length]);
-    const results = await session.run({[inputName]: inputTensor});
-    const output = results[outputName];
+    const results = await session.run({input: inputTensor});
+    const output = results['output'];
 
     const dims = output.dims as number[];
     const T = dims[1];

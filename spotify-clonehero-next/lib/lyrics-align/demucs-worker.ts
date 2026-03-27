@@ -53,6 +53,9 @@ function progress(message: string) {
 
 async function loadModel() {
   ort.env.wasm.wasmPaths = ORT_WASM_CDN;
+  // Multi-threading requires spawning nested pthreads workers, which fails
+  // inside a bundled web worker (import.meta.url resolves to the chunk, not ORT).
+  // WebGPU is the primary speed path; WASM stays single-threaded as fallback.
   ort.env.wasm.numThreads = 1;
 
   progress('Downloading Demucs model (~80 MB)...');
@@ -102,12 +105,14 @@ async function separate(audioInterleaved: Float32Array, numSamples: number) {
   const stftBuffers = createSTFTBuffers();
   const istftBuffers = createISTFTBuffers();
 
+  let avgSegMs = 0;
+
   for (let seg = 0; seg < numSegments; seg++) {
     const segStart = seg * STEP;
     const segEnd = Math.min(segStart + SEGMENT_SAMPLES, numSamples);
     const segLength = segEnd - segStart;
 
-    progress(`Separating: segment ${seg + 1}/${numSegments}`);
+    const segT0 = performance.now();
 
     // Prepare planar
     segmentPlanar.fill(0);
@@ -125,12 +130,18 @@ async function separate(audioInterleaved: Float32Array, numSamples: number) {
     }
 
     const stft = computeSTFT(segmentInterleaved, stftBuffers);
+
     const specShape = [1, NUM_CHANNELS, stft.numBins, stft.numFrames];
     const audioShape = [1, NUM_CHANNELS, SEGMENT_SAMPLES];
 
     const specRealTensor = new ort.Tensor('float32', stft.real, specShape);
     const specImagTensor = new ort.Tensor('float32', stft.imag, specShape);
     const audioTensor = new ort.Tensor('float32', segmentPlanar, audioShape);
+
+    const remaining = seg === 0
+      ? ''
+      : `: ${Math.round((avgSegMs * (numSegments - seg)) / 1000)} seconds remaining`;
+    progress(`Separating segment ${seg + 1}/${numSegments}${remaining}`);
 
     const results = await session.run({
       spec_real: specRealTensor,
@@ -142,7 +153,8 @@ async function separate(audioInterleaved: Float32Array, numSamples: number) {
     const specImagData = results['out_spec_imag'].data as Float32Array;
     const waveData = results['out_wave'].data as Float32Array;
 
-    progress(`Reconstructing: segment ${seg + 1}/${numSegments}`);
+    const segMs = performance.now() - segT0;
+    avgSegMs = seg === 0 ? segMs : avgSegMs * 0.7 + segMs * 0.3; // exponential moving average
 
     const s = VOCALS_INDEX;
     const specOffset = s * NUM_CHANNELS * stft.numBins * stft.numFrames;

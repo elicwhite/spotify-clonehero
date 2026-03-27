@@ -17,7 +17,7 @@
  * what the ONNX Demucs model expects.
  */
 
-import FFT from 'fft.js';
+import WebFFT from 'webfft';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -52,8 +52,8 @@ const ISTFT_PAD = Math.floor(HOP_LENGTH / 2) * 3; // 1536
 const ISTFT_LE =
   HOP_LENGTH * Math.ceil(SEGMENT_SAMPLES / HOP_LENGTH) + 2 * ISTFT_PAD;
 
-// Singleton FFT instance (thread-safe for single-threaded JS)
-const fftInstance = new FFT(NFFT);
+// Singleton FFT instance (WASM-accelerated via webfft)
+const fftInstance = new WebFFT(NFFT);
 
 // Pre-computed Hann window (periodic)
 const hannWindow = new Float32Array(NFFT);
@@ -81,8 +81,7 @@ export interface STFTBuffers {
   imag: Float32Array;
   outReal: Float32Array;
   outImag: Float32Array;
-  fftInput: number[];
-  fftOutput: number[];
+  fftInput: Float32Array;
 }
 
 /** Pre-allocated buffers for the inverse STFT. */
@@ -90,8 +89,7 @@ export interface ISTFTBuffers {
   output: Float32Array;
   windowSum: Float32Array;
   finalOutput: Float32Array;
-  ifftInput: number[];
-  ifftOutput: number[];
+  ifftInput: Float32Array;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,8 +110,7 @@ export function createSTFTBuffers(): STFTBuffers {
     imag: new Float32Array(NUM_CHANNELS * NUM_BINS * RAW_FRAMES),
     outReal: new Float32Array(NUM_CHANNELS * OUT_BINS * OUT_FRAMES),
     outImag: new Float32Array(NUM_CHANNELS * OUT_BINS * OUT_FRAMES),
-    fftInput: fftInstance.createComplexArray(),
-    fftOutput: fftInstance.createComplexArray(),
+    fftInput: new Float32Array(NFFT * 2),
   };
 }
 
@@ -122,8 +119,7 @@ export function createISTFTBuffers(): ISTFTBuffers {
     output: new Float32Array(NUM_CHANNELS * ISTFT_LE),
     windowSum: new Float32Array(ISTFT_LE),
     finalOutput: new Float32Array(NUM_CHANNELS * SEGMENT_SAMPLES),
-    ifftInput: fftInstance.createComplexArray(),
-    ifftOutput: fftInstance.createComplexArray(),
+    ifftInput: new Float32Array(NFFT * 2),
   };
 }
 
@@ -131,17 +127,15 @@ export function createISTFTBuffers(): ISTFTBuffers {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Reflect-pad index into range [0, len). */
+/** Reflect-pad index into range [0, len). Uses modular arithmetic instead of a loop. */
 function reflectIndex(i: number, len: number): number {
-  while (i < 0 || i >= len) {
-    if (i < 0) {
-      i = -i;
-    }
-    if (i >= len) {
-      i = 2 * (len - 1) - i;
-    }
-  }
-  return i;
+  if (i >= 0 && i < len) return i;
+  // Map into a period of length 2*(len-1), then fold
+  const period = 2 * (len - 1);
+  // Bring into [0, period)
+  i = ((i % period) + period) % period;
+  // Fold the second half back
+  return i < len ? i : period - i;
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +165,6 @@ export function computeSTFT(
     outReal,
     outImag,
     fftInput,
-    fftOutput,
   } = buffers;
 
   // Clear buffers
@@ -227,7 +220,7 @@ export function computeSTFT(
         fftInput[i * 2 + 1] = 0;
       }
 
-      fftInstance.transform(fftOutput, fftInput);
+      const fftOutput = fftInstance.fft(fftInput);
 
       // Store only the first NUM_BINS (positive frequencies), normalised
       const binOffset = (c * RAW_FRAMES + f) * NUM_BINS;
@@ -283,7 +276,7 @@ export function computeISTFT(
 ): Float32Array {
   const paddedBins = numBins + 1;
   const paddedFrames = numFrames + 4;
-  const {output, windowSum, finalOutput, ifftInput, ifftOutput} = buffers;
+  const {output, windowSum, finalOutput, ifftInput} = buffers;
 
   // Clear buffers
   output.fill(0);
@@ -293,17 +286,16 @@ export function computeISTFT(
   const nfft = NFFT;
   const hopLength = HOP_LENGTH;
   const scale = Math.sqrt(nfft);
+  const invN = 1 / nfft;
 
   for (let c = 0; c < numChannels; c++) {
     for (let fp = 0; fp < paddedFrames; fp++) {
       const f = fp - 2;
 
       // Clear complex input
-      for (let i = 0; i < nfft * 2; i++) {
-        ifftInput[i] = 0;
-      }
+      ifftInput.fill(0);
 
-      // Fill positive frequencies
+      // Fill positive frequencies (conjugated for IFFT-via-FFT trick)
       for (let b = 0; b < paddedBins; b++) {
         let realVal = 0;
         let imagVal = 0;
@@ -315,24 +307,27 @@ export function computeISTFT(
         }
 
         ifftInput[b * 2] = realVal * scale;
-        ifftInput[b * 2 + 1] = imagVal * scale;
+        ifftInput[b * 2 + 1] = -imagVal * scale; // conjugate
       }
 
-      // Mirror negative frequencies (Hermitian symmetry)
+      // Mirror negative frequencies (Hermitian symmetry, already conjugated)
       for (let b = 1; b < paddedBins - 1; b++) {
         const negIdx = nfft - b;
         ifftInput[negIdx * 2] = ifftInput[b * 2];
         ifftInput[negIdx * 2 + 1] = -ifftInput[b * 2 + 1];
       }
 
-      fftInstance.inverseTransform(ifftOutput, ifftInput);
+      // IFFT via FFT: IFFT(X) = conj(FFT(conj(X))) / N
+      // We already conjugated the input above, so just FFT + conjugate output + scale
+      const ifftOutput = fftInstance.fft(ifftInput);
 
-      // Overlap-add with window
+      // Overlap-add with window (conjugate output real part = real, scale by 1/N)
       const frameStart = fp * hopLength;
       for (let i = 0; i < nfft; i++) {
         const outIdx = frameStart + i - nfft / 2;
         if (outIdx >= 0 && outIdx < ISTFT_LE) {
-          const sample = ifftOutput[i * 2] * hannWindow[i];
+          // conj(FFT result) real part = real part, scaled by 1/N
+          const sample = ifftOutput[i * 2] * invN * hannWindow[i];
           output[c * ISTFT_LE + outIdx] += sample;
           if (c === 0) {
             windowSum[outIdx] += hannWindow[i] * hannWindow[i];

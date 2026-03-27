@@ -47,7 +47,6 @@
     "exceljs": "^4.4.0",
     "fast-fuzzy": "^1.12.0",
     "fflate": "^0.8.2",
-    "fft.js": "^4.0.4",
     "filenamify": "^6.0.0",
     "hyphenation.en-us": "^0.2.1",
     "hypher": "^0.2.5",
@@ -81,7 +80,8 @@
     "three": "^0.160.0",
     "throttleit": "^2.0.0",
     "use-interval": "^1.4.0",
-    "vexflow": "^4.2.5"
+    "vexflow": "^4.2.5",
+    "webfft": "^1.0.3"
   },
   "devDependencies": {
     "@types/ini": "^1.3.32",
