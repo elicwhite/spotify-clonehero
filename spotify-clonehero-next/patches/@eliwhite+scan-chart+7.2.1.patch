@@ -1,0 +1,84 @@
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -590,4 +590,7 @@
+     data: Uint8Array;
+ }[], config?: ScanChartFolderConfig): ScannedChart;
+ 
+-export { AlbumArt, ChartIssueType, Difficulty, DrumType, EventType, FolderIssueType, IniChartModifiers, Instrument, InstrumentType, MetadataIssueType, NoteEvent, NoteType, NotesData, RawChartData, ScanChartFolderConfig, ScannedChart, calculateTrackHash, defaultIniChartModifiers, difficulties, drumTypes, eventTypes, getInstrumentType, instrumentTypes, instruments, noteFlags, noteTypes, parseChartFile, scanChartFolder };
++declare function parseNotesFromChart(data: Uint8Array): RawChartData;
++declare function parseNotesFromMidi(data: Uint8Array, iniChartModifiers: IniChartModifiers): RawChartData;
++
++export { AlbumArt, ChartIssueType, Difficulty, DrumType, EventType, FolderIssueType, IniChartModifiers, Instrument, InstrumentType, MetadataIssueType, NoteEvent, NoteType, NotesData, RawChartData, ScanChartFolderConfig, ScannedChart, calculateTrackHash, defaultIniChartModifiers, difficulties, drumTypes, eventTypes, getInstrumentType, instrumentTypes, instruments, noteFlags, noteTypes, parseChartFile, parseNotesFromChart, parseNotesFromMidi, scanChartFolder };
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -54,6 +54,8 @@
+   noteFlags: () => noteFlags,
+   noteTypes: () => noteTypes,
+   parseChartFile: () => parseChartFile,
++  parseNotesFromChart: () => parseNotesFromChart,
++  parseNotesFromMidi: () => parseNotesFromMidi,
+   scanChartFolder: () => scanChartFolder
+ });
+ module.exports = __toCommonJS(src_exports);
+@@ -781,7 +783,7 @@
+     })).value(),
+     trackData: _4.chain(fileSections).pick(_4.keys(trackNameMap)).toPairs().map(([trackName, lines]) => {
+       const { instrument, difficulty } = trackNameMap[trackName];
+-      const trackEvents = _4.chain(lines).map((line) => /^(\d+) = ([A-Z]+) ([\w\s[\]]+?)( \d+)?$/.exec(line)).compact().map(([, tickString, typeCode, value, lengthString]) => {
++      const trackEvents = _4.chain(lines).map((line) => /^(\d+) = ([A-Z]+) ([\w\s[\]"]+?)( \d+)?$/.exec(line)).compact().map(([, tickString, typeCode, value, lengthString]) => {
+         const type = getEventType(typeCode, value, instrument, difficulty);
+         return type !== null ? { tick: Number(tickString), type, length: Number(lengthString) || 0 } : null;
+       }).compact().orderBy("tick").thru((events) => mergeSoloEvents(events)).value();
+@@ -864,6 +866,7 @@
+   return sections;
+ }
+ function getEventType(typeCode, value, instrument, difficulty) {
++  value = value.replace(/"/g, "");
+   switch (typeCode) {
+     case "E": {
+       switch (value) {
+@@ -916,6 +919,8 @@
+               return eventTypes.fiveGreenDrum;
+             case "32":
+               return eventTypes.kick2x;
++            case "33":
++              return eventTypes.kickAccent;
+             case "34":
+               return eventTypes.redAccent;
+             case "35":
+@@ -926,6 +931,8 @@
+               return eventTypes.fiveOrangeFourGreenAccent;
+             case "38":
+               return eventTypes.fiveGreenAccent;
++            case "39":
++              return eventTypes.kickGhost;
+             case "40":
+               return eventTypes.redGhost;
+             case "41":
+@@ -942,6 +949,8 @@
+               return eventTypes.blueCymbalMarker;
+             case "68":
+               return eventTypes.greenCymbalMarker;
++            case "109":
++              return eventTypes.forceFlam;
+             default:
+               return null;
+           }
+@@ -2888,5 +2897,7 @@
+   noteFlags,
+   noteTypes,
+   parseChartFile,
++  parseNotesFromChart,
++  parseNotesFromMidi,
+   scanChartFolder
+ });
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -2846,5 +2846,7 @@
+   noteFlags,
+   noteTypes,
+   parseChartFile,
++  parseNotesFromChart,
++  parseNotesFromMidi,
+   scanChartFolder
+ };
