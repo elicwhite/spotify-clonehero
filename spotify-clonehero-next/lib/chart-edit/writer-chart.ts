@@ -262,10 +262,6 @@ function serializeSyncTrack(doc: ChartDocument): string[] {
 function serializeEventsSection(doc: ChartDocument): string[] {
   const lines = ['[Events]', '{'];
 
-  // v1: vocalPhrases (doc.vocalPhrases) are intentionally not written.
-  // The vocals instrument track is not supported in v1 (drums-only).
-  // If added later, phrases would be emitted as E "phrase_start" / E "phrase_end".
-
   // Collect coda ticks from drum freestyle sections (deduplicated)
   const codaTicks = new Set<number>();
   for (const track of doc.trackData) {
@@ -278,6 +274,10 @@ function serializeEventsSection(doc: ChartDocument): string[] {
     ...doc.sections.map((s) => ({ tick: s.tick, text: `section ${s.name}` })),
     ...doc.endEvents.map((e) => ({ tick: e.tick, text: 'end' })),
     ...doc.lyrics.map((l) => ({ tick: l.tick, text: `lyric ${l.text}` })),
+    ...doc.vocalPhrases.flatMap((p) => [
+      { tick: p.tick, text: 'phrase_start' },
+      { tick: p.tick + p.length, text: 'phrase_end' },
+    ]),
     ...[...codaTicks].map((tick) => ({ tick, text: 'coda' })),
   ];
 

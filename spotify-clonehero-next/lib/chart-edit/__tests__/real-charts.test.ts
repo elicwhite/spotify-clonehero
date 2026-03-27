@@ -386,6 +386,8 @@ type NormalizedData = {
   starPowerSections: Array<{ tick: number; length: number }>;
   drumFreestyleSections: Array<{ tick: number; length: number }>;
   flexLanes: Array<{ tick: number; length: number; isDouble: boolean }>;
+  lyrics: Array<{ tick: number; text: string }>;
+  vocalPhrases: Array<{ tick: number; length: number }>;
 };
 
 /** Strip and sort RawChartData for stable comparison. */
@@ -445,6 +447,33 @@ function normalizeForComparison(raw: RawChartData): NormalizedData {
     starPowerSections: allSP,
     drumFreestyleSections: allFS,
     flexLanes: allFlex,
+    // Deduplicate lyrics by tick+text (the .chart writer's dedup removes
+    // identical events at the same tick). Filter empty-text lyrics (used as
+    // timing placeholders in some MIDI files but discarded by the .chart parser).
+    lyrics: (() => {
+      const seen = new Set<string>();
+      return sortByTick(raw.lyrics)
+        .map((l) => ({ tick: l.tick, text: l.text.trim() }))
+        .filter((l) => {
+          if (l.text === '') return false;
+          const key = `${l.tick}:${l.text}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+    })(),
+    // MIDI has both note 105 (Player 1) and note 106 (Player 2) phrase markers.
+    // scan-chart merges both into vocalPhrases. Notes 105 and 106 at the same
+    // tick may have different lengths. Our writer only writes note 105.
+    // Deduplicate by tick only (not tick:length) for a fair comparison.
+    vocalPhrases: (() => {
+      const seen = new Set<number>();
+      return normalizeSections(raw.vocalPhrases).filter((p) => {
+        if (seen.has(p.tick)) return false;
+        seen.add(p.tick);
+        return true;
+      });
+    })(),
   };
 }
 
@@ -496,6 +525,21 @@ function compareNormalized(
         message: `Expected ${a[field].length} entries, got ${b[field].length}`,
         details: JSON.stringify(
           { expected: a[field], actual: b[field] },
+          null,
+          2,
+        ).slice(0, 2000),
+      });
+    }
+  }
+
+  // Lyrics and vocal phrases
+  for (const field of ['lyrics', 'vocalPhrases'] as const) {
+    if (!deepEqual(a[field], b[field])) {
+      diffs.push({
+        field,
+        message: `Expected ${a[field].length} entries, got ${b[field].length}`,
+        details: JSON.stringify(
+          { expected: a[field].slice(0, 10), actual: b[field].slice(0, 10) },
           null,
           2,
         ).slice(0, 2000),
@@ -559,7 +603,89 @@ function compareNormalized(
 }
 
 // ---------------------------------------------------------------------------
-// Main test suite
+// Per-chart validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate a single chart folder: read → convert to other format → re-parse → compare.
+ * Returns null on success, a FailureRecord on diff, or 'skip' if not applicable.
+ */
+function validateChart(
+  folder: string,
+  chartDir: string,
+): FailureRecord | 'skip' | null {
+  const relPath = relative(chartDir, folder);
+  const files = loadChartFolder(folder);
+
+  let doc;
+  try {
+    doc = readChart(files);
+  } catch {
+    return 'skip';
+  }
+
+  if (!doc.trackData.some((t) => t.instrument === 'drums')) {
+    return 'skip';
+  }
+
+  const chartFile = files.find(
+    (f) => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
+  )!;
+  const isChart = chartFile.fileName === 'notes.chart';
+
+  let rawA: RawChartData;
+  try {
+    rawA = isChart
+      ? parseNotesFromChart(chartFile.data)
+      : parseNotesFromMidi(chartFile.data, buildModifiers(doc.metadata));
+  } catch {
+    return 'skip';
+  }
+
+  const originalFormat = doc.originalFormat;
+  const convertedFormat = originalFormat === 'chart' ? 'mid' : 'chart';
+  doc.originalFormat = convertedFormat;
+
+  let output: FileEntry[];
+  try {
+    output = writeChart(doc);
+  } catch (err) {
+    return {
+      path: relPath,
+      originalFormat,
+      convertedFormat,
+      diffs: [{ field: 'writeChart', message: `Write failed: ${(err as Error).message}` }],
+    };
+  }
+
+  const convertedFile = output.find(
+    (f) => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
+  )!;
+
+  let rawB: RawChartData;
+  try {
+    rawB = convertedFormat === 'chart'
+      ? parseNotesFromChart(convertedFile.data)
+      : parseNotesFromMidi(convertedFile.data, buildModifiers(doc.metadata));
+  } catch (err) {
+    return {
+      path: relPath,
+      originalFormat,
+      convertedFormat,
+      diffs: [{ field: 'parse', message: `Parse of converted file failed: ${(err as Error).message}` }],
+    };
+  }
+
+  const diffs = compareNormalized(
+    normalizeForComparison(rawA),
+    normalizeForComparison(rawB),
+  );
+
+  return diffs.length === 0 ? null : { path: relPath, originalFormat, convertedFormat, diffs };
+}
+
+// ---------------------------------------------------------------------------
+// Main test suite — one it() per chart for Jest sharding
 // ---------------------------------------------------------------------------
 
 const describeFn = CHART_DIR ? describe : describe.skip;
@@ -568,35 +694,30 @@ describeFn('real-chart cross-format validation', () => {
   if (!CHART_DIR) return;
 
   const chartDir = CHART_DIR.replace(/^~/, process.env.HOME || '~');
-  let folders: string[] = [];
+
+  if (!existsSync(chartDir)) {
+    throw new Error(`CHART_DIR does not exist: ${chartDir}`);
+  }
+
+  let folders = findChartFolders(chartDir);
+  if (CHART_LIMIT && CHART_LIMIT < folders.length) {
+    folders = folders.slice(0, CHART_LIMIT);
+  }
 
   const report: Report = {
     timestamp: new Date().toISOString(),
     chartDir,
-    total: 0,
+    total: folders.length,
     passed: 0,
     failed: 0,
     skipped: 0,
     failures: [],
   };
 
-  beforeAll(() => {
-    if (!existsSync(chartDir)) {
-      throw new Error(`CHART_DIR does not exist: ${chartDir}`);
-    }
-    folders = findChartFolders(chartDir);
-    if (CHART_LIMIT && CHART_LIMIT < folders.length) {
-      folders = folders.slice(0, CHART_LIMIT);
-    }
-    report.total = folders.length;
-  });
-
   afterAll(() => {
-    // Write report
     const reportPath = join(__dirname, 'real-charts-report.json');
     writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');
 
-    // Summary to console
     console.log('\n=== Real Charts Report ===');
     console.log(`Total:   ${report.total}`);
     console.log(`Passed:  ${report.passed}`);
@@ -614,143 +735,23 @@ describeFn('real-chart cross-format validation', () => {
     console.log(`\nReport written to: ${reportPath}`);
   });
 
-  it('validates all charts', () => {
-    expect(folders.length).toBeGreaterThan(0);
-
-    const logInterval = Math.max(1, Math.floor(folders.length / 20));
-    const startTime = Date.now();
-
-    for (let fi = 0; fi < folders.length; fi++) {
-      const folder = folders[fi];
-      if (fi % logInterval === 0) {
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        const pct = ((fi / folders.length) * 100).toFixed(0);
-        process.stderr.write(`\r  [${pct}%] ${fi}/${folders.length} charts (${elapsed}s)`);
-      }
-      const relPath = relative(chartDir, folder);
-
-      // 1. Load files
-      const files = loadChartFolder(folder);
-
-      // 2. Read chart
-      let doc;
-      try {
-        doc = readChart(files);
-      } catch (err) {
-        // Chart can't be read at all — skip
+  // One test per chart folder for per-chart failure output and filtering
+  it.each(folders.map((folder) => [relative(chartDir, folder), folder]))(
+    '%s',
+    (_relPath, folder) => {
+      const result = validateChart(folder as string, chartDir);
+      if (result === 'skip') {
         report.skipped++;
-        continue;
+        return;
       }
-
-      // 3. Check for drum trackData
-      const hasDrums = doc.trackData.some((t) => t.instrument === 'drums');
-      if (!hasDrums) {
-        report.skipped++;
-        continue;
-      }
-
-      // 4. Parse ORIGINAL file directly with scan-chart
-      const chartFile = files.find(
-        (f) => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
-      )!;
-      const isChart = chartFile.fileName === 'notes.chart';
-
-      let rawA: RawChartData;
-      try {
-        if (isChart) {
-          rawA = parseNotesFromChart(chartFile.data);
-        } else {
-          const modifiers = buildModifiers(doc.metadata);
-          rawA = parseNotesFromMidi(chartFile.data, modifiers);
-        }
-      } catch {
-        report.skipped++;
-        continue;
-      }
-
-      // 5. Flip format and write
-      const originalFormat = doc.originalFormat;
-      const convertedFormat = originalFormat === 'chart' ? 'mid' : 'chart';
-      doc.originalFormat = convertedFormat;
-
-      let output: FileEntry[];
-      try {
-        output = writeChart(doc);
-      } catch (err) {
-        report.failed++;
-        report.failures.push({
-          path: relPath,
-          originalFormat,
-          convertedFormat,
-          diffs: [
-            {
-              field: 'writeChart',
-              message: `Write failed: ${(err as Error).message}`,
-            },
-          ],
-        });
-        continue;
-      }
-
-      // 6. Parse CONVERTED output with scan-chart
-      const convertedFile = output.find(
-        (f) =>
-          f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
-      )!;
-
-      let rawB: RawChartData;
-      try {
-        if (convertedFormat === 'chart') {
-          rawB = parseNotesFromChart(convertedFile.data);
-        } else {
-          const modifiers = buildModifiers(doc.metadata);
-          rawB = parseNotesFromMidi(convertedFile.data, modifiers);
-        }
-      } catch (err) {
-        report.failed++;
-        report.failures.push({
-          path: relPath,
-          originalFormat,
-          convertedFormat,
-          diffs: [
-            {
-              field: 'parse',
-              message: `Parse of converted file failed: ${(err as Error).message}`,
-            },
-          ],
-        });
-        continue;
-      }
-
-      // 7. Normalize and compare
-      const normA = normalizeForComparison(rawA);
-      const normB = normalizeForComparison(rawB);
-      const diffs = compareNormalized(normA, normB);
-
-      if (diffs.length === 0) {
+      if (result === null) {
         report.passed++;
-      } else {
-        report.failed++;
-        report.failures.push({
-          path: relPath,
-          originalFormat,
-          convertedFormat,
-          diffs,
-        });
+        return;
       }
-    }
-
-    process.stderr.write(`\r  [100%] ${folders.length}/${folders.length} charts (${((Date.now() - startTime) / 1000).toFixed(1)}s)\n`);
-
-    // Assert no failures
-    if (report.failures.length > 0) {
-      const summary = report.failures
-        .map(
-          (f) =>
-            `${f.path} (${f.originalFormat}→${f.convertedFormat}): ${f.diffs.map((d) => `${d.field}: ${d.message}`).join('; ')}`,
-        )
-        .join('\n');
-      fail(`${report.failed} chart(s) failed cross-format validation:\n${summary}`);
-    }
-  }, 300_000); // 5 min timeout for large chart collections
+      report.failed++;
+      report.failures.push(result);
+      const summary = result.diffs.map((d) => `${d.field}: ${d.message}`).join('; ');
+      fail(`${result.path} (${result.originalFormat}→${result.convertedFormat}): ${summary}`);
+    },
+  );
 });
