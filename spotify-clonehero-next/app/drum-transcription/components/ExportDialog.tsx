@@ -27,9 +27,7 @@ import {Switch} from '@/components/ui/switch';
 import {encodeWav} from '@/lib/drum-transcription/audio/wav-encoder';
 import {serializeSongIni} from '@/lib/drum-transcription/chart-io/song-ini';
 import type {SongMetadata} from '@/lib/drum-transcription/chart-io/song-ini';
-import {exportAsZip} from '@/lib/drum-transcription/export/zip';
-import {buildSngFile} from '@/lib/drum-transcription/export/sng';
-import type {SngMetadata, SngFileEntry} from '@/lib/drum-transcription/export/sng';
+import {exportAsZip, exportAsSng} from '@/lib/chart-export';
 import {
   readProjectText,
   readProjectBinary,
@@ -170,45 +168,26 @@ export default function ExportDialog({
         }
       }
 
-      // 5. Package as ZIP or SNG
+      // 5. Build file entries and package as ZIP or SNG
+      const encoder = new TextEncoder();
+      const fileEntries = [
+        {filename: 'notes.chart', data: encoder.encode(chartText)},
+        {filename: 'song.ini', data: encoder.encode(songIni)},
+      ];
+      for (const [name, data] of audioFiles) {
+        fileEntries.push({filename: name, data: new Uint8Array(data)});
+      }
+
       let blob: Blob;
       let extension: string;
 
       if (packageFormat === 'sng') {
-        // Build SNG metadata from song metadata (replaces song.ini)
-        const sngMetadata: SngMetadata = {
-          name: songMetadata.name,
-          artist: songMetadata.artist,
-          album: songMetadata.album ?? '',
-          genre: songMetadata.genre ?? '',
-          year: songMetadata.year ?? '',
-          charter: songMetadata.charter ?? 'AutoDrums',
-          song_length: String(Math.round(songMetadata.durationMs)),
-          diff_drums: String(songMetadata.diffDrums ?? -1),
-          pro_drums: 'True',
-          delay: String(songMetadata.delay ?? 0),
-          preview_start_time: String(songMetadata.previewStartTime ?? -1),
-        };
-
-        // Filter out empty values (matching reference implementation)
-        const filteredMetadata: SngMetadata = {};
-        for (const [key, value] of Object.entries(sngMetadata)) {
-          if (key && value) filteredMetadata[key] = value;
-        }
-
-        const sngFiles: SngFileEntry[] = [
-          {filename: 'notes.chart', data: new TextEncoder().encode(chartText)},
-        ];
-
-        for (const [name, data] of audioFiles) {
-          sngFiles.push({filename: name, data: new Uint8Array(data)});
-        }
-
-        const sngBytes = buildSngFile(filteredMetadata, sngFiles);
+        // exportAsSng extracts song.ini into SNG header metadata automatically
+        const sngBytes = exportAsSng(fileEntries);
         blob = new Blob([sngBytes], {type: 'application/octet-stream'});
         extension = 'sng';
       } else {
-        blob = exportAsZip(chartText, songIni, audioFiles);
+        blob = exportAsZip(fileEntries);
         extension = 'zip';
       }
 
