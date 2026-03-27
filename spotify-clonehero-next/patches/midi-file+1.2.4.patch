@@ -1,6 +1,8 @@
---- a/lib/midi-parser.js
-+++ b/lib/midi-parser.js
-@@ -309,8 +309,15 @@
+diff --git a/node_modules/midi-file/lib/midi-parser.js b/node_modules/midi-file/lib/midi-parser.js
+index 50ed069..93868ee 100644
+--- a/node_modules/midi-file/lib/midi-parser.js
++++ b/node_modules/midi-file/lib/midi-parser.js
+@@ -309,8 +309,15 @@ Parser.prototype.readBytes = function(len) {
  }
  
  Parser.prototype.readString = function(len) {
@@ -17,9 +19,11 @@
  }
  
  Parser.prototype.readVarInt = function() {
---- a/lib/midi-writer.js
-+++ b/lib/midi-writer.js
-@@ -80,50 +80,43 @@
+diff --git a/node_modules/midi-file/lib/midi-writer.js b/node_modules/midi-file/lib/midi-writer.js
+index c1a438d..cbd1a73 100644
+--- a/node_modules/midi-file/lib/midi-writer.js
++++ b/node_modules/midi-file/lib/midi-writer.js
+@@ -80,50 +80,43 @@ function writeEvent(w, event, lastEventTypeByte, useByte9ForNoteOff) {
      case 'text':
        w.writeUInt8(0xFF)
        w.writeUInt8(0x01)
@@ -77,7 +81,7 @@
        break;
  
      case 'channelPrefix':
-@@ -325,13 +318,16 @@
+@@ -325,11 +318,14 @@ Writer.prototype.writeBytes = function(arr) {
  }
  
  Writer.prototype.writeString = function(str) {
@@ -88,14 +92,12 @@
 -  this.writeBytes(arr)
 +  var bytes = new TextEncoder().encode(str)
 +  this.writeBytes(bytes)
- }
- 
++}
++
 +Writer.prototype.writeStringWithLength = function(str) {
 +  var bytes = new TextEncoder().encode(str)
 +  this.writeVarInt(bytes.length)
 +  this.writeBytes(bytes)
-+}
-+
- Writer.prototype.writeVarInt = function(v) {
-   if (v < 0) throw "Cannot write negative variable-length integer"
+ }
  
+ Writer.prototype.writeVarInt = function(v) {
