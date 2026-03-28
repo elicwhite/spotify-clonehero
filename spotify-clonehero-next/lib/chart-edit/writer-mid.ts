@@ -340,7 +340,7 @@ function buildInstrumentTrack(
   const emittedStarPower = new Set<string>();
   const emittedSolo = new Set<string>();
   const emittedActivation = new Set<string>();
-  const emittedFlexLane = new Set<string>();
+  const emittedFlexLane = new Map<string, number>(); // key → velocity
   const emittedTomMarker = new Set<string>();
   const emittedFlam = new Set<string>();
   const emittedKick2x = new Set<string>();
@@ -409,12 +409,19 @@ function buildInstrumentTrack(
           continue;
         }
 
-        // kick2x → Expert+ double kick: note 95
+        // kick2x → double kick: difficulty base note - 1
+        // (Expert+=95, Hard+=83, Medium+=71, Easy+=59)
         if (ev.type === eventTypes.kick2x) {
-          const key = `${ev.tick}:${ev.length}`;
-          if (!emittedKick2x.has(key)) {
-            emittedKick2x.add(key);
-            addNoteOnOff(events, ev.tick, ev.length, drumDiffBases.expert - 1, 100);
+          addNoteOnOff(events, ev.tick, ev.length, drumDiffBases[difficulty] - 1, 100);
+          continue;
+        }
+
+        // forceTap — instrument-wide note 104 (can appear on drum tracks from SysEx)
+        if (ev.type === eventTypes.forceTap) {
+          const key = `tap:${ev.tick}:${ev.length}`;
+          if (!emittedFlam.has(key)) { // reuse flam dedup set (instrument-wide events)
+            emittedFlam.add(key);
+            addNoteOnOff(events, ev.tick, ev.length, 104, 100);
           }
           continue;
         }
@@ -441,14 +448,15 @@ function buildInstrumentTrack(
           continue;
         }
 
-        // forceTap is instrument-wide note 104
+        // forceTap → Phase Shift SysEx (type 0x04) per-difficulty
         if (ev.type === eventTypes.forceTap) {
-          addNoteOnOff(events, ev.tick, ev.length, 104, 100);
+          addSysExOnOff(events, ev.tick, ev.length, difficulty, 0x04);
           continue;
         }
 
-        // forceOpen via SysEx — skip for now (complex encoding)
+        // forceOpen via Phase Shift SysEx
         if (ev.type === eventTypes.forceOpen) {
+          addSysExOnOff(events, ev.tick, ev.length, difficulty, 0x01);
           continue;
         }
       } else if (fiveFretInstruments.has(instrument)) {
@@ -459,14 +467,15 @@ function buildInstrumentTrack(
           continue;
         }
 
-        // forceTap is instrument-wide note 104
+        // forceTap → Phase Shift SysEx (type 0x04) per-difficulty
         if (ev.type === eventTypes.forceTap) {
-          addNoteOnOff(events, ev.tick, ev.length, 104, 100);
+          addSysExOnOff(events, ev.tick, ev.length, difficulty, 0x04);
           continue;
         }
 
-        // forceOpen via SysEx — skip for now
+        // forceOpen via Phase Shift SysEx
         if (ev.type === eventTypes.forceOpen) {
+          addSysExOnOff(events, ev.tick, ev.length, difficulty, 0x01);
           continue;
         }
       }
@@ -506,12 +515,23 @@ function buildInstrumentTrack(
     }
 
     // Flex lanes → note 126 (single) / 127 (double)
+    // Track lowest difficulty per flex lane for LDS velocity encoding.
+    // scan-chart's fixFlexLaneLds filters by velocity:
+    //   easy: 21-30, medium: 21-40, hard: 21-50, expert: all
+    // Use velocity to encode which difficulties should see the flex lane.
+    const diffVelocity: Record<string, number> = { easy: 25, medium: 35, hard: 45, expert: 100 };
     for (const fl of td.flexLanes) {
       const note = fl.isDouble ? 127 : 126;
       const key = `${fl.tick}:${fl.length}:${note}`;
       if (!emittedFlexLane.has(key)) {
-        emittedFlexLane.add(key);
-        addNoteOnOff(events, fl.tick, fl.length, note, 100);
+        emittedFlexLane.set(key, diffVelocity[td.difficulty] ?? 100);
+      } else {
+        // Lower velocity = more inclusive, keep the lowest
+        const existing = emittedFlexLane.get(key)!;
+        const thisVel = diffVelocity[td.difficulty] ?? 100;
+        if (thisVel < existing) {
+          emittedFlexLane.set(key, thisVel);
+        }
       }
     }
 
@@ -567,10 +587,15 @@ function buildInstrumentTrack(
     }
   }
 
+  // Emit flex lanes with collected LDS velocities
+  for (const [key, velocity] of emittedFlexLane) {
+    const [tickStr, lengthStr, noteStr] = key.split(':');
+    addNoteOnOff(events, Number(tickStr), Number(lengthStr), Number(noteStr), velocity);
+  }
+
   // Disco flip text events → [mix <diffIdx> drums0], [mix <diffIdx> drums0d], etc.
-  // scan-chart distributes disco flip to all difficulties on parse, so we
-  // deduplicate by tick+type and emit once per unique event, using the
-  // highest difficulty index (expert=3 is the most common source).
+  // Each difficulty can have its own disco flip event at a unique tick.
+  // Deduplicate by tick+type+difficulty to emit one event per difficulty.
   if (isDrums) {
     const diffToIdx: Record<string, number> = { easy: 0, medium: 1, hard: 2, expert: 3 };
     const discoTypeToFlag: Partial<Record<EventType, string>> = {
@@ -578,18 +603,15 @@ function buildInstrumentTrack(
       [eventTypes.discoFlipOn]: 'd',
       [eventTypes.discoNoFlipOn]: 'dnoflip',
     };
-    // Emit one text event per unique tick+type. scan-chart distributes
-    // disco flip events to all difficulties on parse, so we only need
-    // to write the event once (using expert=3 as the difficulty index).
     const emittedDisco = new Set<string>();
     for (const td of trackDataEntries) {
+      const diffIdx = diffToIdx[td.difficulty] ?? 3;
       for (const ev of td.trackEvents) {
         const flag = discoTypeToFlag[ev.type];
         if (flag !== undefined) {
-          const key = `${ev.tick}:${ev.type}`;
+          const key = `${ev.tick}:${ev.type}:${td.difficulty}`;
           if (!emittedDisco.has(key)) {
             emittedDisco.add(key);
-            const diffIdx = diffToIdx[td.difficulty] ?? 3;
             events.push({
               tick: ev.tick,
               event: {
@@ -696,6 +718,43 @@ function buildVocalsTrack(doc: ChartDocument): MidiEvent[] {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const sysExDiffMap: Record<Difficulty, number> = {
+  easy: 0x00,
+  medium: 0x01,
+  hard: 0x02,
+  expert: 0x03,
+};
+
+/**
+ * Add a Phase Shift SysEx on/off pair (used for forceOpen).
+ * Format: [0x50, 0x53, 0x00, 0x00, diffByte, typeByte, isStart]
+ */
+function addSysExOnOff(
+  events: AbsoluteEvent[],
+  tick: number,
+  length: number,
+  difficulty: Difficulty,
+  typeByte: number,
+): void {
+  const diffByte = sysExDiffMap[difficulty];
+  events.push({
+    tick,
+    event: {
+      deltaTime: 0,
+      type: 'sysEx',
+      data: new Uint8Array([0x50, 0x53, 0x00, 0x00, diffByte, typeByte, 0x01]),
+    } as MidiEvent,
+  });
+  events.push({
+    tick: tick + Math.max(length, 1),
+    event: {
+      deltaTime: 0,
+      type: 'sysEx',
+      data: new Uint8Array([0x50, 0x53, 0x00, 0x00, diffByte, typeByte, 0x00]),
+    } as MidiEvent,
+  });
+}
 
 /** Add a noteOn/noteOff pair to the events array. */
 function addNoteOnOff(

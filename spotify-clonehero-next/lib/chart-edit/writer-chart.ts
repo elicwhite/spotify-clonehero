@@ -347,6 +347,23 @@ function serializeTrackSection(track: TrackData): string[] {
     events.push({ tick: solo.tick + solo.length, sortKey: 2, kind: 'E', text: 'soloend' });
   }
 
+  // Disco flip events → E "mix N drums0..." (drums only, per-difficulty)
+  if (track.instrument === 'drums') {
+    const diffIdx: Record<string, number> = { easy: 0, medium: 1, hard: 2, expert: 3 };
+    const di = diffIdx[track.difficulty] ?? 3;
+    const discoFlagMap: Partial<Record<EventType, string>> = {
+      [eventTypes.discoFlipOff]: '',
+      [eventTypes.discoFlipOn]: 'd',
+      [eventTypes.discoNoFlipOn]: 'dnoflip',
+    };
+    for (const te of track.trackEvents) {
+      const flag = discoFlagMap[te.type];
+      if (flag !== undefined) {
+        events.push({ tick: te.tick, sortKey: 2, kind: 'E', text: `mix ${di} drums0${flag}` });
+      }
+    }
+  }
+
   // Track events (notes and modifiers) → N <noteNumber> <length>
   for (const te of track.trackEvents) {
     const noteNumber = noteMap[te.type];

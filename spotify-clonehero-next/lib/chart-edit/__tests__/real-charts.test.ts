@@ -708,10 +708,172 @@ function validateChart(
   return diffs.length === 0 ? null : { path: relPath, originalFormat, convertedFormat, diffs };
 }
 
+// ---------------------------------------------------------------------------
+// Strict same-format normalization (all instruments, minimal filtering)
+// ---------------------------------------------------------------------------
+
+type StrictNormalizedTrack = {
+  instrument: string;
+  difficulty: string;
+  trackEvents: Array<{ tick: number; type: number; length: number }>;
+  starPowerSections: Array<{ tick: number; length: number }>;
+  soloSections: Array<{ tick: number; length: number }>;
+  drumFreestyleSections: Array<{ tick: number; length: number; isCoda: boolean }>;
+  flexLanes: Array<{ tick: number; length: number; isDouble: boolean }>;
+};
+
+type StrictNormalizedData = {
+  chartTicksPerBeat: number;
+  tempos: Array<{ tick: number; beatsPerMinute: number }>;
+  timeSignatures: Array<{ tick: number; numerator: number; denominator: number }>;
+  sections: Array<{ tick: number; name: string }>;
+  endEvents: Array<{ tick: number }>;
+  trackData: StrictNormalizedTrack[];
+  lyrics: Array<{ tick: number; text: string }>;
+  vocalPhrases: Array<{ tick: number; length: number }>;
+};
+
+/**
+ * Strict normalization for same-format roundtrip.
+ * Includes ALL instruments (not just drums) and ALL event types.
+ * Only strips velocity/channel fields that scan-chart's raw parsers
+ * add inconsistently between formats.
+ */
+function normalizeStrict(raw: RawChartData, format?: 'chart' | 'mid'): StrictNormalizedData {
+  const trackData = raw.trackData
+    .map((t) => {
+      // For trackEvents: strip velocity/channel, keep everything else.
+      // Only filter STRUCTURAL types (already in dedicated arrays).
+      // Filter orphaned accent/ghost modifiers (no base note at same tick) —
+      // scan-chart produces these from overlapping modifier sustains, but
+      // they can't roundtrip through MIDI (ghost/accent = velocity on base note).
+      // Clamp lengths to min 1 for MIDI (our writer uses Math.max(length, 1)
+      // to avoid noteOff sorting issues with zero-length notes).
+      const events = t.trackEvents
+        .filter((e) => !STRUCTURAL_EVENT_TYPES.has(e.type))
+        .map((e) => ({ tick: e.tick, type: e.type, length: Math.max(e.length, 1) }))
+        .sort((a, b) => a.tick !== b.tick ? a.tick - b.tick : a.type - b.type);
+
+      return {
+        instrument: t.instrument,
+        difficulty: t.difficulty,
+        trackEvents: events,
+        starPowerSections: normalizeSections(t.starPowerSections),
+        soloSections: extractSoloSections(t),
+        drumFreestyleSections: sortByTick(t.drumFreestyleSections)
+          .map((fs) => ({ tick: fs.tick, length: Math.max(fs.length, 1), isCoda: fs.isCoda })),
+        flexLanes: sortByTick(t.flexLanes)
+          .map((f) => ({ tick: f.tick, length: Math.max(f.length, 1), isDouble: f.isDouble })),
+      };
+    })
+    .sort((a, b) => {
+      if (a.instrument !== b.instrument) return a.instrument.localeCompare(b.instrument);
+      const order = ['expert', 'hard', 'medium', 'easy'];
+      return order.indexOf(a.difficulty) - order.indexOf(b.difficulty);
+    });
+
+  return {
+    chartTicksPerBeat: raw.chartTicksPerBeat,
+    tempos: sortByTick(raw.tempos).map((t) => ({
+      tick: t.tick,
+      beatsPerMinute: t.beatsPerMinute,
+    })),
+    timeSignatures: sortByTick(raw.timeSignatures).map((t) => ({
+      tick: t.tick,
+      numerator: t.numerator,
+      denominator: t.denominator,
+    })),
+    sections: sortByTick(raw.sections).map((s) => ({ tick: s.tick, name: s.name })),
+    endEvents: sortByTick(raw.endEvents).map((e) => ({ tick: e.tick })),
+    trackData,
+    lyrics: sortByTick(raw.lyrics).map((l) => ({
+      tick: l.tick,
+      text: l.text,
+    })),
+    // vocalPhrases: dedup by tick (keep longest) + overlap-trim.
+    // This normalization matches what our writer does: dedup note 105/106
+    // by tick and trim overlapping phrases. Both sides apply the same
+    // transformation, so the comparison is fair.
+    vocalPhrases: (() => {
+      const byTick = new Map<number, number>();
+      for (const p of raw.vocalPhrases) {
+        const len = Math.max(p.length, 1);
+        const existing = byTick.get(p.tick);
+        if (existing === undefined || len > existing) {
+          byTick.set(p.tick, len);
+        }
+      }
+      const sorted = [...byTick.entries()]
+        .map(([tick, length]) => ({ tick, length }))
+        .sort((a, b) => a.tick - b.tick);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const gap = sorted[i + 1].tick - sorted[i].tick;
+        if (sorted[i].length > gap) sorted[i].length = gap;
+      }
+      return sorted;
+    })(),
+  };
+}
+
+function compareStrict(a: StrictNormalizedData, b: StrictNormalizedData): Diff[] {
+  const diffs: Diff[] = [];
+
+  if (a.chartTicksPerBeat !== b.chartTicksPerBeat) {
+    diffs.push({ field: 'chartTicksPerBeat', message: `${a.chartTicksPerBeat} vs ${b.chartTicksPerBeat}` });
+  }
+
+  for (const field of ['tempos', 'timeSignatures', 'sections', 'endEvents', 'lyrics', 'vocalPhrases'] as const) {
+    if (!deepEqual(a[field], b[field])) {
+      diffs.push({
+        field,
+        message: `Expected ${a[field].length} entries, got ${b[field].length}`,
+        details: JSON.stringify({ expected: a[field].slice(0, 5), actual: b[field].slice(0, 5) }, null, 2).slice(0, 2000),
+      });
+    }
+  }
+
+  // Compare track data: match by instrument+difficulty
+  const bTrackMap = new Map(b.trackData.map((t) => [`${t.instrument}:${t.difficulty}`, t]));
+  const aTrackMap = new Map(a.trackData.map((t) => [`${t.instrument}:${t.difficulty}`, t]));
+
+  // Tracks in A but not B
+  for (const [key, ta] of aTrackMap) {
+    if (!bTrackMap.has(key) && ta.trackEvents.length > 0) {
+      diffs.push({ field: `track(${key})`, message: `Missing in output (had ${ta.trackEvents.length} events)` });
+    }
+  }
+
+  // Compare matching tracks
+  for (const [key, ta] of aTrackMap) {
+    const tb = bTrackMap.get(key);
+    if (!tb) continue;
+
+    for (const section of ['trackEvents', 'starPowerSections', 'soloSections', 'drumFreestyleSections', 'flexLanes'] as const) {
+      if (!deepEqual(ta[section], tb[section])) {
+        const aArr = ta[section] as unknown[];
+        const bArr = tb[section] as unknown[];
+        let firstDiffIdx = -1;
+        for (let j = 0; j < Math.max(aArr.length, bArr.length); j++) {
+          if (!deepEqual(aArr[j], bArr[j])) { firstDiffIdx = j; break; }
+        }
+        diffs.push({
+          field: `track(${key}).${section}`,
+          message: `Expected ${aArr.length}, got ${bArr.length}. First diff at ${firstDiffIdx}`,
+          details: JSON.stringify({
+            expectedAt: firstDiffIdx >= 0 ? aArr[firstDiffIdx] : null,
+            actualAt: firstDiffIdx >= 0 ? bArr[firstDiffIdx] : null,
+          }, null, 2),
+        });
+      }
+    }
+  }
+
+  return diffs;
+}
+
 /**
  * Same-format roundtrip: read → write (same format) → re-parse → compare.
- * This avoids all cross-format issues (per-difficulty merge, precision loss,
- * encoding) and validates that our writer preserves all data faithfully.
+ * Uses strict normalization with ALL instruments and ALL event types.
  */
 function validateSameFormatRoundtrip(
   folder: string,
@@ -727,7 +889,7 @@ function validateSameFormatRoundtrip(
     return 'skip';
   }
 
-  if (!doc.trackData.some((t) => t.instrument === 'drums')) {
+  if (doc.trackData.length === 0) {
     return 'skip';
   }
 
@@ -737,7 +899,6 @@ function validateSameFormatRoundtrip(
   const isChart = chartFile.fileName === 'notes.chart';
   const format = doc.originalFormat;
 
-  // Parse original directly
   let rawA: RawChartData;
   try {
     rawA = isChart
@@ -747,7 +908,6 @@ function validateSameFormatRoundtrip(
     return 'skip';
   }
 
-  // Write back in the SAME format (no conversion)
   let output: FileEntry[];
   try {
     output = writeChart(doc);
@@ -778,11 +938,7 @@ function validateSameFormatRoundtrip(
     };
   }
 
-  const diffs = compareNormalized(
-    normalizeForComparison(rawA),
-    normalizeForComparison(rawB),
-  );
-
+  const diffs = compareStrict(normalizeStrict(rawA, format), normalizeStrict(rawB, format));
   return diffs.length === 0 ? null : { path: relPath, originalFormat: format, convertedFormat: format, diffs };
 }
 
