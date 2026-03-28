@@ -9,6 +9,7 @@ import {KaraokeVideo} from '@/app/karaoke/KaraokeVideo';
 import type {TreatmentId} from '@/app/karaoke/treatments/types';
 import {Button} from '@/components/ui/button';
 import {getExtension, getBasename} from '@/lib/src-shared/utils';
+import {removeStyleTags} from '@/lib/ui-utils';
 import {findAudioFiles, type Files} from '@/lib/preview/chorus-chart-processing';
 import {readChart, writeChart, type ChartDocument} from '@/lib/chart-edit';
 import {exportAsZip, exportAsSng} from '@/lib/chart-export';
@@ -475,14 +476,14 @@ export default function LyricsAlignPage() {
             <div className="bg-muted rounded-lg p-4 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold">
-                  {chart.name}{' '}
+                  {removeStyleTags(chart.name)}{' '}
                   <span className="text-muted-foreground font-normal">
                     by
                   </span>{' '}
-                  {chart.artist}
+                  {removeStyleTags(chart.artist)}
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Charted by {chart.charter} &middot;{' '}
+                  Charted by {removeStyleTags(chart.charter)} &middot;{' '}
                   {chart.audioFiles.length} audio file
                   {chart.audioFiles.length !== 1 ? 's' : ''}
                   {chart.vocalsFile && ' (vocals stem available)'}
