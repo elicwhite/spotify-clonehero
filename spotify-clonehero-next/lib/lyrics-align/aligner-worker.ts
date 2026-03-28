@@ -67,24 +67,43 @@ function progress(message: string) {
 // Init — download + cache model
 // ---------------------------------------------------------------------------
 
+const WAV2VEC2_FP16_URL =
+  'https://huggingface.co/elicwhite/wav2vec2-base-960h-fp16-onnx/resolve/main/wav2vec2-base-960h-fp16.onnx';
+const WAV2VEC2_QUANTIZED_URL =
+  'https://huggingface.co/onnx-community/wav2vec2-base-960h-ONNX/resolve/main/onnx/model_quantized.onnx';
+
 async function handleInit() {
   ort.env.wasm.wasmPaths = ORT_WASM_CDN;
   // Multi-threading requires nested pthread workers which fail inside a bundled
   // web worker. WebGPU is the primary speed path; WASM stays single-threaded.
   ort.env.wasm.numThreads = 1;
 
-  // Use fp16 model for WebGPU (INT8 quantized only works on WASM)
-  useWebGPU = typeof navigator !== 'undefined' && 'gpu' in navigator;
-  const modelFile = useWebGPU
-    ? 'wav2vec2-base-960h-fp16.onnx'
-    : 'wav2vec2-base-960h-quantized.onnx';
-  const modelSize = useWebGPU ? '189 MB' : '91 MB';
-  progress(
-    `Downloading alignment model (${modelSize}, ${useWebGPU ? 'fp16/WebGPU' : 'int8/WASM'})...`,
-  );
+  // Prefer fp16 model + WebGPU, fall back to quantized + WASM
+  const hasWebGPU = typeof navigator !== 'undefined' && 'gpu' in navigator;
+
+  if (hasWebGPU) {
+    try {
+      progress('Downloading alignment model (189 MB, fp16/WebGPU)...');
+      modelBuffer = await getCachedModel(
+        WAV2VEC2_FP16_URL,
+        'wav2vec2-base-960h-fp16.onnx',
+        progress,
+      );
+      useWebGPU = true;
+      progress('Model cached — will load when needed');
+      post({type: 'initDone'});
+      return;
+    } catch {
+      progress('fp16 model unavailable, falling back to quantized...');
+    }
+  }
+
+  // Fall back to quantized model (works with WASM)
+  useWebGPU = false;
+  progress('Downloading alignment model (91 MB, int8/WASM)...');
   modelBuffer = await getCachedModel(
-    `/models/${modelFile}`,
-    modelFile,
+    WAV2VEC2_QUANTIZED_URL,
+    'wav2vec2-base-960h-quantized.onnx',
     progress,
   );
   progress('Model cached — will load when needed');
