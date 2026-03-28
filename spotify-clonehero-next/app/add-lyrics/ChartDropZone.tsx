@@ -91,7 +91,7 @@ export default function ChartDropZone({
     if (disabled || isLoading) return;
     try {
       const dirHandle = await window.showDirectoryPicker({
-        id: 'lyrics-align-chart',
+        id: 'add-lyrics-chart',
       });
       setIsLoading(true);
       const result = await readChartDirectory(dirHandle);

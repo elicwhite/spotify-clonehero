@@ -52,29 +52,17 @@ interface PipelineStep {
 }
 
 const ALIGN_STEPS: PipelineStep[] = [
-  {id: 'decode', label: 'Decode audio', status: 'pending', detail: ''},
+  {id: 'decode', label: 'Decoding audio', status: 'pending', detail: ''},
   {
     id: 'separate',
-    label: 'Separate vocals (Demucs)',
-    status: 'pending',
-    detail: 'Runs in isolated worker',
-  },
-  {id: 'syllabify', label: 'Syllabify lyrics', status: 'pending', detail: ''},
-  {
-    id: 'ctc',
-    label: 'Run CTC model (wav2vec2)',
+    label: 'Separating vocal stem',
     status: 'pending',
     detail: '',
   },
+  {id: 'syllabify', label: 'Splitting lyrics into syllables', status: 'pending', detail: ''},
   {
-    id: 'viterbi',
-    label: 'Viterbi forced alignment',
-    status: 'pending',
-    detail: '',
-  },
-  {
-    id: 'group',
-    label: 'Group into karaoke lines',
+    id: 'align',
+    label: 'Aligning syllables to audio',
     status: 'pending',
     detail: '',
   },
@@ -322,9 +310,8 @@ export default function LyricsAlignPage() {
         });
       }
 
-      updateAlignStep('ctc', {
+      updateAlignStep('align', {
         status: 'active',
-        detail: 'Loading wav2vec2 model...',
         startTime: Date.now(),
       });
 
@@ -334,34 +321,12 @@ export default function LyricsAlignPage() {
         if (msg.startsWith('Syllabified:')) {
           updateAlignStep('syllabify', {
             status: 'done',
-            detail: msg,
+            detail: '',
             startTime: Date.now(),
             endTime: Date.now(),
-          });
-        } else if (msg.startsWith('Running Viterbi')) {
-          updateAlignStep('ctc', {status: 'done', endTime: Date.now()});
-          updateAlignStep('viterbi', {
-            status: 'active',
-            detail: msg,
-            startTime: Date.now(),
           });
         } else if (msg.startsWith('Done:')) {
-          updateAlignStep('viterbi', {status: 'done', endTime: Date.now()});
-          updateAlignStep('group', {
-            status: 'done',
-            detail: msg,
-            endTime: Date.now(),
-          });
-        } else if (
-          msg.startsWith('Emissions:') ||
-          msg.startsWith('Tokens:') ||
-          msg.startsWith('RMS gap boost:')
-        ) {
-          updateAlignStep('ctc', {detail: msg});
-        } else if (msg.startsWith('Viterbi:')) {
-          updateAlignStep('viterbi', {detail: msg});
-        } else {
-          updateAlignStep('ctc', {detail: msg});
+          updateAlignStep('align', {status: 'done', endTime: Date.now()});
         }
       });
 
@@ -466,16 +431,30 @@ export default function LyricsAlignPage() {
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <header className="mb-8">
           <h1 className="text-3xl sm:text-4xl font-bold mb-2">
-            Lyrics Alignment Tool
+            Add Lyrics To A Chart
           </h1>
           <p className="text-muted-foreground text-sm sm:text-base">
-            Open a chart, paste lyrics, align them to the audio, and export
+            Add timed, syllable-level lyrics to any Clone Hero chart.
+            Everything runs in your browser.
           </p>
         </header>
 
-        {/* Step 1: Pick a chart */}
+        {/* Step 1: Landing — flow diagram + drop zone */}
         {(status === 'idle' || (status === 'error' && !chart)) && (
-          <div className="space-y-4">
+          <div className="space-y-8">
+            {/* Flow diagram */}
+            <div className="bg-muted rounded-xl p-6">
+              <div className="flex items-center justify-between">
+                <FlowStep icon="📁" label="Open" desc="Your chart" />
+                <FlowArrow />
+                <FlowStep icon="✏️" label="Paste" desc="Song lyrics" />
+                <FlowArrow />
+                <FlowStep icon="🎵" label="Align" desc="Auto-synced" />
+                <FlowArrow />
+                <FlowStep icon="📥" label="Download" desc="Updated chart" />
+              </div>
+            </div>
+
             <ChartDropZone onLoaded={handleChartLoaded} />
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
@@ -621,6 +600,31 @@ export default function LyricsAlignPage() {
 // Progress Card
 // ---------------------------------------------------------------------------
 
+function FlowStep({icon, label, desc}: {icon: string; label: string; desc: string}) {
+  return (
+    <div className="flex flex-col items-center gap-1 min-w-0">
+      <span className="text-3xl">{icon}</span>
+      <span className="text-sm font-medium">{label}</span>
+      <span className="text-xs text-muted-foreground">{desc}</span>
+    </div>
+  );
+}
+
+function FlowArrow() {
+  return (
+    <svg
+      className="w-10 h-6 text-muted-foreground/30 flex-shrink-0"
+      fill="currentColor"
+      viewBox="0 0 40 24">
+      <path d="M0 9h28l-6-6 3-3 12 12-12 12-3-3 6-6H0z" />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Progress Card
+// ---------------------------------------------------------------------------
+
 function ProgressCard({
   steps,
   error,
@@ -630,7 +634,7 @@ function ProgressCard({
 }) {
   return (
     <div className="bg-muted rounded-xl p-6 mb-8">
-      <h2 className="text-lg font-semibold mb-4">Aligning Lyrics</h2>
+      <h2 className="text-lg font-semibold mb-4">Adding lyrics to your chart</h2>
       <div className="space-y-3">
         {steps.map(step => (
           <div key={step.id} className="flex items-start gap-3">
