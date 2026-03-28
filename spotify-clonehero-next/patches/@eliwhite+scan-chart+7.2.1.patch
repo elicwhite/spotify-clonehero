@@ -12,7 +12,7 @@ index 20f075f..e166aff 100644
 +
 +export { AlbumArt, ChartIssueType, Difficulty, DrumType, EventType, FolderIssueType, IniChartModifiers, Instrument, InstrumentType, MetadataIssueType, NoteEvent, NoteType, NotesData, RawChartData, ScanChartFolderConfig, ScannedChart, calculateTrackHash, defaultIniChartModifiers, difficulties, drumTypes, eventTypes, getInstrumentType, instrumentTypes, instruments, noteFlags, noteTypes, parseChartFile, parseNotesFromChart, parseNotesFromMidi, scanChartFolder };
 diff --git a/node_modules/@eliwhite/scan-chart/dist/index.js b/node_modules/@eliwhite/scan-chart/dist/index.js
-index 08d2852..c426da1 100644
+index 08d2852..ba65768 100644
 --- a/node_modules/@eliwhite/scan-chart/dist/index.js
 +++ b/node_modules/@eliwhite/scan-chart/dist/index.js
 @@ -54,6 +54,8 @@ __export(src_exports, {
@@ -24,7 +24,18 @@ index 08d2852..c426da1 100644
    scanChartFolder: () => scanChartFolder
  });
  module.exports = __toCommonJS(src_exports);
-@@ -781,7 +783,7 @@ function parseNotesFromChart(data) {
+@@ -772,16 +774,16 @@ function parseNotesFromChart(data) {
+         timeSignatures.unshift({ tick: 0, numerator: 4, denominator: 4 });
+       }
+     }).value(),
+-    sections: _4.chain(fileSections["Events"]).map((line) => /^(\d+) = E "\[?(?:section|prc)[ _](.*?)\]?"$/.exec(line)).compact().map(([, stringTick, stringName]) => ({
++    sections: _4.chain(fileSections["Events"]).map((line) => /^(\d+) = E "(\[)?(?:section|prc)[ _](.*)"$/.exec(line)).compact().map(([, stringTick, hadBracket, stringName]) => ({
+       tick: Number(stringTick),
+-      name: stringName
++      name: hadBracket ? stringName.replace(/\]$/, "") : stringName
+     })).value(),
+     endEvents: _4.chain(fileSections["Events"]).map((line) => /^(\d+) = E "\[?end\]?"$/.exec(line)).compact().map(([, stringTick]) => ({
+       tick: Number(stringTick)
      })).value(),
      trackData: _4.chain(fileSections).pick(_4.keys(trackNameMap)).toPairs().map(([trackName, lines]) => {
        const { instrument, difficulty } = trackNameMap[trackName];
@@ -77,6 +88,15 @@ index 08d2852..c426da1 100644
        }
      }
    }
+@@ -1147,7 +1156,7 @@ function parseNotesFromMidi(data, iniChartModifiers) {
+     endEvents: _5.chain(tracks).find((t) => t.trackName === "EVENTS").get("trackEvents").filter((e) => e.type === "text" && /^\[?end\]?$/.test(e.text)).map((e) => ({
+       tick: e.deltaTime
+     })).value(),
+-    trackData: _5.chain(tracks).filter((t) => _5.keys(instrumentNameMap).includes(t.trackName)).map((t) => {
++    trackData: _5.chain(tracks).filter((t) => _5.keys(instrumentNameMap).includes(t.trackName)).uniqBy("trackName").map((t) => {
+       const instrument = instrumentNameMap[t.trackName];
+       const instrumentType = getInstrumentType(instrument);
+       const trackDifficulties = _5.chain(t.trackEvents).thru((trackEvents) => getTrackEventEnds(trackEvents, instrumentType)).thru((eventEnds) => distributeInstrumentEvents(eventEnds)).thru((eventEnds) => getTrackEvents(eventEnds)).thru((events) => splitMidiModifierSustains(events, instrumentType)).thru((events) => fixLegacyGhStarPower(events, instrumentType, iniChartModifiers)).thru((events) => fixFlexLaneLds(events)).value();
 diff --git a/node_modules/@eliwhite/scan-chart/dist/index.mjs b/node_modules/@eliwhite/scan-chart/dist/index.mjs
 index 8e3382d..977beed 100644
 --- a/node_modules/@eliwhite/scan-chart/dist/index.mjs

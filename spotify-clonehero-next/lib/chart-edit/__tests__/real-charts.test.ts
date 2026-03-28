@@ -478,6 +478,7 @@ function normalizeForComparison(raw: RawChartData): NormalizedData {
     // scan-chart merges both into vocalPhrases. Notes 105 and 106 at the same
     // tick may have different lengths. Our writer only writes note 105.
     // Deduplicate by tick, keeping the longest length at each tick.
+    // Apply same dedup + overlap-trim as the writer so both sides match.
     vocalPhrases: (() => {
       const byTick = new Map<number, number>();
       for (const p of raw.vocalPhrases) {
@@ -487,9 +488,15 @@ function normalizeForComparison(raw: RawChartData): NormalizedData {
           byTick.set(p.tick, len);
         }
       }
-      return sortByTick(
-        [...byTick.entries()].map(([tick, length]) => ({ tick, length })),
-      );
+      const sorted = [...byTick.entries()]
+        .map(([tick, length]) => ({ tick, length }))
+        .sort((a, b) => a.tick - b.tick);
+      // Trim overlapping phrases (same logic as writer)
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const gap = sorted[i + 1].tick - sorted[i].tick;
+        if (sorted[i].length > gap) sorted[i].length = gap;
+      }
+      return sorted;
     })(),
   };
 }

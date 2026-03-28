@@ -567,6 +567,44 @@ function buildInstrumentTrack(
     }
   }
 
+  // Disco flip text events → [mix <diffIdx> drums0], [mix <diffIdx> drums0d], etc.
+  // scan-chart distributes disco flip to all difficulties on parse, so we
+  // deduplicate by tick+type and emit once per unique event, using the
+  // highest difficulty index (expert=3 is the most common source).
+  if (isDrums) {
+    const diffToIdx: Record<string, number> = { easy: 0, medium: 1, hard: 2, expert: 3 };
+    const discoTypeToFlag: Partial<Record<EventType, string>> = {
+      [eventTypes.discoFlipOff]: '',
+      [eventTypes.discoFlipOn]: 'd',
+      [eventTypes.discoNoFlipOn]: 'dnoflip',
+    };
+    // Emit one text event per unique tick+type. scan-chart distributes
+    // disco flip events to all difficulties on parse, so we only need
+    // to write the event once (using expert=3 as the difficulty index).
+    const emittedDisco = new Set<string>();
+    for (const td of trackDataEntries) {
+      for (const ev of td.trackEvents) {
+        const flag = discoTypeToFlag[ev.type];
+        if (flag !== undefined) {
+          const key = `${ev.tick}:${ev.type}`;
+          if (!emittedDisco.has(key)) {
+            emittedDisco.add(key);
+            const diffIdx = diffToIdx[td.difficulty] ?? 3;
+            events.push({
+              tick: ev.tick,
+              event: {
+                deltaTime: 0,
+                meta: true,
+                type: 'text',
+                text: `[mix ${diffIdx} drums0${flag}]`,
+              } as MidiEvent,
+            });
+          }
+        }
+      }
+    }
+  }
+
   // Emit [ENABLE_CHART_DYNAMICS] text event at tick 0 if any accents/ghosts are present
   if (isDrums && hasAccentsOrGhosts) {
     events.push({
@@ -622,8 +660,11 @@ function buildVocalsTrack(doc: ChartDocument): MidiEvent[] {
   }
 
   // Vocal phrase markers as note 105 on/off pairs.
-  // Deduplicate by tick (keep longest) since scan-chart merges notes 105+106
-  // into one array and they may have different lengths at the same tick.
+  // 1. Deduplicate by tick (keep longest) since scan-chart merges notes
+  //    105+106 and they may have different lengths at the same tick.
+  // 2. Trim overlapping phrases so noteOff doesn't overlap the next noteOn
+  //    (adjacent phrases at 1-tick apart would create overlapping note 105
+  //    events, which scan-chart re-parses as tiny 1-tick phrases).
   const phraseLengthByTick = new Map<number, number>();
   for (const phrase of doc.vocalPhrases) {
     const existing = phraseLengthByTick.get(phrase.tick);
@@ -631,7 +672,21 @@ function buildVocalsTrack(doc: ChartDocument): MidiEvent[] {
       phraseLengthByTick.set(phrase.tick, phrase.length);
     }
   }
-  for (const [tick, length] of phraseLengthByTick) {
+  const sortedPhrases = [...phraseLengthByTick.entries()]
+    .map(([tick, length]) => ({ tick, length }))
+    .sort((a, b) => a.tick - b.tick);
+  // Trim phrases that extend past the next phrase's start tick.
+  // A phrase ending exactly at the next one's start (length = gap) is OK;
+  // only trim if it would create overlapping noteOn/noteOff events.
+  for (let i = 0; i < sortedPhrases.length - 1; i++) {
+    const current = sortedPhrases[i];
+    const next = sortedPhrases[i + 1];
+    const gap = next.tick - current.tick;
+    if (current.length > gap) {
+      current.length = gap;
+    }
+  }
+  for (const { tick, length } of sortedPhrases) {
     addNoteOnOff(events, tick, length, 105, 100);
   }
 
