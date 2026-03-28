@@ -384,7 +384,8 @@ type NormalizedData = {
   // difficulties in MIDI but per-difficulty in .chart. We merge and
   // deduplicate across all difficulties for a fair cross-format comparison.
   starPowerSections: Array<{ tick: number; length: number }>;
-  drumFreestyleSections: Array<{ tick: number; length: number }>;
+  soloSections: Array<{ tick: number; length: number }>;
+  drumFreestyleSections: Array<{ tick: number; length: number; isCoda: boolean }>;
   flexLanes: Array<{ tick: number; length: number; isDouble: boolean }>;
   lyrics: Array<{ tick: number; text: string }>;
   vocalPhrases: Array<{ tick: number; length: number }>;
@@ -410,9 +411,19 @@ function normalizeForComparison(raw: RawChartData): NormalizedData {
   const allSP = deduplicateSections(
     normalizeSections(drumTracks.flatMap((t) => t.starPowerSections)),
   );
-  const allFS = deduplicateSections(
-    normalizeSections(drumTracks.flatMap((t) => t.drumFreestyleSections)),
+  const allSolo = deduplicateSections(
+    normalizeSections(drumTracks.flatMap((t) => extractSoloSections(t))),
   );
+  // Freestyle sections: include isCoda flag, dedup by tick:length:isCoda
+  const seenFS = new Set<string>();
+  const allFS = sortByTick(drumTracks.flatMap((t) => t.drumFreestyleSections))
+    .map((fs) => ({ tick: fs.tick, length: Math.max(fs.length, 1), isCoda: fs.isCoda }))
+    .filter((fs) => {
+      const key = `${fs.tick}:${fs.length}:${fs.isCoda}`;
+      if (seenFS.has(key)) return false;
+      seenFS.add(key);
+      return true;
+    });
 
   // Flex lanes: merge and deduplicate by tick:length:isDouble
   // Normalize length to min 1 (same as other sections — .chart allows
@@ -445,6 +456,7 @@ function normalizeForComparison(raw: RawChartData): NormalizedData {
     endEvents: sortByTick(raw.endEvents).map((e) => ({ tick: e.tick })),
     trackData,
     starPowerSections: allSP,
+    soloSections: allSolo,
     drumFreestyleSections: allFS,
     flexLanes: allFlex,
     // Deduplicate lyrics by tick+text (the .chart writer's dedup removes
@@ -465,14 +477,19 @@ function normalizeForComparison(raw: RawChartData): NormalizedData {
     // MIDI has both note 105 (Player 1) and note 106 (Player 2) phrase markers.
     // scan-chart merges both into vocalPhrases. Notes 105 and 106 at the same
     // tick may have different lengths. Our writer only writes note 105.
-    // Deduplicate by tick only (not tick:length) for a fair comparison.
+    // Deduplicate by tick, keeping the longest length at each tick.
     vocalPhrases: (() => {
-      const seen = new Set<number>();
-      return normalizeSections(raw.vocalPhrases).filter((p) => {
-        if (seen.has(p.tick)) return false;
-        seen.add(p.tick);
-        return true;
-      });
+      const byTick = new Map<number, number>();
+      for (const p of raw.vocalPhrases) {
+        const len = Math.max(p.length, 1);
+        const existing = byTick.get(p.tick);
+        if (existing === undefined || len > existing) {
+          byTick.set(p.tick, len);
+        }
+      }
+      return sortByTick(
+        [...byTick.entries()].map(([tick, length]) => ({ tick, length })),
+      );
     })(),
   };
 }
@@ -548,7 +565,7 @@ function compareNormalized(
   }
 
   // Instrument-wide sections (merged across difficulties)
-  for (const field of ['starPowerSections', 'drumFreestyleSections', 'flexLanes'] as const) {
+  for (const field of ['starPowerSections', 'soloSections', 'drumFreestyleSections', 'flexLanes'] as const) {
     if (!deepEqual(a[field], b[field])) {
       diffs.push({
         field,
@@ -684,6 +701,84 @@ function validateChart(
   return diffs.length === 0 ? null : { path: relPath, originalFormat, convertedFormat, diffs };
 }
 
+/**
+ * Same-format roundtrip: read → write (same format) → re-parse → compare.
+ * This avoids all cross-format issues (per-difficulty merge, precision loss,
+ * encoding) and validates that our writer preserves all data faithfully.
+ */
+function validateSameFormatRoundtrip(
+  folder: string,
+  chartDir: string,
+): FailureRecord | 'skip' | null {
+  const relPath = relative(chartDir, folder);
+  const files = loadChartFolder(folder);
+
+  let doc;
+  try {
+    doc = readChart(files);
+  } catch {
+    return 'skip';
+  }
+
+  if (!doc.trackData.some((t) => t.instrument === 'drums')) {
+    return 'skip';
+  }
+
+  const chartFile = files.find(
+    (f) => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
+  )!;
+  const isChart = chartFile.fileName === 'notes.chart';
+  const format = doc.originalFormat;
+
+  // Parse original directly
+  let rawA: RawChartData;
+  try {
+    rawA = isChart
+      ? parseNotesFromChart(chartFile.data)
+      : parseNotesFromMidi(chartFile.data, buildModifiers(doc.metadata));
+  } catch {
+    return 'skip';
+  }
+
+  // Write back in the SAME format (no conversion)
+  let output: FileEntry[];
+  try {
+    output = writeChart(doc);
+  } catch (err) {
+    return {
+      path: relPath,
+      originalFormat: format,
+      convertedFormat: format,
+      diffs: [{ field: 'writeChart', message: `Write failed: ${(err as Error).message}` }],
+    };
+  }
+
+  const outputFile = output.find(
+    (f) => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
+  )!;
+
+  let rawB: RawChartData;
+  try {
+    rawB = isChart
+      ? parseNotesFromChart(outputFile.data)
+      : parseNotesFromMidi(outputFile.data, buildModifiers(doc.metadata));
+  } catch (err) {
+    return {
+      path: relPath,
+      originalFormat: format,
+      convertedFormat: format,
+      diffs: [{ field: 'parse', message: `Re-parse failed: ${(err as Error).message}` }],
+    };
+  }
+
+  const diffs = compareNormalized(
+    normalizeForComparison(rawA),
+    normalizeForComparison(rawB),
+  );
+
+  return diffs.length === 0 ? null : { path: relPath, originalFormat: format, convertedFormat: format, diffs };
+}
+
 // ---------------------------------------------------------------------------
 // Main test suite — one it() per chart for Jest sharding
 // ---------------------------------------------------------------------------
@@ -700,16 +795,16 @@ if (!CHART_DIR) {
 
 const chartDir = CHART_DIR.replace(/^~/, process.env.HOME || '~');
 
+if (!existsSync(chartDir)) {
+  throw new Error(`CHART_DIR does not exist: ${chartDir}`);
+}
+
+let folders = findChartFolders(chartDir);
+if (CHART_LIMIT && CHART_LIMIT < folders.length) {
+  folders = folders.slice(0, CHART_LIMIT);
+}
+
 describe('real-chart cross-format validation', () => {
-
-  if (!existsSync(chartDir)) {
-    throw new Error(`CHART_DIR does not exist: ${chartDir}`);
-  }
-
-  let folders = findChartFolders(chartDir);
-  if (CHART_LIMIT && CHART_LIMIT < folders.length) {
-    folders = folders.slice(0, CHART_LIMIT);
-  }
 
   const report: Report = {
     timestamp: new Date().toISOString(),
@@ -757,6 +852,58 @@ describe('real-chart cross-format validation', () => {
       }
       report.failed++;
       report.failures.push(result);
+      const summary = result.diffs.map((d) => `${d.field}: ${d.message}`).join('; ');
+      fail(`${result.path} (${result.originalFormat}→${result.convertedFormat}): ${summary}`);
+    },
+  );
+});
+
+describe('real-chart same-format roundtrip', () => {
+  const roundtripReport: Report = {
+    timestamp: new Date().toISOString(),
+    chartDir,
+    total: folders.length,
+    passed: 0,
+    failed: 0,
+    skipped: 0,
+    failures: [],
+  };
+
+  afterAll(() => {
+    const reportPath = join(__dirname, 'real-charts-roundtrip-report.json');
+    writeFileSync(reportPath, JSON.stringify(roundtripReport, null, 2) + '\n');
+
+    console.log('\n=== Same-Format Roundtrip Report ===');
+    console.log(`Total:   ${roundtripReport.total}`);
+    console.log(`Passed:  ${roundtripReport.passed}`);
+    console.log(`Failed:  ${roundtripReport.failed}`);
+    console.log(`Skipped: ${roundtripReport.skipped}`);
+    if (roundtripReport.failures.length > 0) {
+      console.log('\nFailures:');
+      for (const f of roundtripReport.failures) {
+        console.log(`  ${f.path} (${f.originalFormat} → ${f.convertedFormat})`);
+        for (const d of f.diffs) {
+          console.log(`    ${d.field}: ${d.message}`);
+        }
+      }
+    }
+    console.log(`\nReport written to: ${reportPath}`);
+  });
+
+  it.each(folders.map((folder) => [relative(chartDir, folder), folder]))(
+    'roundtrip %s',
+    (_relPath, folder) => {
+      const result = validateSameFormatRoundtrip(folder as string, chartDir);
+      if (result === 'skip') {
+        roundtripReport.skipped++;
+        return;
+      }
+      if (result === null) {
+        roundtripReport.passed++;
+        return;
+      }
+      roundtripReport.failed++;
+      roundtripReport.failures.push(result);
       const summary = result.diffs.map((d) => `${d.field}: ${d.message}`).join('; ');
       fail(`${result.path} (${result.originalFormat}→${result.convertedFormat}): ${summary}`);
     },

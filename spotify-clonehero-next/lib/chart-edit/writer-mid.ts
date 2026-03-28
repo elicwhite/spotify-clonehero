@@ -621,9 +621,18 @@ function buildVocalsTrack(doc: ChartDocument): MidiEvent[] {
     });
   }
 
-  // Vocal phrase markers as note 105 on/off pairs
+  // Vocal phrase markers as note 105 on/off pairs.
+  // Deduplicate by tick (keep longest) since scan-chart merges notes 105+106
+  // into one array and they may have different lengths at the same tick.
+  const phraseLengthByTick = new Map<number, number>();
   for (const phrase of doc.vocalPhrases) {
-    addNoteOnOff(events, phrase.tick, phrase.length, 105, 100);
+    const existing = phraseLengthByTick.get(phrase.tick);
+    if (existing === undefined || phrase.length > existing) {
+      phraseLengthByTick.set(phrase.tick, phrase.length);
+    }
+  }
+  for (const [tick, length] of phraseLengthByTick) {
+    addNoteOnOff(events, tick, length, 105, 100);
   }
 
   return finalizeMidiTrack(events);

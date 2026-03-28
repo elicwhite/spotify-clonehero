@@ -422,7 +422,7 @@ function serializeTrackSection(track: TrackData): string[] {
 
   for (const event of deduped) {
     if (event.kind === 'E') {
-      lines.push(`  ${event.tick} = E "${event.text}"`);
+      lines.push(`  ${event.tick} = E ${event.text}`);
     } else {
       lines.push(`  ${event.tick} = ${event.kind} ${event.value} ${event.length}`);
     }

@@ -201,8 +201,8 @@ describe('serializeChart', () => {
     const doc = makeDocWithDrumTrack();
     addSoloSection(getTrack(doc), 0, 192);
     const text = serializeChart(doc);
-    expect(text).toContain('E "solo"');
-    expect(text).toContain('E "soloend"');
+    expect(text).toContain('E solo');
+    expect(text).toContain('E soloend');
   });
 
   // ---------------------------------------------------------------------------
