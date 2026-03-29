@@ -26,7 +26,7 @@ import {
 import AudioUploader from './components/AudioUploader';
 import ProcessingView from './components/ProcessingView';
 import EditorApp from './components/EditorApp';
-import {EditorProvider} from './contexts/EditorContext';
+import {ChartEditorProvider} from '@/components/chart-editor/ChartEditorContext';
 import {
   listProjects,
   getProject,
@@ -483,9 +483,9 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
             Back to Projects
           </Button>
         </div>
-        <EditorProvider>
+        <ChartEditorProvider>
           <EditorApp projectId={projectId} />
-        </EditorProvider>
+        </ChartEditorProvider>
       </div>
     );
   }

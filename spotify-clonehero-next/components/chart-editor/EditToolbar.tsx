@@ -24,21 +24,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {useEditorContext, type ToolMode} from '../contexts/EditorContext';
-import {useUndoRedo} from '../hooks/useEditCommands';
+import {formatForDisplay} from '@tanstack/react-hotkeys';
+import {useChartEditorContext, type ToolMode} from './ChartEditorContext';
+import {useUndoRedo} from './hooks/useEditCommands';
 import {cn} from '@/lib/utils';
 
 const TOOL_ITEMS: {
   mode: ToolMode;
   icon: React.ElementType;
   label: string;
-  shortcut: string;
+  hotkey: string;
 }[] = [
-  {mode: 'cursor', icon: MousePointer2, label: 'Cursor', shortcut: '1'},
-  {mode: 'place', icon: Plus, label: 'Place Note', shortcut: '2'},
-  {mode: 'erase', icon: Eraser, label: 'Eraser', shortcut: '3'},
-  {mode: 'bpm', icon: Activity, label: 'BPM', shortcut: '4'},
-  {mode: 'timesig', icon: Timer, label: 'Time Sig', shortcut: '5'},
+  {mode: 'cursor', icon: MousePointer2, label: 'Cursor', hotkey: 'Mod+1'},
+  {mode: 'place', icon: Plus, label: 'Place Note', hotkey: 'Mod+2'},
+  {mode: 'erase', icon: Eraser, label: 'Eraser', hotkey: 'Mod+3'},
+  {mode: 'bpm', icon: Activity, label: 'BPM', hotkey: 'Mod+4'},
+  {mode: 'timesig', icon: Timer, label: 'Time Sig', hotkey: 'Mod+5'},
 ];
 
 const GRID_OPTIONS: {value: string; label: string; shortcut: string}[] = [
@@ -60,7 +61,7 @@ interface EditToolbarProps {
  * and undo/redo controls.
  */
 export default function EditToolbar({className}: EditToolbarProps) {
-  const {state, dispatch} = useEditorContext();
+  const {state, dispatch} = useChartEditorContext();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
 
   return (
@@ -82,7 +83,7 @@ export default function EditToolbar({className}: EditToolbarProps) {
               <Undo2 className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Undo (Ctrl+Z)</TooltipContent>
+          <TooltipContent>Undo ({formatForDisplay('Mod+Z')})</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -96,14 +97,14 @@ export default function EditToolbar({className}: EditToolbarProps) {
               <Redo2 className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Redo (Ctrl+Shift+Z)</TooltipContent>
+          <TooltipContent>Redo ({formatForDisplay('Mod+Shift+Z')})</TooltipContent>
         </Tooltip>
 
         {/* Separator */}
         <div className="mx-1 h-6 w-px bg-border" />
 
         {/* Tool mode buttons */}
-        {TOOL_ITEMS.map(({mode, icon: Icon, label, shortcut}) => (
+        {TOOL_ITEMS.map(({mode, icon: Icon, label, hotkey}) => (
           <Tooltip key={mode}>
             <TooltipTrigger asChild>
               <Button
@@ -118,7 +119,7 @@ export default function EditToolbar({className}: EditToolbarProps) {
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {label} ({shortcut})
+              {label} ({formatForDisplay(hotkey)})
             </TooltipContent>
           </Tooltip>
         ))}
@@ -165,7 +166,7 @@ export default function EditToolbar({className}: EditToolbarProps) {
               </span>
             </TooltipTrigger>
             <TooltipContent>
-              Unsaved changes. Press Ctrl+S to save.
+              Unsaved changes. Press {formatForDisplay('Mod+S')} to save.
             </TooltipContent>
           </Tooltip>
         )}

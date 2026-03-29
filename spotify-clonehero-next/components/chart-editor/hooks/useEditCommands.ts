@@ -2,7 +2,7 @@
 
 import {useCallback} from 'react';
 import {parseChartFile} from '@eliwhite/scan-chart';
-import {useEditorContext} from '../contexts/EditorContext';
+import {useChartEditorContext} from '../ChartEditorContext';
 import {writeChart} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {EditCommand} from '../commands';
@@ -34,7 +34,7 @@ function chartDocumentToParsedChart(doc: ChartDocument) {
  * to update both the document and the parsed chart in one reducer step.
  */
 export function useExecuteCommand() {
-  const {state, dispatch} = useEditorContext();
+  const {state, dispatch} = useChartEditorContext();
 
   const executeCommand = useCallback(
     (command: EditCommand) => {
@@ -64,7 +64,7 @@ export function useExecuteCommand() {
  * previous chart document. Redo re-applies the last undone command.
  */
 export function useUndoRedo() {
-  const {state, dispatch} = useEditorContext();
+  const {state, dispatch} = useChartEditorContext();
 
   const undo = useCallback(() => {
     if (state.undoStack.length === 0 || state.undoDocStack.length === 0) return;

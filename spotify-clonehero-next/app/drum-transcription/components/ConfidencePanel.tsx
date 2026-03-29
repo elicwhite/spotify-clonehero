@@ -4,12 +4,9 @@ import {useMemo, useState} from 'react';
 import {
   ChevronDown,
   ChevronRight,
-  Eye,
-  EyeOff,
   AlertTriangle,
   CheckCircle2,
 } from 'lucide-react';
-import {Button} from '@/components/ui/button';
 import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
 import {Label} from '@/components/ui/label';
@@ -19,8 +16,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import {useEditorContext} from '../contexts/EditorContext';
-import {noteId} from '../commands';
+import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
+import {useDrumTranscriptionContext} from '../contexts/DrumTranscriptionContext';
+import {noteId} from '@/components/chart-editor/commands';
 import {getDrumNotes} from '@/lib/chart-edit';
 import {cn} from '@/lib/utils';
 
@@ -37,7 +35,8 @@ interface ConfidencePanelProps {
  * - Statistics: total notes, high/medium/low confidence counts, reviewed count
  */
 export default function ConfidencePanel({className}: ConfidencePanelProps) {
-  const {state, dispatch} = useEditorContext();
+  const {state} = useChartEditorContext();
+  const {dtState, dtDispatch} = useDrumTranscriptionContext();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const stats = useMemo(() => {
@@ -46,7 +45,8 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
     }
 
     const track = state.chartDoc.trackData.find(
-      (t: {instrument: string; difficulty: string}) => t.instrument === 'drums' && t.difficulty === 'expert',
+      (t: {instrument: string; difficulty: string}) =>
+        t.instrument === 'drums' && t.difficulty === 'expert',
     );
     if (!track) {
       return {total: 0, high: 0, medium: 0, low: 0, reviewed: 0, lowIds: 0};
@@ -61,9 +61,9 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
 
     for (const note of notes) {
       const id = noteId(note);
-      const conf = state.confidence.get(id);
+      const conf = dtState.confidence.get(id);
 
-      if (state.reviewedNoteIds.has(id)) {
+      if (dtState.reviewedNoteIds.has(id)) {
         reviewed++;
       }
 
@@ -72,7 +72,7 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
         high++;
       } else if (conf >= 0.9) {
         high++;
-      } else if (conf >= state.confidenceThreshold) {
+      } else if (conf >= dtState.confidenceThreshold) {
         medium++;
       } else {
         low++;
@@ -80,9 +80,14 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
     }
 
     return {total, high, medium, low, reviewed, lowIds: low};
-  }, [state.chartDoc, state.confidence, state.confidenceThreshold, state.reviewedNoteIds]);
+  }, [
+    state.chartDoc,
+    dtState.confidence,
+    dtState.confidenceThreshold,
+    dtState.reviewedNoteIds,
+  ]);
 
-  if (state.confidence.size === 0) {
+  if (dtState.confidence.size === 0) {
     // No confidence data loaded -- don't show the panel
     return null;
   }
@@ -123,9 +128,9 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
               </Label>
               <Switch
                 id="show-confidence"
-                checked={state.showConfidence}
+                checked={dtState.showConfidence}
                 onCheckedChange={checked =>
-                  dispatch({type: 'SET_SHOW_CONFIDENCE', show: checked})
+                  dtDispatch({type: 'SET_SHOW_CONFIDENCE', show: checked})
                 }
               />
             </div>
@@ -135,16 +140,16 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
               <div className="flex items-center justify-between">
                 <Label className="text-xs">Threshold</Label>
                 <span className="text-xs font-mono text-muted-foreground">
-                  {(state.confidenceThreshold * 100).toFixed(0)}%
+                  {(dtState.confidenceThreshold * 100).toFixed(0)}%
                 </span>
               </div>
               <Slider
-                value={[state.confidenceThreshold * 100]}
+                value={[dtState.confidenceThreshold * 100]}
                 min={10}
                 max={95}
                 step={5}
                 onValueChange={v =>
-                  dispatch({
+                  dtDispatch({
                     type: 'SET_CONFIDENCE_THRESHOLD',
                     threshold: v[0] / 100,
                   })
@@ -156,7 +161,9 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total notes</span>
-                <span className="font-mono">{stats.total.toLocaleString()}</span>
+                <span className="font-mono">
+                  {stats.total.toLocaleString()}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground flex items-center gap-1">
@@ -189,7 +196,8 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
               <div className="flex justify-between">
                 <span className="text-muted-foreground flex items-center gap-1">
                   <span className="h-2 w-2 rounded-full bg-red-500 inline-block" />
-                  Low (&lt;{(state.confidenceThreshold * 100).toFixed(0)}%)
+                  Low (&lt;
+                  {(dtState.confidenceThreshold * 100).toFixed(0)}%)
                 </span>
                 <span className="font-mono">
                   {stats.low.toLocaleString()}
@@ -214,7 +222,9 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
                 </div>
                 {stats.lowIds > 0 && (
                   <div className="flex justify-between mt-1">
-                    <span className="text-muted-foreground">Low conf. reviewed</span>
+                    <span className="text-muted-foreground">
+                      Low conf. reviewed
+                    </span>
                     <span className="font-mono">
                       {/* Count low-confidence notes that are reviewed */}
                       {(() => {
@@ -228,11 +238,11 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
                         let count = 0;
                         for (const note of getDrumNotes(track)) {
                           const id = noteId(note);
-                          const conf = state.confidence.get(id);
+                          const conf = dtState.confidence.get(id);
                           if (
                             conf !== undefined &&
-                            conf < state.confidenceThreshold &&
-                            state.reviewedNoteIds.has(id)
+                            conf < dtState.confidenceThreshold &&
+                            dtState.reviewedNoteIds.has(id)
                           ) {
                             count++;
                           }

@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useState} from 'react';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import {Loader2, AlertCircle} from 'lucide-react';
 import {toast} from 'sonner';
@@ -15,19 +15,23 @@ import {
   type AudioStorageMeta,
 } from '@/lib/drum-transcription/storage/opfs';
 import {encodeWavBlob} from '@/lib/drum-transcription/audio/wav-encoder';
-import {readChart} from '@/lib/chart-edit';
-import {useEditorContext} from '../contexts/EditorContext';
-import {useEditorKeyboard} from '../hooks/useEditorKeyboard';
-import {useAutoSave} from '../hooks/useAutoSave';
-import TransportControls from './TransportControls';
-import WaveformDisplay from './WaveformDisplay';
-import ExportDialog from './ExportDialog';
-import HighwayEditor from './HighwayEditor';
-import EditToolbar from './EditToolbar';
-import NoteInspector from './NoteInspector';
+import {readChart, writeChart} from '@/lib/chart-edit';
+import {useHotkey} from '@tanstack/react-hotkeys';
+import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
+import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboard';
+import {useAutoSave} from '@/components/chart-editor/hooks/useAutoSave';
+import {noteId} from '@/components/chart-editor/commands';
+import ChartEditor from '@/components/chart-editor/ChartEditor';
+import type {AudioSource} from '@/components/chart-editor/ExportDialog';
+import {
+  useDrumTranscriptionContext,
+  DrumTranscriptionProvider,
+} from '../contexts/DrumTranscriptionContext';
 import ConfidencePanel from './ConfidencePanel';
 import StemVolumeControls from './StemVolumeControls';
-import LoopControls from './LoopControls';
+import {getDrumNotes} from '@/lib/chart-edit';
+import {buildTimedTempos} from '@/lib/drum-transcription/timing';
+import type {DrumNote} from '@/lib/chart-edit';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -50,13 +54,23 @@ interface EditorAppProps {
 }
 
 /**
- * Top-level editor layout. Loads chart + audio from OPFS,
- * creates AudioManager, and renders the editing UI with
- * HighwayEditor, SheetMusic, transport controls, editing tools,
- * confidence panel, stem controls, and loop controls.
+ * Top-level editor layout for drum-transcription.
+ *
+ * Loads chart + audio from OPFS, creates AudioManager, and wraps
+ * DrumTranscriptionProvider around the shared ChartEditor shell.
+ * Passes ConfidencePanel and StemVolumeControls as leftPanelChildren.
  */
 export default function EditorApp({projectId}: EditorAppProps) {
-  const {state, dispatch, audioManagerRef} = useEditorContext();
+  return (
+    <DrumTranscriptionProvider>
+      <EditorAppInner projectId={projectId} />
+    </DrumTranscriptionProvider>
+  );
+}
+
+function EditorAppInner({projectId}: {projectId: string}) {
+  const {state, dispatch, audioManagerRef} = useChartEditorContext();
+  const {dtState, dtDispatch} = useDrumTranscriptionContext();
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
   const [loadingStep, setLoadingStep] = useState<string>(
     'Loading project metadata...',
@@ -68,11 +82,163 @@ export default function EditorApp({projectId}: EditorAppProps) {
   const [audioChannels, setAudioChannels] = useState(2);
   const [durationSeconds, setDurationSeconds] = useState(0);
 
-  // Auto-save hook
-  const {save} = useAutoSave(loadingState === 'ready' ? projectId : null);
+  // Build the save function for auto-save
+  const saveFn = useCallback(async () => {
+    if (!state.chartDoc) return;
 
-  // Register keyboard shortcuts for editing (pass save function)
-  useEditorKeyboard(save);
+    const root = await navigator.storage.getDirectory();
+    const nsDir = await root.getDirectoryHandle('drum-transcription');
+    const projectDir = await nsDir.getDirectoryHandle(projectId);
+
+    // Save edited chart
+    const files = writeChart(state.chartDoc);
+    const chartText = new TextDecoder().decode(
+      files.find(f => f.fileName === 'notes.chart')!.data,
+    );
+    const chartFile = await projectDir.getFileHandle('notes.edited.chart', {
+      create: true,
+    });
+    const chartWritable = await chartFile.createWritable();
+    await chartWritable.write(chartText);
+    await chartWritable.close();
+
+    // Save review progress
+    const reviewJson = JSON.stringify({
+      reviewed: Array.from(dtState.reviewedNoteIds),
+    });
+    const reviewFile = await projectDir.getFileHandle(
+      'review-progress.json',
+      {create: true},
+    );
+    const reviewWritable = await reviewFile.createWritable();
+    await reviewWritable.write(reviewJson);
+    await reviewWritable.close();
+  }, [projectId, state.chartDoc, dtState.reviewedNoteIds]);
+
+  // Auto-save hook (uses shared hook, passes the save function)
+  const {save} = useAutoSave(loadingState === 'ready' ? saveFn : null);
+
+  // Jump to low-confidence note
+  const jumpToLowConfidence = useCallback(
+    (direction: 'next' | 'prev') => {
+      if (!state.chartDoc) return;
+      const track = state.chartDoc.trackData.find(
+        t => t.instrument === 'drums' && t.difficulty === 'expert',
+      );
+      if (!track || dtState.confidence.size === 0) return;
+
+      const threshold = dtState.confidenceThreshold;
+      const currentMs = (audioManagerRef.current?.currentTime ?? 0) * 1000;
+
+      const timedTempos = buildTimedTempos(
+        state.chartDoc.tempos,
+        state.chartDoc.chartTicksPerBeat,
+      );
+      const resolution = state.chartDoc.chartTicksPerBeat;
+
+      const lowConfNotes: {note: DrumNote; ms: number}[] = [];
+      for (const note of getDrumNotes(track)) {
+        const id = noteId(note);
+        const conf = dtState.confidence.get(id);
+        if (conf !== undefined && conf < threshold) {
+          let tempoIdx = 0;
+          for (let i = 1; i < timedTempos.length; i++) {
+            if (timedTempos[i].tick <= note.tick) tempoIdx = i;
+            else break;
+          }
+          const tempo = timedTempos[tempoIdx];
+          const ms =
+            tempo.msTime +
+            ((note.tick - tempo.tick) * 60000) /
+              (tempo.beatsPerMinute * resolution);
+          lowConfNotes.push({note, ms});
+        }
+      }
+
+      if (lowConfNotes.length === 0) return;
+      lowConfNotes.sort((a, b) => a.ms - b.ms);
+
+      let target: {note: DrumNote; ms: number} | undefined;
+      if (direction === 'next') {
+        target = lowConfNotes.find(n => n.ms > currentMs + 50);
+        if (!target) target = lowConfNotes[0];
+      } else {
+        for (let i = lowConfNotes.length - 1; i >= 0; i--) {
+          if (lowConfNotes[i].ms < currentMs - 50) {
+            target = lowConfNotes[i];
+            break;
+          }
+        }
+        if (!target) target = lowConfNotes[lowConfNotes.length - 1];
+      }
+
+      if (target) {
+        const am = audioManagerRef.current;
+        if (am) {
+          am.play({time: target.ms / 1000});
+        }
+        dispatch({
+          type: 'SET_SELECTED_NOTES',
+          noteIds: new Set([noteId(target.note)]),
+        });
+      }
+    },
+    [
+      state.chartDoc,
+      dtState.confidence,
+      dtState.confidenceThreshold,
+      audioManagerRef,
+      dispatch,
+    ],
+  );
+
+  // Callback for when notes are modified (mark reviewed)
+  const handleNotesModified = useCallback(
+    (noteIds: string[]) => {
+      dtDispatch({type: 'MARK_REVIEWED', noteIds});
+    },
+    [dtDispatch],
+  );
+
+  // Register shared editor keyboard shortcuts
+  useEditorKeyboard(save, handleNotesModified);
+
+  // -----------------------------------------------------------------------
+  // Drum-transcription-specific keyboard shortcuts via useHotkey
+  // -----------------------------------------------------------------------
+
+  // Enter - confirm/review selected notes
+  useHotkey('Enter', () => {
+    if (state.selectedNoteIds.size > 0) {
+      dtDispatch({
+        type: 'MARK_REVIEWED',
+        noteIds: Array.from(state.selectedNoteIds),
+      });
+    }
+  }, {enabled: state.selectedNoteIds.size > 0});
+
+  // N - jump to next low-confidence note
+  useHotkey('N', () => {
+    jumpToLowConfidence('next');
+  });
+
+  // Shift+N - jump to previous low-confidence note
+  useHotkey('Shift+N', () => {
+    jumpToLowConfidence('prev');
+  });
+
+  // D - toggle drums solo
+  useHotkey('D', () => {
+    dispatch({
+      type: 'SET_SOLO_TRACK',
+      track: state.soloTrack === 'drums' ? null : 'drums',
+    });
+  });
+
+  // M - toggle mute drums
+  useHotkey('M', () => {
+    dispatch({type: 'TOGGLE_MUTE_TRACK', track: 'drums'});
+  });
 
   // Load data from OPFS
   useEffect(() => {
@@ -125,7 +291,9 @@ export default function EditorApp({projectId}: EditorAppProps) {
         }
 
         // 5. Build editable ChartDocument from chart bytes
-        const chartDoc = readChart([{fileName: 'notes.chart', data: chartBytes}]);
+        const chartDoc = readChart([
+          {fileName: 'notes.chart', data: chartBytes},
+        ]);
 
         // 6. Load confidence data (if available)
         try {
@@ -144,7 +312,7 @@ export default function EditorApp({projectId}: EditorAppProps) {
             const confMap = new Map<string, number>(
               Object.entries(confData.notes),
             );
-            dispatch({type: 'SET_CONFIDENCE', confidence: confMap});
+            dtDispatch({type: 'SET_CONFIDENCE', confidence: confMap});
           }
         } catch (err) {
           console.warn('Failed to load confidence data:', err);
@@ -162,7 +330,7 @@ export default function EditorApp({projectId}: EditorAppProps) {
               'review-progress.json',
             );
             const reviewData = JSON.parse(reviewText) as {reviewed: string[]};
-            dispatch({
+            dtDispatch({
               type: 'SET_REVIEWED_NOTES',
               noteIds: new Set(reviewData.reviewed),
             });
@@ -187,10 +355,6 @@ export default function EditorApp({projectId}: EditorAppProps) {
         setAudioChannels(aMeta.channels);
 
         // 10. Create AudioManager from the audio files
-        // Always load the full mix as "song.wav" so there's always a
-        // complete audio track. Then load any separated stems on top —
-        // AudioManager merges all files with "drums" in the name into
-        // a single drums track, and other stems become separate tracks.
         setLoadingStep('Preparing audio...');
         const fullMixWav = encodeWavBlob(
           pcmData,
@@ -253,7 +417,6 @@ export default function EditorApp({projectId}: EditorAppProps) {
 
     return () => {
       cancelled = true;
-      // Clean up AudioManager on unmount
       audioManagerRef.current?.destroy();
       audioManagerRef.current = null;
     };
@@ -261,8 +424,6 @@ export default function EditorApp({projectId}: EditorAppProps) {
   }, [projectId]);
 
   // Build a minimal metadata object for CloneHeroRenderer.
-  // Memoized so the reference is stable across renders (prevents
-  // DrumHighwayPreview from tearing down and rebuilding the 3D renderer).
   const cloneHeroMetadata = useMemo(
     () =>
       projectMeta
@@ -280,6 +441,93 @@ export default function EditorApp({projectId}: EditorAppProps) {
         : null,
     [projectMeta],
   );
+
+  // Provide chart text for export
+  const getChartText = useCallback(async (): Promise<string> => {
+    let chartText: string;
+    const hasEdited = await projectFileExists(
+      projectId,
+      'notes.edited.chart',
+    );
+    if (hasEdited) {
+      chartText = await readProjectText(projectId, 'notes.edited.chart');
+    } else {
+      chartText = await readProjectText(projectId, 'notes.chart');
+    }
+    return chartText;
+  }, [projectId]);
+
+  // Provide audio sources for export
+  const getAudioSources = useCallback(async (): Promise<AudioSource[]> => {
+    const sources: AudioSource[] = [];
+    const aMeta = audioMeta;
+    if (!aMeta) return sources;
+
+    const {encodeWav} = await import(
+      '@/lib/drum-transcription/audio/wav-encoder'
+    );
+
+    // Drum stem
+    try {
+      const {readProjectBinary} = await import(
+        '@/lib/drum-transcription/storage/opfs'
+      );
+      const drumsPcmBuffer = await readProjectBinary(projectId, 'drums.pcm');
+      const drumsPcm = new Float32Array(drumsPcmBuffer);
+      const drumsWav = encodeWav(drumsPcm, aMeta.sampleRate, aMeta.channels);
+      sources.push({fileName: 'drums.wav', data: drumsWav});
+    } catch {
+      // No drums stem
+    }
+
+    // Accompaniment (mix bass+other+vocals, or fall back to full mix)
+    try {
+      const {readProjectBinary} = await import(
+        '@/lib/drum-transcription/storage/opfs'
+      );
+      const stemNames = ['bass', 'other', 'vocals'];
+      const stemBuffers: Float32Array[] = [];
+
+      for (const stemName of stemNames) {
+        try {
+          const buffer = await readProjectBinary(
+            projectId,
+            `${stemName}.pcm`,
+          );
+          stemBuffers.push(new Float32Array(buffer));
+        } catch {
+          // Stem not available
+        }
+      }
+
+      if (stemBuffers.length > 0) {
+        const maxLength = Math.max(...stemBuffers.map(b => b.length));
+        const mixed = new Float32Array(maxLength);
+        for (const stem of stemBuffers) {
+          for (let i = 0; i < stem.length; i++) {
+            mixed[i] += stem[i];
+          }
+        }
+        for (let i = 0; i < mixed.length; i++) {
+          mixed[i] = Math.max(-1, Math.min(1, mixed[i]));
+        }
+        const songWav = encodeWav(mixed, aMeta.sampleRate, aMeta.channels);
+        sources.push({fileName: 'song.wav', data: songWav});
+      } else {
+        const fullPcmBuffer = await readProjectBinary(
+          projectId,
+          'full.pcm',
+        );
+        const fullPcm = new Float32Array(fullPcmBuffer);
+        const songWav = encodeWav(fullPcm, aMeta.sampleRate, aMeta.channels);
+        sources.push({fileName: 'song.wav', data: songWav});
+      }
+    } catch {
+      // Can't create accompaniment
+    }
+
+    return sources;
+  }, [projectId, audioMeta]);
 
   if (loadingState === 'loading') {
     return (
@@ -299,73 +547,36 @@ export default function EditorApp({projectId}: EditorAppProps) {
     );
   }
 
-  const {chart, track} = state;
-  if (!chart || !track || !audioManagerRef.current || !cloneHeroMetadata) {
+  const {chart} = state;
+  if (!chart || !audioManagerRef.current || !cloneHeroMetadata) {
     return null;
   }
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden bg-black">
-      {/* Main area: highway + overlaid panels */}
-      <div className="relative flex-1 min-h-0">
-        {/* Highway — fills available space above the bottom bar */}
-        <HighwayEditor
-          metadata={cloneHeroMetadata}
-          chart={chart}
-          audioManager={audioManagerRef.current}
-          className="h-full w-full"
-        />
-
-        {/* Overlaid panels on the dark highway edges */}
-
-        {/* Top bar: toolbar + project name + export */}
-        <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between gap-2 px-3 py-2 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
-          <div className="flex items-center gap-2 pointer-events-auto">
-            <h2 className="text-sm font-semibold text-white/90 truncate">
-              {projectMeta?.name ?? 'Untitled'}
-            </h2>
-            {state.dirty && (
-              <span className="text-xs text-amber-400" title="Unsaved changes">
-                *
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 pointer-events-auto">
-            <EditToolbar />
-            <LoopControls audioManager={audioManagerRef.current} />
-            <ExportDialog
-              projectId={projectId}
-              songName={projectMeta?.name ?? 'Untitled'}
-            />
-          </div>
-        </div>
-
-        {/* Left panel: note inspector + confidence + stem controls */}
-        <div className="absolute top-12 left-2 bottom-2 z-10 w-[260px] flex flex-col gap-2 overflow-y-auto pointer-events-auto">
-          <NoteInspector />
+    <ChartEditor
+      metadata={cloneHeroMetadata}
+      chart={chart}
+      audioManager={audioManagerRef.current}
+      audioData={audioPcm ?? undefined}
+      audioChannels={audioChannels}
+      durationSeconds={durationSeconds}
+      sections={chart.sections}
+      songName={projectMeta?.name ?? 'Untitled'}
+      dirty={state.dirty}
+      getChartText={getChartText}
+      getAudioSources={getAudioSources}
+      onNotesModified={handleNotesModified}
+      confidence={dtState.confidence}
+      showConfidence={dtState.showConfidence}
+      confidenceThreshold={dtState.confidenceThreshold}
+      reviewedNoteIds={dtState.reviewedNoteIds}
+      leftPanelChildren={
+        <>
           <ConfidencePanel />
           <StemVolumeControls audioManager={audioManagerRef.current} />
-        </div>
-      </div>
-
-      {/* Bottom bar: transport + waveform + speed — not overlapping the highway */}
-      <div className="shrink-0 rounded-t-lg border border-b-0 bg-card px-3 py-2">
-        <TransportControls
-          audioManager={audioManagerRef.current}
-          durationSeconds={durationSeconds}
-          sections={chart.sections}>
-          {audioPcm && (
-            <WaveformDisplay
-              audioData={audioPcm}
-              channels={audioChannels}
-              audioManager={audioManagerRef.current}
-              durationSeconds={durationSeconds}
-              className="flex-1 min-w-0"
-            />
-          )}
-        </TransportControls>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }
 

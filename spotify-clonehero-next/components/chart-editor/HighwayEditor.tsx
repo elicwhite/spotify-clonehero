@@ -9,22 +9,27 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import * as THREE from 'three';
-import {useEditorContext, type ToolMode} from '../contexts/EditorContext';
-import {useExecuteCommand} from '../hooks/useEditCommands';
+import {useChartEditorContext, type ToolMode} from './ChartEditorContext';
+import {useExecuteCommand} from './hooks/useEditCommands';
 import {
   AddNoteCommand,
   DeleteNotesCommand,
   MoveNotesCommand,
   AddBPMCommand,
   AddTimeSignatureCommand,
+  AddSectionCommand,
+  DeleteSectionCommand,
+  RenameSectionCommand,
+  MoveSectionCommand,
   noteId,
   typeToLane,
   laneToType,
   defaultFlagsForType,
-} from '../commands';
+} from './commands';
 import {
   buildTimedTempos,
   msToTick,
+  tickToMs,
   snapToGrid,
 } from '@/lib/drum-transcription/timing';
 import type {
@@ -141,15 +146,44 @@ const LANE_COLORS = [
   'rgba(1, 177, 26, 0.5)', // green
 ];
 
+// Ghost note colors for cursor position (fainter than hover ghost)
+const GHOST_LANE_COLORS = [
+  'rgba(248, 178, 114, 0.25)', // kick/orange
+  'rgba(221, 34, 20, 0.25)', // red
+  'rgba(222, 235, 82, 0.25)', // yellow
+  'rgba(0, 108, 175, 0.25)', // blue
+  'rgba(1, 177, 26, 0.25)', // green
+];
+
+const CURSOR_LINE_COLOR = 'rgba(0, 255, 128, 0.8)';
+const CURSOR_LINE_WIDTH = 2.5;
+
 const SELECTION_COLOR = 'rgba(255, 255, 255, 0.35)';
 const BOX_SELECT_COLOR = 'rgba(100, 149, 237, 0.25)';
 const BOX_SELECT_BORDER = 'rgba(100, 149, 237, 0.6)';
+
+// Section banner constants
+const SECTION_BG_COLOR = 'rgba(255, 200, 0, 0.15)';
+const SECTION_TEXT_COLOR = 'rgba(255, 200, 0, 0.9)';
+const SECTION_LINE_COLOR = 'rgba(255, 200, 0, 0.5)';
+const SECTION_SELECTED_BG = 'rgba(255, 200, 0, 0.35)';
+const SECTION_SELECTED_BORDER = 'rgba(255, 200, 0, 0.8)';
+const SECTION_BANNER_HEIGHT = 24;
+const SECTION_HIT_TOLERANCE_PX = 14;
 
 interface HighwayEditorProps {
   metadata: ChartResponseEncore;
   chart: ParsedChart;
   audioManager: AudioManager;
   className?: string;
+  /** Optional confidence scores for notes, keyed by noteId (tick:type). */
+  confidence?: Map<string, number>;
+  /** Whether to show confidence overlays. Defaults to false. */
+  showConfidence?: boolean;
+  /** Confidence threshold below which notes are flagged. Defaults to 0.7. */
+  confidenceThreshold?: number;
+  /** Set of note IDs that have been reviewed by the user. */
+  reviewedNoteIds?: Set<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -222,8 +256,12 @@ export default function HighwayEditor({
   chart,
   audioManager,
   className,
+  confidence,
+  showConfidence = false,
+  confidenceThreshold = 0.7,
+  reviewedNoteIds,
 }: HighwayEditorProps) {
-  const {state, dispatch} = useEditorContext();
+  const {state, dispatch, audioManagerRef} = useChartEditorContext();
   const executeCommand = useExecuteCommand();
 
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -253,9 +291,9 @@ export default function HighwayEditor({
   } | null>(null);
   const [isErasing, setIsErasing] = useState(false);
 
-  // Popover state for BPM/TimeSig editing
+  // Popover state for BPM/TimeSig/Section editing
   const [popover, setPopover] = useState<{
-    kind: 'bpm' | 'timesig';
+    kind: 'bpm' | 'timesig' | 'section' | 'section-rename';
     tick: number;
     x: number;
     y: number;
@@ -263,6 +301,16 @@ export default function HighwayEditor({
   const [bpmInput, setBpmInput] = useState('120');
   const [tsNumerator, setTsNumerator] = useState('4');
   const [tsDenominator, setTsDenominator] = useState('4');
+  const [sectionNameInput, setSectionNameInput] = useState('');
+
+  // Section drag state
+  const [isDraggingSection, setIsDraggingSection] = useState(false);
+  const [sectionDragTick, setSectionDragTick] = useState<number | null>(null);
+  const [sectionDragName, setSectionDragName] = useState<string>('');
+  const [sectionDragOriginalTick, setSectionDragOriginalTick] = useState<number>(0);
+
+  // Double-click tracking for section rename
+  const lastClickRef = useRef<{tick: number; time: number} | null>(null);
 
   // Compute timed tempos for coordinate mapping
   const timedTempos = useMemo(() => {
@@ -426,6 +474,58 @@ export default function HighwayEditor({
     [screenToLane, screenToMs, expertNotes, timedTempos, resolution],
   );
 
+  /**
+   * Find a section whose banner intersects the given screen position.
+   * Returns the section {tick, name} or null.
+   */
+  const findSectionAtPosition = useCallback(
+    (x: number, y: number): {tick: number; name: string} | null => {
+      if (!state.chartDoc) return null;
+      const sections = state.chartDoc.sections;
+      if (sections.length === 0) return null;
+
+      const handle = rendererHandleRef.current;
+      const canvas = overlayRef.current;
+      if (!handle || !canvas) return null;
+
+      const camera = handle.getCamera();
+      const highwaySpeed = handle.getHighwaySpeed();
+      const currentMs = audioManager.currentTime * 1000;
+      const delay = (audioManager.delay || 0) * 1000;
+      const elapsedMs = currentMs - delay;
+      const w = canvas.width;
+      const h = canvas.height;
+
+      for (const section of sections) {
+        // Convert section tick to ms
+        let tempoIdx = 0;
+        for (let i = 1; i < timedTempos.length; i++) {
+          if (timedTempos[i].tick <= section.tick) tempoIdx = i;
+          else break;
+        }
+        const tempo = timedTempos[tempoIdx];
+        const ms =
+          tempo.msTime +
+          ((section.tick - tempo.tick) * 60000) /
+            (tempo.beatsPerMinute * resolution);
+
+        const worldY = ((ms - elapsedMs) / 1000) * highwaySpeed - 1;
+        const worldPoint = new THREE.Vector3(0, worldY, 0);
+        const screenPt = worldToScreen(worldPoint, w, h, camera);
+
+        if (
+          Math.abs(screenPt.y - y) <= SECTION_HIT_TOLERANCE_PX &&
+          screenPt.y > 0 &&
+          screenPt.y < h
+        ) {
+          return section;
+        }
+      }
+      return null;
+    },
+    [state.chartDoc, timedTempos, resolution, audioManager],
+  );
+
   // ---------------------------------------------------------------------------
   // Mouse handlers
   // ---------------------------------------------------------------------------
@@ -452,6 +552,50 @@ export default function HighwayEditor({
 
       switch (state.activeTool) {
         case 'cursor': {
+          // Check for section hit first
+          const hitSection = findSectionAtPosition(coords.x, coords.y);
+          if (hitSection) {
+            // Double-click detection for rename
+            const now = Date.now();
+            const last = lastClickRef.current;
+            if (
+              last &&
+              last.tick === hitSection.tick &&
+              now - last.time < 400
+            ) {
+              // Double-click: open rename popover
+              lastClickRef.current = null;
+              const rect = overlayRef.current!.getBoundingClientRect();
+              setSectionNameInput(hitSection.name);
+              setPopover({
+                kind: 'section-rename',
+                tick: hitSection.tick,
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top,
+              });
+              dispatch({type: 'SET_SELECTED_SECTION', tick: hitSection.tick});
+              break;
+            }
+            lastClickRef.current = {tick: hitSection.tick, time: now};
+
+            // Select section
+            dispatch({type: 'SET_SELECTED_SECTION', tick: hitSection.tick});
+            dispatch({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
+            // Start section drag
+            setIsDraggingSection(true);
+            setSectionDragTick(hitSection.tick);
+            setSectionDragName(hitSection.name);
+            setSectionDragOriginalTick(hitSection.tick);
+            setDragStart(coords);
+            setDragCurrent(coords);
+            break;
+          }
+
+          // Clear section selection when clicking elsewhere
+          if (state.selectedSectionTick !== null) {
+            dispatch({type: 'SET_SELECTED_SECTION', tick: null});
+          }
+
           const hitNote = findNoteAtPosition(coords.x, coords.y);
           if (hitNote) {
             const id = noteId(hitNote);
@@ -548,14 +692,27 @@ export default function HighwayEditor({
           setTsDenominator('4');
           break;
         }
+        case 'section': {
+          const rect3 = overlayRef.current!.getBoundingClientRect();
+          setSectionNameInput('');
+          setPopover({
+            kind: 'section',
+            tick,
+            x: e.clientX - rect3.left,
+            y: e.clientY - rect3.top,
+          });
+          break;
+        }
       }
     },
     [
       state.activeTool,
       state.selectedNoteIds,
+      state.selectedSectionTick,
       screenToLane,
       screenToTick,
       findNoteAtPosition,
+      findSectionAtPosition,
       expertNotes,
       timedTempos,
       executeCommand,
@@ -573,6 +730,12 @@ export default function HighwayEditor({
         setDragCurrent(coords);
       }
 
+      // Section drag: update the visual drag position
+      if (isDraggingSection && dragStart) {
+        const newTick = screenToTick(coords.x, coords.y);
+        setSectionDragTick(newTick);
+      }
+
       // Erase mode: paint-erase while dragging
       if (isErasing && state.activeTool === 'erase') {
         const hitNote = findNoteAtPosition(coords.x, coords.y);
@@ -588,6 +751,7 @@ export default function HighwayEditor({
       screenToTick,
       dragStart,
       isErasing,
+      isDraggingSection,
       state.activeTool,
       findNoteAtPosition,
       executeCommand,
@@ -673,7 +837,28 @@ export default function HighwayEditor({
         }
       }
 
+      // Complete section drag-move
+      if (isDraggingSection && sectionDragTick !== null && dragStart) {
+        const dx = coords.x - dragStart.x;
+        const dy = coords.y - dragStart.y;
+        if (
+          (Math.abs(dx) > 5 || Math.abs(dy) > 5) &&
+          sectionDragTick !== sectionDragOriginalTick
+        ) {
+          executeCommand(
+            new MoveSectionCommand(
+              sectionDragOriginalTick,
+              sectionDragTick,
+              sectionDragName,
+            ),
+          );
+          dispatch({type: 'SET_SELECTED_SECTION', tick: sectionDragTick});
+        }
+      }
+
       setIsDragging(false);
+      setIsDraggingSection(false);
+      setSectionDragTick(null);
       setDragStart(null);
       setDragCurrent(null);
       setIsErasing(false);
@@ -684,6 +869,10 @@ export default function HighwayEditor({
       dragStart,
       dragCurrent,
       isDragging,
+      isDraggingSection,
+      sectionDragTick,
+      sectionDragOriginalTick,
+      sectionDragName,
       screenToLane,
       screenToTick,
       screenToMs,
@@ -699,11 +888,11 @@ export default function HighwayEditor({
     setHoverLane(null);
     setHoverTick(null);
     setIsErasing(false);
-    if (!isDragging) {
+    if (!isDragging && !isDraggingSection) {
       setDragStart(null);
       setDragCurrent(null);
     }
-  }, [isDragging]);
+  }, [isDragging, isDraggingSection]);
 
   // ---------------------------------------------------------------------------
   // Popover submit handlers
@@ -728,12 +917,49 @@ export default function HighwayEditor({
     setPopover(null);
   };
 
+  const handleSectionSubmit = () => {
+    if (!popover) return;
+    const name = sectionNameInput.trim();
+    if (!name) return;
+    executeCommand(new AddSectionCommand(popover.tick, name));
+    setPopover(null);
+    setSectionNameInput('');
+  };
+
+  const handleSectionRenameSubmit = () => {
+    if (!popover || popover.kind !== 'section-rename') return;
+    const newName = sectionNameInput.trim();
+    if (!newName) return;
+    const section = state.chartDoc?.sections.find(
+      s => s.tick === popover.tick,
+    );
+    if (!section || section.name === newName) {
+      setPopover(null);
+      return;
+    }
+    executeCommand(
+      new RenameSectionCommand(popover.tick, section.name, newName),
+    );
+    setPopover(null);
+    setSectionNameInput('');
+  };
+
   // ---------------------------------------------------------------------------
   // Refs that mirror state for use inside the draw loop.
   // ---------------------------------------------------------------------------
 
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  // Refs for optional confidence/review props (read from animation frame)
+  const confidenceRef = useRef(confidence);
+  confidenceRef.current = confidence;
+  const showConfidenceRef = useRef(showConfidence);
+  showConfidenceRef.current = showConfidence;
+  const confidenceThresholdRef = useRef(confidenceThreshold);
+  confidenceThresholdRef.current = confidenceThreshold;
+  const reviewedNoteIdsRef = useRef(reviewedNoteIds);
+  reviewedNoteIdsRef.current = reviewedNoteIds;
 
   const hoverLaneRef = useRef(hoverLane);
   hoverLaneRef.current = hoverLane;
@@ -758,6 +984,15 @@ export default function HighwayEditor({
 
   const resolutionRef = useRef(resolution);
   resolutionRef.current = resolution;
+
+  const isDraggingSectionRef = useRef(isDraggingSection);
+  isDraggingSectionRef.current = isDraggingSection;
+  const sectionDragTickRef = useRef(sectionDragTick);
+  sectionDragTickRef.current = sectionDragTick;
+  const sectionDragNameRef = useRef(sectionDragName);
+  sectionDragNameRef.current = sectionDragName;
+  const sectionDragOriginalTickRef = useRef(sectionDragOriginalTick);
+  sectionDragOriginalTickRef.current = sectionDragOriginalTick;
 
   // ---------------------------------------------------------------------------
   // Overlay rendering loop
@@ -944,15 +1179,159 @@ export default function HighwayEditor({
         }
       }
 
+      // Draw section banners
+      if (st.chartDoc && handle) {
+        const camera = handle.getCamera();
+        const highwaySpeed = handle.getHighwaySpeed();
+        const currentMs = audioManager.currentTime * 1000;
+        const delay = (audioManager.delay || 0) * 1000;
+        const elapsedMs = currentMs - delay;
+        const curDraggingSection = isDraggingSectionRef.current;
+        const curDragSectionTick = sectionDragTickRef.current;
+        const curDragSectionName = sectionDragNameRef.current;
+        const curDragSectionOrigTick = sectionDragOriginalTickRef.current;
+
+        const sectionsToRender = st.chartDoc.sections;
+        for (const section of sectionsToRender) {
+          // During a drag, hide the section at its original tick
+          // (we'll draw it at the drag position instead)
+          if (
+            curDraggingSection &&
+            section.tick === curDragSectionOrigTick
+          ) {
+            continue;
+          }
+
+          let sTempoIdx = 0;
+          for (let i = 1; i < tempos.length; i++) {
+            if (tempos[i].tick <= section.tick) sTempoIdx = i;
+            else break;
+          }
+          const sTempo = tempos[sTempoIdx];
+          const sMs =
+            sTempo.msTime +
+            ((section.tick - sTempo.tick) * 60000) /
+              (sTempo.beatsPerMinute * res);
+          const sWorldY = ((sMs - elapsedMs) / 1000) * highwaySpeed - 1;
+
+          const leftPt = worldToScreen(
+            new THREE.Vector3(-HIGHWAY_HALF_WIDTH, sWorldY, 0),
+            w,
+            h,
+            camera,
+          );
+          const rightPt = worldToScreen(
+            new THREE.Vector3(HIGHWAY_HALF_WIDTH, sWorldY, 0),
+            w,
+            h,
+            camera,
+          );
+
+          if (leftPt.y < -20 || leftPt.y > h + 20) continue;
+
+          const isSelected = st.selectedSectionTick === section.tick;
+          const bannerH = SECTION_BANNER_HEIGHT;
+          const bannerW = rightPt.x - leftPt.x;
+
+          // Draw banner background
+          ctx.fillStyle = isSelected ? SECTION_SELECTED_BG : SECTION_BG_COLOR;
+          ctx.fillRect(leftPt.x, leftPt.y - bannerH / 2, bannerW, bannerH);
+
+          // Draw border for selected section
+          if (isSelected) {
+            ctx.strokeStyle = SECTION_SELECTED_BORDER;
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(leftPt.x, leftPt.y - bannerH / 2, bannerW, bannerH);
+          }
+
+          // Draw line
+          ctx.strokeStyle = SECTION_LINE_COLOR;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(leftPt.x, leftPt.y);
+          ctx.lineTo(rightPt.x, rightPt.y);
+          ctx.stroke();
+
+          // Draw text
+          ctx.fillStyle = SECTION_TEXT_COLOR;
+          ctx.font = '12px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(section.name, leftPt.x + 8, leftPt.y);
+        }
+
+        // Draw section being dragged at its current drag position
+        if (
+          curDraggingSection &&
+          curDragSectionTick !== null
+        ) {
+          let dTempoIdx = 0;
+          for (let i = 1; i < tempos.length; i++) {
+            if (tempos[i].tick <= curDragSectionTick) dTempoIdx = i;
+            else break;
+          }
+          const dTempo = tempos[dTempoIdx];
+          const dMs =
+            dTempo.msTime +
+            ((curDragSectionTick - dTempo.tick) * 60000) /
+              (dTempo.beatsPerMinute * res);
+          const dWorldY = ((dMs - elapsedMs) / 1000) * highwaySpeed - 1;
+
+          const dLeftPt = worldToScreen(
+            new THREE.Vector3(-HIGHWAY_HALF_WIDTH, dWorldY, 0),
+            w,
+            h,
+            camera,
+          );
+          const dRightPt = worldToScreen(
+            new THREE.Vector3(HIGHWAY_HALF_WIDTH, dWorldY, 0),
+            w,
+            h,
+            camera,
+          );
+
+          if (dLeftPt.y > -20 && dLeftPt.y < h + 20) {
+            const bannerH = SECTION_BANNER_HEIGHT;
+            const bannerW = dRightPt.x - dLeftPt.x;
+
+            ctx.fillStyle = SECTION_SELECTED_BG;
+            ctx.fillRect(dLeftPt.x, dLeftPt.y - bannerH / 2, bannerW, bannerH);
+            ctx.strokeStyle = SECTION_SELECTED_BORDER;
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(dLeftPt.x, dLeftPt.y - bannerH / 2, bannerW, bannerH);
+            ctx.strokeStyle = SECTION_LINE_COLOR;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(dLeftPt.x, dLeftPt.y);
+            ctx.lineTo(dRightPt.x, dRightPt.y);
+            ctx.stroke();
+            ctx.fillStyle = SECTION_TEXT_COLOR;
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+              curDragSectionName,
+              dLeftPt.x + 8,
+              dLeftPt.y,
+            );
+          }
+        }
+      }
+
       // Draw confidence overlays and review indicators
-      if (st.showConfidence && st.confidence.size > 0) {
+      const curConfidence = confidenceRef.current;
+      const curShowConfidence = showConfidenceRef.current;
+      const curConfidenceThreshold = confidenceThresholdRef.current;
+      const curReviewedNoteIds = reviewedNoteIdsRef.current;
+
+      if (curShowConfidence && curConfidence && curConfidence.size > 0) {
         for (const note of notes) {
           const lane = typeToLane(note.type);
           const pos = localNoteToScreen(note.tick, lane);
           if (!pos || pos.y < -20 || pos.y > h + 20) continue;
 
           const id = noteId(note);
-          const conf = st.confidence.get(id);
+          const conf = curConfidence.get(id);
 
           if (conf !== undefined && conf < 0.9) {
             const bounds = laneScreenBounds(lane, pos.y);
@@ -969,7 +1348,7 @@ export default function HighwayEditor({
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
               ctx.fillText('?', pos.x, pos.y);
-            } else if (conf < st.confidenceThreshold) {
+            } else if (conf < curConfidenceThreshold) {
               ctx.strokeStyle = 'rgba(245, 158, 11, 0.6)';
               ctx.lineWidth = 2;
               ctx.beginPath();
@@ -987,10 +1366,10 @@ export default function HighwayEditor({
       }
 
       // Draw review indicators (small green check mark)
-      if (st.reviewedNoteIds.size > 0) {
+      if (curReviewedNoteIds && curReviewedNoteIds.size > 0) {
         for (const note of notes) {
           const id = noteId(note);
-          if (!st.reviewedNoteIds.has(id)) continue;
+          if (!curReviewedNoteIds.has(id)) continue;
           const lane = typeToLane(note.type);
           const pos = localNoteToScreen(note.tick, lane);
           if (!pos || pos.y < -20 || pos.y > h + 20) continue;
@@ -1023,7 +1402,79 @@ export default function HighwayEditor({
         }
       }
 
-      // Draw ghost note preview (Place mode)
+      // Draw cursor line (when not playing)
+      if (!st.isPlaying && handle) {
+        const cursorTick = st.cursorTick;
+        const cursorPos = localNoteToScreen(cursorTick, 0);
+        if (cursorPos && cursorPos.y > 0 && cursorPos.y < h) {
+          const camera = handle.getCamera();
+          const highwaySpeed = handle.getHighwaySpeed();
+          const currentMs = audioManager.currentTime * 1000;
+          const delay = (audioManager.delay || 0) * 1000;
+          const elapsedMs = currentMs - delay;
+
+          // tick to ms for cursor
+          let cTempoIdx = 0;
+          for (let i = 1; i < tempos.length; i++) {
+            if (tempos[i].tick <= cursorTick) cTempoIdx = i;
+            else break;
+          }
+          const cTempo = tempos[cTempoIdx];
+          const cursorMs =
+            cTempo
+              ? cTempo.msTime +
+                ((cursorTick - cTempo.tick) * 60000) /
+                  (cTempo.beatsPerMinute * res)
+              : 0;
+          const cursorWorldY =
+            ((cursorMs - elapsedMs) / 1000) * highwaySpeed - 1;
+
+          const leftPt = worldToScreen(
+            new THREE.Vector3(-HIGHWAY_HALF_WIDTH, cursorWorldY, 0),
+            w,
+            h,
+            camera,
+          );
+          const rightPt = worldToScreen(
+            new THREE.Vector3(HIGHWAY_HALF_WIDTH, cursorWorldY, 0),
+            w,
+            h,
+            camera,
+          );
+
+          // Draw cursor line
+          ctx.strokeStyle = CURSOR_LINE_COLOR;
+          ctx.lineWidth = CURSOR_LINE_WIDTH;
+          ctx.beginPath();
+          ctx.moveTo(leftPt.x, leftPt.y);
+          ctx.lineTo(rightPt.x, rightPt.y);
+          ctx.stroke();
+
+          // Draw tick label next to cursor
+          ctx.fillStyle = CURSOR_LINE_COLOR;
+          ctx.font = '10px monospace';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(`tick ${cursorTick}`, rightPt.x + 4, rightPt.y - 2);
+        }
+      }
+
+      // Draw ghost note previews at cursor position (Place mode, all lanes)
+      if (st.activeTool === 'place' && !st.isPlaying) {
+        const cursorTick = st.cursorTick;
+        for (let lane = 0; lane < NUM_LANES; lane++) {
+          const pos = localNoteToScreen(cursorTick, lane);
+          if (!pos || pos.y <= 0 || pos.y >= h) continue;
+          const bounds = laneScreenBounds(lane, pos.y);
+          const noteRadius = bounds ? bounds.width / 3 : 12;
+          ctx.fillStyle = GHOST_LANE_COLORS[lane];
+          ctx.beginPath();
+          ctx.ellipse(pos.x, pos.y, noteRadius, 6, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Draw ghost note preview at mouse hover position (Place mode)
       if (
         st.activeTool === 'place' &&
         curHoverLane !== null &&
@@ -1117,9 +1568,9 @@ export default function HighwayEditor({
         }
       }
 
-      // Draw cursor crosshair for BPM/TimeSig modes
+      // Draw cursor crosshair for BPM/TimeSig/Section modes
       if (
-        (st.activeTool === 'bpm' || st.activeTool === 'timesig') &&
+        (st.activeTool === 'bpm' || st.activeTool === 'timesig' || st.activeTool === 'section') &&
         curHoverTick !== null &&
         handle
       ) {
@@ -1158,7 +1609,9 @@ export default function HighwayEditor({
           ctx.strokeStyle =
             st.activeTool === 'bpm'
               ? 'rgba(255, 165, 0, 0.7)'
-              : 'rgba(147, 112, 219, 0.7)';
+              : st.activeTool === 'timesig'
+                ? 'rgba(147, 112, 219, 0.7)'
+                : 'rgba(255, 200, 0, 0.7)';
           ctx.lineWidth = 2;
           ctx.setLineDash([5, 5]);
           ctx.beginPath();
@@ -1172,7 +1625,9 @@ export default function HighwayEditor({
           ctx.fillText(
             st.activeTool === 'bpm'
               ? `BPM @ tick ${curHoverTick}`
-              : `TS @ tick ${curHoverTick}`,
+              : st.activeTool === 'timesig'
+                ? `TS @ tick ${curHoverTick}`
+                : `Section @ tick ${curHoverTick}`,
             leftPt.x + 4,
             leftPt.y - 6,
           );
@@ -1261,6 +1716,43 @@ export default function HighwayEditor({
   }, []);
 
   // ---------------------------------------------------------------------------
+  // Sync cursor tick with playback
+  //
+  // During playback, cursor follows audioManager.currentTime.
+  // On stop, cursor stays at the current position.
+  // ---------------------------------------------------------------------------
+
+  const prevIsPlayingRef = useRef(state.isPlaying);
+
+  useEffect(() => {
+    const wasPlaying = prevIsPlayingRef.current;
+    prevIsPlayingRef.current = state.isPlaying;
+
+    if (!state.isPlaying && wasPlaying && state.chartDoc) {
+      // Just stopped: update cursor to current audio position
+      const currentMs = (audioManagerRef.current?.currentTime ?? 0) * 1000;
+      const cursorTick = msToTick(currentMs, timedTempos, resolution);
+      const snapped =
+        state.gridDivision === 0
+          ? Math.max(0, cursorTick)
+          : Math.max(
+              0,
+              snapToGrid(cursorTick, resolution, state.gridDivision),
+            );
+      dispatch({type: 'SET_CURSOR_TICK', tick: snapped});
+    }
+    // audioManagerRef is a stable ref from context, not a dependency
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    state.isPlaying,
+    state.chartDoc,
+    state.gridDivision,
+    timedTempos,
+    resolution,
+    dispatch,
+  ]);
+
+  // ---------------------------------------------------------------------------
   // Cursor style based on tool mode
   // ---------------------------------------------------------------------------
 
@@ -1274,6 +1766,7 @@ export default function HighwayEditor({
         return 'pointer';
       case 'bpm':
       case 'timesig':
+      case 'section':
         return 'crosshair';
       default:
         return 'default';
@@ -1378,6 +1871,97 @@ export default function HighwayEditor({
             />
             <Button type="submit" size="sm" className="h-7 px-2 text-xs">
               Set
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setPopover(null)}>
+              Cancel
+            </Button>
+          </form>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Tick: {popover.tick}
+          </p>
+        </div>
+      )}
+
+      {/* Section add popover */}
+      {popover?.kind === 'section' && (
+        <div
+          className="absolute z-20 rounded-lg border bg-background p-2 shadow-lg"
+          style={{left: popover.x + 8, top: popover.y - 16}}>
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              handleSectionSubmit();
+            }}
+            className="flex items-center gap-1">
+            <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+              Section:
+            </label>
+            <Input
+              type="text"
+              value={sectionNameInput}
+              onChange={e => setSectionNameInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  setPopover(null);
+                }
+              }}
+              className="h-7 w-32 text-xs"
+              placeholder="e.g. verse 1"
+              autoFocus
+            />
+            <Button type="submit" size="sm" className="h-7 px-2 text-xs">
+              Add
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setPopover(null)}>
+              Cancel
+            </Button>
+          </form>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Tick: {popover.tick}
+          </p>
+        </div>
+      )}
+
+      {/* Section rename popover */}
+      {popover?.kind === 'section-rename' && (
+        <div
+          className="absolute z-20 rounded-lg border bg-background p-2 shadow-lg"
+          style={{left: popover.x + 8, top: popover.y - 16}}>
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              handleSectionRenameSubmit();
+            }}
+            className="flex items-center gap-1">
+            <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+              Rename:
+            </label>
+            <Input
+              type="text"
+              value={sectionNameInput}
+              onChange={e => setSectionNameInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  setPopover(null);
+                }
+              }}
+              className="h-7 w-32 text-xs"
+              autoFocus
+            />
+            <Button type="submit" size="sm" className="h-7 px-2 text-xs">
+              Save
             </Button>
             <Button
               type="button"

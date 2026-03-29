@@ -18,8 +18,8 @@ import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
 import type {
   LoadedFiles,
   SourceFormat,
-} from '@/lib/lyrics-align/chart-file-readers';
-import ChartDropZone from './ChartDropZone';
+} from '@/components/chart-picker/chart-file-readers';
+import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 
 const FPS = 30;
 
@@ -456,7 +456,7 @@ export default function LyricsAlignPage() {
               </div>
             </div>
 
-            <ChartDropZone onLoaded={handleChartLoaded} />
+            <ChartDropZone onLoaded={handleChartLoaded} id="add-lyrics-chart" />
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
         )}
@@ -490,7 +490,7 @@ export default function LyricsAlignPage() {
                   {' '}&middot; {chart.sourceFormat === 'sng' ? '.sng' : chart.sourceFormat === 'zip' ? '.zip' : 'folder'}
                 </p>
               </div>
-              <ChartDropZone onLoaded={handleChartLoaded} />
+              <ChartDropZone onLoaded={handleChartLoaded} id="add-lyrics-chart" />
             </div>
 
             {/* Existing lyrics warning */}

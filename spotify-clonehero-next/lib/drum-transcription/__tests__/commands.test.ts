@@ -12,6 +12,10 @@ import {
   ToggleFlagCommand,
   AddBPMCommand,
   AddTimeSignatureCommand,
+  AddSectionCommand,
+  DeleteSectionCommand,
+  RenameSectionCommand,
+  MoveSectionCommand,
   BatchCommand,
   noteId,
   typeToLane,
@@ -457,5 +461,231 @@ describe('BatchCommand', () => {
     const notes = getExpertNotes(result);
     expect(notes).toHaveLength(1);
     expect(notes[0].type).toBe('redDrum');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AddSectionCommand
+// ---------------------------------------------------------------------------
+
+describe('AddSectionCommand', () => {
+  it('adds a section to an empty sections array', () => {
+    const doc = makeDoc();
+    const cmd = new AddSectionCommand(480, 'verse 1');
+
+    const result = cmd.execute(doc);
+    expect(result.sections).toHaveLength(1);
+    expect(result.sections[0]).toEqual({tick: 480, name: 'verse 1'});
+  });
+
+  it('maintains sort order when adding', () => {
+    const doc: ChartDocument = {
+      ...makeDoc(),
+      sections: [
+        {tick: 0, name: 'intro'},
+        {tick: 960, name: 'chorus'},
+      ],
+    };
+    const cmd = new AddSectionCommand(480, 'verse');
+
+    const result = cmd.execute(doc);
+    expect(result.sections).toHaveLength(3);
+    expect(result.sections[0].tick).toBe(0);
+    expect(result.sections[1].tick).toBe(480);
+    expect(result.sections[2].tick).toBe(960);
+  });
+
+  it('replaces an existing section at the same tick', () => {
+    const doc: ChartDocument = {
+      ...makeDoc(),
+      sections: [{tick: 480, name: 'old name'}],
+    };
+    const cmd = new AddSectionCommand(480, 'new name');
+
+    const result = cmd.execute(doc);
+    expect(result.sections).toHaveLength(1);
+    expect(result.sections[0].name).toBe('new name');
+  });
+
+  it('undo removes the added section', () => {
+    const doc = makeDoc();
+    const cmd = new AddSectionCommand(480, 'verse 1');
+
+    const after = cmd.execute(doc);
+    expect(after.sections).toHaveLength(1);
+
+    const reverted = cmd.undo(after);
+    expect(reverted.sections).toHaveLength(0);
+  });
+
+  it('does not mutate the original document', () => {
+    const doc = makeDoc();
+    const cmd = new AddSectionCommand(480, 'verse 1');
+
+    cmd.execute(doc);
+    expect(doc.sections).toHaveLength(0);
+  });
+
+  it('has a descriptive description', () => {
+    const cmd = new AddSectionCommand(480, 'chorus');
+    expect(cmd.description).toBe('Add section "chorus"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DeleteSectionCommand
+// ---------------------------------------------------------------------------
+
+describe('DeleteSectionCommand', () => {
+  it('removes a section at the given tick', () => {
+    const doc: ChartDocument = {
+      ...makeDoc(),
+      sections: [
+        {tick: 0, name: 'intro'},
+        {tick: 480, name: 'verse'},
+        {tick: 960, name: 'chorus'},
+      ],
+    };
+    const cmd = new DeleteSectionCommand(480, 'verse');
+
+    const result = cmd.execute(doc);
+    expect(result.sections).toHaveLength(2);
+    expect(result.sections.map(s => s.name)).toEqual(['intro', 'chorus']);
+  });
+
+  it('undo restores the deleted section', () => {
+    const doc: ChartDocument = {
+      ...makeDoc(),
+      sections: [
+        {tick: 0, name: 'intro'},
+        {tick: 480, name: 'verse'},
+      ],
+    };
+    const cmd = new DeleteSectionCommand(480, 'verse');
+
+    const after = cmd.execute(doc);
+    expect(after.sections).toHaveLength(1);
+
+    const reverted = cmd.undo(after);
+    expect(reverted.sections).toHaveLength(2);
+    expect(reverted.sections[1]).toEqual({tick: 480, name: 'verse'});
+  });
+
+  it('does not mutate the original document', () => {
+    const doc: ChartDocument = {
+      ...makeDoc(),
+      sections: [{tick: 480, name: 'verse'}],
+    };
+    const cmd = new DeleteSectionCommand(480, 'verse');
+
+    cmd.execute(doc);
+    expect(doc.sections).toHaveLength(1);
+  });
+
+  it('has a descriptive description', () => {
+    const cmd = new DeleteSectionCommand(480, 'verse');
+    expect(cmd.description).toBe('Delete section "verse"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RenameSectionCommand
+// ---------------------------------------------------------------------------
+
+describe('RenameSectionCommand', () => {
+  it('renames a section', () => {
+    const doc: ChartDocument = {
+      ...makeDoc(),
+      sections: [{tick: 480, name: 'verse'}],
+    };
+    const cmd = new RenameSectionCommand(480, 'verse', 'verse 1');
+
+    const result = cmd.execute(doc);
+    expect(result.sections).toHaveLength(1);
+    expect(result.sections[0].name).toBe('verse 1');
+  });
+
+  it('undo restores the original name', () => {
+    const doc: ChartDocument = {
+      ...makeDoc(),
+      sections: [{tick: 480, name: 'verse'}],
+    };
+    const cmd = new RenameSectionCommand(480, 'verse', 'verse 1');
+
+    const after = cmd.execute(doc);
+    const reverted = cmd.undo(after);
+    expect(reverted.sections[0].name).toBe('verse');
+  });
+
+  it('does not mutate the original document', () => {
+    const doc: ChartDocument = {
+      ...makeDoc(),
+      sections: [{tick: 480, name: 'verse'}],
+    };
+    const cmd = new RenameSectionCommand(480, 'verse', 'verse 1');
+
+    cmd.execute(doc);
+    expect(doc.sections[0].name).toBe('verse');
+  });
+
+  it('has a descriptive description', () => {
+    const cmd = new RenameSectionCommand(480, 'verse', 'verse 1');
+    expect(cmd.description).toBe('Rename section to "verse 1"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MoveSectionCommand
+// ---------------------------------------------------------------------------
+
+describe('MoveSectionCommand', () => {
+  it('moves a section to a new tick position', () => {
+    const doc: ChartDocument = {
+      ...makeDoc(),
+      sections: [
+        {tick: 0, name: 'intro'},
+        {tick: 480, name: 'verse'},
+        {tick: 960, name: 'chorus'},
+      ],
+    };
+    const cmd = new MoveSectionCommand(480, 720, 'verse');
+
+    const result = cmd.execute(doc);
+    expect(result.sections).toHaveLength(3);
+    const ticks = result.sections.map(s => s.tick);
+    expect(ticks).toEqual([0, 720, 960]);
+    expect(result.sections.find(s => s.tick === 720)?.name).toBe('verse');
+  });
+
+  it('undo moves the section back', () => {
+    const doc: ChartDocument = {
+      ...makeDoc(),
+      sections: [
+        {tick: 0, name: 'intro'},
+        {tick: 480, name: 'verse'},
+      ],
+    };
+    const cmd = new MoveSectionCommand(480, 720, 'verse');
+
+    const after = cmd.execute(doc);
+    const reverted = cmd.undo(after);
+    expect(reverted.sections).toHaveLength(2);
+    expect(reverted.sections[1]).toEqual({tick: 480, name: 'verse'});
+  });
+
+  it('does not mutate the original document', () => {
+    const doc: ChartDocument = {
+      ...makeDoc(),
+      sections: [{tick: 480, name: 'verse'}],
+    };
+    const cmd = new MoveSectionCommand(480, 720, 'verse');
+
+    cmd.execute(doc);
+    expect(doc.sections[0].tick).toBe(480);
+  });
+
+  it('has a descriptive description', () => {
+    const cmd = new MoveSectionCommand(480, 720, 'verse');
+    expect(cmd.description).toBe('Move section "verse"');
   });
 });

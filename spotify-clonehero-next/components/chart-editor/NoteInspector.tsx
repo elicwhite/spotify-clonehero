@@ -3,14 +3,14 @@
 import {useMemo} from 'react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
-import {useEditorContext} from '../contexts/EditorContext';
-import {useExecuteCommand} from '../hooks/useEditCommands';
+import {useChartEditorContext} from './ChartEditorContext';
+import {useExecuteCommand} from './hooks/useEditCommands';
 import {
   ToggleFlagCommand,
   DeleteNotesCommand,
   noteId,
   type FlagName,
-} from '../commands';
+} from './commands';
 import type {
   DrumNote,
   DrumNoteType,
@@ -34,14 +34,16 @@ const FLAG_ITEMS: {key: FlagName; label: string; shortcut: string}[] = [
 
 interface NoteInspectorProps {
   className?: string;
+  /** Optional callback when notes are modified via this inspector. */
+  onNotesModified?: (noteIds: string[]) => void;
 }
 
 /**
  * Panel that shows properties of the currently selected note(s).
  * Appears only when notes are selected in Cursor mode.
  */
-export default function NoteInspector({className}: NoteInspectorProps) {
-  const {state, dispatch} = useEditorContext();
+export default function NoteInspector({className, onNotesModified}: NoteInspectorProps) {
+  const {state, dispatch} = useChartEditorContext();
   const executeCommand = useExecuteCommand();
 
   const selectedNotes = useMemo(() => {
@@ -70,14 +72,12 @@ export default function NoteInspector({className}: NoteInspectorProps) {
   const handleToggleFlag = (flag: FlagName) => {
     const ids = selectedNotes.map(n => noteId(n));
     executeCommand(new ToggleFlagCommand(ids, flag));
-    // Mark as reviewed on edit
-    dispatch({type: 'MARK_REVIEWED', noteIds: ids});
+    onNotesModified?.(ids);
   };
 
   const handleDelete = () => {
     const ids = new Set(selectedNotes.map(n => noteId(n)));
-    // Mark as reviewed on delete
-    dispatch({type: 'MARK_REVIEWED', noteIds: Array.from(ids)});
+    onNotesModified?.(Array.from(ids));
     executeCommand(new DeleteNotesCommand(ids));
     dispatch({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
   };

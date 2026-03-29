@@ -24,30 +24,40 @@ import {
 import {Label} from '@/components/ui/label';
 import {Switch} from '@/components/ui/switch';
 
-import {encodeWav} from '@/lib/drum-transcription/audio/wav-encoder';
 import {readChart, writeChart} from '@/lib/chart-edit';
 import {exportAsZip, exportAsSng} from '@/lib/chart-export';
-import {
-  readProjectText,
-  readProjectBinary,
-  projectFileExists,
-  loadAudioMeta,
-} from '@/lib/drum-transcription/storage/opfs';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+/** A named audio source for export packaging. */
+export interface AudioSource {
+  /** File name in the output package (e.g. 'drums.wav', 'song.wav'). */
+  fileName: string;
+  /** Raw audio data (WAV-encoded). */
+  data: ArrayBuffer;
+}
+
 interface ExportDialogProps {
-  /** Project ID for OPFS lookups. */
-  projectId: string;
   /** Song name for display and metadata. */
   songName: string;
   /** Artist name for metadata. */
   artistName?: string;
+  /**
+   * Provides the chart text to export. Must return a valid .chart string.
+   * This decouples the dialog from any specific storage backend.
+   */
+  getChartText: () => Promise<string>;
+  /**
+   * Provides audio sources to include in the package.
+   * Returns an array of AudioSource objects with named WAV data.
+   */
+  getAudioSources?: () => Promise<AudioSource[]>;
+  /** Whether to show stem inclusion toggles (default: true if getAudioSources is provided). */
+  showStemToggles?: boolean;
 }
 
-type AudioFormat = 'wav';
 type PackageFormat = 'zip' | 'sng';
 
 // ---------------------------------------------------------------------------
@@ -57,18 +67,21 @@ type PackageFormat = 'zip' | 'sng';
 /**
  * Export dialog for downloading the chart as a .zip or .sng package.
  *
- * Allows the user to select package format (ZIP or SNG), audio format,
- * and choose which audio stems to include. Reads chart and audio data
- * from OPFS, packages them, and triggers a browser download.
+ * Allows the user to select package format (ZIP or SNG) and
+ * triggers a browser download with the packaged chart and audio.
+ *
+ * Chart and audio data are provided via callback props, making
+ * this component independent of any storage backend.
  */
 export default function ExportDialog({
-  projectId,
   songName,
   artistName,
+  getChartText,
+  getAudioSources,
+  showStemToggles = true,
 }: ExportDialogProps) {
   const [open, setOpen] = useState(false);
   const [packageFormat, setPackageFormat] = useState<PackageFormat>('zip');
-  const [audioFormat, setAudioFormat] = useState<AudioFormat>('wav');
   const [includeDrumStem, setIncludeDrumStem] = useState(true);
   const [includeAccompaniment, setIncludeAccompaniment] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
@@ -76,22 +89,10 @@ export default function ExportDialog({
   const handleExport = useCallback(async () => {
     setIsExporting(true);
     try {
-      // 1. Read the chart — prefer edited version, fall back to generated
-      let chartText: string;
-      const hasEdited = await projectFileExists(
-        projectId,
-        'notes.edited.chart',
-      );
-      if (hasEdited) {
-        chartText = await readProjectText(projectId, 'notes.edited.chart');
-      } else {
-        chartText = await readProjectText(projectId, 'notes.chart');
-      }
+      // 1. Get the chart text
+      const chartText = await getChartText();
 
-      // 2. Load audio metadata
-      const audioMeta = await loadAudioMeta(projectId);
-
-      // 3. Parse chart into a ChartDocument, set metadata, and use writeChart
+      // 2. Parse chart into a ChartDocument, set metadata, and use writeChart
       //    to produce both notes.chart and song.ini
       const chartBytes = new TextEncoder().encode(chartText);
       const chartDoc = readChart([{fileName: 'notes.chart', data: chartBytes}]);
@@ -99,87 +100,36 @@ export default function ExportDialog({
         ...chartDoc.metadata,
         name: songName,
         artist: artistName ?? '',
-        song_length: Math.round(audioMeta.durationMs),
         pro_drums: true,
         charter: chartDoc.metadata.charter ?? 'AutoDrums',
       };
       const chartFiles = writeChart(chartDoc);
 
-      // 4. Encode audio stems as WAV
-      const audioFiles = new Map<string, ArrayBuffer>();
-
-      if (includeDrumStem) {
+      // 3. Get audio sources
+      const audioFiles: AudioSource[] = [];
+      if (getAudioSources) {
         try {
-          const drumsPcmBuffer = await readProjectBinary(projectId, 'drums.pcm');
-          const drumsPcm = new Float32Array(drumsPcmBuffer);
-          const drumsWav = encodeWav(
-            drumsPcm,
-            audioMeta.sampleRate,
-            audioMeta.channels,
-          );
-          audioFiles.set('drums.wav', drumsWav);
-        } catch {
-          toast.error('Drum stem not found — skipping drums.wav');
+          const sources = await getAudioSources();
+          for (const source of sources) {
+            // Apply stem inclusion filters if toggles are shown
+            if (showStemToggles) {
+              if (source.fileName.startsWith('drums') && !includeDrumStem) continue;
+              if (source.fileName.startsWith('song') && !includeAccompaniment) continue;
+            }
+            audioFiles.push(source);
+          }
+        } catch (err) {
+          console.warn('Failed to get audio sources:', err);
         }
       }
 
-      if (includeAccompaniment) {
-        // Build accompaniment from bass + other + vocals stems, or fall back to full mix
-        try {
-          const stemNames = ['bass', 'other', 'vocals'];
-          const stemBuffers: Float32Array[] = [];
-
-          for (const stemName of stemNames) {
-            try {
-              const buffer = await readProjectBinary(projectId, `${stemName}.pcm`);
-              stemBuffers.push(new Float32Array(buffer));
-            } catch {
-              // Stem not available
-            }
-          }
-
-          if (stemBuffers.length > 0) {
-            // Mix stems together
-            const maxLength = Math.max(...stemBuffers.map(b => b.length));
-            const mixed = new Float32Array(maxLength);
-            for (const stem of stemBuffers) {
-              for (let i = 0; i < stem.length; i++) {
-                mixed[i] += stem[i];
-              }
-            }
-            // Clamp to [-1, 1]
-            for (let i = 0; i < mixed.length; i++) {
-              mixed[i] = Math.max(-1, Math.min(1, mixed[i]));
-            }
-            const songWav = encodeWav(
-              mixed,
-              audioMeta.sampleRate,
-              audioMeta.channels,
-            );
-            audioFiles.set('song.wav', songWav);
-          } else {
-            // Fall back to full mix
-            const fullPcmBuffer = await readProjectBinary(projectId, 'full.pcm');
-            const fullPcm = new Float32Array(fullPcmBuffer);
-            const songWav = encodeWav(
-              fullPcm,
-              audioMeta.sampleRate,
-              audioMeta.channels,
-            );
-            audioFiles.set('song.wav', songWav);
-          }
-        } catch {
-          toast.error('Could not create accompaniment audio — skipping song.wav');
-        }
-      }
-
-      // 5. Build file entries and package as ZIP or SNG
+      // 4. Build file entries and package as ZIP or SNG
       const fileEntries = chartFiles.map(f => ({
         filename: f.fileName,
         data: f.data,
       }));
-      for (const [name, data] of audioFiles) {
-        fileEntries.push({filename: name, data: new Uint8Array(data)});
+      for (const audio of audioFiles) {
+        fileEntries.push({filename: audio.fileName, data: new Uint8Array(audio.data)});
       }
 
       let blob: Blob;
@@ -195,7 +145,7 @@ export default function ExportDialog({
         extension = 'zip';
       }
 
-      // 6. Trigger browser download
+      // 5. Trigger browser download
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -215,13 +165,14 @@ export default function ExportDialog({
       setIsExporting(false);
     }
   }, [
-    projectId,
     songName,
     artistName,
     packageFormat,
-    audioFormat,
     includeDrumStem,
     includeAccompaniment,
+    getChartText,
+    getAudioSources,
+    showStemToggles,
   ]);
 
   return (
@@ -261,49 +212,51 @@ export default function ExportDialog({
             </Select>
           </div>
 
-          {/* Audio format selector */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="audio-format" className="text-right">
-              Audio
-            </Label>
-            <Select
-              value={audioFormat}
-              onValueChange={v => setAudioFormat(v as AudioFormat)}>
-              <SelectTrigger className="col-span-3" id="audio-format">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="wav">WAV (lossless)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Audio format display */}
+          {getAudioSources && (
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="audio-format" className="text-right">
+                Audio
+              </Label>
+              <Select value="wav" disabled>
+                <SelectTrigger className="col-span-3" id="audio-format">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="wav">WAV (lossless)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Include checkboxes */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label className="text-right">Include</Label>
-            <div className="col-span-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="include-drums"
-                  checked={includeDrumStem}
-                  onCheckedChange={setIncludeDrumStem}
-                />
-                <Label htmlFor="include-drums" className="font-normal">
-                  Drum stem (drums.wav)
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="include-accompaniment"
-                  checked={includeAccompaniment}
-                  onCheckedChange={setIncludeAccompaniment}
-                />
-                <Label htmlFor="include-accompaniment" className="font-normal">
-                  Accompaniment (song.wav)
-                </Label>
+          {getAudioSources && showStemToggles && (
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right">Include</Label>
+              <div className="col-span-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="include-drums"
+                    checked={includeDrumStem}
+                    onCheckedChange={setIncludeDrumStem}
+                  />
+                  <Label htmlFor="include-drums" className="font-normal">
+                    Drum stem (drums.wav)
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="include-accompaniment"
+                    checked={includeAccompaniment}
+                    onCheckedChange={setIncludeAccompaniment}
+                  />
+                  <Label htmlFor="include-accompaniment" className="font-normal">
+                    Accompaniment (song.wav)
+                  </Label>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         <DialogFooter>

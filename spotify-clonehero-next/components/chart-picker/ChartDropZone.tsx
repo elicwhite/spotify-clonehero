@@ -11,16 +11,22 @@ import {
   readSngFile,
   detectFormat,
   type LoadedFiles,
-} from '@/lib/lyrics-align/chart-file-readers';
+} from './chart-file-readers';
 
 interface ChartDropZoneProps {
   onLoaded: (result: LoadedFiles) => void;
   disabled?: boolean;
+  /** Persistent ID for the File System Access API directory picker. */
+  id?: string;
+  /** Additional CSS classes for the outer container. */
+  className?: string;
 }
 
 export default function ChartDropZone({
   onLoaded,
   disabled,
+  id = 'chart-picker',
+  className,
 }: ChartDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -90,9 +96,7 @@ export default function ChartDropZone({
   const handlePickFolder = useCallback(async () => {
     if (disabled || isLoading) return;
     try {
-      const dirHandle = await window.showDirectoryPicker({
-        id: 'add-lyrics-chart',
-      });
+      const dirHandle = await window.showDirectoryPicker({id});
       setIsLoading(true);
       const result = await readChartDirectory(dirHandle);
       onLoaded(result);
@@ -102,10 +106,10 @@ export default function ChartDropZone({
     } finally {
       setIsLoading(false);
     }
-  }, [onLoaded, disabled, isLoading]);
+  }, [onLoaded, disabled, isLoading, id]);
 
   return (
-    <div className="space-y-3">
+    <div className={cn('space-y-3', className)}>
       {/* Drop zone for .zip/.sng files */}
       <div
         onDrop={handleDrop}

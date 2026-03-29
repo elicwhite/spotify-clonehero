@@ -1,6 +1,7 @@
 'use client';
 
 import {useCallback} from 'react';
+import {formatForDisplay} from '@tanstack/react-hotkeys';
 import {Repeat, X} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {
@@ -9,7 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import {useEditorContext} from '../contexts/EditorContext';
+import {useChartEditorContext} from './ChartEditorContext';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import {cn} from '@/lib/utils';
 
@@ -31,7 +32,7 @@ export default function LoopControls({
   audioManager,
   className,
 }: LoopControlsProps) {
-  const {state, dispatch} = useEditorContext();
+  const {state, dispatch} = useChartEditorContext();
 
   const setLoopStart = useCallback(() => {
     const currentMs = audioManager.currentTime * 1000;
@@ -118,7 +119,7 @@ export default function LoopControls({
                   <X className="h-3 w-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Clear loop (Ctrl+L)</TooltipContent>
+              <TooltipContent>Clear loop ({formatForDisplay('Mod+L')})</TooltipContent>
             </Tooltip>
 
             <span className="text-[10px] text-muted-foreground font-mono">

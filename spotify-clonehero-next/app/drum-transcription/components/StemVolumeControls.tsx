@@ -16,7 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import {useEditorContext} from '../contexts/EditorContext';
+import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import {cn} from '@/lib/utils';
 
@@ -29,7 +29,7 @@ interface StemVolumeControlsProps {
 }
 
 /**
- * Per-stem volume controls integrated with EditorContext state.
+ * Per-stem volume controls integrated with ChartEditorContext state.
  *
  * Features:
  * - Volume slider per available stem
@@ -37,13 +37,13 @@ interface StemVolumeControlsProps {
  * - Mute button (M) -- mutes this stem
  * - D key toggles drums solo, M key toggles drums mute (handled by keyboard hook)
  *
- * Reads/writes trackVolumes, soloTrack, mutedTracks from EditorContext.
+ * Reads/writes trackVolumes, soloTrack, mutedTracks from ChartEditorContext.
  */
 export default function StemVolumeControls({
   audioManager,
   className,
 }: StemVolumeControlsProps) {
-  const {state, dispatch} = useEditorContext();
+  const {state, dispatch} = useChartEditorContext();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [availableStems, setAvailableStems] = useState<string[]>([]);
 
@@ -129,7 +129,8 @@ export default function StemVolumeControls({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className={cn('rounded-lg border bg-background text-sm', className)}>
+      <div
+        className={cn('rounded-lg border bg-background text-sm', className)}>
         {/* Header */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}

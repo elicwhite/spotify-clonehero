@@ -1,6 +1,7 @@
 'use client';
 
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {useHotkey, formatForDisplay} from '@tanstack/react-hotkeys';
 import {
   Play,
   Pause,
@@ -142,66 +143,20 @@ export default function TransportControls({
     }
   }, [audioManager, currentTime, sections]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      // Don't capture keys when typing in an input
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
-        return;
-      }
+  // Keyboard shortcuts via @tanstack/react-hotkeys
+  useHotkey('Space', () => {
+    togglePlayPause();
+  });
 
-      switch (e.key) {
-        case ' ':
-          e.preventDefault();
-          togglePlayPause();
-          break;
-        case 'ArrowLeft':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault();
-            jumpToPrevSection();
-          } else {
-            e.preventDefault();
-            // Seek back 5 seconds
-            const newTime = Math.max(0, currentTime - 5);
-            audioManager.play({time: newTime});
-          }
-          break;
-        case 'ArrowRight':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault();
-            jumpToNextSection();
-          } else {
-            e.preventDefault();
-            // Seek forward 5 seconds
-            const newTimeFwd = Math.min(durationSeconds, currentTime + 5);
-            audioManager.play({time: newTimeFwd});
-          }
-          break;
-        case '[':
-          e.preventDefault();
-          handleSpeedChange(-1);
-          break;
-        case ']':
-          e.preventDefault();
-          handleSpeedChange(1);
-          break;
-      }
-    }
+  // Arrow keys are handled by useEditorKeyboard (grid navigation)
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    togglePlayPause,
-    jumpToPrevSection,
-    jumpToNextSection,
-    handleSpeedChange,
-    audioManager,
-    currentTime,
-    durationSeconds,
-  ]);
+  useHotkey('[', () => {
+    handleSpeedChange(-1);
+  });
+
+  useHotkey(']', () => {
+    handleSpeedChange(1);
+  });
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -220,7 +175,7 @@ export default function TransportControls({
               <SkipBack className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Previous section (Ctrl+Left)</TooltipContent>
+          <TooltipContent>Previous section ({formatForDisplay('Mod+ArrowLeft')})</TooltipContent>
         </Tooltip>
 
         {/* Play/Pause */}
@@ -255,7 +210,7 @@ export default function TransportControls({
               <SkipForward className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Next section (Ctrl+Right)</TooltipContent>
+          <TooltipContent>Next section ({formatForDisplay('Mod+ArrowRight')})</TooltipContent>
         </Tooltip>
 
         {/* Time display */}

@@ -9,9 +9,10 @@ import {
   type RefObject,
 } from 'react';
 import {parseChartFile} from '@eliwhite/scan-chart';
+import {HotkeysProvider} from '@tanstack/react-hotkeys';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {ChartDocument, DrumNote} from '@/lib/chart-edit';
-import type {EditCommand} from '../commands';
+import type {EditCommand} from './commands';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,12 +20,12 @@ import type {EditCommand} from '../commands';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
-export type ToolMode = 'cursor' | 'place' | 'erase' | 'bpm' | 'timesig';
+export type ToolMode = 'cursor' | 'place' | 'erase' | 'bpm' | 'timesig' | 'section';
 
 /** Maximum number of undo entries before oldest are discarded. */
 const UNDO_STACK_CAP = 200;
 
-export interface EditorState {
+export interface ChartEditorState {
   /** Parsed chart data (for rendering -- derived from chartDoc). */
   chart: ParsedChart | null;
   /** The active drum track from the parsed chart. */
@@ -43,7 +44,7 @@ export interface EditorState {
   /** Zoom level for sheet music and waveform. */
   zoom: number;
 
-  // -- Editing state (0007a) --
+  // -- Editing state --
 
   /** IDs of selected notes (composite key: `${tick}:${type}`). */
   selectedNoteIds: Set<string>;
@@ -54,7 +55,7 @@ export interface EditorState {
   /** Whether the chart has unsaved modifications. */
   dirty: boolean;
 
-  // -- Undo/Redo (0007b) --
+  // -- Undo/Redo --
 
   /** Stack of executed commands, most recent last. */
   undoStack: EditCommand[];
@@ -69,21 +70,7 @@ export interface EditorState {
   /** Depth of undo stack when the last save occurred. */
   savedUndoDepth: number;
 
-  // -- Confidence (0007b) --
-
-  /** Confidence scores for notes, keyed by noteId (tick:type). */
-  confidence: Map<string, number>;
-  /** Whether to show confidence overlay on notes. */
-  showConfidence: boolean;
-  /** Threshold below which notes are flagged as low-confidence. */
-  confidenceThreshold: number;
-
-  // -- Review (0007b) --
-
-  /** Set of note IDs that have been reviewed by the user. */
-  reviewedNoteIds: Set<string>;
-
-  // -- Audio mixing (0007b) --
+  // -- Audio mixing --
 
   /** Per-track volume levels (0-1). */
   trackVolumes: Record<string, number>;
@@ -92,13 +79,23 @@ export interface EditorState {
   /** Set of track names that are muted. */
   mutedTracks: Set<string>;
 
-  // -- Loop region (0007b) --
+  // -- Cursor --
+
+  /** Current cursor position in ticks (editing position, independent of playback). */
+  cursorTick: number;
+
+  // -- Section selection --
+
+  /** Tick of the currently selected section, or null if none. */
+  selectedSectionTick: number | null;
+
+  // -- Loop region --
 
   /** A-B loop region in milliseconds. null = no loop. */
   loopRegion: {startMs: number; endMs: number} | null;
 }
 
-export type EditorAction =
+export type ChartEditorAction =
   | {type: 'SET_CHART'; chart: ParsedChart; track: ParsedChart['trackData'][0]}
   | {type: 'SET_CHART_DOC'; chartDoc: ChartDocument}
   | {type: 'SET_PLAYING'; isPlaying: boolean}
@@ -122,24 +119,21 @@ export type EditorAction =
   | {type: 'MARK_SAVED'}
   // -- Clipboard --
   | {type: 'SET_CLIPBOARD'; notes: DrumNote[]}
-  // -- Confidence --
-  | {type: 'SET_CONFIDENCE'; confidence: Map<string, number>}
-  | {type: 'SET_SHOW_CONFIDENCE'; show: boolean}
-  | {type: 'SET_CONFIDENCE_THRESHOLD'; threshold: number}
-  // -- Review --
-  | {type: 'MARK_REVIEWED'; noteIds: string[]}
-  | {type: 'SET_REVIEWED_NOTES'; noteIds: Set<string>}
   // -- Audio mixing --
   | {type: 'SET_TRACK_VOLUME'; track: string; volume: number}
   | {type: 'SET_SOLO_TRACK'; track: string | null}
   | {type: 'TOGGLE_MUTE_TRACK'; track: string}
   | {type: 'SET_MUTED_TRACKS'; tracks: Set<string>}
+  // -- Cursor --
+  | {type: 'SET_CURSOR_TICK'; tick: number}
+  // -- Section selection --
+  | {type: 'SET_SELECTED_SECTION'; tick: number | null}
   // -- Loop --
   | {type: 'SET_LOOP_REGION'; region: {startMs: number; endMs: number} | null};
 
-export interface EditorContextValue {
-  state: EditorState;
-  dispatch: React.Dispatch<EditorAction>;
+export interface ChartEditorContextValue {
+  state: ChartEditorState;
+  dispatch: React.Dispatch<ChartEditorAction>;
   audioManagerRef: RefObject<AudioManager | null>;
 }
 
@@ -147,7 +141,7 @@ export interface EditorContextValue {
 // Initial state
 // ---------------------------------------------------------------------------
 
-const initialState: EditorState = {
+const initialState: ChartEditorState = {
   chart: null,
   track: null,
   chartDoc: null,
@@ -166,16 +160,14 @@ const initialState: EditorState = {
   redoDocStack: [],
   clipboard: [],
   savedUndoDepth: 0,
-  // Confidence
-  confidence: new Map(),
-  showConfidence: true,
-  confidenceThreshold: 0.7,
-  // Review
-  reviewedNoteIds: new Set(),
   // Audio mixing
   trackVolumes: {},
   soloTrack: null,
   mutedTracks: new Set(),
+  // Cursor
+  cursorTick: 0,
+  // Section selection
+  selectedSectionTick: null,
   // Loop
   loopRegion: null,
 };
@@ -184,7 +176,7 @@ const initialState: EditorState = {
 // Reducer
 // ---------------------------------------------------------------------------
 
-function editorReducer(state: EditorState, action: EditorAction): EditorState {
+function chartEditorReducer(state: ChartEditorState, action: ChartEditorAction): ChartEditorState {
   switch (action.type) {
     case 'SET_CHART':
       return {...state, chart: action.chart, track: action.track};
@@ -301,26 +293,6 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
     case 'SET_CLIPBOARD':
       return {...state, clipboard: action.notes};
 
-    case 'SET_CONFIDENCE':
-      return {...state, confidence: action.confidence};
-
-    case 'SET_SHOW_CONFIDENCE':
-      return {...state, showConfidence: action.show};
-
-    case 'SET_CONFIDENCE_THRESHOLD':
-      return {...state, confidenceThreshold: action.threshold};
-
-    case 'MARK_REVIEWED': {
-      const newReviewed = new Set(state.reviewedNoteIds);
-      for (const id of action.noteIds) {
-        newReviewed.add(id);
-      }
-      return {...state, reviewedNoteIds: newReviewed};
-    }
-
-    case 'SET_REVIEWED_NOTES':
-      return {...state, reviewedNoteIds: action.noteIds};
-
     case 'SET_TRACK_VOLUME': {
       return {
         ...state,
@@ -344,6 +316,14 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
     case 'SET_MUTED_TRACKS':
       return {...state, mutedTracks: action.tracks};
 
+    case 'SET_CURSOR_TICK':
+      if (state.cursorTick === action.tick) return state;
+      return {...state, cursorTick: Math.max(0, action.tick)};
+
+    case 'SET_SELECTED_SECTION':
+      if (state.selectedSectionTick === action.tick) return state;
+      return {...state, selectedSectionTick: action.tick};
+
     case 'SET_LOOP_REGION':
       return {...state, loopRegion: action.region};
 
@@ -356,24 +336,26 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
 // Context
 // ---------------------------------------------------------------------------
 
-const EditorContext = createContext<EditorContextValue | null>(null);
+const ChartEditorContext = createContext<ChartEditorContextValue | null>(null);
 
-export function EditorProvider({children}: {children: ReactNode}) {
-  const [state, dispatch] = useReducer(editorReducer, initialState);
+export function ChartEditorProvider({children}: {children: ReactNode}) {
+  const [state, dispatch] = useReducer(chartEditorReducer, initialState);
   const audioManagerRef = useRef<AudioManager | null>(null);
 
   return (
-    <EditorContext.Provider
-      value={{state, dispatch, audioManagerRef}}>
-      {children}
-    </EditorContext.Provider>
+    <HotkeysProvider>
+      <ChartEditorContext.Provider
+        value={{state, dispatch, audioManagerRef}}>
+        {children}
+      </ChartEditorContext.Provider>
+    </HotkeysProvider>
   );
 }
 
-export function useEditorContext(): EditorContextValue {
-  const ctx = useContext(EditorContext);
+export function useChartEditorContext(): ChartEditorContextValue {
+  const ctx = useContext(ChartEditorContext);
   if (!ctx) {
-    throw new Error('useEditorContext must be used within an EditorProvider');
+    throw new Error('useChartEditorContext must be used within a ChartEditorProvider');
   }
   return ctx;
 }
