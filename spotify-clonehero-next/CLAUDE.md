@@ -104,28 +104,41 @@ All work follows the plan-driven workflow in `plans/`. Read the plan before star
 
 ### Current Plans (dependency order)
 
+**Completed:**
+
+| Plan | Description |
+|------|-------------|
+| `0001-project-scaffolding` | Page shell, dependencies, directory structure |
+| `0002-chart-file-writing` | .chart serializer with scan-chart round-trip tests |
+| `0003-audio-acquisition` | File upload, Web Audio decode, OPFS storage, demo file |
+| `0004-stem-separation` | Demucs via ONNX + WebGPU, STFT/iSTFT in JS |
+| `0005-ml-model-integration` | ADTOF Frame_RNN via ONNX + WebGPU, post-processing |
+| `0006-chart-preview-integration` | CloneHeroRenderer + AudioManager integration |
+| `0007-editor-core` | Read-only editor page, SheetMusic + highway views, transport |
+| `0007a-highway-editing` | Note editing on highway (Moonscraper-style), BPM/TS editing |
+| `0007b-editor-workflow` | Confidence viz, undo/redo, auto-save, stem volume controls |
+| `0008-pipeline-orchestration` | End-to-end flow: upload → process → edit → export |
+| `0009-chart-export-packaging` | ZIP export with chart + stems + song.ini |
+| `0010-sng-export` | SNG binary export |
+| `0011-chart-edit-bugfixes` | chart-edit bug fixes and test coverage |
+| `0012-consolidate-chart-io` | Consolidate drum-transcription chart-io → chart-edit |
+
+**Todo (sequential):**
+
 | Plan | Description | Depends On |
 |------|-------------|------------|
-| `0001-project-scaffolding` | Page shell, dependencies, directory structure | — |
-| `0002-chart-file-writing` | .chart serializer with scan-chart round-trip tests | 0001 |
-| `0003-audio-acquisition` | File upload, Web Audio decode, OPFS storage, demo file | 0001 |
-| `0004-stem-separation` | Demucs via ONNX + WebGPU, STFT/iSTFT in JS | 0001, 0003 |
-| `0005-ml-model-integration` | ADTOF Frame_RNN via ONNX + WebGPU, post-processing | 0002, 0004 |
-| `0006-chart-preview-integration` | CloneHeroRenderer + AudioManager integration | 0002 |
-| `0007-editor-core` | Read-only editor page, SheetMusic + highway views, transport | 0005, 0006 |
-| `0007a-highway-editing` | Note editing on highway (Moonscraper-style), BPM/TS editing | 0007 |
-| `0007b-editor-workflow` | Confidence viz, undo/redo, auto-save, stem volume controls | 0007a |
-| `0008-pipeline-orchestration` | End-to-end flow: upload → process → edit → export | 0003-0007 |
-| `0009-chart-export-packaging` | ZIP export with chart + stems + song.ini | 0002, 0007 |
-| `0010-sng-export` | SNG binary export | 0009 |
+| `0013-extract-shared-editor` | Extract editor UI to `components/chart-editor/`, composable panels | 0012 |
+| `0014-drum-edit-page` | New `/drum-edit` page with chart loading (SNG/ZIP/folder) | 0013 |
+| `0015-moonscraper-layout-timeline` | Moonscraper-inspired layout + timeline minimap | 0013 |
+| `0016-grid-navigation-keys-mode` | Grid-based cursor navigation + keyboard note placement (1-5) | 0013 |
+| `0017-section-editing` | Add/edit/delete named section markers on highway + timeline | 0015 |
 
 ### Parallelizable Work
 
-After 0001, these tracks can proceed in parallel:
-- **Track A:** 0002 (chart I/O) → 0006 (preview integration)
-- **Track B:** 0003 (audio input) → 0004 (Demucs) → 0005 (ADTOF)
-
-Both tracks merge at 0007 (editor core).
+After 0013, these can proceed in parallel:
+- **Track A:** 0014 (drum-edit page)
+- **Track B:** 0015 (layout + timeline) → 0017 (section editing)
+- **Track C:** 0016 (grid nav + keys mode)
 
 ## Browser Validation
 
