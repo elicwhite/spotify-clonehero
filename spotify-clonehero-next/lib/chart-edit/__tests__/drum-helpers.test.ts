@@ -259,6 +259,73 @@ describe('drum notes', () => {
     }).toThrow('No kick note found at tick 0');
   });
 
+  it('setDrumNoteFlags cymbal:false adds tom marker for yellow', () => {
+    const track = makeTrack();
+    addDrumNote(track, { tick: 0, type: 'yellowDrum', flags: { cymbal: true } });
+
+    setDrumNoteFlags(track, 0, 'yellowDrum', { cymbal: false });
+
+    const types = track.trackEvents.map((e) => e.type);
+    expect(types).toContain(eventTypes.yellowTomMarker);
+    expect(types).not.toContain(eventTypes.yellowCymbalMarker);
+  });
+
+  it('setDrumNoteFlags cymbal:false adds tom marker for blue', () => {
+    const track = makeTrack();
+    addDrumNote(track, { tick: 0, type: 'blueDrum', flags: { cymbal: true } });
+
+    setDrumNoteFlags(track, 0, 'blueDrum', { cymbal: false });
+
+    const types = track.trackEvents.map((e) => e.type);
+    expect(types).toContain(eventTypes.blueTomMarker);
+    expect(types).not.toContain(eventTypes.blueCymbalMarker);
+  });
+
+  it('setDrumNoteFlags cymbal:false adds tom marker for green', () => {
+    const track = makeTrack();
+    addDrumNote(track, { tick: 0, type: 'greenDrum', flags: { cymbal: true } });
+
+    setDrumNoteFlags(track, 0, 'greenDrum', { cymbal: false });
+
+    const types = track.trackEvents.map((e) => e.type);
+    expect(types).toContain(eventTypes.greenTomMarker);
+    expect(types).not.toContain(eventTypes.greenCymbalMarker);
+  });
+
+  it('setDrumNoteFlags cymbal toggle round-trips through getDrumNotes', () => {
+    const track = makeTrack();
+    addDrumNote(track, { tick: 0, type: 'yellowDrum', flags: { cymbal: true } });
+
+    // Toggle off
+    setDrumNoteFlags(track, 0, 'yellowDrum', { cymbal: false });
+    let notes = getDrumNotes(track);
+    let yellow = notes.find((n) => n.type === 'yellowDrum');
+    expect(yellow!.flags.cymbal).toBe(false);
+
+    // Toggle back on
+    setDrumNoteFlags(track, 0, 'yellowDrum', { cymbal: true });
+    notes = getDrumNotes(track);
+    yellow = notes.find((n) => n.type === 'yellowDrum');
+    expect(yellow!.flags.cymbal).toBe(true);
+
+    // Verify tom marker removed when cymbal set back
+    const types = track.trackEvents.map((e) => e.type);
+    expect(types).toContain(eventTypes.yellowCymbalMarker);
+    expect(types).not.toContain(eventTypes.yellowTomMarker);
+  });
+
+  it('setDrumNoteFlags cymbal:false does not add tom marker for red', () => {
+    const track = makeTrack();
+    addDrumNote(track, { tick: 0, type: 'redDrum' });
+
+    // Red drum has no cymbal/tom distinction
+    setDrumNoteFlags(track, 0, 'redDrum', { cymbal: false });
+
+    const types = track.trackEvents.map((e) => e.type);
+    // Should only have the base note — no tom marker for red
+    expect(types).toEqual([eventTypes.redDrum]);
+  });
+
   // C4: greenDrum / fiveGreenDrum tests
   it('addDrumNote with greenDrum produces fiveOrangeFourGreenDrum event', () => {
     const track = makeTrack();

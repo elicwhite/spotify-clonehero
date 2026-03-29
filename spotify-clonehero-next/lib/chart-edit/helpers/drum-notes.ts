@@ -276,6 +276,13 @@ export function setDrumNoteFlags(
     if (cymbalType !== undefined) {
       pushEvent(track, tick, 0, cymbalType);
     }
+  } else if (flags.cymbal === false) {
+    // Yellow/blue/green default to cymbal in .chart format.
+    // An explicit tom marker is needed to make them toms.
+    const tomType = drumTomEventType[type];
+    if (tomType !== undefined) {
+      pushEvent(track, tick, 0, tomType);
+    }
   }
 
   if (flags.doubleKick && type === 'kick') {

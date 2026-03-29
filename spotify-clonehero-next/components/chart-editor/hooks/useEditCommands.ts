@@ -198,7 +198,6 @@ export function useExecuteCommand() {
       }
 
       // Full rebuild path (BPM/TS changes, flag toggles, or no NotesManager)
-      console.log('[useExecuteCommand] Full rebuild for:', command.constructor.name);
       const newChart = chartDocumentToParsedChart(newDoc);
 
       dispatch({
