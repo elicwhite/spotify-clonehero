@@ -44,6 +44,11 @@ const CURSOR_LINE_COLOR = 0x00ff80;
 
 const sectionTextureCache = new Map<string, THREE.CanvasTexture>();
 
+/**
+ * Create a text label texture for a section flag (Moonscraper-style).
+ * White text on a semi-transparent green background, like Moonscraper's
+ * section markers.
+ */
 function createSectionTexture(
   name: string,
   isSelected: boolean,
@@ -53,31 +58,42 @@ function createSectionTexture(
   if (cached) return cached;
 
   const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 32;
   const ctx = canvas.getContext('2d')!;
 
-  // Background
-  const bgAlpha = isSelected ? SECTION_SELECTED_BG_OPACITY : SECTION_BG_OPACITY;
-  ctx.fillStyle = `rgba(255, 200, 0, ${bgAlpha})`;
+  // Render at 2x resolution for crisp text on high-DPI / when scaled up
+  const scale = 2;
+  const fontSize = 24 * scale;
+  const padding = 16 * scale;
+
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  const metrics = ctx.measureText(name);
+  const textWidth = Math.ceil(metrics.width);
+  canvas.width = textWidth + padding * 2;
+  canvas.height = 36 * scale;
+
+  // Background — green for sections (like Moonscraper)
+  const bgAlpha = isSelected ? 0.6 : 0.35;
+  ctx.fillStyle = `rgba(0, 200, 40, ${bgAlpha})`;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // Selected border
   if (isSelected) {
-    ctx.strokeStyle = 'rgba(255, 200, 0, 0.8)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(100, 255, 100, 0.9)';
+    ctx.lineWidth = 3 * scale;
     ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
   }
 
-  // Text
-  ctx.fillStyle = SECTION_TEXT_COLOR_CSS;
-  ctx.font = '18px sans-serif';
+  // Text — white, crisp
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${fontSize}px sans-serif`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(name, 12, canvas.height / 2);
+  ctx.fillText(name, padding, canvas.height / 2);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
   sectionTextureCache.set(key, texture);
   return texture;
 }
@@ -521,59 +537,60 @@ export class SceneOverlays {
     worldY: number,
     isSelected: boolean,
   ): void {
-    // Get or create banner mesh
-    let mesh: THREE.Mesh;
+    // --- Text flag sprite (faces camera, right side of highway) ---
+    let mesh: THREE.Sprite;
     if (this.sectionBannerPool.length > 0) {
-      mesh = this.sectionBannerPool.pop()!;
+      mesh = this.sectionBannerPool.pop()! as unknown as THREE.Sprite;
     } else {
-      const geometry = new THREE.PlaneGeometry(
-        HIGHWAY_HALF_WIDTH * 2,
-        0.03,
-      );
-      const material = new THREE.MeshBasicMaterial({
+      const material = new THREE.SpriteMaterial({
         transparent: true,
         depthTest: false,
-        side: THREE.DoubleSide,
       });
-      material.clippingPlanes = this.clippingPlanes;
-      mesh = new THREE.Mesh(geometry, material);
+      mesh = new THREE.Sprite(material);
       mesh.renderOrder = 8;
+      // Anchor at left edge so it extends rightward from the highway
+      mesh.center.set(0.0, 0.5);
     }
 
-    // Update texture
     const texture = createSectionTexture(name, isSelected);
-    (mesh.material as THREE.MeshBasicMaterial).map = texture;
-    (mesh.material as THREE.MeshBasicMaterial).needsUpdate = true;
+    (mesh.material as THREE.SpriteMaterial).map = texture;
+    (mesh.material as THREE.SpriteMaterial).needsUpdate = true;
 
-    mesh.position.set(0, worldY, 0.001);
+    // Scale proportional to texture aspect ratio
+    const texCanvas = texture.image as HTMLCanvasElement;
+    const aspect = texCanvas.width / texCanvas.height;
+    const flagHeight = 0.055;
+    mesh.scale.set(flagHeight * aspect, flagHeight, 1);
+
+    // Position to the right of the highway edge
+    mesh.position.set(HIGHWAY_HALF_WIDTH + 0.02, worldY, 0.001);
     mesh.visible = true;
     this.sectionBannerGroup.add(mesh);
 
-    // Get or create section line
-    let line: THREE.Line;
+    // --- Thin green marker line across the highway ---
+    let line: THREE.Mesh;
     if (this.sectionLinePool.length > 0) {
-      line = this.sectionLinePool.pop()!;
+      line = this.sectionLinePool.pop()! as unknown as THREE.Mesh;
     } else {
-      const lineGeom = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(-HIGHWAY_HALF_WIDTH, 0, 0),
-        new THREE.Vector3(HIGHWAY_HALF_WIDTH, 0, 0),
-      ]);
-      const lineMat = new THREE.LineBasicMaterial({
-        color: SECTION_LINE_COLOR,
+      const lineGeom = new THREE.PlaneGeometry(HIGHWAY_HALF_WIDTH * 2, 0.003);
+      const lineMat = new THREE.MeshBasicMaterial({
+        color: 0x00cc28, // green, like Moonscraper sections
         transparent: true,
-        opacity: 0.5,
+        opacity: 0.4,
         depthTest: false,
+        side: THREE.DoubleSide,
       });
       lineMat.clippingPlanes = this.clippingPlanes;
-      line = new THREE.Line(lineGeom, lineMat);
-      line.renderOrder = 8;
+      line = new THREE.Mesh(lineGeom, lineMat);
+      line.renderOrder = 2;
     }
 
+    (line.material as THREE.MeshBasicMaterial).opacity = isSelected ? 0.7 : 0.4;
     line.position.set(0, worldY, 0.001);
     line.visible = true;
     this.sectionBannerGroup.add(line);
 
-    this.activeSectionMeshes.push({mesh, line});
+    this.activeSectionMeshes.push({mesh: mesh as unknown as THREE.Mesh, line: line as unknown as THREE.Line});
   }
 
   // -----------------------------------------------------------------------

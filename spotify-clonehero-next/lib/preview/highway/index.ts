@@ -264,10 +264,8 @@ export const setupRenderer = (
       };
       gridOverlay = createGridOverlay(scene, fullConfig, clippingPlanes);
 
-      // Apply current mode
-      if (highwayMode === 'waveform') {
-        gridOverlay.setVisible(true);
-      }
+      // Grid lines always visible (both classic and waveform modes)
+      gridOverlay.setVisible(true);
     },
 
     /**
@@ -278,7 +276,7 @@ export const setupRenderer = (
       const isWaveform = mode === 'waveform';
 
       if (waveformSurface) waveformSurface.setVisible(isWaveform);
-      if (gridOverlay) gridOverlay.setVisible(isWaveform);
+      if (gridOverlay) gridOverlay.setVisible(true); // always show grid lines
       if (classicHighwayMesh) classicHighwayMesh.visible = !isWaveform;
     },
 
@@ -383,7 +381,7 @@ export const setupRenderer = (
       if (waveformSurface && highwayMode === 'waveform') {
         waveformSurface.update(elapsedTime);
       }
-      if (gridOverlay && highwayMode === 'waveform') {
+      if (gridOverlay) {
         gridOverlay.update(elapsedTime);
       }
 

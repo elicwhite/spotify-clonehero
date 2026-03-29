@@ -386,6 +386,8 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
   const [errorMessage, setErrorMessage] = useState('');
   const [projectMeta, setProjectMeta] = useState<ProjectMetadata | null>(null);
   const [durationSeconds, setDurationSeconds] = useState(0);
+  const [audioData, setAudioData] = useState<Float32Array | null>(null);
+  const [audioChannels, setAudioChannels] = useState(2);
 
   // Auto-save: write edited chart to OPFS
   const saveFn = useCallback(async () => {
@@ -465,7 +467,32 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
 
         audioManagerRef.current = audioManager;
 
-        // 8. Update editor state
+        // 8. Decode first audio file to raw PCM for waveform display
+        try {
+          const waveformCtx = new AudioContext({sampleRate: 44100});
+          const firstAudio = audioFiles[0];
+          const buf = firstAudio.data.slice(0).buffer;
+          const decoded = await waveformCtx.decodeAudioData(buf as ArrayBuffer);
+          const channels = decoded.numberOfChannels;
+          // Interleave channels into a single Float32Array
+          const length = decoded.length;
+          const interleaved = new Float32Array(length * channels);
+          for (let ch = 0; ch < channels; ch++) {
+            const channelData = decoded.getChannelData(ch);
+            for (let i = 0; i < length; i++) {
+              interleaved[i * channels + ch] = channelData[i];
+            }
+          }
+          setAudioData(interleaved);
+          setAudioChannels(channels);
+          await waveformCtx.close();
+        } catch {
+          // Waveform is optional — don't fail the whole load
+          console.warn('Could not decode audio for waveform display');
+        }
+        if (cancelled) return;
+
+        // 9. Update editor state
         dispatch({type: 'SET_CHART', chart: parsed, track: drumTrack});
         dispatch({type: 'SET_CHART_DOC', chartDoc});
         setLoadingState('ready');
@@ -563,6 +590,8 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
         metadata={cloneHeroMetadata}
         chart={chart}
         audioManager={audioManagerRef.current}
+        audioData={audioData ?? undefined}
+        audioChannels={audioChannels}
         durationSeconds={durationSeconds}
         sections={chart.sections}
         songName={projectMeta?.name ?? 'Untitled'}

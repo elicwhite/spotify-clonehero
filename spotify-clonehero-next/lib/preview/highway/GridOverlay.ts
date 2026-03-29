@@ -214,7 +214,7 @@ export class GridOverlay {
       return this.beatLinePool[index];
     }
     const mesh = new THREE.Mesh(this.beatGeometry, this.beatMaterial);
-    mesh.renderOrder = 2;
+    mesh.renderOrder = 1;
     this.beatLinePool.push(mesh);
     this.group.add(mesh);
     return mesh;
@@ -225,7 +225,7 @@ export class GridOverlay {
       return this.measureLinePool[index];
     }
     const mesh = new THREE.Mesh(this.measureGeometry, this.measureMaterial);
-    mesh.renderOrder = 2;
+    mesh.renderOrder = 1;
     this.measureLinePool.push(mesh);
     this.group.add(mesh);
     return mesh;
