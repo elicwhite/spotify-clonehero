@@ -132,6 +132,7 @@ All work follows the plan-driven workflow in `plans/`. Read the plan before star
 | `0015-moonscraper-layout-timeline` | Moonscraper-inspired layout + timeline minimap | 0013 |
 | `0016-grid-navigation-keys-mode` | Grid-based cursor navigation + keyboard note placement (1-5) | 0013 |
 | `0017-section-editing` | Add/edit/delete named section markers on highway + timeline | 0015 |
+| `0018-tanstack-hotkeys-migration` | Replace raw addEventListener keyboard handling with @tanstack/react-hotkeys | 0013, 0016 |
 
 ### Parallelizable Work
 
