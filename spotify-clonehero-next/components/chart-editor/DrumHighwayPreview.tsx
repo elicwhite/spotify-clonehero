@@ -1,8 +1,7 @@
 'use client';
 
 import {memo, useEffect, useMemo, useRef} from 'react';
-import {setupRenderer, type OverlayState, InteractionManager, type HighwayMode} from '@/lib/preview/highway';
-import type {NotesManager} from '@/lib/preview/highway/NotesManager';
+import {setupRenderer, type OverlayState, InteractionManager, type HighwayMode, type SceneReconciler, type NoteRenderer} from '@/lib/preview/highway';
 import type {WaveformSurfaceConfig} from '@/lib/preview/highway/WaveformSurface';
 import type {GridOverlayConfig} from '@/lib/preview/highway/GridOverlay';
 import {AudioManager} from '@/lib/preview/audioManager';
@@ -21,10 +20,12 @@ export interface HighwayRendererHandle {
     timedTempos: {tick: number; msTime: number; beatsPerMinute: number}[],
     resolution: number,
   ): void;
-  /** Get the NotesManager for setting selection/confidence/review state. */
-  getNotesManager(): Promise<NotesManager>;
   /** Get the InteractionManager for hit-testing and coordinate conversion. */
   getInteractionManager(): Promise<InteractionManager | null>;
+  /** Get the SceneReconciler for declarative element management. */
+  getReconciler(): Promise<SceneReconciler>;
+  /** Get the NoteRenderer for overlay state management. */
+  getNoteRenderer(): Promise<NoteRenderer>;
   /** Set waveform audio data for the highway surface. */
   setWaveformData(config: Omit<WaveformSurfaceConfig, 'highwayWidth' | 'highwaySpeed'>): Promise<void>;
   /** Set grid overlay data (tempos + time signatures). */
@@ -78,8 +79,15 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
     [chart],
   );
 
+  // Use a ref to capture the latest drumTrack for the initial prepTrack() call.
+  // The renderer lifecycle only depends on metadata and audioManager.
+  // Data updates (chart edits) flow through the SceneReconciler, not renderer recreation.
+  const drumTrackRef = useRef(drumTrack);
+  drumTrackRef.current = drumTrack;
+
   useEffect(() => {
-    if (!canvasRef.current || !drumTrack) return;
+    const track = drumTrackRef.current;
+    if (!canvasRef.current || !track) return;
 
     // Destroy previous renderer if any
     rendererRef.current?.destroy();
@@ -92,7 +100,7 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
       audioManager,
     );
     rendererRef.current = renderer;
-    renderer.prepTrack(drumTrack);
+    renderer.prepTrack(track);
     renderer.startRender();
 
     // Expose renderer API to the editor overlay
@@ -102,8 +110,9 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
       setOverlayState: (state: OverlayState) => renderer.setOverlayState(state),
       setTimingData: (timedTempos, resolution) =>
         renderer.setTimingData(timedTempos, resolution),
-      getNotesManager: () => renderer.getNotesManager(),
       getInteractionManager: () => renderer.getInteractionManager(),
+      getReconciler: () => renderer.getReconciler(),
+      getNoteRenderer: () => renderer.getNoteRenderer(),
       setWaveformData: (config) => renderer.setWaveformData(config),
       setGridData: (config) => renderer.setGridData(config),
       setHighwayMode: (mode) => renderer.setHighwayMode(mode),
@@ -115,7 +124,10 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
       rendererRef.current = null;
       onRendererReady?.(null);
     };
-  }, [metadata, chart, drumTrack, audioManager, onRendererReady]);
+    // Only recreate the renderer when the instrument/audio changes.
+    // Chart data updates flow through the SceneReconciler (not renderer recreation).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metadata, audioManager, onRendererReady]);
 
   if (!drumTrack) {
     return (

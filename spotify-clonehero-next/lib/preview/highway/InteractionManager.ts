@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import {NotesManager} from './NotesManager';
 import {SceneOverlays} from './SceneOverlays';
+import type {SceneReconciler} from './SceneReconciler';
+import {NoteRenderer, type NoteElementData} from './NoteRenderer';
 import {
   type HitResult,
   calculateNoteXOffset,
@@ -31,7 +32,7 @@ const LANE_X_POSITIONS = [
  */
 export class InteractionManager {
   private camera: THREE.PerspectiveCamera;
-  private notesManager: NotesManager;
+  private reconciler: SceneReconciler;
   private sceneOverlays: SceneOverlays | null;
   private highwaySpeed: number;
 
@@ -50,15 +51,20 @@ export class InteractionManager {
   /** Function to get current audio time in ms. */
   private getElapsedMs: () => number;
 
+  /** Cached sprite list for raycasting. Rebuilt when active groups change. */
+  private cachedSprites: THREE.Sprite[] = [];
+  private cachedSpriteToKey = new Map<THREE.Sprite, string>();
+  private cachedGroupCount = -1;
+
   constructor(
     camera: THREE.PerspectiveCamera,
-    notesManager: NotesManager,
+    reconciler: SceneReconciler,
     sceneOverlays: SceneOverlays | null,
     highwaySpeed: number,
     getElapsedMs: () => number,
   ) {
     this.camera = camera;
-    this.notesManager = notesManager;
+    this.reconciler = reconciler;
     this.sceneOverlays = sceneOverlays;
     this.highwaySpeed = highwaySpeed;
     this.getElapsedMs = getElapsedMs;
@@ -124,24 +130,53 @@ export class InteractionManager {
   // -----------------------------------------------------------------------
 
   private hitTestNotes(): HitResult {
-    const sprites = this.notesManager.getActiveSprites();
-    if (sprites.length === 0) return null;
+    // Rebuild sprite cache only when active groups changed (after updateWindow)
+    const activeGroups = this.reconciler.getActiveGroups();
+    if (activeGroups.size !== this.cachedGroupCount) {
+      this.cachedSprites.length = 0;
+      this.cachedSpriteToKey.clear();
+      for (const [key, group] of activeGroups) {
+        const sprite = NoteRenderer.getSprite(group);
+        if (sprite) {
+          this.cachedSprites.push(sprite);
+          this.cachedSpriteToKey.set(sprite, key);
+        }
+      }
+      this.cachedGroupCount = activeGroups.size;
+    }
+    if (this.cachedSprites.length === 0) return null;
 
-    const hits = this.raycaster.intersectObjects(sprites, false);
+    const hits = this.raycaster.intersectObjects(this.cachedSprites, false);
     if (hits.length === 0) return null;
 
-    // The hit is on a sprite, whose parent is the note's THREE.Group
-    const hitObject = hits[0].object;
-    const noteGroup = hitObject.parent as THREE.Group;
-    const result = this.notesManager.getNoteForGroup(noteGroup);
-    if (!result) return null;
+    const hitSprite = hits[0].object as THREE.Sprite;
+    const key = this.cachedSpriteToKey.get(hitSprite);
+    if (!key) return null;
+
+    const el = this.reconciler.getElement(key);
+    if (!el || el.kind !== 'note') return null;
+
+    const data = el.data as NoteElementData;
+    // Extract noteId from key: 'note:480:redDrum' -> '480:redDrum'
+    const noteId = key.startsWith('note:') ? key.slice(5) : key;
+    const tick = data.note.tick ?? 0;
+    const lane = data.isKick ? 0 : data.lane + 1; // editor lane (0=kick)
 
     return {
       type: 'note',
-      noteId: result.id,
-      note: result.note,
-      lane: result.note.lane === -1 ? 0 : result.note.lane + 1, // editor lane (0=kick)
-      tick: result.note.note.tick ?? 0,
+      noteId,
+      note: {
+        note: data.note,
+        msTime: el.msTime,
+        msLength: data.msLength,
+        xPosition: data.xPosition,
+        inStarPower: data.inStarPower,
+        isKick: data.isKick,
+        isOpen: data.isOpen,
+        lane: data.lane,
+      },
+      lane,
+      tick,
     };
   }
 
@@ -246,29 +281,40 @@ export class InteractionManager {
    * Returns a note HitResult if found, null otherwise.
    */
   private hitTestKickAtTick(tick: number, ms: number): HitResult {
-    const prepared = this.notesManager.getPreparedNotes();
-    if (prepared.length === 0) return null;
+    const elements = this.reconciler.getElements();
+    if (elements.length === 0) return null;
     // Tolerance: check notes within a small ms range around the click
     const tolerance = 15; // ms
-    // Binary search for the first note >= ms - tolerance
+    // Binary search for the first element >= ms - tolerance
     let lo = 0;
-    let hi = prepared.length;
+    let hi = elements.length;
     while (lo < hi) {
       const mid = (lo + hi) >>> 1;
-      if (prepared[mid].msTime < ms - tolerance) lo = mid + 1;
+      if (elements[mid].msTime < ms - tolerance) lo = mid + 1;
       else hi = mid;
     }
-    for (let i = lo; i < prepared.length; i++) {
-      const pn = prepared[i];
-      if (pn.msTime > ms + tolerance) break;
-      if (!pn.isKick) continue;
-      const noteId = `${pn.note.tick ?? 0}:kick`;
+    for (let i = lo; i < elements.length; i++) {
+      const el = elements[i];
+      if (el.msTime > ms + tolerance) break;
+      if (el.kind !== 'note') continue;
+      const data = el.data as NoteElementData;
+      if (!data.isKick) continue;
+      const noteId = `${data.note.tick ?? 0}:kick`;
       return {
         type: 'note',
         noteId,
-        note: pn,
+        note: {
+          note: data.note,
+          msTime: el.msTime,
+          msLength: data.msLength,
+          xPosition: data.xPosition,
+          inStarPower: data.inStarPower,
+          isKick: data.isKick,
+          isOpen: data.isOpen,
+          lane: data.lane,
+        },
         lane: 0,
-        tick: pn.note.tick ?? 0,
+        tick: data.note.tick ?? 0,
       };
     }
     return null;

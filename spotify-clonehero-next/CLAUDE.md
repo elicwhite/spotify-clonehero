@@ -138,6 +138,7 @@ All work follows the plan-driven workflow in `plans/`. Read the plan before star
 | `0021-interaction-manager` | Hybrid hit testing (Three.js raycasts, React decides) + hover glow/outline | 0020 |
 | `0022-incremental-editing` | Diff-based note updates — no full rebuild on add/delete/move | 0021 |
 | `0023-waveform-highway-surface` | Waveform as highway texture + beat line grid overlay | 0019 |
+| `0025-scene-reconciler` | Generic key-based scene reconciler (React-inspired) for notes, sections, lyrics | 0019-0022 |
 
 ### Parallelizable Work
 

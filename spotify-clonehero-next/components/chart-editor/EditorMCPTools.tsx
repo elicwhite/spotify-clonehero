@@ -23,7 +23,7 @@ import {typeToLane} from './commands';
  * by any connected AI agent (Claude, etc.) through the WebMCP protocol.
  */
 export default function EditorMCPTools() {
-  const {state, dispatch, audioManagerRef, notesManagerRef} =
+  const {state, dispatch, audioManagerRef, noteRendererRef} =
     useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
@@ -143,7 +143,7 @@ export default function EditorMCPTools() {
         const newIds = add ? new Set(stateRef.current.selectedNoteIds) : new Set<string>();
         newIds.add(id);
         dispatchRef.current({type: 'SET_SELECTED_NOTES', noteIds: newIds});
-        notesManagerRef.current?.setSelectedNoteIds(newIds);
+        // NoteRenderer selection state is pushed by HighwayEditor's overlay effect
         return {content: [{type: 'text', text: `Selected: ${id} (total: ${newIds.size})`}]};
       },
     });

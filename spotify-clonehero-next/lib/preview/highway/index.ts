@@ -17,10 +17,12 @@ import type {WaveformSurface} from './WaveformSurface';
 import type {WaveformSurfaceConfig} from './WaveformSurface';
 import type {GridOverlay} from './GridOverlay';
 import type {GridOverlayConfig} from './GridOverlay';
-import {NotesManager} from './NotesManager';
-import {AnimatedTextureManager} from './TextureManager';
+import {AnimatedTextureManager, loadNoteTextures} from './TextureManager';
 import {SceneOverlays, type OverlayState} from './SceneOverlays';
 import {InteractionManager} from './InteractionManager';
+import {SceneReconciler, type ChartElement} from './SceneReconciler';
+import {NoteRenderer} from './NoteRenderer';
+import {trackToElements} from './trackToElements';
 import type {Track} from './types';
 
 // Re-export public types, constants, and utilities
@@ -30,6 +32,9 @@ export {areAnimationsSupported} from './TextureManager';
 export {SceneOverlays, type OverlayState, type SectionData} from './SceneOverlays';
 export {InteractionManager} from './InteractionManager';
 export {type HighwayMode} from './HighwayScene';
+export {SceneReconciler, type ChartElement} from './SceneReconciler';
+export {NoteRenderer} from './NoteRenderer';
+export {trackToElements} from './trackToElements';
 
 let instanceCounter = 0;
 
@@ -121,21 +126,21 @@ export const setupRenderer = (
     prepTrack(track: Track) {
       const scene = new THREE.Scene();
       trackPromise = prepTrack(scene, track);
-      console.log('track', track);
       return trackPromise;
     },
 
     async startRender() {
-      const {scene, notesManager, highwayTexture, animatedTextureManager, sceneOverlays} =
+      const {scene, highwayTexture, animatedTextureManager, sceneOverlays, reconciler, noteRenderer} =
         await trackPromise;
 
       await startRender(
         scene,
         highwayTexture,
-        notesManager,
         metadata.song_length || 60 * 5 * 1000,
         animatedTextureManager,
         sceneOverlays,
+        reconciler,
+        noteRenderer,
       );
     },
 
@@ -149,10 +154,12 @@ export const setupRenderer = (
       // Dispose animated textures if track was prepared
       if (trackPromise) {
         try {
-          const {animatedTextureManager, sceneOverlays, interactionManager} = await trackPromise;
+          const {animatedTextureManager, sceneOverlays, interactionManager, reconciler, noteRenderer: nr} = await trackPromise;
           animatedTextureManager.dispose();
           sceneOverlays?.dispose();
           interactionManager?.dispose();
+          reconciler.dispose();
+          nr.dispose();
         } catch {
           // Ignore errors during cleanup
         }
@@ -198,19 +205,27 @@ export const setupRenderer = (
     },
 
     /**
-     * Get the NotesManager for setting selection/confidence/review state.
-     */
-    async getNotesManager(): Promise<NotesManager> {
-      const {notesManager} = await trackPromise;
-      return notesManager;
-    },
-
-    /**
      * Get the InteractionManager for hit-testing and coordinate conversion.
      */
     async getInteractionManager(): Promise<InteractionManager | null> {
       const {interactionManager} = await trackPromise;
       return interactionManager;
+    },
+
+    /**
+     * Get the SceneReconciler for declarative element management.
+     */
+    async getReconciler(): Promise<SceneReconciler> {
+      const {reconciler} = await trackPromise;
+      return reconciler;
+    },
+
+    /**
+     * Get the NoteRenderer for overlay state management.
+     */
+    async getNoteRenderer(): Promise<NoteRenderer> {
+      const {noteRenderer} = await trackPromise;
+      return noteRenderer;
     },
 
     // -- Waveform / Grid surface integration --
@@ -303,13 +318,26 @@ export const setupRenderer = (
 
     const animatedTextureManager = new AnimatedTextureManager();
 
-    const notesManager = new NotesManager(
-      scene,
+    // Load textures (shared between NotesManager and NoteRenderer)
+    const {getTextureForNote} = await loadNoteTextures(
+      textureLoader,
       track.instrument,
-      highwaySpeed,
-      clippingPlanes,
+      animatedTextureManager,
     );
-    await notesManager.prepare(textureLoader, track, animatedTextureManager);
+
+    // Create NoteRenderer for the reconciler
+    const noteRenderer = new NoteRenderer(getTextureForNote, clippingPlanes);
+
+    // Create SceneReconciler with NoteRenderer
+    const reconciler = new SceneReconciler(
+      scene,
+      {note: noteRenderer},
+      highwaySpeed,
+    );
+
+    // Convert track to elements and set on the reconciler
+    const elements = trackToElements(track);
+    reconciler.setElements(elements);
 
     // Create SceneOverlays for drum tracks (editor use)
     const sceneOverlays = track.instrument === 'drums'
@@ -325,7 +353,7 @@ export const setupRenderer = (
     const interactionManager = track.instrument === 'drums'
       ? new InteractionManager(
           camera,
-          notesManager,
+          reconciler,
           sceneOverlays,
           highwaySpeed,
           getElapsedMs,
@@ -335,25 +363,31 @@ export const setupRenderer = (
     return {
       scene,
       highwayTexture,
-      notesManager,
       animatedTextureManager,
       sceneOverlays,
       interactionManager,
+      reconciler,
+      noteRenderer,
     };
   }
 
   async function startRender(
     scene: THREE.Scene,
     highwayTexture: THREE.Texture,
-    notesManager: NotesManager,
     songLength: number,
     animatedTextureManager: AnimatedTextureManager,
     sceneOverlays: SceneOverlays | null,
+    reconciler: SceneReconciler,
+    noteRenderer: NoteRenderer,
   ) {
     renderer.setAnimationLoop(animation);
 
     function animation() {
-      const SYNC_MS = (audioManager?.delay || 0) * 1000;
+      // Only apply audio latency compensation during active playback.
+      // When paused, the highway should show the exact seek position
+      // without offset — otherwise resuming creates a visible jump-back.
+      const isPlaying = audioManager?.isPlaying && audioManager?.isInitialized;
+      const SYNC_MS = isPlaying ? (audioManager?.delay || 0) * 1000 : 0;
       const durationMs = (audioManager?.duration ?? Infinity) * 1000;
       const rawMs = (audioManager?.currentTime ?? 0) * 1000;
       const currentMs = Math.min(rawMs, durationMs);
@@ -374,8 +408,23 @@ export const setupRenderer = (
         highwayTexture.offset.y = -1 * scrollPosition;
       }
 
-      // Always update note positions (editor needs this when paused too)
-      notesManager.updateDisplayedNotes(elapsedTime);
+      // Update note positions via the reconciler (windowing + repositioning)
+      const prevActiveCount = reconciler.getActiveGroups().size;
+      reconciler.updateWindow(elapsedTime);
+      // Mark overlays dirty when notes enter/leave the window
+      if (reconciler.getActiveGroups().size !== prevActiveCount) {
+        noteRenderer.markOverlaysDirty();
+      }
+
+      // Update note overlays only when overlay state changed (selection, hover, etc.)
+      if (noteRenderer.consumeOverlaysDirty()) {
+        for (const [key, group] of reconciler.getActiveGroups()) {
+          const el = reconciler.getElement(key);
+          if (el && el.kind === 'note') {
+            noteRenderer.updateOverlays(group, key, el.data as import('./NoteRenderer').NoteElementData);
+          }
+        }
+      }
 
       // Scroll waveform and grid surfaces (always, so they stay in sync when paused)
       if (waveformSurface && highwayMode === 'waveform') {

@@ -91,7 +91,7 @@ export default function HighwayEditor({
   audioChannels = 2,
   durationSeconds,
 }: HighwayEditorProps) {
-  const {state, dispatch, audioManagerRef, notesManagerRef} = useChartEditorContext();
+  const {state, dispatch, audioManagerRef, reconcilerRef, noteRendererRef} = useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
 
   const interactionRef = useRef<HTMLDivElement>(null);
@@ -108,25 +108,28 @@ export default function HighwayEditor({
     (handle: HighwayRendererHandle | null) => {
       rendererHandleRef.current = handle;
       if (!handle) {
-        notesManagerRef.current = null;
         interactionManagerRef.current = null;
+        reconcilerRef.current = null;
+        noteRendererRef.current = null;
         setRendererVersion(v => v + 1);
         return;
       }
-      // Resolve NotesManager and InteractionManager.
-      // Use a generation counter to avoid stale resolutions if called multiple times.
+      // Resolve all managers from the single trackPromise.
+      // Generation counter avoids stale resolutions if called multiple times.
       const gen = ++readyGenerationRef.current;
       Promise.all([
-        handle.getNotesManager(),
+        handle.getReconciler(),
         handle.getInteractionManager(),
-      ]).then(([nm, im]) => {
-        if (readyGenerationRef.current !== gen) return; // stale
-        notesManagerRef.current = nm;
+        handle.getNoteRenderer(),
+      ]).then(([rec, im, nr]) => {
+        if (readyGenerationRef.current !== gen) return;
+        reconcilerRef.current = rec;
         interactionManagerRef.current = im;
+        noteRendererRef.current = nr;
         setRendererVersion(v => v + 1);
       });
     },
-    [notesManagerRef],
+    [reconcilerRef, noteRendererRef],
   );
 
   // Interaction state
@@ -495,9 +498,9 @@ export default function HighwayEditor({
         setHoveredHitType(null);
       }
 
-      // Update note hover highlight via NotesManager
+      // Update note hover highlight via NoteRenderer
       const hoveredNoteId = hit?.type === 'note' ? hit.noteId : null;
-      notesManagerRef.current?.setHoveredNoteId(hoveredNoteId);
+      noteRendererRef.current?.setHoveredNoteId(hoveredNoteId);
 
       if (dragStart) {
         setDragCurrent(coords);
@@ -527,6 +530,7 @@ export default function HighwayEditor({
       isDraggingSection,
       state.activeTool,
       executeCommand,
+      noteRendererRef,
     ],
   );
 
@@ -662,12 +666,12 @@ export default function HighwayEditor({
     setHoveredHitType(null);
     setIsErasing(false);
     // Clear note hover highlight
-    notesManagerRef.current?.setHoveredNoteId(null);
+    noteRendererRef.current?.setHoveredNoteId(null);
     if (!isDragging && !isDraggingSection) {
       setDragStart(null);
       setDragCurrent(null);
     }
-  }, [isDragging, isDraggingSection]);
+  }, [isDragging, isDraggingSection, noteRendererRef]);
 
   // ---------------------------------------------------------------------------
   // Wheel scrolling -- scrub cursor forward/backward by one grid step
@@ -798,16 +802,17 @@ export default function HighwayEditor({
       loopRegion: state.loopRegion,
     });
 
-    // Push selection and confidence state to the NotesManager
-    handle.getNotesManager().then(nm => {
-      nm.setSelectedNoteIds(state.selectedNoteIds);
-      nm.setConfidenceData(
+    // Push selection and confidence state to the NoteRenderer
+    const nr = noteRendererRef.current;
+    if (nr) {
+      nr.setSelectedNoteIds(state.selectedNoteIds);
+      nr.setConfidenceData(
         confidence ?? null,
         showConfidence,
         confidenceThreshold,
       );
-      nm.setReviewedNoteIds(reviewedNoteIds ?? null);
-    });
+      nr.setReviewedNoteIds(reviewedNoteIds ?? null);
+    }
 
     // Push sections to InteractionManager for section hit-testing
     handle.getInteractionManager().then(im => {
@@ -831,6 +836,7 @@ export default function HighwayEditor({
     showConfidence,
     confidenceThreshold,
     reviewedNoteIds,
+    rendererVersion,
   ]);
 
   // Push timing data to SceneOverlays when tempos or resolution change
