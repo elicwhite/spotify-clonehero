@@ -172,7 +172,7 @@ export default function ChartEditor({
       </div>
 
       {/* Bottom bar: transport + waveform */}
-      <div className="shrink-0 rounded-t-lg border border-b-0 bg-card px-3 py-2">
+      <div className="shrink-0 border-t bg-background px-4 py-2.5">
         <TransportControls
           audioManager={audioManager}
           durationSeconds={durationSeconds}

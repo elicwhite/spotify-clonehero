@@ -214,7 +214,7 @@ export default function TransportControls({
         </Tooltip>
 
         {/* Time display */}
-        <span className="min-w-[5rem] text-xs font-mono text-muted-foreground tabular-nums whitespace-nowrap">
+        <span className="min-w-[5.5rem] text-sm font-mono text-muted-foreground tabular-nums whitespace-nowrap">
           {formatTime(currentTime)} / {formatTime(durationSeconds)}
         </span>
 

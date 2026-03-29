@@ -145,15 +145,15 @@ export default function TimelineMinimap({
   return (
     <div
       className={cn(
-        'flex flex-col h-full w-[120px] bg-background/80 border-l select-none',
+        'flex flex-col h-full w-[140px] bg-background border-l select-none',
         className,
       )}>
       {/* Time and percentage at top */}
-      <div className="shrink-0 px-2 py-2 text-center border-b">
-        <div className="text-xs font-mono text-foreground tabular-nums">
+      <div className="shrink-0 px-3 py-3 text-center">
+        <div className="text-sm font-mono text-foreground tabular-nums">
           {formatTimePrecise(currentTimeMs / 1000)}
         </div>
-        <div className="text-[10px] font-mono text-muted-foreground tabular-nums">
+        <div className="text-xs font-mono text-muted-foreground tabular-nums">
           {percentage.toFixed(0)}%
         </div>
       </div>
@@ -161,7 +161,7 @@ export default function TimelineMinimap({
       {/* Track area with sections and position handle */}
       <div
         ref={trackRef}
-        className="relative flex-1 min-h-0 mx-2 my-2 cursor-pointer"
+        className="relative flex-1 min-h-0 mx-3 mb-3 cursor-pointer"
         onClick={handleTrackClick}>
         {/* Track background bar */}
         <div className="absolute left-1/2 top-0 bottom-0 w-[3px] -translate-x-1/2 rounded-full bg-muted" />
@@ -175,20 +175,18 @@ export default function TimelineMinimap({
         {/* Section markers */}
         {sections.map((section, i) => {
           const bottomPct =
-            durationMs > 0
-              ? (section.timeMs / durationMs) * 100
-              : 0;
+            durationMs > 0 ? (section.timeMs / durationMs) * 100 : 0;
           return (
             <button
               key={`${section.name}-${i}`}
-              className="absolute right-0 flex items-center gap-1 -translate-y-1/2 hover:opacity-100 opacity-80 transition-opacity group"
+              className="absolute right-0 flex items-center gap-1.5 -translate-y-1/2 hover:opacity-100 opacity-75 transition-opacity group"
               style={{bottom: `${bottomPct}%`}}
               onClick={e => {
                 e.stopPropagation();
                 handleSectionClick(section.timeMs);
               }}
               title={`${section.name} (${formatTimePrecise(section.timeMs / 1000)})`}>
-              <span className="text-[9px] text-amber-400/80 group-hover:text-amber-400 truncate max-w-[80px] text-right leading-tight">
+              <span className="text-[11px] text-amber-400/80 group-hover:text-amber-400 truncate max-w-[90px] text-right leading-tight">
                 {section.name}
               </span>
               <span className="w-2 h-2 rounded-full bg-amber-400/70 group-hover:bg-amber-400 shrink-0" />
