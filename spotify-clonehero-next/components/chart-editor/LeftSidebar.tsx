@@ -31,9 +31,7 @@ import {useChartEditorContext, type ToolMode} from './ChartEditorContext';
 import {useUndoRedo} from './hooks/useEditCommands';
 import NoteInspector from './NoteInspector';
 import LoopControls from './LoopControls';
-import ExportDialog from './ExportDialog';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type {AudioSource} from './ExportDialog';
 import {cn} from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -75,9 +73,6 @@ interface LeftSidebarProps {
   songName: string;
   dirty?: boolean;
   audioManager: AudioManager;
-  artistName?: string;
-  getChartText?: () => Promise<string>;
-  getAudioSources?: () => Promise<AudioSource[]>;
   onNotesModified?: (noteIds: string[]) => void;
   leftPanelChildren?: ReactNode;
 }
@@ -90,9 +85,6 @@ export default function LeftSidebar({
   songName,
   dirty,
   audioManager,
-  artistName,
-  getChartText,
-  getAudioSources,
   onNotesModified,
   leftPanelChildren,
 }: LeftSidebarProps) {
@@ -106,33 +98,10 @@ export default function LeftSidebar({
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex flex-col w-64 shrink-0 border-r bg-background overflow-y-auto overflow-x-hidden">
-        {/* Project header */}
-        <div className="shrink-0 p-4 space-y-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="flex-1 min-w-0">
-              <h2 className="text-sm font-semibold text-foreground truncate">
-                {songName}
-              </h2>
-              {dirty && (
-                <span className="text-[10px] text-amber-400">Unsaved</span>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <LoopControls audioManager={audioManager} className="flex-1" />
-            {getChartText && (
-              <ExportDialog
-                songName={songName}
-                artistName={artistName}
-                getChartText={getChartText}
-                getAudioSources={getAudioSources}
-              />
-            )}
-          </div>
-        </div>
-
         {/* Scrollable sidebar body */}
-        <div className="space-y-4 overflow-y-auto flex-1 p-4 pt-0">
+        <div className="space-y-4 overflow-y-auto flex-1 p-4">
+          {/* Loop controls */}
+          <LoopControls audioManager={audioManager} />
           {/* Grid step */}
           <div className="space-y-2 pt-4 border-t">
             <div className="flex items-center justify-between">

@@ -43,6 +43,8 @@ export interface ChartEditorProps {
   songName: string;
   /** Artist name for display. */
   artistName?: string;
+  /** Charter name for display. */
+  charterName?: string;
   /** Whether the chart has unsaved changes. */
   dirty?: boolean;
   /** Content rendered in the left sidebar panel (page-specific). */
@@ -97,6 +99,7 @@ export default function ChartEditor({
   sections,
   songName,
   artistName,
+  charterName,
   dirty,
   leftPanelChildren,
   getChartText,
@@ -135,6 +138,42 @@ export default function ChartEditor({
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-black">
+      {/* Top bar: song info + export */}
+      <div className="shrink-0 flex items-center justify-between border-b bg-background px-4 py-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h1 className="text-sm font-semibold text-foreground truncate">
+              {songName}
+            </h1>
+            {artistName && (
+              <span className="text-sm text-muted-foreground truncate">
+                by {artistName}
+              </span>
+            )}
+            {dirty && (
+              <span className="text-[10px] text-amber-400 shrink-0">
+                Unsaved
+              </span>
+            )}
+          </div>
+          {charterName && (
+            <p className="text-xs text-muted-foreground truncate">
+              Charted by {charterName}
+            </p>
+          )}
+        </div>
+        {getChartText && (
+          <div className="shrink-0 ml-4">
+            <ExportDialog
+              songName={songName}
+              artistName={artistName}
+              getChartText={getChartText}
+              getAudioSources={getAudioSources}
+            />
+          </div>
+        )}
+      </div>
+
       {/* Main area: three-column layout */}
       <div className="flex flex-1 min-h-0">
         {/* Left sidebar */}
@@ -142,9 +181,6 @@ export default function ChartEditor({
           songName={songName}
           dirty={dirty}
           audioManager={audioManager}
-          getChartText={getChartText}
-          getAudioSources={getAudioSources}
-          artistName={artistName}
           onNotesModified={onNotesModified}
           leftPanelChildren={leftPanelChildren}
         />

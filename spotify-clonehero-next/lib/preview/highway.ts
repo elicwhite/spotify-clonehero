@@ -504,7 +504,7 @@ class NotesManager {
             prepared.push({
               note,
               msTime: note.msTime,
-              msLength: note.msLength,
+              msLength: 0, // Drums don't have sustains
               xPosition: 0, // kick has no lane X offset — centered via sprite center
               inStarPower: starPower,
               isKick: true,
@@ -531,7 +531,7 @@ class NotesManager {
               prepared.push({
                 note,
                 msTime: note.msTime,
-                msLength: note.msLength,
+                msLength: 0, // Drums don't have sustains
                 xPosition: calculateNoteXOffset(this.instrument, lane),
                 inStarPower: starPower,
                 isKick: false,
@@ -652,7 +652,7 @@ class NotesManager {
 
       if (pn.isKick) {
         const kickScale = 0.045;
-        sprite.center.set(0.5, -0.5);
+        sprite.center.set(0.5, 0.5);
         const aspectRatio =
           sprite.material.map!.image.width / sprite.material.map!.image.height;
         sprite.scale.set(kickScale * aspectRatio, kickScale, kickScale);
@@ -660,14 +660,14 @@ class NotesManager {
         noteGroup.position.x = 0;
       } else if (pn.isOpen) {
         const openScale = 0.11;
-        sprite.center.set(0.5, 0);
+        sprite.center.set(0.5, 0.5);
         const aspectRatio =
           sprite.material.map!.image.width / sprite.material.map!.image.height;
         sprite.scale.set(openScale * aspectRatio, openScale, openScale);
         sprite.renderOrder = 4;
         noteGroup.position.x = 0;
       } else {
-        sprite.center.set(0.5, 0);
+        sprite.center.set(0.5, 0.5);
         const aspectRatio =
           sprite.material.map!.image.width / sprite.material.map!.image.height;
         sprite.scale.set(SCALE * aspectRatio, SCALE, SCALE);

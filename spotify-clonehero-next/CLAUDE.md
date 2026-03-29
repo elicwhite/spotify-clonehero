@@ -133,6 +133,11 @@ All work follows the plan-driven workflow in `plans/`. Read the plan before star
 | `0016-grid-navigation-keys-mode` | Grid-based cursor navigation + keyboard note placement (1-5) | 0013 |
 | `0017-section-editing` | Add/edit/delete named section markers on highway + timeline | 0015 |
 | `0018-tanstack-hotkeys-migration` | Replace raw addEventListener keyboard handling with @tanstack/react-hotkeys | 0013, 0016 |
+| `0019-highway-decomposition` | Split highway.ts into modules: HighwayScene, NotesManager, TextureManager | — |
+| `0020-scene-integration` | Move overlay drawing (selections, cursor, sections, ghosts) into Three.js scene | 0019 |
+| `0021-interaction-manager` | Hybrid hit testing (Three.js raycasts, React decides) + hover glow/outline | 0020 |
+| `0022-incremental-editing` | Diff-based note updates — no full rebuild on add/delete/move | 0021 |
+| `0023-waveform-highway-surface` | Waveform as highway texture + beat line grid overlay | 0019 |
 
 ### Parallelizable Work
 
@@ -140,6 +145,10 @@ After 0013, these can proceed in parallel:
 - **Track A:** 0014 (drum-edit page)
 - **Track B:** 0015 (layout + timeline) → 0017 (section editing)
 - **Track C:** 0016 (grid nav + keys mode)
+
+Highway refactor (0019-0023) is sequential:
+- 0019 (decompose) → 0020 (scene integration) → 0021 (interaction) → 0022 (incremental editing)
+- 0019 (decompose) → 0023 (waveform) — can parallel with 0020-0022
 
 ## Browser Validation
 

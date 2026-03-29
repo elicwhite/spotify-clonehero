@@ -567,6 +567,7 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
         sections={chart.sections}
         songName={projectMeta?.name ?? 'Untitled'}
         artistName={projectMeta?.artist}
+        charterName={projectMeta?.charter}
         dirty={state.dirty}
         getChartText={getChartText}
         getAudioSources={getAudioSources}

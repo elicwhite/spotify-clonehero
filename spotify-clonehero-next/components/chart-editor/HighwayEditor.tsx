@@ -1214,6 +1214,9 @@ export default function HighwayEditor({
               (sTempo.beatsPerMinute * res);
           const sWorldY = ((sMs - elapsedMs) / 1000) * highwaySpeed - 1;
 
+          // Clip to visible highway range (world Y: -1 to ~1.1)
+          if (sWorldY > 1.1 || sWorldY < -1.2) continue;
+
           const leftPt = worldToScreen(
             new THREE.Vector3(-HIGHWAY_HALF_WIDTH, sWorldY, 0),
             w,
@@ -1277,6 +1280,8 @@ export default function HighwayEditor({
               (dTempo.beatsPerMinute * res);
           const dWorldY = ((dMs - elapsedMs) / 1000) * highwaySpeed - 1;
 
+          // Clip to visible highway range
+          if (dWorldY <= 1.1 && dWorldY >= -1.2) {
           const dLeftPt = worldToScreen(
             new THREE.Vector3(-HIGHWAY_HALF_WIDTH, dWorldY, 0),
             w,
@@ -1315,6 +1320,7 @@ export default function HighwayEditor({
               dLeftPt.y,
             );
           }
+          } // close worldY bounds check
         }
       }
 
