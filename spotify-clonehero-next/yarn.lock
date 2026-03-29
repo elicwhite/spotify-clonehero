@@ -460,6 +460,11 @@
   resolved "https://registry.yarnpkg.com/@bcoe/v8-coverage/-/v8-coverage-0.2.3.tgz#75a2e8b51cb758a7553d6804a5932d7aace75c39"
   integrity sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==
 
+"@cfworker/json-schema@^4.1.1":
+  version "4.1.1"
+  resolved "https://registry.yarnpkg.com/@cfworker/json-schema/-/json-schema-4.1.1.tgz#4a2a3947ee9fa7b7c24be981422831b8674c3be6"
+  integrity sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==
+
 "@eliwhite/scan-chart@7.2.1":
   version "7.2.1"
   resolved "https://registry.yarnpkg.com/@eliwhite/scan-chart/-/scan-chart-7.2.1.tgz#e07291cd68c926d449371de52e7e2a30c50b5449"
@@ -1041,6 +1046,46 @@
   dependencies:
     "@jridgewell/resolve-uri" "^3.1.0"
     "@jridgewell/sourcemap-codec" "^1.4.14"
+
+"@mcp-b/global@^2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@mcp-b/global/-/global-2.2.0.tgz#56d5bfa4e7eb52bde9c0daf72e4cd672742ceca9"
+  integrity sha512-3+FNuVXPGyhzYsVPL5UItMkTF+GD6E3iHEmuJY0yydjjpWtlqrUw7b7PLhyuymKcc1+jTMunyrr3Zps0uPEfiw==
+  dependencies:
+    "@mcp-b/transports" "2.2.0"
+    "@mcp-b/webmcp-polyfill" "2.2.0"
+    "@mcp-b/webmcp-ts-sdk" "2.2.0"
+    "@mcp-b/webmcp-types" "2.2.0"
+
+"@mcp-b/transports@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@mcp-b/transports/-/transports-2.2.0.tgz#1b74945ea22b7581b5e75153461aa36bfc6c3c2b"
+  integrity sha512-zSqYekrmou72z67GF5jXaDnQdhT84Hlmi4meshm0zMn71GlaYmHhXfb3UsgW3xQ7Y5CexQ4U9L9IrdG6/+MTfA==
+  dependencies:
+    "@mcp-b/webmcp-ts-sdk" "2.2.0"
+    zod "3.25.76"
+
+"@mcp-b/webmcp-polyfill@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@mcp-b/webmcp-polyfill/-/webmcp-polyfill-2.2.0.tgz#9777ed4ec33089f0f8bfda8cd25c90f91b178bc0"
+  integrity sha512-as49JP4MHXVMMVNzD8938EsiU2tEzWNk7Un6c6C/xK5rstkIrQZQsVLbH7NFtmgMb6bbryzSqg9JWSFIxkU27Q==
+  dependencies:
+    "@cfworker/json-schema" "^4.1.1"
+    "@mcp-b/webmcp-types" "2.2.0"
+    "@standard-schema/spec" "^1.1.0"
+
+"@mcp-b/webmcp-ts-sdk@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@mcp-b/webmcp-ts-sdk/-/webmcp-ts-sdk-2.2.0.tgz#2dee73c2dd59f24a60afd8402f6cb15fd7546e4a"
+  integrity sha512-IzjwqrpbbASbAJxpr5k5m1ryiELGdnohDXzpLuB7UK2VI1rsAwQ04j59uRkMvaqZ4iwvxHTzKk+AajRB57OcPw==
+  dependencies:
+    "@mcp-b/webmcp-polyfill" "2.2.0"
+    "@mcp-b/webmcp-types" "2.2.0"
+
+"@mcp-b/webmcp-types@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@mcp-b/webmcp-types/-/webmcp-types-2.2.0.tgz#e04e0593680552f4ff6f598a5b1771caa13a4b14"
+  integrity sha512-1/UYAwQKBkqRgK18GkbGR4m6Cn9vz6Qy6pTL5LIIinUOhR5dMLaNl/blH/tJT+nJleMmgDoFZWGAmmr+fAz2PQ==
 
 "@next/env@15.5.9":
   version "15.5.9"
@@ -2263,6 +2308,11 @@
   version "3.50.1-build1"
   resolved "https://registry.yarnpkg.com/@sqlite.org/sqlite-wasm/-/sqlite-wasm-3.50.1-build1.tgz#67dd9944b0e37ddb0ef2c8b195baa74ece838e44"
   integrity sha512-yH4M/SHN98NibniIwTVk6rwTJjy7n39l7zwWY3u+qsfZBGTi4lC1uEl2NDvIlkzsFtfCBvHBJJFJ1iuU3UzzEQ==
+
+"@standard-schema/spec@^1.1.0":
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/@standard-schema/spec/-/spec-1.1.0.tgz#a79b55dbaf8604812f52d140b2c9ab41bc150bb8"
+  integrity sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==
 
 "@stitches/core@^1.2.8":
   version "1.2.8"
@@ -8580,6 +8630,14 @@ use-sync-external-store@^1.6.0:
   resolved "https://registry.yarnpkg.com/use-sync-external-store/-/use-sync-external-store-1.6.0.tgz#b174bfa65cb2b526732d9f2ac0a408027876f32d"
   integrity sha512-Pp6GSwGP/NrPIrxVFAIkOQeyw8lFenOHijQWkUTrDvrF4ALqylP2C/KCkeS9dpUM3KvYRQhna5vt7IL95+ZQ9w==
 
+usewebmcp@^2.2.0:
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/usewebmcp/-/usewebmcp-2.2.0.tgz#625e98243489fca6706417d49a588b8a1b98e3f0"
+  integrity sha512-MIfwGVangLr/HQPrymzO65RbtELvk+R4XFb1vg54VmDrc6f7kmGIj9+XQ3xyK91oJwbJ+jC/vVKv5O/dT++2hA==
+  dependencies:
+    "@mcp-b/webmcp-polyfill" "2.2.0"
+    "@mcp-b/webmcp-types" "2.2.0"
+
 utf-8@^2.0.0:
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/utf-8/-/utf-8-2.0.0.tgz#6c2a309d683958862a01b5bf8e1d2dff46d36bf9"
@@ -8859,6 +8917,16 @@ zip-stream@^4.1.0:
     archiver-utils "^3.0.4"
     compress-commons "^4.1.2"
     readable-stream "^3.6.0"
+
+zod-to-json-schema@^3.25.2:
+  version "3.25.2"
+  resolved "https://registry.yarnpkg.com/zod-to-json-schema/-/zod-to-json-schema-3.25.2.tgz#3fa799a7badd554541472fb65843fdc460b2e5aa"
+  integrity sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==
+
+zod@3.25.76:
+  version "3.25.76"
+  resolved "https://registry.yarnpkg.com/zod/-/zod-3.25.76.tgz#26841c3f6fd22a6a2760e7ccb719179768471e34"
+  integrity sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==
 
 zod@^4.1.5:
   version "4.1.9"

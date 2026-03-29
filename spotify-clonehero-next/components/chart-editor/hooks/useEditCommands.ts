@@ -55,7 +55,6 @@ function isIncrementalCommand(cmd: EditCommand): boolean {
     cmd instanceof AddNoteCommand ||
     cmd instanceof DeleteNotesCommand ||
     cmd instanceof MoveNotesCommand ||
-    cmd instanceof ToggleFlagCommand ||
     cmd instanceof AddSectionCommand ||
     cmd instanceof DeleteSectionCommand ||
     cmd instanceof RenameSectionCommand ||
@@ -198,7 +197,8 @@ export function useExecuteCommand() {
         return;
       }
 
-      // Full rebuild path (BPM/TS changes or no NotesManager available)
+      // Full rebuild path (BPM/TS changes, flag toggles, or no NotesManager)
+      console.log('[useExecuteCommand] Full rebuild for:', command.constructor.name);
       const newChart = chartDocumentToParsedChart(newDoc);
 
       dispatch({

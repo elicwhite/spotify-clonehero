@@ -103,18 +103,28 @@ export default function HighwayEditor({
   const rendererHandleRef = useRef<HighwayRendererHandle | null>(null);
   const [rendererVersion, setRendererVersion] = useState(0);
 
+  const readyGenerationRef = useRef(0);
   const handleRendererReady = useCallback(
     (handle: HighwayRendererHandle | null) => {
       rendererHandleRef.current = handle;
-      setRendererVersion(v => v + 1);
-      // Wire NotesManager to the shared context ref for incremental updates
-      if (handle) {
-        handle.getNotesManager().then(nm => {
-          notesManagerRef.current = nm;
-        });
-      } else {
+      if (!handle) {
         notesManagerRef.current = null;
+        interactionManagerRef.current = null;
+        setRendererVersion(v => v + 1);
+        return;
       }
+      // Resolve NotesManager and InteractionManager.
+      // Use a generation counter to avoid stale resolutions if called multiple times.
+      const gen = ++readyGenerationRef.current;
+      Promise.all([
+        handle.getNotesManager(),
+        handle.getInteractionManager(),
+      ]).then(([nm, im]) => {
+        if (readyGenerationRef.current !== gen) return; // stale
+        notesManagerRef.current = nm;
+        interactionManagerRef.current = im;
+        setRendererVersion(v => v + 1);
+      });
     },
     [notesManagerRef],
   );
@@ -177,17 +187,7 @@ export default function HighwayEditor({
 
   const interactionManagerRef = useRef<InteractionManager | null>(null);
 
-  // Resolve InteractionManager when the renderer handle becomes available
-  useEffect(() => {
-    const handle = rendererHandleRef.current;
-    if (!handle) {
-      interactionManagerRef.current = null;
-      return;
-    }
-    handle.getInteractionManager().then(im => {
-      interactionManagerRef.current = im;
-    });
-  }, [rendererVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  // InteractionManager is resolved in handleRendererReady (above)
 
   // ---------------------------------------------------------------------------
   // Waveform / Grid surface setup

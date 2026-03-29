@@ -415,27 +415,28 @@ export class NotesManager {
       }
     }
 
-    // 2. Update moved notes in-place (the group will reposition on next frame)
+    // 2. Handle moved notes (flags changed, position changed, etc.)
+    // Update preparedNotes in-place; remove active groups so they get
+    // recreated by updateDisplayedNotes.
     for (const {oldIndex, newNote} of diff.moved) {
       this.preparedNotes[oldIndex] = newNote;
-      // If this note has an active group, update its material in case flags changed
       const group = this.activeNoteGroups.get(oldIndex);
-      if (group && group.children.length > 0 && group.children[0] instanceof THREE.Sprite) {
-        const sprite = group.children[0] as THREE.Sprite;
-        const material = this.getTextureForNote(newNote.note, {
-          inStarPower: newNote.inStarPower,
-        });
-        sprite.material = material;
-
-        // Update X position for lane changes
-        if (newNote.isKick) {
-          group.position.x = 0;
-        } else if (newNote.isOpen) {
-          group.position.x = 0;
-        } else {
-          group.position.x = newNote.xPosition;
-        }
+      if (group) {
+        this.scene.remove(group);
+        this.recycleGroup(group);
+        this.activeNoteGroups.delete(oldIndex);
       }
+    }
+
+    // If there were moved notes, clear ALL active groups to force a full
+    // visible-window rebuild on the next updateDisplayedNotes call.
+    // This avoids index/cursor misalignment issues.
+    if (diff.moved.length > 0) {
+      for (const [, group] of this.activeNoteGroups) {
+        this.scene.remove(group);
+        this.recycleGroup(group);
+      }
+      this.activeNoteGroups.clear();
     }
 
     // 3. Add new notes to preparedNotes
@@ -547,14 +548,16 @@ export class NotesManager {
       }
     }
 
-    // Add new notes that entered the window
+    // Add notes that should be visible but don't have an active group.
+    // This covers both new notes scrolling in from the top AND notes that
+    // were removed by applyDiff (moved/flag-changed) and need re-creation.
     for (
-      let i = maxNoteIndex + 1;
+      let i = noteStartIndex;
       i < this.preparedNotes.length &&
       this.preparedNotes[i].msTime < renderEndTimeMs;
       i++
     ) {
-      // Skip if already active (shouldn't happen, but be safe)
+      // Skip if already active
       if (this.activeNoteGroups.has(i)) continue;
 
       const pn = this.preparedNotes[i];
@@ -627,8 +630,10 @@ export class NotesManager {
    * Compute a note ID string from a PreparedNote, matching the format used
    * by the editor commands (`tick:type`).
    */
+  private static LANE_TO_DRUM_TYPE = ['redDrum', 'yellowDrum', 'blueDrum', 'greenDrum'];
   private noteIdFromPrepared(pn: PreparedNote): string {
-    return `${pn.note.tick ?? 0}:${pn.note.type}`;
+    const drumType = pn.isKick ? 'kick' : (NotesManager.LANE_TO_DRUM_TYPE[pn.lane] ?? 'redDrum');
+    return `${pn.note.tick ?? 0}:${drumType}`;
   }
 
   /**

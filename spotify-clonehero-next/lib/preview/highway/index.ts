@@ -393,10 +393,9 @@ export const setupRenderer = (
       try {
         renderer.render(scene, camera);
       } catch (e) {
-        // WebGL context lost or shader compilation failed -- stop the loop
-        // to avoid flooding the console with errors every frame.
-        renderer.setAnimationLoop(null);
-        console.error('Highway render error (animation loop stopped):', e);
+        // Log but don't stop the loop — transient errors (e.g., null material
+        // during texture swap) should not permanently kill the renderer.
+        console.warn('Highway render error:', e);
       }
     }
   }

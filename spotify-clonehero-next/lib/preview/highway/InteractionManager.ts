@@ -262,7 +262,7 @@ export class InteractionManager {
       const pn = prepared[i];
       if (pn.msTime > ms + tolerance) break;
       if (!pn.isKick) continue;
-      const noteId = `${pn.note.tick ?? 0}:${pn.note.type}`;
+      const noteId = `${pn.note.tick ?? 0}:kick`;
       return {
         type: 'note',
         noteId,

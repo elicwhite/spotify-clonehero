@@ -14,6 +14,7 @@ import NoteInspector from './NoteInspector';
 import ExportDialog from './ExportDialog';
 import LeftSidebar from './LeftSidebar';
 import TimelineMinimap from './TimelineMinimap';
+import EditorMCPTools from './EditorMCPTools';
 import {useChartEditorContext} from './ChartEditorContext';
 import {buildTimedTempos, tickToMs} from '@/lib/drum-transcription/timing';
 
@@ -138,6 +139,7 @@ export default function ChartEditor({
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-black">
+      <EditorMCPTools />
       {/* Top bar: song info + export */}
       <div className="shrink-0 flex items-center justify-between border-b bg-background px-4 py-2">
         <div className="min-w-0">
