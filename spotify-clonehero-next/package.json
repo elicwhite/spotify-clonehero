@@ -35,6 +35,7 @@
     "@supabase/auth-ui-shared": "^0.1.8",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.56.0",
+    "@tanstack/react-hotkeys": "^0.8.3",
     "@tanstack/react-table": "^8.10.7",
     "@types/react-icons": "^3.0.0",
     "@types/wicg-file-system-access": "^2023.10.2",
