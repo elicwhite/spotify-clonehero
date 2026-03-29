@@ -403,6 +403,11 @@ export class BatchCommand implements EditCommand {
       description ?? `Batch: ${commands.length} command(s)`;
   }
 
+  /** Read-only access to the sub-commands (for incremental edit detection). */
+  getCommands(): readonly EditCommand[] {
+    return this.commands;
+  }
+
   execute(doc: ChartDocument): ChartDocument {
     let result = doc;
     for (const cmd of this.commands) {

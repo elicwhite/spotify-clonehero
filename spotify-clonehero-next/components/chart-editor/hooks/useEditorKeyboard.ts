@@ -95,7 +95,7 @@ export function useEditorKeyboard(
   onNotesModified?: (noteIds: string[]) => void,
 ) {
   const {state, dispatch, audioManagerRef} = useChartEditorContext();
-  const executeCommand = useExecuteCommand();
+  const {executeCommand} = useExecuteCommand();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
 
   // Get expert notes for clipboard and navigation

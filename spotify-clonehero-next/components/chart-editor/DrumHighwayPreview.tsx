@@ -1,16 +1,38 @@
 'use client';
 
 import {memo, useEffect, useMemo, useRef} from 'react';
-import {setupRenderer} from '@/lib/preview/highway';
+import {setupRenderer, type OverlayState, InteractionManager, type HighwayMode} from '@/lib/preview/highway';
+import type {NotesManager} from '@/lib/preview/highway/NotesManager';
+import type {WaveformSurfaceConfig} from '@/lib/preview/highway/WaveformSurface';
+import type {GridOverlayConfig} from '@/lib/preview/highway/GridOverlay';
 import {AudioManager} from '@/lib/preview/audioManager';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {parseChartFile} from '@eliwhite/scan-chart';
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
-/** The subset of the renderer API that the overlay needs for coordinate mapping. */
+/** The subset of the renderer API that the editor needs. */
 export interface HighwayRendererHandle {
   getCamera(): import('three').PerspectiveCamera;
   getHighwaySpeed(): number;
+  /** Set overlay state for the current frame (read by render loop). */
+  setOverlayState(state: OverlayState): void;
+  /** Update timing data for tick-to-ms conversion. */
+  setTimingData(
+    timedTempos: {tick: number; msTime: number; beatsPerMinute: number}[],
+    resolution: number,
+  ): void;
+  /** Get the NotesManager for setting selection/confidence/review state. */
+  getNotesManager(): Promise<NotesManager>;
+  /** Get the InteractionManager for hit-testing and coordinate conversion. */
+  getInteractionManager(): Promise<InteractionManager | null>;
+  /** Set waveform audio data for the highway surface. */
+  setWaveformData(config: Omit<WaveformSurfaceConfig, 'highwayWidth' | 'highwaySpeed'>): Promise<void>;
+  /** Set grid overlay data (tempos + time signatures). */
+  setGridData(config: Omit<GridOverlayConfig, 'highwayWidth' | 'highwaySpeed'>): Promise<void>;
+  /** Switch between 'classic' and 'waveform' highway modes. */
+  setHighwayMode(mode: HighwayMode): void;
+  /** Get the current highway display mode. */
+  getHighwayMode(): HighwayMode;
 }
 
 interface DrumHighwayPreviewProps {
@@ -73,10 +95,19 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
     renderer.prepTrack(drumTrack);
     renderer.startRender();
 
-    // Expose camera/speed to the overlay
+    // Expose renderer API to the editor overlay
     onRendererReady?.({
       getCamera: () => renderer.getCamera(),
       getHighwaySpeed: () => renderer.getHighwaySpeed(),
+      setOverlayState: (state: OverlayState) => renderer.setOverlayState(state),
+      setTimingData: (timedTempos, resolution) =>
+        renderer.setTimingData(timedTempos, resolution),
+      getNotesManager: () => renderer.getNotesManager(),
+      getInteractionManager: () => renderer.getInteractionManager(),
+      setWaveformData: (config) => renderer.setWaveformData(config),
+      setGridData: (config) => renderer.setGridData(config),
+      setHighwayMode: (mode) => renderer.setHighwayMode(mode),
+      getHighwayMode: () => renderer.getHighwayMode(),
     });
 
     return () => {

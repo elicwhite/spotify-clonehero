@@ -196,6 +196,9 @@ export default function ChartEditor({
             showConfidence={showConfidence}
             confidenceThreshold={confidenceThreshold}
             reviewedNoteIds={reviewedNoteIds}
+            audioData={audioData}
+            audioChannels={audioChannels}
+            durationSeconds={durationSeconds}
           />
         </div>
 

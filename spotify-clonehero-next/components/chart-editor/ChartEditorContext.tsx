@@ -13,6 +13,8 @@ import {HotkeysProvider} from '@tanstack/react-hotkeys';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {ChartDocument, DrumNote} from '@/lib/chart-edit';
 import type {EditCommand} from './commands';
+import type {HighwayMode} from '@/lib/preview/highway';
+import type {NotesManager} from '@/lib/preview/highway/NotesManager';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,6 +95,9 @@ export interface ChartEditorState {
 
   /** A-B loop region in milliseconds. null = no loop. */
   loopRegion: {startMs: number; endMs: number} | null;
+
+  /** Highway display mode: 'classic' (texture) or 'waveform' (audio waveform surface). */
+  highwayMode: HighwayMode;
 }
 
 export type ChartEditorAction =
@@ -113,9 +118,17 @@ export type ChartEditorAction =
       /** Updated chart document after the command was applied. */
       chartDoc: ChartDocument;
     }
+  | {
+      type: 'EXECUTE_COMMAND_INCREMENTAL';
+      command: EditCommand;
+      /** Updated chart document after the command was applied. */
+      chartDoc: ChartDocument;
+    }
   // -- Undo/Redo --
   | {type: 'UNDO'; chart: ParsedChart; chartDoc: ChartDocument}
   | {type: 'REDO'; chart: ParsedChart; chartDoc: ChartDocument}
+  | {type: 'UNDO_INCREMENTAL'; chartDoc: ChartDocument}
+  | {type: 'REDO_INCREMENTAL'; chartDoc: ChartDocument}
   | {type: 'MARK_SAVED'}
   // -- Clipboard --
   | {type: 'SET_CLIPBOARD'; notes: DrumNote[]}
@@ -129,12 +142,16 @@ export type ChartEditorAction =
   // -- Section selection --
   | {type: 'SET_SELECTED_SECTION'; tick: number | null}
   // -- Loop --
-  | {type: 'SET_LOOP_REGION'; region: {startMs: number; endMs: number} | null};
+  | {type: 'SET_LOOP_REGION'; region: {startMs: number; endMs: number} | null}
+  // -- Highway mode --
+  | {type: 'SET_HIGHWAY_MODE'; mode: HighwayMode};
 
 export interface ChartEditorContextValue {
   state: ChartEditorState;
   dispatch: React.Dispatch<ChartEditorAction>;
   audioManagerRef: RefObject<AudioManager | null>;
+  /** Shared ref to the Three.js NotesManager for incremental edits. */
+  notesManagerRef: React.MutableRefObject<NotesManager | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +187,8 @@ const initialState: ChartEditorState = {
   selectedSectionTick: null,
   // Loop
   loopRegion: null,
+  // Highway mode
+  highwayMode: 'classic' as HighwayMode,
 };
 
 // ---------------------------------------------------------------------------
@@ -230,6 +249,32 @@ function chartEditorReducer(state: ChartEditorState, action: ChartEditorAction):
       };
     }
 
+    case 'EXECUTE_COMMAND_INCREMENTAL': {
+      // Like EXECUTE_COMMAND but does NOT update `chart` or `track`,
+      // so DrumHighwayPreview does not remount. The scene is updated
+      // separately via NotesManager.applyDiff().
+      const prevDocInc = state.chartDoc;
+      if (!prevDocInc) return state;
+
+      let newUndoStackInc = [...state.undoStack, action.command];
+      let newUndoDocStackInc = [...state.undoDocStack, prevDocInc];
+      if (newUndoStackInc.length > UNDO_STACK_CAP) {
+        newUndoStackInc = newUndoStackInc.slice(newUndoStackInc.length - UNDO_STACK_CAP);
+        newUndoDocStackInc = newUndoDocStackInc.slice(newUndoDocStackInc.length - UNDO_STACK_CAP);
+      }
+
+      return {
+        ...state,
+        // chart and track remain unchanged -- no remount
+        chartDoc: action.chartDoc,
+        dirty: true,
+        undoStack: newUndoStackInc,
+        undoDocStack: newUndoDocStackInc,
+        redoStack: [],
+        redoDocStack: [],
+      };
+    }
+
     case 'UNDO': {
       if (state.undoStack.length === 0 || !state.chartDoc) return state;
 
@@ -283,6 +328,45 @@ function chartEditorReducer(state: ChartEditorState, action: ChartEditorAction):
       };
     }
 
+    case 'UNDO_INCREMENTAL': {
+      // Like UNDO but does NOT update `chart` or `track`,
+      // so DrumHighwayPreview does not remount.
+      if (state.undoStack.length === 0 || !state.chartDoc) return state;
+
+      const undoneCmd = state.undoStack[state.undoStack.length - 1];
+      const undoDepthInc = state.undoStack.length - 1;
+      const isDirtyInc = undoDepthInc !== state.savedUndoDepth;
+
+      return {
+        ...state,
+        chartDoc: action.chartDoc,
+        dirty: isDirtyInc,
+        undoStack: state.undoStack.slice(0, -1),
+        undoDocStack: state.undoDocStack.slice(0, -1),
+        redoStack: [...state.redoStack, undoneCmd],
+        redoDocStack: [...state.redoDocStack, state.chartDoc],
+      };
+    }
+
+    case 'REDO_INCREMENTAL': {
+      // Like REDO but does NOT update `chart` or `track`.
+      if (state.redoStack.length === 0 || !state.chartDoc) return state;
+
+      const redoneCmdInc = state.redoStack[state.redoStack.length - 1];
+      const redoDepthInc = state.undoStack.length + 1;
+      const isDirtyRedoInc = redoDepthInc !== state.savedUndoDepth;
+
+      return {
+        ...state,
+        chartDoc: action.chartDoc,
+        dirty: isDirtyRedoInc,
+        undoStack: [...state.undoStack, redoneCmdInc],
+        undoDocStack: [...state.undoDocStack, state.chartDoc],
+        redoStack: state.redoStack.slice(0, -1),
+        redoDocStack: state.redoDocStack.slice(0, -1),
+      };
+    }
+
     case 'MARK_SAVED':
       return {
         ...state,
@@ -327,6 +411,10 @@ function chartEditorReducer(state: ChartEditorState, action: ChartEditorAction):
     case 'SET_LOOP_REGION':
       return {...state, loopRegion: action.region};
 
+    case 'SET_HIGHWAY_MODE':
+      if (state.highwayMode === action.mode) return state;
+      return {...state, highwayMode: action.mode};
+
     default:
       return state;
   }
@@ -341,11 +429,12 @@ const ChartEditorContext = createContext<ChartEditorContextValue | null>(null);
 export function ChartEditorProvider({children}: {children: ReactNode}) {
   const [state, dispatch] = useReducer(chartEditorReducer, initialState);
   const audioManagerRef = useRef<AudioManager | null>(null);
+  const notesManagerRef = useRef<NotesManager | null>(null);
 
   return (
     <HotkeysProvider>
       <ChartEditorContext.Provider
-        value={{state, dispatch, audioManagerRef}}>
+        value={{state, dispatch, audioManagerRef, notesManagerRef}}>
         {children}
       </ChartEditorContext.Provider>
     </HotkeysProvider>

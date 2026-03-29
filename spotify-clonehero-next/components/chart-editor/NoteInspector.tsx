@@ -44,7 +44,7 @@ interface NoteInspectorProps {
  */
 export default function NoteInspector({className, onNotesModified}: NoteInspectorProps) {
   const {state, dispatch} = useChartEditorContext();
-  const executeCommand = useExecuteCommand();
+  const {executeCommand} = useExecuteCommand();
 
   const selectedNotes = useMemo(() => {
     if (!state.chartDoc) return [];

@@ -8,8 +8,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
-import * as THREE from 'three';
-import {useChartEditorContext, type ToolMode} from './ChartEditorContext';
+import {useChartEditorContext} from './ChartEditorContext';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {
   AddNoteCommand,
@@ -29,128 +28,22 @@ import {
 import {
   buildTimedTempos,
   msToTick,
-  tickToMs,
   snapToGrid,
 } from '@/lib/drum-transcription/timing';
-import type {
-  DrumNote,
-  DrumNoteType,
-} from '@/lib/chart-edit';
+import type {DrumNote} from '@/lib/chart-edit';
 import {getDrumNotes} from '@/lib/chart-edit';
 import DrumHighwayPreview, {
   type HighwayRendererHandle,
 } from './DrumHighwayPreview';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import {calculateNoteXOffset} from '@/lib/preview/highway';
+import type {InteractionManager} from '@/lib/preview/highway';
+import type {HitResult} from '@/lib/preview/highway';
 import {parseChartFile} from '@eliwhite/scan-chart';
 type ParsedChart = ReturnType<typeof parseChartFile>;
 import {Input} from '@/components/ui/input';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
-
-// ---------------------------------------------------------------------------
-// Lane layout constants (from highway.ts — single source of truth)
-// ---------------------------------------------------------------------------
-
-const NUM_LANES = 5;
-
-/**
- * 3D X positions for each editor lane.
- * Editor lanes: 0=kick, 1=red, 2=yellow, 3=blue, 4=green.
- * highway.ts uses lanes 0-3 for red/yellow/blue/green. Kick is centered at x=0.
- */
-const LANE_X_POSITIONS = [
-  0, // kick — centered
-  ...Array.from({length: 4}, (_, i) => calculateNoteXOffset('drums', i)),
-];
-
-/**
- * The lane boundaries (midpoints between adjacent lane centers) for hit testing.
- * A click at 3D x is in lane i if x is between LANE_BOUNDARIES[i] and LANE_BOUNDARIES[i+1].
- */
-function computeLaneBoundaries(): number[] {
-  // Sort lanes by X position for boundary computation
-  // Lanes: kick(0)=0, red(1)=-0.255, yellow(2)=-0.078, blue(3)=0.099, green(4)=0.276
-  // Sorted by X: red(-0.255), yellow(-0.078), kick(0), blue(0.099), green(0.276)
-  //
-  // But we want to map based on the editor lane order (0-4).
-  // Since kick is at the center and the other notes are spread across,
-  // we need to find which lane a given X is closest to.
-  //
-  // For simplicity and accuracy, we'll find the closest lane center to the
-  // clicked X position.
-  // Return sorted pairs of [x, laneIndex] for boundary-based lookup.
-  const sorted = LANE_X_POSITIONS.map((x, i) => ({x, lane: i})).sort(
-    (a, b) => a.x - b.x,
-  );
-
-  // Boundaries between sorted lanes
-  const boundaries: number[] = [-Infinity];
-  for (let i = 1; i < sorted.length; i++) {
-    boundaries.push((sorted[i - 1].x + sorted[i].x) / 2);
-  }
-  boundaries.push(Infinity);
-
-  return boundaries;
-}
-
-/** Find the lane index (0-4) for a 3D X coordinate. */
-function xWorldToLane(worldX: number): number {
-  // Find the closest lane center
-  let bestLane = 0;
-  let bestDist = Infinity;
-  for (let i = 0; i < LANE_X_POSITIONS.length; i++) {
-    const dist = Math.abs(worldX - LANE_X_POSITIONS[i]);
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestLane = i;
-    }
-  }
-  return bestLane;
-}
-
-// Highway width is 0.9, half-width is 0.45
-const HIGHWAY_HALF_WIDTH = 0.45;
-
-/** Check if a 3D X coordinate is within the highway bounds. */
-function isOnHighway(worldX: number): boolean {
-  return Math.abs(worldX) <= HIGHWAY_HALF_WIDTH + 0.05; // small margin
-}
-
-// Colors for ghost note preview and selection highlights
-const LANE_COLORS = [
-  'rgba(248, 178, 114, 0.5)', // kick/orange
-  'rgba(221, 34, 20, 0.5)', // red
-  'rgba(222, 235, 82, 0.5)', // yellow
-  'rgba(0, 108, 175, 0.5)', // blue
-  'rgba(1, 177, 26, 0.5)', // green
-];
-
-// Ghost note colors for cursor position (fainter than hover ghost)
-const GHOST_LANE_COLORS = [
-  'rgba(248, 178, 114, 0.25)', // kick/orange
-  'rgba(221, 34, 20, 0.25)', // red
-  'rgba(222, 235, 82, 0.25)', // yellow
-  'rgba(0, 108, 175, 0.25)', // blue
-  'rgba(1, 177, 26, 0.25)', // green
-];
-
-const CURSOR_LINE_COLOR = 'rgba(0, 255, 128, 0.8)';
-const CURSOR_LINE_WIDTH = 2.5;
-
-const SELECTION_COLOR = 'rgba(255, 255, 255, 0.35)';
-const BOX_SELECT_COLOR = 'rgba(100, 149, 237, 0.25)';
-const BOX_SELECT_BORDER = 'rgba(100, 149, 237, 0.6)';
-
-// Section banner constants
-const SECTION_BG_COLOR = 'rgba(255, 200, 0, 0.15)';
-const SECTION_TEXT_COLOR = 'rgba(255, 200, 0, 0.9)';
-const SECTION_LINE_COLOR = 'rgba(255, 200, 0, 0.5)';
-const SECTION_SELECTED_BG = 'rgba(255, 200, 0, 0.35)';
-const SECTION_SELECTED_BORDER = 'rgba(255, 200, 0, 0.8)';
-const SECTION_BANNER_HEIGHT = 24;
-const SECTION_HIT_TOLERANCE_PX = 14;
 
 interface HighwayEditorProps {
   metadata: ChartResponseEncore;
@@ -165,72 +58,23 @@ interface HighwayEditorProps {
   confidenceThreshold?: number;
   /** Set of note IDs that have been reviewed by the user. */
   reviewedNoteIds?: Set<string>;
+  /** Raw PCM audio data for waveform highway surface. */
+  audioData?: Float32Array;
+  /** Number of audio channels. */
+  audioChannels?: number;
+  /** Total duration in seconds. */
+  durationSeconds?: number;
 }
 
-// ---------------------------------------------------------------------------
-// Unprojection helper: screen pixel → 3D world point on the highway plane
-// ---------------------------------------------------------------------------
-
 /**
- * Unproject a screen-space pixel coordinate to a 3D point on the highway
- * plane (z=0) using the Three.js camera.
+ * Wraps DrumHighwayPreview with a transparent interaction layer.
  *
- * Returns null if the ray doesn't intersect the plane (shouldn't happen
- * with the highway camera setup, but defensive).
- */
-function screenToWorld(
-  screenX: number,
-  screenY: number,
-  canvasWidth: number,
-  canvasHeight: number,
-  camera: THREE.PerspectiveCamera,
-): THREE.Vector3 | null {
-  // Convert pixel coords to NDC (-1 to +1)
-  const ndcX = (screenX / canvasWidth) * 2 - 1;
-  const ndcY = -(screenY / canvasHeight) * 2 + 1;
-
-  // Create ray from camera through NDC point
-  const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
-
-  // Intersect with highway plane (z=0)
-  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-  const intersection = new THREE.Vector3();
-  const hit = raycaster.ray.intersectPlane(plane, intersection);
-
-  return hit;
-}
-
-/**
- * Project a 3D world point on the highway plane back to screen-space pixels.
- */
-function worldToScreen(
-  worldPoint: THREE.Vector3,
-  canvasWidth: number,
-  canvasHeight: number,
-  camera: THREE.PerspectiveCamera,
-): {x: number; y: number} {
-  const projected = worldPoint.clone().project(camera);
-  return {
-    x: ((projected.x + 1) / 2) * canvasWidth,
-    y: ((-projected.y + 1) / 2) * canvasHeight,
-  };
-}
-
-/**
- * Wraps DrumHighwayPreview with an editing overlay canvas.
- *
- * The overlay handles mouse events (click, drag, hover) and draws:
- * - Ghost note preview at cursor position (Place mode)
- * - Selection highlights on selected notes
- * - Box selection rectangle (Cursor mode, drag on empty)
- * - BPM/TimeSig placement indicators
+ * Mouse events are captured by a transparent <div>, then delegated to
+ * InteractionManager for hit-testing (raycasting against note sprites,
+ * section banners, and the highway plane). React decides what to do
+ * with the results (select, place, erase, etc.).
  *
  * All edits go through the command system via useExecuteCommand.
- *
- * Coordinate mapping uses Three.js unprojection through the same camera
- * that the highway renderer uses, ensuring the overlay lanes and tick
- * positions exactly match the 3D rendered notes even with perspective.
  */
 export default function HighwayEditor({
   metadata,
@@ -241,13 +85,15 @@ export default function HighwayEditor({
   showConfidence = false,
   confidenceThreshold = 0.7,
   reviewedNoteIds,
+  audioData,
+  audioChannels = 2,
+  durationSeconds,
 }: HighwayEditorProps) {
-  const {state, dispatch, audioManagerRef} = useChartEditorContext();
-  const executeCommand = useExecuteCommand();
+  const {state, dispatch, audioManagerRef, notesManagerRef} = useChartEditorContext();
+  const {executeCommand} = useExecuteCommand();
 
-  const overlayRef = useRef<HTMLCanvasElement>(null);
+  const interactionRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const animFrameRef = useRef<number>(0);
 
   // Three.js renderer handle for coordinate mapping
   const rendererHandleRef = useRef<HighwayRendererHandle | null>(null);
@@ -255,13 +101,22 @@ export default function HighwayEditor({
   const handleRendererReady = useCallback(
     (handle: HighwayRendererHandle | null) => {
       rendererHandleRef.current = handle;
+      // Wire NotesManager to the shared context ref for incremental updates
+      if (handle) {
+        handle.getNotesManager().then(nm => {
+          notesManagerRef.current = nm;
+        });
+      } else {
+        notesManagerRef.current = null;
+      }
     },
-    [],
+    [notesManagerRef],
   );
 
   // Interaction state
   const [hoverLane, setHoverLane] = useState<number | null>(null);
   const [hoverTick, setHoverTick] = useState<number | null>(null);
+  const [hoveredHitType, setHoveredHitType] = useState<'note' | 'section' | 'highway' | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{x: number; y: number} | null>(
     null,
@@ -311,262 +166,189 @@ export default function HighwayEditor({
   }, [state.chartDoc]);
 
   // ---------------------------------------------------------------------------
-  // Coordinate mapping via Three.js unprojection
-  //
-  // These functions convert screen pixel positions to lane/tick by
-  // unprojecting through the Three.js camera to find the 3D intersection
-  // with the highway plane, then mapping the 3D coordinates.
-  //
-  // IMPORTANT: These read audioManager.currentTime directly (not React
-  // state) so they don't need to be recreated when time changes.
+  // InteractionManager ref — resolved asynchronously from the renderer handle
   // ---------------------------------------------------------------------------
 
-  /** Map pixel X,Y position on the overlay to a lane index (0-4). */
-  const screenToLane = useCallback((x: number, y: number): number => {
-    const canvas = overlayRef.current;
+  const interactionManagerRef = useRef<InteractionManager | null>(null);
+
+  // Resolve InteractionManager when the renderer handle becomes available
+  useEffect(() => {
     const handle = rendererHandleRef.current;
-    if (!canvas || !handle) return 0;
+    if (!handle) {
+      interactionManagerRef.current = null;
+      return;
+    }
+    handle.getInteractionManager().then(im => {
+      interactionManagerRef.current = im;
+    });
+  }, [rendererHandleRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const camera = handle.getCamera();
-    const world = screenToWorld(x, y, canvas.width, canvas.height, camera);
-    if (!world) return 0;
+  // ---------------------------------------------------------------------------
+  // Waveform / Grid surface setup
+  // ---------------------------------------------------------------------------
 
-    return xWorldToLane(world.x);
+  // Send waveform audio data to the renderer when available
+  useEffect(() => {
+    const handle = rendererHandleRef.current;
+    if (!handle || !audioData || !durationSeconds) return;
+    handle.setWaveformData({
+      audioData,
+      channels: audioChannels,
+      durationMs: durationSeconds * 1000,
+    });
+  }, [rendererHandleRef.current, audioData, audioChannels, durationSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Send grid data (tempos + time signatures) to the renderer
+  useEffect(() => {
+    const handle = rendererHandleRef.current;
+    if (!handle || !state.chartDoc || !durationSeconds) return;
+    const tempos = state.chartDoc.tempos.map(t => ({
+      tick: t.tick,
+      beatsPerMinute: t.beatsPerMinute,
+    }));
+    const timeSignatures = state.chartDoc.timeSignatures.map(ts => ({
+      tick: ts.tick,
+      numerator: ts.numerator,
+      denominator: ts.denominator,
+    }));
+    handle.setGridData({
+      tempos,
+      timeSignatures,
+      resolution: state.chartDoc.chartTicksPerBeat,
+      durationMs: durationSeconds * 1000,
+    });
+  }, [rendererHandleRef.current, state.chartDoc, durationSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync highway mode from context to renderer
+  useEffect(() => {
+    const handle = rendererHandleRef.current;
+    if (!handle) return;
+    handle.setHighwayMode(state.highwayMode);
+  }, [rendererHandleRef.current, state.highwayMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---------------------------------------------------------------------------
+  // Coordinate helpers via InteractionManager
+  //
+  // These thin wrappers delegate to InteractionManager. They read
+  // audioManager.currentTime via InteractionManager's getElapsedMs closure,
+  // so they don't need React state dependencies for time.
+  // ---------------------------------------------------------------------------
+
+  /** Get canvas dimensions from the interaction div. */
+  const getCanvasSize = useCallback((): {w: number; h: number} => {
+    const el = interactionRef.current;
+    if (!el) return {w: 1, h: 1};
+    return {w: el.offsetWidth, h: el.offsetHeight};
   }, []);
 
-  /**
-   * Map pixel X,Y position on the overlay to a ms timestamp.
-   *
-   * Uses Three.js unprojection to find the 3D Y coordinate on the highway
-   * plane, then converts to ms using the highway speed and current scroll.
-   */
+  const screenToLane = useCallback(
+    (x: number, y: number): number => {
+      const im = interactionManagerRef.current;
+      if (!im) return 0;
+      const {w, h} = getCanvasSize();
+      return im.screenToLane(x, y, w, h);
+    },
+    [getCanvasSize],
+  );
+
   const screenToMs = useCallback(
     (x: number, y: number): number => {
-      const canvas = overlayRef.current;
-      const handle = rendererHandleRef.current;
-      if (!canvas || !handle) return 0;
-
-      const camera = handle.getCamera();
-      const highwaySpeed = handle.getHighwaySpeed();
-      const world = screenToWorld(x, y, canvas.width, canvas.height, camera);
-      if (!world) return 0;
-
-      // world.y = ((noteMs - elapsedMs) / 1000) * highwaySpeed - 1
-      // Solve for noteMs:
-      // noteMs = ((world.y + 1) / highwaySpeed) * 1000 + elapsedMs
-      const currentMs = audioManager.currentTime * 1000;
-      const delay = (audioManager.delay || 0) * 1000;
-      const elapsedMs = currentMs - delay;
-
-      return ((world.y + 1) / highwaySpeed) * 1000 + elapsedMs;
+      const im = interactionManagerRef.current;
+      if (!im) return 0;
+      const {w, h} = getCanvasSize();
+      return im.screenToMs(x, y, w, h);
     },
-    [audioManager],
+    [getCanvasSize],
   );
 
   const screenToTick = useCallback(
     (x: number, y: number): number => {
-      if (timedTempos.length === 0) return 0;
-      const ms = screenToMs(x, y);
-      const rawTick = msToTick(ms, timedTempos, resolution);
-      if (state.gridDivision === 0) return Math.max(0, rawTick);
-      return Math.max(0, snapToGrid(rawTick, resolution, state.gridDivision));
+      const im = interactionManagerRef.current;
+      if (!im) return 0;
+      const {w, h} = getCanvasSize();
+      return im.screenToTick(x, y, w, h, state.gridDivision);
     },
-    [screenToMs, timedTempos, resolution, state.gridDivision],
+    [getCanvasSize, state.gridDivision],
   );
 
   /**
-   * Reverse: map a tick and lane to screen-space pixel position.
-   *
-   * Uses Three.js projection through the camera so the overlay
-   * rendering matches the 3D highway exactly.
+   * Perform a hit-test at the given element-relative coordinates.
+   * Returns a HitResult (note, section, highway, or null).
    */
-  const noteToScreen = useCallback(
-    (
-      tick: number,
-      lane: number,
-    ): {x: number; y: number} => {
-      const canvas = overlayRef.current;
-      const handle = rendererHandleRef.current;
-      if (!canvas || !handle || timedTempos.length === 0)
-        return {x: 0, y: 0};
-
-      const camera = handle.getCamera();
-      const highwaySpeed = handle.getHighwaySpeed();
-
-      // Convert tick to ms
-      let tempoIdx = 0;
-      for (let i = 1; i < timedTempos.length; i++) {
-        if (timedTempos[i].tick <= tick) tempoIdx = i;
-        else break;
-      }
-      const tempo = timedTempos[tempoIdx];
-      const ms =
-        tempo.msTime +
-        ((tick - tempo.tick) * 60000) / (tempo.beatsPerMinute * resolution);
-
-      // Compute world Y
-      const currentMs = audioManager.currentTime * 1000;
-      const delay = (audioManager.delay || 0) * 1000;
-      const elapsedMs = currentMs - delay;
-      const worldY = ((ms - elapsedMs) / 1000) * highwaySpeed - 1;
-
-      // Get world X for lane
-      const worldX = LANE_X_POSITIONS[lane] ?? 0;
-
-      // Project to screen
-      const worldPoint = new THREE.Vector3(worldX, worldY, 0);
-      return worldToScreen(worldPoint, canvas.width, canvas.height, camera);
+  const hitTestAt = useCallback(
+    (x: number, y: number): HitResult => {
+      const im = interactionManagerRef.current;
+      if (!im) return null;
+      const {w, h} = getCanvasSize();
+      return im.hitTest(x, y, w, h, state.gridDivision);
     },
-    [timedTempos, resolution, audioManager],
-  );
-
-  // ---------------------------------------------------------------------------
-  // Hit-testing: find note at pixel position
-  // ---------------------------------------------------------------------------
-
-  const findNoteAtPosition = useCallback(
-    (x: number, y: number): DrumNote | null => {
-      const lane = screenToLane(x, y);
-      const targetMs = screenToMs(x, y);
-
-      // Find notes within a small time tolerance (~50ms / ~30px)
-      const toleranceMs = 80;
-      const targetType = laneToType(lane);
-
-      for (const note of expertNotes) {
-        if (note.type !== targetType) continue;
-        // Convert note tick to ms for comparison
-        let tempoIdx = 0;
-        for (let i = 1; i < timedTempos.length; i++) {
-          if (timedTempos[i].tick <= note.tick) tempoIdx = i;
-          else break;
-        }
-        const tempo = timedTempos[tempoIdx];
-        const noteMs =
-          tempo.msTime +
-          ((note.tick - tempo.tick) * 60000) / (tempo.beatsPerMinute * resolution);
-
-        if (Math.abs(noteMs - targetMs) <= toleranceMs) {
-          return note;
-        }
-      }
-      return null;
-    },
-    [screenToLane, screenToMs, expertNotes, timedTempos, resolution],
-  );
-
-  /**
-   * Find a section whose banner intersects the given screen position.
-   * Returns the section {tick, name} or null.
-   */
-  const findSectionAtPosition = useCallback(
-    (x: number, y: number): {tick: number; name: string} | null => {
-      if (!state.chartDoc) return null;
-      const sections = state.chartDoc.sections;
-      if (sections.length === 0) return null;
-
-      const handle = rendererHandleRef.current;
-      const canvas = overlayRef.current;
-      if (!handle || !canvas) return null;
-
-      const camera = handle.getCamera();
-      const highwaySpeed = handle.getHighwaySpeed();
-      const currentMs = audioManager.currentTime * 1000;
-      const delay = (audioManager.delay || 0) * 1000;
-      const elapsedMs = currentMs - delay;
-      const w = canvas.width;
-      const h = canvas.height;
-
-      for (const section of sections) {
-        // Convert section tick to ms
-        let tempoIdx = 0;
-        for (let i = 1; i < timedTempos.length; i++) {
-          if (timedTempos[i].tick <= section.tick) tempoIdx = i;
-          else break;
-        }
-        const tempo = timedTempos[tempoIdx];
-        const ms =
-          tempo.msTime +
-          ((section.tick - tempo.tick) * 60000) /
-            (tempo.beatsPerMinute * resolution);
-
-        const worldY = ((ms - elapsedMs) / 1000) * highwaySpeed - 1;
-        const worldPoint = new THREE.Vector3(0, worldY, 0);
-        const screenPt = worldToScreen(worldPoint, w, h, camera);
-
-        if (
-          Math.abs(screenPt.y - y) <= SECTION_HIT_TOLERANCE_PX &&
-          screenPt.y > 0 &&
-          screenPt.y < h
-        ) {
-          return section;
-        }
-      }
-      return null;
-    },
-    [state.chartDoc, timedTempos, resolution, audioManager],
+    [getCanvasSize, state.gridDivision],
   );
 
   // ---------------------------------------------------------------------------
   // Mouse handlers
   // ---------------------------------------------------------------------------
 
-  const getCanvasCoords = (
-    e: ReactMouseEvent<HTMLCanvasElement>,
+  /**
+   * Get pixel coordinates relative to the interaction element.
+   * Since this is a DOM div (not a canvas), coords match the element's
+   * CSS pixel dimensions directly (no canvas scale factor needed).
+   * The Three.js camera uses the renderer's canvas which is sized to
+   * match this same div, so these coords map correctly.
+   */
+  const getElementCoords = (
+    e: ReactMouseEvent<HTMLDivElement>,
   ): {x: number; y: number} => {
-    const canvas = overlayRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    const el = interactionRef.current!;
+    const rect = el.getBoundingClientRect();
     return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
     };
   };
 
   const handleMouseDown = useCallback(
-    (e: ReactMouseEvent<HTMLCanvasElement>) => {
+    (e: ReactMouseEvent<HTMLDivElement>) => {
       e.preventDefault();
-      const coords = getCanvasCoords(e);
-      const lane = screenToLane(coords.x, coords.y);
-      const tick = screenToTick(coords.x, coords.y);
+      const coords = getElementCoords(e);
+      const hit = hitTestAt(coords.x, coords.y);
+      const lane = hit && 'lane' in hit ? hit.lane : screenToLane(coords.x, coords.y);
+      const tick = hit ? hit.tick : screenToTick(coords.x, coords.y);
 
       switch (state.activeTool) {
         case 'cursor': {
           // Check for section hit first
-          const hitSection = findSectionAtPosition(coords.x, coords.y);
-          if (hitSection) {
+          if (hit?.type === 'section') {
             // Double-click detection for rename
             const now = Date.now();
             const last = lastClickRef.current;
             if (
               last &&
-              last.tick === hitSection.tick &&
+              last.tick === hit.tick &&
               now - last.time < 400
             ) {
               // Double-click: open rename popover
               lastClickRef.current = null;
-              const rect = overlayRef.current!.getBoundingClientRect();
-              setSectionNameInput(hitSection.name);
+              setSectionNameInput(hit.name);
               setPopover({
                 kind: 'section-rename',
-                tick: hitSection.tick,
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top,
+                tick: hit.tick,
+                x: coords.x,
+                y: coords.y,
               });
-              dispatch({type: 'SET_SELECTED_SECTION', tick: hitSection.tick});
+              dispatch({type: 'SET_SELECTED_SECTION', tick: hit.tick});
               break;
             }
-            lastClickRef.current = {tick: hitSection.tick, time: now};
+            lastClickRef.current = {tick: hit.tick, time: now};
 
             // Select section
-            dispatch({type: 'SET_SELECTED_SECTION', tick: hitSection.tick});
+            dispatch({type: 'SET_SELECTED_SECTION', tick: hit.tick});
             dispatch({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
             // Start section drag
             setIsDraggingSection(true);
-            setSectionDragTick(hitSection.tick);
-            setSectionDragName(hitSection.name);
-            setSectionDragOriginalTick(hitSection.tick);
+            setSectionDragTick(hit.tick);
+            setSectionDragName(hit.name);
+            setSectionDragOriginalTick(hit.tick);
             setDragStart(coords);
             setDragCurrent(coords);
             break;
@@ -577,9 +359,8 @@ export default function HighwayEditor({
             dispatch({type: 'SET_SELECTED_SECTION', tick: null});
           }
 
-          const hitNote = findNoteAtPosition(coords.x, coords.y);
-          if (hitNote) {
-            const id = noteId(hitNote);
+          if (hit?.type === 'note') {
+            const id = hit.noteId;
             if (e.shiftKey) {
               // Toggle selection
               const newIds = new Set(state.selectedNoteIds);
@@ -613,12 +394,9 @@ export default function HighwayEditor({
         case 'place': {
           const type = laneToType(lane);
           // Toggle: if a note exists at this position, remove it
-          const existing = expertNotes.find(
-            n => n.tick === tick && n.type === type,
-          );
-          if (existing) {
+          if (hit?.type === 'note') {
             executeCommand(
-              new DeleteNotesCommand(new Set([noteId(existing)])),
+              new DeleteNotesCommand(new Set([hit.noteId])),
             );
           } else {
             executeCommand(
@@ -633,22 +411,20 @@ export default function HighwayEditor({
           break;
         }
         case 'erase': {
-          const hitNote = findNoteAtPosition(coords.x, coords.y);
-          if (hitNote) {
+          if (hit?.type === 'note') {
             executeCommand(
-              new DeleteNotesCommand(new Set([noteId(hitNote)])),
+              new DeleteNotesCommand(new Set([hit.noteId])),
             );
           }
           setIsErasing(true);
           break;
         }
         case 'bpm': {
-          const rect = overlayRef.current!.getBoundingClientRect();
           setPopover({
             kind: 'bpm',
             tick,
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top,
+            x: coords.x,
+            y: coords.y,
           });
           // Pre-fill with current BPM at this position
           if (timedTempos.length > 0) {
@@ -662,25 +438,23 @@ export default function HighwayEditor({
           break;
         }
         case 'timesig': {
-          const rect2 = overlayRef.current!.getBoundingClientRect();
           setPopover({
             kind: 'timesig',
             tick,
-            x: e.clientX - rect2.left,
-            y: e.clientY - rect2.top,
+            x: coords.x,
+            y: coords.y,
           });
           setTsNumerator('4');
           setTsDenominator('4');
           break;
         }
         case 'section': {
-          const rect3 = overlayRef.current!.getBoundingClientRect();
           setSectionNameInput('');
           setPopover({
             kind: 'section',
             tick,
-            x: e.clientX - rect3.left,
-            y: e.clientY - rect3.top,
+            x: coords.x,
+            y: coords.y,
           });
           break;
         }
@@ -690,11 +464,9 @@ export default function HighwayEditor({
       state.activeTool,
       state.selectedNoteIds,
       state.selectedSectionTick,
+      hitTestAt,
       screenToLane,
       screenToTick,
-      findNoteAtPosition,
-      findSectionAtPosition,
-      expertNotes,
       timedTempos,
       executeCommand,
       dispatch,
@@ -702,10 +474,26 @@ export default function HighwayEditor({
   );
 
   const handleMouseMove = useCallback(
-    (e: ReactMouseEvent<HTMLCanvasElement>) => {
-      const coords = getCanvasCoords(e);
-      setHoverLane(screenToLane(coords.x, coords.y));
-      setHoverTick(screenToTick(coords.x, coords.y));
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      const coords = getElementCoords(e);
+      const hit = hitTestAt(coords.x, coords.y);
+
+      // Update hover lane/tick from hit result
+      if (hit) {
+        setHoverLane('lane' in hit ? hit.lane : screenToLane(coords.x, coords.y));
+        setHoverTick(hit.tick);
+        setHoveredHitType(hit.type);
+      } else {
+        setHoverLane(screenToLane(coords.x, coords.y));
+        setHoverTick(screenToTick(coords.x, coords.y));
+        setHoveredHitType(null);
+      }
+
+      // Update note hover highlight via NotesManager
+      const hoveredNoteId = hit?.type === 'note' ? hit.noteId : null;
+      rendererHandleRef.current?.getNotesManager().then(nm => {
+        nm.setHoveredNoteId(hoveredNoteId);
+      });
 
       if (dragStart) {
         setDragCurrent(coords);
@@ -719,29 +507,28 @@ export default function HighwayEditor({
 
       // Erase mode: paint-erase while dragging
       if (isErasing && state.activeTool === 'erase') {
-        const hitNote = findNoteAtPosition(coords.x, coords.y);
-        if (hitNote) {
+        if (hit?.type === 'note') {
           executeCommand(
-            new DeleteNotesCommand(new Set([noteId(hitNote)])),
+            new DeleteNotesCommand(new Set([hit.noteId])),
           );
         }
       }
     },
     [
+      hitTestAt,
       screenToLane,
       screenToTick,
       dragStart,
       isErasing,
       isDraggingSection,
       state.activeTool,
-      findNoteAtPosition,
       executeCommand,
     ],
   );
 
   const handleMouseUp = useCallback(
-    (e: ReactMouseEvent<HTMLCanvasElement>) => {
-      const coords = getCanvasCoords(e);
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      const coords = getElementCoords(e);
 
       if (state.activeTool === 'cursor' && dragStart && dragCurrent) {
         if (isDragging && state.selectedNoteIds.size > 0) {
@@ -868,7 +655,12 @@ export default function HighwayEditor({
   const handleMouseLeave = useCallback(() => {
     setHoverLane(null);
     setHoverTick(null);
+    setHoveredHitType(null);
     setIsErasing(false);
+    // Clear note hover highlight
+    rendererHandleRef.current?.getNotesManager().then(nm => {
+      nm.setHoveredNoteId(null);
+    });
     if (!isDragging && !isDraggingSection) {
       setDragStart(null);
       setDragCurrent(null);
@@ -926,781 +718,74 @@ export default function HighwayEditor({
   };
 
   // ---------------------------------------------------------------------------
-  // Refs that mirror state for use inside the draw loop.
-  // ---------------------------------------------------------------------------
-
-  const stateRef = useRef(state);
-  stateRef.current = state;
-
-  // Refs for optional confidence/review props (read from animation frame)
-  const confidenceRef = useRef(confidence);
-  confidenceRef.current = confidence;
-  const showConfidenceRef = useRef(showConfidence);
-  showConfidenceRef.current = showConfidence;
-  const confidenceThresholdRef = useRef(confidenceThreshold);
-  confidenceThresholdRef.current = confidenceThreshold;
-  const reviewedNoteIdsRef = useRef(reviewedNoteIds);
-  reviewedNoteIdsRef.current = reviewedNoteIds;
-
-  const hoverLaneRef = useRef(hoverLane);
-  hoverLaneRef.current = hoverLane;
-
-  const hoverTickRef = useRef(hoverTick);
-  hoverTickRef.current = hoverTick;
-
-  const dragStartRef = useRef(dragStart);
-  dragStartRef.current = dragStart;
-
-  const dragCurrentRef = useRef(dragCurrent);
-  dragCurrentRef.current = dragCurrent;
-
-  const isDraggingRef = useRef(isDragging);
-  isDraggingRef.current = isDragging;
-
-  const expertNotesRef = useRef(expertNotes);
-  expertNotesRef.current = expertNotes;
-
-  const timedTemposRef = useRef(timedTempos);
-  timedTemposRef.current = timedTempos;
-
-  const resolutionRef = useRef(resolution);
-  resolutionRef.current = resolution;
-
-  const isDraggingSectionRef = useRef(isDraggingSection);
-  isDraggingSectionRef.current = isDraggingSection;
-  const sectionDragTickRef = useRef(sectionDragTick);
-  sectionDragTickRef.current = sectionDragTick;
-  const sectionDragNameRef = useRef(sectionDragName);
-  sectionDragNameRef.current = sectionDragName;
-  const sectionDragOriginalTickRef = useRef(sectionDragOriginalTick);
-  sectionDragOriginalTickRef.current = sectionDragOriginalTick;
-
-  // ---------------------------------------------------------------------------
-  // Overlay rendering loop
-  //
-  // This runs a single requestAnimationFrame loop for the lifetime of the
-  // component. It reads all needed values from refs (synced above) and
-  // audioManager.currentTime directly, so it never needs to be torn down
-  // and restarted due to state changes.
-  //
-  // Drawing uses Three.js projection (worldToScreen) to position overlay
-  // elements exactly where the 3D notes appear.
+  // Push overlay state to the Three.js renderer each time it changes.
+  // The renderer's animation loop reads this every frame.
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    const canvas = overlayRef.current;
-    if (!canvas) return;
+    const handle = rendererHandleRef.current;
+    if (!handle) return;
 
-    function draw() {
-      const ctx = canvas!.getContext('2d');
-      if (!ctx) {
-        animFrameRef.current = requestAnimationFrame(draw);
-        return;
-      }
-
-      // Read all values from refs (no React dependency tracking)
-      const st = stateRef.current;
-      const curHoverLane = hoverLaneRef.current;
-      const curHoverTick = hoverTickRef.current;
-      const curDragStart = dragStartRef.current;
-      const curDragCurrent = dragCurrentRef.current;
-      const curIsDragging = isDraggingRef.current;
-      const notes = expertNotesRef.current;
-      const tempos = timedTemposRef.current;
-      const res = resolutionRef.current;
-      const handle = rendererHandleRef.current;
-
-      const w = canvas!.width;
-      const h = canvas!.height;
-      ctx.clearRect(0, 0, w, h);
-
-      // Helper: project a note (tick + lane) to screen using the camera
-      function localNoteToScreen(
-        tick: number,
-        lane: number,
-      ): {x: number; y: number} | null {
-        if (!handle || tempos.length === 0) return null;
-
-        const camera = handle.getCamera();
-        const highwaySpeed = handle.getHighwaySpeed();
-        const currentMs = audioManager.currentTime * 1000;
-        const delay = (audioManager.delay || 0) * 1000;
-        const elapsedMs = currentMs - delay;
-
-        // tick to ms
-        let tempoIdx = 0;
-        for (let i = 1; i < tempos.length; i++) {
-          if (tempos[i].tick <= tick) tempoIdx = i;
-          else break;
-        }
-        const tempo = tempos[tempoIdx];
-        const ms =
-          tempo.msTime +
-          ((tick - tempo.tick) * 60000) / (tempo.beatsPerMinute * res);
-
-        const worldY = ((ms - elapsedMs) / 1000) * highwaySpeed - 1;
-        const worldX = LANE_X_POSITIONS[lane] ?? 0;
-        const worldPoint = new THREE.Vector3(worldX, worldY, 0);
-        return worldToScreen(worldPoint, w, h, camera);
-      }
-
-      // Helper: project a ms time to a screen Y at the center of the highway
-      function msToScreenY(ms: number): number | null {
-        if (!handle) return null;
-        const camera = handle.getCamera();
-        const highwaySpeed = handle.getHighwaySpeed();
-        const currentMs = audioManager.currentTime * 1000;
-        const delay = (audioManager.delay || 0) * 1000;
-        const elapsedMs = currentMs - delay;
-        const worldY = ((ms - elapsedMs) / 1000) * highwaySpeed - 1;
-        const worldPoint = new THREE.Vector3(0, worldY, 0);
-        const screen = worldToScreen(worldPoint, w, h, camera);
-        return screen.y;
-      }
-
-      // Helper: get the screen X range for a lane at a given screen Y
-      function laneScreenBounds(
-        lane: number,
-        screenY: number,
-      ): {left: number; right: number; cx: number; width: number} | null {
-        if (!handle) return null;
-        const camera = handle.getCamera();
-        const laneX = LANE_X_POSITIONS[lane] ?? 0;
-        const highwaySpeed = handle.getHighwaySpeed();
-        const currentMs = audioManager.currentTime * 1000;
-        const delay = (audioManager.delay || 0) * 1000;
-        const elapsedMs = currentMs - delay;
-
-        // We need the worldY that corresponds to this screenY.
-        // Unproject from screen to world.
-        const world = screenToWorld(
-          w / 2,
-          screenY,
-          w,
-          h,
-          camera,
-        );
-        if (!world) return null;
-        const worldY = world.y;
-
-        // Compute lane center and boundaries in screen space at this worldY
-        const centerScreen = worldToScreen(
-          new THREE.Vector3(laneX, worldY, 0),
-          w,
-          h,
-          camera,
-        );
-
-        // Compute half-lane width: distance to midpoint between this lane and neighbors
-        let leftBoundX: number, rightBoundX: number;
-        const sortedLanes = LANE_X_POSITIONS.slice().sort((a, b) => a - b);
-        const sortedIdx = sortedLanes.indexOf(laneX);
-
-        if (sortedIdx === 0) {
-          leftBoundX = -HIGHWAY_HALF_WIDTH;
-        } else {
-          leftBoundX = (sortedLanes[sortedIdx - 1] + laneX) / 2;
-        }
-        if (sortedIdx === sortedLanes.length - 1) {
-          rightBoundX = HIGHWAY_HALF_WIDTH;
-        } else {
-          rightBoundX = (laneX + sortedLanes[sortedIdx + 1]) / 2;
-        }
-
-        const leftScreen = worldToScreen(
-          new THREE.Vector3(leftBoundX, worldY, 0),
-          w,
-          h,
-          camera,
-        );
-        const rightScreen = worldToScreen(
-          new THREE.Vector3(rightBoundX, worldY, 0),
-          w,
-          h,
-          camera,
-        );
-
-        return {
-          left: leftScreen.x,
-          right: rightScreen.x,
-          cx: centerScreen.x,
-          width: rightScreen.x - leftScreen.x,
-        };
-      }
-
-      // Draw lane dividers using projected positions
-      if (handle) {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-        ctx.lineWidth = 1;
-
-        // Draw dividers at top and bottom, connecting with lines
-        const sortedLaneXs = LANE_X_POSITIONS.slice().sort((a, b) => a - b);
-        for (let i = 0; i < sortedLaneXs.length - 1; i++) {
-          const boundaryX = (sortedLaneXs[i] + sortedLaneXs[i + 1]) / 2;
-
-          // Project at top and bottom of visible highway
-          const camera = handle.getCamera();
-          const topScreen = worldToScreen(
-            new THREE.Vector3(boundaryX, 2, 0),
-            w,
-            h,
-            camera,
-          );
-          const bottomScreen = worldToScreen(
-            new THREE.Vector3(boundaryX, -1.5, 0),
-            w,
-            h,
-            camera,
-          );
-
-          ctx.beginPath();
-          ctx.moveTo(topScreen.x, topScreen.y);
-          ctx.lineTo(bottomScreen.x, bottomScreen.y);
-          ctx.stroke();
-        }
-      }
-
-      // Draw section banners
-      if (st.chartDoc && handle) {
-        const camera = handle.getCamera();
-        const highwaySpeed = handle.getHighwaySpeed();
-        const currentMs = audioManager.currentTime * 1000;
-        const delay = (audioManager.delay || 0) * 1000;
-        const elapsedMs = currentMs - delay;
-        const curDraggingSection = isDraggingSectionRef.current;
-        const curDragSectionTick = sectionDragTickRef.current;
-        const curDragSectionName = sectionDragNameRef.current;
-        const curDragSectionOrigTick = sectionDragOriginalTickRef.current;
-
-        const sectionsToRender = st.chartDoc.sections;
-        for (const section of sectionsToRender) {
-          // During a drag, hide the section at its original tick
-          // (we'll draw it at the drag position instead)
-          if (
-            curDraggingSection &&
-            section.tick === curDragSectionOrigTick
-          ) {
-            continue;
+    // Push overlay state to the Three.js render loop
+    handle.setOverlayState({
+      cursorTick: state.cursorTick,
+      isPlaying: state.isPlaying,
+      activeTool: state.activeTool,
+      hoverLane,
+      hoverTick,
+      sections: state.chartDoc?.sections ?? [],
+      selectedSectionTick: state.selectedSectionTick,
+      sectionDrag: isDraggingSection && sectionDragTick !== null
+        ? {
+            originalTick: sectionDragOriginalTick,
+            currentTick: sectionDragTick,
+            name: sectionDragName,
           }
-
-          let sTempoIdx = 0;
-          for (let i = 1; i < tempos.length; i++) {
-            if (tempos[i].tick <= section.tick) sTempoIdx = i;
-            else break;
-          }
-          const sTempo = tempos[sTempoIdx];
-          const sMs =
-            sTempo.msTime +
-            ((section.tick - sTempo.tick) * 60000) /
-              (sTempo.beatsPerMinute * res);
-          const sWorldY = ((sMs - elapsedMs) / 1000) * highwaySpeed - 1;
-
-          // Clip to visible highway range (world Y: -1 to ~1.1)
-          if (sWorldY > 1.1 || sWorldY < -1.2) continue;
-
-          const leftPt = worldToScreen(
-            new THREE.Vector3(-HIGHWAY_HALF_WIDTH, sWorldY, 0),
-            w,
-            h,
-            camera,
-          );
-          const rightPt = worldToScreen(
-            new THREE.Vector3(HIGHWAY_HALF_WIDTH, sWorldY, 0),
-            w,
-            h,
-            camera,
-          );
-
-          if (leftPt.y < -20 || leftPt.y > h + 20) continue;
-
-          const isSelected = st.selectedSectionTick === section.tick;
-          const bannerH = SECTION_BANNER_HEIGHT;
-          const bannerW = rightPt.x - leftPt.x;
-
-          // Draw banner background
-          ctx.fillStyle = isSelected ? SECTION_SELECTED_BG : SECTION_BG_COLOR;
-          ctx.fillRect(leftPt.x, leftPt.y - bannerH / 2, bannerW, bannerH);
-
-          // Draw border for selected section
-          if (isSelected) {
-            ctx.strokeStyle = SECTION_SELECTED_BORDER;
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(leftPt.x, leftPt.y - bannerH / 2, bannerW, bannerH);
-          }
-
-          // Draw line
-          ctx.strokeStyle = SECTION_LINE_COLOR;
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(leftPt.x, leftPt.y);
-          ctx.lineTo(rightPt.x, rightPt.y);
-          ctx.stroke();
-
-          // Draw text
-          ctx.fillStyle = SECTION_TEXT_COLOR;
-          ctx.font = '12px sans-serif';
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(section.name, leftPt.x + 8, leftPt.y);
-        }
-
-        // Draw section being dragged at its current drag position
-        if (
-          curDraggingSection &&
-          curDragSectionTick !== null
-        ) {
-          let dTempoIdx = 0;
-          for (let i = 1; i < tempos.length; i++) {
-            if (tempos[i].tick <= curDragSectionTick) dTempoIdx = i;
-            else break;
-          }
-          const dTempo = tempos[dTempoIdx];
-          const dMs =
-            dTempo.msTime +
-            ((curDragSectionTick - dTempo.tick) * 60000) /
-              (dTempo.beatsPerMinute * res);
-          const dWorldY = ((dMs - elapsedMs) / 1000) * highwaySpeed - 1;
-
-          // Clip to visible highway range
-          if (dWorldY <= 1.1 && dWorldY >= -1.2) {
-          const dLeftPt = worldToScreen(
-            new THREE.Vector3(-HIGHWAY_HALF_WIDTH, dWorldY, 0),
-            w,
-            h,
-            camera,
-          );
-          const dRightPt = worldToScreen(
-            new THREE.Vector3(HIGHWAY_HALF_WIDTH, dWorldY, 0),
-            w,
-            h,
-            camera,
-          );
-
-          if (dLeftPt.y > -20 && dLeftPt.y < h + 20) {
-            const bannerH = SECTION_BANNER_HEIGHT;
-            const bannerW = dRightPt.x - dLeftPt.x;
-
-            ctx.fillStyle = SECTION_SELECTED_BG;
-            ctx.fillRect(dLeftPt.x, dLeftPt.y - bannerH / 2, bannerW, bannerH);
-            ctx.strokeStyle = SECTION_SELECTED_BORDER;
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(dLeftPt.x, dLeftPt.y - bannerH / 2, bannerW, bannerH);
-            ctx.strokeStyle = SECTION_LINE_COLOR;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(dLeftPt.x, dLeftPt.y);
-            ctx.lineTo(dRightPt.x, dRightPt.y);
-            ctx.stroke();
-            ctx.fillStyle = SECTION_TEXT_COLOR;
-            ctx.font = '12px sans-serif';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(
-              curDragSectionName,
-              dLeftPt.x + 8,
-              dLeftPt.y,
-            );
-          }
-          } // close worldY bounds check
-        }
-      }
-
-      // Draw confidence overlays and review indicators
-      const curConfidence = confidenceRef.current;
-      const curShowConfidence = showConfidenceRef.current;
-      const curConfidenceThreshold = confidenceThresholdRef.current;
-      const curReviewedNoteIds = reviewedNoteIdsRef.current;
-
-      if (curShowConfidence && curConfidence && curConfidence.size > 0) {
-        for (const note of notes) {
-          const lane = typeToLane(note.type);
-          const pos = localNoteToScreen(note.tick, lane);
-          if (!pos || pos.y < -20 || pos.y > h + 20) continue;
-
-          const id = noteId(note);
-          const conf = curConfidence.get(id);
-
-          if (conf !== undefined && conf < 0.9) {
-            const bounds = laneScreenBounds(lane, pos.y);
-            const noteRadius = bounds ? bounds.width / 3 : 12;
-
-            if (conf < 0.5) {
-              ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
-              ctx.lineWidth = 2;
-              ctx.beginPath();
-              ctx.arc(pos.x, pos.y, noteRadius + 3, 0, Math.PI * 2);
-              ctx.stroke();
-              ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
-              ctx.font = 'bold 10px sans-serif';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText('?', pos.x, pos.y);
-            } else if (conf < curConfidenceThreshold) {
-              ctx.strokeStyle = 'rgba(245, 158, 11, 0.6)';
-              ctx.lineWidth = 2;
-              ctx.beginPath();
-              ctx.arc(pos.x, pos.y, noteRadius + 2, 0, Math.PI * 2);
-              ctx.stroke();
-            } else {
-              ctx.strokeStyle = 'rgba(245, 158, 11, 0.3)';
-              ctx.lineWidth = 1;
-              ctx.beginPath();
-              ctx.arc(pos.x, pos.y, noteRadius + 1, 0, Math.PI * 2);
-              ctx.stroke();
-            }
-          }
-        }
-      }
-
-      // Draw review indicators (small green check mark)
-      if (curReviewedNoteIds && curReviewedNoteIds.size > 0) {
-        for (const note of notes) {
-          const id = noteId(note);
-          if (!curReviewedNoteIds.has(id)) continue;
-          const lane = typeToLane(note.type);
-          const pos = localNoteToScreen(note.tick, lane);
-          if (!pos || pos.y < -20 || pos.y > h + 20) continue;
-
-          const bounds = laneScreenBounds(lane, pos.y);
-          const offset = bounds ? bounds.width / 2 - 6 : 10;
-          ctx.fillStyle = 'rgba(34, 197, 94, 0.7)';
-          ctx.beginPath();
-          ctx.arc(pos.x + offset, pos.y + 4, 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-
-      // Draw selection highlights
-      if (st.selectedNoteIds.size > 0) {
-        for (const note of notes) {
-          if (!st.selectedNoteIds.has(noteId(note))) continue;
-          const lane = typeToLane(note.type);
-          const pos = localNoteToScreen(note.tick, lane);
-          if (!pos || pos.y < -20 || pos.y > h + 20) continue;
-
-          const bounds = laneScreenBounds(lane, pos.y);
-          if (bounds) {
-            ctx.fillStyle = SELECTION_COLOR;
-            ctx.fillRect(bounds.left + 2, pos.y - 8, bounds.width - 4, 16);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(bounds.left + 2, pos.y - 8, bounds.width - 4, 16);
-          }
-        }
-      }
-
-      // Draw cursor line (when not playing)
-      if (!st.isPlaying && handle) {
-        const cursorTick = st.cursorTick;
-        const cursorPos = localNoteToScreen(cursorTick, 0);
-        if (cursorPos && cursorPos.y > 0 && cursorPos.y < h) {
-          const camera = handle.getCamera();
-          const highwaySpeed = handle.getHighwaySpeed();
-          const currentMs = audioManager.currentTime * 1000;
-          const delay = (audioManager.delay || 0) * 1000;
-          const elapsedMs = currentMs - delay;
-
-          // tick to ms for cursor
-          let cTempoIdx = 0;
-          for (let i = 1; i < tempos.length; i++) {
-            if (tempos[i].tick <= cursorTick) cTempoIdx = i;
-            else break;
-          }
-          const cTempo = tempos[cTempoIdx];
-          const cursorMs =
-            cTempo
-              ? cTempo.msTime +
-                ((cursorTick - cTempo.tick) * 60000) /
-                  (cTempo.beatsPerMinute * res)
-              : 0;
-          const cursorWorldY =
-            ((cursorMs - elapsedMs) / 1000) * highwaySpeed - 1;
-
-          const leftPt = worldToScreen(
-            new THREE.Vector3(-HIGHWAY_HALF_WIDTH, cursorWorldY, 0),
-            w,
-            h,
-            camera,
-          );
-          const rightPt = worldToScreen(
-            new THREE.Vector3(HIGHWAY_HALF_WIDTH, cursorWorldY, 0),
-            w,
-            h,
-            camera,
-          );
-
-          // Draw cursor line
-          ctx.strokeStyle = CURSOR_LINE_COLOR;
-          ctx.lineWidth = CURSOR_LINE_WIDTH;
-          ctx.beginPath();
-          ctx.moveTo(leftPt.x, leftPt.y);
-          ctx.lineTo(rightPt.x, rightPt.y);
-          ctx.stroke();
-
-          // Draw tick label next to cursor
-          ctx.fillStyle = CURSOR_LINE_COLOR;
-          ctx.font = '10px monospace';
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(`tick ${cursorTick}`, rightPt.x + 4, rightPt.y - 2);
-        }
-      }
-
-      // Draw ghost note previews at cursor position (Place mode, all lanes)
-      if (st.activeTool === 'place' && !st.isPlaying) {
-        const cursorTick = st.cursorTick;
-        for (let lane = 0; lane < NUM_LANES; lane++) {
-          const pos = localNoteToScreen(cursorTick, lane);
-          if (!pos || pos.y <= 0 || pos.y >= h) continue;
-          const bounds = laneScreenBounds(lane, pos.y);
-          const noteRadius = bounds ? bounds.width / 3 : 12;
-          ctx.fillStyle = GHOST_LANE_COLORS[lane];
-          ctx.beginPath();
-          ctx.ellipse(pos.x, pos.y, noteRadius, 6, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-
-      // Draw ghost note preview at mouse hover position (Place mode)
-      if (
-        st.activeTool === 'place' &&
-        curHoverLane !== null &&
-        curHoverTick !== null
-      ) {
-        const pos = localNoteToScreen(curHoverTick, curHoverLane);
-        if (pos && pos.y > 0 && pos.y < h) {
-          const bounds = laneScreenBounds(curHoverLane, pos.y);
-          const noteRadius = bounds ? bounds.width / 3 : 12;
-          ctx.fillStyle = LANE_COLORS[curHoverLane];
-          ctx.beginPath();
-          ctx.ellipse(pos.x, pos.y, noteRadius, 6, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-
-      // Draw box selection rectangle (Cursor mode)
-      if (
-        st.activeTool === 'cursor' &&
-        curDragStart &&
-        curDragCurrent &&
-        !curIsDragging
-      ) {
-        const x1 = Math.min(curDragStart.x, curDragCurrent.x);
-        const y1 = Math.min(curDragStart.y, curDragCurrent.y);
-        const bw = Math.abs(curDragCurrent.x - curDragStart.x);
-        const bh = Math.abs(curDragCurrent.y - curDragStart.y);
-        if (bw > 3 || bh > 3) {
-          ctx.fillStyle = BOX_SELECT_COLOR;
-          ctx.fillRect(x1, y1, bw, bh);
-          ctx.strokeStyle = BOX_SELECT_BORDER;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x1, y1, bw, bh);
-        }
-      }
-
-      // Draw hover highlight for eraser
-      if (st.activeTool === 'erase' && curHoverLane !== null && handle) {
-        // Highlight the lane column using projected boundaries
-        const bounds = laneScreenBounds(curHoverLane, h / 2);
-        if (bounds) {
-          // Draw a trapezoidal highlight that follows the perspective
-          const camera = handle.getCamera();
-          const laneX = LANE_X_POSITIONS[curHoverLane];
-          const sortedLaneXs = LANE_X_POSITIONS.slice().sort(
-            (a, b) => a - b,
-          );
-          const sortedIdx = sortedLaneXs.indexOf(laneX);
-          let leftBoundX =
-            sortedIdx === 0
-              ? -HIGHWAY_HALF_WIDTH
-              : (sortedLaneXs[sortedIdx - 1] + laneX) / 2;
-          let rightBoundX =
-            sortedIdx === sortedLaneXs.length - 1
-              ? HIGHWAY_HALF_WIDTH
-              : (laneX + sortedLaneXs[sortedIdx + 1]) / 2;
-
-          const topLeft = worldToScreen(
-            new THREE.Vector3(leftBoundX, 2, 0),
-            w,
-            h,
-            camera,
-          );
-          const topRight = worldToScreen(
-            new THREE.Vector3(rightBoundX, 2, 0),
-            w,
-            h,
-            camera,
-          );
-          const botLeft = worldToScreen(
-            new THREE.Vector3(leftBoundX, -1.5, 0),
-            w,
-            h,
-            camera,
-          );
-          const botRight = worldToScreen(
-            new THREE.Vector3(rightBoundX, -1.5, 0),
-            w,
-            h,
-            camera,
-          );
-
-          ctx.fillStyle = 'rgba(255, 0, 0, 0.15)';
-          ctx.beginPath();
-          ctx.moveTo(topLeft.x, topLeft.y);
-          ctx.lineTo(topRight.x, topRight.y);
-          ctx.lineTo(botRight.x, botRight.y);
-          ctx.lineTo(botLeft.x, botLeft.y);
-          ctx.closePath();
-          ctx.fill();
-        }
-      }
-
-      // Draw cursor crosshair for BPM/TimeSig/Section modes
-      if (
-        (st.activeTool === 'bpm' || st.activeTool === 'timesig' || st.activeTool === 'section') &&
-        curHoverTick !== null &&
-        handle
-      ) {
-        // Project the tick to screen Y at left and right highway edges
-        const camera = handle.getCamera();
-        const highwaySpeed = handle.getHighwaySpeed();
-        const currentMs = audioManager.currentTime * 1000;
-        const delay = (audioManager.delay || 0) * 1000;
-        const elapsedMs = currentMs - delay;
-
-        let tempoIdx = 0;
-        for (let i = 1; i < tempos.length; i++) {
-          if (tempos[i].tick <= curHoverTick) tempoIdx = i;
-          else break;
-        }
-        const tempo = tempos[tempoIdx];
-        const ms =
-          tempo.msTime +
-          ((curHoverTick - tempo.tick) * 60000) / (tempo.beatsPerMinute * res);
-        const worldY = ((ms - elapsedMs) / 1000) * highwaySpeed - 1;
-
-        const leftPt = worldToScreen(
-          new THREE.Vector3(-HIGHWAY_HALF_WIDTH, worldY, 0),
-          w,
-          h,
-          camera,
-        );
-        const rightPt = worldToScreen(
-          new THREE.Vector3(HIGHWAY_HALF_WIDTH, worldY, 0),
-          w,
-          h,
-          camera,
-        );
-
-        if (leftPt.y > 0 && leftPt.y < h) {
-          ctx.strokeStyle =
-            st.activeTool === 'bpm'
-              ? 'rgba(255, 165, 0, 0.7)'
-              : st.activeTool === 'timesig'
-                ? 'rgba(147, 112, 219, 0.7)'
-                : 'rgba(255, 200, 0, 0.7)';
-          ctx.lineWidth = 2;
-          ctx.setLineDash([5, 5]);
-          ctx.beginPath();
-          ctx.moveTo(leftPt.x, leftPt.y);
-          ctx.lineTo(rightPt.x, rightPt.y);
-          ctx.stroke();
-          ctx.setLineDash([]);
-
-          ctx.fillStyle = ctx.strokeStyle;
-          ctx.font = '11px monospace';
-          ctx.fillText(
-            st.activeTool === 'bpm'
-              ? `BPM @ tick ${curHoverTick}`
-              : st.activeTool === 'timesig'
-                ? `TS @ tick ${curHoverTick}`
-                : `Section @ tick ${curHoverTick}`,
-            leftPt.x + 4,
-            leftPt.y - 6,
-          );
-        }
-      }
-
-      // Draw loop region markers
-      if (st.loopRegion && handle) {
-        const startY = msToScreenY(st.loopRegion.startMs);
-        const endY = msToScreenY(st.loopRegion.endMs);
-
-        if (startY !== null && endY !== null) {
-          // Loop region background tint
-          if (endY < h && startY > 0) {
-            ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
-            ctx.fillRect(
-              0,
-              Math.max(0, endY),
-              w,
-              Math.min(h, startY) - Math.max(0, endY),
-            );
-          }
-
-          // Loop start line
-          if (startY > 0 && startY < h) {
-            ctx.strokeStyle = 'rgba(59, 130, 246, 0.7)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([3, 3]);
-            ctx.beginPath();
-            ctx.moveTo(0, startY);
-            ctx.lineTo(w, startY);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.fillStyle = 'rgba(59, 130, 246, 0.8)';
-            ctx.font = '10px sans-serif';
-            ctx.fillText('A', 4, startY - 4);
-          }
-
-          // Loop end line
-          if (endY > 0 && endY < h) {
-            ctx.strokeStyle = 'rgba(59, 130, 246, 0.7)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([3, 3]);
-            ctx.beginPath();
-            ctx.moveTo(0, endY);
-            ctx.lineTo(w, endY);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.fillStyle = 'rgba(59, 130, 246, 0.8)';
-            ctx.font = '10px sans-serif';
-            ctx.fillText('B', 4, endY - 4);
-          }
-        }
-      }
-
-      animFrameRef.current = requestAnimationFrame(draw);
-    }
-
-    animFrameRef.current = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(animFrameRef.current);
-    // This effect intentionally has a minimal dependency array.
-    // All mutable values are read from refs inside the draw loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioManager]);
-
-  // ---------------------------------------------------------------------------
-  // Resize observer to keep overlay canvas sized to container
-  // ---------------------------------------------------------------------------
-
-  useEffect(() => {
-    const container = containerRef.current;
-    const canvas = overlayRef.current;
-    if (!container || !canvas) return;
-
-    const observer = new ResizeObserver(() => {
-      canvas.width = container.offsetWidth;
-      canvas.height = container.offsetHeight;
+        : null,
+      loopRegion: state.loopRegion,
     });
-    observer.observe(container);
 
-    // Initial size
-    canvas.width = container.offsetWidth;
-    canvas.height = container.offsetHeight;
+    // Push selection and confidence state to the NotesManager
+    handle.getNotesManager().then(nm => {
+      nm.setSelectedNoteIds(state.selectedNoteIds);
+      nm.setConfidenceData(
+        confidence ?? null,
+        showConfidence,
+        confidenceThreshold,
+      );
+      nm.setReviewedNoteIds(reviewedNoteIds ?? null);
+    });
 
-    return () => observer.disconnect();
-  }, []);
+    // Push sections to InteractionManager for section hit-testing
+    handle.getInteractionManager().then(im => {
+      im?.setSections(state.chartDoc?.sections ?? []);
+    });
+  }, [
+    state.cursorTick,
+    state.isPlaying,
+    state.activeTool,
+    state.selectedNoteIds,
+    state.selectedSectionTick,
+    state.chartDoc?.sections,
+    state.loopRegion,
+    hoverLane,
+    hoverTick,
+    isDraggingSection,
+    sectionDragTick,
+    sectionDragOriginalTick,
+    sectionDragName,
+    confidence,
+    showConfidence,
+    confidenceThreshold,
+    reviewedNoteIds,
+  ]);
+
+  // Push timing data to SceneOverlays when tempos or resolution change
+  useEffect(() => {
+    const handle = rendererHandleRef.current;
+    if (!handle || timedTempos.length === 0) return;
+    handle.setTimingData(timedTempos, resolution);
+  }, [timedTempos, resolution]);
 
   // ---------------------------------------------------------------------------
   // Sync cursor tick with playback
@@ -1740,10 +825,21 @@ export default function HighwayEditor({
   ]);
 
   // ---------------------------------------------------------------------------
-  // Cursor style based on tool mode
+  // Cursor style based on tool mode and what's under the mouse
   // ---------------------------------------------------------------------------
 
   const cursorStyle = useMemo(() => {
+    // When hovering over a note, show pointer in cursor/erase mode
+    if (hoveredHitType === 'note') {
+      if (state.activeTool === 'cursor' || state.activeTool === 'erase') {
+        return 'pointer';
+      }
+    }
+    // When hovering over a section banner, show pointer in cursor mode
+    if (hoveredHitType === 'section' && state.activeTool === 'cursor') {
+      return 'pointer';
+    }
+    // Default cursors per tool mode
     switch (state.activeTool) {
       case 'cursor':
         return 'default';
@@ -1758,7 +854,7 @@ export default function HighwayEditor({
       default:
         return 'default';
     }
-  }, [state.activeTool]);
+  }, [state.activeTool, hoveredHitType]);
 
   return (
     <div
@@ -1774,9 +870,9 @@ export default function HighwayEditor({
         onRendererReady={handleRendererReady}
       />
 
-      {/* Transparent overlay canvas for editing interactions */}
-      <canvas
-        ref={overlayRef}
+      {/* Transparent interaction layer for mouse events */}
+      <div
+        ref={interactionRef}
         className="absolute inset-0 z-10"
         style={{cursor: cursorStyle}}
         onMouseDown={handleMouseDown}
@@ -1784,6 +880,26 @@ export default function HighwayEditor({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
       />
+
+      {/* Box selection rectangle (DOM div -- inherently screen-space) */}
+      {state.activeTool === 'cursor' &&
+        dragStart &&
+        dragCurrent &&
+        !isDragging &&
+        (Math.abs(dragCurrent.x - dragStart.x) > 3 ||
+          Math.abs(dragCurrent.y - dragStart.y) > 3) && (
+          <div
+            className="pointer-events-none absolute z-20 border"
+            style={{
+              left: Math.min(dragStart.x, dragCurrent.x),
+              top: Math.min(dragStart.y, dragCurrent.y),
+              width: Math.abs(dragCurrent.x - dragStart.x),
+              height: Math.abs(dragCurrent.y - dragStart.y),
+              backgroundColor: 'rgba(100, 149, 237, 0.25)',
+              borderColor: 'rgba(100, 149, 237, 0.6)',
+            }}
+          />
+        )}
 
       {/* BPM popover */}
       {popover?.kind === 'bpm' && (

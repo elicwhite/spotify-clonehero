@@ -12,6 +12,7 @@ import {
   Undo2,
   Redo2,
   Minus,
+  AudioWaveform,
 } from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {
@@ -28,6 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {useChartEditorContext, type ToolMode} from './ChartEditorContext';
+import type {HighwayMode} from '@/lib/preview/highway';
 import {useUndoRedo} from './hooks/useEditCommands';
 import NoteInspector from './NoteInspector';
 import LoopControls from './LoopControls';
@@ -210,6 +212,33 @@ export default function LeftSidebar({
                   <Plus className="h-3 w-3" />
                 </Button>
               </div>
+            </div>
+          </div>
+
+          {/* Highway mode */}
+          <div className="space-y-2 pt-4 border-t">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Highway</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={state.highwayMode === 'waveform' ? 'secondary' : 'outline'}
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={() =>
+                      dispatch({
+                        type: 'SET_HIGHWAY_MODE',
+                        mode: state.highwayMode === 'waveform' ? 'classic' : 'waveform',
+                      })
+                    }>
+                    <AudioWaveform className="h-3.5 w-3.5" />
+                    {state.highwayMode === 'waveform' ? 'Waveform' : 'Classic'}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  Toggle waveform highway surface
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
 
