@@ -3,8 +3,7 @@
 import {parseChartFile} from '@eliwhite/scan-chart';
 import {tickToMs} from '@/lib/chart-utils/tickToMs';
 import {
-  applyDiscoFlip,
-  noteEventToInstrument,
+  interpretDrumNote,
   type DrumNoteInstrument,
 } from '@/lib/drum-mapping/noteToInstrument';
 
@@ -172,11 +171,7 @@ class Parser {
           ) {
             beat.notes.push({
               notes: noteGroups[noteGroupIndex].map(note => {
-                // Apply disco flip before mapping to instrument
-                const flipped = applyDiscoFlip(note);
-                return mapping[
-                  noteEventToInstrument({...note, ...flipped})
-                ];
+                return mapping[interpretDrumNote(note).instrument];
               }),
               isRest: false,
               dotted: false,

@@ -7,7 +7,7 @@ import {
   noteFlags,
   noteTypes,
 } from '@eliwhite/scan-chart';
-import {applyDiscoFlip} from '../drum-mapping/noteToInstrument';
+import {interpretDrumNote, noteTypeToPad, type DrumPad} from '../drum-mapping/noteToInstrument';
 import {ChartResponseEncore} from '../chartSelection';
 import {AudioManager} from './audioManager';
 
@@ -22,10 +22,18 @@ export type SelectedTrack = {
 
 export type Song = {};
 
-const SCALE = 0.105;
-const NOTE_SPAN_WIDTH = 0.95;
+export const SCALE = 0.105;
+export const NOTE_SPAN_WIDTH = 0.95;
 /** How far ahead (in ms) to render notes beyond the strikeline. */
 const HIGHWAY_DURATION_MS = 1500;
+
+/** DrumPad → highway lane index (0-3). Kick is handled separately. */
+const PAD_TO_HIGHWAY_LANE: Partial<Record<DrumPad, number>> = {
+  red: 0,
+  yellow: 1,
+  blue: 2,
+  green: 3,
+};
 
 const NOTE_COLORS = {
   green: '#01B11A',
@@ -498,9 +506,9 @@ class NotesManager {
 
       for (const note of group) {
         if (isDrums) {
-          const {type: discoType} = applyDiscoFlip(note);
+          const interpreted = interpretDrumNote(note);
 
-          if (discoType === noteTypes.kick) {
+          if (interpreted.isKick) {
             prepared.push({
               note,
               msTime: note.msTime,
@@ -512,20 +520,7 @@ class NotesManager {
               lane: -1,
             });
           } else {
-            const lane =
-              discoType === noteTypes.redDrum
-                ? 0
-                : discoType === noteTypes.yellow ||
-                    discoType === noteTypes.yellowDrum
-                  ? 1
-                  : discoType === noteTypes.blue ||
-                      discoType === noteTypes.blueDrum
-                    ? 2
-                    : discoType === noteTypes.green ||
-                        discoType === noteTypes.greenDrum ||
-                        discoType === noteTypes.orange
-                      ? 3
-                      : -1;
+            const lane = PAD_TO_HIGHWAY_LANE[interpreted.pad] ?? -1;
 
             if (lane !== -1) {
               prepared.push({
@@ -1143,33 +1138,30 @@ async function loadNoteTextures(
   return {
     getTextureForNote(note: Note, {inStarPower}: {inStarPower: boolean}) {
       if (isDrums) {
-        // Apply disco flip: swaps red↔yellow and tom↔cymbal flags for disco notes
-        const {type, flags} = applyDiscoFlip(note);
+        const interpreted = interpretDrumNote(note);
 
-        if (type === noteTypes.kick) {
+        if (interpreted.isKick) {
           // Build lookup flags for kick: preserve doubleKick, add SP if needed
           const lookupFlags =
-            (flags & noteFlags.doubleKick) | (inStarPower ? SP_FLAG : 0);
+            (interpreted.flags & noteFlags.doubleKick) | (inStarPower ? SP_FLAG : 0);
           return kickTextures.get(lookupFlags) ?? kickTextures.get(noteFlags.none)!;
         }
 
-        // Determine if this is a cymbal or tom
-        const isCymbal = !!(flags & noteFlags.cymbal) && type !== noteTypes.redDrum;
-        const textureMap = isCymbal ? cymbalTextures : tomTextures;
-        const typeFlag = isCymbal ? noteFlags.cymbal : noteFlags.tom;
+        const textureMap = interpreted.isCymbal ? cymbalTextures : tomTextures;
+        const typeFlag = interpreted.isCymbal ? noteFlags.cymbal : noteFlags.tom;
 
         // Build lookup flags: type flag + dynamic (ghost/accent) + SP
-        const dynamicFlag = flags & noteFlags.ghost
+        const dynamicFlag = interpreted.dynamic === 'ghost'
           ? noteFlags.ghost
-          : flags & noteFlags.accent
+          : interpreted.dynamic === 'accent'
             ? noteFlags.accent
             : noteFlags.none;
         const spFlag = inStarPower ? SP_FLAG : 0;
         const lookupFlags = typeFlag | dynamicFlag | spFlag;
 
-        const flagMap = textureMap.get(type);
+        const flagMap = textureMap.get(interpreted.noteType);
         if (!flagMap) {
-          throw new Error(`Invalid sprite requested: ${type}`);
+          throw new Error(`Invalid sprite requested: ${interpreted.noteType}`);
         }
 
         // Try exact match first, then fall back without SP, then without dynamic, then plain
@@ -1321,12 +1313,7 @@ async function loadTomTextures(
   textureLoader: THREE.TextureLoader,
   animatedTextureManager?: AnimatedTextureManager,
 ): Promise<DrumTextureMap> {
-  const colors = new Map([
-    [noteTypes.redDrum, 'red'],
-    [noteTypes.yellowDrum, 'yellow'],
-    [noteTypes.blueDrum, 'blue'],
-    [noteTypes.greenDrum, 'green'],
-  ]);
+  const tomNoteTypes = [noteTypes.redDrum, noteTypes.yellowDrum, noteTypes.blueDrum, noteTypes.greenDrum] as const;
   const dynamicFlags: [number, string][] = [
     [noteFlags.none, ''],
     [noteFlags.ghost, '-ghost'],
@@ -1342,7 +1329,8 @@ async function loadTomTextures(
   // First pass: load all normal (no dynamic, no SP) textures for fallback
   const normalTextures = new Map<number, THREE.Texture>();
   await Promise.all(
-    Array.from(colors.entries()).map(async ([noteType, colorName]) => {
+    tomNoteTypes.map(async (noteType) => {
+      const colorName = noteTypeToPad(noteType)!;
       const url = `${DRUM_TEXTURE_PATH}drum-tom-${colorName}.webp`;
       const texture = await loadTexture(textureLoader, url, animatedTextureManager);
       normalTextures.set(noteType, texture);
@@ -1351,7 +1339,8 @@ async function loadTomTextures(
 
   // Second pass: load all variants, falling back to normal on failure
   const promises: Promise<void>[] = [];
-  for (const [noteType, colorName] of colors) {
+  for (const noteType of tomNoteTypes) {
+    const colorName = noteTypeToPad(noteType)!;
     const flagMap = new Map<number, THREE.SpriteMaterial>();
     result.set(noteType, flagMap);
 
@@ -1384,11 +1373,7 @@ async function loadCymbalTextures(
   animatedTextureManager?: AnimatedTextureManager,
 ): Promise<DrumTextureMap> {
   // No red cymbal in pro drums — only yellow, blue, green
-  const colors = new Map([
-    [noteTypes.yellowDrum, 'yellow'],
-    [noteTypes.blueDrum, 'blue'],
-    [noteTypes.greenDrum, 'green'],
-  ]);
+  const cymbalNoteTypes = [noteTypes.yellowDrum, noteTypes.blueDrum, noteTypes.greenDrum] as const;
   const dynamicFlags: [number, string][] = [
     [noteFlags.none, ''],
     [noteFlags.ghost, '-ghost'],
@@ -1404,7 +1389,8 @@ async function loadCymbalTextures(
   // First pass: load normal textures for fallback
   const normalTextures = new Map<number, THREE.Texture>();
   await Promise.all(
-    Array.from(colors.entries()).map(async ([noteType, colorName]) => {
+    cymbalNoteTypes.map(async (noteType) => {
+      const colorName = noteTypeToPad(noteType)!;
       const url = `${DRUM_TEXTURE_PATH}drum-cymbal-${colorName}.webp`;
       const texture = await loadTexture(textureLoader, url, animatedTextureManager);
       normalTextures.set(noteType, texture);
@@ -1413,7 +1399,8 @@ async function loadCymbalTextures(
 
   // Second pass: load all variants
   const promises: Promise<void>[] = [];
-  for (const [noteType, colorName] of colors) {
+  for (const noteType of cymbalNoteTypes) {
+    const colorName = noteTypeToPad(noteType)!;
     const flagMap = new Map<number, THREE.SpriteMaterial>();
     result.set(noteType, flagMap);
 
@@ -1538,7 +1525,7 @@ async function loadAndCreateDrumHitBox(textureLoader: THREE.TextureLoader) {
   return sprite;
 }
 
-function calculateNoteXOffset(instrument: Instrument, lane: number) {
+export function calculateNoteXOffset(instrument: Instrument, lane: number) {
   const leftOffset = instrument == 'drums' ? 0.135 : 0.035;
 
   return (

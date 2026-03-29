@@ -1,9 +1,13 @@
 /**
- * Helpers to map NoteType to voice categories for drum analysis
+ * Helpers to map NoteType to voice categories for drum analysis.
+ *
+ * Uses lib/drum-mapping as the single source of truth for interpreting
+ * scan-chart drum note data.
  */
 
 import {DrumVoice} from './types';
-import {NoteType, noteFlags, noteTypes} from '@eliwhite/scan-chart';
+import {NoteType, noteTypes} from '@eliwhite/scan-chart';
+import {interpretDrumNote, noteTypeToPad} from '../drum-mapping/noteToInstrument';
 
 // Re-export DrumVoice for use in other modules
 export {DrumVoice};
@@ -39,6 +43,15 @@ export const ROCK_BAND_4_DRUM_MAP: Record<number, DrumVoice> = {
  */
 const DEFAULT_DRUM_MAP = CLONE_HERO_DRUM_MAP;
 
+/** Set of proper drum noteType values (kick=12, redDrum=13, yellowDrum=14, blueDrum=15, greenDrum=16). */
+const DRUM_NOTE_TYPES = new Set<NoteType>([
+  noteTypes.kick,
+  noteTypes.redDrum,
+  noteTypes.yellowDrum,
+  noteTypes.blueDrum,
+  noteTypes.greenDrum,
+]);
+
 /**
  * Maps scan-chart NoteType enum values to DrumVoice, handling both 4-lane (RB), 4-lane pro, and 5-lane.
  */
@@ -47,25 +60,23 @@ export function mapScanChartNoteToVoice(
   drumType: 0 | 1 | 2 | null = null,
   flags: number = 0,
 ): DrumVoice {
-  // Prefer explicit mapping of drum-specific note types that scan-chart emits
-  const {kick, redDrum, yellowDrum, blueDrum, greenDrum} = noteTypes;
+  // Only use interpretDrumNote for proper drum noteTypes (12-16).
+  // Legacy numeric types (0-5) fall through to CLONE_HERO_DRUM_MAP.
+  if (DRUM_NOTE_TYPES.has(noteType)) {
+    const interpreted = interpretDrumNote({type: noteType, flags});
 
-  if (noteType === kick) return DrumVoice.KICK;
-  if (noteType === redDrum) return DrumVoice.SNARE;
+    if (interpreted.isKick) return DrumVoice.KICK;
+    if (interpreted.pad === 'red') return DrumVoice.SNARE;
 
-  // drumType: 0=fourLane, 1=fourLanePro, 2=fiveLane
-  if (noteType === yellowDrum) {
-    // Yellow: hi-hat/ride if cymbal flag, otherwise tom
-    return flags & noteFlags.cymbal ? DrumVoice.HAT : DrumVoice.TOM;
-  }
-  if (noteType === blueDrum) {
-    return flags & noteFlags.cymbal ? DrumVoice.CYMBAL : DrumVoice.TOM;
-  }
-  if (noteType === greenDrum) {
-    return flags & noteFlags.cymbal ? DrumVoice.CYMBAL : DrumVoice.TOM;
+    // For yellow, cymbal means hihat; for blue/green, cymbal means crash/ride
+    if (interpreted.isCymbal) {
+      return interpreted.pad === 'yellow' ? DrumVoice.HAT : DrumVoice.CYMBAL;
+    }
+
+    return DrumVoice.TOM;
   }
 
-  // Fallback to legacy mapping if type matches 0..5
+  // Fallback to legacy mapping for non-drum noteTypes (0-5 etc.)
   if (noteType in CLONE_HERO_DRUM_MAP) {
     return CLONE_HERO_DRUM_MAP[noteType as unknown as number];
   }

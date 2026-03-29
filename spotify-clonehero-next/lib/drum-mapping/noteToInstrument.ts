@@ -1,10 +1,55 @@
 /**
- * Shared drum note mapping: scan-chart NoteEvent -> instrument name.
+ * Shared drum note mapping: scan-chart NoteEvent → interpreted drum note.
  *
- * Used by both the SheetMusic VexFlow renderer and the drum transcription editor.
+ * This is the single source of truth for interpreting raw scan-chart drum note
+ * data. All consumers should call `interpretDrumNote()` rather than manually
+ * checking noteTypes/noteFlags.
  */
 
-import {NoteEvent, NoteType, noteTypes, noteFlags} from '@eliwhite/scan-chart';
+import {NoteType, noteTypes, noteFlags} from '@eliwhite/scan-chart';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/** The drum pad color after disco flip. */
+export type DrumPad = 'kick' | 'red' | 'yellow' | 'blue' | 'green';
+
+export type DrumNoteInstrument =
+  | 'kick'
+  | 'snare'
+  | 'high-tom'
+  | 'mid-tom'
+  | 'floor-tom'
+  | 'hihat'
+  | 'crash'
+  | 'ride';
+
+/** Full interpretation of a drum note's type and flags. */
+export interface InterpretedDrumNote {
+  /** Pad color (after disco flip). */
+  pad: DrumPad;
+  /** Specific instrument (snare, hihat, ride, crash, high-tom, mid-tom, floor-tom, kick). */
+  instrument: DrumNoteInstrument;
+  /** True if cymbal (hihat, ride, crash). False for toms/kick/snare. */
+  isCymbal: boolean;
+  /** True for kick notes. */
+  isKick: boolean;
+  /** True for double-kick (kick with doubleKick flag). */
+  isDoubleKick: boolean;
+  /** Dynamic modifier. */
+  dynamic: 'ghost' | 'accent' | 'none';
+  /** True if flam flag is set. */
+  isFlam: boolean;
+  /** The note type after disco flip. */
+  noteType: NoteType;
+  /** The flags after disco flip. */
+  flags: number;
+}
+
+// ---------------------------------------------------------------------------
+// Disco flip
+// ---------------------------------------------------------------------------
 
 /**
  * Applies the disco flip transformation to a drum note's type and flags.
@@ -48,60 +93,146 @@ export function applyDiscoFlip(note: {
   return {type, flags};
 }
 
-export type DrumNoteInstrument =
-  | 'kick'
-  | 'snare'
-  | 'high-tom'
-  | 'mid-tom'
-  | 'floor-tom'
-  | 'hihat'
-  | 'crash'
-  | 'ride';
+// ---------------------------------------------------------------------------
+// Convenience predicates (work on raw noteType, no disco flip)
+// ---------------------------------------------------------------------------
+
+/** True if the noteType is a kick drum. */
+export function isKickNote(noteType: NoteType): boolean {
+  return noteType === noteTypes.kick;
+}
+
+/** True if the note renders as a cymbal (cymbal flag set, not red pad). */
+export function isDrumCymbal(noteType: NoteType, flags: number): boolean {
+  return (
+    (flags & noteFlags.cymbal) !== 0 &&
+    noteType !== noteTypes.redDrum
+  );
+}
 
 /**
- * Maps a scan-chart NoteEvent to a DrumNoteInstrument string.
- *
- * Uses the note's `type` and `flags` fields to determine the instrument:
- * - kick (noteTypes.kick)
- * - snare (noteTypes.redDrum)
- * - yellow: hihat (cymbal flag) or high-tom (tom flag)
- * - blue: ride (cymbal flag) or mid-tom (tom flag)
- * - green: crash (cymbal flag) or floor-tom (tom flag)
+ * Map a raw scan-chart NoteType to a DrumPad color (no disco flip applied).
+ * Handles 4-lane aliases (noteTypes.yellow, .blue, .green, .orange).
+ * Returns null for non-drum note types.
  */
-export function noteEventToInstrument(note: NoteEvent): DrumNoteInstrument {
-  switch (note.type) {
+export function noteTypeToPad(noteType: NoteType): DrumPad | null {
+  switch (noteType) {
     case noteTypes.kick:
       return 'kick';
     case noteTypes.redDrum:
-      return 'snare';
+      return 'red';
+    case noteTypes.yellow:
     case noteTypes.yellowDrum:
-      if (note.flags & noteFlags.cymbal && note.flags & noteFlags.accent) {
-        // Could be open-hat or a harder hit
-        return 'hihat';
-      } else if (note.flags & noteFlags.cymbal) {
-        return 'hihat';
-      } else if (note.flags & noteFlags.tom) {
-        return 'high-tom';
-      } else {
-        throw new Error(`Unexpected Yellow note flags ${note.flags}`);
-      }
+      return 'yellow';
+    case noteTypes.blue:
     case noteTypes.blueDrum:
-      if (note.flags & noteFlags.cymbal) {
-        return 'ride';
-      } else if (note.flags & noteFlags.tom) {
-        return 'mid-tom';
-      } else {
-        throw new Error(`Unexpected Blue note flags ${note.flags}`);
-      }
+      return 'blue';
+    case noteTypes.green:
     case noteTypes.greenDrum:
-      if (note.flags & noteFlags.cymbal) {
-        return 'crash';
-      } else if (note.flags & noteFlags.tom) {
-        return 'floor-tom';
-      } else {
-        throw new Error(`Unexpected Green note flags ${note.flags}`);
-      }
+    case noteTypes.orange:
+      return 'green';
     default:
-      throw new Error(`Unexpected note type ${note.type}`);
+      return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Primary interpretation function
+// ---------------------------------------------------------------------------
+
+/**
+ * Interpret a raw scan-chart drum note into structured data.
+ *
+ * Applies disco flip, determines pad, instrument, cymbal/tom, dynamics.
+ * This is the single source of truth — all consumers should call this
+ * instead of manually checking noteTypes/noteFlags.
+ */
+export function interpretDrumNote(note: {
+  type: NoteType;
+  flags: number;
+}): InterpretedDrumNote {
+  const {type, flags} = applyDiscoFlip(note);
+
+  const pad = noteTypeToPad(type);
+  if (pad == null) {
+    throw new Error(`Not a drum note type: ${note.type}`);
+  }
+
+  const isKick = pad === 'kick';
+  const isCymbal = (flags & noteFlags.cymbal) !== 0 && pad !== 'red';
+
+  const instrument = resolveInstrument(type, flags, pad, isCymbal);
+
+  const dynamic: InterpretedDrumNote['dynamic'] =
+    flags & noteFlags.ghost
+      ? 'ghost'
+      : flags & noteFlags.accent
+        ? 'accent'
+        : 'none';
+
+  return {
+    pad,
+    instrument,
+    isCymbal,
+    isKick,
+    isDoubleKick: isKick && (flags & noteFlags.doubleKick) !== 0,
+    dynamic,
+    isFlam: (flags & noteFlags.flam) !== 0,
+    noteType: type,
+    flags,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Legacy API (kept for backward compat — delegates to interpretDrumNote)
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps a scan-chart note to a DrumNoteInstrument string.
+ * Prefer `interpretDrumNote()` for new code.
+ */
+export function noteEventToInstrument(note: {
+  type: NoteType;
+  flags: number;
+}): DrumNoteInstrument {
+  return interpretDrumNote(note).instrument;
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+function resolveInstrument(
+  type: NoteType,
+  flags: number,
+  pad: DrumPad,
+  isCymbal: boolean,
+): DrumNoteInstrument {
+  if (pad === 'kick') return 'kick';
+  if (pad === 'red') return 'snare';
+
+  if (isCymbal) {
+    switch (pad) {
+      case 'yellow':
+        return 'hihat';
+      case 'blue':
+        return 'ride';
+      case 'green':
+        return 'crash';
+    }
+  }
+
+  // Tom (explicit tom flag, or default when no cymbal flag)
+  if (flags & noteFlags.tom || !(flags & noteFlags.cymbal)) {
+    switch (pad) {
+      case 'yellow':
+        return 'high-tom';
+      case 'blue':
+        return 'mid-tom';
+      case 'green':
+        return 'floor-tom';
+    }
+  }
+
+  throw new Error(`Cannot determine instrument for pad=${pad} flags=${flags}`);
 }

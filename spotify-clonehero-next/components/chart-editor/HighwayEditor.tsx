@@ -42,6 +42,7 @@ import DrumHighwayPreview, {
 } from './DrumHighwayPreview';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
+import {calculateNoteXOffset} from '@/lib/preview/highway';
 import {parseChartFile} from '@eliwhite/scan-chart';
 type ParsedChart = ReturnType<typeof parseChartFile>;
 import {Input} from '@/components/ui/input';
@@ -49,40 +50,20 @@ import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
-// Lane layout constants (must match highway.ts)
+// Lane layout constants (from highway.ts — single source of truth)
 // ---------------------------------------------------------------------------
 
 const NUM_LANES = 5;
-const SCALE = 0.105;
-const NOTE_SPAN_WIDTH = 0.99;
 
 /**
- * Compute the 3D X positions for each drum lane as rendered by highway.ts.
- *
- * highway.ts calculateNoteXOffset('drums', lane) uses lanes 0-3 for
- * red/yellow/blue/green. Kick is rendered centered at x=0.
- *
- * Our editor lanes are 0=kick, 1=red, 2=yellow, 3=blue, 4=green.
- * We compute the 3D X center for each editor lane.
+ * 3D X positions for each editor lane.
+ * Editor lanes: 0=kick, 1=red, 2=yellow, 3=blue, 4=green.
+ * highway.ts uses lanes 0-3 for red/yellow/blue/green. Kick is centered at x=0.
  */
-function computeLaneXPositions(): number[] {
-  const leftOffset = 0.135;
-  // Kick is centered at x=0
-  const kickX = 0;
-  // Lanes 0-3 in highway.ts correspond to red(1), yellow(2), blue(3), green(4) in editor
-  const positions = [kickX];
-  for (let hwLane = 0; hwLane < 4; hwLane++) {
-    const x =
-      leftOffset +
-      -(NOTE_SPAN_WIDTH / 2) +
-      SCALE +
-      ((NOTE_SPAN_WIDTH - SCALE) / 5) * hwLane;
-    positions.push(x);
-  }
-  return positions;
-}
-
-const LANE_X_POSITIONS = computeLaneXPositions();
+const LANE_X_POSITIONS = [
+  0, // kick — centered
+  ...Array.from({length: 4}, (_, i) => calculateNoteXOffset('drums', i)),
+];
 
 /**
  * The lane boundaries (midpoints between adjacent lane centers) for hit testing.
