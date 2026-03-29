@@ -666,9 +666,10 @@ export class NotesManager {
     isSelected: boolean,
     isHovered: boolean,
   ): void {
-    // Determine desired highlight size based on note type
+    // Determine desired highlight size based on note type.
+    // Kick notes span the full highway width (0.9), so the highlight should too.
     const noteScale = pn.isKick ? 0.045 : pn.isOpen ? 0.11 : SCALE;
-    const highlightW = noteScale * 2.2;
+    const highlightW = pn.isKick ? 0.9 : noteScale * 2.2;
     const highlightH = noteScale * 1.8;
 
     if (isSelected || isHovered) {

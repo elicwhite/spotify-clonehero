@@ -1,24 +1,23 @@
 import * as THREE from 'three';
 
 // ---------------------------------------------------------------------------
-// GridOverlay -- renders beat lines on a transparent texture over the highway
+// GridOverlay -- renders beat lines as thin plane meshes
 // ---------------------------------------------------------------------------
 
-/** Maximum canvas height (same as WaveformSurface). */
-const MAX_CANVAS_HEIGHT = 4096;
-/** Canvas width in pixels. */
-const CANVAS_WIDTH = 512;
-/** Resolution: rows per second of audio (must match WaveformSurface). */
-const DEFAULT_PX_PER_SECOND = 20;
-
 /** Colour for measure boundary lines. */
-const MEASURE_LINE_COLOR = 'rgba(255, 255, 255, 0.35)';
+const MEASURE_LINE_COLOR = 0xffffff;
 /** Colour for beat lines within a measure. */
-const BEAT_LINE_COLOR = 'rgba(255, 255, 255, 0.15)';
-/** Thickness for measure boundary lines (px). */
-const MEASURE_LINE_HEIGHT = 2;
-/** Thickness for beat lines (px). */
-const BEAT_LINE_HEIGHT = 1;
+const BEAT_LINE_COLOR = 0xffffff;
+
+/** Opacity for measure boundary lines. */
+const MEASURE_LINE_OPACITY = 0.55;
+/** Opacity for beat lines. */
+const BEAT_LINE_OPACITY = 0.28;
+
+/** Width (in world units) for measure boundary lines. */
+const MEASURE_LINE_WIDTH = 0.008;
+/** Width (in world units) for regular beat lines. */
+const BEAT_LINE_WIDTH = 0.004;
 
 export interface TempoEntry {
   tick: number;
@@ -46,111 +45,210 @@ export interface GridOverlayConfig {
   highwaySpeed: number;
 }
 
+/** Pre-computed beat entry with its ms time and visual weight. */
+interface BeatEntry {
+  msTime: number;
+  isMeasure: boolean;
+}
+
 /**
- * Renders beat lines and measure boundaries to a transparent canvas texture
- * that sits on top of the waveform surface. Scrolls in sync with the
- * WaveformSurface via the same offset/repeat math.
+ * Renders beat lines and measure boundaries as thin plane meshes
+ * in the 3D scene. Uses PlaneGeometry instead of THREE.Line to
+ * guarantee visible line thickness on all platforms (WebGL only
+ * supports lineWidth=1 on most GPUs).
+ *
+ * Lines are positioned at the correct world-space Y each frame,
+ * matching the same coordinate system as notes.
+ *
+ * Only lines visible within the highway time window are shown; the rest
+ * are hidden. A pool of mesh objects is reused to avoid per-frame allocation.
  */
 export class GridOverlay {
-  private mesh: THREE.Mesh;
-  private canvas: HTMLCanvasElement;
-  private texture: THREE.CanvasTexture;
-  private material: THREE.MeshBasicMaterial;
-
-  private durationMs: number;
+  private group: THREE.Group;
   private highwaySpeed: number;
+  private halfWidth: number;
 
-  constructor(config: GridOverlayConfig) {
-    this.durationMs = config.durationMs;
+  /** All beat positions in ms, pre-computed on construction. */
+  private beats: BeatEntry[] = [];
+
+  /** Pool of mesh objects for beat lines. */
+  private beatLinePool: THREE.Mesh[] = [];
+  /** Pool of mesh objects for measure lines. */
+  private measureLinePool: THREE.Mesh[] = [];
+
+  /** Shared materials (one for beats, one for measures). */
+  private beatMaterial: THREE.MeshBasicMaterial;
+  private measureMaterial: THREE.MeshBasicMaterial;
+  /** Shared geometries for beat and measure line planes. */
+  private beatGeometry: THREE.PlaneGeometry;
+  private measureGeometry: THREE.PlaneGeometry;
+
+  /** Clipping planes to keep lines within the highway bounds. */
+  private clippingPlanes: THREE.Plane[] | null = null;
+
+  constructor(config: GridOverlayConfig, clippingPlanes?: THREE.Plane[]) {
     this.highwaySpeed = config.highwaySpeed;
+    this.halfWidth = config.highwayWidth / 2;
+    this.clippingPlanes = clippingPlanes ?? null;
 
-    this.canvas = document.createElement('canvas');
-    this.renderGrid(config);
+    this.group = new THREE.Group();
+    this.group.visible = false; // hidden until explicitly enabled
 
-    this.texture = new THREE.CanvasTexture(this.canvas);
-    this.texture.wrapS = THREE.ClampToEdgeWrapping;
-    this.texture.wrapT = THREE.ClampToEdgeWrapping;
-    this.texture.minFilter = THREE.LinearFilter;
-    this.texture.magFilter = THREE.LinearFilter;
+    // Shared geometries: thin horizontal planes spanning the highway width
+    this.beatGeometry = new THREE.PlaneGeometry(
+      this.halfWidth * 2,
+      BEAT_LINE_WIDTH,
+    );
+    this.measureGeometry = new THREE.PlaneGeometry(
+      this.halfWidth * 2,
+      MEASURE_LINE_WIDTH,
+    );
 
-    this.material = new THREE.MeshBasicMaterial({
-      map: this.texture,
-      depthTest: false,
+    // Shared materials
+    this.beatMaterial = new THREE.MeshBasicMaterial({
+      color: BEAT_LINE_COLOR,
       transparent: true,
+      opacity: BEAT_LINE_OPACITY,
+      depthTest: false,
+      side: THREE.DoubleSide,
     });
+    if (this.clippingPlanes) {
+      this.beatMaterial.clippingPlanes = this.clippingPlanes;
+    }
 
-    const geometry = new THREE.PlaneGeometry(config.highwayWidth, 2);
-    this.mesh = new THREE.Mesh(geometry, this.material);
-    this.mesh.position.y = -0.1;
-    // Slightly in front of the waveform surface
-    this.mesh.position.z = 0.0001;
-    this.mesh.renderOrder = 1;
-    this.mesh.visible = false;
+    this.measureMaterial = new THREE.MeshBasicMaterial({
+      color: MEASURE_LINE_COLOR,
+      transparent: true,
+      opacity: MEASURE_LINE_OPACITY,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    });
+    if (this.clippingPlanes) {
+      this.measureMaterial.clippingPlanes = this.clippingPlanes;
+    }
+
+    // Pre-compute all beat positions
+    this.computeBeats(config);
   }
 
   // -----------------------------------------------------------------------
   // Public API
   // -----------------------------------------------------------------------
 
-  getMesh(): THREE.Mesh {
-    return this.mesh;
+  getMesh(): THREE.Group {
+    return this.group;
   }
 
-  /** Scroll the grid in sync with the waveform. Same math as WaveformSurface. */
+  /**
+   * Called every frame. Positions beat lines within the visible window.
+   * Uses the same Y formula as notes: worldY = ((ms - elapsedMs) / 1000) * highwaySpeed - 1
+   */
   update(currentTimeMs: number): void {
-    const windowMs = (2 / this.highwaySpeed) * 1000;
-    const fraction = currentTimeMs / this.durationMs;
-    const windowFraction = windowMs / this.durationMs;
+    // The visible window spans from worldY = -1 (strikeline) to worldY = ~0.9 (top).
+    // worldY = ((ms - currentMs) / 1000) * highwaySpeed - 1
+    // Solve for ms: ms = currentMs + ((worldY + 1) / highwaySpeed) * 1000
+    const windowStartMs = currentTimeMs; // ms at strikeline (worldY = -1 -> ms = currentMs)
+    const windowEndMs = currentTimeMs + (1.9 / this.highwaySpeed) * 1000; // ms at top of highway
 
-    this.texture.offset.y = fraction;
-    this.texture.repeat.y = windowFraction;
+    // Binary search for the first beat >= windowStartMs
+    let lo = 0;
+    let hi = this.beats.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (this.beats[mid].msTime < windowStartMs) lo = mid + 1;
+      else hi = mid;
+    }
+
+    let beatPoolIdx = 0;
+    let measurePoolIdx = 0;
+
+    for (let i = lo; i < this.beats.length; i++) {
+      const beat = this.beats[i];
+      if (beat.msTime > windowEndMs) break;
+
+      const worldY = ((beat.msTime - currentTimeMs) / 1000) * this.highwaySpeed - 1;
+
+      if (beat.isMeasure) {
+        const line = this.acquireMeasureLine(measurePoolIdx++);
+        line.position.y = worldY;
+        line.visible = true;
+      } else {
+        const line = this.acquireBeatLine(beatPoolIdx++);
+        line.position.y = worldY;
+        line.visible = true;
+      }
+    }
+
+    // Hide unused pool entries
+    for (let i = beatPoolIdx; i < this.beatLinePool.length; i++) {
+      this.beatLinePool[i].visible = false;
+    }
+    for (let i = measurePoolIdx; i < this.measureLinePool.length; i++) {
+      this.measureLinePool[i].visible = false;
+    }
   }
 
   setVisible(visible: boolean): void {
-    this.mesh.visible = visible;
+    this.group.visible = visible;
   }
 
   dispose(): void {
-    this.mesh.geometry.dispose();
-    this.material.dispose();
-    this.texture.dispose();
+    this.beatGeometry.dispose();
+    this.measureGeometry.dispose();
+    this.beatMaterial.dispose();
+    this.measureMaterial.dispose();
+    // Meshes share geometry and material, so just clear the group
+    for (const child of [...this.group.children]) {
+      this.group.remove(child);
+    }
+    this.beatLinePool = [];
+    this.measureLinePool = [];
   }
 
   // -----------------------------------------------------------------------
-  // Grid rendering
+  // Pool management
+  // -----------------------------------------------------------------------
+
+  private acquireBeatLine(index: number): THREE.Mesh {
+    if (index < this.beatLinePool.length) {
+      return this.beatLinePool[index];
+    }
+    const mesh = new THREE.Mesh(this.beatGeometry, this.beatMaterial);
+    mesh.renderOrder = 2;
+    this.beatLinePool.push(mesh);
+    this.group.add(mesh);
+    return mesh;
+  }
+
+  private acquireMeasureLine(index: number): THREE.Mesh {
+    if (index < this.measureLinePool.length) {
+      return this.measureLinePool[index];
+    }
+    const mesh = new THREE.Mesh(this.measureGeometry, this.measureMaterial);
+    mesh.renderOrder = 2;
+    this.measureLinePool.push(mesh);
+    this.group.add(mesh);
+    return mesh;
+  }
+
+  // -----------------------------------------------------------------------
+  // Beat computation
   // -----------------------------------------------------------------------
 
   /**
-   * Draws beat lines onto the canvas. Uses the tempo map and time signatures
-   * to calculate the millisecond position of each beat, then maps that to
-   * canvas rows using the same resolution as the WaveformSurface.
+   * Pre-compute all beat positions (in ms) for the entire song.
+   * Walks through the tempo map beat-by-beat, tracking time signatures
+   * to determine measure boundaries.
    */
-  private renderGrid(config: GridOverlayConfig): void {
+  private computeBeats(config: GridOverlayConfig): void {
     const {tempos, timeSignatures, resolution, durationMs} = config;
-
-    const durationSec = durationMs / 1000;
-    let pxPerSecond = DEFAULT_PX_PER_SECOND;
-    let canvasHeight = Math.ceil(durationSec * pxPerSecond);
-    if (canvasHeight > MAX_CANVAS_HEIGHT) {
-      pxPerSecond = MAX_CANVAS_HEIGHT / durationSec;
-      canvasHeight = MAX_CANVAS_HEIGHT;
-    }
-    canvasHeight = Math.max(1, canvasHeight);
-
-    this.canvas.width = CANVAS_WIDTH;
-    this.canvas.height = canvasHeight;
-
-    const ctx = this.canvas.getContext('2d')!;
-    ctx.clearRect(0, 0, CANVAS_WIDTH, canvasHeight);
-
     if (tempos.length === 0) return;
 
-    // Build a timed tempo array (tick -> ms)
+    // Build timed tempos
     const timedTempos = buildTimedTempos(tempos, resolution);
 
     // Build time signature map: sorted by tick
     const sortedTS = [...timeSignatures].sort((a, b) => a.tick - b.tick);
-    // Default 4/4 if no time signatures
     if (sortedTS.length === 0) {
       sortedTS.push({tick: 0, numerator: 4, denominator: 4});
     }
@@ -178,7 +276,7 @@ export class GridOverlay {
         sortedTS[tsIdx + 1].tick <= currentTick
       ) {
         tsIdx++;
-        beatInMeasure = 0; // Reset beat counter on TS change
+        beatInMeasure = 0;
       }
 
       const ts = sortedTS[tsIdx];
@@ -186,28 +284,16 @@ export class GridOverlay {
 
       // Convert tick to ms
       const ms = this.tickToMs(currentTick, timedTempos, resolution);
-      // Convert ms to canvas row
-      const row = Math.round((ms / 1000) * pxPerSecond);
-      // Draw row from bottom (same convention as WaveformSurface)
-      const y = canvasHeight - row - 1;
 
-      if (y >= 0 && y < canvasHeight) {
-        const isMeasureBoundary = beatInMeasure === 0;
+      if (ms > durationMs + 1000) break;
 
-        if (isMeasureBoundary) {
-          ctx.fillStyle = MEASURE_LINE_COLOR;
-          ctx.fillRect(0, y - Math.floor(MEASURE_LINE_HEIGHT / 2), CANVAS_WIDTH, MEASURE_LINE_HEIGHT);
-        } else {
-          ctx.fillStyle = BEAT_LINE_COLOR;
-          ctx.fillRect(0, y - Math.floor(BEAT_LINE_HEIGHT / 2), CANVAS_WIDTH, BEAT_LINE_HEIGHT);
-        }
-      }
+      this.beats.push({
+        msTime: ms,
+        isMeasure: beatInMeasure === 0,
+      });
 
       beatInMeasure = (beatInMeasure + 1) % beatsPerMeasure;
       currentTick += resolution; // Advance by one beat (one quarter note)
-
-      // Safety: prevent infinite loop if duration is huge
-      if (ms > durationMs + 1000) break;
     }
   }
 

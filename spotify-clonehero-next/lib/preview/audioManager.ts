@@ -325,6 +325,10 @@ export class AudioManager {
     return this.#isInitialized;
   }
 
+  get duration() {
+    return this.#duration;
+  }
+
   async stop() {
     Object.values(this.#tracks).forEach(track => {
       track.stop();

@@ -262,7 +262,7 @@ export const setupRenderer = (
         highwayWidth: 0.9,
         highwaySpeed,
       };
-      gridOverlay = createGridOverlay(scene, fullConfig);
+      gridOverlay = createGridOverlay(scene, fullConfig, clippingPlanes);
 
       // Apply current mode
       if (highwayMode === 'waveform') {
@@ -356,7 +356,9 @@ export const setupRenderer = (
 
     function animation() {
       const SYNC_MS = (audioManager?.delay || 0) * 1000;
-      const currentMs = (audioManager?.currentTime ?? 0) * 1000;
+      const durationMs = (audioManager?.duration ?? Infinity) * 1000;
+      const rawMs = (audioManager?.currentTime ?? 0) * 1000;
+      const currentMs = Math.min(rawMs, durationMs);
       const elapsedTime = currentMs - SYNC_MS;
 
       if (
@@ -366,12 +368,12 @@ export const setupRenderer = (
       ) {
         // Update animated textures only during playback
         animatedTextureManager.tick();
+      }
 
-        // Scroll the highway background texture
-        const scrollPosition = -1 * (elapsedTime / 1000) * highwaySpeed;
-        if (highwayTexture) {
-          highwayTexture.offset.y = -1 * scrollPosition;
-        }
+      // Scroll the highway background texture (always, so it stays in sync after seeking)
+      const scrollPosition = -1 * (elapsedTime / 1000) * highwaySpeed;
+      if (highwayTexture) {
+        highwayTexture.offset.y = -1 * scrollPosition;
       }
 
       // Always update note positions (editor needs this when paused too)

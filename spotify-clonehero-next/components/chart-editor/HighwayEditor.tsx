@@ -27,8 +27,10 @@ import {
 } from './commands';
 import {
   buildTimedTempos,
+  tickToMs,
   msToTick,
   snapToGrid,
+  getNextGridTick,
 } from '@/lib/drum-transcription/timing';
 import type {DrumNote} from '@/lib/chart-edit';
 import {getDrumNotes} from '@/lib/chart-edit';
@@ -95,12 +97,16 @@ export default function HighwayEditor({
   const interactionRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Three.js renderer handle for coordinate mapping
+  // Three.js renderer handle for coordinate mapping.
+  // rendererVersion is bumped whenever the handle changes so that useEffects
+  // that depend on it re-run (refs alone don't trigger re-renders).
   const rendererHandleRef = useRef<HighwayRendererHandle | null>(null);
+  const [rendererVersion, setRendererVersion] = useState(0);
 
   const handleRendererReady = useCallback(
     (handle: HighwayRendererHandle | null) => {
       rendererHandleRef.current = handle;
+      setRendererVersion(v => v + 1);
       // Wire NotesManager to the shared context ref for incremental updates
       if (handle) {
         handle.getNotesManager().then(nm => {
@@ -181,7 +187,7 @@ export default function HighwayEditor({
     handle.getInteractionManager().then(im => {
       interactionManagerRef.current = im;
     });
-  }, [rendererHandleRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rendererVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------------------------------------------------------------------------
   // Waveform / Grid surface setup
@@ -196,7 +202,7 @@ export default function HighwayEditor({
       channels: audioChannels,
       durationMs: durationSeconds * 1000,
     });
-  }, [rendererHandleRef.current, audioData, audioChannels, durationSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rendererVersion, audioData, audioChannels, durationSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Send grid data (tempos + time signatures) to the renderer
   useEffect(() => {
@@ -217,14 +223,14 @@ export default function HighwayEditor({
       resolution: state.chartDoc.chartTicksPerBeat,
       durationMs: durationSeconds * 1000,
     });
-  }, [rendererHandleRef.current, state.chartDoc, durationSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rendererVersion, state.chartDoc, durationSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync highway mode from context to renderer
   useEffect(() => {
     const handle = rendererHandleRef.current;
     if (!handle) return;
     handle.setHighwayMode(state.highwayMode);
-  }, [rendererHandleRef.current, state.highwayMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rendererVersion, state.highwayMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------------------------------------------------------------------------
   // Coordinate helpers via InteractionManager
@@ -491,9 +497,7 @@ export default function HighwayEditor({
 
       // Update note hover highlight via NotesManager
       const hoveredNoteId = hit?.type === 'note' ? hit.noteId : null;
-      rendererHandleRef.current?.getNotesManager().then(nm => {
-        nm.setHoveredNoteId(hoveredNoteId);
-      });
+      notesManagerRef.current?.setHoveredNoteId(hoveredNoteId);
 
       if (dragStart) {
         setDragCurrent(coords);
@@ -658,14 +662,63 @@ export default function HighwayEditor({
     setHoveredHitType(null);
     setIsErasing(false);
     // Clear note hover highlight
-    rendererHandleRef.current?.getNotesManager().then(nm => {
-      nm.setHoveredNoteId(null);
-    });
+    notesManagerRef.current?.setHoveredNoteId(null);
     if (!isDragging && !isDraggingSection) {
       setDragStart(null);
       setDragCurrent(null);
     }
   }, [isDragging, isDraggingSection]);
+
+  // ---------------------------------------------------------------------------
+  // Wheel scrolling -- scrub cursor forward/backward by one grid step
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    const el = interactionRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (state.isPlaying || !state.chartDoc) return;
+      e.preventDefault();
+
+      // deltaY < 0 = wheel up = scroll forward (later in song)
+      // deltaY > 0 = wheel down = scroll backward (earlier in song)
+      const direction: 1 | -1 = e.deltaY < 0 ? 1 : -1;
+      const newTick = getNextGridTick(
+        state.cursorTick,
+        direction,
+        state.gridDivision,
+        state.chartDoc.chartTicksPerBeat,
+      );
+
+      // Clamp to song duration
+      const am = audioManagerRef.current;
+      if (am && timedTempos.length > 0) {
+        const ms = tickToMs(newTick, timedTempos, resolution);
+        if (ms / 1000 > am.duration) return;
+      }
+
+      dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
+
+      // Seek AudioManager to the new cursor position
+      if (am && timedTempos.length > 0) {
+        const ms = tickToMs(newTick, timedTempos, resolution);
+        am.play({time: ms / 1000}).then(() => am.pause());
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, {passive: false});
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [
+    state.isPlaying,
+    state.chartDoc,
+    state.cursorTick,
+    state.gridDivision,
+    timedTempos,
+    resolution,
+    audioManagerRef,
+    dispatch,
+  ]);
 
   // ---------------------------------------------------------------------------
   // Popover submit handlers

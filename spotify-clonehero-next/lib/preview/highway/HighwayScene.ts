@@ -27,14 +27,15 @@ export function createWaveformSurface(
 }
 
 /**
- * Creates a GridOverlay and adds it to the scene at renderOrder 1.
+ * Creates a GridOverlay and adds it to the scene.
  * Returns the instance for update/dispose lifecycle management.
  */
 export function createGridOverlay(
   scene: THREE.Scene,
   config: GridOverlayConfig,
+  clippingPlanes?: THREE.Plane[],
 ): GridOverlay {
-  const overlay = new GridOverlay(config);
+  const overlay = new GridOverlay(config, clippingPlanes);
   scene.add(overlay.getMesh());
   return overlay;
 }

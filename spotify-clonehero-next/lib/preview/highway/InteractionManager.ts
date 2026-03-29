@@ -222,12 +222,56 @@ export class InteractionManager {
     const ms = this.worldYToMs(hit.y);
     const tick = this.msToTickSnapped(ms, gridDivision);
 
+    // Check for kick notes at this position. Kick notes span the full
+    // highway width, so a click anywhere on the highway at a kick's
+    // tick position should select the kick note -- but only if the
+    // click wasn't on a specific pad lane. Pad notes have higher
+    // specificity; if the raycast missed a pad sprite, the user
+    // probably intended to click empty highway, not a kick.
+    if (lane === 0) {
+      const kickHit = this.hitTestKickAtTick(tick, ms);
+      if (kickHit) return kickHit;
+    }
+
     return {
       type: 'highway',
       lane,
       tick,
       ms,
     };
+  }
+
+  /**
+   * Check if there is a kick note at the given tick position.
+   * Returns a note HitResult if found, null otherwise.
+   */
+  private hitTestKickAtTick(tick: number, ms: number): HitResult {
+    const prepared = this.notesManager.getPreparedNotes();
+    if (prepared.length === 0) return null;
+    // Tolerance: check notes within a small ms range around the click
+    const tolerance = 15; // ms
+    // Binary search for the first note >= ms - tolerance
+    let lo = 0;
+    let hi = prepared.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (prepared[mid].msTime < ms - tolerance) lo = mid + 1;
+      else hi = mid;
+    }
+    for (let i = lo; i < prepared.length; i++) {
+      const pn = prepared[i];
+      if (pn.msTime > ms + tolerance) break;
+      if (!pn.isKick) continue;
+      const noteId = `${pn.note.tick ?? 0}:${pn.note.type}`;
+      return {
+        type: 'note',
+        noteId,
+        note: pn,
+        lane: 0,
+        tick: pn.note.tick ?? 0,
+      };
+    }
+    return null;
   }
 
   // -----------------------------------------------------------------------

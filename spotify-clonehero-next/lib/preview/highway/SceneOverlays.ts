@@ -365,9 +365,11 @@ export class SceneOverlays {
   // -----------------------------------------------------------------------
 
   private createLaneDividers(): void {
-    const sortedLaneXs = LANE_X_POSITIONS.slice().sort((a, b) => a - b);
-    for (let i = 0; i < sortedLaneXs.length - 1; i++) {
-      const boundaryX = (sortedLaneXs[i] + sortedLaneXs[i + 1]) / 2;
+    // Only draw dividers between the 4 pad lanes (red, yellow, blue, green).
+    // Kick (lane 0, x=0) spans the full highway width and should not have dividers.
+    const padLaneXs = LANE_X_POSITIONS.slice(1).sort((a, b) => a - b);
+    for (let i = 0; i < padLaneXs.length - 1; i++) {
+      const boundaryX = (padLaneXs[i] + padLaneXs[i + 1]) / 2;
 
       const geometry = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(boundaryX, -1.5, 0),
@@ -593,13 +595,17 @@ export class SceneOverlays {
     if (state.activeTool !== 'place' || state.isPlaying) return;
     if (this.timedTempos.length === 0) return;
 
-    const cursorTick = state.cursorTick;
-    const cursorMs = this.tickToMs(cursorTick);
-    const cursorWorldY = this.msToWorldY(cursorMs, elapsedMs);
+    // Ghost notes follow the hover position (where the user would click)
+    // rather than the cursor position (which may be elsewhere).
+    if (state.hoverTick === null) return;
 
-    if (cursorWorldY < -1.2 || cursorWorldY > 1.1) return;
+    const ghostTick = state.hoverTick;
+    const ghostMs = this.tickToMs(ghostTick);
+    const ghostWorldY = this.msToWorldY(ghostMs, elapsedMs);
 
-    // Show ghost notes at cursor position for all lanes
+    if (ghostWorldY < -1.2 || ghostWorldY > 1.1) return;
+
+    // Show ghost note outlines at the hover tick for all lanes
     for (let lane = 0; lane < NUM_LANES; lane++) {
       // Ensure we have enough ghost note meshes
       while (this.ghostNoteMeshes.length <= lane) {
@@ -619,42 +625,37 @@ export class SceneOverlays {
       }
 
       const mesh = this.ghostNoteMeshes[lane];
-      mesh.position.set(LANE_X_POSITIONS[lane], cursorWorldY, 0.001);
+      mesh.position.set(LANE_X_POSITIONS[lane], ghostWorldY, 0.001);
       mesh.visible = true;
     }
 
-    // Hover ghost (brighter, at hover position)
-    if (state.hoverLane !== null && state.hoverTick !== null) {
-      const hoverMs = this.tickToMs(state.hoverTick);
-      const hoverWorldY = this.msToWorldY(hoverMs, elapsedMs);
-
-      if (hoverWorldY >= -1.2 && hoverWorldY <= 1.1) {
-        if (!this.hoverGhostMesh) {
-          const geometry = new THREE.PlaneGeometry(SCALE * 1.2, SCALE * 0.5);
-          const material = new THREE.MeshBasicMaterial({
-            color: 0xffffff,
-            transparent: true,
-            opacity: 0.5,
-            depthTest: false,
-            side: THREE.DoubleSide,
-          });
-          material.clippingPlanes = this.clippingPlanes;
-          this.hoverGhostMesh = new THREE.Mesh(geometry, material);
-          this.hoverGhostMesh.renderOrder = 7;
-          this.ghostNoteGroup.add(this.hoverGhostMesh);
-        }
-
-        (this.hoverGhostMesh.material as THREE.MeshBasicMaterial).color.set(
-          LANE_COLORS_HEX[state.hoverLane],
-        );
-        (this.hoverGhostMesh.material as THREE.MeshBasicMaterial).opacity = 0.5;
-        this.hoverGhostMesh.position.set(
-          LANE_X_POSITIONS[state.hoverLane],
-          hoverWorldY,
-          0.001,
-        );
-        this.hoverGhostMesh.visible = true;
+    // Hover ghost: brighter highlight at the specific hovered lane
+    if (state.hoverLane !== null) {
+      if (!this.hoverGhostMesh) {
+        const geometry = new THREE.PlaneGeometry(SCALE * 1.2, SCALE * 0.5);
+        const material = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.5,
+          depthTest: false,
+          side: THREE.DoubleSide,
+        });
+        material.clippingPlanes = this.clippingPlanes;
+        this.hoverGhostMesh = new THREE.Mesh(geometry, material);
+        this.hoverGhostMesh.renderOrder = 7;
+        this.ghostNoteGroup.add(this.hoverGhostMesh);
       }
+
+      (this.hoverGhostMesh.material as THREE.MeshBasicMaterial).color.set(
+        LANE_COLORS_HEX[state.hoverLane],
+      );
+      (this.hoverGhostMesh.material as THREE.MeshBasicMaterial).opacity = 0.5;
+      this.hoverGhostMesh.position.set(
+        LANE_X_POSITIONS[state.hoverLane],
+        ghostWorldY,
+        0.001,
+      );
+      this.hoverGhostMesh.visible = true;
     }
   }
 

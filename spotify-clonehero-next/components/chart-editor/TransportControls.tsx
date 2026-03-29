@@ -82,11 +82,11 @@ export default function TransportControls({
   // Update current time display via animation frame
   const updateTime = useCallback(() => {
     if (audioManager.isInitialized) {
-      setCurrentTime(audioManager.currentTime);
+      setCurrentTime(Math.min(audioManager.currentTime, durationSeconds));
     }
     setIsPlaying(audioManager.isPlaying);
     animationFrameRef.current = requestAnimationFrame(updateTime);
-  }, [audioManager]);
+  }, [audioManager, durationSeconds]);
 
   useEffect(() => {
     animationFrameRef.current = requestAnimationFrame(updateTime);
