@@ -21,6 +21,8 @@ import {getDrumNotes} from '@/lib/chart-edit';
 import {
   buildTimedTempos,
   tickToMs,
+  msToTick,
+  snapToGrid,
   getNextGridTick,
   getNextMeasureTick,
 } from '@/lib/drum-transcription/timing';
@@ -105,6 +107,23 @@ export function useEditorKeyboard(
       t => t.instrument === 'drums' && t.difficulty === 'expert',
     ) ?? null;
   }, [state.chartDoc]);
+
+  // Helper: sync cursor tick from current audio position.
+  // After playback or timeline clicks, the audio position may have moved
+  // without updating cursorTick. This returns the current audio position
+  // snapped to the grid, suitable as a base for grid navigation.
+  const getCursorFromAudio = useCallback((): number => {
+    const am = audioManagerRef.current;
+    if (!am || !state.chartDoc) return state.cursorTick;
+    const timedTempos = buildTimedTempos(
+      state.chartDoc.tempos,
+      state.chartDoc.chartTicksPerBeat,
+    );
+    if (timedTempos.length === 0) return state.cursorTick;
+    const currentMs = am.currentTime * 1000;
+    const tick = msToTick(currentMs, timedTempos, state.chartDoc.chartTicksPerBeat);
+    return snapToGrid(tick, state.chartDoc.chartTicksPerBeat, state.gridDivision);
+  }, [audioManagerRef, state.chartDoc, state.cursorTick, state.gridDivision]);
 
   // Helper: seek AudioManager to a tick position (without starting playback)
   const seekToTick = useCallback(
@@ -259,8 +278,9 @@ export function useEditorKeyboard(
   // -----------------------------------------------------------------------
   useHotkey('ArrowUp', () => {
     if (state.isPlaying || !state.chartDoc) return;
+    const baseTick = getCursorFromAudio();
     const newTick = getNextGridTick(
-      state.cursorTick,
+      baseTick,
       1,
       state.gridDivision,
       state.chartDoc.chartTicksPerBeat,
@@ -271,8 +291,9 @@ export function useEditorKeyboard(
 
   useHotkey('ArrowRight', () => {
     if (state.isPlaying || !state.chartDoc) return;
+    const baseTick = getCursorFromAudio();
     const newTick = getNextGridTick(
-      state.cursorTick,
+      baseTick,
       1,
       state.gridDivision,
       state.chartDoc.chartTicksPerBeat,
@@ -283,8 +304,9 @@ export function useEditorKeyboard(
 
   useHotkey('ArrowDown', () => {
     if (state.isPlaying || !state.chartDoc) return;
+    const baseTick = getCursorFromAudio();
     const newTick = getNextGridTick(
-      state.cursorTick,
+      baseTick,
       -1,
       state.gridDivision,
       state.chartDoc.chartTicksPerBeat,
@@ -295,8 +317,9 @@ export function useEditorKeyboard(
 
   useHotkey('ArrowLeft', () => {
     if (state.isPlaying || !state.chartDoc) return;
+    const baseTick = getCursorFromAudio();
     const newTick = getNextGridTick(
-      state.cursorTick,
+      baseTick,
       -1,
       state.gridDivision,
       state.chartDoc.chartTicksPerBeat,
@@ -310,8 +333,9 @@ export function useEditorKeyboard(
   // -----------------------------------------------------------------------
   useHotkey('Mod+ArrowUp', () => {
     if (state.isPlaying || !state.chartDoc) return;
+    const baseTick = getCursorFromAudio();
     const newTick = getNextMeasureTick(
-      state.cursorTick,
+      baseTick,
       1,
       state.chartDoc.chartTicksPerBeat,
       state.chartDoc.timeSignatures,
@@ -322,8 +346,9 @@ export function useEditorKeyboard(
 
   useHotkey('Mod+ArrowRight', () => {
     if (state.isPlaying || !state.chartDoc) return;
+    const baseTick = getCursorFromAudio();
     const newTick = getNextMeasureTick(
-      state.cursorTick,
+      baseTick,
       1,
       state.chartDoc.chartTicksPerBeat,
       state.chartDoc.timeSignatures,
@@ -334,8 +359,9 @@ export function useEditorKeyboard(
 
   useHotkey('Mod+ArrowDown', () => {
     if (state.isPlaying || !state.chartDoc) return;
+    const baseTick = getCursorFromAudio();
     const newTick = getNextMeasureTick(
-      state.cursorTick,
+      baseTick,
       -1,
       state.chartDoc.chartTicksPerBeat,
       state.chartDoc.timeSignatures,
@@ -346,8 +372,9 @@ export function useEditorKeyboard(
 
   useHotkey('Mod+ArrowLeft', () => {
     if (state.isPlaying || !state.chartDoc) return;
+    const baseTick = getCursorFromAudio();
     const newTick = getNextMeasureTick(
-      state.cursorTick,
+      baseTick,
       -1,
       state.chartDoc.chartTicksPerBeat,
       state.chartDoc.timeSignatures,

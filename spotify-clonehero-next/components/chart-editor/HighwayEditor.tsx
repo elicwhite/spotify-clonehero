@@ -685,29 +685,22 @@ export default function HighwayEditor({
       if (state.isPlaying || !state.chartDoc) return;
       e.preventDefault();
 
-      // deltaY < 0 = wheel up = scroll forward (later in song)
-      // deltaY > 0 = wheel down = scroll backward (earlier in song)
-      const direction: 1 | -1 = e.deltaY < 0 ? 1 : -1;
-      const newTick = getNextGridTick(
-        state.cursorTick,
-        direction,
-        state.gridDivision,
-        state.chartDoc.chartTicksPerBeat,
-      );
-
-      // Clamp to song duration
       const am = audioManagerRef.current;
-      if (am && timedTempos.length > 0) {
-        const ms = tickToMs(newTick, timedTempos, resolution);
-        if (ms / 1000 > am.duration) return;
-      }
+      if (!am) return;
 
-      dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
+      // Scroll by a fixed time amount per wheel tick (100ms).
+      // deltaY < 0 = wheel up = scroll forward, deltaY > 0 = backward.
+      const SCROLL_STEP_MS = 25;
+      const direction = e.deltaY < 0 ? 1 : -1;
+      const currentMs = am.currentTime * 1000;
+      const targetMs = Math.max(0, Math.min(currentMs + direction * SCROLL_STEP_MS, am.duration * 1000));
 
-      // Seek AudioManager to the new cursor position
-      if (am && timedTempos.length > 0) {
-        const ms = tickToMs(newTick, timedTempos, resolution);
-        am.play({time: ms / 1000}).then(() => am.pause());
+      am.play({time: targetMs / 1000}).then(() => am.pause());
+
+      // Update cursor tick to match
+      if (timedTempos.length > 0) {
+        const tick = msToTick(targetMs, timedTempos, state.chartDoc.chartTicksPerBeat);
+        dispatch({type: 'SET_CURSOR_TICK', tick});
       }
     };
 
@@ -785,7 +778,7 @@ export default function HighwayEditor({
 
     // Push overlay state to the Three.js render loop
     handle.setOverlayState({
-      cursorTick: state.cursorTick,
+      cursorTick: hoverTick ?? state.cursorTick,
       isPlaying: state.isPlaying,
       activeTool: state.activeTool,
       hoverLane,
