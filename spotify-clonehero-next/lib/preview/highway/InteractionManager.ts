@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import {SceneOverlays} from './SceneOverlays';
 import type {SceneReconciler} from './SceneReconciler';
 import {NoteRenderer, type NoteElementData} from './NoteRenderer';
+import type {MarkerElementData} from './MarkerRenderer';
 import {
   type HitResult,
   calculateNoteXOffset,
@@ -33,7 +33,6 @@ const LANE_X_POSITIONS = [
 export class InteractionManager {
   private camera: THREE.PerspectiveCamera;
   private reconciler: SceneReconciler;
-  private sceneOverlays: SceneOverlays | null;
   private highwaySpeed: number;
 
   private raycaster = new THREE.Raycaster();
@@ -59,13 +58,11 @@ export class InteractionManager {
   constructor(
     camera: THREE.PerspectiveCamera,
     reconciler: SceneReconciler,
-    sceneOverlays: SceneOverlays | null,
     highwaySpeed: number,
     getElapsedMs: () => number,
   ) {
     this.camera = camera;
     this.reconciler = reconciler;
-    this.sceneOverlays = sceneOverlays;
     this.highwaySpeed = highwaySpeed;
     this.getElapsedMs = getElapsedMs;
   }
@@ -183,60 +180,48 @@ export class InteractionManager {
   // -----------------------------------------------------------------------
   // Section hit testing
   //
-  // Sections are rendered as flat quads at known Y positions. Rather than
-  // raycasting against the banner meshes (which are pooled and swapped
-  // frequently), we use the same world-space Y tolerance approach used
-  // by the old HighwayEditor.tsx -- project each section's world Y to
-  // screen space and check pixel distance.
+  // Sections are ChartElements in the reconciler with key `section:{tick}`.
+  // We project each visible section's world Y to screen space and check
+  // pixel distance.
   // -----------------------------------------------------------------------
 
   /** Tolerance in CSS pixels for section banner hit detection. */
   private static readonly SECTION_HIT_TOLERANCE_PX = 14;
 
   private hitTestSections(
-    canvasX: number,
+    _canvasX: number,
     canvasY: number,
-    canvasW: number,
+    _canvasW: number,
     canvasH: number,
   ): HitResult {
-    if (!this.sceneOverlays || this.timedTempos.length === 0) return null;
-
-    const elapsedMs = this.getElapsedMs();
-    const sections = this.lastSections;
-    if (!sections || sections.length === 0) return null;
+    if (this.timedTempos.length === 0) return null;
 
     const tempWorld = new THREE.Vector3();
 
-    for (const section of sections) {
-      const sectionMs = this.tickToMs(section.tick);
-      const worldY = this.msToWorldY(sectionMs, elapsedMs);
+    // Iterate active groups looking for section elements
+    for (const [key, group] of this.reconciler.getActiveGroups()) {
+      if (!key.startsWith('section:')) continue;
 
-      // Quick cull: skip if off-screen in world space
-      if (worldY < -1.2 || worldY > 1.1) continue;
-
-      // Project to screen space
-      tempWorld.set(0, worldY, 0);
+      // Project group Y to screen Y
+      tempWorld.set(0, group.position.y, 0);
       const projected = tempWorld.project(this.camera);
       const screenY = ((-projected.y + 1) / 2) * canvasH;
 
       if (Math.abs(screenY - canvasY) <= InteractionManager.SECTION_HIT_TOLERANCE_PX) {
+        const el = this.reconciler.getElement(key);
+        if (!el) continue;
+        const data = el.data as MarkerElementData;
+        // Extract tick from key: 'section:480' -> 480
+        const tick = parseInt(key.slice('section:'.length), 10);
         return {
           type: 'section',
-          tick: section.tick,
-          name: section.name,
+          tick,
+          name: data.text,
         };
       }
     }
 
     return null;
-  }
-
-  /** Sections data, updated from HighwayEditor when overlay state changes. */
-  private lastSections: {tick: number; name: string}[] = [];
-
-  /** Update the sections list for section hit-testing. */
-  setSections(sections: {tick: number; name: string}[]): void {
-    this.lastSections = sections;
   }
 
   // -----------------------------------------------------------------------

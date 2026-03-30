@@ -6,7 +6,7 @@ import {useChartEditorContext} from '../ChartEditorContext';
 import {writeChart} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {EditCommand} from '../commands';
-import {trackToElements} from '@/lib/preview/highway/trackToElements';
+import {chartToElements} from '@/lib/preview/highway/chartToElements';
 
 /** Default modifiers for pro drums chart parsing. */
 const PRO_DRUMS_MODIFIERS = {
@@ -54,7 +54,7 @@ export function useExecuteCommand() {
           t => t.instrument === 'drums' && t.difficulty === 'expert',
         );
         if (newTrack) {
-          reconciler.setElements(trackToElements(newTrack));
+          reconciler.setElements(chartToElements(newChart, newTrack));
         }
       }
 
@@ -92,7 +92,7 @@ export function useUndoRedo() {
         t => t.instrument === 'drums' && t.difficulty === 'expert',
       );
       if (prevTrack) {
-        reconciler.setElements(trackToElements(prevTrack));
+        reconciler.setElements(chartToElements(prevChart, prevTrack));
       }
     }
 
@@ -116,7 +116,7 @@ export function useUndoRedo() {
         t => t.instrument === 'drums' && t.difficulty === 'expert',
       );
       if (redoTrack) {
-        reconciler.setElements(trackToElements(redoTrack));
+        reconciler.setElements(chartToElements(redoChart, redoTrack));
       }
     }
 

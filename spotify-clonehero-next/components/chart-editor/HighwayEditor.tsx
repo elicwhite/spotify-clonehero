@@ -41,6 +41,7 @@ import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {InteractionManager} from '@/lib/preview/highway';
 import type {HitResult} from '@/lib/preview/highway';
+import {chartToElements} from '@/lib/preview/highway/chartToElements';
 import {parseChartFile} from '@eliwhite/scan-chart';
 type ParsedChart = ReturnType<typeof parseChartFile>;
 import {Input} from '@/components/ui/input';
@@ -783,15 +784,6 @@ export default function HighwayEditor({
       activeTool: state.activeTool,
       hoverLane,
       hoverTick,
-      sections: state.chartDoc?.sections ?? [],
-      selectedSectionTick: state.selectedSectionTick,
-      sectionDrag: isDraggingSection && sectionDragTick !== null
-        ? {
-            originalTick: sectionDragOriginalTick,
-            currentTick: sectionDragTick,
-            name: sectionDragName,
-          }
-        : null,
       loopRegion: state.loopRegion,
     });
 
@@ -807,10 +799,6 @@ export default function HighwayEditor({
       nr.setReviewedNoteIds(reviewedNoteIds ?? null);
     }
 
-    // Push sections to InteractionManager for section hit-testing
-    handle.getInteractionManager().then(im => {
-      im?.setSections(state.chartDoc?.sections ?? []);
-    });
   }, [
     state.cursorTick,
     state.isPlaying,
@@ -821,10 +809,6 @@ export default function HighwayEditor({
     state.loopRegion,
     hoverLane,
     hoverTick,
-    isDraggingSection,
-    sectionDragTick,
-    sectionDragOriginalTick,
-    sectionDragName,
     confidence,
     showConfidence,
     confidenceThreshold,
@@ -838,6 +822,21 @@ export default function HighwayEditor({
     if (!handle || timedTempos.length === 0) return;
     handle.setTimingData(timedTempos, resolution);
   }, [timedTempos, resolution]);
+
+  // Push full chart elements (notes + markers) to reconciler when chart
+  // changes or reconciler first becomes available. This ensures marker
+  // elements (sections, lyrics, BPM, TS, phrases) are present from the
+  // start, not only after the first edit command.
+  useEffect(() => {
+    const reconciler = reconcilerRef.current;
+    if (!reconciler || !state.chart) return;
+    const track = state.chart.trackData.find(
+      t => t.instrument === 'drums' && t.difficulty === 'expert',
+    );
+    if (track) {
+      reconciler.setElements(chartToElements(state.chart, track));
+    }
+  }, [reconcilerRef, state.chart, rendererVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------------------------------------------------------------------------
   // Sync cursor tick with playback

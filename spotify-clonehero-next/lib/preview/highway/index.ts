@@ -22,19 +22,23 @@ import {SceneOverlays, type OverlayState} from './SceneOverlays';
 import {InteractionManager} from './InteractionManager';
 import {SceneReconciler, type ChartElement} from './SceneReconciler';
 import {NoteRenderer} from './NoteRenderer';
+import {MarkerRenderer} from './MarkerRenderer';
 import {trackToElements} from './trackToElements';
+import {chartToElements} from './chartToElements';
 import type {Track} from './types';
 
 // Re-export public types, constants, and utilities
 export {type SelectedTrack, type Song, type HitResult, type PreparedNote, SCALE, NOTE_SPAN_WIDTH, PAD_TO_HIGHWAY_LANE, calculateNoteXOffset} from './types';
 export {NotesManager, type NotesDiff} from './NotesManager';
 export {areAnimationsSupported} from './TextureManager';
-export {SceneOverlays, type OverlayState, type SectionData} from './SceneOverlays';
+export {SceneOverlays, type OverlayState} from './SceneOverlays';
 export {InteractionManager} from './InteractionManager';
 export {type HighwayMode} from './HighwayScene';
 export {SceneReconciler, type ChartElement} from './SceneReconciler';
 export {NoteRenderer} from './NoteRenderer';
+export {MarkerRenderer} from './MarkerRenderer';
 export {trackToElements} from './trackToElements';
+export {chartToElements} from './chartToElements';
 
 let instanceCounter = 0;
 
@@ -160,6 +164,7 @@ export const setupRenderer = (
           interactionManager?.dispose();
           reconciler.dispose();
           nr.dispose();
+          MarkerRenderer.clearTextureCache();
         } catch {
           // Ignore errors during cleanup
         }
@@ -328,14 +333,32 @@ export const setupRenderer = (
     // Create NoteRenderer for the reconciler
     const noteRenderer = new NoteRenderer(getTextureForNote, clippingPlanes);
 
-    // Create SceneReconciler with NoteRenderer
+    // Create marker renderers for all marker types
+    const sectionRenderer = new MarkerRenderer(clippingPlanes, 'right', [0, 200, 40]);
+    const lyricRenderer = new MarkerRenderer(clippingPlanes, 'left', [40, 120, 255]);
+    const phraseStartRenderer = new MarkerRenderer(clippingPlanes, 'left', [40, 120, 255]);
+    const phraseEndRenderer = new MarkerRenderer(clippingPlanes, 'left', [40, 120, 255]);
+    const bpmRenderer = new MarkerRenderer(clippingPlanes, 'left', [180, 40, 255]);
+    const tsRenderer = new MarkerRenderer(clippingPlanes, 'right', [255, 80, 60]);
+
+    // Create SceneReconciler with all renderers
     const reconciler = new SceneReconciler(
       scene,
-      {note: noteRenderer},
+      {
+        note: noteRenderer,
+        section: sectionRenderer,
+        lyric: lyricRenderer,
+        'phrase-start': phraseStartRenderer,
+        'phrase-end': phraseEndRenderer,
+        bpm: bpmRenderer,
+        ts: tsRenderer,
+      },
       highwaySpeed,
     );
 
     // Convert track to elements and set on the reconciler
+    // (notes only -- chartToElements requires the full ParsedChart,
+    // which is provided by useEditCommands when the chart loads)
     const elements = trackToElements(track);
     reconciler.setElements(elements);
 
@@ -354,7 +377,6 @@ export const setupRenderer = (
       ? new InteractionManager(
           camera,
           reconciler,
-          sceneOverlays,
           highwaySpeed,
           getElapsedMs,
         )
