@@ -6,6 +6,7 @@ import {Loader2, AlertCircle} from 'lucide-react';
 import {toast} from 'sonner';
 
 import {AudioManager} from '@/lib/preview/audioManager';
+import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import {
   getProject,
   readProjectText,
@@ -396,6 +397,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
         await audioManager.ready;
         if (cancelled) return;
 
+        audioManager.setChartDelay(getChartDelayMs(chartDoc.metadata) / 1000);
         audioManagerRef.current = audioManager;
 
         // 11. Update editor state

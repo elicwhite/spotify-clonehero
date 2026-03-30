@@ -369,7 +369,7 @@ export const setupRenderer = (
 
     // Create InteractionManager for drum tracks (editor use)
     const getElapsedMs = () => {
-      const currentMs = (audioManager?.currentTime ?? 0) * 1000;
+      const currentMs = (audioManager?.chartTime ?? 0) * 1000;
       const delay = (audioManager?.delay || 0) * 1000;
       return currentMs - delay;
     };
@@ -410,10 +410,8 @@ export const setupRenderer = (
       // without offset — otherwise resuming creates a visible jump-back.
       const isPlaying = audioManager?.isPlaying && audioManager?.isInitialized;
       const SYNC_MS = isPlaying ? (audioManager?.delay || 0) * 1000 : 0;
-      const durationMs = (audioManager?.duration ?? Infinity) * 1000;
-      const rawMs = (audioManager?.currentTime ?? 0) * 1000;
-      const currentMs = Math.min(rawMs, durationMs);
-      const elapsedTime = currentMs - SYNC_MS;
+      const chartMs = (audioManager?.chartTime ?? 0) * 1000;
+      const elapsedTime = chartMs - SYNC_MS;
 
       if (
         audioManager != null &&

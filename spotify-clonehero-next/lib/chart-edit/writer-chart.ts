@@ -174,7 +174,8 @@ function serializeSongSection(doc: ChartDocument): string[] {
   lines.push(`  Resolution = ${doc.chartTicksPerBeat}`);
 
   if (doc.metadata.delay != null && doc.metadata.delay !== 0) {
-    lines.push(`  Offset = ${doc.metadata.delay}`);
+    // .chart Offset field is in seconds; metadata.delay is in milliseconds
+    lines.push(`  Offset = ${doc.metadata.delay / 1000}`);
   }
 
   // Audio stream references from assets

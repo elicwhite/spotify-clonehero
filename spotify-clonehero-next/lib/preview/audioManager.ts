@@ -42,6 +42,15 @@ export class AudioManager {
   // it after async operations to bail out if a newer call has started.
   #playGeneration: number = 0;
 
+  /**
+   * Chart delay in seconds. Positive = audio has lead-in silence before chart
+   * starts. Set via setChartDelay() after construction.
+   *
+   * chartTime = currentTime - chartDelay
+   * audioTime = chartTime + chartDelay
+   */
+  #chartDelay: number = 0;
+
   ready: Promise<void>;
 
   constructor(audioFiles: Files, onSongEnded: () => void) {
@@ -327,6 +336,38 @@ export class AudioManager {
 
   get duration() {
     return this.#duration;
+  }
+
+  /**
+   * Chart delay in seconds. Positive = audio has lead-in before chart.
+   */
+  get chartDelay() {
+    return this.#chartDelay;
+  }
+
+  /**
+   * Set the chart delay (in seconds). Call after construction when chart
+   * metadata is available.
+   */
+  setChartDelay(delaySec: number) {
+    this.#chartDelay = delaySec;
+  }
+
+  /**
+   * Current playback position in chart-relative seconds.
+   * Accounts for the chart delay: chartTime = currentTime - chartDelay.
+   * Use this for note positioning, display, seeking to chart positions.
+   */
+  get chartTime() {
+    return this.currentTime - this.#chartDelay;
+  }
+
+  /**
+   * Seek to a chart-relative time position (in seconds).
+   * Internally adds chartDelay to get the audio time.
+   */
+  async playChartTime(chartTimeSec: number) {
+    return this.play({time: chartTimeSec + this.#chartDelay});
   }
 
   async stop() {

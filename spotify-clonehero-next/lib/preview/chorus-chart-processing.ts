@@ -19,6 +19,25 @@ export type Files = {fileName: string; data: Uint8Array}[];
 
 export async function getChartAndAudioFiles(chart: ChartResponseEncore) {
   const files = await getChartFiles(chart);
+
+  // Parse song.ini to extract delay for the iniChartModifiers.
+  // scan-chart reads delay from modifiers for MIDI files (patched).
+  let iniDelay: number | undefined;
+  const iniFile = files.find(f => hasIniName(f.fileName));
+  if (iniFile) {
+    const iniText = new TextDecoder().decode(iniFile.data);
+    const delayMatch = iniText.match(/^\s*delay\s*=\s*(-?\d+)/mi);
+    if (delayMatch) {
+      iniDelay = parseInt(delayMatch[1], 10);
+    }
+    if (iniDelay === undefined) {
+      const offsetMatch = iniText.match(/^\s*chart_offset\s*=\s*(-?[\d.]+)/mi);
+      if (offsetMatch) {
+        iniDelay = Math.round(parseFloat(offsetMatch[1]) * 1000);
+      }
+    }
+  }
+
   const [parsedChart, audioFiles] = await Promise.all([
     (async () => {
       const {chartData, format} = findChartData(files);
@@ -34,6 +53,8 @@ export async function getChartAndAudioFiles(chart: ChartResponseEncore) {
           pro_drums: false,
         },
         chart,
+        // Pass delay from song.ini so scan-chart includes it in metadata
+        iniDelay !== undefined ? {delay: iniDelay} : {},
       );
       return parseChartFile(chartData, format, iniChartModifiers);
     })(),

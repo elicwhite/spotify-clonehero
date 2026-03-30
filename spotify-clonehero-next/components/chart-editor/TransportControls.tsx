@@ -120,28 +120,30 @@ export default function TransportControls({
   );
 
   // Section jumping
+  // Section msTime values are chart time — use playChartTime for seeking
+  // and chartTime for comparison.
   const jumpToNextSection = useCallback(() => {
     if (sections.length === 0) return;
-    const currentMs = currentTime * 1000;
-    const nextSection = sections.find(s => s.msTime > currentMs + 100);
+    const chartMs = audioManager.chartTime * 1000;
+    const nextSection = sections.find(s => s.msTime > chartMs + 100);
     if (nextSection) {
-      audioManager.play({time: nextSection.msTime / 1000});
+      audioManager.playChartTime(nextSection.msTime / 1000);
     }
-  }, [audioManager, currentTime, sections]);
+  }, [audioManager, sections]);
 
   const jumpToPrevSection = useCallback(() => {
     if (sections.length === 0) return;
-    const currentMs = currentTime * 1000;
+    const chartMs = audioManager.chartTime * 1000;
     // Find the section before the current position (with 500ms tolerance)
-    const prevSections = sections.filter(s => s.msTime < currentMs - 500);
+    const prevSections = sections.filter(s => s.msTime < chartMs - 500);
     if (prevSections.length > 0) {
       const prevSection = prevSections[prevSections.length - 1];
-      audioManager.play({time: prevSection.msTime / 1000});
+      audioManager.playChartTime(prevSection.msTime / 1000);
     } else {
       // Go to beginning
       audioManager.play({time: 0});
     }
-  }, [audioManager, currentTime, sections]);
+  }, [audioManager, sections]);
 
   // Keyboard shortcuts via @tanstack/react-hotkeys
   useHotkey('Space', () => {
@@ -213,9 +215,9 @@ export default function TransportControls({
           <TooltipContent>Next section ({formatForDisplay('Mod+ArrowRight')})</TooltipContent>
         </Tooltip>
 
-        {/* Time display */}
+        {/* Time display (chart-relative) */}
         <span className="min-w-[5.5rem] text-sm font-mono text-muted-foreground tabular-nums whitespace-nowrap">
-          {formatTime(currentTime)} / {formatTime(durationSeconds)}
+          {formatTime(audioManager.chartTime)} / {formatTime(durationSeconds)}
         </span>
 
         {/* Slot for waveform or other content between controls */}

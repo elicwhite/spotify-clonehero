@@ -689,18 +689,19 @@ export default function HighwayEditor({
       const am = audioManagerRef.current;
       if (!am) return;
 
-      // Scroll by a fixed time amount per wheel tick (100ms).
+      // Scroll by a fixed time amount per wheel tick (25ms).
       // deltaY < 0 = wheel up = scroll forward, deltaY > 0 = backward.
       const SCROLL_STEP_MS = 25;
       const direction = e.deltaY < 0 ? 1 : -1;
-      const currentMs = am.currentTime * 1000;
-      const targetMs = Math.max(0, Math.min(currentMs + direction * SCROLL_STEP_MS, am.duration * 1000));
+      const currentChartMs = am.chartTime * 1000;
+      const maxChartMs = am.duration * 1000 - am.chartDelay * 1000;
+      const targetChartMs = Math.max(0, Math.min(currentChartMs + direction * SCROLL_STEP_MS, maxChartMs));
 
-      am.play({time: targetMs / 1000}).then(() => am.pause());
+      am.playChartTime(targetChartMs / 1000).then(() => am.pause());
 
       // Update cursor tick to match
       if (timedTempos.length > 0) {
-        const tick = msToTick(targetMs, timedTempos, state.chartDoc.chartTicksPerBeat);
+        const tick = msToTick(targetChartMs, timedTempos, state.chartDoc.chartTicksPerBeat);
         dispatch({type: 'SET_CURSOR_TICK', tick});
       }
     };

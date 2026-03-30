@@ -161,13 +161,16 @@ export async function generateClickTrackFromMeasures(
   measures: Measure[],
   // clickOptions: ClickOptions,
   clickVolumes: ClickVolumes,
+  /** Chart delay in ms. Clicks are shifted forward so they align with audio. */
+  chartDelayMs: number = 0,
 ): Promise<Uint8Array> {
   if (measures.length === 0) {
     throw new Error('No measures provided');
   }
   const before = performance.now();
-  // Assume the overall duration is defined by the endMs of the last measure.
-  const totalDurationMs = measures[measures.length - 1].endMs;
+  // Assume the overall duration is defined by the endMs of the last measure,
+  // shifted by chartDelayMs so clicks align with audio playback.
+  const totalDurationMs = measures[measures.length - 1].endMs + chartDelayMs;
   const totalDurationSeconds = totalDurationMs / 1000;
   // const sampleRate = 44100;
   const sampleRate = 8000;
@@ -218,7 +221,7 @@ export async function generateClickTrackFromMeasures(
       return;
     }
 
-    const timeSec = event.timeMs / 1000;
+    const timeSec = (event.timeMs + chartDelayMs) / 1000;
     const index = Math.floor(timeSec * sampleRate);
     if (event.type === 'downbeat') {
       mixSamples(trackBuffer, downbeatSample, index);

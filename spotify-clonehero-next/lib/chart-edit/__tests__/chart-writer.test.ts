@@ -67,9 +67,27 @@ describe('serializeChart', () => {
 
   it('writes Offset when delay is non-zero', () => {
     const doc = createChart({ format: 'chart' });
-    doc.metadata.delay = 500;
+    doc.metadata.delay = 500; // ms
     const text = serializeChart(doc);
-    expect(text).toContain('Offset = 500');
+    // .chart Offset is in seconds; metadata.delay is in ms
+    expect(text).toContain('Offset = 0.5');
+  });
+
+  it('delay round-trips correctly through write → parse', () => {
+    const doc = createChart({ format: 'chart' });
+    doc.metadata.delay = 2000; // 2000ms = 2 seconds
+    const text = serializeChart(doc);
+
+    // .chart Offset should be in seconds
+    expect(text).toContain('Offset = 2');
+
+    // Re-parse and verify delay round-trips back to 2000ms
+    const reparsed = parseChartFile(
+      new TextEncoder().encode(text),
+      'chart',
+      { song_length: 0, hopo_frequency: 0, eighthnote_hopo: false, multiplier_note: 0, sustain_cutoff_threshold: -1, chord_snap_threshold: 0, five_lane_drums: false, pro_drums: false, end_events: true },
+    );
+    expect(reparsed.metadata.delay).toBe(2000);
   });
 
   it('writes audio stream references from assets', () => {

@@ -37,6 +37,7 @@ import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import {readChart, writeChart} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {AudioManager} from '@/lib/preview/audioManager';
+import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {ChartEditorProvider, useChartEditorContext} from '@/components/chart-editor';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
@@ -465,6 +466,7 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
         await audioManager.ready;
         if (cancelled) return;
 
+        audioManager.setChartDelay(getChartDelayMs(chartDoc.metadata) / 1000);
         audioManagerRef.current = audioManager;
 
         // 8. Decode first audio file to raw PCM for waveform display

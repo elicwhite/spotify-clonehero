@@ -576,3 +576,194 @@ describe('image asset classification', () => {
     expect(outputNames).toContain('background.jpg');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Full scan-chart output round-trip
+// ---------------------------------------------------------------------------
+
+const DEFAULT_MODIFIERS = {
+  song_length: 0,
+  hopo_frequency: 0,
+  eighthnote_hopo: false,
+  multiplier_note: 0,
+  sustain_cutoff_threshold: -1,
+  chord_snap_threshold: 0,
+  five_lane_drums: false,
+  pro_drums: true,
+  end_events: true,
+};
+
+/**
+ * Strip msTime / msLength from scan-chart output for structural comparison.
+ * These are computed from tick + tempo and may have floating-point drift,
+ * so we compare them separately with toBeCloseTo.
+ */
+function stripTimingFields(obj: unknown): unknown {
+  if (Array.isArray(obj)) return obj.map(stripTimingFields);
+  if (obj && typeof obj === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (k === 'msTime' || k === 'msLength') continue;
+      result[k] = stripTimingFields(v);
+    }
+    return result;
+  }
+  return obj;
+}
+
+/**
+ * Collect all msTime values from a scan-chart output for approximate comparison.
+ */
+function collectMsTimes(obj: unknown, path = ''): Array<{path: string; value: number}> {
+  const results: Array<{path: string; value: number}> = [];
+  if (Array.isArray(obj)) {
+    obj.forEach((item, i) => results.push(...collectMsTimes(item, `${path}[${i}]`)));
+  } else if (obj && typeof obj === 'object') {
+    for (const [k, v] of Object.entries(obj)) {
+      if (k === 'msTime' && typeof v === 'number') {
+        results.push({path: `${path}.msTime`, value: v});
+      } else if (k === 'msLength' && typeof v === 'number') {
+        results.push({path: `${path}.msLength`, value: v});
+      } else {
+        results.push(...collectMsTimes(v, `${path}.${k}`));
+      }
+    }
+  }
+  return results;
+}
+
+describe('full scan-chart output round-trip', () => {
+  it('.chart: entire ParsedChart structure survives write → readChart → re-parse', () => {
+    // 1. Parse original (with ini, like a real load)
+    const originalFiles = chartFixtureFiles();
+    const original = parseChartFile(loadFixture('drums-basic.chart'), 'chart', DEFAULT_MODIFIERS);
+
+    // 2. Load into ChartDocument and write back (produces chart + ini)
+    const doc = readChart(originalFiles);
+    const outputFiles = writeChart(doc);
+    const chartFile = outputFiles.find(f => f.fileName === 'notes.chart')!;
+    const iniFile = outputFiles.find(f => f.fileName === 'song.ini')!;
+
+    // 3. Re-read with both chart + ini (full round-trip)
+    const reDoc = readChart([chartFile, iniFile]);
+    // 4. Write again and parse with scan-chart for full comparison
+    const reOutputFiles = writeChart(reDoc);
+    const reChartFile = reOutputFiles.find(f => f.fileName === 'notes.chart')!;
+    const roundTripped = parseChartFile(reChartFile.data, 'chart', DEFAULT_MODIFIERS);
+
+    // resolution
+    expect(roundTripped.resolution).toBe(original.resolution);
+
+    // drumType
+    expect(roundTripped.drumType).toBe(original.drumType);
+
+    // metadata (chart-level fields that survive the .chart [Song] section)
+    // name/artist/charter etc. live in song.ini, not .chart — they round-trip
+    // through readChart but not through parseChartFile alone.
+    if (original.metadata.delay !== undefined) {
+      expect(roundTripped.metadata.delay).toBe(original.metadata.delay);
+    }
+
+    // tempos (tick + bpm)
+    expect(roundTripped.tempos.length).toBe(original.tempos.length);
+    for (let i = 0; i < original.tempos.length; i++) {
+      expect(roundTripped.tempos[i].tick).toBe(original.tempos[i].tick);
+      expect(roundTripped.tempos[i].beatsPerMinute).toBeCloseTo(original.tempos[i].beatsPerMinute, 1);
+    }
+
+    // time signatures
+    expect(roundTripped.timeSignatures.length).toBe(original.timeSignatures.length);
+    for (let i = 0; i < original.timeSignatures.length; i++) {
+      expect(roundTripped.timeSignatures[i].tick).toBe(original.timeSignatures[i].tick);
+      expect(roundTripped.timeSignatures[i].numerator).toBe(original.timeSignatures[i].numerator);
+      expect(roundTripped.timeSignatures[i].denominator).toBe(original.timeSignatures[i].denominator);
+    }
+
+    // sections
+    expect(roundTripped.sections.length).toBe(original.sections.length);
+    for (let i = 0; i < original.sections.length; i++) {
+      expect(roundTripped.sections[i].tick).toBe(original.sections[i].tick);
+      expect(roundTripped.sections[i].name).toBe(original.sections[i].name);
+    }
+
+    // lyrics
+    expect(roundTripped.lyrics.length).toBe(original.lyrics.length);
+    for (let i = 0; i < original.lyrics.length; i++) {
+      expect(roundTripped.lyrics[i].tick).toBe(original.lyrics[i].tick);
+      expect(roundTripped.lyrics[i].text).toBe(original.lyrics[i].text);
+    }
+
+    // vocalPhrases
+    expect(roundTripped.vocalPhrases.length).toBe(original.vocalPhrases.length);
+
+    // hasLyrics, hasVocals, hasForcedNotes
+    expect(roundTripped.hasLyrics).toBe(original.hasLyrics);
+    expect(roundTripped.hasVocals).toBe(original.hasVocals);
+    expect(roundTripped.hasForcedNotes).toBe(original.hasForcedNotes);
+
+    // trackData: same instruments and difficulties
+    expect(roundTripped.trackData.length).toBe(original.trackData.length);
+    for (const origTrack of original.trackData) {
+      const rtTrack = roundTripped.trackData.find(
+        t => t.instrument === origTrack.instrument && t.difficulty === origTrack.difficulty,
+      );
+      expect(rtTrack).toBeDefined();
+      if (!rtTrack) continue;
+
+      // Same number of note groups
+      expect(rtTrack.noteEventGroups.length).toBe(origTrack.noteEventGroups.length);
+
+      // Each note group: same number of notes, same ticks and types
+      for (let g = 0; g < origTrack.noteEventGroups.length; g++) {
+        const origGroup = origTrack.noteEventGroups[g];
+        const rtGroup = rtTrack.noteEventGroups[g];
+        expect(rtGroup.length).toBe(origGroup.length);
+        for (let n = 0; n < origGroup.length; n++) {
+          expect(rtGroup[n].tick).toBe(origGroup[n].tick);
+          expect(rtGroup[n].type).toBe(origGroup[n].type);
+          expect(rtGroup[n].flags).toBe(origGroup[n].flags);
+        }
+      }
+
+      // Star power sections
+      expect(rtTrack.starPowerSections.length).toBe(origTrack.starPowerSections.length);
+      for (let i = 0; i < origTrack.starPowerSections.length; i++) {
+        expect(rtTrack.starPowerSections[i].tick).toBe(origTrack.starPowerSections[i].tick);
+        expect(rtTrack.starPowerSections[i].length).toBe(origTrack.starPowerSections[i].length);
+      }
+
+      // Solo sections
+      expect(rtTrack.soloSections.length).toBe(origTrack.soloSections.length);
+    }
+
+    // msTime values should be close (floating-point)
+    const origTimes = collectMsTimes(original);
+    const rtTimes = collectMsTimes(roundTripped);
+    expect(rtTimes.length).toBe(origTimes.length);
+    for (let i = 0; i < origTimes.length; i++) {
+      expect(rtTimes[i].value).toBeCloseTo(origTimes[i].value, 1);
+    }
+  });
+
+  it('.chart: delay round-trips through metadata', () => {
+    const doc = readChart(chartFixtureFiles());
+    doc.metadata.delay = 2000; // ms
+
+    const outputFiles = writeChart(doc);
+    const chartFile = outputFiles.find(f => f.fileName === 'notes.chart')!;
+    const roundTripped = parseChartFile(chartFile.data, 'chart', DEFAULT_MODIFIERS);
+
+    expect(roundTripped.metadata.delay).toBe(2000);
+  });
+
+  it('.chart: negative delay round-trips', () => {
+    const doc = readChart(chartFixtureFiles());
+    doc.metadata.delay = -500;
+
+    const outputFiles = writeChart(doc);
+    const chartFile = outputFiles.find(f => f.fileName === 'notes.chart')!;
+    const roundTripped = parseChartFile(chartFile.data, 'chart', DEFAULT_MODIFIERS);
+
+    expect(roundTripped.metadata.delay).toBe(-500);
+  });
+});

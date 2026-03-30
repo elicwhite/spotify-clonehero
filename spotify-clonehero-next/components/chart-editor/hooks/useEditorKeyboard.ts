@@ -120,7 +120,7 @@ export function useEditorKeyboard(
       state.chartDoc.chartTicksPerBeat,
     );
     if (timedTempos.length === 0) return state.cursorTick;
-    const currentMs = am.currentTime * 1000;
+    const currentMs = am.chartTime * 1000;
     const tick = msToTick(currentMs, timedTempos, state.chartDoc.chartTicksPerBeat);
     return snapToGrid(tick, state.chartDoc.chartTicksPerBeat, state.gridDivision);
   }, [audioManagerRef, state.chartDoc, state.cursorTick, state.gridDivision]);
@@ -136,7 +136,7 @@ export function useEditorKeyboard(
       );
       const ms = tickToMs(tick, timedTempos, state.chartDoc.chartTicksPerBeat);
       const wasPlaying = am.isPlaying;
-      await am.play({time: ms / 1000});
+      await am.playChartTime(ms / 1000);
       if (!wasPlaying) {
         await am.pause();
       }

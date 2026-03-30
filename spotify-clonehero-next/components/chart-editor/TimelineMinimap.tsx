@@ -55,11 +55,11 @@ export default function TimelineMinimap({
   const percentage =
     durationMs > 0 ? Math.min(100, (currentTimeMs / durationMs) * 100) : 0;
 
-  // Animation frame loop to track playback position
+  // Animation frame loop to track playback position (chart-relative)
   useEffect(() => {
     function tick() {
       if (!isDragging) {
-        setCurrentTimeMs(audioManager.currentTime * 1000);
+        setCurrentTimeMs(audioManager.chartTime * 1000);
       }
       animFrameRef.current = requestAnimationFrame(tick);
     }
@@ -85,9 +85,9 @@ export default function TimelineMinimap({
   const handleTrackClick = useCallback(
     (e: React.MouseEvent) => {
       if (isDragging) return;
-      const timeMs = clientYToTimeMs(e.clientY);
-      audioManager.play({time: timeMs / 1000});
-      setCurrentTimeMs(timeMs);
+      const chartTimeMs = clientYToTimeMs(e.clientY);
+      audioManager.playChartTime(chartTimeMs / 1000);
+      setCurrentTimeMs(chartTimeMs);
     },
     [audioManager, clientYToTimeMs, isDragging],
   );
@@ -110,9 +110,9 @@ export default function TimelineMinimap({
     if (!isDragging) return;
 
     function onMouseMove(e: MouseEvent) {
-      const timeMs = clientYToTimeMs(e.clientY);
-      setCurrentTimeMs(timeMs);
-      audioManager.play({time: timeMs / 1000});
+      const chartTimeMs = clientYToTimeMs(e.clientY);
+      setCurrentTimeMs(chartTimeMs);
+      audioManager.playChartTime(chartTimeMs / 1000);
     }
 
     function onMouseUp() {
@@ -130,10 +130,10 @@ export default function TimelineMinimap({
     };
   }, [isDragging, audioManager, clientYToTimeMs]);
 
-  // Section click handler
+  // Section click handler (timeMs is chart time)
   const handleSectionClick = useCallback(
     (timeMs: number) => {
-      audioManager.play({time: timeMs / 1000});
+      audioManager.playChartTime(timeMs / 1000);
       setCurrentTimeMs(timeMs);
     },
     [audioManager],

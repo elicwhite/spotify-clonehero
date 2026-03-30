@@ -32,8 +32,8 @@ export const Playhead = memo(function ({
     // Set up animation frame loop for smooth movement
     const animate = () => {
       if (audioManagerRef.current != null) {
-        // Get current time directly from audio manager
-        const currentTimeMs = audioManagerRef.current.currentTime * 1000;
+        // Get current time directly from audio manager (chart-relative)
+        const currentTimeMs = audioManagerRef.current.chartTime * 1000;
         // Find position for current time
         const newPosition = findPositionForTime(timePositionMap, currentTimeMs);
         if (newPosition && playheadRef.current) {

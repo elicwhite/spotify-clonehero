@@ -62,6 +62,7 @@ import wholeNote from '@/public/assets/svgs/whole-note.svg';
 import quarterNote from '@/public/assets/svgs/quarter-note.svg';
 import eighthNote from '@/public/assets/svgs/eighth-note.svg';
 import tripletNote from '@/public/assets/svgs/triplet-note.svg';
+import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import {extractFills, defaultConfig} from '@/lib/fill-detector';
 import {toast} from '@/components/ui/toast';
 import {createClient} from '@/lib/supabase/client';
@@ -339,6 +340,22 @@ export default function Renderer({
       );
   };
 
+  // Compute chart delay once from metadata (must be before consumers)
+  const chartDelayMs = useMemo(() => getChartDelayMs(chart.metadata), [chart]);
+
+  // Offset practice mode times for AudioManager.
+  // PracticeModeConfig stores chart times in startTimeMs/endTimeMs,
+  // but AudioManager.checkPracticeModeLoop compares against audio time,
+  // so we must shift by chartDelayMs when passing to AudioManager.
+  const toAudioPracticeMode = useCallback(
+    (config: PracticeModeConfig): PracticeModeConfig => ({
+      ...config,
+      startTimeMs: config.startTimeMs + chartDelayMs,
+      endTimeMs: config.endTimeMs + chartDelayMs,
+    }),
+    [chartDelayMs],
+  );
+
   const loadSection = useCallback(
     (section: {start_ms: number; end_ms: number}) => {
       const startMs = section.start_ms;
@@ -351,13 +368,13 @@ export default function Renderer({
       };
       setPracticeMode(config);
       setSelectionIndex(null);
-      audioManagerRef.current?.setPracticeMode(config);
+      audioManagerRef.current?.setPracticeMode(toAudioPracticeMode(config));
       if (audioManagerRef.current) {
-        audioManagerRef.current.play({time: config.startTimeMs / 1000});
+        audioManagerRef.current.playChartTime(config.startTimeMs / 1000);
         setIsPlaying(true);
       }
     },
-    [],
+    [toAudioPracticeMode],
   );
 
   // const clickTrack = useMemo(async () => {
@@ -486,6 +503,7 @@ export default function Renderer({
       const clickTrack = await generateClickTrackFromMeasures(
         measures,
         clickVolumes,
+        chartDelayMs,
       );
       const files = [
         ...audioFiles,
@@ -565,13 +583,14 @@ export default function Renderer({
           // This effect already ran and has been set up before we got here. Bail.
           return;
         }
+        audioManager.setChartDelay(chartDelayMs / 1000);
         audioManager.setVolume('click', playClickTrack ? masterClickVolume : 0);
         audioManagerRef.current = audioManager;
         window.am = audioManager;
 
         // Restore practice mode configuration if it exists
         if (practiceMode && practiceMode.endMeasureMs > 0) {
-          audioManager.setPracticeMode(practiceMode);
+          audioManager.setPracticeMode(toAudioPracticeMode(practiceMode));
         }
 
         // Apply initial per-track volumes loaded from storage
@@ -609,6 +628,8 @@ export default function Renderer({
     playClickTrack,
     masterClickVolume,
     settingsLoaded,
+    chartDelayMs,
+    toAudioPracticeMode,
   ]);
 
   // Apply practice mode changes to the existing audio manager without recreating it
@@ -619,9 +640,9 @@ export default function Renderer({
       practiceMode?.endTimeMs != null &&
       practiceMode?.endTimeMs > 0
     ) {
-      audioManagerRef.current.setPracticeMode(practiceMode);
+      audioManagerRef.current.setPracticeMode(toAudioPracticeMode(practiceMode));
     }
-  }, [practiceMode]);
+  }, [practiceMode, toAudioPracticeMode]);
 
   useInterval(
     () => {
@@ -854,12 +875,12 @@ export default function Renderer({
 
       setPracticeMode(updated);
       setSelectionIndex(null);
-      audioManagerRef.current?.setPracticeMode(updated);
+      audioManagerRef.current?.setPracticeMode(toAudioPracticeMode(updated));
       toast.success(
         'Practice mode configured! Click play to start practicing.',
       );
     },
-    [selectionIndex, measures],
+    [selectionIndex, measures, toAudioPracticeMode],
   );
 
   const songDuration =
@@ -1411,7 +1432,7 @@ export default function Renderer({
                 if (audioManagerRef.current == null) {
                   return;
                 }
-                audioManagerRef.current.play({time});
+                audioManagerRef.current.playChartTime(time);
 
                 setIsPlaying(true);
               }}
