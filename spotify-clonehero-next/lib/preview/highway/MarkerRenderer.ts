@@ -14,6 +14,8 @@ const HIGHWAY_HALF_WIDTH = 0.45;
 export interface MarkerElementData {
   text: string;
   isSelected?: boolean;
+  /** Vertical stack index for markers at the same tick. 0 = no offset. */
+  stackIndex?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -41,8 +43,8 @@ function createMarkerTexture(
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
 
-  // Render at 2x resolution for crisp text on high-DPI
-  const scale = 2;
+  // Render at 4x resolution for crisp text at larger display size
+  const scale = 4;
   const fontSize = 24 * scale;
   const padding = 16 * scale;
 
@@ -128,17 +130,20 @@ export class MarkerRenderer implements ElementRenderer<MarkerElementData> {
     // Scale proportional to texture aspect ratio
     const texCanvas = texture.image as HTMLCanvasElement;
     const aspect = texCanvas.width / texCanvas.height;
-    const flagHeight = 0.055;
+    const flagHeight = 0.11;
     sprite.scale.set(flagHeight * aspect, flagHeight, 1);
+
+    // Stack offset: shift each marker up by its stack index to avoid overlap
+    const stackOffset = (data.stackIndex ?? 0) * flagHeight * 1.1;
 
     if (this.side === 'right') {
       // Right side: anchor at left edge so it extends rightward
       sprite.center.set(0.0, 0.5);
-      sprite.position.set(HIGHWAY_HALF_WIDTH + 0.02, 0, 0.001);
+      sprite.position.set(HIGHWAY_HALF_WIDTH + 0.02, stackOffset, 0.001);
     } else {
       // Left side: anchor at right edge so it extends leftward
       sprite.center.set(1.0, 0.5);
-      sprite.position.set(-HIGHWAY_HALF_WIDTH - 0.02, 0, 0.001);
+      sprite.position.set(-HIGHWAY_HALF_WIDTH - 0.02, stackOffset, 0.001);
     }
 
     group.add(sprite);
