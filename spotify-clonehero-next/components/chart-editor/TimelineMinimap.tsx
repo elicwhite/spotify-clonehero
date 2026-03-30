@@ -164,11 +164,11 @@ export default function TimelineMinimap({
         className="relative flex-1 min-h-0 mx-3 mb-3 cursor-pointer"
         onClick={handleTrackClick}>
         {/* Track background bar */}
-        <div className="absolute left-1/2 top-0 bottom-0 w-[3px] -translate-x-1/2 rounded-full bg-muted" />
+        <div className="absolute left-1/2 top-0 bottom-0 w-[3px] -translate-x-1/2 rounded-full bg-border" />
 
         {/* Progress fill (from bottom up to handle) */}
         <div
-          className="absolute left-1/2 bottom-0 w-[3px] -translate-x-1/2 rounded-full bg-primary/50"
+          className="absolute left-1/2 bottom-0 w-[3px] -translate-x-1/2 rounded-full bg-primary/60"
           style={{height: `${handleBottomPct}%`}}
         />
 
@@ -179,17 +179,17 @@ export default function TimelineMinimap({
           return (
             <button
               key={`${section.name}-${i}`}
-              className="absolute right-0 flex items-center gap-1.5 -translate-y-1/2 hover:opacity-100 opacity-75 transition-opacity group"
+              className="absolute right-0 flex items-center gap-1.5 -translate-y-1/2 group"
               style={{bottom: `${bottomPct}%`}}
               onClick={e => {
                 e.stopPropagation();
                 handleSectionClick(section.timeMs);
               }}
               title={`${section.name} (${formatTimePrecise(section.timeMs / 1000)})`}>
-              <span className="text-[11px] text-amber-400/80 group-hover:text-amber-400 truncate max-w-[90px] text-right leading-tight">
+              <span className="text-[11px] text-foreground group-hover:text-foreground truncate max-w-[90px] text-right leading-tight font-medium">
                 {section.name}
               </span>
-              <span className="w-2 h-2 rounded-full bg-amber-400/70 group-hover:bg-amber-400 shrink-0" />
+              <span className="w-2 h-2 rounded-full bg-foreground/50 group-hover:bg-foreground shrink-0" />
             </button>
           );
         })}
@@ -202,7 +202,7 @@ export default function TimelineMinimap({
           )}
           style={{bottom: `${handleBottomPct}%`}}
           onMouseDown={handleDragStart}>
-          <div className="h-[3px] bg-amber-400 rounded-full shadow-[0_0_4px_rgba(251,191,36,0.4)]" />
+          <div className="h-[3px] bg-primary rounded-full shadow-sm" />
           {/* Wider invisible grab area */}
           <div className="absolute -top-2 -bottom-2 left-0 right-0" />
         </div>
