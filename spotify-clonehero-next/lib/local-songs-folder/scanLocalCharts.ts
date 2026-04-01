@@ -8,6 +8,7 @@ export type SongIniData = {
   name: string;
   artist: string;
   charter: string;
+  genre?: string | null;
   diff_drums?: number | null;
   diff_drums_real?: number | null;
   diff_guitar?: number | null;
@@ -20,6 +21,7 @@ export type SongAccumulator = {
   song: string; // Change this to Name to match Encore
   modifiedTime: string;
   charter: string;
+  genre: string;
   data: SongIniData;
   file: string; // This will throw if you access it
   // fileHandle: FileSystemFileHandle | FileSystemDirectoryHandle;
@@ -138,6 +140,7 @@ async function scanLocalChartsDirectory(
       song: removeStyleTags(songIniData.name),
       modifiedTime: new Date(newestDate).toISOString(),
       charter: removeStyleTags(songIniData.charter || songIniData.frets || ''),
+      genre: removeStyleTags(songIniData.genre ?? ''),
       data: convertedSongIniData,
       handleInfo: {
         parentDir: parentDirectoryHandle,
@@ -217,6 +220,7 @@ async function scanLocalSngFile(
       song: removeStyleTags(songIniData.name),
       modifiedTime: new Date(file.lastModified).toISOString(),
       charter: removeStyleTags(songIniData.charter || songIniData.frets || ''),
+      genre: removeStyleTags(songIniData.genre ?? ''),
       data: convertedSongIniData,
       handleInfo: {
         parentDir: parentDirectoryHandle,
