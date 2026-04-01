@@ -76,5 +76,12 @@ export function serializeIni(metadata: ChartMetadata): string {
     lines.push(`${key} = ${formatValue(value, type)}`);
   }
 
+  // Write any extra fields that weren't in our known field list
+  if (metadata.extraIniFields) {
+    for (const [key, value] of Object.entries(metadata.extraIniFields)) {
+      lines.push(`${key} = ${value}`);
+    }
+  }
+
   return lines.join('\r\n') + '\r\n';
 }

@@ -681,35 +681,25 @@ function buildVocalsTrack(doc: ChartDocument): MidiEvent[] {
     });
   }
 
-  // Vocal phrase markers as note 105 on/off pairs.
-  // 1. Deduplicate by tick (keep longest) since scan-chart merges notes
-  //    105+106 and they may have different lengths at the same tick.
-  // 2. Trim overlapping phrases so noteOff doesn't overlap the next noteOn
-  //    (adjacent phrases at 1-tick apart would create overlapping note 105
-  //    events, which scan-chart re-parses as tiny 1-tick phrases).
-  const phraseLengthByTick = new Map<number, number>();
-  for (const phrase of doc.vocalPhrases) {
-    const existing = phraseLengthByTick.get(phrase.tick);
-    if (existing === undefined || phrase.length > existing) {
-      phraseLengthByTick.set(phrase.tick, phrase.length);
-    }
-  }
-  const sortedPhrases = [...phraseLengthByTick.entries()]
-    .map(([tick, length]) => ({ tick, length }))
+  // Vocal phrase markers as note on/off pairs.
+  // scan-chart includes noteNumber (105 or 106) on each phrase entry.
+  // Write each with its original note number. When multiple phrases share
+  // the same tick and note number, alternate to note 106 to avoid
+  // overlapping noteOn events on the same MIDI note (which scan-chart
+  // can't distinguish on re-parse).
+  const sortedPhrases = [...doc.vocalPhrases]
     .sort((a, b) => a.tick - b.tick);
-  // Trim phrases that extend past the next phrase's start tick.
-  // A phrase ending exactly at the next one's start (length = gap) is OK;
-  // only trim if it would create overlapping noteOn/noteOff events.
-  for (let i = 0; i < sortedPhrases.length - 1; i++) {
-    const current = sortedPhrases[i];
-    const next = sortedPhrases[i + 1];
-    const gap = next.tick - current.tick;
-    if (current.length > gap) {
-      current.length = gap;
+  const usedAtTick = new Map<number, Set<number>>(); // tick → set of used note numbers
+  for (const phrase of sortedPhrases) {
+    let noteNum = (phrase as {noteNumber?: number}).noteNumber ?? 105;
+    // If this tick+noteNumber already used, alternate to the other note number
+    const usedNums = usedAtTick.get(phrase.tick);
+    if (usedNums && usedNums.has(noteNum)) {
+      noteNum = noteNum === 105 ? 106 : 105;
     }
-  }
-  for (const { tick, length } of sortedPhrases) {
-    addNoteOnOff(events, tick, length, 105, 100);
+    if (!usedAtTick.has(phrase.tick)) usedAtTick.set(phrase.tick, new Set());
+    usedAtTick.get(phrase.tick)!.add(noteNum);
+    addNoteOnOff(events, phrase.tick, Math.max(phrase.length, 1), noteNum, 100);
   }
 
   return finalizeMidiTrack(events);
@@ -774,10 +764,9 @@ function addNoteOnOff(
       velocity,
     } as MidiEvent,
   });
-  // Use length of at least 1 so noteOff is at tick+1, ensuring correct
-  // noteOn/noteOff ordering. Zero-length notes place noteOff at the same
-  // tick, and finalizeMidiTrack sorts noteOff before noteOn at equal ticks,
-  // which causes scan-chart to discard the note.
+  // noteOff at tick + length. Use at least 1 tick so noteOff comes after
+  // noteOn (finalizeMidiTrack sorts noteOff before noteOn at equal ticks,
+  // which would cause scan-chart to discard zero-length notes).
   events.push({
     tick: tick + Math.max(length, 1),
     event: {

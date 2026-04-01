@@ -114,6 +114,11 @@ function parseMetadataFromIni(iniText: string): ChartMetadata {
     if (key in section) {
       const parsed = parseFloat(section[key]);
       if (!isNaN(parsed)) {
+        // delay=0 is semantically identical to undefined (no offset).
+        // scan-chart's .chart parser also returns undefined for Offset=0.
+        // Normalize here so the value doesn't enter metadata and cause
+        // round-trip mismatches.
+        if (key === 'delay' && parsed === 0) continue;
         (metadata as Record<string, unknown>)[key] = parsed;
       }
     }
@@ -124,6 +129,24 @@ function parseMetadataFromIni(iniText: string): ChartMetadata {
       (metadata as Record<string, unknown>)[key] =
         section[key].toLowerCase() === 'true';
     }
+  }
+
+  // Preserve unknown fields so they survive round-trip (e.g. sysex_slider,
+  // sysex_open_bass, diff_bass_real, diff_guitar_real, etc.)
+  const knownFields = new Set<string>([
+    ...INI_STRING_FIELDS,
+    ...INI_INT_FIELDS,
+    ...INI_NUMBER_FIELDS,
+    ...INI_BOOLEAN_FIELDS,
+  ]);
+  const extra: Record<string, string> = {};
+  for (const key of Object.keys(section)) {
+    if (!knownFields.has(key)) {
+      extra[key] = section[key];
+    }
+  }
+  if (Object.keys(extra).length > 0) {
+    metadata.extraIniFields = extra;
   }
 
   return metadata;
@@ -211,30 +234,38 @@ export function readChart(files: FileEntry[]): ChartDocument {
     rawData = parseNotesFromMidi(chartFile.data, iniChartModifiers);
   }
 
-  // 4. Merge RawChartData.metadata into ChartMetadata as fallbacks
-  if (!iniFile && rawData.metadata) {
+  // 4. Merge RawChartData.metadata into ChartMetadata as fallbacks.
+  // When a song.ini exists, it's the primary source for metadata. But some
+  // fields (like delay/Offset) may only be in the chart file itself — always
+  // merge those as fallbacks regardless of whether an ini exists.
+  if (rawData.metadata) {
     const raw = rawData.metadata;
-    if (raw.name !== undefined && metadata.name === undefined)
-      metadata.name = raw.name;
-    if (raw.artist !== undefined && metadata.artist === undefined)
-      metadata.artist = raw.artist;
-    if (raw.album !== undefined && metadata.album === undefined)
-      metadata.album = raw.album;
-    if (raw.genre !== undefined && metadata.genre === undefined)
-      metadata.genre = raw.genre;
-    if (raw.year !== undefined && metadata.year === undefined)
-      metadata.year = raw.year;
-    if (raw.charter !== undefined && metadata.charter === undefined)
-      metadata.charter = raw.charter;
-    if (raw.diff_guitar !== undefined && metadata.diff_guitar === undefined)
-      metadata.diff_guitar = raw.diff_guitar;
+    if (!iniFile) {
+      // No ini — use chart metadata for everything
+      if (raw.name !== undefined && metadata.name === undefined)
+        metadata.name = raw.name;
+      if (raw.artist !== undefined && metadata.artist === undefined)
+        metadata.artist = raw.artist;
+      if (raw.album !== undefined && metadata.album === undefined)
+        metadata.album = raw.album;
+      if (raw.genre !== undefined && metadata.genre === undefined)
+        metadata.genre = raw.genre;
+      if (raw.year !== undefined && metadata.year === undefined)
+        metadata.year = raw.year;
+      if (raw.charter !== undefined && metadata.charter === undefined)
+        metadata.charter = raw.charter;
+      if (raw.diff_guitar !== undefined && metadata.diff_guitar === undefined)
+        metadata.diff_guitar = raw.diff_guitar;
+      if (
+        raw.preview_start_time !== undefined &&
+        metadata.preview_start_time === undefined
+      )
+        metadata.preview_start_time = raw.preview_start_time;
+    }
+    // Always merge delay — .chart stores it as Offset in [Song], song.ini
+    // stores it as delay (ms). Both should be sources, ini taking precedence.
     if (raw.delay !== undefined && metadata.delay === undefined)
       metadata.delay = raw.delay;
-    if (
-      raw.preview_start_time !== undefined &&
-      metadata.preview_start_time === undefined
-    )
-      metadata.preview_start_time = raw.preview_start_time;
   }
 
   // 5. Classify remaining files as assets

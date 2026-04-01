@@ -85,7 +85,7 @@ describe('serializeChart', () => {
     const reparsed = parseChartFile(
       new TextEncoder().encode(text),
       'chart',
-      { song_length: 0, hopo_frequency: 0, eighthnote_hopo: false, multiplier_note: 0, sustain_cutoff_threshold: -1, chord_snap_threshold: 0, five_lane_drums: false, pro_drums: false, end_events: true },
+      { song_length: 0, hopo_frequency: 0, eighthnote_hopo: false, multiplier_note: 0, sustain_cutoff_threshold: -1, chord_snap_threshold: 0, five_lane_drums: false, pro_drums: false },
     );
     expect(reparsed.metadata.delay).toBe(2000);
   });

@@ -545,6 +545,65 @@ describe('boolean metadata round-trip', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Unknown INI fields preserved through round-trip
+// ---------------------------------------------------------------------------
+
+describe('extraIniFields round-trip', () => {
+  it('preserves unknown song.ini fields through read → write → read', () => {
+    const iniText = [
+      '[song]',
+      'name = Test Song',
+      'artist = Test Artist',
+      'sysex_slider = True',
+      'sysex_open_bass = True',
+      'diff_bass_real = -1',
+      'diff_guitar_real = -1',
+      'custom_field = hello world',
+      '',
+    ].join('\r\n');
+    const encoder = new TextEncoder();
+    const files: FileEntry[] = [
+      makeFileEntry('notes.chart', loadFixture('drums-basic.chart')),
+      makeFileEntry('song.ini', encoder.encode(iniText)),
+    ];
+
+    const doc = readChart(files);
+
+    // Verify unknown fields were captured
+    expect(doc.metadata.extraIniFields).toBeDefined();
+    expect(doc.metadata.extraIniFields!['sysex_slider']).toBe('True');
+    expect(doc.metadata.extraIniFields!['sysex_open_bass']).toBe('True');
+    expect(doc.metadata.extraIniFields!['diff_bass_real']).toBe('-1');
+    expect(doc.metadata.extraIniFields!['custom_field']).toBe('hello world');
+
+    // Known fields should NOT be in extraIniFields
+    expect(doc.metadata.extraIniFields!['name']).toBeUndefined();
+    expect(doc.metadata.extraIniFields!['artist']).toBeUndefined();
+
+    // Write and re-read
+    const outputFiles = writeChart(doc);
+    const iniFile = outputFiles.find((f) => f.fileName === 'song.ini')!;
+    const outputIni = new TextDecoder().decode(iniFile.data);
+
+    // Verify unknown fields appear in output
+    expect(outputIni).toContain('sysex_slider = True');
+    expect(outputIni).toContain('sysex_open_bass = True');
+    expect(outputIni).toContain('diff_bass_real = -1');
+    expect(outputIni).toContain('custom_field = hello world');
+
+    // Re-read and verify they survive the full round-trip
+    const reDoc = readChart(outputFiles);
+    expect(reDoc.metadata.extraIniFields).toEqual(doc.metadata.extraIniFields);
+  });
+
+  it('does not create extraIniFields when all fields are known', () => {
+    const doc = readChart(chartFixtureFiles());
+    // The test fixture only has known fields, so extraIniFields should be absent
+    expect(doc.metadata.extraIniFields).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // C5: Image asset classification
 // ---------------------------------------------------------------------------
 

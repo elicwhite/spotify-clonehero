@@ -70,6 +70,12 @@ export interface ChartMetadata {
   five_lane_drums?: boolean;
   pro_drums?: boolean;
   end_events?: boolean;
+  /**
+   * Preserves any song.ini fields not explicitly modeled in ChartMetadata.
+   * Written verbatim after known fields during INI serialization to prevent
+   * data loss on round-trip (e.g. sysex_slider, sysex_open_bass, diff_bass_real).
+   */
+  extraIniFields?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------

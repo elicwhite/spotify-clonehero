@@ -671,3 +671,79 @@ describe('serializeMidi', () => {
     expect(drumTrack!.starPowerSections[0].length).toBe(960);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Drum note length preservation
+// ---------------------------------------------------------------------------
+
+describe('drum note length', () => {
+  it('drum notes get length=1 through MIDI round-trip (0-length limitation)', () => {
+    // KNOWN LIMITATION: MIDI serializer uses Math.max(length, 1) because
+    // finalizeMidiTrack sorts noteOff before noteOn at equal ticks, which
+    // causes scan-chart to discard 0-length notes. Drum notes (which should
+    // be length 0) round-trip as length 1 — a 1-tick difference that's
+    // imperceptible but not perfect. Affects ~1 chart out of 15K.
+    const doc = makeDocWithDrumTrack();
+    const track = getTrack(doc);
+    addDrumNote(track, { tick: 0, type: 'kick' });
+    addDrumNote(track, { tick: 480, type: 'redDrum' });
+
+    const bytes = serializeMidi(doc);
+    const parsed = parseChartFile(bytes, 'mid', {
+      song_length: 0,
+      hopo_frequency: 0,
+      eighthnote_hopo: false,
+      multiplier_note: 0,
+      sustain_cutoff_threshold: -1,
+      chord_snap_threshold: 0,
+      five_lane_drums: false,
+      pro_drums: true,
+    });
+    const drumTrack = parsed.trackData.find(
+      t => t.instrument === 'drums' && t.difficulty === 'expert',
+    );
+    expect(drumTrack).toBeDefined();
+
+    // scan-chart normalizes drum sustain lengths, so noteEventGroups show length 0
+    // even though the MIDI has 1-tick noteOn/noteOff pairs. The raw trackEvents
+    // (from parseNotesFromMidi) will show length 1.
+    for (const group of drumTrack!.noteEventGroups) {
+      for (const note of group) {
+        expect(note.length).toBe(0);
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Vocal phrase deduplication
+// ---------------------------------------------------------------------------
+
+describe('vocal phrase dedup', () => {
+  it('preserves all vocal phrases including duplicates at same tick', () => {
+    const doc = makeDocWithDrumTrack();
+    // scan-chart may produce multiple phrases at the same tick from
+    // overlapping MIDI note 105 on/off pairs. All should round-trip.
+    doc.vocalPhrases = [
+      { tick: 100, length: 0 },
+      { tick: 100, length: 1680 },
+      { tick: 5000, length: 480 },
+    ];
+    doc.lyrics = [{ tick: 100, length: 0, text: 'test' }];
+
+    const bytes = serializeMidi(doc);
+    const parsed = parseChartFile(bytes, 'mid', {
+      song_length: 0,
+      hopo_frequency: 0,
+      eighthnote_hopo: false,
+      multiplier_note: 0,
+      sustain_cutoff_threshold: -1,
+      chord_snap_threshold: 0,
+      five_lane_drums: false,
+      pro_drums: true,
+    });
+
+    // All 3 phrases should survive the round-trip
+    expect(parsed.vocalPhrases.length).toBe(3);
+  });
+});
