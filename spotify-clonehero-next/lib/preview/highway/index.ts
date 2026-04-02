@@ -25,6 +25,7 @@ import {NoteRenderer} from './NoteRenderer';
 import {MarkerRenderer} from './MarkerRenderer';
 import {trackToElements} from './trackToElements';
 import {chartToElements} from './chartToElements';
+import {LyricsOverlay} from './LyricsOverlay';
 import type {Track} from './types';
 
 // Re-export public types, constants, and utilities
@@ -39,6 +40,7 @@ export {NoteRenderer} from './NoteRenderer';
 export {MarkerRenderer} from './MarkerRenderer';
 export {trackToElements} from './trackToElements';
 export {chartToElements} from './chartToElements';
+export {LyricsOverlay} from './LyricsOverlay';
 
 let instanceCounter = 0;
 
@@ -80,12 +82,16 @@ export const setupRenderer = (
   renderer.localClippingEnabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
+  /** Lyrics overlay (Clone Hero-style karaoke at top of screen). */
+  let lyricsOverlay: LyricsOverlay | null = null;
+
   function setSize() {
     const width = sizingRef.current?.offsetWidth ?? window.innerWidth;
     const height = sizingRef.current?.offsetHeight ?? window.innerHeight;
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height);
+    lyricsOverlay?.resize(width, height);
   }
   setSize();
 
@@ -175,6 +181,8 @@ export const setupRenderer = (
       gridOverlay?.dispose();
       gridOverlay = null;
       classicHighwayMesh = null;
+      lyricsOverlay?.dispose();
+      lyricsOverlay = null;
     },
     /** Expose the camera for overlay coordinate mapping (unprojection). */
     getCamera() {
@@ -382,6 +390,18 @@ export const setupRenderer = (
         )
       : null;
 
+    // Create lyrics overlay if chart has lyrics
+    if (chart.lyrics.length > 0) {
+      const width = sizingRef.current?.offsetWidth ?? window.innerWidth;
+      const height = sizingRef.current?.offsetHeight ?? window.innerHeight;
+      lyricsOverlay = new LyricsOverlay(
+        chart.lyrics,
+        chart.vocalPhrases,
+        width,
+        height,
+      );
+    }
+
     return {
       scene,
       highwayTexture,
@@ -461,6 +481,13 @@ export const setupRenderer = (
 
       try {
         renderer.render(scene, camera);
+
+        // Render lyrics overlay on top (second pass, no depth clear)
+        if (lyricsOverlay?.update(elapsedTime)) {
+          renderer.autoClear = false;
+          renderer.render(lyricsOverlay.scene, lyricsOverlay.camera);
+          renderer.autoClear = true;
+        }
       } catch (e) {
         // Log but don't stop the loop — transient errors (e.g., null material
         // during texture swap) should not permanently kill the renderer.
