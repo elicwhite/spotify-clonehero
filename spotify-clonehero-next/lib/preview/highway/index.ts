@@ -78,7 +78,11 @@ export const setupRenderer = (
   camera.position.y = -1.3;
   camera.rotation.x = THREE.MathUtils.degToRad(60);
 
-  const renderer = new THREE.WebGLRenderer({antialias: true});
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const renderer = new THREE.WebGLRenderer({
+    antialias: dpr < 2, // skip antialias on high-DPI screens where it's unnecessary
+  });
+  renderer.setPixelRatio(dpr);
   renderer.localClippingEnabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
