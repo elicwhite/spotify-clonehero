@@ -295,5 +295,66 @@ describe('LyricsState', () => {
       expect(snap.lineIndex).toBe(0);
       expect(snap.transitionProgress).toBe(0);
     });
+
+    it('no slide transition after long gap', () => {
+      const state = new LyricsState(twoFarLines());
+      state.update(2000); // on line 0
+      // Advance past phraseEndMs + fade (3000 + 500 = 3500)
+      state.update(4000);
+      expect(state.update(4000).lineIndex).toBe(1); // early advance
+      expect(state.update(4000).isTransitioning).toBe(false); // no slide
+    });
+  });
+
+  describe('long-gap full sequence', () => {
+    it('plays line → fades out → hidden → advances → fades in → plays next', () => {
+      const state = new LyricsState(twoFarLines());
+      // Line 0: phraseStart=1000, phraseEnd=3000
+      // Line 1: phraseStart=8000, phraseEnd=10000
+
+      // 1. Playing line 0
+      let snap = state.update(1500);
+      expect(snap.lineIndex).toBe(0);
+      expect(snap.opacity).toBe(1);
+      expect(snap.syllableIndex).toBe(0);
+
+      // 2. Past phraseEnd — fading out
+      snap = state.update(3100);
+      expect(snap.lineIndex).toBe(0);
+      expect(snap.opacity).toBeGreaterThan(0);
+      expect(snap.opacity).toBeLessThan(1);
+
+      // 3. Fully faded out
+      snap = state.update(3600);
+      expect(snap.opacity).toBe(0);
+
+      // 4. Early advance to line 1 (after fade-out complete)
+      snap = state.update(4000);
+      expect(snap.lineIndex).toBe(1);
+      expect(snap.opacity).toBe(0); // still hidden
+      expect(snap.isTransitioning).toBe(false); // no slide
+
+      // 5. Still hidden in the middle of the gap
+      snap = state.update(6000);
+      expect(snap.lineIndex).toBe(1);
+      expect(snap.opacity).toBe(0);
+
+      // 6. Fade in starts (phraseStart - PHRASE_FADE_MS = 7500)
+      snap = state.update(7750);
+      expect(snap.lineIndex).toBe(1);
+      expect(snap.opacity).toBeGreaterThan(0);
+      expect(snap.opacity).toBeLessThan(1);
+
+      // 7. Fully visible, playing line 1
+      snap = state.update(8500);
+      expect(snap.lineIndex).toBe(1);
+      expect(snap.opacity).toBe(1);
+      expect(snap.syllableIndex).toBe(0);
+
+      // 8. Seek back to line 0 works correctly
+      snap = state.update(1500);
+      expect(snap.lineIndex).toBe(0);
+      expect(snap.opacity).toBe(1);
+    });
   });
 });

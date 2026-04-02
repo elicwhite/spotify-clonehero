@@ -11,6 +11,10 @@ export const PHRASE_DISTANCE_THRESHOLD_MS = 2000;
 export const PHRASE_FADE_MS = 500;
 /** Duration of the slide-up transition between lines. */
 export const TRANSITION_DURATION_MS = 400;
+/** Phrases shorter than this are likely effect markers, not real lyrics. */
+const MIN_PHRASE_LENGTH_MS = 250;
+/** Show upcoming line only when this close to the end of the current line. */
+const UPCOMING_LEAD_TIME_MS = 3000;
 
 // Clone Hero color scheme
 const COLOR_SUNG = 'rgb(230, 166, 47)'; // orange-gold (already sung / currently singing)
@@ -155,9 +159,13 @@ export class LyricsState {
         this.currentLineIndex++;
         continue;
       }
-      // Check for early advance during long gaps: once the fade-out is
-      // complete, move to the next line so it's ready when the fade-in
-      // starts (the line renders at opacity 0 until then).
+      // Early advance during long gaps: once the fade-out completes, move
+      // to the next line immediately. This ensures the canvas shows the
+      // correct (new) line content at opacity 0 well before the fade-in
+      // begins at `phraseStartMs - PHRASE_FADE_MS`. Without this, the old
+      // line would flash for one frame when the fade-in starts.
+      // calculateOpacity() handles the rest — it returns 0 when
+      // `timeMs < phraseStartMs - PHRASE_FADE_MS`, then fades 0→1.
       const line = lines[this.currentLineIndex];
       const gap = nextLine.phraseStartMs - line.phraseEndMs;
       if (gap >= PHRASE_DISTANCE_THRESHOLD_MS && timeMs >= line.phraseEndMs + PHRASE_FADE_MS) {
@@ -246,8 +254,15 @@ export class LyricsState {
     const nextLine = this.lines[this.currentLineIndex + 1];
     if (!nextLine) return false;
 
+    // Skip very short phrases (effect markers, not real lyrics)
+    const nextDuration = nextLine.phraseEndMs - nextLine.phraseStartMs;
+    if (nextDuration < MIN_PHRASE_LENGTH_MS) return false;
+
     const gap = nextLine.phraseStartMs - line.phraseEndMs;
-    return gap < PHRASE_DISTANCE_THRESHOLD_MS;
+    if (gap >= PHRASE_DISTANCE_THRESHOLD_MS) return false;
+
+    // Only show when nearing the end of the current line
+    return timeMs >= nextLine.phraseStartMs - UPCOMING_LEAD_TIME_MS;
   }
 }
 
@@ -454,6 +469,14 @@ export class LyricsOverlay {
       return;
     }
 
+    // Dark gradient background for readability against bright highway content
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgba(0, 0, 0, 0.7)');
+    grad.addColorStop(0.85, 'rgba(0, 0, 0, 0.4)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
     const lines = this.state.lines;
     const activeLine = lines[snap.lineIndex];
     const nextLine = lines[snap.lineIndex + 1] ?? null;
@@ -518,6 +541,18 @@ export class LyricsOverlay {
     this.texture.needsUpdate = true;
   }
 
+  /** Measure each syllable and return widths + total. */
+  private measureSyllables(
+    ctx: CanvasRenderingContext2D,
+    line: LyricLine,
+    fontSize: number,
+  ): {widths: number[]; totalWidth: number} {
+    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+    const widths = line.syllables.map(s => ctx.measureText(s.text).width);
+    const totalWidth = widths.reduce((sum, w) => sum + w, 0);
+    return {widths, totalWidth};
+  }
+
   /** Draw the active phrase line with per-syllable color highlighting. */
   private drawPhraseLine(
     ctx: CanvasRenderingContext2D,
@@ -527,17 +562,14 @@ export class LyricsOverlay {
     y: number,
     canvasWidth: number,
   ): void {
-    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+    const {widths, totalWidth} = this.measureSyllables(ctx, line, fontSize);
     ctx.textBaseline = 'middle';
 
-    const totalWidth = ctx.measureText(line.text).width;
     let x = (canvasWidth - totalWidth) / 2;
-
     for (let i = 0; i < line.syllables.length; i++) {
-      const syllable = line.syllables[i];
       ctx.fillStyle = i <= activeSyllableIndex ? COLOR_SUNG : COLOR_FUTURE;
-      ctx.fillText(syllable.text, x, y);
-      x += ctx.measureText(syllable.text).width;
+      ctx.fillText(line.syllables[i].text, x, y);
+      x += widths[i];
     }
   }
 
@@ -554,29 +586,24 @@ export class LyricsOverlay {
     canvasWidth: number,
     t: number,
   ): void {
-    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+    const {widths, totalWidth} = this.measureSyllables(ctx, line, fontSize);
     ctx.textBaseline = 'middle';
 
-    const totalWidth = ctx.measureText(line.text).width;
     let x = (canvasWidth - totalWidth) / 2;
-
     for (let i = 0; i < line.syllables.length; i++) {
-      const syllable = line.syllables[i];
       if (i <= activeSyllableIndex) {
-        // Interpolate gray → sung color
         ctx.fillStyle = lerpColor(
           COLOR_UPCOMING_R, COLOR_UPCOMING_G, COLOR_UPCOMING_B,
           SUNG_R, SUNG_G, SUNG_B, t,
         );
       } else {
-        // Interpolate gray → white
         ctx.fillStyle = lerpColor(
           COLOR_UPCOMING_R, COLOR_UPCOMING_G, COLOR_UPCOMING_B,
           FUTURE_R, FUTURE_G, FUTURE_B, t,
         );
       }
-      ctx.fillText(syllable.text, x, y);
-      x += ctx.measureText(syllable.text).width;
+      ctx.fillText(line.syllables[i].text, x, y);
+      x += widths[i];
     }
   }
 
@@ -588,11 +615,10 @@ export class LyricsOverlay {
     y: number,
     canvasWidth: number,
   ): void {
-    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+    const {totalWidth} = this.measureSyllables(ctx, line, fontSize);
     ctx.textBaseline = 'middle';
     ctx.fillStyle = `rgb(${COLOR_UPCOMING_R},${COLOR_UPCOMING_G},${COLOR_UPCOMING_B})`;
 
-    const totalWidth = ctx.measureText(line.text).width;
     const x = (canvasWidth - totalWidth) / 2;
     ctx.fillText(line.text, x, y);
   }

@@ -191,11 +191,12 @@ function splitLongLines(lines: LyricLine[]): LyricLine[] {
       if (second[0].text.startsWith(' ')) {
         second[0] = {...second[0], text: second[0].text.trimStart()};
       }
+      const splitMs = second[0].msTime;
       const firstLine = makeLine(first);
       firstLine.phraseStartMs = line.phraseStartMs;
-      firstLine.phraseEndMs = line.phraseEndMs;
+      firstLine.phraseEndMs = splitMs;
       const secondLine = makeLine(second);
-      secondLine.phraseStartMs = line.phraseStartMs;
+      secondLine.phraseStartMs = splitMs;
       secondLine.phraseEndMs = line.phraseEndMs;
       splitLine(firstLine);
       splitLine(secondLine);
@@ -279,12 +280,15 @@ function mergeShortLines(lines: LyricLine[]): LyricLine[] {
   return merged;
 }
 
+/** Default duration after last syllable start when no vocal phrase marker exists. */
+const DEFAULT_LAST_SYLLABLE_DURATION_MS = 500;
+
 function makeLine(syllables: Syllable[]): LyricLine {
   const firstMs = syllables[0].msTime;
   const lastMs = syllables[syllables.length - 1].msTime;
   return {
     phraseStartMs: firstMs, // default; overridden by groupByPhrases
-    phraseEndMs: lastMs,    // default; overridden by groupByPhrases
+    phraseEndMs: lastMs + DEFAULT_LAST_SYLLABLE_DURATION_MS, // default; overridden by groupByPhrases
     syllables,
     text: syllables.map(s => s.text).join(''),
   };
