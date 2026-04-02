@@ -125,9 +125,6 @@ export class SceneOverlays {
   private cursorTickLabelTexture: THREE.CanvasTexture | null = null;
   private lastCursorTick = -1;
 
-  // Lane dividers
-  private laneDividers: THREE.Line[] = [];
-
   // Ghost notes (Place mode)
   private ghostNoteGroup = new THREE.Group();
   private ghostNoteMeshes: THREE.Mesh[] = [];
@@ -171,8 +168,6 @@ export class SceneOverlays {
     this.scene.add(this.ghostNoteGroup);
     this.scene.add(this.loopGroup);
 
-    // Create lane dividers
-    this.createLaneDividers();
   }
 
   // -----------------------------------------------------------------------
@@ -221,12 +216,6 @@ export class SceneOverlays {
     this.cursorTickLabelTexture?.dispose();
     if (this.cursorTickLabel) this.scene.remove(this.cursorTickLabel);
 
-    // Lane dividers
-    for (const line of this.laneDividers) {
-      line.geometry.dispose();
-      (line.material as THREE.LineBasicMaterial).dispose();
-      this.scene.remove(line);
-    }
 
     // Ghost notes
     this.scene.remove(this.ghostNoteGroup);
@@ -260,34 +249,6 @@ export class SceneOverlays {
   }
 
   // -----------------------------------------------------------------------
-  // Lane dividers
-  // -----------------------------------------------------------------------
-
-  private createLaneDividers(): void {
-    // Only draw dividers between the 4 pad lanes (red, yellow, blue, green).
-    // Kick (lane 0, x=0) spans the full highway width and should not have dividers.
-    const padLaneXs = LANE_X_POSITIONS.slice(1).sort((a, b) => a - b);
-    for (let i = 0; i < padLaneXs.length - 1; i++) {
-      const boundaryX = (padLaneXs[i] + padLaneXs[i + 1]) / 2;
-
-      const geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(boundaryX, -1.5, 0),
-        new THREE.Vector3(boundaryX, 2, 0),
-      ]);
-      const material = new THREE.LineBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.08,
-        depthTest: false,
-      });
-      material.clippingPlanes = this.clippingPlanes;
-      const line = new THREE.Line(geometry, material);
-      line.renderOrder = 2;
-      this.scene.add(line);
-      this.laneDividers.push(line);
-    }
-  }
-
   // -----------------------------------------------------------------------
   // Cursor line
   // -----------------------------------------------------------------------
