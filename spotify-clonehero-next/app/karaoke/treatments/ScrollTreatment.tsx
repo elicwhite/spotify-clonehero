@@ -9,7 +9,7 @@ export const ScrollTreatment: React.FC<TreatmentProps> = ({
 }) => {
   let currentLineIndex = 0;
   for (let i = 0; i < lines.length; i++) {
-    if (currentMs >= lines[i].startMs) {
+    if (currentMs >= lines[i].phraseStartMs) {
       currentLineIndex = i;
     }
   }
@@ -20,7 +20,7 @@ export const ScrollTreatment: React.FC<TreatmentProps> = ({
   if (nextLine) {
     scrollProgress = interpolate(
       currentMs,
-      [currentLine.startMs, nextLine.startMs],
+      [currentLine.phraseStartMs, nextLine.phraseStartMs],
       [0, 1],
       {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'},
     );
@@ -68,7 +68,7 @@ export const ScrollTreatment: React.FC<TreatmentProps> = ({
 
             return (
               <div
-                key={`${line.startMs}-${i}`}
+                key={`${line.phraseStartMs}-${i}`}
                 className="px-16"
                 style={{
                   height: LINE_HEIGHT,
@@ -86,7 +86,7 @@ export const ScrollTreatment: React.FC<TreatmentProps> = ({
                     const nextSyllableTime =
                       si < line.syllables.length - 1
                         ? line.syllables[si + 1].msTime
-                        : line.endMs;
+                        : line.phraseEndMs;
                     const progress = isCurrent
                       ? Math.min(
                           1,

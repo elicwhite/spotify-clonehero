@@ -18,7 +18,7 @@ export const BounceTreatment: React.FC<TreatmentProps> = ({
 
   let currentLineIndex = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (currentMs >= lines[i].startMs - 500 && currentMs < lines[i].endMs) {
+    if (currentMs >= lines[i].phraseStartMs - 500 && currentMs < lines[i].phraseEndMs) {
       currentLineIndex = i;
       break;
     }
@@ -31,15 +31,15 @@ export const BounceTreatment: React.FC<TreatmentProps> = ({
     topLine = lines[currentLineIndex];
     bottomLine = lines[currentLineIndex + 1] ?? null;
   } else {
-    const nextIndex = lines.findIndex(l => l.startMs > currentMs);
-    if (nextIndex >= 0 && lines[nextIndex].startMs - currentMs < 2000) {
+    const nextIndex = lines.findIndex(l => l.phraseStartMs > currentMs);
+    if (nextIndex >= 0 && lines[nextIndex].phraseStartMs - currentMs < 2000) {
       bottomLine = lines[nextIndex];
     }
   }
 
   let slideProgress = 0;
   if (topLine && bottomLine) {
-    const transitionStart = bottomLine.startMs - TRANSITION_MS;
+    const transitionStart = bottomLine.phraseStartMs - TRANSITION_MS;
     if (currentMs >= transitionStart) {
       slideProgress = Math.min(
         1,
@@ -55,7 +55,7 @@ export const BounceTreatment: React.FC<TreatmentProps> = ({
   let ballRelY: number | null = null;
 
   if (topLine && outerRef.current && topLineRef.current) {
-    const ball = getBallProgress(topLine.syllables, topLine.endMs, currentMs);
+    const ball = getBallProgress(topLine.syllables, topLine.phraseEndMs, currentMs);
     const outerRect = outerRef.current.getBoundingClientRect();
     const scale = outerRect.width / outerRef.current.offsetWidth || 1;
 
@@ -95,8 +95,8 @@ export const BounceTreatment: React.FC<TreatmentProps> = ({
     } else if (currentLineIndex >= 0) {
       const lastSyllable = topLine.syllables[topLine.syllables.length - 1];
       const lastSyllableEnd = bottomLine
-        ? bottomLine.startMs
-        : topLine.endMs;
+        ? bottomLine.phraseStartMs
+        : topLine.phraseEndMs;
       if (
         bottomLine &&
         currentMs >= lastSyllable.msTime &&

@@ -9,10 +9,14 @@ function makeLine(
   startMs: number,
   endMs: number,
   syllables: {text: string; msTime: number}[],
+  phraseStartMs?: number,
+  phraseEndMs?: number,
 ): LyricLine {
   return {
     startMs,
     endMs,
+    phraseStartMs: phraseStartMs ?? syllables[0].msTime,
+    phraseEndMs: phraseEndMs ?? syllables[syllables.length - 1].msTime,
     syllables,
     text: syllables.map(s => s.text).join(''),
   };
@@ -185,10 +189,10 @@ describe('LyricsState', () => {
       const lines = twoCloseLines();
       const state = new LyricsState(lines);
       state.update(3500);
-      state.update(5500); // at endMs of line 1
+      state.update(5200); // at last syllable of line 1
 
-      // 250ms into fade (half of 500ms)
-      const snap = state.update(5750);
+      // 250ms into fade (half of 500ms) from last syllable time
+      const snap = state.update(5450);
       expect(snap.opacity).toBeCloseTo(0.5, 1);
     });
 
@@ -202,15 +206,15 @@ describe('LyricsState', () => {
 
     it('fades out and back in during long gap', () => {
       const state = new LyricsState(twoFarLines());
-      // Line 0 ends at 3000, line 1 starts at 8000 (gap = 5000ms)
+      // Last syllable of line 0 at 2000, line 1 starts at 8000 (gap = 6000ms)
 
-      state.update(2000);
+      state.update(1500);
 
-      // Just past end — fading out
-      const fadeOut = state.update(3250);
+      // Just past last syllable — fading out (250ms into 500ms fade)
+      const fadeOut = state.update(2250);
       expect(fadeOut.opacity).toBeCloseTo(0.5, 1);
 
-      // Fully faded out (past 3500)
+      // Fully faded out (past 2500)
       const hidden = state.update(5000);
       expect(hidden.opacity).toBe(0);
 
@@ -233,11 +237,11 @@ describe('LyricsState', () => {
       expect(snap.showUpcoming).toBe(false);
     });
 
-    it('shows upcoming line after current ends (even with long gap)', () => {
+    it('does not show upcoming during long gap', () => {
       const state = new LyricsState(twoFarLines());
       state.update(2000);
-      const snap = state.update(3100); // past endMs of line 0
-      expect(snap.showUpcoming).toBe(true);
+      const snap = state.update(3100); // past last syllable, long gap
+      expect(snap.showUpcoming).toBe(false);
     });
 
     it('does not show upcoming when on last line', () => {

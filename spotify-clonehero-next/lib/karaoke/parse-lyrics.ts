@@ -8,6 +8,10 @@ export interface Syllable {
 export interface LyricLine {
   startMs: number;
   endMs: number;
+  /** Start of the vocal phrase marker. May be earlier than first syllable. */
+  phraseStartMs: number;
+  /** End of the vocal phrase marker (msTime + msLength). May be later than last syllable. */
+  phraseEndMs: number;
   syllables: Syllable[];
   text: string;
 }
@@ -103,7 +107,10 @@ function groupByPhrases(
       };
     }
 
-    lines.push(makeLine(phraseSyllables));
+    const line = makeLine(phraseSyllables);
+    line.phraseStartMs = phrase.msTime;
+    line.phraseEndMs = phraseEnd;
+    lines.push(line);
   }
 
   return lines;
@@ -186,8 +193,14 @@ function splitLongLines(lines: LyricLine[]): LyricLine[] {
       if (second[0].text.startsWith(' ')) {
         second[0] = {...second[0], text: second[0].text.trimStart()};
       }
-      splitLine(makeLine(first));
-      splitLine(makeLine(second));
+      const firstLine = makeLine(first);
+      firstLine.phraseStartMs = line.phraseStartMs;
+      firstLine.phraseEndMs = line.phraseEndMs;
+      const secondLine = makeLine(second);
+      secondLine.phraseStartMs = line.phraseStartMs;
+      secondLine.phraseEndMs = line.phraseEndMs;
+      splitLine(firstLine);
+      splitLine(secondLine);
     } else {
       result.push(line);
     }
@@ -253,10 +266,13 @@ function mergeShortLines(lines: LyricLine[]): LyricLine[] {
         ...currSyllables[0],
         text: ' ' + currSyllables[0].text.trimStart(),
       };
-      merged[merged.length - 1] = makeLine([
+      const mergedLine = makeLine([
         ...prev.syllables,
         ...currSyllables,
       ]);
+      mergedLine.phraseStartMs = Math.min(prev.phraseStartMs, curr.phraseStartMs);
+      mergedLine.phraseEndMs = Math.max(prev.phraseEndMs, curr.phraseEndMs);
+      merged[merged.length - 1] = mergedLine;
     } else {
       merged.push(curr);
     }
@@ -266,9 +282,13 @@ function mergeShortLines(lines: LyricLine[]): LyricLine[] {
 }
 
 function makeLine(syllables: Syllable[]): LyricLine {
+  const firstMs = syllables[0].msTime;
+  const lastMs = syllables[syllables.length - 1].msTime;
   return {
-    startMs: syllables[0].msTime,
+    startMs: firstMs,
     endMs: 0,
+    phraseStartMs: firstMs, // default; overridden by groupByPhrases
+    phraseEndMs: lastMs,    // default; overridden by groupByPhrases
     syllables,
     text: syllables.map(s => s.text).join(''),
   };

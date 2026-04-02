@@ -74,7 +74,7 @@ export default function ClientPage({md5}: {md5: string}) {
         const songLength =
           (metadata.song_length ?? 0) > 0
             ? metadata.song_length!
-            : lines[lines.length - 1].endMs + 5000;
+            : lines[lines.length - 1].phraseEndMs + 5000;
 
         setKaraokeData({
           metadata,

@@ -74,9 +74,15 @@ export class LyricsState {
     }
     this.lastTimeMs = timeMs;
 
-    // Detect line change → start transition
+    // Detect line change → start slide transition only for short gaps.
+    // Long gaps (≥ threshold) use fade out/in instead, so the new line
+    // should appear directly at the active position with no slide.
     if (this.currentLineIndex !== prevLineIndex && prevLineIndex >= 0 && this.currentLineIndex > prevLineIndex) {
-      this.transitionStartMs = timeMs;
+      const prevLine = this.lines[prevLineIndex];
+      const gap = this.lines[this.currentLineIndex].phraseStartMs - prevLine.phraseEndMs;
+      if (gap < PHRASE_DISTANCE_THRESHOLD_MS) {
+        this.transitionStartMs = timeMs;
+      }
     }
 
     // Calculate transition progress
@@ -113,7 +119,7 @@ export class LyricsState {
   /** Binary search for the active line at a given time. */
   private findLineIndex(timeMs: number): number {
     const lines = this.lines;
-    if (lines.length === 0 || timeMs < lines[0].startMs - PHRASE_FADE_MS) {
+    if (lines.length === 0 || timeMs < lines[0].phraseStartMs - PHRASE_FADE_MS) {
       return -1;
     }
 
@@ -136,17 +142,29 @@ export class LyricsState {
   private advanceLineIndex(timeMs: number): void {
     const lines = this.lines;
     if (this.currentLineIndex < 0) {
-      if (lines.length > 0 && timeMs >= lines[0].startMs - PHRASE_FADE_MS) {
+      if (lines.length > 0 && timeMs >= lines[0].phraseStartMs - PHRASE_FADE_MS) {
         this.currentLineIndex = 0;
       }
       return;
     }
 
-    while (
-      this.currentLineIndex < lines.length - 1 &&
-      timeMs >= lines[this.currentLineIndex + 1].startMs
-    ) {
-      this.currentLineIndex++;
+    while (this.currentLineIndex < lines.length - 1) {
+      const nextLine = lines[this.currentLineIndex + 1];
+      if (timeMs >= nextLine.startMs) {
+        // Past the next line's first syllable — advance normally
+        this.currentLineIndex++;
+        continue;
+      }
+      // Check for early advance during long gaps: once the fade-out is
+      // complete, move to the next line so it's ready when the fade-in
+      // starts (the line renders at opacity 0 until then).
+      const line = lines[this.currentLineIndex];
+      const gap = nextLine.phraseStartMs - line.phraseEndMs;
+      if (gap >= PHRASE_DISTANCE_THRESHOLD_MS && timeMs >= line.phraseEndMs + PHRASE_FADE_MS) {
+        this.currentLineIndex++;
+        continue;
+      }
+      break;
     }
   }
 
@@ -175,43 +193,47 @@ export class LyricsState {
   private calculateOpacity(timeMs: number): number {
     if (this.currentLineIndex < 0) {
       if (this.lines.length > 0) {
-        const firstStart = this.lines[0].startMs;
-        if (timeMs >= firstStart - PHRASE_FADE_MS && timeMs < firstStart) {
-          return (timeMs - (firstStart - PHRASE_FADE_MS)) / PHRASE_FADE_MS;
+        const phraseStart = this.lines[0].phraseStartMs;
+        if (timeMs >= phraseStart - PHRASE_FADE_MS && timeMs < phraseStart) {
+          return (timeMs - (phraseStart - PHRASE_FADE_MS)) / PHRASE_FADE_MS;
         }
       }
       return 0;
     }
 
     const line = this.lines[this.currentLineIndex];
-    const lineEnd = line.endMs;
     const nextLine = this.lines[this.currentLineIndex + 1];
+    const phraseEnd = line.phraseEndMs;
 
-    if (timeMs >= lineEnd) {
+    if (timeMs >= phraseEnd) {
       if (nextLine) {
-        const gap = nextLine.startMs - lineEnd;
+        const gap = nextLine.phraseStartMs - phraseEnd;
         if (gap < PHRASE_DISTANCE_THRESHOLD_MS) {
-          return 1;
+          return 1; // Short gap — stay visible
         }
-        const fadeOutEnd = lineEnd + PHRASE_FADE_MS;
+        // Long gap — fade out, then fade in for next
+        const fadeOutEnd = phraseEnd + PHRASE_FADE_MS;
         if (timeMs < fadeOutEnd) {
-          return 1 - (timeMs - lineEnd) / PHRASE_FADE_MS;
+          return 1 - (timeMs - phraseEnd) / PHRASE_FADE_MS;
         }
-        const fadeInStart = nextLine.startMs - PHRASE_FADE_MS;
+        const fadeInStart = nextLine.phraseStartMs - PHRASE_FADE_MS;
         if (timeMs >= fadeInStart) {
           return (timeMs - fadeInStart) / PHRASE_FADE_MS;
         }
         return 0;
       }
-      const fadeOutEnd = lineEnd + PHRASE_FADE_MS;
+      // Last line — fade out
+      const fadeOutEnd = phraseEnd + PHRASE_FADE_MS;
       if (timeMs < fadeOutEnd) {
-        return 1 - (timeMs - lineEnd) / PHRASE_FADE_MS;
+        return 1 - (timeMs - phraseEnd) / PHRASE_FADE_MS;
       }
       return 0;
     }
 
-    if (timeMs < line.startMs) {
-      return Math.max(0, (timeMs - (line.startMs - PHRASE_FADE_MS)) / PHRASE_FADE_MS);
+    // Before phrase starts — fade in
+    const phraseStart = line.phraseStartMs;
+    if (timeMs < phraseStart) {
+      return Math.max(0, (timeMs - (phraseStart - PHRASE_FADE_MS)) / PHRASE_FADE_MS);
     }
 
     return 1;
@@ -224,8 +246,8 @@ export class LyricsState {
     const nextLine = this.lines[this.currentLineIndex + 1];
     if (!nextLine) return false;
 
-    const gap = nextLine.startMs - line.endMs;
-    return gap < PHRASE_DISTANCE_THRESHOLD_MS || timeMs >= line.endMs;
+    const gap = nextLine.phraseStartMs - line.phraseEndMs;
+    return gap < PHRASE_DISTANCE_THRESHOLD_MS;
   }
 }
 

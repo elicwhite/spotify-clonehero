@@ -423,7 +423,7 @@ export default function LyricsAlignPage() {
   const showKaraoke = status === 'done' && alignedLines.length > 0;
   const songLength =
     showKaraoke && alignedLines.length > 0
-      ? alignedLines[alignedLines.length - 1].endMs + 5000
+      ? alignedLines[alignedLines.length - 1].phraseEndMs + 5000
       : chart?.songLength ?? 180000;
   const durationInFrames = Math.ceil((songLength / 1000) * FPS);
 
