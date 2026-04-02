@@ -84,6 +84,8 @@ export const setupRenderer = (
 
   /** Lyrics overlay (Clone Hero-style karaoke at top of screen). */
   let lyricsOverlay: LyricsOverlay | null = null;
+  /** Set to true when destroy() is called, prevents late async startRender. */
+  let destroyed = false;
 
   function setSize() {
     const width = sizingRef.current?.offsetWidth ?? window.innerWidth;
@@ -155,7 +157,7 @@ export const setupRenderer = (
     },
 
     destroy: async () => {
-      console.log('Tearing down the renderer');
+      destroyed = true;
       window.removeEventListener('resize', onResize, false);
       renderer.setAnimationLoop(null);
       renderer.renderLists.dispose();
@@ -422,6 +424,7 @@ export const setupRenderer = (
     reconciler: SceneReconciler,
     noteRenderer: NoteRenderer,
   ) {
+    if (destroyed) return;
     renderer.setAnimationLoop(animation);
 
     function animation() {
