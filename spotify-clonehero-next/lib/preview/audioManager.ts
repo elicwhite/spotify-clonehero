@@ -37,6 +37,19 @@ export class AudioManager {
   #lastTempoChangeRealTime: number = 0;
   #lastTempoChangeEffectiveTime: number = 0;
 
+  // -----------------------------------------------------------------------
+  // Audio clock smoothing
+  // -----------------------------------------------------------------------
+  // AudioContext.currentTime updates at the audio hardware rate which
+  // doesn't align with requestAnimationFrame. This causes visible stutter
+  // when used to position notes/playheads. We smooth it by running our own
+  // rAF loop that advances via the rAF timestamp (perfectly monotonic) and
+  // gently corrects drift against the real audio clock.
+  // -----------------------------------------------------------------------
+  #smoothedTime: number = 0; // smoothed currentTime in seconds
+  #lastFrameTime: number = 0; // rAF timestamp of previous tick
+  #smoothingRafId: number = 0; // rAF handle for the smoothing loop
+
   // Generation counter to prevent concurrent play() calls from creating
   // orphaned audio sources. Each play() call increments this and checks
   // it after async operations to bail out if a newer call has started.
@@ -238,6 +251,7 @@ export class AudioManager {
 
   async pause() {
     if (this.#context.state === 'running') {
+      this.#stopSmoothingLoop();
       await this.#context.suspend();
     }
   }
@@ -245,6 +259,7 @@ export class AudioManager {
   async resume() {
     if (this.#context.state === 'suspended') {
       await this.#context.resume();
+      this.#startSmoothingLoop();
     }
   }
 
@@ -252,6 +267,9 @@ export class AudioManager {
     if (percent == null && time == null) {
       throw new Error('Must provide percent or time');
     }
+
+    // Stop any existing smoothing loop (will restart after audio is playing)
+    this.#stopSmoothingLoop();
 
     // Increment generation so any earlier in-flight play() call will bail out
     // after its async operations complete.
@@ -287,6 +305,8 @@ export class AudioManager {
         return;
       }
     }
+
+    this.#startSmoothingLoop();
   }
 
   setVolume(trackName: string, volume: number) {
@@ -312,7 +332,12 @@ export class AudioManager {
     return this.#context.state === 'running';
   }
 
-  get currentTime() {
+  /**
+   * Raw (unsmoothed) playback position in seconds. Reads directly from
+   * AudioContext.currentTime which updates at the hardware sample rate
+   * and may jitter relative to requestAnimationFrame.
+   */
+  get #rawCurrentTime(): number {
     if (this.#startedAt < 0) {
       return 0;
     }
@@ -321,13 +346,77 @@ export class AudioManager {
     const currentRealTime = this.#context.currentTime;
     const timeSinceLastChange = currentRealTime - this.#lastTempoChangeRealTime;
 
-    // When tempo is 0.5 (half speed), audio time progresses at half the rate of real time
-    // When tempo is 2.0 (double speed), audio time progresses at double the rate of real time
     const effectiveTimeSinceLastChange =
       timeSinceLastChange * this.#tempoConfig.tempo;
 
-    // Return the effective time from the last change plus the current effective time
     return this.#lastTempoChangeEffectiveTime + effectiveTimeSinceLastChange;
+  }
+
+  /**
+   * Start the internal rAF smoothing loop. Called automatically on play/resume.
+   * Multiple calls are safe — only one loop runs at a time.
+   */
+  #startSmoothingLoop(): void {
+    if (this.#smoothingRafId) return; // already running
+
+    const tick = (frameTime: number) => {
+      if (!this.isPlaying || !this.#isInitialized) {
+        // Playback ended while loop was scheduled — stop
+        this.#smoothingRafId = 0;
+        this.#lastFrameTime = 0;
+        this.#smoothedTime = this.#rawCurrentTime;
+        return;
+      }
+
+      const raw = this.#rawCurrentTime;
+
+      if (this.#lastFrameTime === 0) {
+        // First tick — initialize
+        this.#lastFrameTime = frameTime;
+        this.#smoothedTime = raw;
+      } else {
+        // Advance by real elapsed time × current tempo
+        const realDeltaSec = (frameTime - this.#lastFrameTime) / 1000;
+        this.#lastFrameTime = frameTime;
+        this.#smoothedTime += realDeltaSec * this.#tempoConfig.tempo;
+
+        // Drift correction against the authoritative audio clock.
+        const drift = raw - this.#smoothedTime;
+        if (Math.abs(drift) > 0.08) {
+          // Large discontinuity (seek, pause/resume, tab switch) — snap
+          this.#smoothedTime = raw;
+        } else {
+          // Absorb 2% of drift per frame (~60fps → corrects 50ms in ~1.5s)
+          this.#smoothedTime += drift * 0.02;
+        }
+      }
+
+      this.#smoothingRafId = requestAnimationFrame(tick);
+    };
+
+    this.#smoothingRafId = requestAnimationFrame(tick);
+  }
+
+  /** Stop the smoothing loop. Called on pause/stop. */
+  #stopSmoothingLoop(): void {
+    if (this.#smoothingRafId) {
+      cancelAnimationFrame(this.#smoothingRafId);
+      this.#smoothingRafId = 0;
+    }
+    this.#lastFrameTime = 0;
+    this.#smoothedTime = this.#rawCurrentTime;
+  }
+
+  /**
+   * Current playback position in seconds (smoothed).
+   * During playback, returns a jitter-free value driven by the internal
+   * rAF loop. When paused/stopped, returns the raw audio clock value.
+   */
+  get currentTime(): number {
+    if (this.#lastFrameTime === 0) {
+      return this.#rawCurrentTime;
+    }
+    return this.#smoothedTime;
   }
 
   get isInitialized() {
@@ -380,6 +469,7 @@ export class AudioManager {
     this.#effectivePlayTime = 0;
     this.#lastTempoChangeRealTime = 0;
     this.#lastTempoChangeEffectiveTime = 0;
+    this.#stopSmoothingLoop();
   }
 
   destroy() {
