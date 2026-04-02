@@ -183,6 +183,7 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
         artist: song.data.artist,
         song: song.data.name,
         charter: song.data.charter,
+        genre: song.genre,
         modifiedTime: new Date(song.modifiedTime),
         recommendationReasons:
           song.recommendedChart.type == 'better-chart-found'

@@ -73,7 +73,7 @@ export function serializeIni(metadata: ChartMetadata): string {
   for (const { key, type } of FIELD_ORDER) {
     const value = metadata[key];
     if (value === undefined) continue;
-    lines.push(`${key} = ${formatValue(value, type)}`);
+    lines.push(`${key} = ${formatValue(value as string | number | boolean, type)}`);
   }
 
   // Write any extra fields that weren't in our known field list
