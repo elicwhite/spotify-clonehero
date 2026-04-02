@@ -6,17 +6,13 @@ import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
 // ---------------------------------------------------------------------------
 
 function makeLine(
-  startMs: number,
-  endMs: number,
+  phraseStartMs: number,
+  phraseEndMs: number,
   syllables: {text: string; msTime: number}[],
-  phraseStartMs?: number,
-  phraseEndMs?: number,
 ): LyricLine {
   return {
-    startMs,
-    endMs,
-    phraseStartMs: phraseStartMs ?? syllables[0].msTime,
-    phraseEndMs: phraseEndMs ?? syllables[syllables.length - 1].msTime,
+    phraseStartMs,
+    phraseEndMs,
     syllables,
     text: syllables.map(s => s.text).join(''),
   };
@@ -189,10 +185,10 @@ describe('LyricsState', () => {
       const lines = twoCloseLines();
       const state = new LyricsState(lines);
       state.update(3500);
-      state.update(5200); // at last syllable of line 1
+      state.update(5500); // at phraseEndMs of line 1
 
-      // 250ms into fade (half of 500ms) from last syllable time
-      const snap = state.update(5450);
+      // 250ms into fade (half of 500ms) from phraseEndMs
+      const snap = state.update(5750);
       expect(snap.opacity).toBeCloseTo(0.5, 1);
     });
 
@@ -206,15 +202,15 @@ describe('LyricsState', () => {
 
     it('fades out and back in during long gap', () => {
       const state = new LyricsState(twoFarLines());
-      // Last syllable of line 0 at 2000, line 1 starts at 8000 (gap = 6000ms)
+      // Line 0 phraseEndMs=3000, line 1 phraseStartMs=8000 (gap = 5000ms)
 
-      state.update(1500);
+      state.update(2000);
 
-      // Just past last syllable — fading out (250ms into 500ms fade)
-      const fadeOut = state.update(2250);
+      // Just past phraseEnd — fading out (250ms into 500ms fade)
+      const fadeOut = state.update(3250);
       expect(fadeOut.opacity).toBeCloseTo(0.5, 1);
 
-      // Fully faded out (past 2500)
+      // Fully faded out (past 3500)
       const hidden = state.update(5000);
       expect(hidden.opacity).toBe(0);
 

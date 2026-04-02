@@ -269,11 +269,6 @@ function groupIntoLines(words: AlignedWord[]): LyricLine[] {
   }
   flush();
 
-  for (let i = 0; i < lines.length; i++) {
-    lines[i].endMs =
-      i < lines.length - 1 ? lines[i + 1].startMs : lines[i].startMs + 2000;
-  }
-
   return lines;
 
   function flush() {
@@ -282,9 +277,11 @@ function groupIntoLines(words: AlignedWord[]): LyricLine[] {
     for (let j = 1; j < syllables.length; j++) {
       syllables[j] = {...syllables[j], text: ' ' + syllables[j].text};
     }
+    const firstMs = current[0].startMs;
+    const lastMs = current[current.length - 1].startMs;
     lines.push({
-      startMs: current[0].startMs,
-      endMs: 0,
+      phraseStartMs: firstMs,
+      phraseEndMs: lastMs,
       syllables,
       text: current.map(w => w.text).join(' '),
     });

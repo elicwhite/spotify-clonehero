@@ -6,8 +6,6 @@ export interface Syllable {
 }
 
 export interface LyricLine {
-  startMs: number;
-  endMs: number;
   /** Start of the vocal phrase marker. May be earlier than first syllable. */
   phraseStartMs: number;
   /** End of the vocal phrase marker (msTime + msLength). May be later than last syllable. */
@@ -253,7 +251,7 @@ function mergeShortLines(lines: LyricLine[]): LyricLine[] {
     const curr = lines[i];
     const combinedText = prev.text + ' ' + curr.text;
     const prevEnd = prev.syllables[prev.syllables.length - 1].msTime;
-    const gap = curr.startMs - prevEnd;
+    const gap = curr.phraseStartMs - prevEnd;
 
     if (
       prev.text.length < 30 &&
@@ -285,21 +283,11 @@ function makeLine(syllables: Syllable[]): LyricLine {
   const firstMs = syllables[0].msTime;
   const lastMs = syllables[syllables.length - 1].msTime;
   return {
-    startMs: firstMs,
-    endMs: 0,
     phraseStartMs: firstMs, // default; overridden by groupByPhrases
     phraseEndMs: lastMs,    // default; overridden by groupByPhrases
     syllables,
     text: syllables.map(s => s.text).join(''),
   };
-}
-
-function setEndTimes(lines: LyricLine[]): LyricLine[] {
-  for (let i = 0; i < lines.length; i++) {
-    lines[i].endMs =
-      i < lines.length - 1 ? lines[i + 1].startMs : lines[i].startMs + 2000;
-  }
-  return lines;
 }
 
 /**
@@ -318,5 +306,5 @@ export function parseLyrics(
       ? mergeShortLines(groupByPhrases(syllables, phrases))
       : groupByHeuristic(syllables);
 
-  return setEndTimes(splitLongLines(lines));
+  return splitLongLines(lines);
 }

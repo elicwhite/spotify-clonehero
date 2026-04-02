@@ -128,7 +128,7 @@ export class LyricsState {
     let result = -1;
     while (lo <= hi) {
       const mid = (lo + hi) >> 1;
-      if (lines[mid].startMs <= timeMs) {
+      if (lines[mid].phraseStartMs <= timeMs) {
         result = mid;
         lo = mid + 1;
       } else {
@@ -150,7 +150,7 @@ export class LyricsState {
 
     while (this.currentLineIndex < lines.length - 1) {
       const nextLine = lines[this.currentLineIndex + 1];
-      if (timeMs >= nextLine.startMs) {
+      if (timeMs >= nextLine.phraseStartMs) {
         // Past the next line's first syllable — advance normally
         this.currentLineIndex++;
         continue;
