@@ -142,6 +142,24 @@ const tomMarkerEventTypes = new Set<EventType>([
   eventTypes.greenTomMarker,
 ]);
 
+/** SysEx modifier types (written as Phase Shift SysEx, not MIDI notes). */
+const sysExModifierTypes = new Set<EventType>([
+  eventTypes.forceTap,
+  eventTypes.forceOpen,
+]);
+
+/** MIDI-note modifier types (written as note on/off with sustain). */
+const noteModifierTypes = new Set<EventType>([
+  eventTypes.forceHopo,
+  eventTypes.forceStrum,
+]);
+
+/** SysEx type byte for each modifier. */
+const sysExTypeByte: Partial<Record<EventType, number>> = {
+  [eventTypes.forceTap]: 0x04,
+  [eventTypes.forceOpen]: 0x01,
+};
+
 /** 5-fret instruments (non-GHL). */
 const fiveFretInstruments = new Set<Instrument>([
   'guitar',
@@ -337,13 +355,24 @@ function buildInstrumentTrack(
   // star power, solos, activation lanes, flex lanes, tom markers, flam
   // These are already per-difficulty in trackData (scan-chart distributes them),
   // so we need to deduplicate when merging difficulties back into one MIDI track.
-  const emittedStarPower = new Set<string>();
-  const emittedSolo = new Set<string>();
-  const emittedActivation = new Set<string>();
+  // Collect instrument-wide sections across all difficulties, then merge
+  // overlapping ranges before emitting. MIDI cannot have overlapping notes
+  // of the same pitch — when .chart has per-difficulty sections at different
+  // ranges, we must merge them into valid non-overlapping MIDI notes.
+  const allStarPower: { tick: number; length: number }[] = [];
+  const allSolo: { tick: number; length: number }[] = [];
+  const allActivation: { tick: number; length: number }[] = [];
   const emittedFlexLane = new Map<string, number>(); // key → velocity
   const emittedTomMarker = new Set<string>();
   const emittedFlam = new Set<string>();
   const emittedKick2x = new Set<string>();
+
+  // Collect guitar/GHL modifier events per difficulty for sustain-range reconstruction.
+  // scan-chart splits MIDI modifier sustains into zero-length events at each note tick;
+  // we must reverse that to produce sustain-range SysEx/note pairs that Moonscraper and
+  // Clone Hero expect.
+  const modifiersByDiff = new Map<Difficulty, Map<EventType, { tick: number; length: number }[]>>();
+  const noteTicksByDiff = new Map<Difficulty, number[]>();
 
   for (const td of trackDataEntries) {
     const difficulty = td.difficulty;
@@ -376,6 +405,42 @@ function buildInstrumentTrack(
           }
           s.add(base);
         }
+      }
+    }
+
+    // For non-drum instruments, collect modifier events and note ticks
+    // so we can reconstruct sustain ranges after the per-event loop.
+    if (!isDrums) {
+      const noteOffsets = isGhl ? sixFretNoteOffsets : fiveFretNoteOffsets;
+      const noteTicks: number[] = [];
+      let mods = modifiersByDiff.get(difficulty);
+      if (!mods) {
+        mods = new Map();
+        modifiersByDiff.set(difficulty, mods);
+      }
+
+      for (const ev of td.trackEvents) {
+        // Collect note ticks (needed for range reconstruction)
+        if (noteOffsets[ev.type] !== undefined) {
+          noteTicks.push(ev.tick);
+        }
+        // Collect SysEx and note-based modifiers
+        if (sysExModifierTypes.has(ev.type) || noteModifierTypes.has(ev.type)) {
+          let arr = mods.get(ev.type);
+          if (!arr) {
+            arr = [];
+            mods.set(ev.type, arr);
+          }
+          arr.push({ tick: ev.tick, length: ev.length });
+        }
+      }
+
+      // Deduplicate note ticks (chords produce multiple entries at the same tick)
+      const existing = noteTicksByDiff.get(difficulty);
+      if (existing) {
+        existing.push(...noteTicks);
+      } else {
+        noteTicksByDiff.set(difficulty, noteTicks);
       }
     }
 
@@ -448,15 +513,8 @@ function buildInstrumentTrack(
           continue;
         }
 
-        // forceTap → Phase Shift SysEx (type 0x04) per-difficulty
-        if (ev.type === eventTypes.forceTap) {
-          addSysExOnOff(events, ev.tick, ev.length, difficulty, 0x04);
-          continue;
-        }
-
-        // forceOpen via Phase Shift SysEx
-        if (ev.type === eventTypes.forceOpen) {
-          addSysExOnOff(events, ev.tick, ev.length, difficulty, 0x01);
+        // Skip SysEx and note-based modifiers — handled via range reconstruction below
+        if (sysExModifierTypes.has(ev.type) || noteModifierTypes.has(ev.type)) {
           continue;
         }
       } else if (fiveFretInstruments.has(instrument)) {
@@ -467,15 +525,8 @@ function buildInstrumentTrack(
           continue;
         }
 
-        // forceTap → Phase Shift SysEx (type 0x04) per-difficulty
-        if (ev.type === eventTypes.forceTap) {
-          addSysExOnOff(events, ev.tick, ev.length, difficulty, 0x04);
-          continue;
-        }
-
-        // forceOpen via Phase Shift SysEx
-        if (ev.type === eventTypes.forceOpen) {
-          addSysExOnOff(events, ev.tick, ev.length, difficulty, 0x01);
+        // Skip SysEx and note-based modifiers — handled via range reconstruction below
+        if (sysExModifierTypes.has(ev.type) || noteModifierTypes.has(ev.type)) {
           continue;
         }
       }
@@ -483,36 +534,10 @@ function buildInstrumentTrack(
       // Unhandled event types are silently skipped
     }
 
-    // Star power sections → note 116 (deduplicate across difficulties)
-    for (const sp of td.starPowerSections) {
-      const key = `${sp.tick}:${sp.length}`;
-      if (!emittedStarPower.has(key)) {
-        emittedStarPower.add(key);
-        addNoteOnOff(events, sp.tick, sp.length, 116, 100);
-      }
-    }
-
-    // Solo sections → note 103
-    for (const solo of td.soloSections) {
-      const key = `${solo.tick}:${solo.length}`;
-      if (!emittedSolo.has(key)) {
-        emittedSolo.add(key);
-        addNoteOnOff(events, solo.tick, solo.length, 103, 100);
-      }
-    }
-
-    // Drum freestyle / activation lanes → note 120
-    // Write ALL sections (including coda) as note 120 so they survive
-    // round-trip. Coda sections are ALSO emitted as [coda] text events
-    // on the EVENTS track (in buildEventsTrack), which scan-chart uses
-    // to set the isCoda flag on re-parse.
-    for (const fs of td.drumFreestyleSections) {
-      const key = `${fs.tick}:${fs.length}`;
-      if (!emittedActivation.has(key)) {
-        emittedActivation.add(key);
-        addNoteOnOff(events, fs.tick, fs.length, 120, 100);
-      }
-    }
+    // Collect sections for post-loop merge
+    for (const sp of td.starPowerSections) allStarPower.push(sp);
+    for (const solo of td.soloSections) allSolo.push(solo);
+    for (const fs of td.drumFreestyleSections) allActivation.push(fs);
 
     // Flex lanes → note 126 (single) / 127 (double)
     // Track lowest difficulty per flex lane for LDS velocity encoding.
@@ -581,6 +606,147 @@ function buildInstrumentTrack(
                 addNoteOnOff(events, ev.tick, tomLen, midiNote, 100);
               }
             }
+          }
+        }
+      }
+    }
+  }
+
+  // Emit merged instrument-wide sections
+  for (const sp of mergeOverlappingSections(allStarPower)) {
+    addNoteOnOff(events, sp.tick, sp.length, 116, 100);
+  }
+  for (const solo of mergeOverlappingSections(allSolo)) {
+    addNoteOnOff(events, solo.tick, solo.length, 103, 100);
+  }
+  for (const fs of mergeOverlappingSections(allActivation)) {
+    addNoteOnOff(events, fs.tick, fs.length, 120, 100);
+  }
+
+  // Emit modifier sustain ranges for guitar/GHL instruments.
+  //
+  // scan-chart's MIDI parser splits SysEx modifier sustains into zero-length
+  // events at each note tick (to match .chart's per-note format). Our patched
+  // scan-chart preserves the original sustains in `modifierSustains`. When
+  // available, use those directly; otherwise reconstruct ranges from zero-length
+  // events (needed for .chart-sourced data or unpatched scan-chart).
+  //
+  // SysEx modifiers (forceTap, forceOpen): if all charted difficulties have
+  // identical ranges, use 0xFF (all-difficulty); otherwise per-difficulty.
+  // Note-based modifiers (forceHopo, forceStrum): per-difficulty note on/off.
+  if (!isDrums && modifiersByDiff.size > 0) {
+    const chartedDiffs = [...modifiersByDiff.keys()];
+    const diffStarts = isGhl ? sixFretDiffStarts : fiveFretDiffStarts;
+    const noteOffsets = isGhl ? sixFretNoteOffsets : fiveFretNoteOffsets;
+
+    // Check if any difficulty has modifierSustains from the scan-chart patch
+    const hasModifierSustains = trackDataEntries.some(
+      td => td.modifierSustains && td.modifierSustains.length > 0,
+    );
+
+    if (hasModifierSustains) {
+      // Use original sustain ranges from modifierSustains (MIDI-sourced data).
+      // Collect per-difficulty, then merge identical ranges across difficulties.
+      const sustainsByDiff = new Map<Difficulty, Map<EventType, { tick: number; length: number }[]>>();
+      for (const td of trackDataEntries) {
+        if (!td.modifierSustains) continue;
+        let diffMap = sustainsByDiff.get(td.difficulty);
+        if (!diffMap) {
+          diffMap = new Map();
+          sustainsByDiff.set(td.difficulty, diffMap);
+        }
+        for (const ms of td.modifierSustains) {
+          let arr = diffMap.get(ms.type);
+          if (!arr) {
+            arr = [];
+            diffMap.set(ms.type, arr);
+          }
+          arr.push({ tick: ms.tick, length: ms.length });
+        }
+      }
+
+      // Emit SysEx modifiers
+      for (const modType of sysExModifierTypes) {
+        const typeByte = sysExTypeByte[modType]!;
+        const rangesByDiff = new Map<Difficulty, { tick: number; length: number }[]>();
+        for (const diff of chartedDiffs) {
+          rangesByDiff.set(diff, sustainsByDiff.get(diff)?.get(modType) ?? []);
+        }
+
+        // If all difficulties have identical ranges, use 0xFF
+        const rangeArrays = [...rangesByDiff.values()];
+        const allIdentical = rangeArrays.length > 0 && rangeArrays.every(
+          r => JSON.stringify(r) === JSON.stringify(rangeArrays[0]),
+        );
+
+        if (allIdentical && rangeArrays[0].length > 0) {
+          for (const range of rangeArrays[0]) {
+            addSysExOnOff(events, range.tick, range.length, 0xff, typeByte);
+          }
+        } else {
+          for (const [diff, ranges] of rangesByDiff) {
+            for (const range of ranges) {
+              addSysExOnOff(events, range.tick, range.length, sysExDiffMap[diff], typeByte);
+            }
+          }
+        }
+      }
+
+      // Emit note-based modifiers
+      for (const modType of noteModifierTypes) {
+        const offset = noteOffsets[modType];
+        if (offset === undefined) continue;
+        for (const [diff, diffMap] of sustainsByDiff) {
+          for (const range of diffMap.get(modType) ?? []) {
+            addNoteOnOff(events, range.tick, range.length, diffStarts[diff] + offset, 100);
+          }
+        }
+      }
+    } else {
+      // Reconstruct ranges from zero-length per-note events (.chart-sourced data).
+      // Deduplicate note ticks per difficulty
+      for (const [diff, ticks] of noteTicksByDiff) {
+        noteTicksByDiff.set(diff, [...new Set(ticks)]);
+      }
+
+      // SysEx modifiers
+      for (const modType of sysExModifierTypes) {
+        const typeByte = sysExTypeByte[modType]!;
+        const rangesByDiff = new Map<Difficulty, { tick: number; length: number }[]>();
+        for (const diff of chartedDiffs) {
+          const mods = modifiersByDiff.get(diff)?.get(modType) ?? [];
+          const noteTicks = noteTicksByDiff.get(diff) ?? [];
+          rangesByDiff.set(diff, reconstructModifierRanges(mods, noteTicks));
+        }
+
+        const rangeArrays = [...rangesByDiff.values()];
+        const allIdentical = rangeArrays.length > 0 && rangeArrays.every(
+          r => JSON.stringify(r) === JSON.stringify(rangeArrays[0]),
+        );
+
+        if (allIdentical && rangeArrays[0].length > 0) {
+          for (const range of rangeArrays[0]) {
+            addSysExOnOff(events, range.tick, range.length, 0xff, typeByte);
+          }
+        } else {
+          for (const [diff, ranges] of rangesByDiff) {
+            for (const range of ranges) {
+              addSysExOnOff(events, range.tick, range.length, sysExDiffMap[diff], typeByte);
+            }
+          }
+        }
+      }
+
+      // Note-based modifiers
+      for (const modType of noteModifierTypes) {
+        const offset = noteOffsets[modType];
+        if (offset === undefined) continue;
+        for (const [diff, mods] of modifiersByDiff) {
+          const modEvents = mods.get(modType) ?? [];
+          const noteTicks = noteTicksByDiff.get(diff) ?? [];
+          const ranges = reconstructModifierRanges(modEvents, noteTicks);
+          for (const range of ranges) {
+            addNoteOnOff(events, range.tick, range.length, diffStarts[diff] + offset, 100);
           }
         }
       }
@@ -717,17 +883,102 @@ const sysExDiffMap: Record<Difficulty, number> = {
 };
 
 /**
- * Add a Phase Shift SysEx on/off pair (used for forceOpen).
- * Format: [0x50, 0x53, 0x00, 0x00, diffByte, typeByte, isStart]
+ * Merge overlapping sections into non-overlapping ranges.
+ *
+ * MIDI cannot represent overlapping notes of the same pitch. When .chart has
+ * per-difficulty star power / solo sections at overlapping tick ranges,
+ * they must be merged before writing as note 116/103/120. Without merging,
+ * the interleaved noteOn/noteOff pairs produce corrupt lengths on re-parse.
+ */
+function mergeOverlappingSections(
+  sections: { tick: number; length: number }[],
+): { tick: number; length: number }[] {
+  if (sections.length === 0) return [];
+  const sorted = [...sections].sort((a, b) => a.tick - b.tick);
+  const merged: { tick: number; length: number }[] = [{ ...sorted[0] }];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = merged[merged.length - 1];
+    const curr = sorted[i];
+    const prevEnd = prev.tick + prev.length;
+    if (curr.tick <= prevEnd) {
+      const currEnd = curr.tick + curr.length;
+      prev.length = Math.max(prevEnd, currEnd) - prev.tick;
+    } else {
+      merged.push({ ...curr });
+    }
+  }
+  return merged;
+}
+
+/**
+ * Reconstruct sustain ranges from zero-length modifier events.
+ *
+ * scan-chart's MIDI parser splits modifier sustains (forceTap, forceOpen,
+ * forceHopo, forceStrum) into zero-length events at each note tick. This
+ * function reverses that process: it finds contiguous runs of modified note
+ * ticks and produces a single sustain range for each run.
+ *
+ * "Contiguous" means there are no unmodified notes between modified ones.
+ * The range starts at the first modified note's tick and ends at the last
+ * modified note's tick + max(length, 1).
+ *
+ * Events that already have a non-zero length are passed through as-is.
+ */
+function reconstructModifierRanges(
+  modifierEvents: { tick: number; length: number }[],
+  noteTicks: number[],
+): { tick: number; length: number }[] {
+  if (modifierEvents.length === 0) return [];
+
+  // If events already have non-zero length, pass through as-is
+  if (modifierEvents.some(e => e.length > 0)) {
+    return modifierEvents;
+  }
+
+  const modifierTickSet = new Set(modifierEvents.map(e => e.tick));
+  const sortedNoteTicks = [...noteTicks].sort((a, b) => a - b);
+
+  // Walk through notes in order, finding contiguous runs of modified notes
+  const ranges: { tick: number; length: number }[] = [];
+  let rangeStart: number | null = null;
+  let lastModifiedNoteTick: number | null = null;
+
+  for (const noteTick of sortedNoteTicks) {
+    if (modifierTickSet.has(noteTick)) {
+      if (rangeStart === null) {
+        rangeStart = noteTick;
+      }
+      lastModifiedNoteTick = noteTick;
+    } else {
+      // Unmodified note — close any open range
+      if (rangeStart !== null && lastModifiedNoteTick !== null) {
+        ranges.push({ tick: rangeStart, length: lastModifiedNoteTick - rangeStart + 1 });
+        rangeStart = null;
+        lastModifiedNoteTick = null;
+      }
+    }
+  }
+  // Close final range
+  if (rangeStart !== null && lastModifiedNoteTick !== null) {
+    ranges.push({ tick: rangeStart, length: lastModifiedNoteTick - rangeStart + 1 });
+  }
+
+  return ranges;
+}
+
+/**
+ * Add a Phase Shift SysEx on/off pair (used for forceOpen, forceTap).
+ * Format: [0x50, 0x53, 0x00, 0x00, diffByte, typeByte, isStart, 0xF7]
+ *
+ * diffByte is 0xFF for "all difficulties", or 0x00-0x03 for individual ones.
  */
 function addSysExOnOff(
   events: AbsoluteEvent[],
   tick: number,
   length: number,
-  difficulty: Difficulty,
+  diffByte: number,
   typeByte: number,
 ): void {
-  const diffByte = sysExDiffMap[difficulty];
   events.push({
     tick,
     event: {

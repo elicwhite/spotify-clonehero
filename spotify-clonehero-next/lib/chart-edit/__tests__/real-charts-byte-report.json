@@ -1,0 +1,1518 @@
+{
+  "timestamp": "2026-04-03T01:20:25.715Z",
+  "chartDir": "/Users/eliwhite/Desktop/enchor-songs copy",
+  "total": 50,
+  "passed": 9,
+  "failed": 41,
+  "skipped": 0,
+  "failures": [
+    {
+      "path": "'Weird Al' Yankovic - Addicted to Spuds (Sygenysis + Nunchuck)",
+      "originalFormat": "mid",
+      "convertedFormat": "mid",
+      "diffs": [
+        {
+          "field": "tracks.length",
+          "message": "14 vs 7"
+        }
+      ]
+    },
+    {
+      "path": "'Weird Al' Yankovic - Canadian Idiot (Parody of American Idiot by Green Day) (Youngblood)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "2279 vs 2280"
+        },
+        {
+          "field": "line 2279",
+          "message": "Diff",
+          "details": "{\"expected\":\"}\",\"actual\":\"}\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "'Weird Al' Yankovic - Close But No Cigar (Youngblood)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "4293 vs 4294"
+        },
+        {
+          "field": "line 4293",
+          "message": "Diff",
+          "details": "{\"expected\":\"}\",\"actual\":\"}\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "'Weird Al' Yankovic - Do I Creep You Out (Parody of 'Do I Make You Proud' by Taylor Hicks) (Youngblood)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "1044 vs 1045"
+        },
+        {
+          "field": "line 353",
+          "message": "Diff",
+          "details": "{\"expected\":\"  34560 = E \\\"coda\\\"\\r\",\"actual\":\"  34560 = E \\\"section BIG ROCK ENDING!\\\"\\r\"}"
+        },
+        {
+          "field": "line 354",
+          "message": "Diff",
+          "details": "{\"expected\":\"  34560 = E \\\"section BIG ROCK ENDING!\\\"\\r\",\"actual\":\"  34560 = E \\\"coda\\\"\\r\"}"
+        },
+        {
+          "field": "line 1044",
+          "message": "Diff",
+          "details": "{\"expected\":\"}\",\"actual\":\"}\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "'Weird Al' Yankovic - Don't Download This Song (Youngblood)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "2105 vs 2106"
+        },
+        {
+          "field": "line 2105",
+          "message": "Diff",
+          "details": "{\"expected\":\"}\",\"actual\":\"}\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "'Weird Al' Yankovic - Germs (Live) (Gayvee)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "4445 vs 4471"
+        },
+        {
+          "field": "line 199",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4608 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  4608 = E \\\"section Verse 1\\\"\\r\"}"
+        },
+        {
+          "field": "line 200",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4608 = E \\\"section Verse 1\\\"\\r\",\"actual\":\"  4608 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 249",
+          "message": "Diff",
+          "details": "{\"expected\":\"  9960 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  9960 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 250",
+          "message": "Diff",
+          "details": "{\"expected\":\"  9984 = E \\\"lyric Liv-\\\"\\r\",\"actual\":\"  9960 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 251",
+          "message": "Diff",
+          "details": "{\"expected\":\"  10056 = E \\\"lyric in'\\\"\\r\",\"actual\":\"  9984 = E \\\"lyric Liv-\\\"\\r\"}"
+        },
+        {
+          "field": "line 252",
+          "message": "Diff",
+          "details": "{\"expected\":\"  10128 = E \\\"lyric on\\\"\\r\",\"actual\":\"  10056 = E \\\"lyric in'\\\"\\r\"}"
+        },
+        {
+          "field": "line 253",
+          "message": "Diff",
+          "details": "{\"expected\":\"  10224 = E \\\"lyric my\\\"\\r\",\"actual\":\"  10128 = E \\\"lyric on\\\"\\r\"}"
+        },
+        {
+          "field": "line 254",
+          "message": "Diff",
+          "details": "{\"expected\":\"  10320 = E \\\"lyric skin\\\"\\r\",\"actual\":\"  10224 = E \\\"lyric my\\\"\\r\"}"
+        },
+        {
+          "field": "line 255",
+          "message": "Diff",
+          "details": "{\"expected\":\"  10560 = E \\\"phrase_end\\\"\\r\",\"actual\":\"  10320 = E \\\"lyric skin\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "'Weird Al' Yankovic - I'll Sue Ya (Youngblood)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "3008 vs 3009"
+        },
+        {
+          "field": "line 3008",
+          "message": "Diff",
+          "details": "{\"expected\":\"}\",\"actual\":\"}\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "'Weird Al' Yankovic - Polkarama! (Youngblood)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line 686",
+          "message": "Diff",
+          "details": "{\"expected\":\"  88032 = E \\\"lyric \\\"\\r\",\"actual\":\"  88272 = E \\\"phrase_end\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "'Weird Al' Yankovic - The Night Santa Went Crazy (Extra Gory Version) (TylerFG)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line 642",
+          "message": "Diff",
+          "details": "{\"expected\":\"  20785 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  20785 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 643",
+          "message": "Diff",
+          "details": "{\"expected\":\"  20812 = E \\\"phrase_end\\\"\\r\",\"actual\":\"  20785 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 644",
+          "message": "Diff",
+          "details": "{\"expected\":\"  20832 = E \\\"lyric The\\\"\\r\",\"actual\":\"  20812 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 645",
+          "message": "Diff",
+          "details": "{\"expected\":\"  21016 = E \\\"lyric night\\\"\\r\",\"actual\":\"  20832 = E \\\"lyric The\\\"\\r\"}"
+        },
+        {
+          "field": "line 646",
+          "message": "Diff",
+          "details": "{\"expected\":\"  21216 = E \\\"lyric St.\\\"\\r\",\"actual\":\"  21016 = E \\\"lyric night\\\"\\r\"}"
+        },
+        {
+          "field": "line 647",
+          "message": "Diff",
+          "details": "{\"expected\":\"  21408 = E \\\"lyric Nick\\\"\\r\",\"actual\":\"  21216 = E \\\"lyric St.\\\"\\r\"}"
+        },
+        {
+          "field": "line 648",
+          "message": "Diff",
+          "details": "{\"expected\":\"  21588 = E \\\"lyric went\\\"\\r\",\"actual\":\"  21408 = E \\\"lyric Nick\\\"\\r\"}"
+        },
+        {
+          "field": "line 649",
+          "message": "Diff",
+          "details": "{\"expected\":\"  21702 = E \\\"lyric in-\\\"\\r\",\"actual\":\"  21588 = E \\\"lyric went\\\"\\r\"}"
+        },
+        {
+          "field": "line 650",
+          "message": "Diff",
+          "details": "{\"expected\":\"  21872 = E \\\"lyric sane\\\"\\r\",\"actual\":\"  21702 = E \\\"lyric in-\\\"\\r\"}"
+        },
+        {
+          "field": "line 651",
+          "message": "Diff",
+          "details": "{\"expected\":\"  22182 = E \\\"phrase_end\\\"\\r\",\"actual\":\"  21872 = E \\\"lyric sane\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "'Weird Al' Yankovic - Virus Alert (Youngblood)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "3739 vs 3740"
+        },
+        {
+          "field": "line 3739",
+          "message": "Diff",
+          "details": "{\"expected\":\"}\",\"actual\":\"}\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "'Weird Al' Yankovic - White & Nerdy (Parody of Ridin' by Chamillionaire feat. Krayzie Bone) (Youngblood)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line 597",
+          "message": "Diff",
+          "details": "{\"expected\":\"  46848 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  46848 = E \\\"section Verse 2A\\\"\\r\"}"
+        },
+        {
+          "field": "line 598",
+          "message": "Diff",
+          "details": "{\"expected\":\"  46848 = E \\\"section Verse 2A\\\"\\r\",\"actual\":\"  46848 = E \\\"phrase_start\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "'Weird Al' Yankovic - You're Pitiful (Sygenysis + Nunchuck)",
+      "originalFormat": "mid",
+      "convertedFormat": "mid",
+      "diffs": [
+        {
+          "field": "tracks.length",
+          "message": "14 vs 7"
+        }
+      ]
+    },
+    {
+      "path": "(Damn) This Desert Air - Ghost I Own (Alt-StrumProductions)",
+      "originalFormat": "mid",
+      "convertedFormat": "mid",
+      "diffs": [
+        {
+          "field": "tracks.length",
+          "message": "8 vs 6"
+        }
+      ]
+    },
+    {
+      "path": "(Finland) The Rasmus - Jezebel (Yhughu)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line 28",
+          "message": "Diff",
+          "details": "{\"expected\":\"  17280 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  17280 = E \\\"section Säkeistö (Verse) A\\\"\\r\"}"
+        },
+        {
+          "field": "line 29",
+          "message": "Diff",
+          "details": "{\"expected\":\"  17280 = E \\\"section Säkeistö (Verse) A\\\"\\r\",\"actual\":\"  17280 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 325",
+          "message": "Diff",
+          "details": "{\"expected\":\"  122880 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  122880 = E \\\"section Silta (Bridge)\\\"\\r\"}"
+        },
+        {
+          "field": "line 326",
+          "message": "Diff",
+          "details": "{\"expected\":\"  122880 = E \\\"section Silta (Bridge)\\\"\\r\",\"actual\":\"  122880 = E \\\"phrase_start\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "(K)NoW_NAME - Welcome to Chaos (Ghostbyob, highfine)",
+      "originalFormat": "mid",
+      "convertedFormat": "mid",
+      "diffs": [
+        {
+          "field": "tracks.length",
+          "message": "8 vs 6"
+        }
+      ]
+    },
+    {
+      "path": "...And You Will Know Us by the Trail of Dead - Open Doors (Sygenysis + Nunchuck, Rex_Voluntas)",
+      "originalFormat": "mid",
+      "convertedFormat": "mid",
+      "diffs": [
+        {
+          "field": "tracks.length",
+          "message": "8 vs 6"
+        }
+      ]
+    },
+    {
+      "path": ".38 Special - Hold On Loosely (Harmonix)",
+      "originalFormat": "mid",
+      "convertedFormat": "mid",
+      "diffs": [
+        {
+          "field": "tracks.length",
+          "message": "19 vs 7"
+        }
+      ]
+    },
+    {
+      "path": "009 Sound System - Dreamscape (emiliANOGod)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "2531 vs 2530"
+        },
+        {
+          "field": "line 509",
+          "message": "Diff",
+          "details": "{\"expected\":\"  86880 = E solo\\r\",\"actual\":\"  86976 = N 2 0\\r\"}"
+        },
+        {
+          "field": "line 510",
+          "message": "Diff",
+          "details": "{\"expected\":\"  86976 = N 2 0\\r\",\"actual\":\"  87072 = N 1 0\\r\"}"
+        },
+        {
+          "field": "line 511",
+          "message": "Diff",
+          "details": "{\"expected\":\"  87072 = N 1 0\\r\",\"actual\":\"  87168 = N 3 0\\r\"}"
+        },
+        {
+          "field": "line 512",
+          "message": "Diff",
+          "details": "{\"expected\":\"  87168 = N 3 0\\r\",\"actual\":\"  87264 = N 2 0\\r\"}"
+        },
+        {
+          "field": "line 513",
+          "message": "Diff",
+          "details": "{\"expected\":\"  87264 = N 2 0\\r\",\"actual\":\"  87360 = N 1 0\\r\"}"
+        },
+        {
+          "field": "line 514",
+          "message": "Diff",
+          "details": "{\"expected\":\"  87360 = N 1 0\\r\",\"actual\":\"  87456 = N 3 0\\r\"}"
+        },
+        {
+          "field": "line 515",
+          "message": "Diff",
+          "details": "{\"expected\":\"  87456 = N 3 0\\r\",\"actual\":\"  87552 = N 2 0\\r\"}"
+        },
+        {
+          "field": "line 516",
+          "message": "Diff",
+          "details": "{\"expected\":\"  87552 = N 2 0\\r\",\"actual\":\"  87648 = N 4 0\\r\"}"
+        },
+        {
+          "field": "line 517",
+          "message": "Diff",
+          "details": "{\"expected\":\"  87648 = N 4 0\\r\",\"actual\":\"  87744 = N 2 0\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - 757 (Pix_)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "2629 vs 2906"
+        },
+        {
+          "field": "line 60",
+          "message": "Diff",
+          "details": "{\"expected\":\"  8208 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  8208 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 61",
+          "message": "Diff",
+          "details": "{\"expected\":\"  8256 = E \\\"lyric <b>Yeah,\\\"\\r\",\"actual\":\"  8208 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 62",
+          "message": "Diff",
+          "details": "{\"expected\":\"  8352 = E \\\"lyric I'll\\\"\\r\",\"actual\":\"  8256 = E \\\"lyric <b>Yeah,\\\"\\r\"}"
+        },
+        {
+          "field": "line 63",
+          "message": "Diff",
+          "details": "{\"expected\":\"  8448 = E \\\"lyric ne-\\\"\\r\",\"actual\":\"  8352 = E \\\"lyric I'll\\\"\\r\"}"
+        },
+        {
+          "field": "line 64",
+          "message": "Diff",
+          "details": "{\"expected\":\"  8544 = E \\\"lyric ver\\\"\\r\",\"actual\":\"  8448 = E \\\"lyric ne-\\\"\\r\"}"
+        },
+        {
+          "field": "line 65",
+          "message": "Diff",
+          "details": "{\"expected\":\"  8640 = E \\\"lyric go\\\"\\r\",\"actual\":\"  8544 = E \\\"lyric ver\\\"\\r\"}"
+        },
+        {
+          "field": "line 66",
+          "message": "Diff",
+          "details": "{\"expected\":\"  8736 = E \\\"lyric to\\\"\\r\",\"actual\":\"  8640 = E \\\"lyric go\\\"\\r\"}"
+        },
+        {
+          "field": "line 67",
+          "message": "Diff",
+          "details": "{\"expected\":\"  8832 = E \\\"lyric hea-\\\"\\r\",\"actual\":\"  8736 = E \\\"lyric to\\\"\\r\"}"
+        },
+        {
+          "field": "line 68",
+          "message": "Diff",
+          "details": "{\"expected\":\"  8928 = E \\\"lyric ven\\\"\\r\",\"actual\":\"  8832 = E \\\"lyric hea-\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - Billy knows jamie (Pix_)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "4852 vs 5970"
+        },
+        {
+          "field": "line 62",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1464 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  1464 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 63",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1524 = E \\\"lyric <i>Ja-\\\"\\r\",\"actual\":\"  1464 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 64",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1572 = E \\\"lyric mie\\\"\\r\",\"actual\":\"  1524 = E \\\"lyric <i>Ja-\\\"\\r\"}"
+        },
+        {
+          "field": "line 65",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1620 = E \\\"lyric gon-\\\"\\r\",\"actual\":\"  1572 = E \\\"lyric mie\\\"\\r\"}"
+        },
+        {
+          "field": "line 66",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1664 = E \\\"lyric na\\\"\\r\",\"actual\":\"  1620 = E \\\"lyric gon-\\\"\\r\"}"
+        },
+        {
+          "field": "line 67",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1712 = E \\\"lyric kill\\\"\\r\",\"actual\":\"  1664 = E \\\"lyric na\\\"\\r\"}"
+        },
+        {
+          "field": "line 68",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1824 = E \\\"lyric me,\\\"\\r\",\"actual\":\"  1712 = E \\\"lyric kill\\\"\\r\"}"
+        },
+        {
+          "field": "line 69",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1920 = E \\\"lyric think\\\"\\r\",\"actual\":\"  1824 = E \\\"lyric me,\\\"\\r\"}"
+        },
+        {
+          "field": "line 70",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1952 = E \\\"lyric I\\\"\\r\",\"actual\":\"  1920 = E \\\"lyric think\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - Doritos & Fritos (Lowlander2, BongOfDestiny)",
+      "originalFormat": "mid",
+      "convertedFormat": "mid",
+      "diffs": [
+        {
+          "field": "tracks.length",
+          "message": "11 vs 6"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - Doritos & Fritos (Pix_)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "4501 vs 4699"
+        },
+        {
+          "field": "line 50",
+          "message": "Diff",
+          "details": "{\"expected\":\"  15169 = E \\\"lyric _\\\"\\r\",\"actual\":\"  15169 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 51",
+          "message": "Diff",
+          "details": "{\"expected\":\"  15169 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  15169 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 52",
+          "message": "Diff",
+          "details": "{\"expected\":\"  15170 = E \\\"lyric Okay, I went to France to get some new pants-\\\"\\r\",\"actual\":\"  15169 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 53",
+          "message": "Diff",
+          "details": "{\"expected\":\"  15170 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  15170 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 54",
+          "message": "Diff",
+          "details": "{\"expected\":\"  15264 = E \\\"lyric _\\\"\\r\",\"actual\":\"  15170 = E \\\"lyric Okay, I went to France to get some new pants-\\\"\\r\"}"
+        },
+        {
+          "field": "line 55",
+          "message": "Diff",
+          "details": "{\"expected\":\"  15265 = E \\\"lyric Ooh!\\\"\\r\",\"actual\":\"  15170 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 56",
+          "message": "Diff",
+          "details": "{\"expected\":\"  15265 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  15264 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 57",
+          "message": "Diff",
+          "details": "{\"expected\":\"  15266 = E \\\"lyric I\\\"\\r\",\"actual\":\"  15265 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 58",
+          "message": "Diff",
+          "details": "{\"expected\":\"  15266 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  15265 = E \\\"lyric Ooh!\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - Dumbest girl alive (Pix_)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "1699 vs 1767"
+        },
+        {
+          "field": "line 48",
+          "message": "Diff",
+          "details": "{\"expected\":\"  10176 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  10176 = E \\\"section Riff 1\\\"\\r\"}"
+        },
+        {
+          "field": "line 49",
+          "message": "Diff",
+          "details": "{\"expected\":\"  10176 = E \\\"section Riff 1\\\"\\r\",\"actual\":\"  10176 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 51",
+          "message": "Diff",
+          "details": "{\"expected\":\"  11425 = E \\\"lyric _-\\\"\\r\",\"actual\":\"  11425 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 52",
+          "message": "Diff",
+          "details": "{\"expected\":\"  11425 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  11425 = E \\\"lyric _-\\\"\\r\"}"
+        },
+        {
+          "field": "line 53",
+          "message": "Diff",
+          "details": "{\"expected\":\"  11426 = E \\\"lyric _\\\"\\r\",\"actual\":\"  11425 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 54",
+          "message": "Diff",
+          "details": "{\"expected\":\"  11472 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  11426 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 55",
+          "message": "Diff",
+          "details": "{\"expected\":\"  11520 = E \\\"lyric <i>Woo!\\\"\\r\",\"actual\":\"  11472 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 56",
+          "message": "Diff",
+          "details": "{\"expected\":\"  11664 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  11472 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 57",
+          "message": "Diff",
+          "details": "{\"expected\":\"  22440 = E \\\"lyric _\\\"\\r\",\"actual\":\"  11520 = E \\\"lyric <i>Woo!\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - Frog on the floor (Pix_)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "3011 vs 3277"
+        },
+        {
+          "field": "line 76",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2689 = E \\\"lyric _\\\"\\r\",\"actual\":\"  2689 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 77",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2689 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  2689 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 78",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2690 = E \\\"lyric Frog on the floor-\\\"\\r\",\"actual\":\"  2689 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 79",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2690 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  2690 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 80",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2772 = E \\\"lyric _\\\"\\r\",\"actual\":\"  2690 = E \\\"lyric Frog on the floor-\\\"\\r\"}"
+        },
+        {
+          "field": "line 81",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2773 = E \\\"lyric <i>*Ri−*\\\"\\r\",\"actual\":\"  2690 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 82",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2773 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  2772 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 83",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2774 = E \\\"lyric _-\\\"\\r\",\"actual\":\"  2773 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 84",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2774 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  2773 = E \\\"lyric <i>*Ri−*\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - Hey Big Man (Shut Your Piehole Mix) (Pix_)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "3437 vs 3921"
+        },
+        {
+          "field": "line 45",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1512 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  1512 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 46",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1536 = E \\\"lyric Nope_\\\"\\r\",\"actual\":\"  1512 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 47",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1537 = E \\\"lyric _\\\"\\r\",\"actual\":\"  1536 = E \\\"lyric Nope_\\\"\\r\"}"
+        },
+        {
+          "field": "line 48",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1537 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  1537 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 49",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1538 = E \\\"lyric Nope-\\\"\\r\",\"actual\":\"  1537 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 50",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1538 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  1537 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 51",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1632 = E \\\"lyric _\\\"\\r\",\"actual\":\"  1538 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 52",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1633 = E \\\"lyric <b>No?\\\"\\r\",\"actual\":\"  1538 = E \\\"lyric Nope-\\\"\\r\"}"
+        },
+        {
+          "field": "line 53",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1633 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  1538 = E \\\"phrase_start\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - Hollywood Baby (Mickelräven)",
+      "originalFormat": "mid",
+      "convertedFormat": "mid",
+      "diffs": [
+        {
+          "field": "notes[0]",
+          "message": "Event mismatch",
+          "details": "{\n  \"expected\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"trackName\",\n    \"text\": \"notes\"\n  },\n  \"actual\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"trackName\",\n    \"text\": \"tempo\"\n  }\n}"
+        },
+        {
+          "field": "notes[1]",
+          "message": "Event mismatch",
+          "details": "{\n  \"expected\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"timeSignature\",\n    \"numerator\": 4,\n    \"denominator\": 4,\n    \"metronome\": 24,\n    \"thirtyseconds\": 8\n  },\n  \"actual\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"setTempo\",\n    \"microsecondsPerBeat\": 779220\n  }\n}"
+        },
+        {
+          "field": "notes[2]",
+          "message": "Event mismatch",
+          "details": "{\n  \"expected\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"setTempo\",\n    \"microsecondsPerBeat\": 779220\n  },\n  \"actual\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"timeSignature\",\n    \"numerator\": 4,\n    \"denominator\": 4,\n    \"metronome\": 24,\n    \"thirtyseconds\": 8\n  }\n}"
+        },
+        {
+          "field": "PART GUITAR.events.length",
+          "message": "4728 vs 569"
+        },
+        {
+          "field": "PART GUITAR[0]",
+          "message": "first diff",
+          "details": "{\n  \"expected\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"trackName\",\n    \"text\": \"PART GUITAR\"\n  },\n  \"actual\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"trackName\",\n    \"text\": \"PART VOCALS\"\n  }\n}"
+        },
+        {
+          "field": "PART BASS.events.length",
+          "message": "4010 vs 4788"
+        },
+        {
+          "field": "PART BASS[0]",
+          "message": "first diff",
+          "details": "{\n  \"expected\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"trackName\",\n    \"text\": \"PART BASS\"\n  },\n  \"actual\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"trackName\",\n    \"text\": \"PART GUITAR\"\n  }\n}"
+        },
+        {
+          "field": "PART DRUMS.events.length",
+          "message": "3980 vs 4116"
+        },
+        {
+          "field": "PART DRUMS[0]",
+          "message": "first diff",
+          "details": "{\n  \"expected\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"trackName\",\n    \"text\": \"PART DRUMS\"\n  },\n  \"actual\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"trackName\",\n    \"text\": \"PART BASS\"\n  }\n}"
+        },
+        {
+          "field": "PART VOCALS.events.length",
+          "message": "1519 vs 3888"
+        },
+        {
+          "field": "PART VOCALS[0]",
+          "message": "first diff",
+          "details": "{\n  \"expected\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"trackName\",\n    \"text\": \"PART VOCALS\"\n  },\n  \"actual\": {\n    \"deltaTime\": 0,\n    \"meta\": true,\n    \"type\": \"trackName\",\n    \"text\": \"PART DRUMS\"\n  }\n}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - Hollywood Baby (Pix_)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "2978 vs 3268"
+        },
+        {
+          "field": "line 50",
+          "message": "Diff",
+          "details": "{\"expected\":\"  8784 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  8784 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 51",
+          "message": "Diff",
+          "details": "{\"expected\":\"  8832 = E \\\"lyric Clear\\\"\\r\",\"actual\":\"  8784 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 52",
+          "message": "Diff",
+          "details": "{\"expected\":\"  9024 = E \\\"lyric blue\\\"\\r\",\"actual\":\"  8832 = E \\\"lyric Clear\\\"\\r\"}"
+        },
+        {
+          "field": "line 53",
+          "message": "Diff",
+          "details": "{\"expected\":\"  9216 = E \\\"lyric sky\\\"\\r\",\"actual\":\"  9024 = E \\\"lyric blue\\\"\\r\"}"
+        },
+        {
+          "field": "line 54",
+          "message": "Diff",
+          "details": "{\"expected\":\"  9408 = E \\\"lyric but\\\"\\r\",\"actual\":\"  9216 = E \\\"lyric sky\\\"\\r\"}"
+        },
+        {
+          "field": "line 55",
+          "message": "Diff",
+          "details": "{\"expected\":\"  9480 = E \\\"lyric it\\\"\\r\",\"actual\":\"  9408 = E \\\"lyric but\\\"\\r\"}"
+        },
+        {
+          "field": "line 56",
+          "message": "Diff",
+          "details": "{\"expected\":\"  9600 = E \\\"lyric rains\\\"\\r\",\"actual\":\"  9480 = E \\\"lyric it\\\"\\r\"}"
+        },
+        {
+          "field": "line 57",
+          "message": "Diff",
+          "details": "{\"expected\":\"  9792 = E \\\"lyric all\\\"\\r\",\"actual\":\"  9600 = E \\\"lyric rains\\\"\\r\"}"
+        },
+        {
+          "field": "line 58",
+          "message": "Diff",
+          "details": "{\"expected\":\"  9888 = E \\\"lyric the\\\"\\r\",\"actual\":\"  9792 = E \\\"lyric all\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - I got my tooth removed (Pix_)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "5478 vs 6220"
+        },
+        {
+          "field": "line 62",
+          "message": "Diff",
+          "details": "{\"expected\":\"  864 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  864 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 63",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1248 = E \\\"lyric _\\\"\\r\",\"actual\":\"  864 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 64",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1249 = E \\\"lyric _-\\\"\\r\",\"actual\":\"  1248 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 65",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1249 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  1249 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 66",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1250 = E \\\"lyric _\\\"\\r\",\"actual\":\"  1249 = E \\\"lyric _-\\\"\\r\"}"
+        },
+        {
+          "field": "line 67",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1344 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  1249 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 68",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1432 = E \\\"lyric Un-\\\"\\r\",\"actual\":\"  1250 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 69",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1624 = E \\\"lyric for-\\\"\\r\",\"actual\":\"  1344 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 70",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1728 = E \\\"lyric gi-\\\"\\r\",\"actual\":\"  1344 = E \\\"phrase_start\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - One million Dollars (Pix_)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "6271 vs 8182"
+        },
+        {
+          "field": "line 53",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1392 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  1392 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 54",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1440 = E \\\"lyric _\\\"\\r\",\"actual\":\"  1392 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 55",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1441 = E \\\"lyric _-\\\"\\r\",\"actual\":\"  1440 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 56",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1441 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  1441 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 57",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1442 = E \\\"lyric _\\\"\\r\",\"actual\":\"  1441 = E \\\"lyric _-\\\"\\r\"}"
+        },
+        {
+          "field": "line 58",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1488 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  1441 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 59",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1536 = E \\\"lyric One\\\"\\r\",\"actual\":\"  1442 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 60",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1536 = E \\\"section One Million Dollars Intro\\\"\\r\",\"actual\":\"  1488 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 61",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1728 = E \\\"lyric mil-\\\"\\r\",\"actual\":\"  1488 = E \\\"phrase_start\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - Runaway (highfine)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "1621 vs 1733"
+        },
+        {
+          "field": "line 59",
+          "message": "Diff",
+          "details": "{\"expected\":\"  7577 = E \\\"lyric -\\\"\\r\",\"actual\":\"  7577 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 60",
+          "message": "Diff",
+          "details": "{\"expected\":\"  7577 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  7577 = E \\\"lyric -\\\"\\r\"}"
+        },
+        {
+          "field": "line 61",
+          "message": "Diff",
+          "details": "{\"expected\":\"  7578 = E \\\"lyric So I run\\\"\\r\",\"actual\":\"  7577 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 62",
+          "message": "Diff",
+          "details": "{\"expected\":\"  7578 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  7578 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 63",
+          "message": "Diff",
+          "details": "{\"expected\":\"  7672 = E \\\"lyric -\\\"\\r\",\"actual\":\"  7578 = E \\\"lyric So I run\\\"\\r\"}"
+        },
+        {
+          "field": "line 64",
+          "message": "Diff",
+          "details": "{\"expected\":\"  7673 = E \\\"lyric <i>So\\\"\\r\",\"actual\":\"  7578 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 65",
+          "message": "Diff",
+          "details": "{\"expected\":\"  7673 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  7672 = E \\\"lyric -\\\"\\r\"}"
+        },
+        {
+          "field": "line 66",
+          "message": "Diff",
+          "details": "{\"expected\":\"  7674 = E \\\"lyric So I run\\\"\\r\",\"actual\":\"  7673 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 67",
+          "message": "Diff",
+          "details": "{\"expected\":\"  7674 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  7673 = E \\\"lyric <i>So\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - The Most Wanted Person In the United States (Pix_)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "3160 vs 3261"
+        },
+        {
+          "field": "line 42",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1632 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  1632 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 43",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1680 = E \\\"lyric The\\\"\\r\",\"actual\":\"  1632 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 44",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1728 = E \\\"lyric num-\\\"\\r\",\"actual\":\"  1680 = E \\\"lyric The\\\"\\r\"}"
+        },
+        {
+          "field": "line 45",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1776 = E \\\"lyric ber\\\"\\r\",\"actual\":\"  1728 = E \\\"lyric num-\\\"\\r\"}"
+        },
+        {
+          "field": "line 46",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1824 = E \\\"lyric one\\\"\\r\",\"actual\":\"  1776 = E \\\"lyric ber\\\"\\r\"}"
+        },
+        {
+          "field": "line 47",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1920 = E \\\"lyric most\\\"\\r\",\"actual\":\"  1824 = E \\\"lyric one\\\"\\r\"}"
+        },
+        {
+          "field": "line 48",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2016 = E \\\"lyric wan-\\\"\\r\",\"actual\":\"  1920 = E \\\"lyric most\\\"\\r\"}"
+        },
+        {
+          "field": "line 49",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2064 = E \\\"lyric ted\\\"\\r\",\"actual\":\"  2016 = E \\\"lyric wan-\\\"\\r\"}"
+        },
+        {
+          "field": "line 50",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2112 = E \\\"lyric per-\\\"\\r\",\"actual\":\"  2064 = E \\\"lyric ted\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - Torture Me (feat. Skrillex) (Pix_)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "2787 vs 3142"
+        },
+        {
+          "field": "line 31",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3841 = E \\\"lyric _\\\"\\r\",\"actual\":\"  3841 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 32",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3841 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  3841 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 33",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3842 = E \\\"lyric Me-\\\"\\r\",\"actual\":\"  3841 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 34",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3842 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  3842 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 35",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3920 = E \\\"lyric _\\\"\\r\",\"actual\":\"  3842 = E \\\"lyric Me-\\\"\\r\"}"
+        },
+        {
+          "field": "line 36",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3921 = E \\\"lyric _\\\"\\r\",\"actual\":\"  3842 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 37",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3921 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  3920 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 38",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3922 = E \\\"lyric _-\\\"\\r\",\"actual\":\"  3921 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 39",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3922 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  3921 = E \\\"lyric _\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - mememe (Pix_)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "4593 vs 5186"
+        },
+        {
+          "field": "line 54",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2689 = E \\\"lyric _\\\"\\r\",\"actual\":\"  2689 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 55",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2689 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  2689 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 56",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2690 = E \\\"lyric <i>Gec-\\\"\\r\",\"actual\":\"  2689 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 57",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2690 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  2690 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 58",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2700 = E \\\"lyric _\\\"\\r\",\"actual\":\"  2690 = E \\\"lyric <i>Gec-\\\"\\r\"}"
+        },
+        {
+          "field": "line 59",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2701 = E \\\"lyric _\\\"\\r\",\"actual\":\"  2690 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 60",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2701 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  2700 = E \\\"lyric _\\\"\\r\"}"
+        },
+        {
+          "field": "line 61",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2702 = E \\\"lyric _-\\\"\\r\",\"actual\":\"  2701 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 62",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2702 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  2701 = E \\\"lyric _\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "100 gecs - mememe (Pizzachamp)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line 1970",
+          "message": "Diff",
+          "details": "{\"expected\":\"[ExpertKeyboard]\\r\",\"actual\":\"[ExpertDrums]\\r\"}"
+        },
+        {
+          "field": "line 1972",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1536 = N 2 0\\r\",\"actual\":\"  7680 = N 2 0\\r\"}"
+        },
+        {
+          "field": "line 1973",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1728 = N 2 0\\r\",\"actual\":\"  7680 = N 66 0\\r\"}"
+        },
+        {
+          "field": "line 1974",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1824 = N 1 0\\r\",\"actual\":\"  7776 = N 2 0\\r\"}"
+        },
+        {
+          "field": "line 1975",
+          "message": "Diff",
+          "details": "{\"expected\":\"  1920 = N 0 0\\r\",\"actual\":\"  7776 = N 66 0\\r\"}"
+        },
+        {
+          "field": "line 1976",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2112 = N 0 0\\r\",\"actual\":\"  7872 = N 2 0\\r\"}"
+        },
+        {
+          "field": "line 1977",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2208 = N 2 0\\r\",\"actual\":\"  7872 = N 66 0\\r\"}"
+        },
+        {
+          "field": "line 1978",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2304 = N 1 0\\r\",\"actual\":\"  7968 = N 2 0\\r\"}"
+        },
+        {
+          "field": "line 1979",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2496 = N 0 0\\r\",\"actual\":\"  7968 = N 66 0\\r\"}"
+        },
+        {
+          "field": "line 1980",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2592 = N 1 0\\r\",\"actual\":\"  8064 = N 2 0\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "12 Stones - We Are One (Derpferdler)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "3621 vs 3617"
+        },
+        {
+          "field": "line 51",
+          "message": "Diff",
+          "details": "{\"expected\":\"  672 = E \\\"Default\\\"\\r\",\"actual\":\"  768 = E \\\"lyric Woah\\\"\\r\"}"
+        },
+        {
+          "field": "line 52",
+          "message": "Diff",
+          "details": "{\"expected\":\"  768 = E \\\"lyric Woah\\\"\\r\",\"actual\":\"  768 = E \\\"section Intro A\\\"\\r\"}"
+        },
+        {
+          "field": "line 53",
+          "message": "Diff",
+          "details": "{\"expected\":\"  768 = E \\\"section Intro A\\\"\\r\",\"actual\":\"  2208 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 54",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2112 = E \\\"phrase_end\\\"\\r\",\"actual\":\"  2304 = E \\\"lyric Woah\\\"\\r\"}"
+        },
+        {
+          "field": "line 55",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2208 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  3648 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 56",
+          "message": "Diff",
+          "details": "{\"expected\":\"  2304 = E \\\"lyric Woah\\\"\\r\",\"actual\":\"  3744 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 57",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3648 = E \\\"phrase_end\\\"\\r\",\"actual\":\"  3840 = E \\\"lyric Woah\\\"\\r\"}"
+        },
+        {
+          "field": "line 58",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3744 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  3840 = E \\\"section Intro B\\\"\\r\"}"
+        },
+        {
+          "field": "line 59",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3840 = E \\\"lyric Woah\\\"\\r\",\"actual\":\"  5088 = E \\\"phrase_end\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "1640m - Time Machine (ft. Hatsune Miku) (Ghostbyob)",
+      "originalFormat": "mid",
+      "convertedFormat": "mid",
+      "diffs": [
+        {
+          "field": "tracks.length",
+          "message": "15 vs 7"
+        }
+      ]
+    },
+    {
+      "path": "22-20s - Latest Heartbreak (OffbeatEntertainment)",
+      "originalFormat": "mid",
+      "convertedFormat": "mid",
+      "diffs": [
+        {
+          "field": "tracks.length",
+          "message": "8 vs 6"
+        }
+      ]
+    },
+    {
+      "path": "2X - Hostil (BBS Paranoicos Cover) (DonfraHC)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "2735 vs 2733"
+        },
+        {
+          "field": "line 27",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3360 = E \\\"lyric \\\"\\r\",\"actual\":\"  3456 = E \\\"lyric Oh...\\\"\\r\"}"
+        },
+        {
+          "field": "line 28",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3456 = E \\\"lyric Oh...\\\"\\r\",\"actual\":\"  4512 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 29",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4416 = E \\\"phrase_end\\\"\\r\",\"actual\":\"  4608 = E \\\"lyric Ex-\\\"\\r\"}"
+        },
+        {
+          "field": "line 30",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4512 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  4608 = E \\\"section Verse 1A\\\"\\r\"}"
+        },
+        {
+          "field": "line 31",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4608 = E \\\"lyric Ex-\\\"\\r\",\"actual\":\"  4704 = E \\\"lyric tin-\\\"\\r\"}"
+        },
+        {
+          "field": "line 32",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4608 = E \\\"section Verse 1A\\\"\\r\",\"actual\":\"  4896 = E \\\"lyric to-\\\"\\r\"}"
+        },
+        {
+          "field": "line 33",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4704 = E \\\"lyric tin-\\\"\\r\",\"actual\":\"  5040 = E \\\"lyric res\\\"\\r\"}"
+        },
+        {
+          "field": "line 34",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4896 = E \\\"lyric to-\\\"\\r\",\"actual\":\"  5376 = E \\\"lyric de\\\"\\r\"}"
+        },
+        {
+          "field": "line 35",
+          "message": "Diff",
+          "details": "{\"expected\":\"  5040 = E \\\"lyric res\\\"\\r\",\"actual\":\"  5472 = E \\\"lyric li-\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "2X - Hostil (DonfraHC)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "2735 vs 2733"
+        },
+        {
+          "field": "line 27",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3360 = E \\\"lyric \\\"\\r\",\"actual\":\"  3456 = E \\\"lyric Oh...\\\"\\r\"}"
+        },
+        {
+          "field": "line 28",
+          "message": "Diff",
+          "details": "{\"expected\":\"  3456 = E \\\"lyric Oh...\\\"\\r\",\"actual\":\"  4512 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 29",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4416 = E \\\"phrase_end\\\"\\r\",\"actual\":\"  4608 = E \\\"lyric Ex-\\\"\\r\"}"
+        },
+        {
+          "field": "line 30",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4512 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  4608 = E \\\"section Verse 1A\\\"\\r\"}"
+        },
+        {
+          "field": "line 31",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4608 = E \\\"lyric Ex-\\\"\\r\",\"actual\":\"  4704 = E \\\"lyric tin-\\\"\\r\"}"
+        },
+        {
+          "field": "line 32",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4608 = E \\\"section Verse 1A\\\"\\r\",\"actual\":\"  4896 = E \\\"lyric to-\\\"\\r\"}"
+        },
+        {
+          "field": "line 33",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4704 = E \\\"lyric tin-\\\"\\r\",\"actual\":\"  5040 = E \\\"lyric res\\\"\\r\"}"
+        },
+        {
+          "field": "line 34",
+          "message": "Diff",
+          "details": "{\"expected\":\"  4896 = E \\\"lyric to-\\\"\\r\",\"actual\":\"  5376 = E \\\"lyric de\\\"\\r\"}"
+        },
+        {
+          "field": "line 35",
+          "message": "Diff",
+          "details": "{\"expected\":\"  5040 = E \\\"lyric res\\\"\\r\",\"actual\":\"  5472 = E \\\"lyric li-\\\"\\r\"}"
+        }
+      ]
+    },
+    {
+      "path": "2nd Thought - Just Hang On (FairwoodStudios)",
+      "originalFormat": "mid",
+      "convertedFormat": "mid",
+      "diffs": [
+        {
+          "field": "tracks.length",
+          "message": "8 vs 6"
+        }
+      ]
+    },
+    {
+      "path": "3 - Numbers (FigNeutered, MurdrBurger)",
+      "originalFormat": "chart",
+      "convertedFormat": "chart",
+      "diffs": [
+        {
+          "field": "line count",
+          "message": "7846 vs 7850"
+        },
+        {
+          "field": "line 331",
+          "message": "Diff",
+          "details": "{\"expected\":\"  24720 = E \\\"lyric There’s\\\"\\r\",\"actual\":\"  24720 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 332",
+          "message": "Diff",
+          "details": "{\"expected\":\"  24720 = E \\\"phrase_start\\\"\\r\",\"actual\":\"  24720 = E \\\"lyric There’s\\\"\\r\"}"
+        },
+        {
+          "field": "line 333",
+          "message": "Diff",
+          "details": "{\"expected\":\"  24864 = E \\\"lyric no\\\"\\r\",\"actual\":\"  24720 = E \\\"phrase_start\\\"\\r\"}"
+        },
+        {
+          "field": "line 334",
+          "message": "Diff",
+          "details": "{\"expected\":\"  24960 = E \\\"lyric in\\\"\\r\",\"actual\":\"  24864 = E \\\"lyric no\\\"\\r\"}"
+        },
+        {
+          "field": "line 335",
+          "message": "Diff",
+          "details": "{\"expected\":\"  25104 = E \\\"lyric be-\\\"\\r\",\"actual\":\"  24960 = E \\\"lyric in\\\"\\r\"}"
+        },
+        {
+          "field": "line 336",
+          "message": "Diff",
+          "details": "{\"expected\":\"  25248 = E \\\"lyric tween\\\"\\r\",\"actual\":\"  25104 = E \\\"lyric be-\\\"\\r\"}"
+        },
+        {
+          "field": "line 337",
+          "message": "Diff",
+          "details": "{\"expected\":\"  25536 = E \\\"phrase_end\\\"\\r\",\"actual\":\"  25248 = E \\\"lyric tween\\\"\\r\"}"
+        },
+        {
+          "field": "line 338",
+          "message": "Diff",
+          "details": "{\"expected\":\"  26112 = E \\\"section Verse 2A\\\"\\r\",\"actual\":\"  25536 = E \\\"phrase_end\\\"\\r\"}"
+        },
+        {
+          "field": "line 339",
+          "message": "Diff",
+          "details": "{\"expected\":\"  26208 = E \\\"lyric And\\\"\\r\",\"actual\":\"  26112 = E \\\"section Verse 2A\\\"\\r\"}"
+        }
+      ]
+    }
+  ]
+}

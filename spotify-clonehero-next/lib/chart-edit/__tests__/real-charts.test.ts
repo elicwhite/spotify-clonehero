@@ -20,6 +20,8 @@ import {
 } from '@eliwhite/scan-chart';
 import type { RawChartData, IniChartModifiers } from '@eliwhite/scan-chart';
 import type { FileEntry, ChartMetadata } from '../types';
+import { parseMidi } from 'midi-file';
+import type { MidiEvent } from 'midi-file';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -189,16 +191,33 @@ const DISCO_FLIP_TYPES = new Set<number>([
 ]);
 
 /**
- * Guitar-only force modifiers. These can appear in drum tracks in some MIDI
- * files (e.g., note 104 → forceTap) but are not meaningful for drums and
- * won't survive cross-format conversion.
+ * Guitar force modifiers that appear in drum tracks from MIDI SysEx bleed.
+ * Not meaningful for drums and can't survive cross-format conversion on drums.
+ * Only filtered on drum tracks — guitar tracks must preserve these.
  */
-const GUITAR_MODIFIER_TYPES = new Set<number>([
-  eventTypes.forceOpen,         // 27 (.mid only)
+const DRUM_ONLY_GUITAR_MODIFIER_TYPES = new Set<number>([
+  eventTypes.forceOpen,         // 27
   eventTypes.forceTap,          // 28
-  eventTypes.forceStrum,        // 29 (.mid only)
-  eventTypes.forceHopo,         // 30 (.mid only)
+  eventTypes.forceStrum,        // 29
+  eventTypes.forceHopo,         // 30
+]);
+
+/**
+ * Force modifiers that encode differently between .chart and MIDI:
+ * - forceUnnatural (31): .chart-only; replaced by forceHopo/forceStrum in MIDI
+ * - forceHopo (30): MIDI-only; replaced by forceUnnatural in .chart
+ * - forceStrum (29): MIDI-only; replaced by forceUnnatural in .chart
+ * - forceOpen (27): MIDI-only SysEx; .chart represents open notes directly
+ *   as note type 7 (open) without a separate modifier event.
+ *
+ * These can't be compared 1:1 in cross-format since the encoding is
+ * semantically different.
+ */
+const CROSS_FORMAT_FORCE_TYPES = new Set<number>([
   eventTypes.forceUnnatural,    // 31 (.chart only)
+  eventTypes.forceHopo,         // 30 (.mid only)
+  eventTypes.forceStrum,        // 29 (.mid only)
+  eventTypes.forceOpen,         // 27 (.mid only SysEx)
 ]);
 
 /**
@@ -251,6 +270,31 @@ const ACCENT_GHOST_TYPES = new Set<number>([
   eventTypes.kickGhost,                 // 44
 ]);
 
+/**
+ * Merge overlapping sections into non-overlapping ranges.
+ * MIDI can't represent overlapping notes of the same pitch — per-difficulty
+ * sections that overlap are merged by the writer. Apply the same merge here
+ * so both sides of the cross-format comparison match.
+ */
+function mergeOverlapping(
+  arr: Array<{ tick: number; length: number }>,
+): Array<{ tick: number; length: number }> {
+  if (arr.length === 0) return [];
+  const sorted = [...arr].sort((a, b) => a.tick - b.tick);
+  const merged: Array<{ tick: number; length: number }> = [{ ...sorted[0] }];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = merged[merged.length - 1];
+    const curr = sorted[i];
+    const prevEnd = prev.tick + prev.length;
+    if (curr.tick <= prevEnd) {
+      prev.length = Math.max(prevEnd, curr.tick + curr.length) - prev.tick;
+    } else {
+      merged.push({ ...curr });
+    }
+  }
+  return merged;
+}
+
 function sortByTick<T extends { tick: number }>(arr: T[]): T[] {
   return [...arr].sort((a, b) => a.tick - b.tick);
 }
@@ -260,35 +304,61 @@ function sortByTick<T extends { tick: number }>(arr: T[]): T[] {
  * - Strip format-specific fields (velocity, channel)
  * - Normalize drum note lengths to 0 (drums don't sustain;
  *   .chart stores 0 while MIDI produces real noteOn→noteOff lengths)
+ * - Normalize guitar modifier lengths to 0 (MIDI stores sustain ranges
+ *   that get split into zero-length per-note events by scan-chart)
  */
-function normalizeEvent(e: TrackEventEntry): { tick: number; type: number; length: number } {
+function normalizeEvent(
+  e: TrackEventEntry,
+  isDrums: boolean,
+): { tick: number; type: number; length: number } {
   return {
     tick: e.tick,
     type: e.type,
-    // Drum notes don't sustain — normalize length to 0
-    length: 0,
+    // Drum notes don't sustain — .chart stores 0, MIDI produces real
+    // noteOn→noteOff lengths. Normalize to 0 for drums only.
+    // Fret notes: scan-chart's MIDI parser discards zero-length notes
+    // (noteOff sorted before noteOn at same tick → length stays -1 → removed).
+    // The MIDI writer uses Math.max(length, 1) to work around this. Normalize
+    // to max(length, 1) for cross-format comparison since this is a parser
+    // limitation, not a writer bug.
+    length: isDrums ? 0 : Math.max(e.length, 1),
   };
 }
 
 function sortAndFilterTrackEvents(
   events: TrackEventEntry[],
-  difficulty?: string,
+  instrument: string,
+  difficulty: string,
 ): Array<{ tick: number; type: number; length: number }> {
+  const isDrums = instrument === 'drums';
   return events
     .filter((e) => {
+      // Format-specific cymbal/tom markers (tested in cross-format.test.ts)
       if (CYMBAL_TOM_MARKER_TYPES.has(e.type)) return false;
+      // Disco flip toggle events (format-specific encoding)
       if (DISCO_FLIP_TYPES.has(e.type)) return false;
+      // enableChartDynamics auto-generated meta event
       if (META_ONLY_TYPES.has(e.type)) return false;
-      if (GUITAR_MODIFIER_TYPES.has(e.type)) return false;
+      // Structural events extracted into dedicated arrays
       if (STRUCTURAL_EVENT_TYPES.has(e.type)) return false;
-      if (ACCENT_GHOST_TYPES.has(e.type)) return false;
-      // kick2x (Expert+) is note 95 in MIDI, which is Expert-only.
-      // .chart allows kick2x per-difficulty, but MIDI can't represent it
-      // on non-expert. Filter kick2x from non-expert comparisons.
+      // Force modifiers that encode differently between formats
+      // (forceUnnatural ↔ forceHopo/forceStrum)
+      if (CROSS_FORMAT_FORCE_TYPES.has(e.type)) return false;
+
+      // Guitar modifiers on drum tracks: meaningless SysEx bleed
+      if (isDrums && DRUM_ONLY_GUITAR_MODIFIER_TYPES.has(e.type)) return false;
+
+      // Accent/ghost on drums: different encoding between formats
+      // (.chart uses separate events, MIDI uses velocity).
+      // Only filter on drums — guitar doesn't have accent/ghost.
+      if (isDrums && ACCENT_GHOST_TYPES.has(e.type)) return false;
+
+      // kick2x: MIDI note 95 is Expert-only. .chart allows per-difficulty.
       if (e.type === eventTypes.kick2x && difficulty !== 'expert') return false;
+
       return true;
     })
-    .map(normalizeEvent)
+    .map(e => normalizeEvent(e, isDrums))
     .sort((a, b) => {
       if (a.tick !== b.tick) return a.tick - b.tick;
       return a.type - b.type;
@@ -368,75 +438,99 @@ function deduplicateSections(
   });
 }
 
+
 type NormalizedData = {
   chartTicksPerBeat: number;
   tempos: Array<{ tick: number; beatsPerMinute: number }>;
   timeSignatures: Array<{ tick: number; numerator: number; denominator: number }>;
   sections: Array<{ tick: number; name: string }>;
   endEvents: Array<{ tick: number }>;
-  // Per-difficulty: trackEvents only (notes are per-difficulty)
+  // Per-instrument per-difficulty track data
   trackData: Array<{
     instrument: string;
     difficulty: string;
     trackEvents: Array<{ tick: number; type: number; length: number }>;
   }>;
-  // Instrument-wide: star power, freestyle, flex lanes are shared across
-  // difficulties in MIDI but per-difficulty in .chart. We merge and
-  // deduplicate across all difficulties for a fair cross-format comparison.
-  starPowerSections: Array<{ tick: number; length: number }>;
-  soloSections: Array<{ tick: number; length: number }>;
-  drumFreestyleSections: Array<{ tick: number; length: number; isCoda: boolean }>;
-  flexLanes: Array<{ tick: number; length: number; isDouble: boolean }>;
+  // Per-instrument sections: star power, solos, freestyle, flex lanes are
+  // shared across difficulties in MIDI but per-difficulty in .chart. We merge
+  // and deduplicate across difficulties within each instrument.
+  instrumentSections: Array<{
+    instrument: string;
+    starPowerSections: Array<{ tick: number; length: number }>;
+    soloSections: Array<{ tick: number; length: number }>;
+    drumFreestyleSections: Array<{ tick: number; length: number; isCoda: boolean }>;
+    flexLanes: Array<{ tick: number; length: number; isDouble: boolean }>;
+  }>;
   lyrics: Array<{ tick: number; text: string }>;
   vocalPhrases: Array<{ tick: number; length: number }>;
 };
 
 /** Strip and sort RawChartData for stable comparison. */
 function normalizeForComparison(raw: RawChartData): NormalizedData {
-  const drumTracks = raw.trackData.filter((t) => t.instrument === 'drums');
+  const allTracks = raw.trackData;
 
-  // Per-difficulty: only trackEvents (notes are per-difficulty)
-  const trackData = drumTracks
+  // Per-difficulty per-instrument: trackEvents (notes + modifiers)
+  const trackData = allTracks
     .map((t) => ({
       instrument: t.instrument,
       difficulty: t.difficulty,
-      trackEvents: sortAndFilterTrackEvents(t.trackEvents, t.difficulty),
+      trackEvents: sortAndFilterTrackEvents(t.trackEvents, t.instrument, t.difficulty),
     }))
     .sort((a, b) => {
+      // Sort by instrument then difficulty
+      if (a.instrument !== b.instrument) return a.instrument.localeCompare(b.instrument);
       const order = ['expert', 'hard', 'medium', 'easy'];
       return order.indexOf(a.difficulty) - order.indexOf(b.difficulty);
     });
 
-  // Instrument-wide: merge across all difficulties and deduplicate
-  const allSP = deduplicateSections(
-    normalizeSections(drumTracks.flatMap((t) => t.starPowerSections)),
-  );
-  const allSolo = deduplicateSections(
-    normalizeSections(drumTracks.flatMap((t) => extractSoloSections(t))),
-  );
-  // Freestyle sections: include isCoda flag, dedup by tick:length:isCoda
-  const seenFS = new Set<string>();
-  const allFS = sortByTick(drumTracks.flatMap((t) => t.drumFreestyleSections))
-    .map((fs) => ({ tick: fs.tick, length: Math.max(fs.length, 1), isCoda: fs.isCoda }))
-    .filter((fs) => {
-      const key = `${fs.tick}:${fs.length}:${fs.isCoda}`;
-      if (seenFS.has(key)) return false;
-      seenFS.add(key);
-      return true;
-    });
+  // Per-instrument sections: merge across difficulties within each instrument
+  // and deduplicate. These are shared in MIDI but per-difficulty in .chart.
+  const byInstrument = new Map<string, TrackDataEntry[]>();
+  for (const t of allTracks) {
+    let arr = byInstrument.get(t.instrument);
+    if (!arr) {
+      arr = [];
+      byInstrument.set(t.instrument, arr);
+    }
+    arr.push(t);
+  }
 
-  // Flex lanes: merge and deduplicate by tick:length:isDouble
-  // Normalize length to min 1 (same as other sections — .chart allows
-  // zero-length S events, MIDI requires noteOn/noteOff with length ≥ 1)
-  const seenFlex = new Set<string>();
-  const allFlex = sortByTick(drumTracks.flatMap((t) => t.flexLanes))
-    .map((f) => ({ tick: f.tick, length: Math.max(f.length, 1), isDouble: f.isDouble }))
-    .filter((f) => {
-      const key = `${f.tick}:${f.length}:${f.isDouble}`;
-      if (seenFlex.has(key)) return false;
-      seenFlex.add(key);
-      return true;
-    });
+  const instrumentSections = [...byInstrument.entries()].map(([instrument, tracks]) => {
+    // Merge overlapping sections: MIDI can't represent overlapping notes of
+    // the same pitch, so per-difficulty sections that overlap get merged by
+    // the writer. This is a spec-level constraint, not a writer bug.
+    const sp = mergeOverlapping(deduplicateSections(
+      normalizeSections(tracks.flatMap((t) => t.starPowerSections)),
+    ));
+    const solo = mergeOverlapping(deduplicateSections(
+      normalizeSections(tracks.flatMap((t) => extractSoloSections(t))),
+    ));
+    const seenFS = new Set<string>();
+    const fs = sortByTick(tracks.flatMap((t) => t.drumFreestyleSections))
+      .map((f) => ({ tick: f.tick, length: Math.max(f.length, 1), isCoda: f.isCoda }))
+      .filter((f) => {
+        const key = `${f.tick}:${f.length}:${f.isCoda}`;
+        if (seenFS.has(key)) return false;
+        seenFS.add(key);
+        return true;
+      });
+    const seenFlex = new Set<string>();
+    const flex = sortByTick(tracks.flatMap((t) => t.flexLanes))
+      .map((f) => ({ tick: f.tick, length: Math.max(f.length, 1), isDouble: f.isDouble }))
+      .filter((f) => {
+        const key = `${f.tick}:${f.length}:${f.isDouble}`;
+        if (seenFlex.has(key)) return false;
+        seenFlex.add(key);
+        return true;
+      });
+    return {
+      instrument,
+      starPowerSections: sp,
+      soloSections: solo,
+      drumFreestyleSections: fs,
+      flexLanes: flex,
+    };
+  }).sort((a, b) => a.instrument.localeCompare(b.instrument));
 
   return {
     chartTicksPerBeat: raw.chartTicksPerBeat,
@@ -455,10 +549,7 @@ function normalizeForComparison(raw: RawChartData): NormalizedData {
     })),
     endEvents: sortByTick(raw.endEvents).map((e) => ({ tick: e.tick })),
     trackData,
-    starPowerSections: allSP,
-    soloSections: allSolo,
-    drumFreestyleSections: allFS,
-    flexLanes: allFlex,
+    instrumentSections,
     // Deduplicate lyrics by tick+text (the .chart writer's dedup removes
     // identical events at the same tick). Filter empty-text lyrics (used as
     // timing placeholders in some MIDI files but discarded by the .chart parser).
@@ -571,31 +662,46 @@ function compareNormalized(
     }
   }
 
-  // Instrument-wide sections (merged across difficulties)
-  for (const field of ['starPowerSections', 'soloSections', 'drumFreestyleSections', 'flexLanes'] as const) {
-    if (!deepEqual(a[field], b[field])) {
+  // Per-instrument sections (merged across difficulties within each instrument)
+  const bInstrSections = new Map(
+    b.instrumentSections.map((s) => [s.instrument, s]),
+  );
+  for (const aInstr of a.instrumentSections) {
+    const bInstr = bInstrSections.get(aInstr.instrument);
+    if (!bInstr) {
       diffs.push({
-        field,
-        message: `Expected ${a[field].length} entries, got ${b[field].length}`,
-        details: JSON.stringify(
-          { expected: a[field], actual: b[field] },
-          null,
-          2,
-        ).slice(0, 2000),
+        field: `instrumentSections(${aInstr.instrument})`,
+        message: `Instrument missing in output`,
       });
+      continue;
+    }
+    for (const field of ['starPowerSections', 'soloSections', 'drumFreestyleSections', 'flexLanes'] as const) {
+      if (!deepEqual(aInstr[field], bInstr[field])) {
+        diffs.push({
+          field: `${aInstr.instrument}.${field}`,
+          message: `Expected ${aInstr[field].length} entries, got ${bInstr[field].length}`,
+          details: JSON.stringify(
+            { expected: aInstr[field], actual: bInstr[field] },
+            null,
+            2,
+          ).slice(0, 2000),
+        });
+      }
     }
   }
 
-  // Per-difficulty track data (notes only)
-  // Only compare difficulties present in both sides (empty difficulties
-  // in .chart may not be recreated after MIDI round-trip).
-  const bDiffs = new Set(b.trackData.map((t) => t.difficulty));
-  const commonTracks = a.trackData.filter((t) => bDiffs.has(t.difficulty));
-  const bByDiff = new Map(b.trackData.map((t) => [t.difficulty, t]));
+  // Per-instrument per-difficulty track data
+  // Match by instrument+difficulty pair. Only compare tracks present in both sides
+  // (empty difficulties in .chart may not be recreated after MIDI round-trip).
+  const trackKey = (t: { instrument: string; difficulty: string }) =>
+    `${t.instrument}:${t.difficulty}`;
+  const bTrackKeys = new Set(b.trackData.map(trackKey));
+  const commonTracks = a.trackData.filter((t) => bTrackKeys.has(trackKey(t)));
+  const bByKey = new Map(b.trackData.map((t) => [trackKey(t), t]));
 
   for (const ta of commonTracks) {
-    const tb = bByDiff.get(ta.difficulty)!;
-    const prefix = `trackData(${ta.difficulty})`;
+    const tb = bByKey.get(trackKey(ta))!;
+    const prefix = `trackData(${ta.instrument}:${ta.difficulty})`;
 
     if (!deepEqual(ta.trackEvents, tb.trackEvents)) {
       const maxLen = Math.max(ta.trackEvents.length, tb.trackEvents.length);
@@ -648,7 +754,7 @@ function validateChart(
     return 'skip';
   }
 
-  if (!doc.trackData.some((t) => t.instrument === 'drums')) {
+  if (doc.trackData.length === 0) {
     return 'skip';
   }
 
@@ -769,9 +875,12 @@ function stripForComparison(obj: unknown, path = ''): unknown {
       if (k === 'velocity') continue;
       // TODO: Preserve MIDI channel in writer
       if (k === 'channel') continue;
-      // MIDI noteOff-before-noteOn sorting means 0-length events become length 1.
-      // Normalize 0→1 for comparison since this is a known serializer constraint.
-      // Affects trackEvents (notes) and vocalPhrases (note 105/106 on/off pairs).
+      // modifierSustains is metadata for the writer, not chart content.
+      // It's populated from the MIDI parser but not from .chart; skip for comparison.
+      if (k === 'modifierSustains') continue;
+      // scan-chart's MIDI parser discards zero-length notes (noteOff sorted
+      // before noteOn at same tick). The writer uses Math.max(length, 1) to
+      // work around this. Normalize 0→1 for same-format comparison.
       if (k === 'length' && v === 0 && (path.includes('trackEvents') || path.includes('vocalPhrases'))) {
         result[k] = 1;
         continue;
@@ -1090,6 +1199,256 @@ describe('real-chart same-format roundtrip', () => {
       roundtripReport.failures.push(result);
       const summary = result.diffs.map((d) => `${d.field}: ${d.message}`).join('; ');
       throw new Error(`${result.path} (${result.originalFormat}→${result.convertedFormat}): ${summary}`);
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Byte-level same-format roundtrip: compare raw file output without scan-chart
+// ---------------------------------------------------------------------------
+
+/**
+ * Strip timing-derived fields from a parsed MIDI event for comparison.
+ * Everything else (note numbers, velocities, event types, SysEx data,
+ * text content) must match exactly.
+ */
+function stripMidiEvent(e: MidiEvent): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(e)) {
+    // deltaTime is structural — keep it (it encodes tick positions)
+    if (v === undefined) continue;
+    // Convert Uint8Array to regular array for deep comparison
+    if (v instanceof Uint8Array) {
+      result[k] = Array.from(v);
+    } else {
+      result[k] = v;
+    }
+  }
+  return result;
+}
+
+/**
+ * Compare two parsed MIDI files track-by-track, event-by-event.
+ * Returns diffs for any structural differences.
+ */
+function compareMidiFiles(
+  a: ReturnType<typeof parseMidi>,
+  b: ReturnType<typeof parseMidi>,
+): Diff[] {
+  const diffs: Diff[] = [];
+
+  if (a.header.format !== b.header.format) {
+    diffs.push({ field: 'header.format', message: `${a.header.format} vs ${b.header.format}` });
+  }
+  if (a.header.ticksPerBeat !== b.header.ticksPerBeat) {
+    diffs.push({ field: 'header.ticksPerBeat', message: `${a.header.ticksPerBeat} vs ${b.header.ticksPerBeat}` });
+  }
+  if (a.tracks.length !== b.tracks.length) {
+    diffs.push({ field: 'tracks.length', message: `${a.tracks.length} vs ${b.tracks.length}` });
+    return diffs;
+  }
+
+  for (let t = 0; t < a.tracks.length; t++) {
+    const trackA = a.tracks[t];
+    const trackB = b.tracks[t];
+
+    // Get track name for better error messages
+    const nameEvt = trackA.find(e => (e as any).type === 'trackName');
+    const trackLabel = nameEvt ? (nameEvt as any).text : `track[${t}]`;
+
+    if (trackA.length !== trackB.length) {
+      diffs.push({
+        field: `${trackLabel}.events.length`,
+        message: `${trackA.length} vs ${trackB.length}`,
+      });
+      // Find first divergence
+      const minLen = Math.min(trackA.length, trackB.length);
+      for (let i = 0; i < minLen; i++) {
+        const ea = stripMidiEvent(trackA[i]);
+        const eb = stripMidiEvent(trackB[i]);
+        if (JSON.stringify(ea) !== JSON.stringify(eb)) {
+          diffs.push({
+            field: `${trackLabel}[${i}]`,
+            message: 'first diff',
+            details: JSON.stringify({ expected: ea, actual: eb }, null, 2).slice(0, 500),
+          });
+          break;
+        }
+      }
+      continue;
+    }
+
+    for (let i = 0; i < trackA.length; i++) {
+      const ea = stripMidiEvent(trackA[i]);
+      const eb = stripMidiEvent(trackB[i]);
+      if (JSON.stringify(ea) !== JSON.stringify(eb)) {
+        diffs.push({
+          field: `${trackLabel}[${i}]`,
+          message: `Event mismatch`,
+          details: JSON.stringify({ expected: ea, actual: eb }, null, 2).slice(0, 500),
+        });
+        if (diffs.length >= 5) return diffs;
+      }
+    }
+  }
+
+  return diffs;
+}
+
+/**
+ * Compare two .chart files as text, line by line.
+ */
+function compareChartText(a: string, b: string): Diff[] {
+  const diffs: Diff[] = [];
+  const linesA = a.split('\n');
+  const linesB = b.split('\n');
+
+  if (linesA.length !== linesB.length) {
+    diffs.push({
+      field: 'line count',
+      message: `${linesA.length} vs ${linesB.length}`,
+    });
+  }
+
+  const maxLen = Math.min(linesA.length, linesB.length);
+  for (let i = 0; i < maxLen; i++) {
+    if (linesA[i] !== linesB[i]) {
+      diffs.push({
+        field: `line ${i + 1}`,
+        message: `Diff`,
+        details: JSON.stringify({ expected: linesA[i], actual: linesB[i] }).slice(0, 500),
+      });
+      if (diffs.length >= 10) break;
+    }
+  }
+
+  return diffs;
+}
+
+/**
+ * Byte-level same-format roundtrip: readChart → writeChart → compare raw output
+ * against input. No scan-chart re-parsing — compares the actual file bytes.
+ *
+ * For MIDI: parses both with midi-file and compares track-by-track.
+ * For .chart: compares the text content line-by-line.
+ */
+function validateByteLevelRoundtrip(
+  folder: string,
+  chartDir: string,
+): FailureRecord | 'skip' | null {
+  const relPath = relative(chartDir, folder);
+  const files = loadChartFolder(folder);
+
+  let doc;
+  try {
+    doc = readChart(files);
+  } catch {
+    return 'skip';
+  }
+
+  if (doc.trackData.length === 0) {
+    return 'skip';
+  }
+
+  const format = doc.originalFormat;
+
+  let output: FileEntry[];
+  try {
+    output = writeChart(doc);
+  } catch (err) {
+    return {
+      path: relPath,
+      originalFormat: format,
+      convertedFormat: format,
+      diffs: [{ field: 'writeChart', message: `Write failed: ${(err as Error).message}` }],
+    };
+  }
+
+  const inputFile = files.find(
+    f => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
+  )!;
+  const outputFile = output.find(
+    f => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
+  )!;
+
+  let diffs: Diff[];
+
+  if (format === 'mid') {
+    // Parse both MIDI files and compare structure
+    let midiA, midiB;
+    try {
+      midiA = parseMidi(inputFile.data);
+      midiB = parseMidi(outputFile.data);
+    } catch (err) {
+      return {
+        path: relPath,
+        originalFormat: format,
+        convertedFormat: format,
+        diffs: [{ field: 'parseMidi', message: `Parse failed: ${(err as Error).message}` }],
+      };
+    }
+    diffs = compareMidiFiles(midiA, midiB);
+  } else {
+    // Compare .chart text
+    const textA = new TextDecoder().decode(inputFile.data);
+    const textB = new TextDecoder().decode(outputFile.data);
+    diffs = compareChartText(textA, textB);
+  }
+
+  return diffs.length === 0
+    ? null
+    : { path: relPath, originalFormat: format, convertedFormat: format, diffs };
+}
+
+describe('real-chart byte-level roundtrip', () => {
+  const byteReport: Report = {
+    timestamp: new Date().toISOString(),
+    chartDir,
+    total: folders.length,
+    passed: 0,
+    failed: 0,
+    skipped: 0,
+    failures: [],
+  };
+
+  afterAll(() => {
+    const reportPath = join(__dirname, 'real-charts-byte-report.json');
+    writeFileSync(reportPath, JSON.stringify(byteReport, null, 2) + '\n');
+
+    console.log('\n=== Byte-Level Roundtrip Report ===');
+    console.log(`Total:   ${byteReport.total}`);
+    console.log(`Passed:  ${byteReport.passed}`);
+    console.log(`Failed:  ${byteReport.failed}`);
+    console.log(`Skipped: ${byteReport.skipped}`);
+    if (byteReport.failures.length > 0) {
+      console.log('\nFailures:');
+      for (const f of byteReport.failures) {
+        console.log(`  ${f.path} (${f.originalFormat})`);
+        for (const d of f.diffs.slice(0, 3)) {
+          console.log(`    ${d.field}: ${d.message}`);
+        }
+        if (f.diffs.length > 3) console.log(`    ... and ${f.diffs.length - 3} more`);
+      }
+    }
+    console.log(`\nReport written to: ${reportPath}`);
+  });
+
+  it.each(folders.map((folder) => [relative(chartDir, folder), folder]))(
+    'bytes %s',
+    (_relPath, folder) => {
+      const result = validateByteLevelRoundtrip(folder as string, chartDir);
+      if (result === 'skip') {
+        byteReport.skipped++;
+        return;
+      }
+      if (result === null) {
+        byteReport.passed++;
+        return;
+      }
+      byteReport.failed++;
+      byteReport.failures.push(result);
+      const summary = result.diffs.slice(0, 3).map((d) => `${d.field}: ${d.message}`).join('; ');
+      throw new Error(`${result.path} (${result.originalFormat}): ${summary}`);
     },
   );
 });

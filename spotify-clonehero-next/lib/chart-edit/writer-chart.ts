@@ -161,7 +161,9 @@ export function serializeChart(doc: ChartDocument): string {
     lines.push(...serializeTrackSection(track));
   }
 
-  return lines.join('\r\n') + '\r\n';
+  // Join with \r\n. Add trailing \r\n only between lines, not after the last one.
+  // Most .chart editors (Moonscraper, YARG) don't add a trailing newline.
+  return lines.join('\r\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -171,19 +173,46 @@ export function serializeChart(doc: ChartDocument): string {
 function serializeSongSection(doc: ChartDocument): string[] {
   const lines = ['[Song]', '{'];
 
-  lines.push(`  Resolution = ${doc.chartTicksPerBeat}`);
+  if (doc.chartSongSection) {
+    // Preserve original [Song] fields in their original order for roundtrip.
+    // Update Resolution and Offset from the document (they may have changed).
+    for (const { key, value } of doc.chartSongSection) {
+      if (key === 'Resolution') {
+        lines.push(`  Resolution = ${doc.chartTicksPerBeat}`);
+      } else if (key === 'Offset') {
+        const delaySec = (doc.metadata.delay ?? 0) / 1000;
+        lines.push(`  Offset = ${delaySec}`);
+      } else {
+        lines.push(`  ${key} = ${value}`);
+      }
+    }
+  } else {
+    // No original [Song] section — build from metadata (MIDI → .chart conversion)
+    const m = doc.metadata;
+    if (m.name != null) lines.push(`  Name = "${m.name}"`);
+    if (m.artist != null) lines.push(`  Artist = "${m.artist}"`);
+    if (m.charter != null) lines.push(`  Charter = "${m.charter}"`);
+    if (m.album != null) lines.push(`  Album = "${m.album}"`);
+    if (m.genre != null) lines.push(`  Genre = "${m.genre}"`);
+    if (m.year != null) lines.push(`  Year = ", ${m.year}"`);
 
-  if (doc.metadata.delay != null && doc.metadata.delay !== 0) {
-    // .chart Offset field is in seconds; metadata.delay is in milliseconds
-    lines.push(`  Offset = ${doc.metadata.delay / 1000}`);
-  }
+    lines.push(`  Resolution = ${doc.chartTicksPerBeat}`);
 
-  // Audio stream references from assets
-  for (const asset of doc.assets) {
-    const basename = getBasename(asset.fileName).toLowerCase();
-    const field = basenameToStreamField[basename];
-    if (field != null) {
-      lines.push(`  ${field} = "${asset.fileName}"`);
+    if (m.delay != null && m.delay !== 0) {
+      lines.push(`  Offset = ${m.delay / 1000}`);
+    }
+    if (m.preview_start_time != null) {
+      lines.push(`  PreviewStart = ${m.preview_start_time / 1000}`);
+    }
+    if (m.diff_guitar != null) lines.push(`  Difficulty = ${m.diff_guitar}`);
+
+    // Audio stream references from assets
+    for (const asset of doc.assets) {
+      const basename = getBasename(asset.fileName).toLowerCase();
+      const field = basenameToStreamField[basename];
+      if (field != null) {
+        lines.push(`  ${field} = "${asset.fileName}"`);
+      }
     }
   }
 
@@ -282,7 +311,21 @@ function serializeEventsSection(doc: ChartDocument): string[] {
     ...[...codaTicks].map((tick) => ({ tick, text: 'coda' })),
   ];
 
-  events.sort((a, b) => a.tick - b.tick);
+  // Sort by tick, then by event priority within the same tick.
+  // Priority order matches Moonscraper: phrase_end, lyric, section, phrase_start, coda, end.
+  const eventPriority = (text: string): number => {
+    if (text === 'phrase_end') return 0;
+    if (text.startsWith('lyric ')) return 1;
+    if (text.startsWith('section ')) return 2;
+    if (text === 'phrase_start') return 3;
+    if (text === 'coda') return 4;
+    if (text === 'end') return 5;
+    return 3;
+  };
+  events.sort((a, b) => {
+    if (a.tick !== b.tick) return a.tick - b.tick;
+    return eventPriority(a.text) - eventPriority(b.text);
+  });
 
   // Deduplicate
   const deduped = events.filter((event, i) => {
@@ -305,8 +348,8 @@ function serializeEventsSection(doc: ChartDocument): string[] {
 
 /** A single line event within a track section. */
 type TrackLineEvent =
-  | { tick: number; sortKey: 0; kind: 'S'; value: number; length: number }
-  | { tick: number; sortKey: 1; kind: 'N'; value: number; length: number }
+  | { tick: number; sortKey: 1; kind: 'S'; value: number; length: number }
+  | { tick: number; sortKey: 0; kind: 'N'; value: number; length: number }
   | { tick: number; sortKey: 2; kind: 'E'; text: string };
 
 function serializeTrackSection(track: TrackData): string[] {
@@ -325,7 +368,7 @@ function serializeTrackSection(track: TrackData): string[] {
 
   // Star power sections → S 2
   for (const sp of track.starPowerSections) {
-    events.push({ tick: sp.tick, sortKey: 0, kind: 'S', value: 2, length: sp.length });
+    events.push({ tick: sp.tick, sortKey: 1, kind: 'S', value: 2, length: sp.length });
   }
 
   // Drum freestyle sections → S 64
@@ -333,13 +376,13 @@ function serializeTrackSection(track: TrackData): string[] {
   // on parse by whether the section's tick >= the first [coda] text event
   // in the [Events] section (see serializeEventsSection for coda events).
   for (const fs of track.drumFreestyleSections) {
-    events.push({ tick: fs.tick, sortKey: 0, kind: 'S', value: 64, length: fs.length });
+    events.push({ tick: fs.tick, sortKey: 1, kind: 'S', value: 64, length: fs.length });
   }
 
   // Flex lanes → S 65 (single) or S 66 (double)
   for (const fl of track.flexLanes) {
     const value = fl.isDouble ? 66 : 65;
-    events.push({ tick: fl.tick, sortKey: 0, kind: 'S', value, length: fl.length });
+    events.push({ tick: fl.tick, sortKey: 1, kind: 'S', value, length: fl.length });
   }
 
   // Solo sections → E "solo" at tick, E "soloend" at tick+length
@@ -369,7 +412,7 @@ function serializeTrackSection(track: TrackData): string[] {
   for (const te of track.trackEvents) {
     const noteNumber = noteMap[te.type];
     if (noteNumber != null) {
-      events.push({ tick: te.tick, sortKey: 1, kind: 'N', value: noteNumber, length: te.length });
+      events.push({ tick: te.tick, sortKey: 0, kind: 'N', value: noteNumber, length: te.length });
     }
     // EventTypes not in the map are structural (starPower, soloSection, etc.)
     // and are handled via the dedicated sections above — skip them here.
@@ -409,22 +452,19 @@ function serializeTrackSection(track: TrackData): string[] {
       for (const [noteType, toms, chartNote] of noteToChartCymbal) {
         for (const ev of track.trackEvents) {
           if (ev.type === noteType && !toms.has(ev.tick)) {
-            events.push({ tick: ev.tick, sortKey: 1, kind: 'N', value: chartNote, length: 0 });
+            events.push({ tick: ev.tick, sortKey: 0, kind: 'N', value: chartNote, length: 0 });
           }
         }
       }
     }
   }
 
-  // Sort: by tick, then S before N before E, then by value
+  // Sort: by tick, then N before S before E (matching Moonscraper output order).
+  // Within the same tick and kind, preserve insertion order (which reflects
+  // the original file order from scan-chart's parser).
   events.sort((a, b) => {
     if (a.tick !== b.tick) return a.tick - b.tick;
-    if (a.sortKey !== b.sortKey) return a.sortKey - b.sortKey;
-    // Within same kind, sort by value (E events don't have a value, but
-    // "solo" always comes before "soloend" alphabetically which is fine)
-    if (a.kind === 'E' && b.kind === 'E') return 0;
-    if (a.kind !== 'E' && b.kind !== 'E') return a.value - b.value;
-    return 0;
+    return a.sortKey - b.sortKey;
   });
 
   // Deduplicate: remove exact duplicate events (same tick + kind + value/text)

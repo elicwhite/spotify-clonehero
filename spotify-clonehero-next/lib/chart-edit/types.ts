@@ -98,6 +98,13 @@ export interface ChartDocument extends Omit<RawChartData, 'metadata'> {
   originalFormat: 'chart' | 'mid';
   /** Pass-through files not managed by the library (audio, album art, video). */
   assets: FileEntry[];
+  /**
+   * Raw key-value pairs from the .chart [Song] section, preserving original
+   * field order and unknown fields (Player2, MediaType, etc.) that scan-chart
+   * doesn't parse. Used by the .chart writer for byte-level roundtrip fidelity.
+   * Only populated when reading .chart files.
+   */
+  chartSongSection?: Array<{ key: string; value: string }>;
 }
 
 /**

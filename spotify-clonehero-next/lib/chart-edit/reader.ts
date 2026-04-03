@@ -192,6 +192,35 @@ function isAssetFile(fileName: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// .chart [Song] section raw parsing
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse the raw [Song] section from a .chart file, preserving field order
+ * and unknown fields for byte-level roundtrip fidelity.
+ */
+function parseChartSongSection(
+  data: Uint8Array,
+): Array<{ key: string; value: string }> | undefined {
+  const text = new TextDecoder().decode(data);
+  // Find [Song] section
+  const songMatch = text.match(/\[Song\]\s*\{([^}]*)\}/);
+  if (!songMatch) return undefined;
+
+  const entries: Array<{ key: string; value: string }> = [];
+  const lines = songMatch[1].split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Match "Key = Value" or "Key = "Value""
+    const m = trimmed.match(/^(\S+)\s*=\s*(.*?)[\r]*$/);
+    if (m) {
+      entries.push({ key: m[1], value: m[2] });
+    }
+  }
+  return entries.length > 0 ? entries : undefined;
+}
+
+// ---------------------------------------------------------------------------
 // readChart
 // ---------------------------------------------------------------------------
 
@@ -281,7 +310,13 @@ export function readChart(files: FileEntry[]): ChartDocument {
     return isAssetFile(f.fileName);
   });
 
-  // 6. Build ChartDocument
+  // 6. Parse raw [Song] section for .chart round-trip fidelity
+  const chartSongSection =
+    originalFormat === 'chart'
+      ? parseChartSongSection(chartFile.data)
+      : undefined;
+
+  // 7. Build ChartDocument
   const { metadata: _rawMeta, ...rawFields } = rawData;
 
   return {
@@ -289,5 +324,6 @@ export function readChart(files: FileEntry[]): ChartDocument {
     metadata,
     originalFormat,
     assets,
+    chartSongSection,
   };
 }

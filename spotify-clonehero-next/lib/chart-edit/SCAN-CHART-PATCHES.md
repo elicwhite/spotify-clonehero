@@ -52,6 +52,32 @@ uses `[\w\s[\]]` which does **not** include `"`. Lines like
 **Validated by:** `real-charts.test.ts` — removes need for the solo section
 workaround (`soloSections: []` with comment about scan-chart limitation).
 
+## Patch 3: MIDI parser — preserve modifier sustain ranges
+
+scan-chart's `splitMidiModifierSustains()` converts modifier sustain ranges
+(forceTap, forceOpen, forceHopo, forceStrum for guitar; forceFlam, tom markers
+for drums) into zero-length events at each note tick. This is needed for the
+notes-parser which groups events by tick, but it destroys the original sustain
+range information. When writing back to MIDI, tools like Moonscraper expect
+sustain-range SysEx (one on/off pair per range), not hundreds of 1-tick
+on/off pairs.
+
+**Fix:** In the MIDI parser's track building code, extract the original
+modifier sustain events *before* `splitMidiModifierSustains()` runs, and store
+them in a new `modifierSustains` field on each track data entry.
+
+```typescript
+// New field on RawChartData.trackData[]:
+modifierSustains: { tick: number; length: number; type: EventType }[]
+```
+
+The MIDI writer uses `modifierSustains` when available to write sustain-range
+SysEx. For .chart-sourced data (which doesn't have `modifierSustains`), the
+writer falls back to reconstructing ranges from zero-length events.
+
+**Validated by:** `tap-debug.test.ts` — round-trip comparison of forceTap
+SysEx using a real chart with tap notes. Verifies byte-identical SysEx output.
+
 ## Not patched
 
 ### MIDI lyrics on PART VOCALS (not a parser bug)
