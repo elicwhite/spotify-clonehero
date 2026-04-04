@@ -18,7 +18,7 @@ yarn lint       # ESLint
 - **Styling:** Tailwind CSS + shadcn/ui (Radix primitives in `components/ui/`)
 - **State:** React state + context (`useState`, `useReducer`, context). No zustand or other state libraries.
 - **Database:** SQLocal (SQLite in OPFS) + Kysely
-- **Charts:** `@eliwhite/scan-chart` (parse .chart/.mid), `parse-sng` (parse .sng)
+- **Charts:** `@eliwhite/scan-chart` (parse + write .chart/.mid), `parse-sng` (parse .sng). Edit helpers: `lib/chart-edit/` (drum notes, sections, tempo)
 - **3D Preview:** THREE.js highway renderer (`lib/preview/highway.ts`, `app/sheet-music/[slug]/CloneHeroRenderer.tsx`)
 - **Audio:** `AudioManager` (`lib/preview/audioManager.ts`) — Web Audio API, multiple stems, speed control
 - **Notation:** VexFlow (`app/sheet-music/[slug]/SheetMusic.tsx`)
@@ -67,7 +67,8 @@ lib/drum-transcription/            # Core logic (testable, no React)
 
 | Need | Location |
 |------|----------|
-| Chart parsing, types (`NoteEvent`, `noteTypes`, `noteFlags`) | `@eliwhite/scan-chart` |
+| Chart parsing + writing, types (`NoteEvent`, `noteTypes`, `noteFlags`, `ChartDocument`, `ParsedChart`) | `@eliwhite/scan-chart` |
+| Chart edit helpers (`addDrumNote`, `addSection`, `addTempo`), `readChart` wrapper | `lib/chart-edit/` |
 | SNG parsing | `parse-sng` |
 | Tick → ms conversion | `app/sheet-music/[slug]/chartUtils.ts` → `tickToMs()` |
 | Drum note → instrument mapping | `lib/fill-detector/drumLaneMap.ts` |

@@ -70,7 +70,7 @@ export default function EditorMCPTools() {
         const am = audioManagerRef.current;
         let selectedNotes: Array<{id: string; tick: number; type: string; flags: Record<string, boolean>}> = [];
         if (s.chartDoc && s.selectedNoteIds.size > 0) {
-          const track = s.chartDoc.trackData.find(t => t.instrument === 'drums' && t.difficulty === 'expert');
+          const track = s.chartDoc.parsedChart.trackData.find(t => t.instrument === 'drums' && t.difficulty === 'expert');
           if (track) {
             selectedNotes = getDrumNotes(track)
               .filter(n => s.selectedNoteIds.has(noteId(n)))
@@ -82,8 +82,8 @@ export default function EditorMCPTools() {
           isPlaying: s.isPlaying, playbackSpeed: s.playbackSpeed, zoom: s.zoom, dirty: s.dirty,
           currentTimeMs: am ? am.currentTime * 1000 : 0, durationMs: am ? am.duration * 1000 : 0,
           selectedNoteCount: s.selectedNoteIds.size, selectedNotes,
-          totalNotes: s.chartDoc ? (() => { const t = s.chartDoc!.trackData.find(tr => tr.instrument === 'drums' && tr.difficulty === 'expert'); return t ? getDrumNotes(t).length : 0; })() : 0,
-          sectionCount: s.chartDoc?.sections.length ?? 0, canUndo: canUndoRef.current, canRedo: canRedoRef.current, highwayMode: s.highwayMode,
+          totalNotes: s.chartDoc ? (() => { const t = s.chartDoc!.parsedChart.trackData.find(tr => tr.instrument === 'drums' && tr.difficulty === 'expert'); return t ? getDrumNotes(t).length : 0; })() : 0,
+          sectionCount: s.chartDoc?.parsedChart.sections.length ?? 0, canUndo: canUndoRef.current, canRedo: canRedoRef.current, highwayMode: s.highwayMode,
         }, null, 2)}]};
       },
     });
@@ -99,8 +99,8 @@ export default function EditorMCPTools() {
         if (!am) return {content: [{type: 'text', text: 'No AudioManager'}]};
         let seekMs: number;
         if (args.tick !== undefined && s.chartDoc) {
-          const tt = buildTimedTempos(s.chartDoc.tempos, s.chartDoc.chartTicksPerBeat);
-          seekMs = tickToMs(args.tick as number, tt, s.chartDoc.chartTicksPerBeat);
+          const tt = buildTimedTempos(s.chartDoc.parsedChart.tempos, s.chartDoc.parsedChart.resolution);
+          seekMs = tickToMs(args.tick as number, tt, s.chartDoc.parsedChart.resolution);
           dispatchRef.current({type: 'SET_CURSOR_TICK', tick: args.tick as number});
         } else if (args.timeMs !== undefined) {
           seekMs = args.timeMs as number;
@@ -121,7 +121,7 @@ export default function EditorMCPTools() {
       execute: async (args) => {
         const s = stateRef.current;
         if (!s.chartDoc) return {content: [{type: 'text', text: 'No chart loaded'}]};
-        const track = s.chartDoc.trackData.find(t => t.instrument === 'drums' && t.difficulty === 'expert');
+        const track = s.chartDoc.parsedChart.trackData.find(t => t.instrument === 'drums' && t.difficulty === 'expert');
         if (!track) return {content: [{type: 'text', text: 'No expert drums track'}]};
         const startTick = (args.startTick as number) ?? 0;
         const endTick = (args.endTick as number) ?? startTick + 1920;

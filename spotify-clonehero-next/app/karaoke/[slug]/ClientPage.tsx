@@ -60,7 +60,10 @@ export default function ClientPage({md5}: {md5: string}) {
 
         if (cancelled) return;
 
-        const lines = parseLyrics(chart.lyrics, chart.vocalPhrases);
+        const vocals = chart.vocalTracks.parts.vocals;
+        const rawLyrics = vocals?.notePhrases.flatMap(p => p.lyrics) ?? [];
+        const vocalPhrases = vocals?.notePhrases ?? [];
+        const lines = parseLyrics(rawLyrics, vocalPhrases);
 
         if (lines.length === 0) {
           setError('Could not parse lyrics from this chart');

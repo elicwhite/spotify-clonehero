@@ -22,7 +22,7 @@ function createTestChart() {
       msTime: (barStart / resolution) * (60000 / 120),
       length: resolution / 4,
       msLength: 125,
-      type: 0, // Kick
+      type: 0 as never, // Kick
       flags: 0,
     });
 
@@ -31,7 +31,7 @@ function createTestChart() {
       msTime: ((barStart + resolution * 2) / resolution) * (60000 / 120),
       length: resolution / 4,
       msLength: 125,
-      type: 0, // Kick
+      type: 0 as never, // Kick
       flags: 0,
     });
 
@@ -411,7 +411,7 @@ describe('Window Statistics', () => {
         startMs: 0,
         endMs: 500,
         notes: [
-          {tick: 48, msTime: 0, length: 24, msLength: 62.5, type: 0, flags: 0},
+          {tick: 48, msTime: 0, length: 24, msLength: 62.5, type: 0 as never, flags: 0},
           {tick: 96, msTime: 0, length: 24, msLength: 62.5, type: 1, flags: 0},
         ],
         features: {

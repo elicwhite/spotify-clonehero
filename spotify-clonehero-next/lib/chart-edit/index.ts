@@ -1,43 +1,56 @@
 /**
  * chart-edit public API
  *
- * Read, create, and write Clone Hero chart documents.
- * All scan-chart types are re-exported for consumer convenience.
+ * Thin wrapper around `@eliwhite/scan-chart`:
+ *  - `readChart(files)` — `parseChartAndIni` with asset classification
+ *  - `writeChartFolder`, `createEmptyChart` — re-exported directly
+ *  - drum/section/tempo helpers — local, operate on normalized `ParsedChart` data
  */
 
-// Core functions
-export { readChart } from './reader';
-export { createChart } from './create';
-export { writeChart } from './writer';
+import {
+  parseChartAndIni,
+  createEmptyChart,
+  writeChartFolder,
+} from '@eliwhite/scan-chart';
+import type { ChartDocument, File } from '@eliwhite/scan-chart';
 
-// Types
+// Re-export the scan-chart surface consumers depend on
+export { createEmptyChart, writeChartFolder };
 export type {
   ChartDocument,
-  ChartMetadata,
-  FileEntry,
-  TrackData,
-  TrackEvent,
-  DrumNote,
-  DrumNoteType,
-  DrumNoteFlags,
+  File,
+  ParsedChart,
+  ParsedTrackData,
+  IniChartModifiers,
+  RawChartData,
   EventType,
   Instrument,
   Difficulty,
+  NoteEvent,
+  NoteType,
+  NormalizedVocalTrack,
+  NormalizedVocalPart,
+  NormalizedVocalPhrase,
+  NormalizedLyricEvent,
+  NormalizedVocalNote,
+  DrumType,
+  VocalTrackData,
+  DrumNote,
+  DrumNoteType,
+  DrumNoteFlags,
 } from './types';
 
 // Constants
-export { eventTypes, instruments, difficulties } from './types';
-
-// Type mappings
 export {
-  drumNoteEventType,
-  eventTypeToDrumNote,
-  drumCymbalEventType,
-  drumTomEventType,
-  drumAccentEventType,
-  drumGhostEventType,
-  baseDrumEventTypes,
-  drumModifierEventTypes,
+  eventTypes,
+  instruments,
+  difficulties,
+  noteTypes,
+  noteFlags,
+  lyricFlags,
+  drumTypes,
+  drumNoteTypeMap,
+  noteTypeToDrumNote,
 } from './types';
 
 // Drum helpers
@@ -48,7 +61,7 @@ export {
   setDrumNoteFlags,
 } from './helpers/drum-notes';
 
-// Section helpers
+// Drum section helpers (star power, activation lanes, solos, flex lanes)
 export {
   addStarPower,
   removeStarPower,
@@ -60,7 +73,7 @@ export {
   removeFlexLane,
 } from './helpers/drum-sections';
 
-// Tempo helpers
+// Tempo / time signature helpers
 export {
   addTempo,
   removeTempo,
@@ -68,8 +81,28 @@ export {
   removeTimeSignature,
 } from './helpers/tempo';
 
-// Section helpers
+// Named section (globalEvent) helpers
 export {
   addSection,
   removeSection,
 } from './helpers/sections';
+
+// ---------------------------------------------------------------------------
+// readChart — parses a chart folder into a ChartDocument
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse a chart folder (notes.chart / notes.mid + song.ini + passthrough
+ * assets) into a scan-chart `ChartDocument`. Throws if the chart file can't
+ * be found or parsed.
+ */
+export function readChart(files: File[]): ChartDocument {
+  const result = parseChartAndIni(files);
+  if (!result.parsedChart) {
+    const reason = result.chartFolderIssues[0]?.description ?? 'Could not parse chart';
+    throw new Error(reason);
+  }
+  const chartFileNames = new Set(['notes.chart', 'notes.mid', 'song.ini']);
+  const assets = files.filter(f => !chartFileNames.has(f.fileName.toLowerCase()));
+  return { parsedChart: result.parsedChart, assets };
+}

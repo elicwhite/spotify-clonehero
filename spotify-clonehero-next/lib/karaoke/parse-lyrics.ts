@@ -298,7 +298,7 @@ function makeLine(syllables: Syllable[]): LyricLine {
  * Parse lyrics and vocal phrases from a scanned chart into display lines.
  */
 export function parseLyrics(
-  rawLyrics: {msTime: number; msLength: number; text: string}[],
+  rawLyrics: {msTime: number; text: string}[],
   vocalPhrases: {msTime: number; msLength: number}[],
 ): LyricLine[] {
   const syllables = buildSyllables(rawLyrics);

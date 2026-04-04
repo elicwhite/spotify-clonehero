@@ -29,42 +29,45 @@ export function validateChart(doc: ChartDocument): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Deep copy to avoid mutating the original
+  // Deep copy to avoid mutating the original. Parsed-chart fields live on
+  // `.parsedChart`; clone that subtree explicitly so the validator can
+  // mutate without touching the input doc.
+  const chart = doc.parsedChart;
   const result: ChartDocument = {
-    ...doc,
-    tempos: doc.tempos.map((t) => ({ ...t })),
-    timeSignatures: doc.timeSignatures.map((ts) => ({ ...ts })),
-    sections: doc.sections.map((s) => ({ ...s })),
-    endEvents: doc.endEvents.map((e) => ({ ...e })),
-    lyrics: doc.lyrics.map((l) => ({ ...l })),
-    vocalPhrases: doc.vocalPhrases.map((p) => ({ ...p })),
-    trackData: doc.trackData.map((t) => ({
-      ...t,
-      trackEvents: t.trackEvents.map((e) => ({ ...e })),
-      starPowerSections: t.starPowerSections.map((sp) => ({ ...sp })),
-      rejectedStarPowerSections: t.rejectedStarPowerSections.map((sp) => ({
-        ...sp,
+    parsedChart: {
+      ...chart,
+      metadata: {...chart.metadata},
+      tempos: chart.tempos.map((t) => ({ ...t })),
+      timeSignatures: chart.timeSignatures.map((ts) => ({ ...ts })),
+      sections: chart.sections.map((s) => ({ ...s })),
+      endEvents: chart.endEvents.map((e) => ({ ...e })),
+      trackData: chart.trackData.map((t) => ({
+        ...t,
+        noteEventGroups: t.noteEventGroups.map((g) => g.map((n) => ({ ...n }))),
+        starPowerSections: t.starPowerSections.map((sp) => ({ ...sp })),
+        rejectedStarPowerSections: t.rejectedStarPowerSections.map((sp) => ({
+          ...sp,
+        })),
+        soloSections: t.soloSections.map((s) => ({ ...s })),
+        flexLanes: t.flexLanes.map((f) => ({ ...f })),
+        drumFreestyleSections: t.drumFreestyleSections.map((fs) => ({ ...fs })),
       })),
-      soloSections: t.soloSections.map((s) => ({ ...s })),
-      flexLanes: t.flexLanes.map((f) => ({ ...f })),
-      drumFreestyleSections: t.drumFreestyleSections.map((fs) => ({ ...fs })),
-    })),
-    metadata: { ...doc.metadata },
+    },
     assets: [...doc.assets],
   };
 
   // --- Resolution ---
   if (
-    !Number.isInteger(result.chartTicksPerBeat) ||
-    result.chartTicksPerBeat <= 0
+    !Number.isInteger(result.parsedChart.resolution) ||
+    result.parsedChart.resolution <= 0
   ) {
     errors.push(
-      `Resolution must be a positive integer, got ${result.chartTicksPerBeat}`,
+      `Resolution must be a positive integer, got ${result.parsedChart.resolution}`,
     );
   }
 
   // --- Tempos ---
-  for (const tempo of result.tempos) {
+  for (const tempo of result.parsedChart.tempos) {
     if (tempo.tick < 0) {
       errors.push(`Negative tick value in tempo: ${tempo.tick}`);
     }
@@ -76,15 +79,15 @@ export function validateChart(doc: ChartDocument): ValidationResult {
   }
 
   // Auto-fix: ensure tempo at tick 0
-  if (!result.tempos.some((t) => t.tick === 0)) {
-    result.tempos.unshift({ tick: 0, beatsPerMinute: 120 });
+  if (!result.parsedChart.tempos.some((t) => t.tick === 0)) {
+    result.parsedChart.tempos.unshift({ tick: 0, beatsPerMinute: 120, msTime: 0 });
     warnings.push('No tempo at tick 0; inserted default 120 BPM');
   }
 
-  result.tempos.sort((a, b) => a.tick - b.tick);
+  result.parsedChart.tempos.sort((a, b) => a.tick - b.tick);
 
   // Warn on extreme BPM values
-  for (const tempo of result.tempos) {
+  for (const tempo of result.parsedChart.tempos) {
     if (tempo.beatsPerMinute > 300) {
       warnings.push(
         `Very high BPM (${tempo.beatsPerMinute}) at tick ${tempo.tick}; likely an error`,
@@ -98,7 +101,7 @@ export function validateChart(doc: ChartDocument): ValidationResult {
   }
 
   // --- Time Signatures ---
-  for (const ts of result.timeSignatures) {
+  for (const ts of result.parsedChart.timeSignatures) {
     if (ts.tick < 0) {
       errors.push(`Negative tick value in time signature: ${ts.tick}`);
     }
@@ -122,31 +125,33 @@ export function validateChart(doc: ChartDocument): ValidationResult {
     }
   }
 
-  if (!result.timeSignatures.some((ts) => ts.tick === 0)) {
-    result.timeSignatures.unshift({
+  if (!result.parsedChart.timeSignatures.some((ts) => ts.tick === 0)) {
+    result.parsedChart.timeSignatures.unshift({
       tick: 0,
       numerator: 4,
       denominator: 4,
+      msTime: 0,
+      msLength: 0,
     });
     warnings.push('No time signature at tick 0; inserted default 4/4');
   }
 
-  result.timeSignatures.sort((a, b) => a.tick - b.tick);
+  result.parsedChart.timeSignatures.sort((a, b) => a.tick - b.tick);
 
   // --- Sections ---
-  result.sections.sort((a, b) => a.tick - b.tick);
+  result.parsedChart.sections.sort((a, b) => a.tick - b.tick);
 
-  if (result.sections.length === 0) {
+  if (result.parsedChart.sections.length === 0) {
     warnings.push('No section markers in chart');
   }
 
   // --- Default BPM warning ---
   if (
-    result.tempos.length === 1 &&
-    result.tempos[0].beatsPerMinute === 120 &&
-    result.timeSignatures.length === 1 &&
-    result.timeSignatures[0].numerator === 4 &&
-    result.timeSignatures[0].denominator === 4
+    result.parsedChart.tempos.length === 1 &&
+    result.parsedChart.tempos[0].beatsPerMinute === 120 &&
+    result.parsedChart.timeSignatures.length === 1 &&
+    result.parsedChart.timeSignatures[0].numerator === 4 &&
+    result.parsedChart.timeSignatures[0].denominator === 4
   ) {
     warnings.push(
       'Only one 120 BPM marker and 4/4 time sig (probably untempo-mapped)',
@@ -156,47 +161,58 @@ export function validateChart(doc: ChartDocument): ValidationResult {
   // --- Tracks ---
   let hasAnyNotes = false;
 
-  for (const track of result.trackData) {
+  for (const track of result.parsedChart.trackData) {
     if (track.instrument !== 'drums') continue;
 
     // Check for negative ticks
-    for (const ev of track.trackEvents) {
-      if (ev.tick < 0) {
-        errors.push(
-          `Negative tick value in track event: ${ev.tick} (type ${ev.type})`,
-        );
+    for (const group of track.noteEventGroups) {
+      for (const ev of group) {
+        if (ev.tick < 0) {
+          errors.push(
+            `Negative tick value in track event: ${ev.tick} (type ${ev.type})`,
+          );
+        }
       }
     }
 
-    // Auto-sort trackEvents by tick
-    const wasSorted = track.trackEvents.every(
-      (e, i) => i === 0 || e.tick >= track.trackEvents[i - 1].tick,
+    // Auto-sort noteEventGroups by the group's leading tick
+    const wasSorted = track.noteEventGroups.every(
+      (g, i) => i === 0 || (g[0]?.tick ?? 0) >= (track.noteEventGroups[i - 1][0]?.tick ?? 0),
     );
     if (!wasSorted) {
-      track.trackEvents.sort((a, b) => a.tick - b.tick);
+      track.noteEventGroups.sort((a, b) => (a[0]?.tick ?? 0) - (b[0]?.tick ?? 0));
       warnings.push(
         `Track events not sorted by tick in ${track.difficulty} ${track.instrument}; auto-sorted`,
       );
     }
 
-    // Deduplicate trackEvents (same type at same tick)
+    // Deduplicate notes (same type at same tick) across all groups on this track.
+    // Collapses duplicate groups and duplicate events-within-groups.
     const seen = new Set<string>();
-    const deduped: typeof track.trackEvents = [];
-    for (const ev of track.trackEvents) {
-      const key = `${ev.tick}:${ev.type}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        deduped.push(ev);
+    let totalNotesBefore = 0;
+    let totalNotesAfter = 0;
+    const dedupedGroups: typeof track.noteEventGroups = [];
+    for (const group of track.noteEventGroups) {
+      totalNotesBefore += group.length;
+      const dedupedGroup: typeof group = [];
+      for (const ev of group) {
+        const key = `${ev.tick}:${ev.type}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          dedupedGroup.push(ev);
+        }
       }
+      totalNotesAfter += dedupedGroup.length;
+      if (dedupedGroup.length > 0) dedupedGroups.push(dedupedGroup);
     }
-    if (deduped.length < track.trackEvents.length) {
+    track.noteEventGroups = dedupedGroups;
+    if (totalNotesAfter < totalNotesBefore) {
       warnings.push(
-        `Duplicate events removed in ${track.difficulty} ${track.instrument}: ${track.trackEvents.length - deduped.length} duplicates`,
+        `Duplicate events removed in ${track.difficulty} ${track.instrument}: ${totalNotesBefore - totalNotesAfter} duplicates`,
       );
-      track.trackEvents = deduped;
     }
 
-    if (track.trackEvents.length > 0) {
+    if (totalNotesAfter > 0) {
       hasAnyNotes = true;
     }
 

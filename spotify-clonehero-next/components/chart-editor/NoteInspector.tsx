@@ -48,7 +48,7 @@ export default function NoteInspector({className, onNotesModified}: NoteInspecto
 
   const selectedNotes = useMemo(() => {
     if (!state.chartDoc) return [];
-    const expertTrack = state.chartDoc.trackData.find(
+    const expertTrack = state.chartDoc.parsedChart.trackData.find(
       t => t.instrument === 'drums' && t.difficulty === 'expert',
     );
     if (!expertTrack) return [];

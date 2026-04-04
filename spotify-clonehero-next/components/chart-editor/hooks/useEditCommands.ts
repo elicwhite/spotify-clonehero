@@ -1,9 +1,8 @@
 'use client';
 
 import {useCallback} from 'react';
-import {parseChartFile} from '@eliwhite/scan-chart';
+import {parseChartFile, writeChartFolder} from '@eliwhite/scan-chart';
 import {useChartEditorContext} from '../ChartEditorContext';
-import {writeChart} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {EditCommand} from '../commands';
 import {chartToElements} from '@/lib/preview/highway/chartToElements';
@@ -20,9 +19,17 @@ const PRO_DRUMS_MODIFIERS = {
   pro_drums: true,
 } as const;
 
-/** Convert a ChartDocument to a ParsedChart via serialize -> parse round-trip. */
+/**
+ * Round-trip a ChartDocument through the writer + parser so derived fields
+ * (HOPOs, chord flags, section timing, etc.) are recomputed after an edit.
+ * The editor only writes `.chart` right now, so we look for `notes.chart` in
+ * the serialized output.
+ */
 function chartDocumentToParsedChart(doc: ChartDocument) {
-  const files = writeChart(doc);
+  const files = writeChartFolder({
+    parsedChart: {...doc.parsedChart, format: 'chart'},
+    assets: doc.assets,
+  });
   const chartFile = files.find(f => f.fileName === 'notes.chart')!;
   return parseChartFile(chartFile.data, 'chart', PRO_DRUMS_MODIFIERS);
 }

@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import {fileURLToPath} from 'url';
 import os from 'os';
-import {scanChartFolder} from '@eliwhite/scan-chart';
+import {scanIni} from '@eliwhite/scan-chart';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,7 +13,7 @@ async function scanSongFolder(folderPath) {
   try {
     const files = await fs.promises.readdir(folderPath);
 
-    // Read all files in the folder and convert to the format expected by scanChartFolder
+    // Read all files in the folder and convert to the format expected by scanIni
     const chartFiles = [];
 
     for (const fileName of files) {
@@ -40,15 +40,15 @@ async function scanSongFolder(folderPath) {
       return false;
     }
 
-    // Use scan-chart to parse the folder
-    const scannedChart = scanChartFolder(chartFiles);
+    // This script just lists song metadata — read song.ini directly, skip
+    // the chart parse + hash work entirely.
+    const meta = scanIni(chartFiles).metadata;
 
-    // Check if we have valid song metadata
-    if (scannedChart.name) {
+    if (meta?.name && meta.name !== 'Unknown Name') {
       const songInfo = [
-        scannedChart.name,
-        scannedChart.artist ? `by ${scannedChart.artist}` : null,
-        scannedChart.charter ? `(Charter: ${scannedChart.charter})` : null,
+        meta.name,
+        meta.artist && meta.artist !== 'Unknown Artist' ? `by ${meta.artist}` : null,
+        meta.charter && meta.charter !== 'Unknown Charter' ? `(Charter: ${meta.charter})` : null,
       ]
         .filter(Boolean)
         .join(' ');

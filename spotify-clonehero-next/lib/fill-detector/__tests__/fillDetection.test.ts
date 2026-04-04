@@ -42,7 +42,7 @@ function createBasicDrumPattern(bars = 4, resolution = 192): NoteEvent[] {
       msTime: (barStart / resolution) * (60000 / 120),
       length: resolution / 4,
       msLength: 125,
-      type: 0, // Kick
+      type: 0 as never, // Kick
       flags: 0,
     });
 
@@ -51,7 +51,7 @@ function createBasicDrumPattern(bars = 4, resolution = 192): NoteEvent[] {
       msTime: ((barStart + resolution * 2) / resolution) * (60000 / 120),
       length: resolution / 4,
       msLength: 125,
-      type: 0, // Kick
+      type: 0 as never, // Kick
       flags: 0,
     });
 
@@ -309,7 +309,7 @@ describe('Fill Detection', () => {
 
       // Single note
       const {chart: singleNoteChart, track: singleTrack} = createSyntheticChart(
-        [{tick: 0, msTime: 0, length: 48, msLength: 125, type: 0, flags: 0}],
+        [{tick: 0, msTime: 0, length: 48, msLength: 125, type: 0 as never, flags: 0}],
         'Single Note',
       );
       const singleFills = extractFills(singleNoteChart, singleTrack);

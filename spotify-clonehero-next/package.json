@@ -15,7 +15,7 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
-    "@eliwhite/scan-chart": "7.2.1",
+    "@eliwhite/scan-chart": "8.1.0-eliwhite.1",
     "@headlessui/react": "^1.7.17",
     "@mcp-b/global": "^2.2.0",
     "@next/third-parties": "15.5.3",

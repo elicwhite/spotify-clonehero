@@ -13,7 +13,7 @@
 
 import type {
   ChartDocument,
-  TrackData,
+  ParsedTrackData,
   DrumNote,
   DrumNoteType,
   DrumNoteFlags,
@@ -35,11 +35,14 @@ import {
 // Clone helpers — chart-edit mutates in place, so we clone before calling
 // ---------------------------------------------------------------------------
 
-/** Shallow-clone a TrackData so in-place helpers don't mutate the original. */
-function cloneTrack(track: TrackData): TrackData {
+/** Shallow-clone a ParsedTrackData so in-place helpers don't mutate the original.
+ *  Deep-clones `noteEventGroups` (per-tick note storage) since it's the only
+ *  field mutated by the helpers; raw arrays for sections/lanes are also
+ *  shallow-cloned via `...track` so their references differ. */
+function cloneTrack(track: ParsedTrackData): ParsedTrackData {
   return {
     ...track,
-    trackEvents: [...track.trackEvents.map(e => ({...e}))],
+    noteEventGroups: track.noteEventGroups.map(g => g.map(n => ({...n}))),
   };
 }
 
@@ -47,9 +50,12 @@ function cloneTrack(track: TrackData): TrackData {
 function cloneDocWithTracks(doc: ChartDocument): ChartDocument {
   return {
     ...doc,
-    trackData: doc.trackData.map(t => cloneTrack(t)),
-    tempos: doc.tempos.map(t => ({...t})),
-    timeSignatures: doc.timeSignatures.map(ts => ({...ts})),
+    parsedChart: {
+      ...doc.parsedChart,
+      trackData: doc.parsedChart.trackData.map(t => cloneTrack(t)),
+      tempos: doc.parsedChart.tempos.map(t => ({...t})),
+      timeSignatures: doc.parsedChart.timeSignatures.map(ts => ({...ts})),
+    },
   };
 }
 
@@ -57,13 +63,16 @@ function cloneDocWithTracks(doc: ChartDocument): ChartDocument {
 function cloneDocWithSections(doc: ChartDocument): ChartDocument {
   return {
     ...doc,
-    sections: doc.sections.map(s => ({...s})),
+    parsedChart: {
+      ...doc.parsedChart,
+      sections: doc.parsedChart.sections.map(s => ({...s})),
+    },
   };
 }
 
 /** Find the expert drums track index. */
 function findExpertDrumsIndex(doc: ChartDocument): number {
-  return doc.trackData.findIndex(
+  return doc.parsedChart.trackData.findIndex(
     t => t.instrument === 'drums' && t.difficulty === 'expert',
   );
 }
@@ -103,7 +112,7 @@ export class AddNoteCommand implements EditCommand {
     if (idx === -1) return doc;
 
     const newDoc = cloneDocWithTracks(doc);
-    const track = newDoc.trackData[idx];
+    const track = newDoc.parsedChart.trackData[idx];
 
     // Check for duplicates via getDrumNotes
     const existing = getDrumNotes(track).find(
@@ -125,7 +134,7 @@ export class AddNoteCommand implements EditCommand {
     if (idx === -1) return doc;
 
     const newDoc = cloneDocWithTracks(doc);
-    const track = newDoc.trackData[idx];
+    const track = newDoc.parsedChart.trackData[idx];
     removeDrumNote(track, this.note.tick, this.note.type);
     return newDoc;
   }
@@ -148,7 +157,7 @@ export class DeleteNotesCommand implements EditCommand {
     if (idx === -1) return doc;
 
     const newDoc = cloneDocWithTracks(doc);
-    const track = newDoc.trackData[idx];
+    const track = newDoc.parsedChart.trackData[idx];
 
     // Get current notes to find which ones match the IDs
     const currentNotes = getDrumNotes(track);
@@ -168,7 +177,7 @@ export class DeleteNotesCommand implements EditCommand {
     if (idx === -1) return doc;
 
     const newDoc = cloneDocWithTracks(doc);
-    const track = newDoc.trackData[idx];
+    const track = newDoc.parsedChart.trackData[idx];
 
     for (const note of this.deletedNotes) {
       addDrumNote(track, {
@@ -204,7 +213,7 @@ export class MoveNotesCommand implements EditCommand {
     if (idx === -1) return doc;
 
     const newDoc = cloneDocWithTracks(doc);
-    const track = newDoc.trackData[idx];
+    const track = newDoc.parsedChart.trackData[idx];
 
     const idSet = new Set(this.noteIds);
     this.movedIds = [];
@@ -251,7 +260,7 @@ export class MoveNotesCommand implements EditCommand {
     if (idx === -1) return doc;
 
     const newDoc = cloneDocWithTracks(doc);
-    const track = newDoc.trackData[idx];
+    const track = newDoc.parsedChart.trackData[idx];
 
     // Reverse: find notes by their moved IDs and apply negative deltas
     const idSet = new Set(this.movedIds);
@@ -314,7 +323,7 @@ export class ToggleFlagCommand implements EditCommand {
     if (idx === -1) return doc;
 
     const newDoc = cloneDocWithTracks(doc);
-    const track = newDoc.trackData[idx];
+    const track = newDoc.parsedChart.trackData[idx];
 
     const idSet = new Set(this.noteIds);
     const currentNotes = getDrumNotes(track);
@@ -496,14 +505,14 @@ export class RenameSectionCommand implements EditCommand {
 
   execute(doc: ChartDocument): ChartDocument {
     const newDoc = cloneDocWithSections(doc);
-    const section = newDoc.sections.find(s => s.tick === this.tick);
+    const section = newDoc.parsedChart.sections.find(s => s.tick === this.tick);
     if (section) section.name = this.newName;
     return newDoc;
   }
 
   undo(doc: ChartDocument): ChartDocument {
     const newDoc = cloneDocWithSections(doc);
-    const section = newDoc.sections.find(s => s.tick === this.tick);
+    const section = newDoc.parsedChart.sections.find(s => s.tick === this.tick);
     if (section) section.name = this.oldName;
     return newDoc;
   }

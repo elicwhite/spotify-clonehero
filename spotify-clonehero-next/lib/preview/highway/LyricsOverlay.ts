@@ -327,7 +327,7 @@ export class LyricsOverlay {
   private dpr: number;
 
   constructor(
-    lyrics: {msTime: number; msLength: number; text: string}[],
+    lyrics: {msTime: number; text: string; msLength?: number}[],
     vocalPhrases: {msTime: number; msLength: number}[],
     width: number,
     height: number,

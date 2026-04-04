@@ -53,3 +53,4 @@ public/*.sng
 # Real-charts test reports (generated, user-specific)
 real-charts-report.json
 real-charts-roundtrip-report.json
+lib/chart-edit/__tests__/yarg-dumps/

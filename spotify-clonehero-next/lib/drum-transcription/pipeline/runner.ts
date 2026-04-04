@@ -24,7 +24,7 @@ import {
 import {separateStems, hasSeparatedStems} from '../ml/demucs';
 import {CrnnTranscriber, MockTranscriber, type DrumTranscriber} from '../ml/transcriber';
 import {rawEventsToDrumNotes, getChartMapping} from '../ml/class-mapping';
-import {createChart, writeChart, addDrumNote, addSection} from '@/lib/chart-edit';
+import {createEmptyChart, writeChartFolder, addDrumNote, addSection} from '@/lib/chart-edit';
 import type {ChartDocument, DrumNoteType} from '@/lib/chart-edit';
 import {buildTimedTempos, msToTick} from '../timing';
 import type {RawDrumEvent, TranscriptionResult} from '../ml/types';
@@ -209,10 +209,10 @@ export async function runPipeline(
     );
 
     // Serialize chart to .chart format and store
-    const files = writeChart(chartDoc);
+    const files = writeChartFolder(chartDoc);
     const chartFile = files.find(f => f.fileName === 'notes.chart');
     if (!chartFile) {
-      throw new Error('writeChart did not produce notes.chart');
+      throw new Error('writeChartFolder did not produce notes.chart');
     }
     const chartText = new TextDecoder().decode(chartFile.data);
     await writeProjectText(projectId, 'notes.chart', chartText);
@@ -336,10 +336,10 @@ export async function resumePipeline(
       result.durationSeconds,
     );
 
-    const files = writeChart(chartDoc);
+    const files = writeChartFolder(chartDoc);
     const chartFile = files.find(f => f.fileName === 'notes.chart');
     if (!chartFile) {
-      throw new Error('writeChart did not produce notes.chart');
+      throw new Error('writeChartFolder did not produce notes.chart');
     }
     const chartText = new TextDecoder().decode(chartFile.data);
     await writeProjectText(projectId, 'notes.chart', chartText);
@@ -395,16 +395,17 @@ function buildChartDocument(
 ): ChartDocument {
   const bpm = DEFAULT_BPM;
 
-  // Create chart document with chart-edit
-  const doc = createChart({
+  // Create an empty parsed chart (single tempo + 4/4 time signature)
+  const parsedChart = createEmptyChart({
     format: 'chart',
     resolution: RESOLUTION,
     bpm,
     timeSignature: {numerator: 4, denominator: 4},
   });
 
-  // Set metadata
-  doc.metadata = {
+  // Set metadata on the parsed chart
+  parsedChart.metadata = {
+    ...parsedChart.metadata,
     name: songName,
     artist: 'Unknown',
     charter: 'Drum Transcription AI',
@@ -416,18 +417,22 @@ function buildChartDocument(
   const drumNotes = rawEventsToDrumNotes(events, tempos, RESOLUTION);
 
   // Add an ExpertDrums track
-  doc.trackData.push({
+  parsedChart.trackData.push({
     instrument: 'drums',
     difficulty: 'expert',
-    trackEvents: [],
     starPowerSections: [],
     rejectedStarPowerSections: [],
     drumFreestyleSections: [],
     soloSections: [],
     flexLanes: [],
-  });
+    noteEventGroups: [],
+    textEvents: [],
+    versusPhrases: [],
+    animations: [],
+    unrecognizedMidiEvents: [],
+  } as never);
 
-  const track = doc.trackData[0];
+  const track = parsedChart.trackData[0];
 
   // Add each drum note using chart-edit's addDrumNote
   for (const note of drumNotes) {
@@ -453,7 +458,9 @@ function buildChartDocument(
   const endTick = Math.max(lastNoteTick + RESOLUTION, durationTicks);
 
   // Add end event
-  doc.endEvents = [{tick: endTick}];
+  parsedChart.endEvents = [{tick: endTick, msTime: 0, msLength: 0}];
+
+  const doc: ChartDocument = {parsedChart, assets: []};
 
   // Create section markers every 4 bars
   const ticksPerBar = RESOLUTION * 4; // 4/4 time

@@ -34,7 +34,7 @@ import {
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
-import {readChart, writeChart} from '@/lib/chart-edit';
+import {readChart, writeChartFolder} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
@@ -142,9 +142,9 @@ function DrumEditInner() {
 
         // Parse chart
         const chartDoc = readChart(files);
-        const name = chartDoc.metadata.name ?? originalName ?? 'Unknown';
-        const artist = chartDoc.metadata.artist ?? 'Unknown';
-        const charter = chartDoc.metadata.charter ?? 'Unknown';
+        const name = chartDoc.parsedChart.metadata.name ?? originalName ?? 'Unknown';
+        const artist = chartDoc.parsedChart.metadata.artist ?? 'Unknown';
+        const charter = chartDoc.parsedChart.metadata.charter ?? 'Unknown';
 
         // Find audio files
         const audioFiles = findAudioFiles(files);
@@ -167,11 +167,11 @@ function DrumEditInner() {
         }
 
         // Force .chart output format (input may have been .mid)
-        chartDoc.originalFormat = 'chart';
-        const chartFiles = writeChart(chartDoc);
+        chartDoc.parsedChart.format = 'chart';
+        const chartFiles = writeChartFolder(chartDoc);
         const chartFileEntry = chartFiles.find(f => f.fileName === 'notes.chart');
         if (!chartFileEntry) {
-          throw new Error('writeChart did not produce notes.chart');
+          throw new Error('writeChartFolder did not produce notes.chart');
         }
         const chartText = new TextDecoder().decode(chartFileEntry.data);
 
@@ -393,7 +393,7 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
   // Auto-save: write edited chart to OPFS
   const saveFn = useCallback(async () => {
     if (!state.chartDoc) return;
-    const files = writeChart(state.chartDoc);
+    const files = writeChartFolder(state.chartDoc);
     const chartFile = files.find(f => f.fileName === 'notes.chart');
     if (!chartFile) return;
     const chartText = new TextDecoder().decode(chartFile.data);
@@ -466,7 +466,7 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
         await audioManager.ready;
         if (cancelled) return;
 
-        audioManager.setChartDelay(getChartDelayMs(chartDoc.metadata) / 1000);
+        audioManager.setChartDelay(getChartDelayMs(chartDoc.parsedChart.metadata) / 1000);
         audioManagerRef.current = audioManager;
 
         // 8. Decode first audio file to raw PCM for waveform display
@@ -542,9 +542,9 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
   // Export: provide chart text
   const getChartText = useCallback(async (): Promise<string> => {
     if (!state.chartDoc) throw new Error('No chart document');
-    const files = writeChart(state.chartDoc);
+    const files = writeChartFolder(state.chartDoc);
     const chartFile = files.find(f => f.fileName === 'notes.chart');
-    if (!chartFile) throw new Error('writeChart did not produce notes.chart');
+    if (!chartFile) throw new Error('writeChartFolder did not produce notes.chart');
     return new TextDecoder().decode(chartFile.data);
   }, [state.chartDoc]);
 

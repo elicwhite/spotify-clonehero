@@ -34,8 +34,10 @@ export function chartToElements(
     });
   }
 
-  // Lyrics
-  for (const lyric of parsedChart.lyrics) {
+  // Lyrics (pulled from the vocal part's note phrases)
+  const vocals = parsedChart.vocalTracks.parts.vocals;
+  const lyrics = vocals?.notePhrases.flatMap(p => p.lyrics) ?? [];
+  for (const lyric of lyrics) {
     elements.push({
       key: `lyric:${lyric.tick}`,
       kind: 'lyric',
@@ -45,7 +47,8 @@ export function chartToElements(
   }
 
   // Vocal phrases (start and end markers)
-  for (const phrase of parsedChart.vocalPhrases) {
+  const vocalPhrases = vocals?.notePhrases ?? [];
+  for (const phrase of vocalPhrases) {
     elements.push({
       key: `phrase-start:${phrase.tick}`,
       kind: 'phrase-start',

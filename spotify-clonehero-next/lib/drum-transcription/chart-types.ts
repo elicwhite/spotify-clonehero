@@ -9,10 +9,9 @@
 // Re-export everything consumers need from chart-edit
 export type {
   ChartDocument,
-  ChartMetadata,
-  FileEntry,
-  TrackData,
-  TrackEvent,
+  File,
+  ParsedTrackData,
+  NoteEvent,
   DrumNote,
   DrumNoteType,
   DrumNoteFlags,
@@ -23,8 +22,8 @@ export type {
 
 export {
   readChart,
-  createChart,
-  writeChart,
+  createEmptyChart,
+  writeChartFolder,
   addDrumNote,
   removeDrumNote,
   getDrumNotes,
@@ -46,8 +45,6 @@ export {
   eventTypes,
   instruments,
   difficulties,
-  drumNoteEventType,
-  eventTypeToDrumNote,
 } from '@/lib/chart-edit';
 
 // Re-export scan-chart types used by drum-transcription

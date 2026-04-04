@@ -7,18 +7,12 @@
 
 import type { ChartDocument } from '../types';
 
-/**
- * Add or replace a section marker at the given tick.
- */
 export function addSection(doc: ChartDocument, tick: number, name: string): void {
-  doc.sections = doc.sections.filter((s) => s.tick !== tick);
-  doc.sections.push({ tick, name });
-  doc.sections.sort((a, b) => a.tick - b.tick);
+  doc.parsedChart.sections = doc.parsedChart.sections.filter((s) => s.tick !== tick);
+  doc.parsedChart.sections.push({ tick, name, msTime: 0, msLength: 0 });
+  doc.parsedChart.sections.sort((a, b) => a.tick - b.tick);
 }
 
-/**
- * Remove the section marker at the given tick.
- */
 export function removeSection(doc: ChartDocument, tick: number): void {
-  doc.sections = doc.sections.filter((s) => s.tick !== tick);
+  doc.parsedChart.sections = doc.parsedChart.sections.filter((s) => s.tick !== tick);
 }

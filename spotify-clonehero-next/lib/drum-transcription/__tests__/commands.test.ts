@@ -23,16 +23,18 @@ import {
   shiftLane,
   defaultFlagsForType,
 } from '@/app/drum-transcription/commands';
-import type {ChartDocument, DrumNote, DrumNoteType, TrackData} from '@/lib/chart-edit';
-import {createChart, addDrumNote, getDrumNotes} from '@/lib/chart-edit';
+import type {ChartDocument, DrumNote, DrumNoteType, ParsedChart, ParsedTrackData} from '@/lib/chart-edit';
+import {createEmptyChart, addDrumNote, getDrumNotes} from '@/lib/chart-edit';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
 // ---------------------------------------------------------------------------
 
 function makeDoc(notes: Array<{tick: number; type: DrumNoteType; flags?: DrumNote['flags']; length?: number}> = []): ChartDocument {
-  const doc = createChart();
-  // Add an expert drums track
+  const parsedChart = createEmptyChart({ bpm: 120, resolution: 480 });
+  // Add an expert drums track with all the fields the new ParsedTrackData
+  // shape requires (noteEventGroups, animations, textEvents, versusPhrases,
+  // etc.).
   const track = {
     instrument: 'drums',
     difficulty: 'expert',
@@ -43,8 +45,11 @@ function makeDoc(notes: Array<{tick: number; type: DrumNoteType; flags?: DrumNot
     flexLanes: [],
     drumFreestyleSections: [],
     noteEventGroups: [],
-  } as unknown as TrackData;
-  doc.trackData.push(track);
+    textEvents: [],
+    versusPhrases: [],
+    animations: [],
+  } as unknown as ParsedTrackData;
+  parsedChart.trackData.push(track);
 
   for (const n of notes) {
     addDrumNote(track, {
@@ -55,15 +60,43 @@ function makeDoc(notes: Array<{tick: number; type: DrumNoteType; flags?: DrumNot
     });
   }
 
-  return doc;
+  return { parsedChart, assets: [] };
 }
 
 function getExpertNotes(doc: ChartDocument): DrumNote[] {
-  const track = doc.trackData.find(
+  const track = doc.parsedChart.trackData.find(
     t => t.instrument === 'drums' && t.difficulty === 'expert',
   );
   if (!track) return [];
   return getDrumNotes(track);
+}
+
+/** Apply overrides to the inner `parsedChart` (where tempos/sections/etc. live).
+ *  Accepts source-shape objects (without msTime/msLength) and fills in defaults. */
+function withChart(
+  base: ChartDocument,
+  overrides: {
+    tempos?: Array<{ tick: number; beatsPerMinute: number; msTime?: number }>;
+    timeSignatures?: Array<{ tick: number; numerator: number; denominator: number; msTime?: number; msLength?: number }>;
+    sections?: Array<{ tick: number; name: string; msTime?: number; msLength?: number }>;
+    endEvents?: Array<{ tick: number; msTime?: number; msLength?: number }>;
+  } & Partial<Omit<ParsedChart, 'tempos' | 'timeSignatures' | 'sections' | 'endEvents'>>,
+): ChartDocument {
+  const { tempos, timeSignatures, sections, endEvents, ...rest } = overrides;
+  const next = { ...base.parsedChart, ...rest } as ParsedChart;
+  if (tempos) {
+    next.tempos = tempos.map(t => ({ msTime: 0, ...t })) as ParsedChart['tempos'];
+  }
+  if (timeSignatures) {
+    next.timeSignatures = timeSignatures.map(ts => ({ msTime: 0, msLength: 0, ...ts })) as ParsedChart['timeSignatures'];
+  }
+  if (sections) {
+    next.sections = sections.map(s => ({ msTime: 0, msLength: 0, ...s })) as ParsedChart['sections'];
+  }
+  if (endEvents) {
+    next.endEvents = endEvents.map(e => ({ msTime: 0, msLength: 0, ...e })) as ParsedChart['endEvents'];
+  }
+  return { ...base, parsedChart: next };
 }
 
 // ---------------------------------------------------------------------------
@@ -331,8 +364,8 @@ describe('AddBPMCommand', () => {
     const cmd = new AddBPMCommand(480, 140);
 
     const result = cmd.execute(doc);
-    expect(result.tempos).toHaveLength(2);
-    expect(result.tempos[1]).toEqual({tick: 480, beatsPerMinute: 140});
+    expect(result.parsedChart.tempos).toHaveLength(2);
+    expect(result.parsedChart.tempos[1]).toMatchObject({tick: 480, beatsPerMinute: 140});
   });
 
   it('updates existing BPM marker at the same tick', () => {
@@ -340,25 +373,22 @@ describe('AddBPMCommand', () => {
     const cmd = new AddBPMCommand(0, 140);
 
     const result = cmd.execute(doc);
-    expect(result.tempos).toHaveLength(1);
-    expect(result.tempos[0].beatsPerMinute).toBe(140);
+    expect(result.parsedChart.tempos).toHaveLength(1);
+    expect(result.parsedChart.tempos[0].beatsPerMinute).toBe(140);
   });
 
   it('maintains sort order', () => {
-    const doc: ChartDocument = {
-      ...makeDoc(),
-      tempos: [
+    const doc = withChart(makeDoc(), { tempos: [
         {tick: 0, beatsPerMinute: 120},
         {tick: 960, beatsPerMinute: 150},
-      ],
-    };
+      ], });
     const cmd = new AddBPMCommand(480, 130);
 
     const result = cmd.execute(doc);
-    expect(result.tempos).toHaveLength(3);
-    expect(result.tempos[0].tick).toBe(0);
-    expect(result.tempos[1].tick).toBe(480);
-    expect(result.tempos[2].tick).toBe(960);
+    expect(result.parsedChart.tempos).toHaveLength(3);
+    expect(result.parsedChart.tempos[0].tick).toBe(0);
+    expect(result.parsedChart.tempos[1].tick).toBe(480);
+    expect(result.parsedChart.tempos[2].tick).toBe(960);
   });
 
   it('undo removes the added marker', () => {
@@ -367,8 +397,8 @@ describe('AddBPMCommand', () => {
 
     const after = cmd.execute(doc);
     const reverted = cmd.undo(after);
-    expect(reverted.tempos).toHaveLength(1);
-    expect(reverted.tempos[0].tick).toBe(0);
+    expect(reverted.parsedChart.tempos).toHaveLength(1);
+    expect(reverted.parsedChart.tempos[0].tick).toBe(0);
   });
 
   it('undo does not remove the marker at tick 0', () => {
@@ -377,7 +407,7 @@ describe('AddBPMCommand', () => {
 
     const after = cmd.execute(doc);
     const reverted = cmd.undo(after);
-    expect(reverted.tempos).toHaveLength(1);
+    expect(reverted.parsedChart.tempos).toHaveLength(1);
   });
 });
 
@@ -391,8 +421,8 @@ describe('AddTimeSignatureCommand', () => {
     const cmd = new AddTimeSignatureCommand(480, 3, 4);
 
     const result = cmd.execute(doc);
-    expect(result.timeSignatures).toHaveLength(2);
-    expect(result.timeSignatures[1]).toEqual({
+    expect(result.parsedChart.timeSignatures).toHaveLength(2);
+    expect(result.parsedChart.timeSignatures[1]).toMatchObject({
       tick: 480,
       numerator: 3,
       denominator: 4,
@@ -404,9 +434,9 @@ describe('AddTimeSignatureCommand', () => {
     const cmd = new AddTimeSignatureCommand(0, 6, 8);
 
     const result = cmd.execute(doc);
-    expect(result.timeSignatures).toHaveLength(1);
-    expect(result.timeSignatures[0].numerator).toBe(6);
-    expect(result.timeSignatures[0].denominator).toBe(8);
+    expect(result.parsedChart.timeSignatures).toHaveLength(1);
+    expect(result.parsedChart.timeSignatures[0].numerator).toBe(6);
+    expect(result.parsedChart.timeSignatures[0].denominator).toBe(8);
   });
 
   it('undo removes the added time signature', () => {
@@ -415,7 +445,7 @@ describe('AddTimeSignatureCommand', () => {
 
     const after = cmd.execute(doc);
     const reverted = cmd.undo(after);
-    expect(reverted.timeSignatures).toHaveLength(1);
+    expect(reverted.parsedChart.timeSignatures).toHaveLength(1);
   });
 });
 
@@ -474,37 +504,31 @@ describe('AddSectionCommand', () => {
     const cmd = new AddSectionCommand(480, 'verse 1');
 
     const result = cmd.execute(doc);
-    expect(result.sections).toHaveLength(1);
-    expect(result.sections[0]).toEqual({tick: 480, name: 'verse 1'});
+    expect(result.parsedChart.sections).toHaveLength(1);
+    expect(result.parsedChart.sections[0]).toMatchObject({tick: 480, name: 'verse 1'});
   });
 
   it('maintains sort order when adding', () => {
-    const doc: ChartDocument = {
-      ...makeDoc(),
-      sections: [
+    const doc = withChart(makeDoc(), { sections: [
         {tick: 0, name: 'intro'},
         {tick: 960, name: 'chorus'},
-      ],
-    };
+      ], });
     const cmd = new AddSectionCommand(480, 'verse');
 
     const result = cmd.execute(doc);
-    expect(result.sections).toHaveLength(3);
-    expect(result.sections[0].tick).toBe(0);
-    expect(result.sections[1].tick).toBe(480);
-    expect(result.sections[2].tick).toBe(960);
+    expect(result.parsedChart.sections).toHaveLength(3);
+    expect(result.parsedChart.sections[0].tick).toBe(0);
+    expect(result.parsedChart.sections[1].tick).toBe(480);
+    expect(result.parsedChart.sections[2].tick).toBe(960);
   });
 
   it('replaces an existing section at the same tick', () => {
-    const doc: ChartDocument = {
-      ...makeDoc(),
-      sections: [{tick: 480, name: 'old name'}],
-    };
+    const doc = withChart(makeDoc(), { sections: [{tick: 480, name: 'old name'}], });
     const cmd = new AddSectionCommand(480, 'new name');
 
     const result = cmd.execute(doc);
-    expect(result.sections).toHaveLength(1);
-    expect(result.sections[0].name).toBe('new name');
+    expect(result.parsedChart.sections).toHaveLength(1);
+    expect(result.parsedChart.sections[0].name).toBe('new name');
   });
 
   it('undo removes the added section', () => {
@@ -512,10 +536,10 @@ describe('AddSectionCommand', () => {
     const cmd = new AddSectionCommand(480, 'verse 1');
 
     const after = cmd.execute(doc);
-    expect(after.sections).toHaveLength(1);
+    expect(after.parsedChart.sections).toHaveLength(1);
 
     const reverted = cmd.undo(after);
-    expect(reverted.sections).toHaveLength(0);
+    expect(reverted.parsedChart.sections).toHaveLength(0);
   });
 
   it('does not mutate the original document', () => {
@@ -523,7 +547,7 @@ describe('AddSectionCommand', () => {
     const cmd = new AddSectionCommand(480, 'verse 1');
 
     cmd.execute(doc);
-    expect(doc.sections).toHaveLength(0);
+    expect(doc.parsedChart.sections).toHaveLength(0);
   });
 
   it('has a descriptive description', () => {
@@ -538,48 +562,39 @@ describe('AddSectionCommand', () => {
 
 describe('DeleteSectionCommand', () => {
   it('removes a section at the given tick', () => {
-    const doc: ChartDocument = {
-      ...makeDoc(),
-      sections: [
+    const doc = withChart(makeDoc(), { sections: [
         {tick: 0, name: 'intro'},
         {tick: 480, name: 'verse'},
         {tick: 960, name: 'chorus'},
-      ],
-    };
+      ], });
     const cmd = new DeleteSectionCommand(480, 'verse');
 
     const result = cmd.execute(doc);
-    expect(result.sections).toHaveLength(2);
-    expect(result.sections.map(s => s.name)).toEqual(['intro', 'chorus']);
+    expect(result.parsedChart.sections).toHaveLength(2);
+    expect(result.parsedChart.sections.map(s => s.name)).toEqual(['intro', 'chorus']);
   });
 
   it('undo restores the deleted section', () => {
-    const doc: ChartDocument = {
-      ...makeDoc(),
-      sections: [
+    const doc = withChart(makeDoc(), { sections: [
         {tick: 0, name: 'intro'},
         {tick: 480, name: 'verse'},
-      ],
-    };
+      ], });
     const cmd = new DeleteSectionCommand(480, 'verse');
 
     const after = cmd.execute(doc);
-    expect(after.sections).toHaveLength(1);
+    expect(after.parsedChart.sections).toHaveLength(1);
 
     const reverted = cmd.undo(after);
-    expect(reverted.sections).toHaveLength(2);
-    expect(reverted.sections[1]).toEqual({tick: 480, name: 'verse'});
+    expect(reverted.parsedChart.sections).toHaveLength(2);
+    expect(reverted.parsedChart.sections[1]).toMatchObject({tick: 480, name: 'verse'});
   });
 
   it('does not mutate the original document', () => {
-    const doc: ChartDocument = {
-      ...makeDoc(),
-      sections: [{tick: 480, name: 'verse'}],
-    };
+    const doc = withChart(makeDoc(), { sections: [{tick: 480, name: 'verse'}], });
     const cmd = new DeleteSectionCommand(480, 'verse');
 
     cmd.execute(doc);
-    expect(doc.sections).toHaveLength(1);
+    expect(doc.parsedChart.sections).toHaveLength(1);
   });
 
   it('has a descriptive description', () => {
@@ -594,38 +609,29 @@ describe('DeleteSectionCommand', () => {
 
 describe('RenameSectionCommand', () => {
   it('renames a section', () => {
-    const doc: ChartDocument = {
-      ...makeDoc(),
-      sections: [{tick: 480, name: 'verse'}],
-    };
+    const doc = withChart(makeDoc(), { sections: [{tick: 480, name: 'verse'}], });
     const cmd = new RenameSectionCommand(480, 'verse', 'verse 1');
 
     const result = cmd.execute(doc);
-    expect(result.sections).toHaveLength(1);
-    expect(result.sections[0].name).toBe('verse 1');
+    expect(result.parsedChart.sections).toHaveLength(1);
+    expect(result.parsedChart.sections[0].name).toBe('verse 1');
   });
 
   it('undo restores the original name', () => {
-    const doc: ChartDocument = {
-      ...makeDoc(),
-      sections: [{tick: 480, name: 'verse'}],
-    };
+    const doc = withChart(makeDoc(), { sections: [{tick: 480, name: 'verse'}], });
     const cmd = new RenameSectionCommand(480, 'verse', 'verse 1');
 
     const after = cmd.execute(doc);
     const reverted = cmd.undo(after);
-    expect(reverted.sections[0].name).toBe('verse');
+    expect(reverted.parsedChart.sections[0].name).toBe('verse');
   });
 
   it('does not mutate the original document', () => {
-    const doc: ChartDocument = {
-      ...makeDoc(),
-      sections: [{tick: 480, name: 'verse'}],
-    };
+    const doc = withChart(makeDoc(), { sections: [{tick: 480, name: 'verse'}], });
     const cmd = new RenameSectionCommand(480, 'verse', 'verse 1');
 
     cmd.execute(doc);
-    expect(doc.sections[0].name).toBe('verse');
+    expect(doc.parsedChart.sections[0].name).toBe('verse');
   });
 
   it('has a descriptive description', () => {
@@ -640,48 +646,39 @@ describe('RenameSectionCommand', () => {
 
 describe('MoveSectionCommand', () => {
   it('moves a section to a new tick position', () => {
-    const doc: ChartDocument = {
-      ...makeDoc(),
-      sections: [
+    const doc = withChart(makeDoc(), { sections: [
         {tick: 0, name: 'intro'},
         {tick: 480, name: 'verse'},
         {tick: 960, name: 'chorus'},
-      ],
-    };
+      ], });
     const cmd = new MoveSectionCommand(480, 720, 'verse');
 
     const result = cmd.execute(doc);
-    expect(result.sections).toHaveLength(3);
-    const ticks = result.sections.map(s => s.tick);
+    expect(result.parsedChart.sections).toHaveLength(3);
+    const ticks = result.parsedChart.sections.map(s => s.tick);
     expect(ticks).toEqual([0, 720, 960]);
-    expect(result.sections.find(s => s.tick === 720)?.name).toBe('verse');
+    expect(result.parsedChart.sections.find(s => s.tick === 720)?.name).toBe('verse');
   });
 
   it('undo moves the section back', () => {
-    const doc: ChartDocument = {
-      ...makeDoc(),
-      sections: [
+    const doc = withChart(makeDoc(), { sections: [
         {tick: 0, name: 'intro'},
         {tick: 480, name: 'verse'},
-      ],
-    };
+      ], });
     const cmd = new MoveSectionCommand(480, 720, 'verse');
 
     const after = cmd.execute(doc);
     const reverted = cmd.undo(after);
-    expect(reverted.sections).toHaveLength(2);
-    expect(reverted.sections[1]).toEqual({tick: 480, name: 'verse'});
+    expect(reverted.parsedChart.sections).toHaveLength(2);
+    expect(reverted.parsedChart.sections[1]).toMatchObject({tick: 480, name: 'verse'});
   });
 
   it('does not mutate the original document', () => {
-    const doc: ChartDocument = {
-      ...makeDoc(),
-      sections: [{tick: 480, name: 'verse'}],
-    };
+    const doc = withChart(makeDoc(), { sections: [{tick: 480, name: 'verse'}], });
     const cmd = new MoveSectionCommand(480, 720, 'verse');
 
     cmd.execute(doc);
-    expect(doc.sections[0].tick).toBe(480);
+    expect(doc.parsedChart.sections[0].tick).toBe(480);
   });
 
   it('has a descriptive description', () => {

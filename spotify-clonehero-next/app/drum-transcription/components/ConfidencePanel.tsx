@@ -44,7 +44,7 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
       return {total: 0, high: 0, medium: 0, low: 0, reviewed: 0, lowIds: 0};
     }
 
-    const track = state.chartDoc.trackData.find(
+    const track = state.chartDoc.parsedChart.trackData.find(
       (t: {instrument: string; difficulty: string}) =>
         t.instrument === 'drums' && t.difficulty === 'expert',
     );
@@ -229,7 +229,7 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
                       {/* Count low-confidence notes that are reviewed */}
                       {(() => {
                         if (!state.chartDoc) return 0;
-                        const track = state.chartDoc.trackData.find(
+                        const track = state.chartDoc.parsedChart.trackData.find(
                           (t: {instrument: string; difficulty: string}) =>
                             t.instrument === 'drums' &&
                             t.difficulty === 'expert',

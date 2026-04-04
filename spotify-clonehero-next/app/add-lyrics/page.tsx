@@ -1,17 +1,15 @@
 'use client';
 
-import {useEffect, useState, useCallback, useRef} from 'react';
+import {useEffect, useState, useCallback, useRef, useMemo} from 'react';
 import {Download} from 'lucide-react';
-import {Player} from '@remotion/player';
 import {toast} from 'sonner';
+import {parseChartFile} from '@eliwhite/scan-chart';
 import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
-import {KaraokeVideo} from '@/app/karaoke/KaraokeVideo';
-import type {TreatmentId} from '@/app/karaoke/treatments/types';
 import {Button} from '@/components/ui/button';
 import {getExtension, getBasename} from '@/lib/src-shared/utils';
 import {removeStyleTags} from '@/lib/ui-utils';
 import {findAudioFiles, type Files} from '@/lib/preview/chorus-chart-processing';
-import {readChart, writeChart, type ChartDocument} from '@/lib/chart-edit';
+import {readChart, writeChartFolder, type ChartDocument} from '@/lib/chart-edit';
 import {exportAsZip, exportAsSng} from '@/lib/chart-export';
 import {alignedSyllablesToChartLyrics} from '@/lib/lyrics-align/chart-lyrics';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
@@ -20,8 +18,16 @@ import type {
   SourceFormat,
 } from '@/components/chart-picker/chart-file-readers';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
+import {
+  ChartEditorProvider,
+  useChartEditorContext,
+} from '@/components/chart-editor';
+import ChartEditor from '@/components/chart-editor/ChartEditor';
+import {AudioManager} from '@/lib/preview/audioManager';
+import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
+import type {ChartResponseEncore} from '@/lib/chartSelection';
 
-const FPS = 30;
+type ParsedChart = ReturnType<typeof parseChartFile>;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,9 +38,7 @@ interface LoadedChart {
   artist: string;
   charter: string;
   audioFiles: Files;
-  audioUrls: string[];
   vocalsFile: {data: Uint8Array; mimeType: string} | null;
-  songLength: number;
   chartDoc: ChartDocument;
   /** All raw files from the input — needed for re-export. */
   rawFiles: LoadedFiles['files'];
@@ -94,14 +98,6 @@ function getMimeForExtension(ext: string): string {
   }
 }
 
-function filesToBlobUrls(files: Files): string[] {
-  return files.map(f => {
-    const ext = getExtension(f.fileName).toLowerCase();
-    const blob = new Blob([f.data], {type: getMimeForExtension(ext)});
-    return URL.createObjectURL(blob);
-  });
-}
-
 function loadChartFromFiles(loaded: LoadedFiles): LoadedChart {
   const {files, sourceFormat, originalName, sngMetadata} = loaded;
 
@@ -120,27 +116,21 @@ function loadChartFromFiles(loaded: LoadedFiles): LoadedChart {
     f => getBasename(f.fileName).toLowerCase() === 'vocals',
   );
 
-  const name = chartDoc.metadata.name ?? 'Unknown';
-  const artist = chartDoc.metadata.artist ?? 'Unknown';
-  const charter = chartDoc.metadata.charter ?? 'Unknown';
-
-  // Estimate song length from last tempo marker
-  const lastTempo = chartDoc.tempos[chartDoc.tempos.length - 1];
-  const songLength = lastTempo ? (lastTempo as any).msTime + 60000 : 180000;
+  const name = chartDoc.parsedChart.metadata.name ?? 'Unknown';
+  const artist = chartDoc.parsedChart.metadata.artist ?? 'Unknown';
+  const charter = chartDoc.parsedChart.metadata.charter ?? 'Unknown';
 
   return {
     name,
     artist,
     charter,
     audioFiles,
-    audioUrls: filesToBlobUrls(audioFiles),
     vocalsFile: vocalsFile
       ? {
           data: vocalsFile.data,
           mimeType: getMimeForExtension(getExtension(vocalsFile.fileName)),
         }
       : null,
-    songLength,
     chartDoc,
     rawFiles: files,
     sourceFormat,
@@ -149,22 +139,141 @@ function loadChartFromFiles(loaded: LoadedFiles): LoadedChart {
   };
 }
 
+/**
+ * Clone + apply aligned lyrics to the chart document's PART VOCALS track.
+ * Produces a new ChartDocument that writeChartFolder() can serialize with lyrics.
+ */
+function applyAlignedLyricsToDoc(
+  source: ChartDocument,
+  syllables: AlignedSyllable[],
+): ChartDocument {
+  const {lyrics: chartLyrics, vocalPhrases} = alignedSyllablesToChartLyrics(
+    syllables,
+    source.parsedChart.tempos,
+    source.parsedChart.resolution,
+  );
+
+  // Group lyric events under each phrase and pair each lyric with a placeholder
+  // pitched note (required so scan-chart keeps the phrase on round-trip).
+  const notePhrases = vocalPhrases.map(phrase => {
+    const phraseLyrics = chartLyrics.filter(
+      l => l.tick >= phrase.tick && l.tick <= phrase.tick + phrase.length,
+    );
+    return {
+      tick: phrase.tick,
+      msTime: 0,
+      length: phrase.length,
+      msLength: 0,
+      isPercussion: false,
+      notes: phraseLyrics.map(l => ({
+        tick: l.tick,
+        msTime: 0,
+        length: 60,
+        msLength: 0,
+        pitch: 60,
+        type: 'pitched' as const,
+      })),
+      lyrics: phraseLyrics.map(l => ({
+        tick: l.tick,
+        msTime: 0,
+        text: l.text,
+        flags: 0,
+      })),
+    };
+  });
+
+  const existingVocals = source.parsedChart.vocalTracks?.parts?.vocals;
+  const vocalsPart = {
+    ...(existingVocals ?? {
+      staticLyricPhrases: [],
+      starPowerSections: [],
+      rangeShifts: [],
+      lyricShifts: [],
+      textEvents: [],
+    }),
+    notePhrases,
+  };
+
+  const doc: ChartDocument = {
+    ...source,
+    parsedChart: {
+      ...source.parsedChart,
+      vocalTracks: {
+        ...source.parsedChart.vocalTracks,
+        parts: {
+          ...source.parsedChart.vocalTracks?.parts,
+          vocals: vocalsPart,
+        },
+      },
+    },
+  };
+
+  return doc;
+}
+
+/** Decode audio into an interleaved Float32 PCM buffer for waveform display. */
+async function decodeAudioForWaveform(
+  data: Uint8Array,
+): Promise<{interleaved: Float32Array; channels: number} | null> {
+  try {
+    const ctx = new AudioContext({sampleRate: 44100});
+    try {
+      const buf = data.slice(0).buffer as ArrayBuffer;
+      const decoded = await ctx.decodeAudioData(buf);
+      const channels = decoded.numberOfChannels;
+      const length = decoded.length;
+      const interleaved = new Float32Array(length * channels);
+      for (let ch = 0; ch < channels; ch++) {
+        const channelData = decoded.getChannelData(ch);
+        for (let i = 0; i < length; i++) {
+          interleaved[i * channels + ch] = channelData[i];
+        }
+      }
+      return {interleaved, channels};
+    } finally {
+      await ctx.close();
+    }
+  } catch (err) {
+    console.warn('Could not decode audio for waveform display', err);
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Page Component
 // ---------------------------------------------------------------------------
 
+interface EditorData {
+  chart: ParsedChart;
+  track: ParsedChart['trackData'][0] | null;
+  chartDoc: ChartDocument;
+  audioManager: AudioManager;
+  audioData?: Float32Array;
+  audioChannels: number;
+  durationSeconds: number;
+}
+
 export default function LyricsAlignPage() {
+  return (
+    <ChartEditorProvider>
+      <LyricsAlignInner />
+    </ChartEditorProvider>
+  );
+}
+
+function LyricsAlignInner() {
+  const {dispatch, audioManagerRef} = useChartEditorContext();
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
   const [chart, setChart] = useState<LoadedChart | null>(null);
   const [lyrics, setLyrics] = useState('');
-  const treatment: TreatmentId = 'scroll';
   const [alignedLines, setAlignedLines] = useState<LyricLine[]>([]);
   const [alignedSyllables, setAlignedSyllables] = useState<AlignedSyllable[]>(
     [],
   );
   const [alignSteps, setAlignSteps] = useState<PipelineStep[]>(ALIGN_STEPS);
   const [showLyricsWarning, setShowLyricsWarning] = useState(false);
+  const [editorData, setEditorData] = useState<EditorData | null>(null);
   const initStartedRef = useRef(false);
 
   const updateAlignStep = useCallback(
@@ -191,12 +300,15 @@ export default function LyricsAlignPage() {
     })();
   }, [status]);
 
-  // Clean up blob URLs on unmount
+  // Tear down any AudioManager + audio decode state when leaving the results
+  // view (Re-align, chart reload) or unmounting the page.
   useEffect(() => {
     return () => {
-      chart?.audioUrls.forEach(url => URL.revokeObjectURL(url));
+      if (editorData) {
+        editorData.audioManager.destroy();
+      }
     };
-  }, [chart]);
+  }, [editorData]);
 
   const handleChartLoaded = useCallback((loaded: LoadedFiles) => {
     setStatus('loading-chart');
@@ -207,7 +319,8 @@ export default function LyricsAlignPage() {
       setChart(result);
 
       // Check for existing lyrics and warn
-      if (result.chartDoc.hasLyrics && result.chartDoc.lyrics.length > 0) {
+      const existingLyrics = result.chartDoc.parsedChart.vocalTracks.parts.vocals?.notePhrases.flatMap(p => p.lyrics) ?? [];
+      if (existingLyrics.length > 0) {
         setShowLyricsWarning(true);
       }
 
@@ -361,30 +474,19 @@ export default function LyricsAlignPage() {
     if (!chart || alignedSyllables.length === 0) return;
 
     try {
-      // Convert aligned syllables to chart lyrics format
-      const {lyrics: chartLyrics, vocalPhrases} =
-        alignedSyllablesToChartLyrics(
-          alignedSyllables,
-          chart.chartDoc.tempos,
-          chart.chartDoc.chartTicksPerBeat,
-        );
-
-      // Update the chart document with lyrics
-      const doc = {...chart.chartDoc};
-      doc.lyrics = chartLyrics;
-      doc.vocalPhrases = vocalPhrases;
-      doc.hasLyrics = true;
+      const doc = applyAlignedLyricsToDoc(chart.chartDoc, alignedSyllables);
 
       // Write chart back to files
-      const chartFiles = writeChart(doc);
+      const chartFiles = writeChartFolder(doc);
 
       // Build export file list: chart files + original audio files
       const exportFiles: {filename: string; data: Uint8Array}[] = [];
       for (const f of chartFiles) {
         exportFiles.push({filename: f.fileName, data: f.data});
       }
-      // Add audio files from the original input that writeChart doesn't include
-      // (writeChart returns chart + ini + assets; assets already include audio passed through)
+      // Add audio files from the original input that writeChartFolder doesn't
+      // include (writeChartFolder returns chart + ini + assets; assets already
+      // carry the audio passed through)
       // Check if audio files are already in the output via assets
       const outputNames = new Set(exportFiles.map(f => f.filename.toLowerCase()));
       for (const f of chart.rawFiles) {
@@ -420,12 +522,168 @@ export default function LyricsAlignPage() {
     }
   }, [chart, alignedSyllables]);
 
-  const showKaraoke = status === 'done' && alignedLines.length > 0;
-  const songLength =
-    showKaraoke && alignedLines.length > 0
-      ? alignedLines[alignedLines.length - 1].phraseEndMs + 5000
-      : chart?.songLength ?? 180000;
-  const durationInFrames = Math.ceil((songLength / 1000) * FPS);
+  const showEditor = status === 'done' && alignedLines.length > 0;
+
+  // Prepare the ChartEditor view when alignment completes. Builds a fresh
+  // ChartDocument with the aligned lyrics applied, a running AudioManager,
+  // and a decoded PCM buffer for the waveform display.
+  useEffect(() => {
+    if (!showEditor || !chart || alignedSyllables.length === 0) return;
+    if (editorData) return; // already prepared
+
+    let cancelled = false;
+    let createdAudioManager: AudioManager | null = null;
+    (async () => {
+      try {
+        const nextDoc = applyAlignedLyricsToDoc(chart.chartDoc, alignedSyllables);
+
+        const audioManager = new AudioManager(chart.audioFiles, () => {
+          dispatch({type: 'SET_PLAYING', isPlaying: false});
+        });
+        createdAudioManager = audioManager;
+        await audioManager.ready;
+        if (cancelled) {
+          audioManager.destroy();
+          return;
+        }
+        audioManager.setChartDelay(getChartDelayMs(nextDoc.parsedChart.metadata) / 1000);
+
+        const decoded = await decodeAudioForWaveform(chart.audioFiles[0].data);
+        if (cancelled) {
+          audioManager.destroy();
+          return;
+        }
+
+        const durationSeconds = audioManager.duration;
+        const track =
+          nextDoc.parsedChart.trackData.find(
+            t => t.instrument === 'drums' && t.difficulty === 'expert',
+          ) ??
+          nextDoc.parsedChart.trackData[0] ??
+          null;
+
+        audioManagerRef.current = audioManager;
+        dispatch({
+          type: 'SET_CHART',
+          chart: nextDoc.parsedChart as ParsedChart,
+          track: (track ?? {}) as ParsedChart['trackData'][0],
+        });
+        dispatch({type: 'SET_CHART_DOC', chartDoc: nextDoc});
+
+        setEditorData({
+          chart: nextDoc.parsedChart as ParsedChart,
+          track,
+          chartDoc: nextDoc,
+          audioManager,
+          audioData: decoded?.interleaved,
+          audioChannels: decoded?.channels ?? 2,
+          durationSeconds,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Failed to prepare chart editor:', err);
+        toast.error(
+          err instanceof Error ? err.message : 'Failed to prepare preview',
+        );
+        createdAudioManager?.destroy();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    showEditor,
+    chart,
+    alignedSyllables,
+    editorData,
+    dispatch,
+    audioManagerRef,
+  ]);
+
+  const cloneHeroMetadata = useMemo<ChartResponseEncore | null>(() => {
+    if (!chart) return null;
+    return {
+      name: chart.name,
+      artist: chart.artist,
+      charter: chart.charter,
+      md5: '',
+      hasVideoBackground: false,
+      albumArtMd5: '',
+      notesData: {} as ChartResponseEncore['notesData'],
+      modifiedTime: '',
+      file: '',
+    } as ChartResponseEncore;
+  }, [chart]);
+
+  const getChartText = useCallback(async (): Promise<string> => {
+    if (!editorData) throw new Error('No chart prepared');
+    const files = writeChartFolder(editorData.chartDoc);
+    const chartFile = files.find(f => f.fileName === 'notes.chart');
+    if (!chartFile) throw new Error('writeChartFolder did not produce notes.chart');
+    return new TextDecoder().decode(chartFile.data);
+  }, [editorData]);
+
+  if (showEditor && chart) {
+    return (
+      <main className="h-screen w-screen flex flex-col bg-background overflow-hidden">
+        <div className="shrink-0 border-b bg-background px-4 py-2 flex items-center gap-3 flex-wrap">
+          <div className="min-w-0 mr-auto">
+            <h1 className="text-sm font-semibold truncate">
+              {removeStyleTags(chart.name)}
+              <span className="text-muted-foreground font-normal"> by </span>
+              {removeStyleTags(chart.artist)}
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              {alignedLines.reduce((n, l) => n + l.syllables.length, 0)}{' '}
+              syllables aligned into {alignedLines.length} lines
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (editorData) {
+                editorData.audioManager.destroy();
+              }
+              audioManagerRef.current = null;
+              setEditorData(null);
+              setAlignedLines([]);
+              setAlignedSyllables([]);
+              setStatus('input');
+            }}>
+            Re-align
+          </Button>
+          <Button size="sm" onClick={handleDownload}>
+            <Download className="h-4 w-4 mr-1" />
+            Download .{chart.sourceFormat === 'sng' ? 'sng' : 'zip'}
+          </Button>
+        </div>
+        <div className="flex-1 min-h-0">
+          {editorData && cloneHeroMetadata ? (
+            <ChartEditor
+              metadata={cloneHeroMetadata}
+              chart={editorData.chart}
+              audioManager={editorData.audioManager}
+              audioData={editorData.audioData}
+              audioChannels={editorData.audioChannels}
+              durationSeconds={editorData.durationSeconds}
+              sections={editorData.chart.sections}
+              songName={chart.name}
+              artistName={chart.artist}
+              charterName={chart.charter}
+              getChartText={getChartText}
+            />
+          ) : (
+            <div className="flex items-center justify-center gap-3 h-full">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-foreground" />
+              <p className="text-muted-foreground">Preparing preview...</p>
+            </div>
+          )}
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-background w-full">
@@ -539,59 +797,6 @@ export default function LyricsAlignPage() {
           <ProgressCard steps={alignSteps} error={error} />
         )}
 
-        {/* Step 3: Results — karaoke viewer + download */}
-        {showKaraoke && chart && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-4 flex-wrap">
-              <span className="text-sm text-muted-foreground">
-                {alignedLines.reduce((n, l) => n + l.syllables.length, 0)}{' '}
-                syllables aligned into {alignedLines.length} lines
-              </span>
-              <div className="flex-1" />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setAlignedLines([]);
-                  setAlignedSyllables([]);
-                  setStatus('input');
-                }}>
-                Re-align
-              </Button>
-              <Button size="sm" onClick={handleDownload}>
-                <Download className="h-4 w-4 mr-1" />
-                Download updated .{chart.sourceFormat === 'sng' ? 'sng' : 'zip'}
-              </Button>
-            </div>
-
-            <h3 className="text-sm font-medium text-muted-foreground">
-              Preview
-            </h3>
-
-            <Player
-              component={KaraokeVideo}
-              inputProps={{
-                lines: alignedLines,
-                audioUrls: chart.audioUrls,
-                albumArtUrl: null,
-                treatment,
-              }}
-              durationInFrames={durationInFrames}
-              compositionWidth={1920}
-              compositionHeight={1080}
-              fps={FPS}
-              controls
-              numberOfSharedAudioTags={8}
-              acknowledgeRemotionLicense
-              errorFallback={({error}) => (
-                <div className="flex items-center justify-center h-full bg-black text-red-400 p-8 text-center">
-                  <p>{error.message}</p>
-                </div>
-              )}
-              style={{width: '100%', maxWidth: 1280, aspectRatio: '16/9'}}
-            />
-          </div>
-        )}
       </div>
     </main>
   );

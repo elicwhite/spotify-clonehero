@@ -2,28 +2,21 @@
  * Section helpers for drum tracks.
  *
  * Manages star power, activation lanes, solo sections, and flex lanes
- * on a TrackData object. All mutations are in-place.
+ * on a ParsedTrackData object. All mutations are in-place.
  */
 
-import type { TrackData } from '../types';
+import type { ParsedTrackData } from '../types';
 
 // ---------------------------------------------------------------------------
 // Star Power
 // ---------------------------------------------------------------------------
 
-/**
- * Add a star power section to the track.
- * If one already exists at the same tick, it is replaced.
- */
-export function addStarPower(track: TrackData, tick: number, length: number): void {
+export function addStarPower(track: ParsedTrackData, tick: number, length: number): void {
   removeStarPower(track, tick);
-  track.starPowerSections.push({ tick, length });
+  track.starPowerSections.push({ tick, length, msTime: 0, msLength: 0 });
 }
 
-/**
- * Remove the star power section at the given tick.
- */
-export function removeStarPower(track: TrackData, tick: number): void {
+export function removeStarPower(track: ParsedTrackData, tick: number): void {
   track.starPowerSections = track.starPowerSections.filter((s) => s.tick !== tick);
 }
 
@@ -31,20 +24,12 @@ export function removeStarPower(track: TrackData, tick: number): void {
 // Activation Lanes (drumFreestyleSections with isCoda: false)
 // ---------------------------------------------------------------------------
 
-/**
- * Add an activation lane to the track.
- * If one already exists at the same tick, it is replaced.
- */
-export function addActivationLane(track: TrackData, tick: number, length: number): void {
+export function addActivationLane(track: ParsedTrackData, tick: number, length: number): void {
   removeActivationLane(track, tick);
-  track.drumFreestyleSections.push({ tick, length, isCoda: false });
+  track.drumFreestyleSections.push({ tick, length, isCoda: false, msTime: 0, msLength: 0 });
 }
 
-/**
- * Remove the activation lane at the given tick.
- * Only removes non-coda freestyle sections.
- */
-export function removeActivationLane(track: TrackData, tick: number): void {
+export function removeActivationLane(track: ParsedTrackData, tick: number): void {
   track.drumFreestyleSections = track.drumFreestyleSections.filter(
     (s) => s.tick !== tick || s.isCoda,
   );
@@ -54,19 +39,12 @@ export function removeActivationLane(track: TrackData, tick: number): void {
 // Solo Sections
 // ---------------------------------------------------------------------------
 
-/**
- * Add a solo section to the track.
- * If one already exists at the same tick, it is replaced.
- */
-export function addSoloSection(track: TrackData, tick: number, length: number): void {
+export function addSoloSection(track: ParsedTrackData, tick: number, length: number): void {
   removeSoloSection(track, tick);
-  track.soloSections.push({ tick, length });
+  track.soloSections.push({ tick, length, msTime: 0, msLength: 0 });
 }
 
-/**
- * Remove the solo section at the given tick.
- */
-export function removeSoloSection(track: TrackData, tick: number): void {
+export function removeSoloSection(track: ParsedTrackData, tick: number): void {
   track.soloSections = track.soloSections.filter((s) => s.tick !== tick);
 }
 
@@ -74,23 +52,16 @@ export function removeSoloSection(track: TrackData, tick: number): void {
 // Flex Lanes
 // ---------------------------------------------------------------------------
 
-/**
- * Add a flex lane to the track.
- * If one already exists at the same tick, it is replaced.
- */
 export function addFlexLane(
-  track: TrackData,
+  track: ParsedTrackData,
   tick: number,
   length: number,
   isDouble: boolean,
 ): void {
   removeFlexLane(track, tick);
-  track.flexLanes.push({ tick, length, isDouble });
+  track.flexLanes.push({ tick, length, isDouble, msTime: 0, msLength: 0 });
 }
 
-/**
- * Remove the flex lane at the given tick.
- */
-export function removeFlexLane(track: TrackData, tick: number): void {
+export function removeFlexLane(track: ParsedTrackData, tick: number): void {
   track.flexLanes = track.flexLanes.filter((s) => s.tick !== tick);
 }

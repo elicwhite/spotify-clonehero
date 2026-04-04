@@ -43,7 +43,7 @@ export const ROCK_BAND_4_DRUM_MAP: Record<number, DrumVoice> = {
  */
 const DEFAULT_DRUM_MAP = CLONE_HERO_DRUM_MAP;
 
-/** Set of proper drum noteType values (kick=12, redDrum=13, yellowDrum=14, blueDrum=15, greenDrum=16). */
+/** Set of proper drum noteType values (kick, red/yellow/blue/orange/greenDrum). */
 const DRUM_NOTE_TYPES = new Set<NoteType>([
   noteTypes.kick,
   noteTypes.redDrum,
@@ -87,7 +87,7 @@ export function mapScanChartNoteToVoice(
  * Maps a NoteType to its corresponding drum voice category
  */
 export function mapNoteToVoice(
-  noteType: NoteType,
+  noteType: NoteType | number,
   customMap?: Record<number, DrumVoice>,
 ): DrumVoice {
   const drumMap = customMap || DEFAULT_DRUM_MAP;
@@ -157,7 +157,7 @@ export function getTotalNotesInVoices(
  * Helper to check if a note type represents a tom
  */
 export function isTom(
-  noteType: NoteType,
+  noteType: NoteType | number,
   customMap?: Record<number, DrumVoice>,
 ): boolean {
   return mapNoteToVoice(noteType, customMap) === DrumVoice.TOM;
@@ -167,7 +167,7 @@ export function isTom(
  * Helper to check if a note type represents a hat/ride
  */
 export function isHat(
-  noteType: NoteType,
+  noteType: NoteType | number,
   customMap?: Record<number, DrumVoice>,
 ): boolean {
   return mapNoteToVoice(noteType, customMap) === DrumVoice.HAT;
@@ -177,7 +177,7 @@ export function isHat(
  * Helper to check if a note type represents a kick
  */
 export function isKick(
-  noteType: NoteType,
+  noteType: NoteType | number,
   customMap?: Record<number, DrumVoice>,
 ): boolean {
   return mapNoteToVoice(noteType, customMap) === DrumVoice.KICK;
@@ -187,7 +187,7 @@ export function isKick(
  * Helper to check if a note type represents a cymbal/crash
  */
 export function isCymbal(
-  noteType: NoteType,
+  noteType: NoteType | number,
   customMap?: Record<number, DrumVoice>,
 ): boolean {
   return mapNoteToVoice(noteType, customMap) === DrumVoice.CYMBAL;

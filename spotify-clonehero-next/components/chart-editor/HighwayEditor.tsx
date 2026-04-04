@@ -171,15 +171,15 @@ export default function HighwayEditor({
   // Compute timed tempos for coordinate mapping
   const timedTempos = useMemo(() => {
     if (!state.chartDoc) return [];
-    return buildTimedTempos(state.chartDoc.tempos, state.chartDoc.chartTicksPerBeat);
+    return buildTimedTempos(state.chartDoc.parsedChart.tempos, state.chartDoc.parsedChart.resolution);
   }, [state.chartDoc]);
 
-  const resolution = state.chartDoc?.chartTicksPerBeat ?? 480;
+  const resolution = state.chartDoc?.parsedChart.resolution ?? 480;
 
   // Get the expert drums notes for hit-testing
   const expertNotes = useMemo(() => {
     if (!state.chartDoc) return [];
-    const track = state.chartDoc.trackData.find(
+    const track = state.chartDoc.parsedChart.trackData.find(
       t => t.instrument === 'drums' && t.difficulty === 'expert',
     );
     return track ? getDrumNotes(track) : [];
@@ -212,11 +212,11 @@ export default function HighwayEditor({
   useEffect(() => {
     const handle = rendererHandleRef.current;
     if (!handle || !state.chartDoc || !durationSeconds) return;
-    const tempos = state.chartDoc.tempos.map(t => ({
+    const tempos = state.chartDoc.parsedChart.tempos.map(t => ({
       tick: t.tick,
       beatsPerMinute: t.beatsPerMinute,
     }));
-    const timeSignatures = state.chartDoc.timeSignatures.map(ts => ({
+    const timeSignatures = state.chartDoc.parsedChart.timeSignatures.map(ts => ({
       tick: ts.tick,
       numerator: ts.numerator,
       denominator: ts.denominator,
@@ -224,7 +224,7 @@ export default function HighwayEditor({
     handle.setGridData({
       tempos,
       timeSignatures,
-      resolution: state.chartDoc.chartTicksPerBeat,
+      resolution: state.chartDoc.parsedChart.resolution,
       durationMs: durationSeconds * 1000,
     });
   }, [rendererVersion, state.chartDoc, durationSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -701,7 +701,7 @@ export default function HighwayEditor({
 
       // Update cursor tick to match
       if (timedTempos.length > 0) {
-        const tick = msToTick(targetChartMs, timedTempos, state.chartDoc.chartTicksPerBeat);
+        const tick = msToTick(targetChartMs, timedTempos, state.chartDoc.parsedChart.resolution);
         dispatch({type: 'SET_CURSOR_TICK', tick});
       }
     };
@@ -755,7 +755,7 @@ export default function HighwayEditor({
     if (!popover || popover.kind !== 'section-rename') return;
     const newName = sectionNameInput.trim();
     if (!newName) return;
-    const section = state.chartDoc?.sections.find(
+    const section = state.chartDoc?.parsedChart.sections.find(
       s => s.tick === popover.tick,
     );
     if (!section || section.name === newName) {
@@ -806,7 +806,7 @@ export default function HighwayEditor({
     state.activeTool,
     state.selectedNoteIds,
     state.selectedSectionTick,
-    state.chartDoc?.sections,
+    state.chartDoc?.parsedChart.sections,
     state.loopRegion,
     hoverLane,
     hoverTick,

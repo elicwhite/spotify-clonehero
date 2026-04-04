@@ -16,7 +16,7 @@ import {
   type AudioStorageMeta,
 } from '@/lib/drum-transcription/storage/opfs';
 import {encodeWavBlob} from '@/lib/drum-transcription/audio/wav-encoder';
-import {readChart, writeChart} from '@/lib/chart-edit';
+import {readChart, writeChartFolder} from '@/lib/chart-edit';
 import {useHotkey} from '@tanstack/react-hotkeys';
 import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
 import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboard';
@@ -92,7 +92,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
     const projectDir = await nsDir.getDirectoryHandle(projectId);
 
     // Save edited chart
-    const files = writeChart(state.chartDoc);
+    const files = writeChartFolder(state.chartDoc);
     const chartText = new TextDecoder().decode(
       files.find(f => f.fileName === 'notes.chart')!.data,
     );
@@ -123,7 +123,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
   const jumpToLowConfidence = useCallback(
     (direction: 'next' | 'prev') => {
       if (!state.chartDoc) return;
-      const track = state.chartDoc.trackData.find(
+      const track = state.chartDoc.parsedChart.trackData.find(
         t => t.instrument === 'drums' && t.difficulty === 'expert',
       );
       if (!track || dtState.confidence.size === 0) return;
@@ -132,10 +132,10 @@ function EditorAppInner({projectId}: {projectId: string}) {
       const currentMs = (audioManagerRef.current?.currentTime ?? 0) * 1000;
 
       const timedTempos = buildTimedTempos(
-        state.chartDoc.tempos,
-        state.chartDoc.chartTicksPerBeat,
+        state.chartDoc.parsedChart.tempos,
+        state.chartDoc.parsedChart.resolution,
       );
-      const resolution = state.chartDoc.chartTicksPerBeat;
+      const resolution = state.chartDoc.parsedChart.resolution;
 
       const lowConfNotes: {note: DrumNote; ms: number}[] = [];
       for (const note of getDrumNotes(track)) {
@@ -397,7 +397,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
         await audioManager.ready;
         if (cancelled) return;
 
-        audioManager.setChartDelay(getChartDelayMs(chartDoc.metadata) / 1000);
+        audioManager.setChartDelay(getChartDelayMs(chartDoc.parsedChart.metadata) / 1000);
         audioManagerRef.current = audioManager;
 
         // 11. Update editor state

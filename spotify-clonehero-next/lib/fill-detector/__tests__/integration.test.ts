@@ -40,7 +40,11 @@ function createSyntheticChart(
     soloSections: [],
     flexLanes: [],
     drumFreestyleSections: [],
-  };
+    textEvents: [],
+    versusPhrases: [],
+    animations: [],
+    unrecognizedMidiEvents: [],
+  } as Track;
 
   return {
     resolution,
@@ -50,15 +54,17 @@ function createSyntheticChart(
     ],
     trackData: [drumTrack],
     metadata: {name},
-    hasLyrics: false,
-    hasVocals: false,
-    hasForcedNotes: false,
-    lyrics: [],
-    vocalPhrases: [],
+    parseIssues: [],
+    vocalTracks: {parts: {}, rangeShifts: [], lyricShifts: []},
     endEvents: [],
+    unrecognizedEventsTrackTextEvents: [],
+    unrecognizedEventsTrackMidiEvents: [],
+    unrecognizedSyncTrackEvents: [],
+    unrecognizedMidiTracks: [],
+    unrecognizedChartSections: [],
     sections: [],
     drumType: 1,
-  };
+  } as unknown as ParsedChart;
 }
 
 describe('Fill Detection Integration', () => {
@@ -70,7 +76,7 @@ describe('Fill Detection Integration', () => {
     });
 
     it('should throw error for missing drum track', () => {
-      const chart: ParsedChart = {
+      const chart = {
         resolution: 192,
         tempos: [{tick: 0, beatsPerMinute: 120, msTime: 0}],
         timeSignatures: [
@@ -78,15 +84,17 @@ describe('Fill Detection Integration', () => {
         ],
         trackData: [], // No drum track
         metadata: {name: 'No Track'},
-        hasLyrics: false,
-        hasVocals: false,
-        hasForcedNotes: false,
-        lyrics: [],
-        vocalPhrases: [],
+        parseIssues: [],
+        vocalTracks: {parts: {}, rangeShifts: [], lyricShifts: []},
         endEvents: [],
+        unrecognizedEventsTrackTextEvents: [],
+        unrecognizedEventsTrackMidiEvents: [],
+        unrecognizedSyncTrackEvents: [],
+        unrecognizedMidiTracks: [],
+        unrecognizedChartSections: [],
         sections: [],
         drumType: 1,
-      };
+      } as unknown as ParsedChart;
 
       expect(() => {
         extractFills(chart);
@@ -108,7 +116,7 @@ describe('Fill Detection Integration', () => {
           msTime: 0,
           length: resolution / 4,
           msLength: 0,
-          type: 0, // Kick
+          type: 0 as never, // Kick
           flags: 0,
         });
 
@@ -117,7 +125,7 @@ describe('Fill Detection Integration', () => {
           msTime: 0,
           length: resolution / 4,
           msLength: 0,
-          type: 0, // Kick
+          type: 0 as never, // Kick
           flags: 0,
         });
 
@@ -185,7 +193,7 @@ describe('Fill Detection Integration', () => {
           msTime: 0,
           length: resolution / 4,
           msLength: 0,
-          type: 0, // Kick
+          type: 0 as never, // Kick
           flags: 0,
         });
 
@@ -203,7 +211,7 @@ describe('Fill Detection Integration', () => {
           msTime: 0,
           length: resolution / 4,
           msLength: 0,
-          type: 0, // Kick
+          type: 0 as never, // Kick
           flags: 0,
         });
 
@@ -549,7 +557,11 @@ describe('Fill Detection Integration', () => {
         soloSections: [],
         flexLanes: [],
         drumFreestyleSections: [],
-      });
+        textEvents: [],
+        versusPhrases: [],
+        animations: [],
+        unrecognizedMidiEvents: [],
+      } as never);
 
       const fills = extractFills(chart, {difficulty: 'hard'});
       expect(Array.isArray(fills)).toBe(true);

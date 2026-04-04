@@ -121,13 +121,13 @@ export default function ChartEditor({
     }
 
     // If chartDoc has sections with tick data, compute ms from tempo map
-    const chartSections = state.chartDoc.sections;
+    const chartSections = state.chartDoc.parsedChart.sections;
     if (chartSections && chartSections.length > 0) {
       const timedTempos = buildTimedTempos(
-        state.chartDoc.tempos,
-        state.chartDoc.chartTicksPerBeat,
+        state.chartDoc.parsedChart.tempos,
+        state.chartDoc.parsedChart.resolution,
       );
-      const resolution = state.chartDoc.chartTicksPerBeat;
+      const resolution = state.chartDoc.parsedChart.resolution;
       return chartSections.map(s => ({
         name: s.name,
         timeMs: tickToMs(s.tick, timedTempos, resolution),

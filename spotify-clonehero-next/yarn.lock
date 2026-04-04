@@ -20,6 +20,11 @@
     "@jridgewell/gen-mapping" "^0.3.0"
     "@jridgewell/trace-mapping" "^0.3.9"
 
+"@awasm/noble@^0.1.1":
+  version "0.1.1"
+  resolved "https://registry.yarnpkg.com/@awasm/noble/-/noble-0.1.1.tgz#f47be599b928d7045345076e221027413a041727"
+  integrity sha512-WTAFJq3ShNt/ABL++b1PgnmR8W4rgQ6O49FGI5vUNlFehatf0M4yloEEosqgnvYkZPNyRMz6wCPyRI2JMU3kmQ==
+
 "@babel/code-frame@^7.0.0", "@babel/code-frame@^7.12.13", "@babel/code-frame@^7.22.13":
   version "7.22.13"
   resolved "https://registry.yarnpkg.com/@babel/code-frame/-/code-frame-7.22.13.tgz#e3c1c099402598483b7a8c46a721d1038803755e"
@@ -465,18 +470,18 @@
   resolved "https://registry.yarnpkg.com/@cfworker/json-schema/-/json-schema-4.1.1.tgz#4a2a3947ee9fa7b7c24be981422831b8674c3be6"
   integrity sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==
 
-"@eliwhite/scan-chart@7.2.1":
-  version "7.2.1"
-  resolved "https://registry.yarnpkg.com/@eliwhite/scan-chart/-/scan-chart-7.2.1.tgz#e07291cd68c926d449371de52e7e2a30c50b5449"
-  integrity sha512-z9yuRBQ3edXvGVCCCWSl5M2rZvO8IfyeOUmGRYvwsgYF1ZMJD0vidaUdyJtzwJk/FnAb7LfRv3r65AZ3tkdK3A==
+"@eliwhite/scan-chart@8.1.0-eliwhite.1":
+  version "8.1.0-eliwhite.1"
+  resolved "https://registry.yarnpkg.com/@eliwhite/scan-chart/-/scan-chart-8.1.0-eliwhite.1.tgz#72f6cc639a55608ee3164ae1cfec3bb360147d1c"
+  integrity sha512-E3f5pM9AaY8ATfFgH5nNVBj1gE5WoZRISfLGalG4aeRHWwzrMZkIiDCe7yPbmdxtCCU/sqVS50PJsFAnp1PNfA==
   dependencies:
-    "@noble/hashes" "^1.4.0"
+    "@awasm/noble" "^0.1.1"
+    "@geomitron/midi-file" "^1.2.5"
     bottleneck "^2.19.5"
     exifreader "^4.23.2"
     fluent-ffmpeg "^2.1.2"
     js-md5 "^0.8.3"
     lodash "^4.17.21"
-    midi-file "^1.2.4"
     rfc4648 "^1.5.3"
     sanitize-filename "^1.6.3"
     stream-audio-fingerprint "git+https://github.com/Geomitron/stream-audio-fingerprint.git"
@@ -589,6 +594,11 @@
   version "0.2.1"
   resolved "https://registry.yarnpkg.com/@floating-ui/utils/-/utils-0.2.1.tgz#16308cea045f0fc777b6ff20a9f25474dd8293d2"
   integrity sha512-9TANp6GPoMtYzQdt54kfAyMmz1+osLlXdg2ENroU7zzrtflTLrrC/lgrIfaSe+Wu0b89GKccT7vxXA0MoAIO+Q==
+
+"@geomitron/midi-file@^1.2.5":
+  version "1.2.5"
+  resolved "https://registry.yarnpkg.com/@geomitron/midi-file/-/midi-file-1.2.5.tgz#8cf9c2debcdb198c3d566b44bf4889c2021830ef"
+  integrity sha512-sJZIqz6HfGNQ7CK3hcqqs6++ldVp2BFXnBP26Ckv/RmlA/XMsImAA2ARce5Mr+g5v1FOYXV7/3n5Wb5ZXOR5Uw==
 
 "@headlessui/react@^1.7.17":
   version "1.7.17"
@@ -1145,11 +1155,6 @@
   integrity sha512-DSKz1N6/WmacV8JAPizHt8dqTP6RljcOgtrnLDEIEI7TGpX1lSfoHwY0TxXVhVoN1WwUHGDo6XUJsSjaLpcMoQ==
   dependencies:
     third-party-capital "1.0.20"
-
-"@noble/hashes@^1.4.0":
-  version "1.8.0"
-  resolved "https://registry.yarnpkg.com/@noble/hashes/-/hashes-1.8.0.tgz#cee43d801fcef9644b11b8194857695acd5f815a"
-  integrity sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==
 
 "@nodelib/fs.scandir@2.1.5":
   version "2.1.5"

@@ -67,9 +67,12 @@ function makeTrack(
     rejectedStarPowerSections: [],
     soloSections: [],
     flexLanes: [],
-    flexLaneSections: [],
     drumFreestyleSections: [],
-  } as Track;
+    textEvents: [],
+    versusPhrases: [],
+    animations: [],
+    unrecognizedMidiEvents: [],
+  } as unknown as Track;
 }
 
 function note(

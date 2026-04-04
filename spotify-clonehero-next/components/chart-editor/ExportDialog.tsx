@@ -24,7 +24,7 @@ import {
 import {Label} from '@/components/ui/label';
 import {Switch} from '@/components/ui/switch';
 
-import {readChart, writeChart} from '@/lib/chart-edit';
+import {readChart, writeChartFolder} from '@/lib/chart-edit';
 import {exportAsZip, exportAsSng} from '@/lib/chart-export';
 
 // ---------------------------------------------------------------------------
@@ -92,18 +92,18 @@ export default function ExportDialog({
       // 1. Get the chart text
       const chartText = await getChartText();
 
-      // 2. Parse chart into a ChartDocument, set metadata, and use writeChart
-      //    to produce both notes.chart and song.ini
+      // 2. Parse chart into a ChartDocument, set metadata, and use
+      //    writeChartFolder to produce both notes.chart and song.ini
       const chartBytes = new TextEncoder().encode(chartText);
       const chartDoc = readChart([{fileName: 'notes.chart', data: chartBytes}]);
-      chartDoc.metadata = {
-        ...chartDoc.metadata,
+      chartDoc.parsedChart.metadata = {
+        ...chartDoc.parsedChart.metadata,
         name: songName,
         artist: artistName ?? '',
         pro_drums: true,
-        charter: chartDoc.metadata.charter ?? 'AutoDrums',
+        charter: chartDoc.parsedChart.metadata.charter ?? 'AutoDrums',
       };
-      const chartFiles = writeChart(chartDoc);
+      const chartFiles = writeChartFolder(chartDoc);
 
       // 3. Get audio sources
       const audioFiles: AudioSource[] = [];

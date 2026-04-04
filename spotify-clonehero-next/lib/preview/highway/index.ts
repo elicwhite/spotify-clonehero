@@ -397,12 +397,14 @@ export const setupRenderer = (
       : null;
 
     // Create lyrics overlay if chart has lyrics
-    if (chart.lyrics.length > 0) {
+    const vocals = chart.vocalTracks.parts.vocals;
+    const chartLyrics = vocals?.notePhrases.flatMap(p => p.lyrics) ?? [];
+    if (chartLyrics.length > 0) {
       const width = sizingRef.current?.offsetWidth ?? window.innerWidth;
       const height = sizingRef.current?.offsetHeight ?? window.innerHeight;
       lyricsOverlay = new LyricsOverlay(
-        chart.lyrics,
-        chart.vocalPhrases,
+        chartLyrics,
+        vocals?.notePhrases ?? [],
         width,
         height,
       );

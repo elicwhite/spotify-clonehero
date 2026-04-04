@@ -132,7 +132,7 @@ function setBigUint64LE(
  * @param files - File entries to include. Filenames must be <= 255 UTF-8 bytes.
  * @returns The complete .sng file as a Uint8Array.
  */
-function buildSngFile(metadata: SngMetadata, files: FileEntry[]): Uint8Array {
+export function buildSngFile(metadata: SngMetadata, files: FileEntry[]): Uint8Array {
   const sizes = calculateSizes(metadata, files);
   const buffer = new ArrayBuffer(sizes.totalSize);
   const view = new DataView(buffer);

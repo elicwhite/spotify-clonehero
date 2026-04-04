@@ -1,4 +1,4 @@
-import type { TrackData } from '../types';
+import type { ChartDocument, ParsedTrackData } from '../types';
 import {
   addDrumNote,
   removeDrumNote,
@@ -18,21 +18,26 @@ import {
   removeTimeSignature,
   addSection,
   removeSection,
-  createChart,
-  eventTypes,
+  createEmptyChart,
 } from '../index';
+import { noteFlags } from '@eliwhite/scan-chart';
+import { emptyTrackData } from './test-utils';
 
-function makeTrack(): TrackData {
+/** Wrap `createEmptyChart` into a full `ChartDocument` for the doc-level helpers. */
+function createChart(opts?: { bpm?: number }): ChartDocument {
   return {
-    instrument: 'drums' as const,
-    difficulty: 'expert' as const,
-    starPowerSections: [],
-    rejectedStarPowerSections: [],
-    soloSections: [],
-    flexLanes: [],
-    drumFreestyleSections: [],
-    trackEvents: [],
+    parsedChart: createEmptyChart({ bpm: opts?.bpm ?? 120, resolution: 480 }),
+    assets: [],
   };
+}
+
+function makeTrack(): ParsedTrackData {
+  return emptyTrackData('drums', 'expert');
+}
+
+/** Total note count across all noteEventGroups. */
+function noteCount(track: ParsedTrackData): number {
+  return track.noteEventGroups.reduce((sum, g) => sum + g.length, 0);
 }
 
 // ==========================================================================
@@ -40,64 +45,59 @@ function makeTrack(): TrackData {
 // ==========================================================================
 
 describe('drum notes', () => {
-  it('addDrumNote basic', () => {
+  it('addDrumNote basic — pushes to noteEventGroups, no flags', () => {
     const track = makeTrack();
     addDrumNote(track, { tick: 0, type: 'kick' });
 
-    expect(track.trackEvents).toHaveLength(1);
-    expect(track.trackEvents[0]).toEqual({
-      tick: 0,
-      length: 0,
-      type: eventTypes.kick,
-    });
+    expect(noteCount(track)).toBe(1);
+    const note = track.noteEventGroups[0][0];
+    expect(note.tick).toBe(0);
+    expect(note.flags).toBe(0);
   });
 
-  it('addDrumNote with cymbal', () => {
+  it('addDrumNote with cymbal sets cymbal flag', () => {
     const track = makeTrack();
     addDrumNote(track, { tick: 0, type: 'yellowDrum', flags: { cymbal: true } });
 
-    expect(track.trackEvents).toHaveLength(2);
-    expect(track.trackEvents.map((e) => e.type)).toContain(eventTypes.yellowDrum);
-    expect(track.trackEvents.map((e) => e.type)).toContain(eventTypes.yellowCymbalMarker);
+    expect(noteCount(track)).toBe(1);
+    const note = track.noteEventGroups[0][0];
+    expect(note.flags & noteFlags.cymbal).toBeTruthy();
   });
 
-  it('addDrumNote with doubleKick', () => {
+  it('addDrumNote with doubleKick sets doubleKick flag on kick note', () => {
     const track = makeTrack();
     addDrumNote(track, { tick: 0, type: 'kick', flags: { doubleKick: true } });
 
-    expect(track.trackEvents).toHaveLength(2);
-    expect(track.trackEvents.map((e) => e.type)).toContain(eventTypes.kick);
-    expect(track.trackEvents.map((e) => e.type)).toContain(eventTypes.kick2x);
+    expect(noteCount(track)).toBe(1);
+    const note = track.noteEventGroups[0][0];
+    expect(note.flags & noteFlags.doubleKick).toBeTruthy();
   });
 
-  it('addDrumNote with accent', () => {
+  it('addDrumNote with accent sets accent flag', () => {
     const track = makeTrack();
     addDrumNote(track, { tick: 0, type: 'redDrum', flags: { accent: true } });
 
-    expect(track.trackEvents).toHaveLength(2);
-    expect(track.trackEvents.map((e) => e.type)).toContain(eventTypes.redDrum);
-    expect(track.trackEvents.map((e) => e.type)).toContain(eventTypes.redAccent);
+    expect(noteCount(track)).toBe(1);
+    expect(track.noteEventGroups[0][0].flags & noteFlags.accent).toBeTruthy();
   });
 
-  it('addDrumNote with ghost', () => {
+  it('addDrumNote with ghost sets ghost flag', () => {
     const track = makeTrack();
     addDrumNote(track, { tick: 0, type: 'blueDrum', flags: { ghost: true } });
 
-    expect(track.trackEvents).toHaveLength(2);
-    expect(track.trackEvents.map((e) => e.type)).toContain(eventTypes.blueDrum);
-    expect(track.trackEvents.map((e) => e.type)).toContain(eventTypes.blueGhost);
+    expect(noteCount(track)).toBe(1);
+    expect(track.noteEventGroups[0][0].flags & noteFlags.ghost).toBeTruthy();
   });
 
-  it('addDrumNote with flam', () => {
+  it('addDrumNote with flam sets flam flag', () => {
     const track = makeTrack();
     addDrumNote(track, { tick: 0, type: 'redDrum', flags: { flam: true } });
 
-    expect(track.trackEvents).toHaveLength(2);
-    expect(track.trackEvents.map((e) => e.type)).toContain(eventTypes.redDrum);
-    expect(track.trackEvents.map((e) => e.type)).toContain(eventTypes.forceFlam);
+    expect(noteCount(track)).toBe(1);
+    expect(track.noteEventGroups[0][0].flags & noteFlags.flam).toBeTruthy();
   });
 
-  it('addDrumNote with all flags (cymbal + accent + flam)', () => {
+  it('addDrumNote with all flags (cymbal + accent + flam) ORs them onto one note', () => {
     const track = makeTrack();
     addDrumNote(track, {
       tick: 0,
@@ -105,33 +105,18 @@ describe('drum notes', () => {
       flags: { cymbal: true, accent: true, flam: true },
     });
 
-    // base note + cymbal marker + accent marker + flam = 4 events
-    expect(track.trackEvents).toHaveLength(4);
-    const types = track.trackEvents.map((e) => e.type);
-    expect(types).toContain(eventTypes.yellowDrum);
-    expect(types).toContain(eventTypes.yellowCymbalMarker);
-    expect(types).toContain(eventTypes.yellowAccent);
-    expect(types).toContain(eventTypes.forceFlam);
+    expect(noteCount(track)).toBe(1);
+    const f = track.noteEventGroups[0][0].flags;
+    expect(f & noteFlags.cymbal).toBeTruthy();
+    expect(f & noteFlags.accent).toBeTruthy();
+    expect(f & noteFlags.flam).toBeTruthy();
   });
 
-  it('removeDrumNote', () => {
+  it('removeDrumNote removes the note entirely', () => {
     const track = makeTrack();
     addDrumNote(track, { tick: 0, type: 'kick' });
     removeDrumNote(track, 0, 'kick');
-
-    expect(track.trackEvents).toHaveLength(0);
-  });
-
-  it('removeDrumNote with modifiers', () => {
-    const track = makeTrack();
-    addDrumNote(track, {
-      tick: 0,
-      type: 'yellowDrum',
-      flags: { cymbal: true },
-    });
-    removeDrumNote(track, 0, 'yellowDrum');
-
-    expect(track.trackEvents).toHaveLength(0);
+    expect(noteCount(track)).toBe(0);
   });
 
   it('removeDrumNote does not affect other notes at same tick', () => {
@@ -140,258 +125,78 @@ describe('drum notes', () => {
     addDrumNote(track, { tick: 0, type: 'redDrum' });
     removeDrumNote(track, 0, 'kick');
 
-    expect(track.trackEvents).toHaveLength(1);
-    expect(track.trackEvents[0].type).toBe(eventTypes.redDrum);
+    expect(noteCount(track)).toBe(1);
+    expect(getDrumNotes(track)[0].type).toBe('redDrum');
   });
 
   it('getDrumNotes empty', () => {
-    const track = makeTrack();
-    expect(getDrumNotes(track)).toEqual([]);
+    expect(getDrumNotes(makeTrack())).toEqual([]);
   });
 
-  it('getDrumNotes basic', () => {
+  it('getDrumNotes basic — sorted by tick', () => {
     const track = makeTrack();
     addDrumNote(track, { tick: 480, type: 'redDrum' });
     addDrumNote(track, { tick: 0, type: 'kick' });
 
     const notes = getDrumNotes(track);
     expect(notes).toHaveLength(2);
-    // Sorted by tick
     expect(notes[0].tick).toBe(0);
     expect(notes[0].type).toBe('kick');
     expect(notes[1].tick).toBe(480);
     expect(notes[1].type).toBe('redDrum');
   });
 
-  it('getDrumNotes resolves cymbal flag', () => {
-    const track = makeTrack();
-    // Manually push raw events (like a reader would)
-    track.trackEvents.push(
-      { tick: 0, length: 0, type: eventTypes.yellowDrum },
-      { tick: 0, length: 0, type: eventTypes.yellowCymbalMarker },
-    );
-
-    const notes = getDrumNotes(track);
-    expect(notes).toHaveLength(1);
-    expect(notes[0].flags.cymbal).toBe(true);
-  });
-
-  it('getDrumNotes resolves doubleKick', () => {
-    const track = makeTrack();
-    track.trackEvents.push(
-      { tick: 0, length: 0, type: eventTypes.kick },
-      { tick: 0, length: 0, type: eventTypes.kick2x },
-    );
-
-    const notes = getDrumNotes(track);
-    expect(notes).toHaveLength(1);
-    expect(notes[0].type).toBe('kick');
-    expect(notes[0].flags.doubleKick).toBe(true);
-  });
-
-  it('getDrumNotes resolves accent', () => {
-    const track = makeTrack();
-    track.trackEvents.push(
-      { tick: 0, length: 0, type: eventTypes.redDrum },
-      { tick: 0, length: 0, type: eventTypes.redAccent },
-    );
-
-    const notes = getDrumNotes(track);
-    expect(notes).toHaveLength(1);
-    expect(notes[0].flags.accent).toBe(true);
-  });
-
-  it('getDrumNotes resolves ghost', () => {
-    const track = makeTrack();
-    track.trackEvents.push(
-      { tick: 0, length: 0, type: eventTypes.blueDrum },
-      { tick: 0, length: 0, type: eventTypes.blueGhost },
-    );
-
-    const notes = getDrumNotes(track);
-    expect(notes).toHaveLength(1);
-    expect(notes[0].flags.ghost).toBe(true);
-  });
-
-  it('getDrumNotes resolves flam', () => {
-    const track = makeTrack();
-    track.trackEvents.push(
-      { tick: 0, length: 0, type: eventTypes.redDrum },
-      { tick: 0, length: 0, type: eventTypes.forceFlam },
-    );
-
-    const notes = getDrumNotes(track);
-    expect(notes).toHaveLength(1);
-    expect(notes[0].flags.flam).toBe(true);
-  });
-
-  it('setDrumNoteFlags updates modifiers', () => {
+  it('setDrumNoteFlags updates flags on the note', () => {
     const track = makeTrack();
     addDrumNote(track, { tick: 0, type: 'yellowDrum' });
-
     setDrumNoteFlags(track, 0, 'yellowDrum', { cymbal: true });
 
-    const types = track.trackEvents.map((e) => e.type);
-    expect(types).toContain(eventTypes.yellowCymbalMarker);
+    expect(getDrumNotes(track)[0].flags.cymbal).toBe(true);
   });
 
-  it('setDrumNoteFlags removes old modifiers', () => {
+  it('setDrumNoteFlags removes old flags', () => {
     const track = makeTrack();
-    addDrumNote(track, {
-      tick: 0,
-      type: 'yellowDrum',
-      flags: { cymbal: true },
-    });
-
+    addDrumNote(track, { tick: 0, type: 'yellowDrum', flags: { cymbal: true } });
     setDrumNoteFlags(track, 0, 'yellowDrum', {});
 
-    const types = track.trackEvents.map((e) => e.type);
-    expect(types).not.toContain(eventTypes.yellowCymbalMarker);
-    // Base note should still be there
-    expect(types).toContain(eventTypes.yellowDrum);
+    const note = getDrumNotes(track)[0];
+    expect(note.flags.cymbal).toBeFalsy();
   });
 
   it('setDrumNoteFlags throws on missing note', () => {
     const track = makeTrack();
-
     expect(() => {
       setDrumNoteFlags(track, 0, 'kick', { doubleKick: true });
     }).toThrow('No kick note found at tick 0');
-  });
-
-  it('setDrumNoteFlags cymbal:false adds tom marker for yellow', () => {
-    const track = makeTrack();
-    addDrumNote(track, { tick: 0, type: 'yellowDrum', flags: { cymbal: true } });
-
-    setDrumNoteFlags(track, 0, 'yellowDrum', { cymbal: false });
-
-    const types = track.trackEvents.map((e) => e.type);
-    expect(types).toContain(eventTypes.yellowTomMarker);
-    expect(types).not.toContain(eventTypes.yellowCymbalMarker);
-  });
-
-  it('setDrumNoteFlags cymbal:false adds tom marker for blue', () => {
-    const track = makeTrack();
-    addDrumNote(track, { tick: 0, type: 'blueDrum', flags: { cymbal: true } });
-
-    setDrumNoteFlags(track, 0, 'blueDrum', { cymbal: false });
-
-    const types = track.trackEvents.map((e) => e.type);
-    expect(types).toContain(eventTypes.blueTomMarker);
-    expect(types).not.toContain(eventTypes.blueCymbalMarker);
-  });
-
-  it('setDrumNoteFlags cymbal:false adds tom marker for green', () => {
-    const track = makeTrack();
-    addDrumNote(track, { tick: 0, type: 'greenDrum', flags: { cymbal: true } });
-
-    setDrumNoteFlags(track, 0, 'greenDrum', { cymbal: false });
-
-    const types = track.trackEvents.map((e) => e.type);
-    expect(types).toContain(eventTypes.greenTomMarker);
-    expect(types).not.toContain(eventTypes.greenCymbalMarker);
   });
 
   it('setDrumNoteFlags cymbal toggle round-trips through getDrumNotes', () => {
     const track = makeTrack();
     addDrumNote(track, { tick: 0, type: 'yellowDrum', flags: { cymbal: true } });
 
-    // Toggle off
     setDrumNoteFlags(track, 0, 'yellowDrum', { cymbal: false });
-    let notes = getDrumNotes(track);
-    let yellow = notes.find((n) => n.type === 'yellowDrum');
-    expect(yellow!.flags.cymbal).toBe(false);
+    expect(getDrumNotes(track).find((n) => n.type === 'yellowDrum')!.flags.cymbal).toBe(false);
 
-    // Toggle back on
     setDrumNoteFlags(track, 0, 'yellowDrum', { cymbal: true });
-    notes = getDrumNotes(track);
-    yellow = notes.find((n) => n.type === 'yellowDrum');
-    expect(yellow!.flags.cymbal).toBe(true);
-
-    // Verify tom marker removed when cymbal set back
-    const types = track.trackEvents.map((e) => e.type);
-    expect(types).toContain(eventTypes.yellowCymbalMarker);
-    expect(types).not.toContain(eventTypes.yellowTomMarker);
+    expect(getDrumNotes(track).find((n) => n.type === 'yellowDrum')!.flags.cymbal).toBe(true);
   });
 
-  it('setDrumNoteFlags cymbal:false does not add tom marker for red', () => {
-    const track = makeTrack();
-    addDrumNote(track, { tick: 0, type: 'redDrum' });
-
-    // Red drum has no cymbal/tom distinction
-    setDrumNoteFlags(track, 0, 'redDrum', { cymbal: false });
-
-    const types = track.trackEvents.map((e) => e.type);
-    // Should only have the base note — no tom marker for red
-    expect(types).toEqual([eventTypes.redDrum]);
-  });
-
-  // C4: greenDrum / fiveGreenDrum tests
-  it('addDrumNote with greenDrum produces fiveOrangeFourGreenDrum event', () => {
-    const track = makeTrack();
-    addDrumNote(track, { tick: 0, type: 'greenDrum' });
-
-    expect(track.trackEvents).toHaveLength(1);
-    expect(track.trackEvents[0].type).toBe(eventTypes.fiveOrangeFourGreenDrum);
-  });
-
-  it('addDrumNote with fiveGreenDrum produces fiveGreenDrum event', () => {
-    const track = makeTrack();
-    addDrumNote(track, { tick: 0, type: 'fiveGreenDrum' });
-
-    expect(track.trackEvents).toHaveLength(1);
-    expect(track.trackEvents[0].type).toBe(eventTypes.fiveGreenDrum);
-  });
-
-  it('addDrumNote with greenDrum cymbal produces greenCymbalMarker event', () => {
-    const track = makeTrack();
-    addDrumNote(track, { tick: 0, type: 'greenDrum', flags: { cymbal: true } });
-
-    expect(track.trackEvents).toHaveLength(2);
-    const types = track.trackEvents.map((e) => e.type);
-    expect(types).toContain(eventTypes.fiveOrangeFourGreenDrum);
-    expect(types).toContain(eventTypes.greenCymbalMarker);
-  });
-
-  it('getDrumNotes returns correct DrumNoteType for greenDrum and fiveGreenDrum', () => {
-    const track = makeTrack();
-    track.trackEvents.push(
-      { tick: 0, length: 0, type: eventTypes.fiveOrangeFourGreenDrum },
-      { tick: 480, length: 0, type: eventTypes.fiveGreenDrum },
-    );
-
-    const notes = getDrumNotes(track);
-    expect(notes).toHaveLength(2);
-    expect(notes[0].type).toBe('greenDrum');
-    expect(notes[0].tick).toBe(0);
-    expect(notes[1].type).toBe('fiveGreenDrum');
-    expect(notes[1].tick).toBe(480);
-  });
-
-  // A3: Duplicate forceFlam prevention
-  it('addDrumNote with flam does not create duplicate forceFlam events', () => {
+  // A3: Duplicate flam prevention is now intrinsic — flam is per-note flag.
+  it('addDrumNote with flam on multiple notes at same tick: each note keeps its own flam flag', () => {
     const track = makeTrack();
     addDrumNote(track, { tick: 0, type: 'kick', flags: { flam: true } });
     addDrumNote(track, { tick: 0, type: 'redDrum', flags: { flam: true } });
 
-    const flamEvents = track.trackEvents.filter(
-      (e) => e.type === eventTypes.forceFlam,
-    );
-    expect(flamEvents).toHaveLength(1);
-
     const notes = getDrumNotes(track);
-    const kick = notes.find((n) => n.type === 'kick');
-    const red = notes.find((n) => n.type === 'redDrum');
-    expect(kick!.flags.flam).toBe(true);
-    expect(red!.flags.flam).toBe(true);
+    expect(notes.find((n) => n.type === 'kick')!.flags.flam).toBe(true);
+    expect(notes.find((n) => n.type === 'redDrum')!.flags.flam).toBe(true);
   });
 
-  // A1: Shared forceFlam corruption in removeDrumNote
-  it('removeDrumNote preserves forceFlam for remaining notes at same tick', () => {
+  // A1: Shared flam corruption check (now: removing one note must not clear flam on the other)
+  it('removeDrumNote preserves flam for remaining notes at same tick', () => {
     const track = makeTrack();
     addDrumNote(track, { tick: 0, type: 'kick', flags: { flam: true } });
     addDrumNote(track, { tick: 0, type: 'redDrum', flags: { flam: true } });
-
     removeDrumNote(track, 0, 'kick');
 
     const notes = getDrumNotes(track);
@@ -400,17 +205,15 @@ describe('drum notes', () => {
     expect(notes[0].flags.flam).toBe(true);
   });
 
-  // A2: Shared forceFlam corruption in setDrumNoteFlags
-  it('setDrumNoteFlags flam:false preserves forceFlam when other notes remain', () => {
+  // A2: setDrumNoteFlags flam:false on one note must not clear the other note's flam.
+  it('setDrumNoteFlags flam:false preserves flam when other notes remain', () => {
     const track = makeTrack();
     addDrumNote(track, { tick: 0, type: 'kick', flags: { flam: true } });
     addDrumNote(track, { tick: 0, type: 'redDrum', flags: { flam: true } });
-
     setDrumNoteFlags(track, 0, 'kick', { flam: false });
 
-    const notes = getDrumNotes(track);
-    const red = notes.find((n) => n.type === 'redDrum');
-    expect(red!.flags.flam).toBe(true);
+    const red = getDrumNotes(track).find((n) => n.type === 'redDrum')!;
+    expect(red.flags.flam).toBe(true);
   });
 
   it('addDrumNote -> getDrumNotes round-trip', () => {
@@ -424,31 +227,23 @@ describe('drum notes', () => {
     const notes = getDrumNotes(track);
     expect(notes).toHaveLength(4);
 
-    // tick 0: kick with doubleKick
-    const kick = notes.find((n) => n.type === 'kick');
-    expect(kick).toBeDefined();
-    expect(kick!.tick).toBe(0);
-    expect(kick!.flags.doubleKick).toBe(true);
+    const kick = notes.find((n) => n.type === 'kick')!;
+    expect(kick.tick).toBe(0);
+    expect(kick.flags.doubleKick).toBe(true);
 
-    // tick 0: yellow cymbal with accent
-    const yellow = notes.find((n) => n.type === 'yellowDrum');
-    expect(yellow).toBeDefined();
-    expect(yellow!.tick).toBe(0);
-    expect(yellow!.flags.cymbal).toBe(true);
-    expect(yellow!.flags.accent).toBe(true);
+    const yellow = notes.find((n) => n.type === 'yellowDrum')!;
+    expect(yellow.tick).toBe(0);
+    expect(yellow.flags.cymbal).toBe(true);
+    expect(yellow.flags.accent).toBe(true);
 
-    // tick 480: red with ghost + flam
-    const red = notes.find((n) => n.type === 'redDrum');
-    expect(red).toBeDefined();
-    expect(red!.tick).toBe(480);
-    expect(red!.flags.ghost).toBe(true);
-    expect(red!.flags.flam).toBe(true);
+    const red = notes.find((n) => n.type === 'redDrum')!;
+    expect(red.tick).toBe(480);
+    expect(red.flags.ghost).toBe(true);
+    expect(red.flags.flam).toBe(true);
 
-    // tick 960: blue with length
-    const blue = notes.find((n) => n.type === 'blueDrum');
-    expect(blue).toBeDefined();
-    expect(blue!.tick).toBe(960);
-    expect(blue!.length).toBe(120);
+    const blue = notes.find((n) => n.type === 'blueDrum')!;
+    expect(blue.tick).toBe(960);
+    expect(blue.length).toBe(120);
   });
 });
 
@@ -462,7 +257,7 @@ describe('section helpers', () => {
     addStarPower(track, 0, 480);
 
     expect(track.starPowerSections).toHaveLength(1);
-    expect(track.starPowerSections[0]).toEqual({ tick: 0, length: 480 });
+    expect(track.starPowerSections[0]).toMatchObject({ tick: 0, length: 480 });
   });
 
   it('addStarPower replaces at same tick', () => {
@@ -487,7 +282,7 @@ describe('section helpers', () => {
     addActivationLane(track, 0, 480);
 
     expect(track.drumFreestyleSections).toHaveLength(1);
-    expect(track.drumFreestyleSections[0]).toEqual({
+    expect(track.drumFreestyleSections[0]).toMatchObject({
       tick: 0,
       length: 480,
       isCoda: false,
@@ -507,7 +302,7 @@ describe('section helpers', () => {
     addSoloSection(track, 0, 480);
 
     expect(track.soloSections).toHaveLength(1);
-    expect(track.soloSections[0]).toEqual({ tick: 0, length: 480 });
+    expect(track.soloSections[0]).toMatchObject({ tick: 0, length: 480 });
   });
 
   it('removeSoloSection', () => {
@@ -523,7 +318,7 @@ describe('section helpers', () => {
     addFlexLane(track, 0, 480, true);
 
     expect(track.flexLanes).toHaveLength(1);
-    expect(track.flexLanes[0]).toEqual({ tick: 0, length: 480, isDouble: true });
+    expect(track.flexLanes[0]).toMatchObject({ tick: 0, length: 480, isDouble: true });
   });
 
   it('removeFlexLane', () => {
@@ -544,17 +339,17 @@ describe('tempo helpers', () => {
     const doc = createChart({ bpm: 120 });
     addTempo(doc, 480, 140);
 
-    expect(doc.tempos).toHaveLength(2);
-    expect(doc.tempos[0]).toEqual({ tick: 0, beatsPerMinute: 120 });
-    expect(doc.tempos[1]).toEqual({ tick: 480, beatsPerMinute: 140 });
+    expect(doc.parsedChart.tempos).toHaveLength(2);
+    expect(doc.parsedChart.tempos[0]).toMatchObject({ tick: 0, beatsPerMinute: 120 });
+    expect(doc.parsedChart.tempos[1]).toMatchObject({ tick: 480, beatsPerMinute: 140 });
   });
 
   it('addTempo replaces at same tick', () => {
     const doc = createChart({ bpm: 120 });
     addTempo(doc, 0, 140);
 
-    expect(doc.tempos).toHaveLength(1);
-    expect(doc.tempos[0].beatsPerMinute).toBe(140);
+    expect(doc.parsedChart.tempos).toHaveLength(1);
+    expect(doc.parsedChart.tempos[0].beatsPerMinute).toBe(140);
   });
 
   it('removeTempo', () => {
@@ -562,8 +357,8 @@ describe('tempo helpers', () => {
     addTempo(doc, 480, 140);
     removeTempo(doc, 480);
 
-    expect(doc.tempos).toHaveLength(1);
-    expect(doc.tempos[0].tick).toBe(0);
+    expect(doc.parsedChart.tempos).toHaveLength(1);
+    expect(doc.parsedChart.tempos[0].tick).toBe(0);
   });
 
   it('removeTempo throws at tick 0', () => {
@@ -578,8 +373,8 @@ describe('tempo helpers', () => {
     const doc = createChart();
     addTimeSignature(doc, 480, 3, 4);
 
-    expect(doc.timeSignatures).toHaveLength(2);
-    expect(doc.timeSignatures[1]).toEqual({
+    expect(doc.parsedChart.timeSignatures).toHaveLength(2);
+    expect(doc.parsedChart.timeSignatures[1]).toMatchObject({
       tick: 480,
       numerator: 3,
       denominator: 4,
@@ -604,8 +399,8 @@ describe('section markers', () => {
     const doc = createChart();
     addSection(doc, 0, 'Intro');
 
-    expect(doc.sections).toHaveLength(1);
-    expect(doc.sections[0]).toEqual({ tick: 0, name: 'Intro' });
+    expect(doc.parsedChart.sections).toHaveLength(1);
+    expect(doc.parsedChart.sections[0]).toMatchObject({ tick: 0, name: 'Intro' });
   });
 
   it('addSection replaces at same tick', () => {
@@ -613,8 +408,8 @@ describe('section markers', () => {
     addSection(doc, 0, 'Intro');
     addSection(doc, 0, 'Verse 1');
 
-    expect(doc.sections).toHaveLength(1);
-    expect(doc.sections[0].name).toBe('Verse 1');
+    expect(doc.parsedChart.sections).toHaveLength(1);
+    expect(doc.parsedChart.sections[0].name).toBe('Verse 1');
   });
 
   it('removeSection', () => {
@@ -622,6 +417,6 @@ describe('section markers', () => {
     addSection(doc, 0, 'Intro');
     removeSection(doc, 0);
 
-    expect(doc.sections).toHaveLength(0);
+    expect(doc.parsedChart.sections).toHaveLength(0);
   });
 });

@@ -11,56 +11,37 @@ import type { ChartDocument } from '../types';
 // Tempo
 // ---------------------------------------------------------------------------
 
-/**
- * Add or replace a tempo marker at the given tick.
- */
 export function addTempo(doc: ChartDocument, tick: number, beatsPerMinute: number): void {
-  // Remove any existing tempo at this tick
-  doc.tempos = doc.tempos.filter((t) => t.tick !== tick);
-  doc.tempos.push({ tick, beatsPerMinute });
-  doc.tempos.sort((a, b) => a.tick - b.tick);
+  doc.parsedChart.tempos = doc.parsedChart.tempos.filter((t) => t.tick !== tick);
+  doc.parsedChart.tempos.push({ tick, beatsPerMinute, msTime: 0 });
+  doc.parsedChart.tempos.sort((a, b) => a.tick - b.tick);
 }
 
-/**
- * Remove the tempo marker at the given tick.
- *
- * Throws if attempting to remove the tempo at tick 0 (there must always
- * be an initial tempo).
- */
 export function removeTempo(doc: ChartDocument, tick: number): void {
   if (tick === 0) {
     throw new Error('Cannot remove the tempo at tick 0');
   }
-  doc.tempos = doc.tempos.filter((t) => t.tick !== tick);
+  doc.parsedChart.tempos = doc.parsedChart.tempos.filter((t) => t.tick !== tick);
 }
 
 // ---------------------------------------------------------------------------
 // Time Signature
 // ---------------------------------------------------------------------------
 
-/**
- * Add or replace a time signature at the given tick.
- */
 export function addTimeSignature(
   doc: ChartDocument,
   tick: number,
   numerator: number,
   denominator: number,
 ): void {
-  doc.timeSignatures = doc.timeSignatures.filter((ts) => ts.tick !== tick);
-  doc.timeSignatures.push({ tick, numerator, denominator });
-  doc.timeSignatures.sort((a, b) => a.tick - b.tick);
+  doc.parsedChart.timeSignatures = doc.parsedChart.timeSignatures.filter((ts) => ts.tick !== tick);
+  doc.parsedChart.timeSignatures.push({ tick, numerator, denominator, msTime: 0, msLength: 0 });
+  doc.parsedChart.timeSignatures.sort((a, b) => a.tick - b.tick);
 }
 
-/**
- * Remove the time signature at the given tick.
- *
- * Throws if attempting to remove the time signature at tick 0 (there must
- * always be an initial time signature).
- */
 export function removeTimeSignature(doc: ChartDocument, tick: number): void {
   if (tick === 0) {
     throw new Error('Cannot remove the time signature at tick 0');
   }
-  doc.timeSignatures = doc.timeSignatures.filter((ts) => ts.tick !== tick);
+  doc.parsedChart.timeSignatures = doc.parsedChart.timeSignatures.filter((ts) => ts.tick !== tick);
 }

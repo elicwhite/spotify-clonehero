@@ -226,8 +226,8 @@ interface AlignedSyllable {
 }
 
 interface LyricLine {
-  startMs: number;
-  endMs: number;
+  phraseStartMs: number;
+  phraseEndMs: number;
   syllables: {text: string; msTime: number}[];
   text: string;
 }

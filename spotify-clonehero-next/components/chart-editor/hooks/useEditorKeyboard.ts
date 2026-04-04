@@ -103,7 +103,7 @@ export function useEditorKeyboard(
   // Get expert notes for clipboard and navigation
   const getExpertTrack = useCallback(() => {
     if (!state.chartDoc) return null;
-    return state.chartDoc.trackData.find(
+    return state.chartDoc.parsedChart.trackData.find(
       t => t.instrument === 'drums' && t.difficulty === 'expert',
     ) ?? null;
   }, [state.chartDoc]);
@@ -116,13 +116,13 @@ export function useEditorKeyboard(
     const am = audioManagerRef.current;
     if (!am || !state.chartDoc) return state.cursorTick;
     const timedTempos = buildTimedTempos(
-      state.chartDoc.tempos,
-      state.chartDoc.chartTicksPerBeat,
+      state.chartDoc.parsedChart.tempos,
+      state.chartDoc.parsedChart.resolution,
     );
     if (timedTempos.length === 0) return state.cursorTick;
     const currentMs = am.chartTime * 1000;
-    const tick = msToTick(currentMs, timedTempos, state.chartDoc.chartTicksPerBeat);
-    return snapToGrid(tick, state.chartDoc.chartTicksPerBeat, state.gridDivision);
+    const tick = msToTick(currentMs, timedTempos, state.chartDoc.parsedChart.resolution);
+    return snapToGrid(tick, state.chartDoc.parsedChart.resolution, state.gridDivision);
   }, [audioManagerRef, state.chartDoc, state.cursorTick, state.gridDivision]);
 
   // Helper: seek AudioManager to a tick position (without starting playback)
@@ -131,10 +131,10 @@ export function useEditorKeyboard(
       const am = audioManagerRef.current;
       if (!am || !state.chartDoc) return;
       const timedTempos = buildTimedTempos(
-        state.chartDoc.tempos,
-        state.chartDoc.chartTicksPerBeat,
+        state.chartDoc.parsedChart.tempos,
+        state.chartDoc.parsedChart.resolution,
       );
-      const ms = tickToMs(tick, timedTempos, state.chartDoc.chartTicksPerBeat);
+      const ms = tickToMs(tick, timedTempos, state.chartDoc.parsedChart.resolution);
       const wasPlaying = am.isPlaying;
       await am.playChartTime(ms / 1000);
       if (!wasPlaying) {
@@ -283,7 +283,7 @@ export function useEditorKeyboard(
       baseTick,
       1,
       state.gridDivision,
-      state.chartDoc.chartTicksPerBeat,
+      state.chartDoc.parsedChart.resolution,
     );
     dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
     seekToTick(newTick);
@@ -296,7 +296,7 @@ export function useEditorKeyboard(
       baseTick,
       1,
       state.gridDivision,
-      state.chartDoc.chartTicksPerBeat,
+      state.chartDoc.parsedChart.resolution,
     );
     dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
     seekToTick(newTick);
@@ -309,7 +309,7 @@ export function useEditorKeyboard(
       baseTick,
       -1,
       state.gridDivision,
-      state.chartDoc.chartTicksPerBeat,
+      state.chartDoc.parsedChart.resolution,
     );
     dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
     seekToTick(newTick);
@@ -322,7 +322,7 @@ export function useEditorKeyboard(
       baseTick,
       -1,
       state.gridDivision,
-      state.chartDoc.chartTicksPerBeat,
+      state.chartDoc.parsedChart.resolution,
     );
     dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
     seekToTick(newTick);
@@ -337,8 +337,8 @@ export function useEditorKeyboard(
     const newTick = getNextMeasureTick(
       baseTick,
       1,
-      state.chartDoc.chartTicksPerBeat,
-      state.chartDoc.timeSignatures,
+      state.chartDoc.parsedChart.resolution,
+      state.chartDoc.parsedChart.timeSignatures,
     );
     dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
     seekToTick(newTick);
@@ -350,8 +350,8 @@ export function useEditorKeyboard(
     const newTick = getNextMeasureTick(
       baseTick,
       1,
-      state.chartDoc.chartTicksPerBeat,
-      state.chartDoc.timeSignatures,
+      state.chartDoc.parsedChart.resolution,
+      state.chartDoc.parsedChart.timeSignatures,
     );
     dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
     seekToTick(newTick);
@@ -363,8 +363,8 @@ export function useEditorKeyboard(
     const newTick = getNextMeasureTick(
       baseTick,
       -1,
-      state.chartDoc.chartTicksPerBeat,
-      state.chartDoc.timeSignatures,
+      state.chartDoc.parsedChart.resolution,
+      state.chartDoc.parsedChart.timeSignatures,
     );
     dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
     seekToTick(newTick);
@@ -376,8 +376,8 @@ export function useEditorKeyboard(
     const newTick = getNextMeasureTick(
       baseTick,
       -1,
-      state.chartDoc.chartTicksPerBeat,
-      state.chartDoc.timeSignatures,
+      state.chartDoc.parsedChart.resolution,
+      state.chartDoc.parsedChart.timeSignatures,
     );
     dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
     seekToTick(newTick);
@@ -456,7 +456,7 @@ export function useEditorKeyboard(
   // -----------------------------------------------------------------------
   const handleDelete = useCallback(() => {
     if (state.selectedSectionTick !== null && state.chartDoc) {
-      const section = state.chartDoc.sections.find(
+      const section = state.chartDoc.parsedChart.sections.find(
         s => s.tick === state.selectedSectionTick,
       );
       if (section) {
