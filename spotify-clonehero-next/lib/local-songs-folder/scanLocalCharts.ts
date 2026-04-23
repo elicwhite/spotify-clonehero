@@ -90,8 +90,8 @@ async function scanLocalChartsDirectory(
   callbackPerSong: () => void,
   limit: LimitFunction,
 ) {
-  let newestDate = 0;
   let songIniData: SongIniData | null = null;
+  let songIniMTime = 0;
 
   let entries: Array<[string, EntryHandle]>;
   try {
@@ -106,60 +106,64 @@ async function scanLocalChartsDirectory(
     return;
   }
 
-  await Promise.all(
-    entries.map(async ([, subHandle]) => {
-      if (subHandle.kind === 'directory') {
-        await scanLocalChartsDirectory(
+  // Partition entries up-front so non-ini files don't cost a getFile() call.
+  let songIniHandle: FileSystemFileHandle | null = null;
+  const childTasks: Array<Promise<void>> = [];
+  for (const [, subHandle] of entries) {
+    if (subHandle.kind === 'directory') {
+      childTasks.push(
+        scanLocalChartsDirectory(
           currentDirectoryHandle,
           subHandle,
           accumulator,
           callbackPerSong,
           limit,
-        );
-        return;
-      }
-      if (subHandle.kind !== 'file') return;
-
+        ),
+      );
+    } else if (subHandle.kind === 'file') {
       if (subHandle.name.toLowerCase().endsWith('.sng')) {
-        await scanLocalSngFile(
-          currentDirectoryHandle,
-          subHandle,
-          accumulator,
-          callbackPerSong,
-          limit,
+        childTasks.push(
+          scanLocalSngFile(
+            currentDirectoryHandle,
+            subHandle,
+            accumulator,
+            callbackPerSong,
+            limit,
+          ),
         );
-        return;
+      } else if (subHandle.name === 'song.ini') {
+        songIniHandle = subHandle;
       }
+    }
+  }
 
-      await limit(async () => {
+  if (songIniHandle) {
+    const iniHandle = songIniHandle;
+    childTasks.push(
+      limit(async () => {
         let file: File;
         try {
-          file = await subHandle.getFile();
+          file = await iniHandle.getFile();
         } catch {
           return;
         }
-        if (subHandle.name === 'song.ini') {
-          try {
-            const text = await file.text();
-            const values = parse(text);
-            // @ts-ignore Assuming JSON matches TypeScript
-            songIniData = values.iniObject?.song || values.iniObject?.Song;
-          } catch (e) {
-            console.log(
-              'Could not scan song.ini of',
-              currentDirectoryHandle.name,
-            );
-            return;
-          }
+        try {
+          const text = await file.text();
+          const values = parse(text);
+          // @ts-ignore Assuming JSON matches TypeScript
+          songIniData = values.iniObject?.song || values.iniObject?.Song;
+          songIniMTime = file.lastModified;
+        } catch (e) {
+          console.log(
+            'Could not scan song.ini of',
+            currentDirectoryHandle.name,
+          );
         }
-        // Read-modify-write happens synchronously within this callback, so
-        // the parallel callbacks can't race on newestDate.
-        if (file.lastModified > newestDate) {
-          newestDate = file.lastModified;
-        }
-      });
-    }),
-  );
+      }),
+    );
+  }
+
+  await Promise.all(childTasks);
 
   // Cast back to the declared union — control-flow analysis collapses the
   // variable to its initializer's `null` type because all assignments happen
@@ -170,7 +174,7 @@ async function scanLocalChartsDirectory(
     const chart = {
       artist: removeStyleTags(finalIni.artist),
       song: removeStyleTags(finalIni.name),
-      modifiedTime: new Date(newestDate).toISOString(),
+      modifiedTime: new Date(songIniMTime).toISOString(),
       charter: removeStyleTags(finalIni.charter || finalIni.frets || ''),
       genre: removeStyleTags(finalIni.genre ?? ''),
       data: convertedSongIniData,
