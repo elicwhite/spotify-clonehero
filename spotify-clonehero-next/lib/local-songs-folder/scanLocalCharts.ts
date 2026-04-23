@@ -16,8 +16,7 @@ async function listEntries(
   dir: FileSystemDirectoryHandle,
 ): Promise<Array<[string, EntryHandle]>> {
   const iter = await dir.entries();
-  // @ts-ignore fromAsync is not defined in TS yet
-  return (await Array.fromAsync(iter)) as Array<[string, EntryHandle]>;
+  return await Array.fromAsync(iter);
 }
 
 export type SongIniData = {
