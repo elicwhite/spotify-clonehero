@@ -142,10 +142,10 @@ function LoggedIn() {
     setStatus({status: 'scanning', songsCounted: 0});
 
     try {
-      await scanForInstalledCharts(() => {
+      await scanForInstalledCharts(count => {
         setStatus(prevStatus => ({
           ...prevStatus,
-          songsCounted: prevStatus.songsCounted + 1,
+          songsCounted: count,
         }));
       });
       setStatus(prevStatus => ({...prevStatus, status: 'done-scanning'}));

@@ -88,8 +88,8 @@ export default function ChartDownloader() {
 
     let localScanSuccess = true;
     try {
-      await scanForInstalledCharts(() => {
-        setLocalScanCount(prev => prev + 1);
+      await scanForInstalledCharts(count => {
+        setLocalScanCount(count);
       });
 
       // Also scan the output directory so previously downloaded charts are recognized

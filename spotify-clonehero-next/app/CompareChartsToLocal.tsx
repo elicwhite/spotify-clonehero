@@ -46,7 +46,8 @@ type SongStateActions =
       type: 'reset';
     }
   | {
-      type: 'increment-counter';
+      type: 'set-counter';
+      count: number;
     }
   | {
       type: 'set-songs';
@@ -61,8 +62,8 @@ function songsReducer(state: SongState, action: SongStateActions): SongState {
         songsCounted: 0,
         chorusCharts: state.chorusCharts,
       };
-    case 'increment-counter':
-      return {...state, songsCounted: state.songsCounted + 1};
+    case 'set-counter':
+      return {...state, songsCounted: action.count};
     case 'set-songs':
       return {...state, songs: action.songs};
     default:
@@ -107,9 +108,10 @@ export default function CompareChartsToLocal({
     let songs: SongAccumulator[] = [];
 
     try {
-      const scanResult = await scanForInstalledCharts(() => {
+      const scanResult = await scanForInstalledCharts(count => {
         songsDispatch({
-          type: 'increment-counter',
+          type: 'set-counter',
+          count,
         });
       });
       songs = scanResult.installedCharts;
