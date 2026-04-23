@@ -1,12 +1,7 @@
 'use client';
 
-import _ from 'lodash';
-import {parseChartFile} from '@eliwhite/scan-chart';
 import {useSearchParams} from 'next/navigation';
-
-import EncoreAutocomplete from '@/components/EncoreAutocomplete';
-import {Button} from '@/components/ui/button';
-import {useCallback, useEffect, useState} from 'react';
+import {useEffect, useState} from 'react';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import SongView from './SongView';
 import {

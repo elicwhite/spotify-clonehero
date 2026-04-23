@@ -1,4 +1,3 @@
-import {levenshteinEditDistance} from 'levenshtein-edit-distance';
 import pLimit, {type LimitFunction} from 'p-limit';
 import {parse} from '@/lib/ini-parser';
 import * as Sentry from '@sentry/nextjs';
