@@ -220,40 +220,36 @@ async function scanLocalSngFileInner(
   callbackPerSong: () => void,
 ) {
   const file = await fileHandle.getFile();
-  let songIniData: SongIniData | null;
+  let metadata: {[key: string]: string};
 
   try {
-    songIniData = await new Promise<SongIniData | null>((resolve, reject) => {
-      let localSongIniData: SongIniData | null = null;
-      const sngStream = new SngStream(file.stream(), {generateSongIni: true});
-      sngStream.on('file', async (fileName, fileStream, nextFile) => {
-        try {
-          if (fileName === 'song.ini') {
-            const text = await new Response(fileStream).text();
-            const values = parse(text);
-            // @ts-ignore Assuming JSON matches TypeScript
-            localSongIniData = values.iniObject?.song || values.iniObject?.Song;
-          } else {
-            const reader = fileStream.getReader();
-            // eslint-disable-next-line no-constant-condition
-            while (true) {
-              const result = await reader.read();
-              if (result.done) {
-                break;
-              }
-            }
-          }
-        } catch (e) {
-          console.log('Could not scan song.ini of', fileHandle.name);
-        }
-
-        if (nextFile) {
-          nextFile();
-        } else {
-          resolve(localSongIniData);
-        }
+    metadata = await new Promise<{[key: string]: string}>((resolve, reject) => {
+      let resolved = false;
+      const sngStream = new SngStream(file.stream(), {
+        generateSongIni: false,
       });
-      sngStream.on('error', err => reject(err));
+
+      sngStream.on('header', header => {
+        if (resolved) return;
+        resolved = true;
+        resolve(header.metadata);
+      });
+
+      sngStream.on('file', (_fileName, fileStream) => {
+        // We already have the metadata from the header. Cancel the file
+        // stream so parse-sng stops streaming the (potentially many MB of)
+        // audio/chart bytes inside the .sng. Intentionally don't call
+        // nextFile() — there's nothing left we need to read.
+        fileStream.cancel().catch(() => {});
+      });
+
+      sngStream.on('error', err => {
+        // Errors after we resolve are typically the cancel propagating back
+        // through the parser — ignore. Real header-parse failures fire
+        // before `resolved` is set.
+        if (!resolved) reject(err);
+      });
+
       sngStream.start();
     });
   } catch (e) {
@@ -266,31 +262,34 @@ async function scanLocalSngFileInner(
     return;
   }
 
-  if (songIniData != null) {
-    const convertedSongIniData = convertValues(songIniData);
-    const chart = {
-      artist: removeStyleTags(songIniData.artist),
-      song: removeStyleTags(songIniData.name),
-      modifiedTime: new Date(file.lastModified).toISOString(),
-      charter: removeStyleTags(songIniData.charter || songIniData.frets || ''),
-      genre: removeStyleTags(songIniData.genre ?? ''),
-      data: convertedSongIniData,
-      handleInfo: {
-        parentDir: parentDirectoryHandle,
-        fileName: fileHandle.name,
-      },
-      file: '',
-    };
-    Object.defineProperty(chart, 'file', {
-      get() {
-        throw new Error('Charts from disk do not have a download URL');
-      },
-      enumerable: false, // Can't serialize to JSON
-    });
+  // The SNG header's metadata mirrors the [Song] section of song.ini — same
+  // key/value shape. convertValues() coerces numeric/boolean strings below.
+  if (!metadata.name && !metadata.artist) return;
+  const songIniData = metadata as unknown as SongIniData;
 
-    accumulator.push(chart);
-    callbackPerSong();
-  }
+  const convertedSongIniData = convertValues(songIniData);
+  const chart = {
+    artist: removeStyleTags(songIniData.artist),
+    song: removeStyleTags(songIniData.name),
+    modifiedTime: new Date(file.lastModified).toISOString(),
+    charter: removeStyleTags(songIniData.charter || songIniData.frets || ''),
+    genre: removeStyleTags(songIniData.genre ?? ''),
+    data: convertedSongIniData,
+    handleInfo: {
+      parentDir: parentDirectoryHandle,
+      fileName: fileHandle.name,
+    },
+    file: '',
+  };
+  Object.defineProperty(chart, 'file', {
+    get() {
+      throw new Error('Charts from disk do not have a download URL');
+    },
+    enumerable: false, // Can't serialize to JSON
+  });
+
+  accumulator.push(chart);
+  callbackPerSong();
 }
 
 function convertValues(songIniData: SongIniData): SongIniData {
