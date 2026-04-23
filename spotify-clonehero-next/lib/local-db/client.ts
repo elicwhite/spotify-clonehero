@@ -33,8 +33,20 @@ async function initializeDatabase(): Promise<Kysely<DB>> {
   try {
     console.log('Initializing SQLocal database...');
 
-    // Create the SQLocal database client
-    const client = new SQLocalKysely('spotify-clonehero-local.sqlite3');
+    // Create the SQLocal database client.
+    //
+    // `onInit` runs after every (re)connect — set page cache and temp store
+    // here so all callers benefit. With the OPFS Async VFS each cache miss
+    // costs an OPFS roundtrip (~1ms), so a bigger cache pays for itself
+    // quickly on read-heavy workloads (snapshot SELECTs, chorus charts,
+    // etc.). Negative values are KiB; -65536 = 64 MiB. Per-tab.
+    const client = new SQLocalKysely({
+      databasePath: 'spotify-clonehero-local.sqlite3',
+      onInit: sql => [
+        sql`PRAGMA cache_size = -65536`,
+        sql`PRAGMA temp_store = MEMORY`,
+      ],
+    });
     const {dialect} = client;
     sqlocalClient = client;
     const db = new Kysely<DB>({
