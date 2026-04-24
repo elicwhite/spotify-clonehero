@@ -150,6 +150,63 @@ function findDensestWindow(
 }
 
 // ---------------------------------------------------------------------------
+// Queue ordering
+// ---------------------------------------------------------------------------
+
+/**
+ * Deterministic fileName hash, used as jitter/shuffle seed so the queue
+ * builder is pure (no Math.random) and safe to call during render. Same
+ * fileName always produces the same hash, so the ordering is stable
+ * across re-renders within a session.
+ */
+function fileNameHash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) | 0;
+  }
+  return h;
+}
+
+function buildReviewQueue(
+  allEntries: SongAccumulator[],
+  classifierScores: Map<string, number>,
+  focusScore: number,
+  ratedSet: Set<string>,
+): number[] {
+  if (allEntries.length === 0) return [];
+
+  const classified: {idx: number; score: number; tieBreak: number}[] = [];
+  const unclassified: {idx: number; tieBreak: number}[] = [];
+
+  for (let i = 0; i < allEntries.length; i++) {
+    const fileName = allEntries[i].handleInfo.fileName;
+    if (ratedSet.has(fileName)) continue;
+    const tieBreak = fileNameHash(fileName);
+    const score = classifierScores.get(fileName);
+    if (score !== undefined) {
+      classified.push({idx: i, score, tieBreak});
+    } else {
+      unclassified.push({idx: i, tieBreak});
+    }
+  }
+
+  // Sort classified by distance from focusScore, with fileName hash as
+  // deterministic tie-break. Normalizing hash into [-0.0005, +0.0005]
+  // keeps the jitter smaller than any plausible real score delta so
+  // ordering by actual score is always preferred.
+  classified.sort((a, b) => {
+    const da = Math.abs(a.score - focusScore) + (a.tieBreak % 1000) / 1_000_000;
+    const db = Math.abs(b.score - focusScore) + (b.tieBreak % 1000) / 1_000_000;
+    return da - db;
+  });
+
+  // Deterministic "shuffle" of unclassified by fileName hash.
+  unclassified.sort((a, b) => a.tieBreak - b.tieBreak);
+
+  return [...classified.map(c => c.idx), ...unclassified.map(u => u.idx)];
+}
+
+// ---------------------------------------------------------------------------
 // TSV persistence
 // ---------------------------------------------------------------------------
 
@@ -344,48 +401,28 @@ export default function ChartReviewPage() {
   const lastRatingTimeRef = useRef(0);
 
   // Queue ordered by classifier score distance from 0.5 (most uncertain first),
-  // expanding outward in both directions. Songs absent from the classifier go last.
+  // expanding outward in both directions. Songs absent from the classifier go
+  // last. ratedSet is captured as a snapshot at the moment the queue rebuilds —
+  // rating a song mid-review must not reshuffle the remaining queue, so
+  // ratedSet changes deliberately do NOT trigger a rebuild (only entries,
+  // classifier data, or focus score do).
+  const queueInputs = useMemo(
+    () => ({allEntries, classifierScores, focusScore}),
+    [allEntries, classifierScores, focusScore],
+  );
   const [queue, setQueue] = useState<number[]>([]);
-  // Current position in queue. Declared before the effect below so the
-  // effect's setQueuePos reference is to an already-initialized binding.
   const [queuePos, setQueuePos] = useState(0);
-  useEffect(() => {
-    if (allEntries.length === 0) return;
+  const [lastQueueInputs, setLastQueueInputs] = useState(queueInputs);
 
-    // Collect unrated entries with their classifier scores
-    const classified: {idx: number; score: number}[] = [];
-    const unclassified: number[] = [];
-
-    for (let i = 0; i < allEntries.length; i++) {
-      if (ratedSet.has(allEntries[i].handleInfo.fileName)) continue;
-      const score = classifierScores.get(allEntries[i].handleInfo.fileName);
-      if (score !== undefined) {
-        classified.push({idx: i, score});
-      } else {
-        unclassified.push(i);
-      }
-    }
-
-    // Sort by distance from focusScore ascending — closest first.
-    // Add tiny jitter to break ties randomly.
-    classified.sort(
-      (a, b) =>
-        Math.abs(a.score - focusScore) +
-        (Math.random() - 0.5) * 0.001 -
-        (Math.abs(b.score - focusScore) + (Math.random() - 0.5) * 0.001),
-    );
-
-    // Shuffle unclassified songs and append after all classified ones
-    for (let i = unclassified.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [unclassified[i], unclassified[j]] = [unclassified[j], unclassified[i]];
-    }
-
-    setQueue([...classified.map(s => s.idx), ...unclassified]);
+  if (queueInputs !== lastQueueInputs) {
+    // Adjust-during-render pattern from the React docs: detect when the
+    // inputs identity has changed and rebuild. React will immediately re-run
+    // the render with the updated state before committing, so the user never
+    // sees the stale queue.
+    setLastQueueInputs(queueInputs);
+    setQueue(buildReviewQueue(allEntries, classifierScores, focusScore, ratedSet));
     setQueuePos(0);
-    // Only rebuild when entries, classifier data, or focus score changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allEntries, classifierScores, focusScore]);
+  }
 
   // Save function
   const saveRatings = useCallback(async () => {
