@@ -7,7 +7,6 @@ export default defineConfig([
     extends: [...nextCoreWebVitals],
     rules: {
       'react-hooks/refs': 'off',
-      'react-hooks/set-state-in-effect': 'off',
     },
   },
   // Must come last — turns off ESLint rules that conflict with Prettier.
