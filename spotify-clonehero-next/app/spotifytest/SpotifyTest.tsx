@@ -114,19 +114,20 @@ function LoggedIn() {
 
   const [started, setStarted] = useState(false);
 
-  const [useMockLoader, setUseMockLoader] = useState(false);
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'production') {
-      setUseMockLoader(false);
-      return;
-    }
+  // Dev-only opt-in mock loader. See Spotify.tsx for rationale — read
+  // URL/localStorage once at mount via a useState lazy initializer.
+  const [useMockLoader] = useState(() => {
+    if (process.env.NODE_ENV === 'production') return false;
+    if (typeof window === 'undefined') return false;
     try {
       const url = new URL(window.location.href);
       const fromQuery = url.searchParams.get('mockLoader') === '1';
       const fromStorage = localStorage.getItem('spotifyLoaderMock') === '1';
-      setUseMockLoader(Boolean(fromQuery || fromStorage));
-    } catch {}
-  }, []);
+      return fromQuery || fromStorage;
+    } catch {
+      return false;
+    }
+  });
 
   const calculate = useCallback(async () => {
     const abortController = new AbortController();
