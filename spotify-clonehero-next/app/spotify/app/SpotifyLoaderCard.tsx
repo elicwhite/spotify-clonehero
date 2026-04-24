@@ -105,7 +105,7 @@ export default function SpotifyLoaderCard({
   const itemRefs = useRef<{[id: string]: HTMLDivElement | null}>({});
   const prevFirstScanningId = useRef<string | null>(null);
   const [inViewMap, setInViewMap] = useState<{[id: string]: boolean}>({});
-  const [etaTick, setEtaTick] = useState(0);
+  const [etaNowMs, setEtaNowMs] = useState(() => Date.now());
   const scanStartTimeRef = useRef<number | null>(null);
   const initialCachedCountsRef = useRef<{[id: string]: number}>({});
 
@@ -239,17 +239,19 @@ export default function SpotifyLoaderCard({
     }
   }, [progress.updateStatus, hasStarted, allItems]);
 
-  // Tick periodically during fetching to refresh ETA calculations
+  // Tick periodically during fetching to refresh ETA calculations.
+  // We capture the timestamp into state so the memo below stays a pure
+  // function of its inputs instead of reading Date.now() during render.
   useEffect(() => {
     if (progress.updateStatus !== 'fetching') return;
-    const interval = setInterval(() => setEtaTick(t => t + 1), 5000);
+    const interval = setInterval(() => setEtaNowMs(Date.now()), 5000);
     return () => clearInterval(interval);
   }, [progress.updateStatus]);
 
   // Compute ETA using observed rate since scan started (only for fresh scanning)
   const observedEtaSeconds = useMemo(() => {
     if (!scanStartTimeRef.current) return null;
-    const elapsedMs = Date.now() - scanStartTimeRef.current;
+    const elapsedMs = etaNowMs - scanStartTimeRef.current;
     const elapsedSeconds = elapsedMs / 1000;
     const songsScannedFresh = totalSongsScannedFresh;
     const totalSongsToScanCount = totalSongsToScan;
@@ -258,7 +260,7 @@ export default function SpotifyLoaderCard({
     const ratePerSecond = songsScannedFresh / elapsedSeconds;
     if (ratePerSecond <= 0) return null;
     return Math.ceil(remaining / ratePerSecond);
-  }, [totalSongsScannedFresh, totalSongsToScan, etaTick]);
+  }, [totalSongsScannedFresh, totalSongsToScan, etaNowMs]);
   const timeRemainingText = (() => {
     // Prefer explicit update status when provided
     if (progress.updateStatus === 'idle') return 'Ready to scan';
