@@ -288,7 +288,6 @@ export default function ChartReviewPage() {
   const [scanProgress, setScanProgress] = useState(0);
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [isScanning, setIsScanning] = useState(false);
-  const [isReady, setIsReady] = useState(false);
 
   // Classifier scores: fileName → score (0–1), loaded from public TSV
   const [classifierScores, setClassifierScores] = useState<Map<string, number>>(
@@ -586,13 +585,6 @@ export default function ChartReviewPage() {
       setQueuePos(prev => prev + 1);
     }
   }, [currentEntryIndex, failedIndices]);
-
-  // Mark ready once first chart is loaded
-  useEffect(() => {
-    if (currentChart && !isReady) {
-      setIsReady(true);
-    }
-  }, [currentChart, isReady]);
 
   // Auto-play current chart when it becomes active
   const lastPlayedRef = useRef<string | null>(null);
