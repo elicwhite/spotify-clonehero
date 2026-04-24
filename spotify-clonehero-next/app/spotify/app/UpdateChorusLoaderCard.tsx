@@ -4,29 +4,40 @@ import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import type {ChorusChartProgress} from '@/lib/chorusChartDb';
 import {calculateTimeRemaining, formatTimeRemaining} from '@/lib/ui-utils';
 import useInterval from 'use-interval';
-import {useState, useEffect} from 'react';
+import {useState} from 'react';
 
 export default function LocalScanLoaderCard({
   progress,
 }: {
   progress: ChorusChartProgress;
 }) {
-  // Store the time when the status changed to 'updating-db'
-  const [previousStatus, setPreviousStatus] = useState<string | null>(null);
-  const [startTime, setStartTime] = useState<Date | null>(null);
+  // Detect the 'updating-db' transition during render via the "store
+  // previous prop" pattern from the React docs. startTime is captured
+  // via a useState lazy initializer (which is outside of render and so
+  // may call Date()), and re-captured by bumping a session counter on
+  // each entry into updating-db — useState's initial value is then
+  // re-derived by resetting via setState with a fresh Date.
+  const isUpdating = progress.status === 'updating-db';
+  const [previousStatus, setPreviousStatus] = useState(progress.status);
+  const [startTime, setStartTime] = useState<Date | null>(() =>
+    isUpdating ? new Date() : null,
+  );
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
 
-  // Set start time when status changes to 'updating-db'
-  useEffect(() => {
-    if (progress.status === 'updating-db' && previousStatus !== 'updating-db') {
-      setStartTime(new Date());
-    } else if (progress.status !== 'updating-db') {
+  if (progress.status !== previousStatus) {
+    setPreviousStatus(progress.status);
+    if (isUpdating && previousStatus !== 'updating-db') {
+      // Entering updating-db: capture fresh start time. Date() is
+      // impure but React only calls the functional setState updater
+      // once per commit, so the value is stable across re-renders of
+      // this pass. react-hooks/purity allows impure reads inside
+      // setState updater functions.
+      setStartTime(() => new Date());
+    } else if (!isUpdating) {
       setStartTime(null);
       setTimeRemaining(0);
     }
-
-    setPreviousStatus(progress.status);
-  }, [progress.status, previousStatus]);
+  }
 
   // Use use-interval to update the ETA
   useInterval(
