@@ -5,9 +5,6 @@ import prettier from 'eslint-config-prettier/flat';
 export default defineConfig([
   {
     extends: [...nextCoreWebVitals],
-    rules: {
-      'react-hooks/refs': 'off',
-    },
   },
   // Must come last — turns off ESLint rules that conflict with Prettier.
   prettier,
