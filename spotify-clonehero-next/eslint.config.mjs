@@ -12,7 +12,6 @@ export default defineConfig([
       'react-hooks/purity': 'off',
       'react-hooks/incompatible-library': 'off',
       'react-hooks/immutability': 'off',
-      'react-hooks/component-hook-factories': 'off',
     },
   },
   // Must come last — turns off ESLint rules that conflict with Prettier.
