@@ -647,10 +647,32 @@ export default function ChartReviewPage() {
     setQueuePos(prev => prev + 1);
   }
 
-  // Auto-play current chart when it becomes active
+  // Track whether the user has interacted with the page yet. Chrome's
+  // autoplay policy blocks AudioContext.resume() until the page has
+  // received a user gesture; attempting a resume() before that point
+  // logs a browser-level warning (audioManager.ts:302) that no
+  // JS-level catch can suppress. Once the first keydown/click lands,
+  // subsequent resume() calls are allowed — from effects, promises,
+  // or anywhere — for the rest of the session.
+  const [hasInteracted, setHasInteracted] = useState(false);
+  useEffect(() => {
+    if (hasInteracted) return;
+    const mark = () => setHasInteracted(true);
+    window.addEventListener('keydown', mark, {once: true});
+    window.addEventListener('click', mark, {once: true});
+    return () => {
+      window.removeEventListener('keydown', mark);
+      window.removeEventListener('click', mark);
+    };
+  }, [hasInteracted]);
+
+  // Auto-play current chart when it becomes active. Gated on
+  // hasInteracted so we don't fire the browser's "AudioContext was
+  // not allowed to start" warning on initial mount.
   const lastPlayedRef = useRef<string | null>(null);
   const playCurrentChart = useCallback(() => {
     if (!currentChart) return;
+    if (!hasInteracted) return;
     const key = currentChart.song.handleInfo.fileName;
     if (lastPlayedRef.current === key) return;
     currentChart.audioManager
@@ -659,23 +681,12 @@ export default function ChartReviewPage() {
         lastPlayedRef.current = key;
       })
       .catch(err => {
-        console.warn('Auto-play failed (will retry on interaction):', err);
+        console.warn('Auto-play failed:', err);
       });
-  }, [currentChart]);
+  }, [currentChart, hasInteracted]);
 
   useEffect(() => {
     playCurrentChart();
-  }, [playCurrentChart]);
-
-  // Retry auto-play on any user interaction (AudioContext needs a gesture)
-  useEffect(() => {
-    const retry = () => playCurrentChart();
-    window.addEventListener('keydown', retry);
-    window.addEventListener('click', retry);
-    return () => {
-      window.removeEventListener('keydown', retry);
-      window.removeEventListener('click', retry);
-    };
   }, [playCurrentChart]);
 
   // ---------------------------------------------------------------------------
