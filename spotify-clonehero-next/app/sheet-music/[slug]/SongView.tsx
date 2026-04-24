@@ -460,12 +460,24 @@ export default function Renderer({
   ]);
 
   useEffect(() => {
+    // Track whether this effect run has been cleaned up. Without this,
+    // StrictMode's double-mount can race the async audioManager.ready
+    // chain: effect A creates AudioManager A, cleanup A runs before
+    // A.ready resolves (so the ref is still null and the cleanup's
+    // destroy() is a no-op), then A.ready.then() runs and parks A in
+    // audioManagerRef before B.ready.then() bails because the ref is
+    // non-null. The page ends up reading from the leaked A while B sits
+    // unused. The cancelled flag breaks that race: A's .then() bails on
+    // see-cancelled and the cleanup also destroys A directly.
+    let cancelled = false;
+    let createdAudioManager: AudioManager | null = null;
     async function run() {
       const clickTrack = await generateClickTrackFromMeasures(
         measures,
         clickVolumes,
         chartDelayMs,
       );
+      if (cancelled) return;
       const files = [
         ...audioFiles,
         {
@@ -476,6 +488,7 @@ export default function Renderer({
       const audioManager = new AudioManager(files, () => {
         setIsPlaying(false);
       });
+      createdAudioManager = audioManager;
 
       const processedTracks = new Set();
       let initialVolumeControls: VolumeControl[] = [];
@@ -540,8 +553,11 @@ export default function Renderer({
       setVolumeControls(initialVolumeControls);
 
       audioManager.ready.then(() => {
-        if (audioManagerRef.current) {
-          // This effect already ran and has been set up before we got here. Bail.
+        if (cancelled) {
+          // Effect was cleaned up before audio finished loading. Tear
+          // down the manager we just finished building rather than
+          // leaking it.
+          audioManager.destroy();
           return;
         }
         audioManager.setChartDelay(chartDelayMs / 1000);
@@ -576,11 +592,18 @@ export default function Renderer({
     run();
 
     return () => {
+      cancelled = true;
       lastAudioState.current = {
         currentTime: audioManagerRef.current?.currentTime ?? 0,
         wasPlaying: audioManagerRef.current?.isPlaying ?? false,
       };
+      // Destroy the manager whether or not it ever made it into the ref.
+      // .ready.then() may not have resolved yet — without this, the
+      // newly-created manager would leak past cleanup and its later
+      // .then() would still be racing to install itself in the ref.
+      // (Idempotent destroy() means double-calling is safe.)
       audioManagerRef.current?.destroy();
+      createdAudioManager?.destroy();
       audioManagerRef.current = null;
       setAudioManager(null);
     };
