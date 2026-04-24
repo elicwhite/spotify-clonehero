@@ -1,0 +1,20 @@
+# Dependencies and lockfiles
+node_modules
+yarn.lock
+package-lock.json
+pnpm-lock.yaml
+
+# Generated / build output
+.next
+out
+build
+coverage
+.vercel
+
+# Static assets (includes large JSON like charts.json and ONNX models)
+public
+*.min.js
+*.min.css
+
+# OS / editor
+.DS_Store

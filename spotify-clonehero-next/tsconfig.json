@@ -1,15 +1,8 @@
 {
   "compilerOptions": {
     "target": "es2015",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
-    "types": [
-      "jest",
-      "node"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "types": ["jest", "node"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -27,15 +20,10 @@
       }
     ],
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     }
   },
-  "typeRoots": [
-    "./node_modules/@types",
-    "src/@types"
-  ],
+  "typeRoots": ["./node_modules/@types", "src/@types"],
   "include": [
     "**/*.ts",
     "**/*.tsx",
@@ -45,10 +33,7 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules",
-    ".next"
-  ],
+  "exclude": ["node_modules", ".next"],
   "ts-node": {
     "compilerOptions": {
       "module": "CommonJS"
