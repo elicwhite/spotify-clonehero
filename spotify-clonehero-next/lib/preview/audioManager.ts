@@ -29,6 +29,7 @@ export class AudioManager {
   #duration: number = 0;
   #tracks: {[trackName: string]: AudioTrack} = {};
   #isInitialized: boolean = false;
+  #destroyed: boolean = false;
   #onSongEnded: (() => void) | null;
   #practiceModeConfig: PracticeModeConfig | null = null;
 
@@ -474,6 +475,14 @@ export class AudioManager {
   }
 
   destroy() {
+    // Idempotent: destroy() may be called multiple times on the same
+    // instance in StrictMode dev (setState updaters and effect bodies
+    // run twice), and AudioContext.close() on an already-closed context
+    // throws InvalidStateError. Guard with a flag so only the first
+    // call does teardown.
+    if (this.#destroyed) return;
+    this.#destroyed = true;
+
     Object.values(this.#tracks).forEach(track => {
       track.destroy();
     });
