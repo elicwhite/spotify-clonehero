@@ -1,6 +1,12 @@
 'use client';
 
-import {Suspense, useCallback, useEffect, useState} from 'react';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
 import Script from 'next/script';
 import {
@@ -46,15 +52,20 @@ import {
   type PipelineStep,
 } from '@/lib/drum-transcription/pipeline/runner';
 
+// WebGPU support is a static capability for the page lifetime, so the
+// subscribe function is a no-op. The server can't answer the question
+// at all, so getServerSnapshot returns null and callers treat that as
+// "checking" — which matches the prior initial state.
+const webGPUSubscribe = () => () => {};
+const webGPUGetSnapshot = () => 'gpu' in navigator;
+const webGPUGetServerSnapshot = (): boolean | null => null;
+
 function useWebGPUCheck() {
-  const [supported, setSupported] = useState<boolean | null>(null);
-
-  // Check after hydration to avoid server/client mismatch
-  useEffect(() => {
-    setSupported('gpu' in navigator);
-  }, []);
-
-  return supported;
+  return useSyncExternalStore(
+    webGPUSubscribe,
+    webGPUGetSnapshot,
+    webGPUGetServerSnapshot,
+  );
 }
 
 /**
