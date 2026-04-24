@@ -28,21 +28,25 @@ export default function EditorMCPTools() {
   const {executeCommand} = useExecuteCommand();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
 
-  // Use refs to capture latest values without re-registering tools
+  // Use refs to capture latest values without re-registering tools.
+  // The refs are updated in an effect so the writes happen after
+  // commit, not during render — see react-hooks/refs.
   const stateRef = useRef(state);
-  stateRef.current = state;
   const executeCommandRef = useRef(executeCommand);
-  executeCommandRef.current = executeCommand;
   const undoRef = useRef(undo);
-  undoRef.current = undo;
   const redoRef = useRef(redo);
-  redoRef.current = redo;
   const canUndoRef = useRef(canUndo);
-  canUndoRef.current = canUndo;
   const canRedoRef = useRef(canRedo);
-  canRedoRef.current = canRedo;
   const dispatchRef = useRef(dispatch);
-  dispatchRef.current = dispatch;
+  useEffect(() => {
+    stateRef.current = state;
+    executeCommandRef.current = executeCommand;
+    undoRef.current = undo;
+    redoRef.current = redo;
+    canUndoRef.current = canUndo;
+    canRedoRef.current = canRedo;
+    dispatchRef.current = dispatch;
+  });
 
   useEffect(() => {
     if (
