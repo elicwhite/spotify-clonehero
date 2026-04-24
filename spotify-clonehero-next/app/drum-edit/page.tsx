@@ -410,6 +410,10 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [audioData, setAudioData] = useState<Float32Array | null>(null);
   const [audioChannels, setAudioChannels] = useState(2);
+  // Mirrors audioManagerRef (shared via context for event-handler reads)
+  // into render-visible state so the CloneHeroRenderer prop is passed
+  // without reading ref.current during render.
+  const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
 
   // Auto-save: write edited chart to OPFS
   const saveFn = useCallback(async () => {
@@ -487,6 +491,7 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
           getChartDelayMs(chartDoc.parsedChart.metadata) / 1000,
         );
         audioManagerRef.current = audioManager;
+        setAudioManager(audioManager);
 
         // 8. Decode first audio file to raw PCM for waveform display
         try {
@@ -535,6 +540,7 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
       cancelled = true;
       audioManagerRef.current?.destroy();
       audioManagerRef.current = null;
+      setAudioManager(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
@@ -602,7 +608,7 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
   }
 
   const {chart} = state;
-  if (!chart || !audioManagerRef.current || !cloneHeroMetadata) {
+  if (!chart || !audioManager || !cloneHeroMetadata) {
     return null;
   }
 
@@ -611,7 +617,7 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
       <ChartEditor
         metadata={cloneHeroMetadata}
         chart={chart}
-        audioManager={audioManagerRef.current}
+        audioManager={audioManager}
         audioData={audioData ?? undefined}
         audioChannels={audioChannels}
         durationSeconds={durationSeconds}
