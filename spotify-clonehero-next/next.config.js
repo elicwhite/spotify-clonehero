@@ -1,7 +1,17 @@
+const path = require('path');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Prevent onnxruntime-web from being bundled server-side (it uses browser APIs)
-  serverExternalPackages: ['onnxruntime-web'],
+  // Pin Turbopack workspace root to this directory (parent has its own yarn.lock)
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
+  // Externalize server-side bundling for browser-only packages. Next 16's
+  // Client Component SSR otherwise tries to statically analyze their code:
+  //   - onnxruntime-web uses browser-only APIs
+  //   - @eshaz/web-worker contains dynamic `import(mod)` in its node.js shim
+  //     (reached via audio-decode -> mpg123-decoder -> @wasm-audio-decoders)
+  serverExternalPackages: ['onnxruntime-web', '@eshaz/web-worker'],
   images: {
     remotePatterns: [
       {
@@ -51,38 +61,6 @@ const nextConfig = {
   },
 };
 
-// Injected content via Sentry wizard below
-
-const {withSentryConfig} = require('@sentry/nextjs');
-
-module.exports = withSentryConfig(nextConfig, {
-  // For all available options, see:
-  // https://www.npmjs.com/package/@sentry/webpack-plugin#options
-
-  org: 'clone-hero-chart-tools',
-  project: 'frontend',
-
-  // Only print logs for uploading source maps in CI
-  silent: !process.env.CI,
-
-  // For all available options, see:
-  // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
-
-  // Upload a larger set of source maps for prettier stack traces (increases build time)
-  widenClientFileUpload: true,
-
-  // Uncomment to route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
-  // This can increase your server load as well as your hosting bill.
-  // Note: Check that the configured route will not match with your Next.js middleware, otherwise reporting of client-
-  // side errors will fail.
-  // tunnelRoute: "/monitoring",
-
-  // Automatically tree-shake Sentry logger statements to reduce bundle size
-  disableLogger: true,
-
-  // Enables automatic instrumentation of Vercel Cron Monitors. (Does not yet work with App Router route handlers.)
-  // See the following for more information:
-  // https://docs.sentry.io/product/crons/
-  // https://vercel.com/docs/cron-jobs
-  automaticVercelMonitors: true,
-});
+// MEMORY DEBUG: Sentry wrap disabled to isolate Next 16 memory regression.
+// Restore `withSentryConfig(...)` after diagnosis.
+module.exports = nextConfig;
