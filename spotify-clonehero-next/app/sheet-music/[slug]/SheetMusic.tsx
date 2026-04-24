@@ -1,12 +1,10 @@
 import {Difficulty, parseChartFile} from '@eliwhite/scan-chart';
 import {
-  RefObject,
   useEffect,
   useMemo,
   useRef,
   useState,
   forwardRef,
-  createRef,
 } from 'react';
 import convertToVexFlow from './convertToVexflow';
 import {
@@ -54,7 +52,6 @@ export default function SheetMusic({
 }) {
   const vexflowContainerRef = useRef<HTMLDivElement>(null!);
   const [windowWidth, setWindowWidth] = useState<number>(window.innerWidth);
-  const highlightsRef = useRef<RefObject<HTMLButtonElement>[]>([]);
   const [highlightedMeasureIndex, setHighlightedMeasureIndex] =
     useState<number>(1);
 
@@ -70,22 +67,20 @@ export default function SheetMusic({
     return createConsolidatedTimePositionMap(renderData);
   }, [renderData]);
 
-  const debouncedOnResize = useMemo(
-    () =>
-      debounce(() => {
-        const width =
-          vexflowContainerRef.current?.offsetWidth ?? window.innerWidth;
-        setWindowWidth(width);
-      }, 50),
-    [],
-  );
-
   useEffect(() => {
+    // Create the debounced handler inside the effect so the ref access
+    // lives in an effect-scoped closure, not a render-phase useMemo. The
+    // debounce still only fires the inner body 50ms after the last resize.
+    const debouncedOnResize = debounce(() => {
+      const width =
+        vexflowContainerRef.current?.offsetWidth ?? window.innerWidth;
+      setWindowWidth(width);
+    }, 50);
     window.addEventListener('resize', debouncedOnResize);
     return () => {
       window.removeEventListener('resize', debouncedOnResize);
     };
-  }, [debouncedOnResize]);
+  }, []);
 
   useEffect(() => {
     if (!vexflowContainerRef.current) {
@@ -122,10 +117,6 @@ export default function SheetMusic({
       practiceModeConfig,
     );
     setRenderData(data);
-
-    highlightsRef.current = data.map(() =>
-      createRef(),
-    ) as RefObject<HTMLButtonElement>[];
   }, [
     measures,
     showBarNumbers,
@@ -162,7 +153,6 @@ export default function SheetMusic({
     return (
       <MeasureHighlight
         key={index}
-        ref={highlightsRef.current[index]}
         style={{
           top: stave.getY() * zoom + 10,
           left: stave.getX() * zoom - 5,
