@@ -170,18 +170,6 @@ export default function Renderer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [volumeControls, setVolumeControls] = useState<VolumeControl[]>([]);
   const [isMobileMode, setIsMobileMode] = useState(false);
-  const [detectedFills, setDetectedFills] = useState<
-    Array<{
-      fillNumber: number;
-      startTimeMs: number;
-      endTimeMs: number;
-      durationMs: number;
-      startTick: number;
-      endTick: number;
-      measureStartMs: number;
-      measureNumber: number;
-    }>
-  >([]);
 
   // Tempo control state
   const [tempo, setTempo] = useState(persistedSettings.tempo ?? 1.0);
@@ -659,24 +647,25 @@ export default function Renderer({
     }
   }, [metadata]);
 
-  // Run fill detection when chart and track are loaded (dev mode only)
-  useEffect(() => {
-    // Only run fill detection in development mode
+  // Derive fills from chart + track (dev mode only). Keeping this as
+  // a useMemo rather than useState-in-effect means the component's
+  // render output is a pure function of its props.
+  const fillDetectionResult = useMemo(() => {
     if (process.env.NODE_ENV !== 'development') {
-      return;
+      return {fills: [], error: null as unknown};
     }
-
+    if (track.instrument !== 'drums') {
+      return {fills: [], error: null as unknown};
+    }
     try {
-      // Only run fill detection if we have a drums track
-      if (track.instrument !== 'drums') {
-        setDetectedFills([]); // Clear fills for non-drums tracks
-        return;
-      }
-
-      const fills = extractFills(chart, track, defaultConfig);
-
-      // Store fills in state for UI
-      const fillsForUI = fills.map((fill, index) => ({
+      return {fills: extractFills(chart, track, defaultConfig), error: null};
+    } catch (error) {
+      return {fills: [], error};
+    }
+  }, [chart, track]);
+  const detectedFills = useMemo(
+    () =>
+      fillDetectionResult.fills.map((fill, index) => ({
         fillNumber: index + 1,
         startTimeMs: fill.startMs,
         endTimeMs: fill.endMs,
@@ -685,56 +674,19 @@ export default function Renderer({
         endTick: fill.endTick,
         measureStartMs: fill.measureStartMs,
         measureNumber: fill.measureNumber,
-      }));
-      setDetectedFills(fillsForUI);
+      })),
+    [fillDetectionResult],
+  );
 
-      console.log('🥁 Detected Drum Fills Debug Info:', {
-        songName: metadata.name,
-        artist: metadata.artist,
-        charter: metadata.charter,
-        difficulty: track.difficulty,
-        totalFills: fills.length,
-        fillDetails: fills.map((fill, index) => ({
-          fillNumber: index + 1,
-          measureNumber: fill.measureNumber,
-          measureStartMs: fill.measureStartMs,
-          startTick: fill.startTick,
-          endTick: fill.endTick,
-          startTimeMs: fill.startMs,
-          endTimeMs: fill.endMs,
-          durationMs: fill.endMs - fill.startMs,
-          durationBeats: (fill.endTick - fill.startTick) / chart.resolution,
-          scores: {
-            densityZ: fill.densityZ,
-            grooveDistance: fill.grooveDist,
-            tomRatioJump: fill.tomRatioJump,
-            hatDropout: fill.hatDropout,
-            kickDrop: fill.kickDrop,
-            ioiStdZ: fill.ioiStdZ,
-            ngramNovelty: fill.ngramNovelty,
-            samePadBurst: fill.samePadBurst,
-            crashResolve: fill.crashResolve,
-          },
-          combinedScore: fill.densityZ + fill.grooveDist + fill.tomRatioJump,
-        })),
-        summary:
-          fills.length > 0
-            ? {
-                shortestFillMs: Math.min(
-                  ...fills.map(f => f.endMs - f.startMs),
-                ),
-                longestFillMs: Math.max(...fills.map(f => f.endMs - f.startMs)),
-                avgFillDurationMs:
-                  fills.reduce((sum, f) => sum + (f.endMs - f.startMs), 0) /
-                  fills.length,
-                totalFillTimeMs: fills.reduce(
-                  (sum, f) => sum + (f.endMs - f.startMs),
-                  0,
-                ),
-              }
-            : null,
-      });
-    } catch (error) {
+  // Dev-mode fill-detection debug logging, separated from the pure
+  // derivation above so the logging side effect runs only when the
+  // underlying result actually changes.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+    if (track.instrument !== 'drums') return;
+
+    const {fills, error} = fillDetectionResult;
+    if (error) {
       console.warn('⚠️ Fill detection failed:', error);
       console.log('Chart structure for debugging:', {
         trackInstrument: track.instrument,
@@ -743,9 +695,56 @@ export default function Renderer({
         tempoCount: chart.tempos?.length || 0,
         resolution: chart.resolution,
       });
-      setDetectedFills([]); // Clear fills on error
+      return;
     }
-  }, [chart, track, metadata]);
+
+    console.log('🥁 Detected Drum Fills Debug Info:', {
+      songName: metadata.name,
+      artist: metadata.artist,
+      charter: metadata.charter,
+      difficulty: track.difficulty,
+      totalFills: fills.length,
+      fillDetails: fills.map((fill, index) => ({
+        fillNumber: index + 1,
+        measureNumber: fill.measureNumber,
+        measureStartMs: fill.measureStartMs,
+        startTick: fill.startTick,
+        endTick: fill.endTick,
+        startTimeMs: fill.startMs,
+        endTimeMs: fill.endMs,
+        durationMs: fill.endMs - fill.startMs,
+        durationBeats: (fill.endTick - fill.startTick) / chart.resolution,
+        scores: {
+          densityZ: fill.densityZ,
+          grooveDistance: fill.grooveDist,
+          tomRatioJump: fill.tomRatioJump,
+          hatDropout: fill.hatDropout,
+          kickDrop: fill.kickDrop,
+          ioiStdZ: fill.ioiStdZ,
+          ngramNovelty: fill.ngramNovelty,
+          samePadBurst: fill.samePadBurst,
+          crashResolve: fill.crashResolve,
+        },
+        combinedScore: fill.densityZ + fill.grooveDist + fill.tomRatioJump,
+      })),
+      summary:
+        fills.length > 0
+          ? {
+              shortestFillMs: Math.min(
+                ...fills.map(f => f.endMs - f.startMs),
+              ),
+              longestFillMs: Math.max(...fills.map(f => f.endMs - f.startMs)),
+              avgFillDurationMs:
+                fills.reduce((sum, f) => sum + (f.endMs - f.startMs), 0) /
+                fills.length,
+              totalFillTimeMs: fills.reduce(
+                (sum, f) => sum + (f.endMs - f.startMs),
+                0,
+              ),
+            }
+          : null,
+    });
+  }, [fillDetectionResult, track, chart, metadata]);
 
   // Function to play from a specific fill
   const playFill = useCallback((fillStartTimeMs: number) => {
