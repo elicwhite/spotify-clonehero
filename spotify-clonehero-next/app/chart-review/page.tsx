@@ -347,6 +347,9 @@ export default function ChartReviewPage() {
   // Queue ordered by classifier score distance from 0.5 (most uncertain first),
   // expanding outward in both directions. Songs absent from the classifier go last.
   const [queue, setQueue] = useState<number[]>([]);
+  // Current position in queue. Declared before the effect below so the
+  // effect's setQueuePos reference is to an already-initialized binding.
+  const [queuePos, setQueuePos] = useState(0);
   useEffect(() => {
     if (allEntries.length === 0) return;
 
@@ -384,9 +387,6 @@ export default function ChartReviewPage() {
     // Only rebuild when entries, classifier data, or focus score changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allEntries, classifierScores, focusScore]);
-
-  // Current position in queue
-  const [queuePos, setQueuePos] = useState(0);
 
   // Save function
   const saveRatings = useCallback(async () => {
