@@ -8,6 +8,31 @@ const LINE_HEIGHT = 80;
 const TRANSITION_MS = 350;
 const CONTAINER_HEIGHT = LINE_HEIGHT * 3;
 
+// This component is rendered by Remotion as a deterministic frame-by-
+// frame video treatment. The bouncing ball is positioned by measuring
+// syllable <span> geometry via getBoundingClientRect so the ball
+// tracks the actual rendered widths of each syllable — those widths
+// depend on the font metrics and available container width, both of
+// which are only known after layout.
+//
+// Remotion renders this component once per video frame with a fresh
+// currentMs. On the *first* frame of a session the refs are null and
+// the ball position falls back to null (the `if (…ref.current…)`
+// guards); on subsequent frames the previous frame's DOM is still
+// attached, so the measurements are of the previous frame's layout —
+// which is the same as the current frame's for all practical
+// purposes because nothing about the layout depends on currentMs
+// except syllable highlight colors.
+//
+// react-hooks/refs flags reading ref.current during render because in
+// a concurrent React app, renders can be discarded before commit and
+// ref reads would then be of stale DOM. Remotion's video renderer
+// doesn't use concurrent rendering and commits every frame it
+// renders, so the assumption the rule is enforcing doesn't hold
+// here. We disable the rule for this file rather than try to
+// restructure around an invariant that doesn't apply.
+/* eslint-disable react-hooks/refs */
+
 export const BounceTreatment: React.FC<TreatmentProps> = ({
   lines,
   currentMs,
