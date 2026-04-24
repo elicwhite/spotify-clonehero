@@ -126,21 +126,46 @@ export default function Renderer({
     tempo?: number;
     zoom?: number;
   };
-  const [playClickTrack, setPlayClickTrack] = useState(true);
+  // Read persisted settings once per mount so each useState below can
+  // seed itself directly — avoids the render → effect → N × setState
+  // cascade that the old implementation required.
+  const [persistedSettings] = useState<PersistedSettings>(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      return raw ? (JSON.parse(raw) as PersistedSettings) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [playClickTrack, setPlayClickTrack] = useState(
+    persistedSettings.playClickTrack ?? true,
+  );
   const [clickTrackConfigurationOpen, setClickTrackConfigurationOpen] =
     useState(false);
-  const [masterClickVolume, setMasterClickVolume] = useState(0.7);
-  const [clickVolumes, setClickVolumes] = useState<ClickVolumes>({
+  const [masterClickVolume, setMasterClickVolume] = useState(
+    persistedSettings.masterClickVolume ?? 0.7,
+  );
+  const [clickVolumes, setClickVolumes] = useState<ClickVolumes>(() => ({
     wholeNote: 1,
     quarterNote: 0.75, //0.75,
     eighthNote: 0.1, // 0.5,
     tripletNote: 0,
-  });
+    ...persistedSettings.clickVolumes,
+  }));
 
-  const [showBarNumbers, setShowBarNumbers] = useState(false);
-  const [enableColors, setEnableColors] = useState(true);
-  const [showLyrics, setShowLyrics] = useState(true);
-  const [viewCloneHero, setViewCloneHero] = useState(false);
+  const [showBarNumbers, setShowBarNumbers] = useState(
+    persistedSettings.showBarNumbers ?? false,
+  );
+  const [enableColors, setEnableColors] = useState(
+    persistedSettings.enableColors ?? true,
+  );
+  const [showLyrics, setShowLyrics] = useState(
+    persistedSettings.showLyrics ?? true,
+  );
+  const [viewCloneHero, setViewCloneHero] = useState(
+    persistedSettings.viewCloneHero ?? false,
+  );
   const [currentPlayback, setCurrentPlayback] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volumeControls, setVolumeControls] = useState<VolumeControl[]>([]);
@@ -159,10 +184,10 @@ export default function Renderer({
   >([]);
 
   // Tempo control state
-  const [tempo, setTempo] = useState(1.0);
+  const [tempo, setTempo] = useState(persistedSettings.tempo ?? 1.0);
 
   // Zoom control state
-  const [zoom, setZoom] = useState(1.0);
+  const [zoom, setZoom] = useState(persistedSettings.zoom ?? 1.0);
 
   // Practice mode state
   const [practiceMode, setPracticeMode] = useState<PracticeModeConfig | null>(
@@ -179,9 +204,12 @@ export default function Renderer({
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const availableDifficulties = getDrumDifficulties(chart);
-  const [selectedDifficulty, setSelectedDifficulty] = useState(
-    availableDifficulties[0],
-  );
+  const [selectedDifficulty, setSelectedDifficulty] = useState(() => {
+    const persisted = persistedSettings.selectedDifficulty;
+    return persisted && availableDifficulties.includes(persisted)
+      ? persisted
+      : availableDifficulties[0];
+  });
 
   const audioManagerRef = useRef<AudioManager | null>(null);
   const router = useRouter();
@@ -405,63 +433,6 @@ export default function Renderer({
     wasPlaying: false,
   });
 
-  // Load persisted settings on first mount
-  const hasLoadedSettingsRef = useRef(false);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
-  useEffect(() => {
-    if (hasLoadedSettingsRef.current) return;
-    hasLoadedSettingsRef.current = true;
-    try {
-      if (typeof window === 'undefined') return;
-      const raw = localStorage.getItem(SETTINGS_KEY);
-      if (raw) {
-        const parsed: PersistedSettings = JSON.parse(raw);
-
-        if (parsed.playClickTrack !== undefined) {
-          setPlayClickTrack(parsed.playClickTrack);
-        }
-        if (parsed.masterClickVolume !== undefined) {
-          setMasterClickVolume(parsed.masterClickVolume);
-        }
-        if (parsed.clickVolumes) {
-          setClickVolumes(prev => ({...prev, ...parsed.clickVolumes!}));
-        }
-        if (parsed.enableColors !== undefined) {
-          setEnableColors(parsed.enableColors);
-        }
-        if (parsed.showLyrics !== undefined) {
-          setShowLyrics(parsed.showLyrics);
-        }
-        if (parsed.viewCloneHero !== undefined) {
-          setViewCloneHero(parsed.viewCloneHero);
-        }
-        if (parsed.showBarNumbers !== undefined) {
-          setShowBarNumbers(parsed.showBarNumbers);
-        }
-        if (
-          parsed.selectedDifficulty &&
-          availableDifficulties.includes(parsed.selectedDifficulty)
-        ) {
-          setSelectedDifficulty(parsed.selectedDifficulty);
-        }
-
-        // Restore tempo if available
-        if (parsed.tempo) {
-          setTempo(parsed.tempo);
-        }
-
-        // Restore zoom if available
-        if (parsed.zoom) {
-          setZoom(parsed.zoom);
-        }
-      }
-    } catch (e) {
-      // noop on parse errors
-    }
-    setSettingsLoaded(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Persist settings whenever they change
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -496,9 +467,6 @@ export default function Renderer({
   ]);
 
   useEffect(() => {
-    // Wait for settings to be loaded before initializing audio manager
-    if (!settingsLoaded) return;
-
     async function run() {
       const clickTrack = await generateClickTrackFromMeasures(
         measures,
@@ -627,7 +595,6 @@ export default function Renderer({
     clickVolumes,
     playClickTrack,
     masterClickVolume,
-    settingsLoaded,
     chartDelayMs,
     toAudioPracticeMode,
   ]);
