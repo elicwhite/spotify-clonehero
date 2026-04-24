@@ -86,11 +86,20 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
     useState<PipelineProgress | null>(null);
   const [pipelineAudioFile, setPipelineAudioFile] = useState<File | null>(null);
 
-  // Track whether a project opened via URL needs pipeline processing.
-  // While checkingProject is true, we show a brief "Checking project..." state.
-  // If projectNeedsProcessing becomes true, we show ProcessingView instead of EditorApp.
-  const [checkingProject, setCheckingProject] = useState(false);
-  const [projectNeedsProcessing, setProjectNeedsProcessing] = useState(false);
+  // Result of checking a project's stage, tagged with the projectId we
+  // checked for. Tagging lets us derive UI state from a single source:
+  // if the tag doesn't match the current projectId, we haven't finished
+  // checking yet.
+  const [projectCheck, setProjectCheck] = useState<{
+    projectId: string;
+    needsProcessing: boolean;
+  } | null>(null);
+  const checkingProject =
+    !!projectId && projectCheck?.projectId !== projectId;
+  const projectNeedsProcessing =
+    !!projectId &&
+    projectCheck?.projectId === projectId &&
+    projectCheck.needsProcessing;
 
   // Delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
@@ -105,30 +114,23 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
   // before rendering EditorApp (which would show a generic spinner and fail
   // because chart files don't exist yet for incomplete projects).
   useEffect(() => {
-    if (!projectId) {
-      setProjectNeedsProcessing(false);
-      setCheckingProject(false);
-      return;
-    }
+    if (!projectId) return;
 
     let cancelled = false;
 
     async function checkProjectStage() {
-      setCheckingProject(true);
       try {
         const meta = await getProject(projectId!);
         if (cancelled) return;
 
         if (meta.stage === 'editing' || meta.stage === 'exported') {
           // Project is ready for the editor
-          setProjectNeedsProcessing(false);
-          setCheckingProject(false);
+          setProjectCheck({projectId: projectId!, needsProcessing: false});
           return;
         }
 
         // Project needs pipeline processing — show ProcessingView and resume
-        setProjectNeedsProcessing(true);
-        setCheckingProject(false);
+        setProjectCheck({projectId: projectId!, needsProcessing: true});
 
         const initialStep: PipelineStep =
           meta.stage === 'uploaded'
@@ -153,7 +155,7 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
 
           toast.success('Processing complete! Opening editor.');
           setPipelineProgress(null);
-          setProjectNeedsProcessing(false);
+          setProjectCheck({projectId: projectId!, needsProcessing: false});
         } catch (err) {
           if (cancelled) return;
           const message =
@@ -171,8 +173,7 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
       } catch {
         if (cancelled) return;
         // Can't load metadata — let EditorApp handle the error
-        setProjectNeedsProcessing(false);
-        setCheckingProject(false);
+        setProjectCheck({projectId: projectId!, needsProcessing: false});
       }
     }
 
@@ -382,7 +383,11 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
   const handleCancelPipeline = useCallback(() => {
     setPipelineProgress(null);
     setPipelineAudioFile(null);
-    setProjectNeedsProcessing(false);
+    // Preserve the tag for the current project so checkingProject stays
+    // false; we've just decided this project no longer needs processing.
+    setProjectCheck(prev =>
+      prev ? {projectId: prev.projectId, needsProcessing: false} : null,
+    );
   }, []);
 
   const handleBackToProjects = useCallback(() => {
