@@ -101,13 +101,24 @@ export default function SpotifyLoaderCard({
   const isRateLimited = rateLimitCountdown > 0;
 
   const [countdown, setCountdown] = useState(rateLimitCountdown);
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  // containerEl is stored as state (via a callback ref) rather than a
+  // useRef because the IntersectionObserver root is passed as a prop
+  // to PlaylistRow — PlaylistRow needs to mount a *new* observer when
+  // the root element becomes available, which only happens if the
+  // prop value updates, which only happens if React re-renders.
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
   const itemRefs = useRef<{[id: string]: HTMLDivElement | null}>({});
   const prevFirstScanningId = useRef<string | null>(null);
   const [inViewMap, setInViewMap] = useState<{[id: string]: boolean}>({});
   const [etaNowMs, setEtaNowMs] = useState(() => Date.now());
-  const scanStartTimeRef = useRef<number | null>(null);
-  const initialCachedCountsRef = useRef<{[id: string]: number}>({});
+  // scanStart / initialCachedCounts are read by useMemo during render
+  // (for totalSongsToScan and observedEtaSeconds), so they need to be
+  // state — reading a useRef from inside a useMemo is the
+  // react-hooks/refs "can't access ref during render" violation.
+  const [scanStartTime, setScanStartTime] = useState<number | null>(null);
+  const [initialCachedCounts, setInitialCachedCounts] = useState<{
+    [id: string]: number;
+  }>({});
 
   const handleRowRef = useCallback((id: string, el: HTMLDivElement | null) => {
     itemRefs.current[id] = el;
@@ -179,7 +190,7 @@ export default function SpotifyLoaderCard({
         if (playlist.totalSongs > MAX_PLAYLIST_TRACKS_TO_FETCH) return acc;
 
         // Get initial cached count (stored when scanning started)
-        const initialCached = initialCachedCountsRef.current[playlist.id] || 0;
+        const initialCached = initialCachedCounts[playlist.id] || 0;
 
         // Songs that need fresh scanning = total - initially cached
         const songsToScan = Math.max(0, playlist.totalSongs - initialCached);
@@ -196,7 +207,7 @@ export default function SpotifyLoaderCard({
       },
       {totalSongsToScan: 0, totalSongsScannedFresh: 0},
     );
-  }, [allItems]);
+  }, [allItems, initialCachedCounts]);
 
   const totalRemainingSongs = scanningPlaylists.reduce(
     (acc, p) => acc + Math.max(0, p.totalSongs - p.scannedSongs),
@@ -219,25 +230,27 @@ export default function SpotifyLoaderCard({
     return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   };
 
-  // Initialize scan start timestamp and cache initial cached counts when scanning begins
-  useEffect(() => {
-    if (
-      (progress.updateStatus === 'fetching' || hasStarted) &&
-      !scanStartTimeRef.current
-    ) {
-      scanStartTimeRef.current = Date.now();
-
-      // Store initial cached counts for each item
+  // Capture scan start timestamp and cache initial counts once, the
+  // first time scanning begins. Using the adjust-during-render pattern
+  // (inline setState) instead of a useEffect means the timestamp is
+  // captured on the render where scanShouldStart flips true — before
+  // the commit — so the ETA memo below doesn't flicker through null on
+  // its first run post-transition. Date.now() and the object
+  // construction live inside functional setState updaters, which React
+  // invokes during reconciliation (outside the purity-checked render
+  // body), so react-hooks/purity is satisfied.
+  const scanShouldStart =
+    progress.updateStatus === 'fetching' || hasStarted;
+  if (scanShouldStart && scanStartTime === null) {
+    setScanStartTime(() => Date.now());
+    setInitialCachedCounts(() => {
+      const counts: {[id: string]: number} = {};
       allItems.forEach(item => {
-        if (!initialCachedCountsRef.current[item.id]) {
-          initialCachedCountsRef.current[item.id] = item.scannedSongs || 0;
-        }
+        counts[item.id] = item.scannedSongs || 0;
       });
-    }
-    if (progress.updateStatus === 'complete') {
-      // keep the timestamp for now; could be reset if needed later
-    }
-  }, [progress.updateStatus, hasStarted, allItems]);
+      return counts;
+    });
+  }
 
   // Tick periodically during fetching to refresh ETA calculations.
   // We capture the timestamp into state so the memo below stays a pure
@@ -250,8 +263,8 @@ export default function SpotifyLoaderCard({
 
   // Compute ETA using observed rate since scan started (only for fresh scanning)
   const observedEtaSeconds = useMemo(() => {
-    if (!scanStartTimeRef.current) return null;
-    const elapsedMs = etaNowMs - scanStartTimeRef.current;
+    if (scanStartTime === null) return null;
+    const elapsedMs = etaNowMs - scanStartTime;
     const elapsedSeconds = elapsedMs / 1000;
     const songsScannedFresh = totalSongsScannedFresh;
     const totalSongsToScanCount = totalSongsToScan;
@@ -260,7 +273,7 @@ export default function SpotifyLoaderCard({
     const ratePerSecond = songsScannedFresh / elapsedSeconds;
     if (ratePerSecond <= 0) return null;
     return Math.ceil(remaining / ratePerSecond);
-  }, [totalSongsScannedFresh, totalSongsToScan, etaNowMs]);
+  }, [totalSongsScannedFresh, totalSongsToScan, etaNowMs, scanStartTime]);
   const timeRemainingText = (() => {
     // Prefer explicit update status when provided
     if (progress.updateStatus === 'idle') return 'Ready to scan';
@@ -302,7 +315,7 @@ export default function SpotifyLoaderCard({
     prevFirstScanningId.current = currentId;
     if (!currentId) return;
 
-    const container = containerRef.current;
+    const container = containerEl;
     const target = itemRefs.current[currentId];
     if (!container || !target) return;
 
@@ -355,7 +368,7 @@ export default function SpotifyLoaderCard({
             </div>
           )}
 
-          <div ref={containerRef} className="h-96 overflow-y-auto px-6 pb-6">
+          <div ref={setContainerEl} className="h-96 overflow-y-auto px-6 pb-6">
             <div className="border rounded-lg bg-card overflow-hidden">
               {allItems.map(playlist => (
                 <PlaylistRow
@@ -363,7 +376,7 @@ export default function SpotifyLoaderCard({
                   playlist={playlist}
                   onRef={handleRowRef}
                   onInViewChange={handleInViewChange}
-                  root={containerRef.current}
+                  root={containerEl}
                 />
               ))}
             </div>
