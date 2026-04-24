@@ -117,30 +117,38 @@ function DrumEditInner() {
 
   // Project list for the load screen
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [loadingProjects, setLoadingProjects] = useState(false);
+  // projectsLoaded starts false and stays true once we've completed a
+  // listProjects() call. loadingProjects is derived from it so the
+  // effect below doesn't need to flip a loading flag synchronously.
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
+  const loadingProjects = pageState === 'load' && !projectsLoaded;
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
 
   // Data loaded for the editor
   const [projectMeta, setProjectMeta] = useState<ProjectMetadata | null>(null);
 
-  const loadProjectList = useCallback(async () => {
-    setLoadingProjects(true);
-    try {
-      const list = await listProjects();
-      setProjects(list);
-    } catch (err) {
-      console.warn('Failed to load drum-edit projects:', err);
-    } finally {
-      setLoadingProjects(false);
-    }
-  }, []);
-
-  // Load project list when showing the load screen
+  // Load project list when showing the load screen. All state writes
+  // happen in the promise callback, so the effect body itself does no
+  // synchronous setState.
   useEffect(() => {
-    if (pageState === 'load') {
-      loadProjectList();
-    }
-  }, [pageState, loadProjectList]);
+    if (pageState !== 'load') return;
+
+    let cancelled = false;
+    listProjects()
+      .then(list => {
+        if (!cancelled) {
+          setProjects(list);
+          setProjectsLoaded(true);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load drum-edit projects:', err);
+        if (!cancelled) setProjectsLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pageState]);
 
   // Handle chart loaded from drop zone (new project)
   const handleChartLoaded = useCallback(
