@@ -69,22 +69,23 @@ export default function TransportControls({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [tempo, setTempo] = useState(1.0);
-  const animationFrameRef = useRef<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Update current time display via animation frame
-  const updateTime = useCallback(() => {
-    if (audioManager.isInitialized) {
-      setCurrentTime(Math.min(audioManager.currentTime, durationSeconds));
-    }
-    setIsPlaying(audioManager.isPlaying);
-    animationFrameRef.current = requestAnimationFrame(updateTime);
-  }, [audioManager, durationSeconds]);
-
+  // Poll AudioManager every frame to drive the time/playing displays.
+  // Keep both the loop function and its handle local to the effect so
+  // the function doesn't need to reference itself through a closure.
   useEffect(() => {
-    animationFrameRef.current = requestAnimationFrame(updateTime);
-    return () => cancelAnimationFrame(animationFrameRef.current);
-  }, [updateTime]);
+    let rafId = 0;
+    const tick = () => {
+      if (audioManager.isInitialized) {
+        setCurrentTime(Math.min(audioManager.currentTime, durationSeconds));
+      }
+      setIsPlaying(audioManager.isPlaying);
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [audioManager, durationSeconds]);
 
   // Play/Pause toggle
   const togglePlayPause = useCallback(async () => {
