@@ -391,11 +391,20 @@ export default function ChartReviewPage() {
     [ratings],
   );
 
-  // Refs for save logic
+  // Refs for save logic. These hold the latest values of React state so
+  // async save callbacks can read them without capturing stale closures.
+  // Updating via useEffect (rather than ref.current = value during render)
+  // keeps the assignment out of the render phase, which react-hooks/refs
+  // requires and which also protects against StrictMode double-render
+  // triggering two writes for the same commit.
   const ratingsRef = useRef(ratings);
-  ratingsRef.current = ratings;
+  useEffect(() => {
+    ratingsRef.current = ratings;
+  });
   const tsvHandleRef = useRef(tsvHandle);
-  tsvHandleRef.current = tsvHandle;
+  useEffect(() => {
+    tsvHandleRef.current = tsvHandle;
+  });
   const unsavedCountRef = useRef(0);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRatingTimeRef = useRef(0);
@@ -820,9 +829,13 @@ export default function ChartReviewPage() {
     }
   }, [currentChart, nextChart, queue, queuePos]);
 
-  // Ref for current chart (used by seek handler to avoid stale closures)
+  // Ref for current chart (used by seek handler to avoid stale closures).
+  // Updated in an effect so the write happens after commit, not during
+  // render.
   const currentChartRef = useRef(currentChart);
-  currentChartRef.current = currentChart;
+  useEffect(() => {
+    currentChartRef.current = currentChart;
+  });
 
   // Keyboard handler
   useEffect(() => {
