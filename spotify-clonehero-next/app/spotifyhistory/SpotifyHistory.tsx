@@ -145,7 +145,25 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
   const handler = useCallback(async () => {
     const abortController = new AbortController();
 
-    let artistTrackPlays = await getSpotifyDumpArtistTrackPlays();
+    // Kick off everything that can start without a user-gesture decision:
+    //  - chorus fetch (depends on local DB; triggers init on first call)
+    //  - local scan (independent — it'll prompt for the songs directory)
+    //  - spotify-dump cache check (DB + OPFS read; result decides whether
+    //    we need to prompt the user for a Spotify directory)
+    // None of these block each other: the cache check runs concurrently
+    // with the scan's parse-sng work and the chorus network round-trip.
+    const chorusChartsPromise = fetchChorusCharts(abortController);
+    const cachedSpotifyPromise = getSpotifyDumpArtistTrackPlays();
+
+    setStatus({status: 'scanning', songsCounted: 0});
+    const scanPromise = scanForInstalledCharts(count => {
+      setStatus(prevStatus => ({
+        ...prevStatus,
+        songsCounted: count,
+      }));
+    });
+
+    let artistTrackPlays = await cachedSpotifyPromise;
     let spotifyDataHandle;
     if (artistTrackPlays == null) {
       alert(
@@ -158,12 +176,13 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       } catch (err) {
         toast.info('Directory picker canceled');
         console.log('User canceled picker');
+        abortController.abort();
+        // Drain the in-flight scan so its rejection (if any) doesn't surface
+        // as an unhandled-promise warning.
+        scanPromise.catch(() => {});
         return;
       }
     }
-
-    // Kick off chorus chart fetch and spotify dump processing in parallel
-    const chorusChartsPromise = fetchChorusCharts(abortController);
 
     const spotifyDumpPromise = (async () => {
       if (artistTrackPlays != null) return artistTrackPlays;
@@ -173,16 +192,8 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       return await processSpotifyDump(spotifyDataHandle);
     })();
 
-    // Scan local charts in parallel with the above
-    setStatus({status: 'scanning', songsCounted: 0});
-
     try {
-      await scanForInstalledCharts(count => {
-        setStatus(prevStatus => ({
-          ...prevStatus,
-          songsCounted: count,
-        }));
-      });
+      await scanPromise;
       setStatus(prevStatus => ({
         ...prevStatus,
         status: 'done-scanning',
@@ -195,6 +206,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
           status: 'not-started',
           songsCounted: 0,
         });
+        abortController.abort();
         return;
       } else {
         toast.error('Error scanning local charts', {duration: 8000});
