@@ -148,44 +148,51 @@ export default function Search({
     }
   }, [searchQuery, searchSongs, initialQuery, setSearchQuery]);
 
-  const loadMore = useCallback(async () => {
-    if (isLoadingMore) return;
-    setIsLoadingMore(true);
-    try {
-      const nextPage = page + 1;
-      const results = await searchEncore(
-        searchQuery,
-        instrumentFilter,
-        nextPage,
-      );
-      setFilteredSongs(prev => {
-        const prevData = prev?.data ?? [];
-        // Deduplicate across the combined list to be resilient to duplicate Appends or StrictMode
-        const combined = [...prevData, ...results.data];
-        const deduped = Array.from(
-          new Map(combined.map(chart => [chart.md5, chart])).values(),
-        );
-        return {
-          ...results,
-          data: deduped,
-          found: results.found,
-          out_of: results.out_of,
-        };
-      });
-      setPage(nextPage);
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [page, searchQuery, instrumentFilter, isLoadingMore]);
-
-  // Infinite scroll: observe sentinel and load next page when visible
+  // Infinite scroll: when the sentinel scrolls into view and we aren't
+  // already fetching, load the next page. All React state writes happen
+  // inside the async IIFE (post-await), so the effect body itself
+  // performs no synchronous setState.
   useEffect(() => {
     if (!filteredSongs) return;
     const hasMore = filteredSongs.data.length < filteredSongs.found;
-    if (hasMore && inView && !isLoadingMore) {
-      loadMore();
-    }
-  }, [filteredSongs, inView, isLoadingMore, loadMore]);
+    if (!hasMore || !inView || isLoadingMore) return;
+
+    let cancelled = false;
+    (async () => {
+      setIsLoadingMore(true);
+      try {
+        const nextPage = page + 1;
+        const results = await searchEncore(
+          searchQuery,
+          instrumentFilter,
+          nextPage,
+        );
+        if (cancelled) return;
+        setFilteredSongs(prev => {
+          const prevData = prev?.data ?? [];
+          // Deduplicate across the combined list to be resilient to
+          // duplicate appends or StrictMode double-invocation.
+          const combined = [...prevData, ...results.data];
+          const deduped = Array.from(
+            new Map(combined.map(chart => [chart.md5, chart])).values(),
+          );
+          return {
+            ...results,
+            data: deduped,
+            found: results.found,
+            out_of: results.out_of,
+          };
+        });
+        setPage(nextPage);
+      } finally {
+        if (!cancelled) setIsLoadingMore(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filteredSongs, inView, isLoadingMore, page, searchQuery, instrumentFilter]);
 
   return (
     <main className="min-h-screen bg-background w-full">
