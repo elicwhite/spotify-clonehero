@@ -550,13 +550,18 @@ export default function ChartReviewPage() {
   // Preloading
   // ---------------------------------------------------------------------------
 
-  // Preload charts for current queue position and next PRELOAD_COUNT
+  // Preload charts for the current window and destroy any that fell out
+  // of it. Cleanup and preload share a single effect so there's a single
+  // authoritative setState path (inside the async IIFE, post-microtask
+  // relative to the effect body), avoiding the two-effects-racing-on-
+  // prepared shape the old code had.
   useEffect(() => {
     if (queue.length === 0 || queuePos >= queue.length) return;
 
-    let cancelled = false;
+    const relevant = new Set(
+      queue.slice(queuePos, queuePos + PRELOAD_COUNT + 1),
+    );
     const indicesToLoad: number[] = [];
-
     for (
       let i = queuePos;
       i < Math.min(queuePos + PRELOAD_COUNT + 1, queue.length);
@@ -567,8 +572,30 @@ export default function ChartReviewPage() {
         indicesToLoad.push(entryIndex);
       }
     }
+    const stale: [number, PreparedChart][] = [];
+    for (const [k, v] of prepared) {
+      if (!relevant.has(k)) stale.push([k, v]);
+    }
+
+    if (indicesToLoad.length === 0 && stale.length === 0) return;
+
+    let cancelled = false;
 
     (async () => {
+      // Destroy stale audio managers and drop them from the map first.
+      // AudioManager.destroy() closes its AudioContext, so we run it
+      // outside the setState updater to avoid double-invocation under
+      // StrictMode double-render.
+      if (stale.length > 0) {
+        for (const [, v] of stale) v.audioManager.destroy();
+        if (cancelled) return;
+        setPrepared(prev => {
+          const next = new Map(prev);
+          for (const [k] of stale) next.delete(k);
+          return next;
+        });
+      }
+
       for (const idx of indicesToLoad) {
         if (cancelled) return;
         try {
@@ -597,24 +624,6 @@ export default function ChartReviewPage() {
     currentEntryIndex >= 0 ? (prepared.get(currentEntryIndex) ?? null) : null;
   const nextChart =
     nextEntryIndex >= 0 ? (prepared.get(nextEntryIndex) ?? null) : null;
-
-  // Stop and destroy audio for any prepared chart no longer in the active window
-  useEffect(() => {
-    if (queue.length === 0) return;
-    const relevant = new Set(
-      queue.slice(queuePos, queuePos + PRELOAD_COUNT + 1),
-    );
-    setPrepared(prev => {
-      const stale = Array.from(prev.keys()).filter(k => !relevant.has(k));
-      if (stale.length === 0) return prev;
-      const next = new Map(prev);
-      for (const k of stale) {
-        next.get(k)?.audioManager.destroy();
-        next.delete(k);
-      }
-      return next;
-    });
-  }, [queuePos, queue]);
 
   // Skip failed entries
   useEffect(() => {
