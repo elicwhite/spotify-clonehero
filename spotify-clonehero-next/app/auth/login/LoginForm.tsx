@@ -1,6 +1,6 @@
 'use client';
 
-import {useState, useEffect} from 'react';
+import {useState} from 'react';
 import {createClient} from '@/lib/supabase/client';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
@@ -27,21 +27,24 @@ export function LoginForm({
   const [loading, setLoading] = useState<
     null | 'email' | 'spotify' | 'discord'
   >(null);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
   const supabase = createClient();
   const searchParams = useSearchParams();
 
-  useEffect(() => {
-    const errorParam = searchParams.get('error');
-    if (errorParam === 'invalid_token') {
-      setError('Error when logging in. Please try logging in again.');
-    } else if (errorParam === 'provider_email_needs_verification') {
-      setMessage(
-        'Please check your email and confirm your Spotify email address.',
-      );
-    }
-  }, [searchParams]);
+  // Seed message/error from the URL once at mount. Subsequent user
+  // actions (submit, OAuth click) overwrite these via their own event
+  // handlers. Reading searchParams in a lazy useState initializer
+  // avoids the render → effect → setState extra commit that the
+  // previous useEffect-based sync required.
+  const [message, setMessage] = useState(() =>
+    searchParams.get('error') === 'provider_email_needs_verification'
+      ? 'Please check your email and confirm your Spotify email address.'
+      : '',
+  );
+  const [error, setError] = useState(() =>
+    searchParams.get('error') === 'invalid_token'
+      ? 'Error when logging in. Please try logging in again.'
+      : '',
+  );
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
