@@ -200,6 +200,11 @@ export default function Renderer({
   });
 
   const audioManagerRef = useRef<AudioManager | null>(null);
+  // Mirrors audioManagerRef into React state so consumers that need to
+  // render against it (CloneHeroRenderer) receive a stable prop that
+  // changes when the manager is created/destroyed, without reading
+  // ref.current during render.
+  const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
   const router = useRouter();
   const [isSaved, setIsSaved] = useState(false);
 
@@ -542,6 +547,7 @@ export default function Renderer({
         audioManager.setChartDelay(chartDelayMs / 1000);
         audioManager.setVolume('click', playClickTrack ? masterClickVolume : 0);
         audioManagerRef.current = audioManager;
+        setAudioManager(audioManager);
         window.am = audioManager;
 
         // Restore practice mode configuration if it exists
@@ -576,6 +582,7 @@ export default function Renderer({
       };
       audioManagerRef.current?.destroy();
       audioManagerRef.current = null;
+      setAudioManager(null);
     };
   }, [
     audioFiles,
@@ -1406,12 +1413,12 @@ export default function Renderer({
               audioManagerRef={audioManagerRef}
             />
           </div>
-          {viewCloneHero && (
+          {viewCloneHero && audioManager && (
             <CloneHeroRenderer
               metadata={metadata}
               chart={chart}
               track={track}
-              audioManager={audioManagerRef.current!}
+              audioManager={audioManager}
             />
           )}
         </div>
