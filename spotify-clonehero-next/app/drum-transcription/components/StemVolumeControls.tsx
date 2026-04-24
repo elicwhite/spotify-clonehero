@@ -40,22 +40,15 @@ export default function StemVolumeControls({
 }: StemVolumeControlsProps) {
   const {state, dispatch} = useChartEditorContext();
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [availableStems, setAvailableStems] = useState<string[]>([]);
 
-  // Detect which stems are available in AudioManager
-  useEffect(() => {
-    const found: string[] = [];
-    for (const stem of STEM_NAMES) {
-      try {
-        // Try setting volume to current value to probe existence
-        audioManager.setVolume(stem, 1.0);
-        found.push(stem);
-      } catch {
-        // Stem not available
-      }
-    }
-    setAvailableStems(found);
-  }, [audioManager]);
+  // Derive available stems from the AudioManager's track list. This is
+  // a pure read — the previous implementation probed by calling
+  // setVolume(stem, 1.0) inside a try/catch, which forced the effect
+  // to exist only to convert a probe result into React state.
+  const loadedTrackNames = audioManager.trackNames;
+  const availableStems = STEM_NAMES.filter(stem =>
+    loadedTrackNames.includes(stem),
+  );
 
   // Apply volume changes to AudioManager whenever state changes
   useEffect(() => {

@@ -320,9 +320,10 @@ export class AudioManager {
 
     this.#tracks[trackName].volume = volume > 1 ? 1 : volume < 0 ? 0 : volume;
   }
-  // get tracks() {
-  //   return Object.values(this.#tracks);
-  // }
+
+  get trackNames(): readonly string[] {
+    return Object.keys(this.#tracks);
+  }
 
   get delay() {
     return this.#context.baseLatency + (this.#context.outputLatency || 0);
