@@ -1,6 +1,6 @@
 'use client';
 
-import {useCallback, useEffect, useRef} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {useChartEditorContext} from '../ChartEditorContext';
 
 /** Default auto-save interval in milliseconds. */
@@ -30,24 +30,28 @@ export function useAutoSave(
 ) {
   const {state, dispatch} = useChartEditorContext();
   const savingRef = useRef(false);
-  const lastSaveRef = useRef<number>(0);
+  // lastSaveTime is state (not a ref) because it's exposed in the
+  // returned object and consumers use it to render "Last saved 3s
+  // ago"-style UI — that UI needs to update when the timestamp
+  // changes, which only happens if the value flows through React state.
+  const [lastSaveTime, setLastSaveTime] = useState<number>(0);
   const intervalMs = config?.intervalMs ?? DEFAULT_INTERVAL_MS;
 
   const save = useCallback(async () => {
     if (!saveFn || !state.chartDoc || savingRef.current) return;
-    if (!state.dirty && lastSaveRef.current > 0) return;
+    if (!state.dirty && lastSaveTime > 0) return;
 
     savingRef.current = true;
     try {
       await saveFn();
-      lastSaveRef.current = Date.now();
+      setLastSaveTime(Date.now());
       dispatch({type: 'MARK_SAVED'});
     } catch (err) {
       console.error('Auto-save failed:', err);
     } finally {
       savingRef.current = false;
     }
-  }, [saveFn, state.chartDoc, state.dirty, dispatch]);
+  }, [saveFn, state.chartDoc, state.dirty, lastSaveTime, dispatch]);
 
   // Periodic auto-save timer
   useEffect(() => {
@@ -96,6 +100,6 @@ export function useAutoSave(
 
   return {
     save,
-    lastSaveTime: lastSaveRef.current,
+    lastSaveTime,
   };
 }
