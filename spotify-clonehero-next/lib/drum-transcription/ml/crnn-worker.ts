@@ -48,8 +48,10 @@ let ort: any = null;
 async function loadOrt() {
   if (ort) return ort;
   // In a worker, use importScripts to load ONNX Runtime
-  (self as unknown as { importScripts: (...urls: string[]) => void }).importScripts(ORT_CDN_URL);
-    ort = (self as any).ort;
+  (
+    self as unknown as {importScripts: (...urls: string[]) => void}
+  ).importScripts(ORT_CDN_URL);
+  ort = (self as any).ort;
   if (!ort) throw new Error('Failed to load ONNX Runtime in worker');
   ort.env.wasm.wasmPaths = ORT_CDN_BASE;
   ort.env.wasm.numThreads = 1; // Workers don't need multi-threaded WASM
@@ -83,7 +85,7 @@ function stereoToMono(stereo: Float32Array): Float32Array {
 // ---------------------------------------------------------------------------
 
 async function windowedInference(
-    session: any,
+  session: any,
   mel: Float32Array,
   nFrames: number,
   nMels: number,
@@ -110,8 +112,7 @@ async function windowedInference(
   );
   let windowIdx = 0;
 
-  const step =
-    passName === 'pass-1' ? 'inference-pass-1' : 'inference-pass-2';
+  const step = passName === 'pass-1' ? 'inference-pass-1' : 'inference-pass-2';
 
   for (let start = 0; start < T; start += WINDOW_STRIDE) {
     const end = Math.min(start + WINDOW_SIZE, T);
@@ -167,9 +168,7 @@ async function windowedInference(
     // Accumulate sigmoid(logits) into the correct position
     for (let f = 0; f < W; f++) {
       for (let c = 0; c < nClasses; c++) {
-        accum[(start + f) * nClasses + c] += sigmoid(
-          logits[f * nClasses + c],
-        );
+        accum[(start + f) * nClasses + c] += sigmoid(logits[f * nClasses + c]);
       }
       counts[start + f] += 1;
     }
@@ -223,10 +222,11 @@ async function transcribe(
       ...DEFAULT_MEL_CONFIG,
       sampleRate,
     };
-    const {spectrogram: mel, nFrames, nMels} = computeMelSpectrogram(
-      mono,
-      config,
-    );
+    const {
+      spectrogram: mel,
+      nFrames,
+      nMels,
+    } = computeMelSpectrogram(mono, config);
     postProgress('computing-spectrogram', 0.5);
 
     // Step 2: Compute panning features (from stereo)
@@ -299,7 +299,9 @@ async function transcribe(
       durationSeconds,
     };
 
-    self.postMessage(result, {transfer: [result.modelOutput.predictions.buffer]});
+    self.postMessage(result, {
+      transfer: [result.modelOutput.predictions.buffer],
+    });
   } catch (err) {
     self.postMessage({
       type: 'error',

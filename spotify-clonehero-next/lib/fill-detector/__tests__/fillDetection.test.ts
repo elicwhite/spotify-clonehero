@@ -309,7 +309,16 @@ describe('Fill Detection', () => {
 
       // Single note
       const {chart: singleNoteChart, track: singleTrack} = createSyntheticChart(
-        [{tick: 0, msTime: 0, length: 48, msLength: 125, type: 0 as never, flags: 0}],
+        [
+          {
+            tick: 0,
+            msTime: 0,
+            length: 48,
+            msLength: 125,
+            type: 0 as never,
+            flags: 0,
+          },
+        ],
         'Single Note',
       );
       const singleFills = extractFills(singleNoteChart, singleTrack);

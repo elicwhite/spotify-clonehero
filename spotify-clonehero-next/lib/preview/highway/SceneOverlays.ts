@@ -1,8 +1,5 @@
 import * as THREE from 'three';
-import {
-  SCALE,
-  calculateNoteXOffset,
-} from './types';
+import {SCALE, calculateNoteXOffset} from './types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -152,7 +149,11 @@ export class SceneOverlays {
   private loopEndLabel: THREE.Sprite | null = null;
 
   // Tempo data for tick->ms conversion
-  private timedTempos: {tick: number; msTime: number; beatsPerMinute: number}[] = [];
+  private timedTempos: {
+    tick: number;
+    msTime: number;
+    beatsPerMinute: number;
+  }[] = [];
   private resolution = 480;
 
   constructor(
@@ -167,7 +168,6 @@ export class SceneOverlays {
     // Add container groups to scene
     this.scene.add(this.ghostNoteGroup);
     this.scene.add(this.loopGroup);
-
   }
 
   // -----------------------------------------------------------------------
@@ -216,7 +216,6 @@ export class SceneOverlays {
     this.cursorTickLabelTexture?.dispose();
     if (this.cursorTickLabel) this.scene.remove(this.cursorTickLabel);
 
-
     // Ghost notes
     this.scene.remove(this.ghostNoteGroup);
     for (const mesh of this.ghostNoteMeshes) {
@@ -253,11 +252,12 @@ export class SceneOverlays {
   // Cursor line
   // -----------------------------------------------------------------------
 
-  private updateCursorLine(
-    elapsedMs: number,
-    state: OverlayState,
-  ): void {
-    if (state.isPlaying || state.cursorTick < 0 || this.timedTempos.length === 0) {
+  private updateCursorLine(elapsedMs: number, state: OverlayState): void {
+    if (
+      state.isPlaying ||
+      state.cursorTick < 0 ||
+      this.timedTempos.length === 0
+    ) {
       // Hide cursor line during playback or when no cursor
       if (this.cursorLine) this.cursorLine.visible = false;
       if (this.cursorTickLabel) this.cursorTickLabel.visible = false;
@@ -315,16 +315,13 @@ export class SceneOverlays {
       } else {
         (this.cursorTickLabel.material as THREE.SpriteMaterial).map =
           this.cursorTickLabelTexture;
-        (this.cursorTickLabel.material as THREE.SpriteMaterial).needsUpdate = true;
+        (this.cursorTickLabel.material as THREE.SpriteMaterial).needsUpdate =
+          true;
       }
     }
 
     if (this.cursorTickLabel) {
-      this.cursorTickLabel.position.set(
-        HIGHWAY_HALF_WIDTH + 0.1,
-        worldY,
-        0,
-      );
+      this.cursorTickLabel.position.set(HIGHWAY_HALF_WIDTH + 0.1, worldY, 0);
       this.cursorTickLabel.visible = true;
     }
   }
@@ -333,10 +330,7 @@ export class SceneOverlays {
   // Ghost notes (Place mode)
   // -----------------------------------------------------------------------
 
-  private updateGhostNotes(
-    elapsedMs: number,
-    state: OverlayState,
-  ): void {
+  private updateGhostNotes(elapsedMs: number, state: OverlayState): void {
     // Hide all ghost notes first
     for (const mesh of this.ghostNoteMeshes) {
       mesh.visible = false;
@@ -463,16 +457,17 @@ export class SceneOverlays {
   // Tool crosshair (BPM / TimeSig / Section)
   // -----------------------------------------------------------------------
 
-  private updateCrosshair(
-    elapsedMs: number,
-    state: OverlayState,
-  ): void {
+  private updateCrosshair(elapsedMs: number, state: OverlayState): void {
     const isToolMode =
       state.activeTool === 'bpm' ||
       state.activeTool === 'timesig' ||
       state.activeTool === 'section';
 
-    if (!isToolMode || state.hoverTick === null || this.timedTempos.length === 0) {
+    if (
+      !isToolMode ||
+      state.hoverTick === null ||
+      this.timedTempos.length === 0
+    ) {
       if (this.crosshairLine) this.crosshairLine.visible = false;
       if (this.crosshairLabel) this.crosshairLabel.visible = false;
       return;
@@ -543,7 +538,8 @@ export class SceneOverlays {
       } else {
         (this.crosshairLabel.material as THREE.SpriteMaterial).map =
           this.crosshairLabelTexture;
-        (this.crosshairLabel.material as THREE.SpriteMaterial).needsUpdate = true;
+        (this.crosshairLabel.material as THREE.SpriteMaterial).needsUpdate =
+          true;
       }
     }
 
@@ -561,10 +557,7 @@ export class SceneOverlays {
   // Loop region
   // -----------------------------------------------------------------------
 
-  private updateLoopRegion(
-    elapsedMs: number,
-    state: OverlayState,
-  ): void {
+  private updateLoopRegion(elapsedMs: number, state: OverlayState): void {
     if (!state.loopRegion) {
       // Hide all loop elements
       if (this.loopStartLine) this.loopStartLine.visible = false;
@@ -589,24 +582,18 @@ export class SceneOverlays {
 
     // Start line
     this.loopStartLine!.position.y = startWorldY;
-    this.loopStartLine!.visible =
-      startWorldY >= -1.2 && startWorldY <= 1.1;
+    this.loopStartLine!.visible = startWorldY >= -1.2 && startWorldY <= 1.1;
 
     // End line
     this.loopEndLine!.position.y = endWorldY;
-    this.loopEndLine!.visible =
-      endWorldY >= -1.2 && endWorldY <= 1.1;
+    this.loopEndLine!.visible = endWorldY >= -1.2 && endWorldY <= 1.1;
 
     // Tint region
     const regionHeight = endWorldY - startWorldY;
     if (regionHeight > 0) {
       this.loopTint!.geometry.dispose();
       this.loopTint!.geometry = new THREE.PlaneGeometry(width, regionHeight);
-      this.loopTint!.position.set(
-        0,
-        startWorldY + regionHeight / 2,
-        -0.001,
-      );
+      this.loopTint!.position.set(0, startWorldY + regionHeight / 2, -0.001);
       this.loopTint!.visible = true;
     } else {
       this.loopTint!.visible = false;
@@ -619,17 +606,11 @@ export class SceneOverlays {
         startWorldY,
         0,
       );
-      this.loopStartLabel.visible =
-        startWorldY >= -1.2 && startWorldY <= 1.1;
+      this.loopStartLabel.visible = startWorldY >= -1.2 && startWorldY <= 1.1;
     }
     if (this.loopEndLabel) {
-      this.loopEndLabel.position.set(
-        -HIGHWAY_HALF_WIDTH - 0.03,
-        endWorldY,
-        0,
-      );
-      this.loopEndLabel.visible =
-        endWorldY >= -1.2 && endWorldY <= 1.1;
+      this.loopEndLabel.position.set(-HIGHWAY_HALF_WIDTH - 0.03, endWorldY, 0);
+      this.loopEndLabel.visible = endWorldY >= -1.2 && endWorldY <= 1.1;
     }
   }
 

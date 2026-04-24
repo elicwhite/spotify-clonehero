@@ -12,7 +12,10 @@ export const HighlightTreatment: React.FC<TreatmentProps> = ({
 }) => {
   let currentLineIndex = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (currentMs >= lines[i].phraseStartMs - 500 && currentMs < lines[i].phraseEndMs) {
+    if (
+      currentMs >= lines[i].phraseStartMs - 500 &&
+      currentMs < lines[i].phraseEndMs
+    ) {
       currentLineIndex = i;
       break;
     }

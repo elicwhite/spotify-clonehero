@@ -1,4 +1,10 @@
-import {AbsoluteFill, Audio, Img, useCurrentFrame, useVideoConfig} from 'remotion';
+import {
+  AbsoluteFill,
+  Audio,
+  Img,
+  useCurrentFrame,
+  useVideoConfig,
+} from 'remotion';
 import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
 import type {TreatmentId} from './treatments/types';
 import {HighlightTreatment} from './treatments/HighlightTreatment';

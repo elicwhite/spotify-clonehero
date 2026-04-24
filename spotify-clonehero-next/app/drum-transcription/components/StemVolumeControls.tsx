@@ -1,12 +1,7 @@
 'use client';
 
 import {useCallback, useEffect, useState} from 'react';
-import {
-  Volume2,
-  VolumeX,
-  ChevronDown,
-  ChevronRight,
-} from 'lucide-react';
+import {Volume2, VolumeX, ChevronDown, ChevronRight} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Slider} from '@/components/ui/slider';
 import {Label} from '@/components/ui/label';
@@ -129,8 +124,7 @@ export default function StemVolumeControls({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div
-        className={cn('rounded-lg border bg-background text-sm', className)}>
+      <div className={cn('rounded-lg border bg-background text-sm', className)}>
         {/* Header */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}

@@ -40,7 +40,13 @@ function note(
   flags = 0,
   msLength = 0,
 ): Track['noteEventGroups'][0][0] {
-  return {type, tick, msTime, flags, msLength} as Track['noteEventGroups'][0][0];
+  return {
+    type,
+    tick,
+    msTime,
+    flags,
+    msLength,
+  } as Track['noteEventGroups'][0][0];
 }
 
 // ---------------------------------------------------------------------------
@@ -55,9 +61,7 @@ describe('trackToElements', () => {
   });
 
   it('converts kick note to element with key note:tick:kick', () => {
-    const track = makeTrack([
-      [note(noteTypes.kick, 0, 0)],
-    ]);
+    const track = makeTrack([[note(noteTypes.kick, 0, 0)]]);
     const elements = trackToElements(track);
 
     expect(elements).toHaveLength(1);
@@ -115,14 +119,9 @@ describe('trackToElements', () => {
 
   it('handles star power sections', () => {
     const track = makeTrack(
-      [
-        [note(noteTypes.redDrum, 0, 0)],
-        [note(noteTypes.redDrum, 960, 1000)],
-      ],
+      [[note(noteTypes.redDrum, 0, 0)], [note(noteTypes.redDrum, 960, 1000)]],
       {
-        starPowerSections: [
-          {tick: 0, msTime: 0, msLength: 500, length: 480},
-        ],
+        starPowerSections: [{tick: 0, msTime: 0, msLength: 500, length: 480}],
       },
     );
     const elements = trackToElements(track);

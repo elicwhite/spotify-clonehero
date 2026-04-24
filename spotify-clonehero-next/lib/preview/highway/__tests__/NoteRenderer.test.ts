@@ -93,7 +93,9 @@ function createTestRenderer(): NoteRenderer {
   return new NoteRenderer(getTextureForNote, clippingPlanes);
 }
 
-function makeNoteData(overrides: Partial<NoteElementData> = {}): NoteElementData {
+function makeNoteData(
+  overrides: Partial<NoteElementData> = {},
+): NoteElementData {
   return {
     note: {
       msTime: 0,
@@ -177,10 +179,9 @@ describe('NoteRenderer', () => {
 
     renderer.create(makeNoteData({inStarPower: true}));
 
-    expect(getTexture).toHaveBeenCalledWith(
-      expect.anything(),
-      {inStarPower: true},
-    );
+    expect(getTexture).toHaveBeenCalledWith(expect.anything(), {
+      inStarPower: true,
+    });
   });
 
   it('create() with accent/ghost -- dynamic texture variant', () => {
@@ -189,9 +190,11 @@ describe('NoteRenderer', () => {
     const renderer = new NoteRenderer(getTexture, []);
 
     // accent flag = 16 in scan-chart
-    renderer.create(makeNoteData({
-      note: {msTime: 0, msLength: 0, type: 13, flags: 16, tick: 0} as any,
-    }));
+    renderer.create(
+      makeNoteData({
+        note: {msTime: 0, msLength: 0, type: 13, flags: 16, tick: 0} as any,
+      }),
+    );
 
     expect(getTexture).toHaveBeenCalledWith(
       expect.objectContaining({flags: 16}),

@@ -113,8 +113,10 @@ export default function ExportDialog({
           for (const source of sources) {
             // Apply stem inclusion filters if toggles are shown
             if (showStemToggles) {
-              if (source.fileName.startsWith('drums') && !includeDrumStem) continue;
-              if (source.fileName.startsWith('song') && !includeAccompaniment) continue;
+              if (source.fileName.startsWith('drums') && !includeDrumStem)
+                continue;
+              if (source.fileName.startsWith('song') && !includeAccompaniment)
+                continue;
             }
             audioFiles.push(source);
           }
@@ -129,7 +131,10 @@ export default function ExportDialog({
         data: f.data,
       }));
       for (const audio of audioFiles) {
-        fileEntries.push({filename: audio.fileName, data: new Uint8Array(audio.data)});
+        fileEntries.push({
+          filename: audio.fileName,
+          data: new Uint8Array(audio.data),
+        });
       }
 
       let blob: Blob;
@@ -138,7 +143,9 @@ export default function ExportDialog({
       if (packageFormat === 'sng') {
         // exportAsSng extracts song.ini into SNG header metadata automatically
         const sngBytes = exportAsSng(fileEntries);
-        blob = new Blob([sngBytes as Uint8Array<ArrayBuffer>], {type: 'application/octet-stream'});
+        blob = new Blob([sngBytes as Uint8Array<ArrayBuffer>], {
+          type: 'application/octet-stream',
+        });
         extension = 'sng';
       } else {
         blob = exportAsZip(fileEntries);
@@ -250,7 +257,9 @@ export default function ExportDialog({
                     checked={includeAccompaniment}
                     onCheckedChange={setIncludeAccompaniment}
                   />
-                  <Label htmlFor="include-accompaniment" className="font-normal">
+                  <Label
+                    htmlFor="include-accompaniment"
+                    className="font-normal">
                     Accompaniment (song.wav)
                   </Label>
                 </div>

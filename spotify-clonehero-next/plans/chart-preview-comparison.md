@@ -2,6 +2,7 @@
 
 **Date:** 2026-03-18
 **Files compared:**
+
 - `highway.ts`: `/Users/eliwhite/projects/spotify-clonehero/spotify-clonehero-next/lib/preview/highway.ts` (806 lines)
 - `chart-preview`: `~/projects/chart-preview/src/ChartPreview.ts` (1760 lines) + supporting files
 
@@ -10,6 +11,7 @@
 ## 1. Architecture Differences
 
 ### highway.ts
+
 - Single-file, functional/closure-based architecture
 - `setupRenderer()` returns a methods object (prepTrack, startRender, destroy, getCamera, getHighwaySpeed)
 - React-coupled: takes `RefObject<HTMLDivElement>` for sizing/container
@@ -18,6 +20,7 @@
 - No event system; relies on external `AudioManager` for playback state
 
 ### chart-preview
+
 - Multi-file, class-based OOP architecture:
   - `ChartPreview` -- core renderer class (static factory `create()`)
   - `ChartPreviewPlayer` -- Web Component with full UI controls (`<chart-preview-player>`)
@@ -35,10 +38,12 @@
 ## 2. Note Rendering -- Windowed vs Pre-generated (Critical Difference)
 
 ### highway.ts
+
 - **Pre-generates ALL notes** at setup time in `generateNoteHighway()`. Every note in the entire chart is created as a `THREE.Sprite` and added to a single `THREE.Group`. The group's Y position is then shifted each frame based on audio time.
 - For a song with 10,000 notes, all 10,000 sprites exist in the scene from the start.
 
 ### chart-preview
+
 - **Windowed/dynamic note rendering** via `NotesManager.updateDisplayedNotes()`:
   - Calculates a visible time window: `[chartCurrentTimeMs, chartCurrentTimeMs + HIGHWAY_DURATION_MS]` where `HIGHWAY_DURATION_MS = 1500`
   - Only creates sprites for notes within this window
@@ -54,6 +59,7 @@
 ### 3a. Drum Note Textures
 
 **highway.ts:**
+
 - 4 tom textures: `drum-tom-{blue,green,red,yellow}.webp`
 - 4 cymbal textures: `drum-cymbal-{blue,green,red,yellow}.webp`
 - 1 kick texture: `drum-kick.webp`
@@ -61,6 +67,7 @@
 - No ghost note, accent, or star power drum variants
 
 **chart-preview:**
+
 - Loads textures from `https://static.enchor.us/preview-{name}.webp`
 - For each color (red, yellow, blue, green), loads:
   - Tom variants: normal, ghost, accent, and SP versions of each (4 colors x 3 dynamics x 2 SP states = 24 tom textures)
@@ -73,6 +80,7 @@
 ### 3b. Drum Note Flag Handling Bug
 
 **highway.ts** has a **duplicate condition bug** at lines 370-376:
+
 ```typescript
 if (note.type == noteTypes.greenDrum && note.flags & noteFlags.cymbal) {
   return cymbalTextures.green;
@@ -81,6 +89,7 @@ if (note.type == noteTypes.greenDrum && note.flags & noteFlags.cymbal) {
   return cymbalTextures.green;
 }
 ```
+
 The first two conditions are identical. The second branch is dead code.
 
 **chart-preview** does not have this bug -- it uses a clean Map-based lookup (`noteMaterials.get(note.type)?.get(note.flags)`) that avoids if/else chains entirely.
@@ -90,10 +99,12 @@ The first two conditions are identical. The second branch is dead code.
 ### 3c. Drum Cymbal Detection (Red Cymbal)
 
 **highway.ts:**
+
 - Loads and supports red cymbal textures (`drum-cymbal-red.webp`)
 - Will render a red cymbal if the note has the cymbal flag
 
 **chart-preview:**
+
 - Explicitly excludes red cymbals: `if (colorKey !== noteTypes.redDrum)` when loading cymbal textures
 - This is correct -- in pro drums, red is always a snare (tom), never a cymbal
 
@@ -104,6 +115,7 @@ The first two conditions are identical. The second branch is dead code.
 **highway.ts:** Does not handle disco flip or disco-noflip flags at all.
 
 **chart-preview:** `adjustParsedChart()` processes disco flags:
+
 - `discoNoflip` flag is stripped (no visual change needed)
 - `disco` flag swaps red and yellow notes and their tom/cymbal flags (red tom becomes yellow cymbal and vice versa)
 
@@ -112,12 +124,14 @@ The first two conditions are identical. The second branch is dead code.
 ### 3e. Kick Drum Rendering
 
 **highway.ts:**
+
 - Kick scale: `0.045`
 - Kick center: `new THREE.Vector2(0.5, -0.5)` -- centered horizontally, offset downward
 - Kick position: centered at X=0 (no lane offset applied)
 - Kick renderOrder: 1
 
 **chart-preview:**
+
 - Kick scale: `0.045` (same)
 - Kick center: `new THREE.Vector2(0.62, -0.5)` -- offset rightward by 0.12
 - Kick position: uses `calculateNoteXOffset()` which returns lane 2 (center lane)
@@ -144,6 +158,7 @@ Both use `0.9` for drum highway width. No difference.
 ### 4a. Camera Setup
 
 Both are identical:
+
 - FOV: 90
 - Aspect: 1:1 (updated on resize)
 - Near clip: 0.01, Far clip: 10
@@ -155,6 +170,7 @@ No differences.
 ### 4b. Renderer Setup
 
 Both use:
+
 - `antialias: true`
 - `localClippingEnabled = true`
 - `outputColorSpace = THREE.LinearSRGBColorSpace`
@@ -164,6 +180,7 @@ No differences.
 ### 4c. Clipping Planes
 
 Both use identical clipping planes:
+
 - Beginning: `Plane(Vector3(0, 1, 0), 1)`
 - End: `Plane(Vector3(0, -1, 0), 0.9)`
 
@@ -172,12 +189,14 @@ No differences.
 ### 4d. Highway Scroll Speed
 
 **highway.ts:**
+
 - `highwaySpeed = 1.5`
 - Scroll: `scrollPosition = -1 * (elapsedTime / 1000) * highwaySpeed`
 - Highway texture offset: `highwayTexture.offset.y = -1 * scrollPosition`
 - Notes group Y: `scrollPosition` directly
 
 **chart-preview:**
+
 - `HIGHWAY_DURATION_MS = 1500`
 - Scroll: `scrollPosition = -0.9 * (chartCurrentTimeMs / 1000) * (HIGHWAY_DURATION_MS / 1000)`
   - Which simplifies to: `-0.9 * (time / 1000) * 1.5` = `-1.35 * time/1000`
@@ -191,10 +210,12 @@ No differences.
 ### 4e. Note Positioning (Y axis)
 
 **highway.ts:**
+
 - Note Y position set at creation time: `notesGroup.position.y = (time / 1000) * highwaySpeed - 1`
 - Group moves with highway scroll
 
 **chart-preview:**
+
 - Note Y position calculated per-frame: `interpolate(note.msTime, chartCurrentTimeMs, renderEndTimeMs, -1, 1)`
 - Maps the note's time to the [-1, 1] Y range based on current time window
 - The strikeline is at Y=-1, top of highway is at Y=1
@@ -204,10 +225,12 @@ No differences.
 ### 4f. Highway Width by Instrument Type
 
 **highway.ts:**
+
 - Guitar: 1.0
 - Drums: 0.9
 
 **chart-preview:**
+
 - Guitar (5-fret): 1.0
 - Drums: 0.9
 - 6-fret (GHL): 0.7
@@ -228,6 +251,7 @@ No differences.
 ### 5a. Texture Sources
 
 **highway.ts:**
+
 - All textures loaded from local `/assets/preview/` paths
 - Highway: `/assets/preview/assets/highways/wor.png`
 - Guitar strikeline: `/assets/preview/assets/isolated.png`
@@ -237,6 +261,7 @@ No differences.
 - Drum notes: `/assets/preview/assets2/drum-tom-{color}.webp`, `drum-cymbal-{color}.webp`, `drum-kick.webp`
 
 **chart-preview:**
+
 - All textures loaded from CDN: `https://static.enchor.us/`
 - Highway: `preview-highway.png`
 - Strikeline: `preview-drums-strikeline.png`, `preview-5fret-strikeline.png`, `preview-6fret-strikeline.png`
@@ -252,6 +277,7 @@ No differences.
 **highway.ts:** No animation support. All textures are static.
 
 **chart-preview:** Full animated WebP support via `AnimatedTexture` class:
+
 - Uses `ImageDecoder` API (Chromium-only) for animated WebP
 - Pre-decodes all frames during init for synchronous per-frame updates
 - Falls back to static textures on unsupported browsers
@@ -283,6 +309,7 @@ No differences.
 ### 6a. Note Colors (Sustain Tails)
 
 Both use the same base colors:
+
 - Green: `#01B11A`
 - Red: `#DD2214`
 - Yellow: `#DEEB52`
@@ -290,6 +317,7 @@ Both use the same base colors:
 - Orange: `#F8B272`
 
 **chart-preview adds:**
+
 - Open note sustain color: `#8A0BB5` (purple)
 - Default fallback: `#FFFFFF` (white)
 - Drum note sustains also use these colors (mapped by drum noteType)
@@ -351,29 +379,37 @@ chart-preview calls `renderer.forceContextLoss()` and `renderer.renderLists.disp
 ## 8. Bug Fixes in chart-preview
 
 ### 8a. Duplicate Green Drum Cymbal Condition
+
 As noted in 3b, highway.ts has dead code from a duplicated condition.
 
 ### 8b. Red Cymbal Exclusion
+
 As noted in 3c, highway.ts incorrectly allows red cymbals.
 
 ### 8c. Missing WebGL Context Cleanup
+
 As noted in 7f.
 
 ### 8d. No Fallback for Missing Textures
+
 highway.ts throws on missing textures; chart-preview uses placeholders.
 
 ### 8e. No Color Space Management
+
 highway.ts doesn't set texture colorSpace, potentially causing color rendering issues.
 
 ### 8f. Audio Latency Compensation
+
 chart-preview's AudioManager subtracts `audioCtx.baseLatency + outputLatency` from the current time calculation. highway.ts does not compensate for audio latency.
 
 **Category:** Important fix for audio-visual sync accuracy.
 
 ### 8g. No Star Power Visual Distinction (in note textures)
+
 highway.ts passes `inStarPower` to `getTextureForNote()` but never actually uses it -- all drum textures ignore the star power parameter. chart-preview has separate SP textures (`drums-kick-sp`, `drums-red-tom-sp`, etc.) and applies them via the `SP_FLAG`.
 
 ### 8h. Resize Listener Leak
+
 highway.ts adds a resize listener but `destroy()` properly removes it. chart-preview also properly removes its listeners. Both are correct here, though chart-preview's class-based cleanup is more organized.
 
 ---
@@ -430,26 +466,26 @@ instance.instrumentType: InstrumentType
 
 ## 10. Feature Additions in chart-preview
 
-| Feature | highway.ts | chart-preview |
-|---------|-----------|---------------|
-| 5-fret guitar | Yes (strum/hopo/tap) | Yes (strum/hopo/tap + SP variants) |
-| 6-fret (GHL) guitar | No | Yes |
-| Drums | Yes | Yes (with ghost/accent/SP) |
-| Star power visuals | No (parameter exists but unused) | Yes (separate SP textures) |
-| Disco flip | No | Yes |
-| Ghost/accent notes | No | Yes |
-| Double kick | No distinction | Has texture |
-| Open note sustains | Basic | Full-width purple sustains |
-| Animated textures | No | Yes (animated WebP) |
-| Web Component player | No | Yes (full media player UI) |
-| Shared AudioContext | No | Yes (multi-instance support) |
-| SNG file loading | No | Yes |
-| Keyboard shortcuts | No | Yes (Space, arrows, M, F, Esc) |
-| Fullscreen support | No | Yes |
-| Seek support | No | Yes |
-| Volume control | No | Yes |
-| Solo/flex lane tracking | No | Tracked (not yet rendered) |
-| Audio latency compensation | No | Yes |
+| Feature                    | highway.ts                       | chart-preview                      |
+| -------------------------- | -------------------------------- | ---------------------------------- |
+| 5-fret guitar              | Yes (strum/hopo/tap)             | Yes (strum/hopo/tap + SP variants) |
+| 6-fret (GHL) guitar        | No                               | Yes                                |
+| Drums                      | Yes                              | Yes (with ghost/accent/SP)         |
+| Star power visuals         | No (parameter exists but unused) | Yes (separate SP textures)         |
+| Disco flip                 | No                               | Yes                                |
+| Ghost/accent notes         | No                               | Yes                                |
+| Double kick                | No distinction                   | Has texture                        |
+| Open note sustains         | Basic                            | Full-width purple sustains         |
+| Animated textures          | No                               | Yes (animated WebP)                |
+| Web Component player       | No                               | Yes (full media player UI)         |
+| Shared AudioContext        | No                               | Yes (multi-instance support)       |
+| SNG file loading           | No                               | Yes                                |
+| Keyboard shortcuts         | No                               | Yes (Space, arrows, M, F, Esc)     |
+| Fullscreen support         | No                               | Yes                                |
+| Seek support               | No                               | Yes                                |
+| Volume control             | No                               | Yes                                |
+| Solo/flex lane tracking    | No                               | Tracked (not yet rendered)         |
+| Audio latency compensation | No                               | Yes                                |
 
 ---
 
@@ -468,6 +504,7 @@ instance.instrumentType: InstrumentType
 ### What we SHOULD backport from chart-preview:
 
 **High priority (performance/correctness):**
+
 1. **Windowed note rendering** -- Replace pre-generated notes with dynamic creation/removal based on visible time window. This is the #1 performance improvement.
 2. **WebGL context cleanup** -- Add `forceContextLoss()` and `renderLists.dispose()` to `destroy()`.
 3. **Fix duplicate green drum cymbal condition** -- Remove the dead code branch.
@@ -476,21 +513,9 @@ instance.instrumentType: InstrumentType
 6. **Star power visual distinction** -- Load and use SP-variant textures.
 7. **Texture colorSpace** -- Set `SRGBColorSpace` on loaded textures.
 
-**Medium priority (visual improvements):**
-8. **Ghost/accent drum textures** -- Add texture variants for dynamics.
-9. **Disco flip handling** -- Process disco/discoNoflip flags.
-10. **Open note sustain width** -- Use `SCALE * 5` for open note sustains.
-11. **Sustain width increase** -- Use `SCALE * 0.3` instead of `SCALE * 0.175`.
-12. **Placeholder textures** -- Add fallback for failed texture loads.
-13. **Kick drum center offset** -- Use `0.62` X center for kick sprites.
-14. **NOTE_SPAN_WIDTH adjustment** -- Consider changing from 0.99 to 0.95.
+**Medium priority (visual improvements):** 8. **Ghost/accent drum textures** -- Add texture variants for dynamics. 9. **Disco flip handling** -- Process disco/discoNoflip flags. 10. **Open note sustain width** -- Use `SCALE * 5` for open note sustains. 11. **Sustain width increase** -- Use `SCALE * 0.3` instead of `SCALE * 0.175`. 12. **Placeholder textures** -- Add fallback for failed texture loads. 13. **Kick drum center offset** -- Use `0.62` X center for kick sprites. 14. **NOTE_SPAN_WIDTH adjustment** -- Consider changing from 0.99 to 0.95.
 
-**Low priority / Not needed:**
-15. Animated textures (nice-to-have, Chrome-only)
-16. Web Component player (we have our own UI)
-17. SNG loading (handled elsewhere)
-18. Shared AudioContext (only relevant for multi-instance)
-19. 6-fret guitar support (not needed for drum transcription)
+**Low priority / Not needed:** 15. Animated textures (nice-to-have, Chrome-only) 16. Web Component player (we have our own UI) 17. SNG loading (handled elsewhere) 18. Shared AudioContext (only relevant for multi-instance) 19. 6-fret guitar support (not needed for drum transcription)
 
 ### Alternative approach:
 
@@ -500,12 +525,12 @@ If we later want to use chart-preview for the read-only preview on the sheet-mus
 
 ## 12. Files Referenced
 
-| File | Path |
-|------|------|
-| highway.ts | `/Users/eliwhite/projects/spotify-clonehero/spotify-clonehero-next/lib/preview/highway.ts` |
-| CloneHeroRenderer.tsx | `/Users/eliwhite/projects/spotify-clonehero/spotify-clonehero-next/app/sheet-music/[slug]/CloneHeroRenderer.tsx` |
-| ChartPreview.ts | `/Users/eliwhite/projects/chart-preview/src/ChartPreview.ts` |
-| ChartPreviewPlayer.ts | `/Users/eliwhite/projects/chart-preview/src/ChartPreviewPlayer.ts` |
-| SharedAudioContext.ts | `/Users/eliwhite/projects/chart-preview/src/SharedAudioContext.ts` |
-| SngLoader.ts | `/Users/eliwhite/projects/chart-preview/src/SngLoader.ts` |
-| chart-preview package.json | `/Users/eliwhite/projects/chart-preview/package.json` |
+| File                       | Path                                                                                                             |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| highway.ts                 | `/Users/eliwhite/projects/spotify-clonehero/spotify-clonehero-next/lib/preview/highway.ts`                       |
+| CloneHeroRenderer.tsx      | `/Users/eliwhite/projects/spotify-clonehero/spotify-clonehero-next/app/sheet-music/[slug]/CloneHeroRenderer.tsx` |
+| ChartPreview.ts            | `/Users/eliwhite/projects/chart-preview/src/ChartPreview.ts`                                                     |
+| ChartPreviewPlayer.ts      | `/Users/eliwhite/projects/chart-preview/src/ChartPreviewPlayer.ts`                                               |
+| SharedAudioContext.ts      | `/Users/eliwhite/projects/chart-preview/src/SharedAudioContext.ts`                                               |
+| SngLoader.ts               | `/Users/eliwhite/projects/chart-preview/src/SngLoader.ts`                                                        |
+| chart-preview package.json | `/Users/eliwhite/projects/chart-preview/package.json`                                                            |

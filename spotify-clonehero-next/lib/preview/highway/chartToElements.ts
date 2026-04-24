@@ -98,7 +98,11 @@ export function chartToElements(
   // Group markers by msTime rounded to 1ms (close enough to overlap visually)
   const groups = new Map<string, ChartElement[]>();
   for (const el of markerElements) {
-    const side = LEFT_KINDS.has(el.kind) ? 'L' : RIGHT_KINDS.has(el.kind) ? 'R' : null;
+    const side = LEFT_KINDS.has(el.kind)
+      ? 'L'
+      : RIGHT_KINDS.has(el.kind)
+        ? 'R'
+        : null;
     if (!side) continue;
     const groupKey = `${side}:${Math.round(el.msTime)}`;
     let group = groups.get(groupKey);

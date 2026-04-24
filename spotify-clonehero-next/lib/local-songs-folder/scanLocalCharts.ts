@@ -321,9 +321,10 @@ function createSongLookupKey(artist: string, song: string) {
   return `${artist} - ${song}`;
 }
 
-export function createIsInstalledFilter(
-  installedSongs: SongAccumulator[],
-): {isChartInstalled: ChartInstalledChecker; isSongInstalled: SongInstalledChecker} {
+export function createIsInstalledFilter(installedSongs: SongAccumulator[]): {
+  isChartInstalled: ChartInstalledChecker;
+  isSongInstalled: SongInstalledChecker;
+} {
   const installedCharts = new Set<string>();
   const installedSongKeys = new Set<string>();
 

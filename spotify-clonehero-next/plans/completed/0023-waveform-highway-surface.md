@@ -28,21 +28,21 @@ class WaveformSurface {
   private texture: THREE.CanvasTexture;
 
   constructor(
-    audioData: Float32Array,   // raw PCM
+    audioData: Float32Array, // raw PCM
     channels: number,
     durationMs: number,
-    highwayWidth: number,      // 0.9 for drums, 1.0 for guitar
-  )
+    highwayWidth: number, // 0.9 for drums, 1.0 for guitar
+  );
 
   // Renders the waveform to a canvas texture
   // The canvas height maps to the full song duration
   // The canvas width maps to the highway width
-  private renderWaveform(): void
+  private renderWaveform(): void;
 
-  getMesh(): THREE.Mesh        // add to scene
-  update(currentTimeMs: number, highwaySpeed: number): void  // scroll texture offset
-  setVisible(visible: boolean): void
-  dispose(): void
+  getMesh(): THREE.Mesh; // add to scene
+  update(currentTimeMs: number, highwaySpeed: number): void; // scroll texture offset
+  setVisible(visible: boolean): void;
+  dispose(): void;
 }
 ```
 
@@ -126,13 +126,13 @@ class GridOverlay {
     resolution: number,
     durationMs: number,
     highwayWidth: number,
-  )
+  );
 
   // Renders beat lines to a canvas texture (white/grey lines at beat positions)
-  private renderGrid(): void
-  getMesh(): THREE.Mesh
-  update(currentTimeMs: number, highwaySpeed: number): void
-  dispose(): void
+  private renderGrid(): void;
+  getMesh(): THREE.Mesh;
+  update(currentTimeMs: number, highwaySpeed: number): void;
+  dispose(): void;
 }
 ```
 
@@ -141,10 +141,21 @@ class GridOverlay {
 ```typescript
 // In HighwayScene.ts or index.ts
 if (waveformData) {
-  const waveform = new WaveformSurface(waveformData, channels, durationMs, highwayWidth);
+  const waveform = new WaveformSurface(
+    waveformData,
+    channels,
+    durationMs,
+    highwayWidth,
+  );
   scene.add(waveform.getMesh()); // renderOrder 0 (behind everything)
 
-  const grid = new GridOverlay(tempos, timeSignatures, resolution, durationMs, highwayWidth);
+  const grid = new GridOverlay(
+    tempos,
+    timeSignatures,
+    resolution,
+    durationMs,
+    highwayWidth,
+  );
   scene.add(grid.getMesh()); // renderOrder 1 (above waveform, below notes)
 }
 ```
@@ -152,6 +163,7 @@ if (waveformData) {
 ### Toggle
 
 The waveform surface should be toggleable — user can switch between:
+
 1. Waveform + grid (editor mode)
 2. Classic highway texture (preview mode)
 
@@ -165,16 +177,19 @@ setHighwayMode(mode: 'waveform' | 'classic'): void {
 ## Memory Considerations
 
 A full-song waveform texture can be large:
+
 - 3-minute song at 50px/s = 9000px tall × 512px wide = ~18MB uncompressed
 - WebGL max texture size is typically 4096 or 16384
 - For songs > 5 minutes, need tiling or lower resolution
 
 ### Tiling approach (if needed):
+
 - Divide song into segments (e.g., 30-second tiles)
 - Only keep the current tile + adjacent tiles loaded
 - Swap textures as playback progresses
 
 ### Simpler approach for v1:
+
 - Render at lower resolution (20px/s instead of 50)
 - Cap canvas height at 4096px
 - Good enough for most songs (< 3.5 minutes)

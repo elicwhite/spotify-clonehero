@@ -56,15 +56,10 @@ export const ScrollTreatment: React.FC<TreatmentProps> = ({
           }}>
           {lines.map((line, i) => {
             const isCurrent = i === currentLineIndex;
-            const distance = Math.abs(
-              i - currentLineIndex - scrollProgress,
-            );
-            const opacity = interpolate(
-              distance,
-              [0, 3, 5],
-              [1, 0.4, 0.15],
-              {extrapolateRight: 'clamp'},
-            );
+            const distance = Math.abs(i - currentLineIndex - scrollProgress);
+            const opacity = interpolate(distance, [0, 3, 5], [1, 0.4, 0.15], {
+              extrapolateRight: 'clamp',
+            });
 
             return (
               <div

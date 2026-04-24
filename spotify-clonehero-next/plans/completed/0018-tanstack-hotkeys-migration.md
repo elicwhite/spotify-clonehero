@@ -8,38 +8,40 @@
 ## Context
 
 ### Current state:
+
 All ~30+ keyboard shortcuts use raw `addEventListener` with manual `e.metaKey || e.ctrlKey` checks, manual input field skipping, and manual `e.preventDefault()`. This code is scattered across 4 locations:
 
-| Location | Shortcuts | Pattern |
-|----------|-----------|---------|
-| `components/chart-editor/hooks/useEditorKeyboard.ts` | ~24 (tools, grid, flags, clipboard, undo/redo, save, select) | `window.addEventListener('keydown', handler)` in useEffect |
-| `components/chart-editor/TransportControls.tsx` | 5 (space, arrows, brackets for speed) | `window.addEventListener('keydown', handler)` in useEffect |
-| `components/ui/sidebar.tsx` (SidebarProvider) | 1 (Ctrl+B toggle) | `window.addEventListener('keydown', handler)` in useEffect |
-| `app/drum-transcription/components/EditorApp.tsx` | 5 (N, Shift+N, D, M, Enter — via additionalShortcuts callback) | Callback passed to useEditorKeyboard |
+| Location                                             | Shortcuts                                                      | Pattern                                                    |
+| ---------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------- |
+| `components/chart-editor/hooks/useEditorKeyboard.ts` | ~24 (tools, grid, flags, clipboard, undo/redo, save, select)   | `window.addEventListener('keydown', handler)` in useEffect |
+| `components/chart-editor/TransportControls.tsx`      | 5 (space, arrows, brackets for speed)                          | `window.addEventListener('keydown', handler)` in useEffect |
+| `components/ui/sidebar.tsx` (SidebarProvider)        | 1 (Ctrl+B toggle)                                              | `window.addEventListener('keydown', handler)` in useEffect |
+| `app/drum-transcription/components/EditorApp.tsx`    | 5 (N, Shift+N, D, M, Enter — via additionalShortcuts callback) | Callback passed to useEditorKeyboard                       |
 
 ### Target state:
+
 Each shortcut becomes a declarative `useHotkey()` call. No raw addEventListener for keyboard events anywhere in the codebase.
 
 ## 1. @tanstack/react-hotkeys API Reference
 
 ```tsx
-import { useHotkey } from '@tanstack/react-hotkeys'
+import {useHotkey} from '@tanstack/react-hotkeys';
 
 // Basic usage — Mod resolves to Cmd (Mac) or Ctrl (Win/Linux)
-useHotkey('Mod+S', () => save())
+useHotkey('Mod+S', () => save());
 
 // Options
 useHotkey('Mod+Z', () => undo(), {
-  enabled: canUndo,           // Conditional enable/disable
-  preventDefault: true,        // Prevent browser default (default: true)
-})
+  enabled: canUndo, // Conditional enable/disable
+  preventDefault: true, // Prevent browser default (default: true)
+});
 
 // Display formatting
-import { formatForDisplay } from '@tanstack/react-hotkeys'
-formatForDisplay('Mod+S') // → "⌘S" on Mac, "Ctrl+S" on Windows
+import {formatForDisplay} from '@tanstack/react-hotkeys';
+formatForDisplay('Mod+S'); // → "⌘S" on Mac, "Ctrl+S" on Windows
 
 // Provider for global defaults
-import { HotkeysProvider } from '@tanstack/react-hotkeys'
+import {HotkeysProvider} from '@tanstack/react-hotkeys';
 ```
 
 ## 2. Migration Map
@@ -69,75 +71,77 @@ useEffect(() => {
 
 // AFTER (declarative useHotkey)
 useHotkey('Mod+S', () => onSave?.());
-useHotkey('Mod+Z', () => undo(), { enabled: canUndo });
-useHotkey('Mod+Shift+Z', () => redo(), { enabled: canRedo });
-useHotkey('Mod+Y', () => redo(), { enabled: canRedo });
+useHotkey('Mod+Z', () => undo(), {enabled: canUndo});
+useHotkey('Mod+Shift+Z', () => redo(), {enabled: canRedo});
+useHotkey('Mod+Y', () => redo(), {enabled: canRedo});
 // ... each shortcut is its own call
 ```
 
 #### Full shortcut mapping for useEditorKeyboard:
 
-| Current implementation | useHotkey call |
-|----------------------|----------------|
-| `(metaKey\|ctrlKey) && 's'` | `useHotkey('Mod+S', () => onSave?.())` |
-| `(metaKey\|ctrlKey) && 'z' && !shiftKey` | `useHotkey('Mod+Z', () => undo(), { enabled: canUndo })` |
-| `(metaKey\|ctrlKey) && 'z' && shiftKey` | `useHotkey('Mod+Shift+Z', () => redo(), { enabled: canRedo })` |
-| `(metaKey\|ctrlKey) && 'y'` | `useHotkey('Mod+Y', () => redo(), { enabled: canRedo })` |
-| `(metaKey\|ctrlKey) && 'c'` | `useHotkey('Mod+C', () => copy(), { enabled: hasSelection })` |
-| `(metaKey\|ctrlKey) && 'x'` | `useHotkey('Mod+X', () => cut(), { enabled: hasSelection })` |
-| `(metaKey\|ctrlKey) && 'v'` | `useHotkey('Mod+V', () => paste(), { enabled: hasClipboard })` |
-| `(metaKey\|ctrlKey) && 'l'` | `useHotkey('Mod+L', () => clearLoop())` |
-| `(metaKey\|ctrlKey) && 'a'` | `useHotkey('Mod+A', () => selectAll())` |
-| `key === 'Escape'` | `useHotkey('Escape', () => deselectAll())` |
+| Current implementation                      | useHotkey call                                                                                     |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `(metaKey\|ctrlKey) && 's'`                 | `useHotkey('Mod+S', () => onSave?.())`                                                             |
+| `(metaKey\|ctrlKey) && 'z' && !shiftKey`    | `useHotkey('Mod+Z', () => undo(), { enabled: canUndo })`                                           |
+| `(metaKey\|ctrlKey) && 'z' && shiftKey`     | `useHotkey('Mod+Shift+Z', () => redo(), { enabled: canRedo })`                                     |
+| `(metaKey\|ctrlKey) && 'y'`                 | `useHotkey('Mod+Y', () => redo(), { enabled: canRedo })`                                           |
+| `(metaKey\|ctrlKey) && 'c'`                 | `useHotkey('Mod+C', () => copy(), { enabled: hasSelection })`                                      |
+| `(metaKey\|ctrlKey) && 'x'`                 | `useHotkey('Mod+X', () => cut(), { enabled: hasSelection })`                                       |
+| `(metaKey\|ctrlKey) && 'v'`                 | `useHotkey('Mod+V', () => paste(), { enabled: hasClipboard })`                                     |
+| `(metaKey\|ctrlKey) && 'l'`                 | `useHotkey('Mod+L', () => clearLoop())`                                                            |
+| `(metaKey\|ctrlKey) && 'a'`                 | `useHotkey('Mod+A', () => selectAll())`                                                            |
+| `key === 'Escape'`                          | `useHotkey('Escape', () => deselectAll())`                                                         |
 | `key === 'Delete' \|\| key === 'Backspace'` | `useHotkey('Delete', () => deleteSelected())` and `useHotkey('Backspace', () => deleteSelected())` |
-| `key === 'q'` | `useHotkey('Q', () => toggleCymbal(), { enabled: hasSelection })` |
-| `key === 'a' (no modifier)` | `useHotkey('A', () => toggleAccent(), { enabled: hasSelection })` |
-| `key === 's' (no modifier)` | `useHotkey('S', () => toggleGhost(), { enabled: hasSelection })` |
-| `key === '1'...'5' (no shift)` | `useHotkey('1', () => setTool('cursor'))` through `useHotkey('5', () => setTool('timesig'))` |
-| `shiftKey && '1'...'6'` | `useHotkey('Shift+1', () => setGrid(4))` through `useHotkey('Shift+6', () => setGrid(64))` |
-| `shiftKey && '0'` | `useHotkey('Shift+0', () => setGrid(0))` |
+| `key === 'q'`                               | `useHotkey('Q', () => toggleCymbal(), { enabled: hasSelection })`                                  |
+| `key === 'a' (no modifier)`                 | `useHotkey('A', () => toggleAccent(), { enabled: hasSelection })`                                  |
+| `key === 's' (no modifier)`                 | `useHotkey('S', () => toggleGhost(), { enabled: hasSelection })`                                   |
+| `key === '1'...'5' (no shift)`              | `useHotkey('1', () => setTool('cursor'))` through `useHotkey('5', () => setTool('timesig'))`       |
+| `shiftKey && '1'...'6'`                     | `useHotkey('Shift+1', () => setGrid(4))` through `useHotkey('Shift+6', () => setGrid(64))`         |
+| `shiftKey && '0'`                           | `useHotkey('Shift+0', () => setGrid(0))`                                                           |
 
 ### TransportControls.tsx → useHotkey calls
 
 Move the keyboard handling out of TransportControls into either the component itself or a dedicated `useTransportKeyboard` hook:
 
-| Current | useHotkey call |
-|---------|----------------|
-| `key === ' '` (space) | `useHotkey('Space', () => togglePlayPause())` |
-| `key === 'ArrowLeft'` | `useHotkey('ArrowLeft', () => seekBack())` |
-| `key === 'ArrowRight'` | `useHotkey('ArrowRight', () => seekForward())` |
-| `ctrlKey && 'ArrowLeft'` | `useHotkey('Mod+ArrowLeft', () => prevSection())` |
+| Current                   | useHotkey call                                     |
+| ------------------------- | -------------------------------------------------- |
+| `key === ' '` (space)     | `useHotkey('Space', () => togglePlayPause())`      |
+| `key === 'ArrowLeft'`     | `useHotkey('ArrowLeft', () => seekBack())`         |
+| `key === 'ArrowRight'`    | `useHotkey('ArrowRight', () => seekForward())`     |
+| `ctrlKey && 'ArrowLeft'`  | `useHotkey('Mod+ArrowLeft', () => prevSection())`  |
 | `ctrlKey && 'ArrowRight'` | `useHotkey('Mod+ArrowRight', () => nextSection())` |
-| `key === '['` | `useHotkey('[', () => decreaseSpeed())` |
-| `key === ']'` | `useHotkey(']', () => increaseSpeed())` |
+| `key === '['`             | `useHotkey('[', () => decreaseSpeed())`            |
+| `key === ']'`             | `useHotkey(']', () => increaseSpeed())`            |
 
 ### SidebarProvider (components/ui/sidebar.tsx) → useHotkey
 
-| Current | useHotkey call |
-|---------|----------------|
+| Current                     | useHotkey call                              |
+| --------------------------- | ------------------------------------------- |
 | `(metaKey\|ctrlKey) && 'b'` | `useHotkey('Mod+B', () => toggleSidebar())` |
 
 ### EditorApp drum-transcription specifics → useHotkey calls
 
 The `additionalShortcuts` callback pattern is eliminated. Instead, drum-transcription's EditorApp registers its own hotkeys directly:
 
-| Current (via callback) | useHotkey call in EditorApp |
-|------------------------|---------------------------|
-| `key === 'Enter'` | `useHotkey('Enter', () => markReviewed(), { enabled: hasSelection })` |
-| `key === 'n' && !shiftKey` | `useHotkey('N', () => nextLowConfidence())` |
-| `key === 'n' && shiftKey` | `useHotkey('Shift+N', () => prevLowConfidence())` |
-| `key === 'd'` | `useHotkey('D', () => toggleDrumsSolo())` |
-| `key === 'm'` | `useHotkey('M', () => toggleDrumsMute())` |
+| Current (via callback)     | useHotkey call in EditorApp                                           |
+| -------------------------- | --------------------------------------------------------------------- |
+| `key === 'Enter'`          | `useHotkey('Enter', () => markReviewed(), { enabled: hasSelection })` |
+| `key === 'n' && !shiftKey` | `useHotkey('N', () => nextLowConfidence())`                           |
+| `key === 'n' && shiftKey`  | `useHotkey('Shift+N', () => prevLowConfidence())`                     |
+| `key === 'd'`              | `useHotkey('D', () => toggleDrumsSolo())`                             |
+| `key === 'm'`              | `useHotkey('M', () => toggleDrumsMute())`                             |
 
 ## 3. Eliminating the additionalShortcuts Pattern
 
 Currently `useEditorKeyboard` accepts an `additionalShortcuts` callback so page-specific code can inject extra shortcuts. With `useHotkey`, this pattern is unnecessary — each component simply calls `useHotkey` for its own shortcuts. They compose naturally because `useHotkey` hooks are independent.
 
 **Remove:**
+
 - The `additionalShortcuts` parameter from `useEditorKeyboard`
 - The callback wiring in EditorApp
 
 **Replace with:**
+
 - Direct `useHotkey` calls in drum-transcription's EditorApp (or a `useDrumTranscriptionKeyboard` hook)
 
 ## 4. HotkeysProvider Setup
@@ -146,13 +150,14 @@ Add `HotkeysProvider` at the app layout level with sensible defaults:
 
 ```tsx
 // app/layout.tsx or components/chart-editor/ChartEditor.tsx
-import { HotkeysProvider } from '@tanstack/react-hotkeys'
+import {HotkeysProvider} from '@tanstack/react-hotkeys';
 
-<HotkeysProvider defaultOptions={{
-  hotkey: { preventDefault: true },
-}}>
+<HotkeysProvider
+  defaultOptions={{
+    hotkey: {preventDefault: true},
+  }}>
   {children}
-</HotkeysProvider>
+</HotkeysProvider>;
 ```
 
 This ensures all hotkeys preventDefault by default (matching current behavior).
@@ -162,11 +167,23 @@ This ensures all hotkeys preventDefault by default (matching current behavior).
 Current code manually checks `e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement`. Verify that @tanstack/react-hotkeys handles this automatically. If not, configure it globally via the provider or per-hook options. If the library doesn't support this natively, add a wrapper:
 
 ```typescript
-function useEditorHotkey(key: string, handler: () => void, options?: HotkeyOptions) {
-  useHotkey(key, (e) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    handler();
-  }, options);
+function useEditorHotkey(
+  key: string,
+  handler: () => void,
+  options?: HotkeyOptions,
+) {
+  useHotkey(
+    key,
+    e => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      )
+        return;
+      handler();
+    },
+    options,
+  );
 }
 ```
 

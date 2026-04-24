@@ -66,7 +66,13 @@ describe('syllabifyLyrics', () => {
     const result = syllabifyLyrics('shine bright like a diamond');
     // "diamond" → ["di", "a", "mond"] (3 syllables)
     expect(result.map(s => s.text)).toEqual([
-      'shine', 'bright', 'like', 'a', 'di', 'a', 'mond',
+      'shine',
+      'bright',
+      'like',
+      'a',
+      'di',
+      'a',
+      'mond',
     ]);
     expect(result.find(s => s.text === 'di')?.joinNext).toBe(true);
     expect(result.find(s => s.text === 'mond')?.joinNext).toBe(false);

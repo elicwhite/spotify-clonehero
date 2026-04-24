@@ -12,10 +12,10 @@ import {
   createEmptyChart,
   writeChartFolder,
 } from '@eliwhite/scan-chart';
-import type { ChartDocument, File } from '@eliwhite/scan-chart';
+import type {ChartDocument, File} from '@eliwhite/scan-chart';
 
 // Re-export the scan-chart surface consumers depend on
-export { createEmptyChart, writeChartFolder };
+export {createEmptyChart, writeChartFolder};
 export type {
   ChartDocument,
   File,
@@ -82,10 +82,7 @@ export {
 } from './helpers/tempo';
 
 // Named section (globalEvent) helpers
-export {
-  addSection,
-  removeSection,
-} from './helpers/sections';
+export {addSection, removeSection} from './helpers/sections';
 
 // ---------------------------------------------------------------------------
 // readChart — parses a chart folder into a ChartDocument
@@ -99,10 +96,13 @@ export {
 export function readChart(files: File[]): ChartDocument {
   const result = parseChartAndIni(files);
   if (!result.parsedChart) {
-    const reason = result.chartFolderIssues[0]?.description ?? 'Could not parse chart';
+    const reason =
+      result.chartFolderIssues[0]?.description ?? 'Could not parse chart';
     throw new Error(reason);
   }
   const chartFileNames = new Set(['notes.chart', 'notes.mid', 'song.ini']);
-  const assets = files.filter(f => !chartFileNames.has(f.fileName.toLowerCase()));
-  return { parsedChart: result.parsedChart, assets };
+  const assets = files.filter(
+    f => !chartFileNames.has(f.fileName.toLowerCase()),
+  );
+  return {parsedChart: result.parsedChart, assets};
 }

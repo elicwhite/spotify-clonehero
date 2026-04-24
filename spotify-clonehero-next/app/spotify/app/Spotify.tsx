@@ -293,11 +293,7 @@ async function getData() {
           'track.id',
           'track_chart_link.spotify_id',
         )
-        .innerJoin(
-          'track_dedup as td',
-          'td.original_id',
-          'track.id',
-        )
+        .innerJoin('track_dedup as td', 'td.original_id', 'track.id')
         .select([
           'td.canonical_id as spotify_track_id',
           sql<string>`MIN(track.name)`.as('spotify_track_name'),

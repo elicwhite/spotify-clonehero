@@ -201,7 +201,7 @@ async function runSeparation(
 
     // Yield to UI thread periodically
     if (seg % 2 === 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
     }
 
     const segStart = seg * STEP;
@@ -357,9 +357,7 @@ export async function loadStem(
 /**
  * Checks whether all 4 stems have been stored for a project.
  */
-export async function hasSeparatedStems(
-  projectId: string,
-): Promise<boolean> {
+export async function hasSeparatedStems(projectId: string): Promise<boolean> {
   try {
     const root = await navigator.storage.getDirectory();
     const nsDir = await root.getDirectoryHandle('drum-transcription');

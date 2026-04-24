@@ -94,11 +94,7 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div
-        className={cn(
-          'rounded-lg border bg-background text-sm',
-          className,
-        )}>
+      <div className={cn('rounded-lg border bg-background text-sm', className)}>
         {/* Header */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}

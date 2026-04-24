@@ -92,7 +92,10 @@ export function trackToElements(track: Track): ChartElement[] {
 
   const newCache = new Map<string, NoteElementData>();
 
-  function cachedData(cacheKey: string, data: NoteElementData): NoteElementData {
+  function cachedData(
+    cacheKey: string,
+    data: NoteElementData,
+  ): NoteElementData {
     const existing = dataCache.get(cacheKey);
     if (existing && dataShallowEqual(existing, data)) {
       newCache.set(cacheKey, existing);

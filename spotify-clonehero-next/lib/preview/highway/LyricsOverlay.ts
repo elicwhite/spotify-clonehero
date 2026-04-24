@@ -19,12 +19,19 @@ const UPCOMING_LEAD_TIME_MS = 3000;
 // Clone Hero color scheme
 const COLOR_SUNG = 'rgb(230, 166, 47)'; // orange-gold (already sung / currently singing)
 const COLOR_FUTURE = '#FFFFFF'; // white (not yet sung)
-const COLOR_UPCOMING_R = 129, COLOR_UPCOMING_G = 129, COLOR_UPCOMING_B = 129;
-const SUNG_R = 230, SUNG_G = 166, SUNG_B = 47;
-const FUTURE_R = 255, FUTURE_G = 255, FUTURE_B = 255;
+const COLOR_UPCOMING_R = 129,
+  COLOR_UPCOMING_G = 129,
+  COLOR_UPCOMING_B = 129;
+const SUNG_R = 230,
+  SUNG_G = 166,
+  SUNG_B = 47;
+const FUTURE_R = 255,
+  FUTURE_G = 255,
+  FUTURE_B = 255;
 
 /** System font stack matching Clone Hero's look. */
-const FONT_FAMILY = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+const FONT_FAMILY =
+  'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
 /** Canvas height in CSS pixels. Fixed so text aspect ratio is preserved. */
 const CANVAS_CSS_HEIGHT = 120;
@@ -63,7 +70,14 @@ export class LyricsState {
   /** Update state for the given time. Returns a snapshot of the current state. */
   update(timeMs: number): LyricsStateSnapshot {
     if (this.lines.length === 0) {
-      return {lineIndex: -1, syllableIndex: -1, opacity: 0, showUpcoming: false, transitionProgress: 0, isTransitioning: false};
+      return {
+        lineIndex: -1,
+        syllableIndex: -1,
+        opacity: 0,
+        showUpcoming: false,
+        transitionProgress: 0,
+        isTransitioning: false,
+      };
     }
 
     const prevLineIndex = this.currentLineIndex;
@@ -81,9 +95,14 @@ export class LyricsState {
     // Detect line change → start slide transition only for short gaps.
     // Long gaps (≥ threshold) use fade out/in instead, so the new line
     // should appear directly at the active position with no slide.
-    if (this.currentLineIndex !== prevLineIndex && prevLineIndex >= 0 && this.currentLineIndex > prevLineIndex) {
+    if (
+      this.currentLineIndex !== prevLineIndex &&
+      prevLineIndex >= 0 &&
+      this.currentLineIndex > prevLineIndex
+    ) {
       const prevLine = this.lines[prevLineIndex];
-      const gap = this.lines[this.currentLineIndex].phraseStartMs - prevLine.phraseEndMs;
+      const gap =
+        this.lines[this.currentLineIndex].phraseStartMs - prevLine.phraseEndMs;
       if (gap < PHRASE_DISTANCE_THRESHOLD_MS) {
         this.transitionStartMs = timeMs;
       }
@@ -94,7 +113,10 @@ export class LyricsState {
     let isTransitioning = false;
     if (this.transitionStartMs >= 0) {
       isTransitioning = true;
-      transitionProgress = Math.min(1, (timeMs - this.transitionStartMs) / TRANSITION_DURATION_MS);
+      transitionProgress = Math.min(
+        1,
+        (timeMs - this.transitionStartMs) / TRANSITION_DURATION_MS,
+      );
       if (transitionProgress >= 1) {
         this.transitionStartMs = -1; // transition complete
         transitionProgress = 0;
@@ -123,7 +145,10 @@ export class LyricsState {
   /** Binary search for the active line at a given time. */
   private findLineIndex(timeMs: number): number {
     const lines = this.lines;
-    if (lines.length === 0 || timeMs < lines[0].phraseStartMs - PHRASE_FADE_MS) {
+    if (
+      lines.length === 0 ||
+      timeMs < lines[0].phraseStartMs - PHRASE_FADE_MS
+    ) {
       return -1;
     }
 
@@ -146,7 +171,10 @@ export class LyricsState {
   private advanceLineIndex(timeMs: number): void {
     const lines = this.lines;
     if (this.currentLineIndex < 0) {
-      if (lines.length > 0 && timeMs >= lines[0].phraseStartMs - PHRASE_FADE_MS) {
+      if (
+        lines.length > 0 &&
+        timeMs >= lines[0].phraseStartMs - PHRASE_FADE_MS
+      ) {
         this.currentLineIndex = 0;
       }
       return;
@@ -168,7 +196,10 @@ export class LyricsState {
       // `timeMs < phraseStartMs - PHRASE_FADE_MS`, then fades 0→1.
       const line = lines[this.currentLineIndex];
       const gap = nextLine.phraseStartMs - line.phraseEndMs;
-      if (gap >= PHRASE_DISTANCE_THRESHOLD_MS && timeMs >= line.phraseEndMs + PHRASE_FADE_MS) {
+      if (
+        gap >= PHRASE_DISTANCE_THRESHOLD_MS &&
+        timeMs >= line.phraseEndMs + PHRASE_FADE_MS
+      ) {
         this.currentLineIndex++;
         continue;
       }
@@ -241,7 +272,10 @@ export class LyricsState {
     // Before phrase starts — fade in
     const phraseStart = line.phraseStartMs;
     if (timeMs < phraseStart) {
-      return Math.max(0, (timeMs - (phraseStart - PHRASE_FADE_MS)) / PHRASE_FADE_MS);
+      return Math.max(
+        0,
+        (timeMs - (phraseStart - PHRASE_FADE_MS)) / PHRASE_FADE_MS,
+      );
     }
 
     return 1;
@@ -282,8 +316,12 @@ function lerp(a: number, b: number, t: number): number {
 
 /** Interpolate an RGB color string. */
 function lerpColor(
-  r1: number, g1: number, b1: number,
-  r2: number, g2: number, b2: number,
+  r1: number,
+  g1: number,
+  b1: number,
+  r2: number,
+  g2: number,
+  b2: number,
   t: number,
 ): string {
   const r = Math.round(lerp(r1, r2, t));
@@ -484,7 +522,8 @@ export class LyricsOverlay {
 
     // Compute font sizes — fixed ideal, shrunk only if text overflows
     const activeFontSize = this.fitFontSize(
-      LyricsOverlay.ACTIVE_FONT_PX, activeLine.text,
+      LyricsOverlay.ACTIVE_FONT_PX,
+      activeLine.text,
     );
     const upcomingFontSize = nextLine
       ? this.fitFontSize(LyricsOverlay.UPCOMING_FONT_PX, nextLine.text)
@@ -500,7 +539,8 @@ export class LyricsOverlay {
     if (snap.isTransitioning && prevLine) {
       // --- Transition in progress ---
       const prevFontSize = this.fitFontSize(
-        LyricsOverlay.ACTIVE_FONT_PX, prevLine.text,
+        LyricsOverlay.ACTIVE_FONT_PX,
+        prevLine.text,
       );
 
       // Outgoing line (previous): slides up + fades out
@@ -508,33 +548,70 @@ export class LyricsOverlay {
       const outgoingAlpha = 1 - t;
       if (outgoingAlpha > 0.01) {
         ctx.globalAlpha = outgoingAlpha;
-        this.drawPhraseLine(ctx, prevLine, prevLine.syllables.length - 1, prevFontSize, outgoingY, w);
+        this.drawPhraseLine(
+          ctx,
+          prevLine,
+          prevLine.syllables.length - 1,
+          prevFontSize,
+          outgoingY,
+          w,
+        );
         ctx.globalAlpha = 1;
       }
 
       // Incoming line (current, was upcoming): slides up from upcoming → active position
       const incomingUpcomingSize = this.fitFontSize(
-        LyricsOverlay.UPCOMING_FONT_PX, activeLine.text,
+        LyricsOverlay.UPCOMING_FONT_PX,
+        activeLine.text,
       );
       const incomingY = lerp(upcomingBaseY, activeBaseY, t);
-      const incomingFontSize = Math.round(lerp(incomingUpcomingSize, activeFontSize, t));
-      this.drawTransitioningLine(ctx, activeLine, snap.syllableIndex, incomingFontSize, incomingY, w, t);
+      const incomingFontSize = Math.round(
+        lerp(incomingUpcomingSize, activeFontSize, t),
+      );
+      this.drawTransitioningLine(
+        ctx,
+        activeLine,
+        snap.syllableIndex,
+        incomingFontSize,
+        incomingY,
+        w,
+        t,
+      );
 
       // Next upcoming line fades in
       if (nextLine && snap.showUpcoming) {
         ctx.globalAlpha = t;
-        this.drawUpcomingLine(ctx, nextLine, upcomingFontSize, upcomingBaseY, w);
+        this.drawUpcomingLine(
+          ctx,
+          nextLine,
+          upcomingFontSize,
+          upcomingBaseY,
+          w,
+        );
         ctx.globalAlpha = 1;
       }
     } else {
       // --- Settled state ---
 
       // Active line
-      this.drawPhraseLine(ctx, activeLine, snap.syllableIndex, activeFontSize, activeBaseY, w);
+      this.drawPhraseLine(
+        ctx,
+        activeLine,
+        snap.syllableIndex,
+        activeFontSize,
+        activeBaseY,
+        w,
+      );
 
       // Upcoming line
       if (nextLine && snap.showUpcoming) {
-        this.drawUpcomingLine(ctx, nextLine, upcomingFontSize, upcomingBaseY, w);
+        this.drawUpcomingLine(
+          ctx,
+          nextLine,
+          upcomingFontSize,
+          upcomingBaseY,
+          w,
+        );
       }
     }
 
@@ -593,13 +670,23 @@ export class LyricsOverlay {
     for (let i = 0; i < line.syllables.length; i++) {
       if (i <= activeSyllableIndex) {
         ctx.fillStyle = lerpColor(
-          COLOR_UPCOMING_R, COLOR_UPCOMING_G, COLOR_UPCOMING_B,
-          SUNG_R, SUNG_G, SUNG_B, t,
+          COLOR_UPCOMING_R,
+          COLOR_UPCOMING_G,
+          COLOR_UPCOMING_B,
+          SUNG_R,
+          SUNG_G,
+          SUNG_B,
+          t,
         );
       } else {
         ctx.fillStyle = lerpColor(
-          COLOR_UPCOMING_R, COLOR_UPCOMING_G, COLOR_UPCOMING_B,
-          FUTURE_R, FUTURE_G, FUTURE_B, t,
+          COLOR_UPCOMING_R,
+          COLOR_UPCOMING_G,
+          COLOR_UPCOMING_B,
+          FUTURE_R,
+          FUTURE_G,
+          FUTURE_B,
+          t,
         );
       }
       ctx.fillText(line.syllables[i].text, x, y);

@@ -63,8 +63,12 @@ export class SceneReconciler {
   private hoveredKey: string | null = null;
 
   /** Callbacks for selection/hover visual updates. */
-  private onSelectionChange: ((key: string, group: THREE.Group, selected: boolean) => void) | null = null;
-  private onHoverChange: ((key: string, group: THREE.Group, hovered: boolean) => void) | null = null;
+  private onSelectionChange:
+    | ((key: string, group: THREE.Group, selected: boolean) => void)
+    | null = null;
+  private onHoverChange:
+    | ((key: string, group: THREE.Group, hovered: boolean) => void)
+    | null = null;
 
   constructor(
     scene: THREE.Scene,
@@ -137,7 +141,9 @@ export class SceneReconciler {
     const SCROLL_OFF_MARGIN_MS = 200;
 
     // Binary search for window start in sorted elements
-    const startIdx = this.binarySearchStart(currentTimeMs - SCROLL_OFF_MARGIN_MS);
+    const startIdx = this.binarySearchStart(
+      currentTimeMs - SCROLL_OFF_MARGIN_MS,
+    );
 
     // Track which keys are in the window this frame (reuse set to avoid allocation)
     const inWindow = this.inWindowSet;

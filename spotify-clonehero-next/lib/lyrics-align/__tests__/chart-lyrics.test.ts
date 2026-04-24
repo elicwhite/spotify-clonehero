@@ -31,10 +31,7 @@ describe('alignedSyllablesToChartLyrics', () => {
 
   test('multi-syllable word has hyphen suffixes', () => {
     const result = alignedSyllablesToChartLyrics(
-      [
-        syl('ev', 500, true, true),
-        syl('ery', 700, false, false),
-      ],
+      [syl('ev', 500, true, true), syl('ery', 700, false, false)],
       TEMPOS,
       RES,
     );
@@ -46,10 +43,7 @@ describe('alignedSyllablesToChartLyrics', () => {
 
   test('multiple words have no hyphen suffix', () => {
     const result = alignedSyllablesToChartLyrics(
-      [
-        syl('hello', 500, false, true),
-        syl('world', 1000, false, false),
-      ],
+      [syl('hello', 500, false, true), syl('world', 1000, false, false)],
       TEMPOS,
       RES,
     );

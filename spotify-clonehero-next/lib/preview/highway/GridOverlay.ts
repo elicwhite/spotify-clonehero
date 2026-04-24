@@ -166,7 +166,8 @@ export class GridOverlay {
       const beat = this.beats[i];
       if (beat.msTime > windowEndMs) break;
 
-      const worldY = ((beat.msTime - currentTimeMs) / 1000) * this.highwaySpeed - 1;
+      const worldY =
+        ((beat.msTime - currentTimeMs) / 1000) * this.highwaySpeed - 1;
 
       if (beat.isMeasure) {
         const line = this.acquireMeasureLine(measurePoolIdx++);
@@ -333,10 +334,7 @@ export class GridOverlay {
     }
     const tempo = timedTempos[idx];
     const deltaMs = ms - tempo.msTime;
-    return (
-      tempo.tick +
-      (deltaMs * tempo.beatsPerMinute * resolution) / 60000
-    );
+    return tempo.tick + (deltaMs * tempo.beatsPerMinute * resolution) / 60000;
   }
 }
 
@@ -362,8 +360,7 @@ function buildTimedTempos(
       const prev = result[i - 1];
       const deltaTick = tempo.tick - prev.tick;
       currentMs =
-        prev.msTime +
-        (deltaTick * 60000) / (prev.beatsPerMinute * resolution);
+        prev.msTime + (deltaTick * 60000) / (prev.beatsPerMinute * resolution);
     }
     result.push({
       tick: tempo.tick,

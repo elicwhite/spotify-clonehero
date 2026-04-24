@@ -8,6 +8,7 @@
 ## Context
 
 Currently, every edit goes through this flow:
+
 1. Command modifies ChartDocument (immutable clone)
 2. `writeChart()` serializes to .chart text
 3. `parseChartFile()` re-parses the text via scan-chart
@@ -26,22 +27,23 @@ After a command executes, diff the old vs new PreparedNote arrays. Only add/remo
 ```typescript
 class NotesManager {
   // Existing
-  prepare(track, textureManager): void  // full initial setup
+  prepare(track, textureManager): void; // full initial setup
 
   // New: incremental update
-  applyDiff(diff: NotesDiff): void
+  applyDiff(diff: NotesDiff): void;
 
   // New: compute diff between old and new note sets
   static computeDiff(
     oldNotes: PreparedNote[],
     newNotes: PreparedNote[],
-  ): NotesDiff
+  ): NotesDiff;
 }
 
 interface NotesDiff {
-  added: PreparedNote[];     // notes in new but not old
-  removed: number[];          // indices in old array to remove
-  moved: Array<{             // notes that changed position
+  added: PreparedNote[]; // notes in new but not old
+  removed: number[]; // indices in old array to remove
+  moved: Array<{
+    // notes that changed position
     oldIndex: number;
     newNote: PreparedNote;
   }>;
@@ -133,7 +135,7 @@ function useExecuteCommand() {
     notesManager.applyDiff(diff);
 
     // Update React state (chartDoc only, NOT chart — skip re-parse for rendering)
-    dispatch({ type: 'EXECUTE_COMMAND', command, chartDoc: newDoc });
+    dispatch({type: 'EXECUTE_COMMAND', command, chartDoc: newDoc});
   };
 }
 ```
@@ -141,6 +143,7 @@ function useExecuteCommand() {
 ### Step 5: When Full Rebuild IS Needed
 
 Some operations still require a full rebuild:
+
 - **BPM changes** — all note msTime values change
 - **Time signature changes** — affects grid and note positioning
 - **Loading a new chart** — obviously

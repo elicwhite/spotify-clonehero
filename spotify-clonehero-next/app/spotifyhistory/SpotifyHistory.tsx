@@ -248,7 +248,9 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       artist: item.artist,
       song: item.song,
       playCount: item.play_count,
-      matchingCharts: (item.matching_charts as unknown as PickedChorusCharts[]).map(
+      matchingCharts: (
+        item.matching_charts as unknown as PickedChorusCharts[]
+      ).map(
         (chart): SpotifyChartData => ({
           ...chart,
           albumArtMd5: chart.album_art_md5 ?? '',
@@ -273,8 +275,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     }
   }, []);
 
-  const isLoading =
-    status.status !== 'not-started' && status.status !== 'done';
+  const isLoading = status.status !== 'not-started' && status.status !== 'done';
 
   return (
     <>
@@ -292,9 +293,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
             </div>
           )}
           {status.status === 'finding-matches' && (
-            <div className="flex justify-center">
-              Checking for song matches
-            </div>
+            <div className="flex justify-center">Checking for song matches</div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <LocalScanLoaderCard
@@ -319,7 +318,6 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
   );
 }
 
-
 async function getHistoryData() {
   const db = await getLocalDb();
 
@@ -332,11 +330,7 @@ async function getHistoryData() {
             .selectFrom('spotify_history as h')
             .innerJoin('chorus_charts as chart', join =>
               join
-                .onRef(
-                  'chart.artist_normalized',
-                  '=',
-                  'h.artist_normalized',
-                )
+                .onRef('chart.artist_normalized', '=', 'h.artist_normalized')
                 .onRef('chart.name_normalized', '=', 'h.name_normalized'),
             )
             .select([
@@ -433,7 +427,11 @@ async function getHistoryData() {
               'playlist.total_tracks as total_tracks',
               'playlist.updated_at as updated_at',
             ])
-            .groupBy(['h.artist_normalized', 'h.name_normalized', 'playlist.id'])
+            .groupBy([
+              'h.artist_normalized',
+              'h.name_normalized',
+              'playlist.id',
+            ])
             .as('deduped_playlists'),
         )
         .select([
@@ -466,11 +464,7 @@ async function getHistoryData() {
         .selectFrom('spotify_history as h')
         .innerJoin('chorus_charts as chart', join =>
           join
-            .onRef(
-              'chart.artist_normalized',
-              '=',
-              'h.artist_normalized',
-            )
+            .onRef('chart.artist_normalized', '=', 'h.artist_normalized')
             .onRef('chart.name_normalized', '=', 'h.name_normalized'),
         )
         .innerJoin('local_charts as local', join =>
@@ -491,38 +485,18 @@ async function getHistoryData() {
     .selectFrom('spotify_history as h')
     .innerJoin('chart_aggregates as chart_data', join =>
       join
-        .onRef(
-          'chart_data.artist_normalized',
-          '=',
-          'h.artist_normalized',
-        )
+        .onRef('chart_data.artist_normalized', '=', 'h.artist_normalized')
         .onRef('chart_data.name_normalized', '=', 'h.name_normalized'),
     )
     .leftJoin('playlist_aggregates as playlist_data', join =>
       join
-        .onRef(
-          'playlist_data.artist_normalized',
-          '=',
-          'h.artist_normalized',
-        )
-        .onRef(
-          'playlist_data.name_normalized',
-          '=',
-          'h.name_normalized',
-        ),
+        .onRef('playlist_data.artist_normalized', '=', 'h.artist_normalized')
+        .onRef('playlist_data.name_normalized', '=', 'h.name_normalized'),
     )
     .leftJoin('local_chart_flags as installed_flag', join =>
       join
-        .onRef(
-          'installed_flag.artist_normalized',
-          '=',
-          'h.artist_normalized',
-        )
-        .onRef(
-          'installed_flag.name_normalized',
-          '=',
-          'h.name_normalized',
-        ),
+        .onRef('installed_flag.artist_normalized', '=', 'h.artist_normalized')
+        .onRef('installed_flag.name_normalized', '=', 'h.name_normalized'),
     )
     .select([
       'h.artist',

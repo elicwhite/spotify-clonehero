@@ -108,7 +108,9 @@ describe('getNextMeasureTick', () => {
     });
 
     it('moves forward from a measure boundary', () => {
-      expect(getNextMeasureTick(1920, 1, resolution, timeSignatures)).toBe(3840);
+      expect(getNextMeasureTick(1920, 1, resolution, timeSignatures)).toBe(
+        3840,
+      );
     });
 
     it('moves backward from a measure boundary', () => {
@@ -120,7 +122,9 @@ describe('getNextMeasureTick', () => {
     });
 
     it('moves backward from second measure mid-point', () => {
-      expect(getNextMeasureTick(2500, -1, resolution, timeSignatures)).toBe(1920);
+      expect(getNextMeasureTick(2500, -1, resolution, timeSignatures)).toBe(
+        1920,
+      );
     });
 
     it('clamps to 0 when moving backward from start', () => {
@@ -156,8 +160,8 @@ describe('getNextMeasureTick', () => {
 
   describe('time signature changes', () => {
     const timeSignatures = [
-      {tick: 0, numerator: 4, denominator: 4},     // measure = 1920
-      {tick: 3840, numerator: 3, denominator: 4},   // measure = 1440, starts at tick 3840
+      {tick: 0, numerator: 4, denominator: 4}, // measure = 1920
+      {tick: 3840, numerator: 3, denominator: 4}, // measure = 1440, starts at tick 3840
     ];
 
     it('navigates correctly in first TS', () => {
@@ -165,21 +169,29 @@ describe('getNextMeasureTick', () => {
     });
 
     it('navigates forward to second TS boundary', () => {
-      expect(getNextMeasureTick(1920, 1, resolution, timeSignatures)).toBe(3840);
+      expect(getNextMeasureTick(1920, 1, resolution, timeSignatures)).toBe(
+        3840,
+      );
     });
 
     it('navigates forward in second TS', () => {
       // In 3/4 starting at 3840: next measure = 3840 + 1440 = 5280
-      expect(getNextMeasureTick(3840, 1, resolution, timeSignatures)).toBe(5280);
+      expect(getNextMeasureTick(3840, 1, resolution, timeSignatures)).toBe(
+        5280,
+      );
     });
 
     it('navigates backward from second TS to first', () => {
-      expect(getNextMeasureTick(3840, -1, resolution, timeSignatures)).toBe(1920);
+      expect(getNextMeasureTick(3840, -1, resolution, timeSignatures)).toBe(
+        1920,
+      );
     });
 
     it('navigates backward within second TS', () => {
       // Mid-second-TS measure: 4000 -> back to 3840
-      expect(getNextMeasureTick(4000, -1, resolution, timeSignatures)).toBe(3840);
+      expect(getNextMeasureTick(4000, -1, resolution, timeSignatures)).toBe(
+        3840,
+      );
     });
   });
 

@@ -34,14 +34,14 @@ console.log(doc.parsedChart.format); // 'chart' | 'mid'
 const expert = doc.parsedChart.trackData.find(
   t => t.instrument === 'drums' && t.difficulty === 'expert',
 );
-if (expert) addDrumNote(expert, { tick: 960, type: 'redDrum' });
+if (expert) addDrumNote(expert, {tick: 960, type: 'redDrum'});
 addSection(doc, 1920, 'Verse 1');
 
 // Serialize back to files (notes.chart/notes.mid + song.ini + assets)
 const outFiles = writeChartFolder(doc);
 
 // Or build a chart from scratch
-const empty = createEmptyChart({ format: 'chart', bpm: 120, resolution: 480 });
+const empty = createEmptyChart({format: 'chart', bpm: 120, resolution: 480});
 ```
 
 ## What lives here

@@ -11,10 +11,7 @@ import {
   noteId,
   type FlagName,
 } from './commands';
-import type {
-  DrumNote,
-  DrumNoteType,
-} from '@/lib/chart-edit';
+import type {DrumNote, DrumNoteType} from '@/lib/chart-edit';
 import {getDrumNotes} from '@/lib/chart-edit';
 
 const DRUM_TYPE_LABELS: Record<DrumNoteType, string> = {
@@ -42,7 +39,10 @@ interface NoteInspectorProps {
  * Panel that shows properties of the currently selected note(s).
  * Appears only when notes are selected in Cursor mode.
  */
-export default function NoteInspector({className, onNotesModified}: NoteInspectorProps) {
+export default function NoteInspector({
+  className,
+  onNotesModified,
+}: NoteInspectorProps) {
   const {state, dispatch} = useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
 
@@ -95,7 +95,9 @@ export default function NoteInspector({className, onNotesModified}: NoteInspecto
       )}>
       <div className="flex items-center justify-between">
         <span className="font-semibold">
-          {isSingle ? 'Note Properties' : `${selectedNotes.length} Notes Selected`}
+          {isSingle
+            ? 'Note Properties'
+            : `${selectedNotes.length} Notes Selected`}
         </span>
         <Button
           variant="ghost"

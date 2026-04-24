@@ -32,10 +32,38 @@ const ORT_WASM_CDN =
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
 
 const VOCAB: string[] = [
-  '<pad>', '<s>', '</s>', '<unk>', '|',
-  'E', 'T', 'A', 'O', 'N', 'I', 'H', 'S', 'R', 'D', 'L',
-  'U', 'M', 'W', 'C', 'F', 'G', 'Y', 'P', 'B', 'V', 'K',
-  "'", 'X', 'J', 'Q', 'Z',
+  '<pad>',
+  '<s>',
+  '</s>',
+  '<unk>',
+  '|',
+  'E',
+  'T',
+  'A',
+  'O',
+  'N',
+  'I',
+  'H',
+  'S',
+  'R',
+  'D',
+  'L',
+  'U',
+  'M',
+  'W',
+  'C',
+  'F',
+  'G',
+  'Y',
+  'P',
+  'B',
+  'V',
+  'K',
+  "'",
+  'X',
+  'J',
+  'Q',
+  'Z',
 ];
 
 // ---------------------------------------------------------------------------
@@ -259,7 +287,8 @@ function groupIntoLines(words: AlignedWord[]): LyricLine[] {
 
     // If adding this word would make the line too long, flush first
     if (current.length > 0) {
-      const testLen = current.map(x => x.text).join(' ').length + 1 + w.text.length;
+      const testLen =
+        current.map(x => x.text).join(' ').length + 1 + w.text.length;
       if (testLen > MAX_LINE_CHARS) {
         flush();
       }
@@ -338,9 +367,7 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
   }
 
   if (tokens.length === 0) throw new Error('No valid tokens in syllables');
-  progress(
-    `Tokens: ${tokens.length} characters for ${syls.length} syllables`,
-  );
+  progress(`Tokens: ${tokens.length} characters for ${syls.length} syllables`);
 
   // 2.5. Compute RMS energy per frame and boost blank in quiet frames
   const SAMPLES_PER_FRAME = 320;
@@ -479,7 +506,11 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
   for (const line of lines) {
     const lineSyls: {text: string; msTime: number}[] = [];
     const lineWordCount = line.syllables.length; // each "syllable" from groupIntoLines is a word
-    for (let w = 0; w < lineWordCount && wordIdx < words.length; w++, wordIdx++) {
+    for (
+      let w = 0;
+      w < lineWordCount && wordIdx < words.length;
+      w++, wordIdx++
+    ) {
       const [ss, se] = wordSylRanges[wordIdx];
       for (let si = ss; si < se; si++) {
         // Add space before first syllable of non-first words
@@ -494,9 +525,7 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
     line.text = lineSyls.map(s => s.text).join('');
   }
 
-  progress(
-    `Done: ${alignedSyls.length} syllables, ${lines.length} lines`,
-  );
+  progress(`Done: ${alignedSyls.length} syllables, ${lines.length} lines`);
 
   post({type: 'result', lines, words, syllables: alignedSyls, durationMs});
 }

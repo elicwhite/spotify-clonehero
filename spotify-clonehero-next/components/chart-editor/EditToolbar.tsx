@@ -97,7 +97,9 @@ export default function EditToolbar({className}: EditToolbarProps) {
               <Redo2 className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Redo ({formatForDisplay('Mod+Shift+Z')})</TooltipContent>
+          <TooltipContent>
+            Redo ({formatForDisplay('Mod+Shift+Z')})
+          </TooltipContent>
         </Tooltip>
 
         {/* Separator */}

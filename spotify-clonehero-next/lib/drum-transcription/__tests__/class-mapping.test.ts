@@ -122,7 +122,15 @@ describe('drumClassToDrumNoteType', () => {
 describe('getChartMapping', () => {
   it('returns complete mapping for each class', () => {
     const classes: DrumClassName[] = [
-      'BD', 'SD', 'HT', 'MT', 'FT', 'HH', 'CR', 'CR2', 'RD',
+      'BD',
+      'SD',
+      'HT',
+      'MT',
+      'FT',
+      'HH',
+      'CR',
+      'CR2',
+      'RD',
     ];
 
     for (const cls of classes) {

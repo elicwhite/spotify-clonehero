@@ -37,7 +37,7 @@ export function addDrumNote(
     flags?: DrumNoteFlags;
   },
 ): void {
-  const { tick, type, length = 0, flags: drumFlags = {} } = note;
+  const {tick, type, length = 0, flags: drumFlags = {}} = note;
   const noteType = drumNoteTypeMap[type];
   const flagBits = drumFlagsToNoteFlags(drumFlags, type);
 
@@ -51,7 +51,9 @@ export function addDrumNote(
   };
 
   // Find existing group at this tick
-  const group = track.noteEventGroups.find(g => g.length > 0 && g[0].tick === tick);
+  const group = track.noteEventGroups.find(
+    g => g.length > 0 && g[0].tick === tick,
+  );
   if (group) {
     group.push(newNote);
     // If flam flag is set, apply it to all notes in group
@@ -171,7 +173,9 @@ export function setDrumNoteFlags(
       }
     } else if (flags.flam === false) {
       // Only remove flam if this was the last note requesting it
-      const othersHaveFlam = group.some(n => n !== note && (n.flags & noteFlags.flam));
+      const othersHaveFlam = group.some(
+        n => n !== note && n.flags & noteFlags.flam,
+      );
       if (!othersHaveFlam) {
         for (const n of group) {
           n.flags &= ~noteFlags.flam;
@@ -188,12 +192,18 @@ export function setDrumNoteFlags(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function drumFlagsToNoteFlags(flags: DrumNoteFlags, type: DrumNoteType): number {
+function drumFlagsToNoteFlags(
+  flags: DrumNoteFlags,
+  type: DrumNoteType,
+): number {
   let bits = 0;
 
   if (flags.cymbal) {
     bits |= noteFlags.cymbal;
-  } else if (flags.cymbal === false && (type === 'yellowDrum' || type === 'blueDrum' || type === 'greenDrum')) {
+  } else if (
+    flags.cymbal === false &&
+    (type === 'yellowDrum' || type === 'blueDrum' || type === 'greenDrum')
+  ) {
     bits |= noteFlags.tom;
   }
 

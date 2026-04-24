@@ -23,15 +23,28 @@ import {
   shiftLane,
   defaultFlagsForType,
 } from '@/app/drum-transcription/commands';
-import type {ChartDocument, DrumNote, DrumNoteType, ParsedChart, ParsedTrackData} from '@/lib/chart-edit';
+import type {
+  ChartDocument,
+  DrumNote,
+  DrumNoteType,
+  ParsedChart,
+  ParsedTrackData,
+} from '@/lib/chart-edit';
 import {createEmptyChart, addDrumNote, getDrumNotes} from '@/lib/chart-edit';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
 // ---------------------------------------------------------------------------
 
-function makeDoc(notes: Array<{tick: number; type: DrumNoteType; flags?: DrumNote['flags']; length?: number}> = []): ChartDocument {
-  const parsedChart = createEmptyChart({ bpm: 120, resolution: 480 });
+function makeDoc(
+  notes: Array<{
+    tick: number;
+    type: DrumNoteType;
+    flags?: DrumNote['flags'];
+    length?: number;
+  }> = [],
+): ChartDocument {
+  const parsedChart = createEmptyChart({bpm: 120, resolution: 480});
   // Add an expert drums track with all the fields the new ParsedTrackData
   // shape requires (noteEventGroups, animations, textEvents, versusPhrases,
   // etc.).
@@ -60,7 +73,7 @@ function makeDoc(notes: Array<{tick: number; type: DrumNoteType; flags?: DrumNot
     });
   }
 
-  return { parsedChart, assets: [] };
+  return {parsedChart, assets: []};
 }
 
 function getExpertNotes(doc: ChartDocument): DrumNote[] {
@@ -76,27 +89,52 @@ function getExpertNotes(doc: ChartDocument): DrumNote[] {
 function withChart(
   base: ChartDocument,
   overrides: {
-    tempos?: Array<{ tick: number; beatsPerMinute: number; msTime?: number }>;
-    timeSignatures?: Array<{ tick: number; numerator: number; denominator: number; msTime?: number; msLength?: number }>;
-    sections?: Array<{ tick: number; name: string; msTime?: number; msLength?: number }>;
-    endEvents?: Array<{ tick: number; msTime?: number; msLength?: number }>;
-  } & Partial<Omit<ParsedChart, 'tempos' | 'timeSignatures' | 'sections' | 'endEvents'>>,
+    tempos?: Array<{tick: number; beatsPerMinute: number; msTime?: number}>;
+    timeSignatures?: Array<{
+      tick: number;
+      numerator: number;
+      denominator: number;
+      msTime?: number;
+      msLength?: number;
+    }>;
+    sections?: Array<{
+      tick: number;
+      name: string;
+      msTime?: number;
+      msLength?: number;
+    }>;
+    endEvents?: Array<{tick: number; msTime?: number; msLength?: number}>;
+  } & Partial<
+    Omit<ParsedChart, 'tempos' | 'timeSignatures' | 'sections' | 'endEvents'>
+  >,
 ): ChartDocument {
-  const { tempos, timeSignatures, sections, endEvents, ...rest } = overrides;
-  const next = { ...base.parsedChart, ...rest } as ParsedChart;
+  const {tempos, timeSignatures, sections, endEvents, ...rest} = overrides;
+  const next = {...base.parsedChart, ...rest} as ParsedChart;
   if (tempos) {
-    next.tempos = tempos.map(t => ({ msTime: 0, ...t })) as ParsedChart['tempos'];
+    next.tempos = tempos.map(t => ({msTime: 0, ...t})) as ParsedChart['tempos'];
   }
   if (timeSignatures) {
-    next.timeSignatures = timeSignatures.map(ts => ({ msTime: 0, msLength: 0, ...ts })) as ParsedChart['timeSignatures'];
+    next.timeSignatures = timeSignatures.map(ts => ({
+      msTime: 0,
+      msLength: 0,
+      ...ts,
+    })) as ParsedChart['timeSignatures'];
   }
   if (sections) {
-    next.sections = sections.map(s => ({ msTime: 0, msLength: 0, ...s })) as ParsedChart['sections'];
+    next.sections = sections.map(s => ({
+      msTime: 0,
+      msLength: 0,
+      ...s,
+    })) as ParsedChart['sections'];
   }
   if (endEvents) {
-    next.endEvents = endEvents.map(e => ({ msTime: 0, msLength: 0, ...e })) as ParsedChart['endEvents'];
+    next.endEvents = endEvents.map(e => ({
+      msTime: 0,
+      msLength: 0,
+      ...e,
+    })) as ParsedChart['endEvents'];
   }
-  return { ...base, parsedChart: next };
+  return {...base, parsedChart: next};
 }
 
 // ---------------------------------------------------------------------------
@@ -182,7 +220,12 @@ describe('AddNoteCommand', () => {
       {tick: 0, type: 'kick'},
       {tick: 960, type: 'redDrum'},
     ]);
-    const note: DrumNote = {tick: 480, type: 'yellowDrum', length: 0, flags: {cymbal: true}};
+    const note: DrumNote = {
+      tick: 480,
+      type: 'yellowDrum',
+      length: 0,
+      flags: {cymbal: true},
+    };
     const cmd = new AddNoteCommand(note);
 
     const result = cmd.execute(doc);
@@ -267,9 +310,7 @@ describe('DeleteNotesCommand', () => {
 
 describe('MoveNotesCommand', () => {
   it('moves notes by tick and lane delta', () => {
-    const doc = makeDoc([
-      {tick: 480, type: 'redDrum'},
-    ]);
+    const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
     const cmd = new MoveNotesCommand(['480:redDrum'], 240, 1);
 
     const result = cmd.execute(doc);
@@ -280,9 +321,7 @@ describe('MoveNotesCommand', () => {
   });
 
   it('clamps tick to 0', () => {
-    const doc = makeDoc([
-      {tick: 100, type: 'kick'},
-    ]);
+    const doc = makeDoc([{tick: 100, type: 'kick'}]);
     const cmd = new MoveNotesCommand(['100:kick'], -200, 0);
 
     const result = cmd.execute(doc);
@@ -290,9 +329,7 @@ describe('MoveNotesCommand', () => {
   });
 
   it('undo reverses the move', () => {
-    const doc = makeDoc([
-      {tick: 480, type: 'redDrum'},
-    ]);
+    const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
     const cmd = new MoveNotesCommand(['480:redDrum'], 240, 1);
 
     const after = cmd.execute(doc);
@@ -309,9 +346,7 @@ describe('MoveNotesCommand', () => {
 
 describe('ToggleFlagCommand', () => {
   it('toggles cymbal flag on', () => {
-    const doc = makeDoc([
-      {tick: 480, type: 'yellowDrum'},
-    ]);
+    const doc = makeDoc([{tick: 480, type: 'yellowDrum'}]);
     const cmd = new ToggleFlagCommand(['480:yellowDrum'], 'cymbal');
 
     const result = cmd.execute(doc);
@@ -365,7 +400,10 @@ describe('AddBPMCommand', () => {
 
     const result = cmd.execute(doc);
     expect(result.parsedChart.tempos).toHaveLength(2);
-    expect(result.parsedChart.tempos[1]).toMatchObject({tick: 480, beatsPerMinute: 140});
+    expect(result.parsedChart.tempos[1]).toMatchObject({
+      tick: 480,
+      beatsPerMinute: 140,
+    });
   });
 
   it('updates existing BPM marker at the same tick', () => {
@@ -378,10 +416,12 @@ describe('AddBPMCommand', () => {
   });
 
   it('maintains sort order', () => {
-    const doc = withChart(makeDoc(), { tempos: [
+    const doc = withChart(makeDoc(), {
+      tempos: [
         {tick: 0, beatsPerMinute: 120},
         {tick: 960, beatsPerMinute: 150},
-      ], });
+      ],
+    });
     const cmd = new AddBPMCommand(480, 130);
 
     const result = cmd.execute(doc);
@@ -459,7 +499,12 @@ describe('BatchCommand', () => {
     const cmd = new BatchCommand([
       new AddNoteCommand({tick: 0, type: 'kick', length: 0, flags: {}}),
       new AddNoteCommand({tick: 480, type: 'redDrum', length: 0, flags: {}}),
-      new AddNoteCommand({tick: 960, type: 'yellowDrum', length: 0, flags: {cymbal: true}}),
+      new AddNoteCommand({
+        tick: 960,
+        type: 'yellowDrum',
+        length: 0,
+        flags: {cymbal: true},
+      }),
     ]);
 
     const result = cmd.execute(doc);
@@ -479,9 +524,7 @@ describe('BatchCommand', () => {
   });
 
   it('can combine different command types', () => {
-    const doc = makeDoc([
-      {tick: 0, type: 'kick'},
-    ]);
+    const doc = makeDoc([{tick: 0, type: 'kick'}]);
     const cmd = new BatchCommand([
       new AddNoteCommand({tick: 480, type: 'redDrum', length: 0, flags: {}}),
       new DeleteNotesCommand(new Set(['0:kick'])),
@@ -505,14 +548,19 @@ describe('AddSectionCommand', () => {
 
     const result = cmd.execute(doc);
     expect(result.parsedChart.sections).toHaveLength(1);
-    expect(result.parsedChart.sections[0]).toMatchObject({tick: 480, name: 'verse 1'});
+    expect(result.parsedChart.sections[0]).toMatchObject({
+      tick: 480,
+      name: 'verse 1',
+    });
   });
 
   it('maintains sort order when adding', () => {
-    const doc = withChart(makeDoc(), { sections: [
+    const doc = withChart(makeDoc(), {
+      sections: [
         {tick: 0, name: 'intro'},
         {tick: 960, name: 'chorus'},
-      ], });
+      ],
+    });
     const cmd = new AddSectionCommand(480, 'verse');
 
     const result = cmd.execute(doc);
@@ -523,7 +571,9 @@ describe('AddSectionCommand', () => {
   });
 
   it('replaces an existing section at the same tick', () => {
-    const doc = withChart(makeDoc(), { sections: [{tick: 480, name: 'old name'}], });
+    const doc = withChart(makeDoc(), {
+      sections: [{tick: 480, name: 'old name'}],
+    });
     const cmd = new AddSectionCommand(480, 'new name');
 
     const result = cmd.execute(doc);
@@ -562,23 +612,30 @@ describe('AddSectionCommand', () => {
 
 describe('DeleteSectionCommand', () => {
   it('removes a section at the given tick', () => {
-    const doc = withChart(makeDoc(), { sections: [
+    const doc = withChart(makeDoc(), {
+      sections: [
         {tick: 0, name: 'intro'},
         {tick: 480, name: 'verse'},
         {tick: 960, name: 'chorus'},
-      ], });
+      ],
+    });
     const cmd = new DeleteSectionCommand(480, 'verse');
 
     const result = cmd.execute(doc);
     expect(result.parsedChart.sections).toHaveLength(2);
-    expect(result.parsedChart.sections.map(s => s.name)).toEqual(['intro', 'chorus']);
+    expect(result.parsedChart.sections.map(s => s.name)).toEqual([
+      'intro',
+      'chorus',
+    ]);
   });
 
   it('undo restores the deleted section', () => {
-    const doc = withChart(makeDoc(), { sections: [
+    const doc = withChart(makeDoc(), {
+      sections: [
         {tick: 0, name: 'intro'},
         {tick: 480, name: 'verse'},
-      ], });
+      ],
+    });
     const cmd = new DeleteSectionCommand(480, 'verse');
 
     const after = cmd.execute(doc);
@@ -586,11 +643,14 @@ describe('DeleteSectionCommand', () => {
 
     const reverted = cmd.undo(after);
     expect(reverted.parsedChart.sections).toHaveLength(2);
-    expect(reverted.parsedChart.sections[1]).toMatchObject({tick: 480, name: 'verse'});
+    expect(reverted.parsedChart.sections[1]).toMatchObject({
+      tick: 480,
+      name: 'verse',
+    });
   });
 
   it('does not mutate the original document', () => {
-    const doc = withChart(makeDoc(), { sections: [{tick: 480, name: 'verse'}], });
+    const doc = withChart(makeDoc(), {sections: [{tick: 480, name: 'verse'}]});
     const cmd = new DeleteSectionCommand(480, 'verse');
 
     cmd.execute(doc);
@@ -609,7 +669,7 @@ describe('DeleteSectionCommand', () => {
 
 describe('RenameSectionCommand', () => {
   it('renames a section', () => {
-    const doc = withChart(makeDoc(), { sections: [{tick: 480, name: 'verse'}], });
+    const doc = withChart(makeDoc(), {sections: [{tick: 480, name: 'verse'}]});
     const cmd = new RenameSectionCommand(480, 'verse', 'verse 1');
 
     const result = cmd.execute(doc);
@@ -618,7 +678,7 @@ describe('RenameSectionCommand', () => {
   });
 
   it('undo restores the original name', () => {
-    const doc = withChart(makeDoc(), { sections: [{tick: 480, name: 'verse'}], });
+    const doc = withChart(makeDoc(), {sections: [{tick: 480, name: 'verse'}]});
     const cmd = new RenameSectionCommand(480, 'verse', 'verse 1');
 
     const after = cmd.execute(doc);
@@ -627,7 +687,7 @@ describe('RenameSectionCommand', () => {
   });
 
   it('does not mutate the original document', () => {
-    const doc = withChart(makeDoc(), { sections: [{tick: 480, name: 'verse'}], });
+    const doc = withChart(makeDoc(), {sections: [{tick: 480, name: 'verse'}]});
     const cmd = new RenameSectionCommand(480, 'verse', 'verse 1');
 
     cmd.execute(doc);
@@ -646,35 +706,44 @@ describe('RenameSectionCommand', () => {
 
 describe('MoveSectionCommand', () => {
   it('moves a section to a new tick position', () => {
-    const doc = withChart(makeDoc(), { sections: [
+    const doc = withChart(makeDoc(), {
+      sections: [
         {tick: 0, name: 'intro'},
         {tick: 480, name: 'verse'},
         {tick: 960, name: 'chorus'},
-      ], });
+      ],
+    });
     const cmd = new MoveSectionCommand(480, 720, 'verse');
 
     const result = cmd.execute(doc);
     expect(result.parsedChart.sections).toHaveLength(3);
     const ticks = result.parsedChart.sections.map(s => s.tick);
     expect(ticks).toEqual([0, 720, 960]);
-    expect(result.parsedChart.sections.find(s => s.tick === 720)?.name).toBe('verse');
+    expect(result.parsedChart.sections.find(s => s.tick === 720)?.name).toBe(
+      'verse',
+    );
   });
 
   it('undo moves the section back', () => {
-    const doc = withChart(makeDoc(), { sections: [
+    const doc = withChart(makeDoc(), {
+      sections: [
         {tick: 0, name: 'intro'},
         {tick: 480, name: 'verse'},
-      ], });
+      ],
+    });
     const cmd = new MoveSectionCommand(480, 720, 'verse');
 
     const after = cmd.execute(doc);
     const reverted = cmd.undo(after);
     expect(reverted.parsedChart.sections).toHaveLength(2);
-    expect(reverted.parsedChart.sections[1]).toMatchObject({tick: 480, name: 'verse'});
+    expect(reverted.parsedChart.sections[1]).toMatchObject({
+      tick: 480,
+      name: 'verse',
+    });
   });
 
   it('does not mutate the original document', () => {
-    const doc = withChart(makeDoc(), { sections: [{tick: 480, name: 'verse'}], });
+    const doc = withChart(makeDoc(), {sections: [{tick: 480, name: 'verse'}]});
     const cmd = new MoveSectionCommand(480, 720, 'verse');
 
     cmd.execute(doc);

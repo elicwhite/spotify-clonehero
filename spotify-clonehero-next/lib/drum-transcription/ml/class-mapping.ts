@@ -155,7 +155,7 @@ export function rawEventsToDrumNotes(
 ): DrumNote[] {
   const timedTempos: TimedTempo[] = buildTimedTempos(tempos, resolution);
 
-  const notes: DrumNote[] = events.map((event) => {
+  const notes: DrumNote[] = events.map(event => {
     const mapping = CLASS_TO_CHART[event.drumClass];
     const msTime = event.timeSeconds * 1000;
     const tick = msToTick(msTime, timedTempos, resolution);

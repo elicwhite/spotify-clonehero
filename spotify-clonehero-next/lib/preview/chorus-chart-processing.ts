@@ -26,12 +26,12 @@ export async function getChartAndAudioFiles(chart: ChartResponseEncore) {
   const iniFile = files.find(f => hasIniName(f.fileName));
   if (iniFile) {
     const iniText = new TextDecoder().decode(iniFile.data);
-    const delayMatch = iniText.match(/^\s*delay\s*=\s*(-?\d+)/mi);
+    const delayMatch = iniText.match(/^\s*delay\s*=\s*(-?\d+)/im);
     if (delayMatch) {
       iniDelay = parseInt(delayMatch[1], 10);
     }
     if (iniDelay === undefined) {
-      const offsetMatch = iniText.match(/^\s*chart_offset\s*=\s*(-?[\d.]+)/mi);
+      const offsetMatch = iniText.match(/^\s*chart_offset\s*=\s*(-?[\d.]+)/im);
       if (offsetMatch) {
         iniDelay = Math.round(parseFloat(offsetMatch[1]) * 1000);
       }

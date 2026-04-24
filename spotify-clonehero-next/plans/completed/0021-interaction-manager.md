@@ -61,17 +61,20 @@ class InteractionManager {
 When a note is hovered, it gets a visual outline or glow. Approach: **custom ShaderMaterial** that adds an outline.
 
 ### Option A: Outline via scaled duplicate (simpler)
+
 - When hovered, add a slightly larger (1.15x scale) sprite behind the note with a bright tint
 - Same texture, tinted white/bright, acts as an outline
 - Cheap — just one extra sprite per hovered note
 
 ### Option B: Post-processing outline (more polished)
+
 - Render hovered notes to a separate render target
 - Apply a blur/edge-detect shader
 - Composite back — gives a proper glow effect
 - More GPU work but looks great
 
 ### Recommendation: Option A for now
+
 Simple, performant, looks good enough. Can upgrade to Option B later.
 
 ```typescript

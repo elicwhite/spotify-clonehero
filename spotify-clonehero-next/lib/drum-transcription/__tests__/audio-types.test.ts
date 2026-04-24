@@ -28,9 +28,7 @@ describe('fileNameToDisplayName', () => {
   });
 
   it('strips extension from name with spaces', () => {
-    expect(fileNameToDisplayName('My Song (Live).wav')).toBe(
-      'My Song (Live)',
-    );
+    expect(fileNameToDisplayName('My Song (Live).wav')).toBe('My Song (Live)');
   });
 });
 

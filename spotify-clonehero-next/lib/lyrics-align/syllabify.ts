@@ -41,7 +41,10 @@ export function syllabify(word: string): string[] {
 export function syllabifyLyrics(
   lyrics: string,
 ): {text: string; joinNext: boolean; newLine: boolean}[] {
-  const inputLines = lyrics.split(/\n/).map(l => l.trim()).filter(Boolean);
+  const inputLines = lyrics
+    .split(/\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
   const result: {text: string; joinNext: boolean; newLine: boolean}[] = [];
 
   for (const line of inputLines) {

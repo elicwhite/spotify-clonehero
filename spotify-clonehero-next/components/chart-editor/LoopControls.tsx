@@ -38,7 +38,10 @@ export default function LoopControls({
     const currentMs = audioManager.currentTime * 1000;
     const endMs = state.loopRegion?.endMs ?? currentMs + 4000;
 
-    const region = {startMs: currentMs, endMs: Math.max(currentMs + 100, endMs)};
+    const region = {
+      startMs: currentMs,
+      endMs: Math.max(currentMs + 100, endMs),
+    };
     dispatch({type: 'SET_LOOP_REGION', region});
 
     // Apply to AudioManager
@@ -54,7 +57,10 @@ export default function LoopControls({
     const currentMs = audioManager.currentTime * 1000;
     const startMs = state.loopRegion?.startMs ?? Math.max(0, currentMs - 4000);
 
-    const region = {startMs: Math.min(startMs, currentMs - 100), endMs: currentMs};
+    const region = {
+      startMs: Math.min(startMs, currentMs - 100),
+      endMs: currentMs,
+    };
     dispatch({type: 'SET_LOOP_REGION', region});
 
     audioManager.setPracticeMode({
@@ -119,7 +125,9 @@ export default function LoopControls({
                   <X className="h-3 w-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Clear loop ({formatForDisplay('Mod+L')})</TooltipContent>
+              <TooltipContent>
+                Clear loop ({formatForDisplay('Mod+L')})
+              </TooltipContent>
             </Tooltip>
 
             <span className="text-[10px] text-muted-foreground font-mono">
@@ -129,9 +137,7 @@ export default function LoopControls({
           </>
         )}
 
-        {!hasLoop && (
-          <Repeat className="h-3.5 w-3.5 text-muted-foreground" />
-        )}
+        {!hasLoop && <Repeat className="h-3.5 w-3.5 text-muted-foreground" />}
       </div>
     </TooltipProvider>
   );

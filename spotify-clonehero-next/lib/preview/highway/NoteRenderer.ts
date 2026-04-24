@@ -28,12 +28,11 @@ export interface NoteElementData {
   msLength: number;
 }
 
-
 /** Confidence ring colors by tier */
 const CONFIDENCE_COLORS = {
-  low: 0xef4444,     // red - conf < 0.5
-  medium: 0xf59e0b,  // amber - conf < threshold
-  mild: 0xf59e0b,    // amber - conf < 0.9
+  low: 0xef4444, // red - conf < 0.5
+  medium: 0xf59e0b, // amber - conf < threshold
+  mild: 0xf59e0b, // amber - conf < 0.9
 };
 
 /**
@@ -87,7 +86,10 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
   private highlightGeometry: THREE.PlaneGeometry | null = null;
 
   constructor(
-    getTextureForNote: (note: Note, opts: {inStarPower: boolean}) => THREE.SpriteMaterial,
+    getTextureForNote: (
+      note: Note,
+      opts: {inStarPower: boolean},
+    ) => THREE.SpriteMaterial,
     clippingPlanes: THREE.Plane[],
   ) {
     this.getTextureForNote = getTextureForNote;
@@ -305,7 +307,10 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
    * Extract the main sprite from a note group for raycasting.
    */
   static getSprite(group: THREE.Group): THREE.Sprite | null {
-    if (group.children.length > 0 && group.children[0] instanceof THREE.Sprite) {
+    if (
+      group.children.length > 0 &&
+      group.children[0] instanceof THREE.Sprite
+    ) {
       return group.children[0] as THREE.Sprite;
     }
     return null;
@@ -348,9 +353,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
         }
         highlight = new THREE.Mesh(
           this.getHighlightGeometry(),
-          isHovered
-            ? this.getHoverMaterial()
-            : this.getSelectionMaterial(),
+          isHovered ? this.getHoverMaterial() : this.getSelectionMaterial(),
         );
         highlight.renderOrder = 5;
         group.add(highlight);
@@ -455,10 +458,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     ring.visible = true;
   }
 
-  private updateReviewIndicator(
-    group: THREE.Group,
-    id: string,
-  ): void {
+  private updateReviewIndicator(group: THREE.Group, id: string): void {
     if (!this.reviewedNoteIds || !this.reviewedNoteIds.has(id)) {
       if (
         group.children.length > CHILD_REVIEW &&
@@ -483,10 +483,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
         group.add(placeholder);
       }
       const dotGeom = new THREE.CircleGeometry(0.008, 12);
-      indicator = new THREE.Mesh(
-        dotGeom,
-        this.getReviewMaterial(),
-      );
+      indicator = new THREE.Mesh(dotGeom, this.getReviewMaterial());
       indicator.renderOrder = 6;
       group.add(indicator);
     }
@@ -495,10 +492,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     indicator.visible = true;
   }
 
-  private createSustain(
-    group: THREE.Group,
-    data: NoteElementData,
-  ): THREE.Mesh {
+  private createSustain(group: THREE.Group, data: NoteElementData): THREE.Mesh {
     const sustainWorldHeight = 2 * (data.msLength / HIGHWAY_DURATION_MS);
     const color =
       data.lane >= 0 && data.lane < GUITAR_LANE_COLORS.length

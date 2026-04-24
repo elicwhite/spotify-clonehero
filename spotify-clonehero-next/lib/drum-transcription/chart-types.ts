@@ -48,8 +48,8 @@ export {
 } from '@/lib/chart-edit';
 
 // Re-export scan-chart types used by drum-transcription
-export type { NoteType } from '@eliwhite/scan-chart';
-export { noteTypes, noteFlags } from '@eliwhite/scan-chart';
+export type {NoteType} from '@eliwhite/scan-chart';
+export {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 
 // ---------------------------------------------------------------------------
 // Drum-transcription-specific types (not in chart-edit)
@@ -96,4 +96,3 @@ export interface ValidationResult {
   warnings: string[];
   document: import('@/lib/chart-edit').ChartDocument;
 }
-

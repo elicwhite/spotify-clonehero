@@ -105,7 +105,9 @@ export async function loadAndCreateHitBox(textureLoader: THREE.TextureLoader) {
   return sprite;
 }
 
-export async function loadAndCreateDrumHitBox(textureLoader: THREE.TextureLoader) {
+export async function loadAndCreateDrumHitBox(
+  textureLoader: THREE.TextureLoader,
+) {
   const texture = await loadTexture(
     textureLoader,
     '/assets/preview/assets/isolated-drums.png',

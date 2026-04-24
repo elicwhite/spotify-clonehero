@@ -1,7 +1,14 @@
 'use client';
 
 import {memo, useEffect, useMemo, useRef} from 'react';
-import {setupRenderer, type OverlayState, InteractionManager, type HighwayMode, type SceneReconciler, type NoteRenderer} from '@/lib/preview/highway';
+import {
+  setupRenderer,
+  type OverlayState,
+  InteractionManager,
+  type HighwayMode,
+  type SceneReconciler,
+  type NoteRenderer,
+} from '@/lib/preview/highway';
 import type {WaveformSurfaceConfig} from '@/lib/preview/highway/WaveformSurface';
 import type {GridOverlayConfig} from '@/lib/preview/highway/GridOverlay';
 import {AudioManager} from '@/lib/preview/audioManager';
@@ -27,9 +34,13 @@ export interface HighwayRendererHandle {
   /** Get the NoteRenderer for overlay state management. */
   getNoteRenderer(): Promise<NoteRenderer>;
   /** Set waveform audio data for the highway surface. */
-  setWaveformData(config: Omit<WaveformSurfaceConfig, 'highwayWidth' | 'highwaySpeed'>): Promise<void>;
+  setWaveformData(
+    config: Omit<WaveformSurfaceConfig, 'highwayWidth' | 'highwaySpeed'>,
+  ): Promise<void>;
   /** Set grid overlay data (tempos + time signatures). */
-  setGridData(config: Omit<GridOverlayConfig, 'highwayWidth' | 'highwaySpeed'>): Promise<void>;
+  setGridData(
+    config: Omit<GridOverlayConfig, 'highwayWidth' | 'highwaySpeed'>,
+  ): Promise<void>;
   /** Switch between 'classic' and 'waveform' highway modes. */
   setHighwayMode(mode: HighwayMode): void;
   /** Get the current highway display mode. */
@@ -113,9 +124,9 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
       getInteractionManager: () => renderer.getInteractionManager(),
       getReconciler: () => renderer.getReconciler(),
       getNoteRenderer: () => renderer.getNoteRenderer(),
-      setWaveformData: (config) => renderer.setWaveformData(config),
-      setGridData: (config) => renderer.setGridData(config),
-      setHighwayMode: (mode) => renderer.setHighwayMode(mode),
+      setWaveformData: config => renderer.setWaveformData(config),
+      setGridData: config => renderer.setGridData(config),
+      setHighwayMode: mode => renderer.setHighwayMode(mode),
       getHighwayMode: () => renderer.getHighwayMode(),
     });
 

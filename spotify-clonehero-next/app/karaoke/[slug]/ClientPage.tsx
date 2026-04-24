@@ -88,9 +88,7 @@ export default function ClientPage({md5}: {md5: string}) {
         });
       } catch (err) {
         if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : 'Failed to load chart',
-          );
+          setError(err instanceof Error ? err.message : 'Failed to load chart');
         }
       } finally {
         if (!cancelled) setLoading(false);

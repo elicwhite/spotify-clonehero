@@ -58,9 +58,7 @@ export async function decodeAudio(
  */
 async function resampleAudio(source: AudioBuffer): Promise<AudioBuffer> {
   const outputChannels = Math.min(source.numberOfChannels, TARGET_CHANNELS);
-  const outputLength = Math.ceil(
-    source.duration * TARGET_SAMPLE_RATE,
-  );
+  const outputLength = Math.ceil(source.duration * TARGET_SAMPLE_RATE);
 
   const offlineCtx = new OfflineAudioContext(
     outputChannels,
@@ -90,9 +88,7 @@ export function interleaveAudioBuffer(audioBuffer: AudioBuffer): Float32Array {
 
   const left = audioBuffer.getChannelData(0);
   const right =
-    audioBuffer.numberOfChannels >= 2
-      ? audioBuffer.getChannelData(1)
-      : left; // Mono: duplicate left channel
+    audioBuffer.numberOfChannels >= 2 ? audioBuffer.getChannelData(1) : left; // Mono: duplicate left channel
 
   for (let i = 0; i < numSamples; i++) {
     interleaved[i * 2] = left[i];

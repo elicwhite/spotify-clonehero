@@ -8,6 +8,7 @@
 ## Context
 
 Moonscraper's layout (from screenshot analysis):
+
 - **Left sidebar**: Settings panel (Step grid value, Clap toggle, Hyperspeed, Speed multiplier, Highway Length) + Tools grid (cursor, eraser, note, starpower, BPM, time signature icons)
 - **Center**: 3D highway filling most of the screen, with the strikeline near the bottom
 - **Right sidebar**: Timeline minimap — a vertical bar representing the entire song. Shows section labels (intro a, verse 1a, chorus 1b, etc.) with dot indicators, a draggable position handle, percentage display, and current timestamp
@@ -39,6 +40,7 @@ Our editor currently uses a horizontal toolbar at top + overlaid panels on the l
 ```
 
 ### CSS Layout:
+
 - Full viewport height (`h-screen`)
 - CSS Grid: `grid-template-columns: auto 1fr auto`
 - Left sidebar: fixed width (~200px), scrollable if content overflows
@@ -47,6 +49,7 @@ Our editor currently uses a horizontal toolbar at top + overlaid panels on the l
 - Bottom: fixed height transport bar
 
 ### Left Sidebar Contents (top to bottom):
+
 1. **Settings panel** — collapsible
    - Grid step display + controls (shows "Step: 1/16" etc.)
    - Speed display + slider (shows "Speed: x1.00")
@@ -64,6 +67,7 @@ Our editor currently uses a horizontal toolbar at top + overlaid panels on the l
    - drum-edit: StemVolumeControls (if multi-stem)
 
 ### Keyboard shortcut hints:
+
 Tool icons and settings show keyboard shortcuts as tooltips (e.g., "Place (3)" for the note tool).
 
 ## 2. Timeline Minimap Component
@@ -73,6 +77,7 @@ Tool icons and settings show keyboard shortcuts as tooltips (e.g., "Place (3)" f
 A vertical bar on the right side showing the entire song at a glance.
 
 ### Visual design:
+
 ```
 ┌────────────┐
 │   00:09.16  │  ← Current time
@@ -99,6 +104,7 @@ A vertical bar on the right side showing the entire song at a glance.
 ### Features:
 
 **Position handle:**
+
 - Draggable vertical indicator showing current playback/scroll position
 - Position = `(currentTimeMs / totalDurationMs) * timelineHeight`
 - Dragging seeks the AudioManager to the corresponding time
@@ -106,6 +112,7 @@ A vertical bar on the right side showing the entire song at a glance.
 - Handle styled as a horizontal bar (like Moonscraper's gold indicator)
 
 **Section markers:**
+
 - Read sections from `chartDoc.sections[]` (each has `tick` and `name`)
 - Convert tick to Y position: `tickToMs(section.tick) / totalDurationMs * timelineHeight`
 - Display section name as right-aligned text with a small dot/circle indicator
@@ -113,6 +120,7 @@ A vertical bar on the right side showing the entire song at a glance.
 - Clicking a section label jumps to that section
 
 **Time and percentage display:**
+
 - Show current time in `mm:ss.cc` format (like Moonscraper's `00:09.16`)
 - Show position as percentage of total song
 - Update every animation frame (read from `audioManager.currentTime`)
@@ -123,17 +131,19 @@ A vertical bar on the right side showing the entire song at a glance.
 interface TimelineMinimapProps {
   audioManager: AudioManager;
   durationMs: number;
-  sections: Array<{ tick: number; name: string; timeMs: number }>;
+  sections: Array<{tick: number; name: string; timeMs: number}>;
   className?: string;
 }
 ```
 
 Rendering approach:
+
 - Canvas-based for performance (many section markers, smooth handle dragging)
 - Or HTML/CSS if section count is manageable (< 50 sections typical) — simpler, accessible
 - **Recommendation: HTML/CSS** with `position: absolute` for markers. Sections are sparse (10-30 per song), so DOM performance is fine. Easier to style, add hover effects, handle click events.
 
 ### Interaction:
+
 - **Click on timeline body**: Seek to that position (`e.clientY → percentage → timeMs → audioManager.seek()`)
 - **Drag handle**: Continuous seeking while dragging (pause playback, seek on each mousemove, resume on mouseup if was playing)
 - **Click on section label**: Jump to that section's time
@@ -144,18 +154,21 @@ Rendering approach:
 Currently, speed and grid controls are in `EditToolbar` (horizontal). Move them to the left sidebar with a vertical layout:
 
 ### Grid Step Control:
+
 - Display: "Step: 1/16" (or current grid division)
 - Controls: Up/Down buttons to cycle through divisions, or a dropdown
 - Same values: 1/4, 1/8, 1/12, 1/16, 1/32, 1/64, Free
 - Keyboard: Shift+1-6, Shift+0 (unchanged)
 
 ### Speed Control:
+
 - Display: "Speed: x1.00"
 - Controls: Slider or preset buttons
 - Same range: 0.25x to 2.0x (or 4.0x)
 - Compact layout for sidebar
 
 ### Highway Length:
+
 - New control — adjusts how many milliseconds of the chart are visible on the highway
 - Maps to the renderer's `HIGHWAY_DURATION_MS` value
 - Slider from ~500ms (zoomed in, few notes visible) to ~5000ms (zoomed out, many notes)
@@ -181,6 +194,7 @@ Replace the current horizontal text buttons with a compact icon grid:
 ## 5. Transport Bar (Bottom)
 
 Move TransportControls to a full-width bottom bar:
+
 - Fixed height (~48px)
 - Contains: play/pause, skip back/forward, seek bar, time display, speed indicator
 - Speed controls moved to left sidebar, but a compact speed display remains in transport

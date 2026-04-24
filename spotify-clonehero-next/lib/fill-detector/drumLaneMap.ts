@@ -7,7 +7,10 @@
 
 import {DrumVoice} from './types';
 import {NoteType, noteTypes} from '@eliwhite/scan-chart';
-import {interpretDrumNote, noteTypeToPad} from '../drum-mapping/noteToInstrument';
+import {
+  interpretDrumNote,
+  noteTypeToPad,
+} from '../drum-mapping/noteToInstrument';
 
 // Re-export DrumVoice for use in other modules
 export {DrumVoice};

@@ -65,33 +65,33 @@ lib/drum-transcription/            # Core logic (testable, no React)
 
 ### Existing Utilities — Reuse, Don't Reimplement
 
-| Need | Location |
-|------|----------|
-| Chart parsing + writing, types (`NoteEvent`, `noteTypes`, `noteFlags`, `ChartDocument`, `ParsedChart`) | `@eliwhite/scan-chart` |
-| Chart edit helpers (`addDrumNote`, `addSection`, `addTempo`), `readChart` wrapper | `lib/chart-edit/` |
-| SNG parsing | `parse-sng` |
-| Tick → ms conversion | `app/sheet-music/[slug]/chartUtils.ts` → `tickToMs()` |
-| Drum note → instrument mapping | `lib/fill-detector/drumLaneMap.ts` |
-| Drum note → VexFlow notation | `app/sheet-music/[slug]/convertToVexflow.ts` |
-| OPFS file read/write | `lib/fileSystemHelpers.ts` |
-| Audio playback (primary) | `lib/preview/audioManager.ts` |
-| Highway 3D renderer | `lib/preview/highway.ts` + `app/sheet-music/[slug]/CloneHeroRenderer.tsx` |
-| Sheet music notation | `app/sheet-music/[slug]/SheetMusic.tsx` |
-| INI parsing | `lib/ini-parser.ts` |
-| UI components | `components/ui/` (shadcn: Button, Dialog, Card, Select, Slider, etc.) |
-| CSS class merging | `lib/utils.ts` → `cn()` |
-| Toasts | `sonner` (configured in root layout) |
+| Need                                                                                                   | Location                                                                  |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Chart parsing + writing, types (`NoteEvent`, `noteTypes`, `noteFlags`, `ChartDocument`, `ParsedChart`) | `@eliwhite/scan-chart`                                                    |
+| Chart edit helpers (`addDrumNote`, `addSection`, `addTempo`), `readChart` wrapper                      | `lib/chart-edit/`                                                         |
+| SNG parsing                                                                                            | `parse-sng`                                                               |
+| Tick → ms conversion                                                                                   | `app/sheet-music/[slug]/chartUtils.ts` → `tickToMs()`                     |
+| Drum note → instrument mapping                                                                         | `lib/fill-detector/drumLaneMap.ts`                                        |
+| Drum note → VexFlow notation                                                                           | `app/sheet-music/[slug]/convertToVexflow.ts`                              |
+| OPFS file read/write                                                                                   | `lib/fileSystemHelpers.ts`                                                |
+| Audio playback (primary)                                                                               | `lib/preview/audioManager.ts`                                             |
+| Highway 3D renderer                                                                                    | `lib/preview/highway.ts` + `app/sheet-music/[slug]/CloneHeroRenderer.tsx` |
+| Sheet music notation                                                                                   | `app/sheet-music/[slug]/SheetMusic.tsx`                                   |
+| INI parsing                                                                                            | `lib/ini-parser.ts`                                                       |
+| UI components                                                                                          | `components/ui/` (shadcn: Button, Dialog, Card, Select, Slider, etc.)     |
+| CSS class merging                                                                                      | `lib/utils.ts` → `cn()`                                                   |
+| Toasts                                                                                                 | `sonner` (configured in root layout)                                      |
 
 ### Reference Projects
 
-| Project | Use |
-|---------|-----|
-| `~/projects/demucs-next` | Browser Demucs via ONNX + WebGPU. Reference for STFT/iSTFT, segmentation, ONNX session management |
-| `~/projects/ADTOF` | Drum transcription model (Frame_RNN). Must be exported to ONNX via tf2onnx |
-| `~/projects/Moonscraper-Chart-Editor` | Chart writing, highway editing UX, hotkeys, command pattern |
-| `~/projects/GuitarGame_ChartFormats` | Chart format spec (.chart, .mid, .sng, zip), audio file naming |
-| `~/projects/SngFileFormat` | SNG binary format spec + reference C# serializer |
-| `~/projects/drum-transcription` | ML model README and training context |
+| Project                               | Use                                                                                               |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `~/projects/demucs-next`              | Browser Demucs via ONNX + WebGPU. Reference for STFT/iSTFT, segmentation, ONNX session management |
+| `~/projects/ADTOF`                    | Drum transcription model (Frame_RNN). Must be exported to ONNX via tf2onnx                        |
+| `~/projects/Moonscraper-Chart-Editor` | Chart writing, highway editing UX, hotkeys, command pattern                                       |
+| `~/projects/GuitarGame_ChartFormats`  | Chart format spec (.chart, .mid, .sng, zip), audio file naming                                    |
+| `~/projects/SngFileFormat`            | SNG binary format spec + reference C# serializer                                                  |
+| `~/projects/drum-transcription`       | ML model README and training context                                                              |
 
 ## Plans
 
@@ -107,48 +107,50 @@ All work follows the plan-driven workflow in `plans/`. Read the plan before star
 
 **Completed:**
 
-| Plan | Description |
-|------|-------------|
-| `0001-project-scaffolding` | Page shell, dependencies, directory structure |
-| `0002-chart-file-writing` | .chart serializer with scan-chart round-trip tests |
-| `0003-audio-acquisition` | File upload, Web Audio decode, OPFS storage, demo file |
-| `0004-stem-separation` | Demucs via ONNX + WebGPU, STFT/iSTFT in JS |
-| `0005-ml-model-integration` | ADTOF Frame_RNN via ONNX + WebGPU, post-processing |
-| `0006-chart-preview-integration` | CloneHeroRenderer + AudioManager integration |
-| `0007-editor-core` | Read-only editor page, SheetMusic + highway views, transport |
-| `0007a-highway-editing` | Note editing on highway (Moonscraper-style), BPM/TS editing |
-| `0007b-editor-workflow` | Confidence viz, undo/redo, auto-save, stem volume controls |
-| `0008-pipeline-orchestration` | End-to-end flow: upload → process → edit → export |
-| `0009-chart-export-packaging` | ZIP export with chart + stems + song.ini |
-| `0010-sng-export` | SNG binary export |
-| `0011-chart-edit-bugfixes` | chart-edit bug fixes and test coverage |
-| `0012-consolidate-chart-io` | Consolidate drum-transcription chart-io → chart-edit |
+| Plan                             | Description                                                  |
+| -------------------------------- | ------------------------------------------------------------ |
+| `0001-project-scaffolding`       | Page shell, dependencies, directory structure                |
+| `0002-chart-file-writing`        | .chart serializer with scan-chart round-trip tests           |
+| `0003-audio-acquisition`         | File upload, Web Audio decode, OPFS storage, demo file       |
+| `0004-stem-separation`           | Demucs via ONNX + WebGPU, STFT/iSTFT in JS                   |
+| `0005-ml-model-integration`      | ADTOF Frame_RNN via ONNX + WebGPU, post-processing           |
+| `0006-chart-preview-integration` | CloneHeroRenderer + AudioManager integration                 |
+| `0007-editor-core`               | Read-only editor page, SheetMusic + highway views, transport |
+| `0007a-highway-editing`          | Note editing on highway (Moonscraper-style), BPM/TS editing  |
+| `0007b-editor-workflow`          | Confidence viz, undo/redo, auto-save, stem volume controls   |
+| `0008-pipeline-orchestration`    | End-to-end flow: upload → process → edit → export            |
+| `0009-chart-export-packaging`    | ZIP export with chart + stems + song.ini                     |
+| `0010-sng-export`                | SNG binary export                                            |
+| `0011-chart-edit-bugfixes`       | chart-edit bug fixes and test coverage                       |
+| `0012-consolidate-chart-io`      | Consolidate drum-transcription chart-io → chart-edit         |
 
 **Todo (sequential):**
 
-| Plan | Description | Depends On |
-|------|-------------|------------|
-| `0013-extract-shared-editor` | Extract editor UI to `components/chart-editor/`, composable panels | 0012 |
-| `0014-drum-edit-page` | New `/drum-edit` page with chart loading (SNG/ZIP/folder) | 0013 |
-| `0015-moonscraper-layout-timeline` | Moonscraper-inspired layout + timeline minimap | 0013 |
-| `0016-grid-navigation-keys-mode` | Grid-based cursor navigation + keyboard note placement (1-5) | 0013 |
-| `0017-section-editing` | Add/edit/delete named section markers on highway + timeline | 0015 |
-| `0018-tanstack-hotkeys-migration` | Replace raw addEventListener keyboard handling with @tanstack/react-hotkeys | 0013, 0016 |
-| `0019-highway-decomposition` | Split highway.ts into modules: HighwayScene, NotesManager, TextureManager | — |
-| `0020-scene-integration` | Move overlay drawing (selections, cursor, sections, ghosts) into Three.js scene | 0019 |
-| `0021-interaction-manager` | Hybrid hit testing (Three.js raycasts, React decides) + hover glow/outline | 0020 |
-| `0022-incremental-editing` | Diff-based note updates — no full rebuild on add/delete/move | 0021 |
-| `0023-waveform-highway-surface` | Waveform as highway texture + beat line grid overlay | 0019 |
-| `0025-scene-reconciler` | Generic key-based scene reconciler (React-inspired) for notes, sections, lyrics | 0019-0022 |
+| Plan                               | Description                                                                     | Depends On |
+| ---------------------------------- | ------------------------------------------------------------------------------- | ---------- |
+| `0013-extract-shared-editor`       | Extract editor UI to `components/chart-editor/`, composable panels              | 0012       |
+| `0014-drum-edit-page`              | New `/drum-edit` page with chart loading (SNG/ZIP/folder)                       | 0013       |
+| `0015-moonscraper-layout-timeline` | Moonscraper-inspired layout + timeline minimap                                  | 0013       |
+| `0016-grid-navigation-keys-mode`   | Grid-based cursor navigation + keyboard note placement (1-5)                    | 0013       |
+| `0017-section-editing`             | Add/edit/delete named section markers on highway + timeline                     | 0015       |
+| `0018-tanstack-hotkeys-migration`  | Replace raw addEventListener keyboard handling with @tanstack/react-hotkeys     | 0013, 0016 |
+| `0019-highway-decomposition`       | Split highway.ts into modules: HighwayScene, NotesManager, TextureManager       | —          |
+| `0020-scene-integration`           | Move overlay drawing (selections, cursor, sections, ghosts) into Three.js scene | 0019       |
+| `0021-interaction-manager`         | Hybrid hit testing (Three.js raycasts, React decides) + hover glow/outline      | 0020       |
+| `0022-incremental-editing`         | Diff-based note updates — no full rebuild on add/delete/move                    | 0021       |
+| `0023-waveform-highway-surface`    | Waveform as highway texture + beat line grid overlay                            | 0019       |
+| `0025-scene-reconciler`            | Generic key-based scene reconciler (React-inspired) for notes, sections, lyrics | 0019-0022  |
 
 ### Parallelizable Work
 
 After 0013, these can proceed in parallel:
+
 - **Track A:** 0014 (drum-edit page)
 - **Track B:** 0015 (layout + timeline) → 0017 (section editing)
 - **Track C:** 0016 (grid nav + keys mode)
 
 Highway refactor (0019-0023) is sequential:
+
 - 0019 (decompose) → 0020 (scene integration) → 0021 (interaction) → 0022 (incremental editing)
 - 0019 (decompose) → 0023 (waveform) — can parallel with 0020-0022
 

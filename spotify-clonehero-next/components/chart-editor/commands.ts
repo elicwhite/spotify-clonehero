@@ -408,8 +408,7 @@ export class BatchCommand implements EditCommand {
     private commands: EditCommand[],
     description?: string,
   ) {
-    this.description =
-      description ?? `Batch: ${commands.length} command(s)`;
+    this.description = description ?? `Batch: ${commands.length} command(s)`;
   }
 
   /** Read-only access to the sub-commands (for incremental edit detection). */
@@ -552,7 +551,13 @@ export class MoveSectionCommand implements EditCommand {
 // Lane helpers
 // ---------------------------------------------------------------------------
 
-const LANE_ORDER: DrumNoteType[] = ['kick', 'redDrum', 'yellowDrum', 'blueDrum', 'greenDrum'];
+const LANE_ORDER: DrumNoteType[] = [
+  'kick',
+  'redDrum',
+  'yellowDrum',
+  'blueDrum',
+  'greenDrum',
+];
 
 /** Map a DrumNoteType to a lane index (0-4). */
 export function typeToLane(type: DrumNoteType): number {

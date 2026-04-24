@@ -8,11 +8,13 @@
 ## Context
 
 ### Current navigation (time-based):
+
 - Left/Right arrows seek by ±5 seconds
 - No concept of a "cursor position" separate from playback position
 - Grid snapping only applies when placing notes via mouse click
 
 ### Moonscraper navigation (grid-based):
+
 - A **cursor** (strikeline position) moves independently of playback
 - Up/Down arrows move the cursor by one grid step (e.g., 1/16th note)
 - Ctrl+Up/Down moves by one measure
@@ -21,6 +23,7 @@
 - When stopped, the cursor is the editing position — keyboard note placement happens at the cursor
 
 ### Moonscraper keys mode:
+
 - Press a lane key to instantly place a note at the cursor position in that lane
 - Lane keys for drums: 1=Kick, 2=Red, 3=Yellow, 4=Blue, 5=Green
 - After placing, the cursor optionally auto-advances by one grid step (configurable)
@@ -29,21 +32,24 @@
 ## 1. Grid Cursor
 
 ### Concept:
+
 A **cursor tick** represents the user's current editing position on the highway. It's separate from the playback time.
 
 ```typescript
 // Add to ChartEditorContext state:
-cursorTick: number;        // Current cursor position in ticks
-cursorVisible: boolean;    // Whether to show the cursor line on highway
+cursorTick: number; // Current cursor position in ticks
+cursorVisible: boolean; // Whether to show the cursor line on highway
 ```
 
 ### Behavior:
+
 - **When stopped**: Cursor is a green/white horizontal line on the highway at the cursor tick position. This is the "editing position."
 - **When playing**: Cursor follows the playback position (strikeline). Navigation keys are disabled during playback (matches Moonscraper — most editing happens while stopped).
 - **On stop**: Cursor stays at the position where playback was stopped.
 - **On seek (click waveform, click timeline, etc.)**: Cursor moves to the seeked position.
 
 ### Visual:
+
 - Horizontal line across the highway at the cursor tick position
 - Rendered in the HighwayEditor overlay canvas (same as selection highlights)
 - Different color from beat lines (green or bright white) to be distinguishable
@@ -53,14 +59,14 @@ cursorVisible: boolean;    // Whether to show the cursor line on highway
 
 ### Arrow key behavior (replaces current time-based seeking):
 
-| Key | Action | Moonscraper equivalent |
-|-----|--------|----------------------|
-| Up Arrow | Move cursor forward by one grid step | `MoveStepPositive` |
-| Down Arrow | Move cursor backward by one grid step | `MoveStepNegative` |
-| Ctrl+Up | Move cursor forward by one measure | `MoveMeasurePositive` |
-| Ctrl+Down | Move cursor backward by one measure | `MoveMeasureNegative` |
-| Left Arrow | Move cursor forward by one grid step | Alias for Up (natural for vertical highway) |
-| Right Arrow | Move cursor backward by one grid step | Alias for Down |
+| Key         | Action                                | Moonscraper equivalent                      |
+| ----------- | ------------------------------------- | ------------------------------------------- |
+| Up Arrow    | Move cursor forward by one grid step  | `MoveStepPositive`                          |
+| Down Arrow  | Move cursor backward by one grid step | `MoveStepNegative`                          |
+| Ctrl+Up     | Move cursor forward by one measure    | `MoveMeasurePositive`                       |
+| Ctrl+Down   | Move cursor backward by one measure   | `MoveMeasureNegative`                       |
+| Left Arrow  | Move cursor forward by one grid step  | Alias for Up (natural for vertical highway) |
+| Right Arrow | Move cursor backward by one grid step | Alias for Down                              |
 
 **Note on direction:** The highway scrolls bottom-to-top (future notes are above). "Forward" means later in the song (higher tick), which visually means the highway scrolls down to reveal notes above. We match Moonscraper's convention: Up = forward in song time.
 
@@ -69,7 +75,7 @@ cursorVisible: boolean;    // Whether to show the cursor line on highway
 ```typescript
 function getNextGridTick(
   currentTick: number,
-  direction: 1 | -1,  // 1 = forward, -1 = backward
+  direction: 1 | -1, // 1 = forward, -1 = backward
   gridDivision: number,
   resolution: number,
   timeSignatures: TimeSignatureEvent[],
@@ -114,7 +120,9 @@ function getNextMeasureTick(
 ```
 
 ### Audio sync:
+
 When the cursor moves, also seek the AudioManager so the user hears the audio at the cursor position:
+
 ```typescript
 const cursorMs = tickToMs(newCursorTick, timedTempos);
 audioManager.seek(cursorMs / 1000);
@@ -124,13 +132,13 @@ audioManager.seek(cursorMs / 1000);
 
 ### Lane key mapping:
 
-| Key | Lane | Drum Type | Note |
-|-----|------|-----------|------|
-| 1 | 0 | kick | Center/orange |
-| 2 | 1 | redDrum | Snare |
-| 3 | 2 | yellowDrum | Hi-hat/cymbal |
-| 4 | 3 | blueDrum | Tom/ride |
-| 5 | 4 | greenDrum | Crash/floor tom |
+| Key | Lane | Drum Type  | Note            |
+| --- | ---- | ---------- | --------------- |
+| 1   | 0    | kick       | Center/orange   |
+| 2   | 1    | redDrum    | Snare           |
+| 3   | 2    | yellowDrum | Hi-hat/cymbal   |
+| 4   | 3    | blueDrum   | Tom/ride        |
+| 5   | 4    | greenDrum  | Crash/floor tom |
 
 ### Placement behavior:
 
@@ -142,28 +150,35 @@ audioManager.seek(cursorMs / 1000);
 6. Cursor does NOT auto-advance (user controls position with arrows)
 
 ### Chord building:
+
 Since cursor doesn't auto-advance, pressing multiple lane keys at the same cursor position builds a chord. For example:
+
 - Press 1 (kick) → kick note at tick 960
 - Press 3 (yellow) → yellow note at tick 960 (chord with kick)
 - Press Up → cursor advances to tick 1080
 - Press 2 (red) → red note at tick 1080
 
 ### Flag application with keys mode:
+
 Flags (Q=cymbal, A=accent, S=ghost) work as modifiers:
+
 - Hold Q + press 3 → place yellow note with cymbal flag
 - Or: press 3 to place, then press Q to toggle cymbal on last placed note
 - **Recommended approach**: Toggle flags on the note at cursorTick if one exists, matching Moonscraper's behavior where flags modify existing notes.
 
 ### Conflict with tool shortcuts:
+
 Currently 1-5 are tool selection shortcuts. Keys mode uses 1-5 for lane placement. Resolution:
 
 **Option: Mode-based**
+
 - When `activeTool === 'place'`, keys 1-5 are lane placement keys
 - When `activeTool === 'cursor'`, keys 1-5 are tool selection shortcuts
 - This is natural: you switch to "Place" mode (press 3 to select Place tool, or click the icon), then 1-5 become lane keys
 - Switch back to cursor mode (press Escape) and 1-5 are tool shortcuts again
 
 **Tool shortcuts become shifted in Place mode:**
+
 - In place mode: 1-5 = lane keys
 - Ctrl+1-5 = tool shortcuts (always available regardless of mode)
 - This ensures tools are always accessible
@@ -171,19 +186,23 @@ Currently 1-5 are tool selection shortcuts. Keys mode uses 1-5 for lane placemen
 ## 4. Visual Indicators on Highway
 
 ### Cursor line:
+
 - Horizontal line across the highway at the cursor tick position
 - Color: bright green or white (configurable)
 - Thickness: 2-3px
 - Only visible when not playing (during playback, the strikeline is the visual anchor)
 
 ### Ghost note preview (enhanced):
+
 When in Place mode with keys mode:
+
 - Show faint ghost notes at ALL lane positions at the cursor tick
 - Each ghost note shows the lane's color (red, yellow, blue, green, orange for kick)
 - Pressing a key "solidifies" the ghost into a real note
 - This gives visual feedback about where notes would be placed
 
 ### Current grid step indicator:
+
 - Show the grid step size visually on the highway as subtle tick marks between beat lines
 - Helps users see the resolution they're navigating at
 
@@ -191,24 +210,25 @@ When in Place mode with keys mode:
 
 ### New shortcuts (add to useEditorKeyboard):
 
-| Key | Context | Action |
-|-----|---------|--------|
-| Up Arrow | Editor (stopped) | Move cursor forward one grid step |
-| Down Arrow | Editor (stopped) | Move cursor backward one grid step |
-| Ctrl+Up | Editor (stopped) | Move cursor forward one measure |
-| Ctrl+Down | Editor (stopped) | Move cursor backward one measure |
-| 1-5 | Place tool active | Place/toggle note in lane at cursor |
-| Ctrl+1-5 | Always | Select tool (cursor/place/erase/bpm/timesig) |
+| Key        | Context           | Action                                       |
+| ---------- | ----------------- | -------------------------------------------- |
+| Up Arrow   | Editor (stopped)  | Move cursor forward one grid step            |
+| Down Arrow | Editor (stopped)  | Move cursor backward one grid step           |
+| Ctrl+Up    | Editor (stopped)  | Move cursor forward one measure              |
+| Ctrl+Down  | Editor (stopped)  | Move cursor backward one measure             |
+| 1-5        | Place tool active | Place/toggle note in lane at cursor          |
+| Ctrl+1-5   | Always            | Select tool (cursor/place/erase/bpm/timesig) |
 
 ### Modified shortcuts:
 
-| Key | Old behavior | New behavior |
-|-----|-------------|-------------|
-| Left Arrow | Seek -5 seconds | Move cursor back one grid step (same as Down) |
-| Right Arrow | Seek +5 seconds | Move cursor forward one grid step (same as Up) |
-| 1-5 | Select tool (always) | Select tool (cursor mode) / Place note (place mode) |
+| Key         | Old behavior         | New behavior                                        |
+| ----------- | -------------------- | --------------------------------------------------- |
+| Left Arrow  | Seek -5 seconds      | Move cursor back one grid step (same as Down)       |
+| Right Arrow | Seek +5 seconds      | Move cursor forward one grid step (same as Up)      |
+| 1-5         | Select tool (always) | Select tool (cursor mode) / Place note (place mode) |
 
 ### Kept as-is:
+
 - Space: play/pause
 - Shift+1-6, Shift+0: grid division selection
 - Q/A/S: flag toggles
@@ -219,22 +239,26 @@ When in Place mode with keys mode:
 ## 6. Integration with Existing Tools
 
 ### Cursor tool:
+
 - Arrow keys navigate the cursor
 - Click on highway selects notes (unchanged)
 - No lane key placement in cursor mode
 
 ### Place tool:
+
 - Arrow keys navigate the cursor
 - Click on highway places note at mouse position (unchanged)
 - Lane keys (1-5) place note at cursor position (new)
 - Both mouse and keyboard placement coexist
 
 ### Erase tool:
+
 - Arrow keys navigate the cursor
 - Click on highway erases note (unchanged)
 - Could add: pressing a lane key at cursor position deletes that lane's note (same toggle as place mode)
 
 ### BPM/TimeSig tools:
+
 - Arrow keys navigate the cursor
 - Click places BPM/TS at mouse position (unchanged)
 - Could add: Enter key places BPM/TS at cursor position

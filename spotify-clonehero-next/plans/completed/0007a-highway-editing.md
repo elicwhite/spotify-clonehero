@@ -54,7 +54,7 @@ function canvasToChartPosition(
   highwayPlane: THREE.Mesh,
   chart: ParsedChart,
   gridDivision: number,
-): { lane: number; tick: number } | null {
+): {lane: number; tick: number} | null {
   // Raycast from camera through mouse position onto the highway plane
   // X position maps to lane (same logic as PlaceNote.XPosToNoteNumber)
   // Y position maps to time, converted to tick via tempo map, snapped to grid
@@ -63,13 +63,13 @@ function canvasToChartPosition(
 
 Lane mapping for pro drums:
 
-| Highway Lane | Note Type | Note # |
-|---|---|---|
-| 0 (leftmost) | Kick | 0 |
-| 1 | Red (Snare) | 1 |
-| 2 | Yellow (Hi-hat/Hi-tom) | 2 |
-| 3 | Blue (Ride/Mid-tom) | 3 |
-| 4 (rightmost) | Green (Crash/Floor-tom) | 4 |
+| Highway Lane  | Note Type               | Note # |
+| ------------- | ----------------------- | ------ |
+| 0 (leftmost)  | Kick                    | 0      |
+| 1             | Red (Snare)             | 1      |
+| 2             | Yellow (Hi-hat/Hi-tom)  | 2      |
+| 3             | Blue (Ride/Mid-tom)     | 3      |
+| 4 (rightmost) | Green (Crash/Floor-tom) | 4      |
 
 Cymbal vs tom distinction is handled by note flags, not by lane position (same as Clone Hero and Moonscraper).
 
@@ -81,17 +81,18 @@ Cymbal vs tom distinction is handled by note flags, not by lane position (same a
 
 Following Moonscraper's tool pattern, the editor has modes (toggled via toolbar buttons or keyboard):
 
-| Mode | Behavior | Moonscraper equivalent |
-|---|---|---|
-| **Cursor** (default) | Click to select notes, drag to box-select, drag selected notes to move them | `CursorSelect` + `GroupMove` |
-| **Place** | Click on highway to add a note at the cursor position. Lane determined by X, tick by Y (snapped to grid) | `PlaceNoteController` |
-| **Erase** | Click or drag over notes to delete them | `Eraser` |
-| **BPM** | Click to place a BPM marker at the cursor tick position. Opens a small input to set the BPM value | `PlaceBPM` |
-| **Time Sig** | Click to place a time signature change at the cursor tick position. Opens a small input for numerator/denominator | `PlaceTimesignature` |
+| Mode                 | Behavior                                                                                                          | Moonscraper equivalent       |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| **Cursor** (default) | Click to select notes, drag to box-select, drag selected notes to move them                                       | `CursorSelect` + `GroupMove` |
+| **Place**            | Click on highway to add a note at the cursor position. Lane determined by X, tick by Y (snapped to grid)          | `PlaceNoteController`        |
+| **Erase**            | Click or drag over notes to delete them                                                                           | `Eraser`                     |
+| **BPM**              | Click to place a BPM marker at the cursor tick position. Opens a small input to set the BPM value                 | `PlaceBPM`                   |
+| **Time Sig**         | Click to place a time signature change at the cursor tick position. Opens a small input for numerator/denominator | `PlaceTimesignature`         |
 
 ### 2.2 Mouse Interactions
 
 **Cursor mode:**
+
 - **Left-click** on a note: select it (highlight, show properties in sidebar)
 - **Left-click** on empty highway: deselect all
 - **Shift+click** on a note: toggle it in/out of multi-selection
@@ -99,19 +100,23 @@ Following Moonscraper's tool pattern, the editor has modes (toggled via toolbar 
 - **Click+drag** a selected note: move the selection as a group. X movement changes lane, Y movement changes tick (snapped to grid). Hold Alt to disable grid snap
 
 **Place mode:**
+
 - **Left-click** on highway: add a note at the (lane, tick) position. If a note already exists at that exact position and lane, remove it (toggle behavior)
 - Ghost note preview follows the cursor to show where the note would land
 - Note flags (cymbal/tom) default based on the lane: yellow/blue/green default to cymbal unless the user holds a modifier key (see shortcuts)
 
 **Erase mode:**
+
 - **Left-click** on a note: delete it
 - **Left-click+drag**: delete all notes the cursor passes over (paint-erase, like Moonscraper's `Eraser`)
 
 **BPM mode:**
+
 - **Left-click** on highway: place a BPM marker at the snapped tick. Opens an inline input (or popover) pre-filled with the current BPM at that position. Confirm with Enter
 - **Left-click** on existing BPM marker: select it for editing or deletion
 
 **Time Sig mode:**
+
 - **Left-click** on highway: place a time signature change. Opens an inline input for numerator/denominator (default 4/4). Confirm with Enter
 - **Left-click** on existing time sig marker: select it for editing or deletion
 
@@ -204,14 +209,22 @@ interface EditCommand {
 
 class AddNoteCommand implements EditCommand {
   constructor(private note: DrumNote) {}
-  execute(state) { /* insert note, maintain sort order */ }
-  undo(state) { /* remove the note */ }
+  execute(state) {
+    /* insert note, maintain sort order */
+  }
+  undo(state) {
+    /* remove the note */
+  }
 }
 
 class DeleteNotesCommand implements EditCommand {
   constructor(private notes: DrumNote[]) {}
-  execute(state) { /* remove notes */ }
-  undo(state) { /* re-insert notes */ }
+  execute(state) {
+    /* remove notes */
+  }
+  undo(state) {
+    /* re-insert notes */
+  }
 }
 
 class MoveNotesCommand implements EditCommand {
@@ -220,14 +233,25 @@ class MoveNotesCommand implements EditCommand {
     private tickDelta: number,
     private laneDelta: number,
   ) {}
-  execute(state) { /* update tick and lane for each note */ }
-  undo(state) { /* reverse the deltas */ }
+  execute(state) {
+    /* update tick and lane for each note */
+  }
+  undo(state) {
+    /* reverse the deltas */
+  }
 }
 
 class AddBPMCommand implements EditCommand {
-  constructor(private tick: number, private bpm: number) {}
-  execute(state) { /* insert BPM marker */ }
-  undo(state) { /* remove BPM marker */ }
+  constructor(
+    private tick: number,
+    private bpm: number,
+  ) {}
+  execute(state) {
+    /* insert BPM marker */
+  }
+  undo(state) {
+    /* remove BPM marker */
+  }
 }
 
 class AddTimeSignatureCommand implements EditCommand {
@@ -236,14 +260,22 @@ class AddTimeSignatureCommand implements EditCommand {
     private numerator: number,
     private denominator: number,
   ) {}
-  execute(state) { /* insert time sig */ }
-  undo(state) { /* remove time sig */ }
+  execute(state) {
+    /* insert time sig */
+  }
+  undo(state) {
+    /* remove time sig */
+  }
 }
 
 class BatchCommand implements EditCommand {
   constructor(private commands: EditCommand[]) {}
-  execute(state) { /* execute all in order */ }
-  undo(state) { /* undo all in reverse order */ }
+  execute(state) {
+    /* execute all in order */
+  }
+  undo(state) {
+    /* undo all in reverse order */
+  }
 }
 ```
 
@@ -271,6 +303,7 @@ Same as the original plan -- composite key `${tick}:${type}`. Unique because the
 ### 4.4 Updating Downstream Views
 
 When chart data changes via an edit:
+
 1. The SheetMusic component re-renders automatically because it receives `chart` and `track` as props. VexFlow re-renders from the updated data.
 2. The CloneHeroRenderer needs to be notified. Either:
    - Pass the chart as a prop and re-run `renderer.prepTrack(track)` on change (debounced to avoid per-keystroke rebuilds), or
@@ -305,6 +338,7 @@ Time signature markers appear on the highway as horizontal lines with the signat
 ### 5.3 Impact on Grid
 
 When BPM or time signature changes, the grid lines on the highway must update. The grid is derived from the tempo map and time signatures:
+
 - Beat lines at each beat boundary
 - Sub-beat lines at the current grid division (1/8th, 1/16th, etc.)
 - Measure lines (stronger visual) at measure boundaries

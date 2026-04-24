@@ -60,9 +60,7 @@ export default function WebMCPTools() {
               const subDir = await dir.getDirectoryHandle(name);
               entries.push(...(await listDir(subDir, fullPath)));
             } else {
-              const file = await (
-                handle as FileSystemFileHandle
-              ).getFile();
+              const file = await (handle as FileSystemFileHandle).getFile();
               entries.push({
                 path: fullPath,
                 kind: 'file',
@@ -88,9 +86,7 @@ export default function WebMCPTools() {
           }
           const entries = await listDir(dir, path);
           return {
-            content: [
-              {type: 'text', text: JSON.stringify(entries, null, 2)},
-            ],
+            content: [{type: 'text', text: JSON.stringify(entries, null, 2)}],
           };
         } catch (e) {
           return {
@@ -196,9 +192,7 @@ export default function WebMCPTools() {
           }> = [];
           for await (const [name, handle] of dir) {
             if (handle.kind === 'file') {
-              const file = await (
-                handle as FileSystemFileHandle
-              ).getFile();
+              const file = await (handle as FileSystemFileHandle).getFile();
               const samples = file.size / 4;
               const durationSec = samples / 2 / 44100;
               entries.push({
@@ -210,9 +204,7 @@ export default function WebMCPTools() {
             }
           }
           return {
-            content: [
-              {type: 'text', text: JSON.stringify(entries, null, 2)},
-            ],
+            content: [{type: 'text', text: JSON.stringify(entries, null, 2)}],
           };
         } catch (e) {
           return {
@@ -242,8 +234,7 @@ export default function WebMCPTools() {
               type: 'text',
               text: JSON.stringify({
                 used: ((estimate.usage ?? 0) / 1048576).toFixed(1) + ' MB',
-                quota:
-                  ((estimate.quota ?? 0) / 1048576).toFixed(0) + ' MB',
+                quota: ((estimate.quota ?? 0) / 1048576).toFixed(0) + ' MB',
                 percent:
                   (
                     ((estimate.usage ?? 0) / (estimate.quota ?? 1)) *
@@ -321,9 +312,7 @@ export default function WebMCPTools() {
         try {
           const rows = await runRawSql(sql);
           return {
-            content: [
-              {type: 'text', text: JSON.stringify(rows, null, 2)},
-            ],
+            content: [{type: 'text', text: JSON.stringify(rows, null, 2)}],
           };
         } catch (e) {
           return {

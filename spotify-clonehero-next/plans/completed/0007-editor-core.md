@@ -19,18 +19,18 @@ This plan is intentionally scoped to read-only viewing with audio playback. The 
 
 This is a standard Next.js page in the existing project. Nothing special:
 
-| Layer | Choice |
-|---|---|
-| Framework | Next.js (existing project) |
-| Package manager | yarn |
-| Language | TypeScript (strict) |
-| Styling | Tailwind CSS |
-| State management | React state + context (no zustand) |
-| Audio playback | `AudioManager` from `lib/preview/audioManager.ts` (primary source) |
-| Seeking/navigation | WaveSurfer.js 7+ (visual waveform, click-to-seek, minimap) |
-| Notation view | `SheetMusic` component from `app/sheet-music/[slug]/SheetMusic.tsx` (reused) |
-| Highway view | `CloneHeroRenderer` from `app/sheet-music/[slug]/CloneHeroRenderer.tsx` (reused) |
-| Chart parsing | `scan-chart` (`parseChartFile`) -- already a dependency |
+| Layer              | Choice                                                                           |
+| ------------------ | -------------------------------------------------------------------------------- |
+| Framework          | Next.js (existing project)                                                       |
+| Package manager    | yarn                                                                             |
+| Language           | TypeScript (strict)                                                              |
+| Styling            | Tailwind CSS                                                                     |
+| State management   | React state + context (no zustand)                                               |
+| Audio playback     | `AudioManager` from `lib/preview/audioManager.ts` (primary source)               |
+| Seeking/navigation | WaveSurfer.js 7+ (visual waveform, click-to-seek, minimap)                       |
+| Notation view      | `SheetMusic` component from `app/sheet-music/[slug]/SheetMusic.tsx` (reused)     |
+| Highway view       | `CloneHeroRenderer` from `app/sheet-music/[slug]/CloneHeroRenderer.tsx` (reused) |
+| Chart parsing      | `scan-chart` (`parseChartFile`) -- already a dependency                          |
 
 ---
 
@@ -44,11 +44,17 @@ Extract `convertNoteToString()` from `app/sheet-music/[slug]/convertToVexflow.ts
 
 ```typescript
 // lib/drum-mapping/noteToInstrument.ts
-import { NoteEvent, noteTypes, noteFlags } from '@eliwhite/scan-chart';
+import {NoteEvent, noteTypes, noteFlags} from '@eliwhite/scan-chart';
 
 export type DrumNoteInstrument =
-  | 'kick' | 'snare' | 'high-tom' | 'mid-tom'
-  | 'floor-tom' | 'hihat' | 'crash' | 'ride';
+  | 'kick'
+  | 'snare'
+  | 'high-tom'
+  | 'mid-tom'
+  | 'floor-tom'
+  | 'hihat'
+  | 'crash'
+  | 'ride';
 
 export function noteEventToInstrument(note: NoteEvent): DrumNoteInstrument {
   // Move the body of convertNoteToString here
@@ -146,11 +152,11 @@ interface EditorState {
 }
 
 type EditorAction =
-  | { type: 'SET_CHART'; chart: ParsedChart; track: ParsedChart['trackData'][0] }
-  | { type: 'SET_PLAYING'; isPlaying: boolean }
-  | { type: 'SET_CURRENT_TIME'; timeMs: number }
-  | { type: 'SET_PLAYBACK_SPEED'; speed: number }
-  | { type: 'SET_ZOOM'; zoom: number };
+  | {type: 'SET_CHART'; chart: ParsedChart; track: ParsedChart['trackData'][0]}
+  | {type: 'SET_PLAYING'; isPlaying: boolean}
+  | {type: 'SET_CURRENT_TIME'; timeMs: number}
+  | {type: 'SET_PLAYBACK_SPEED'; speed: number}
+  | {type: 'SET_ZOOM'; zoom: number};
 
 // Context provides state + dispatch + refs to AudioManager and WaveSurfer
 interface EditorContextValue {
@@ -191,6 +197,7 @@ For now, use URL query params to specify the project name: `/drum-transcription?
 ### 6.1 AudioManager is Primary
 
 `AudioManager` from `lib/preview/audioManager.ts` owns all audio playback. It handles:
+
 - Play, pause, seek (via `play({ time })`, `pause()`, `resume()`)
 - Playback speed (via `setTempo()`)
 - Multiple tracks (drums, song, etc.)
@@ -201,11 +208,13 @@ Do not copy AudioManager. Import and use it directly.
 ### 6.2 WaveSurfer is for Seeking Only
 
 WaveSurfer displays the waveform visually and provides click-to-seek and minimap navigation. It does NOT play audio. Configure WaveSurfer with:
+
 - `backend: 'WebAudio'`
 - `interact: true` (enable click-to-seek)
 - Media element set to a silent/muted source, or use WaveSurfer's `media` option with a muted audio element
 
 When the user clicks on the WaveSurfer waveform:
+
 1. WaveSurfer fires a `seek` event with a position (0-1).
 2. The handler calls `audioManager.play({ percent: position })`.
 3. AudioManager handles the actual audio seek.
@@ -226,7 +235,7 @@ function animationLoop() {
     wavesurferRef.current?.seekTo(currentTime / duration);
 
     // Update React state (throttled to ~30fps to avoid excess renders)
-    dispatch({ type: 'SET_CURRENT_TIME', timeMs: currentTimeMs });
+    dispatch({type: 'SET_CURRENT_TIME', timeMs: currentTimeMs});
   }
   requestAnimationFrame(animationLoop);
 }
@@ -248,12 +257,12 @@ A `<TransportControls>` component with Tailwind styling:
 
 ### Keyboard shortcuts (transport only, editing shortcuts come in 0007a):
 
-| Key | Action |
-|---|---|
-| `Space` | Play/Pause |
-| `Left/Right` | Step by beat |
-| `Home/End` | Jump to start/end |
-| `+` / `-` | Zoom in/out (time axis) |
+| Key          | Action                  |
+| ------------ | ----------------------- |
+| `Space`      | Play/Pause              |
+| `Left/Right` | Step by beat            |
+| `Home/End`   | Jump to start/end       |
+| `+` / `-`    | Zoom in/out (time axis) |
 
 ---
 
@@ -268,6 +277,7 @@ Use WaveSurfer's `MinimapPlugin` for a full-song overview bar at the top. Click 
 The main waveform view, zoomable via scroll wheel or +/- keys. Click to seek. During playback, the waveform view auto-scrolls to keep the playhead visible.
 
 Configure with:
+
 - `minPxPerSec: 50` (reasonable zoom minimum)
 - `cursorColor` and `progressColor` for visual distinction
 - `height: 128` (or configurable)

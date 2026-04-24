@@ -92,7 +92,10 @@ function calculateSizes(
   const fileDataSectionSize = 8 + totalFileDataSize;
 
   const totalSize =
-    headerSize + metadataSectionSize + fileIndexSectionSize + fileDataSectionSize;
+    headerSize +
+    metadataSectionSize +
+    fileIndexSectionSize +
+    fileDataSectionSize;
 
   const fileDataStartOffset =
     headerSize + metadataSectionSize + fileIndexSectionSize + 8;
@@ -113,11 +116,7 @@ function calculateSizes(
 // BigInt helper
 // ---------------------------------------------------------------------------
 
-function setBigUint64LE(
-  view: DataView,
-  offset: number,
-  value: bigint,
-): void {
+function setBigUint64LE(view: DataView, offset: number, value: bigint): void {
   view.setBigUint64(offset, value, true);
 }
 
@@ -132,7 +131,10 @@ function setBigUint64LE(
  * @param files - File entries to include. Filenames must be <= 255 UTF-8 bytes.
  * @returns The complete .sng file as a Uint8Array.
  */
-export function buildSngFile(metadata: SngMetadata, files: FileEntry[]): Uint8Array {
+export function buildSngFile(
+  metadata: SngMetadata,
+  files: FileEntry[],
+): Uint8Array {
   const sizes = calculateSizes(metadata, files);
   const buffer = new ArrayBuffer(sizes.totalSize);
   const view = new DataView(buffer);
@@ -229,9 +231,7 @@ export function buildSngFile(metadata: SngMetadata, files: FileEntry[]): Uint8Ar
  */
 export function exportAsSng(files: FileEntry[]): Uint8Array {
   // Find and extract song.ini for SNG header metadata
-  const songIniEntry = files.find(
-    f => f.filename.toLowerCase() === 'song.ini',
-  );
+  const songIniEntry = files.find(f => f.filename.toLowerCase() === 'song.ini');
 
   let metadata: SngMetadata = {};
   let filteredFiles = files;

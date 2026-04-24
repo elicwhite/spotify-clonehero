@@ -128,10 +128,8 @@ describe('createLogFilterbank', () => {
     const {filters} = createLogFilterbank(44100, 2048, 12, 20, 20000);
 
     // Count non-zero bins in first and last filter
-    const nonZeroFirst = filters[0].filter((v) => v > 0).length;
-    const nonZeroLast = filters[filters.length - 1].filter(
-      (v) => v > 0,
-    ).length;
+    const nonZeroFirst = filters[0].filter(v => v > 0).length;
+    const nonZeroLast = filters[filters.length - 1].filter(v => v > 0).length;
 
     // Higher filters (higher frequency) should be wider in frequency
     // but since the FFT bins are linearly spaced, the first filter

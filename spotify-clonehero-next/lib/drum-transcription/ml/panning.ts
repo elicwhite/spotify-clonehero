@@ -72,9 +72,7 @@ export function computePanningFeatures(
     for (let i = 0; i < nFft; i++) {
       const sampleIdx = frameStart + i;
       const lSample =
-        sampleIdx < numSamples
-          ? stereoAudio[sampleIdx * 2] * hannWindow[i]
-          : 0;
+        sampleIdx < numSamples ? stereoAudio[sampleIdx * 2] * hannWindow[i] : 0;
       const rSample =
         sampleIdx < numSamples
           ? stereoAudio[sampleIdx * 2 + 1] * hannWindow[i]
@@ -109,8 +107,7 @@ export function computePanningFeatures(
     // Compute panning ratio per band: (R - L) / (R + L + eps)
     for (let b = 0; b < 4; b++) {
       const denom = lBandPower[b] + rBandPower[b] + 1e-10;
-      panning[b * nFrames + frame] =
-        (rBandPower[b] - lBandPower[b]) / denom;
+      panning[b * nFrames + frame] = (rBandPower[b] - lBandPower[b]) / denom;
     }
   }
 

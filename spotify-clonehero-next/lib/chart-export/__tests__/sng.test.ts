@@ -62,7 +62,8 @@ async function parseSngBuffer(
 
 describe('exportAsSng', () => {
   test('extracts song.ini into SNG header metadata', async () => {
-    const songIni = '[song]\nname = Test Song\nartist = Test Artist\npro_drums = True';
+    const songIni =
+      '[song]\nname = Test Song\nartist = Test Artist\npro_drums = True';
     const files: FileEntry[] = [
       {filename: 'notes.chart', data: new TextEncoder().encode('[Song]\n{}')},
       {filename: 'song.ini', data: new TextEncoder().encode(songIni)},
@@ -85,13 +86,18 @@ describe('exportAsSng', () => {
   });
 
   test('file data round-trips correctly', async () => {
-    const chartData = new TextEncoder().encode('[ExpertDrums]\n{\n  0 = N 0 0\n}');
+    const chartData = new TextEncoder().encode(
+      '[ExpertDrums]\n{\n  0 = N 0 0\n}',
+    );
     const audioData = new Uint8Array(256);
     for (let i = 0; i < 256; i++) audioData[i] = i;
 
     const files: FileEntry[] = [
       {filename: 'notes.chart', data: chartData},
-      {filename: 'song.ini', data: new TextEncoder().encode('[song]\nname = RT')},
+      {
+        filename: 'song.ini',
+        data: new TextEncoder().encode('[song]\nname = RT'),
+      },
       {filename: 'drums.wav', data: audioData},
     ];
 
@@ -120,7 +126,10 @@ describe('exportAsSng', () => {
   test('song.ini matching is case-insensitive', async () => {
     const files: FileEntry[] = [
       {filename: 'notes.chart', data: new TextEncoder().encode('data')},
-      {filename: 'Song.INI', data: new TextEncoder().encode('[song]\nname = CaseTest')},
+      {
+        filename: 'Song.INI',
+        data: new TextEncoder().encode('[song]\nname = CaseTest'),
+      },
     ];
 
     const sngBytes = exportAsSng(files);

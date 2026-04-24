@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:guarded": "scripts/dev-guarded.sh",
+    "dev:webpack": "next dev --webpack",
+    "dev:webpack:guarded": "DEV_CMD='yarn dev:webpack' scripts/dev-guarded.sh",
     "build": "yarn run jest && next build",
     "start": "next start",
     "lint": "eslint .",

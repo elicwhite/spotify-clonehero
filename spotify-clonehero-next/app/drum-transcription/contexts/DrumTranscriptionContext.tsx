@@ -1,11 +1,6 @@
 'use client';
 
-import {
-  createContext,
-  useContext,
-  useReducer,
-  type ReactNode,
-} from 'react';
+import {createContext, useContext, useReducer, type ReactNode} from 'react';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -83,10 +78,14 @@ function drumTranscriptionReducer(
 // Context
 // ---------------------------------------------------------------------------
 
-const DrumTranscriptionContext = createContext<DrumTranscriptionContextValue | null>(null);
+const DrumTranscriptionContext =
+  createContext<DrumTranscriptionContextValue | null>(null);
 
 export function DrumTranscriptionProvider({children}: {children: ReactNode}) {
-  const [dtState, dtDispatch] = useReducer(drumTranscriptionReducer, initialState);
+  const [dtState, dtDispatch] = useReducer(
+    drumTranscriptionReducer,
+    initialState,
+  );
 
   return (
     <DrumTranscriptionContext.Provider value={{dtState, dtDispatch}}>
@@ -98,7 +97,9 @@ export function DrumTranscriptionProvider({children}: {children: ReactNode}) {
 export function useDrumTranscriptionContext(): DrumTranscriptionContextValue {
   const ctx = useContext(DrumTranscriptionContext);
   if (!ctx) {
-    throw new Error('useDrumTranscriptionContext must be used within a DrumTranscriptionProvider');
+    throw new Error(
+      'useDrumTranscriptionContext must be used within a DrumTranscriptionProvider',
+    );
   }
   return ctx;
 }

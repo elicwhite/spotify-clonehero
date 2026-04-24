@@ -69,8 +69,7 @@ export function msToTick(
 
   const tempo = timedTempos[tempoIndex];
   const elapsedMs = msTime - tempo.msTime;
-  const tickOffset =
-    (elapsedMs * tempo.beatsPerMinute * resolution) / 60000;
+  const tickOffset = (elapsedMs * tempo.beatsPerMinute * resolution) / 60000;
 
   return Math.round(tempo.tick + tickOffset);
 }

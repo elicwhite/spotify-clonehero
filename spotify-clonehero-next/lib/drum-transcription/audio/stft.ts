@@ -244,7 +244,12 @@ export function computeSTFT(
     }
   }
 
-  return {real: outReal, imag: outImag, numBins: OUT_BINS, numFrames: OUT_FRAMES};
+  return {
+    real: outReal,
+    imag: outImag,
+    numBins: OUT_BINS,
+    numFrames: OUT_FRAMES,
+  };
 }
 
 // ---------------------------------------------------------------------------

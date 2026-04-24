@@ -55,7 +55,15 @@ export type {
   DrumType,
   VocalTrackData,
 };
-export { eventTypes, instruments, difficulties, noteTypes, noteFlags, lyricFlags, drumTypes };
+export {
+  eventTypes,
+  instruments,
+  difficulties,
+  noteTypes,
+  noteFlags,
+  lyricFlags,
+  drumTypes,
+};
 
 /** A single track in a ParsedChart (one instrument + difficulty combo). */
 export type ParsedTrackData = ParsedChart['trackData'][number];

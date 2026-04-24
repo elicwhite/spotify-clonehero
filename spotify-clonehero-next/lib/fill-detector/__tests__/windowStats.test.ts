@@ -411,7 +411,14 @@ describe('Window Statistics', () => {
         startMs: 0,
         endMs: 500,
         notes: [
-          {tick: 48, msTime: 0, length: 24, msLength: 62.5, type: 0 as never, flags: 0},
+          {
+            tick: 48,
+            msTime: 0,
+            length: 24,
+            msLength: 62.5,
+            type: 0 as never,
+            flags: 0,
+          },
           {tick: 96, msTime: 0, length: 24, msLength: 62.5, type: 1, flags: 0},
         ],
         features: {

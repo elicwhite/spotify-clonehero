@@ -22,16 +22,19 @@ components/chart-picker/              # NEW shared location
 ```
 
 ### Changes to ChartDropZone:
+
 - Add `id` prop for File System Access API persistence (currently hardcoded `'add-lyrics-chart'`)
 - Add optional `className` prop for layout flexibility
 - Keep all format support: SNG, ZIP, folder, auto-detect drag-and-drop
 
 ### Changes to chart-file-readers.ts:
+
 - Currently at `lib/lyrics-align/chart-file-readers.ts`
 - Move to `components/chart-picker/chart-file-readers.ts` (co-located with UI)
 - No functional changes — `readSngFile`, `readZipFile`, `readChartDirectory`, `detectFormat` all stay the same
 
 ### Update add-lyrics:
+
 - Update imports in `app/add-lyrics/page.tsx` and `app/add-lyrics/ChartDropZone.tsx` to point to new location
 - Delete old `app/add-lyrics/ChartDropZone.tsx`, import from `components/chart-picker/`
 
@@ -103,12 +106,13 @@ export async function loadChartFromFiles(
   rawFiles: FileEntry[];
   sourceFormat: SourceFormat;
   originalName: string;
-}>
+}>;
 ```
 
 ### OPFS Storage for drum-edit:
 
 Namespace under `drum-edit/` in OPFS (separate from `drum-transcription/`):
+
 - `drum-edit/{project-name}/notes.chart` — current chart state
 - `drum-edit/{project-name}/notes.edited.chart` — user edits
 - `drum-edit/{project-name}/audio/` — loaded audio files
@@ -117,6 +121,7 @@ Namespace under `drum-edit/` in OPFS (separate from `drum-transcription/`):
 ### Auto-save:
 
 Use the shared `useAutoSave` hook from plan 0013 with drum-edit-specific config:
+
 - Save `notes.edited.chart` to OPFS
 - No confidence or review progress to save
 - Same 30s interval + visibility change triggers
@@ -126,6 +131,7 @@ Use the shared `useAutoSave` hook from plan 0013 with drum-edit-specific config:
 Charts can contain multiple audio stems (song.ogg, guitar.ogg, drums.ogg, bass.ogg, etc.). The AudioManager already supports multi-track loading.
 
 For drum-edit:
+
 - Load all audio files from the chart package
 - Create AudioManager with available stems
 - Show stem volume controls if multiple stems exist (reuse StemVolumeControls with generic stem names)
@@ -134,6 +140,7 @@ For drum-edit:
 ## 4. Export from drum-edit
 
 Use the shared ExportDialog from plan 0013:
+
 - Export in the same format as the input (SNG → SNG, ZIP → ZIP)
 - Preserve all original files (audio, album art, etc.)
 - Replace only the chart file with edited version
@@ -191,7 +198,9 @@ Use the sample chart `public/All Time Low - SUCKERPUNCH (Hubbubble).sng` as the 
      ```js
      fetch('/All Time Low - SUCKERPUNCH (Hubbubble).sng')
        .then(r => r.blob())
-       .then(b => { /* trigger file load with this blob */ })
+       .then(b => {
+         /* trigger file load with this blob */
+       });
      ```
    - Or use the file upload UI to load the .sng file
    - `take_screenshot` — verify chart is parsed successfully, loading indicator works

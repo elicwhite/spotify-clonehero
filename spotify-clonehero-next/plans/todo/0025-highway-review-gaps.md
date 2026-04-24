@@ -208,6 +208,7 @@ The synthetic `scanNote` object is cast `as Note`, but it may lack properties th
 The `useEffect` has `hoverLane` and `hoverTick` in its dependency array, so it fires 60+ times/sec during mouse movement, calling `handle.getNotesManager().then(...)` each time.
 
 **Fix:** Split into two effects:
+
 1. One that pushes `overlayState` (can run frequently, is synchronous).
 2. One that pushes selection/confidence/review to NotesManager (runs only when those change, not on hover).
 
@@ -292,6 +293,7 @@ The `useEffect` has `hoverLane` and `hoverTick` in its dependency array, so it f
 ### 8.1 Keyboard placement mode missing
 
 **Moonscraper ref:** `PlaceNoteController.cs` supports **two placement modes** toggled via `ToggleMouseMode`:
+
 - **Mouse burst mode**: Click to place notes at mouse position (what we have).
 - **Keyboard burst mode**: Press lane keys (1-5) to place notes at the **cursor position**. No mouse needed. This is the primary editing workflow for experienced users.
 - **Keyboard sustain mode**: Hold a lane key to create a sustain note that extends as long as the key is held.
@@ -299,6 +301,7 @@ The `useEffect` has `hoverLane` and `hoverTick` in its dependency array, so it f
 **Our state:** Only mouse placement exists. No keyboard lane shortcuts for placement.
 
 **Fix:** Add keyboard placement mode. When active:
+
 - Keys 1-5 place notes at the current `cursorTick` in the corresponding lane (1=kick, 2=red, 3=yellow, 4=blue, 5=green).
 - After placing, auto-advance cursor to the next grid step (so the user can type a rhythm).
 - Toggle between mouse and keyboard mode via a shortcut.
@@ -324,6 +327,7 @@ This is a high-impact feature for editing speed. This is covered by plan 0016 (g
 ### 8.4 Chord select modifier missing
 
 **Moonscraper ref:** Moonscraper has a `ChordSelect` input modifier. When active:
+
 - Clicking a note selects ALL notes at that tick (the chord).
 - Erasing a note erases the entire chord.
 - Useful for drum charts where multiple pads hit at the same time.
@@ -427,6 +431,7 @@ This is a high-impact feature for editing speed. This is covered by plan 0016 (g
 ### 11.4 Dynamics SET commands (not just toggles) missing
 
 **Moonscraper ref:** Moonscraper has both SET and TOGGLE variants:
+
 - `NoteSetAccent` / `NoteSetGhost` / `NoteSetDynamicsNone` — SET the dynamic level to a specific value.
 - `ToggleNoteAccent` / `ToggleNoteGhost` — TOGGLE the flag.
 
@@ -497,6 +502,7 @@ Covered in 3.1 above. Moonscraper shows the actual note mesh/sprite as the ghost
 ## Execution Order
 
 ### Phase 1: Bugs & Performance (ship-blocking)
+
 1. Fix per-frame allocations (1.1-1.7)
 2. Fix module-level singletons (2.1-2.2)
 3. Fix kick hit-testing (4.1)
@@ -506,12 +512,14 @@ Covered in 3.1 above. Moonscraper shows the actual note mesh/sprite as the ghost
 7. Code cleanup (6.1-6.7)
 
 ### Phase 2: Visual Correctness
+
 8. Ghost notes use real textures (3.1)
 9. Three-tier beat lines (3.2, 7.1)
 10. Fix waveform race condition (3.5)
 11. BPM/TS markers on highway (11.1)
 
 ### Phase 3: Moonscraper Parity — Editing Core
+
 12. Eraser drag batching (8.2)
 13. Keyboard placement mode (8.1) — cross-ref plan 0016
 14. Step increment/decrement shortcuts (9.4)
@@ -523,6 +531,7 @@ Covered in 3.1 above. Moonscraper shows the actual note mesh/sprite as the ghost
 20. Select all in section (11.6)
 
 ### Phase 4: Moonscraper Parity — Advanced
+
 21. Adjustable highway speed (10.1)
 22. Per-pad tom/cymbal keyboard placement (11.3)
 23. Dynamics set commands (11.4)
@@ -531,6 +540,7 @@ Covered in 3.1 above. Moonscraper shows the actual note mesh/sprite as the ghost
 26. Drum roll tool (11.2)
 
 ### Phase 5: Tests
+
 27. Tests for applyDiff, coordinate conversion, overlay positioning (5.1-5.4)
 
 ## Verification

@@ -19,14 +19,14 @@ BPM changes (purple)
 
 All markers use the same text flag sprite approach as sections (plan 0017): a `THREE.Sprite` with a `CanvasTexture` containing the label text on a semi-transparent colored background. This provides a consistent visual language across all marker types.
 
-| Marker Type | Side | Color | Key Format | Label Example |
-|-------------|------|-------|------------|---------------|
-| Section | Right | Green `rgba(0, 200, 40)` | `section:{tick}` | `verse_1` |
-| Lyric | Left | Blue `rgba(40, 120, 255)` | `lyric:{tick}` | `hel-` |
-| Phrase start | Left | Blue `rgba(40, 120, 255)` | `phrase-start:{tick}` | `phrase ▶` |
-| Phrase end | Left | Blue `rgba(40, 120, 255)` | `phrase-end:{tick}` | `phrase ■` |
-| BPM | Left | Purple `rgba(180, 40, 255)` | `bpm:{tick}` | `♩ 120.00` |
-| Time Sig | Right | Red `rgba(255, 80, 60)` | `ts:{tick}` | `4/4` |
+| Marker Type  | Side  | Color                       | Key Format            | Label Example |
+| ------------ | ----- | --------------------------- | --------------------- | ------------- |
+| Section      | Right | Green `rgba(0, 200, 40)`    | `section:{tick}`      | `verse_1`     |
+| Lyric        | Left  | Blue `rgba(40, 120, 255)`   | `lyric:{tick}`        | `hel-`        |
+| Phrase start | Left  | Blue `rgba(40, 120, 255)`   | `phrase-start:{tick}` | `phrase ▶`   |
+| Phrase end   | Left  | Blue `rgba(40, 120, 255)`   | `phrase-end:{tick}`   | `phrase ■`    |
+| BPM          | Left  | Purple `rgba(180, 40, 255)` | `bpm:{tick}`          | `♩ 120.00`    |
+| Time Sig     | Right | Red `rgba(255, 80, 60)`     | `ts:{tick}`           | `4/4`         |
 
 ## Architecture
 
@@ -35,15 +35,19 @@ All markers use the same text flag sprite approach as sections (plan 0017): a `T
 The reconciler already supports multiple element kinds. Add new renderers:
 
 ```typescript
-const reconciler = new SceneReconciler(scene, {
-  note: noteRenderer,
-  lyric: new MarkerRenderer(clippingPlanes, 'left', [40, 120, 255]),
-  'phrase-start': new MarkerRenderer(clippingPlanes, 'left', [40, 120, 255]),
-  'phrase-end': new MarkerRenderer(clippingPlanes, 'left', [40, 120, 255]),
-  bpm: new MarkerRenderer(clippingPlanes, 'left', [180, 40, 255]),
-  ts: new MarkerRenderer(clippingPlanes, 'right', [255, 80, 60]),
-  section: new MarkerRenderer(clippingPlanes, 'right', [0, 200, 40]),
-}, highwaySpeed);
+const reconciler = new SceneReconciler(
+  scene,
+  {
+    note: noteRenderer,
+    lyric: new MarkerRenderer(clippingPlanes, 'left', [40, 120, 255]),
+    'phrase-start': new MarkerRenderer(clippingPlanes, 'left', [40, 120, 255]),
+    'phrase-end': new MarkerRenderer(clippingPlanes, 'left', [40, 120, 255]),
+    bpm: new MarkerRenderer(clippingPlanes, 'left', [180, 40, 255]),
+    ts: new MarkerRenderer(clippingPlanes, 'right', [255, 80, 60]),
+    section: new MarkerRenderer(clippingPlanes, 'right', [0, 200, 40]),
+  },
+  highwaySpeed,
+);
 ```
 
 ### MarkerRenderer
@@ -62,8 +66,8 @@ class MarkerRenderer implements ElementRenderer<MarkerElementData> {
   constructor(
     clippingPlanes: THREE.Plane[],
     side: 'left' | 'right',
-    color: [number, number, number],  // RGB 0-255
-  )
+    color: [number, number, number], // RGB 0-255
+  );
 
   create(data: MarkerElementData, msTime: number): THREE.Group {
     // Create:
@@ -104,7 +108,7 @@ function chartToElements(
       key: `section:${section.tick}`,
       kind: 'section',
       msTime: section.msTime,
-      data: { text: section.name },
+      data: {text: section.name},
     });
   }
 
@@ -114,7 +118,7 @@ function chartToElements(
       key: `lyric:${lyric.tick}`,
       kind: 'lyric',
       msTime: lyric.msTime,
-      data: { text: lyric.text },
+      data: {text: lyric.text},
     });
   }
 
@@ -124,7 +128,7 @@ function chartToElements(
       key: `phrase-start:${phrase.tick}`,
       kind: 'phrase-start',
       msTime: phrase.msTime,
-      data: { text: 'phrase ▶' },
+      data: {text: 'phrase ▶'},
     });
     // phrase end at tick + length
     const endTick = phrase.tick + phrase.length;
@@ -133,7 +137,7 @@ function chartToElements(
       key: `phrase-end:${endTick}`,
       kind: 'phrase-end',
       msTime: endMs,
-      data: { text: 'phrase ■' },
+      data: {text: 'phrase ■'},
     });
   }
 
@@ -143,7 +147,7 @@ function chartToElements(
       key: `bpm:${tempo.tick}`,
       kind: 'bpm',
       msTime: tempo.msTime,
-      data: { text: `♩ ${tempo.beatsPerMinute.toFixed(2)}` },
+      data: {text: `♩ ${tempo.beatsPerMinute.toFixed(2)}`},
     });
   }
 
@@ -153,7 +157,7 @@ function chartToElements(
       key: `ts:${ts.tick}`,
       kind: 'ts',
       msTime: ts.msTime,
-      data: { text: `${ts.numerator}/${ts.denominator}` },
+      data: {text: `${ts.numerator}/${ts.denominator}`},
     });
   }
 
@@ -181,6 +185,7 @@ ParsedChart (from scan-chart)
 ```
 
 For edits:
+
 ```
 Command modifies ChartDocument
   → writeChart → parseChartFile → new ParsedChart

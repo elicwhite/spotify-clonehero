@@ -640,7 +640,9 @@ export default function Renderer({
       practiceMode?.endTimeMs != null &&
       practiceMode?.endTimeMs > 0
     ) {
-      audioManagerRef.current.setPracticeMode(toAudioPracticeMode(practiceMode));
+      audioManagerRef.current.setPracticeMode(
+        toAudioPracticeMode(practiceMode),
+      );
     }
   }, [practiceMode, toAudioPracticeMode]);
 
@@ -1236,9 +1238,7 @@ export default function Renderer({
                   checked={showBarNumbers}
                   onCheckedChange={setShowBarNumbers}
                 />
-                <label
-                  htmlFor="measurenumbers"
-                  className="text-sm font-medium">
+                <label htmlFor="measurenumbers" className="text-sm font-medium">
                   Show measure numbers
                 </label>
               </div>
@@ -1364,8 +1364,8 @@ export default function Renderer({
         <p className="text-xs text-muted-foreground text-center mt-auto">
           Special thanks to{' '}
           <a href="https://github.com/tonygoldcrest">@tonygoldcrest</a>&apos;s{' '}
-          <a href="https://github.com/tonygoldcrest/drum-hero">drum-hero</a>{' '}
-          for providing much of this tool.
+          <a href="https://github.com/tonygoldcrest/drum-hero">drum-hero</a> for
+          providing much of this tool.
         </p>
       }>
       <div
@@ -1416,10 +1416,7 @@ export default function Renderer({
         />
         <div className="flex flex-1 gap-2 overflow-hidden">
           <div
-            className={cn(
-              viewCloneHero ? 'hidden md:flex' : 'flex',
-              'flex-1',
-            )}>
+            className={cn(viewCloneHero ? 'hidden md:flex' : 'flex', 'flex-1')}>
             <SheetMusic
               currentTime={currentPlayback}
               chart={chart}

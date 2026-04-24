@@ -146,7 +146,7 @@ describe('STFT → iSTFT round-trip', () => {
   });
 
   it('recovers a DC signal with low error', () => {
-    const signal = makeTestSignal((ch) => (ch === 0 ? 0.3 : -0.2));
+    const signal = makeTestSignal(ch => (ch === 0 ? 0.3 : -0.2));
 
     const stft = computeSTFT(signal, stftBuf);
     const recovered = computeISTFT(
@@ -202,7 +202,7 @@ describe('STFT → iSTFT round-trip', () => {
   });
 });
 
-describe('Parseval\'s theorem', () => {
+describe("Parseval's theorem", () => {
   let stftBuf: STFTBuffers;
 
   beforeAll(() => {

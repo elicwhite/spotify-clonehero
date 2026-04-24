@@ -39,11 +39,7 @@ export default function ChartDetailLayout({
       size="icon"
       className="rounded-full"
       onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
-      {isSidebarOpen ? (
-        <X className="h-6 w-6" />
-      ) : (
-        <Menu className="h-6 w-6" />
-      )}
+      {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
     </Button>
   );
 

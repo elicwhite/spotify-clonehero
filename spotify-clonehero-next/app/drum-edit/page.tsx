@@ -1,6 +1,13 @@
 'use client';
 
-import {Suspense, useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
 import {
   Loader2,
@@ -39,7 +46,10 @@ import type {ChartDocument} from '@/lib/chart-edit';
 import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
-import {ChartEditorProvider, useChartEditorContext} from '@/components/chart-editor';
+import {
+  ChartEditorProvider,
+  useChartEditorContext,
+} from '@/components/chart-editor';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
 import type {AudioSource} from '@/components/chart-editor/ExportDialog';
 import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboard';
@@ -142,7 +152,8 @@ function DrumEditInner() {
 
         // Parse chart
         const chartDoc = readChart(files);
-        const name = chartDoc.parsedChart.metadata.name ?? originalName ?? 'Unknown';
+        const name =
+          chartDoc.parsedChart.metadata.name ?? originalName ?? 'Unknown';
         const artist = chartDoc.parsedChart.metadata.artist ?? 'Unknown';
         const charter = chartDoc.parsedChart.metadata.charter ?? 'Unknown';
 
@@ -169,7 +180,9 @@ function DrumEditInner() {
         // Force .chart output format (input may have been .mid)
         chartDoc.parsedChart.format = 'chart';
         const chartFiles = writeChartFolder(chartDoc);
-        const chartFileEntry = chartFiles.find(f => f.fileName === 'notes.chart');
+        const chartFileEntry = chartFiles.find(
+          f => f.fileName === 'notes.chart',
+        );
         if (!chartFileEntry) {
           throw new Error('writeChartFolder did not produce notes.chart');
         }
@@ -352,8 +365,8 @@ function DrumEditInner() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete project?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete &ldquo;{deleteTarget?.name}&rdquo; and
-              all its data from your browser. This cannot be undone.
+              This will permanently delete &ldquo;{deleteTarget?.name}&rdquo;
+              and all its data from your browser. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -425,11 +438,7 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
 
         // 3. Parse chart
         const chartBytes = new TextEncoder().encode(chartText);
-        const parsed = parseChartFile(
-          chartBytes,
-          'chart',
-          PRO_DRUMS_MODIFIERS,
-        );
+        const parsed = parseChartFile(chartBytes, 'chart', PRO_DRUMS_MODIFIERS);
 
         // 4. Find expert drums track
         const drumTrack = parsed.trackData.find(
@@ -466,7 +475,9 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
         await audioManager.ready;
         if (cancelled) return;
 
-        audioManager.setChartDelay(getChartDelayMs(chartDoc.parsedChart.metadata) / 1000);
+        audioManager.setChartDelay(
+          getChartDelayMs(chartDoc.parsedChart.metadata) / 1000,
+        );
         audioManagerRef.current = audioManager;
 
         // 8. Decode first audio file to raw PCM for waveform display
@@ -544,7 +555,8 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
     if (!state.chartDoc) throw new Error('No chart document');
     const files = writeChartFolder(state.chartDoc);
     const chartFile = files.find(f => f.fileName === 'notes.chart');
-    if (!chartFile) throw new Error('writeChartFolder did not produce notes.chart');
+    if (!chartFile)
+      throw new Error('writeChartFolder did not produce notes.chart');
     return new TextDecoder().decode(chartFile.data);
   }, [state.chartDoc]);
 

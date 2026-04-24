@@ -82,7 +82,13 @@ function note(
   flags = 0,
   msLength = 0,
 ): Track['noteEventGroups'][0][0] {
-  return {type, tick, msTime, flags, msLength} as Track['noteEventGroups'][0][0];
+  return {
+    type,
+    tick,
+    msTime,
+    flags,
+    msLength,
+  } as Track['noteEventGroups'][0][0];
 }
 
 // ---------------------------------------------------------------------------
@@ -96,9 +102,7 @@ describe('edit round-trip through reconciler', () => {
     const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
 
     // Initial: yellow tom
-    const track1 = makeTrack([
-      [note(noteTypes.yellowDrum, 480, 500, 0)],
-    ]);
+    const track1 = makeTrack([[note(noteTypes.yellowDrum, 480, 500, 0)]]);
     reconciler.setElements(trackToElements(track1));
     const elements1 = reconciler.getElements();
     expect(elements1).toHaveLength(1);
@@ -125,9 +129,7 @@ describe('edit round-trip through reconciler', () => {
     const renderer = createMockRenderer();
     const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
 
-    const track1 = makeTrack([
-      [note(noteTypes.redDrum, 0, 0)],
-    ]);
+    const track1 = makeTrack([[note(noteTypes.redDrum, 0, 0)]]);
     reconciler.setElements(trackToElements(track1));
     expect(reconciler.getElements()).toHaveLength(1);
 
@@ -157,9 +159,7 @@ describe('edit round-trip through reconciler', () => {
     expect(reconciler.getActiveGroups().size).toBe(2);
 
     // Delete yellow
-    const track2 = makeTrack([
-      [note(noteTypes.redDrum, 0, 0)],
-    ]);
+    const track2 = makeTrack([[note(noteTypes.redDrum, 0, 0)]]);
     reconciler.setElements(trackToElements(track2));
     expect(reconciler.getElements()).toHaveLength(1);
     expect(reconciler.getActiveGroups().size).toBe(1);
@@ -170,16 +170,12 @@ describe('edit round-trip through reconciler', () => {
     const renderer = createMockRenderer();
     const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
 
-    const track1 = makeTrack([
-      [note(noteTypes.redDrum, 480, 500)],
-    ]);
+    const track1 = makeTrack([[note(noteTypes.redDrum, 480, 500)]]);
     reconciler.setElements(trackToElements(track1));
     expect(reconciler.getElements()[0].key).toBe('note:480:redDrum');
 
     // Move to different tick
-    const track2 = makeTrack([
-      [note(noteTypes.redDrum, 960, 1000)],
-    ]);
+    const track2 = makeTrack([[note(noteTypes.redDrum, 960, 1000)]]);
     reconciler.setElements(trackToElements(track2));
 
     // Old key gone, new key present
@@ -193,9 +189,7 @@ describe('edit round-trip through reconciler', () => {
     const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
 
     // Original state
-    const track1 = makeTrack([
-      [note(noteTypes.yellowDrum, 480, 500, 0)],
-    ]);
+    const track1 = makeTrack([[note(noteTypes.yellowDrum, 480, 500, 0)]]);
     const elements1 = trackToElements(track1);
     reconciler.setElements(elements1);
 
@@ -218,15 +212,11 @@ describe('edit round-trip through reconciler', () => {
     const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
 
     // 120 BPM: tick 480 = 500ms
-    const track1 = makeTrack([
-      [note(noteTypes.redDrum, 480, 500)],
-    ]);
+    const track1 = makeTrack([[note(noteTypes.redDrum, 480, 500)]]);
     reconciler.setElements(trackToElements(track1));
 
     // 60 BPM: tick 480 = 1000ms (different msTime)
-    const track2 = makeTrack([
-      [note(noteTypes.redDrum, 480, 1000)],
-    ]);
+    const track2 = makeTrack([[note(noteTypes.redDrum, 480, 1000)]]);
     reconciler.setElements(trackToElements(track2));
 
     const elements = reconciler.getElements();
@@ -246,9 +236,7 @@ describe('edit round-trip through reconciler', () => {
     reconciler.updateWindow(0);
 
     // Add note 1
-    const track1 = makeTrack([
-      [note(noteTypes.kick, 0, 0)],
-    ]);
+    const track1 = makeTrack([[note(noteTypes.kick, 0, 0)]]);
     reconciler.setElements(trackToElements(track1));
     reconciler.updateWindow(0);
     expect(reconciler.getActiveGroups().size).toBe(1);

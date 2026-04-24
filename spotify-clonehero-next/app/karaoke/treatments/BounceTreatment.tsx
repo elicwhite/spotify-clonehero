@@ -18,7 +18,10 @@ export const BounceTreatment: React.FC<TreatmentProps> = ({
 
   let currentLineIndex = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (currentMs >= lines[i].phraseStartMs - 500 && currentMs < lines[i].phraseEndMs) {
+    if (
+      currentMs >= lines[i].phraseStartMs - 500 &&
+      currentMs < lines[i].phraseEndMs
+    ) {
       currentLineIndex = i;
       break;
     }
@@ -55,7 +58,11 @@ export const BounceTreatment: React.FC<TreatmentProps> = ({
   let ballRelY: number | null = null;
 
   if (topLine && outerRef.current && topLineRef.current) {
-    const ball = getBallProgress(topLine.syllables, topLine.phraseEndMs, currentMs);
+    const ball = getBallProgress(
+      topLine.syllables,
+      topLine.phraseEndMs,
+      currentMs,
+    );
     const outerRect = outerRef.current.getBoundingClientRect();
     const scale = outerRect.width / outerRef.current.offsetWidth || 1;
 
@@ -107,8 +114,7 @@ export const BounceTreatment: React.FC<TreatmentProps> = ({
           (currentMs - lastSyllable.msTime) /
             (lastSyllableEnd - lastSyllable.msTime),
         );
-        const lastEl =
-          syllableRefs.current[topLine.syllables.length - 1];
+        const lastEl = syllableRefs.current[topLine.syllables.length - 1];
         if (lastEl) {
           const lastRect = lastEl.getBoundingClientRect();
           const endX = (lastRect.right - outerRect.left) / scale;
@@ -238,8 +244,7 @@ function getBallProgress(
 ): {index: number; progress: number} | null {
   for (let i = 0; i < syllables.length; i++) {
     const start = syllables[i].msTime;
-    const end =
-      i < syllables.length - 1 ? syllables[i + 1].msTime : lineEndMs;
+    const end = i < syllables.length - 1 ? syllables[i + 1].msTime : lineEndMs;
     if (currentMs >= start && currentMs < end) {
       return {index: i, progress: (currentMs - start) / (end - start)};
     }

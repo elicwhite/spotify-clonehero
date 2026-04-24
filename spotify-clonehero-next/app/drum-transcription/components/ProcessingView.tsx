@@ -10,7 +10,10 @@ import {
 } from '@/components/ui/card';
 import {Progress} from '@/components/ui/progress';
 import {Button} from '@/components/ui/button';
-import type {PipelineProgress, PipelineStep} from '@/lib/drum-transcription/pipeline/runner';
+import type {
+  PipelineProgress,
+  PipelineStep,
+} from '@/lib/drum-transcription/pipeline/runner';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,7 +68,7 @@ export default function ProcessingView({
   onCancel,
 }: ProcessingViewProps) {
   const currentStepIndex = PIPELINE_STEPS.findIndex(
-    (s) => s.key === progress.step,
+    s => s.key === progress.step,
   );
 
   // Error state
@@ -177,15 +180,9 @@ function StepIndicator({
     <div className="flex items-start gap-3">
       {/* Status icon */}
       <div className="mt-0.5 shrink-0">
-        {isComplete && (
-          <CheckCircle2 className="h-5 w-5 text-green-500" />
-        )}
-        {isActive && (
-          <Loader2 className="h-5 w-5 animate-spin text-primary" />
-        )}
-        {isPending && (
-          <Circle className="h-5 w-5 text-muted-foreground/40" />
-        )}
+        {isComplete && <CheckCircle2 className="h-5 w-5 text-green-500" />}
+        {isActive && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
+        {isPending && <Circle className="h-5 w-5 text-muted-foreground/40" />}
       </div>
 
       {/* Label + progress */}

@@ -222,13 +222,18 @@ export default function LeftSidebar({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant={state.highwayMode === 'waveform' ? 'secondary' : 'outline'}
+                    variant={
+                      state.highwayMode === 'waveform' ? 'secondary' : 'outline'
+                    }
                     size="sm"
                     className="h-7 gap-1.5 text-xs"
                     onClick={() =>
                       dispatch({
                         type: 'SET_HIGHWAY_MODE',
-                        mode: state.highwayMode === 'waveform' ? 'classic' : 'waveform',
+                        mode:
+                          state.highwayMode === 'waveform'
+                            ? 'classic'
+                            : 'waveform',
                       })
                     }>
                     <AudioWaveform className="h-3.5 w-3.5" />

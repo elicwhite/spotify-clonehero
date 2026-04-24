@@ -138,9 +138,10 @@ async function separate(audioInterleaved: Float32Array, numSamples: number) {
     const specImagTensor = new ort.Tensor('float32', stft.imag, specShape);
     const audioTensor = new ort.Tensor('float32', segmentPlanar, audioShape);
 
-    const remaining = seg === 0
-      ? ''
-      : `: ${Math.round((avgSegMs * (numSegments - seg)) / 1000)} seconds remaining`;
+    const remaining =
+      seg === 0
+        ? ''
+        : `: ${Math.round((avgSegMs * (numSegments - seg)) / 1000)} seconds remaining`;
     progress(`Separating segment ${seg + 1}/${numSegments}${remaining}`);
 
     const results = await session.run({

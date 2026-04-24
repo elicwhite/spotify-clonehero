@@ -8,6 +8,7 @@
 ## Context
 
 ### What sections are:
+
 - Named markers at specific tick positions in the chart (e.g., "intro", "verse 1a", "chorus 2b")
 - Stored in `ChartDocument.sections[]` as `{ tick: number; name: string }`
 - chart-edit already has `addSection()` and `removeSection()` helpers
@@ -16,6 +17,7 @@
 - TransportControls already supports section jumping (Ctrl+Left/Right arrows skip between sections)
 
 ### Moonscraper's section editing:
+
 - Sections appear as text labels on the highway at their tick position
 - Users can add sections by placing a "Section" event (similar to placing a BPM marker)
 - Sections can be renamed via a text input dialog
@@ -25,6 +27,7 @@
 ## 1. Section Markers on Highway
 
 ### Visual rendering:
+
 Sections should be visible on the highway as horizontal banners with text labels:
 
 ```
@@ -40,6 +43,7 @@ Sections should be visible on the highway as horizontal banners with text labels
 - Only render sections visible in the current highway viewport (performance)
 
 ### Implementation:
+
 Add section rendering to `HighwayEditor.tsx`'s overlay draw loop:
 
 ```typescript
@@ -86,12 +90,14 @@ type ToolMode = 'cursor' | 'place' | 'erase' | 'bpm' | 'timesig' | 'section';
 Keyboard shortcut: 6 (in cursor mode) or Ctrl+6 (always).
 
 ### Placement:
+
 - In Section tool mode, click on the highway to add a section at the clicked tick (snapped to grid)
 - A text input popover appears to name the section (similar to BPM popover)
 - Default name: auto-increment based on existing sections (e.g., "section_1", "section_2") or empty with cursor focused for typing
 - Press Enter to confirm, Escape to cancel
 
 ### Editing existing sections:
+
 - In Cursor mode, clicking on a section banner selects it
 - Double-click on a section banner opens the rename popover
 - Delete key removes the selected section
@@ -118,7 +124,9 @@ class AddSectionCommand implements EditCommand {
     return newDoc;
   }
 
-  get description() { return `Add section "${this.name}"`; }
+  get description() {
+    return `Add section "${this.name}"`;
+  }
 }
 
 class RenameSectionCommand implements EditCommand {
@@ -142,7 +150,9 @@ class RenameSectionCommand implements EditCommand {
     return newDoc;
   }
 
-  get description() { return `Rename section to "${this.newName}"`; }
+  get description() {
+    return `Rename section to "${this.newName}"`;
+  }
 }
 
 class DeleteSectionCommand implements EditCommand {
@@ -163,7 +173,9 @@ class DeleteSectionCommand implements EditCommand {
     return newDoc;
   }
 
-  get description() { return `Delete section "${this.name}"`; }
+  get description() {
+    return `Delete section "${this.name}"`;
+  }
 }
 
 class MoveSectionCommand implements EditCommand {
@@ -179,6 +191,7 @@ class MoveSectionCommand implements EditCommand {
 ## 3. Section Name Popover
 
 ### UI:
+
 When adding or renaming a section, show a small popover near the clicked position:
 
 ```
@@ -197,38 +210,46 @@ When adding or renaming a section, show a small popover near the clicked positio
 - Position near the click point on the highway (or near the section banner for rename)
 
 ### Common section names (suggestions):
+
 Optional autocomplete/suggestions dropdown:
+
 - intro, verse, pre-chorus, chorus, post-chorus, bridge, solo, outro
 - With automatic numbering: verse 1, verse 2, chorus 1a, chorus 1b
 
 ## 4. Section Navigation Enhancements
 
 ### Existing (from TransportControls):
+
 - Ctrl+Left/Right: Jump to previous/next section (already implemented)
 
 ### New with grid cursor (from plan 0016):
+
 - Section jumping also moves the cursor tick to the section's tick
 
 ### Timeline interaction (from plan 0015):
+
 - Clicking a section label in the timeline minimap jumps to that section
 - Sections are already rendered in the timeline by plan 0015
 
 ## 5. Integration with chart-edit
 
 ### Existing helpers in chart-edit:
+
 - `addSection(doc, tick, name)` — adds a section event
 - `removeSection(doc, tick)` — removes a section at tick
 
 ### What may need adding:
+
 - `renameSection(doc, tick, newName)` — or just mutate after clone
 - Ensure `writeChart()` serializes sections to `[Events]` track as `"section <name>"` events
 - Ensure scan-chart round-trip preserves sections
 
 ### Sections in ChartDocument:
+
 ```typescript
 // Already exists in chart-edit types:
 interface ChartDocument {
-  sections: Section[];  // { tick: number; name: string }[]
+  sections: Section[]; // { tick: number; name: string }[]
   // ...
 }
 ```

@@ -109,7 +109,7 @@ export function computeRealContext(
     () => [],
   );
   for (const event of events) {
-    const classIdx = DRUM_CLASSES.findIndex((c) => c.name === event.drumClass);
+    const classIdx = DRUM_CLASSES.findIndex(c => c.name === event.drumClass);
     if (classIdx >= 0) {
       const frame = Math.round(event.timeSeconds * fps);
       onsetFramesByInst[classIdx].push(frame);

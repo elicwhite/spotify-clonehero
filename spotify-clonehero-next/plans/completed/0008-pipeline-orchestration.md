@@ -31,14 +31,23 @@ User uploads audio (or clicks "Try Demo" → fetch('/drumsample.mp3'))
 // Uses React state + context (no zustand) — same pattern as the rest of the app
 
 interface PipelineState {
-  step: 'idle' | 'decoding' | 'separating' | 'transcribing' | 'ready' | 'editing' | 'exporting' | 'error'
-  progress: number  // 0-1 within current step
-  error?: string
-  projectName?: string
+  step:
+    | 'idle'
+    | 'decoding'
+    | 'separating'
+    | 'transcribing'
+    | 'ready'
+    | 'editing'
+    | 'exporting'
+    | 'error';
+  progress: number; // 0-1 within current step
+  error?: string;
+  projectName?: string;
 }
 ```
 
 The page renders different views based on `step`:
+
 - `idle` → `<AudioUploader />` with "Try Demo" button + existing project list
 - `decoding` / `separating` / `transcribing` → `<ProcessingView />` with progress bars
 - `ready` / `editing` → `<EditorApp />` (waveform, drum grid, highway, transport)
@@ -55,28 +64,32 @@ The page renders different views based on `step`:
 export async function runPipeline(
   audioFile: File | ArrayBuffer,
   fileName: string,
-  onProgress: (state: PipelineState) => void
+  onProgress: (state: PipelineState) => void,
 ): Promise<string> {
-  const projectName = slugify(fileName)
+  const projectName = slugify(fileName);
 
   // Each step checks OPFS for existing output before running (resumability)
-  if (!await stepDone(projectName, 'decode')) {
-    onProgress({ step: 'decoding', progress: 0, projectName })
-    await decodeAndStore(audioFile, projectName)
+  if (!(await stepDone(projectName, 'decode'))) {
+    onProgress({step: 'decoding', progress: 0, projectName});
+    await decodeAndStore(audioFile, projectName);
   }
 
-  if (!await stepDone(projectName, 'separate')) {
-    onProgress({ step: 'separating', progress: 0, projectName })
-    await runDemucs(projectName, p => onProgress({ step: 'separating', progress: p, projectName }))
+  if (!(await stepDone(projectName, 'separate'))) {
+    onProgress({step: 'separating', progress: 0, projectName});
+    await runDemucs(projectName, p =>
+      onProgress({step: 'separating', progress: p, projectName}),
+    );
   }
 
-  if (!await stepDone(projectName, 'transcribe')) {
-    onProgress({ step: 'transcribing', progress: 0, projectName })
-    await runTranscription(projectName, p => onProgress({ step: 'transcribing', progress: p, projectName }))
+  if (!(await stepDone(projectName, 'transcribe'))) {
+    onProgress({step: 'transcribing', progress: 0, projectName});
+    await runTranscription(projectName, p =>
+      onProgress({step: 'transcribing', progress: p, projectName}),
+    );
   }
 
-  onProgress({ step: 'ready', progress: 1, projectName })
-  return projectName
+  onProgress({step: 'ready', progress: 1, projectName});
+  return projectName;
 }
 ```
 
@@ -113,16 +126,16 @@ On load, scan OPFS `drum-transcription/` for existing projects:
 
 ```typescript
 async function listProjects(): Promise<string[]> {
-  const root = await navigator.storage.getDirectory()
+  const root = await navigator.storage.getDirectory();
   try {
-    const dtDir = await root.getDirectoryHandle('drum-transcription')
-    const names: string[] = []
+    const dtDir = await root.getDirectoryHandle('drum-transcription');
+    const names: string[] = [];
     for await (const [name, handle] of dtDir) {
-      if (handle.kind === 'directory') names.push(name)
+      if (handle.kind === 'directory') names.push(name);
     }
-    return names
+    return names;
   } catch {
-    return []
+    return [];
   }
 }
 ```
@@ -134,20 +147,24 @@ Show as a list below the upload area. Users can resume editing or re-export.
 ## 6. Implementation Order
 
 ### Phase 1: Core plumbing
+
 1. OPFS storage helpers (`lib/drum-transcription/storage/opfs.ts`)
 2. Pipeline state (Zustand store)
 3. Audio decoder
 4. Page shell with upload + processing views
 
 ### Phase 2: ML pipeline
+
 5. ONNX runtime setup
 6. Demucs pipeline
 7. Transcription pipeline
 
 ### Phase 3: Editor
+
 8. Chart I/O
 9. Editor components
 10. chart-preview integration
 
 ### Phase 4: Export
+
 11. ZIP/SNG packaging (plan 0009)

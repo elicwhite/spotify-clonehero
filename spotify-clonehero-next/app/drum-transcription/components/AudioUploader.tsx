@@ -33,13 +33,9 @@ export default function AudioUploader({
     (file: File) => {
       if (
         !file.type.startsWith('audio/') &&
-        !file.name.match(
-          /\.(mp3|wav|ogg|flac|aac|m4a|webm|opus|wma)$/i,
-        )
+        !file.name.match(/\.(mp3|wav|ogg|flac|aac|m4a|webm|opus|wma)$/i)
       ) {
-        toast.error(
-          'Please select an audio file (MP3, WAV, OGG, FLAC, etc.)',
-        );
+        toast.error('Please select an audio file (MP3, WAV, OGG, FLAC, etc.)');
         return;
       }
       onFileSelected(file);

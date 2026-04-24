@@ -22,9 +22,18 @@ import {
   type ProjectMetadata,
 } from '../storage/opfs';
 import {separateStems, hasSeparatedStems} from '../ml/demucs';
-import {CrnnTranscriber, MockTranscriber, type DrumTranscriber} from '../ml/transcriber';
+import {
+  CrnnTranscriber,
+  MockTranscriber,
+  type DrumTranscriber,
+} from '../ml/transcriber';
 import {rawEventsToDrumNotes, getChartMapping} from '../ml/class-mapping';
-import {createEmptyChart, writeChartFolder, addDrumNote, addSection} from '@/lib/chart-edit';
+import {
+  createEmptyChart,
+  writeChartFolder,
+  addDrumNote,
+  addSection,
+} from '@/lib/chart-edit';
 import type {ChartDocument, DrumNoteType} from '@/lib/chart-edit';
 import {buildTimedTempos, msToTick} from '../timing';
 import type {RawDrumEvent, TranscriptionResult} from '../ml/types';
@@ -132,7 +141,7 @@ export async function runPipeline(
       // Load the interleaved audio from OPFS
       const storedAudio = await loadAudioForDemucs(projectId);
 
-      await separateStems(projectId, storedAudio, (sepProgress) => {
+      await separateStems(projectId, storedAudio, sepProgress => {
         onProgress({
           step: 'separating',
           progress: sepProgress.percent,
@@ -143,10 +152,7 @@ export async function runPipeline(
     } catch (err) {
       // Stem separation failed. Log the full error for debugging,
       // then continue — transcription will use the full audio mix.
-      console.warn(
-        'Stem separation failed, continuing with full mix:',
-        err,
-      );
+      console.warn('Stem separation failed, continuing with full mix:', err);
       onProgress({
         step: 'separating',
         progress: 1,
@@ -191,7 +197,7 @@ export async function runPipeline(
     const result: TranscriptionResult = await txr.transcribe(
       drumAudioStereo,
       TARGET_SAMPLE_RATE,
-      (txrProgress) => {
+      txrProgress => {
         onProgress({
           step: 'transcribing',
           progress: txrProgress.percent,
@@ -218,7 +224,11 @@ export async function runPipeline(
     await writeProjectText(projectId, 'notes.chart', chartText);
 
     // Store confidence scores
-    const confidenceData = buildConfidenceData(result.events, [{tick: 0, beatsPerMinute: DEFAULT_BPM}], RESOLUTION);
+    const confidenceData = buildConfidenceData(
+      result.events,
+      [{tick: 0, beatsPerMinute: DEFAULT_BPM}],
+      RESOLUTION,
+    );
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
   }
 
@@ -275,7 +285,7 @@ export async function resumePipeline(
     try {
       const storedAudio = await loadAudioForDemucs(projectId);
 
-      await separateStems(projectId, storedAudio, (sepProgress) => {
+      await separateStems(projectId, storedAudio, sepProgress => {
         onProgress({
           step: 'separating',
           progress: sepProgress.percent,
@@ -284,10 +294,7 @@ export async function resumePipeline(
         });
       });
     } catch (err) {
-      console.warn(
-        'Stem separation failed, continuing with full mix:',
-        err,
-      );
+      console.warn('Stem separation failed, continuing with full mix:', err);
       onProgress({
         step: 'separating',
         progress: 1,
@@ -320,7 +327,7 @@ export async function resumePipeline(
     const result: TranscriptionResult = await txr.transcribe(
       drumAudioStereo,
       TARGET_SAMPLE_RATE,
-      (txrProgress) => {
+      txrProgress => {
         onProgress({
           step: 'transcribing',
           progress: txrProgress.percent,
@@ -344,7 +351,11 @@ export async function resumePipeline(
     const chartText = new TextDecoder().decode(chartFile.data);
     await writeProjectText(projectId, 'notes.chart', chartText);
 
-    const confidenceData = buildConfidenceData(result.events, [{tick: 0, beatsPerMinute: DEFAULT_BPM}], RESOLUTION);
+    const confidenceData = buildConfidenceData(
+      result.events,
+      [{tick: 0, beatsPerMinute: DEFAULT_BPM}],
+      RESOLUTION,
+    );
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
   }
 
@@ -452,9 +463,7 @@ function buildChartDocument(
   // Calculate end tick (slightly after last note or based on duration)
   const lastNoteTick =
     drumNotes.length > 0 ? drumNotes[drumNotes.length - 1].tick : 0;
-  const durationTicks = Math.ceil(
-    (durationSeconds * bpm * RESOLUTION) / 60,
-  );
+  const durationTicks = Math.ceil((durationSeconds * bpm * RESOLUTION) / 60);
   const endTick = Math.max(lastNoteTick + RESOLUTION, durationTicks);
 
   // Add end event

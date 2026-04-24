@@ -6,7 +6,13 @@
  * unrecognizedMidiEvents, etc.) so tests can build documents synthetically.
  */
 
-import type { ParsedTrackData, Instrument, Difficulty, NoteEvent, NoteType } from '../types';
+import type {
+  ParsedTrackData,
+  Instrument,
+  Difficulty,
+  NoteEvent,
+  NoteType,
+} from '../types';
 
 /** Build a ParsedTrackData with all required fields zero-initialized. */
 export function emptyTrackData(
@@ -33,13 +39,23 @@ export function emptyTrackData(
 }
 
 /** Fill in msTime/msLength=0 on any section-shaped object. */
-export function mkSection<T extends object>(fields: T): T & { msTime: number; msLength: number } {
-  return { msTime: 0, msLength: 0, ...fields };
+export function mkSection<T extends object>(
+  fields: T,
+): T & {msTime: number; msLength: number} {
+  return {msTime: 0, msLength: 0, ...fields};
 }
 
 /** NoteEvent factory — fills msTime=0, msLength=length. */
-export function mkNote(
-  fields: { tick: number; length: number; type: number; flags: number },
-): NoteEvent {
-  return { msTime: 0, msLength: fields.length, ...fields, type: fields.type as NoteType };
+export function mkNote(fields: {
+  tick: number;
+  length: number;
+  type: number;
+  flags: number;
+}): NoteEvent {
+  return {
+    msTime: 0,
+    msLength: fields.length,
+    ...fields,
+    type: fields.type as NoteType,
+  };
 }

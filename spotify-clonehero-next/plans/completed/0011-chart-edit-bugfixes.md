@@ -25,11 +25,11 @@ All completed plans (0001–0010). This is a bugfix pass on the existing impleme
 ```typescript
 // In removeDrumNote, after the main filter:
 const remainingBasesAtTick = track.trackEvents.some(
-  (e) => e.tick === tick && baseDrumEventTypes.has(e.type),
+  e => e.tick === tick && baseDrumEventTypes.has(e.type),
 );
 if (!remainingBasesAtTick) {
   track.trackEvents = track.trackEvents.filter(
-    (e) => e.tick !== tick || e.type !== eventTypes.forceFlam,
+    e => e.tick !== tick || e.type !== eventTypes.forceFlam,
   );
 }
 ```
@@ -37,6 +37,7 @@ if (!remainingBasesAtTick) {
 Split `getModifierTypesForNote` into per-note modifiers (cymbal, accent, ghost, kick2x) and shared modifiers (flam). The main filter uses per-note modifiers only. Flam is handled separately with the remaining-notes check.
 
 **Test:** Add to `drum-helpers.test.ts`:
+
 - Add kick + redDrum at tick 0, both with `flam: true`
 - Remove kick
 - Verify `getDrumNotes` returns redDrum with `flam: true`
@@ -55,11 +56,13 @@ Split `getModifierTypesForNote` into per-note modifiers (cymbal, accent, ghost, 
 2. For flam: if `flags.flam` is true, ensure exactly one forceFlam exists at the tick (add if missing). If `flags.flam` is false/undefined, only remove forceFlam if no other note at the tick has flam (check all other base notes' modifier events)
 
 Alternatively, since flam applies to the entire chord: when setting flam=false on one note, keep the forceFlam if any other base note at the tick previously had flam. The simplest correct behavior: only remove forceFlam when setting flags on the LAST note that could want it. Since flam is chord-wide, the safest approach is:
+
 - When `flags.flam` is explicitly `false`: remove forceFlam only if no other base drum note at the tick exists
 - When `flags.flam` is `true`: ensure exactly one forceFlam exists (no duplicates)
 - When `flags.flam` is `undefined`: leave existing forceFlam untouched
 
 **Test:** Add to `drum-helpers.test.ts`:
+
 - Add kick + redDrum at tick 0, both with `flam: true`
 - `setDrumNoteFlags(track, 0, 'kick', { flam: false })`
 - Verify redDrum still has `flam: true`
@@ -77,7 +80,7 @@ Alternatively, since flam applies to the entire chord: when setting flam=false o
 ```typescript
 if (flags.flam) {
   const flamExists = track.trackEvents.some(
-    (e) => e.tick === tick && e.type === eventTypes.forceFlam,
+    e => e.tick === tick && e.type === eventTypes.forceFlam,
   );
   if (!flamExists) {
     pushEvent(track, tick, 0, eventTypes.forceFlam);
@@ -86,6 +89,7 @@ if (flags.flam) {
 ```
 
 **Test:** Add to `drum-helpers.test.ts`:
+
 - Add kick with `flam: true` at tick 0
 - Add redDrum with `flam: true` at tick 0
 - Verify only ONE forceFlam event exists in `trackEvents`
@@ -126,6 +130,7 @@ if (tomMarkerEventTypes.has(ev.type)) {
 ```
 
 **Test:** Add to `mid-writer.test.ts`:
+
 - Create a doc with Expert + Hard drum tracks, both containing the same `yellowTomMarker` at tick 0
 - Write to MIDI → verify only ONE noteOn at MIDI note 110, not two
 
@@ -140,19 +145,21 @@ if (tomMarkerEventTypes.has(ev.type)) {
 **Fix:** Two changes:
 
 1. In `buildInstrumentTrack` (writer-mid.ts), filter drum freestyle sections:
+
 ```typescript
 for (const fs of td.drumFreestyleSections) {
-  if (fs.isCoda) continue;  // ← add this line
+  if (fs.isCoda) continue; // ← add this line
   const key = `${fs.tick}:${fs.length}`;
   // ...
 }
 ```
 
 2. In `buildEventsTrack` (writer-mid.ts), emit coda events. Collect coda sections from all trackData:
+
 ```typescript
 // Coda events
 const codaSections = doc.trackData.flatMap(td =>
-  td.drumFreestyleSections.filter(fs => fs.isCoda)
+  td.drumFreestyleSections.filter(fs => fs.isCoda),
 );
 const emittedCoda = new Set<string>();
 for (const cs of codaSections) {
@@ -161,13 +168,19 @@ for (const cs of codaSections) {
     emittedCoda.add(key);
     events.push({
       tick: cs.tick,
-      event: { deltaTime: 0, meta: true, type: 'text', text: '[coda]' } as MidiEvent,
+      event: {
+        deltaTime: 0,
+        meta: true,
+        type: 'text',
+        text: '[coda]',
+      } as MidiEvent,
     });
   }
 }
 ```
 
 **Test:** Add to `mid-writer.test.ts`:
+
 - Create a doc with one `drumFreestyleSections` entry where `isCoda: true`
 - Write to MIDI → verify no note 120, and EVENTS track has `[coda]` text event
 
@@ -182,14 +195,15 @@ for (const cs of codaSections) {
 **Fix:** Add lyrics to the events array:
 
 ```typescript
-const events: { tick: number; text: string }[] = [
-  ...doc.sections.map((s) => ({ tick: s.tick, text: `section ${s.name}` })),
-  ...doc.endEvents.map((e) => ({ tick: e.tick, text: 'end' })),
-  ...doc.lyrics.map((l) => ({ tick: l.tick, text: `lyric ${l.text}` })),
+const events: {tick: number; text: string}[] = [
+  ...doc.sections.map(s => ({tick: s.tick, text: `section ${s.name}`})),
+  ...doc.endEvents.map(e => ({tick: e.tick, text: 'end'})),
+  ...doc.lyrics.map(l => ({tick: l.tick, text: `lyric ${l.text}`})),
 ];
 ```
 
 **Test:** Add to `chart-writer.test.ts`:
+
 - Create a doc with lyrics entries
 - Serialize → verify output contains `E "lyric Hello"` lines at correct ticks
 
@@ -205,10 +219,10 @@ const events: { tick: number; text: string }[] = [
 
 ```typescript
 function parseMetadataFromIni(iniText: string): ChartMetadata {
-  const { iniObject } = parseIni(iniText);
+  const {iniObject} = parseIni(iniText);
   // Case-insensitive section lookup — real charts use [song], [Song], or [SONG]
   const sectionKey = Object.keys(iniObject).find(
-    (k) => typeof k === 'string' && k.toLowerCase() === 'song',
+    k => typeof k === 'string' && k.toLowerCase() === 'song',
   );
   const section = sectionKey ? iniObject[sectionKey] : {};
   // ...
@@ -216,6 +230,7 @@ function parseMetadataFromIni(iniText: string): ChartMetadata {
 ```
 
 **Test:** Add to `read-write.test.ts`:
+
 - Create an INI string with `[Song]` (uppercase) containing `name = Test`
 - Encode as FileEntry, pass to readChart with a chart file
 - Verify `metadata.name === 'Test'`
@@ -239,9 +254,10 @@ text: '[ENHANCED_OPENS]',
 ```
 
 **Test:** Update existing test in `mid-writer.test.ts` (`'emits ENABLE_CHART_DYNAMICS text event when accents present'`) to check for bracketed form:
+
 ```typescript
 const dynamicsEvent = textEvents.find(
-  (e) => (e as any).text === '[ENABLE_CHART_DYNAMICS]',
+  e => (e as any).text === '[ENABLE_CHART_DYNAMICS]',
 );
 ```
 
@@ -256,6 +272,7 @@ const dynamicsEvent = textEvents.find(
 **Problem:** `writer-mid.ts:17` imports `midi-file` directly, but it's not in `dependencies` or `devDependencies`. It only resolves because it's a transitive dependency. A future `yarn install` in a clean environment or a dep update could break this.
 
 **Fix:**
+
 ```bash
 yarn add midi-file
 ```
@@ -278,8 +295,10 @@ const deduped: TrackLineEvent[] = [];
 for (const event of events) {
   const prev = deduped[deduped.length - 1];
   if (prev && prev.tick === event.tick && prev.kind === event.kind) {
-    if (event.kind === 'E' && prev.kind === 'E' && prev.text === event.text) continue;
-    if (event.kind !== 'E' && prev.kind !== 'E' && prev.value === event.value) continue;
+    if (event.kind === 'E' && prev.kind === 'E' && prev.text === event.text)
+      continue;
+    if (event.kind !== 'E' && prev.kind !== 'E' && prev.value === event.value)
+      continue;
   }
   deduped.push(event);
 }
@@ -305,7 +324,7 @@ export const drumAccentEventType: Partial<Record<DrumNoteType, EventType>> = {
   yellowDrum: eventTypes.yellowAccent,
   blueDrum: eventTypes.blueAccent,
   greenDrum: eventTypes.fiveOrangeFourGreenAccent,
-  fiveGreenDrum: eventTypes.fiveGreenAccent,       // ← add
+  fiveGreenDrum: eventTypes.fiveGreenAccent, // ← add
 };
 
 export const drumGhostEventType: Partial<Record<DrumNoteType, EventType>> = {
@@ -313,7 +332,7 @@ export const drumGhostEventType: Partial<Record<DrumNoteType, EventType>> = {
   yellowDrum: eventTypes.yellowGhost,
   blueDrum: eventTypes.blueGhost,
   greenDrum: eventTypes.fiveOrangeFourGreenGhost,
-  fiveGreenDrum: eventTypes.fiveGreenGhost,         // ← add
+  fiveGreenDrum: eventTypes.fiveGreenGhost, // ← add
 };
 ```
 
@@ -322,12 +341,13 @@ Also add to `drumModifierEventTypes` set if `fiveGreenAccent` / `fiveGreenGhost`
 ```typescript
 export const drumModifierEventTypes = new Set<EventType>([
   // ... existing entries ...
-  eventTypes.fiveGreenAccent,   // ← add
-  eventTypes.fiveGreenGhost,    // ← add
+  eventTypes.fiveGreenAccent, // ← add
+  eventTypes.fiveGreenGhost, // ← add
 ]);
 ```
 
 **Test:** Add to `drum-helpers.test.ts`:
+
 - `addDrumNote(track, { tick: 0, type: 'fiveGreenDrum', flags: { accent: true } })`
 - Verify `trackEvents` contains `fiveGreenAccent` event
 - Verify `getDrumNotes` returns note with `accent: true`
@@ -361,11 +381,17 @@ Detection: check if ANY tom marker events exist in trackEvents. If yes, the data
 const hasTomMarkers = td.trackEvents.some(e => tomMarkerEventTypes.has(e.type));
 if (!hasTomMarkers) {
   // Data is .chart-sourced. Generate tom markers for non-cymbal notes.
-  const cymbalTicks = { yellow: new Set<number>(), blue: new Set<number>(), green: new Set<number>() };
+  const cymbalTicks = {
+    yellow: new Set<number>(),
+    blue: new Set<number>(),
+    green: new Set<number>(),
+  };
   for (const ev of td.trackEvents) {
-    if (ev.type === eventTypes.yellowCymbalMarker) cymbalTicks.yellow.add(ev.tick);
+    if (ev.type === eventTypes.yellowCymbalMarker)
+      cymbalTicks.yellow.add(ev.tick);
     if (ev.type === eventTypes.blueCymbalMarker) cymbalTicks.blue.add(ev.tick);
-    if (ev.type === eventTypes.greenCymbalMarker) cymbalTicks.green.add(ev.tick);
+    if (ev.type === eventTypes.greenCymbalMarker)
+      cymbalTicks.green.add(ev.tick);
   }
   // For each drum note at each tick, if no cymbal marker → emit tom marker
   for (const ev of td.trackEvents) {
@@ -385,14 +411,19 @@ Analogous: if data has tom markers but no cymbal markers (MIDI-sourced), generat
 
 ```typescript
 // In serializeTrackSection, when instrument is drums:
-const hasCymbalMarkers = track.trackEvents.some(e =>
-  e.type === eventTypes.yellowCymbalMarker ||
-  e.type === eventTypes.blueCymbalMarker ||
-  e.type === eventTypes.greenCymbalMarker
+const hasCymbalMarkers = track.trackEvents.some(
+  e =>
+    e.type === eventTypes.yellowCymbalMarker ||
+    e.type === eventTypes.blueCymbalMarker ||
+    e.type === eventTypes.greenCymbalMarker,
 );
 if (!hasCymbalMarkers) {
   // Data is MIDI-sourced. Generate cymbal markers for non-tom notes.
-  const tomTicks = { yellow: new Set<number>(), blue: new Set<number>(), green: new Set<number>() };
+  const tomTicks = {
+    yellow: new Set<number>(),
+    blue: new Set<number>(),
+    green: new Set<number>(),
+  };
   for (const ev of track.trackEvents) {
     if (ev.type === eventTypes.yellowTomMarker) tomTicks.yellow.add(ev.tick);
     if (ev.type === eventTypes.blueTomMarker) tomTicks.blue.add(ev.tick);
@@ -400,7 +431,7 @@ if (!hasCymbalMarkers) {
   }
   for (const ev of track.trackEvents) {
     if (ev.type === eventTypes.yellowDrum && !tomTicks.yellow.has(ev.tick)) {
-      events.push({ tick: ev.tick, sortKey: 1, kind: 'N', value: 66, length: 0 }); // cymbal marker
+      events.push({tick: ev.tick, sortKey: 1, kind: 'N', value: 66, length: 0}); // cymbal marker
     }
     // ... same for blue (67) and green (68)
   }
@@ -563,6 +594,7 @@ yarn test --testPathPattern='lib/chart-edit'
 All existing tests must still pass. New tests must cover each fix. Total test count should increase from 134 to ~170+.
 
 Additionally, spot-check with real chart files from `~/Desktop/enchor-songs copy/`:
+
 - Load a .chart file with pro drums → write → re-parse → compare
 - Load a .mid file → write → re-parse → compare
 - Load a .chart file → change to .mid format → write → re-parse → compare notes

@@ -24,6 +24,7 @@ Write `.chart` files (Clone Hero format) from an in-memory representation. The s
 The in-memory model is designed to be easy to construct from the ML transcription output (which produces millisecond-timed onsets with drum labels) while also being complete enough to serialize a valid `.chart` file.
 
 **scan-chart type reuse:** Many of these types align with structures in `@eliwhite/scan-chart`. Where noted below, use the scan-chart type directly rather than defining a parallel type. Import from `@eliwhite/scan-chart`:
+
 - `Instrument` — union type for instrument names (includes `'drums'`)
 - `Difficulty` — union type `'expert' | 'hard' | 'medium' | 'easy'`
 - `NoteType`, `noteTypes` — note type enum values (e.g. `noteTypes.kick`, `noteTypes.redDrum`)
@@ -31,7 +32,7 @@ The in-memory model is designed to be easy to construct from the ML transcriptio
 - `RawChartData` — scan-chart's intermediate parsed representation; its sub-types for `tempos`, `timeSignatures`, `sections`, `endEvents`, and `trackData` should be used as the structural reference
 
 ```typescript
-import type { Instrument, Difficulty } from '@eliwhite/scan-chart';
+import type {Instrument, Difficulty} from '@eliwhite/scan-chart';
 
 /**
  * Top-level chart document. Everything needed to write a .chart file.
@@ -59,7 +60,7 @@ interface ChartDocument {
   sections: SectionEvent[];
 
   /** End event, if any. */
-  endEvents: { tick: number }[];
+  endEvents: {tick: number}[];
 
   /** Note tracks keyed by instrument+difficulty. For drums, we only need ExpertDrums. */
   tracks: TrackData[];
@@ -81,14 +82,14 @@ interface ChartMetadata {
   genre?: string;
   year?: string;
   charter?: string;
-  resolution: number;       // Same as ChartDocument.resolution
-  offset?: number;          // Seconds (float). Audio delay.
-  difficulty?: number;      // Overall difficulty rating
-  previewStart?: number;    // Seconds (float)
-  previewEnd?: number;      // Seconds (float)
+  resolution: number; // Same as ChartDocument.resolution
+  offset?: number; // Seconds (float). Audio delay.
+  difficulty?: number; // Overall difficulty rating
+  previewStart?: number; // Seconds (float)
+  previewEnd?: number; // Seconds (float)
   /** Audio stem file references */
-  musicStream?: string;     // e.g. "song.ogg"
-  drumStream?: string;      // e.g. "drums.ogg"
+  musicStream?: string; // e.g. "song.ogg"
+  drumStream?: string; // e.g. "drums.ogg"
 }
 
 /**
@@ -129,13 +130,13 @@ interface SectionEvent {
  * `RawChartData['trackData'][number]['drumFreestyleSections']` respectively.
  */
 interface TrackData {
-  instrument: Instrument;   // Use scan-chart's Instrument type (constrained to 'drums' for our pipeline)
-  difficulty: Difficulty;    // Use scan-chart's Difficulty type
+  instrument: Instrument; // Use scan-chart's Instrument type (constrained to 'drums' for our pipeline)
+  difficulty: Difficulty; // Use scan-chart's Difficulty type
   notes: DrumNote[];
   /** Star power phrases. */
-  starPower?: { tick: number; length: number }[];
+  starPower?: {tick: number; length: number}[];
   /** Drum activation lanes (freestyle sections). */
-  activationLanes?: { tick: number; length: number }[];
+  activationLanes?: {tick: number; length: number}[];
 }
 
 /**
@@ -171,7 +172,7 @@ type DrumNoteType = 'kick' | 'red' | 'yellow' | 'blue' | 'green';
  * NOT exported by scan-chart.
  */
 interface DrumNoteFlags {
-  cymbal?: boolean;     // For yellow/blue/green in pro drums mode
+  cymbal?: boolean; // For yellow/blue/green in pro drums mode
   doubleKick?: boolean; // Expert+ double kick (note 32)
   accent?: boolean;
   ghost?: boolean;
@@ -233,41 +234,45 @@ The file is UTF-8 text with Windows-style line endings (`\r\n`). Sections are en
 
 Key-value pairs. String values are quoted with `"`. Numeric values are unquoted.
 
-| Key | Type | Example | Notes |
-|-----|------|---------|-------|
-| `Name` | string | `"Song Title"` | Song name |
-| `Artist` | string | `"Artist Name"` | |
-| `Album` | string | `"Album Name"` | |
-| `Genre` | string | `"rock"` | |
-| `Year` | string | `", 2024"` | Note: Moonscraper prefixes with `, ` |
-| `Charter` | string | `"AutoChart"` | |
-| `Resolution` | number | `480` | Ticks per quarter note |
-| `Offset` | number | `0` | Audio offset in seconds |
-| `Player2` | string | `"bass"` | |
-| `Difficulty` | number | `0` | Overall difficulty 0-6 |
-| `PreviewStart` | number | `0` | Preview start in seconds |
-| `PreviewEnd` | number | `0` | Preview end in seconds |
-| `MediaType` | string | `"cd"` | |
-| `MusicStream` | string | `"song.ogg"` | Main audio file |
-| `DrumStream` | string | `"drums.ogg"` | Drum stem audio file |
+| Key            | Type   | Example         | Notes                                |
+| -------------- | ------ | --------------- | ------------------------------------ |
+| `Name`         | string | `"Song Title"`  | Song name                            |
+| `Artist`       | string | `"Artist Name"` |                                      |
+| `Album`        | string | `"Album Name"`  |                                      |
+| `Genre`        | string | `"rock"`        |                                      |
+| `Year`         | string | `", 2024"`      | Note: Moonscraper prefixes with `, ` |
+| `Charter`      | string | `"AutoChart"`   |                                      |
+| `Resolution`   | number | `480`           | Ticks per quarter note               |
+| `Offset`       | number | `0`             | Audio offset in seconds              |
+| `Player2`      | string | `"bass"`        |                                      |
+| `Difficulty`   | number | `0`             | Overall difficulty 0-6               |
+| `PreviewStart` | number | `0`             | Preview start in seconds             |
+| `PreviewEnd`   | number | `0`             | Preview end in seconds               |
+| `MediaType`    | string | `"cd"`          |                                      |
+| `MusicStream`  | string | `"song.ogg"`    | Main audio file                      |
+| `DrumStream`   | string | `"drums.ogg"`   | Drum stem audio file                 |
 
 ### [SyncTrack] section
 
 Two event types, sorted by tick:
 
 **Tempo (B):**
+
 ```
 <tick> = B <millibeats_per_minute>
 ```
-- `millibeats_per_minute` = BPM * 1000, as an integer
+
+- `millibeats_per_minute` = BPM \* 1000, as an integer
 - Example: 120 BPM -> `0 = B 120000`
 - Example: 145.5 BPM -> `0 = B 145500`
 
 **Time Signature (TS):**
+
 ```
 <tick> = TS <numerator>
 <tick> = TS <numerator> <denominator_exponent>
 ```
+
 - `denominator_exponent` = log2(denominator). Omitted when denominator is 4 (exponent = 2).
 - Example: 4/4 -> `0 = TS 4` (exponent 2 is default, omitted)
 - Example: 3/4 -> `0 = TS 3`
@@ -282,11 +287,13 @@ Two event types, sorted by tick:
 ```
 
 Section markers use the format:
+
 ```
 <tick> = E "section <section_name>"
 ```
 
 End events:
+
 ```
 <tick> = E "end"
 ```
@@ -295,65 +302,69 @@ End events:
 
 Track section names follow the pattern `[<Difficulty><Instrument>]`:
 
-| Section Name | Instrument | Difficulty |
-|---|---|---|
-| `ExpertDrums` | drums | expert |
-| `HardDrums` | drums | hard |
-| `MediumDrums` | drums | medium |
-| `EasyDrums` | drums | easy |
+| Section Name  | Instrument | Difficulty |
+| ------------- | ---------- | ---------- |
+| `ExpertDrums` | drums      | expert     |
+| `HardDrums`   | drums      | hard       |
+| `MediumDrums` | drums      | medium     |
+| `EasyDrums`   | drums      | easy       |
 
 **Note events (N):**
+
 ```
 <tick> = N <note_number> <length>
 ```
 
 **Drum note numbers:**
 
-| Note # | Meaning | When to emit |
-|--------|---------|-------------|
-| 0 | Kick | `type === 'kick'` and not double kick |
-| 1 | Red (snare) | `type === 'red'` |
-| 2 | Yellow (hi-hat/tom) | `type === 'yellow'` |
-| 3 | Blue (tom/ride) | `type === 'blue'` |
-| 4 | Orange/Green (crash/tom) | `type === 'green'` (4-lane) |
-| 5 | Green (5-lane only) | Not used in our pipeline |
-| 32 | Double kick (Expert+) | `type === 'kick'` AND `flags.doubleKick` |
+| Note # | Meaning                  | When to emit                             |
+| ------ | ------------------------ | ---------------------------------------- |
+| 0      | Kick                     | `type === 'kick'` and not double kick    |
+| 1      | Red (snare)              | `type === 'red'`                         |
+| 2      | Yellow (hi-hat/tom)      | `type === 'yellow'`                      |
+| 3      | Blue (tom/ride)          | `type === 'blue'`                        |
+| 4      | Orange/Green (crash/tom) | `type === 'green'` (4-lane)              |
+| 5      | Green (5-lane only)      | Not used in our pipeline                 |
+| 32     | Double kick (Expert+)    | `type === 'kick'` AND `flags.doubleKick` |
 
 **Pro drums cymbal markers (emitted as separate N events at same tick):**
 
-| Note # | Meaning | When to emit |
-|--------|---------|-------------|
-| 66 | Yellow cymbal | `type === 'yellow'` AND `flags.cymbal` |
-| 67 | Blue cymbal | `type === 'blue'` AND `flags.cymbal` |
-| 68 | Green cymbal | `type === 'green'` AND `flags.cymbal` |
+| Note # | Meaning       | When to emit                           |
+| ------ | ------------- | -------------------------------------- |
+| 66     | Yellow cymbal | `type === 'yellow'` AND `flags.cymbal` |
+| 67     | Blue cymbal   | `type === 'blue'` AND `flags.cymbal`   |
+| 68     | Green cymbal  | `type === 'green'` AND `flags.cymbal`  |
 
 Important: In .chart format, drums default to **tom**. Cymbal markers are additive.
+
 - Yellow with no marker = yellow tom
 - Yellow + note 66 = yellow cymbal (hi-hat/crash)
 - Red is always snare (no cymbal marker exists for red)
 
 **Accent flags:**
 
-| Note # | Meaning |
-|--------|---------|
-| 34 | Red accent |
-| 35 | Yellow accent |
-| 36 | Blue accent |
-| 37 | Green accent |
+| Note # | Meaning       |
+| ------ | ------------- |
+| 34     | Red accent    |
+| 35     | Yellow accent |
+| 36     | Blue accent   |
+| 37     | Green accent  |
 
 **Ghost flags:**
 
-| Note # | Meaning |
-|--------|---------|
-| 40 | Red ghost |
-| 41 | Yellow ghost |
-| 42 | Blue ghost |
-| 43 | Green ghost |
+| Note # | Meaning      |
+| ------ | ------------ |
+| 40     | Red ghost    |
+| 41     | Yellow ghost |
+| 42     | Blue ghost   |
+| 43     | Green ghost  |
 
 **Special events (S):**
+
 ```
 <tick> = S 2 <length>
 ```
+
 - `S 2` = star power phrase
 - `S 64` = drum freestyle section (activation lane)
 
@@ -362,6 +373,7 @@ Important: In .chart format, drums default to **tom**. Cymbal markers are additi
 ### Line ordering within sections
 
 Within a section, events MUST be sorted by tick (ascending). At the same tick, Moonscraper orders:
+
 1. `S` (special) events first
 2. `N` (note) events second
 3. `E` (text) events third
@@ -424,17 +436,17 @@ Interleave tempo and time signature events, sorted by tick. At the same tick, em
 ```typescript
 function serializeSyncTrack(
   tempos: TempoEvent[],
-  timeSignatures: TimeSignatureEvent[]
+  timeSignatures: TimeSignatureEvent[],
 ): string[] {
   const lines = ['[SyncTrack]', '{'];
 
   // Merge and sort by tick
   type SyncEvent =
-    | { tick: number; kind: 'tempo'; bpm: number }
-    | { tick: number; kind: 'ts'; numerator: number; denominator: number };
+    | {tick: number; kind: 'tempo'; bpm: number}
+    | {tick: number; kind: 'ts'; numerator: number; denominator: number};
 
   const events: SyncEvent[] = [
-    ...tempos.map(t => ({ tick: t.tick, kind: 'tempo' as const, bpm: t.bpm })),
+    ...tempos.map(t => ({tick: t.tick, kind: 'tempo' as const, bpm: t.bpm})),
     ...timeSignatures.map(ts => ({
       tick: ts.tick,
       kind: 'ts' as const,
@@ -473,13 +485,13 @@ function serializeSyncTrack(
 ```typescript
 function serializeEvents(
   sections: SectionEvent[],
-  endEvents: { tick: number }[]
+  endEvents: {tick: number}[],
 ): string[] {
   const lines = ['[Events]', '{'];
 
-  const events: { tick: number; text: string }[] = [
-    ...sections.map(s => ({ tick: s.tick, text: `section ${s.name}` })),
-    ...endEvents.map(e => ({ tick: e.tick, text: 'end' })),
+  const events: {tick: number; text: string}[] = [
+    ...sections.map(s => ({tick: s.tick, text: `section ${s.name}`})),
+    ...endEvents.map(e => ({tick: e.tick, text: 'end'})),
   ];
 
   events.sort((a, b) => a.tick - b.tick);
@@ -509,37 +521,42 @@ function serializeTrack(track: TrackData): string[] {
 
   // Collect all events for this track
   type TrackEvent =
-    | { tick: number; kind: 'S'; value: number; length: number }
-    | { tick: number; kind: 'N'; value: number; length: number };
+    | {tick: number; kind: 'S'; value: number; length: number}
+    | {tick: number; kind: 'N'; value: number; length: number};
 
   const events: TrackEvent[] = [];
 
   // Star power
   for (const sp of track.starPower ?? []) {
-    events.push({ tick: sp.tick, kind: 'S', value: 2, length: sp.length });
+    events.push({tick: sp.tick, kind: 'S', value: 2, length: sp.length});
   }
 
   // Activation lanes
   for (const al of track.activationLanes ?? []) {
-    events.push({ tick: al.tick, kind: 'S', value: 64, length: al.length });
+    events.push({tick: al.tick, kind: 'S', value: 64, length: al.length});
   }
 
   // Notes
   for (const note of track.notes) {
     // Base note number
     const baseNoteNum = drumTypeToNoteNumber(note.type, note.flags);
-    events.push({ tick: note.tick, kind: 'N', value: baseNoteNum, length: note.length });
+    events.push({
+      tick: note.tick,
+      kind: 'N',
+      value: baseNoteNum,
+      length: note.length,
+    });
 
     // Double kick marker (emit note 32 in addition to note 0)
     if (note.type === 'kick' && note.flags.doubleKick) {
-      events.push({ tick: note.tick, kind: 'N', value: 32, length: 0 });
+      events.push({tick: note.tick, kind: 'N', value: 32, length: 0});
     }
 
     // Pro drums cymbal markers
     if (note.flags.cymbal) {
       const cymbalNum = drumTypeToCymbalNumber(note.type);
       if (cymbalNum !== null) {
-        events.push({ tick: note.tick, kind: 'N', value: cymbalNum, length: 0 });
+        events.push({tick: note.tick, kind: 'N', value: cymbalNum, length: 0});
       }
     }
 
@@ -547,7 +564,7 @@ function serializeTrack(track: TrackData): string[] {
     if (note.flags.accent) {
       const accentNum = drumTypeToAccentNumber(note.type);
       if (accentNum !== null) {
-        events.push({ tick: note.tick, kind: 'N', value: accentNum, length: 0 });
+        events.push({tick: note.tick, kind: 'N', value: accentNum, length: 0});
       }
     }
 
@@ -555,7 +572,7 @@ function serializeTrack(track: TrackData): string[] {
     if (note.flags.ghost) {
       const ghostNum = drumTypeToGhostNumber(note.type);
       if (ghostNum !== null) {
-        events.push({ tick: note.tick, kind: 'N', value: ghostNum, length: 0 });
+        events.push({tick: note.tick, kind: 'N', value: ghostNum, length: 0});
       }
     }
   }
@@ -570,7 +587,9 @@ function serializeTrack(track: TrackData): string[] {
   });
 
   for (const event of events) {
-    lines.push(`  ${event.tick} = ${event.kind} ${event.value} ${event.length}`);
+    lines.push(
+      `  ${event.tick} = ${event.kind} ${event.value} ${event.length}`,
+    );
   }
 
   lines.push('}');
@@ -583,43 +602,62 @@ function serializeTrack(track: TrackData): string[] {
 ```typescript
 function drumTypeToNoteNumber(
   type: DrumNoteType,
-  flags: DrumNoteFlags
+  flags: DrumNoteFlags,
 ): number {
   switch (type) {
-    case 'kick':   return 0;  // Always note 0 (double kick adds 32 separately)
-    case 'red':    return 1;
-    case 'yellow': return 2;
-    case 'blue':   return 3;
-    case 'green':  return 4;
+    case 'kick':
+      return 0; // Always note 0 (double kick adds 32 separately)
+    case 'red':
+      return 1;
+    case 'yellow':
+      return 2;
+    case 'blue':
+      return 3;
+    case 'green':
+      return 4;
   }
 }
 
 function drumTypeToCymbalNumber(type: DrumNoteType): number | null {
   switch (type) {
-    case 'yellow': return 66;
-    case 'blue':   return 67;
-    case 'green':  return 68;
-    default:       return null;  // kick and red have no cymbal markers
+    case 'yellow':
+      return 66;
+    case 'blue':
+      return 67;
+    case 'green':
+      return 68;
+    default:
+      return null; // kick and red have no cymbal markers
   }
 }
 
 function drumTypeToAccentNumber(type: DrumNoteType): number | null {
   switch (type) {
-    case 'red':    return 34;
-    case 'yellow': return 35;
-    case 'blue':   return 36;
-    case 'green':  return 37;
-    default:       return null;
+    case 'red':
+      return 34;
+    case 'yellow':
+      return 35;
+    case 'blue':
+      return 36;
+    case 'green':
+      return 37;
+    default:
+      return null;
   }
 }
 
 function drumTypeToGhostNumber(type: DrumNoteType): number | null {
   switch (type) {
-    case 'red':    return 40;
-    case 'yellow': return 41;
-    case 'blue':   return 42;
-    case 'green':  return 43;
-    default:       return null;
+    case 'red':
+      return 40;
+    case 'yellow':
+      return 41;
+    case 'blue':
+      return 42;
+    case 'green':
+      return 43;
+    default:
+      return null;
   }
 }
 ```
@@ -631,12 +669,15 @@ function drumTypeToGhostNumber(type: DrumNoteType): number | null {
 ### BPM events
 
 Each tempo change in the SyncTrack is serialized as:
+
 ```
 <tick> = B <millibeats>
 ```
+
 Where `millibeats = Math.round(bpm * 1000)`.
 
 Requirements:
+
 - There MUST be a tempo event at tick 0. If not provided, default to 120 BPM (`0 = B 120000`).
 - BPM must be > 0.
 - Millibeats is always a positive integer.
@@ -648,6 +689,7 @@ Requirements:
 ```
 
 Requirements:
+
 - There MUST be a time signature at tick 0. If not provided, default to 4/4 (`0 = TS 4`).
 - Numerator must be > 0.
 - Denominator must be a power of 2 (1, 2, 4, 8, 16, 32). The exponent `log2(denominator)` is written. If denominator is 4 (exponent = 2), the exponent is omitted (Moonscraper convention, not strictly required but conventional).
@@ -694,7 +736,7 @@ interface TimedTempo {
 function msToTick(
   msTime: number,
   timedTempos: TimedTempo[],
-  resolution: number
+  resolution: number,
 ): number {
   // Find the active tempo at this msTime
   let tempoIndex = 0;
@@ -721,19 +763,19 @@ Before converting ms to ticks, pre-compute `msTime` for each tempo event (same a
 ```typescript
 function buildTimedTempos(
   tempos: TempoEvent[],
-  resolution: number
+  resolution: number,
 ): TimedTempo[] {
   const timed: TimedTempo[] = [];
 
   for (let i = 0; i < tempos.length; i++) {
     if (i === 0) {
-      timed.push({ tick: tempos[0].tick, bpm: tempos[0].bpm, msTime: 0 });
+      timed.push({tick: tempos[0].tick, bpm: tempos[0].bpm, msTime: 0});
     } else {
       const prev = timed[i - 1];
       const msTime =
         prev.msTime +
         ((tempos[i].tick - prev.tick) * 60000) / (prev.bpm * resolution);
-      timed.push({ tick: tempos[i].tick, bpm: tempos[i].bpm, msTime });
+      timed.push({tick: tempos[i].tick, bpm: tempos[i].bpm, msTime});
     }
   }
 
@@ -757,13 +799,18 @@ Recommendation: **Round to nearest tick** for the initial implementation. At res
  * Snap a tick to the nearest grid position.
  * gridDivision: number of divisions per quarter note (e.g., 4 = 16th notes, 8 = 32nd notes)
  */
-function snapToGrid(tick: number, resolution: number, gridDivision: number): number {
+function snapToGrid(
+  tick: number,
+  resolution: number,
+  gridDivision: number,
+): number {
   const gridSize = resolution / gridDivision;
   return Math.round(tick / gridSize) * gridSize;
 }
 ```
 
 At resolution 480:
+
 - 1/4 note grid: 480 ticks
 - 1/8 note grid: 240 ticks
 - 1/16 note grid: 120 ticks
@@ -781,6 +828,7 @@ At resolution 480:
 In .chart files, drums default to **tom** (unlike .mid where yellow/blue/green default to cymbal). To mark a note as a cymbal, add a separate `N` event with the cymbal marker note number at the same tick.
 
 scan-chart confirms this behavior (from `chart-parser.ts` line 361-362):
+
 ```
 case '66': return eventTypes.yellowCymbalMarker
 case '67': return eventTypes.blueCymbalMarker
@@ -788,6 +836,7 @@ case '68': return eventTypes.greenCymbalMarker
 ```
 
 And from `notes-parser.ts` `getTomOrCymbalFlags` (chart format, lines 334-346):
+
 - Red is always tom (no cymbal option)
 - Yellow: cymbal if `yellowCymbalMarker` present, otherwise tom
 - Blue: cymbal if `blueCymbalMarker` present, otherwise tom
@@ -801,6 +850,7 @@ When writing a note with `flags.cymbal === true`:
 960 = N 2 0
 960 = N 66 0
 ```
+
 This is a yellow cymbal hit at tick 960. The `N 2 0` is the yellow drum note; the `N 66 0` is the cymbal marker.
 
 Without the cymbal marker, `960 = N 2 0` alone would be a yellow tom hit.
@@ -813,17 +863,17 @@ In scan-chart's chart parser, cymbal markers are zero-length events at a specifi
 
 For our pipeline, we should default to `pro_drums: true` in the song.ini and emit cymbal markers for all hi-hat and cymbal hits. The ML model classifies drums into classes that map to:
 
-| ML Class | DrumNoteType | Cymbal? |
-|----------|-------------|---------|
-| Kick | kick | n/a |
-| Snare | red | n/a (always tom) |
-| Hi-hat (closed) | yellow | yes |
-| Hi-hat (open) | yellow | yes |
-| High tom | yellow | no |
-| Low tom / floor tom | blue | no |
-| Ride cymbal | blue | yes |
-| Crash cymbal | green | yes |
-| Low floor tom | green | no |
+| ML Class            | DrumNoteType | Cymbal?          |
+| ------------------- | ------------ | ---------------- |
+| Kick                | kick         | n/a              |
+| Snare               | red          | n/a (always tom) |
+| Hi-hat (closed)     | yellow       | yes              |
+| Hi-hat (open)       | yellow       | yes              |
+| High tom            | yellow       | no               |
+| Low tom / floor tom | blue         | no               |
+| Ride cymbal         | blue         | yes              |
+| Crash cymbal        | green        | yes              |
+| Low floor tom       | green        | no               |
 
 ---
 
@@ -831,14 +881,15 @@ For our pipeline, we should default to `pro_drums: true` in the song.ini and emi
 
 ### 192 vs 480
 
-| Resolution | Pros | Cons |
-|-----------|------|------|
-| 192 | Traditional CH standard; smallest file sizes | 1 tick = ~2.6ms at 120 BPM; less precise |
-| 480 | Standard in modern charting; 1 tick = ~1.04ms at 120 BPM; better subdivision support | Slightly larger files |
+| Resolution | Pros                                                                                 | Cons                                     |
+| ---------- | ------------------------------------------------------------------------------------ | ---------------------------------------- |
+| 192        | Traditional CH standard; smallest file sizes                                         | 1 tick = ~2.6ms at 120 BPM; less precise |
+| 480        | Standard in modern charting; 1 tick = ~1.04ms at 120 BPM; better subdivision support | Slightly larger files                    |
 
 **Recommendation: 480 ticks per quarter note.**
 
 Reasons:
+
 - Better precision for ML-derived onset times (1.04ms vs 2.6ms per tick at 120 BPM)
 - Clean subdivision into common note values: 1/4=480, 1/8=240, 1/12=160, 1/16=120, 1/24=80, 1/32=60, 1/48=40, 1/64=30
 - 192 only cleanly divides into: 1/4=192, 1/8=96, 1/12=64, 1/16=48, 1/24=32, 1/32=24, 1/48=16, 1/64=12
@@ -898,7 +949,7 @@ The core test: serialize a `ChartDocument` to a `.chart` string, then parse it b
 ### Test harness
 
 ```typescript
-import { parseChartFile } from 'scan-chart';
+import {parseChartFile} from 'scan-chart';
 
 function roundTripTest(doc: ChartDocument): void {
   // 1. Serialize
@@ -925,8 +976,13 @@ function roundTripTest(doc: ChartDocument): void {
   assert(parsed.timeSignatures.length === doc.timeSignatures.length);
   for (let i = 0; i < doc.timeSignatures.length; i++) {
     assert(parsed.timeSignatures[i].tick === doc.timeSignatures[i].tick);
-    assert(parsed.timeSignatures[i].numerator === doc.timeSignatures[i].numerator);
-    assert(parsed.timeSignatures[i].denominator === doc.timeSignatures[i].denominator);
+    assert(
+      parsed.timeSignatures[i].numerator === doc.timeSignatures[i].numerator,
+    );
+    assert(
+      parsed.timeSignatures[i].denominator ===
+        doc.timeSignatures[i].denominator,
+    );
   }
 
   // 6. Compare sections
@@ -939,8 +995,9 @@ function roundTripTest(doc: ChartDocument): void {
   // 7. Compare tracks
   for (const docTrack of doc.tracks) {
     const parsedTrack = parsed.trackData.find(
-      t => t.instrument === docTrack.instrument &&
-           t.difficulty === docTrack.difficulty
+      t =>
+        t.instrument === docTrack.instrument &&
+        t.difficulty === docTrack.difficulty,
     );
     assert(parsedTrack !== undefined);
 
@@ -957,7 +1014,7 @@ function roundTripTest(doc: ChartDocument): void {
       // Compare each note in the group
       for (const expectedNote of expectedGroup) {
         const parsedNote = parsedGroup.find(
-          n => n.type === drumNoteTypeToScanChartType(expectedNote.type)
+          n => n.type === drumNoteTypeToScanChartType(expectedNote.type),
         );
         assert(parsedNote !== undefined);
         assert(parsedNote.tick === expectedNote.tick);
@@ -1013,31 +1070,33 @@ function roundTripTest(doc: ChartDocument): void {
 ### Testing with Jest
 
 ```typescript
-import { describe, test, expect } from '@jest/globals';
+import {describe, test, expect} from '@jest/globals';
 
 describe('chart-writer', () => {
   test('minimal chart round-trips', () => {
     const doc: ChartDocument = {
       resolution: 480,
-      metadata: { name: 'Test', artist: 'Test', resolution: 480 },
-      tempos: [{ tick: 0, bpm: 120 }],
-      timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
+      metadata: {name: 'Test', artist: 'Test', resolution: 480},
+      tempos: [{tick: 0, bpm: 120}],
+      timeSignatures: [{tick: 0, numerator: 4, denominator: 4}],
       sections: [],
       endEvents: [],
-      tracks: [{
-        instrument: 'drums',
-        difficulty: 'expert',
-        notes: [
-          { tick: 0, type: 'kick', length: 0, flags: {} },
-          { tick: 480, type: 'red', length: 0, flags: {} },
-        ],
-      }],
+      tracks: [
+        {
+          instrument: 'drums',
+          difficulty: 'expert',
+          notes: [
+            {tick: 0, type: 'kick', length: 0, flags: {}},
+            {tick: 480, type: 'red', length: 0, flags: {}},
+          ],
+        },
+      ],
     };
 
     const text = serializeChart(doc);
-    const parsed = parseChartFile(
-      new TextEncoder().encode(text), 'chart', { pro_drums: true }
-    );
+    const parsed = parseChartFile(new TextEncoder().encode(text), 'chart', {
+      pro_drums: true,
+    });
 
     expect(parsed.resolution).toBe(480);
     expect(parsed.trackData).toHaveLength(1);
@@ -1110,6 +1169,7 @@ A minimal but complete drum chart file:
 ```
 
 This represents a simple rock beat at 120 BPM:
+
 - Beat 1 (tick 0): Kick + hi-hat (cymbal)
 - "And" of 1 (tick 240): hi-hat (cymbal)
 - Beat 2 (tick 480): Kick + hi-hat (cymbal)
@@ -1125,44 +1185,44 @@ These values are all available via `import { noteTypes, noteFlags, eventTypes } 
 From `scan-chart/src/chart/note-parsing-interfaces.ts`, the `noteTypes` used after parsing:
 
 | scan-chart noteType | Value | Our DrumNoteType |
-|---|---|---|
-| `kick` | 13 | `'kick'` |
-| `redDrum` | 14 | `'red'` |
-| `yellowDrum` | 15 | `'yellow'` |
-| `blueDrum` | 16 | `'blue'` |
-| `greenDrum` | 17 | `'green'` |
+| ------------------- | ----- | ---------------- |
+| `kick`              | 13    | `'kick'`         |
+| `redDrum`           | 14    | `'red'`          |
+| `yellowDrum`        | 15    | `'yellow'`       |
+| `blueDrum`          | 16    | `'blue'`         |
+| `greenDrum`         | 17    | `'green'`        |
 
 And `noteFlags` bitmask values:
 
-| Flag | Value | Our DrumNoteFlags field |
-|---|---|---|
-| `tom` | 16 | Default (no cymbal flag) |
-| `cymbal` | 32 | `flags.cymbal` |
-| `doubleKick` | 8 | `flags.doubleKick` |
-| `ghost` | 512 | `flags.ghost` |
-| `accent` | 1024 | `flags.accent` |
+| Flag         | Value | Our DrumNoteFlags field  |
+| ------------ | ----- | ------------------------ |
+| `tom`        | 16    | Default (no cymbal flag) |
+| `cymbal`     | 32    | `flags.cymbal`           |
+| `doubleKick` | 8     | `flags.doubleKick`       |
+| `ghost`      | 512   | `flags.ghost`            |
+| `accent`     | 1024  | `flags.accent`           |
 
 ### Chart note number <-> scan-chart event type mapping (drums)
 
 From `chart-parser.ts` `getEventType()`:
 
-| .chart N value | scan-chart eventType | Our DrumNoteType |
-|---|---|---|
-| 0 | `kick` (17) | `'kick'` |
-| 1 | `redDrum` (19) | `'red'` |
-| 2 | `yellowDrum` (20) | `'yellow'` |
-| 3 | `blueDrum` (21) | `'blue'` |
-| 4 | `fiveOrangeFourGreenDrum` (22) | `'green'` |
-| 5 | `fiveGreenDrum` (23) | (5-lane only, not used) |
-| 32 | `kick2x` (18) | `'kick'` + doubleKick flag |
-| 34 | `redAccent` (45) | accent modifier |
-| 35 | `yellowAccent` (46) | accent modifier |
-| 36 | `blueAccent` (47) | accent modifier |
-| 37 | `fiveOrangeFourGreenAccent` (48) | accent modifier |
-| 40 | `redGhost` (39) | ghost modifier |
-| 41 | `yellowGhost` (40) | ghost modifier |
-| 42 | `blueGhost` (41) | ghost modifier |
-| 43 | `fiveOrangeFourGreenGhost` (42) | ghost modifier |
-| 66 | `yellowCymbalMarker` (36) | cymbal modifier |
-| 67 | `blueCymbalMarker` (37) | cymbal modifier |
-| 68 | `greenCymbalMarker` (38) | cymbal modifier |
+| .chart N value | scan-chart eventType             | Our DrumNoteType           |
+| -------------- | -------------------------------- | -------------------------- |
+| 0              | `kick` (17)                      | `'kick'`                   |
+| 1              | `redDrum` (19)                   | `'red'`                    |
+| 2              | `yellowDrum` (20)                | `'yellow'`                 |
+| 3              | `blueDrum` (21)                  | `'blue'`                   |
+| 4              | `fiveOrangeFourGreenDrum` (22)   | `'green'`                  |
+| 5              | `fiveGreenDrum` (23)             | (5-lane only, not used)    |
+| 32             | `kick2x` (18)                    | `'kick'` + doubleKick flag |
+| 34             | `redAccent` (45)                 | accent modifier            |
+| 35             | `yellowAccent` (46)              | accent modifier            |
+| 36             | `blueAccent` (47)                | accent modifier            |
+| 37             | `fiveOrangeFourGreenAccent` (48) | accent modifier            |
+| 40             | `redGhost` (39)                  | ghost modifier             |
+| 41             | `yellowGhost` (40)               | ghost modifier             |
+| 42             | `blueGhost` (41)                 | ghost modifier             |
+| 43             | `fiveOrangeFourGreenGhost` (42)  | ghost modifier             |
+| 66             | `yellowCymbalMarker` (36)        | cymbal modifier            |
+| 67             | `blueCymbalMarker` (37)          | cymbal modifier            |
+| 68             | `greenCymbalMarker` (38)         | cymbal modifier            |

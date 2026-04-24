@@ -29,7 +29,16 @@ import {LyricsOverlay} from './LyricsOverlay';
 import type {Track} from './types';
 
 // Re-export public types, constants, and utilities
-export {type SelectedTrack, type Song, type HitResult, type PreparedNote, SCALE, NOTE_SPAN_WIDTH, PAD_TO_HIGHWAY_LANE, calculateNoteXOffset} from './types';
+export {
+  type SelectedTrack,
+  type Song,
+  type HitResult,
+  type PreparedNote,
+  SCALE,
+  NOTE_SPAN_WIDTH,
+  PAD_TO_HIGHWAY_LANE,
+  calculateNoteXOffset,
+} from './types';
 export {NotesManager, type NotesDiff} from './NotesManager';
 export {areAnimationsSupported} from './TextureManager';
 export {SceneOverlays, type OverlayState} from './SceneOverlays';
@@ -146,8 +155,14 @@ export const setupRenderer = (
     },
 
     async startRender() {
-      const {scene, highwayTexture, animatedTextureManager, sceneOverlays, reconciler, noteRenderer} =
-        await trackPromise;
+      const {
+        scene,
+        highwayTexture,
+        animatedTextureManager,
+        sceneOverlays,
+        reconciler,
+        noteRenderer,
+      } = await trackPromise;
 
       await startRender(
         scene,
@@ -170,7 +185,13 @@ export const setupRenderer = (
       // Dispose animated textures if track was prepared
       if (trackPromise) {
         try {
-          const {animatedTextureManager, sceneOverlays, interactionManager, reconciler, noteRenderer: nr} = await trackPromise;
+          const {
+            animatedTextureManager,
+            sceneOverlays,
+            interactionManager,
+            reconciler,
+            noteRenderer: nr,
+          } = await trackPromise;
           animatedTextureManager.dispose();
           sceneOverlays?.dispose();
           interactionManager?.dispose();
@@ -253,7 +274,9 @@ export const setupRenderer = (
      * Set up the waveform surface layer. Must be called after prepTrack.
      * Only applicable for drum tracks.
      */
-    async setWaveformData(config: Omit<WaveformSurfaceConfig, 'highwayWidth' | 'highwaySpeed'>): Promise<void> {
+    async setWaveformData(
+      config: Omit<WaveformSurfaceConfig, 'highwayWidth' | 'highwaySpeed'>,
+    ): Promise<void> {
       const {scene} = await trackPromise;
 
       // Dispose previous waveform surface if any
@@ -281,7 +304,9 @@ export const setupRenderer = (
      * Set up the grid overlay layer. Must be called after prepTrack.
      * Only applicable for drum tracks.
      */
-    async setGridData(config: Omit<GridOverlayConfig, 'highwayWidth' | 'highwaySpeed'>): Promise<void> {
+    async setGridData(
+      config: Omit<GridOverlayConfig, 'highwayWidth' | 'highwaySpeed'>,
+    ): Promise<void> {
       const {scene} = await trackPromise;
 
       // Dispose previous grid overlay if any
@@ -348,12 +373,36 @@ export const setupRenderer = (
     const noteRenderer = new NoteRenderer(getTextureForNote, clippingPlanes);
 
     // Create marker renderers for all marker types
-    const sectionRenderer = new MarkerRenderer(clippingPlanes, 'right', [0, 200, 40]);
-    const lyricRenderer = new MarkerRenderer(clippingPlanes, 'left', [40, 120, 255]);
-    const phraseStartRenderer = new MarkerRenderer(clippingPlanes, 'left', [40, 120, 255]);
-    const phraseEndRenderer = new MarkerRenderer(clippingPlanes, 'left', [40, 120, 255]);
-    const bpmRenderer = new MarkerRenderer(clippingPlanes, 'left', [180, 40, 255]);
-    const tsRenderer = new MarkerRenderer(clippingPlanes, 'right', [255, 80, 60]);
+    const sectionRenderer = new MarkerRenderer(
+      clippingPlanes,
+      'right',
+      [0, 200, 40],
+    );
+    const lyricRenderer = new MarkerRenderer(
+      clippingPlanes,
+      'left',
+      [40, 120, 255],
+    );
+    const phraseStartRenderer = new MarkerRenderer(
+      clippingPlanes,
+      'left',
+      [40, 120, 255],
+    );
+    const phraseEndRenderer = new MarkerRenderer(
+      clippingPlanes,
+      'left',
+      [40, 120, 255],
+    );
+    const bpmRenderer = new MarkerRenderer(
+      clippingPlanes,
+      'left',
+      [180, 40, 255],
+    );
+    const tsRenderer = new MarkerRenderer(
+      clippingPlanes,
+      'right',
+      [255, 80, 60],
+    );
 
     // Create SceneReconciler with all renderers
     const reconciler = new SceneReconciler(
@@ -377,9 +426,10 @@ export const setupRenderer = (
     reconciler.setElements(elements);
 
     // Create SceneOverlays for drum tracks (editor use)
-    const sceneOverlays = track.instrument === 'drums'
-      ? new SceneOverlays(scene, highwaySpeed, clippingPlanes)
-      : null;
+    const sceneOverlays =
+      track.instrument === 'drums'
+        ? new SceneOverlays(scene, highwaySpeed, clippingPlanes)
+        : null;
 
     // Create InteractionManager for drum tracks (editor use)
     const getElapsedMs = () => {
@@ -387,14 +437,10 @@ export const setupRenderer = (
       const delay = (audioManager?.delay || 0) * 1000;
       return currentMs - delay;
     };
-    const interactionManager = track.instrument === 'drums'
-      ? new InteractionManager(
-          camera,
-          reconciler,
-          highwaySpeed,
-          getElapsedMs,
-        )
-      : null;
+    const interactionManager =
+      track.instrument === 'drums'
+        ? new InteractionManager(camera, reconciler, highwaySpeed, getElapsedMs)
+        : null;
 
     // Create lyrics overlay if chart has lyrics
     const vocals = chart.vocalTracks.parts.vocals;
@@ -470,7 +516,11 @@ export const setupRenderer = (
         for (const [key, group] of reconciler.getActiveGroups()) {
           const el = reconciler.getElement(key);
           if (el && el.kind === 'note') {
-            noteRenderer.updateOverlays(group, key, el.data as import('./NoteRenderer').NoteElementData);
+            noteRenderer.updateOverlays(
+              group,
+              key,
+              el.data as import('./NoteRenderer').NoteElementData,
+            );
           }
         }
       }

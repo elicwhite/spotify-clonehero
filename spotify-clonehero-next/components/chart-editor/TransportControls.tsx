@@ -2,14 +2,7 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useHotkey, formatForDisplay} from '@tanstack/react-hotkeys';
-import {
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Minus,
-  Plus,
-} from 'lucide-react';
+import {Play, Pause, SkipBack, SkipForward, Minus, Plus} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {
   Tooltip,
@@ -177,7 +170,9 @@ export default function TransportControls({
               <SkipBack className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Previous section ({formatForDisplay('Mod+ArrowLeft')})</TooltipContent>
+          <TooltipContent>
+            Previous section ({formatForDisplay('Mod+ArrowLeft')})
+          </TooltipContent>
         </Tooltip>
 
         {/* Play/Pause */}
@@ -212,7 +207,9 @@ export default function TransportControls({
               <SkipForward className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Next section ({formatForDisplay('Mod+ArrowRight')})</TooltipContent>
+          <TooltipContent>
+            Next section ({formatForDisplay('Mod+ArrowRight')})
+          </TooltipContent>
         </Tooltip>
 
         {/* Time display (chart-relative) */}

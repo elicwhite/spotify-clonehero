@@ -20,10 +20,7 @@ import type {
   RawDrumEvent,
   DrumClassName,
 } from './types';
-import {
-  DRUM_CLASSES,
-  NUM_DRUM_CLASSES,
-} from './types';
+import {DRUM_CLASSES, NUM_DRUM_CLASSES} from './types';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -82,9 +79,7 @@ export class CrnnTranscriber implements DrumTranscriber {
     onProgress?: TranscriptionProgressCallback,
   ): Promise<TranscriptionResult> {
     return new Promise((resolve, reject) => {
-      const worker = new Worker(
-        new URL('./crnn-worker.ts', import.meta.url),
-      );
+      const worker = new Worker(new URL('./crnn-worker.ts', import.meta.url));
 
       worker.onmessage = (e: MessageEvent) => {
         const msg = e.data;
@@ -116,7 +111,7 @@ export class CrnnTranscriber implements DrumTranscriber {
         }
       };
 
-      worker.onerror = (err) => {
+      worker.onerror = err => {
         worker.terminate();
         reject(new Error(`Worker error: ${err.message}`));
       };
@@ -166,7 +161,7 @@ export class MockTranscriber implements DrumTranscriber {
     onProgress?.({step: 'computing-spectrogram', percent: 0.1});
 
     // Simulate processing time
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    await new Promise<void>(resolve => setTimeout(resolve, 100));
 
     onProgress?.({step: 'inference-pass-1', percent: 0.5});
 
@@ -175,7 +170,7 @@ export class MockTranscriber implements DrumTranscriber {
 
     onProgress?.({step: 'post-processing', percent: 0.9});
 
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    await new Promise<void>(resolve => setTimeout(resolve, 50));
 
     onProgress?.({step: 'done', percent: 1});
 
@@ -268,49 +263,29 @@ export class MockTranscriber implements DrumTranscriber {
         );
       }
       if (eighthIndex === 2) {
-        events.push(
-          this.makeEvent(time, 'SD', 38, 0.8 + Math.random() * 0.2),
-        );
+        events.push(this.makeEvent(time, 'SD', 38, 0.8 + Math.random() * 0.2));
       }
     } else {
       // Second half: tom fill (descending) using 3 tom types
       if (eighthIndex === 4) {
-        events.push(
-          this.makeEvent(time, 'SD', 38, 0.7 + Math.random() * 0.2),
-        );
+        events.push(this.makeEvent(time, 'SD', 38, 0.7 + Math.random() * 0.2));
       }
       if (eighthIndex === 5) {
-        events.push(
-          this.makeEvent(time, 'HT', 50, 0.75 + Math.random() * 0.2),
-        );
+        events.push(this.makeEvent(time, 'HT', 50, 0.75 + Math.random() * 0.2));
       }
       if (eighthIndex === 6) {
-        events.push(
-          this.makeEvent(time, 'MT', 47, 0.75 + Math.random() * 0.2),
-        );
+        events.push(this.makeEvent(time, 'MT', 47, 0.75 + Math.random() * 0.2));
       }
       if (eighthIndex === 7) {
-        events.push(
-          this.makeEvent(time, 'FT', 43, 0.7 + Math.random() * 0.2),
-        );
+        events.push(this.makeEvent(time, 'FT', 43, 0.7 + Math.random() * 0.2));
         // Crash on the "next" beat 1 (but only if within duration)
         const crashTime = time + 60 / this.bpm / 2;
         if (crashTime < durationSeconds) {
           events.push(
-            this.makeEvent(
-              crashTime,
-              'CR',
-              49,
-              0.85 + Math.random() * 0.15,
-            ),
+            this.makeEvent(crashTime, 'CR', 49, 0.85 + Math.random() * 0.15),
           );
           events.push(
-            this.makeEvent(
-              crashTime,
-              'BD',
-              36,
-              0.9 + Math.random() * 0.1,
-            ),
+            this.makeEvent(crashTime, 'BD', 36, 0.9 + Math.random() * 0.1),
           );
         }
       }
@@ -349,9 +324,7 @@ export class MockTranscriber implements DrumTranscriber {
     // For each event, create a gaussian-like activation peak
     for (const event of events) {
       const centerFrame = Math.round(event.timeSeconds * fps);
-      const classIdx = DRUM_CLASSES.findIndex(
-        (c) => c.name === event.drumClass,
-      );
+      const classIdx = DRUM_CLASSES.findIndex(c => c.name === event.drumClass);
       if (classIdx < 0) continue;
 
       // Write a peak +/- 3 frames around the center

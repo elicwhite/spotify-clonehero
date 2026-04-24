@@ -28,6 +28,7 @@ Confidence scores are stored as a JSON sidecar in OPFS alongside the chart data:
 ```
 
 Format:
+
 ```json
 {
   "notes": {
@@ -47,8 +48,8 @@ Load this file in the OPFS loading step (0007 section 5). Store in EditorContext
 interface EditorState {
   // ... from 0007/0007a
   confidence: Map<string, number>; // noteId -> confidence (0-1)
-  showConfidence: boolean;         // toggle overlay on/off
-  confidenceThreshold: number;     // threshold for "low confidence" (default 0.7)
+  showConfidence: boolean; // toggle overlay on/off
+  confidenceThreshold: number; // threshold for "low confidence" (default 0.7)
 }
 ```
 
@@ -56,13 +57,13 @@ interface EditorState {
 
 On the Clone Hero highway, notes are rendered with confidence-dependent styling:
 
-| Confidence | Visual on Highway |
-|---|---|
-| >= 0.9 (high) | Standard note appearance, full opacity |
-| 0.7 - 0.9 (medium) | Slight amber tint/glow around the note |
-| 0.5 - 0.7 (low) | Amber pulsing glow, reduced opacity gem |
-| < 0.5 (very low) | Red pulsing glow, "?" overlay on the note |
-| Manually added | Distinct border/glow to indicate human-added |
+| Confidence         | Visual on Highway                            |
+| ------------------ | -------------------------------------------- |
+| >= 0.9 (high)      | Standard note appearance, full opacity       |
+| 0.7 - 0.9 (medium) | Slight amber tint/glow around the note       |
+| 0.5 - 0.7 (low)    | Amber pulsing glow, reduced opacity gem      |
+| < 0.5 (very low)   | Red pulsing glow, "?" overlay on the note    |
+| Manually added     | Distinct border/glow to indicate human-added |
 
 The visual treatment should be implementable as material changes on the Three.js note meshes. Use `emissive` color properties or overlay sprites.
 
@@ -80,10 +81,10 @@ On the SheetMusic notation view, confidence can be shown as note coloring:
 
 Add navigation shortcuts and toolbar buttons:
 
-| Key | Action |
-|---|---|
-| `N` | Jump to next low-confidence note (below `confidenceThreshold`) |
-| `Shift+N` | Jump to previous low-confidence note |
+| Key       | Action                                                         |
+| --------- | -------------------------------------------------------------- |
+| `N`       | Jump to next low-confidence note (below `confidenceThreshold`) |
+| `Shift+N` | Jump to previous low-confidence note                           |
 
 When jumping, the highway scrolls to center the note and it becomes selected. This lets the user quickly review every uncertain note in sequence.
 
@@ -122,11 +123,13 @@ interface EditorState {
 ```
 
 A note is marked reviewed when:
+
 - The user selects it and presses a "confirm" key (e.g., `Enter`)
 - The user edits the note (changes type, flags, or position)
 - The user deletes the note
 
 Reviewed notes get a subtle visual indicator:
+
 - On highway: a small checkmark sprite or a green border
 - On SheetMusic: not shown (would clutter notation)
 
@@ -168,31 +171,35 @@ interface EditorState {
 ```typescript
 type EditorAction =
   // ... existing actions from 0007
-  | { type: 'EXECUTE_COMMAND'; command: EditCommand }
-  | { type: 'UNDO' }
-  | { type: 'REDO' }
-  | { type: 'MARK_SAVED' };
+  | {type: 'EXECUTE_COMMAND'; command: EditCommand}
+  | {type: 'UNDO'}
+  | {type: 'REDO'}
+  | {type: 'MARK_SAVED'};
 ```
 
 **EXECUTE_COMMAND:**
+
 1. Execute the command's `execute()` to produce new chart state
 2. Push the command onto `undoStack`
 3. Clear `redoStack` (new edit branch)
 4. Set `dirty = true`
 
 **UNDO:**
+
 1. Pop the last command from `undoStack`
 2. Execute the command's `undo()` to revert chart state
 3. Push the command onto `redoStack`
 4. Set `dirty = true` (or check if we've returned to the saved state)
 
 **REDO:**
+
 1. Pop the last command from `redoStack`
 2. Execute the command's `execute()` to re-apply
 3. Push the command onto `undoStack`
 4. Set `dirty = true`
 
 **MARK_SAVED:**
+
 1. Set `dirty = false`
 2. Optionally record the current undo stack depth so we can detect when we undo back to the saved state
 
@@ -202,16 +209,16 @@ When the user performs a bulk action (e.g., "delete 20 selected notes"), wrap th
 
 ### 3.4 Memory Management
 
-The undo stack stores command objects (diffs), not full state snapshots. This keeps memory usage proportional to edit count, not chart size * edit count.
+The undo stack stores command objects (diffs), not full state snapshots. This keeps memory usage proportional to edit count, not chart size \* edit count.
 
 Cap the undo stack at a reasonable depth (e.g., 200 entries). When the cap is exceeded, discard the oldest entries.
 
 ### 3.5 Keyboard Shortcuts
 
-| Key | Action |
-|---|---|
-| `Ctrl+Z` (or `Cmd+Z` on Mac) | Undo |
-| `Ctrl+Shift+Z` or `Ctrl+Y` | Redo |
+| Key                          | Action |
+| ---------------------------- | ------ |
+| `Ctrl+Z` (or `Cmd+Z` on Mac) | Undo   |
+| `Ctrl+Shift+Z` or `Ctrl+Y`   | Redo   |
 
 These are already defined in 0007a's shortcut table and are wired here.
 
@@ -222,6 +229,7 @@ These are already defined in 0007a's shortcut table and are wired here.
 ### 4.1 Copy
 
 When notes are selected and the user presses `Ctrl+C`:
+
 1. Capture the selected notes as an array
 2. Normalize their positions: subtract the minimum tick in the selection so the first note starts at tick 0
 3. Store in EditorContext as `clipboard: DrumNote[]`
@@ -229,6 +237,7 @@ When notes are selected and the user presses `Ctrl+C`:
 ### 4.2 Paste
 
 When the user presses `Ctrl+V`:
+
 1. Take the clipboard notes
 2. Add the current cursor tick position (the snapped tick where the playhead or mouse is) to each note's normalized tick
 3. Execute an `AddNotesCommand` (batch) for all pasted notes
@@ -254,6 +263,7 @@ interface EditorState {
 ### 5.1 Trigger
 
 Auto-save fires:
+
 - Every 30 seconds while there are unsaved changes (`dirty === true`)
 - When the user navigates away from the page (`beforeunload` handler)
 - When the page loses focus (tab switch, `visibilitychange` event)
@@ -270,6 +280,7 @@ Save the edited chart to a separate file in OPFS, preserving the original:
 ```
 
 The serializer converts the internal `DrumNote[]` representation back to `.chart` text format. This uses the same logic as the chart writer (0002), including:
+
 - Note type to chart note number mapping
 - Cymbal flag markers (notes 66, 67, 68)
 - Accent/ghost markers
@@ -289,24 +300,29 @@ async function autoSave(projectName: string, state: EditorState) {
   const chartDir = await projectDir.getDirectoryHandle('chart');
 
   // Save edited chart
-  const chartFile = await chartDir.getFileHandle('notes.edited.chart', { create: true });
+  const chartFile = await chartDir.getFileHandle('notes.edited.chart', {
+    create: true,
+  });
   const chartWritable = await chartFile.createWritable();
   await chartWritable.write(chartText);
   await chartWritable.close();
 
   // Save review progress
-  const reviewFile = await chartDir.getFileHandle('review-progress.json', { create: true });
+  const reviewFile = await chartDir.getFileHandle('review-progress.json', {
+    create: true,
+  });
   const reviewWritable = await reviewFile.createWritable();
   await reviewWritable.write(reviewJson);
   await reviewWritable.close();
 
-  dispatch({ type: 'MARK_SAVED' });
+  dispatch({type: 'MARK_SAVED'});
 }
 ```
 
 ### 5.4 Dirty Indicator
 
 Show a visual indicator in the toolbar when there are unsaved changes:
+
 - Small dot or asterisk next to the song title
 - Tooltip: "Unsaved changes" or "Last saved: 2 minutes ago"
 
@@ -321,6 +337,7 @@ Show a visual indicator in the toolbar when there are unsaved changes:
 ### 6.1 Concept
 
 The user should be able to hear different audio stems at different volumes during editing. Key use cases:
+
 - **Solo drums**: hear only the drum stem to verify transcription accuracy
 - **Full mix**: hear everything to understand the musical context
 - **Drums + backing**: hear drums louder with the rest quieter
@@ -341,6 +358,7 @@ Volume Controls:
 ```
 
 Each track has:
+
 - A volume slider (0-100%)
 - A Solo button `[S]`: mutes all other tracks, solos this one
 - A Mute button `[M]`: mutes this track
@@ -349,8 +367,8 @@ Track names come from the audio files loaded from OPFS. The available tracks dep
 
 ### 6.4 Keyboard Shortcuts
 
-| Key | Action |
-|---|---|
+| Key | Action            |
+| --- | ----------------- |
 | `D` | Toggle drums solo |
 | `M` | Toggle mute drums |
 
@@ -359,9 +377,9 @@ Track names come from the audio files loaded from OPFS. The available tracks dep
 ```typescript
 interface EditorState {
   // ... existing
-  trackVolumes: Record<string, number>;  // trackName -> volume (0-1)
-  soloTrack: string | null;              // track name that is currently soloed
-  mutedTracks: Set<string>;              // tracks that are muted
+  trackVolumes: Record<string, number>; // trackName -> volume (0-1)
+  soloTrack: string | null; // track name that is currently soloed
+  mutedTracks: Set<string>; // tracks that are muted
 }
 ```
 
@@ -404,7 +422,7 @@ AudioManager already handles looping back to the start of the practice region wh
 ```typescript
 interface EditorState {
   // ... existing
-  loopRegion: { startMs: number; endMs: number } | null;
+  loopRegion: {startMs: number; endMs: number} | null;
 }
 ```
 
@@ -451,7 +469,7 @@ interface EditorState {
   trackVolumes: Record<string, number>;
   soloTrack: string | null;
   mutedTracks: Set<string>;
-  loopRegion: { startMs: number; endMs: number } | null;
+  loopRegion: {startMs: number; endMs: number} | null;
 }
 ```
 

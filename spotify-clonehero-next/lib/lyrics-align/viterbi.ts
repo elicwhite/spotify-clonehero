@@ -55,10 +55,7 @@ export function forcedAlign(
   // Precompute skip mask
   const canSkip = new Uint8Array(L);
   for (let s = 2; s < L; s++) {
-    if (
-      ctcTokens[s] !== blankIdx &&
-      ctcTokens[s] !== ctcTokens[s - 2]
-    ) {
+    if (ctcTokens[s] !== blankIdx && ctcTokens[s] !== ctcTokens[s - 2]) {
       canSkip[s] = 1;
     }
   }
@@ -101,9 +98,7 @@ export function forcedAlign(
 
   // Backtrace
   let s =
-    dp[(T - 1) * L + (L - 1)] >= dp[(T - 1) * L + (L - 2)]
-      ? L - 1
-      : L - 2;
+    dp[(T - 1) * L + (L - 1)] >= dp[(T - 1) * L + (L - 2)] ? L - 1 : L - 2;
 
   const pathS = new Int32Array(T);
   for (let t = T - 1; t >= 0; t--) {

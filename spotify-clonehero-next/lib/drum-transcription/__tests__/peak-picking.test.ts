@@ -235,8 +235,8 @@ describe('pickPeaksFromModelOutput', () => {
 
     expect(events.length).toBeGreaterThanOrEqual(2);
 
-    const bdEvents = events.filter((e) => e.drumClass === 'BD');
-    const sdEvents = events.filter((e) => e.drumClass === 'SD');
+    const bdEvents = events.filter(e => e.drumClass === 'BD');
+    const sdEvents = events.filter(e => e.drumClass === 'SD');
     expect(bdEvents.length).toBeGreaterThanOrEqual(1);
     expect(sdEvents.length).toBeGreaterThanOrEqual(1);
 
@@ -296,7 +296,7 @@ describe('pickPeaksFromModelOutput', () => {
 
     for (let cls = 0; cls < nClasses; cls++) {
       const classEvents = events.filter(
-        (e) => e.midiPitch === expectedPitches[cls],
+        e => e.midiPitch === expectedPitches[cls],
       );
       expect(classEvents.length).toBeGreaterThanOrEqual(1);
     }
@@ -315,8 +315,8 @@ describe('pickPeaksFromModelOutput', () => {
     const modelOutput: ModelOutput = {predictions, nFrames, nClasses};
     const events = pickPeaksFromModelOutput(modelOutput);
 
-    const bdEvents = events.filter((e) => e.drumClass === 'BD');
-    const htEvents = events.filter((e) => e.drumClass === 'HT');
+    const bdEvents = events.filter(e => e.drumClass === 'BD');
+    const htEvents = events.filter(e => e.drumClass === 'HT');
     expect(bdEvents.length).toBeGreaterThanOrEqual(1);
     expect(htEvents.length).toBe(0);
   });

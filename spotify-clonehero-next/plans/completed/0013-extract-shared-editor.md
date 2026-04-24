@@ -52,14 +52,14 @@ interface ChartEditorProps {
   chart: ParsedChart;
   chartDoc: ChartDocument;
   audioManager: AudioManager;
-  audioData?: Float32Array;         // For waveform display
+  audioData?: Float32Array; // For waveform display
   audioChannels?: number;
   durationSeconds: number;
-  sections?: Section[];             // For section jumping in transport
-  leftPanelChildren?: ReactNode;    // Page-specific left sidebar panels
-  onSave?: () => Promise<void>;     // Auto-save callback
-  saveConfig?: AutoSaveConfig;      // OPFS paths, interval
-  children?: ReactNode;             // Additional content
+  sections?: Section[]; // For section jumping in transport
+  leftPanelChildren?: ReactNode; // Page-specific left sidebar panels
+  onSave?: () => Promise<void>; // Auto-save callback
+  saveConfig?: AutoSaveConfig; // OPFS paths, interval
+  children?: ReactNode; // Additional content
 }
 ```
 
@@ -70,6 +70,7 @@ The shell wraps everything in `ChartEditorProvider` and renders the core layout.
 Split the current `EditorContext` into a base context with generic editing state:
 
 ### State kept in base context (generic):
+
 - `chart`, `chartDoc`, `track` — chart data
 - `isPlaying`, `currentTimeMs`, `playbackSpeed` — playback
 - `zoom` — view scaling
@@ -80,10 +81,12 @@ Split the current `EditorContext` into a base context with generic editing state
 - `loopRegion` — A-B loop
 
 ### State removed from base (page-specific):
+
 - `confidence`, `showConfidence`, `confidenceThreshold` — ML confidence
 - `reviewedNoteIds` — review tracking
 
 ### Approach:
+
 The base context handles all generic actions. Drum-transcription wraps it with additional state for confidence/review via a separate `DrumTranscriptionContext` that composes on top.
 
 ```typescript
@@ -104,36 +107,37 @@ The base context handles all generic actions. Drum-transcription wraps it with a
 
 ### Move to `components/chart-editor/` (generic):
 
-| Component | Changes Needed |
-|-----------|---------------|
-| `TransportControls.tsx` | None — already generic. Update imports. |
-| `WaveformDisplay.tsx` | None — already generic. Update imports. |
-| `LoopControls.tsx` | None — already generic. Update imports. |
-| `EditToolbar.tsx` | None significant — tool modes are already defined in context. Update imports. |
-| `HighwayEditor.tsx` | Update context import to use base ChartEditorContext. |
-| `DrumHighwayPreview.tsx` | Update imports. |
-| `NoteInspector.tsx` | Update imports. Stays drum-focused for now (drums-only instrument). |
-| `ExportDialog.tsx` | Decouple from OPFS project structure — accept chart/audio data as props instead. |
-| `commands.ts` | Move to `components/chart-editor/commands.ts`. |
-| `useEditCommands.ts` | Move to `components/chart-editor/hooks/`. |
-| `useEditorKeyboard.ts` | Split: generic shortcuts → shared hook. Drum ML shortcuts (N for confidence nav, D/M for stems) → kept in drum-transcription via a callback/extension mechanism. |
-| `useAutoSave.ts` | Generalize — accept save function and interval config as parameters instead of hardcoding OPFS paths. |
+| Component                | Changes Needed                                                                                                                                                   |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TransportControls.tsx`  | None — already generic. Update imports.                                                                                                                          |
+| `WaveformDisplay.tsx`    | None — already generic. Update imports.                                                                                                                          |
+| `LoopControls.tsx`       | None — already generic. Update imports.                                                                                                                          |
+| `EditToolbar.tsx`        | None significant — tool modes are already defined in context. Update imports.                                                                                    |
+| `HighwayEditor.tsx`      | Update context import to use base ChartEditorContext.                                                                                                            |
+| `DrumHighwayPreview.tsx` | Update imports.                                                                                                                                                  |
+| `NoteInspector.tsx`      | Update imports. Stays drum-focused for now (drums-only instrument).                                                                                              |
+| `ExportDialog.tsx`       | Decouple from OPFS project structure — accept chart/audio data as props instead.                                                                                 |
+| `commands.ts`            | Move to `components/chart-editor/commands.ts`.                                                                                                                   |
+| `useEditCommands.ts`     | Move to `components/chart-editor/hooks/`.                                                                                                                        |
+| `useEditorKeyboard.ts`   | Split: generic shortcuts → shared hook. Drum ML shortcuts (N for confidence nav, D/M for stems) → kept in drum-transcription via a callback/extension mechanism. |
+| `useAutoSave.ts`         | Generalize — accept save function and interval config as parameters instead of hardcoding OPFS paths.                                                            |
 
 ### Keep in `app/drum-transcription/components/` (domain-specific):
 
-| Component | Reason |
-|-----------|--------|
-| `EditorApp.tsx` | Loads from OPFS, initializes ML data. Refactored to compose ChartEditor. |
-| `ProcessingView.tsx` | ML pipeline progress UI. |
-| `AudioUploader.tsx` | Audio upload for ML pipeline. |
-| `ConfidencePanel.tsx` | ML confidence scores. Uses DrumTranscriptionContext. |
-| `StemVolumeControls.tsx` | Demucs-specific stem names. Passed as leftPanelChildren. |
+| Component                | Reason                                                                   |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `EditorApp.tsx`          | Loads from OPFS, initializes ML data. Refactored to compose ChartEditor. |
+| `ProcessingView.tsx`     | ML pipeline progress UI.                                                 |
+| `AudioUploader.tsx`      | Audio upload for ML pipeline.                                            |
+| `ConfidencePanel.tsx`    | ML confidence scores. Uses DrumTranscriptionContext.                     |
+| `StemVolumeControls.tsx` | Demucs-specific stem names. Passed as leftPanelChildren.                 |
 
 ## 4. useEditorKeyboard Split
 
 The keyboard hook has both generic and domain-specific shortcuts:
 
 **Generic (move to shared):**
+
 - Tool selection: 1-5 (cursor, place, erase, bpm, timesig)
 - Grid snap: Shift+1-6, Shift+0
 - Editing: Ctrl+Z, Ctrl+Shift+Z, Delete, Ctrl+A, Escape
@@ -142,6 +146,7 @@ The keyboard hook has both generic and domain-specific shortcuts:
 - Save: Ctrl+S
 
 **Domain-specific (keep in drum-transcription, passed as extension):**
+
 - N / Shift+N — jump to next/prev low-confidence note
 - D — toggle drums solo
 - M — toggle drums mute

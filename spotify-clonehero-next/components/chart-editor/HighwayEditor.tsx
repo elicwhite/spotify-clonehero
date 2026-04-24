@@ -92,7 +92,8 @@ export default function HighwayEditor({
   audioChannels = 2,
   durationSeconds,
 }: HighwayEditorProps) {
-  const {state, dispatch, audioManagerRef, reconcilerRef, noteRendererRef} = useChartEditorContext();
+  const {state, dispatch, audioManagerRef, reconcilerRef, noteRendererRef} =
+    useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
 
   const interactionRef = useRef<HTMLDivElement>(null);
@@ -136,7 +137,9 @@ export default function HighwayEditor({
   // Interaction state
   const [hoverLane, setHoverLane] = useState<number | null>(null);
   const [hoverTick, setHoverTick] = useState<number | null>(null);
-  const [hoveredHitType, setHoveredHitType] = useState<'note' | 'section' | 'highway' | null>(null);
+  const [hoveredHitType, setHoveredHitType] = useState<
+    'note' | 'section' | 'highway' | null
+  >(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{x: number; y: number} | null>(
     null,
@@ -163,7 +166,8 @@ export default function HighwayEditor({
   const [isDraggingSection, setIsDraggingSection] = useState(false);
   const [sectionDragTick, setSectionDragTick] = useState<number | null>(null);
   const [sectionDragName, setSectionDragName] = useState<string>('');
-  const [sectionDragOriginalTick, setSectionDragOriginalTick] = useState<number>(0);
+  const [sectionDragOriginalTick, setSectionDragOriginalTick] =
+    useState<number>(0);
 
   // Double-click tracking for section rename
   const lastClickRef = useRef<{tick: number; time: number} | null>(null);
@@ -171,7 +175,10 @@ export default function HighwayEditor({
   // Compute timed tempos for coordinate mapping
   const timedTempos = useMemo(() => {
     if (!state.chartDoc) return [];
-    return buildTimedTempos(state.chartDoc.parsedChart.tempos, state.chartDoc.parsedChart.resolution);
+    return buildTimedTempos(
+      state.chartDoc.parsedChart.tempos,
+      state.chartDoc.parsedChart.resolution,
+    );
   }, [state.chartDoc]);
 
   const resolution = state.chartDoc?.parsedChart.resolution ?? 480;
@@ -216,11 +223,13 @@ export default function HighwayEditor({
       tick: t.tick,
       beatsPerMinute: t.beatsPerMinute,
     }));
-    const timeSignatures = state.chartDoc.parsedChart.timeSignatures.map(ts => ({
-      tick: ts.tick,
-      numerator: ts.numerator,
-      denominator: ts.denominator,
-    }));
+    const timeSignatures = state.chartDoc.parsedChart.timeSignatures.map(
+      ts => ({
+        tick: ts.tick,
+        numerator: ts.numerator,
+        denominator: ts.denominator,
+      }),
+    );
     handle.setGridData({
       tempos,
       timeSignatures,
@@ -322,7 +331,8 @@ export default function HighwayEditor({
       e.preventDefault();
       const coords = getElementCoords(e);
       const hit = hitTestAt(coords.x, coords.y);
-      const lane = hit && 'lane' in hit ? hit.lane : screenToLane(coords.x, coords.y);
+      const lane =
+        hit && 'lane' in hit ? hit.lane : screenToLane(coords.x, coords.y);
       const tick = hit ? hit.tick : screenToTick(coords.x, coords.y);
 
       switch (state.activeTool) {
@@ -332,11 +342,7 @@ export default function HighwayEditor({
             // Double-click detection for rename
             const now = Date.now();
             const last = lastClickRef.current;
-            if (
-              last &&
-              last.tick === hit.tick &&
-              now - last.time < 400
-            ) {
+            if (last && last.tick === hit.tick && now - last.time < 400) {
               // Double-click: open rename popover
               lastClickRef.current = null;
               setSectionNameInput(hit.name);
@@ -405,9 +411,7 @@ export default function HighwayEditor({
           const type = laneToType(lane);
           // Toggle: if a note exists at this position, remove it
           if (hit?.type === 'note') {
-            executeCommand(
-              new DeleteNotesCommand(new Set([hit.noteId])),
-            );
+            executeCommand(new DeleteNotesCommand(new Set([hit.noteId])));
           } else {
             executeCommand(
               new AddNoteCommand({
@@ -422,9 +426,7 @@ export default function HighwayEditor({
         }
         case 'erase': {
           if (hit?.type === 'note') {
-            executeCommand(
-              new DeleteNotesCommand(new Set([hit.noteId])),
-            );
+            executeCommand(new DeleteNotesCommand(new Set([hit.noteId])));
           }
           setIsErasing(true);
           break;
@@ -490,7 +492,9 @@ export default function HighwayEditor({
 
       // Update hover lane/tick from hit result
       if (hit) {
-        setHoverLane('lane' in hit ? hit.lane : screenToLane(coords.x, coords.y));
+        setHoverLane(
+          'lane' in hit ? hit.lane : screenToLane(coords.x, coords.y),
+        );
         setHoverTick(hit.tick);
         setHoveredHitType(hit.type);
       } else {
@@ -516,9 +520,7 @@ export default function HighwayEditor({
       // Erase mode: paint-erase while dragging
       if (isErasing && state.activeTool === 'erase') {
         if (hit?.type === 'note') {
-          executeCommand(
-            new DeleteNotesCommand(new Set([hit.noteId])),
-          );
+          executeCommand(new DeleteNotesCommand(new Set([hit.noteId])));
         }
       }
     },
@@ -695,13 +697,20 @@ export default function HighwayEditor({
       const direction = e.deltaY < 0 ? 1 : -1;
       const currentChartMs = am.chartTime * 1000;
       const maxChartMs = am.duration * 1000 - am.chartDelay * 1000;
-      const targetChartMs = Math.max(0, Math.min(currentChartMs + direction * SCROLL_STEP_MS, maxChartMs));
+      const targetChartMs = Math.max(
+        0,
+        Math.min(currentChartMs + direction * SCROLL_STEP_MS, maxChartMs),
+      );
 
       am.playChartTime(targetChartMs / 1000).then(() => am.pause());
 
       // Update cursor tick to match
       if (timedTempos.length > 0) {
-        const tick = msToTick(targetChartMs, timedTempos, state.chartDoc.parsedChart.resolution);
+        const tick = msToTick(
+          targetChartMs,
+          timedTempos,
+          state.chartDoc.parsedChart.resolution,
+        );
         dispatch({type: 'SET_CURSOR_TICK', tick});
       }
     };
@@ -799,7 +808,6 @@ export default function HighwayEditor({
       );
       nr.setReviewedNoteIds(reviewedNoteIds ?? null);
     }
-
   }, [
     state.cursorTick,
     state.isPlaying,
@@ -859,10 +867,7 @@ export default function HighwayEditor({
       const snapped =
         state.gridDivision === 0
           ? Math.max(0, cursorTick)
-          : Math.max(
-              0,
-              snapToGrid(cursorTick, resolution, state.gridDivision),
-            );
+          : Math.max(0, snapToGrid(cursorTick, resolution, state.gridDivision));
       dispatch({type: 'SET_CURSOR_TICK', tick: snapped});
     }
     // audioManagerRef is a stable ref from context, not a dependency

@@ -144,7 +144,9 @@ export async function createProject(opts: {
   }
 
   // Write all non-audio, non-chart files at the project root (e.g. album art, song.ini)
-  const audioFileNames = new Set(opts.audioFiles.map(f => f.fileName.toLowerCase()));
+  const audioFileNames = new Set(
+    opts.audioFiles.map(f => f.fileName.toLowerCase()),
+  );
   const manifest: OriginalFileEntry[] = [];
 
   for (const file of opts.allFiles) {
@@ -277,7 +279,10 @@ export async function loadAudioFiles(
   for await (const [name, handle] of audioDir.entries()) {
     if (handle.kind !== 'file') continue;
     const file = await (handle as FileSystemFileHandle).getFile();
-    files.push({fileName: name, data: new Uint8Array(await file.arrayBuffer())});
+    files.push({
+      fileName: name,
+      data: new Uint8Array(await file.arrayBuffer()),
+    });
   }
 
   return files;
@@ -303,7 +308,9 @@ export async function loadFilesForExport(
   // Read manifest to know what other files exist
   try {
     const manifestHandle = await dir.getFileHandle(ORIGINAL_FILES_MANIFEST);
-    const manifest = (await readJsonFile(manifestHandle)) as OriginalFileEntry[];
+    const manifest = (await readJsonFile(
+      manifestHandle,
+    )) as OriginalFileEntry[];
 
     for (const entry of manifest) {
       const lowerName = entry.fileName.toLowerCase();
@@ -328,7 +335,9 @@ export async function loadFilesForExport(
           });
         }
       } catch {
-        console.warn(`drum-edit export: Could not read file "${entry.fileName}"`);
+        console.warn(
+          `drum-edit export: Could not read file "${entry.fileName}"`,
+        );
       }
     }
   } catch {

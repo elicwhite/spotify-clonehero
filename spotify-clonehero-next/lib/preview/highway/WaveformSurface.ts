@@ -139,7 +139,10 @@ export class WaveformSurface {
     ctx.fillRect(0, 0, w, h);
 
     // Convert time range to sample range
-    const startSample = Math.max(0, Math.floor((startMs / 1000) * this.sampleRate));
+    const startSample = Math.max(
+      0,
+      Math.floor((startMs / 1000) * this.sampleRate),
+    );
     const endSample = Math.min(
       Math.floor((endMs / 1000) * this.sampleRate),
       this.audioData.length / this.channels,

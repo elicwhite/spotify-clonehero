@@ -71,20 +71,20 @@ lib/drum-transcription/
 
 ## 2. Existing Utilities to Reuse — DO NOT Reimplement
 
-| Need | Existing Code | Notes |
-|------|--------------|-------|
-| Chart parsing | `@eliwhite/scan-chart` | `parseChartFile()`, `NoteEvent`, `noteTypes`, `noteFlags` |
-| SNG parsing | `parse-sng` | Extract .sng archives |
-| Tick → ms | `app/sheet-music/[slug]/chartUtils.ts` → `tickToMs()` | Consider moving to `lib/` for sharing |
-| Drum lane mapping | `lib/fill-detector/drumLaneMap.ts` | `DrumVoice`, `NoteType` → voice |
-| OPFS helpers | `lib/fileSystemHelpers.ts` | `writeFile()`, `readJsonFile()`, `readTextFile()` |
-| INI parsing | `lib/ini-parser.ts` | Parse song.ini |
-| Audio playback | `lib/preview/audioManager.ts` | Web Audio API, speed control |
-| Highway rendering | `app/sheet-music/[slug]/CloneHeroRenderer.tsx` | Clone Hero 3D highway renderer |
-| UI components | `components/ui/` | Button, Dialog, Card, Select, Slider, etc. |
-| Icons | `lucide-react` | Already installed |
-| Toasts | `sonner` | Already configured in root layout |
-| CSS utility | `lib/utils.ts` → `cn()` | Tailwind class merging |
+| Need              | Existing Code                                         | Notes                                                     |
+| ----------------- | ----------------------------------------------------- | --------------------------------------------------------- |
+| Chart parsing     | `@eliwhite/scan-chart`                                | `parseChartFile()`, `NoteEvent`, `noteTypes`, `noteFlags` |
+| SNG parsing       | `parse-sng`                                           | Extract .sng archives                                     |
+| Tick → ms         | `app/sheet-music/[slug]/chartUtils.ts` → `tickToMs()` | Consider moving to `lib/` for sharing                     |
+| Drum lane mapping | `lib/fill-detector/drumLaneMap.ts`                    | `DrumVoice`, `NoteType` → voice                           |
+| OPFS helpers      | `lib/fileSystemHelpers.ts`                            | `writeFile()`, `readJsonFile()`, `readTextFile()`         |
+| INI parsing       | `lib/ini-parser.ts`                                   | Parse song.ini                                            |
+| Audio playback    | `lib/preview/audioManager.ts`                         | Web Audio API, speed control                              |
+| Highway rendering | `app/sheet-music/[slug]/CloneHeroRenderer.tsx`        | Clone Hero 3D highway renderer                            |
+| UI components     | `components/ui/`                                      | Button, Dialog, Card, Select, Slider, etc.                |
+| Icons             | `lucide-react`                                        | Already installed                                         |
+| Toasts            | `sonner`                                              | Already configured in root layout                         |
+| CSS utility       | `lib/utils.ts` → `cn()`                               | Tailwind class merging                                    |
 
 > **Shared utility policy:** Any utilities or libraries needed by the drum transcription feature that already exist elsewhere in the project should first be extracted into a shared lib location, and the original callsite should be updated. This refactoring should happen in its own commit before being used by new code.
 
@@ -92,11 +92,11 @@ lib/drum-transcription/
 
 ## 3. New Dependencies to Install
 
-| Package | Purpose |
-|---------|---------|
-| `fft.js` | Pure JS FFT for STFT/iSTFT (Demucs preprocessing) |
-| `fflate` | Browser-native ZIP compression for export |
-| `wavesurfer.js` | Waveform display in editor |
+| Package         | Purpose                                           |
+| --------------- | ------------------------------------------------- |
+| `fft.js`        | Pure JS FFT for STFT/iSTFT (Demucs preprocessing) |
+| `fflate`        | Browser-native ZIP compression for export         |
+| `wavesurfer.js` | Waveform display in editor                        |
 
 ONNX Runtime Web is loaded from CDN (not bundled), following demucs-next's pattern.
 

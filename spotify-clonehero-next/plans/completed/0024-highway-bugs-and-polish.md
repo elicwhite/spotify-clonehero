@@ -10,6 +10,7 @@
 ### 1. Waveform never renders on highway in waveform mode
 
 The waveform toggle in the sidebar switches to "Waveform" mode but nothing visible changes on the highway surface. Debug the data flow:
+
 - Is `audioData` (Float32Array) reaching `HighwayEditor` → `DrumHighwayPreview` → `setupRenderer`?
 - Is `setWaveformData()` being called on the renderer?
 - Is the WaveformSurface mesh being created and added to the scene?
@@ -24,6 +25,7 @@ Trace the full data path from `ChartEditor` props through to the Three.js scene.
 The Moonscraper reference screenshot shows crisp, solid white lines for beats and thicker lines for measures. The current GridOverlay renders lines to a CanvasTexture which gets blurry due to texture filtering and perspective projection.
 
 **Fix approach:** Instead of rendering lines to a texture (which gets filtered/interpolated), render beat lines as individual `THREE.Line` objects in the scene at each beat position. This is what chart-preview does — each beat line is a separate 3D line spanning the highway width at the correct world Y. Lines are:
+
 - Thin white for subdivision beats
 - Medium white for beats
 - Thick/bright white for measure boundaries
@@ -47,6 +49,7 @@ Similarly, when hit-testing for kick notes in InteractionManager, a click anywhe
 When in Place mode, hovering over the highway should show a semi-transparent note preview (ghost note) at the nearest grid-snapped position. Currently nothing appears and clicking doesn't add notes.
 
 Debug:
+
 - Is the Place tool's mouse handler calling the correct SceneOverlays/NotesManager methods?
 - Is the ghost note sprite being created and positioned?
 - Is the click handler creating an AddNoteCommand and executing it?
@@ -59,6 +62,7 @@ The ghost should show a cymbal/tom sprite (with ~50% opacity) at the grid-snappe
 In Moonscraper, scrolling the mouse wheel scrubs the playback position forward/backward, effectively scrolling through the chart. Currently the mouse wheel does nothing on the highway.
 
 **Implementation:**
+
 - Add a `wheel` event handler on the highway container div
 - Wheel up (deltaY < 0) = move forward in time (same as arrow up / grid step forward)
 - Wheel down (deltaY > 0) = move backward in time

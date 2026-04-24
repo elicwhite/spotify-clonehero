@@ -12,30 +12,37 @@ Currently `HighwayEditor.tsx` has a transparent `<canvas>` overlaying the Three.
 ## What Moves into Three.js
 
 ### 1. Selection Highlights
+
 **Current:** 2D filled/stroked rectangle at projected screen position.
 **New:** Add a semi-transparent plane or outline mesh behind/around the selected note sprite. Managed by NotesManager — when a note is selected, attach a highlight child mesh to its group.
 
 ### 2. Ghost Note Previews (Place mode)
+
 **Current:** Colored circles drawn at cursor tick + each lane position.
 **New:** Semi-transparent note sprites at the ghost position. Reuse the same texture as the real note but with reduced opacity. Created/destroyed by NotesManager.
 
 ### 3. Cursor Line
+
 **Current:** Green horizontal line drawn across the overlay canvas.
 **New:** A THREE.Line or thin PlaneGeometry mesh spanning the highway width at cursorTick's world Y. Updated each frame.
 
 ### 4. Section Banners
+
 **Current:** Gold rectangles with text drawn on overlay canvas.
 **New:** PlaneGeometry meshes with CanvasTexture for the text label. Positioned at section tick's world Y, spanning highway width. Only visible sections rendered (same world Y clipping).
 
 ### 5. Box Select Rectangle
+
 **Current:** Blue dashed rectangle drawn from drag start to current mouse position.
 **New:** This one is inherently screen-space (it's a 2D selection box on screen). Keep this as a simple DOM element or minimal overlay. Alternatively, project the four corners into 3D and draw a quad — but a DOM `<div>` with absolute positioning is simpler and correct.
 
 ### 6. Confidence Indicators
+
 **Current:** Colored circles/arcs around notes based on ML confidence.
 **New:** Tinted ring meshes or colored planes behind notes. Managed by NotesManager similar to selection highlights.
 
 ### 7. Review Indicators
+
 **Current:** Small green dots near reviewed notes.
 **New:** Small sprite or circle mesh attached to note group.
 
@@ -73,6 +80,7 @@ clearGhostNote(): void
 ```
 
 ### What stays in React (HighwayEditor.tsx)
+
 - Mouse event handlers (onMouseDown/Move/Up) — React owns events
 - Tool mode logic (which tool is active, what a click means)
 - Box select rectangle — rendered as a DOM `<div>` with absolute positioning
@@ -80,6 +88,7 @@ clearGhostNote(): void
 - Keyboard shortcut handling — stays in useEditorKeyboard
 
 ### What's deleted
+
 - The overlay `<canvas>` element
 - The entire `draw()` function in HighwayEditor's useEffect
 - `localNoteToScreen()`, `laneScreenBounds()`, `worldToScreen()` helper functions (no longer needed for drawing — hit testing moves to InteractionManager in plan 0021)
@@ -102,7 +111,9 @@ function createSectionBanner(name: string, width: number): THREE.Mesh {
 
   const texture = new THREE.CanvasTexture(canvas);
   const material = new THREE.MeshBasicMaterial({
-    map: texture, transparent: true, depthTest: false
+    map: texture,
+    transparent: true,
+    depthTest: false,
   });
   const geometry = new THREE.PlaneGeometry(width, 0.02);
   const mesh = new THREE.Mesh(geometry, material);

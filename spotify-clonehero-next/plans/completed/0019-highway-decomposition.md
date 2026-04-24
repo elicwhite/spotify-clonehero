@@ -24,6 +24,7 @@ lib/preview/highway/
 ## Module Responsibilities
 
 ### HighwayScene.ts
+
 - Creates THREE.WebGLRenderer, THREE.Scene, THREE.PerspectiveCamera
 - Camera setup: 90° FOV, z=0.8, y=-1.3, rotation 60°
 - Clipping planes (beginning/end)
@@ -35,6 +36,7 @@ lib/preview/highway/
 - `destroy()` for cleanup
 
 ### NotesManager.ts
+
 - `prepare(track, textureManager)` — flattens note groups into PreparedNote[], determines star power
 - `updateDisplayedNotes(currentTimeMs)` — windowed culling via EventSequence
 - Sprite pooling: `acquireGroup()`, `recycleGroup()`
@@ -44,6 +46,7 @@ lib/preview/highway/
 - `getActiveNoteGroups()` — expose for hit testing
 
 ### TextureManager.ts
+
 - `loadNoteTextures(instrument, textureLoader, animatedTextureManager)` — all texture loading
 - `getTextureForNote(note, options)` — returns correct SpriteMaterial
 - AnimatedTexture class (WebP frame extraction via ImageDecoder)
@@ -51,16 +54,19 @@ lib/preview/highway/
 - Texture fallback chains (SP → no-SP → no-dynamic → plain)
 
 ### EventSequence.ts
+
 - Already a standalone generic class — just move it to its own file
 - `EventSequence<T extends {msTime: number; msLength: number}>`
 - `getEarliestActiveEventIndex(startMs)` — cursor-based lookup
 
 ### types.ts
+
 - `PreparedNote` interface
 - `HighwayRendererHandle` interface (getCamera, getHighwaySpeed)
 - Constants: SCALE, HIGHWAY_DURATION_MS, SYNC_MS, etc.
 
 ### index.ts
+
 - `setupRenderer()` — composes the modules:
   1. Creates HighwayScene
   2. Creates TextureManager
@@ -74,10 +80,12 @@ lib/preview/highway/
 ## Preserving Compatibility
 
 ### sheet-music (CloneHeroRenderer.tsx)
+
 Currently imports: `import {setupRenderer} from '@/lib/preview/highway'`
 After: `import {setupRenderer} from '@/lib/preview/highway'` (same — index.ts re-exports)
 
 ### drum-edit (DrumHighwayPreview.tsx)
+
 Currently imports: `import {setupRenderer} from '@/lib/preview/highway'`
 After: identical import, identical API.
 

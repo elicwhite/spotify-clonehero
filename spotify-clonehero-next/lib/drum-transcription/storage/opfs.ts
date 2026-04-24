@@ -314,9 +314,7 @@ export async function projectFileExists(
 /**
  * Lists all file names in a project directory.
  */
-export async function listProjectFiles(
-  projectId: string,
-): Promise<string[]> {
+export async function listProjectFiles(projectId: string): Promise<string[]> {
   const dir = await getProjectDir(projectId);
   const files: string[] = [];
   for await (const [name, handle] of dir.entries()) {

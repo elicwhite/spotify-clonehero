@@ -7,7 +7,10 @@ describe('exportAsZip', () => {
   test('round-trips file entries', () => {
     const files: FileEntry[] = [
       {filename: 'notes.chart', data: new TextEncoder().encode('[Song]\n{}')},
-      {filename: 'song.ini', data: new TextEncoder().encode('[song]\nname = Test')},
+      {
+        filename: 'song.ini',
+        data: new TextEncoder().encode('[song]\nname = Test'),
+      },
       {filename: 'song.ogg', data: new Uint8Array([0x4f, 0x67, 0x67, 0x53])},
     ];
 

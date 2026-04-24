@@ -3,10 +3,12 @@
 ## Context
 
 chart-edit currently fills a gap between scan-chart's raw parsers and what consumers need:
+
 - Raw parsers (`parseNotesFromChart`, `parseNotesFromMidi`) produce `RawChartData` with 9-field metadata — they parse a single file with no INI awareness.
 - chart-edit's `readChart()` adds file discovery, INI parsing, metadata merging, asset classification, and produces `ChartDocument` — which is just `RawChartData` with richer metadata + `originalFormat` + `assets`.
 
 This gap causes problems:
+
 - **5 patches on scan-chart** via patch-package (must patch both `.js` and `.mjs`, fragile)
 - **INI parsing duplicated** — scan-chart has `ini-scanner.ts`/`ini-parser.ts`, chart-edit uses `lib/ini-parser` + its own field extraction
 - **Metadata type split** — `RawChartData.metadata` (9 fields) vs `ChartMetadata` (30+ fields + `extraIniFields`), connected by `Omit<RawChartData, 'metadata'>`
@@ -37,11 +39,11 @@ scanChartFolder(files)                       (refactored, calls parseChartFolder
 
 **Three types currently serve overlapping roles:**
 
-| Type | Role | Fields | Where populated |
-|------|------|--------|-----------------|
-| `RawChartData.metadata` | Parser **output** — what a single file contains | 9 display fields (name, artist, album, genre, year, charter, diff_guitar, delay, preview_start_time) | .chart parser from `[Song]`; MIDI parser gets almost nothing (just delay via patch) |
-| `IniChartModifiers` | Parser **input** — changes how the MIDI parser interprets notes | 8 behavioral fields (hopo_frequency, five_lane_drums, pro_drums, sustain_cutoff_threshold, etc.) | Built from song.ini before MIDI parsing starts |
-| `ChartMetadata` (chart-edit) | **Union** of everything from song.ini | 30+ fields: all of the above + display-only fields (diff_drums, icon, loading_phrase, album_track, etc.) + `extraIniFields` | Merged from song.ini + raw parser metadata |
+| Type                         | Role                                                            | Fields                                                                                                                      | Where populated                                                                     |
+| ---------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `RawChartData.metadata`      | Parser **output** — what a single file contains                 | 9 display fields (name, artist, album, genre, year, charter, diff_guitar, delay, preview_start_time)                        | .chart parser from `[Song]`; MIDI parser gets almost nothing (just delay via patch) |
+| `IniChartModifiers`          | Parser **input** — changes how the MIDI parser interprets notes | 8 behavioral fields (hopo_frequency, five_lane_drums, pro_drums, sustain_cutoff_threshold, etc.)                            | Built from song.ini before MIDI parsing starts                                      |
+| `ChartMetadata` (chart-edit) | **Union** of everything from song.ini                           | 30+ fields: all of the above + display-only fields (diff_drums, icon, loading_phrase, album_track, etc.) + `extraIniFields` | Merged from song.ini + raw parser metadata                                          |
 
 These have **zero overlap** between metadata (output) and modifiers (input). `ChartMetadata` is the superset.
 
@@ -62,6 +64,7 @@ metadata: ChartMetadata
 ```
 
 **Add `ChartMetadata` type to scan-chart** (moved from chart-edit's `types.ts`):
+
 ```typescript
 export interface ChartMetadata {
   name?: string;
@@ -105,6 +108,7 @@ export interface ChartMetadata {
 ```
 
 **Add passthrough fields to `RawChartData`:**
+
 ```typescript
 // Added to RawChartData for roundtrip data preservation
 chartSongSection?: Array<{ key: string; value: string }>;
@@ -114,6 +118,7 @@ unknownChartSections?: Array<{ name: string; lines: string[] }>;
 ```
 
 **Add `ChartDocument` type to scan-chart:**
+
 ```typescript
 export interface ChartDocument extends RawChartData {
   originalFormat: 'chart' | 'mid';
@@ -124,6 +129,7 @@ export interface ChartDocument extends RawChartData {
 Note: `RawChartData.metadata` is now `ChartMetadata`, so no `Omit` needed.
 
 **Add `FileEntry` type to scan-chart:**
+
 ```typescript
 export interface FileEntry {
   fileName: string;
@@ -156,14 +162,17 @@ Currently reimplements file discovery and INI parsing. Refactor to:
 ### INI consolidation
 
 scan-chart currently has two INI-related files:
+
 - `ini/ini-parser.ts` — raw `[section] key=value` parser
 - `ini/ini-scanner.ts` — `scanIni()` + `extractSongMetadata()` + `defaultMetadata`
 
 chart-edit currently uses:
+
 - `lib/ini-parser` — separate raw INI parser (used by `reader.ts`)
 - `reader.ts` — field extraction with `INI_STRING_FIELDS`, `INI_INT_FIELDS`, etc.
 
 After refactor:
+
 - scan-chart's `ini/ini-parser.ts` stays (raw parser)
 - `parseChartFolder` uses scan-chart's INI parser + new field extraction logic (merged from chart-edit's `reader.ts` and scan-chart's `extractSongMetadata()`)
 - chart-edit drops its INI parsing — no longer imports `lib/ini-parser`
@@ -185,8 +194,8 @@ MIDI files often contain tracks scan-chart doesn't parse: `PART REAL_GUITAR`, `P
 // New field on RawChartData
 unknownMidiTracks: Array<{
   name: string;
-  events: MidiEvent[];  // Raw midi-file events, preserving delta times
-}>
+  events: MidiEvent[]; // Raw midi-file events, preserving delta times
+}>;
 ```
 
 The MIDI writer emits these tracks verbatim after all known tracks.
@@ -201,8 +210,8 @@ The MIDI writer emits these tracks verbatim after all known tracks.
 // New field on RawChartData
 unknownChartSections: Array<{
   name: string;
-  lines: string[];  // Raw lines between { and }, preserving original text
-}>
+  lines: string[]; // Raw lines between { and }, preserving original text
+}>;
 ```
 
 The .chart writer emits these sections verbatim after all known sections.
@@ -232,6 +241,7 @@ This patch gets baked into scan-chart source.
 ### Patches baked in
 
 All patches from `patches/@eliwhite+scan-chart+7.2.1.patch` get applied directly to scan-chart source:
+
 1. Missing drum note mappings (kickAccent, kickGhost, forceFlam)
 2. Track section E events with quotes
 3. Solo section length calculation
@@ -251,46 +261,46 @@ The patch file is deleted. `postinstall: patch-package` removed (if no other pat
 
 ### scan-chart (~/projects/scan-chart)
 
-| File | Change |
-|------|--------|
-| `src/chart/note-parsing-interfaces.ts` | Add `ChartMetadata`, `FileEntry` types. Change `RawChartData.metadata` to `ChartMetadata`. Add passthrough fields (`chartSongSection`, `unknownMidiTracks`, `unknownChartSections`). Add `ChartDocument` extending `RawChartData`. |
-| `src/chart/chart-folder-parser.ts` | **New file.** `parseChartFolder(files: FileEntry[]): ChartDocument` — moved from chart-edit `reader.ts`. |
-| `src/ini/ini-scanner.ts` | Refactor `extractSongMetadata()` to produce `ChartMetadata` with full field set + `extraIniFields`. Remove `defaultMetadata` flat object (replaced by typed extraction). |
-| `src/index.ts` | Export `parseChartFolder`, `ChartDocument`, `ChartMetadata`, `FileEntry`. Refactor `scanChartFolder` to call `parseChartFolder` internally. |
-| `src/chart/chart-parser.ts` | Apply patch: quote stripping, section name parsing. **Add:** capture raw `[Song]` key-value pairs into `chartSongSection`. Collect unrecognized track sections into `unknownChartSections` (sections not in `trackNameMap` and not `Song`/`SyncTrack`/`Events`). |
-| `src/chart/midi-parser.ts` | Apply patches: drum note mappings, delay propagation, vocal phrase noteNumber, event dedup, track dedup, instrument event validation. **Add:** collect unrecognized MIDI tracks into `unknownMidiTracks`. Preserve modifier sustains in `modifierSustains` (bake existing patch). |
-| `src/chart/notes-parser.ts` | Apply patch: solo section length |
-| `src/index.ts` | Export raw parsers directly (currently patched in) |
+| File                                   | Change                                                                                                                                                                                                                                                                            |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/chart/note-parsing-interfaces.ts` | Add `ChartMetadata`, `FileEntry` types. Change `RawChartData.metadata` to `ChartMetadata`. Add passthrough fields (`chartSongSection`, `unknownMidiTracks`, `unknownChartSections`). Add `ChartDocument` extending `RawChartData`.                                                |
+| `src/chart/chart-folder-parser.ts`     | **New file.** `parseChartFolder(files: FileEntry[]): ChartDocument` — moved from chart-edit `reader.ts`.                                                                                                                                                                          |
+| `src/ini/ini-scanner.ts`               | Refactor `extractSongMetadata()` to produce `ChartMetadata` with full field set + `extraIniFields`. Remove `defaultMetadata` flat object (replaced by typed extraction).                                                                                                          |
+| `src/index.ts`                         | Export `parseChartFolder`, `ChartDocument`, `ChartMetadata`, `FileEntry`. Refactor `scanChartFolder` to call `parseChartFolder` internally.                                                                                                                                       |
+| `src/chart/chart-parser.ts`            | Apply patch: quote stripping, section name parsing. **Add:** capture raw `[Song]` key-value pairs into `chartSongSection`. Collect unrecognized track sections into `unknownChartSections` (sections not in `trackNameMap` and not `Song`/`SyncTrack`/`Events`).                  |
+| `src/chart/midi-parser.ts`             | Apply patches: drum note mappings, delay propagation, vocal phrase noteNumber, event dedup, track dedup, instrument event validation. **Add:** collect unrecognized MIDI tracks into `unknownMidiTracks`. Preserve modifier sustains in `modifierSustains` (bake existing patch). |
+| `src/chart/notes-parser.ts`            | Apply patch: solo section length                                                                                                                                                                                                                                                  |
+| `src/index.ts`                         | Export raw parsers directly (currently patched in)                                                                                                                                                                                                                                |
 
 ### chart-edit (lib/chart-edit)
 
-| File | Change |
-|------|--------|
-| `reader.ts` | **Delete.** Logic moved to scan-chart's `parseChartFolder`. |
-| `types.ts` | Remove `ChartMetadata`, `ChartDocument`, `FileEntry` — import from scan-chart. Keep drum helper types (`DrumNoteType`, `DrumNoteFlags`, etc.) and event type mappings. |
-| `index.ts` | Replace `export { readChart }` with re-export of `parseChartFolder` from scan-chart (or alias as `readChart` for compatibility). Export `ChartDocument`, `ChartMetadata`, `FileEntry` from scan-chart. |
-| `writer.ts` | Import `ChartDocument` from scan-chart instead of local types. |
-| `writer-chart.ts` | Import types from scan-chart. Use `chartSongSection` to preserve [Song] field order and unknown fields. Emit `unknownChartSections` verbatim after known sections. |
-| `writer-mid.ts` | Import types from scan-chart. Use `modifierSustains` for sustain-range SysEx (already implemented). Emit `unknownMidiTracks` verbatim after known instrument tracks. |
-| `writer-ini.ts` | Import `ChartMetadata` from scan-chart. |
-| `helpers/*.ts` | Import types from scan-chart. |
-| `__tests__/*.ts` | Update imports. Tests that called `readChart` now call `parseChartFolder`. |
+| File              | Change                                                                                                                                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `reader.ts`       | **Delete.** Logic moved to scan-chart's `parseChartFolder`.                                                                                                                                            |
+| `types.ts`        | Remove `ChartMetadata`, `ChartDocument`, `FileEntry` — import from scan-chart. Keep drum helper types (`DrumNoteType`, `DrumNoteFlags`, etc.) and event type mappings.                                 |
+| `index.ts`        | Replace `export { readChart }` with re-export of `parseChartFolder` from scan-chart (or alias as `readChart` for compatibility). Export `ChartDocument`, `ChartMetadata`, `FileEntry` from scan-chart. |
+| `writer.ts`       | Import `ChartDocument` from scan-chart instead of local types.                                                                                                                                         |
+| `writer-chart.ts` | Import types from scan-chart. Use `chartSongSection` to preserve [Song] field order and unknown fields. Emit `unknownChartSections` verbatim after known sections.                                     |
+| `writer-mid.ts`   | Import types from scan-chart. Use `modifierSustains` for sustain-range SysEx (already implemented). Emit `unknownMidiTracks` verbatim after known instrument tracks.                                   |
+| `writer-ini.ts`   | Import `ChartMetadata` from scan-chart.                                                                                                                                                                |
+| `helpers/*.ts`    | Import types from scan-chart.                                                                                                                                                                          |
+| `__tests__/*.ts`  | Update imports. Tests that called `readChart` now call `parseChartFolder`.                                                                                                                             |
 
 ### Consumers in the app
 
-| File | Change |
-|------|--------|
-| `app/add-lyrics/page.tsx` | `readChart` → `parseChartFolder` (or use re-exported alias) |
-| `app/drum-edit/page.tsx` | Same |
-| `lib/preview/chorus-chart-processing.ts` | May use `parseChartFolder` instead of `parseChartFile` + manual INI handling |
+| File                                            | Change                                                                                    |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `app/add-lyrics/page.tsx`                       | `readChart` → `parseChartFolder` (or use re-exported alias)                               |
+| `app/drum-edit/page.tsx`                        | Same                                                                                      |
+| `lib/preview/chorus-chart-processing.ts`        | May use `parseChartFolder` instead of `parseChartFile` + manual INI handling              |
 | All files importing from `@eliwhite/scan-chart` | No change if types are re-exported from chart-edit. Direct scan-chart imports still work. |
 
 ### Project root
 
-| File | Change |
-|------|--------|
-| `package.json` | Update `@eliwhite/scan-chart` dependency to local workspace path or new version |
-| `patches/@eliwhite+scan-chart+7.2.1.patch` | Delete |
+| File                                       | Change                                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------------------- |
+| `package.json`                             | Update `@eliwhite/scan-chart` dependency to local workspace path or new version |
+| `patches/@eliwhite+scan-chart+7.2.1.patch` | Delete                                                                          |
 
 ## Migration strategy
 

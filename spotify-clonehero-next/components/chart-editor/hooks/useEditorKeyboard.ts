@@ -103,9 +103,11 @@ export function useEditorKeyboard(
   // Get expert notes for clipboard and navigation
   const getExpertTrack = useCallback(() => {
     if (!state.chartDoc) return null;
-    return state.chartDoc.parsedChart.trackData.find(
-      t => t.instrument === 'drums' && t.difficulty === 'expert',
-    ) ?? null;
+    return (
+      state.chartDoc.parsedChart.trackData.find(
+        t => t.instrument === 'drums' && t.difficulty === 'expert',
+      ) ?? null
+    );
   }, [state.chartDoc]);
 
   // Helper: sync cursor tick from current audio position.
@@ -121,8 +123,16 @@ export function useEditorKeyboard(
     );
     if (timedTempos.length === 0) return state.cursorTick;
     const currentMs = am.chartTime * 1000;
-    const tick = msToTick(currentMs, timedTempos, state.chartDoc.parsedChart.resolution);
-    return snapToGrid(tick, state.chartDoc.parsedChart.resolution, state.gridDivision);
+    const tick = msToTick(
+      currentMs,
+      timedTempos,
+      state.chartDoc.parsedChart.resolution,
+    );
+    return snapToGrid(
+      tick,
+      state.chartDoc.parsedChart.resolution,
+      state.gridDivision,
+    );
   }, [audioManagerRef, state.chartDoc, state.cursorTick, state.gridDivision]);
 
   // Helper: seek AudioManager to a tick position (without starting playback)
@@ -134,7 +144,11 @@ export function useEditorKeyboard(
         state.chartDoc.parsedChart.tempos,
         state.chartDoc.parsedChart.resolution,
       );
-      const ms = tickToMs(tick, timedTempos, state.chartDoc.parsedChart.resolution);
+      const ms = tickToMs(
+        tick,
+        timedTempos,
+        state.chartDoc.parsedChart.resolution,
+      );
       const wasPlaying = am.isPlaying;
       await am.playChartTime(ms / 1000);
       if (!wasPlaying) {
@@ -154,92 +168,116 @@ export function useEditorKeyboard(
   // -----------------------------------------------------------------------
   // Undo / Redo
   // -----------------------------------------------------------------------
-  useHotkey('Mod+Z', () => {
-    undo();
-  }, {enabled: canUndo});
+  useHotkey(
+    'Mod+Z',
+    () => {
+      undo();
+    },
+    {enabled: canUndo},
+  );
 
-  useHotkey('Mod+Shift+Z', () => {
-    redo();
-  }, {enabled: canRedo, conflictBehavior: 'allow'});
+  useHotkey(
+    'Mod+Shift+Z',
+    () => {
+      redo();
+    },
+    {enabled: canRedo, conflictBehavior: 'allow'},
+  );
 
-  useHotkey('Mod+Y', () => {
-    redo();
-  }, {enabled: canRedo, conflictBehavior: 'allow'});
+  useHotkey(
+    'Mod+Y',
+    () => {
+      redo();
+    },
+    {enabled: canRedo, conflictBehavior: 'allow'},
+  );
 
   // -----------------------------------------------------------------------
   // Copy (Mod+C)
   // -----------------------------------------------------------------------
-  useHotkey('Mod+C', () => {
-    if (state.selectedNoteIds.size === 0) return;
-    const track = getExpertTrack();
-    if (!track) return;
-    const selected = getDrumNotes(track).filter(n =>
-      state.selectedNoteIds.has(noteId(n)),
-    );
-    if (selected.length === 0) return;
+  useHotkey(
+    'Mod+C',
+    () => {
+      if (state.selectedNoteIds.size === 0) return;
+      const track = getExpertTrack();
+      if (!track) return;
+      const selected = getDrumNotes(track).filter(n =>
+        state.selectedNoteIds.has(noteId(n)),
+      );
+      if (selected.length === 0) return;
 
-    const minTick = Math.min(...selected.map(n => n.tick));
-    const normalized: DrumNote[] = selected.map(n => ({
-      ...n,
-      tick: n.tick - minTick,
-      flags: {...n.flags},
-    }));
-    dispatch({type: 'SET_CLIPBOARD', notes: normalized});
-  }, {enabled: state.selectedNoteIds.size > 0});
+      const minTick = Math.min(...selected.map(n => n.tick));
+      const normalized: DrumNote[] = selected.map(n => ({
+        ...n,
+        tick: n.tick - minTick,
+        flags: {...n.flags},
+      }));
+      dispatch({type: 'SET_CLIPBOARD', notes: normalized});
+    },
+    {enabled: state.selectedNoteIds.size > 0},
+  );
 
   // -----------------------------------------------------------------------
   // Cut (Mod+X)
   // -----------------------------------------------------------------------
-  useHotkey('Mod+X', () => {
-    if (state.selectedNoteIds.size === 0) return;
-    const track = getExpertTrack();
-    if (!track) return;
-    const selected = getDrumNotes(track).filter(n =>
-      state.selectedNoteIds.has(noteId(n)),
-    );
-    if (selected.length === 0) return;
+  useHotkey(
+    'Mod+X',
+    () => {
+      if (state.selectedNoteIds.size === 0) return;
+      const track = getExpertTrack();
+      if (!track) return;
+      const selected = getDrumNotes(track).filter(n =>
+        state.selectedNoteIds.has(noteId(n)),
+      );
+      if (selected.length === 0) return;
 
-    // Copy
-    const minTick = Math.min(...selected.map(n => n.tick));
-    const normalized: DrumNote[] = selected.map(n => ({
-      ...n,
-      tick: n.tick - minTick,
-      flags: {...n.flags},
-    }));
-    dispatch({type: 'SET_CLIPBOARD', notes: normalized});
+      // Copy
+      const minTick = Math.min(...selected.map(n => n.tick));
+      const normalized: DrumNote[] = selected.map(n => ({
+        ...n,
+        tick: n.tick - minTick,
+        flags: {...n.flags},
+      }));
+      dispatch({type: 'SET_CLIPBOARD', notes: normalized});
 
-    // Delete
-    executeCommand(new DeleteNotesCommand(state.selectedNoteIds));
-    dispatch({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
-  }, {enabled: state.selectedNoteIds.size > 0});
+      // Delete
+      executeCommand(new DeleteNotesCommand(state.selectedNoteIds));
+      dispatch({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
+    },
+    {enabled: state.selectedNoteIds.size > 0},
+  );
 
   // -----------------------------------------------------------------------
   // Paste (Mod+V)
   // -----------------------------------------------------------------------
-  useHotkey('Mod+V', () => {
-    if (state.clipboard.length === 0 || !state.chartDoc) return;
-    const cursorTick = state.cursorTick;
+  useHotkey(
+    'Mod+V',
+    () => {
+      if (state.clipboard.length === 0 || !state.chartDoc) return;
+      const cursorTick = state.cursorTick;
 
-    const commands = state.clipboard.map(
-      n =>
-        new AddNoteCommand({
-          ...n,
-          tick: n.tick + cursorTick,
-          flags: {...n.flags},
-        }),
-    );
-
-    if (commands.length > 0) {
-      executeCommand(
-        new BatchCommand(commands, `Paste ${commands.length} note(s)`),
+      const commands = state.clipboard.map(
+        n =>
+          new AddNoteCommand({
+            ...n,
+            tick: n.tick + cursorTick,
+            flags: {...n.flags},
+          }),
       );
 
-      const newIds = new Set(
-        state.clipboard.map(n => noteId({...n, tick: n.tick + cursorTick})),
-      );
-      dispatch({type: 'SET_SELECTED_NOTES', noteIds: newIds});
-    }
-  }, {enabled: state.clipboard.length > 0 && state.chartDoc !== null});
+      if (commands.length > 0) {
+        executeCommand(
+          new BatchCommand(commands, `Paste ${commands.length} note(s)`),
+        );
+
+        const newIds = new Set(
+          state.clipboard.map(n => noteId({...n, tick: n.tick + cursorTick})),
+        );
+        dispatch({type: 'SET_SELECTED_NOTES', noteIds: newIds});
+      }
+    },
+    {enabled: state.clipboard.length > 0 && state.chartDoc !== null},
+  );
 
   // -----------------------------------------------------------------------
   // Loop clear (Mod+L)
@@ -268,9 +306,13 @@ export function useEditorKeyboard(
   // -----------------------------------------------------------------------
   for (const [key, tool] of Object.entries(TOOL_SHORTCUT_MAP)) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    useHotkey(`Mod+${key}` as Hotkey, () => {
-      dispatch({type: 'SET_ACTIVE_TOOL', tool});
-    }, {conflictBehavior: 'allow'});
+    useHotkey(
+      `Mod+${key}` as Hotkey,
+      () => {
+        dispatch({type: 'SET_ACTIVE_TOOL', tool});
+      },
+      {conflictBehavior: 'allow'},
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -289,18 +331,22 @@ export function useEditorKeyboard(
     seekToTick(newTick);
   });
 
-  useHotkey('ArrowRight', () => {
-    if (state.isPlaying || !state.chartDoc) return;
-    const baseTick = getCursorFromAudio();
-    const newTick = getNextGridTick(
-      baseTick,
-      1,
-      state.gridDivision,
-      state.chartDoc.parsedChart.resolution,
-    );
-    dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
-    seekToTick(newTick);
-  }, {conflictBehavior: 'allow'});
+  useHotkey(
+    'ArrowRight',
+    () => {
+      if (state.isPlaying || !state.chartDoc) return;
+      const baseTick = getCursorFromAudio();
+      const newTick = getNextGridTick(
+        baseTick,
+        1,
+        state.gridDivision,
+        state.chartDoc.parsedChart.resolution,
+      );
+      dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
+      seekToTick(newTick);
+    },
+    {conflictBehavior: 'allow'},
+  );
 
   useHotkey('ArrowDown', () => {
     if (state.isPlaying || !state.chartDoc) return;
@@ -315,18 +361,22 @@ export function useEditorKeyboard(
     seekToTick(newTick);
   });
 
-  useHotkey('ArrowLeft', () => {
-    if (state.isPlaying || !state.chartDoc) return;
-    const baseTick = getCursorFromAudio();
-    const newTick = getNextGridTick(
-      baseTick,
-      -1,
-      state.gridDivision,
-      state.chartDoc.parsedChart.resolution,
-    );
-    dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
-    seekToTick(newTick);
-  }, {conflictBehavior: 'allow'});
+  useHotkey(
+    'ArrowLeft',
+    () => {
+      if (state.isPlaying || !state.chartDoc) return;
+      const baseTick = getCursorFromAudio();
+      const newTick = getNextGridTick(
+        baseTick,
+        -1,
+        state.gridDivision,
+        state.chartDoc.parsedChart.resolution,
+      );
+      dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
+      seekToTick(newTick);
+    },
+    {conflictBehavior: 'allow'},
+  );
 
   // -----------------------------------------------------------------------
   // Measure navigation (Mod+arrows)
@@ -344,18 +394,22 @@ export function useEditorKeyboard(
     seekToTick(newTick);
   });
 
-  useHotkey('Mod+ArrowRight', () => {
-    if (state.isPlaying || !state.chartDoc) return;
-    const baseTick = getCursorFromAudio();
-    const newTick = getNextMeasureTick(
-      baseTick,
-      1,
-      state.chartDoc.parsedChart.resolution,
-      state.chartDoc.parsedChart.timeSignatures,
-    );
-    dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
-    seekToTick(newTick);
-  }, {conflictBehavior: 'allow'});
+  useHotkey(
+    'Mod+ArrowRight',
+    () => {
+      if (state.isPlaying || !state.chartDoc) return;
+      const baseTick = getCursorFromAudio();
+      const newTick = getNextMeasureTick(
+        baseTick,
+        1,
+        state.chartDoc.parsedChart.resolution,
+        state.chartDoc.parsedChart.timeSignatures,
+      );
+      dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
+      seekToTick(newTick);
+    },
+    {conflictBehavior: 'allow'},
+  );
 
   useHotkey('Mod+ArrowDown', () => {
     if (state.isPlaying || !state.chartDoc) return;
@@ -370,27 +424,35 @@ export function useEditorKeyboard(
     seekToTick(newTick);
   });
 
-  useHotkey('Mod+ArrowLeft', () => {
-    if (state.isPlaying || !state.chartDoc) return;
-    const baseTick = getCursorFromAudio();
-    const newTick = getNextMeasureTick(
-      baseTick,
-      -1,
-      state.chartDoc.parsedChart.resolution,
-      state.chartDoc.parsedChart.timeSignatures,
-    );
-    dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
-    seekToTick(newTick);
-  }, {conflictBehavior: 'allow'});
+  useHotkey(
+    'Mod+ArrowLeft',
+    () => {
+      if (state.isPlaying || !state.chartDoc) return;
+      const baseTick = getCursorFromAudio();
+      const newTick = getNextMeasureTick(
+        baseTick,
+        -1,
+        state.chartDoc.parsedChart.resolution,
+        state.chartDoc.parsedChart.timeSignatures,
+      );
+      dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
+      seekToTick(newTick);
+    },
+    {conflictBehavior: 'allow'},
+  );
 
   // -----------------------------------------------------------------------
   // Grid snap shortcuts (Shift+number)
   // -----------------------------------------------------------------------
   for (const [key, division] of Object.entries(GRID_SHORTCUT_MAP)) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    useHotkey(`Shift+${key}` as Hotkey, () => {
-      dispatch({type: 'SET_GRID_DIVISION', division});
-    }, {conflictBehavior: 'allow'});
+    useHotkey(
+      `Shift+${key}` as Hotkey,
+      () => {
+        dispatch({type: 'SET_GRID_DIVISION', division});
+      },
+      {conflictBehavior: 'allow'},
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -398,32 +460,36 @@ export function useEditorKeyboard(
   // -----------------------------------------------------------------------
   for (const [key, lane] of Object.entries(LANE_KEY_MAP)) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    useHotkey(key as Hotkey, () => {
-      if (!state.chartDoc) return;
-      const type: DrumNoteType = laneToType(lane);
-      const tick = state.cursorTick;
+    useHotkey(
+      key as Hotkey,
+      () => {
+        if (!state.chartDoc) return;
+        const type: DrumNoteType = laneToType(lane);
+        const tick = state.cursorTick;
 
-      const track = getExpertTrack();
-      if (track) {
-        const existing = getDrumNotes(track).find(
-          n => n.tick === tick && n.type === type,
-        );
-        if (existing) {
-          const id = noteId(existing);
-          executeCommand(new DeleteNotesCommand(new Set([id])));
-          onNotesModified?.([id]);
-        } else {
-          const newNote: DrumNote = {
-            tick,
-            type,
-            length: 0,
-            flags: defaultFlagsForType(type),
-          };
-          executeCommand(new AddNoteCommand(newNote));
-          onNotesModified?.([noteId(newNote)]);
+        const track = getExpertTrack();
+        if (track) {
+          const existing = getDrumNotes(track).find(
+            n => n.tick === tick && n.type === type,
+          );
+          if (existing) {
+            const id = noteId(existing);
+            executeCommand(new DeleteNotesCommand(new Set([id])));
+            onNotesModified?.([id]);
+          } else {
+            const newNote: DrumNote = {
+              tick,
+              type,
+              length: 0,
+              flags: defaultFlagsForType(type),
+            };
+            executeCommand(new AddNoteCommand(newNote));
+            onNotesModified?.([noteId(newNote)]);
+          }
         }
-      }
-    }, {enabled: state.activeTool === 'place', conflictBehavior: 'allow'});
+      },
+      {enabled: state.activeTool === 'place', conflictBehavior: 'allow'},
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -431,9 +497,13 @@ export function useEditorKeyboard(
   // -----------------------------------------------------------------------
   for (const [key, tool] of Object.entries(TOOL_SHORTCUT_MAP)) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    useHotkey(key as Hotkey, () => {
-      dispatch({type: 'SET_ACTIVE_TOOL', tool});
-    }, {enabled: state.activeTool !== 'place', conflictBehavior: 'allow'});
+    useHotkey(
+      key as Hotkey,
+      () => {
+        dispatch({type: 'SET_ACTIVE_TOOL', tool});
+      },
+      {enabled: state.activeTool !== 'place', conflictBehavior: 'allow'},
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -441,14 +511,21 @@ export function useEditorKeyboard(
   // -----------------------------------------------------------------------
   for (const [key, flag] of Object.entries(FLAG_SHORTCUT_MAP)) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    useHotkey(key.toUpperCase() as Hotkey, () => {
-      if (state.selectedNoteIds.size > 0 && state.chartDoc) {
-        executeCommand(
-          new ToggleFlagCommand(Array.from(state.selectedNoteIds), flag),
-        );
-        onNotesModified?.(Array.from(state.selectedNoteIds));
-      }
-    }, {enabled: state.selectedNoteIds.size > 0 && state.chartDoc !== null, conflictBehavior: 'allow'});
+    useHotkey(
+      key.toUpperCase() as Hotkey,
+      () => {
+        if (state.selectedNoteIds.size > 0 && state.chartDoc) {
+          executeCommand(
+            new ToggleFlagCommand(Array.from(state.selectedNoteIds), flag),
+          );
+          onNotesModified?.(Array.from(state.selectedNoteIds));
+        }
+      },
+      {
+        enabled: state.selectedNoteIds.size > 0 && state.chartDoc !== null,
+        conflictBehavior: 'allow',
+      },
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -460,9 +537,7 @@ export function useEditorKeyboard(
         s => s.tick === state.selectedSectionTick,
       );
       if (section) {
-        executeCommand(
-          new DeleteSectionCommand(section.tick, section.name),
-        );
+        executeCommand(new DeleteSectionCommand(section.tick, section.name));
         dispatch({type: 'SET_SELECTED_SECTION', tick: null});
       }
       return;
@@ -472,14 +547,23 @@ export function useEditorKeyboard(
       executeCommand(new DeleteNotesCommand(state.selectedNoteIds));
       dispatch({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
     }
-  }, [state.selectedSectionTick, state.selectedNoteIds, state.chartDoc, executeCommand, dispatch, onNotesModified]);
+  }, [
+    state.selectedSectionTick,
+    state.selectedNoteIds,
+    state.chartDoc,
+    executeCommand,
+    dispatch,
+    onNotesModified,
+  ]);
 
   useHotkey('Delete', handleDelete, {
-    enabled: state.selectedNoteIds.size > 0 || state.selectedSectionTick !== null,
+    enabled:
+      state.selectedNoteIds.size > 0 || state.selectedSectionTick !== null,
   });
 
   useHotkey('Backspace', handleDelete, {
-    enabled: state.selectedNoteIds.size > 0 || state.selectedSectionTick !== null,
+    enabled:
+      state.selectedNoteIds.size > 0 || state.selectedSectionTick !== null,
     conflictBehavior: 'allow',
   });
 

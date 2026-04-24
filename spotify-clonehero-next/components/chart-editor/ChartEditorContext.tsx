@@ -23,7 +23,13 @@ import type {NoteRenderer} from '@/lib/preview/highway/NoteRenderer';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
-export type ToolMode = 'cursor' | 'place' | 'erase' | 'bpm' | 'timesig' | 'section';
+export type ToolMode =
+  | 'cursor'
+  | 'place'
+  | 'erase'
+  | 'bpm'
+  | 'timesig'
+  | 'section';
 
 /** Maximum number of undo entries before oldest are discarded. */
 const UNDO_STACK_CAP = 200;
@@ -190,7 +196,10 @@ const initialState: ChartEditorState = {
 // Reducer
 // ---------------------------------------------------------------------------
 
-function chartEditorReducer(state: ChartEditorState, action: ChartEditorAction): ChartEditorState {
+function chartEditorReducer(
+  state: ChartEditorState,
+  action: ChartEditorAction,
+): ChartEditorState {
   switch (action.type) {
     case 'SET_CHART':
       return {...state, chart: action.chart, track: action.track};
@@ -223,7 +232,9 @@ function chartEditorReducer(state: ChartEditorState, action: ChartEditorAction):
       let newUndoDocStack = [...state.undoDocStack, prevDoc];
       if (newUndoStack.length > UNDO_STACK_CAP) {
         newUndoStack = newUndoStack.slice(newUndoStack.length - UNDO_STACK_CAP);
-        newUndoDocStack = newUndoDocStack.slice(newUndoDocStack.length - UNDO_STACK_CAP);
+        newUndoDocStack = newUndoDocStack.slice(
+          newUndoDocStack.length - UNDO_STACK_CAP,
+        );
       }
 
       const newTrack = action.chart.trackData.find(
@@ -359,13 +370,23 @@ const ChartEditorContext = createContext<ChartEditorContextValue | null>(null);
 export function ChartEditorProvider({children}: {children: ReactNode}) {
   const [state, dispatch] = useReducer(chartEditorReducer, initialState);
   const audioManagerRef = useRef<AudioManager | null>(null);
-  const reconcilerRef = useRef<import('@/lib/preview/highway/SceneReconciler').SceneReconciler | null>(null);
-  const noteRendererRef = useRef<import('@/lib/preview/highway/NoteRenderer').NoteRenderer | null>(null);
+  const reconcilerRef = useRef<
+    import('@/lib/preview/highway/SceneReconciler').SceneReconciler | null
+  >(null);
+  const noteRendererRef = useRef<
+    import('@/lib/preview/highway/NoteRenderer').NoteRenderer | null
+  >(null);
 
   return (
     <HotkeysProvider>
       <ChartEditorContext.Provider
-        value={{state, dispatch, audioManagerRef, reconcilerRef, noteRendererRef}}>
+        value={{
+          state,
+          dispatch,
+          audioManagerRef,
+          reconcilerRef,
+          noteRendererRef,
+        }}>
         {children}
       </ChartEditorContext.Provider>
     </HotkeysProvider>
@@ -375,7 +396,9 @@ export function ChartEditorProvider({children}: {children: ReactNode}) {
 export function useChartEditorContext(): ChartEditorContextValue {
   const ctx = useContext(ChartEditorContext);
   if (!ctx) {
-    throw new Error('useChartEditorContext must be used within a ChartEditorProvider');
+    throw new Error(
+      'useChartEditorContext must be used within a ChartEditorProvider',
+    );
   }
   return ctx;
 }

@@ -36,10 +36,9 @@ let initPromise: Promise<void> | null = null;
 
 function getWorker(): Worker {
   if (!worker) {
-    worker = new Worker(
-      new URL('./aligner-worker.ts', import.meta.url),
-      {type: 'module'},
-    );
+    worker = new Worker(new URL('./aligner-worker.ts', import.meta.url), {
+      type: 'module',
+    });
   }
   return worker;
 }
@@ -48,9 +47,7 @@ function getWorker(): Worker {
  * Download and cache the wav2vec2 model (does NOT create the ONNX session).
  * Safe to call multiple times — only runs once.
  */
-export function init(
-  onProgress?: (msg: string) => void,
-): Promise<void> {
+export function init(onProgress?: (msg: string) => void): Promise<void> {
   if (initPromise) return initPromise;
 
   initPromise = new Promise<void>((resolve, reject) => {
@@ -119,9 +116,6 @@ export async function alignVocals(
     };
 
     w.addEventListener('message', handler);
-    w.postMessage(
-      {type: 'align', vocals16k, lyrics},
-      [vocals16k.buffer],
-    );
+    w.postMessage({type: 'align', vocals16k, lyrics}, [vocals16k.buffer]);
   });
 }

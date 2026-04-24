@@ -6,7 +6,7 @@
  * scan-chart uses in getTimedTempos).
  */
 
-import type { TimedTempo } from './chart-types';
+import type {TimedTempo} from './chart-types';
 
 interface TempoInput {
   tick: number;
@@ -245,7 +245,7 @@ export function getNextMeasureTick(
     // Previous measure boundary
     if (measureInTs > 0) {
       // There's a previous measure in this time signature
-      const prevMeasureTick = (measureInTs) * measureTicks + activeTs.tick;
+      const prevMeasureTick = measureInTs * measureTicks + activeTs.tick;
       // If we're exactly on a measure boundary, go one more back
       if (prevMeasureTick >= currentTick) {
         const evenEarlier = (measureInTs - 1) * measureTicks + activeTs.tick;

@@ -62,10 +62,10 @@ export interface InterpretedDrumNote {
  *
  * Returns a new {type, flags} object — does NOT mutate the input note.
  */
-export function applyDiscoFlip(note: {
+export function applyDiscoFlip(note: {type: NoteType; flags: number}): {
   type: NoteType;
   flags: number;
-}): {type: NoteType; flags: number} {
+} {
   let {type, flags} = note;
 
   if (flags & noteFlags.discoNoflip) {
@@ -104,10 +104,7 @@ export function isKickNote(noteType: NoteType): boolean {
 
 /** True if the note renders as a cymbal (cymbal flag set, not red pad). */
 export function isDrumCymbal(noteType: NoteType, flags: number): boolean {
-  return (
-    (flags & noteFlags.cymbal) !== 0 &&
-    noteType !== noteTypes.redDrum
-  );
+  return (flags & noteFlags.cymbal) !== 0 && noteType !== noteTypes.redDrum;
 }
 
 /**

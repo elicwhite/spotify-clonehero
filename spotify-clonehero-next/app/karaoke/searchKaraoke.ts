@@ -25,9 +25,7 @@ export async function searchKaraoke(query: string): Promise<EncoreResponse> {
   ]);
 
   const combined = [...byName.data, ...byArtist.data];
-  const deduped = Array.from(
-    new Map(combined.map(c => [c.md5, c])).values(),
-  );
+  const deduped = Array.from(new Map(combined.map(c => [c.md5, c])).values());
 
   return {
     found: deduped.length,

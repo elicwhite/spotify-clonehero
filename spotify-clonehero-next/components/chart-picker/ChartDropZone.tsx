@@ -43,14 +43,10 @@ export default function ChartDropZone({
       setIsLoading(true);
       try {
         const result =
-          format === 'zip'
-            ? await readZipFile(file)
-            : await readSngFile(file);
+          format === 'zip' ? await readZipFile(file) : await readSngFile(file);
         onLoaded(result);
       } catch (e) {
-        toast.error(
-          e instanceof Error ? e.message : 'Failed to read file',
-        );
+        toast.error(e instanceof Error ? e.message : 'Failed to read file');
       } finally {
         setIsLoading(false);
       }

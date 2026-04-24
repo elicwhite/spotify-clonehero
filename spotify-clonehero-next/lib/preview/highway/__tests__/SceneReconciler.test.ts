@@ -5,7 +5,11 @@
  * pooling, and selection logic without real WebGL.
  */
 
-import {SceneReconciler, type ChartElement, type ElementRenderer} from '../SceneReconciler';
+import {
+  SceneReconciler,
+  type ChartElement,
+  type ElementRenderer,
+} from '../SceneReconciler';
 
 // ---------------------------------------------------------------------------
 // Minimal THREE.js mocks
@@ -77,7 +81,12 @@ function createMockRenderer(): ElementRenderer & {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function el(key: string, msTime: number, data: unknown = {}, kind = 'note'): ChartElement {
+function el(
+  key: string,
+  msTime: number,
+  data: unknown = {},
+  kind = 'note',
+): ChartElement {
   return {key, kind, msTime, data};
 }
 
@@ -178,9 +187,9 @@ describe('SceneReconciler', () => {
       expect(renderer.created).toHaveLength(3);
 
       reconciler.setElements([
-        el('note:0:kick', 0, {val: 'a'}),       // unchanged
+        el('note:0:kick', 0, {val: 'a'}), // unchanged
         el('note:960:yellowDrum', 1000, {val: 'd'}), // changed
-        el('note:1440:blueDrum', 1400, {val: 'e'}),  // added
+        el('note:1440:blueDrum', 1400, {val: 'e'}), // added
       ]);
       // redDrum removed (recycled), yellowDrum changed (recycled)
       expect(renderer.recycled).toHaveLength(2);
@@ -256,9 +265,7 @@ describe('SceneReconciler', () => {
       expect(renderer.created).toHaveLength(2);
 
       // Remove only one
-      reconciler.setElements([
-        el('note:480:yellowDrum', 500, data),
-      ]);
+      reconciler.setElements([el('note:480:yellowDrum', 500, data)]);
       expect(renderer.recycled).toHaveLength(1);
       expect(reconciler.getActiveGroups().size).toBe(1);
     });
@@ -332,10 +339,7 @@ describe('SceneReconciler', () => {
       const renderer = createMockRenderer();
       const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
 
-      reconciler.setElements([
-        el('note:0:a', 0),
-        el('note:1:b', 2000),
-      ]);
+      reconciler.setElements([el('note:0:a', 0), el('note:1:b', 2000)]);
       reconciler.updateWindow(0);
       expect(renderer.created).toHaveLength(1); // only 'a' in [0, 1500]
 
@@ -351,10 +355,7 @@ describe('SceneReconciler', () => {
       const renderer = createMockRenderer();
       const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
 
-      reconciler.setElements([
-        el('note:0:a', 0),
-        el('note:1:b', 2000),
-      ]);
+      reconciler.setElements([el('note:0:a', 0), el('note:1:b', 2000)]);
 
       // Start at 1500 -- only 'b' in range
       reconciler.updateWindow(1500);
@@ -655,7 +656,10 @@ describe('SceneReconciler', () => {
       // Deselect old, select new
       expect(selectionCalls).toHaveLength(3);
       expect(selectionCalls[1]).toEqual({key: 'note:0:kick', selected: false});
-      expect(selectionCalls[2]).toEqual({key: 'note:480:redDrum', selected: true});
+      expect(selectionCalls[2]).toEqual({
+        key: 'note:480:redDrum',
+        selected: true,
+      });
 
       // No new creates
       expect(renderer.created).toHaveLength(2);

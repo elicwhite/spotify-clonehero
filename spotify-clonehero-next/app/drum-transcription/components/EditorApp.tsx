@@ -107,10 +107,9 @@ function EditorAppInner({projectId}: {projectId: string}) {
     const reviewJson = JSON.stringify({
       reviewed: Array.from(dtState.reviewedNoteIds),
     });
-    const reviewFile = await projectDir.getFileHandle(
-      'review-progress.json',
-      {create: true},
-    );
+    const reviewFile = await projectDir.getFileHandle('review-progress.json', {
+      create: true,
+    });
     const reviewWritable = await reviewFile.createWritable();
     await reviewWritable.write(reviewJson);
     await reviewWritable.close();
@@ -209,14 +208,18 @@ function EditorAppInner({projectId}: {projectId: string}) {
   // -----------------------------------------------------------------------
 
   // Enter - confirm/review selected notes
-  useHotkey('Enter', () => {
-    if (state.selectedNoteIds.size > 0) {
-      dtDispatch({
-        type: 'MARK_REVIEWED',
-        noteIds: Array.from(state.selectedNoteIds),
-      });
-    }
-  }, {enabled: state.selectedNoteIds.size > 0});
+  useHotkey(
+    'Enter',
+    () => {
+      if (state.selectedNoteIds.size > 0) {
+        dtDispatch({
+          type: 'MARK_REVIEWED',
+          noteIds: Array.from(state.selectedNoteIds),
+        });
+      }
+    },
+    {enabled: state.selectedNoteIds.size > 0},
+  );
 
   // N - jump to next low-confidence note
   useHotkey('N', () => {
@@ -272,11 +275,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
 
         // 3. Parse chart
         const chartBytes = new TextEncoder().encode(loadedChartText);
-        const parsed = parseChartFile(
-          chartBytes,
-          'chart',
-          PRO_DRUMS_MODIFIERS,
-        );
+        const parsed = parseChartFile(chartBytes, 'chart', PRO_DRUMS_MODIFIERS);
 
         // 4. Find expert drums track
         const drumTrack = parsed.trackData.find(
@@ -397,7 +396,9 @@ function EditorAppInner({projectId}: {projectId: string}) {
         await audioManager.ready;
         if (cancelled) return;
 
-        audioManager.setChartDelay(getChartDelayMs(chartDoc.parsedChart.metadata) / 1000);
+        audioManager.setChartDelay(
+          getChartDelayMs(chartDoc.parsedChart.metadata) / 1000,
+        );
         audioManagerRef.current = audioManager;
 
         // 11. Update editor state
@@ -447,10 +448,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
   // Provide chart text for export
   const getChartText = useCallback(async (): Promise<string> => {
     let chartText: string;
-    const hasEdited = await projectFileExists(
-      projectId,
-      'notes.edited.chart',
-    );
+    const hasEdited = await projectFileExists(projectId, 'notes.edited.chart');
     if (hasEdited) {
       chartText = await readProjectText(projectId, 'notes.edited.chart');
     } else {
@@ -492,10 +490,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
 
       for (const stemName of stemNames) {
         try {
-          const buffer = await readProjectBinary(
-            projectId,
-            `${stemName}.pcm`,
-          );
+          const buffer = await readProjectBinary(projectId, `${stemName}.pcm`);
           stemBuffers.push(new Float32Array(buffer));
         } catch {
           // Stem not available
@@ -516,10 +511,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
         const songWav = encodeWav(mixed, aMeta.sampleRate, aMeta.channels);
         sources.push({fileName: 'song.wav', data: songWav});
       } else {
-        const fullPcmBuffer = await readProjectBinary(
-          projectId,
-          'full.pcm',
-        );
+        const fullPcmBuffer = await readProjectBinary(projectId, 'full.pcm');
         const fullPcm = new Float32Array(fullPcmBuffer);
         const songWav = encodeWav(fullPcm, aMeta.sampleRate, aMeta.channels);
         sources.push({fileName: 'song.wav', data: songWav});

@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import {noteFlags, noteTypes, Instrument} from '@eliwhite/scan-chart';
-import {interpretDrumNote, noteTypeToPad} from '../../drum-mapping/noteToInstrument';
+import {
+  interpretDrumNote,
+  noteTypeToPad,
+} from '../../drum-mapping/noteToInstrument';
 import {DRUM_TEXTURE_PATH, SP_FLAG, type Note} from './types';
 
 // ---------------------------------------------------------------------------
@@ -283,7 +286,11 @@ export async function loadTexture(
   animatedTextureManager?: AnimatedTextureManager,
 ): Promise<THREE.Texture> {
   // For .webp files, try animated loading if ImageDecoder is available
-  if (animatedTextureManager && url.endsWith('.webp') && isImageDecoderSupported()) {
+  if (
+    animatedTextureManager &&
+    url.endsWith('.webp') &&
+    isImageDecoderSupported()
+  ) {
     try {
       const result = await AnimatedTexture.create(textureLoader, url);
 
@@ -295,7 +302,10 @@ export async function loadTexture(
       // Static texture returned (single frame or fallback)
       return result;
     } catch (error) {
-      console.warn(`Failed to load animated texture from ${url}, falling back to static:`, error);
+      console.warn(
+        `Failed to load animated texture from ${url}, falling back to static:`,
+        error,
+      );
       // Fall through to static loading
     }
   }
@@ -325,7 +335,11 @@ async function loadDrumTextureWithFallback(
   animatedTextureManager?: AnimatedTextureManager,
 ): Promise<THREE.Texture> {
   // For .webp files, try animated loading first
-  if (animatedTextureManager && variantUrl.endsWith('.webp') && isImageDecoderSupported()) {
+  if (
+    animatedTextureManager &&
+    variantUrl.endsWith('.webp') &&
+    isImageDecoderSupported()
+  ) {
     try {
       const result = await AnimatedTexture.create(textureLoader, variantUrl);
       if (result instanceof AnimatedTexture) {
@@ -358,7 +372,12 @@ async function loadTomTextures(
   textureLoader: THREE.TextureLoader,
   animatedTextureManager?: AnimatedTextureManager,
 ): Promise<DrumTextureMap> {
-  const tomNoteTypes = [noteTypes.redDrum, noteTypes.yellowDrum, noteTypes.blueDrum, noteTypes.greenDrum] as const;
+  const tomNoteTypes = [
+    noteTypes.redDrum,
+    noteTypes.yellowDrum,
+    noteTypes.blueDrum,
+    noteTypes.greenDrum,
+  ] as const;
   const dynamicFlags: [number, string][] = [
     [noteFlags.none, ''],
     [noteFlags.ghost, '-ghost'],
@@ -374,10 +393,14 @@ async function loadTomTextures(
   // First pass: load all normal (no dynamic, no SP) textures for fallback
   const normalTextures = new Map<number, THREE.Texture>();
   await Promise.all(
-    tomNoteTypes.map(async (noteType) => {
+    tomNoteTypes.map(async noteType => {
       const colorName = noteTypeToPad(noteType)!;
       const url = `${DRUM_TEXTURE_PATH}drum-tom-${colorName}.webp`;
-      const texture = await loadTexture(textureLoader, url, animatedTextureManager);
+      const texture = await loadTexture(
+        textureLoader,
+        url,
+        animatedTextureManager,
+      );
       normalTextures.set(noteType, texture);
     }),
   );
@@ -399,11 +422,17 @@ async function loadTomTextures(
         const fallback = normalTextures.get(noteType)!;
 
         promises.push(
-          loadDrumTextureWithFallback(textureLoader, url, fallback, animatedTextureManager).then(
-            texture => {
-              flagMap.set(combinedFlags, new THREE.SpriteMaterial({map: texture}));
-            },
-          ),
+          loadDrumTextureWithFallback(
+            textureLoader,
+            url,
+            fallback,
+            animatedTextureManager,
+          ).then(texture => {
+            flagMap.set(
+              combinedFlags,
+              new THREE.SpriteMaterial({map: texture}),
+            );
+          }),
         );
       }
     }
@@ -418,7 +447,11 @@ async function loadCymbalTextures(
   animatedTextureManager?: AnimatedTextureManager,
 ): Promise<DrumTextureMap> {
   // No red cymbal in pro drums -- only yellow, blue, green
-  const cymbalNoteTypes = [noteTypes.yellowDrum, noteTypes.blueDrum, noteTypes.greenDrum] as const;
+  const cymbalNoteTypes = [
+    noteTypes.yellowDrum,
+    noteTypes.blueDrum,
+    noteTypes.greenDrum,
+  ] as const;
   const dynamicFlags: [number, string][] = [
     [noteFlags.none, ''],
     [noteFlags.ghost, '-ghost'],
@@ -434,10 +467,14 @@ async function loadCymbalTextures(
   // First pass: load normal textures for fallback
   const normalTextures = new Map<number, THREE.Texture>();
   await Promise.all(
-    cymbalNoteTypes.map(async (noteType) => {
+    cymbalNoteTypes.map(async noteType => {
       const colorName = noteTypeToPad(noteType)!;
       const url = `${DRUM_TEXTURE_PATH}drum-cymbal-${colorName}.webp`;
-      const texture = await loadTexture(textureLoader, url, animatedTextureManager);
+      const texture = await loadTexture(
+        textureLoader,
+        url,
+        animatedTextureManager,
+      );
       normalTextures.set(noteType, texture);
     }),
   );
@@ -459,11 +496,17 @@ async function loadCymbalTextures(
         const fallback = normalTextures.get(noteType)!;
 
         promises.push(
-          loadDrumTextureWithFallback(textureLoader, url, fallback, animatedTextureManager).then(
-            texture => {
-              flagMap.set(combinedFlags, new THREE.SpriteMaterial({map: texture}));
-            },
-          ),
+          loadDrumTextureWithFallback(
+            textureLoader,
+            url,
+            fallback,
+            animatedTextureManager,
+          ).then(texture => {
+            flagMap.set(
+              combinedFlags,
+              new THREE.SpriteMaterial({map: texture}),
+            );
+          }),
         );
       }
     }
@@ -561,9 +604,18 @@ async function loadKickTextures(
 
   const result = new Map<number, THREE.SpriteMaterial>();
   result.set(noteFlags.none, new THREE.SpriteMaterial({map: normalTexture}));
-  result.set(noteFlags.doubleKick, new THREE.SpriteMaterial({map: normalTexture}));
-  result.set(noteFlags.none | SP_FLAG, new THREE.SpriteMaterial({map: spTexture}));
-  result.set(noteFlags.doubleKick | SP_FLAG, new THREE.SpriteMaterial({map: spTexture}));
+  result.set(
+    noteFlags.doubleKick,
+    new THREE.SpriteMaterial({map: normalTexture}),
+  );
+  result.set(
+    noteFlags.none | SP_FLAG,
+    new THREE.SpriteMaterial({map: spTexture}),
+  );
+  result.set(
+    noteFlags.doubleKick | SP_FLAG,
+    new THREE.SpriteMaterial({map: spTexture}),
+  );
   return result;
 }
 
@@ -594,9 +646,18 @@ export async function loadNoteTextures(
       loadKickTextures(textureLoader, animatedTextureManager),
     ]);
   } else {
-    strumTextures = await loadStrumNoteTextures(textureLoader, animatedTextureManager);
-    strumTexturesHopo = await loadStrumHopoNoteTextures(textureLoader, animatedTextureManager);
-    strumTexturesTap = await loadStrumTapNoteTextures(textureLoader, animatedTextureManager);
+    strumTextures = await loadStrumNoteTextures(
+      textureLoader,
+      animatedTextureManager,
+    );
+    strumTexturesHopo = await loadStrumHopoNoteTextures(
+      textureLoader,
+      animatedTextureManager,
+    );
+    strumTexturesTap = await loadStrumTapNoteTextures(
+      textureLoader,
+      animatedTextureManager,
+    );
     openMaterial = new THREE.SpriteMaterial({
       map: await loadTexture(
         textureLoader,
@@ -614,19 +675,25 @@ export async function loadNoteTextures(
         if (interpreted.isKick) {
           // Build lookup flags for kick: preserve doubleKick, add SP if needed
           const lookupFlags =
-            (interpreted.flags & noteFlags.doubleKick) | (inStarPower ? SP_FLAG : 0);
-          return kickTextures.get(lookupFlags) ?? kickTextures.get(noteFlags.none)!;
+            (interpreted.flags & noteFlags.doubleKick) |
+            (inStarPower ? SP_FLAG : 0);
+          return (
+            kickTextures.get(lookupFlags) ?? kickTextures.get(noteFlags.none)!
+          );
         }
 
         const textureMap = interpreted.isCymbal ? cymbalTextures : tomTextures;
-        const typeFlag = interpreted.isCymbal ? noteFlags.cymbal : noteFlags.tom;
+        const typeFlag = interpreted.isCymbal
+          ? noteFlags.cymbal
+          : noteFlags.tom;
 
         // Build lookup flags: type flag + dynamic (ghost/accent) + SP
-        const dynamicFlag = interpreted.dynamic === 'ghost'
-          ? noteFlags.ghost
-          : interpreted.dynamic === 'accent'
-            ? noteFlags.accent
-            : noteFlags.none;
+        const dynamicFlag =
+          interpreted.dynamic === 'ghost'
+            ? noteFlags.ghost
+            : interpreted.dynamic === 'accent'
+              ? noteFlags.accent
+              : noteFlags.none;
         const spFlag = inStarPower ? SP_FLAG : 0;
         const lookupFlags = typeFlag | dynamicFlag | spFlag;
 

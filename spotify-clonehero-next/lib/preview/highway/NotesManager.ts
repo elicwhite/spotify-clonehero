@@ -49,7 +49,9 @@ let selectionMaterial: THREE.MeshBasicMaterial | null = null;
 let hoverMaterial: THREE.MeshBasicMaterial | null = null;
 let reviewMaterial: THREE.MeshBasicMaterial | null = null;
 
-function getSelectionMaterial(clippingPlanes: THREE.Plane[]): THREE.MeshBasicMaterial {
+function getSelectionMaterial(
+  clippingPlanes: THREE.Plane[],
+): THREE.MeshBasicMaterial {
   if (!selectionMaterial) {
     selectionMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -63,7 +65,9 @@ function getSelectionMaterial(clippingPlanes: THREE.Plane[]): THREE.MeshBasicMat
   return selectionMaterial;
 }
 
-function getHoverMaterial(clippingPlanes: THREE.Plane[]): THREE.MeshBasicMaterial {
+function getHoverMaterial(
+  clippingPlanes: THREE.Plane[],
+): THREE.MeshBasicMaterial {
   if (!hoverMaterial) {
     hoverMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -77,7 +81,9 @@ function getHoverMaterial(clippingPlanes: THREE.Plane[]): THREE.MeshBasicMateria
   return hoverMaterial;
 }
 
-function getReviewMaterial(clippingPlanes: THREE.Plane[]): THREE.MeshBasicMaterial {
+function getReviewMaterial(
+  clippingPlanes: THREE.Plane[],
+): THREE.MeshBasicMaterial {
   if (!reviewMaterial) {
     reviewMaterial = new THREE.MeshBasicMaterial({
       color: 0x22c55e,
@@ -93,9 +99,9 @@ function getReviewMaterial(clippingPlanes: THREE.Plane[]): THREE.MeshBasicMateri
 
 /** Confidence ring colors by tier */
 const CONFIDENCE_COLORS = {
-  low: 0xef4444,     // red - conf < 0.5
-  medium: 0xf59e0b,  // amber - conf < threshold
-  mild: 0xf59e0b,    // amber - conf < 0.9
+  low: 0xef4444, // red - conf < 0.5
+  medium: 0xf59e0b, // amber - conf < threshold
+  mild: 0xf59e0b, // amber - conf < 0.9
 };
 
 export class NotesManager {
@@ -189,7 +195,10 @@ export class NotesManager {
   getActiveSprites(): THREE.Sprite[] {
     const sprites: THREE.Sprite[] = [];
     for (const group of this.activeNoteGroups.values()) {
-      if (group.children.length > 0 && group.children[0] instanceof THREE.Sprite) {
+      if (
+        group.children.length > 0 &&
+        group.children[0] instanceof THREE.Sprite
+      ) {
         sprites.push(group.children[0] as THREE.Sprite);
       }
     }
@@ -517,17 +526,18 @@ export class NotesManager {
     // Update existing active notes -- reposition or remove
     for (const [noteIndex, group] of this.activeNoteGroups) {
       const pn = this.preparedNotes[noteIndex];
-      if (
-        noteIndex < noteStartIndex ||
-        pn.msTime > renderEndTimeMs
-      ) {
+      if (noteIndex < noteStartIndex || pn.msTime > renderEndTimeMs) {
         // Off-screen -- recycle
         this.scene.remove(group);
         this.recycleGroup(group);
         this.activeNoteGroups.delete(noteIndex);
       } else {
         // Still visible -- reposition
-        group.position.y = this.noteYPosition(pn.msTime, currentTimeMs, renderEndTimeMs);
+        group.position.y = this.noteYPosition(
+          pn.msTime,
+          currentTimeMs,
+          renderEndTimeMs,
+        );
 
         // Reposition sustain tail if present
         if (pn.msLength > 0 && group.children.length > 1) {
@@ -600,7 +610,11 @@ export class NotesManager {
       sprite.material.depthTest = false;
       sprite.material.transparent = true;
 
-      noteGroup.position.y = this.noteYPosition(pn.msTime, currentTimeMs, renderEndTimeMs);
+      noteGroup.position.y = this.noteYPosition(
+        pn.msTime,
+        currentTimeMs,
+        renderEndTimeMs,
+      );
       noteGroup.position.z = 0;
 
       // Sustain tail (guitar only, non-kick, non-open with length > 0)
@@ -630,9 +644,16 @@ export class NotesManager {
    * Compute a note ID string from a PreparedNote, matching the format used
    * by the editor commands (`tick:type`).
    */
-  private static LANE_TO_DRUM_TYPE = ['redDrum', 'yellowDrum', 'blueDrum', 'greenDrum'];
+  private static LANE_TO_DRUM_TYPE = [
+    'redDrum',
+    'yellowDrum',
+    'blueDrum',
+    'greenDrum',
+  ];
   private noteIdFromPrepared(pn: PreparedNote): string {
-    const drumType = pn.isKick ? 'kick' : (NotesManager.LANE_TO_DRUM_TYPE[pn.lane] ?? 'redDrum');
+    const drumType = pn.isKick
+      ? 'kick'
+      : (NotesManager.LANE_TO_DRUM_TYPE[pn.lane] ?? 'redDrum');
     return `${pn.note.tick ?? 0}:${drumType}`;
   }
 
@@ -640,10 +661,7 @@ export class NotesManager {
    * Update overlay children (selection, confidence, review) on a note group.
    * Called for every active note group each frame.
    */
-  private updateNoteOverlays(
-    group: THREE.Group,
-    pn: PreparedNote,
-  ): void {
+  private updateNoteOverlays(group: THREE.Group, pn: PreparedNote): void {
     const id = this.noteIdFromPrepared(pn);
     const isSelected = this.selectedNoteIds.has(id);
     const isHovered = this.hoveredNoteId === id;
@@ -809,10 +827,7 @@ export class NotesManager {
     ring.visible = true;
   }
 
-  private updateReviewIndicator(
-    group: THREE.Group,
-    id: string,
-  ): void {
+  private updateReviewIndicator(group: THREE.Group, id: string): void {
     if (!this.reviewedNoteIds || !this.reviewedNoteIds.has(id)) {
       if (
         group.children.length > CHILD_REVIEW &&
@@ -917,7 +932,10 @@ export class NotesManager {
     group: THREE.Group,
     material: THREE.SpriteMaterial,
   ): THREE.Sprite {
-    if (group.children.length > 0 && group.children[0] instanceof THREE.Sprite) {
+    if (
+      group.children.length > 0 &&
+      group.children[0] instanceof THREE.Sprite
+    ) {
       const sprite = group.children[0] as THREE.Sprite;
       sprite.material = material;
       sprite.visible = true;
@@ -932,10 +950,7 @@ export class NotesManager {
    * Ensures the group has a sustain-tail mesh as its second child.
    * Creates one if needed, or reconfigures the existing one.
    */
-  private ensureSustain(
-    group: THREE.Group,
-    pn: PreparedNote,
-  ): THREE.Mesh {
+  private ensureSustain(group: THREE.Group, pn: PreparedNote): THREE.Mesh {
     const sustainWorldHeight = 2 * (pn.msLength / HIGHWAY_DURATION_MS);
     const color =
       pn.lane >= 0 && pn.lane < GUITAR_LANE_COLORS.length
@@ -943,10 +958,7 @@ export class NotesManager {
         : '#FFFFFF';
     const sustainWidth = pn.isOpen ? SCALE * 5 : SCALE * 0.3;
 
-    if (
-      group.children.length > 1 &&
-      group.children[1] instanceof THREE.Mesh
-    ) {
+    if (group.children.length > 1 && group.children[1] instanceof THREE.Mesh) {
       const mesh = group.children[1] as THREE.Mesh<
         THREE.PlaneGeometry,
         THREE.MeshBasicMaterial

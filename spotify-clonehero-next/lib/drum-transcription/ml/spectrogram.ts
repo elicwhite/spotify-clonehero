@@ -55,7 +55,7 @@ export function logFrequencies(
   }
 
   // Filter to [fMin, fMax) -- matching madmom's searchsorted filtering
-  return allFreqs.filter((f) => f >= fMin && f < fMax);
+  return allFreqs.filter(f => f >= fMin && f < fMax);
 }
 
 /**
@@ -147,10 +147,7 @@ export function frequenciesToBins(
  * @param numFftBins - Number of FFT bins.
  * @returns Array of normalized triangular filters.
  */
-function triangularFilters(
-  bins: number[],
-  numFftBins: number,
-): Float32Array[] {
+function triangularFilters(bins: number[], numFftBins: number): Float32Array[] {
   const numFilters = bins.length - 2;
   const filters: Float32Array[] = [];
 

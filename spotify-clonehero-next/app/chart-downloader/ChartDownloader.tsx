@@ -13,7 +13,9 @@ import {getLocalDb} from '@/lib/local-db/client';
 import {upsertLocalCharts} from '@/lib/local-db/local-charts';
 import {sql} from 'kysely';
 import {SngStream} from '@eliwhite/parse-sng';
-import scanLocalCharts, {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
+import scanLocalCharts, {
+  SongAccumulator,
+} from '@/lib/local-songs-folder/scanLocalCharts';
 
 type MissingChart = {
   md5: string;
@@ -43,7 +45,9 @@ const NOTES_FILE_PATTERN = /^notes\.(chart|mid)$/i;
 
 /** Files we want to keep from the SNG — notes files and song.ini (generated from header) */
 function shouldKeepFile(fileName: string): boolean {
-  return NOTES_FILE_PATTERN.test(fileName) || fileName.toLowerCase() === 'song.ini';
+  return (
+    NOTES_FILE_PATTERN.test(fileName) || fileName.toLowerCase() === 'song.ini'
+  );
 }
 
 export default function ChartDownloader() {
@@ -145,7 +149,11 @@ export default function ChartDownloader() {
       startedAt: Date.now(),
     });
 
-    await downloadMissingCharts(missing, outputDirRef.current!, abortController);
+    await downloadMissingCharts(
+      missing,
+      outputDirRef.current!,
+      abortController,
+    );
     setStatus('done');
   }, [fetchChorusCharts]);
 
@@ -187,7 +195,7 @@ export default function ChartDownloader() {
         <DownloadProgressCard
           progress={downloadProgress}
           concurrency={concurrency}
-          onConcurrencyChange={(val) => {
+          onConcurrencyChange={val => {
             setConcurrency(val);
             concurrencyRef.current = val;
           }}
@@ -197,7 +205,10 @@ export default function ChartDownloader() {
 
       {status === 'done' && (
         <div className="space-y-4">
-          <DoneCard progress={downloadProgress} missingCount={missingCharts.length} />
+          <DoneCard
+            progress={downloadProgress}
+            missingCount={missingCharts.length}
+          />
           <div className="flex justify-center">
             <Button onClick={handleStart}>Run Again</Button>
           </div>
@@ -296,7 +307,11 @@ export default function ChartDownloader() {
     // Watch for concurrency increases — spawn new workers as needed
     const watchInterval = setInterval(() => {
       const desired = concurrencyRef.current;
-      while (activeWorkers < desired && nextIndex < charts.length && !abortController.signal.aborted) {
+      while (
+        activeWorkers < desired &&
+        nextIndex < charts.length &&
+        !abortController.signal.aborted
+      ) {
         workerPromises.push(worker());
       }
     }, 200);
@@ -311,7 +326,9 @@ async function testIniWriteSupport(
   dir: FileSystemDirectoryHandle,
 ): Promise<boolean> {
   try {
-    const testDir = await dir.getDirectoryHandle('__ini_test__', {create: true});
+    const testDir = await dir.getDirectoryHandle('__ini_test__', {
+      create: true,
+    });
     const fileHandle = await testDir.getFileHandle('song.ini', {create: true});
     const writable = await fileHandle.createWritable();
     await writable.write('[Song]\nname=test\n');
@@ -352,25 +369,32 @@ async function downloadAndStripToFolder(
     await new Promise<void>((resolve, reject) => {
       const sngStream = new SngStream(body, {generateSongIni: true});
 
-      sngStream.on('file', async (fileName: string, fileStream: ReadableStream, nextFile: (() => void) | null) => {
-        try {
-          if (shouldKeepFile(fileName)) {
-            const fileHandle = await songDir.getFileHandle(fileName, {
-              create: true,
-            });
-            const writable = await fileHandle.createWritable();
-            await fileStream.pipeTo(writable);
-          } else {
-            // Drain the stream to move to next file
-            await drainStream(fileStream);
-          }
+      sngStream.on(
+        'file',
+        async (
+          fileName: string,
+          fileStream: ReadableStream,
+          nextFile: (() => void) | null,
+        ) => {
+          try {
+            if (shouldKeepFile(fileName)) {
+              const fileHandle = await songDir.getFileHandle(fileName, {
+                create: true,
+              });
+              const writable = await fileHandle.createWritable();
+              await fileStream.pipeTo(writable);
+            } else {
+              // Drain the stream to move to next file
+              await drainStream(fileStream);
+            }
 
-          if (nextFile) nextFile();
-          else resolve();
-        } catch (err) {
-          reject(err);
-        }
-      });
+            if (nextFile) nextFile();
+            else resolve();
+          } catch (err) {
+            reject(err);
+          }
+        },
+      );
 
       sngStream.on('error', reject);
       sngStream.start();
@@ -415,34 +439,41 @@ async function downloadAndStripToSng(
       sngMetadata = header.metadata ?? {};
     });
 
-    sngStream.on('file', async (fileName: string, fileStream: ReadableStream, nextFile: (() => void) | null) => {
-      try {
-        if (NOTES_FILE_PATTERN.test(fileName)) {
-          const chunks: Uint8Array[] = [];
-          const reader = fileStream.getReader();
-          while (true) {
-            const {done, value} = await reader.read();
-            if (done) break;
-            chunks.push(value);
+    sngStream.on(
+      'file',
+      async (
+        fileName: string,
+        fileStream: ReadableStream,
+        nextFile: (() => void) | null,
+      ) => {
+        try {
+          if (NOTES_FILE_PATTERN.test(fileName)) {
+            const chunks: Uint8Array[] = [];
+            const reader = fileStream.getReader();
+            while (true) {
+              const {done, value} = await reader.read();
+              if (done) break;
+              chunks.push(value);
+            }
+            const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+            const merged = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of chunks) {
+              merged.set(chunk, offset);
+              offset += chunk.length;
+            }
+            collectedFiles.push({filename: fileName, data: merged});
+          } else {
+            await drainStream(fileStream);
           }
-          const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
-          const merged = new Uint8Array(totalLength);
-          let offset = 0;
-          for (const chunk of chunks) {
-            merged.set(chunk, offset);
-            offset += chunk.length;
-          }
-          collectedFiles.push({filename: fileName, data: merged});
-        } else {
-          await drainStream(fileStream);
-        }
 
-        if (nextFile) nextFile();
-        else resolve();
-      } catch (err) {
-        reject(err);
-      }
-    });
+          if (nextFile) nextFile();
+          else resolve();
+        } catch (err) {
+          reject(err);
+        }
+      },
+    );
 
     sngStream.on('error', reject);
     sngStream.start();

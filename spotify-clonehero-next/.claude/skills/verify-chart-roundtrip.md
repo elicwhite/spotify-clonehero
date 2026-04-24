@@ -25,26 +25,26 @@ If tests pass, report results and stop. If tests fail, report failures with deta
 3. **Test structure** — every round-trip test should follow this pattern:
 
 ```typescript
-import { parseChartFile } from '@eliwhite/scan-chart';
-import { serializeChart } from '../chart-io/writer';
+import {parseChartFile} from '@eliwhite/scan-chart';
+import {serializeChart} from '../chart-io/writer';
 
 describe('chart round-trip', () => {
   test('description of what is being verified', () => {
     // 1. Build a ChartDocument with the specific feature being tested
     const doc = {
       resolution: 480,
-      metadata: { name: 'Test', artist: 'Test', resolution: 480 },
-      tempos: [{ tick: 0, bpm: 120 }],
-      timeSignatures: [{ tick: 0, numerator: 4, denominator: 4 }],
+      metadata: {name: 'Test', artist: 'Test', resolution: 480},
+      tempos: [{tick: 0, bpm: 120}],
+      timeSignatures: [{tick: 0, numerator: 4, denominator: 4}],
       sections: [],
       endEvents: [],
-      tracks: [{
-        instrument: 'drums',
-        difficulty: 'expert',
-        notes: [
-          { tick: 0, type: 'kick', length: 0, flags: {} },
-        ],
-      }],
+      tracks: [
+        {
+          instrument: 'drums',
+          difficulty: 'expert',
+          notes: [{tick: 0, type: 'kick', length: 0, flags: {}}],
+        },
+      ],
     };
 
     // 2. Serialize to .chart text
@@ -54,7 +54,7 @@ describe('chart round-trip', () => {
     const parsed = parseChartFile(
       new TextEncoder().encode(chartText),
       'chart',
-      { pro_drums: true }
+      {pro_drums: true},
     );
 
     // 4. Assert specific properties match
@@ -67,20 +67,20 @@ describe('chart round-trip', () => {
 
 4. **Required test cases** — ensure these exist (create any that are missing):
 
-| Test | Verifies |
-|------|----------|
-| Minimal chart (1 note, 1 tempo) | Basic structure serialization |
-| Multiple notes at same tick | Chord grouping (kick + hi-hat) |
-| Pro drums cymbal markers | Notes 66/67/68 round-trip, cymbal vs tom flags |
-| Tempo changes | Multiple BPM events in SyncTrack, millibeats precision |
-| Fractional BPM (e.g., 145.5) | Millibeats encoding (145500) doesn't lose precision |
-| Time signature changes | Denominator exponent encoding (4/4, 3/4, 6/8, 7/8) |
-| Accent and ghost flags | Modifier note numbers (33-37, 39-43) |
-| Double kick | Note 32 alongside note 0 |
-| Section markers | `E "section Name"` events with special characters |
-| Star power phrases | `S 2` events with lengths |
-| Full song simulation | ~500 notes, tempo changes, sections — realistic chart |
-| ms → tick → ms round-trip | Timing precision within 1ms after conversion chain |
+| Test                            | Verifies                                               |
+| ------------------------------- | ------------------------------------------------------ |
+| Minimal chart (1 note, 1 tempo) | Basic structure serialization                          |
+| Multiple notes at same tick     | Chord grouping (kick + hi-hat)                         |
+| Pro drums cymbal markers        | Notes 66/67/68 round-trip, cymbal vs tom flags         |
+| Tempo changes                   | Multiple BPM events in SyncTrack, millibeats precision |
+| Fractional BPM (e.g., 145.5)    | Millibeats encoding (145500) doesn't lose precision    |
+| Time signature changes          | Denominator exponent encoding (4/4, 3/4, 6/8, 7/8)     |
+| Accent and ghost flags          | Modifier note numbers (33-37, 39-43)                   |
+| Double kick                     | Note 32 alongside note 0                               |
+| Section markers                 | `E "section Name"` events with special characters      |
+| Star power phrases              | `S 2` events with lengths                              |
+| Full song simulation            | ~500 notes, tempo changes, sections — realistic chart  |
+| ms → tick → ms round-trip       | Timing precision within 1ms after conversion chain     |
 
 5. **Run the tests** after writing them:
 

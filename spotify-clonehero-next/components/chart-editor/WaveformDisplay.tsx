@@ -75,54 +75,51 @@ export default function WaveformDisplay({
   );
 
   // Draw the waveform with progress coloring
-  const drawWaveform = useCallback(
-    (progress: number) => {
-      const canvas = canvasRef.current;
-      const peaks = peaksRef.current;
-      if (!canvas || !peaks) return;
+  const drawWaveform = useCallback((progress: number) => {
+    const canvas = canvasRef.current;
+    const peaks = peaksRef.current;
+    if (!canvas || !peaks) return;
 
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-      const dpr = window.devicePixelRatio || 1;
-      const width = canvas.width / dpr;
-      const height = canvas.height / dpr;
-      const barCount = peaks.length;
-      const progressX = progress * width;
+    const dpr = window.devicePixelRatio || 1;
+    const width = canvas.width / dpr;
+    const height = canvas.height / dpr;
+    const barCount = peaks.length;
+    const progressX = progress * width;
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.save();
-      ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.scale(dpr, dpr);
 
-      const centerY = height / 2;
+    const centerY = height / 2;
 
-      for (let i = 0; i < barCount; i++) {
-        const x = i * (BAR_WIDTH + BAR_GAP);
-        const barHeight = Math.max(1, peaks[i] * height * 0.9);
-        const y = centerY - barHeight / 2;
+    for (let i = 0; i < barCount; i++) {
+      const x = i * (BAR_WIDTH + BAR_GAP);
+      const barHeight = Math.max(1, peaks[i] * height * 0.9);
+      const y = centerY - barHeight / 2;
 
-        ctx.fillStyle = x + BAR_WIDTH <= progressX ? PROGRESS_COLOR : WAVE_COLOR;
+      ctx.fillStyle = x + BAR_WIDTH <= progressX ? PROGRESS_COLOR : WAVE_COLOR;
 
-        // Rounded rect for each bar
-        if (BAR_RADIUS > 0 && barHeight > BAR_RADIUS * 2) {
-          ctx.beginPath();
-          ctx.roundRect(x, y, BAR_WIDTH, barHeight, BAR_RADIUS);
-          ctx.fill();
-        } else {
-          ctx.fillRect(x, y, BAR_WIDTH, barHeight);
-        }
+      // Rounded rect for each bar
+      if (BAR_RADIUS > 0 && barHeight > BAR_RADIUS * 2) {
+        ctx.beginPath();
+        ctx.roundRect(x, y, BAR_WIDTH, barHeight, BAR_RADIUS);
+        ctx.fill();
+      } else {
+        ctx.fillRect(x, y, BAR_WIDTH, barHeight);
       }
+    }
 
-      // Draw cursor line
-      if (progress > 0 && progress < 1) {
-        ctx.fillStyle = CURSOR_COLOR;
-        ctx.fillRect(progressX - CURSOR_WIDTH / 2, 0, CURSOR_WIDTH, height);
-      }
+    // Draw cursor line
+    if (progress > 0 && progress < 1) {
+      ctx.fillStyle = CURSOR_COLOR;
+      ctx.fillRect(progressX - CURSOR_WIDTH / 2, 0, CURSOR_WIDTH, height);
+    }
 
-      ctx.restore();
-    },
-    [],
-  );
+    ctx.restore();
+  }, []);
 
   // Set up canvas sizing and compute peaks
   useEffect(() => {
@@ -181,16 +178,17 @@ export default function WaveformDisplay({
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const progress = x / rect.width;
-      const time = Math.max(0, Math.min(durationSeconds, progress * durationSeconds));
+      const time = Math.max(
+        0,
+        Math.min(durationSeconds, progress * durationSeconds),
+      );
       audioManager.play({time});
     },
     [audioManager, durationSeconds],
   );
 
   return (
-    <div
-      ref={containerRef}
-      className={className ?? ''}>
+    <div ref={containerRef} className={className ?? ''}>
       <canvas
         ref={canvasRef}
         className="w-full cursor-pointer"

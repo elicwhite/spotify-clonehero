@@ -41,14 +41,14 @@ renderer.destroy()                 // Tears down event listeners, stops animatio
 ### Key Types
 
 ```typescript
-type ParsedChart = ReturnType<typeof parseChartFile>;  // from chorus-chart-processing.ts
+type ParsedChart = ReturnType<typeof parseChartFile>; // from chorus-chart-processing.ts
 type Track = ParsedChart['trackData'][0];
 type NoteGroup = Track['noteEventGroups'][0];
 type Note = NoteGroup[0];
 
 type SelectedTrack = {
-  instrument: Instrument;  // 'drums', 'guitar', 'bass', etc.
-  difficulty: Difficulty;  // 'expert', 'hard', 'medium', 'easy'
+  instrument: Instrument; // 'drums', 'guitar', 'bass', etc.
+  difficulty: Difficulty; // 'expert', 'hard', 'medium', 'easy'
 };
 ```
 
@@ -56,19 +56,20 @@ type SelectedTrack = {
 
 ```typescript
 interface CloneHeroRendererProps {
-  metadata: ChartResponseEncore;           // Song metadata
-  chart: ParsedChart;                       // Full parsed chart
-  track: ParsedChart['trackData'][0];       // Specific instrument+difficulty track
-  audioManager: AudioManager;               // Audio playback controller
+  metadata: ChartResponseEncore; // Song metadata
+  chart: ParsedChart; // Full parsed chart
+  track: ParsedChart['trackData'][0]; // Specific instrument+difficulty track
+  audioManager: AudioManager; // Audio playback controller
 }
 ```
 
 Usage:
+
 ```tsx
 <CloneHeroRenderer
   metadata={metadata}
   chart={parsedChart}
-  track={parsedChart.trackData[0]}  // e.g., expert drums
+  track={parsedChart.trackData[0]} // e.g., expert drums
   audioManager={audioManager}
 />
 ```
@@ -96,6 +97,7 @@ Usage:
 ### Texture Loading
 
 Textures are loaded from local assets (not remote URLs):
+
 - Highway: `/assets/preview/assets/highways/wor.png`
 - Hit box: `/assets/preview/assets/isolated-drums.png`
 - Drum toms: `/assets/preview/assets2/drum-tom-{red,yellow,blue,green}.webp`
@@ -158,8 +160,10 @@ Uses SoundTouch AudioWorklet for pitch-corrected tempo changes. Falls back to ra
 ### Practice Mode
 
 ```typescript
-audioManager.setPracticeMode({ startMeasureMs, endMeasureMs, startTimeMs, endTimeMs } | null)
-audioManager.checkPracticeModeLoop()  // Call in animation loop to auto-loop
+audioManager.setPracticeMode(
+  {startMeasureMs, endMeasureMs, startTimeMs, endTimeMs} | null,
+);
+audioManager.checkPracticeModeLoop(); // Call in animation loop to auto-loop
 ```
 
 ---
@@ -196,12 +200,12 @@ interface ParsedChart {
 
 ```typescript
 interface NoteEvent {
-  tick: number        // Position in chart ticks
-  msTime: number      // Millisecond timestamp (used by highway.ts for Y positioning)
-  length: number      // Duration in ticks (0 for drum hits)
-  msLength: number    // Duration in ms (0 for drum hits)
-  type: NoteType      // kick(13), redDrum(14), yellowDrum(15), blueDrum(16), greenDrum(17)
-  flags: number       // Bitmask: tom(16), cymbal(32), ghost(512), accent(1024), doubleKick(8), etc.
+  tick: number; // Position in chart ticks
+  msTime: number; // Millisecond timestamp (used by highway.ts for Y positioning)
+  length: number; // Duration in ticks (0 for drum hits)
+  msLength: number; // Duration in ms (0 for drum hits)
+  type: NoteType; // kick(13), redDrum(14), yellowDrum(15), blueDrum(16), greenDrum(17)
+  flags: number; // Bitmask: tom(16), cymbal(32), ghost(512), accent(1024), doubleKick(8), etc.
 }
 ```
 
@@ -218,9 +222,11 @@ Since we are writing a .chart serializer anyway (plan 0002), the approach is:
 5. Feed the resulting `ParsedChart` to `CloneHeroRenderer` (or `setupRenderer()` directly)
 
 ```typescript
-import { parseChartFile } from '@eliwhite/scan-chart';
+import {parseChartFile} from '@eliwhite/scan-chart';
 
-const chartBytes = new TextEncoder().encode(serializeToChartFormat(internalModel));
+const chartBytes = new TextEncoder().encode(
+  serializeToChartFormat(internalModel),
+);
 const parsedChart = parseChartFile(chartBytes, 'chart', {
   song_length: 0,
   hopo_frequency: 0,
@@ -229,7 +235,7 @@ const parsedChart = parseChartFile(chartBytes, 'chart', {
   sustain_cutoff_threshold: -1,
   chord_snap_threshold: 0,
   five_lane_drums: false,
-  pro_drums: true,  // We want tom/cymbal distinction
+  pro_drums: true, // We want tom/cymbal distinction
 });
 ```
 
@@ -237,17 +243,17 @@ This avoids any format mismatch risk -- `parseChartFile` handles all tempo-to-ms
 
 ### Drum Note Mapping (our .chart note numbers -> scan-chart NoteType + flags)
 
-| .chart Note # | scan-chart NoteType | flags | Highway lane |
-|---|---|---|---|
-| 0 | kick (13) | none | centered (kick sprite) |
-| 1 | redDrum (14) | tom (16) | 0 |
-| 2 | yellowDrum (15) | tom (16) or cymbal (32) | 1 |
-| 3 | blueDrum (16) | tom (16) or cymbal (32) | 2 |
-| 4 | greenDrum (17) | tom (16) or cymbal (32) | 3 |
-| 32 | kick (13) | doubleKick (8) | centered (kick sprite) |
-| 66 | yellowDrum (15) | cymbal (32) | 1 |
-| 67 | blueDrum (16) | cymbal (32) | 2 |
-| 68 | greenDrum (17) | cymbal (32) | 3 |
+| .chart Note # | scan-chart NoteType | flags                   | Highway lane           |
+| ------------- | ------------------- | ----------------------- | ---------------------- |
+| 0             | kick (13)           | none                    | centered (kick sprite) |
+| 1             | redDrum (14)        | tom (16)                | 0                      |
+| 2             | yellowDrum (15)     | tom (16) or cymbal (32) | 1                      |
+| 3             | blueDrum (16)       | tom (16) or cymbal (32) | 2                      |
+| 4             | greenDrum (17)      | tom (16) or cymbal (32) | 3                      |
+| 32            | kick (13)           | doubleKick (8)          | centered (kick sprite) |
+| 66            | yellowDrum (15)     | cymbal (32)             | 1                      |
+| 67            | blueDrum (16)       | cymbal (32)             | 2                      |
+| 68            | greenDrum (17)      | cymbal (32)             | 3                      |
 
 The highway renderer (`getTextureForNote`) checks `noteFlags.cymbal` (32) to choose cymbal vs tom textures.
 
@@ -258,6 +264,7 @@ The highway renderer (`getTextureForNote`) checks `noteFlags.cymbal` (32) to cho
 ### The Core Problem
 
 We have three independent views that must stay in sync:
+
 1. **Waveform view** (WaveSurfer) -- horizontal audio timeline with onset markers
 2. **3D highway** (CloneHeroRenderer) -- vertical scrolling note highway
 3. **Note editor** -- drum lane editor with beat grid
@@ -309,7 +316,7 @@ WaveSurfer should decode the drum stem audio independently for waveform visualiz
 const wavesurfer = WaveSurfer.create({
   container: waveformRef.current,
   interact: true,
-  media: undefined,  // No playback -- visualization only
+  media: undefined, // No playback -- visualization only
 });
 
 // Load drum audio for waveform display
@@ -326,11 +333,12 @@ function syncWaveformPosition() {
 ```
 
 When the user clicks on the waveform to seek:
+
 ```typescript
 wavesurfer.on('seek', (progress: number) => {
   // progress is 0-1
   const timeSec = progress * totalDurationSec;
-  audioManager.play({ time: timeSec });
+  audioManager.play({time: timeSec});
 });
 ```
 
@@ -365,28 +373,28 @@ We build our own unified controls that drive AudioManager directly. The highway 
 
 ### Required Controls
 
-| Control | Implementation |
-|---|---|
-| Play/Pause | `audioManager.play({ time })` / `audioManager.pause()` / `audioManager.resume()` |
-| Seek bar | `audioManager.play({ time: seekMs / 1000 })`, update from `audioManager.currentTime` |
-| Current time display | `audioManager.currentTime * 1000` (convert to ms) |
-| Playback speed | `audioManager.setTempo(value)` -- already supports 0.25x to 4.0x with pitch correction |
-| Per-stem volume | `audioManager.setVolume(trackName, value)` -- individual sliders for drums/song/guitar/bass/vocals |
-| Drums only toggle | Set all non-drum stems to volume 0 |
-| Jump to section | Read `parsedChart.sections[]` -> `audioManager.play({ time: section.msTime / 1000 })` |
-| Practice mode loop | `audioManager.setPracticeMode({ startMeasureMs, endMeasureMs, startTimeMs, endTimeMs })` |
+| Control              | Implementation                                                                                     |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| Play/Pause           | `audioManager.play({ time })` / `audioManager.pause()` / `audioManager.resume()`                   |
+| Seek bar             | `audioManager.play({ time: seekMs / 1000 })`, update from `audioManager.currentTime`               |
+| Current time display | `audioManager.currentTime * 1000` (convert to ms)                                                  |
+| Playback speed       | `audioManager.setTempo(value)` -- already supports 0.25x to 4.0x with pitch correction             |
+| Per-stem volume      | `audioManager.setVolume(trackName, value)` -- individual sliders for drums/song/guitar/bass/vocals |
+| Drums only toggle    | Set all non-drum stems to volume 0                                                                 |
+| Jump to section      | Read `parsedChart.sections[]` -> `audioManager.play({ time: section.msTime / 1000 })`              |
+| Practice mode loop   | `audioManager.setPracticeMode({ startMeasureMs, endMeasureMs, startTimeMs, endTimeMs })`           |
 
 ### Keyboard Shortcuts
 
 Build these into the editor frame:
 
-| Key | Action |
-|---|---|
-| Space | Toggle play/pause |
-| Left/Right | Seek by beat or configurable step |
-| Ctrl+Left/Right | Seek by section |
-| +/- | Zoom waveform (does not affect highway) |
-| [ / ] | Adjust playback speed |
+| Key             | Action                                  |
+| --------------- | --------------------------------------- |
+| Space           | Toggle play/pause                       |
+| Left/Right      | Seek by beat or configurable step       |
+| Ctrl+Left/Right | Seek by section                         |
+| +/-             | Zoom waveform (does not affect highway) |
+| [ / ]           | Adjust playback speed                   |
 
 ---
 
@@ -410,10 +418,12 @@ function rebuildHighway(updatedInternalModel: InternalChartModel) {
   // AudioManager keeps playing -- don't touch it
 
   // Serialize and re-parse chart
-  const chartBytes = new TextEncoder().encode(serializeToChartFormat(updatedInternalModel));
+  const chartBytes = new TextEncoder().encode(
+    serializeToChartFormat(updatedInternalModel),
+  );
   const newParsedChart = parseChartFile(chartBytes, 'chart', chartModifiers);
   const newTrack = newParsedChart.trackData.find(
-    t => t.instrument === 'drums' && t.difficulty === 'expert'
+    t => t.instrument === 'drums' && t.difficulty === 'expert',
   );
 
   // Destroy old renderer (stops animation loop, removes canvas)
@@ -425,7 +435,7 @@ function rebuildHighway(updatedInternalModel: InternalChartModel) {
     newParsedChart,
     sizingRef,
     ref,
-    audioManager,  // Same instance, still playing
+    audioManager, // Same instance, still playing
   );
   renderer.prepTrack(newTrack);
   renderer.startRender();
@@ -434,6 +444,7 @@ function rebuildHighway(updatedInternalModel: InternalChartModel) {
 ```
 
 **Cost analysis:**
+
 - Chart serialization + parsing: ~10-50ms for a typical chart
 - Texture loading: Textures are loaded fresh per `setupRenderer` call (room for optimization -- see below)
 - Audio: 0ms (AudioManager is untouched, keeps playing)
@@ -506,6 +517,7 @@ function rebuildHighway(updatedInternalModel: InternalChartModel) {
 ### Highway Panel Sizing
 
 The 3D highway works best in a tall, narrow aspect ratio (like the actual Clone Hero game). Recommended minimum:
+
 - Width: 300-400px
 - Height: 400-600px (or fill available vertical space)
 - The camera is at a 60-degree angle looking down the highway, so wider containers show more empty space on the sides

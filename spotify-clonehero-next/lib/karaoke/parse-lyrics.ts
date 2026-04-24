@@ -265,11 +265,11 @@ function mergeShortLines(lines: LyricLine[]): LyricLine[] {
         ...currSyllables[0],
         text: ' ' + currSyllables[0].text.trimStart(),
       };
-      const mergedLine = makeLine([
-        ...prev.syllables,
-        ...currSyllables,
-      ]);
-      mergedLine.phraseStartMs = Math.min(prev.phraseStartMs, curr.phraseStartMs);
+      const mergedLine = makeLine([...prev.syllables, ...currSyllables]);
+      mergedLine.phraseStartMs = Math.min(
+        prev.phraseStartMs,
+        curr.phraseStartMs,
+      );
       mergedLine.phraseEndMs = Math.max(prev.phraseEndMs, curr.phraseEndMs);
       merged[merged.length - 1] = mergedLine;
     } else {

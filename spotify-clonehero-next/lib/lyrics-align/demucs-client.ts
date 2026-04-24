@@ -12,10 +12,9 @@ export async function runDemucsInWorker(
   const log = onProgress ?? console.log;
 
   return new Promise((resolve, reject) => {
-    const worker = new Worker(
-      new URL('./demucs-worker.ts', import.meta.url),
-      {type: 'module'},
-    );
+    const worker = new Worker(new URL('./demucs-worker.ts', import.meta.url), {
+      type: 'module',
+    });
 
     worker.onmessage = (e: MessageEvent) => {
       const msg = e.data;
@@ -74,7 +73,9 @@ export async function resampleTo16kMono(
   audioData: Uint8Array,
   mimeType: string,
 ): Promise<Float32Array> {
-  const blob = new Blob([audioData as Uint8Array<ArrayBuffer>], {type: mimeType});
+  const blob = new Blob([audioData as Uint8Array<ArrayBuffer>], {
+    type: mimeType,
+  });
   const arrayBuffer = await blob.arrayBuffer();
   const audioCtx = new OfflineAudioContext(1, 1, 16000);
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);

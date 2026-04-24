@@ -47,8 +47,12 @@ async function scanSongFolder(folderPath) {
     if (meta?.name && meta.name !== 'Unknown Name') {
       const songInfo = [
         meta.name,
-        meta.artist && meta.artist !== 'Unknown Artist' ? `by ${meta.artist}` : null,
-        meta.charter && meta.charter !== 'Unknown Charter' ? `(Charter: ${meta.charter})` : null,
+        meta.artist && meta.artist !== 'Unknown Artist'
+          ? `by ${meta.artist}`
+          : null,
+        meta.charter && meta.charter !== 'Unknown Charter'
+          ? `(Charter: ${meta.charter})`
+          : null,
       ]
         .filter(Boolean)
         .join(' ');

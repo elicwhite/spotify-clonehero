@@ -2,10 +2,7 @@ import * as THREE from 'three';
 import type {SceneReconciler} from './SceneReconciler';
 import {NoteRenderer, type NoteElementData} from './NoteRenderer';
 import type {MarkerElementData} from './MarkerRenderer';
-import {
-  type HitResult,
-  calculateNoteXOffset,
-} from './types';
+import {type HitResult, calculateNoteXOffset} from './types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -44,7 +41,11 @@ export class InteractionManager {
   private intersectionPoint = new THREE.Vector3();
 
   // Timing data for coordinate conversion
-  private timedTempos: {tick: number; msTime: number; beatsPerMinute: number}[] = [];
+  private timedTempos: {
+    tick: number;
+    msTime: number;
+    beatsPerMinute: number;
+  }[] = [];
   private resolution = 480;
 
   /** Function to get current audio time in ms. */
@@ -104,10 +105,7 @@ export class InteractionManager {
     gridDivision: number = 0,
   ): HitResult {
     // Convert canvas coords to NDC (-1 to +1)
-    this.ndcVec.set(
-      (canvasX / canvasW) * 2 - 1,
-      -(canvasY / canvasH) * 2 + 1,
-    );
+    this.ndcVec.set((canvasX / canvasW) * 2 - 1, -(canvasY / canvasH) * 2 + 1);
     this.raycaster.setFromCamera(this.ndcVec, this.camera);
 
     // --- 1. Check note sprites (highest priority) ---
@@ -207,7 +205,10 @@ export class InteractionManager {
       const projected = tempWorld.project(this.camera);
       const screenY = ((-projected.y + 1) / 2) * canvasH;
 
-      if (Math.abs(screenY - canvasY) <= InteractionManager.SECTION_HIT_TOLERANCE_PX) {
+      if (
+        Math.abs(screenY - canvasY) <=
+        InteractionManager.SECTION_HIT_TOLERANCE_PX
+      ) {
         const el = this.reconciler.getElement(key);
         if (!el) continue;
         const data = el.data as MarkerElementData;

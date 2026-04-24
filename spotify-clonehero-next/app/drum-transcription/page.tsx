@@ -3,7 +3,13 @@
 import {Suspense, useCallback, useEffect, useState} from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
 import Script from 'next/script';
-import {AlertTriangle, Loader2, ArrowLeft, FolderOpen, Trash2} from 'lucide-react';
+import {
+  AlertTriangle,
+  Loader2,
+  ArrowLeft,
+  FolderOpen,
+  Trash2,
+} from 'lucide-react';
 import {toast} from 'sonner';
 import {
   Card,
@@ -128,7 +134,7 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
         });
 
         try {
-          await resumePipeline(projectId!, (progress) => {
+          await resumePipeline(projectId!, progress => {
             if (!cancelled) setPipelineProgress(progress);
           });
 
@@ -178,34 +184,31 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
 
   // Wait for ORT to be ready, showing loading-runtime step.
   // Returns a promise that resolves once ortReady is true.
-  const waitForOrt = useCallback(
-    (projectName: string, projectId?: string) => {
-      return new Promise<void>((resolve) => {
-        // Check immediately — ORT may already be loaded
-        if ((globalThis as any).ort) {
-          resolve();
-          return;
-        }
+  const waitForOrt = useCallback((projectName: string, projectId?: string) => {
+    return new Promise<void>(resolve => {
+      // Check immediately — ORT may already be loaded
+      if ((globalThis as any).ort) {
+        resolve();
+        return;
+      }
 
-        setPipelineProgress({
-          step: 'loading-runtime',
-          progress: 0,
-          projectId,
-          projectName,
-        });
-
-        // Poll for ORT availability (the Script onReady will set it,
-        // but we also check the global directly for robustness)
-        const interval = setInterval(() => {
-          if ((globalThis as any).ort) {
-            clearInterval(interval);
-            resolve();
-          }
-        }, 100);
+      setPipelineProgress({
+        step: 'loading-runtime',
+        progress: 0,
+        projectId,
+        projectName,
       });
-    },
-    [],
-  );
+
+      // Poll for ORT availability (the Script onReady will set it,
+      // but we also check the global directly for robustness)
+      const interval = setInterval(() => {
+        if ((globalThis as any).ort) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100);
+    });
+  }, []);
 
   // Handle audio upload -> start pipeline
   const handleStartPipeline = useCallback(
@@ -222,13 +225,9 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
           projectName: file.name,
         });
 
-        const finalProjectId = await runPipeline(
-          file,
-          file.name,
-          (progress) => {
-            setPipelineProgress(progress);
-          },
-        );
+        const finalProjectId = await runPipeline(file, file.name, progress => {
+          setPipelineProgress(progress);
+        });
 
         // Pipeline complete -- navigate to editor
         toast.success('Processing complete! Opening editor.');
@@ -236,10 +235,9 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
         setPipelineAudioFile(null);
         router.push(`/drum-transcription?project=${finalProjectId}`);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : 'Pipeline failed';
+        const message = err instanceof Error ? err.message : 'Pipeline failed';
         console.error('Pipeline error:', err);
-        setPipelineProgress((prev) => ({
+        setPipelineProgress(prev => ({
           step: 'error',
           progress: 0,
           projectId: prev?.projectId,
@@ -284,7 +282,7 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
         });
 
         try {
-          await resumePipeline(id, (progress) => {
+          await resumePipeline(id, progress => {
             setPipelineProgress(progress);
           });
 
@@ -333,13 +331,9 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
         type: 'audio/mpeg',
       });
 
-      const finalProjectId = await runPipeline(
-        file,
-        file.name,
-        (progress) => {
-          setPipelineProgress(progress);
-        },
-      );
+      const finalProjectId = await runPipeline(file, file.name, progress => {
+        setPipelineProgress(progress);
+      });
 
       toast.success('Processing complete! Opening editor.');
       setPipelineProgress(null);
@@ -348,7 +342,7 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
       const message =
         err instanceof Error ? err.message : 'Failed to process demo';
       console.error('Demo pipeline error:', err);
-      setPipelineProgress((prev) => ({
+      setPipelineProgress(prev => ({
         step: 'error',
         progress: 0,
         projectId: prev?.projectId,
@@ -367,7 +361,12 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
       // Re-run with the same file
       handleStartPipeline(pipelineAudioFile);
     }
-  }, [pipelineProgress, pipelineAudioFile, handleSelectProject, handleStartPipeline]);
+  }, [
+    pipelineProgress,
+    pipelineAudioFile,
+    handleSelectProject,
+    handleStartPipeline,
+  ]);
 
   const handleCancelPipeline = useCallback(() => {
     setPipelineProgress(null);
@@ -383,7 +382,7 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
     if (!deleteTarget) return;
     try {
       await deleteProject(deleteTarget.id);
-      setProjects((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      setProjects(prev => prev.filter(p => p.id !== deleteTarget.id));
       toast.success(`Deleted "${deleteTarget.name}"`);
     } catch (err) {
       console.error('Failed to delete project:', err);
@@ -454,7 +453,9 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
       return (
         <div className="flex flex-col items-center justify-center flex-1 gap-4">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Checking project status...</p>
+          <p className="text-sm text-muted-foreground">
+            Checking project status...
+          </p>
         </div>
       );
     }
@@ -529,7 +530,7 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {projects.map((project) => (
+              {projects.map(project => (
                 <div
                   key={project.id}
                   className="w-full flex items-center justify-between px-4 py-3 rounded-lg border hover:bg-accent/50 transition-colors">
@@ -546,7 +547,7 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
                     variant="ghost"
                     size="icon"
                     className="ml-2 shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={(e) => {
+                    onClick={e => {
                       e.stopPropagation();
                       setDeleteTarget(project);
                     }}>
@@ -574,7 +575,7 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
       {/* Delete confirmation dialog */}
       <AlertDialog
         open={deleteTarget !== null}
-        onOpenChange={(open) => {
+        onOpenChange={open => {
           if (!open) setDeleteTarget(null);
         }}>
         <AlertDialogContent>

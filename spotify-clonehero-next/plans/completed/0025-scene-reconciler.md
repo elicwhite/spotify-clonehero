@@ -8,12 +8,14 @@
 ## Context
 
 ### Current problems:
+
 1. **Index-based identity** — `activeNoteGroups` is `Map<number, THREE.Group>` keyed by array index. Every add/remove shifts indices, requiring complex remapping that has caused multiple bugs.
 2. **External diffing** — `computeDiff()` and `applyDiff()` are called externally, and the index management between them is fragile.
 3. **Notes-only** — The system only handles notes. Lyrics, sections, and other chart elements will need similar rendering and diffing on the highway.
 4. **Full rebuild on flag toggle** — Currently `ToggleFlagCommand` triggers a full writeChart → parseChartFile → destroy renderer → rebuild, which is correct but slow.
 
 ### React reconciler analogy:
+
 - **Virtual DOM** = the declared set of elements (PreparedNote[], lyrics, sections)
 - **Real DOM** = the Three.js scene graph (Groups, Sprites, Meshes)
 - **Keys** = stable identity per element (`tick:type` for notes, `tick:name` for sections)
@@ -109,11 +111,15 @@ No array indices. No remapping. Adding/removing elements is O(1) by key.
 Registered at construction. Each kind has its own renderer:
 
 ```typescript
-const reconciler = new SceneReconciler(scene, {
-  note: new NoteRenderer(textureManager, clippingPlanes),
-  section: new SectionRenderer(clippingPlanes),
-  lyric: new LyricRenderer(clippingPlanes),    // future
-}, clippingPlanes);
+const reconciler = new SceneReconciler(
+  scene,
+  {
+    note: new NoteRenderer(textureManager, clippingPlanes),
+    section: new SectionRenderer(clippingPlanes),
+    lyric: new LyricRenderer(clippingPlanes), // future
+  },
+  clippingPlanes,
+);
 ```
 
 #### NoteRenderer
@@ -125,7 +131,11 @@ class NoteRenderer implements ElementRenderer<NoteElementData> {
     // get texture, create sprite, set scale/center/renderOrder, position
   }
 
-  update(group: THREE.Group, oldData: NoteElementData, newData: NoteElementData): void {
+  update(
+    group: THREE.Group,
+    oldData: NoteElementData,
+    newData: NoteElementData,
+  ): void {
     // NOT implemented — use recycle+recreate for notes.
     // Flag changes swap textures which is complex with animated WebP.
     // Returning undefined signals the reconciler to recycle+recreate.
@@ -137,8 +147,8 @@ class NoteRenderer implements ElementRenderer<NoteElementData> {
 }
 
 interface NoteElementData {
-  noteType: NoteType;       // scan-chart numeric type
-  flags: number;            // scan-chart flags
+  noteType: NoteType; // scan-chart numeric type
+  flags: number; // scan-chart flags
   isKick: boolean;
   isOpen: boolean;
   lane: number;
@@ -154,7 +164,9 @@ class SectionRenderer implements ElementRenderer<SectionElementData> {
   create(data: SectionElementData): THREE.Group {
     // Create section flag sprite + marker line (from current SceneOverlays)
   }
-  recycle(group: THREE.Group): void { /* hide */ }
+  recycle(group: THREE.Group): void {
+    /* hide */
+  }
 }
 
 interface SectionElementData {
@@ -293,7 +305,11 @@ reconciler.updateWindow(audioManager.currentTime * 1000, highwaySpeed);
 Converts a scan-chart Track to ChartElement[]:
 
 ```typescript
-function trackToElements(track: Track, tempos: TimedTempo[], resolution: number): ChartElement[] {
+function trackToElements(
+  track: Track,
+  tempos: TimedTempo[],
+  resolution: number,
+): ChartElement[] {
   const elements: ChartElement[] = [];
   for (const group of track.noteEventGroups) {
     for (const note of group) {
@@ -319,6 +335,7 @@ function trackToElements(track: Track, tempos: TimedTempo[], resolution: number)
 ## Migration from NotesManager
 
 ### What NotesManager currently does:
+
 1. Loads textures (`prepare`)
 2. Pre-computes PreparedNote[] from Track
 3. Manages sprite pooling (acquireGroup/recycleGroup)
@@ -328,17 +345,20 @@ function trackToElements(track: Track, tempos: TimedTempo[], resolution: number)
 7. External diff API (computeDiff/applyDiff)
 
 ### What moves to SceneReconciler:
+
 - Key-based identity (replaces index-based)
 - Diffing logic (internal, not external)
 - Pooling (generic, per-kind)
 - Windowing (using sorted array + binary search instead of EventSequence)
 
 ### What stays in NoteRenderer:
+
 - Texture loading and selection (getTextureForNote)
 - Sprite creation and configuration (scale, center, renderOrder)
 - Selection/hover highlight management
 
 ### What's deleted:
+
 - `computeDiff()` / `applyDiff()` static methods
 - Index-based `activeNoteGroups: Map<number, Group>`
 - Index remapping logic

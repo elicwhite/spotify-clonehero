@@ -7,7 +7,10 @@ import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
 import {Slider} from '@/components/ui/slider';
-import {readChartDirectory, readSngFile} from '@/components/chart-picker/chart-file-readers';
+import {
+  readChartDirectory,
+  readSngFile,
+} from '@/components/chart-picker/chart-file-readers';
 import {
   findAudioFiles,
   findChartData,
@@ -165,9 +168,7 @@ function parseTsv(text: string): Rating[] {
   });
 }
 
-async function readTsvFile(
-  handle: FileSystemFileHandle,
-): Promise<Rating[]> {
+async function readTsvFile(handle: FileSystemFileHandle): Promise<Rating[]> {
   try {
     const file = await handle.getFile();
     const text = await file.text();
@@ -177,10 +178,7 @@ async function readTsvFile(
   }
 }
 
-async function writeTsvFile(
-  handle: FileSystemFileHandle,
-  ratings: Rating[],
-) {
+async function writeTsvFile(handle: FileSystemFileHandle, ratings: Rating[]) {
   const writable = await handle.createWritable();
   await writable.write(ratingsToTsv(ratings));
   await writable.close();
@@ -217,9 +215,7 @@ async function prepareChart(song: SongAccumulator): Promise<PreparedChart> {
     const delayMatch = iniText.match(/^\s*delay\s*=\s*(-?\d+)/im);
     if (delayMatch) iniDelay = parseInt(delayMatch[1], 10);
     if (iniDelay === undefined) {
-      const offsetMatch = iniText.match(
-        /^\s*chart_offset\s*=\s*(-?[\d.]+)/im,
-      );
+      const offsetMatch = iniText.match(/^\s*chart_offset\s*=\s*(-?[\d.]+)/im);
       if (offsetMatch) iniDelay = Math.round(parseFloat(offsetMatch[1]) * 1000);
     }
   }
@@ -284,10 +280,10 @@ async function prepareChart(song: SongAccumulator): Promise<PreparedChart> {
 
 export default function ChartReviewPage() {
   // Setup state
-  const [chartsDir, setChartsDir] =
-    useState<FileSystemDirectoryHandle | null>(null);
-  const [tsvHandle, setTsvHandle] =
-    useState<FileSystemFileHandle | null>(null);
+  const [chartsDir, setChartsDir] = useState<FileSystemDirectoryHandle | null>(
+    null,
+  );
+  const [tsvHandle, setTsvHandle] = useState<FileSystemFileHandle | null>(null);
   const [allEntries, setAllEntries] = useState<SongAccumulator[]>([]);
   const [scanProgress, setScanProgress] = useState(0);
   const [ratings, setRatings] = useState<Rating[]>([]);
@@ -295,8 +291,9 @@ export default function ChartReviewPage() {
   const [isReady, setIsReady] = useState(false);
 
   // Classifier scores: fileName → score (0–1), loaded from public TSV
-  const [classifierScores, setClassifierScores] =
-    useState<Map<string, number>>(new Map());
+  const [classifierScores, setClassifierScores] = useState<Map<string, number>>(
+    new Map(),
+  );
 
   // Focus score: queue is sorted by distance from this value
   const [focusScore, setFocusScore] = useState(0.85);
@@ -328,10 +325,7 @@ export default function ChartReviewPage() {
   const [failedIndices, setFailedIndices] = useState<Set<number>>(new Set());
 
   // Stats
-  const ratedSet = useMemo(
-    () => new Set(ratings.map(r => r.name)),
-    [ratings],
-  );
+  const ratedSet = useMemo(() => new Set(ratings.map(r => r.name)), [ratings]);
   const goodCount = useMemo(
     () => ratings.filter(r => r.rating === 'good').length,
     [ratings],
@@ -374,7 +368,8 @@ export default function ChartReviewPage() {
     // Add tiny jitter to break ties randomly.
     classified.sort(
       (a, b) =>
-        Math.abs(a.score - focusScore) + (Math.random() - 0.5) * 0.001 -
+        Math.abs(a.score - focusScore) +
+        (Math.random() - 0.5) * 0.001 -
         (Math.abs(b.score - focusScore) + (Math.random() - 0.5) * 0.001),
     );
 
@@ -560,15 +555,12 @@ export default function ChartReviewPage() {
 
   // Derive current and next prepared charts from queue + prepared map
   const currentEntryIndex = queuePos < queue.length ? queue[queuePos] : -1;
-  const nextEntryIndex =
-    queuePos + 1 < queue.length ? queue[queuePos + 1] : -1;
+  const nextEntryIndex = queuePos + 1 < queue.length ? queue[queuePos + 1] : -1;
 
-  const currentChart = currentEntryIndex >= 0
-    ? prepared.get(currentEntryIndex) ?? null
-    : null;
-  const nextChart = nextEntryIndex >= 0
-    ? prepared.get(nextEntryIndex) ?? null
-    : null;
+  const currentChart =
+    currentEntryIndex >= 0 ? (prepared.get(currentEntryIndex) ?? null) : null;
+  const nextChart =
+    nextEntryIndex >= 0 ? (prepared.get(nextEntryIndex) ?? null) : null;
 
   // Stop and destroy audio for any prepared chart no longer in the active window
   useEffect(() => {
@@ -608,11 +600,14 @@ export default function ChartReviewPage() {
     if (!currentChart) return;
     const key = currentChart.song.handleInfo.fileName;
     if (lastPlayedRef.current === key) return;
-    currentChart.audioManager.playChartTime(currentChart.seekTimeSec).then(() => {
-      lastPlayedRef.current = key;
-    }).catch(err => {
-      console.warn('Auto-play failed (will retry on interaction):', err);
-    });
+    currentChart.audioManager
+      .playChartTime(currentChart.seekTimeSec)
+      .then(() => {
+        lastPlayedRef.current = key;
+      })
+      .catch(err => {
+        console.warn('Auto-play failed (will retry on interaction):', err);
+      });
   }, [currentChart]);
 
   useEffect(() => {
@@ -671,7 +666,9 @@ export default function ChartReviewPage() {
       // user gesture context so AudioContext.resume() is allowed)
       if (nextChart) {
         lastPlayedRef.current = nextChart.song.handleInfo.fileName;
-        nextChart.audioManager.playChartTime(nextChart.seekTimeSec).catch(() => {});
+        nextChart.audioManager
+          .playChartTime(nextChart.seekTimeSec)
+          .catch(() => {});
       }
 
       // Save if threshold reached
@@ -773,7 +770,9 @@ export default function ChartReviewPage() {
 
     if (nextChart) {
       lastPlayedRef.current = nextChart.song.handleInfo.fileName;
-      nextChart.audioManager.playChartTime(nextChart.seekTimeSec).catch(() => {});
+      nextChart.audioManager
+        .playChartTime(nextChart.seekTimeSec)
+        .catch(() => {});
     }
   }, [currentChart, nextChart, queue, queuePos]);
 
@@ -874,7 +873,8 @@ export default function ChartReviewPage() {
         <div className="flex items-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin" />
           <span className="text-muted-foreground">
-            Scanning charts folder... {scanProgress > 0 && `(${scanProgress} found)`}
+            Scanning charts folder...{' '}
+            {scanProgress > 0 && `(${scanProgress} found)`}
           </span>
         </div>
       </main>
@@ -922,10 +922,15 @@ export default function ChartReviewPage() {
           step={0.01}
           value={[focusDisplay]}
           onValueChange={([v]) => setFocusDisplay(v)}
-          onValueCommit={([v]) => { setFocusDisplay(v); setFocusScore(v); }}
+          onValueCommit={([v]) => {
+            setFocusDisplay(v);
+            setFocusScore(v);
+          }}
           className="w-48"
         />
-        <span className="font-mono text-xs w-10">{focusDisplay.toFixed(2)}</span>
+        <span className="font-mono text-xs w-10">
+          {focusDisplay.toFixed(2)}
+        </span>
       </div>
 
       {/* Stats bar */}
@@ -968,7 +973,9 @@ export default function ChartReviewPage() {
           </span>
           <span className="text-green-600">{goodCount} good</span>
           <span className="text-red-600">{badCount} bad</span>
-          <span>{ratings.length} / {allEntries.length} total</span>
+          <span>
+            {ratings.length} / {allEntries.length} total
+          </span>
         </div>
       </div>
 

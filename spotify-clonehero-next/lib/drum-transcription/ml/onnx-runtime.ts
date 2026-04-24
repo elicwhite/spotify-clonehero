@@ -30,11 +30,7 @@ export interface OrtGlobal {
       options?: {executionProviders: string[]; graphOptimizationLevel?: string},
     ): Promise<OrtInferenceSession>;
   };
-  Tensor: new (
-    type: string,
-    data: Float32Array,
-    dims: number[],
-  ) => OrtTensor;
+  Tensor: new (type: string, data: Float32Array, dims: number[]) => OrtTensor;
   env: {
     wasm: {wasmPaths: string; numThreads: number};
     logLevel: string;

@@ -37,11 +37,7 @@ function pn(
 
 describe('NotesManager.computeDiff', () => {
   it('returns empty diff for identical arrays', () => {
-    const notes = [
-      pn(0, 13, 0),
-      pn(480, 14, 500),
-      pn(960, 15, 1000),
-    ];
+    const notes = [pn(0, 13, 0), pn(480, 14, 500), pn(960, 15, 1000)];
 
     const diff = NotesManager.computeDiff(notes, [...notes]);
 
@@ -144,14 +140,14 @@ describe('NotesManager.computeDiff', () => {
 
   it('handles complex scenario with adds, removes, and moves', () => {
     const old = [
-      pn(0, 12, 0),     // kick at tick 0 - will remain
-      pn(480, 13, 500),  // red at tick 480 - will be removed
+      pn(0, 12, 0), // kick at tick 0 - will remain
+      pn(480, 13, 500), // red at tick 480 - will be removed
       pn(960, 14, 1000), // yellow at tick 960 - will be moved (msTime changes)
     ];
     const newer = [
-      pn(0, 12, 0),       // kick unchanged
-      pn(960, 14, 1100),   // yellow moved (msTime changed)
-      pn(1440, 15, 1500),  // blue added
+      pn(0, 12, 0), // kick unchanged
+      pn(960, 14, 1100), // yellow moved (msTime changed)
+      pn(1440, 15, 1500), // blue added
     ];
 
     const diff = NotesManager.computeDiff(old, newer);

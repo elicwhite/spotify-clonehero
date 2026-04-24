@@ -8,8 +8,15 @@ import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
 import {Button} from '@/components/ui/button';
 import {getExtension, getBasename} from '@/lib/src-shared/utils';
 import {removeStyleTags} from '@/lib/ui-utils';
-import {findAudioFiles, type Files} from '@/lib/preview/chorus-chart-processing';
-import {readChart, writeChartFolder, type ChartDocument} from '@/lib/chart-edit';
+import {
+  findAudioFiles,
+  type Files,
+} from '@/lib/preview/chorus-chart-processing';
+import {
+  readChart,
+  writeChartFolder,
+  type ChartDocument,
+} from '@/lib/chart-edit';
 import {exportAsZip, exportAsSng} from '@/lib/chart-export';
 import {alignedSyllablesToChartLyrics} from '@/lib/lyrics-align/chart-lyrics';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
@@ -64,7 +71,12 @@ const ALIGN_STEPS: PipelineStep[] = [
     status: 'pending',
     detail: '',
   },
-  {id: 'syllabify', label: 'Splitting lyrics into syllables', status: 'pending', detail: ''},
+  {
+    id: 'syllabify',
+    label: 'Splitting lyrics into syllables',
+    status: 'pending',
+    detail: '',
+  },
   {
     id: 'align',
     label: 'Aligning syllables to audio',
@@ -319,7 +331,10 @@ function LyricsAlignInner() {
       setChart(result);
 
       // Check for existing lyrics and warn
-      const existingLyrics = result.chartDoc.parsedChart.vocalTracks.parts.vocals?.notePhrases.flatMap(p => p.lyrics) ?? [];
+      const existingLyrics =
+        result.chartDoc.parsedChart.vocalTracks.parts.vocals?.notePhrases.flatMap(
+          p => p.lyrics,
+        ) ?? [];
       if (existingLyrics.length > 0) {
         setShowLyricsWarning(true);
       }
@@ -391,7 +406,9 @@ function LyricsAlignInner() {
 
         const ext = getExtension(songFile.fileName).toLowerCase();
         const mime = getMimeForExtension(ext);
-        const blob = new Blob([songFile.data as Uint8Array<ArrayBuffer>], {type: mime});
+        const blob = new Blob([songFile.data as Uint8Array<ArrayBuffer>], {
+          type: mime,
+        });
         const arrayBuffer = await blob.arrayBuffer();
 
         const audioCtx = new AudioContext({sampleRate: 44100});
@@ -448,9 +465,7 @@ function LyricsAlignInner() {
         prev.map(s => ({
           ...s,
           status:
-            s.status === 'pending' || s.status === 'active'
-              ? 'done'
-              : s.status,
+            s.status === 'pending' || s.status === 'active' ? 'done' : s.status,
           endTime: s.endTime ?? Date.now(),
         })),
       );
@@ -488,7 +503,9 @@ function LyricsAlignInner() {
       // include (writeChartFolder returns chart + ini + assets; assets already
       // carry the audio passed through)
       // Check if audio files are already in the output via assets
-      const outputNames = new Set(exportFiles.map(f => f.filename.toLowerCase()));
+      const outputNames = new Set(
+        exportFiles.map(f => f.filename.toLowerCase()),
+      );
       for (const f of chart.rawFiles) {
         if (!outputNames.has(f.fileName.toLowerCase())) {
           exportFiles.push({filename: f.fileName, data: f.data});
@@ -501,7 +518,9 @@ function LyricsAlignInner() {
       let blob: Blob;
       if (chart.sourceFormat === 'sng') {
         const sngBytes = exportAsSng(exportFiles);
-        blob = new Blob([sngBytes as Uint8Array<ArrayBuffer>], {type: 'application/octet-stream'});
+        blob = new Blob([sngBytes as Uint8Array<ArrayBuffer>], {
+          type: 'application/octet-stream',
+        });
       } else {
         blob = exportAsZip(exportFiles);
       }
@@ -535,7 +554,10 @@ function LyricsAlignInner() {
     let createdAudioManager: AudioManager | null = null;
     (async () => {
       try {
-        const nextDoc = applyAlignedLyricsToDoc(chart.chartDoc, alignedSyllables);
+        const nextDoc = applyAlignedLyricsToDoc(
+          chart.chartDoc,
+          alignedSyllables,
+        );
 
         const audioManager = new AudioManager(chart.audioFiles, () => {
           dispatch({type: 'SET_PLAYING', isPlaying: false});
@@ -546,7 +568,9 @@ function LyricsAlignInner() {
           audioManager.destroy();
           return;
         }
-        audioManager.setChartDelay(getChartDelayMs(nextDoc.parsedChart.metadata) / 1000);
+        audioManager.setChartDelay(
+          getChartDelayMs(nextDoc.parsedChart.metadata) / 1000,
+        );
 
         const decoded = await decodeAudioForWaveform(chart.audioFiles[0].data);
         if (cancelled) {
@@ -620,7 +644,8 @@ function LyricsAlignInner() {
     if (!editorData) throw new Error('No chart prepared');
     const files = writeChartFolder(editorData.chartDoc);
     const chartFile = files.find(f => f.fileName === 'notes.chart');
-    if (!chartFile) throw new Error('writeChartFolder did not produce notes.chart');
+    if (!chartFile)
+      throw new Error('writeChartFolder did not produce notes.chart');
     return new TextDecoder().decode(chartFile.data);
   }, [editorData]);
 
@@ -693,8 +718,8 @@ function LyricsAlignInner() {
             Add Lyrics To A Chart
           </h1>
           <p className="text-muted-foreground text-sm sm:text-base">
-            Add timed, syllable-level lyrics to any Clone Hero chart.
-            Everything runs in your browser.
+            Add timed, syllable-level lyrics to any Clone Hero chart. Everything
+            runs in your browser.
           </p>
         </header>
 
@@ -735,20 +760,25 @@ function LyricsAlignInner() {
               <div>
                 <h2 className="text-xl font-bold">
                   {removeStyleTags(chart.name)}{' '}
-                  <span className="text-muted-foreground font-normal">
-                    by
-                  </span>{' '}
+                  <span className="text-muted-foreground font-normal">by</span>{' '}
                   {removeStyleTags(chart.artist)}
                 </h2>
                 <p className="text-sm text-muted-foreground">
                   Charted by {removeStyleTags(chart.charter)} &middot;{' '}
                   {chart.audioFiles.length} audio file
                   {chart.audioFiles.length !== 1 ? 's' : ''}
-                  {chart.vocalsFile && ' (vocals stem available)'}
-                  {' '}&middot; {chart.sourceFormat === 'sng' ? '.sng' : chart.sourceFormat === 'zip' ? '.zip' : 'folder'}
+                  {chart.vocalsFile && ' (vocals stem available)'} &middot;{' '}
+                  {chart.sourceFormat === 'sng'
+                    ? '.sng'
+                    : chart.sourceFormat === 'zip'
+                      ? '.zip'
+                      : 'folder'}
                 </p>
               </div>
-              <ChartDropZone onLoaded={handleChartLoaded} id="add-lyrics-chart" />
+              <ChartDropZone
+                onLoaded={handleChartLoaded}
+                id="add-lyrics-chart"
+              />
             </div>
 
             {/* Existing lyrics warning */}
@@ -796,7 +826,6 @@ function LyricsAlignInner() {
         {status === 'processing' && (
           <ProgressCard steps={alignSteps} error={error} />
         )}
-
       </div>
     </main>
   );
@@ -806,7 +835,15 @@ function LyricsAlignInner() {
 // Progress Card
 // ---------------------------------------------------------------------------
 
-function FlowStep({icon, label, desc}: {icon: string; label: string; desc: string}) {
+function FlowStep({
+  icon,
+  label,
+  desc,
+}: {
+  icon: string;
+  label: string;
+  desc: string;
+}) {
   return (
     <div className="flex flex-col items-center gap-1 min-w-0">
       <span className="text-3xl">{icon}</span>
@@ -840,7 +877,9 @@ function ProgressCard({
 }) {
   return (
     <div className="bg-muted rounded-xl p-6 mb-8">
-      <h2 className="text-lg font-semibold mb-4">Adding lyrics to your chart</h2>
+      <h2 className="text-lg font-semibold mb-4">
+        Adding lyrics to your chart
+      </h2>
       <div className="space-y-3">
         {steps.map(step => (
           <div key={step.id} className="flex items-start gap-3">

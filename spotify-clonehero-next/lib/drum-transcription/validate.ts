@@ -5,9 +5,9 @@
  * The returned document may differ from the input (auto-corrections applied).
  */
 
-import type { ChartDocument } from '@/lib/chart-edit';
-import { getDrumNotes } from '@/lib/chart-edit';
-import type { ValidationResult } from './chart-types';
+import type {ChartDocument} from '@/lib/chart-edit';
+import {getDrumNotes} from '@/lib/chart-edit';
+import type {ValidationResult} from './chart-types';
 
 /**
  * Validate a ChartDocument before serialization.
@@ -37,20 +37,20 @@ export function validateChart(doc: ChartDocument): ValidationResult {
     parsedChart: {
       ...chart,
       metadata: {...chart.metadata},
-      tempos: chart.tempos.map((t) => ({ ...t })),
-      timeSignatures: chart.timeSignatures.map((ts) => ({ ...ts })),
-      sections: chart.sections.map((s) => ({ ...s })),
-      endEvents: chart.endEvents.map((e) => ({ ...e })),
-      trackData: chart.trackData.map((t) => ({
+      tempos: chart.tempos.map(t => ({...t})),
+      timeSignatures: chart.timeSignatures.map(ts => ({...ts})),
+      sections: chart.sections.map(s => ({...s})),
+      endEvents: chart.endEvents.map(e => ({...e})),
+      trackData: chart.trackData.map(t => ({
         ...t,
-        noteEventGroups: t.noteEventGroups.map((g) => g.map((n) => ({ ...n }))),
-        starPowerSections: t.starPowerSections.map((sp) => ({ ...sp })),
-        rejectedStarPowerSections: t.rejectedStarPowerSections.map((sp) => ({
+        noteEventGroups: t.noteEventGroups.map(g => g.map(n => ({...n}))),
+        starPowerSections: t.starPowerSections.map(sp => ({...sp})),
+        rejectedStarPowerSections: t.rejectedStarPowerSections.map(sp => ({
           ...sp,
         })),
-        soloSections: t.soloSections.map((s) => ({ ...s })),
-        flexLanes: t.flexLanes.map((f) => ({ ...f })),
-        drumFreestyleSections: t.drumFreestyleSections.map((fs) => ({ ...fs })),
+        soloSections: t.soloSections.map(s => ({...s})),
+        flexLanes: t.flexLanes.map(f => ({...f})),
+        drumFreestyleSections: t.drumFreestyleSections.map(fs => ({...fs})),
       })),
     },
     assets: [...doc.assets],
@@ -79,8 +79,12 @@ export function validateChart(doc: ChartDocument): ValidationResult {
   }
 
   // Auto-fix: ensure tempo at tick 0
-  if (!result.parsedChart.tempos.some((t) => t.tick === 0)) {
-    result.parsedChart.tempos.unshift({ tick: 0, beatsPerMinute: 120, msTime: 0 });
+  if (!result.parsedChart.tempos.some(t => t.tick === 0)) {
+    result.parsedChart.tempos.unshift({
+      tick: 0,
+      beatsPerMinute: 120,
+      msTime: 0,
+    });
     warnings.push('No tempo at tick 0; inserted default 120 BPM');
   }
 
@@ -115,17 +119,14 @@ export function validateChart(doc: ChartDocument): ValidationResult {
         `Zero or negative denominator: ${ts.denominator} at tick ${ts.tick}`,
       );
     }
-    if (
-      ts.denominator > 0 &&
-      !Number.isInteger(Math.log2(ts.denominator))
-    ) {
+    if (ts.denominator > 0 && !Number.isInteger(Math.log2(ts.denominator))) {
       errors.push(
         `Denominator must be a power of 2: ${ts.denominator} at tick ${ts.tick}`,
       );
     }
   }
 
-  if (!result.parsedChart.timeSignatures.some((ts) => ts.tick === 0)) {
+  if (!result.parsedChart.timeSignatures.some(ts => ts.tick === 0)) {
     result.parsedChart.timeSignatures.unshift({
       tick: 0,
       numerator: 4,
@@ -177,10 +178,14 @@ export function validateChart(doc: ChartDocument): ValidationResult {
 
     // Auto-sort noteEventGroups by the group's leading tick
     const wasSorted = track.noteEventGroups.every(
-      (g, i) => i === 0 || (g[0]?.tick ?? 0) >= (track.noteEventGroups[i - 1][0]?.tick ?? 0),
+      (g, i) =>
+        i === 0 ||
+        (g[0]?.tick ?? 0) >= (track.noteEventGroups[i - 1][0]?.tick ?? 0),
     );
     if (!wasSorted) {
-      track.noteEventGroups.sort((a, b) => (a[0]?.tick ?? 0) - (b[0]?.tick ?? 0));
+      track.noteEventGroups.sort(
+        (a, b) => (a[0]?.tick ?? 0) - (b[0]?.tick ?? 0),
+      );
       warnings.push(
         `Track events not sorted by tick in ${track.difficulty} ${track.instrument}; auto-sorted`,
       );
@@ -246,9 +251,9 @@ export function validateChart(doc: ChartDocument): ValidationResult {
 
   if (errors.length > 0) {
     throw new Error(
-      `Chart validation failed:\n${errors.map((e) => `  - ${e}`).join('\n')}`,
+      `Chart validation failed:\n${errors.map(e => `  - ${e}`).join('\n')}`,
     );
   }
 
-  return { errors, warnings, document: result };
+  return {errors, warnings, document: result};
 }

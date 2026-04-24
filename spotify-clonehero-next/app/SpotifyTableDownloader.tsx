@@ -365,7 +365,6 @@ const columns = [
           song={song}
           url={url}
           spotifyUrl={spotifyUrl}
-
         />
       );
     },
