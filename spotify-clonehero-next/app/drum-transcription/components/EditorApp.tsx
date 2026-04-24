@@ -82,6 +82,10 @@ function EditorAppInner({projectId}: {projectId: string}) {
   const [audioPcm, setAudioPcm] = useState<Float32Array | null>(null);
   const [audioChannels, setAudioChannels] = useState(2);
   const [durationSeconds, setDurationSeconds] = useState(0);
+  // Mirrors audioManagerRef (shared via context for event-handler reads)
+  // into render-visible state so ChartEditor and StemVolumeControls
+  // receive a stable prop without reading ref.current during render.
+  const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
 
   // Build the save function for auto-save
   const saveFn = useCallback(async () => {
@@ -400,6 +404,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
           getChartDelayMs(chartDoc.parsedChart.metadata) / 1000,
         );
         audioManagerRef.current = audioManager;
+        setAudioManager(audioManager);
 
         // 11. Update editor state
         dispatch({type: 'SET_CHART', chart: parsed, track: drumTrack});
@@ -422,6 +427,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
       cancelled = true;
       audioManagerRef.current?.destroy();
       audioManagerRef.current = null;
+      setAudioManager(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
@@ -542,7 +548,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
   }
 
   const {chart} = state;
-  if (!chart || !audioManagerRef.current || !cloneHeroMetadata) {
+  if (!chart || !audioManager || !cloneHeroMetadata) {
     return null;
   }
 
@@ -550,7 +556,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
     <ChartEditor
       metadata={cloneHeroMetadata}
       chart={chart}
-      audioManager={audioManagerRef.current}
+      audioManager={audioManager}
       audioData={audioPcm ?? undefined}
       audioChannels={audioChannels}
       durationSeconds={durationSeconds}
@@ -567,7 +573,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
       leftPanelChildren={
         <>
           <ConfidencePanel />
-          <StemVolumeControls audioManager={audioManagerRef.current} />
+          <StemVolumeControls audioManager={audioManager} />
         </>
       }
     />
