@@ -239,8 +239,7 @@ export default function SpotifyLoaderCard({
   // construction live inside functional setState updaters, which React
   // invokes during reconciliation (outside the purity-checked render
   // body), so react-hooks/purity is satisfied.
-  const scanShouldStart =
-    progress.updateStatus === 'fetching' || hasStarted;
+  const scanShouldStart = progress.updateStatus === 'fetching' || hasStarted;
   if (scanShouldStart && scanStartTime === null) {
     setScanStartTime(() => Date.now());
     setInitialCachedCounts(() => {

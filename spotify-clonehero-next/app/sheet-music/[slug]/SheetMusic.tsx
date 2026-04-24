@@ -1,11 +1,5 @@
 import {Difficulty, parseChartFile} from '@eliwhite/scan-chart';
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  forwardRef,
-} from 'react';
+import {useEffect, useMemo, useRef, useState, forwardRef} from 'react';
 import convertToVexFlow from './convertToVexflow';
 import {
   RenderData,
