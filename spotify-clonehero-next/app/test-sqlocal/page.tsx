@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect, useState} from 'react';
+import {useState} from 'react';
 import {
   getLocalDb,
   checkLocalDbHealth,
@@ -24,21 +24,23 @@ export default function TestSQLocalPage() {
   const [consistency, setConsistency] = useState<any>(null);
   const [cleaning, setCleaning] = useState<boolean>(false);
   const [newItem, setNewItem] = useState('');
-  const [sqlInput, setSqlInput] = useState('select 1 as ok;');
+  const sqlStorageKey = 'test-sqlocal:sqlInput';
+  // Load saved SQL from localStorage exactly once per mount via the
+  // useState initializer, so there's no effect-then-setState pair
+  // paint. typeof window is checked because this runs on the server
+  // during initial render for App Router client components.
+  const [sqlInput, setSqlInput] = useState(() => {
+    if (typeof window === 'undefined') return 'select 1 as ok;';
+    try {
+      return localStorage.getItem(sqlStorageKey) ?? 'select 1 as ok;';
+    } catch {
+      return 'select 1 as ok;';
+    }
+  });
   const [sqlExecuting, setSqlExecuting] = useState(false);
   const [sqlResult, setSqlResult] = useState<any[] | null>(null);
   const [sqlError, setSqlError] = useState<string | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
-
-  const sqlStorageKey = 'test-sqlocal:sqlInput';
-
-  // Load saved SQL from localStorage on mount
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(sqlStorageKey);
-      if (saved !== null) setSqlInput(saved);
-    } catch {}
-  }, []);
 
   const initializeDatabase = async () => {
     setStatus('initializing');
