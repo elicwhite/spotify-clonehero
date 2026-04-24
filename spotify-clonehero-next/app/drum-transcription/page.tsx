@@ -79,7 +79,10 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
   const projectId = searchParams.get('project');
 
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [loadingProjects, setLoadingProjects] = useState(false);
+  // Tracks whether we've completed at least one listProjects() call.
+  // Used to derive loadingProjects below, so the effect doesn't need
+  // to flip a loading flag synchronously before kicking off the fetch.
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
 
   // Pipeline state
   const [pipelineProgress, setPipelineProgress] =
@@ -183,16 +186,32 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
     };
   }, [projectId]);
 
-  // Load project list when no project is selected and not processing
+  // Load project list when no project is selected and not processing.
+  // All state writes happen in promise callbacks (post-await), so the
+  // effect body itself does no synchronous setState.
+  const shouldLoadProjects = !projectId && !isProcessing;
+  const loadingProjects = shouldLoadProjects && !projectsLoaded;
   useEffect(() => {
-    if (!projectId && !isProcessing) {
-      setLoadingProjects(true);
-      listProjects()
-        .then(setProjects)
-        .catch(() => setProjects([]))
-        .finally(() => setLoadingProjects(false));
-    }
-  }, [projectId, isProcessing]);
+    if (!shouldLoadProjects) return;
+
+    let cancelled = false;
+    listProjects()
+      .then(result => {
+        if (!cancelled) {
+          setProjects(result);
+          setProjectsLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProjects([]);
+          setProjectsLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldLoadProjects]);
 
   // Wait for ORT to be ready, showing loading-runtime step.
   // Returns a promise that resolves once ortReady is true.
