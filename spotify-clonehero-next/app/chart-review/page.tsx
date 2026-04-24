@@ -420,7 +420,9 @@ export default function ChartReviewPage() {
     // the render with the updated state before committing, so the user never
     // sees the stale queue.
     setLastQueueInputs(queueInputs);
-    setQueue(buildReviewQueue(allEntries, classifierScores, focusScore, ratedSet));
+    setQueue(
+      buildReviewQueue(allEntries, classifierScores, focusScore, ratedSet),
+    );
     setQueuePos(0);
   }
 
@@ -625,12 +627,16 @@ export default function ChartReviewPage() {
   const nextChart =
     nextEntryIndex >= 0 ? (prepared.get(nextEntryIndex) ?? null) : null;
 
-  // Skip failed entries
-  useEffect(() => {
-    if (currentEntryIndex >= 0 && failedIndices.has(currentEntryIndex)) {
-      setQueuePos(prev => prev + 1);
-    }
-  }, [currentEntryIndex, failedIndices]);
+  // Skip failed entries. Adjust-during-render from the React docs: if
+  // the current slot points at a failed entry, schedule an advance
+  // synchronously so React re-runs the component with the new queuePos
+  // before committing. For multiple consecutive failures this repeats
+  // render-by-render until a non-failed entry (or end-of-queue) is
+  // found — same number of advances as the old effect, but batched
+  // into a single commit rather than one commit per advance.
+  if (currentEntryIndex >= 0 && failedIndices.has(currentEntryIndex)) {
+    setQueuePos(prev => prev + 1);
+  }
 
   // Auto-play current chart when it becomes active
   const lastPlayedRef = useRef<string | null>(null);
