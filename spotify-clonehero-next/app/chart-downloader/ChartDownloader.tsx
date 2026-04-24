@@ -453,7 +453,7 @@ async function downloadAndStripToSng(
   const sngData = buildSngFile(sngMetadata, collectedFiles);
   const fileHandle = await outputDir.getFileHandle(safeName, {create: true});
   const writable = await fileHandle.createWritable();
-  await writable.write(sngData);
+  await writable.write(sngData as Uint8Array<ArrayBuffer>);
   await writable.close();
 }
 

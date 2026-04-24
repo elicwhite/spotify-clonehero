@@ -32,7 +32,7 @@ function audioFilesToBlobUrls(audioFiles: Files): string[] {
     if (ext === 'mp3') mime = 'audio/mpeg';
     else if (ext === 'opus') mime = 'audio/opus';
     else if (ext === 'wav') mime = 'audio/wav';
-    const blob = new Blob([f.data], {type: mime});
+    const blob = new Blob([f.data as Uint8Array<ArrayBuffer>], {type: mime});
     return URL.createObjectURL(blob);
   });
 }

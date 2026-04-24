@@ -139,7 +139,7 @@ export async function createProject(opts: {
   for (const audio of opts.audioFiles) {
     const handle = await audioDir.getFileHandle(audio.fileName, {create: true});
     const writable = await handle.createWritable();
-    await writable.write(audio.data);
+    await writable.write(audio.data as Uint8Array<ArrayBuffer>);
     await writable.close();
   }
 
@@ -161,7 +161,7 @@ export async function createProject(opts: {
     // Store non-audio files at the project root
     const handle = await dir.getFileHandle(file.fileName, {create: true});
     const writable = await handle.createWritable();
-    await writable.write(file.data);
+    await writable.write(file.data as Uint8Array<ArrayBuffer>);
     await writable.close();
     manifest.push({fileName: file.fileName, storedIn: 'root'});
   }

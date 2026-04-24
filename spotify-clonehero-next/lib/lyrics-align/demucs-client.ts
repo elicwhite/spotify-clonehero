@@ -74,7 +74,7 @@ export async function resampleTo16kMono(
   audioData: Uint8Array,
   mimeType: string,
 ): Promise<Float32Array> {
-  const blob = new Blob([audioData], {type: mimeType});
+  const blob = new Blob([audioData as Uint8Array<ArrayBuffer>], {type: mimeType});
   const arrayBuffer = await blob.arrayBuffer();
   const audioCtx = new OfflineAudioContext(1, 1, 16000);
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);

@@ -424,12 +424,21 @@ export default function ChartReviewPage() {
       try {
         const db = await openHandleDb();
         const stored = await getStoredHandles(db);
+        // TS 6's built-in FileSystem*Handle types don't include the
+        // experimental permission methods; cast through a minimal interface.
+        type WithPerm<M extends string> = {
+          requestPermission(d: {mode: M}): Promise<PermissionState>;
+        };
         if (stored.chartsDir) {
-          const perm = await stored.chartsDir.requestPermission({mode: 'read'});
+          const perm = await (
+            stored.chartsDir as unknown as WithPerm<'read'>
+          ).requestPermission({mode: 'read'});
           if (perm === 'granted') setChartsDir(stored.chartsDir);
         }
         if (stored.tsvFile) {
-          const perm = await stored.tsvFile.requestPermission({mode: 'readwrite'});
+          const perm = await (
+            stored.tsvFile as unknown as WithPerm<'readwrite'>
+          ).requestPermission({mode: 'readwrite'});
           if (perm === 'granted') setTsvHandle(stored.tsvFile);
         }
       } catch {

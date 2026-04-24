@@ -138,7 +138,7 @@ export default function ExportDialog({
       if (packageFormat === 'sng') {
         // exportAsSng extracts song.ini into SNG header metadata automatically
         const sngBytes = exportAsSng(fileEntries);
-        blob = new Blob([sngBytes], {type: 'application/octet-stream'});
+        blob = new Blob([sngBytes as Uint8Array<ArrayBuffer>], {type: 'application/octet-stream'});
         extension = 'sng';
       } else {
         blob = exportAsZip(fileEntries);

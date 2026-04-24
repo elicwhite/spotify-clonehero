@@ -20,5 +20,5 @@ export function exportAsZip(files: FileEntry[]): Blob {
     entries[f.filename] = f.data;
   }
   const zipData = zipSync(entries);
-  return new Blob([zipData], {type: 'application/zip'});
+  return new Blob([zipData as Uint8Array<ArrayBuffer>], {type: 'application/zip'});
 }

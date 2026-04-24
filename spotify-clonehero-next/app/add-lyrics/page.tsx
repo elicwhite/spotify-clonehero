@@ -391,7 +391,7 @@ function LyricsAlignInner() {
 
         const ext = getExtension(songFile.fileName).toLowerCase();
         const mime = getMimeForExtension(ext);
-        const blob = new Blob([songFile.data], {type: mime});
+        const blob = new Blob([songFile.data as Uint8Array<ArrayBuffer>], {type: mime});
         const arrayBuffer = await blob.arrayBuffer();
 
         const audioCtx = new AudioContext({sampleRate: 44100});
@@ -501,7 +501,7 @@ function LyricsAlignInner() {
       let blob: Blob;
       if (chart.sourceFormat === 'sng') {
         const sngBytes = exportAsSng(exportFiles);
-        blob = new Blob([sngBytes], {type: 'application/octet-stream'});
+        blob = new Blob([sngBytes as Uint8Array<ArrayBuffer>], {type: 'application/octet-stream'});
       } else {
         blob = exportAsZip(exportFiles);
       }

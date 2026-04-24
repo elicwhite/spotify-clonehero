@@ -88,7 +88,7 @@ async function storeStem(
     create: true,
   });
   const writable = await fileHandle.createWritable();
-  await writable.write(pcmData.buffer);
+  await writable.write(pcmData.buffer as ArrayBuffer);
   await writable.close();
 }
 

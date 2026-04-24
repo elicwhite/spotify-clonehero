@@ -369,7 +369,7 @@ export async function storeAudio(
     create: true,
   });
   const pcmWritable = await pcmHandle.createWritable();
-  await pcmWritable.write(interleavedPcm.buffer);
+  await pcmWritable.write(interleavedPcm.buffer as ArrayBuffer);
   await pcmWritable.close();
 
   // Write audio metadata
