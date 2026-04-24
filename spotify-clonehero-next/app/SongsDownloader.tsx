@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback} from 'react';
-import {SngStream} from 'parse-sng';
+import {SngStream} from '@eliwhite/parse-sng';
 
 // const URL =
 // 'https://www.enchor.us/download?md5=0acb9bad1d27efe83af51587bd20de0a&isSng=true';

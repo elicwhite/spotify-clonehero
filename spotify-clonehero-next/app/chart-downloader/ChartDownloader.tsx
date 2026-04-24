@@ -12,7 +12,7 @@ import UpdateChorusLoaderCard from '../spotify/app/UpdateChorusLoaderCard';
 import {getLocalDb} from '@/lib/local-db/client';
 import {upsertLocalCharts} from '@/lib/local-db/local-charts';
 import {sql} from 'kysely';
-import {SngStream} from 'parse-sng';
+import {SngStream} from '@eliwhite/parse-sng';
 import scanLocalCharts, {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 
 type MissingChart = {

@@ -4,7 +4,7 @@ import {sendGAEvent} from '@next/third-parties/google';
 
 import {writeFile} from '@/lib/fileSystemHelpers';
 import scanLocalCharts, {SongAccumulator} from './scanLocalCharts';
-import {SngStream} from 'parse-sng';
+import {SngStream} from '@eliwhite/parse-sng';
 import {upsertLocalCharts} from '@/lib/local-db/local-charts';
 
 async function promptForSongsDirectory() {
@@ -30,33 +30,13 @@ async function promptForSongsDirectory() {
 let currentSongDirectoryCache: FileSystemDirectoryHandle | undefined;
 
 async function getSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle> {
-  // const handle: FileSystemDirectoryHandle | undefined = await get(
-  //   'songsDirectoryHandle',
-  // );
-
   if (currentSongDirectoryCache) {
     return currentSongDirectoryCache;
   }
 
-  // if (handle == null) {
   const promptedHandle = await promptForSongsDirectory();
   currentSongDirectoryCache = promptedHandle;
   return promptedHandle;
-  // }
-
-  // const permissionState: PermissionState = await handle.queryPermission({
-  //   mode: 'readwrite',
-  // });
-
-  // console.log('premissionStatus', permissionState);
-  // if (permissionState === 'granted') {
-  //   return handle;
-  // } else if (permissionState === 'prompt') {
-  //   await handle.requestPermission({mode: 'readwrite'});
-  //   return handle;
-  // } else {
-  //   return await promptForSongsDirectory();
-  // }
 }
 
 type InstalledChartsResponse = {

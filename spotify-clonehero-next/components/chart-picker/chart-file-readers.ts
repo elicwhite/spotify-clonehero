@@ -6,8 +6,8 @@
  */
 
 import {unzipSync} from 'fflate';
-import {SngStream} from 'parse-sng';
-import type {SngHeader} from 'parse-sng';
+import {SngStream} from '@eliwhite/parse-sng';
+import type {SngHeader} from '@eliwhite/parse-sng';
 import {
   getExtension,
   hasAudioName,

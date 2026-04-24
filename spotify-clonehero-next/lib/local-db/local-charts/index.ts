@@ -28,8 +28,6 @@ export async function upsertLocalCharts(charts: SongAccumulator[]) {
     }
 
     const removedIds: number[] = [];
-    let unchanged = 0;
-    let changedSample: {key: string; was: string; now: string} | null = null;
     for (const row of existing) {
       const key = makeKey(row.artist, row.song, row.charter);
       const c = incoming.get(key);
@@ -38,24 +36,11 @@ export async function upsertLocalCharts(charts: SongAccumulator[]) {
       } else if (c.modifiedTime === row.modified_time) {
         // Unchanged — no need to rewrite the row.
         incoming.delete(key);
-        unchanged++;
-      } else {
-        // changed — keep in `incoming` so it gets re-upserted.
-        if (changedSample == null) {
-          changedSample = {key, was: row.modified_time, now: c.modifiedTime};
-        }
       }
+      // else: changed — keep in `incoming` so it gets re-upserted.
     }
 
     const toUpsert = Array.from(incoming.values());
-    console.log(
-      `[upsertLocalCharts] existing=${existing.length} unchanged=${unchanged} ` +
-        `toUpsert=${toUpsert.length} (new=${toUpsert.length - (existing.length - unchanged - removedIds.length)} ` +
-        `changed=${existing.length - unchanged - removedIds.length}) removed=${removedIds.length}`,
-    );
-    if (changedSample) {
-      console.log('[upsertLocalCharts] sample changed row:', changedSample);
-    }
 
     if (toUpsert.length > 0) {
       const values = toUpsert.map(chart => ({

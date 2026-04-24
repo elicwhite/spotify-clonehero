@@ -15,6 +15,7 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
+    "@eliwhite/parse-sng": "4.0.3-eliwhite.0",
     "@eliwhite/scan-chart": "8.1.0-eliwhite.1",
     "@headlessui/react": "^1.7.17",
     "@mcp-b/global": "^2.2.0",
@@ -60,7 +61,6 @@
     "onnxruntime-web": "^1.24.3",
     "p-limit": "^7.3.0",
     "p-map": "^6.0.0",
-    "parse-sng": "^4.0.3",
     "patch-package": "^8.0.1",
     "prettier": "^3.6.2",
     "ratelimit-header-parser": "^0.1.0",

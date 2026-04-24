@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import {SngHeader, SngStream} from 'parse-sng';
+import {SngHeader, SngStream} from '@eliwhite/parse-sng';
 import {parseChartFile} from '@eliwhite/scan-chart';
 
 import {

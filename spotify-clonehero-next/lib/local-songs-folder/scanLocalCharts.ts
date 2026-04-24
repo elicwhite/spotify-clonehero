@@ -1,7 +1,7 @@
 import pLimit, {type LimitFunction} from 'p-limit';
 import {parse} from '@/lib/ini-parser';
 import * as Sentry from '@sentry/nextjs';
-import {SngStream} from 'parse-sng';
+import {readSongIni} from '@eliwhite/parse-sng';
 import {removeStyleTags} from '@/lib/ui-utils';
 
 // Caps concurrent FS ops across the whole recursive scan. Without a shared
@@ -90,63 +90,55 @@ async function scanLocalChartsDirectory(
   callbackPerSong: () => void,
   limit: LimitFunction,
 ) {
-  let songIniData: SongIniData | null = null;
-  let songIniMTime = 0;
+  // Run listEntries + song.ini parse atomically inside one limit slot. This
+  // bounds total in-flight FS-Access ops to ~`limit` instead of fanning out
+  // tens of thousands of listings ahead of all parses (which Chrome's FS
+  // queue would FIFO behind, starving the parses for seconds on a flat tree
+  // with 60k+ subdirs).
+  //
+  // Recursion + .sng scanning happens OUTSIDE this slot — we release before
+  // awaiting children so deep trees can't deadlock.
+  type LeafResult = {
+    subdirs: FileSystemDirectoryHandle[];
+    sngFiles: FileSystemFileHandle[];
+    songIniData: SongIniData | null;
+    songIniMTime: number;
+  } | null;
 
-  let entries: Array<[string, EntryHandle]>;
-  try {
-    entries = await listEntries(currentDirectoryHandle);
-  } catch (e) {
-    const error = new Error(
-      `Error scanning directory ${parentDirectoryHandle.name}/${currentDirectoryHandle.name}`,
-      {cause: e},
-    );
-    Sentry.captureException(error);
-    console.error(error.message);
-    return;
-  }
-
-  // Partition entries up-front so non-ini files don't cost a getFile() call.
-  let songIniHandle: FileSystemFileHandle | null = null;
-  const childTasks: Array<Promise<void>> = [];
-  for (const [, subHandle] of entries) {
-    if (subHandle.kind === 'directory') {
-      childTasks.push(
-        scanLocalChartsDirectory(
-          currentDirectoryHandle,
-          subHandle,
-          accumulator,
-          callbackPerSong,
-          limit,
-        ),
+  const result: LeafResult = await limit(async () => {
+    let entries: Array<[string, EntryHandle]>;
+    try {
+      entries = await listEntries(currentDirectoryHandle);
+    } catch (e) {
+      const error = new Error(
+        `Error scanning directory ${parentDirectoryHandle.name}/${currentDirectoryHandle.name}`,
+        {cause: e},
       );
-    } else if (subHandle.kind === 'file') {
-      if (subHandle.name.toLowerCase().endsWith('.sng')) {
-        childTasks.push(
-          scanLocalSngFile(
-            currentDirectoryHandle,
-            subHandle,
-            accumulator,
-            callbackPerSong,
-            limit,
-          ),
-        );
-      } else if (subHandle.name === 'song.ini') {
-        songIniHandle = subHandle;
+      Sentry.captureException(error);
+      console.error(error.message);
+      return null;
+    }
+
+    const subdirs: FileSystemDirectoryHandle[] = [];
+    const sngFiles: FileSystemFileHandle[] = [];
+    let songIniHandle: FileSystemFileHandle | null = null;
+    for (const [, subHandle] of entries) {
+      if (subHandle.kind === 'directory') {
+        subdirs.push(subHandle);
+      } else if (subHandle.kind === 'file') {
+        if (subHandle.name.toLowerCase().endsWith('.sng')) {
+          sngFiles.push(subHandle);
+        } else if (subHandle.name === 'song.ini') {
+          songIniHandle = subHandle;
+        }
       }
     }
-  }
 
-  if (songIniHandle) {
-    const iniHandle = songIniHandle;
-    childTasks.push(
-      limit(async () => {
-        let file: File;
-        try {
-          file = await iniHandle.getFile();
-        } catch {
-          return;
-        }
+    let songIniData: SongIniData | null = null;
+    let songIniMTime = 0;
+    if (songIniHandle) {
+      try {
+        const file = await songIniHandle.getFile();
         try {
           const text = await file.text();
           const values = parse(text);
@@ -159,24 +151,31 @@ async function scanLocalChartsDirectory(
             currentDirectoryHandle.name,
           );
         }
-      }),
-    );
-  }
+      } catch {
+        // getFile failed — skip this directory's chart but still recurse.
+      }
+    }
 
-  await Promise.all(childTasks);
+    return {subdirs, sngFiles, songIniData, songIniMTime};
+  });
 
-  // Cast back to the declared union — control-flow analysis collapses the
-  // variable to its initializer's `null` type because all assignments happen
-  // inside Promise.all callbacks, which CFA treats as opaque.
-  const finalIni = songIniData as SongIniData | null;
-  if (finalIni != null) {
-    const convertedSongIniData = convertValues(finalIni);
+  if (result == null) return;
+
+  // Push chart immediately on slot release so the counter starts ticking
+  // before any children have been processed.
+  if (
+    result.songIniData != null &&
+    (result.songIniData.name || result.songIniData.artist)
+  ) {
+    const convertedSongIniData = convertValues(result.songIniData);
     const chart = {
-      artist: removeStyleTags(finalIni.artist),
-      song: removeStyleTags(finalIni.name),
-      modifiedTime: new Date(songIniMTime).toISOString(),
-      charter: removeStyleTags(finalIni.charter || finalIni.frets || ''),
-      genre: removeStyleTags(finalIni.genre ?? ''),
+      artist: removeStyleTags(result.songIniData.artist ?? ''),
+      song: removeStyleTags(result.songIniData.name ?? ''),
+      modifiedTime: new Date(result.songIniMTime).toISOString(),
+      charter: removeStyleTags(
+        result.songIniData.charter || result.songIniData.frets || '',
+      ),
+      genre: removeStyleTags(result.songIniData.genre ?? ''),
       data: convertedSongIniData,
       handleInfo: {
         parentDir: parentDirectoryHandle,
@@ -194,6 +193,28 @@ async function scanLocalChartsDirectory(
     accumulator.push(chart);
     callbackPerSong();
   }
+
+  // Recurse + scan SNGs OUTSIDE the slot so the slot is freed for siblings.
+  await Promise.all([
+    ...result.subdirs.map(sub =>
+      scanLocalChartsDirectory(
+        currentDirectoryHandle,
+        sub,
+        accumulator,
+        callbackPerSong,
+        limit,
+      ),
+    ),
+    ...result.sngFiles.map(sng =>
+      scanLocalSngFile(
+        currentDirectoryHandle,
+        sng,
+        accumulator,
+        callbackPerSong,
+        limit,
+      ),
+    ),
+  ]);
 }
 
 async function scanLocalSngFile(
@@ -223,35 +244,7 @@ async function scanLocalSngFileInner(
   let metadata: {[key: string]: string};
 
   try {
-    metadata = await new Promise<{[key: string]: string}>((resolve, reject) => {
-      let resolved = false;
-      const sngStream = new SngStream(file.stream(), {
-        generateSongIni: false,
-      });
-
-      sngStream.on('header', header => {
-        if (resolved) return;
-        resolved = true;
-        resolve(header.metadata);
-      });
-
-      sngStream.on('file', (_fileName, fileStream) => {
-        // We already have the metadata from the header. Cancel the file
-        // stream so parse-sng stops streaming the (potentially many MB of)
-        // audio/chart bytes inside the .sng. Intentionally don't call
-        // nextFile() — there's nothing left we need to read.
-        fileStream.cancel().catch(() => {});
-      });
-
-      sngStream.on('error', err => {
-        // Errors after we resolve are typically the cancel propagating back
-        // through the parser — ignore. Real header-parse failures fire
-        // before `resolved` is set.
-        if (!resolved) reject(err);
-      });
-
-      sngStream.start();
-    });
+    metadata = await readSongIni(file.stream());
   } catch (e) {
     const error = new Error(
       `Error scanning sng file ${parentDirectoryHandle.name}/${fileHandle.name}`,
@@ -269,8 +262,8 @@ async function scanLocalSngFileInner(
 
   const convertedSongIniData = convertValues(songIniData);
   const chart = {
-    artist: removeStyleTags(songIniData.artist),
-    song: removeStyleTags(songIniData.name),
+    artist: removeStyleTags(songIniData.artist ?? ''),
+    song: removeStyleTags(songIniData.name ?? ''),
     modifiedTime: new Date(file.lastModified).toISOString(),
     charter: removeStyleTags(songIniData.charter || songIniData.frets || ''),
     genre: removeStyleTags(songIniData.genre ?? ''),
