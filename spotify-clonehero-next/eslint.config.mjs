@@ -9,7 +9,6 @@ export default defineConfig([
       'react-hooks/refs': 'off',
       'react-hooks/set-state-in-effect': 'off',
       'react-hooks/preserve-manual-memoization': 'off',
-      'react-hooks/immutability': 'off',
     },
   },
   // Must come last — turns off ESLint rules that conflict with Prettier.
