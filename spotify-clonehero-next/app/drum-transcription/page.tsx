@@ -97,8 +97,7 @@ function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
     projectId: string;
     needsProcessing: boolean;
   } | null>(null);
-  const checkingProject =
-    !!projectId && projectCheck?.projectId !== projectId;
+  const checkingProject = !!projectId && projectCheck?.projectId !== projectId;
   const projectNeedsProcessing =
     !!projectId &&
     projectCheck?.projectId === projectId &&

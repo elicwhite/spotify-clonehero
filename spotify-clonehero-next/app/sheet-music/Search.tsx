@@ -192,7 +192,14 @@ export default function Search({
     return () => {
       cancelled = true;
     };
-  }, [filteredSongs, inView, isLoadingMore, page, searchQuery, instrumentFilter]);
+  }, [
+    filteredSongs,
+    inView,
+    isLoadingMore,
+    page,
+    searchQuery,
+    instrumentFilter,
+  ]);
 
   return (
     <main className="min-h-screen bg-background w-full">

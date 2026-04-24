@@ -730,9 +730,7 @@ export default function Renderer({
       summary:
         fills.length > 0
           ? {
-              shortestFillMs: Math.min(
-                ...fills.map(f => f.endMs - f.startMs),
-              ),
+              shortestFillMs: Math.min(...fills.map(f => f.endMs - f.startMs)),
               longestFillMs: Math.max(...fills.map(f => f.endMs - f.startMs)),
               avgFillDurationMs:
                 fills.reduce((sum, f) => sum + (f.endMs - f.startMs), 0) /
