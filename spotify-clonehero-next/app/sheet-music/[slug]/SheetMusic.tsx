@@ -22,6 +22,7 @@ export default function SheetMusic({
   showBarNumbers,
   enableColors,
   showLyrics,
+  lyrics,
   zoom,
   onSelectMeasure,
   triggerRerender,
@@ -36,6 +37,7 @@ export default function SheetMusic({
   showBarNumbers: boolean;
   enableColors: boolean;
   showLyrics: boolean;
+  lyrics: {tick: number; text: string; msTime: number}[];
   zoom: number;
   onSelectMeasure: (time: number) => void;
   triggerRerender: string;
@@ -101,14 +103,9 @@ export default function SheetMusic({
       // https://github.com/YARC-Official/YARG.Core/blob/6b24334cb6b3588d290e1d5f8231ce70314d097c/YARG.Core/MoonscraperChartParser/IO/Midi/MidReader.cs#L299
       zoom,
       showLyrics
-        ? (chart as any).lyrics
-            ?.filter((lyric: any) => !lyric.text.includes('['))
-            .map((lyric: any) => {
-              return {
-                ...lyric,
-                text: cleanLyrics(lyric.text),
-              }; //,
-            }) || []
+        ? lyrics
+            .filter(lyric => !lyric.text.includes('['))
+            .map(lyric => ({...lyric, text: cleanLyrics(lyric.text)}))
         : [],
       showBarNumbers,
       enableColors,
@@ -122,7 +119,7 @@ export default function SheetMusic({
     windowWidth,
     triggerRerender,
     showLyrics,
-    (chart as any).lyrics,
+    lyrics,
     chart.sections,
     practiceModeConfig,
     zoom,

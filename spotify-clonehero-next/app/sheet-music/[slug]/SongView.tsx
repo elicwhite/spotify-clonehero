@@ -364,6 +364,18 @@ export default function Renderer({
   // Compute chart delay once from metadata (must be before consumers)
   const chartDelayMs = useMemo(() => getChartDelayMs(chart.metadata), [chart]);
 
+  // Flatten lyrics from the chart's vocal phrases. Older chart formats
+  // exposed lyrics as a top-level `chart.lyrics` array, but the
+  // current parser puts them on vocalTracks.parts.vocals.notePhrases
+  // (the same source the highway uses).
+  const chartLyrics = useMemo(
+    () =>
+      (chart as any).vocalTracks?.parts?.vocals?.notePhrases?.flatMap(
+        (p: any) => p.lyrics,
+      ) ?? [],
+    [chart],
+  );
+
   // Offset practice mode times for AudioManager.
   // PracticeModeConfig stores chart times in startTimeMs/endTimeMs,
   // but AudioManager.checkPracticeModeLoop compares against audio time,
@@ -1203,7 +1215,7 @@ export default function Renderer({
                 Enable colors
               </label>
             </div>
-            {(chart as any).lyrics == null ? null : (
+            {chartLyrics.length === 0 ? null : (
               <div className="flex items-center space-x-2">
                 <Switch
                   id="lyrics"
@@ -1421,6 +1433,7 @@ export default function Renderer({
               showBarNumbers={showBarNumbers}
               enableColors={enableColors}
               showLyrics={showLyrics}
+              lyrics={chartLyrics}
               zoom={zoom}
               onSelectMeasure={time => {
                 if (audioManagerRef.current == null) {
