@@ -129,7 +129,7 @@ export function renderMusic(
   // the worst case during resize is a horizontally squished render
   // for one frame instead of a visible vertical jump.
   const svg = (elementRef.current?.children.item(0) as SVGSVGElement) ?? null;
-  svg?.setAttribute('preserveAspectRatio', 'xMinYMin meet');
+  svg?.setAttribute('preserveAspectRatio', 'xMinYMin slice');
 
   context.scale(zoom, zoom);
 
