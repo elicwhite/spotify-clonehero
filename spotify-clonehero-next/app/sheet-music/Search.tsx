@@ -1,6 +1,6 @@
 'use client';
 
-import {useMemo, useEffect, useState, useCallback} from 'react';
+import {useMemo, useEffect, useRef, useState, useCallback} from 'react';
 import {useInView} from 'react-intersection-observer';
 import {useRouter} from 'next/navigation';
 import {parseAsString, useQueryState} from 'nuqs';
@@ -110,6 +110,15 @@ export default function Search({
     useState<EncoreResponse>(defaultResults);
   const [page, setPage] = useState<number>(1);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  // In-flight gate for the infinite-scroll fetch. We deliberately hold
+  // this in a ref instead of reading isLoadingMore: putting
+  // isLoadingMore in the effect deps creates a self-cancelling loop
+  // (setting it to true re-runs the effect, the previous run's cleanup
+  // sets cancelled=true, the in-flight fetch then bails in its
+  // post-await guard and never clears the loading state). Refs don't
+  // trigger re-renders or dep changes, so the gate stays consistent
+  // across the fetch's full lifecycle.
+  const fetchInFlightRef = useRef(false);
   const {ref: sentinelRef, inView} = useInView({
     root: null,
     rootMargin: '200px',
@@ -149,14 +158,17 @@ export default function Search({
   }, [searchQuery, searchSongs, initialQuery, setSearchQuery]);
 
   // Infinite scroll: when the sentinel scrolls into view and we aren't
-  // already fetching, load the next page. All React state writes happen
-  // inside the async IIFE (post-await), so the effect body itself
-  // performs no synchronous setState.
+  // already fetching, load the next page. The "are we already fetching"
+  // gate is fetchInFlightRef (not isLoadingMore state) so that flipping
+  // the loading flag for UI purposes doesn't loop the effect through
+  // its own cleanup. State writes happen inside the async IIFE
+  // (post-microtask) to keep the effect body itself sync-setState-free.
   useEffect(() => {
     if (!filteredSongs) return;
     const hasMore = filteredSongs.data.length < filteredSongs.found;
-    if (!hasMore || !inView || isLoadingMore) return;
+    if (!hasMore || !inView || fetchInFlightRef.current) return;
 
+    fetchInFlightRef.current = true;
     let cancelled = false;
     (async () => {
       setIsLoadingMore(true);
@@ -185,21 +197,18 @@ export default function Search({
         });
         setPage(nextPage);
       } finally {
+        fetchInFlightRef.current = false;
         if (!cancelled) setIsLoadingMore(false);
       }
     })();
 
     return () => {
       cancelled = true;
+      // Allow a fresh attempt after cleanup — the in-flight fetch
+      // was abandoned, so the gate should release for the next run.
+      fetchInFlightRef.current = false;
     };
-  }, [
-    filteredSongs,
-    inView,
-    isLoadingMore,
-    page,
-    searchQuery,
-    instrumentFilter,
-  ]);
+  }, [filteredSongs, inView, page, searchQuery, instrumentFilter]);
 
   return (
     <main className="min-h-screen bg-background w-full">
