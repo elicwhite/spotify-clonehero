@@ -5,7 +5,6 @@ import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 
 import {Button} from '@/components/ui/button';
-import {Badge} from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -13,14 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Star,
-  Music,
-  ExternalLink,
-  LogOut,
-  SproutIcon as Spotify,
-  Trash2,
-} from 'lucide-react';
+import {Star, Music, LogOut, Trash2} from 'lucide-react';
 import {createClient} from '@/lib/supabase/client';
 import {unfavoriteSongByHash} from './actions';
 import {Icons} from '@/components/icons';

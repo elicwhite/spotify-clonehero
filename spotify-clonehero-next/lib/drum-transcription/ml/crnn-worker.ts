@@ -22,7 +22,6 @@ import {pickPeaksFromModelOutput} from './peak-picking';
 import type {
   MelSpectrogramConfig,
   ModelOutput,
-  RawDrumEvent,
   TranscriptionProgress,
 } from './types';
 import {

@@ -1,6 +1,3 @@
-import {ChartResponseEncore} from '@/lib/chartSelection';
-import {ParsedChart} from '@/lib/preview/chorus-chart-processing';
-import {tickToMs} from './chartUtils';
 import {Measure} from './convertToVexflow';
 
 export interface ClickOptions {

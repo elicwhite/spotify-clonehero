@@ -1,5 +1,4 @@
 import {sql, type Kysely, type Migration} from 'kysely';
-import {normalizeStrForMatching} from '../normalize';
 
 export const migration_004_local_charts_normalized: Migration = {
   async up(db: Kysely<any>) {

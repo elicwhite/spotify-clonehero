@@ -5,7 +5,6 @@ import {
   IValidateResponses,
   SpotifyApi,
 } from '@spotify/web-api-ts-sdk';
-import {use, useMemo} from 'react';
 import {ProtectedAccessToken} from '../spotify-server/tokens';
 import ProvidedAccessTokenStrategy from '../spotify-server/ProvidedAccessTokenStrategy';
 import {createClient} from '@/lib/supabase/client';

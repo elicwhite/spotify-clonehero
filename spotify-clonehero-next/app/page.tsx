@@ -1,4 +1,3 @@
-import {ReactNode} from 'react';
 import Link from 'next/link';
 import {
   CardTitle,
@@ -8,7 +7,7 @@ import {
   Card,
   CardFooter,
 } from '@/components/ui/card';
-import {Button, buttonVariants} from '@/components/ui/button';
+import {buttonVariants} from '@/components/ui/button';
 import {RxExternalLink} from 'react-icons/rx';
 import SupportedBrowserWarning from './SupportedBrowserWarning';
 import {Badge} from '@/components/ui/badge';

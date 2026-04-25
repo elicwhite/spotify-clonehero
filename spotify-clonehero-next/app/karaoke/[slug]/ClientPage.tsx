@@ -5,7 +5,6 @@ import {Player} from '@remotion/player';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import {
   getChartAndAudioFiles,
-  ParsedChart,
   Files,
 } from '@/lib/preview/chorus-chart-processing';
 import {searchAdvanced} from '@/lib/search-encore';

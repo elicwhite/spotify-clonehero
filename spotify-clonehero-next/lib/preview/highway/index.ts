@@ -20,11 +20,10 @@ import type {GridOverlayConfig} from './GridOverlay';
 import {AnimatedTextureManager, loadNoteTextures} from './TextureManager';
 import {SceneOverlays, type OverlayState} from './SceneOverlays';
 import {InteractionManager} from './InteractionManager';
-import {SceneReconciler, type ChartElement} from './SceneReconciler';
+import {SceneReconciler} from './SceneReconciler';
 import {NoteRenderer} from './NoteRenderer';
 import {MarkerRenderer} from './MarkerRenderer';
 import {trackToElements} from './trackToElements';
-import {chartToElements} from './chartToElements';
 import {LyricsOverlay} from './LyricsOverlay';
 import type {Track} from './types';
 

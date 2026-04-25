@@ -2,7 +2,6 @@
 
 import {useState} from 'react';
 import {
-  getLocalDb,
   checkLocalDbHealth,
   getLocalDbStats,
   runRawSql,

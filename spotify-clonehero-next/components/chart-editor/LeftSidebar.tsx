@@ -29,7 +29,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {useChartEditorContext, type ToolMode} from './ChartEditorContext';
-import type {HighwayMode} from '@/lib/preview/highway';
 import {useUndoRedo} from './hooks/useEditCommands';
 import NoteInspector from './NoteInspector';
 import LoopControls from './LoopControls';

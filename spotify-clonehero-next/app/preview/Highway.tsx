@@ -1,17 +1,7 @@
-import React, {
-  FC,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import {SelectedTrack, setupRenderer} from '@/lib/preview/highway';
+import React, {FC, useMemo} from 'react';
+import {SelectedTrack} from '@/lib/preview/highway';
 import {useSelect} from 'downshift';
 import {cn} from '@/lib/utils';
-import {Button} from '@/components/ui/button';
-import {FaRegPlayCircle} from 'react-icons/fa';
-import throttle from 'throttleit';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 

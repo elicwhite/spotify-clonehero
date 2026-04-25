@@ -128,7 +128,7 @@ async function getChartFiles(chartData: ChartResponseEncore) {
             !matchingFileMeta
           ) {
             const reader = fileStream.getReader();
-            // eslint-disable-next-line no-constant-condition
+
             while (true) {
               const result = await reader.read();
               if (result.done) {
@@ -140,7 +140,7 @@ async function getChartFiles(chartData: ChartResponseEncore) {
             let offset = 0;
             let readCount = 0;
             const reader = fileStream.getReader();
-            // eslint-disable-next-line no-constant-condition
+
             while (true) {
               const result = await reader.read();
               if (result.done) {

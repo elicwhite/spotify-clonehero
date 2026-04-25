@@ -20,7 +20,6 @@ import {
   TimeSignature,
 } from './types';
 import {validateConfig, defaultConfig} from './config';
-import {mapScanChartNoteToVoice, DrumVoice} from './drumLaneMap';
 import {validateTempos, buildTempoMap, tickRangeToMs} from './utils/tempoUtils';
 import {getWindowBoundaries} from './quantize';
 import {

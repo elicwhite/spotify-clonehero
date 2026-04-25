@@ -17,7 +17,6 @@ import {
   AddBPMCommand,
   AddTimeSignatureCommand,
   AddSectionCommand,
-  DeleteSectionCommand,
   RenameSectionCommand,
   MoveSectionCommand,
   noteId,
@@ -27,12 +26,9 @@ import {
 } from './commands';
 import {
   buildTimedTempos,
-  tickToMs,
   msToTick,
   snapToGrid,
-  getNextGridTick,
 } from '@/lib/drum-transcription/timing';
-import type {DrumNote} from '@/lib/chart-edit';
 import {getDrumNotes} from '@/lib/chart-edit';
 import DrumHighwayPreview, {
   type HighwayRendererHandle,
@@ -213,7 +209,7 @@ export default function HighwayEditor({
       channels: audioChannels,
       durationMs: durationSeconds * 1000,
     });
-  }, [rendererVersion, audioData, audioChannels, durationSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rendererVersion, audioData, audioChannels, durationSeconds]);
 
   // Send grid data (tempos + time signatures) to the renderer
   useEffect(() => {
@@ -236,14 +232,14 @@ export default function HighwayEditor({
       resolution: state.chartDoc.parsedChart.resolution,
       durationMs: durationSeconds * 1000,
     });
-  }, [rendererVersion, state.chartDoc, durationSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rendererVersion, state.chartDoc, durationSeconds]);
 
   // Sync highway mode from context to renderer
   useEffect(() => {
     const handle = rendererHandleRef.current;
     if (!handle) return;
     handle.setHighwayMode(state.highwayMode);
-  }, [rendererVersion, state.highwayMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rendererVersion, state.highwayMode]);
 
   // ---------------------------------------------------------------------------
   // Coordinate helpers via InteractionManager
@@ -845,7 +841,7 @@ export default function HighwayEditor({
     if (track) {
       reconciler.setElements(chartToElements(state.chart, track));
     }
-  }, [reconcilerRef, state.chart, rendererVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reconcilerRef, state.chart, rendererVersion]);
 
   // ---------------------------------------------------------------------------
   // Sync cursor tick with playback

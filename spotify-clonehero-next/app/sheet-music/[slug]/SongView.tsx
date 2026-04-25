@@ -11,11 +11,9 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {Label} from '@/components/ui/label';
 import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
 import {
@@ -27,20 +25,12 @@ import {
   Target,
   Plus,
   Minus,
-  RotateCcw,
   Star,
   Trash2,
   Maximize2,
   Minimize2,
 } from 'lucide-react';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  forwardRef,
-} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import useInterval from 'use-interval';
 import {ChartResponseEncore} from '@/lib/chartSelection';

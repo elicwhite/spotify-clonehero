@@ -13,7 +13,7 @@ import {
 } from '@/lib/local-db/chorus';
 import {getLastScanSession} from '../local-db/chorus/scanning';
 import {getLocalDb} from '@/lib/local-db/client';
-import {Kysely, Transaction} from 'kysely';
+import {Transaction} from 'kysely';
 import {DB} from '@/lib/local-db/types';
 
 const DEBUG = true;

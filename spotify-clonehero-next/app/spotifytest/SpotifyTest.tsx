@@ -10,13 +10,12 @@ import SpotifyTableDownloader, {
 import {createClient} from '@/lib/supabase/client';
 import {Button} from '@/components/ui/button';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
-import {getLocalDb, runRawSql} from '@/lib/local-db/client';
+import {getLocalDb} from '@/lib/local-db/client';
 import {sql} from 'kysely';
 import {useData} from '@/lib/suspense-data';
 import {SignInWithSpotifyCard} from '../spotify/app/SignInWithSpotifyCard';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
-import {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 import {useSpotifyLibraryUpdate} from '@/lib/spotify-sdk/SpotifyFetching';
 import {toast} from 'sonner';
 import {
@@ -30,11 +29,7 @@ import SpotifyLoaderMock from '../spotify/app/SpotifyLoaderMock';
 import SpotifyLoaderCard from '../spotify/app/SpotifyLoaderCard';
 import LocalScanLoaderCard from '../spotify/app/LocalScanLoaderCard';
 import UpdateChorusLoaderCard from '../spotify/app/UpdateChorusLoaderCard';
-import {
-  ChorusCharts,
-  SpotifyAlbums,
-  SpotifyPlaylists,
-} from '@/lib/local-db/types';
+import {ChorusCharts} from '@/lib/local-db/types';
 import {
   Empty,
   EmptyContent,

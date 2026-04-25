@@ -1,7 +1,7 @@
 import {getLocalDb} from '../client';
-import {ChorusCharts, ChorusMetadata, DB} from '../types';
+import {DB} from '../types';
 import {ChartResponseEncore} from '@/lib/chartSelection';
-import {ColumnDefinitionBuilder, Kysely, Transaction, sql} from 'kysely';
+import {Kysely, Transaction, sql} from 'kysely';
 import {normalizeStrForMatching} from '../normalize';
 import {
   createScanSession,

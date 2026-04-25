@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import {RateLimitError, getSpotifySdk} from './ClientInstance';
 import {
   PlaylistedTrack,

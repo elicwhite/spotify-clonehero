@@ -3,7 +3,7 @@ import {
   extractFeaturesFromWindows,
   computeWindowFeatures,
 } from '../features/windowStats';
-import {validateConfig, defaultConfig} from '../config';
+import {validateConfig} from '../config';
 import {buildTempoMap} from '../utils/tempoUtils';
 import {NoteEvent, AnalysisWindow, ValidatedConfig} from '../types';
 

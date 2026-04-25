@@ -3,7 +3,7 @@
  */
 
 import {validateConfig, defaultConfig} from '../config';
-import {InvalidConfigError, ValidatedConfig} from '../types';
+import {InvalidConfigError} from '../types';
 
 describe('Configuration', () => {
   describe('validateConfig', () => {

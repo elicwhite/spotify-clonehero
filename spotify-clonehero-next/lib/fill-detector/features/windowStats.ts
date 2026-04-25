@@ -8,15 +8,8 @@ import {
   AnalysisWindow,
   ValidatedConfig,
 } from '../types';
-import {
-  countNotesByVoice,
-  DrumVoice,
-  isTom,
-  isHat,
-  isKick,
-  isCymbal,
-} from '../drumLaneMap';
-import {ticksToBeats, isDownbeat} from '../quantize';
+import {countNotesByVoice, DrumVoice, isCymbal} from '../drumLaneMap';
+import {ticksToBeats} from '../quantize';
 import {standardDeviation} from '../utils/math';
 
 /**

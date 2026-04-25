@@ -1,13 +1,5 @@
-import {Difficulty, parseChartFile} from '@eliwhite/scan-chart';
-import {
-  RefObject,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  forwardRef,
-  createRef,
-} from 'react';
+import {parseChartFile} from '@eliwhite/scan-chart';
+import {useEffect, useMemo, useRef, useState} from 'react';
 
 import {cn} from '@/lib/utils';
 

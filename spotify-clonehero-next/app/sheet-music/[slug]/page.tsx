@@ -1,9 +1,7 @@
 import {use} from 'react';
 import dynamic from 'next/dynamic';
-import Error from 'next/error';
 
 import {getMd5FromSlug} from '@/app/getMd5FromSlug';
-import {searchAdvanced} from '@/lib/search-encore';
 
 /*
 Pretty much all of the code that powers this page

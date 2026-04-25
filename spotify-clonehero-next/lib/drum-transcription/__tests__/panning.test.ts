@@ -3,7 +3,6 @@
  */
 
 import {computePanningFeatures} from '../ml/panning';
-import {DEFAULT_MEL_CONFIG} from '../ml/types';
 
 describe('computePanningFeatures', () => {
   it('returns correct shape', () => {

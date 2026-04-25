@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import {Suspense, useCallback, useEffect, useMemo, useState} from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
 import {
   Loader2,
@@ -42,7 +35,6 @@ import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
-import type {ChartDocument} from '@/lib/chart-edit';
 import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
@@ -61,7 +53,6 @@ import {
   readChartText,
   writeEditedChart,
   loadAudioFiles,
-  loadFilesForExport,
   getProject,
   type ProjectSummary,
   type ProjectMetadata,

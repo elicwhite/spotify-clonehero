@@ -1,4 +1,4 @@
-import {Kysely, sql} from 'kysely';
+import {Kysely} from 'kysely';
 import {getLocalDb} from '../client';
 import {normalizeStrForMatching} from '../normalize';
 import type {

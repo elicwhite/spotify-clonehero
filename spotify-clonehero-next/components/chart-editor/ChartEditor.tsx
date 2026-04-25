@@ -9,8 +9,6 @@ import type {AudioSource} from './ExportDialog';
 import HighwayEditor from './HighwayEditor';
 import TransportControls from './TransportControls';
 import WaveformDisplay from './WaveformDisplay';
-import LoopControls from './LoopControls';
-import NoteInspector from './NoteInspector';
 import ExportDialog from './ExportDialog';
 import LeftSidebar from './LeftSidebar';
 import TimelineMinimap from './TimelineMinimap';

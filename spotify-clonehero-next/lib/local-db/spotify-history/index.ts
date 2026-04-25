@@ -1,4 +1,4 @@
-import {sql, type Transaction} from 'kysely';
+import {type Transaction} from 'kysely';
 import type {ArtistTrackPlays} from '@/lib/spotify-sdk/HistoryDumpParsing';
 import {normalizeStrForMatching} from '../normalize';
 import type {DB} from '../types';

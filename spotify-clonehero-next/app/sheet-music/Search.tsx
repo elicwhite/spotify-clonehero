@@ -4,7 +4,7 @@ import {useMemo, useEffect, useRef, useState, useCallback} from 'react';
 import {useInView} from 'react-intersection-observer';
 import {useRouter} from 'next/navigation';
 import {parseAsString, useQueryState} from 'nuqs';
-import {Search as SearchIcon, Guitar, Drum, Radio, Piano} from 'lucide-react';
+import {Search as SearchIcon} from 'lucide-react';
 import {Input} from '@/components/ui/input';
 import {Button} from '@/components/ui/button';
 import Link from 'next/link';

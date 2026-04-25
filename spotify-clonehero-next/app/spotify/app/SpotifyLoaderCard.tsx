@@ -3,7 +3,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState, memo} from 'react';
 import {useInView} from 'react-intersection-observer';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
-import {Loader2, User, Users, Clock, Check, Info, Disc3} from 'lucide-react';
+import {User, Users, Clock, Check, Info, Disc3} from 'lucide-react';
 import {Icons} from '@/components/icons';
 import {
   Tooltip,

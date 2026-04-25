@@ -10,12 +10,7 @@ import {
 import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
 import {Label} from '@/components/ui/label';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import {TooltipProvider} from '@/components/ui/tooltip';
 import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
 import {useDrumTranscriptionContext} from '../contexts/DrumTranscriptionContext';
 import {noteId} from '@/components/chart-editor/commands';

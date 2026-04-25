@@ -49,7 +49,6 @@ import {RxExternalLink} from 'react-icons/rx';
 import {NotesData} from '@eliwhite/scan-chart';
 import {SpotifyAlbums, SpotifyPlaylists} from '@/lib/local-db/types';
 import {Disc3, User} from 'lucide-react';
-import {cx} from 'class-variance-authority';
 import {cn} from '@/lib/utils';
 import {
   Tooltip,

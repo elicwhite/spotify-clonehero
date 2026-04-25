@@ -2,11 +2,9 @@ declare module 'midifile' {
   import {EventType, MIDIEvent, SubEventType} from 'midievents';
 
   class MIDIFileHeader {
-    /* eslint-disable @typescript-eslint/naming-convention */
     readonly HEADER_LENGTH = 14;
     readonly FRAMES_PER_SECONDS = 1;
     readonly TICKS_PER_BEAT = 2;
-    /* eslint-enable @typescript-eslint/naming-convention */
 
     datas: DataView;
 
@@ -58,9 +56,7 @@ declare module 'midifile' {
   }
 
   class MIDIFileTrack {
-    /* eslint-disable @typescript-eslint/naming-convention */
     readonly HDR_LENGTH = 8;
-    /* eslint-enable @typescript-eslint/naming-convention */
 
     datas: DataView;
 
@@ -77,10 +73,8 @@ declare module 'midifile' {
   }
 
   class MIDIFile {
-    /* eslint-disable @typescript-eslint/naming-convention */
     static Header = MIDIFileHeader;
     static Track = MIDIFileTrack;
-    /* eslint-enable @typescript-eslint/naming-convention */
 
     header: MIDIFileHeader;
     tracks: MIDIFileTrack[];

@@ -10,7 +10,7 @@
  */
 
 import type {AlignedSyllable} from './aligner';
-import {buildTimedTempoMap, msToTick, type TimedTempo} from './timing';
+import {buildTimedTempoMap, msToTick} from './timing';
 
 export interface ChartLyricsResult {
   lyrics: {tick: number; length: number; text: string}[];

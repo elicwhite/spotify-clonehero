@@ -16,11 +16,7 @@ import {
   pickPeaksFromModelOutput,
 } from '../ml/peak-picking';
 import type {ModelOutput, PeakPickingParams} from '../ml/types';
-import {
-  DEFAULT_PEAK_PICKING_PARAMS,
-  CRNN_THRESHOLDS,
-  NUM_DRUM_CLASSES,
-} from '../ml/types';
+import {NUM_DRUM_CLASSES} from '../ml/types';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -1,6 +1,5 @@
 import {redirect} from 'next/navigation';
 import AccountClient from './AccountClient';
-import getSpotifyApi from '@/lib/spotify-server/getSpotifyApi';
 import {createClient} from '@/lib/supabase/server';
 
 export default async function AccountPage() {

@@ -2,8 +2,6 @@
  * Tick quantization utilities for grid-based analysis
  */
 
-import {Config} from './types';
-
 /**
  * Snaps a tick value to the nearest grid division
  *

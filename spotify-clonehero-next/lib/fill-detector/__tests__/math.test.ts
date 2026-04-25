@@ -14,7 +14,6 @@ import {
   identityMatrix,
   regularizeCovariance,
   rollingMean,
-  rollingStdDev,
   clamp,
   lerp,
   median,

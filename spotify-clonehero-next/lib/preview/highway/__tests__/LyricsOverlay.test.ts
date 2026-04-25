@@ -1,9 +1,4 @@
-import {
-  LyricsState,
-  PHRASE_DISTANCE_THRESHOLD_MS,
-  PHRASE_FADE_MS,
-  TRANSITION_DURATION_MS,
-} from '../LyricsOverlay';
+import {LyricsState, TRANSITION_DURATION_MS} from '../LyricsOverlay';
 import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
 
 // ---------------------------------------------------------------------------

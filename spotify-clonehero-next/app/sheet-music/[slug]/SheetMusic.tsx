@@ -1,4 +1,4 @@
-import {Difficulty, parseChartFile} from '@eliwhite/scan-chart';
+import {parseChartFile} from '@eliwhite/scan-chart';
 import {
   RefObject,
   useEffect,

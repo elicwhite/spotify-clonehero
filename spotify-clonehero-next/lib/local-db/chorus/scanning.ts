@@ -1,6 +1,6 @@
 import {getLocalDb} from '../client';
 import {ChorusScanSessions, DB} from '../types';
-import {Insertable, Kysely, Selectable, Transaction} from 'kysely';
+import {Selectable, Transaction} from 'kysely';
 
 // Helper function to get current timestamp
 function nowIso(): string {

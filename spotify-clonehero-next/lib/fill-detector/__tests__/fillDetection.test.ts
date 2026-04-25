@@ -1,5 +1,4 @@
 import {extractFills, defaultConfig} from '../index';
-import {validateConfig} from '../config';
 import {NoteEvent, ParsedChart, Config, Track} from '../types';
 import type {NoteType} from '@eliwhite/scan-chart';
 

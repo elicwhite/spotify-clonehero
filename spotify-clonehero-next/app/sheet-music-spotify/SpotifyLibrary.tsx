@@ -1,29 +1,13 @@
 'use client';
 
-import {Suspense, use, useCallback, useEffect, useRef, useState} from 'react';
-import {useChorusChartDb} from '@/lib/chorusChartDb';
+import {Suspense, useEffect, useState} from 'react';
 import {createClient} from '@/lib/supabase/client';
-import {Button} from '@/components/ui/button';
 import {Icons} from '@/components/icons';
-import {getLocalDb} from '@/lib/local-db/client';
-import {sql} from 'kysely';
 import {SignInWithSpotifyCard} from '../spotify/app/SignInWithSpotifyCard';
-import {
-  getSpotifyLibraryMetadata,
-  useSpotifyLibraryUpdate,
-} from '@/lib/spotify-sdk/SpotifyFetching';
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from '@/components/ui/card';
-import SpotifyLoaderCard from '../spotify/app/SpotifyLoaderCard';
-import UpdateChorusLoaderCard from '../spotify/app/UpdateChorusLoaderCard';
-import {User, Disc3, Music, ChevronDown} from 'lucide-react';
+import {getSpotifyLibraryMetadata} from '@/lib/spotify-sdk/SpotifyFetching';
+import {Card, CardHeader, CardTitle, CardContent} from '@/components/ui/card';
+import {User, Disc3} from 'lucide-react';
 import {getSpotifySdk} from '@/lib/spotify-sdk/ClientInstance';
-import {SpotifyApi} from '@spotify/web-api-ts-sdk';
 import {ErrorBoundary} from '@sentry/nextjs';
 import {useData} from '@/lib/suspense-data';
 

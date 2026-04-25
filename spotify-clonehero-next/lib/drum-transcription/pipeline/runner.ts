@@ -22,11 +22,7 @@ import {
   type ProjectMetadata,
 } from '../storage/opfs';
 import {separateStems, hasSeparatedStems} from '../ml/demucs';
-import {
-  CrnnTranscriber,
-  MockTranscriber,
-  type DrumTranscriber,
-} from '../ml/transcriber';
+import {CrnnTranscriber, type DrumTranscriber} from '../ml/transcriber';
 import {rawEventsToDrumNotes, getChartMapping} from '../ml/class-mapping';
 import {
   createEmptyChart,
@@ -34,7 +30,7 @@ import {
   addDrumNote,
   addSection,
 } from '@/lib/chart-edit';
-import type {ChartDocument, DrumNoteType} from '@/lib/chart-edit';
+import type {ChartDocument} from '@/lib/chart-edit';
 import {buildTimedTempos, msToTick} from '../timing';
 import type {RawDrumEvent, TranscriptionResult} from '../ml/types';
 

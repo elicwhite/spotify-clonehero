@@ -12,12 +12,7 @@ import type {
   DrumNote,
   NoteEvent,
 } from '../types';
-import {
-  noteTypes,
-  noteFlags,
-  drumNoteTypeMap,
-  noteTypeToDrumNote,
-} from '../types';
+import {noteFlags, drumNoteTypeMap, noteTypeToDrumNote} from '../types';
 
 // ---------------------------------------------------------------------------
 // Public API

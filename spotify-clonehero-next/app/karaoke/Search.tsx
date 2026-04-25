@@ -1,6 +1,6 @@
 'use client';
 
-import {useMemo, useEffect, useState, useCallback} from 'react';
+import {useMemo, useEffect, useState} from 'react';
 import {parseAsString, useQueryState} from 'nuqs';
 import {Search as SearchIcon} from 'lucide-react';
 import {Input} from '@/components/ui/input';

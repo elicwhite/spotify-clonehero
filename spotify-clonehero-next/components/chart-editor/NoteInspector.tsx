@@ -11,7 +11,7 @@ import {
   noteId,
   type FlagName,
 } from './commands';
-import type {DrumNote, DrumNoteType} from '@/lib/chart-edit';
+import type {DrumNoteType} from '@/lib/chart-edit';
 import {getDrumNotes} from '@/lib/chart-edit';
 
 const DRUM_TYPE_LABELS: Record<DrumNoteType, string> = {

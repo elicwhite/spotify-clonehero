@@ -8,7 +8,6 @@ import {
   hzToMel,
   melToHz,
 } from '../ml/spectrogram';
-import {DEFAULT_MEL_CONFIG} from '../ml/types';
 
 describe('hzToMel / melToHz', () => {
   it('round-trips correctly', () => {

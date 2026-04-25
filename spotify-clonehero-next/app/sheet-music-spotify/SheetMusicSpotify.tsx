@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/card';
 import SpotifyLoaderCard from '../spotify/app/SpotifyLoaderCard';
 import UpdateChorusLoaderCard from '../spotify/app/UpdateChorusLoaderCard';
-import {User, Disc3, Music} from 'lucide-react';
+import {User, Disc3} from 'lucide-react';
 
 type Falsy = false | 0 | '' | null | undefined;
 const _Boolean = <T extends any>(v: T): v is Exclude<typeof v, Falsy> =>

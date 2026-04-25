@@ -1,4 +1,4 @@
-import {ChartInfo, ChartResponseEncore} from '@/lib/chartSelection';
+import {ChartInfo} from '@/lib/chartSelection';
 import {cn} from '@/lib/utils';
 import {memo, useCallback} from 'react';
 

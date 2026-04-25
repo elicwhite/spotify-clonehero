@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useState} from 'react';
 import SpotifyLoaderCard from './SpotifyLoaderCard';
 import {SpotifyLibraryUpdateProgress} from '@/lib/spotify-sdk/SpotifyFetching';
 
