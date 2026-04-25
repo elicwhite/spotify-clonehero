@@ -25,7 +25,7 @@ type ParsedChart = ReturnType<typeof parseChartFile>;
 export default function SheetMusic({
   chart,
   track,
-  currentTime,
+  currentTime: _currentTime,
   showBarNumbers,
   enableColors,
   showLyrics,
@@ -55,9 +55,6 @@ export default function SheetMusic({
 }) {
   const vexflowContainerRef = useRef<HTMLDivElement>(null!);
   const [windowWidth, setWindowWidth] = useState<number>(window.innerWidth);
-  const [highlightedMeasureIndex, setHighlightedMeasureIndex] =
-    useState<number>(1);
-
   const measures = useMemo(() => {
     return convertToVexFlow(chart, track);
   }, [chart, track]);
@@ -210,10 +207,10 @@ const MeasureHighlight = forwardRef<HTMLButtonElement, MeasureHighlightProps>(
   (
     {
       style,
-      isInPracticeRange,
+      isInPracticeRange: _isInPracticeRange,
       isPracticeStart,
       isPracticeEnd,
-      isPracticeModeActive,
+      isPracticeModeActive: _isPracticeModeActive,
       onClick,
     },
     ref,

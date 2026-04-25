@@ -83,8 +83,8 @@ interface LeftSidebarProps {
 // ---------------------------------------------------------------------------
 
 export default function LeftSidebar({
-  songName,
-  dirty,
+  songName: _songName,
+  dirty: _dirty,
   audioManager,
   onNotesModified,
   leftPanelChildren,

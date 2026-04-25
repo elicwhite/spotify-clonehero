@@ -177,7 +177,6 @@ async function runExample() {
   if (sensitiveFills.length > fills.length) {
     console.log('📈 More sensitive settings detected additional fills:');
     sensitiveFills.slice(fills.length).forEach((fill, index) => {
-      const duration = (fill.endMs - fill.startMs) / 1000;
       console.log(
         `  Additional Fill #${index + 1}: ${(fill.startMs / 1000).toFixed(2)}s - ${(fill.endMs / 1000).toFixed(2)}s`,
       );

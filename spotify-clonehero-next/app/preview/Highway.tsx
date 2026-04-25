@@ -1,7 +1,4 @@
-import React, {FC, useMemo} from 'react';
-import {SelectedTrack} from '@/lib/preview/highway';
-import {useSelect} from 'downshift';
-import {cn} from '@/lib/utils';
+import {FC} from 'react';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 
@@ -9,7 +6,7 @@ export const Highway: FC<{
   metadata: ChartResponseEncore;
   chart: ParsedChart;
   audioFiles: Files;
-}> = ({metadata, chart, audioFiles}) => {
+}> = ({metadata: _metadata, chart: _chart, audioFiles: _audioFiles}) => {
   return null;
   // chart.trackData;
 
@@ -120,82 +117,3 @@ export const Highway: FC<{
   //   </>
   // );
 };
-
-function InstrumentDifficultyPicker({
-  chart,
-  selectedTrack,
-  onTrackSelected,
-}: {
-  chart: ParsedChart;
-  selectedTrack: SelectedTrack;
-  onTrackSelected: (track: SelectedTrack) => void;
-}) {
-  const trackTypes = useMemo(() => {
-    return chart == null
-      ? []
-      : chart.trackData.map(parser => ({
-          instrument: parser.instrument,
-          difficulty: parser.difficulty,
-        }));
-  }, [chart]);
-
-  const {
-    isOpen,
-    getToggleButtonProps,
-    getMenuProps,
-    highlightedIndex,
-    getItemProps,
-  } = useSelect({
-    items: trackTypes,
-    itemToString: item => {
-      if (item == null) {
-        return '';
-      }
-      return `${item.instrument} - ${item.difficulty}`;
-    },
-    selectedItem: selectedTrack,
-    onSelectedItemChange: ({selectedItem: newSelectedItem}) => {
-      if (newSelectedItem == null) return;
-
-      onTrackSelected(newSelectedItem);
-    },
-  });
-
-  return (
-    <>
-      <div className="w-72 flex flex-col gap-1">
-        <div className="flex w-full max-w-sm items-center space-x-2"></div>
-        <div
-          className="px-3 py-2 border border-input flex justify-between cursor-pointer ring-offset-background"
-          {...getToggleButtonProps()}>
-          <span>
-            {selectedTrack.instrument} - {selectedTrack.difficulty}
-          </span>
-          <span className="px-2">{isOpen ? <>&#8593;</> : <>&#8595;</>}</span>
-        </div>
-      </div>
-      <ul
-        className={`absolute w-72 mt-1 shadow-md max-h-80 overflow-scroll p-0 z-20 ${
-          !(isOpen && trackTypes.length) && 'hidden'
-        }`}
-        {...getMenuProps()}>
-        {isOpen &&
-          trackTypes.map((trackType, index) => (
-            <li
-              className={cn(
-                'flex flex-col cursor-default select-none px-2 py-1.5 text-sm outline-none transition-colors bg-background',
-                highlightedIndex === index &&
-                  'bg-accent text-accent-foreground',
-                selectedTrack === trackType && 'font-bold',
-              )}
-              key={`${trackType.instrument}-${trackType.difficulty}`}
-              {...getItemProps({item: trackType, index})}>
-              <span className="text-sm">
-                {trackType.instrument} - {trackType.difficulty}
-              </span>
-            </li>
-          ))}
-      </ul>
-    </>
-  );
-}

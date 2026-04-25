@@ -88,7 +88,7 @@ export default function CompareChartsToLocal({
     chorusCharts: null,
   });
 
-  const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb();
+  const [, fetchChorusCharts] = useChorusChartDb();
 
   const handler = useCallback(async () => {
     const before = Date.now();

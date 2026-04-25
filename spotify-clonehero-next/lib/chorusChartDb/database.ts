@@ -29,9 +29,8 @@ export function useChorusChartDb(): [
   });
 
   const run = useCallback(
-    async (abort: AbortController): Promise<ChartResponseEncore[]> => {
-      return new Promise(async (resolve, reject) => {
-        const charts: ChartResponseEncore[] = [];
+    async (_abort: AbortController): Promise<ChartResponseEncore[]> => {
+      return new Promise(async resolve => {
         setProgress(progress => ({
           ...progress,
           status: 'fetching',
@@ -113,20 +112,16 @@ async function getUpdatedCharts(
 
     let updatePromises = Promise.resolve();
 
-    const {charts, metadata} = await fetchNewCharts(
-      scan_since_time,
-      last_chart_id,
-      (json, stats) => {
-        // Store charts and update scan progress
-        updatePromises = updatePromises.then(async () => {
-          await upsertCharts(trx, json as unknown as ChartResponseEncore[]);
-          last_chart_id = stats.lastChartId;
-          await updateScanProgress(trx, id, stats.lastChartId);
-        });
+    await fetchNewCharts(scan_since_time, last_chart_id, (json, stats) => {
+      // Store charts and update scan progress
+      updatePromises = updatePromises.then(async () => {
+        await upsertCharts(trx, json as unknown as ChartResponseEncore[]);
+        last_chart_id = stats.lastChartId;
+        await updateScanProgress(trx, id, stats.lastChartId);
+      });
 
-        onEachResponse(json, stats);
-      },
-    );
+      onEachResponse(json, stats);
+    });
 
     await updatePromises;
 

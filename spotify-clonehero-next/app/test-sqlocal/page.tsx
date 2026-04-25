@@ -22,7 +22,6 @@ export default function TestSQLocalPage() {
   const [stats, setStats] = useState<any>(null);
   const [consistency, setConsistency] = useState<any>(null);
   const [cleaning, setCleaning] = useState<boolean>(false);
-  const [newItem, setNewItem] = useState('');
   const sqlStorageKey = 'test-sqlocal:sqlInput';
   // Load saved SQL from localStorage exactly once per mount via the
   // useState initializer, so there's no effect-then-setState pair

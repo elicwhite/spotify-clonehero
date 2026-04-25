@@ -34,8 +34,6 @@ import {getDrumNotes} from '@/lib/chart-edit';
 import {buildTimedTempos} from '@/lib/drum-transcription/timing';
 import type {DrumNote} from '@/lib/chart-edit';
 
-type ParsedChart = ReturnType<typeof parseChartFile>;
-
 /** Pro drums modifiers for scan-chart parsing. */
 const PRO_DRUMS_MODIFIERS = {
   song_length: 0,
@@ -73,9 +71,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
   const {state, dispatch, audioManagerRef} = useChartEditorContext();
   const {dtState, dtDispatch} = useDrumTranscriptionContext();
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
-  const [loadingStep, setLoadingStep] = useState<string>(
-    'Loading project metadata...',
-  );
+  const [, setLoadingStep] = useState<string>('Loading project metadata...');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [projectMeta, setProjectMeta] = useState<ProjectMetadata | null>(null);
   const [audioMeta, setAudioMeta] = useState<AudioStorageMeta | null>(null);

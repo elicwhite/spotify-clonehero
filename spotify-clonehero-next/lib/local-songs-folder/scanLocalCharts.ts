@@ -145,7 +145,7 @@ async function scanLocalChartsDirectory(
           // @ts-ignore Assuming JSON matches TypeScript
           songIniData = values.iniObject?.song || values.iniObject?.Song;
           songIniMTime = file.lastModified;
-        } catch (e) {
+        } catch {
           console.log(
             'Could not scan song.ini of',
             currentDirectoryHandle.name,

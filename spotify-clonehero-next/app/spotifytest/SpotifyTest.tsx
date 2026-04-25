@@ -164,10 +164,7 @@ function LoggedIn() {
       }
     }
 
-    const [allChorusCharts, updateSpotifyLibraryResult] = await Promise.all([
-      chorusChartsPromise,
-      updateSpotifyLibraryPromise,
-    ]);
+    await Promise.all([chorusChartsPromise, updateSpotifyLibraryPromise]);
 
     setStatus(prevStatus => ({
       ...prevStatus,
@@ -942,16 +939,6 @@ function ScanLocalFoldersCTACard({onClick}: {onClick: () => void}) {
           Select Songs Folder
         </Button>
       </CardContent>
-    </Card>
-  );
-}
-
-function ProgressMessage({message}: {message: string}) {
-  return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader className="text-center">
-        <CardTitle>{message}</CardTitle>
-      </CardHeader>
     </Card>
   );
 }

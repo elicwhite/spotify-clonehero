@@ -8,14 +8,6 @@ async function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-class TooManyRetriesError extends Error {
-  constructor(message?: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = this.constructor.name; // Set the name property to the class name
-    Error.captureStackTrace(this, this.constructor); // Optional: Improves stack traces
-  }
-}
-
 export default async function fetchNewCharts(
   afterTime: Date,
   scanFromId: number,

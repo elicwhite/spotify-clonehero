@@ -62,7 +62,7 @@ export class MyErrorHandler implements IHandleErrors {
     if (error.message.includes('Bad or expired token')) {
       const supabase = createClient();
       const redirectUrl = `${window.location.origin}/auth/callback}`;
-      const {data, error} = await supabase.auth.signInWithOAuth({
+      await supabase.auth.signInWithOAuth({
         provider: 'spotify',
         options: {redirectTo: redirectUrl},
       });

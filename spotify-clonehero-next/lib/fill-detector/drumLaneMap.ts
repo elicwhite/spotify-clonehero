@@ -57,7 +57,7 @@ const DRUM_NOTE_TYPES = new Set<NoteType>([
  */
 export function mapScanChartNoteToVoice(
   noteType: NoteType,
-  drumType: 0 | 1 | 2 | null = null,
+  _drumType: 0 | 1 | 2 | null = null,
   flags: number = 0,
 ): DrumVoice {
   // Only use interpretDrumNote for proper drum noteTypes (12-16).

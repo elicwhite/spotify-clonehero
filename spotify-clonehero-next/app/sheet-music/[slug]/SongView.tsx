@@ -248,27 +248,6 @@ export default function Renderer({
     }
   };
 
-  const handleSpeedUp = () => {
-    if (audioManagerRef.current) {
-      const newTempo = audioManagerRef.current.speedUp();
-      setTempo(newTempo);
-    }
-  };
-
-  const handleSlowDown = () => {
-    if (audioManagerRef.current) {
-      const newTempo = audioManagerRef.current.slowDown();
-      setTempo(newTempo);
-    }
-  };
-
-  const handleResetSpeed = () => {
-    if (audioManagerRef.current) {
-      audioManagerRef.current.resetSpeed();
-      setTempo(1.0);
-    }
-  };
-
   // Zoom control handlers
   const handleZoomChange = (newZoom: number) => {
     setZoom(newZoom);
@@ -443,7 +422,7 @@ export default function Renderer({
     };
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsToPersist));
-    } catch (e) {
+    } catch {
       // ignore write errors
     }
   }, [

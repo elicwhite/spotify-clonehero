@@ -1,6 +1,5 @@
 'use client';
 
-import {useSearchParams} from 'next/navigation';
 import {useEffect, useState} from 'react';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 import SongView from './SongView';
@@ -12,8 +11,6 @@ import {
 import {searchAdvanced} from '@/lib/search-encore';
 
 export default function MyComponent({md5}: {md5: string}) {
-  const searchParams = useSearchParams();
-  // const md5 = searchParams.get('md5');
   const [rendering, setRendering] = useState<null | {
     metadata: ChartResponseEncore;
     chart: ParsedChart;

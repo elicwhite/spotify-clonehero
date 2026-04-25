@@ -21,7 +21,6 @@ import {
 } from './types';
 import {validateConfig, defaultConfig} from './config';
 import {validateTempos, buildTempoMap, tickRangeToMs} from './utils/tempoUtils';
-import {getWindowBoundaries} from './quantize';
 import {
   createAnalysisWindows,
   extractFeaturesFromWindows,
@@ -236,15 +235,6 @@ export function extractFills(
 
   // Determine analysis boundaries
   const {startTick, endTick} = getAnalysisBounds(noteEvents);
-
-  // Create sliding analysis windows
-  const windowBoundaries = getWindowBoundaries(
-    startTick,
-    endTick,
-    config.windowBeats,
-    config.strideBeats,
-    chart.resolution,
-  );
 
   // Create analysis windows with notes
   const windows = createAnalysisWindows(

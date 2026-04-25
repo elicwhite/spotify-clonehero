@@ -21,7 +21,7 @@ export const Playhead = memo(function ({
   const animationRef = useRef<number>(null);
   const lastYRef = useRef<number>(0);
 
-  function ensurePlayheadInView(y: number) {
+  function ensurePlayheadInView(_y: number) {
     playheadRef.current?.scrollIntoView({
       behavior: 'smooth',
       block: 'center',

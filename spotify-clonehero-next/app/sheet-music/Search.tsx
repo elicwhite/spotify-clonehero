@@ -2,7 +2,6 @@
 
 import {useMemo, useEffect, useRef, useState, useCallback} from 'react';
 import {useInView} from 'react-intersection-observer';
-import {useRouter} from 'next/navigation';
 import {parseAsString, useQueryState} from 'nuqs';
 import {Search as SearchIcon} from 'lucide-react';
 import {Input} from '@/components/ui/input';
@@ -87,7 +86,6 @@ export default function Search({
   defaultResults: EncoreResponse;
   initialQuery?: string;
 }) {
-  const router = useRouter();
   const [searchQuery, setSearchQuery] = useQueryState(
     'q',
     parseAsString.withDefault(''),
@@ -98,18 +96,10 @@ export default function Search({
   // );
   const instrumentFilter = 'drums';
 
-  const toggleInstrumentFilter = (instrument: string) => {
-    // if (instrumentFilter === instrument) {
-    //   setInstrumentFilter(null);
-    // } else {
-    //   setInstrumentFilter(instrument);
-    // }
-  };
-
   const [filteredSongs, setFilteredSongs] =
     useState<EncoreResponse>(defaultResults);
   const [page, setPage] = useState<number>(1);
-  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  const [, setIsLoadingMore] = useState<boolean>(false);
   // In-flight gate for the infinite-scroll fetch. We deliberately hold
   // this in a ref instead of reading isLoadingMore: putting
   // isLoadingMore in the effect deps creates a self-cancelling loop

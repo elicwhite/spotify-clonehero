@@ -99,7 +99,7 @@ function emitPlaylistCacheUpdated() {
   cacheUpdateListeners.forEach(listener => {
     try {
       listener();
-    } catch (e) {
+    } catch {
       // ignore listener errors
     }
   });
@@ -995,28 +995,6 @@ export function useSpotifyLibraryUpdate(): [
           updateStatus: 'complete',
         }));
 
-        // Build unique track list to return (preserving previous API)
-        const uniqueSongs = [
-          ...Object.values(newPlaylistCache)
-            .filter(playlistTracks => {
-              if (playlistTracks?.length == null) {
-                return false;
-              }
-              return playlistTracks.length < MAX_PLAYLIST_TRACKS_TO_FETCH;
-            })
-            .flat(),
-          ...Object.values(newAlbumCache).flat(),
-        ].reduce((acc, track) => {
-          const key =
-            `${track.name} - ${track.artists.join(', ')}`.toLowerCase();
-          if (!acc.has(key)) {
-            acc.set(key, track);
-          }
-          return acc;
-        }, new Map<string, TrackResult>());
-
-        const tracks = Array.from(uniqueSongs.values());
-
         resolve({
           playlistMetadata: progress.playlists,
           albumMetadata: progress.albums,
@@ -1094,15 +1072,6 @@ export async function getSpotifyLibraryMetadata(
     playlistMetadata,
     albumMetadata,
   };
-}
-
-function isRateLimitError(err: unknown): err is RateLimitError {
-  return (
-    typeof err === 'object' &&
-    err != null &&
-    'retryAfter' in err &&
-    typeof (err as {retryAfter?: unknown}).retryAfter === 'number'
-  );
 }
 
 export function getTrackMap(library: SpotifyLibrary): Map<string, TrackResult> {

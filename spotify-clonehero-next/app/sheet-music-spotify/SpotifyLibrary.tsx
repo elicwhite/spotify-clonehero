@@ -49,14 +49,6 @@ export default function Page() {
   );
 }
 
-type Status = {
-  status:
-    | 'not-started'
-    | 'fetching-spotify-data'
-    | 'songs-from-encore'
-    | 'done';
-};
-
 function LoggedIn() {
   // const [status, setStatus] = useState<Status>({
   //   status: 'not-started',
@@ -220,7 +212,7 @@ function PlaylistRow({item}: {item: PlaylistAlbumData}) {
   );
 }
 
-function RenderPlaylistTracks({playlist}: {playlist: string}) {
+function RenderPlaylistTracks({playlist: _playlist}: {playlist: string}) {
   return (
     <Row>
       <Row.Left>

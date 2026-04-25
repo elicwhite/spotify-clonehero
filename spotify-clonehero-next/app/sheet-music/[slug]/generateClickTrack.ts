@@ -19,12 +19,6 @@ export interface ClickVolumes {
   tripletNote: number;
 }
 
-interface VolumeConfig {
-  downbeat: number; // Volume for the "1" of each measure
-  quarter: number; // Volume for other quarter beats (2, 3, 4 in 4/4)
-  eighth: number; // Volume for eighth-note subdivisions
-}
-
 // Click options: Here, we want 2 subdivisions per beat (i.e. a click on the beat and one in between)
 const clickOptions: ClickOptions = {
   clickDuration: 0.05, // each click lasts 50ms

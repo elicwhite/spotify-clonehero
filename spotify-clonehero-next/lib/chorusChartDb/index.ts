@@ -246,9 +246,8 @@ function useChorusChartDbIndexedDB(): [
   });
 
   const run = useCallback(
-    async (abort: AbortController): Promise<ChartResponseEncore[]> => {
+    async (_abort: AbortController): Promise<ChartResponseEncore[]> => {
       return new Promise<ChartResponseEncore[]>(async (resolve, reject) => {
-        const charts: ChartResponseEncore[] = [];
         setProgress(progress => ({
           ...progress,
           status: 'fetching',

@@ -27,7 +27,7 @@ export default function Search({
   );
   const [filteredSongs, setFilteredSongs] =
     useState<EncoreResponse>(defaultResults);
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
 
   const debouncedSearch = useMemo(
     () =>

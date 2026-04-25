@@ -81,7 +81,7 @@ describe('computeMelSpectrogram', () => {
       audio[i] = Math.sin((2 * Math.PI * 440 * i) / 44100);
     }
 
-    const {spectrogram, nFrames, nMels} = computeMelSpectrogram(audio);
+    const {spectrogram} = computeMelSpectrogram(audio);
 
     for (let i = 0; i < spectrogram.length; i++) {
       expect(isFinite(spectrogram[i])).toBe(true);

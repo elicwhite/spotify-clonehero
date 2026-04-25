@@ -173,7 +173,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
         spotifyDataHandle = await window.showDirectoryPicker({
           id: 'spotify-dump',
         });
-      } catch (err) {
+      } catch {
         toast.info('Directory picker canceled');
         console.log('User canceled picker');
         abortController.abort();

@@ -72,7 +72,7 @@ function useWebGPUCheck() {
  * Inner component that reads search params.
  * Must be wrapped in Suspense because useSearchParams() requires it.
  */
-function DrumTranscriptionInner({ortReady}: {ortReady: boolean}) {
+function DrumTranscriptionInner({ortReady: _ortReady}: {ortReady: boolean}) {
   const webGPUSupported = useWebGPUCheck();
   const searchParams = useSearchParams();
   const router = useRouter();

@@ -317,7 +317,7 @@ export function createAnalysisWindows(
   windowBeats: number,
   strideBeats: number,
   resolution: number,
-  tempos: any[], // TempoEvent[] but avoiding circular import
+  _tempos: any[], // TempoEvent[] but avoiding circular import
 ): AnalysisWindow[] {
   const windows: AnalysisWindow[] = [];
   const windowTicks = windowBeats * resolution;

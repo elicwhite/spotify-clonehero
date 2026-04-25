@@ -17,8 +17,6 @@ Things I need from scan-chart
 * List of audio files / references to Audio Files
 */
 
-const DEBUG = true;
-
 export default function Preview() {
   const [rendering, setRendering] = useState<null | {
     metadata: ChartResponseEncore;

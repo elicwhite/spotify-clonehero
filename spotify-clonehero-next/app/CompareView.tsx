@@ -22,7 +22,6 @@ export default function CompareView<
   recommendedChart,
   recommendedModified,
   parentDirectoryHandle,
-  currentChartFileName,
   recommendedChartUrl,
   close,
   updateDownloadState,
@@ -33,7 +32,6 @@ export default function CompareView<
   recommendedChart: U;
   recommendedModified: Date;
   parentDirectoryHandle: FileSystemDirectoryHandle;
-  currentChartFileName: string;
   recommendedChartUrl: string;
   close: () => void;
   updateDownloadState: (id: string, state: TableDownloadStates) => void;

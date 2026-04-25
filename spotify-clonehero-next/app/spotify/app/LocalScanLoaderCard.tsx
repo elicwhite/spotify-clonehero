@@ -4,7 +4,7 @@ import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 
 export default function LocalScanLoaderCard({
   count,
-  isScanning,
+  isScanning: _isScanning,
 }: {
   count: number;
   isScanning: boolean;

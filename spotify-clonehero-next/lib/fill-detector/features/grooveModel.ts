@@ -121,7 +121,7 @@ export function calculateGrooveDistance(
 
   try {
     return mahalanobisDistance(features, model.mean, model.covarianceInverse);
-  } catch (error) {
+  } catch {
     // Fallback to Euclidean distance if Mahalanobis fails
     let euclideanDistance = 0;
     for (let i = 0; i < features.length; i++) {
@@ -184,7 +184,7 @@ export function updateGrooveDistances(
  */
 export function identifyGrooveWindows(
   windows: AnalysisWindow[],
-  config: ValidatedConfig,
+  _config: ValidatedConfig,
 ): boolean[] {
   const isGrooveWindow = new Array(windows.length).fill(true);
 

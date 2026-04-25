@@ -185,7 +185,7 @@ export function evaluateWindow(
  */
 function applyAdditionalHeuristics(
   window: AnalysisWindow,
-  config: ValidatedConfig,
+  _config: ValidatedConfig,
 ): {confidenceBonus: number; reasons: string[]} {
   const features = window.features;
   const reasons: string[] = [];
@@ -417,20 +417,6 @@ function adjustCandidatesByMeasureFrequency(
       (f.samePadBurst && f.ioiStdZ >= 0.8)
     );
   }
-  function hasModerateEvidence(
-    w: AnalysisWindow,
-    endNearBar: boolean,
-  ): boolean {
-    const f = w.features;
-    return (
-      endNearBar &&
-      (f.densityZ > config.thresholds.densityZ * 0.8 ||
-        f.ngramNovelty > 0 ||
-        f.samePadBurst ||
-        f.crashResolve)
-    );
-  }
-
   for (let i = 0; i < result.length; i++) {
     const w = result[i];
     const barIndex = Math.floor(w.endTick / barTicks); // bias toward where it resolves
@@ -438,10 +424,6 @@ function adjustCandidatesByMeasureFrequency(
     if (!mask) continue; // empty bars ignored
     const clusterId = maskToClusterId.get(mask);
     if (clusterId === undefined) continue;
-
-    const posInBarEnd = w.endTick % barTicks;
-    const distanceToBarEnd = barTicks - posInBarEnd;
-    const endNearBar = distanceToBarEnd <= 1.25 * resolution;
 
     if (highFreqClusterIds.has(clusterId)) {
       // Groove-like bar: only keep if strong evidence

@@ -577,7 +577,6 @@ export class SceneOverlays {
     }
 
     // Update positions
-    const loopColor = 0x3b82f6;
     const width = HIGHWAY_HALF_WIDTH * 2;
 
     // Start line

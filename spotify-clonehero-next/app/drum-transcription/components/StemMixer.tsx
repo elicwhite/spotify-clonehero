@@ -24,8 +24,6 @@ const ALL_STEMS = [
   'vocals',
 ] as const;
 
-type StemName = (typeof ALL_STEMS)[number];
-
 interface StemMixerProps {
   audioManager: AudioManager;
   /** List of available stem names. If not provided, tries all standard stems. */

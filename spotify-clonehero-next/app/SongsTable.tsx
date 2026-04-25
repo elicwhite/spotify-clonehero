@@ -47,6 +47,7 @@ export type TableDownloadStates =
   | 'failed';
 
 declare module '@tanstack/react-table' {
+  // eslint-disable-next-line unused-imports/no-unused-vars
   interface TableMeta<TData extends RowData> {
     setDownloadState(index: string, state: TableDownloadStates): void;
   }
@@ -402,9 +403,6 @@ export default function SongsTable({songs}: {songs: SongWithRecommendation[]}) {
                         }
                         parentDirectoryHandle={
                           currentlyReviewing.handleInfo.parentDir
-                        }
-                        currentChartFileName={
-                          currentlyReviewing.handleInfo.fileName
                         }
                         recommendedChartUrl={
                           currentlyReviewing.recommendedChart.betterChart.file

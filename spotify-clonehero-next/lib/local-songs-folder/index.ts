@@ -223,13 +223,11 @@ async function moveToFolder(
     // It seems like await should do this, but it doesn't
     // It feels like I /must/ be missing an await somewhere, possibly in parse-sng
     const start = Date.now();
-    let iterations = 0;
     do {
       let hasSwap = false;
 
       for await (const entry of handle.values()) {
         if (entry.name.includes('.crswap')) {
-          iterations++;
           hasSwap = true;
           break;
         }
@@ -241,7 +239,6 @@ async function moveToFolder(
         break;
       }
     } while (Date.now() - start < 10 * 1000);
-    // console.log('iterations', iterations, 'to remove swap');
 
     for await (const entry of handle.values()) {
       await moveToFolder(handle, entry.name, destDirHandle);
@@ -265,7 +262,7 @@ async function fileExists(
   name: string,
 ) {
   try {
-    const checkHandle = await parentHandle.getDirectoryHandle(name, {
+    await parentHandle.getDirectoryHandle(name, {
       create: false,
     });
 
@@ -274,46 +271,6 @@ async function fileExists(
     // Can't get it without creating, doesn't exist.
     return false;
   }
-}
-
-async function backupSong(
-  parentDirectoryHandle: FileSystemDirectoryHandle,
-  fileOrFolderName: string,
-): Promise<{
-  revert: () => Promise<void>;
-  deleteBackup: () => Promise<void>;
-}> {
-  const backupRootDirHandle = await getBackupDirectory();
-
-  const moveResult = await moveToFolder(
-    parentDirectoryHandle,
-    fileOrFolderName,
-    backupRootDirHandle,
-  );
-
-  const result = {
-    async revert() {
-      await moveToFolder(
-        moveResult.newParentDirectoryHandle,
-        moveResult.fileName,
-        parentDirectoryHandle,
-      );
-      await moveResult.newParentDirectoryHandle.removeEntry(
-        moveResult.fileName,
-        {
-          recursive: true,
-        },
-      );
-    },
-    async deleteBackup() {
-      await moveResult.newParentDirectoryHandle.removeEntry(
-        moveResult.fileName,
-        {recursive: true},
-      );
-    },
-  };
-
-  return result;
 }
 
 export async function downloadSong(
@@ -364,7 +321,7 @@ export async function downloadSong(
   try {
     // Remove any existing backups
     await backupRootDirHandle.removeEntry(filename, {recursive: true});
-  } catch (err) {}
+  } catch {}
 
   // Download into backups, and only on success copy it over to destination
   if (options?.asSng) {

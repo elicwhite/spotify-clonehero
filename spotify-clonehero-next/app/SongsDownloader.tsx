@@ -37,35 +37,6 @@ export const songIniOrder = [
   'five_lane_drums',
   'pro_drums',
 ] as const;
-function createSongIniString(metadata: {[key: string]: string}): string {
-  const metadataMap = new Map(Object.entries(metadata));
-
-  const knownIniValues = songIniOrder
-    .map(key => {
-      if (!metadataMap.has(key)) {
-        return;
-      }
-
-      const line = `${key} = ${metadataMap.get(key)}`;
-      metadataMap.delete(key);
-      return line;
-    })
-    // Remove empty lines missing in metadata
-    .filter(Boolean)
-    .join('\n');
-
-  const remainingValues = Array.from(metadataMap)
-    .toSorted((a, b) => {
-      return a[0].localeCompare(b[0]);
-    })
-    .map(([key, value]) => {
-      return `${key} = ${value}`;
-    })
-    .join('\n');
-
-  return `[Song]\n${knownIniValues}\n${remainingValues}`;
-}
-
 export default function SongsDownloader() {
   const handler = useCallback(async () => {
     const dirHandle = await window.showDirectoryPicker({

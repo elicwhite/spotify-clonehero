@@ -58,8 +58,6 @@ import {
   type ProjectMetadata,
 } from '@/lib/drum-edit/storage/opfs';
 
-type ParsedChart = ReturnType<typeof parseChartFile>;
-
 /** scan-chart modifiers for pro drums. */
 const PRO_DRUMS_MODIFIERS = {
   song_length: 0,
@@ -114,9 +112,6 @@ function DrumEditInner() {
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   const loadingProjects = pageState === 'load' && !projectsLoaded;
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
-
-  // Data loaded for the editor
-  const [projectMeta, setProjectMeta] = useState<ProjectMetadata | null>(null);
 
   // Load project list when showing the load screen. All state writes
   // happen in the promise callback, so the effect body itself does no
@@ -201,8 +196,6 @@ function DrumEditInner() {
           allFiles: files,
         });
 
-        setProjectMeta(meta);
-
         // Navigate to the project URL
         router.push(`/drum-edit?project=${meta.id}`);
       } catch (err) {
@@ -241,7 +234,6 @@ function DrumEditInner() {
 
   // Handle going back to load screen
   const handleBack = useCallback(() => {
-    setProjectMeta(null);
     setPageState('load');
     router.push('/drum-edit');
   }, [router]);

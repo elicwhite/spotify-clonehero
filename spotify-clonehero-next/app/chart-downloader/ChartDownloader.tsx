@@ -66,8 +66,6 @@ export default function ChartDownloader() {
   const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb(true);
   const outputDirRef = useRef<FileSystemDirectoryHandle | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // Notify waiting workers when concurrency increases
-  const workerNotifyRef = useRef<(() => void) | null>(null);
 
   const handleStart = useCallback(async () => {
     const abortController = new AbortController();
@@ -117,7 +115,7 @@ export default function ChartDownloader() {
     // Wait for chorus sync
     try {
       await chorusPromise;
-    } catch (err) {
+    } catch {
       toast.error('Error syncing chorus charts');
       setStatus('error');
       return;
@@ -526,7 +524,7 @@ async function findMissingCharts(): Promise<MissingChart[]> {
   return result.rows;
 }
 
-function formatEta(progress: DownloadProgress, concurrency: number): string {
+function formatEta(progress: DownloadProgress, _concurrency: number): string {
   const done = progress.completed + progress.failed;
   if (done < 3) return 'Calculating...';
 

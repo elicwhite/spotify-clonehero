@@ -23,8 +23,7 @@ import {typeToLane} from './commands';
  * by any connected AI agent (Claude, etc.) through the WebMCP protocol.
  */
 export default function EditorMCPTools() {
-  const {state, dispatch, audioManagerRef, noteRendererRef} =
-    useChartEditorContext();
+  const {state, dispatch, audioManagerRef} = useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
 

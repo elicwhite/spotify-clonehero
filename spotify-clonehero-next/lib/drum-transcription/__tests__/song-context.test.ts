@@ -97,7 +97,6 @@ describe('computeRealContext', () => {
     // Slot 1 (BD) should have higher values than mean_mel (slot 0)
     // because the onset window includes frame 50 which has value 10.0
     const bdSlotStart = 1 * nMels; // BD is index 0, slot 1
-    const meanSlotStart = 0;
 
     // BD slot should have values > 0 (from the onset window including frame 50)
     let bdSum = 0;

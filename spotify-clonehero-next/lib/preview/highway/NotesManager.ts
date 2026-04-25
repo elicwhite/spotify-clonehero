@@ -542,7 +542,6 @@ export class NotesManager {
         // Reposition sustain tail if present
         if (pn.msLength > 0 && group.children.length > 1) {
           const sustainMesh = group.children[1] as THREE.Mesh;
-          const sustainWorldHeight = 2 * (pn.msLength / HIGHWAY_DURATION_MS);
           // Update geometry in case HIGHWAY_DURATION_MS or sizing changed
           // (for now it's constant, but the geometry was created with the
           // current value so this is a no-op repositioning)
@@ -772,20 +771,16 @@ export class NotesManager {
     const ringSize = noteScale * 2.8;
     let color: number;
     let opacity: number;
-    let ringWidth: number;
 
     if (conf < 0.5) {
       color = CONFIDENCE_COLORS.low;
       opacity = 0.7;
-      ringWidth = 0.003;
     } else if (conf < this.confidenceThreshold) {
       color = CONFIDENCE_COLORS.medium;
       opacity = 0.6;
-      ringWidth = 0.002;
     } else {
       color = CONFIDENCE_COLORS.mild;
       opacity = 0.3;
-      ringWidth = 0.001;
     }
 
     let ring: THREE.Mesh;

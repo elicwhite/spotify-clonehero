@@ -1,28 +1,6 @@
 'use client';
 
-import {useCallback, useState} from 'react';
-
 export default function CheckerPage() {
-  const [keyId, setKeyId] = useState<number>(0);
-  const [directoryHandle, setDirectoryHandle] =
-    useState<FileSystemDirectoryHandle | null>(null);
-
-  const handler = useCallback(async () => {
-    let handle;
-
-    try {
-      handle = await window.showDirectoryPicker({
-        id: 'charts-to-scan',
-      });
-    } catch {
-      console.log('User canceled picker');
-      return;
-    }
-
-    setDirectoryHandle(handle);
-    setKeyId(key => key + 1);
-  }, []);
-
   return (
     <>
       <p className="mb-4 text-center">

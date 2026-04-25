@@ -1,6 +1,5 @@
 import {ChartResponseEncore} from './chartSelection';
 
-const LOCAL_URL = 'http://localhost:4200/api/search/advanced';
 const PROD_URL = 'https://api.enchor.us/search/advanced';
 
 export type EncoreResponse = {

@@ -171,15 +171,6 @@ async function getChartFiles(chartData: ChartResponseEncore) {
   );
 }
 
-async function getIniContents(files: Files) {
-  const iniFile = files.find(f => hasIniName(f.fileName));
-  if (!iniFile) {
-    throw new Error('No ini file found');
-  }
-
-  return new TextDecoder().decode(iniFile.data);
-}
-
 export function findChartData(files: {fileName: string; data: Uint8Array}[]) {
   const chartFiles = _.chain(files)
     .filter(f => hasChartExtension(f.fileName))

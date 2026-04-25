@@ -69,8 +69,8 @@ export function mergeWindowsIntoSegments(
  */
 function groupConsecutiveCandidates(
   windows: AnalysisWindow[],
-  config: ValidatedConfig,
-  resolution: number,
+  _config: ValidatedConfig,
+  _resolution: number,
 ): CandidateSegment[] {
   const segments: CandidateSegment[] = [];
   let currentSegment: CandidateSegment | null = null;

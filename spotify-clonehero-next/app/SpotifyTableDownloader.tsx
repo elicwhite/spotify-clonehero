@@ -58,6 +58,7 @@ import {
 } from '@/components/ui/tooltip';
 
 declare module '@tanstack/react-table' {
+  // eslint-disable-next-line unused-imports/no-unused-vars
   interface TableMeta<TData extends RowData> {
     setDownloadState(index: string, state: TableDownloadStates): void;
   }
@@ -166,7 +167,7 @@ const downloadedFilter: FilterFn<RowType> = (
   row,
   columnId,
   enabled: boolean,
-  addMeta: any,
+  _addMeta: any,
 ) => {
   if (!enabled) {
     // If the filter isn't enabled, all rows should be included

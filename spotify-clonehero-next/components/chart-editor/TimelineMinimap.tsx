@@ -51,7 +51,6 @@ export default function TimelineMinimap({
   const [isDragging, setIsDragging] = useState(false);
   const wasPlayingRef = useRef(false);
 
-  const durationSec = durationMs / 1000;
   const percentage =
     durationMs > 0 ? Math.min(100, (currentTimeMs / durationMs) * 100) : 0;
 

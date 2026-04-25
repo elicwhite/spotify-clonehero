@@ -50,23 +50,6 @@ export {trackToElements} from './trackToElements';
 export {chartToElements} from './chartToElements';
 export {LyricsOverlay} from './LyricsOverlay';
 
-let instanceCounter = 0;
-
-// ---------------------------------------------------------------------------
-// Interpolation helper (maps a value from one range to another)
-// ---------------------------------------------------------------------------
-function interpolate(
-  val: number,
-  fromStart: number,
-  fromEnd: number,
-  toStart: number,
-  toEnd: number,
-): number {
-  return (
-    ((val - fromStart) / (fromEnd - fromStart)) * (toEnd - toStart) + toStart
-  );
-}
-
 // ---------------------------------------------------------------------------
 // setupRenderer (public API -- signature unchanged)
 // ---------------------------------------------------------------------------
@@ -78,7 +61,6 @@ export const setupRenderer = (
   ref: RefObject<HTMLDivElement>,
   audioManager: AudioManager,
 ) => {
-  instanceCounter++;
   const highwaySpeed = 1.5;
 
   const camera = new THREE.PerspectiveCamera(90, 1 / 1, 0.01, 10);

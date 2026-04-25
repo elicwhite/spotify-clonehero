@@ -1,13 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import {usePathname, useRouter, useSearchParams} from 'next/navigation';
+import {usePathname, useSearchParams} from 'next/navigation';
 import {Button} from '@/components/ui/button';
 import {useAuth} from '@/lib/supabase/AuthProvider';
 
 export default function HeaderAuthControls() {
-  const {user, loading, signOut} = useAuth();
-  const router = useRouter();
+  const {user, loading} = useAuth();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
