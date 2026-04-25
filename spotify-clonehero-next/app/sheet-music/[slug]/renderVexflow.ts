@@ -119,6 +119,18 @@ export function renderMusic(
     (Math.ceil(measures.length / stavePerRow) * lineHeight + 50) * zoom,
   );
 
+  // Anchor SVG content to the top-left during any transient size
+  // mismatch (e.g., the user dragging the window narrower while the
+  // ResizeObserver-driven re-render is debounced). The default
+  // preserveAspectRatio of `xMidYMid meet` *vertically center-pads*
+  // when the SVG element's box gets flex-shrunk below its authored
+  // viewBox width, sliding the content down until the next render
+  // catches up. xMinYMin meet keeps the content pinned to the top —
+  // the worst case during resize is a horizontally squished render
+  // for one frame instead of a visible vertical jump.
+  const svg = (elementRef.current?.children.item(0) as SVGSVGElement) ?? null;
+  svg?.setAttribute('preserveAspectRatio', 'xMinYMin meet');
+
   context.scale(zoom, zoom);
 
   // Create a map of measure start times to section names for quick lookup

@@ -1410,7 +1410,10 @@ export default function Renderer({
         />
         <div className="flex flex-1 gap-2 overflow-hidden">
           <div
-            className={cn(viewCloneHero ? 'hidden md:flex' : 'flex', 'flex-1')}>
+            className={cn(
+              viewCloneHero ? 'hidden md:flex' : 'flex',
+              'flex-1 min-w-0',
+            )}>
             <SheetMusic
               currentTime={currentPlayback}
               chart={chart}
@@ -1436,13 +1439,24 @@ export default function Renderer({
               audioManagerRef={audioManagerRef}
             />
           </div>
-          {viewCloneHero && audioManager && (
-            <CloneHeroRenderer
-              metadata={metadata}
-              chart={chart}
-              track={track}
-              audioManager={audioManager}
-            />
+          {viewCloneHero && (
+            // Reserve the flex slot for the highway from the initial
+            // paint so SheetMusic next door gets sized to its correct
+            // half-width on first render. Without this wrapper the
+            // CloneHeroRenderer mount waits for audioManager state to
+            // resolve, by which time SheetMusic has already laid out at
+            // full width — leaving a blank half-rendered sheet music
+            // until the next layout invalidation.
+            <div className="flex-1 min-w-0 flex">
+              {audioManager && (
+                <CloneHeroRenderer
+                  metadata={metadata}
+                  chart={chart}
+                  track={track}
+                  audioManager={audioManager}
+                />
+              )}
+            </div>
           )}
         </div>
       </div>

@@ -62,17 +62,21 @@ export default function SheetMusic({
   }, [renderData]);
 
   useEffect(() => {
-    // Create the debounced handler inside the effect so the ref access
-    // lives in an effect-scoped closure, not a render-phase useMemo. The
-    // debounce still only fires the inner body 50ms after the last resize.
+    // Re-render whenever the vexflow container's width changes —
+    // window resizes, scrollbar appearance, sibling layout shifts —
+    // so the SVG is re-authored at the matching width and overlays
+    // stay aligned with their staves. setWindowWidth's value is just
+    // a re-run trigger; renderVexflow reads offsetWidth fresh.
+    const container = vexflowContainerRef.current;
+    if (!container) return;
     const debouncedOnResize = debounce(() => {
-      const width =
-        vexflowContainerRef.current?.offsetWidth ?? window.innerWidth;
+      const width = container.offsetWidth;
       setWindowWidth(width);
     }, 50);
-    window.addEventListener('resize', debouncedOnResize);
+    const observer = new ResizeObserver(debouncedOnResize);
+    observer.observe(container);
     return () => {
-      window.removeEventListener('resize', debouncedOnResize);
+      observer.disconnect();
     };
   }, []);
 
