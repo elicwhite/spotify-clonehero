@@ -43,7 +43,13 @@ const STEP = SEGMENT_SAMPLES - OVERLAP;
 
 let session: ort.InferenceSession | null = null;
 
-function post(msg: any, transfer?: Transferable[]) {
+type OutboundMessage =
+  | {type: 'progress'; message: string}
+  | {type: 'loaded'}
+  | {type: 'result'; vocals16k: Float32Array}
+  | {type: 'error'; message: string};
+
+function post(msg: OutboundMessage, transfer?: Transferable[]) {
   self.postMessage(msg, {transfer: transfer ?? []});
 }
 
@@ -243,7 +249,8 @@ self.onmessage = async (e: MessageEvent) => {
     } else if (e.data.type === 'separate') {
       await separate(e.data.audioData, e.data.numSamples);
     }
-  } catch (err: any) {
-    post({type: 'error', message: err.message ?? String(err)});
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    post({type: 'error', message});
   }
 };

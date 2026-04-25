@@ -306,8 +306,9 @@ function LyricsAlignInner() {
       try {
         const {init} = await import('@/lib/lyrics-align/aligner');
         await init(msg => console.log('[aligner init]', msg));
-      } catch (e: any) {
-        console.warn('Failed to preload alignment model:', e.message);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        console.warn('Failed to preload alignment model:', message);
       }
     })();
   }, [status]);
@@ -340,8 +341,9 @@ function LyricsAlignInner() {
       }
 
       setStatus('input');
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to load chart');
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Failed to load chart';
+      setError(message);
       setStatus('error');
     }
   }, []);

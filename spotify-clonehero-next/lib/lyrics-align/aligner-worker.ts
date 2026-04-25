@@ -83,7 +83,19 @@ for (let i = 0; i < VOCAB.length; i++) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function post(msg: any) {
+type OutboundMessage =
+  | {type: 'progress'; message: string}
+  | {type: 'initDone'}
+  | {
+      type: 'result';
+      lines: LyricLine[];
+      words: AlignedWord[];
+      syllables: AlignedSyllable[];
+      durationMs: number;
+    }
+  | {type: 'error'; message: string};
+
+function post(msg: OutboundMessage) {
   self.postMessage(msg);
 }
 
@@ -541,7 +553,8 @@ self.onmessage = async (e: MessageEvent) => {
     } else if (e.data.type === 'align') {
       await handleAlign(e.data.vocals16k, e.data.lyrics);
     }
-  } catch (err: any) {
-    post({type: 'error', message: err.message ?? String(err)});
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    post({type: 'error', message});
   }
 };
