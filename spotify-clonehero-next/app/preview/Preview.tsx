@@ -101,12 +101,7 @@ export default function Preview() {
           </Button>
         )} */}
       </div>
-      {rendering != null && (
-        <Highway
-          metadata={rendering.metadata}
-          chart={rendering.chart}
-          audioFiles={rendering.audioFiles}></Highway>
-      )}
+      {rendering != null && <Highway />}
     </div>
   );
 }

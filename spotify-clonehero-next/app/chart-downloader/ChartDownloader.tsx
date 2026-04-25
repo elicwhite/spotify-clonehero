@@ -175,10 +175,7 @@ export default function ChartDownloader() {
 
       {isLoading && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <LocalScanLoaderCard
-            count={localScanCount}
-            isScanning={status === 'scanning'}
-          />
+          <LocalScanLoaderCard count={localScanCount} />
           <UpdateChorusLoaderCard progress={chorusChartProgress} />
         </div>
       )}
@@ -524,7 +521,7 @@ async function findMissingCharts(): Promise<MissingChart[]> {
   return result.rows;
 }
 
-function formatEta(progress: DownloadProgress, _concurrency: number): string {
+function formatEta(progress: DownloadProgress): string {
   const done = progress.completed + progress.failed;
   if (done < 3) return 'Calculating...';
 
@@ -580,7 +577,7 @@ function DownloadProgressCard({
           Downloading Charts
         </CardTitle>
         <p className="text-muted-foreground text-center text-sm">
-          {formatEta(progress, concurrency)}
+          {formatEta(progress)}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">

@@ -25,7 +25,6 @@ type ParsedChart = ReturnType<typeof parseChartFile>;
 export default function SheetMusic({
   chart,
   track,
-  currentTime: _currentTime,
   showBarNumbers,
   enableColors,
   showLyrics,
@@ -40,7 +39,6 @@ export default function SheetMusic({
 }: {
   chart: ParsedChart;
   track: ParsedChart['trackData'][0];
-  currentTime: number;
   showBarNumbers: boolean;
   enableColors: boolean;
   showLyrics: boolean;
@@ -133,15 +131,11 @@ export default function SheetMusic({
   // Keeping measure overlay divs clickable only
 
   const measureHighlights = renderData.map(({measure, stave}, index) => {
-    // Determine if this measure is in practice mode range
-    let isInPracticeRange = false;
+    // Determine if this measure is the start/end of the practice range
     let isPracticeStart = false;
     let isPracticeEnd = false;
 
     if (practiceModeConfig) {
-      isInPracticeRange =
-        measure.startMs >= practiceModeConfig.startTimeMs &&
-        measure.endMs <= practiceModeConfig.endTimeMs;
       isPracticeStart =
         Math.abs(measure.startMs - practiceModeConfig.startMeasureMs) < 100; // Within 100ms
       isPracticeEnd =
@@ -158,12 +152,8 @@ export default function SheetMusic({
           width: stave.getWidth() * zoom + 10,
           height: stave.getHeight() * zoom,
         }}
-        isInPracticeRange={isInPracticeRange}
         isPracticeStart={isPracticeStart}
         isPracticeEnd={isPracticeEnd}
-        isPracticeModeActive={
-          practiceModeConfig !== null && practiceModeConfig.endMeasureMs > 0
-        }
         onClick={() => {
           if (selectionIndex !== null) {
             onPracticeMeasureSelect(index);
@@ -196,25 +186,13 @@ export default function SheetMusic({
 
 interface MeasureHighlightProps {
   style?: React.CSSProperties;
-  isInPracticeRange?: boolean;
   isPracticeStart?: boolean;
   isPracticeEnd?: boolean;
-  isPracticeModeActive?: boolean;
   onClick?: () => void;
 }
 
 const MeasureHighlight = forwardRef<HTMLButtonElement, MeasureHighlightProps>(
-  (
-    {
-      style,
-      isInPracticeRange: _isInPracticeRange,
-      isPracticeStart,
-      isPracticeEnd,
-      isPracticeModeActive: _isPracticeModeActive,
-      onClick,
-    },
-    ref,
-  ) => {
+  ({style, isPracticeStart, isPracticeEnd, onClick}, ref) => {
     return (
       <button
         ref={ref}

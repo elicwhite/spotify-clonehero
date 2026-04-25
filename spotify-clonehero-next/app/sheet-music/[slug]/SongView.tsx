@@ -1394,7 +1394,6 @@ export default function Renderer({
               'flex-1 min-w-0',
             )}>
             <SheetMusic
-              currentTime={currentPlayback}
               chart={chart}
               track={track}
               showBarNumbers={showBarNumbers}

@@ -197,10 +197,7 @@ function LoggedIn() {
               <SpotifyLoaderCard progress={spotifyLibraryProgress} />
             )}
             <div className="space-y-4">
-              <LocalScanLoaderCard
-                count={status.songsCounted}
-                isScanning={status.status === 'scanning'}
-              />
+              <LocalScanLoaderCard count={status.songsCounted} />
               <UpdateChorusLoaderCard progress={chorusChartProgress} />
             </div>
           </div>

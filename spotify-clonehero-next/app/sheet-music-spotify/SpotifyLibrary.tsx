@@ -205,14 +205,14 @@ function PlaylistRow({item}: {item: PlaylistAlbumData}) {
               </Row.Left>
             </Row>
           }>
-          <RenderPlaylistTracks playlist={item.id} />
+          <RenderPlaylistTracks />
         </Suspense>
       )}
     </>
   );
 }
 
-function RenderPlaylistTracks({playlist: _playlist}: {playlist: string}) {
+function RenderPlaylistTracks() {
   return (
     <Row>
       <Row.Left>

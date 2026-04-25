@@ -72,7 +72,7 @@ function useWebGPUCheck() {
  * Inner component that reads search params.
  * Must be wrapped in Suspense because useSearchParams() requires it.
  */
-function DrumTranscriptionInner({ortReady: _ortReady}: {ortReady: boolean}) {
+function DrumTranscriptionInner() {
   const webGPUSupported = useWebGPUCheck();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -658,29 +658,13 @@ const ORT_CDN_URL =
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.0-dev.20251116-b39e144322/dist/ort.min.js';
 
 export default function DrumTranscriptionPage() {
-  const [ortReady, setOrtReady] = useState(false);
-
-  const handleOrtLoad = useCallback(() => {
-    console.log('[ORT] Script loaded from CDN');
-  }, []);
-
-  const handleOrtReady = useCallback(() => {
-    console.log('[ORT] Runtime ready');
-    setOrtReady(true);
-  }, []);
-
   return (
     <>
       {/* Load ONNX Runtime Web from CDN (avoids bundling ~20MB WASM files).
           Uses afterInteractive so the page renders first, then the script loads. */}
-      <Script
-        src={ORT_CDN_URL}
-        strategy="afterInteractive"
-        onLoad={handleOrtLoad}
-        onReady={handleOrtReady}
-      />
+      <Script src={ORT_CDN_URL} strategy="afterInteractive" />
       <Suspense fallback={null}>
-        <DrumTranscriptionInner ortReady={ortReady} />
+        <DrumTranscriptionInner />
       </Suspense>
     </>
   );

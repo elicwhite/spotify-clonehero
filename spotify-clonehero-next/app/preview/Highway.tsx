@@ -1,12 +1,6 @@
 import {FC} from 'react';
-import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
-import {ChartResponseEncore} from '@/lib/chartSelection';
 
-export const Highway: FC<{
-  metadata: ChartResponseEncore;
-  chart: ParsedChart;
-  audioFiles: Files;
-}> = ({metadata: _metadata, chart: _chart, audioFiles: _audioFiles}) => {
+export const Highway: FC = () => {
   return null;
   // chart.trackData;
 

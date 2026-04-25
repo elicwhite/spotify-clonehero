@@ -2,13 +2,7 @@
 
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 
-export default function LocalScanLoaderCard({
-  count,
-  isScanning: _isScanning,
-}: {
-  count: number;
-  isScanning: boolean;
-}) {
+export default function LocalScanLoaderCard({count}: {count: number}) {
   return (
     <div className="bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-2xl">

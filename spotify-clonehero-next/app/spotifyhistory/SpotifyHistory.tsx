@@ -296,10 +296,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
             <div className="flex justify-center">Checking for song matches</div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <LocalScanLoaderCard
-              count={status.songsCounted}
-              isScanning={status.status === 'scanning'}
-            />
+            <LocalScanLoaderCard count={status.songsCounted} />
             <UpdateChorusLoaderCard progress={chorusChartProgress} />
           </div>
         </>
