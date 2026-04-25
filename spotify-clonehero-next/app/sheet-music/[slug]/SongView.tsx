@@ -370,9 +370,7 @@ export default function Renderer({
   // (the same source the highway uses).
   const chartLyrics = useMemo(
     () =>
-      (chart as any).vocalTracks?.parts?.vocals?.notePhrases?.flatMap(
-        (p: any) => p.lyrics,
-      ) ?? [],
+      chart.vocalTracks.parts.vocals?.notePhrases.flatMap(p => p.lyrics) ?? [],
     [chart],
   );
 
