@@ -477,11 +477,14 @@ function LyricsAlignInner() {
         startTime: Date.now(),
       });
 
-      // Stash the vocal stem for highway waveform display. This is the
-      // exact buffer used by alignment, so visually inspecting it tells
-      // the user where the aligner is "looking". Never serialized into
-      // the downloaded chart.
-      setVocalsWaveform(vocals16k);
+      // Stash a *copy* of the vocal stem for the highway waveform
+      // display. alignVocals posts vocals16k into a worker and detaches
+      // the underlying ArrayBuffer, which would leave the React-state
+      // reference empty and the waveform invisible. Cloning is cheap
+      // (~5 MB for a 5-minute song at 16kHz) and keeps the highway buffer
+      // independent of the alignment pipeline. Never serialized into the
+      // downloaded chart.
+      setVocalsWaveform(new Float32Array(vocals16k));
 
       const {alignVocals} = await import('@/lib/lyrics-align/aligner');
 
