@@ -76,7 +76,10 @@ export class WaveformSurface {
     this.material = new THREE.MeshBasicMaterial({
       map: this.texture,
       depthTest: false,
-      transparent: false,
+      // Transparent so the gray highway floor shows through rows without
+      // audio peaks. The canvas is cleared each frame (no opaque black
+      // fill) to honour this.
+      transparent: true,
     });
 
     const geometry = new THREE.PlaneGeometry(config.highwayWidth, 2);
@@ -137,9 +140,9 @@ export class WaveformSurface {
     const h = CANVAS_HEIGHT;
     const centerX = w / 2;
 
-    // Clear to black
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, w, h);
+    // Clear to fully transparent so the highway floor shows through
+    // anywhere we don't draw a peak.
+    ctx.clearRect(0, 0, w, h);
 
     // Convert time range to sample range
     const startSample = Math.max(
