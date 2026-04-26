@@ -305,6 +305,15 @@ function LyricsAlignInner() {
   );
   const [alignSteps, setAlignSteps] = useState<PipelineStep[]>(ALIGN_STEPS);
   const [showLyricsWarning, setShowLyricsWarning] = useState(false);
+  /**
+   * Float32 16kHz mono PCM of the vocals stem used for alignment. Either
+   * the chart's existing stem (resampled) or the AI-separated stem from
+   * Demucs. Used as the highway's waveform source — never written into
+   * the downloaded chart.
+   */
+  const [vocalsWaveform, setVocalsWaveform] = useState<Float32Array | null>(
+    null,
+  );
   const [editorData, setEditorData] = useState<EditorData | null>(null);
   const initStartedRef = useRef(false);
 
@@ -468,6 +477,12 @@ function LyricsAlignInner() {
         startTime: Date.now(),
       });
 
+      // Stash the vocal stem for highway waveform display. This is the
+      // exact buffer used by alignment, so visually inspecting it tells
+      // the user where the aligner is "looking". Never serialized into
+      // the downloaded chart.
+      setVocalsWaveform(vocals16k);
+
       const {alignVocals} = await import('@/lib/lyrics-align/aligner');
 
       const result = await alignVocals(vocals16k, lyrics, msg => {
@@ -594,7 +609,15 @@ function LyricsAlignInner() {
           getChartDelayMs(nextDoc.parsedChart.metadata) / 1000,
         );
 
-        const decoded = await decodeAudioForWaveform(chart.audioFiles[0].data);
+        // Highway waveform: prefer the same vocals buffer used during
+        // alignment (16kHz mono Float32 from `vocalsWaveform`). Falls back
+        // to decoding the song mix only if alignment somehow ran without
+        // populating that state. The waveform display is a visual cue, so
+        // a 16kHz mono source plots fine across the song duration.
+        const waveform: {interleaved: Float32Array; channels: number} | null =
+          vocalsWaveform
+            ? {interleaved: vocalsWaveform, channels: 1}
+            : await decodeAudioForWaveform(chart.audioFiles[0].data);
         if (cancelled) {
           audioManager.destroy();
           return;
@@ -621,10 +644,14 @@ function LyricsAlignInner() {
           track,
           chartDoc: nextDoc,
           audioManager,
-          audioData: decoded?.interleaved,
-          audioChannels: decoded?.channels ?? 2,
+          audioData: waveform?.interleaved,
+          audioChannels: waveform?.channels ?? 1,
           durationSeconds,
         });
+
+        // add-lyrics defaults to the waveform highway since the user is
+        // syncing lyrics to vocal energy, not navigating notes.
+        dispatch({type: 'SET_HIGHWAY_MODE', mode: 'waveform'});
       } catch (err) {
         if (cancelled) return;
         console.error('Failed to prepare chart editor:', err);
@@ -643,6 +670,7 @@ function LyricsAlignInner() {
     chart,
     alignedSyllables,
     editorData,
+    vocalsWaveform,
     dispatch,
     audioManagerRef,
   ]);
@@ -697,6 +725,7 @@ function LyricsAlignInner() {
               setEditorData(null);
               setAlignedLines([]);
               setAlignedSyllables([]);
+              setVocalsWaveform(null);
               setStatus('input');
             }}>
             Re-align
