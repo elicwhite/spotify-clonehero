@@ -82,7 +82,10 @@ export class WaveformSurface {
     const geometry = new THREE.PlaneGeometry(config.highwayWidth, 2);
     this.mesh = new THREE.Mesh(geometry, this.material);
     this.mesh.position.y = -0.1;
-    this.mesh.renderOrder = 0;
+    // Render above the highway floor (HIGHWAY_FLOOR_RENDER_ORDER = 0) so
+    // the gray plane stays visible at the edges as a frame, but below
+    // markers / notes / cursor.
+    this.mesh.renderOrder = 1;
     this.mesh.visible = false;
   }
 

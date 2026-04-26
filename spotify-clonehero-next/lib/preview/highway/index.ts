@@ -278,15 +278,19 @@ export const setupRenderer = (
 
       const fullConfig: WaveformSurfaceConfig = {
         ...config,
-        highwayWidth: 0.9, // drum highway width
+        // Slightly inset from the highway floor (0.9) so the gray plane
+        // frames the waveform — left/right edges of the highway stay
+        // visible at a glance.
+        highwayWidth: 0.84,
         highwaySpeed,
       };
       waveformSurface = createWaveformSurface(scene, fullConfig);
 
-      // Apply current mode
+      // Apply current mode. Keep the classic highway mesh visible
+      // beneath the waveform surface so the highway's left/right edges
+      // remain framed even while the waveform is showing.
       if (highwayMode === 'waveform') {
         waveformSurface.setVisible(true);
-        if (classicHighwayMesh) classicHighwayMesh.visible = false;
       }
     },
 
@@ -326,7 +330,10 @@ export const setupRenderer = (
 
       if (waveformSurface) waveformSurface.setVisible(isWaveform);
       if (gridOverlay) gridOverlay.setVisible(true); // always show grid lines
-      if (classicHighwayMesh) classicHighwayMesh.visible = !isWaveform;
+      // Classic highway mesh stays visible in both modes — it provides the
+      // gray plane background that frames the highway edges. The waveform
+      // surface renders on top of it.
+      if (classicHighwayMesh) classicHighwayMesh.visible = true;
     },
 
     /** Get the current highway mode. */

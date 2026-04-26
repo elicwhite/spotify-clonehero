@@ -53,13 +53,21 @@ export async function getHighwayTexture(textureLoader: THREE.TextureLoader) {
   return texture;
 }
 
+/**
+ * Render order for the highway floor planes. Lower than the waveform
+ * surface (1) so the waveform draws on top when both are visible — this
+ * keeps the gray plane as a frame around the waveform without occluding
+ * it. Markers, notes, and overlays render at higher orders still.
+ */
+const HIGHWAY_FLOOR_RENDER_ORDER = 0;
+
 export function createHighway(highwayTexture: THREE.Texture) {
   const mat = new THREE.MeshBasicMaterial({map: highwayTexture});
 
   const geometry = new THREE.PlaneGeometry(1, 2);
   const plane = new THREE.Mesh(geometry, mat);
   plane.position.y = -0.1;
-  plane.renderOrder = 1;
+  plane.renderOrder = HIGHWAY_FLOOR_RENDER_ORDER;
   return plane;
 }
 
@@ -69,7 +77,7 @@ export function createDrumHighway(highwayTexture: THREE.Texture) {
   const geometry = new THREE.PlaneGeometry(0.9, 2);
   const plane = new THREE.Mesh(geometry, mat);
   plane.position.y = -0.1;
-  plane.renderOrder = 1;
+  plane.renderOrder = HIGHWAY_FLOOR_RENDER_ORDER;
   return plane;
 }
 
@@ -83,7 +91,7 @@ export function createEmptyHighway() {
   const geometry = new THREE.PlaneGeometry(0.9, 2);
   const plane = new THREE.Mesh(geometry, mat);
   plane.position.y = -0.1;
-  plane.renderOrder = 1;
+  plane.renderOrder = HIGHWAY_FLOOR_RENDER_ORDER;
   return plane;
 }
 
