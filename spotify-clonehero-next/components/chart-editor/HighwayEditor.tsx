@@ -1117,11 +1117,14 @@ export default function HighwayEditor({
         onMouseLeave={handleMouseLeave}
       />
 
-      {/* Box selection rectangle (DOM div -- inherently screen-space) */}
+      {/* Box selection rectangle (DOM div -- inherently screen-space).
+       * Suppressed while a note or marker drag is in progress so the
+       * rectangle doesn't track alongside the dragged element. */}
       {state.activeTool === 'cursor' &&
         dragStart &&
         dragCurrent &&
         !isDragging &&
+        !markerDrag &&
         (Math.abs(dragCurrent.x - dragStart.x) > 3 ||
           Math.abs(dragCurrent.y - dragStart.y) > 3) && (
           <div
