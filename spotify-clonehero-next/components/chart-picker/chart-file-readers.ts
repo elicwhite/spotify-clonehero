@@ -8,12 +8,7 @@
 import {unzipSync} from 'fflate';
 import {SngStream} from '@eliwhite/parse-sng';
 import type {SngHeader} from '@eliwhite/parse-sng';
-import {
-  getExtension,
-  hasAudioName,
-  hasChartExtension,
-  hasIniName,
-} from '@/lib/src-shared/utils';
+import {getExtension} from '@/lib/src-shared/utils';
 
 export interface FileEntry {
   fileName: string;
@@ -41,13 +36,17 @@ export async function readChartDirectory(
   const files: FileEntry[] = [];
   for await (const [name, handle] of dirHandle.entries()) {
     if (handle.kind !== 'file') continue;
-    if (hasChartExtension(name) || hasAudioName(name) || hasIniName(name)) {
-      const file = await (handle as FileSystemFileHandle).getFile();
-      files.push({
-        fileName: name,
-        data: new Uint8Array(await file.arrayBuffer()),
-      });
-    }
+    // Read every file in the folder and let scan-chart route them: the
+    // chart/ini files become the parsed structure, everything else
+    // (audio stems, album art, background.png, highway.png, video, etc.)
+    // lands in `chartDoc.assets` so writeChartFolder can round-trip them.
+    // The zip + sng readers below already pass everything through.
+    if (name.startsWith('.')) continue; // skip dotfiles like .DS_Store
+    const file = await (handle as FileSystemFileHandle).getFile();
+    files.push({
+      fileName: name,
+      data: new Uint8Array(await file.arrayBuffer()),
+    });
   }
   return {files, sourceFormat: 'folder', originalName: dirHandle.name};
 }
