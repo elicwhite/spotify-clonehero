@@ -1,7 +1,7 @@
 'use client';
 
 import {useEffect, useRef} from 'react';
-import {useChartEditorContext} from './ChartEditorContext';
+import {useChartEditorContext, getSelectedIds} from './ChartEditorContext';
 import {useExecuteCommand, useUndoRedo} from './hooks/useEditCommands';
 import {
   noteId,
@@ -83,13 +83,14 @@ export default function EditorMCPTools() {
           type: string;
           flags: Record<string, boolean>;
         }> = [];
-        if (s.chartDoc && s.selectedNoteIds.size > 0) {
+        const selectedIds = getSelectedIds(s, 'note');
+        if (s.chartDoc && selectedIds.size > 0) {
           const track = s.chartDoc.parsedChart.trackData.find(
             t => t.instrument === 'drums' && t.difficulty === 'expert',
           );
           if (track) {
             selectedNotes = getDrumNotes(track)
-              .filter(n => s.selectedNoteIds.has(noteId(n)))
+              .filter(n => selectedIds.has(noteId(n)))
               .map(n => ({
                 id: noteId(n),
                 tick: n.tick,
@@ -117,7 +118,7 @@ export default function EditorMCPTools() {
                   dirty: s.dirty,
                   currentTimeMs: am ? am.currentTime * 1000 : 0,
                   durationMs: am ? am.duration * 1000 : 0,
-                  selectedNoteCount: s.selectedNoteIds.size,
+                  selectedNoteCount: selectedIds.size,
                   selectedNotes,
                   totalNotes: s.chartDoc
                     ? (() => {
@@ -244,10 +245,10 @@ export default function EditorMCPTools() {
         const id = `${args.tick}:${args.type}`;
         const add = (args.addToSelection as boolean) ?? false;
         const newIds = add
-          ? new Set(stateRef.current.selectedNoteIds)
+          ? new Set(getSelectedIds(stateRef.current, 'note'))
           : new Set<string>();
         newIds.add(id);
-        dispatchRef.current({type: 'SET_SELECTED_NOTES', noteIds: newIds});
+        dispatchRef.current({type: 'SET_SELECTION', kind: 'note', ids: newIds});
         // NoteRenderer selection state is pushed by HighwayEditor's overlay effect
         return {
           content: [
@@ -271,16 +272,17 @@ export default function EditorMCPTools() {
         if (!['cymbal', 'accent', 'ghost'].includes(flag))
           return {content: [{type: 'text', text: 'Invalid flag'}]};
         const s = stateRef.current;
-        if (s.selectedNoteIds.size === 0)
+        const selected = getSelectedIds(s, 'note');
+        if (selected.size === 0)
           return {content: [{type: 'text', text: 'No notes selected'}]};
         executeCommandRef.current(
-          new ToggleFlagCommand(Array.from(s.selectedNoteIds), flag),
+          new ToggleFlagCommand(Array.from(selected), flag),
         );
         return {
           content: [
             {
               type: 'text',
-              text: `Toggled ${flag} on ${s.selectedNoteIds.size} note(s)`,
+              text: `Toggled ${flag} on ${selected.size} note(s)`,
             },
           ],
         };
@@ -322,14 +324,15 @@ export default function EditorMCPTools() {
       inputSchema: {type: 'object', properties: {}},
       execute: async () => {
         const s = stateRef.current;
-        if (s.selectedNoteIds.size === 0)
+        const selected = getSelectedIds(s, 'note');
+        if (selected.size === 0)
           return {content: [{type: 'text', text: 'No notes selected'}]};
-        executeCommandRef.current(new DeleteNotesCommand(s.selectedNoteIds));
-        dispatchRef.current({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
+        executeCommandRef.current(
+          new DeleteNotesCommand(selected as Set<string>),
+        );
+        dispatchRef.current({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
         return {
-          content: [
-            {type: 'text', text: `Deleted ${s.selectedNoteIds.size} note(s)`},
-          ],
+          content: [{type: 'text', text: `Deleted ${selected.size} note(s)`}],
         };
       },
     });

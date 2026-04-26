@@ -28,6 +28,7 @@ import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import {
   ChartEditorProvider,
   useChartEditorContext,
+  ADD_LYRICS_CAPABILITIES,
 } from '@/components/chart-editor';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
 import {AudioManager} from '@/lib/preview/audioManager';
@@ -267,7 +268,7 @@ interface EditorData {
 
 export default function LyricsAlignPage() {
   return (
-    <ChartEditorProvider>
+    <ChartEditorProvider capabilities={ADD_LYRICS_CAPABILITIES}>
       <LyricsAlignInner />
     </ChartEditorProvider>
   );
@@ -581,18 +582,18 @@ function LyricsAlignInner() {
         }
 
         const durationSeconds = audioManager.duration;
+        // No drum-track fallback — add-lyrics doesn't require a drum track
+        // and the lanes-off renderer synthesizes an empty one when needed.
         const track =
           nextDoc.parsedChart.trackData.find(
             t => t.instrument === 'drums' && t.difficulty === 'expert',
-          ) ??
-          nextDoc.parsedChart.trackData[0] ??
-          null;
+          ) ?? null;
 
         audioManagerRef.current = audioManager;
         dispatch({
           type: 'SET_CHART',
           chart: nextDoc.parsedChart as ParsedChart,
-          track: (track ?? {}) as ParsedChart['trackData'][0],
+          track,
         });
         dispatch({type: 'SET_CHART_DOC', chartDoc: nextDoc});
 

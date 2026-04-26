@@ -92,6 +92,20 @@ export type HitResult =
       name: string;
     }
   | {
+      type: 'lyric';
+      tick: number;
+      text: string;
+    }
+  | {
+      type: 'phrase-start';
+      tick: number;
+    }
+  | {
+      type: 'phrase-end';
+      /** Phrase end tick (== phrase.tick + phrase.length). */
+      endTick: number;
+    }
+  | {
       type: 'highway';
       lane: number;
       tick: number;

@@ -7,6 +7,7 @@ import {
   getHighwayTexture,
   createHighway,
   createDrumHighway,
+  createEmptyHighway,
   loadAndCreateHitBox,
   loadAndCreateDrumHitBox,
   createWaveformSurface,
@@ -54,13 +55,21 @@ export {LyricsOverlay} from './LyricsOverlay';
 // setupRenderer (public API -- signature unchanged)
 // ---------------------------------------------------------------------------
 
+export interface RendererConfig {
+  /** When false, render a neutral floor + skip the drum hitbox + skip drum
+   *  note rendering. Defaults to true (drum-edit). */
+  showDrumLanes?: boolean;
+}
+
 export const setupRenderer = (
   metadata: ChartResponseEncore,
   chart: ParsedChart,
   sizingRef: RefObject<HTMLDivElement>,
   ref: RefObject<HTMLDivElement>,
   audioManager: AudioManager,
+  config: RendererConfig = {},
 ) => {
+  const showDrumLanes = config.showDrumLanes ?? true;
   const highwaySpeed = 1.5;
 
   const camera = new THREE.PerspectiveCamera(90, 1 / 1, 0.01, 10);
@@ -331,7 +340,12 @@ export const setupRenderer = (
   async function prepTrack(scene: THREE.Scene, track: Track) {
     const {highwayTexture} = await initPromise;
 
-    if (track.instrument === 'drums') {
+    if (!showDrumLanes) {
+      // Lanes-off mode: neutral floor, no hitbox, no drum geometry.
+      const emptyHighway = createEmptyHighway();
+      scene.add(emptyHighway);
+      classicHighwayMesh = emptyHighway;
+    } else if (track.instrument === 'drums') {
       const drumHighway = createDrumHighway(highwayTexture);
       scene.add(drumHighway);
       classicHighwayMesh = drumHighway;
@@ -406,22 +420,23 @@ export const setupRenderer = (
     const elements = trackToElements(track);
     reconciler.setElements(elements);
 
-    // Create SceneOverlays for drum tracks (editor use)
-    const sceneOverlays =
-      track.instrument === 'drums'
-        ? new SceneOverlays(scene, highwaySpeed, clippingPlanes)
-        : null;
+    // SceneOverlays + InteractionManager are created for any track — they
+    // power the cursor / ghost / hit-testing surface for both drum-edit
+    // and lanes-off (lyrics) modes. Drum-specific render paths inside them
+    // simply have nothing to draw when no drum notes are present.
+    const sceneOverlays = new SceneOverlays(scene, highwaySpeed, clippingPlanes);
 
-    // Create InteractionManager for drum tracks (editor use)
     const getElapsedMs = () => {
       const currentMs = (audioManager?.chartTime ?? 0) * 1000;
       const delay = (audioManager?.delay || 0) * 1000;
       return currentMs - delay;
     };
-    const interactionManager =
-      track.instrument === 'drums'
-        ? new InteractionManager(camera, reconciler, highwaySpeed, getElapsedMs)
-        : null;
+    const interactionManager = new InteractionManager(
+      camera,
+      reconciler,
+      highwaySpeed,
+      getElapsedMs,
+    );
 
     // Create lyrics overlay if chart has lyrics
     const vocals = chart.vocalTracks.parts.vocals;

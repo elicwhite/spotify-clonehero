@@ -84,6 +84,33 @@ export {
 // Named section (globalEvent) helpers
 export {addSection, removeSection} from './helpers/sections';
 
+// Lyric helpers (vocal part lyrics)
+export {
+  lyricId,
+  listLyricTicks,
+  moveLyric,
+} from './helpers/lyrics';
+
+// Vocal phrase helpers
+export {
+  phraseStartId,
+  phraseEndId,
+  listPhraseStartTicks,
+  listPhraseEndTicks,
+  movePhraseStart,
+  movePhraseEnd,
+} from './helpers/phrases';
+
+// Per-entity-kind dispatch
+export {
+  entityHandlers,
+  cloneDocFor,
+  noteId,
+  type EntityKind,
+  type EntityRef,
+  type EntityKindHandler,
+} from './entities';
+
 // ---------------------------------------------------------------------------
 // readChart — parses a chart folder into a ChartDocument
 // ---------------------------------------------------------------------------

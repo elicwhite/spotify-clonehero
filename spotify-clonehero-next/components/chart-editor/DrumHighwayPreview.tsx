@@ -52,6 +52,13 @@ interface DrumHighwayPreviewProps {
   chart: ParsedChart;
   audioManager: AudioManager;
   className?: string;
+  /**
+   * When false, render a neutral floor with no drum lanes / hitbox / notes.
+   * Defaults to true. Pages that don't have a drum track (add-lyrics) set
+   * this to false so the highway still renders markers + cursor without
+   * drawing meaningless drum geometry.
+   */
+  showDrumLanes?: boolean;
   /** Called when the renderer is ready (or destroyed). */
   onRendererReady?: (handle: HighwayRendererHandle | null) => void;
 }
@@ -75,6 +82,7 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
   chart,
   audioManager,
   className,
+  showDrumLanes = true,
   onRendererReady,
 }: DrumHighwayPreviewProps) {
   const sizingRef = useRef<HTMLDivElement>(null!);
@@ -82,13 +90,33 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
   const rendererRef = useRef<ReturnType<typeof setupRenderer> | null>(null);
 
   // Memoize so the reference is stable when chart hasn't changed.
-  const drumTrack = useMemo(
-    () =>
-      chart.trackData.find(
-        t => t.instrument === 'drums' && t.difficulty === 'expert',
-      ),
-    [chart],
-  );
+  // When the chart has no drum track but lanes-off mode is requested, fall
+  // back to a synthetic empty drum track so the renderer pipeline (which
+  // expects an `instrument: 'drums'` track for texture loading) still runs.
+  const drumTrack = useMemo(() => {
+    const found = chart.trackData.find(
+      t => t.instrument === 'drums' && t.difficulty === 'expert',
+    );
+    if (found) return found;
+    if (!showDrumLanes) {
+      return {
+        instrument: 'drums',
+        difficulty: 'expert',
+        starPowerSections: [],
+        rejectedStarPowerSections: [],
+        soloSections: [],
+        flexLanes: [],
+        drumFreestyleSections: [],
+        trackEvents: [],
+        textEvents: [],
+        versusPhrases: [],
+        animations: [],
+        unrecognizedMidiEvents: [],
+        noteEventGroups: [],
+      } as unknown as ParsedChart['trackData'][number];
+    }
+    return undefined;
+  }, [chart, showDrumLanes]);
 
   // Use a ref to capture the latest drumTrack for the initial prepTrack() call.
   // The renderer lifecycle only depends on metadata and audioManager.
@@ -109,6 +137,7 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
       sizingRef,
       canvasRef,
       audioManager,
+      {showDrumLanes},
     );
     rendererRef.current = renderer;
     renderer.prepTrack(track);

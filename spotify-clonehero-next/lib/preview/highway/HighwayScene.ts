@@ -73,6 +73,20 @@ export function createDrumHighway(highwayTexture: THREE.Texture) {
   return plane;
 }
 
+/**
+ * A neutral floor mesh used when a chart has no drum track (or when the
+ * editor's capabilities suppress drum lanes — e.g. add-lyrics). No lane
+ * stripes, no hitbox; markers + cursor still draw on top of it.
+ */
+export function createEmptyHighway() {
+  const mat = new THREE.MeshBasicMaterial({color: 0x111111});
+  const geometry = new THREE.PlaneGeometry(0.9, 2);
+  const plane = new THREE.Mesh(geometry, mat);
+  plane.position.y = -0.1;
+  plane.renderOrder = 1;
+  return plane;
+}
+
 export async function loadAndCreateHitBox(textureLoader: THREE.TextureLoader) {
   const texture = await loadTexture(
     textureLoader,

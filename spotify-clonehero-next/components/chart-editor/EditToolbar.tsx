@@ -61,8 +61,13 @@ interface EditToolbarProps {
  * and undo/redo controls.
  */
 export default function EditToolbar({className}: EditToolbarProps) {
-  const {state, dispatch} = useChartEditorContext();
+  const {state, dispatch, capabilities} = useChartEditorContext();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
+
+  // Hide place / erase / bpm / timesig when the page disables note placement.
+  const visibleToolItems = capabilities.showNotePlacementTools
+    ? TOOL_ITEMS
+    : TOOL_ITEMS.filter(t => t.mode === 'cursor');
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -106,7 +111,7 @@ export default function EditToolbar({className}: EditToolbarProps) {
         <div className="mx-1 h-6 w-px bg-border" />
 
         {/* Tool mode buttons */}
-        {TOOL_ITEMS.map(({mode, icon: Icon, label, hotkey}) => (
+        {visibleToolItems.map(({mode, icon: Icon, label, hotkey}) => (
           <Tooltip key={mode}>
             <TooltipTrigger asChild>
               <Button

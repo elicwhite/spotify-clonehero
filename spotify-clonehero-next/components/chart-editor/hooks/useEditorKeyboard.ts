@@ -3,7 +3,12 @@
 import {useCallback} from 'react';
 import {useHotkey} from '@tanstack/react-hotkeys';
 import type {Hotkey} from '@tanstack/react-hotkeys';
-import {useChartEditorContext, type ToolMode} from '../ChartEditorContext';
+import {
+  useChartEditorContext,
+  getSelectedIds,
+  getFirstSelectedId,
+  type ToolMode,
+} from '../ChartEditorContext';
 import {useExecuteCommand, useUndoRedo} from './useEditCommands';
 import {
   AddNoteCommand,
@@ -198,11 +203,11 @@ export function useEditorKeyboard(
   useHotkey(
     'Mod+C',
     () => {
-      if (state.selectedNoteIds.size === 0) return;
+      if (getSelectedIds(state, 'note').size === 0) return;
       const track = getExpertTrack();
       if (!track) return;
       const selected = getDrumNotes(track).filter(n =>
-        state.selectedNoteIds.has(noteId(n)),
+        getSelectedIds(state, 'note').has(noteId(n)),
       );
       if (selected.length === 0) return;
 
@@ -214,7 +219,7 @@ export function useEditorKeyboard(
       }));
       dispatch({type: 'SET_CLIPBOARD', notes: normalized});
     },
-    {enabled: state.selectedNoteIds.size > 0},
+    {enabled: getSelectedIds(state, 'note').size > 0},
   );
 
   // -----------------------------------------------------------------------
@@ -223,11 +228,11 @@ export function useEditorKeyboard(
   useHotkey(
     'Mod+X',
     () => {
-      if (state.selectedNoteIds.size === 0) return;
+      if (getSelectedIds(state, 'note').size === 0) return;
       const track = getExpertTrack();
       if (!track) return;
       const selected = getDrumNotes(track).filter(n =>
-        state.selectedNoteIds.has(noteId(n)),
+        getSelectedIds(state, 'note').has(noteId(n)),
       );
       if (selected.length === 0) return;
 
@@ -241,10 +246,12 @@ export function useEditorKeyboard(
       dispatch({type: 'SET_CLIPBOARD', notes: normalized});
 
       // Delete
-      executeCommand(new DeleteNotesCommand(state.selectedNoteIds));
-      dispatch({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
+      executeCommand(
+        new DeleteNotesCommand(new Set(getSelectedIds(state, 'note'))),
+      );
+      dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
     },
-    {enabled: state.selectedNoteIds.size > 0},
+    {enabled: getSelectedIds(state, 'note').size > 0},
   );
 
   // -----------------------------------------------------------------------
@@ -273,7 +280,7 @@ export function useEditorKeyboard(
         const newIds = new Set(
           state.clipboard.map(n => noteId({...n, tick: n.tick + cursorTick})),
         );
-        dispatch({type: 'SET_SELECTED_NOTES', noteIds: newIds});
+        dispatch({type: 'SET_SELECTION', kind: 'note', ids: newIds});
       }
     },
     {enabled: state.clipboard.length > 0 && state.chartDoc !== null},
@@ -297,7 +304,7 @@ export function useEditorKeyboard(
     const track = getExpertTrack();
     if (track) {
       const allIds = new Set(getDrumNotes(track).map(n => noteId(n)));
-      dispatch({type: 'SET_SELECTED_NOTES', noteIds: allIds});
+      dispatch({type: 'SET_SELECTION', kind: 'note', ids: allIds});
     }
   });
 
@@ -514,15 +521,15 @@ export function useEditorKeyboard(
     useHotkey(
       key.toUpperCase() as Hotkey,
       () => {
-        if (state.selectedNoteIds.size > 0 && state.chartDoc) {
+        if (getSelectedIds(state, 'note').size > 0 && state.chartDoc) {
           executeCommand(
-            new ToggleFlagCommand(Array.from(state.selectedNoteIds), flag),
+            new ToggleFlagCommand(Array.from(getSelectedIds(state, 'note')), flag),
           );
-          onNotesModified?.(Array.from(state.selectedNoteIds));
+          onNotesModified?.(Array.from(getSelectedIds(state, 'note')));
         }
       },
       {
-        enabled: state.selectedNoteIds.size > 0 && state.chartDoc !== null,
+        enabled: getSelectedIds(state, 'note').size > 0 && state.chartDoc !== null,
         conflictBehavior: 'allow',
       },
     );
@@ -532,38 +539,37 @@ export function useEditorKeyboard(
   // Delete / Backspace — delete selected notes or selected section
   // -----------------------------------------------------------------------
   const handleDelete = useCallback(() => {
-    if (state.selectedSectionTick !== null && state.chartDoc) {
+    const selectedSectionId = getFirstSelectedId(state, 'section');
+    const selectedSectionTick =
+      selectedSectionId !== null ? Number.parseInt(selectedSectionId, 10) : null;
+    if (selectedSectionTick !== null && state.chartDoc) {
       const section = state.chartDoc.parsedChart.sections.find(
-        s => s.tick === state.selectedSectionTick,
+        s => s.tick === selectedSectionTick,
       );
       if (section) {
         executeCommand(new DeleteSectionCommand(section.tick, section.name));
-        dispatch({type: 'SET_SELECTED_SECTION', tick: null});
+        dispatch({type: 'SET_SELECTION', kind: 'section', ids: new Set()});
       }
       return;
     }
-    if (state.selectedNoteIds.size > 0) {
-      onNotesModified?.(Array.from(state.selectedNoteIds));
-      executeCommand(new DeleteNotesCommand(state.selectedNoteIds));
-      dispatch({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
+    const selectedNotes = getSelectedIds(state, 'note');
+    if (selectedNotes.size > 0) {
+      onNotesModified?.(Array.from(selectedNotes));
+      executeCommand(new DeleteNotesCommand(selectedNotes as Set<string>));
+      dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
     }
-  }, [
-    state.selectedSectionTick,
-    state.selectedNoteIds,
-    state.chartDoc,
-    executeCommand,
-    dispatch,
-    onNotesModified,
-  ]);
+  }, [state, executeCommand, dispatch, onNotesModified]);
 
   useHotkey('Delete', handleDelete, {
     enabled:
-      state.selectedNoteIds.size > 0 || state.selectedSectionTick !== null,
+      getSelectedIds(state, 'note').size > 0 ||
+      getFirstSelectedId(state, 'section') !== null,
   });
 
   useHotkey('Backspace', handleDelete, {
     enabled:
-      state.selectedNoteIds.size > 0 || state.selectedSectionTick !== null,
+      getSelectedIds(state, 'note').size > 0 ||
+      getFirstSelectedId(state, 'section') !== null,
     conflictBehavior: 'allow',
   });
 
@@ -571,8 +577,7 @@ export function useEditorKeyboard(
   // Escape — deselect all and switch to cursor mode
   // -----------------------------------------------------------------------
   useHotkey('Escape', () => {
-    dispatch({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
-    dispatch({type: 'SET_SELECTED_SECTION', tick: null});
+    dispatch({type: 'CLEAR_SELECTION'});
     dispatch({type: 'SET_ACTIVE_TOOL', tool: 'cursor'});
   });
 }

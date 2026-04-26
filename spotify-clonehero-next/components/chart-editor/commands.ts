@@ -17,6 +17,7 @@ import type {
   DrumNote,
   DrumNoteType,
   DrumNoteFlags,
+  EntityKind,
 } from '@/lib/chart-edit';
 import {
   addDrumNote,
@@ -29,6 +30,9 @@ import {
   removeTimeSignature,
   addSection,
   removeSection,
+  entityHandlers,
+  cloneDocFor,
+  noteId as entityNoteId,
 } from '@/lib/chart-edit';
 
 // ---------------------------------------------------------------------------
@@ -82,9 +86,7 @@ function findExpertDrumsIndex(doc: ChartDocument): number {
 // ---------------------------------------------------------------------------
 
 /** Composite key for a note: `${tick}:${type}`. Unique per chart. */
-export function noteId(note: {tick: number; type: DrumNoteType}): string {
-  return `${note.tick}:${note.type}`;
-}
+export const noteId = entityNoteId;
 
 // ---------------------------------------------------------------------------
 // EditCommand interface
@@ -192,104 +194,52 @@ export class DeleteNotesCommand implements EditCommand {
 }
 
 // ---------------------------------------------------------------------------
-// MoveNotesCommand
+// MoveEntitiesCommand — generalized over any entity kind that supports move
 // ---------------------------------------------------------------------------
 
-export class MoveNotesCommand implements EditCommand {
+const KIND_LABELS: Record<EntityKind, string> = {
+  note: 'note',
+  section: 'section',
+  lyric: 'lyric',
+  'phrase-start': 'phrase start',
+  'phrase-end': 'phrase end',
+};
+
+export class MoveEntitiesCommand implements EditCommand {
   readonly description: string;
-  /** IDs of notes after the move (computed during execute, used by undo). */
+  /** Ids of entities after the move (computed during execute, used by undo). */
   private movedIds: string[] = [];
 
   constructor(
-    private noteIds: string[],
+    private kind: EntityKind,
+    private ids: readonly string[],
     private tickDelta: number,
     private laneDelta: number,
   ) {
-    this.description = `Move ${noteIds.length} note(s)`;
+    const noun = KIND_LABELS[kind];
+    this.description = `Move ${ids.length} ${noun}${ids.length === 1 ? '' : 's'}`;
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    const idx = findExpertDrumsIndex(doc);
-    if (idx === -1) return doc;
-
-    const newDoc = cloneDocWithTracks(doc);
-    const track = newDoc.parsedChart.trackData[idx];
-
-    const idSet = new Set(this.noteIds);
-    this.movedIds = [];
-
-    // Get current notes, find matching ones, remove them, then re-add at new positions
-    const currentNotes = getDrumNotes(track);
-    const toMove: DrumNote[] = [];
-
-    for (const note of currentNotes) {
-      if (idSet.has(noteId(note))) {
-        toMove.push({...note, flags: {...note.flags}});
-      }
-    }
-
-    // Remove originals
-    for (const note of toMove) {
-      removeDrumNote(track, note.tick, note.type);
-    }
-
-    // Re-add at new positions
-    for (const note of toMove) {
-      const newType = shiftLane(note.type, this.laneDelta);
-      const newTick = Math.max(0, note.tick + this.tickDelta);
-      const moved: DrumNote = {
-        ...note,
-        tick: newTick,
-        type: newType,
-        flags: {...note.flags},
-      };
-      this.movedIds.push(noteId(moved));
-      addDrumNote(track, {
-        tick: moved.tick,
-        type: moved.type,
-        length: moved.length,
-        flags: moved.flags,
-      });
-    }
-
+    const handler = entityHandlers[this.kind];
+    const newDoc = cloneDocFor(this.kind, doc);
+    const laneDelta = handler.supportsLaneDelta ? this.laneDelta : 0;
+    this.movedIds = this.ids.map(id =>
+      handler.move(newDoc, id, this.tickDelta, laneDelta),
+    );
     return newDoc;
   }
 
   undo(doc: ChartDocument): ChartDocument {
-    const idx = findExpertDrumsIndex(doc);
-    if (idx === -1) return doc;
-
-    const newDoc = cloneDocWithTracks(doc);
-    const track = newDoc.parsedChart.trackData[idx];
-
-    // Reverse: find notes by their moved IDs and apply negative deltas
-    const idSet = new Set(this.movedIds);
-    const currentNotes = getDrumNotes(track);
-    const toRevert: DrumNote[] = [];
-
-    for (const note of currentNotes) {
-      if (idSet.has(noteId(note))) {
-        toRevert.push({...note, flags: {...note.flags}});
-      }
+    const handler = entityHandlers[this.kind];
+    const newDoc = cloneDocFor(this.kind, doc);
+    const laneDelta = handler.supportsLaneDelta ? -this.laneDelta : 0;
+    // Reverse the deltas using the moved ids captured during execute().
+    // We re-walk in input order; result ids land back on the original
+    // ids modulo any clamping the handler applied on either pass.
+    for (const movedId of this.movedIds) {
+      handler.move(newDoc, movedId, -this.tickDelta, laneDelta);
     }
-
-    // Remove moved notes
-    for (const note of toRevert) {
-      removeDrumNote(track, note.tick, note.type);
-    }
-
-    // Re-add at original positions
-    for (const note of toRevert) {
-      const newType = shiftLane(note.type, -this.laneDelta);
-      const newTick = Math.max(0, note.tick - this.tickDelta);
-      addDrumNote(track, {
-        tick: newTick,
-        type: newType,
-        length: note.length,
-        flags: {...note.flags},
-      });
-    }
-
     return newDoc;
   }
 }
@@ -513,36 +463,6 @@ export class RenameSectionCommand implements EditCommand {
     const newDoc = cloneDocWithSections(doc);
     const section = newDoc.parsedChart.sections.find(s => s.tick === this.tick);
     if (section) section.name = this.oldName;
-    return newDoc;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// MoveSectionCommand
-// ---------------------------------------------------------------------------
-
-export class MoveSectionCommand implements EditCommand {
-  readonly description: string;
-
-  constructor(
-    private oldTick: number,
-    private newTick: number,
-    private name: string,
-  ) {
-    this.description = `Move section "${name}"`;
-  }
-
-  execute(doc: ChartDocument): ChartDocument {
-    const newDoc = cloneDocWithSections(doc);
-    removeSection(newDoc, this.oldTick);
-    addSection(newDoc, this.newTick, this.name);
-    return newDoc;
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    const newDoc = cloneDocWithSections(doc);
-    removeSection(newDoc, this.newTick);
-    addSection(newDoc, this.oldTick, this.name);
     return newDoc;
   }
 }

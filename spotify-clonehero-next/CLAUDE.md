@@ -123,36 +123,23 @@ All work follows the plan-driven workflow in `plans/`. Read the plan before star
 | `0010-sng-export`                | SNG binary export                                            |
 | `0011-chart-edit-bugfixes`       | chart-edit bug fixes and test coverage                       |
 | `0012-consolidate-chart-io`      | Consolidate drum-transcription chart-io → chart-edit         |
-
-**Todo (sequential):**
-
-| Plan                               | Description                                                                     | Depends On |
-| ---------------------------------- | ------------------------------------------------------------------------------- | ---------- |
-| `0013-extract-shared-editor`       | Extract editor UI to `components/chart-editor/`, composable panels              | 0012       |
-| `0014-drum-edit-page`              | New `/drum-edit` page with chart loading (SNG/ZIP/folder)                       | 0013       |
-| `0015-moonscraper-layout-timeline` | Moonscraper-inspired layout + timeline minimap                                  | 0013       |
-| `0016-grid-navigation-keys-mode`   | Grid-based cursor navigation + keyboard note placement (1-5)                    | 0013       |
-| `0017-section-editing`             | Add/edit/delete named section markers on highway + timeline                     | 0015       |
-| `0018-tanstack-hotkeys-migration`  | Replace raw addEventListener keyboard handling with @tanstack/react-hotkeys     | 0013, 0016 |
-| `0019-highway-decomposition`       | Split highway.ts into modules: HighwayScene, NotesManager, TextureManager       | —          |
-| `0020-scene-integration`           | Move overlay drawing (selections, cursor, sections, ghosts) into Three.js scene | 0019       |
-| `0021-interaction-manager`         | Hybrid hit testing (Three.js raycasts, React decides) + hover glow/outline      | 0020       |
-| `0022-incremental-editing`         | Diff-based note updates — no full rebuild on add/delete/move                    | 0021       |
-| `0023-waveform-highway-surface`    | Waveform as highway texture + beat line grid overlay                            | 0019       |
-| `0025-scene-reconciler`            | Generic key-based scene reconciler (React-inspired) for notes, sections, lyrics | 0019-0022  |
-
-### Parallelizable Work
-
-After 0013, these can proceed in parallel:
-
-- **Track A:** 0014 (drum-edit page)
-- **Track B:** 0015 (layout + timeline) → 0017 (section editing)
-- **Track C:** 0016 (grid nav + keys mode)
-
-Highway refactor (0019-0023) is sequential:
-
-- 0019 (decompose) → 0020 (scene integration) → 0021 (interaction) → 0022 (incremental editing)
-- 0019 (decompose) → 0023 (waveform) — can parallel with 0020-0022
+| `0013-extract-shared-editor`     | Extract editor UI to `components/chart-editor/`              |
+| `0014-drum-edit-page`            | `/drum-edit` page with chart loading (SNG/ZIP/folder)        |
+| `0015-moonscraper-layout-timeline` | Moonscraper-inspired layout + timeline minimap             |
+| `0016-grid-navigation-keys-mode` | Grid-based cursor + keyboard note placement (1-5)            |
+| `0017-section-editing`           | Add/edit/delete named section markers                        |
+| `0018-tanstack-hotkeys-migration` | @tanstack/react-hotkeys keyboard handling                   |
+| `0019-highway-decomposition`     | Split highway.ts into HighwayScene/NotesManager/etc.         |
+| `0020-scene-integration`         | Move overlay drawing into Three.js scene                     |
+| `0021-interaction-manager`       | Hybrid Three.js hit testing + React selection                |
+| `0022-incremental-editing`       | Diff-based note updates                                      |
+| `0023-waveform-highway-surface`  | Waveform highway texture + grid overlay                      |
+| `0024-highway-bugs-and-polish`   | Highway bug fixes and polish                                 |
+| `0025-scene-reconciler`          | Key-based scene reconciler                                   |
+| `0026-highway-markers-lyrics-bpm-ts` | Lyric, BPM, TS markers on highway                        |
+| `0027-chart-audio-delay-alignment` | Audio delay alignment                                      |
+| `0028-scan-chart-parsing-refactor` | Move chart parsing into scan-chart                         |
+| `0029-configurable-editor-lyric-phrase-drag` | Capabilities config + lyric/phrase drag + lanes-off |
 
 ## Browser Validation
 

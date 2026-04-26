@@ -4,11 +4,21 @@
 export {
   ChartEditorProvider,
   useChartEditorContext,
+  getSelectedIds,
+  getFirstSelectedId,
+  isAnythingSelected,
   type ChartEditorState,
   type ChartEditorAction,
   type ChartEditorContextValue,
   type ToolMode,
 } from './ChartEditorContext';
+
+// Capabilities
+export {
+  DRUM_EDIT_CAPABILITIES,
+  ADD_LYRICS_CAPABILITIES,
+  type EditorCapabilities,
+} from './capabilities';
 
 // Shell component
 export {default as ChartEditor} from './ChartEditor';
@@ -32,7 +42,7 @@ export type {AudioSource} from './ExportDialog';
 export {
   AddNoteCommand,
   DeleteNotesCommand,
-  MoveNotesCommand,
+  MoveEntitiesCommand,
   ToggleFlagCommand,
   AddBPMCommand,
   AddTimeSignatureCommand,

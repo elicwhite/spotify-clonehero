@@ -8,17 +8,19 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
-import {useChartEditorContext} from './ChartEditorContext';
+import {
+  useChartEditorContext,
+  getSelectedIds,
+} from './ChartEditorContext';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {
   AddNoteCommand,
   DeleteNotesCommand,
-  MoveNotesCommand,
+  MoveEntitiesCommand,
   AddBPMCommand,
   AddTimeSignatureCommand,
   AddSectionCommand,
   RenameSectionCommand,
-  MoveSectionCommand,
   noteId,
   typeToLane,
   laneToType,
@@ -43,6 +45,56 @@ type ParsedChart = ReturnType<typeof parseChartFile>;
 import {Input} from '@/components/ui/input';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
+
+/**
+ * Tick to which a HitResult corresponds for cursor / placement purposes.
+ * Returns null for `null` hits and the empty highway (which already has its
+ * own `tick` field — caller should branch on `hit?.type === 'highway'` if
+ * needed). Phrase-end uses its `endTick`; lyrics use their own `tick`.
+ */
+function hitTick(hit: HitResult): number | null {
+  if (!hit) return null;
+  switch (hit.type) {
+    case 'note':
+    case 'section':
+    case 'lyric':
+    case 'phrase-start':
+    case 'highway':
+      return hit.tick;
+    case 'phrase-end':
+      return hit.endTick;
+  }
+}
+
+/**
+ * Translate a side-marker hit (section/lyric/phrase-start/phrase-end) into
+ * its EntityKind + id. Notes and highway hits have separate paths.
+ */
+function markerHitToRef(
+  hit: HitResult,
+):
+  | {
+      kind: 'section' | 'lyric' | 'phrase-start' | 'phrase-end';
+      id: string;
+      tick: number;
+    }
+  | null {
+  if (!hit) return null;
+  switch (hit.type) {
+    case 'section':
+    case 'lyric':
+    case 'phrase-start':
+      return {kind: hit.type, id: String(hit.tick), tick: hit.tick};
+    case 'phrase-end':
+      return {
+        kind: 'phrase-end',
+        id: String(hit.endTick),
+        tick: hit.endTick,
+      };
+    default:
+      return null;
+  }
+}
 
 interface HighwayEditorProps {
   metadata: ChartResponseEncore;
@@ -88,8 +140,14 @@ export default function HighwayEditor({
   audioChannels = 2,
   durationSeconds,
 }: HighwayEditorProps) {
-  const {state, dispatch, audioManagerRef, reconcilerRef, noteRendererRef} =
-    useChartEditorContext();
+  const {
+    state,
+    dispatch,
+    audioManagerRef,
+    reconcilerRef,
+    noteRendererRef,
+    capabilities,
+  } = useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
 
   const interactionRef = useRef<HTMLDivElement>(null);
@@ -134,7 +192,13 @@ export default function HighwayEditor({
   const [hoverLane, setHoverLane] = useState<number | null>(null);
   const [hoverTick, setHoverTick] = useState<number | null>(null);
   const [hoveredHitType, setHoveredHitType] = useState<
-    'note' | 'section' | 'highway' | null
+    | 'note'
+    | 'section'
+    | 'lyric'
+    | 'phrase-start'
+    | 'phrase-end'
+    | 'highway'
+    | null
   >(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{x: number; y: number} | null>(
@@ -158,12 +222,14 @@ export default function HighwayEditor({
   const [tsDenominator, setTsDenominator] = useState('4');
   const [sectionNameInput, setSectionNameInput] = useState('');
 
-  // Section drag state
-  const [isDraggingSection, setIsDraggingSection] = useState(false);
-  const [sectionDragTick, setSectionDragTick] = useState<number | null>(null);
-  const [sectionDragName, setSectionDragName] = useState<string>('');
-  const [sectionDragOriginalTick, setSectionDragOriginalTick] =
-    useState<number>(0);
+  // Single-entity marker drag state (sections, lyrics, phrase-start, phrase-end).
+  // Note drag is multi-entity and uses `isDragging` + `state.selection`.
+  const [markerDrag, setMarkerDrag] = useState<{
+    kind: 'section' | 'lyric' | 'phrase-start' | 'phrase-end';
+    originalTick: number;
+    /** Latest tick during drag — drives the ghost preview. */
+    currentTick: number;
+  } | null>(null);
 
   // Double-click tracking for section rename
   const lastClickRef = useRef<{tick: number; time: number} | null>(null);
@@ -329,74 +395,104 @@ export default function HighwayEditor({
       const hit = hitTestAt(coords.x, coords.y);
       const lane =
         hit && 'lane' in hit ? hit.lane : screenToLane(coords.x, coords.y);
-      const tick = hit ? hit.tick : screenToTick(coords.x, coords.y);
+      const tick = hitTick(hit) ?? screenToTick(coords.x, coords.y);
 
       switch (state.activeTool) {
         case 'cursor': {
-          // Check for section hit first
-          if (hit?.type === 'section') {
-            // Double-click detection for rename
+          const markerRef = markerHitToRef(hit);
+
+          // Section: double-click → rename popover (drum-edit only).
+          if (
+            markerRef?.kind === 'section' &&
+            capabilities.selectable.has('section')
+          ) {
             const now = Date.now();
             const last = lastClickRef.current;
-            if (last && last.tick === hit.tick && now - last.time < 400) {
-              // Double-click: open rename popover
+            if (last && last.tick === markerRef.tick && now - last.time < 400) {
               lastClickRef.current = null;
-              setSectionNameInput(hit.name);
+              setSectionNameInput(
+                hit?.type === 'section' ? hit.name : '',
+              );
               setPopover({
                 kind: 'section-rename',
-                tick: hit.tick,
+                tick: markerRef.tick,
                 x: coords.x,
                 y: coords.y,
               });
-              dispatch({type: 'SET_SELECTED_SECTION', tick: hit.tick});
+              dispatch({
+                type: 'SET_SELECTION',
+                kind: 'section',
+                ids: new Set([markerRef.id]),
+              });
               break;
             }
-            lastClickRef.current = {tick: hit.tick, time: now};
+            lastClickRef.current = {tick: markerRef.tick, time: now};
+          }
 
-            // Select section
-            dispatch({type: 'SET_SELECTED_SECTION', tick: hit.tick});
-            dispatch({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
-            // Start section drag
-            setIsDraggingSection(true);
-            setSectionDragTick(hit.tick);
-            setSectionDragName(hit.name);
-            setSectionDragOriginalTick(hit.tick);
-            setDragStart(coords);
-            setDragCurrent(coords);
+          // Marker hit: select + (optionally) start single-entity drag.
+          if (markerRef && capabilities.selectable.has(markerRef.kind)) {
+            dispatch({
+              type: 'SET_SELECTION',
+              kind: markerRef.kind,
+              ids: new Set([markerRef.id]),
+            });
+            // Clear note selection so the editor doesn't carry stale notes.
+            if (getSelectedIds(state, 'note').size > 0) {
+              dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
+            }
+            if (capabilities.draggable.has(markerRef.kind)) {
+              setMarkerDrag({
+                kind: markerRef.kind,
+                originalTick: markerRef.tick,
+                currentTick: markerRef.tick,
+              });
+              setDragStart(coords);
+              setDragCurrent(coords);
+            }
             break;
           }
 
-          // Clear section selection when clicking elsewhere
-          if (state.selectedSectionTick !== null) {
-            dispatch({type: 'SET_SELECTED_SECTION', tick: null});
+          // Click missed any selectable marker — clear marker selections so
+          // the panel doesn't keep showing stale state.
+          for (const k of [
+            'section',
+            'lyric',
+            'phrase-start',
+            'phrase-end',
+          ] as const) {
+            if (getSelectedIds(state, k).size > 0) {
+              dispatch({type: 'SET_SELECTION', kind: k, ids: new Set()});
+            }
           }
 
-          if (hit?.type === 'note') {
+          // Note hit: select + start multi-note drag (drum-edit only).
+          if (hit?.type === 'note' && capabilities.selectable.has('note')) {
             const id = hit.noteId;
+            const noteSelection = getSelectedIds(state, 'note');
             if (e.shiftKey) {
-              // Toggle selection
-              const newIds = new Set(state.selectedNoteIds);
+              const newIds = new Set(noteSelection);
               if (newIds.has(id)) {
                 newIds.delete(id);
               } else {
                 newIds.add(id);
               }
-              dispatch({type: 'SET_SELECTED_NOTES', noteIds: newIds});
-            } else if (!state.selectedNoteIds.has(id)) {
-              // Single select
+              dispatch({type: 'SET_SELECTION', kind: 'note', ids: newIds});
+            } else if (!noteSelection.has(id)) {
               dispatch({
-                type: 'SET_SELECTED_NOTES',
-                noteIds: new Set([id]),
+                type: 'SET_SELECTION',
+                kind: 'note',
+                ids: new Set([id]),
               });
             }
-            // Start potential drag-move
-            setIsDragging(true);
+            if (capabilities.draggable.has('note')) {
+              setIsDragging(true);
+            }
             setDragStart(coords);
             setDragCurrent(coords);
-          } else {
-            // Start box selection or deselect
+          } else if (capabilities.selectable.has('note')) {
+            // Empty / inert hit when notes are selectable: box-select or deselect.
             if (!e.shiftKey) {
-              dispatch({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
+              dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
             }
             setDragStart(coords);
             setDragCurrent(coords);
@@ -469,9 +565,8 @@ export default function HighwayEditor({
       }
     },
     [
-      state.activeTool,
-      state.selectedNoteIds,
-      state.selectedSectionTick,
+      state,
+      capabilities,
       hitTestAt,
       screenToLane,
       screenToTick,
@@ -491,7 +586,7 @@ export default function HighwayEditor({
         setHoverLane(
           'lane' in hit ? hit.lane : screenToLane(coords.x, coords.y),
         );
-        setHoverTick(hit.tick);
+        setHoverTick(hitTick(hit) ?? screenToTick(coords.x, coords.y));
         setHoveredHitType(hit.type);
       } else {
         setHoverLane(screenToLane(coords.x, coords.y));
@@ -507,10 +602,12 @@ export default function HighwayEditor({
         setDragCurrent(coords);
       }
 
-      // Section drag: update the visual drag position
-      if (isDraggingSection && dragStart) {
+      // Marker drag: update the live preview tick
+      if (markerDrag && dragStart) {
         const newTick = screenToTick(coords.x, coords.y);
-        setSectionDragTick(newTick);
+        if (newTick !== markerDrag.currentTick) {
+          setMarkerDrag({...markerDrag, currentTick: newTick});
+        }
       }
 
       // Erase mode: paint-erase while dragging
@@ -526,7 +623,7 @@ export default function HighwayEditor({
       screenToTick,
       dragStart,
       isErasing,
-      isDraggingSection,
+      markerDrag,
       state.activeTool,
       executeCommand,
       noteRendererRef,
@@ -537,8 +634,9 @@ export default function HighwayEditor({
     (e: ReactMouseEvent<HTMLDivElement>) => {
       const coords = getElementCoords(e);
 
+      const noteSelection = getSelectedIds(state, 'note');
       if (state.activeTool === 'cursor' && dragStart && dragCurrent) {
-        if (isDragging && state.selectedNoteIds.size > 0) {
+        if (isDragging && noteSelection.size > 0) {
           // Complete drag-move
           const dx = coords.x - dragStart.x;
           const dy = coords.y - dragStart.y;
@@ -552,8 +650,9 @@ export default function HighwayEditor({
             const tickDelta = endTick - startTick;
             if (laneDelta !== 0 || tickDelta !== 0) {
               executeCommand(
-                new MoveNotesCommand(
-                  Array.from(state.selectedNoteIds),
+                new MoveEntitiesCommand(
+                  'note',
+                  Array.from(noteSelection),
                   tickDelta,
                   laneDelta,
                 ),
@@ -602,52 +701,56 @@ export default function HighwayEditor({
 
             if (e.shiftKey) {
               // Add to existing selection
-              const merged = new Set(state.selectedNoteIds);
+              const merged = new Set(noteSelection);
               selected.forEach(id => merged.add(id));
-              dispatch({type: 'SET_SELECTED_NOTES', noteIds: merged});
+              dispatch({type: 'SET_SELECTION', kind: 'note', ids: merged});
             } else {
-              dispatch({type: 'SET_SELECTED_NOTES', noteIds: selected});
+              dispatch({type: 'SET_SELECTION', kind: 'note', ids: selected});
             }
           }
         }
       }
 
-      // Complete section drag-move
-      if (isDraggingSection && sectionDragTick !== null && dragStart) {
+      // Complete single-entity marker drag (sections, lyrics, phrases).
+      if (markerDrag && dragStart) {
         const dx = coords.x - dragStart.x;
         const dy = coords.y - dragStart.y;
-        if (
+        const moved =
           (Math.abs(dx) > 5 || Math.abs(dy) > 5) &&
-          sectionDragTick !== sectionDragOriginalTick
-        ) {
+          markerDrag.currentTick !== markerDrag.originalTick;
+        if (moved) {
+          const tickDelta = markerDrag.currentTick - markerDrag.originalTick;
           executeCommand(
-            new MoveSectionCommand(
-              sectionDragOriginalTick,
-              sectionDragTick,
-              sectionDragName,
+            new MoveEntitiesCommand(
+              markerDrag.kind,
+              [String(markerDrag.originalTick)],
+              tickDelta,
+              0,
             ),
           );
-          dispatch({type: 'SET_SELECTED_SECTION', tick: sectionDragTick});
+          // Keep selection on the moved entity using its new id. Handlers
+          // clamp on overshoot, so the actual id may differ; we re-derive
+          // it here on a best-effort basis.
+          dispatch({
+            type: 'SET_SELECTION',
+            kind: markerDrag.kind,
+            ids: new Set([String(markerDrag.currentTick)]),
+          });
         }
       }
 
       setIsDragging(false);
-      setIsDraggingSection(false);
-      setSectionDragTick(null);
+      setMarkerDrag(null);
       setDragStart(null);
       setDragCurrent(null);
       setIsErasing(false);
     },
     [
-      state.activeTool,
-      state.selectedNoteIds,
+      state,
       dragStart,
       dragCurrent,
       isDragging,
-      isDraggingSection,
-      sectionDragTick,
-      sectionDragOriginalTick,
-      sectionDragName,
+      markerDrag,
       screenToLane,
       screenToTick,
       screenToMs,
@@ -666,11 +769,11 @@ export default function HighwayEditor({
     setIsErasing(false);
     // Clear note hover highlight
     noteRendererRef.current?.setHoveredNoteId(null);
-    if (!isDragging && !isDraggingSection) {
+    if (!isDragging && !markerDrag) {
       setDragStart(null);
       setDragCurrent(null);
     }
-  }, [isDragging, isDraggingSection, noteRendererRef]);
+  }, [isDragging, markerDrag, noteRendererRef]);
 
   // ---------------------------------------------------------------------------
   // Wheel scrolling -- scrub cursor forward/backward by one grid step
@@ -796,7 +899,8 @@ export default function HighwayEditor({
     // Push selection and confidence state to the NoteRenderer
     const nr = noteRendererRef.current;
     if (nr) {
-      nr.setSelectedNoteIds(state.selectedNoteIds);
+      const noteSelection = state.selection.get('note') ?? new Set<string>();
+      nr.setSelectedNoteIds(noteSelection);
       nr.setConfidenceData(
         confidence ?? null,
         showConfidence,
@@ -808,8 +912,7 @@ export default function HighwayEditor({
     state.cursorTick,
     state.isPlaying,
     state.activeTool,
-    state.selectedNoteIds,
-    state.selectedSectionTick,
+    state.selection,
     state.chartDoc?.parsedChart.sections,
     state.loopRegion,
     hoverLane,
@@ -819,6 +922,7 @@ export default function HighwayEditor({
     confidenceThreshold,
     reviewedNoteIds,
     rendererVersion,
+    noteRendererRef,
   ]);
 
   // Push timing data to SceneOverlays when tempos or resolution change
@@ -920,6 +1024,7 @@ export default function HighwayEditor({
         chart={chart}
         audioManager={audioManager}
         className="h-full w-full"
+        showDrumLanes={capabilities.showDrumLanes}
         onRendererReady={handleRendererReady}
       />
 

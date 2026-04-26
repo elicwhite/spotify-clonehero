@@ -11,8 +11,10 @@ import {
 import {parseChartFile} from '@eliwhite/scan-chart';
 import {HotkeysProvider} from '@tanstack/react-hotkeys';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type {ChartDocument, DrumNote} from '@/lib/chart-edit';
+import type {ChartDocument, DrumNote, EntityKind} from '@/lib/chart-edit';
 import type {EditCommand} from './commands';
+import type {EditorCapabilities} from './capabilities';
+import {DRUM_EDIT_CAPABILITIES} from './capabilities';
 import type {HighwayMode} from '@/lib/preview/highway';
 import type {SceneReconciler} from '@/lib/preview/highway/SceneReconciler';
 import type {NoteRenderer} from '@/lib/preview/highway/NoteRenderer';
@@ -55,8 +57,12 @@ export interface ChartEditorState {
 
   // -- Editing state --
 
-  /** IDs of selected notes (composite key: `${tick}:${type}`). */
-  selectedNoteIds: Set<string>;
+  /**
+   * Per-entity-kind selection. Each set holds opaque ids whose format is
+   * defined by the corresponding `EntityKindHandler` in `chart-edit`. Use
+   * the `getSelectedIds` / `isAnythingSelected` helpers to read.
+   */
+  selection: Map<EntityKind, Set<string>>;
   /** Active tool mode. */
   activeTool: ToolMode;
   /** Grid division for snapping. 0 = free (no snap). */
@@ -93,11 +99,6 @@ export interface ChartEditorState {
   /** Current cursor position in ticks (editing position, independent of playback). */
   cursorTick: number;
 
-  // -- Section selection --
-
-  /** Tick of the currently selected section, or null if none. */
-  selectedSectionTick: number | null;
-
   // -- Loop region --
 
   /** A-B loop region in milliseconds. null = no loop. */
@@ -108,13 +109,20 @@ export interface ChartEditorState {
 }
 
 export type ChartEditorAction =
-  | {type: 'SET_CHART'; chart: ParsedChart; track: ParsedChart['trackData'][0]}
+  | {
+      type: 'SET_CHART';
+      chart: ParsedChart;
+      track: ParsedChart['trackData'][0] | null;
+    }
   | {type: 'SET_CHART_DOC'; chartDoc: ChartDocument}
   | {type: 'SET_PLAYING'; isPlaying: boolean}
   | {type: 'SET_CURRENT_TIME'; timeMs: number}
   | {type: 'SET_PLAYBACK_SPEED'; speed: number}
   | {type: 'SET_ZOOM'; zoom: number}
-  | {type: 'SET_SELECTED_NOTES'; noteIds: Set<string>}
+  /** Replace the selection set for one entity kind. */
+  | {type: 'SET_SELECTION'; kind: EntityKind; ids: ReadonlySet<string>}
+  /** Clear selection across all entity kinds. */
+  | {type: 'CLEAR_SELECTION'}
   | {type: 'SET_ACTIVE_TOOL'; tool: ToolMode}
   | {type: 'SET_GRID_DIVISION'; division: number}
   | {
@@ -138,8 +146,6 @@ export type ChartEditorAction =
   | {type: 'SET_MUTED_TRACKS'; tracks: Set<string>}
   // -- Cursor --
   | {type: 'SET_CURSOR_TICK'; tick: number}
-  // -- Section selection --
-  | {type: 'SET_SELECTED_SECTION'; tick: number | null}
   // -- Loop --
   | {type: 'SET_LOOP_REGION'; region: {startMs: number; endMs: number} | null}
   // -- Highway mode --
@@ -153,6 +159,8 @@ export interface ChartEditorContextValue {
   reconcilerRef: React.MutableRefObject<SceneReconciler | null>;
   /** Shared ref to the NoteRenderer for overlay state management. */
   noteRendererRef: React.MutableRefObject<NoteRenderer | null>;
+  /** Per-page interaction profile. Set once at provider mount. */
+  capabilities: EditorCapabilities;
 }
 
 // ---------------------------------------------------------------------------
@@ -167,7 +175,7 @@ const initialState: ChartEditorState = {
   currentTimeMs: 0,
   playbackSpeed: 1.0,
   zoom: 1.0,
-  selectedNoteIds: new Set(),
+  selection: new Map(),
   activeTool: 'cursor',
   gridDivision: 4,
   dirty: false,
@@ -184,8 +192,6 @@ const initialState: ChartEditorState = {
   mutedTracks: new Set(),
   // Cursor
   cursorTick: 0,
-  // Section selection
-  selectedSectionTick: null,
   // Loop
   loopRegion: null,
   // Highway mode
@@ -215,8 +221,19 @@ function chartEditorReducer(
       return {...state, playbackSpeed: action.speed};
     case 'SET_ZOOM':
       return {...state, zoom: action.zoom};
-    case 'SET_SELECTED_NOTES':
-      return {...state, selectedNoteIds: action.noteIds};
+    case 'SET_SELECTION': {
+      const next = new Map(state.selection);
+      const ids = action.ids instanceof Set ? action.ids : new Set(action.ids);
+      if (ids.size === 0) {
+        next.delete(action.kind);
+      } else {
+        next.set(action.kind, ids as Set<string>);
+      }
+      return {...state, selection: next};
+    }
+    case 'CLEAR_SELECTION':
+      if (state.selection.size === 0) return state;
+      return {...state, selection: new Map()};
     case 'SET_ACTIVE_TOOL':
       return {...state, activeTool: action.tool};
     case 'SET_GRID_DIVISION':
@@ -345,10 +362,6 @@ function chartEditorReducer(
       if (state.cursorTick === action.tick) return state;
       return {...state, cursorTick: Math.max(0, action.tick)};
 
-    case 'SET_SELECTED_SECTION':
-      if (state.selectedSectionTick === action.tick) return state;
-      return {...state, selectedSectionTick: action.tick};
-
     case 'SET_LOOP_REGION':
       return {...state, loopRegion: action.region};
 
@@ -367,7 +380,13 @@ function chartEditorReducer(
 
 const ChartEditorContext = createContext<ChartEditorContextValue | null>(null);
 
-export function ChartEditorProvider({children}: {children: ReactNode}) {
+export function ChartEditorProvider({
+  children,
+  capabilities = DRUM_EDIT_CAPABILITIES,
+}: {
+  children: ReactNode;
+  capabilities?: EditorCapabilities;
+}) {
   const [state, dispatch] = useReducer(chartEditorReducer, initialState);
   const audioManagerRef = useRef<AudioManager | null>(null);
   const reconcilerRef = useRef<
@@ -386,6 +405,7 @@ export function ChartEditorProvider({children}: {children: ReactNode}) {
           audioManagerRef,
           reconcilerRef,
           noteRendererRef,
+          capabilities,
         }}>
         {children}
       </ChartEditorContext.Provider>
@@ -401,4 +421,39 @@ export function useChartEditorContext(): ChartEditorContextValue {
     );
   }
   return ctx;
+}
+
+// ---------------------------------------------------------------------------
+// Selection helpers
+// ---------------------------------------------------------------------------
+
+const EMPTY_SET: ReadonlySet<string> = new Set();
+
+/** Read the selection set for one entity kind. Always returns a stable empty
+ *  set when the kind has no selection — never null. */
+export function getSelectedIds(
+  state: ChartEditorState,
+  kind: EntityKind,
+): ReadonlySet<string> {
+  return state.selection.get(kind) ?? EMPTY_SET;
+}
+
+/** True when at least one entity of any kind is selected. */
+export function isAnythingSelected(state: ChartEditorState): boolean {
+  for (const set of state.selection.values()) {
+    if (set.size > 0) return true;
+  }
+  return false;
+}
+
+/** First selected id of a kind, or null. Useful for kinds where the editor
+ *  only ever holds one selected at a time (e.g. sections today). */
+export function getFirstSelectedId(
+  state: ChartEditorState,
+  kind: EntityKind,
+): string | null {
+  const set = state.selection.get(kind);
+  if (!set || set.size === 0) return null;
+  for (const id of set) return id;
+  return null;
 }

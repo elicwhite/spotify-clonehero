@@ -112,9 +112,9 @@ export class InteractionManager {
     const noteHit = this.hitTestNotes();
     if (noteHit) return noteHit;
 
-    // --- 2. Check section banners ---
-    const sectionHit = this.hitTestSections(canvasX, canvasY, canvasW, canvasH);
-    if (sectionHit) return sectionHit;
+    // --- 2. Check side-mounted text markers ---
+    const markerHit = this.hitTestMarkers(canvasX, canvasY, canvasW, canvasH);
+    if (markerHit) return markerHit;
 
     // --- 3. Intersect the highway plane ---
     return this.hitTestHighway(gridDivision);
@@ -176,49 +176,80 @@ export class InteractionManager {
   }
 
   // -----------------------------------------------------------------------
-  // Section hit testing
+  // Marker hit testing
   //
-  // Sections are ChartElements in the reconciler with key `section:{tick}`.
-  // We project each visible section's world Y to screen space and check
-  // pixel distance.
+  // Markers are ChartElements in the reconciler with keys like
+  // `section:{tick}`, `lyric:{tick}`, `phrase-start:{tick}`,
+  // `phrase-end:{endTick}`. Each renders as a horizontal line across the
+  // highway plus a side-mounted text flag. We project each visible marker's
+  // world Y to screen space and check pixel distance, then return a
+  // HitResult variant matching the kind. Sections + ts render on the right;
+  // lyrics + phrases + bpm on the left — so an X-side check disambiguates
+  // markers stacked on the same Y row.
+  //
+  // Within the marker tier, lyric wins over phrase-* (smallest target),
+  // then phrase-end, then phrase-start, then section. BPM/TS markers are
+  // hit-tested separately by the editor today and are excluded here.
   // -----------------------------------------------------------------------
 
-  /** Tolerance in CSS pixels for section banner hit detection. */
-  private static readonly SECTION_HIT_TOLERANCE_PX = 14;
+  /** Tolerance in CSS pixels for marker hit detection. */
+  private static readonly MARKER_HIT_TOLERANCE_PX = 14;
 
-  private hitTestSections(
-    _canvasX: number,
+  private static readonly LEFT_MARKER_KINDS: ReadonlyArray<string> = [
+    'lyric:',
+    'phrase-end:',
+    'phrase-start:',
+  ];
+  private static readonly RIGHT_MARKER_KINDS: ReadonlyArray<string> = [
+    'section:',
+  ];
+
+  private hitTestMarkers(
+    canvasX: number,
     canvasY: number,
-    _canvasW: number,
+    canvasW: number,
     canvasH: number,
   ): HitResult {
     if (this.timedTempos.length === 0) return null;
 
     const tempWorld = new THREE.Vector3();
+    const isLeftSide = canvasX < canvasW / 2;
+    const prefixes = isLeftSide
+      ? InteractionManager.LEFT_MARKER_KINDS
+      : InteractionManager.RIGHT_MARKER_KINDS;
 
-    // Iterate active groups looking for section elements
-    for (const [key, group] of this.reconciler.getActiveGroups()) {
-      if (!key.startsWith('section:')) continue;
+    // Walk priority order; first marker within Y tolerance wins.
+    for (const prefix of prefixes) {
+      for (const [key, group] of this.reconciler.getActiveGroups()) {
+        if (!key.startsWith(prefix)) continue;
 
-      // Project group Y to screen Y
-      tempWorld.set(0, group.position.y, 0);
-      const projected = tempWorld.project(this.camera);
-      const screenY = ((-projected.y + 1) / 2) * canvasH;
+        tempWorld.set(0, group.position.y, 0);
+        const projected = tempWorld.project(this.camera);
+        const screenY = ((-projected.y + 1) / 2) * canvasH;
+        if (
+          Math.abs(screenY - canvasY) >
+          InteractionManager.MARKER_HIT_TOLERANCE_PX
+        ) {
+          continue;
+        }
 
-      if (
-        Math.abs(screenY - canvasY) <=
-        InteractionManager.SECTION_HIT_TOLERANCE_PX
-      ) {
         const el = this.reconciler.getElement(key);
         if (!el) continue;
         const data = el.data as MarkerElementData;
-        // Extract tick from key: 'section:480' -> 480
-        const tick = parseInt(key.slice('section:'.length), 10);
-        return {
-          type: 'section',
-          tick,
-          name: data.text,
-        };
+        const tickStr = key.slice(prefix.length);
+        const tick = parseInt(tickStr, 10);
+        if (Number.isNaN(tick)) continue;
+
+        switch (prefix) {
+          case 'section:':
+            return {type: 'section', tick, name: data.text};
+          case 'lyric:':
+            return {type: 'lyric', tick, text: data.text};
+          case 'phrase-start:':
+            return {type: 'phrase-start', tick};
+          case 'phrase-end:':
+            return {type: 'phrase-end', endTick: tick};
+        }
       }
     }
 
@@ -381,6 +412,9 @@ export class InteractionManager {
             return 'crosshair';
         }
       case 'section':
+      case 'lyric':
+      case 'phrase-start':
+      case 'phrase-end':
         return toolMode === 'cursor' ? 'pointer' : 'crosshair';
       case 'highway':
         switch (toolMode) {

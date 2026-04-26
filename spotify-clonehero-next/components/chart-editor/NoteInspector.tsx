@@ -3,7 +3,7 @@
 import {useMemo} from 'react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
-import {useChartEditorContext} from './ChartEditorContext';
+import {useChartEditorContext, getSelectedIds} from './ChartEditorContext';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {
   ToggleFlagCommand,
@@ -52,10 +52,9 @@ export default function NoteInspector({
       t => t.instrument === 'drums' && t.difficulty === 'expert',
     );
     if (!expertTrack) return [];
-    return getDrumNotes(expertTrack).filter(n =>
-      state.selectedNoteIds.has(noteId(n)),
-    );
-  }, [state.chartDoc, state.selectedNoteIds]);
+    const selected = getSelectedIds(state, 'note');
+    return getDrumNotes(expertTrack).filter(n => selected.has(noteId(n)));
+  }, [state]);
 
   if (selectedNotes.length === 0) return null;
 
@@ -79,7 +78,7 @@ export default function NoteInspector({
     const ids = new Set(selectedNotes.map(n => noteId(n)));
     onNotesModified?.(Array.from(ids));
     executeCommand(new DeleteNotesCommand(ids));
-    dispatch({type: 'SET_SELECTED_NOTES', noteIds: new Set()});
+    dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
   };
 
   // Check if cymbal is applicable (only for yellow/blue/green)

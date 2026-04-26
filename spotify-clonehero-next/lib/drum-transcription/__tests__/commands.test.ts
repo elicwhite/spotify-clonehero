@@ -8,21 +8,20 @@
 import {
   AddNoteCommand,
   DeleteNotesCommand,
-  MoveNotesCommand,
+  MoveEntitiesCommand,
   ToggleFlagCommand,
   AddBPMCommand,
   AddTimeSignatureCommand,
   AddSectionCommand,
   DeleteSectionCommand,
   RenameSectionCommand,
-  MoveSectionCommand,
   BatchCommand,
   noteId,
   typeToLane,
   laneToType,
   shiftLane,
   defaultFlagsForType,
-} from '@/app/drum-transcription/commands';
+} from '@/components/chart-editor/commands';
 import type {
   ChartDocument,
   DrumNote,
@@ -305,13 +304,13 @@ describe('DeleteNotesCommand', () => {
 });
 
 // ---------------------------------------------------------------------------
-// MoveNotesCommand
+// MoveEntitiesCommand: notes
 // ---------------------------------------------------------------------------
 
-describe('MoveNotesCommand', () => {
+describe('MoveEntitiesCommand: notes', () => {
   it('moves notes by tick and lane delta', () => {
     const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
-    const cmd = new MoveNotesCommand(['480:redDrum'], 240, 1);
+    const cmd = new MoveEntitiesCommand('note', ['480:redDrum'], 240, 1);
 
     const result = cmd.execute(doc);
     const moved = getExpertNotes(result);
@@ -322,7 +321,7 @@ describe('MoveNotesCommand', () => {
 
   it('clamps tick to 0', () => {
     const doc = makeDoc([{tick: 100, type: 'kick'}]);
-    const cmd = new MoveNotesCommand(['100:kick'], -200, 0);
+    const cmd = new MoveEntitiesCommand('note', ['100:kick'], -200, 0);
 
     const result = cmd.execute(doc);
     expect(getExpertNotes(result)[0].tick).toBe(0);
@@ -330,7 +329,7 @@ describe('MoveNotesCommand', () => {
 
   it('undo reverses the move', () => {
     const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
-    const cmd = new MoveNotesCommand(['480:redDrum'], 240, 1);
+    const cmd = new MoveEntitiesCommand('note', ['480:redDrum'], 240, 1);
 
     const after = cmd.execute(doc);
     const reverted = cmd.undo(after);
@@ -701,10 +700,10 @@ describe('RenameSectionCommand', () => {
 });
 
 // ---------------------------------------------------------------------------
-// MoveSectionCommand
+// MoveEntitiesCommand: sections
 // ---------------------------------------------------------------------------
 
-describe('MoveSectionCommand', () => {
+describe('MoveEntitiesCommand: sections', () => {
   it('moves a section to a new tick position', () => {
     const doc = withChart(makeDoc(), {
       sections: [
@@ -713,7 +712,7 @@ describe('MoveSectionCommand', () => {
         {tick: 960, name: 'chorus'},
       ],
     });
-    const cmd = new MoveSectionCommand(480, 720, 'verse');
+    const cmd = new MoveEntitiesCommand('section', ['480'], 240, 0);
 
     const result = cmd.execute(doc);
     expect(result.parsedChart.sections).toHaveLength(3);
@@ -731,7 +730,7 @@ describe('MoveSectionCommand', () => {
         {tick: 480, name: 'verse'},
       ],
     });
-    const cmd = new MoveSectionCommand(480, 720, 'verse');
+    const cmd = new MoveEntitiesCommand('section', ['480'], 240, 0);
 
     const after = cmd.execute(doc);
     const reverted = cmd.undo(after);
@@ -744,14 +743,109 @@ describe('MoveSectionCommand', () => {
 
   it('does not mutate the original document', () => {
     const doc = withChart(makeDoc(), {sections: [{tick: 480, name: 'verse'}]});
-    const cmd = new MoveSectionCommand(480, 720, 'verse');
+    const cmd = new MoveEntitiesCommand('section', ['480'], 240, 0);
 
     cmd.execute(doc);
     expect(doc.parsedChart.sections[0].tick).toBe(480);
   });
 
   it('has a descriptive description', () => {
-    const cmd = new MoveSectionCommand(480, 720, 'verse');
-    expect(cmd.description).toBe('Move section "verse"');
+    const cmd = new MoveEntitiesCommand('section', ['480'], 240, 0);
+    expect(cmd.description).toBe('Move 1 section');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MoveEntitiesCommand: lyric + phrase
+// ---------------------------------------------------------------------------
+
+function makeVocalDoc(): ChartDocument {
+  const doc = makeDoc();
+  doc.parsedChart.vocalTracks = {
+    parts: {
+      vocals: {
+        notePhrases: [
+          {
+            tick: 0,
+            msTime: 0,
+            length: 480,
+            msLength: 0,
+            isPercussion: false,
+            notes: [
+              {tick: 240, msTime: 0, length: 60, msLength: 0, pitch: 60, type: 'pitched'},
+            ],
+            lyrics: [{tick: 240, msTime: 0, text: 'la', flags: 0}],
+          },
+        ],
+        staticLyricPhrases: [],
+        starPowerSections: [],
+        rangeShifts: [],
+        lyricShifts: [],
+        textEvents: [],
+      },
+    },
+    rangeShifts: [],
+    lyricShifts: [],
+  };
+  return doc;
+}
+
+describe('MoveEntitiesCommand: lyric', () => {
+  it('moves a lyric within its phrase and undo restores it', () => {
+    const doc = makeVocalDoc();
+    const cmd = new MoveEntitiesCommand('lyric', ['240'], 120, 0);
+
+    const after = cmd.execute(doc);
+    const phrase = after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+    expect(phrase.lyrics[0].tick).toBe(360);
+    expect(phrase.notes[0].tick).toBe(360);
+
+    const reverted = cmd.undo(after);
+    const original =
+      reverted.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+    expect(original.lyrics[0].tick).toBe(240);
+    expect(original.notes[0].tick).toBe(240);
+  });
+
+  it('clamps the lyric drag to the phrase upper bound', () => {
+    const doc = makeVocalDoc();
+    const cmd = new MoveEntitiesCommand('lyric', ['240'], 9999, 0);
+    const after = cmd.execute(doc);
+    expect(
+      after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0].lyrics[0].tick,
+    ).toBe(480);
+  });
+});
+
+describe('MoveEntitiesCommand: phrase markers', () => {
+  it('phrase-start drag adjusts length only; undo restores the original tick', () => {
+    const doc = makeVocalDoc();
+    const cmd = new MoveEntitiesCommand('phrase-start', ['0'], 120, 0);
+
+    const after = cmd.execute(doc);
+    const moved = after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+    expect(moved.tick).toBe(120);
+    expect(moved.length).toBe(360);
+
+    const reverted = cmd.undo(after);
+    const original =
+      reverted.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+    expect(original.tick).toBe(0);
+    expect(original.length).toBe(480);
+  });
+
+  it('phrase-end drag adjusts length only; undo restores the original end tick', () => {
+    const doc = makeVocalDoc();
+    const cmd = new MoveEntitiesCommand('phrase-end', ['480'], 240, 0);
+
+    const after = cmd.execute(doc);
+    const moved = after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+    expect(moved.tick).toBe(0);
+    expect(moved.length).toBe(720);
+
+    const reverted = cmd.undo(after);
+    const original =
+      reverted.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+    expect(original.length).toBe(480);
   });
 });

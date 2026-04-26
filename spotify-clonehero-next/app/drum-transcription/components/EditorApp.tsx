@@ -18,7 +18,10 @@ import {
 import {encodeWavBlob} from '@/lib/drum-transcription/audio/wav-encoder';
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
 import {useHotkey} from '@tanstack/react-hotkeys';
-import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
+import {
+  useChartEditorContext,
+  getSelectedIds,
+} from '@/components/chart-editor/ChartEditorContext';
 import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboard';
 import {useAutoSave} from '@/components/chart-editor/hooks/useAutoSave';
 import {noteId} from '@/components/chart-editor/commands';
@@ -178,8 +181,9 @@ function EditorAppInner({projectId}: {projectId: string}) {
           am.play({time: target.ms / 1000});
         }
         dispatch({
-          type: 'SET_SELECTED_NOTES',
-          noteIds: new Set([noteId(target.note)]),
+          type: 'SET_SELECTION',
+          kind: 'note',
+          ids: new Set([noteId(target.note)]),
         });
       }
     },
@@ -211,14 +215,15 @@ function EditorAppInner({projectId}: {projectId: string}) {
   useHotkey(
     'Enter',
     () => {
-      if (state.selectedNoteIds.size > 0) {
+      const selected = getSelectedIds(state, 'note');
+      if (selected.size > 0) {
         dtDispatch({
           type: 'MARK_REVIEWED',
-          noteIds: Array.from(state.selectedNoteIds),
+          noteIds: Array.from(selected),
         });
       }
     },
-    {enabled: state.selectedNoteIds.size > 0},
+    {enabled: getSelectedIds(state, 'note').size > 0},
   );
 
   // N - jump to next low-confidence note
