@@ -49,8 +49,6 @@ interface LoadedChart {
   audioFiles: Files;
   vocalsFile: {data: Uint8Array; mimeType: string} | null;
   chartDoc: ChartDocument;
-  /** All raw files from the input — needed for re-export. */
-  rawFiles: LoadedFiles['files'];
   sourceFormat: SourceFormat;
   originalName: string;
   sngMetadata?: Record<string, string>;
@@ -146,7 +144,6 @@ function loadChartFromFiles(loaded: LoadedFiles): LoadedChart {
         }
       : null,
     chartDoc,
-    rawFiles: files,
     sourceFormat,
     originalName,
     sngMetadata,
@@ -534,27 +531,14 @@ function LyricsAlignInner() {
       // Write chart back to files
       const chartFiles = writeChartFolder(doc);
 
-      // Build export file list: chart files + original audio + assets.
-      const exportFiles: {filename: string; data: Uint8Array}[] = [];
-      for (const f of chartFiles) {
-        exportFiles.push({filename: f.fileName, data: f.data});
-      }
-      // Pull through anything from the original upload that writeChartFolder
-      // didn't already emit (audio stems, album art, etc.). Skip any
-      // chart-like file (notes.chart / notes.mid / song.ini) — writeChartFolder
-      // is authoritative for those, and copying the source's "other-format"
-      // notes file (e.g. a notes.chart sitting alongside the source's
-      // notes.mid) would leave the export with both files.
-      const CHART_LIKE = new Set(['notes.chart', 'notes.mid', 'song.ini']);
-      const outputNames = new Set(
-        exportFiles.map(f => f.filename.toLowerCase()),
-      );
-      for (const f of chart.rawFiles) {
-        const lower = f.fileName.toLowerCase();
-        if (CHART_LIKE.has(lower)) continue;
-        if (outputNames.has(lower)) continue;
-        exportFiles.push({filename: f.fileName, data: f.data});
-      }
+      // writeChartFolder emits notes.{chart,mid} + song.ini + every asset
+      // from doc.assets (audio stems, album art, etc.) and skips any
+      // chart-like file in the asset list. That covers the full export —
+      // no need to merge in chart.rawFiles separately.
+      const exportFiles = chartFiles.map(f => ({
+        filename: f.fileName,
+        data: f.data,
+      }));
 
       // Package in original format, using the original filename
       const ext = chart.sourceFormat === 'sng' ? '.sng' : '.zip';
