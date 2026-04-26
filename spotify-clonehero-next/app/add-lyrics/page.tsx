@@ -43,9 +43,6 @@ type ParsedChart = ReturnType<typeof parseChartFile>;
 // ---------------------------------------------------------------------------
 
 interface LoadedChart {
-  name: string;
-  artist: string;
-  charter: string;
   audioFiles: Files;
   vocalsFile: {data: Uint8Array; mimeType: string} | null;
   chartDoc: ChartDocument;
@@ -128,14 +125,7 @@ function loadChartFromFiles(loaded: LoadedFiles): LoadedChart {
     f => getBasename(f.fileName).toLowerCase() === 'vocals',
   );
 
-  const name = chartDoc.parsedChart.metadata.name ?? 'Unknown';
-  const artist = chartDoc.parsedChart.metadata.artist ?? 'Unknown';
-  const charter = chartDoc.parsedChart.metadata.charter ?? 'Unknown';
-
   return {
-    name,
-    artist,
-    charter,
     audioFiles,
     vocalsFile: vocalsFile
       ? {
@@ -668,10 +658,11 @@ function LyricsAlignInner() {
 
   const cloneHeroMetadata = useMemo<ChartResponseEncore | null>(() => {
     if (!chart) return null;
+    const md = chart.chartDoc.parsedChart.metadata;
     return {
-      name: chart.name,
-      artist: chart.artist,
-      charter: chart.charter,
+      name: md.name ?? 'Unknown',
+      artist: md.artist ?? 'Unknown',
+      charter: md.charter ?? 'Unknown',
       md5: '',
       hasVideoBackground: false,
       albumArtMd5: '',
@@ -691,14 +682,18 @@ function LyricsAlignInner() {
   }, [editorData]);
 
   if (showEditor && chart) {
+    const md = chart.chartDoc.parsedChart.metadata;
+    const songName = md.name ?? 'Unknown';
+    const artistName = md.artist ?? 'Unknown';
+    const charterName = md.charter ?? 'Unknown';
     return (
       <main className="h-screen w-screen flex flex-col bg-background overflow-hidden">
         <div className="shrink-0 border-b bg-background px-4 py-2 flex items-center gap-3 flex-wrap">
           <div className="min-w-0 mr-auto">
             <h1 className="text-sm font-semibold truncate">
-              {removeStyleTags(chart.name)}
+              {removeStyleTags(songName)}
               <span className="text-muted-foreground font-normal"> by </span>
-              {removeStyleTags(chart.artist)}
+              {removeStyleTags(artistName)}
             </h1>
             <p className="text-xs text-muted-foreground">
               {alignedLines.reduce((n, l) => n + l.syllables.length, 0)}{' '}
@@ -736,9 +731,9 @@ function LyricsAlignInner() {
               audioChannels={editorData.audioChannels}
               durationSeconds={editorData.durationSeconds}
               sections={editorData.chart.sections}
-              songName={chart.name}
-              artistName={chart.artist}
-              charterName={chart.charter}
+              songName={songName}
+              artistName={artistName}
+              charterName={charterName}
               getChartText={getChartText}
               hideHeader
             />
@@ -802,12 +797,12 @@ function LyricsAlignInner() {
             <div className="bg-muted rounded-lg p-4 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold">
-                  {removeStyleTags(chart.name)}{' '}
+                  {removeStyleTags(chart.chartDoc.parsedChart.metadata.name ?? 'Unknown')}{' '}
                   <span className="text-muted-foreground font-normal">by</span>{' '}
-                  {removeStyleTags(chart.artist)}
+                  {removeStyleTags(chart.chartDoc.parsedChart.metadata.artist ?? 'Unknown')}
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Charted by {removeStyleTags(chart.charter)} &middot;{' '}
+                  Charted by {removeStyleTags(chart.chartDoc.parsedChart.metadata.charter ?? 'Unknown')} &middot;{' '}
                   {chart.audioFiles.length} audio file
                   {chart.audioFiles.length !== 1 ? 's' : ''}
                   {chart.vocalsFile && ' (vocals stem available)'} &middot;{' '}
