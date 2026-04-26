@@ -936,16 +936,23 @@ export default function HighwayEditor({
   // changes or reconciler first becomes available. This ensures marker
   // elements (sections, lyrics, BPM, TS, phrases) are present from the
   // start, not only after the first edit command.
+  //
+  // When the page disables drum lanes (e.g. add-lyrics), the source chart
+  // may still carry a real drum track — drop the note elements so the
+  // highway shows only markers + lyrics.
   useEffect(() => {
     const reconciler = reconcilerRef.current;
     if (!reconciler || !state.chart) return;
     const track = state.chart.trackData.find(
       t => t.instrument === 'drums' && t.difficulty === 'expert',
     );
-    if (track) {
-      reconciler.setElements(chartToElements(state.chart, track));
-    }
-  }, [reconcilerRef, state.chart, rendererVersion]);
+    if (!track) return;
+    const elements = chartToElements(state.chart, track);
+    const visible = capabilities.showDrumLanes
+      ? elements
+      : elements.filter(e => e.kind !== 'note');
+    reconciler.setElements(visible);
+  }, [reconcilerRef, state.chart, capabilities, rendererVersion]);
 
   // ---------------------------------------------------------------------------
   // Sync cursor tick with playback

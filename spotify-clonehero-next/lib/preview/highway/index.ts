@@ -414,10 +414,12 @@ export const setupRenderer = (
       highwaySpeed,
     );
 
-    // Convert track to elements and set on the reconciler
-    // (notes only -- chartToElements requires the full ParsedChart,
-    // which is provided by useEditCommands when the chart loads)
-    const elements = trackToElements(track);
+    // Convert track to elements and set on the reconciler. With
+    // `showDrumLanes` off (e.g. add-lyrics), seed the reconciler empty —
+    // HighwayEditor will populate markers from the full ParsedChart and
+    // skip notes when that capability is off, so drawing notes here would
+    // briefly flash drum geometry on a lanes-off page.
+    const elements = showDrumLanes ? trackToElements(track) : [];
     reconciler.setElements(elements);
 
     // SceneOverlays + InteractionManager are created for any track — they
