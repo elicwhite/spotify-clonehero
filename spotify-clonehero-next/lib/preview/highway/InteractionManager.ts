@@ -108,15 +108,30 @@ export class InteractionManager {
     this.ndcVec.set((canvasX / canvasW) * 2 - 1, -(canvasY / canvasH) * 2 + 1);
     this.raycaster.setFromCamera(this.ndcVec, this.camera);
 
-    // --- 1. Check note sprites (highest priority) ---
+    // --- 1. Marker flag boxes (off-highway side rails) ---
+    // The flag boxes sit outside the highway lanes, so they can't conflict
+    // with notes. Picking them first means the side-mounted text always
+    // responds to hover even if a note is at the same tick.
+    const flagHit = this.hitTestMarkerFlags(
+      canvasX,
+      canvasY,
+      canvasW,
+      canvasH,
+    );
+    if (flagHit) return flagHit;
+
+    // --- 2. Notes ---
     const noteHit = this.hitTestNotes();
     if (noteHit) return noteHit;
 
-    // --- 2. Check side-mounted text markers ---
-    const markerHit = this.hitTestMarkers(canvasX, canvasY, canvasW, canvasH);
-    if (markerHit) return markerHit;
+    // --- 3. Marker row lines (cross the highway) ---
+    // Lines run through the same X range as notes; checked after notes so
+    // an explicit click on a note still wins, but cursor on the line
+    // anywhere else still picks the marker.
+    const lineHit = this.hitTestMarkerLines(canvasY, canvasH);
+    if (lineHit) return lineHit;
 
-    // --- 3. Intersect the highway plane ---
+    // --- 4. Intersect the highway plane ---
     return this.hitTestHighway(gridDivision);
   }
 
@@ -206,7 +221,8 @@ export class InteractionManager {
     'section:',
   ];
 
-  private hitTestMarkers(
+  /** Hit-test only the side-mounted flag boxes (off the highway). */
+  private hitTestMarkerFlags(
     canvasX: number,
     canvasY: number,
     canvasW: number,
@@ -216,7 +232,6 @@ export class InteractionManager {
 
     const tempWorld = new THREE.Vector3();
 
-    // Walk priority order; first marker the cursor lands on wins.
     for (const prefix of InteractionManager.MARKER_PRIORITY) {
       for (const [key, group] of this.reconciler.getActiveGroups()) {
         if (!key.startsWith(prefix)) continue;
@@ -253,42 +268,67 @@ export class InteractionManager {
         const boxCenterX = spriteScreenX - anchorOffsetX;
         const boxCenterY = spriteScreenY;
 
-        const inFlag =
-          Math.abs(canvasX - boxCenterX) <= halfW &&
-          Math.abs(canvasY - boxCenterY) <= halfH;
-
-        // Row line: project the group's actual y position; cursor anywhere
-        // along that line within a small Y tolerance also picks the marker.
-        tempWorld.set(0, group.position.y, 0);
-        const lineProjected = tempWorld.project(this.camera);
-        const lineScreenY = ((-lineProjected.y + 1) / 2) * canvasH;
-        const inLine =
-          Math.abs(canvasY - lineScreenY) <=
-          InteractionManager.MARKER_LINE_TOLERANCE_PX;
-
-        if (!inFlag && !inLine) continue;
-
-        const el = this.reconciler.getElement(key);
-        if (!el) continue;
-        const data = el.data as MarkerElementData;
-        const tickStr = key.slice(prefix.length);
-        const tick = parseInt(tickStr, 10);
-        if (Number.isNaN(tick)) continue;
-
-        switch (prefix) {
-          case 'section:':
-            return {type: 'section', tick, name: data.text};
-          case 'lyric:':
-            return {type: 'lyric', tick, text: data.text};
-          case 'phrase-start:':
-            return {type: 'phrase-start', tick};
-          case 'phrase-end:':
-            return {type: 'phrase-end', endTick: tick};
+        if (
+          Math.abs(canvasX - boxCenterX) > halfW ||
+          Math.abs(canvasY - boxCenterY) > halfH
+        ) {
+          continue;
         }
+
+        const hit = this.elementToMarkerHit(key, prefix);
+        if (hit) return hit;
       }
     }
-
     return null;
+  }
+
+  /** Hit-test only the marker rule lines that cross the highway. */
+  private hitTestMarkerLines(canvasY: number, canvasH: number): HitResult {
+    if (this.timedTempos.length === 0) return null;
+
+    const tempWorld = new THREE.Vector3();
+
+    for (const prefix of InteractionManager.MARKER_PRIORITY) {
+      for (const [key, group] of this.reconciler.getActiveGroups()) {
+        if (!key.startsWith(prefix)) continue;
+
+        tempWorld.set(0, group.position.y, 0);
+        const projected = tempWorld.project(this.camera);
+        const lineScreenY = ((-projected.y + 1) / 2) * canvasH;
+        if (
+          Math.abs(canvasY - lineScreenY) >
+          InteractionManager.MARKER_LINE_TOLERANCE_PX
+        ) {
+          continue;
+        }
+
+        const hit = this.elementToMarkerHit(key, prefix);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  }
+
+  private elementToMarkerHit(key: string, prefix: string): HitResult {
+    const el = this.reconciler.getElement(key);
+    if (!el) return null;
+    const data = el.data as MarkerElementData;
+    const tickStr = key.slice(prefix.length);
+    const tick = parseInt(tickStr, 10);
+    if (Number.isNaN(tick)) return null;
+
+    switch (prefix) {
+      case 'section:':
+        return {type: 'section', tick, name: data.text};
+      case 'lyric:':
+        return {type: 'lyric', tick, text: data.text};
+      case 'phrase-start:':
+        return {type: 'phrase-start', tick};
+      case 'phrase-end:':
+        return {type: 'phrase-end', endTick: tick};
+      default:
+        return null;
+    }
   }
 
   // -----------------------------------------------------------------------
