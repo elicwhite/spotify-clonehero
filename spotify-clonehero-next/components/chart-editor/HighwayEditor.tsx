@@ -30,6 +30,7 @@ import {
   buildTimedTempos,
   msToTick,
   snapToGrid,
+  tickToMs,
 } from '@/lib/drum-transcription/timing';
 import {getDrumNotes} from '@/lib/chart-edit';
 import DrumHighwayPreview, {
@@ -40,6 +41,7 @@ import type {AudioManager} from '@/lib/preview/audioManager';
 import type {InteractionManager} from '@/lib/preview/highway';
 import type {HitResult} from '@/lib/preview/highway';
 import {chartToElements} from '@/lib/preview/highway/chartToElements';
+import type {MarkerElementData} from '@/lib/preview/highway/MarkerRenderer';
 import {parseChartFile} from '@eliwhite/scan-chart';
 type ParsedChart = ReturnType<typeof parseChartFile>;
 import {Input} from '@/components/ui/input';
@@ -201,6 +203,11 @@ export default function HighwayEditor({
     | null
   >(null);
   const [isDragging, setIsDragging] = useState(false);
+  /**
+   * Reconciler key (e.g. `lyric:480`) of the side-marker currently under the
+   * cursor, or null. Drives the hover-bright background on MarkerRenderer.
+   */
+  const [hoveredMarkerKey, setHoveredMarkerKey] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState<{x: number; y: number} | null>(
     null,
   );
@@ -580,6 +587,7 @@ export default function HighwayEditor({
     (e: ReactMouseEvent<HTMLDivElement>) => {
       const coords = getElementCoords(e);
       const hit = hitTestAt(coords.x, coords.y);
+      const markerRef = markerHitToRef(hit);
 
       // Update hover lane/tick from hit result
       if (hit) {
@@ -597,6 +605,17 @@ export default function HighwayEditor({
       // Update note hover highlight via NoteRenderer
       const hoveredNoteId = hit?.type === 'note' ? hit.noteId : null;
       noteRendererRef.current?.setHoveredNoteId(hoveredNoteId);
+
+      // Track the side-marker under the cursor so its visual gets the
+      // hover-bright background. Skip while a drag is in progress: the
+      // dragged marker handles its own visual state via markerDrag.
+      let nextMarkerKey: string | null = null;
+      if (!markerDrag && markerRef && capabilities.hoverable.has(markerRef.kind)) {
+        nextMarkerKey = `${markerRef.kind}:${markerRef.tick}`;
+      }
+      if (nextMarkerKey !== hoveredMarkerKey) {
+        setHoveredMarkerKey(nextMarkerKey);
+      }
 
       if (dragStart) {
         setDragCurrent(coords);
@@ -624,6 +643,8 @@ export default function HighwayEditor({
       dragStart,
       isErasing,
       markerDrag,
+      hoveredMarkerKey,
+      capabilities,
       state.activeTool,
       executeCommand,
       noteRendererRef,
@@ -766,6 +787,7 @@ export default function HighwayEditor({
     setHoverLane(null);
     setHoverTick(null);
     setHoveredHitType(null);
+    setHoveredMarkerKey(null);
     setIsErasing(false);
     // Clear note hover highlight
     noteRendererRef.current?.setHoveredNoteId(null);
@@ -937,6 +959,11 @@ export default function HighwayEditor({
   // elements (sections, lyrics, BPM, TS, phrases) are present from the
   // start, not only after the first edit command.
   //
+  // Two transient overlays are applied here so the visual state stays in
+  // sync with React: (a) the hovered side-marker gets `isHovered: true` so
+  // its background brightens; (b) a marker being dragged is repositioned to
+  // its `currentTick` (snapped to grid) so it follows the mouse.
+  //
   // When the page disables drum lanes (e.g. add-lyrics), the source chart
   // may still carry a real drum track — drop the note elements so the
   // highway shows only markers + lyrics.
@@ -948,11 +975,43 @@ export default function HighwayEditor({
     );
     if (!track) return;
     const elements = chartToElements(state.chart, track);
-    const visible = capabilities.showDrumLanes
-      ? elements
-      : elements.filter(e => e.kind !== 'note');
+
+    const dragKey = markerDrag
+      ? `${markerDrag.kind}:${markerDrag.originalTick}`
+      : null;
+    const dragMs =
+      markerDrag && timedTempos.length > 0
+        ? tickToMs(markerDrag.currentTick, timedTempos, resolution)
+        : null;
+
+    const visible = elements
+      .filter(e => capabilities.showDrumLanes || e.kind !== 'note')
+      .map(e => {
+        if (e.kind === 'note') return e;
+        const isHover = hoveredMarkerKey === e.key;
+        const isDrag = dragKey === e.key;
+        if (!isHover && !isDrag) return e;
+        return {
+          ...e,
+          msTime: isDrag && dragMs !== null ? dragMs : e.msTime,
+          data: {
+            ...(e.data as MarkerElementData),
+            isHovered: isHover || isDrag,
+          },
+        };
+      });
+
     reconciler.setElements(visible);
-  }, [reconcilerRef, state.chart, capabilities, rendererVersion]);
+  }, [
+    reconcilerRef,
+    state.chart,
+    capabilities,
+    rendererVersion,
+    hoveredMarkerKey,
+    markerDrag,
+    timedTempos,
+    resolution,
+  ]);
 
   // ---------------------------------------------------------------------------
   // Sync cursor tick with playback
@@ -993,14 +1052,26 @@ export default function HighwayEditor({
   // ---------------------------------------------------------------------------
 
   const cursorStyle = useMemo(() => {
+    // While dragging a marker, keep the grab cursor so the user knows the
+    // marker is following.
+    if (markerDrag) return 'grabbing';
     // When hovering over a note, show pointer in cursor/erase mode
     if (hoveredHitType === 'note') {
       if (state.activeTool === 'cursor' || state.activeTool === 'erase') {
         return 'pointer';
       }
     }
-    // When hovering over a section banner, show pointer in cursor mode
-    if (hoveredHitType === 'section' && state.activeTool === 'cursor') {
+    // Side-mounted markers (sections, lyrics, phrase markers) — pointer in
+    // cursor mode when the kind is selectable on this page.
+    if (
+      state.activeTool === 'cursor' &&
+      hoveredHitType &&
+      (hoveredHitType === 'section' ||
+        hoveredHitType === 'lyric' ||
+        hoveredHitType === 'phrase-start' ||
+        hoveredHitType === 'phrase-end') &&
+      capabilities.selectable.has(hoveredHitType)
+    ) {
       return 'pointer';
     }
     // Default cursors per tool mode
@@ -1018,7 +1089,7 @@ export default function HighwayEditor({
       default:
         return 'default';
     }
-  }, [state.activeTool, hoveredHitType]);
+  }, [state.activeTool, hoveredHitType, capabilities, markerDrag]);
 
   return (
     <div

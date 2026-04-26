@@ -14,6 +14,8 @@ const HIGHWAY_HALF_WIDTH = 0.45;
 export interface MarkerElementData {
   text: string;
   isSelected?: boolean;
+  /** Brightens the marker background to signal hover. */
+  isHovered?: boolean;
   /** Vertical stack index for markers at the same tick. 0 = no offset. */
   stackIndex?: number;
 }
@@ -35,8 +37,9 @@ function createMarkerTexture(
   text: string,
   color: [number, number, number],
   isSelected: boolean,
+  isHovered: boolean,
 ): THREE.CanvasTexture {
-  const key = `${text}:${color.join(',')}:${isSelected}`;
+  const key = `${text}:${color.join(',')}:${isSelected}:${isHovered}`;
   const cached = textureCache.get(key);
   if (cached) return cached;
 
@@ -54,9 +57,11 @@ function createMarkerTexture(
   canvas.width = textWidth + padding * 2;
   canvas.height = 36 * scale;
 
-  // Background -- marker color with transparency
+  // Background -- marker color with transparency. Hover bumps mid-way
+  // between the resting (0.35) and selected (0.6) alphas so the hover
+  // feedback is visible without making it look "selected".
   const [r, g, b] = color;
-  const bgAlpha = isSelected ? 0.6 : 0.35;
+  const bgAlpha = isSelected ? 0.6 : isHovered ? 0.5 : 0.35;
   ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${bgAlpha})`;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -116,6 +121,7 @@ export class MarkerRenderer implements ElementRenderer<MarkerElementData> {
       data.text,
       this.color,
       data.isSelected ?? false,
+      data.isHovered ?? false,
     );
     const material = new THREE.SpriteMaterial({
       map: texture,
