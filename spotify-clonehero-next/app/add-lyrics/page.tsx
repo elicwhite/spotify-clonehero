@@ -20,6 +20,7 @@ import {
 import {exportAsZip, exportAsSng} from '@/lib/chart-export';
 import {alignedSyllablesToChartLyrics} from '@/lib/lyrics-align/chart-lyrics';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
+import {buildTimedTempos, tickToMs} from '@/lib/drum-transcription/timing';
 import type {
   LoadedFiles,
   SourceFormat,
@@ -155,6 +156,15 @@ function loadChartFromFiles(loaded: LoadedFiles): LoadedChart {
 /**
  * Clone + apply aligned lyrics to the chart document's PART VOCALS track.
  * Produces a new ChartDocument that writeChartFolder() can serialize with lyrics.
+ *
+ * Replaces both `notePhrases` and `staticLyricPhrases` on the vocals part:
+ * scan-chart's MIDI writer unions both arrays when emitting lyric events, so
+ * leaving the originals in place would cause duplicate (old + new) lyrics
+ * on save.
+ *
+ * msTime fields are computed from each tick using the chart's tempo map so
+ * the highway can position lyrics correctly. (scan-chart's parser fills
+ * these in on parse, but we're constructing the doc directly here.)
  */
 function applyAlignedLyricsToDoc(
   source: ChartDocument,
@@ -166,29 +176,35 @@ function applyAlignedLyricsToDoc(
     source.parsedChart.resolution,
   );
 
+  const resolution = source.parsedChart.resolution;
+  const timedTempos = buildTimedTempos(source.parsedChart.tempos, resolution);
+  const tickMs = (tick: number) => tickToMs(tick, timedTempos, resolution);
+
   // Group lyric events under each phrase and pair each lyric with a placeholder
   // pitched note (required so scan-chart keeps the phrase on round-trip).
   const notePhrases = vocalPhrases.map(phrase => {
     const phraseLyrics = chartLyrics.filter(
       l => l.tick >= phrase.tick && l.tick <= phrase.tick + phrase.length,
     );
+    const phraseMsStart = tickMs(phrase.tick);
+    const phraseMsEnd = tickMs(phrase.tick + phrase.length);
     return {
       tick: phrase.tick,
-      msTime: 0,
+      msTime: phraseMsStart,
       length: phrase.length,
-      msLength: 0,
+      msLength: phraseMsEnd - phraseMsStart,
       isPercussion: false,
       notes: phraseLyrics.map(l => ({
         tick: l.tick,
-        msTime: 0,
+        msTime: tickMs(l.tick),
         length: 60,
-        msLength: 0,
+        msLength: tickMs(l.tick + 60) - tickMs(l.tick),
         pitch: 60,
         type: 'pitched' as const,
       })),
       lyrics: phraseLyrics.map(l => ({
         tick: l.tick,
-        msTime: 0,
+        msTime: tickMs(l.tick),
         text: l.text,
         flags: 0,
       })),
@@ -205,6 +221,9 @@ function applyAlignedLyricsToDoc(
       textEvents: [],
     }),
     notePhrases,
+    // Clear staticLyricPhrases so scan-chart's writer doesn't union them
+    // with the new notePhrases and emit duplicate lyrics.
+    staticLyricPhrases: [],
   };
 
   const doc: ChartDocument = {

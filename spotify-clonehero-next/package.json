@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@eliwhite/parse-sng": "4.0.3-eliwhite.0",
-    "@eliwhite/scan-chart": "8.1.0-eliwhite.1",
+    "@eliwhite/scan-chart": "8.1.0-eliwhite.2",
     "@headlessui/react": "^1.7.17",
     "@mcp-b/global": "^2.2.0",
     "@next/third-parties": "16.2.4",
