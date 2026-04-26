@@ -85,7 +85,7 @@ export default function LeftSidebar({
   onNotesModified,
   leftPanelChildren,
 }: LeftSidebarProps) {
-  const {state, dispatch} = useChartEditorContext();
+  const {state, dispatch, capabilities} = useChartEditorContext();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
 
   const speedIdx = SPEED_PRESETS.indexOf(state.playbackSpeed);
@@ -210,69 +210,77 @@ export default function LeftSidebar({
             </div>
           </div>
 
-          {/* Highway mode */}
-          <div className="space-y-2 pt-4 border-t">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Highway</span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={
-                      state.highwayMode === 'waveform' ? 'secondary' : 'outline'
-                    }
-                    size="sm"
-                    className="h-7 gap-1.5 text-xs"
-                    onClick={() =>
-                      dispatch({
-                        type: 'SET_HIGHWAY_MODE',
-                        mode:
-                          state.highwayMode === 'waveform'
-                            ? 'classic'
-                            : 'waveform',
-                      })
-                    }>
-                    <AudioWaveform className="h-3.5 w-3.5" />
-                    {state.highwayMode === 'waveform' ? 'Waveform' : 'Classic'}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  Toggle waveform highway surface
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-
-          {/* Tool icons */}
-          <div className="space-y-2 pt-4 border-t">
-            <span className="text-sm font-medium">Tools</span>
-            <div className="grid grid-cols-3 gap-1.5">
-              {TOOL_ITEMS.map(({mode, icon: Icon, label, hotkey}) => (
-                <Tooltip key={mode}>
+          {/* Highway mode toggle — hidden on pages that pin the mode (add-lyrics) */}
+          {capabilities.showHighwayModeToggle && (
+            <div className="space-y-2 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Highway</span>
+                <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant={
-                        state.activeTool === mode ? 'secondary' : 'ghost'
+                        state.highwayMode === 'waveform' ? 'secondary' : 'outline'
                       }
-                      size="icon"
-                      className={cn(
-                        'h-9 w-full',
-                        state.activeTool === mode && 'ring-1 ring-primary',
-                      )}
+                      size="sm"
+                      className="h-7 gap-1.5 text-xs"
                       onClick={() =>
-                        dispatch({type: 'SET_ACTIVE_TOOL', tool: mode})
+                        dispatch({
+                          type: 'SET_HIGHWAY_MODE',
+                          mode:
+                            state.highwayMode === 'waveform'
+                              ? 'classic'
+                              : 'waveform',
+                        })
                       }>
-                      <Icon className="h-4 w-4" />
+                      <AudioWaveform className="h-3.5 w-3.5" />
+                      {state.highwayMode === 'waveform' ? 'Waveform' : 'Classic'}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="right">
-                    {label} ({formatForDisplay(hotkey)})
+                    Toggle waveform highway surface
                   </TooltipContent>
                 </Tooltip>
-              ))}
+              </div>
             </div>
+          )}
 
-            {/* Undo/Redo inline */}
-            <div className="flex items-center gap-1.5 pt-1">
+          {/* Tool palette + Note inspector. Hidden on pages that don't expose
+           *  multiple tools (add-lyrics). Undo/Redo still surface below. */}
+          {capabilities.showToolPalette && (
+            <div className="space-y-2 pt-4 border-t">
+              <span className="text-sm font-medium">Tools</span>
+              <div className="grid grid-cols-3 gap-1.5">
+                {TOOL_ITEMS.map(({mode, icon: Icon, label, hotkey}) => (
+                  <Tooltip key={mode}>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={
+                          state.activeTool === mode ? 'secondary' : 'ghost'
+                        }
+                        size="icon"
+                        className={cn(
+                          'h-9 w-full',
+                          state.activeTool === mode && 'ring-1 ring-primary',
+                        )}
+                        onClick={() =>
+                          dispatch({type: 'SET_ACTIVE_TOOL', tool: mode})
+                        }>
+                        <Icon className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      {label} ({formatForDisplay(hotkey)})
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Undo/Redo (always visible). */}
+          <div className="space-y-2 pt-4 border-t">
+            <span className="text-sm font-medium">History</span>
+            <div className="flex items-center gap-1.5">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -306,8 +314,10 @@ export default function LeftSidebar({
             </div>
           </div>
 
-          {/* Note inspector */}
-          <NoteInspector onNotesModified={onNotesModified} />
+          {/* Note inspector — only useful when notes are selectable. */}
+          {capabilities.selectable.has('note') && (
+            <NoteInspector onNotesModified={onNotesModified} />
+          )}
 
           {/* Page-specific panels */}
           {leftPanelChildren}

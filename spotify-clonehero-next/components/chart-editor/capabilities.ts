@@ -34,6 +34,17 @@ export interface EditorCapabilities {
    * phrase + section markers still render normally.
    */
   showDrumLanes: boolean;
+  /**
+   * Show the sidebar's Tools section (cursor / place / erase / bpm /
+   * timesig / section). Add-lyrics suppresses this since the only valid
+   * tool is the cursor — no choice to surface.
+   */
+  showToolPalette: boolean;
+  /**
+   * Show the sidebar's Highway-mode toggle (Classic ↔ Waveform).
+   * Add-lyrics pins the highway to Waveform, so the toggle is hidden.
+   */
+  showHighwayModeToggle: boolean;
 }
 
 export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
@@ -42,6 +53,8 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
   draggable: new Set(['note', 'section']),
   showNotePlacementTools: true,
   showDrumLanes: true,
+  showToolPalette: true,
+  showHighwayModeToggle: true,
 };
 
 export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
@@ -50,4 +63,6 @@ export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
   draggable: new Set(['lyric', 'phrase-start', 'phrase-end']),
   showNotePlacementTools: false,
   showDrumLanes: false,
+  showToolPalette: false,
+  showHighwayModeToggle: false,
 };
