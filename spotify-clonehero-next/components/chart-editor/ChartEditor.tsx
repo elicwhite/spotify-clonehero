@@ -46,6 +46,12 @@ export interface ChartEditorProps {
   charterName?: string;
   /** Whether the chart has unsaved changes. */
   dirty?: boolean;
+  /**
+   * Hide the editor's built-in top bar (song info + Export). Pages that
+   * already render their own header above the editor (e.g. add-lyrics)
+   * should set this to true to avoid duplicated headings.
+   */
+  hideHeader?: boolean;
   /** Content rendered in the left sidebar panel (page-specific). */
   leftPanelChildren?: ReactNode;
   /** Callback to provide chart text for export. */
@@ -100,6 +106,7 @@ export default function ChartEditor({
   artistName,
   charterName,
   dirty,
+  hideHeader,
   leftPanelChildren,
   getChartText,
   getAudioSources,
@@ -138,41 +145,44 @@ export default function ChartEditor({
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-black">
       <EditorMCPTools />
-      {/* Top bar: song info + export */}
-      <div className="shrink-0 flex items-center justify-between border-b bg-background px-4 py-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="text-sm font-semibold text-foreground truncate">
-              {songName}
-            </h1>
-            {artistName && (
-              <span className="text-sm text-muted-foreground truncate">
-                by {artistName}
-              </span>
-            )}
-            {dirty && (
-              <span className="text-[10px] text-amber-400 shrink-0">
-                Unsaved
-              </span>
+      {/* Top bar: song info + export. Pages with their own header (e.g.
+       *  add-lyrics) suppress this via `hideHeader`. */}
+      {!hideHeader && (
+        <div className="shrink-0 flex items-center justify-between border-b bg-background px-4 py-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-semibold text-foreground truncate">
+                {songName}
+              </h1>
+              {artistName && (
+                <span className="text-sm text-muted-foreground truncate">
+                  by {artistName}
+                </span>
+              )}
+              {dirty && (
+                <span className="text-[10px] text-amber-400 shrink-0">
+                  Unsaved
+                </span>
+              )}
+            </div>
+            {charterName && (
+              <p className="text-xs text-muted-foreground truncate">
+                Charted by {charterName}
+              </p>
             )}
           </div>
-          {charterName && (
-            <p className="text-xs text-muted-foreground truncate">
-              Charted by {charterName}
-            </p>
+          {getChartText && (
+            <div className="shrink-0 ml-4">
+              <ExportDialog
+                songName={songName}
+                artistName={artistName}
+                getChartText={getChartText}
+                getAudioSources={getAudioSources}
+              />
+            </div>
           )}
         </div>
-        {getChartText && (
-          <div className="shrink-0 ml-4">
-            <ExportDialog
-              songName={songName}
-              artistName={artistName}
-              getChartText={getChartText}
-              getAudioSources={getAudioSources}
-            />
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Main area: three-column layout */}
       <div className="flex flex-1 min-h-0">

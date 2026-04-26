@@ -720,6 +720,7 @@ function LyricsAlignInner() {
               artistName={chart.artist}
               charterName={chart.charter}
               getChartText={getChartText}
+              hideHeader
             />
           ) : (
             <div className="flex items-center justify-center gap-3 h-full">
