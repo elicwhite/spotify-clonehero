@@ -69,6 +69,55 @@ function hitTick(hit: HitResult): number | null {
 }
 
 /**
+ * Tick range that a marker drag is allowed to settle into, mirroring the
+ * clamping each chart-edit handler applies on move. The drag preview reads
+ * this so the visual ghost stops at the same boundary the commit would
+ * — no "drag overshoots and snaps back" surprise.
+ *
+ * Sections drag freely; only lyrics + phrase markers are bounded.
+ */
+function computeMarkerDragBounds(
+  chart: ParsedChart,
+  kind: 'section' | 'lyric' | 'phrase-start' | 'phrase-end',
+  originalTick: number,
+): {min: number; max: number} {
+  if (kind === 'section') return {min: 0, max: Number.POSITIVE_INFINITY};
+
+  const phrases = chart.vocalTracks?.parts?.vocals?.notePhrases ?? [];
+
+  if (kind === 'lyric') {
+    // Lyric stays inside the phrase that owns it.
+    const phrase = phrases.find(p =>
+      p.lyrics.some(l => l.tick === originalTick),
+    );
+    if (!phrase) return {min: 0, max: Number.POSITIVE_INFINITY};
+    return {min: phrase.tick, max: phrase.tick + phrase.length};
+  }
+
+  if (kind === 'phrase-start') {
+    const idx = phrases.findIndex(p => p.tick === originalTick);
+    if (idx === -1) return {min: 0, max: Number.POSITIVE_INFINITY};
+    const phrase = phrases[idx];
+    const prev = phrases[idx - 1];
+    return {
+      min: prev ? prev.tick + prev.length : 0,
+      // Keep at least 1 tick of phrase length; matches MIN_PHRASE_LENGTH.
+      max: phrase.tick + phrase.length - 1,
+    };
+  }
+
+  // phrase-end
+  const idx = phrases.findIndex(p => p.tick + p.length === originalTick);
+  if (idx === -1) return {min: 0, max: Number.POSITIVE_INFINITY};
+  const phrase = phrases[idx];
+  const next = phrases[idx + 1];
+  return {
+    min: phrase.tick + 1,
+    max: next ? next.tick : Number.POSITIVE_INFINITY,
+  };
+}
+
+/**
  * Translate a side-marker hit (section/lyric/phrase-start/phrase-end) into
  * its EntityKind + id. Notes and highway hits have separate paths.
  */
@@ -621,9 +670,19 @@ export default function HighwayEditor({
         setDragCurrent(coords);
       }
 
-      // Marker drag: update the live preview tick
-      if (markerDrag && dragStart) {
-        const newTick = screenToTick(coords.x, coords.y);
+      // Marker drag: update the live preview tick, clamped to whatever
+      // bounds the underlying handler enforces on commit. This keeps the
+      // visual ghost from wandering past where the move could actually
+      // land (e.g. lyrics stay inside their phrase, phrase-start can't
+      // cross the previous phrase's end).
+      if (markerDrag && dragStart && state.chart) {
+        const rawTick = screenToTick(coords.x, coords.y);
+        const bounds = computeMarkerDragBounds(
+          state.chart,
+          markerDrag.kind,
+          markerDrag.originalTick,
+        );
+        const newTick = Math.max(bounds.min, Math.min(bounds.max, rawTick));
         if (newTick !== markerDrag.currentTick) {
           setMarkerDrag({...markerDrag, currentTick: newTick});
         }
