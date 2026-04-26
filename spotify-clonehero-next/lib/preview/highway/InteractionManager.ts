@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type {SceneReconciler} from './SceneReconciler';
 import {NoteRenderer, type NoteElementData} from './NoteRenderer';
-import type {MarkerElementData} from './MarkerRenderer';
+import {MarkerRenderer, type MarkerElementData} from './MarkerRenderer';
 import {type HitResult, calculateNoteXOffset} from './types';
 
 // ---------------------------------------------------------------------------
@@ -181,26 +181,28 @@ export class InteractionManager {
   // Markers are ChartElements in the reconciler with keys like
   // `section:{tick}`, `lyric:{tick}`, `phrase-start:{tick}`,
   // `phrase-end:{endTick}`. Each renders as a horizontal line across the
-  // highway plus a side-mounted text flag. We project each visible marker's
-  // world Y to screen space and check pixel distance, then return a
-  // HitResult variant matching the kind. Sections + ts render on the right;
-  // lyrics + phrases + bpm on the left — so an X-side check disambiguates
-  // markers stacked on the same Y row.
+  // highway plus a side-mounted text flag. The flag is the actual click
+  // target — we project its sprite to screen space (using its real scale,
+  // anchor, and stack offset) and check whether the cursor is inside the
+  // resulting box. The line beneath the flag also counts: a small
+  // tolerance around the row's Y matches anywhere on the rule.
   //
   // Within the marker tier, lyric wins over phrase-* (smallest target),
   // then phrase-end, then phrase-start, then section. BPM/TS markers are
   // hit-tested separately by the editor today and are excluded here.
   // -----------------------------------------------------------------------
 
-  /** Tolerance in CSS pixels for marker hit detection. */
-  private static readonly MARKER_HIT_TOLERANCE_PX = 14;
+  /**
+   * Tolerance in CSS pixels for the row line's Y. The line spans the
+   * highway's full width, so cursor anywhere on the line within this
+   * vertical tolerance counts as a marker hit.
+   */
+  private static readonly MARKER_LINE_TOLERANCE_PX = 8;
 
-  private static readonly LEFT_MARKER_KINDS: ReadonlyArray<string> = [
+  private static readonly MARKER_PRIORITY: ReadonlyArray<string> = [
     'lyric:',
     'phrase-end:',
     'phrase-start:',
-  ];
-  private static readonly RIGHT_MARKER_KINDS: ReadonlyArray<string> = [
     'section:',
   ];
 
@@ -213,25 +215,58 @@ export class InteractionManager {
     if (this.timedTempos.length === 0) return null;
 
     const tempWorld = new THREE.Vector3();
-    const isLeftSide = canvasX < canvasW / 2;
-    const prefixes = isLeftSide
-      ? InteractionManager.LEFT_MARKER_KINDS
-      : InteractionManager.RIGHT_MARKER_KINDS;
 
-    // Walk priority order; first marker within Y tolerance wins.
-    for (const prefix of prefixes) {
+    // Walk priority order; first marker the cursor lands on wins.
+    for (const prefix of InteractionManager.MARKER_PRIORITY) {
       for (const [key, group] of this.reconciler.getActiveGroups()) {
         if (!key.startsWith(prefix)) continue;
 
-        tempWorld.set(0, group.position.y, 0);
+        const sprite = MarkerRenderer.getFlagSprite(group);
+        if (!sprite) continue;
+
+        // Sprite center in world space = group.position + sprite.position.
+        sprite.getWorldPosition(tempWorld);
         const projected = tempWorld.project(this.camera);
-        const screenY = ((-projected.y + 1) / 2) * canvasH;
-        if (
-          Math.abs(screenY - canvasY) >
-          InteractionManager.MARKER_HIT_TOLERANCE_PX
-        ) {
-          continue;
-        }
+        const spriteScreenX = ((projected.x + 1) / 2) * canvasW;
+        const spriteScreenY = ((-projected.y + 1) / 2) * canvasH;
+
+        // Sprite scale is in world units; convert to screen pixels by
+        // projecting two world points along its width/height.
+        const scaleW = sprite.scale.x;
+        const scaleH = sprite.scale.y;
+        const right = tempWorld
+          .clone()
+          .setX(tempWorld.x + scaleW / 2)
+          .project(this.camera);
+        const top = tempWorld
+          .clone()
+          .setY(tempWorld.y + scaleH / 2)
+          .project(this.camera);
+        const halfW = (((right.x - projected.x) * canvasW) / 2) | 0;
+        const halfH = (((projected.y - top.y) * canvasH) / 2) | 0;
+
+        // Sprite anchor (sprite.center): right side anchors at the left
+        // edge of the box (center.x = 0.0), left side at the right edge
+        // (center.x = 1.0). Translate the projected sprite-center pixel
+        // into the box's pixel center.
+        const anchorOffsetX = ((sprite.center.x - 0.5) * 2 * halfW) | 0;
+        const boxCenterX = spriteScreenX - anchorOffsetX;
+        const boxCenterY = spriteScreenY;
+
+        const inFlag =
+          Math.abs(canvasX - boxCenterX) <= halfW &&
+          Math.abs(canvasY - boxCenterY) <= halfH;
+
+        // Row line: project the group's actual y position; cursor anywhere
+        // along that line within a small Y tolerance also picks the marker.
+        tempWorld.set(0, group.position.y, 0);
+        const lineProjected = tempWorld.project(this.camera);
+        const lineScreenY = ((-lineProjected.y + 1) / 2) * canvasH;
+        const inLine =
+          Math.abs(canvasY - lineScreenY) <=
+          InteractionManager.MARKER_LINE_TOLERANCE_PX;
+
+        if (!inFlag && !inLine) continue;
 
         const el = this.reconciler.getElement(key);
         if (!el) continue;

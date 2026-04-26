@@ -187,6 +187,18 @@ export class MarkerRenderer implements ElementRenderer<MarkerElementData> {
     }
   }
 
+  /**
+   * Find the text-flag sprite inside a marker group, for raycasting and
+   * hit-testing. Returns null if the group's children have changed in a
+   * way we don't recognize.
+   */
+  static getFlagSprite(group: THREE.Group): THREE.Sprite | null {
+    for (const child of group.children) {
+      if (child instanceof THREE.Sprite) return child;
+    }
+    return null;
+  }
+
   /** Clear the shared texture cache. Call on dispose. */
   static clearTextureCache(): void {
     for (const texture of textureCache.values()) {
