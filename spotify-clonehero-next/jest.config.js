@@ -18,8 +18,12 @@ const customJestConfig = {
     '!lib/**/*.d.ts',
     '!lib/**/__tests__/**',
   ],
-  // webfft and @awasm/noble are ESM-only; transform through SWC like our own code
-  transformIgnorePatterns: ['/node_modules/(?!(webfft|@awasm/noble)/)'],
+  // ESM-only packages; transform through SWC like our own code.
+  // Includes: webfft, @awasm/noble, p-limit + yocto-queue (used by local-songs-folder),
+  // native-file-system-adapter + fetch-blob + formdata-polyfill (used by DB tests).
+  transformIgnorePatterns: [
+    '/node_modules/(?!(webfft|@awasm/noble|p-limit|yocto-queue|native-file-system-adapter|fetch-blob|formdata-polyfill)/)',
+  ],
 };
 
 // createJestConfig is exported in this way to ensure that next/jest can load the Next.js configuration, which is async
@@ -29,7 +33,7 @@ const baseConfig = createJestConfig(customJestConfig);
 module.exports = async () => {
   const config = await baseConfig();
   config.transformIgnorePatterns = [
-    '/node_modules/(?!(webfft|@awasm/noble)/).+\\.js$',
+    '/node_modules/(?!(webfft|@awasm/noble|p-limit|yocto-queue|native-file-system-adapter|fetch-blob|formdata-polyfill)/).+\\.js$',
     '^.+\\.module\\.(css|sass|scss)$',
   ];
   return config;
