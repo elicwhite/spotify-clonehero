@@ -26,7 +26,6 @@ import {removeStyleTags} from '@/lib/ui-utils';
 import {downloadSong} from '@/lib/local-songs-folder';
 import {useTrackUrls} from '@/lib/spotify-sdk/SpotifyFetching';
 import {AudioContext} from './AudioProvider';
-import {TableDownloadStates} from './SongsTable';
 import {Button} from '@/components/ui/button';
 import {Icons} from '@/components/icons';
 import {
@@ -56,6 +55,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+
+export type TableDownloadStates =
+  | 'downloaded'
+  | 'downloading'
+  | 'not-downloading'
+  | 'failed';
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line unused-imports/no-unused-vars
