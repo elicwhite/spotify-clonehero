@@ -3,7 +3,12 @@
 import {useMemo} from 'react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
-import {useChartEditorContext, getSelectedIds} from './ChartEditorContext';
+import {
+  useChartEditorContext,
+  getSelectedIds,
+  selectActiveTrack,
+} from './ChartEditorContext';
+import {trackKeyFromScope} from './scope';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {
   ToggleFlagCommand,
@@ -12,7 +17,7 @@ import {
   type FlagName,
 } from './commands';
 import type {DrumNoteType} from '@/lib/chart-edit';
-import {getDrumNotes} from '@/lib/chart-edit';
+import {getDrumNotes, drums4LaneSchema} from '@/lib/chart-edit';
 
 const DRUM_TYPE_LABELS: Record<DrumNoteType, string> = {
   kick: 'Kick',
@@ -23,11 +28,17 @@ const DRUM_TYPE_LABELS: Record<DrumNoteType, string> = {
   fiveGreenDrum: '5-Lane Green',
 };
 
-const FLAG_ITEMS: {key: FlagName; label: string; shortcut: string}[] = [
-  {key: 'cymbal', label: 'Cymbal', shortcut: 'Q'},
-  {key: 'accent', label: 'Accent', shortcut: 'A'},
-  {key: 'ghost', label: 'Ghost', shortcut: 'S'},
-];
+// Flag items shown in the inspector are derived from the drum schema.
+// Only flags with a keyboard shortcut surface here; flags without one
+// (e.g. flam, doubleKick) live on the schema but aren't bound to a UI button.
+const FLAG_ITEMS: {key: FlagName; label: string; shortcut: string}[] =
+  drums4LaneSchema.flagBindings
+    .filter(b => b.defaultKey !== undefined)
+    .map(b => ({
+      key: b.flag as FlagName,
+      label: b.label,
+      shortcut: b.defaultKey!.toUpperCase(),
+    }));
 
 interface NoteInspectorProps {
   className?: string;
@@ -47,13 +58,10 @@ export default function NoteInspector({
   const {executeCommand} = useExecuteCommand();
 
   const selectedNotes = useMemo(() => {
-    if (!state.chartDoc) return [];
-    const expertTrack = state.chartDoc.parsedChart.trackData.find(
-      t => t.instrument === 'drums' && t.difficulty === 'expert',
-    );
-    if (!expertTrack) return [];
+    const track = selectActiveTrack(state);
+    if (!track) return [];
     const selected = getSelectedIds(state, 'note');
-    return getDrumNotes(expertTrack).filter(n => selected.has(noteId(n)));
+    return getDrumNotes(track).filter(n => selected.has(noteId(n)));
   }, [state]);
 
   if (selectedNotes.length === 0) return null;
@@ -68,16 +76,21 @@ export default function NoteInspector({
     return {key, allTrue, someTrue, indeterminate: someTrue && !allTrue};
   });
 
+  // Note inspector only mounts when notes are selected, which only happens
+  // in track scopes — so trackKey is always defined here.
+  const trackKey = trackKeyFromScope(state.activeScope);
+  if (!trackKey) return null;
+
   const handleToggleFlag = (flag: FlagName) => {
     const ids = selectedNotes.map(n => noteId(n));
-    executeCommand(new ToggleFlagCommand(ids, flag));
+    executeCommand(new ToggleFlagCommand(ids, flag, trackKey));
     onNotesModified?.(ids);
   };
 
   const handleDelete = () => {
     const ids = new Set(selectedNotes.map(n => noteId(n)));
     onNotesModified?.(Array.from(ids));
-    executeCommand(new DeleteNotesCommand(ids));
+    executeCommand(new DeleteNotesCommand(ids, trackKey));
     dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
   };
 

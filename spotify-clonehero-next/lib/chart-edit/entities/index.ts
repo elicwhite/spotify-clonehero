@@ -11,26 +11,37 @@
  * All handlers operate in-place on the supplied `ChartDocument`. Callers
  * must clone first; `cloneDocFor(kind, doc)` here returns a doc cloned
  * exactly enough for the targeted entity kind.
+ *
+ * **EntityContext.** Each handler method takes an optional context object
+ * carrying the active editing scope (which `TrackKey` for notes /
+ * star-power / etc., which vocal `partName` for lyrics + phrases).
+ * Note-targeting handlers require a `trackKey`; vocal handlers default to
+ * the `'vocals'` part when `partName` is omitted; chart-wide handlers
+ * (sections, tempos, time signatures) ignore the context entirely.
  */
 
-import type {
-  ChartDocument,
-  DrumNoteType,
-  ParsedTrackData,
-} from '../types';
-import {
-  addDrumNote,
-  removeDrumNote,
-  getDrumNotes,
-} from '../helpers/drum-notes';
+import type {ChartDocument, DrumNoteType, ParsedTrackData} from '../types';
+import {noteTypeToDrumNote} from '../types';
+import {findTrackOnly, type TrackKey} from '../find-track';
+import {addDrumNote, removeDrumNote, getDrumNotes} from '../helpers/drum-notes';
 import {addSection, removeSection} from '../helpers/sections';
-import {moveLyric, listLyricTicks} from '../helpers/lyrics';
 import {
-  movePhraseStart,
-  movePhraseEnd,
-  listPhraseStartTicks,
+  DEFAULT_VOCALS_PART,
+  lyricId,
+  listLyricTicks,
+  moveLyric,
+  parseLyricId,
+} from '../helpers/lyrics';
+import {
   listPhraseEndTicks,
+  listPhraseStartTicks,
+  movePhraseEnd,
+  movePhraseStart,
+  parsePhraseId,
+  phraseEndId,
+  phraseStartId,
 } from '../helpers/phrases';
+import {drums4LaneSchema} from '../instruments/drums';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -49,9 +60,40 @@ export interface EntityRef {
   id: string;
 }
 
+/**
+ * Active scope hints for kinds that need to know "which slice of the
+ * chart" they're operating on. Sections + tempos + time signatures are
+ * chart-wide and ignore the context.
+ */
+export interface EntityContext {
+  /**
+   * Track to scope notes / star-power / solo / activation / flex against.
+   * Required when invoking note-targeting handlers; chart-wide kinds
+   * (sections, tempos, time signatures) ignore it.
+   */
+  trackKey?: TrackKey;
+  /**
+   * Vocal part to scope lyrics + phrase markers against. Defaults to
+   * `'vocals'` when omitted.
+   */
+  partName?: string;
+}
+
+function resolveTrack(
+  doc: ChartDocument,
+  ctx?: EntityContext,
+): ParsedTrackData | null {
+  if (!ctx?.trackKey) return null;
+  return findTrackOnly(doc, ctx.trackKey);
+}
+
+function resolvePartName(ctx?: EntityContext): string {
+  return ctx?.partName ?? DEFAULT_VOCALS_PART;
+}
+
 export interface EntityKindHandler {
   /** All entity ids of this kind currently in `doc`. */
-  listIds(doc: ChartDocument): string[];
+  listIds(doc: ChartDocument, ctx?: EntityContext): string[];
   /**
    * Resolve an id to its absolute tick (and lane index for kinds that have
    * one). Returns null when the id no longer exists in `doc`.
@@ -59,6 +101,7 @@ export interface EntityKindHandler {
   locate(
     doc: ChartDocument,
     id: string,
+    ctx?: EntityContext,
   ): {tick: number; lane?: number} | null;
   /**
    * Apply a move in-place. `tickDelta` always applies; `laneDelta` only
@@ -70,6 +113,7 @@ export interface EntityKindHandler {
     id: string,
     tickDelta: number,
     laneDelta: number,
+    ctx?: EntityContext,
   ): string;
   /** True if the kind responds to lane-delta input (notes only today). */
   supportsLaneDelta: boolean;
@@ -79,21 +123,23 @@ export interface EntityKindHandler {
 // Note ID helpers (re-exported for the command layer)
 // ---------------------------------------------------------------------------
 
-const LANE_ORDER: DrumNoteType[] = [
-  'kick',
-  'redDrum',
-  'yellowDrum',
-  'blueDrum',
-  'greenDrum',
-];
+// Lane order for the default 4-lane drum kit, derived from
+// `drums4LaneSchema` via the scan-chart NoteType → DrumNoteType reverse map.
+const LANE_ORDER: DrumNoteType[] = drums4LaneSchema.lanes.map(l => {
+  const name = noteTypeToDrumNote[l.noteType];
+  if (!name) {
+    throw new Error(
+      `drums4LaneSchema lane ${l.index} has unknown noteType ${l.noteType}`,
+    );
+  }
+  return name;
+});
 
 export function noteId(note: {tick: number; type: DrumNoteType}): string {
   return `${note.tick}:${note.type}`;
 }
 
-function parseNoteId(
-  id: string,
-): {tick: number; type: DrumNoteType} | null {
+function parseNoteId(id: string): {tick: number; type: DrumNoteType} | null {
   const colon = id.indexOf(':');
   if (colon === -1) return null;
   const tick = Number.parseInt(id.slice(0, colon), 10);
@@ -117,27 +163,20 @@ function shiftLane(type: DrumNoteType, delta: number): DrumNoteType {
   return laneToType(currentLane + delta);
 }
 
-function findExpertDrumsTrack(doc: ChartDocument): ParsedTrackData | null {
-  const t = doc.parsedChart.trackData.find(
-    td => td.instrument === 'drums' && td.difficulty === 'expert',
-  );
-  return t ?? null;
-}
-
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
 
 const noteHandler: EntityKindHandler = {
-  listIds(doc) {
-    const track = findExpertDrumsTrack(doc);
+  listIds(doc, ctx) {
+    const track = resolveTrack(doc, ctx);
     if (!track) return [];
     return getDrumNotes(track).map(noteId);
   },
-  locate(doc, id) {
+  locate(doc, id, ctx) {
     const parsed = parseNoteId(id);
     if (!parsed) return null;
-    const track = findExpertDrumsTrack(doc);
+    const track = resolveTrack(doc, ctx);
     if (!track) return null;
     const found = getDrumNotes(track).find(
       n => n.tick === parsed.tick && n.type === parsed.type,
@@ -145,10 +184,10 @@ const noteHandler: EntityKindHandler = {
     if (!found) return null;
     return {tick: found.tick, lane: typeToLane(found.type)};
   },
-  move(doc, id, tickDelta, laneDelta) {
+  move(doc, id, tickDelta, laneDelta, ctx) {
     const parsed = parseNoteId(id);
     if (!parsed) return id;
-    const track = findExpertDrumsTrack(doc);
+    const track = resolveTrack(doc, ctx);
     if (!track) return id;
 
     const note = getDrumNotes(track).find(
@@ -198,55 +237,95 @@ const sectionHandler: EntityKindHandler = {
 };
 
 const lyricHandler: EntityKindHandler = {
-  listIds(doc) {
-    return listLyricTicks(doc).map(String);
+  listIds(doc, ctx) {
+    const partName = resolvePartName(ctx);
+    return listLyricTicks(doc, partName).map(tick => lyricId(tick, partName));
   },
-  locate(doc, id) {
-    const tick = Number.parseInt(id, 10);
-    if (!Number.isFinite(tick)) return null;
-    return listLyricTicks(doc).includes(tick) ? {tick} : null;
+  locate(doc, id, ctx) {
+    const parsed = parseLyricId(id);
+    if (!parsed) return null;
+    const partName = resolvePartName(ctx);
+    if (parsed.partName !== partName) return null;
+    return listLyricTicks(doc, partName).includes(parsed.tick)
+      ? {tick: parsed.tick}
+      : null;
   },
-  move(doc, id, tickDelta) {
-    const tick = Number.parseInt(id, 10);
-    if (!Number.isFinite(tick)) return id;
-    const newTick = moveLyric(doc, tick, Math.max(0, tick + tickDelta));
-    return String(newTick);
+  move(doc, id, tickDelta, _laneDelta, ctx) {
+    const parsed = parseLyricId(id);
+    if (!parsed) return id;
+    const partName = resolvePartName(ctx);
+    if (parsed.partName !== partName) return id;
+    const newTick = moveLyric(
+      doc,
+      parsed.tick,
+      Math.max(0, parsed.tick + tickDelta),
+      partName,
+    );
+    return lyricId(newTick, partName);
   },
   supportsLaneDelta: false,
 };
 
 const phraseStartHandler: EntityKindHandler = {
-  listIds(doc) {
-    return listPhraseStartTicks(doc).map(String);
+  listIds(doc, ctx) {
+    const partName = resolvePartName(ctx);
+    return listPhraseStartTicks(doc, partName).map(tick =>
+      phraseStartId(tick, partName),
+    );
   },
-  locate(doc, id) {
-    const tick = Number.parseInt(id, 10);
-    if (!Number.isFinite(tick)) return null;
-    return listPhraseStartTicks(doc).includes(tick) ? {tick} : null;
+  locate(doc, id, ctx) {
+    const parsed = parsePhraseId(id);
+    if (!parsed) return null;
+    const partName = resolvePartName(ctx);
+    if (parsed.partName !== partName) return null;
+    return listPhraseStartTicks(doc, partName).includes(parsed.tick)
+      ? {tick: parsed.tick}
+      : null;
   },
-  move(doc, id, tickDelta) {
-    const tick = Number.parseInt(id, 10);
-    if (!Number.isFinite(tick)) return id;
-    const newTick = movePhraseStart(doc, tick, Math.max(0, tick + tickDelta));
-    return String(newTick);
+  move(doc, id, tickDelta, _laneDelta, ctx) {
+    const parsed = parsePhraseId(id);
+    if (!parsed) return id;
+    const partName = resolvePartName(ctx);
+    if (parsed.partName !== partName) return id;
+    const newTick = movePhraseStart(
+      doc,
+      parsed.tick,
+      Math.max(0, parsed.tick + tickDelta),
+      partName,
+    );
+    return phraseStartId(newTick, partName);
   },
   supportsLaneDelta: false,
 };
 
 const phraseEndHandler: EntityKindHandler = {
-  listIds(doc) {
-    return listPhraseEndTicks(doc).map(String);
+  listIds(doc, ctx) {
+    const partName = resolvePartName(ctx);
+    return listPhraseEndTicks(doc, partName).map(tick =>
+      phraseEndId(tick, partName),
+    );
   },
-  locate(doc, id) {
-    const tick = Number.parseInt(id, 10);
-    if (!Number.isFinite(tick)) return null;
-    return listPhraseEndTicks(doc).includes(tick) ? {tick} : null;
+  locate(doc, id, ctx) {
+    const parsed = parsePhraseId(id);
+    if (!parsed) return null;
+    const partName = resolvePartName(ctx);
+    if (parsed.partName !== partName) return null;
+    return listPhraseEndTicks(doc, partName).includes(parsed.tick)
+      ? {tick: parsed.tick}
+      : null;
   },
-  move(doc, id, tickDelta) {
-    const tick = Number.parseInt(id, 10);
-    if (!Number.isFinite(tick)) return id;
-    const newTick = movePhraseEnd(doc, tick, Math.max(0, tick + tickDelta));
-    return String(newTick);
+  move(doc, id, tickDelta, _laneDelta, ctx) {
+    const parsed = parsePhraseId(id);
+    if (!parsed) return id;
+    const partName = resolvePartName(ctx);
+    if (parsed.partName !== partName) return id;
+    const newTick = movePhraseEnd(
+      doc,
+      parsed.tick,
+      Math.max(0, parsed.tick + tickDelta),
+      partName,
+    );
+    return phraseEndId(newTick, partName);
   },
   supportsLaneDelta: false,
 };

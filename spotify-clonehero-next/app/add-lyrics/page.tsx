@@ -28,6 +28,7 @@ import type {
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import {
   ChartEditorProvider,
+  DEFAULT_VOCALS_SCOPE,
   useChartEditorContext,
   ADD_LYRICS_CAPABILITIES,
 } from '@/components/chart-editor';
@@ -264,7 +265,6 @@ async function decodeAudioForWaveform(
 
 interface EditorData {
   chart: ParsedChart;
-  track: ParsedChart['trackData'][0] | null;
   chartDoc: ChartDocument;
   audioManager: AudioManager;
   audioData?: Float32Array;
@@ -274,7 +274,9 @@ interface EditorData {
 
 export default function LyricsAlignPage() {
   return (
-    <ChartEditorProvider capabilities={ADD_LYRICS_CAPABILITIES}>
+    <ChartEditorProvider
+      capabilities={ADD_LYRICS_CAPABILITIES}
+      activeScope={DEFAULT_VOCALS_SCOPE}>
       <LyricsAlignInner />
     </ChartEditorProvider>
   );
@@ -605,24 +607,12 @@ function LyricsAlignInner() {
         }
 
         const durationSeconds = audioManager.duration;
-        // No drum-track fallback — add-lyrics doesn't require a drum track
-        // and the lanes-off renderer synthesizes an empty one when needed.
-        const track =
-          nextDoc.parsedChart.trackData.find(
-            t => t.instrument === 'drums' && t.difficulty === 'expert',
-          ) ?? null;
 
         audioManagerRef.current = audioManager;
-        dispatch({
-          type: 'SET_CHART',
-          chart: nextDoc.parsedChart as ParsedChart,
-          track,
-        });
         dispatch({type: 'SET_CHART_DOC', chartDoc: nextDoc});
 
         setEditorData({
           chart: nextDoc.parsedChart as ParsedChart,
-          track,
           chartDoc: nextDoc,
           audioManager,
           audioData: waveform?.interleaved,
@@ -797,13 +787,20 @@ function LyricsAlignInner() {
             <div className="bg-muted rounded-lg p-4 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold">
-                  {removeStyleTags(chart.chartDoc.parsedChart.metadata.name ?? 'Unknown')}{' '}
+                  {removeStyleTags(
+                    chart.chartDoc.parsedChart.metadata.name ?? 'Unknown',
+                  )}{' '}
                   <span className="text-muted-foreground font-normal">by</span>{' '}
-                  {removeStyleTags(chart.chartDoc.parsedChart.metadata.artist ?? 'Unknown')}
+                  {removeStyleTags(
+                    chart.chartDoc.parsedChart.metadata.artist ?? 'Unknown',
+                  )}
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Charted by {removeStyleTags(chart.chartDoc.parsedChart.metadata.charter ?? 'Unknown')} &middot;{' '}
-                  {chart.audioFiles.length} audio file
+                  Charted by{' '}
+                  {removeStyleTags(
+                    chart.chartDoc.parsedChart.metadata.charter ?? 'Unknown',
+                  )}{' '}
+                  &middot; {chart.audioFiles.length} audio file
                   {chart.audioFiles.length !== 1 ? 's' : ''}
                   {chart.vocalsFile && ' (vocals stem available)'} &middot;{' '}
                   {chart.sourceFormat === 'sng'

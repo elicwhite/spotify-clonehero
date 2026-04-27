@@ -77,15 +77,25 @@ function emptyVocalPart(
   };
 }
 
-function chartWithVocals(
-  notePhrases: NormalizedVocalPhrase[],
-): ChartDocument {
+function chartWithVocals(notePhrases: NormalizedVocalPhrase[]): ChartDocument {
   const doc = emptyChart();
   doc.parsedChart.vocalTracks = {
     parts: {vocals: emptyVocalPart(notePhrases)},
     rangeShifts: [],
     lyricShifts: [],
   };
+  return doc;
+}
+
+function chartWithMultiPartVocals(
+  partNamesToPhrases: Record<string, NormalizedVocalPhrase[]>,
+): ChartDocument {
+  const doc = emptyChart();
+  const parts: Record<string, NormalizedVocalPart> = {};
+  for (const [name, phrases] of Object.entries(partNamesToPhrases)) {
+    parts[name] = emptyVocalPart(phrases);
+  }
+  doc.parsedChart.vocalTracks = {parts, rangeShifts: [], lyricShifts: []};
   return doc;
 }
 
@@ -152,10 +162,7 @@ describe('phrase helpers', () => {
   });
 
   it('movePhraseStart cannot cross the previous phrase end', () => {
-    const doc = chartWithVocals([
-      makePhrase(0, 480),
-      makePhrase(960, 480),
-    ]);
+    const doc = chartWithVocals([makePhrase(0, 480), makePhrase(960, 480)]);
     const final = movePhraseStart(doc, 960, 0);
     expect(final).toBe(480);
   });
@@ -169,10 +176,7 @@ describe('phrase helpers', () => {
   });
 
   it('movePhraseEnd cannot cross the next phrase start', () => {
-    const doc = chartWithVocals([
-      makePhrase(0, 480),
-      makePhrase(960, 480),
-    ]);
+    const doc = chartWithVocals([makePhrase(0, 480), makePhrase(960, 480)]);
     const final = movePhraseEnd(doc, 480, 9999);
     expect(final).toBe(960);
   });
@@ -201,6 +205,9 @@ describe('entityHandlers dispatch', () => {
       lyricShifts: [],
     };
 
+    const drumsCtx = {
+      trackKey: {instrument: 'drums', difficulty: 'expert'},
+    } as const;
     for (const kind of [
       'note',
       'section',
@@ -209,10 +216,12 @@ describe('entityHandlers dispatch', () => {
       'phrase-end',
     ] as const) {
       const handler = entityHandlers[kind];
-      const ids = handler.listIds(doc);
+      // Note kind requires a trackKey; chart-wide and vocal kinds ignore it.
+      const ctx = kind === 'note' ? drumsCtx : undefined;
+      const ids = handler.listIds(doc, ctx);
       expect(ids.length).toBeGreaterThan(0);
       for (const id of ids) {
-        expect(handler.locate(doc, id)).not.toBeNull();
+        expect(handler.locate(doc, id, ctx)).not.toBeNull();
       }
     }
   });
@@ -227,6 +236,7 @@ describe('entityHandlers dispatch', () => {
       noteId({tick: 480, type: 'redDrum'}),
       240,
       1,
+      {trackKey: {instrument: 'drums', difficulty: 'expert'}},
     );
     expect(newId).toBe(noteId({tick: 720, type: 'yellowDrum'}));
     // Original untouched
@@ -243,31 +253,35 @@ describe('entityHandlers dispatch', () => {
     expect(doc.parsedChart.sections.map(s => s.tick)).toEqual([1920]);
   });
 
-  it('lyric handler returns clamped id when drag overshoots phrase', () => {
+  it('lyric handler returns clamped id (default vocals part) when drag overshoots phrase', () => {
     const doc = chartWithVocals([makePhrase(0, 480, [240])]);
     const cloned = cloneDocFor('lyric', doc);
-    const newId = entityHandlers.lyric.move(cloned, '240', 9999, 0);
-    expect(newId).toBe('480');
+    const newId = entityHandlers.lyric.move(cloned, 'vocals:240', 9999, 0);
+    expect(newId).toBe('vocals:480');
   });
 
   it('phrase-start handler returns same id when fully clamped', () => {
-    const doc = chartWithVocals([
-      makePhrase(0, 480),
-      makePhrase(960, 480),
-    ]);
+    const doc = chartWithVocals([makePhrase(0, 480), makePhrase(960, 480)]);
     const cloned = cloneDocFor('phrase-start', doc);
-    const newId = entityHandlers['phrase-start'].move(cloned, '960', -1000, 0);
-    expect(newId).toBe('480');
+    const newId = entityHandlers['phrase-start'].move(
+      cloned,
+      'vocals:960',
+      -1000,
+      0,
+    );
+    expect(newId).toBe('vocals:480');
   });
 
   it('phrase-end handler returns same id when fully clamped against next phrase', () => {
-    const doc = chartWithVocals([
-      makePhrase(0, 480),
-      makePhrase(960, 480),
-    ]);
+    const doc = chartWithVocals([makePhrase(0, 480), makePhrase(960, 480)]);
     const cloned = cloneDocFor('phrase-end', doc);
-    const newId = entityHandlers['phrase-end'].move(cloned, '480', 9999, 0);
-    expect(newId).toBe('960');
+    const newId = entityHandlers['phrase-end'].move(
+      cloned,
+      'vocals:480',
+      9999,
+      0,
+    );
+    expect(newId).toBe('vocals:960');
   });
 });
 
@@ -277,11 +291,106 @@ describe('entityHandlers dispatch', () => {
 
 describe('phrase listing helpers', () => {
   it('start + end ticks line up phrase by phrase', () => {
-    const doc = chartWithVocals([
-      makePhrase(0, 480),
-      makePhrase(960, 240),
-    ]);
+    const doc = chartWithVocals([makePhrase(0, 480), makePhrase(960, 240)]);
     expect(listPhraseStartTicks(doc)).toEqual([0, 960]);
     expect(listPhraseEndTicks(doc)).toEqual([480, 1200]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-part vocals — harm1/harm2/harm3 isolation
+// ---------------------------------------------------------------------------
+
+describe('multi-part vocal helpers', () => {
+  it('listLyricTicks / listPhraseStartTicks return only the requested part', () => {
+    const doc = chartWithMultiPartVocals({
+      vocals: [makePhrase(0, 480, [240])],
+      harm1: [makePhrase(960, 480, [1200])],
+      harm2: [makePhrase(1920, 480, [2160])],
+    });
+    expect(listLyricTicks(doc, 'vocals')).toEqual([240]);
+    expect(listLyricTicks(doc, 'harm1')).toEqual([1200]);
+    expect(listLyricTicks(doc, 'harm2')).toEqual([2160]);
+    expect(listLyricTicks(doc, 'harm3')).toEqual([]);
+    expect(listPhraseStartTicks(doc, 'vocals')).toEqual([0]);
+    expect(listPhraseStartTicks(doc, 'harm1')).toEqual([960]);
+  });
+
+  it('moveLyric in harm1 does not touch vocals', () => {
+    const doc = chartWithMultiPartVocals({
+      vocals: [makePhrase(0, 480, [240])],
+      harm1: [makePhrase(0, 480, [240])],
+    });
+    const final = moveLyric(doc, 240, 360, 'harm1');
+    expect(final).toBe(360);
+    expect(listLyricTicks(doc, 'vocals')).toEqual([240]);
+    expect(listLyricTicks(doc, 'harm1')).toEqual([360]);
+  });
+
+  it('movePhraseStart in harm1 does not touch vocals', () => {
+    const doc = chartWithMultiPartVocals({
+      vocals: [makePhrase(0, 480)],
+      harm1: [makePhrase(0, 480)],
+    });
+    movePhraseStart(doc, 0, 120, 'harm1');
+    expect(listPhraseStartTicks(doc, 'vocals')).toEqual([0]);
+    expect(listPhraseStartTicks(doc, 'harm1')).toEqual([120]);
+  });
+
+  it('movePhraseEnd in harm2 does not touch other parts', () => {
+    const doc = chartWithMultiPartVocals({
+      vocals: [makePhrase(0, 480)],
+      harm1: [makePhrase(0, 480)],
+      harm2: [makePhrase(0, 480)],
+    });
+    movePhraseEnd(doc, 480, 600, 'harm2');
+    expect(listPhraseEndTicks(doc, 'vocals')).toEqual([480]);
+    expect(listPhraseEndTicks(doc, 'harm1')).toEqual([480]);
+    expect(listPhraseEndTicks(doc, 'harm2')).toEqual([600]);
+  });
+
+  it('lyric handler with partName="harm1" returns harm1 ids and ignores vocals', () => {
+    const doc = chartWithMultiPartVocals({
+      vocals: [makePhrase(0, 480, [240])],
+      harm1: [makePhrase(0, 480, [120])],
+    });
+    expect(entityHandlers.lyric.listIds(doc, {partName: 'harm1'})).toEqual([
+      'harm1:120',
+    ]);
+    expect(entityHandlers.lyric.listIds(doc, {partName: 'vocals'})).toEqual([
+      'vocals:240',
+    ]);
+    // A vocals-scoped move against a harm1 id is rejected (returns id unchanged).
+    const cloned = cloneDocFor('lyric', doc);
+    const unchanged = entityHandlers.lyric.move(cloned, 'harm1:120', 120, 0, {
+      partName: 'vocals',
+    });
+    expect(unchanged).toBe('harm1:120');
+    expect(listLyricTicks(cloned, 'harm1')).toEqual([120]);
+  });
+
+  it('phrase-start handler with partName="harm2" moves only that part', () => {
+    const doc = chartWithMultiPartVocals({
+      vocals: [makePhrase(0, 480)],
+      harm2: [makePhrase(0, 480)],
+    });
+    const cloned = cloneDocFor('phrase-start', doc);
+    const newId = entityHandlers['phrase-start'].move(
+      cloned,
+      'harm2:0',
+      120,
+      0,
+      {partName: 'harm2'},
+    );
+    expect(newId).toBe('harm2:120');
+    expect(listPhraseStartTicks(cloned, 'vocals')).toEqual([0]);
+    expect(listPhraseStartTicks(cloned, 'harm2')).toEqual([120]);
+  });
+
+  it('rejects malformed ids without a part:tick separator', () => {
+    const doc = chartWithMultiPartVocals({
+      vocals: [makePhrase(0, 480, [240])],
+    });
+    expect(entityHandlers.lyric.locate(doc, '240')).toBeNull();
   });
 });

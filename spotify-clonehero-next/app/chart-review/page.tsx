@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {parseChartFile} from '@eliwhite/scan-chart';
+import {defaultIniChartModifiers, parseChartFile} from '@eliwhite/scan-chart';
 import {Loader2} from 'lucide-react';
 import {toast} from 'sonner';
 
@@ -51,14 +51,10 @@ interface Rating {
 // Constants
 // ---------------------------------------------------------------------------
 
+/** Chart-review parses charts with pro-drums interpretation regardless of
+ *  song.ini. Everything else falls back to scan-chart's defaults. */
 const PRO_DRUMS_MODIFIERS = {
-  song_length: 0,
-  hopo_frequency: 0,
-  eighthnote_hopo: false,
-  multiplier_note: 0,
-  sustain_cutoff_threshold: -1,
-  chord_snap_threshold: 0,
-  five_lane_drums: false,
+  ...defaultIniChartModifiers,
   pro_drums: true,
 } as const;
 

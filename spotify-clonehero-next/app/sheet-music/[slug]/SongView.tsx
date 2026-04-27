@@ -655,7 +655,6 @@ export default function Renderer({
     }
   }, [metadata]);
 
-
   // Modify the play function to handle practice mode
   const handlePlay = useCallback(() => {
     if (!audioManagerRef.current) {

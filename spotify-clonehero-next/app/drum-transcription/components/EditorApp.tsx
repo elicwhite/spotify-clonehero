@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback, useEffect, useMemo, useState} from 'react';
-import {parseChartFile} from '@eliwhite/scan-chart';
+import {defaultIniChartModifiers, parseChartFile} from '@eliwhite/scan-chart';
 import {Loader2, AlertCircle} from 'lucide-react';
 import {toast} from 'sonner';
 
@@ -37,15 +37,11 @@ import {getDrumNotes} from '@/lib/chart-edit';
 import {buildTimedTempos} from '@/lib/drum-transcription/timing';
 import type {DrumNote} from '@/lib/chart-edit';
 
-/** Pro drums modifiers for scan-chart parsing. */
+/** Drum-transcription always parses charts with pro-drums interpretation
+ *  — the editor is drum-only and pro-drums tom/cymbal modifiers are
+ *  meaningful regardless of any upstream song.ini. */
 const PRO_DRUMS_MODIFIERS = {
-  song_length: 0,
-  hopo_frequency: 0,
-  eighthnote_hopo: false,
-  multiplier_note: 0,
-  sustain_cutoff_threshold: -1,
-  chord_snap_threshold: 0,
-  five_lane_drums: false,
+  ...defaultIniChartModifiers,
   pro_drums: true,
 } as const;
 
@@ -295,10 +291,14 @@ function EditorAppInner({projectId}: {projectId: string}) {
           );
         }
 
-        // 5. Build editable ChartDocument from chart bytes
-        const chartDoc = readChart([
-          {fileName: 'notes.chart', data: chartBytes},
-        ]);
+        // 5. Build editable ChartDocument from chart bytes. Force pro_drums
+        // so the chartDoc parses with the same interpretation we validated
+        // with PRO_DRUMS_MODIFIERS just above; otherwise edits run against
+        // a different interpretation than the validation pass.
+        const chartDoc = readChart(
+          [{fileName: 'notes.chart', data: chartBytes}],
+          {pro_drums: true},
+        );
 
         // 6. Load confidence data (if available)
         try {
@@ -407,8 +407,8 @@ function EditorAppInner({projectId}: {projectId: string}) {
         audioManagerRef.current = audioManager;
         setAudioManager(audioManager);
 
-        // 11. Update editor state
-        dispatch({type: 'SET_CHART', chart: parsed, track: drumTrack});
+        // 11. Update editor state. ChartDoc carries the parsed chart;
+        // consumers derive the active track via selectActiveTrack().
         dispatch({type: 'SET_CHART_DOC', chartDoc});
         setLoadingState('ready');
       } catch (err) {
@@ -548,7 +548,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
     );
   }
 
-  const {chart} = state;
+  const chart = state.chartDoc?.parsedChart ?? null;
   if (!chart || !audioManager || !cloneHeroMetadata) {
     return null;
   }

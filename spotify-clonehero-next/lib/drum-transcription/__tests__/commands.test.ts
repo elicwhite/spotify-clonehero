@@ -28,8 +28,11 @@ import type {
   DrumNoteType,
   ParsedChart,
   ParsedTrackData,
+  TrackKey,
 } from '@/lib/chart-edit';
 import {createEmptyChart, addDrumNote, getDrumNotes} from '@/lib/chart-edit';
+
+const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -205,7 +208,7 @@ describe('AddNoteCommand', () => {
   it('adds a note to an empty track', () => {
     const doc = makeDoc();
     const note: DrumNote = {tick: 480, type: 'redDrum', length: 0, flags: {}};
-    const cmd = new AddNoteCommand(note);
+    const cmd = new AddNoteCommand(note, DRUMS_KEY);
 
     const result = cmd.execute(doc);
     const notes = getExpertNotes(result);
@@ -225,7 +228,7 @@ describe('AddNoteCommand', () => {
       length: 0,
       flags: {cymbal: true},
     };
-    const cmd = new AddNoteCommand(note);
+    const cmd = new AddNoteCommand(note, DRUMS_KEY);
 
     const result = cmd.execute(doc);
     const notes = getExpertNotes(result);
@@ -238,7 +241,7 @@ describe('AddNoteCommand', () => {
   it('does not add a duplicate', () => {
     const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
     const note: DrumNote = {tick: 480, type: 'redDrum', length: 0, flags: {}};
-    const cmd = new AddNoteCommand(note);
+    const cmd = new AddNoteCommand(note, DRUMS_KEY);
 
     const result = cmd.execute(doc);
     expect(getExpertNotes(result)).toHaveLength(1);
@@ -247,7 +250,7 @@ describe('AddNoteCommand', () => {
   it('undo removes the added note', () => {
     const doc = makeDoc();
     const note: DrumNote = {tick: 480, type: 'redDrum', length: 0, flags: {}};
-    const cmd = new AddNoteCommand(note);
+    const cmd = new AddNoteCommand(note, DRUMS_KEY);
 
     const after = cmd.execute(doc);
     expect(getExpertNotes(after)).toHaveLength(1);
@@ -259,7 +262,7 @@ describe('AddNoteCommand', () => {
   it('does not mutate the original document', () => {
     const doc = makeDoc();
     const note: DrumNote = {tick: 480, type: 'redDrum', length: 0, flags: {}};
-    const cmd = new AddNoteCommand(note);
+    const cmd = new AddNoteCommand(note, DRUMS_KEY);
 
     cmd.execute(doc);
     expect(getExpertNotes(doc)).toHaveLength(0);
@@ -277,7 +280,7 @@ describe('DeleteNotesCommand', () => {
       {tick: 480, type: 'redDrum'},
       {tick: 960, type: 'yellowDrum', flags: {cymbal: true}},
     ]);
-    const cmd = new DeleteNotesCommand(new Set(['480:redDrum']));
+    const cmd = new DeleteNotesCommand(new Set(['480:redDrum']), DRUMS_KEY);
 
     const result = cmd.execute(doc);
     const remaining = getExpertNotes(result);
@@ -290,7 +293,7 @@ describe('DeleteNotesCommand', () => {
       {tick: 0, type: 'kick'},
       {tick: 480, type: 'redDrum', flags: {accent: true}},
     ]);
-    const cmd = new DeleteNotesCommand(new Set(['480:redDrum']));
+    const cmd = new DeleteNotesCommand(new Set(['480:redDrum']), DRUMS_KEY);
 
     const after = cmd.execute(doc);
     expect(getExpertNotes(after)).toHaveLength(1);
@@ -310,7 +313,9 @@ describe('DeleteNotesCommand', () => {
 describe('MoveEntitiesCommand: notes', () => {
   it('moves notes by tick and lane delta', () => {
     const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
-    const cmd = new MoveEntitiesCommand('note', ['480:redDrum'], 240, 1);
+    const cmd = new MoveEntitiesCommand('note', ['480:redDrum'], 240, 1, {
+      trackKey: DRUMS_KEY,
+    });
 
     const result = cmd.execute(doc);
     const moved = getExpertNotes(result);
@@ -321,7 +326,9 @@ describe('MoveEntitiesCommand: notes', () => {
 
   it('clamps tick to 0', () => {
     const doc = makeDoc([{tick: 100, type: 'kick'}]);
-    const cmd = new MoveEntitiesCommand('note', ['100:kick'], -200, 0);
+    const cmd = new MoveEntitiesCommand('note', ['100:kick'], -200, 0, {
+      trackKey: DRUMS_KEY,
+    });
 
     const result = cmd.execute(doc);
     expect(getExpertNotes(result)[0].tick).toBe(0);
@@ -329,7 +336,9 @@ describe('MoveEntitiesCommand: notes', () => {
 
   it('undo reverses the move', () => {
     const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
-    const cmd = new MoveEntitiesCommand('note', ['480:redDrum'], 240, 1);
+    const cmd = new MoveEntitiesCommand('note', ['480:redDrum'], 240, 1, {
+      trackKey: DRUMS_KEY,
+    });
 
     const after = cmd.execute(doc);
     const reverted = cmd.undo(after);
@@ -346,7 +355,7 @@ describe('MoveEntitiesCommand: notes', () => {
 describe('ToggleFlagCommand', () => {
   it('toggles cymbal flag on', () => {
     const doc = makeDoc([{tick: 480, type: 'yellowDrum'}]);
-    const cmd = new ToggleFlagCommand(['480:yellowDrum'], 'cymbal');
+    const cmd = new ToggleFlagCommand(['480:yellowDrum'], 'cymbal', DRUMS_KEY);
 
     const result = cmd.execute(doc);
     expect(getExpertNotes(result)[0].flags.cymbal).toBe(true);
@@ -356,7 +365,7 @@ describe('ToggleFlagCommand', () => {
     const doc = makeDoc([
       {tick: 480, type: 'yellowDrum', flags: {cymbal: true}},
     ]);
-    const cmd = new ToggleFlagCommand(['480:yellowDrum'], 'cymbal');
+    const cmd = new ToggleFlagCommand(['480:yellowDrum'], 'cymbal', DRUMS_KEY);
 
     const result = cmd.execute(doc);
     // getDrumNotes returns undefined (not false) when no cymbal marker is present
@@ -367,7 +376,7 @@ describe('ToggleFlagCommand', () => {
     const doc = makeDoc([
       {tick: 480, type: 'yellowDrum', flags: {cymbal: true}},
     ]);
-    const cmd = new ToggleFlagCommand(['480:yellowDrum'], 'cymbal');
+    const cmd = new ToggleFlagCommand(['480:yellowDrum'], 'cymbal', DRUMS_KEY);
 
     const after = cmd.execute(doc);
     const reverted = cmd.undo(after);
@@ -379,7 +388,11 @@ describe('ToggleFlagCommand', () => {
       {tick: 0, type: 'redDrum'},
       {tick: 480, type: 'redDrum'},
     ]);
-    const cmd = new ToggleFlagCommand(['0:redDrum', '480:redDrum'], 'accent');
+    const cmd = new ToggleFlagCommand(
+      ['0:redDrum', '480:redDrum'],
+      'accent',
+      DRUMS_KEY,
+    );
 
     const result = cmd.execute(doc);
     const edited = getExpertNotes(result);
@@ -496,14 +509,23 @@ describe('BatchCommand', () => {
   it('executes all commands in order', () => {
     const doc = makeDoc();
     const cmd = new BatchCommand([
-      new AddNoteCommand({tick: 0, type: 'kick', length: 0, flags: {}}),
-      new AddNoteCommand({tick: 480, type: 'redDrum', length: 0, flags: {}}),
-      new AddNoteCommand({
-        tick: 960,
-        type: 'yellowDrum',
-        length: 0,
-        flags: {cymbal: true},
-      }),
+      new AddNoteCommand(
+        {tick: 0, type: 'kick', length: 0, flags: {}},
+        DRUMS_KEY,
+      ),
+      new AddNoteCommand(
+        {tick: 480, type: 'redDrum', length: 0, flags: {}},
+        DRUMS_KEY,
+      ),
+      new AddNoteCommand(
+        {
+          tick: 960,
+          type: 'yellowDrum',
+          length: 0,
+          flags: {cymbal: true},
+        },
+        DRUMS_KEY,
+      ),
     ]);
 
     const result = cmd.execute(doc);
@@ -513,8 +535,14 @@ describe('BatchCommand', () => {
   it('undo reverses all commands in reverse order', () => {
     const doc = makeDoc();
     const cmd = new BatchCommand([
-      new AddNoteCommand({tick: 0, type: 'kick', length: 0, flags: {}}),
-      new AddNoteCommand({tick: 480, type: 'redDrum', length: 0, flags: {}}),
+      new AddNoteCommand(
+        {tick: 0, type: 'kick', length: 0, flags: {}},
+        DRUMS_KEY,
+      ),
+      new AddNoteCommand(
+        {tick: 480, type: 'redDrum', length: 0, flags: {}},
+        DRUMS_KEY,
+      ),
     ]);
 
     const after = cmd.execute(doc);
@@ -525,8 +553,11 @@ describe('BatchCommand', () => {
   it('can combine different command types', () => {
     const doc = makeDoc([{tick: 0, type: 'kick'}]);
     const cmd = new BatchCommand([
-      new AddNoteCommand({tick: 480, type: 'redDrum', length: 0, flags: {}}),
-      new DeleteNotesCommand(new Set(['0:kick'])),
+      new AddNoteCommand(
+        {tick: 480, type: 'redDrum', length: 0, flags: {}},
+        DRUMS_KEY,
+      ),
+      new DeleteNotesCommand(new Set(['0:kick']), DRUMS_KEY),
     ]);
 
     const result = cmd.execute(doc);
@@ -772,7 +803,14 @@ function makeVocalDoc(): ChartDocument {
             msLength: 0,
             isPercussion: false,
             notes: [
-              {tick: 240, msTime: 0, length: 60, msLength: 0, pitch: 60, type: 'pitched'},
+              {
+                tick: 240,
+                msTime: 0,
+                length: 60,
+                msLength: 0,
+                pitch: 60,
+                type: 'pitched',
+              },
             ],
             lyrics: [{tick: 240, msTime: 0, text: 'la', flags: 0}],
           },
@@ -793,7 +831,9 @@ function makeVocalDoc(): ChartDocument {
 describe('MoveEntitiesCommand: lyric', () => {
   it('moves a lyric within its phrase and undo restores it', () => {
     const doc = makeVocalDoc();
-    const cmd = new MoveEntitiesCommand('lyric', ['240'], 120, 0);
+    const cmd = new MoveEntitiesCommand('lyric', ['vocals:240'], 120, 0, {
+      partName: 'vocals',
+    });
 
     const after = cmd.execute(doc);
     const phrase = after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
@@ -809,7 +849,9 @@ describe('MoveEntitiesCommand: lyric', () => {
 
   it('clamps the lyric drag to the phrase upper bound', () => {
     const doc = makeVocalDoc();
-    const cmd = new MoveEntitiesCommand('lyric', ['240'], 9999, 0);
+    const cmd = new MoveEntitiesCommand('lyric', ['vocals:240'], 9999, 0, {
+      partName: 'vocals',
+    });
     const after = cmd.execute(doc);
     expect(
       after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0].lyrics[0].tick,
@@ -820,7 +862,9 @@ describe('MoveEntitiesCommand: lyric', () => {
 describe('MoveEntitiesCommand: phrase markers', () => {
   it('phrase-start drag adjusts length only; undo restores the original tick', () => {
     const doc = makeVocalDoc();
-    const cmd = new MoveEntitiesCommand('phrase-start', ['0'], 120, 0);
+    const cmd = new MoveEntitiesCommand('phrase-start', ['vocals:0'], 120, 0, {
+      partName: 'vocals',
+    });
 
     const after = cmd.execute(doc);
     const moved = after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
@@ -836,7 +880,9 @@ describe('MoveEntitiesCommand: phrase markers', () => {
 
   it('phrase-end drag adjusts length only; undo restores the original end tick', () => {
     const doc = makeVocalDoc();
-    const cmd = new MoveEntitiesCommand('phrase-end', ['480'], 240, 0);
+    const cmd = new MoveEntitiesCommand('phrase-end', ['vocals:480'], 240, 0, {
+      partName: 'vocals',
+    });
 
     const after = cmd.execute(doc);
     const moved = after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];

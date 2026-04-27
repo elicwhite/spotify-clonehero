@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import type {SceneReconciler} from './SceneReconciler';
 import {NoteRenderer, type NoteElementData} from './NoteRenderer';
 import {MarkerRenderer, type MarkerElementData} from './MarkerRenderer';
-import {type HitResult, calculateNoteXOffset} from './types';
+import {type HitResult} from './types';
+import {parseMarkerKey} from './markerKeys';
+import {drums4LaneSchema} from '@/lib/chart-edit';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -10,11 +12,19 @@ import {type HitResult, calculateNoteXOffset} from './types';
 
 const HIGHWAY_HALF_WIDTH = 0.45;
 
-/** Editor lanes: 0=kick, 1=red, 2=yellow, 3=blue, 4=green. */
-const LANE_X_POSITIONS = [
-  0, // kick -- centered
-  ...Array.from({length: 4}, (_, i) => calculateNoteXOffset('drums', i)),
-];
+/**
+ * Editor lane → world X position. Sourced from `drums4LaneSchema` so the
+ * schema is the single source of truth for lane geometry. The renderer's
+ * `calculateNoteXOffset` is what the schema's `worldXOffset` mirrors.
+ */
+const LANE_X_POSITIONS: number[] = drums4LaneSchema.lanes.map(l => {
+  if (l.worldXOffset === undefined) {
+    throw new Error(
+      `drums4LaneSchema lane ${l.index} (${l.label}) is missing worldXOffset`,
+    );
+  }
+  return l.worldXOffset;
+});
 
 // ---------------------------------------------------------------------------
 // InteractionManager
@@ -112,12 +122,7 @@ export class InteractionManager {
     // The flag boxes sit outside the highway lanes, so they can't conflict
     // with notes. Picking them first means the side-mounted text always
     // responds to hover even if a note is at the same tick.
-    const flagHit = this.hitTestMarkerFlags(
-      canvasX,
-      canvasY,
-      canvasW,
-      canvasH,
-    );
+    const flagHit = this.hitTestMarkerFlags(canvasX, canvasY, canvasW, canvasH);
     if (flagHit) return flagHit;
 
     // --- 2. Notes ---
@@ -275,7 +280,7 @@ export class InteractionManager {
           continue;
         }
 
-        const hit = this.elementToMarkerHit(key, prefix);
+        const hit = this.elementToMarkerHit(key);
         if (hit) return hit;
       }
     }
@@ -302,30 +307,29 @@ export class InteractionManager {
           continue;
         }
 
-        const hit = this.elementToMarkerHit(key, prefix);
+        const hit = this.elementToMarkerHit(key);
         if (hit) return hit;
       }
     }
     return null;
   }
 
-  private elementToMarkerHit(key: string, prefix: string): HitResult {
+  private elementToMarkerHit(key: string): HitResult {
     const el = this.reconciler.getElement(key);
     if (!el) return null;
     const data = el.data as MarkerElementData;
-    const tickStr = key.slice(prefix.length);
-    const tick = parseInt(tickStr, 10);
-    if (Number.isNaN(tick)) return null;
+    const parsed = parseMarkerKey(key);
+    if (!parsed) return null;
 
-    switch (prefix) {
-      case 'section:':
-        return {type: 'section', tick, name: data.text};
-      case 'lyric:':
-        return {type: 'lyric', tick, text: data.text};
-      case 'phrase-start:':
-        return {type: 'phrase-start', tick};
-      case 'phrase-end:':
-        return {type: 'phrase-end', endTick: tick};
+    switch (parsed.kind) {
+      case 'section':
+        return {type: 'section', tick: parsed.tick, name: data.text};
+      case 'lyric':
+        return {type: 'lyric', tick: parsed.tick, text: data.text};
+      case 'phrase-start':
+        return {type: 'phrase-start', tick: parsed.tick};
+      case 'phrase-end':
+        return {type: 'phrase-end', endTick: parsed.tick};
       default:
         return null;
     }

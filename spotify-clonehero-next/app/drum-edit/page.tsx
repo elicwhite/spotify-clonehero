@@ -35,11 +35,13 @@ import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
+import {defaultIniChartModifiers} from '@eliwhite/scan-chart';
 import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {
   ChartEditorProvider,
+  DEFAULT_DRUMS_EXPERT_SCOPE,
   useChartEditorContext,
 } from '@/components/chart-editor';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
@@ -58,15 +60,12 @@ import {
   type ProjectMetadata,
 } from '@/lib/drum-edit/storage/opfs';
 
-/** scan-chart modifiers for pro drums. */
+/** Drum-edit always parses charts with pro-drums interpretation — the
+ *  page edits a drum chart, and pro-drums tom/cymbal modifiers are
+ *  meaningful regardless of what an upstream song.ini says. Everything
+ *  else falls back to scan-chart's defaults. */
 const PRO_DRUMS_MODIFIERS = {
-  song_length: 0,
-  hopo_frequency: 0,
-  eighthnote_hopo: false,
-  multiplier_note: 0,
-  sustain_cutoff_threshold: -1,
-  chord_snap_threshold: 0,
-  five_lane_drums: false,
+  ...defaultIniChartModifiers,
   pro_drums: true,
 } as const;
 
@@ -76,7 +75,7 @@ const PRO_DRUMS_MODIFIERS = {
 
 export default function DrumEditPage() {
   return (
-    <ChartEditorProvider>
+    <ChartEditorProvider activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
       <Suspense
         fallback={
           <div className="flex items-center justify-center h-screen">
@@ -144,8 +143,9 @@ function DrumEditInner() {
       try {
         const {files, sourceFormat, originalName, sngMetadata} = loaded;
 
-        // Parse chart
-        const chartDoc = readChart(files);
+        // Parse chart. Force pro_drums so tom/cymbal modifiers survive
+        // edit / re-parse cycles even if song.ini omits the flag.
+        const chartDoc = readChart(files, {pro_drums: true});
         const name =
           chartDoc.parsedChart.metadata.name ?? originalName ?? 'Unknown';
         const artist = chartDoc.parsedChart.metadata.artist ?? 'Unknown';
@@ -448,10 +448,12 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
           );
         }
 
-        // 5. Build editable ChartDocument
-        const chartDoc = readChart([
-          {fileName: 'notes.chart', data: chartBytes},
-        ]);
+        // 5. Build editable ChartDocument. Force pro_drums so tom/cymbal
+        // modifiers survive edit / re-parse cycles.
+        const chartDoc = readChart(
+          [{fileName: 'notes.chart', data: chartBytes}],
+          {pro_drums: true},
+        );
 
         // 6. Load audio files from OPFS
         setLoadingStep('Loading audio...');
@@ -501,8 +503,8 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
         }
         if (cancelled) return;
 
-        // 9. Update editor state
-        dispatch({type: 'SET_CHART', chart: parsed, track: drumTrack});
+        // 9. Update editor state. ChartDoc carries the parsed chart;
+        // consumers derive the active track via selectActiveTrack().
         dispatch({type: 'SET_CHART_DOC', chartDoc});
         setLoadingState('ready');
         onReady();
@@ -590,7 +592,7 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
     );
   }
 
-  const {chart} = state;
+  const chart = state.chartDoc?.parsedChart ?? null;
   if (!chart || !audioManager || !cloneHeroMetadata) {
     return null;
   }

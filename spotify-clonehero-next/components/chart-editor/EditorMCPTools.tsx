@@ -1,7 +1,12 @@
 'use client';
 
 import {useEffect, useRef} from 'react';
-import {useChartEditorContext, getSelectedIds} from './ChartEditorContext';
+import {
+  useChartEditorContext,
+  getSelectedIds,
+  selectActiveTrack,
+} from './ChartEditorContext';
+import {trackKeyFromScope} from './scope';
 import {useExecuteCommand, useUndoRedo} from './hooks/useEditCommands';
 import {
   noteId,
@@ -16,16 +21,24 @@ import {buildTimedTempos, tickToMs} from '@/lib/drum-transcription/timing';
 import {typeToLane} from './commands';
 
 /**
- * Registers WebMCP tools for the drum chart editor via navigator.modelContext.
+ * Registers WebMCP tools for the chart editor via navigator.modelContext.
  * Must be rendered inside a ChartEditorProvider.
  *
  * Tools are callable via navigator.modelContextTesting.executeTool() or
  * by any connected AI agent (Claude, etc.) through the WebMCP protocol.
+ *
+ * Drum-note tools are gated by capabilities — pages that don't surface
+ * drum editing (e.g. add-lyrics) don't expose `editor_add_note` etc.
  */
 export default function EditorMCPTools() {
-  const {state, dispatch, audioManagerRef} = useChartEditorContext();
+  const {state, dispatch, audioManagerRef, capabilities} =
+    useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
+
+  const noteToolsEnabled = capabilities.selectable.has('note');
+  const placementToolsEnabled = capabilities.showNotePlacementTools;
+  const toolPaletteEnabled = capabilities.showToolPalette;
 
   // Use refs to capture latest values without re-registering tools.
   // The refs are updated in an effect so the writes happen after
@@ -85,9 +98,7 @@ export default function EditorMCPTools() {
         }> = [];
         const selectedIds = getSelectedIds(s, 'note');
         if (s.chartDoc && selectedIds.size > 0) {
-          const track = s.chartDoc.parsedChart.trackData.find(
-            t => t.instrument === 'drums' && t.difficulty === 'expert',
-          );
+          const track = selectActiveTrack(s);
           if (track) {
             selectedNotes = getDrumNotes(track)
               .filter(n => selectedIds.has(noteId(n)))
@@ -184,174 +195,209 @@ export default function EditorMCPTools() {
       },
     });
 
-    // --- editor_list_notes ---
-    register({
-      name: 'editor_list_notes',
-      description: 'List drum notes in a tick range.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          startTick: {type: 'number'},
-          endTick: {type: 'number'},
-          limit: {type: 'number'},
+    // --- editor_list_notes (gated: requires note selection capability) ---
+    if (noteToolsEnabled) {
+      register({
+        name: 'editor_list_notes',
+        description: 'List drum notes in a tick range.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            startTick: {type: 'number'},
+            endTick: {type: 'number'},
+            limit: {type: 'number'},
+          },
         },
-      },
-      execute: async args => {
-        const s = stateRef.current;
-        if (!s.chartDoc)
-          return {content: [{type: 'text', text: 'No chart loaded'}]};
-        const track = s.chartDoc.parsedChart.trackData.find(
-          t => t.instrument === 'drums' && t.difficulty === 'expert',
-        );
-        if (!track)
-          return {content: [{type: 'text', text: 'No expert drums track'}]};
-        const startTick = (args.startTick as number) ?? 0;
-        const endTick = (args.endTick as number) ?? startTick + 1920;
-        const limit = (args.limit as number) ?? 50;
-        const notes = getDrumNotes(track)
-          .filter(n => n.tick >= startTick && n.tick <= endTick)
-          .slice(0, limit)
-          .map(n => ({
-            id: noteId(n),
-            tick: n.tick,
-            type: n.type,
-            lane: typeToLane(n.type),
-            flags: {
-              cymbal: !!n.flags.cymbal,
-              accent: !!n.flags.accent,
-              ghost: !!n.flags.ghost,
-            },
-          }));
-        return {
-          content: [{type: 'text', text: JSON.stringify(notes, null, 2)}],
-        };
-      },
-    });
-
-    // --- editor_select_note ---
-    register({
-      name: 'editor_select_note',
-      description: 'Select a note by tick and type.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          tick: {type: 'number'},
-          type: {type: 'string'},
-          addToSelection: {type: 'boolean'},
+        execute: async args => {
+          const s = stateRef.current;
+          if (!s.chartDoc)
+            return {content: [{type: 'text', text: 'No chart loaded'}]};
+          const track = selectActiveTrack(s);
+          if (!track)
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: 'No active notes track (the editor may be scoped to vocals/global).',
+                },
+              ],
+            };
+          const startTick = (args.startTick as number) ?? 0;
+          const endTick = (args.endTick as number) ?? startTick + 1920;
+          const limit = (args.limit as number) ?? 50;
+          const notes = getDrumNotes(track)
+            .filter(n => n.tick >= startTick && n.tick <= endTick)
+            .slice(0, limit)
+            .map(n => ({
+              id: noteId(n),
+              tick: n.tick,
+              type: n.type,
+              lane: typeToLane(n.type),
+              flags: {
+                cymbal: !!n.flags.cymbal,
+                accent: !!n.flags.accent,
+                ghost: !!n.flags.ghost,
+              },
+            }));
+          return {
+            content: [{type: 'text', text: JSON.stringify(notes, null, 2)}],
+          };
         },
-        required: ['tick', 'type'],
-      },
-      execute: async args => {
-        const id = `${args.tick}:${args.type}`;
-        const add = (args.addToSelection as boolean) ?? false;
-        const newIds = add
-          ? new Set(getSelectedIds(stateRef.current, 'note'))
-          : new Set<string>();
-        newIds.add(id);
-        dispatchRef.current({type: 'SET_SELECTION', kind: 'note', ids: newIds});
-        // NoteRenderer selection state is pushed by HighwayEditor's overlay effect
-        return {
-          content: [
-            {type: 'text', text: `Selected: ${id} (total: ${newIds.size})`},
-          ],
-        };
-      },
-    });
+      });
 
-    // --- editor_toggle_flag ---
-    register({
-      name: 'editor_toggle_flag',
-      description: 'Toggle a flag (cymbal, accent, ghost) on selected notes.',
-      inputSchema: {
-        type: 'object',
-        properties: {flag: {type: 'string'}},
-        required: ['flag'],
-      },
-      execute: async args => {
-        const flag = args.flag as FlagName;
-        if (!['cymbal', 'accent', 'ghost'].includes(flag))
-          return {content: [{type: 'text', text: 'Invalid flag'}]};
-        const s = stateRef.current;
-        const selected = getSelectedIds(s, 'note');
-        if (selected.size === 0)
-          return {content: [{type: 'text', text: 'No notes selected'}]};
-        executeCommandRef.current(
-          new ToggleFlagCommand(Array.from(selected), flag),
-        );
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Toggled ${flag} on ${selected.size} note(s)`,
-            },
-          ],
-        };
-      },
-    });
-
-    // --- editor_add_note ---
-    register({
-      name: 'editor_add_note',
-      description: 'Add a drum note at a tick and type.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          tick: {type: 'number'},
-          type: {type: 'string'},
-          cymbal: {type: 'boolean'},
+      // --- editor_select_note ---
+      register({
+        name: 'editor_select_note',
+        description: 'Select a note by tick and type.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            tick: {type: 'number'},
+            type: {type: 'string'},
+            addToSelection: {type: 'boolean'},
+          },
+          required: ['tick', 'type'],
         },
-        required: ['tick', 'type'],
-      },
-      execute: async args => {
-        const type = args.type as DrumNoteType;
-        const tick = args.tick as number;
-        const cymbalDefault =
-          type === 'yellowDrum' || type === 'blueDrum' || type === 'greenDrum';
-        const cymbal = (args.cymbal as boolean) ?? cymbalDefault;
-        executeCommandRef.current(
-          new AddNoteCommand({tick, type, length: 0, flags: {cymbal}}),
-        );
-        return {
-          content: [{type: 'text', text: `Added ${type} at tick ${tick}`}],
-        };
-      },
-    });
+        execute: async args => {
+          const id = `${args.tick}:${args.type}`;
+          const add = (args.addToSelection as boolean) ?? false;
+          const newIds = add
+            ? new Set(getSelectedIds(stateRef.current, 'note'))
+            : new Set<string>();
+          newIds.add(id);
+          dispatchRef.current({
+            type: 'SET_SELECTION',
+            kind: 'note',
+            ids: newIds,
+          });
+          return {
+            content: [
+              {type: 'text', text: `Selected: ${id} (total: ${newIds.size})`},
+            ],
+          };
+        },
+      });
 
-    // --- editor_delete_selected ---
-    register({
-      name: 'editor_delete_selected',
-      description: 'Delete all selected notes.',
-      inputSchema: {type: 'object', properties: {}},
-      execute: async () => {
-        const s = stateRef.current;
-        const selected = getSelectedIds(s, 'note');
-        if (selected.size === 0)
-          return {content: [{type: 'text', text: 'No notes selected'}]};
-        executeCommandRef.current(
-          new DeleteNotesCommand(selected as Set<string>),
-        );
-        dispatchRef.current({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
-        return {
-          content: [{type: 'text', text: `Deleted ${selected.size} note(s)`}],
-        };
-      },
-    });
+      // --- editor_delete_selected ---
+      register({
+        name: 'editor_delete_selected',
+        description: 'Delete all selected notes.',
+        inputSchema: {type: 'object', properties: {}},
+        execute: async () => {
+          const s = stateRef.current;
+          const trackKey = trackKeyFromScope(s.activeScope);
+          if (!trackKey)
+            return {content: [{type: 'text', text: 'Not editing a track'}]};
+          const selected = getSelectedIds(s, 'note');
+          if (selected.size === 0)
+            return {content: [{type: 'text', text: 'No notes selected'}]};
+          executeCommandRef.current(
+            new DeleteNotesCommand(selected as Set<string>, trackKey),
+          );
+          dispatchRef.current({
+            type: 'SET_SELECTION',
+            kind: 'note',
+            ids: new Set(),
+          });
+          return {
+            content: [{type: 'text', text: `Deleted ${selected.size} note(s)`}],
+          };
+        },
+      });
+    }
 
-    // --- editor_set_tool ---
-    register({
-      name: 'editor_set_tool',
-      description:
-        'Switch active tool: cursor, place, erase, bpm, timesig, section',
-      inputSchema: {
-        type: 'object',
-        properties: {tool: {type: 'string'}},
-        required: ['tool'],
-      },
-      execute: async args => {
-        dispatchRef.current({type: 'SET_ACTIVE_TOOL', tool: args.tool as any});
-        return {content: [{type: 'text', text: `Tool: ${args.tool}`}]};
-      },
-    });
+    // --- editor_toggle_flag (gated: requires drum-note placement) ---
+    if (placementToolsEnabled) {
+      register({
+        name: 'editor_toggle_flag',
+        description: 'Toggle a flag (cymbal, accent, ghost) on selected notes.',
+        inputSchema: {
+          type: 'object',
+          properties: {flag: {type: 'string'}},
+          required: ['flag'],
+        },
+        execute: async args => {
+          const flag = args.flag as FlagName;
+          if (!['cymbal', 'accent', 'ghost'].includes(flag))
+            return {content: [{type: 'text', text: 'Invalid flag'}]};
+          const s = stateRef.current;
+          const trackKey = trackKeyFromScope(s.activeScope);
+          if (!trackKey)
+            return {content: [{type: 'text', text: 'Not editing a track'}]};
+          const selected = getSelectedIds(s, 'note');
+          if (selected.size === 0)
+            return {content: [{type: 'text', text: 'No notes selected'}]};
+          executeCommandRef.current(
+            new ToggleFlagCommand(Array.from(selected), flag, trackKey),
+          );
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Toggled ${flag} on ${selected.size} note(s)`,
+              },
+            ],
+          };
+        },
+      });
+
+      // --- editor_add_note ---
+      register({
+        name: 'editor_add_note',
+        description: 'Add a drum note at a tick and type.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            tick: {type: 'number'},
+            type: {type: 'string'},
+            cymbal: {type: 'boolean'},
+          },
+          required: ['tick', 'type'],
+        },
+        execute: async args => {
+          const trackKey = trackKeyFromScope(stateRef.current.activeScope);
+          if (!trackKey)
+            return {content: [{type: 'text', text: 'Not editing a track'}]};
+          const type = args.type as DrumNoteType;
+          const tick = args.tick as number;
+          const cymbalDefault =
+            type === 'yellowDrum' ||
+            type === 'blueDrum' ||
+            type === 'greenDrum';
+          const cymbal = (args.cymbal as boolean) ?? cymbalDefault;
+          executeCommandRef.current(
+            new AddNoteCommand(
+              {tick, type, length: 0, flags: {cymbal}},
+              trackKey,
+            ),
+          );
+          return {
+            content: [{type: 'text', text: `Added ${type} at tick ${tick}`}],
+          };
+        },
+      });
+    }
+
+    // --- editor_set_tool (gated: requires tool palette) ---
+    if (toolPaletteEnabled) {
+      register({
+        name: 'editor_set_tool',
+        description:
+          'Switch active tool: cursor, place, erase, bpm, timesig, section',
+        inputSchema: {
+          type: 'object',
+          properties: {tool: {type: 'string'}},
+          required: ['tool'],
+        },
+        execute: async args => {
+          dispatchRef.current({
+            type: 'SET_ACTIVE_TOOL',
+            tool: args.tool as any,
+          });
+          return {content: [{type: 'text', text: `Tool: ${args.tool}`}]};
+        },
+      });
+    }
 
     // --- editor_undo / editor_redo ---
     register({
@@ -420,7 +466,9 @@ export default function EditorMCPTools() {
         }
       }
     };
-  }, []); // Register once on mount, use refs for latest state
+    // Re-register when capability gates flip; refs cover everything else.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noteToolsEnabled, placementToolsEnabled, toolPaletteEnabled]);
 
   return null;
 }
