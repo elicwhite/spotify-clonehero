@@ -70,8 +70,7 @@ lib/drum-transcription/            # Core logic (testable, no React)
 | Chart parsing + writing, types (`NoteEvent`, `noteTypes`, `noteFlags`, `ChartDocument`, `ParsedChart`) | `@eliwhite/scan-chart`                                                    |
 | Chart edit helpers (`addDrumNote`, `addSection`, `addTempo`), `readChart` wrapper                      | `lib/chart-edit/`                                                         |
 | SNG parsing                                                                                            | `parse-sng`                                                               |
-| Tick → ms conversion                                                                                   | `app/sheet-music/[slug]/chartUtils.ts` → `tickToMs()`                     |
-| Drum note → instrument mapping                                                                         | `lib/fill-detector/drumLaneMap.ts`                                        |
+| Tick → ms conversion                                                                                   | `lib/chart-utils/tickToMs.ts` → `tickToMs()`                              |
 | Drum note → VexFlow notation                                                                           | `app/sheet-music/[slug]/convertToVexflow.ts`                              |
 | OPFS file read/write                                                                                   | `lib/fileSystemHelpers.ts`                                                |
 | Audio playback (primary)                                                                               | `lib/preview/audioManager.ts`                                             |
