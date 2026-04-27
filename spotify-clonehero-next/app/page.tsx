@@ -91,21 +91,6 @@ export default function Home() {
             </Link>
           </CardFooter>
         </Card>
-        <Card className="flex flex-col justify-between">
-          <CardHeader>
-            <CardTitle>Updater</CardTitle>
-            <CardDescription>
-              Check Chorus for newer versions of your installed charts.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 py-4">
-            <Link
-              href="/updates"
-              className={buttonVariants({variant: 'default'})}>
-              Go to Tool
-            </Link>
-          </CardContent>
-        </Card>
       </section>
     </main>
   );
