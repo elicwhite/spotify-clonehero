@@ -11,13 +11,21 @@ import {
 import {parseChartFile} from '@eliwhite/scan-chart';
 import {HotkeysProvider} from '@tanstack/react-hotkeys';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type {ChartDocument, DrumNote, EntityKind} from '@/lib/chart-edit';
+import type {
+  ChartDocument,
+  DrumNote,
+  EntityKind,
+  ParsedTrackData,
+} from '@/lib/chart-edit';
+import {findTrack, findTrackInParsedChart} from '@/lib/chart-edit';
 import type {EditCommand} from './commands';
 import type {EditorCapabilities} from './capabilities';
 import {DRUM_EDIT_CAPABILITIES} from './capabilities';
 import type {HighwayMode} from '@/lib/preview/highway';
 import type {SceneReconciler} from '@/lib/preview/highway/SceneReconciler';
 import type {NoteRenderer} from '@/lib/preview/highway/NoteRenderer';
+import type {EditorScope} from './scope';
+import {DEFAULT_DRUMS_EXPERT_SCOPE, isTrackScope} from './scope';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,6 +52,15 @@ export interface ChartEditorState {
 
   /** The editable chart document (source of truth for editing). */
   chartDoc: ChartDocument | null;
+
+  /**
+   * What the editor is currently editing. Replaces the implicit
+   * "expert drums" assumption that used to be hardcoded across the
+   * editor surface. Defaults to `DEFAULT_DRUMS_EXPERT_SCOPE` for
+   * pre-migration compatibility; consumer pages set it explicitly via
+   * the `<ChartEditorProvider activeScope={...}>` prop.
+   */
+  activeScope: EditorScope;
 
   /** Whether audio is currently playing. */
   isPlaying: boolean;
@@ -149,7 +166,9 @@ export type ChartEditorAction =
   // -- Loop --
   | {type: 'SET_LOOP_REGION'; region: {startMs: number; endMs: number} | null}
   // -- Highway mode --
-  | {type: 'SET_HIGHWAY_MODE'; mode: HighwayMode};
+  | {type: 'SET_HIGHWAY_MODE'; mode: HighwayMode}
+  // -- Scope --
+  | {type: 'SET_ACTIVE_SCOPE'; scope: EditorScope};
 
 export interface ChartEditorContextValue {
   state: ChartEditorState;
@@ -167,10 +186,12 @@ export interface ChartEditorContextValue {
 // Initial state
 // ---------------------------------------------------------------------------
 
-const initialState: ChartEditorState = {
+/** @internal — exported for unit tests. */
+export const initialState: ChartEditorState = {
   chart: null,
   track: null,
   chartDoc: null,
+  activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
   isPlaying: false,
   currentTimeMs: 0,
   playbackSpeed: 1.0,
@@ -202,7 +223,8 @@ const initialState: ChartEditorState = {
 // Reducer
 // ---------------------------------------------------------------------------
 
-function chartEditorReducer(
+/** @internal — exported for unit tests in `__tests__/reducer.test.ts`. */
+export function chartEditorReducer(
   state: ChartEditorState,
   action: ChartEditorAction,
 ): ChartEditorState {
@@ -254,9 +276,10 @@ function chartEditorReducer(
         );
       }
 
-      const newTrack = action.chart.trackData.find(
-        t => t.instrument === 'drums' && t.difficulty === 'expert',
-      );
+      const newTrack = isTrackScope(state.activeScope)
+        ? (findTrackInParsedChart(action.chart, state.activeScope.track)
+            ?.track ?? null)
+        : null;
 
       return {
         ...state,
@@ -278,9 +301,10 @@ function chartEditorReducer(
       const undoneCommand = state.undoStack[state.undoStack.length - 1];
       const prevDoc = state.undoDocStack[state.undoDocStack.length - 1];
 
-      const newTrack = action.chart.trackData.find(
-        t => t.instrument === 'drums' && t.difficulty === 'expert',
-      );
+      const newTrack = isTrackScope(state.activeScope)
+        ? (findTrackInParsedChart(action.chart, state.activeScope.track)
+            ?.track ?? null)
+        : null;
 
       // Check if we've returned to the saved state
       const newUndoDepth = state.undoStack.length - 1;
@@ -305,9 +329,10 @@ function chartEditorReducer(
       const redoneCommand = state.redoStack[state.redoStack.length - 1];
       const redoDoc = state.redoDocStack[state.redoDocStack.length - 1];
 
-      const newTrack = action.chart.trackData.find(
-        t => t.instrument === 'drums' && t.difficulty === 'expert',
-      );
+      const newTrack = isTrackScope(state.activeScope)
+        ? (findTrackInParsedChart(action.chart, state.activeScope.track)
+            ?.track ?? null)
+        : null;
 
       const newUndoDepth = state.undoStack.length + 1;
       const isDirty = newUndoDepth !== state.savedUndoDepth;
@@ -369,6 +394,10 @@ function chartEditorReducer(
       if (state.highwayMode === action.mode) return state;
       return {...state, highwayMode: action.mode};
 
+    case 'SET_ACTIVE_SCOPE':
+      if (state.activeScope === action.scope) return state;
+      return {...state, activeScope: action.scope};
+
     default:
       return state;
   }
@@ -383,11 +412,17 @@ const ChartEditorContext = createContext<ChartEditorContextValue | null>(null);
 export function ChartEditorProvider({
   children,
   capabilities = DRUM_EDIT_CAPABILITIES,
+  activeScope = DEFAULT_DRUMS_EXPERT_SCOPE,
 }: {
   children: ReactNode;
   capabilities?: EditorCapabilities;
+  /** What the editor is editing. Pages pin this once at mount. */
+  activeScope?: EditorScope;
 }) {
-  const [state, dispatch] = useReducer(chartEditorReducer, initialState);
+  const [state, dispatch] = useReducer(chartEditorReducer, {
+    ...initialState,
+    activeScope,
+  });
   const audioManagerRef = useRef<AudioManager | null>(null);
   const reconcilerRef = useRef<
     import('@/lib/preview/highway/SceneReconciler').SceneReconciler | null
@@ -456,4 +491,22 @@ export function getFirstSelectedId(
   if (!set || set.size === 0) return null;
   for (const id of set) return id;
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Scope selectors
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the `ParsedTrackData` slice referenced by `state.activeScope`.
+ * Returns null when the scope is `vocals` / `global` or when the named
+ * track doesn't exist in the document.
+ */
+export function selectActiveTrack(
+  state: ChartEditorState,
+): ParsedTrackData | null {
+  const doc = state.chartDoc;
+  if (!doc) return null;
+  if (!isTrackScope(state.activeScope)) return null;
+  return findTrack(doc, state.activeScope.track)?.track ?? null;
 }

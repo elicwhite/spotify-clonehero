@@ -28,6 +28,7 @@ import type {
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import {
   ChartEditorProvider,
+  DEFAULT_VOCALS_SCOPE,
   useChartEditorContext,
   ADD_LYRICS_CAPABILITIES,
 } from '@/components/chart-editor';
@@ -274,7 +275,9 @@ interface EditorData {
 
 export default function LyricsAlignPage() {
   return (
-    <ChartEditorProvider capabilities={ADD_LYRICS_CAPABILITIES}>
+    <ChartEditorProvider
+      capabilities={ADD_LYRICS_CAPABILITIES}
+      activeScope={DEFAULT_VOCALS_SCOPE}>
       <LyricsAlignInner />
     </ChartEditorProvider>
   );
@@ -797,13 +800,20 @@ function LyricsAlignInner() {
             <div className="bg-muted rounded-lg p-4 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold">
-                  {removeStyleTags(chart.chartDoc.parsedChart.metadata.name ?? 'Unknown')}{' '}
+                  {removeStyleTags(
+                    chart.chartDoc.parsedChart.metadata.name ?? 'Unknown',
+                  )}{' '}
                   <span className="text-muted-foreground font-normal">by</span>{' '}
-                  {removeStyleTags(chart.chartDoc.parsedChart.metadata.artist ?? 'Unknown')}
+                  {removeStyleTags(
+                    chart.chartDoc.parsedChart.metadata.artist ?? 'Unknown',
+                  )}
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Charted by {removeStyleTags(chart.chartDoc.parsedChart.metadata.charter ?? 'Unknown')} &middot;{' '}
-                  {chart.audioFiles.length} audio file
+                  Charted by{' '}
+                  {removeStyleTags(
+                    chart.chartDoc.parsedChart.metadata.charter ?? 'Unknown',
+                  )}{' '}
+                  &middot; {chart.audioFiles.length} audio file
                   {chart.audioFiles.length !== 1 ? 's' : ''}
                   {chart.vocalsFile && ' (vocals stem available)'} &middot;{' '}
                   {chart.sourceFormat === 'sng'

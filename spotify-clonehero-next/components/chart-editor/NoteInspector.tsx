@@ -3,7 +3,12 @@
 import {useMemo} from 'react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
-import {useChartEditorContext, getSelectedIds} from './ChartEditorContext';
+import {
+  useChartEditorContext,
+  getSelectedIds,
+  selectActiveTrack,
+} from './ChartEditorContext';
+import {trackKeyFromScope} from './scope';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {
   ToggleFlagCommand,
@@ -47,13 +52,10 @@ export default function NoteInspector({
   const {executeCommand} = useExecuteCommand();
 
   const selectedNotes = useMemo(() => {
-    if (!state.chartDoc) return [];
-    const expertTrack = state.chartDoc.parsedChart.trackData.find(
-      t => t.instrument === 'drums' && t.difficulty === 'expert',
-    );
-    if (!expertTrack) return [];
+    const track = selectActiveTrack(state);
+    if (!track) return [];
     const selected = getSelectedIds(state, 'note');
-    return getDrumNotes(expertTrack).filter(n => selected.has(noteId(n)));
+    return getDrumNotes(track).filter(n => selected.has(noteId(n)));
   }, [state]);
 
   if (selectedNotes.length === 0) return null;
@@ -68,16 +70,18 @@ export default function NoteInspector({
     return {key, allTrue, someTrue, indeterminate: someTrue && !allTrue};
   });
 
+  const trackKey = trackKeyFromScope(state.activeScope);
+
   const handleToggleFlag = (flag: FlagName) => {
     const ids = selectedNotes.map(n => noteId(n));
-    executeCommand(new ToggleFlagCommand(ids, flag));
+    executeCommand(new ToggleFlagCommand(ids, flag, trackKey));
     onNotesModified?.(ids);
   };
 
   const handleDelete = () => {
     const ids = new Set(selectedNotes.map(n => noteId(n)));
     onNotesModified?.(Array.from(ids));
-    executeCommand(new DeleteNotesCommand(ids));
+    executeCommand(new DeleteNotesCommand(ids, trackKey));
     dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
   };
 

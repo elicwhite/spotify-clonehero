@@ -1,7 +1,12 @@
 'use client';
 
 import {useEffect, useRef} from 'react';
-import {useChartEditorContext, getSelectedIds} from './ChartEditorContext';
+import {
+  useChartEditorContext,
+  getSelectedIds,
+  selectActiveTrack,
+} from './ChartEditorContext';
+import {trackKeyFromScope} from './scope';
 import {useExecuteCommand, useUndoRedo} from './hooks/useEditCommands';
 import {
   noteId,
@@ -85,9 +90,7 @@ export default function EditorMCPTools() {
         }> = [];
         const selectedIds = getSelectedIds(s, 'note');
         if (s.chartDoc && selectedIds.size > 0) {
-          const track = s.chartDoc.parsedChart.trackData.find(
-            t => t.instrument === 'drums' && t.difficulty === 'expert',
-          );
+          const track = selectActiveTrack(s);
           if (track) {
             selectedNotes = getDrumNotes(track)
               .filter(n => selectedIds.has(noteId(n)))
@@ -200,11 +203,16 @@ export default function EditorMCPTools() {
         const s = stateRef.current;
         if (!s.chartDoc)
           return {content: [{type: 'text', text: 'No chart loaded'}]};
-        const track = s.chartDoc.parsedChart.trackData.find(
-          t => t.instrument === 'drums' && t.difficulty === 'expert',
-        );
+        const track = selectActiveTrack(s);
         if (!track)
-          return {content: [{type: 'text', text: 'No expert drums track'}]};
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'No active notes track (the editor may be scoped to vocals/global).',
+              },
+            ],
+          };
         const startTick = (args.startTick as number) ?? 0;
         const endTick = (args.endTick as number) ?? startTick + 1920;
         const limit = (args.limit as number) ?? 50;
@@ -276,7 +284,11 @@ export default function EditorMCPTools() {
         if (selected.size === 0)
           return {content: [{type: 'text', text: 'No notes selected'}]};
         executeCommandRef.current(
-          new ToggleFlagCommand(Array.from(selected), flag),
+          new ToggleFlagCommand(
+            Array.from(selected),
+            flag,
+            trackKeyFromScope(s.activeScope),
+          ),
         );
         return {
           content: [
@@ -309,7 +321,10 @@ export default function EditorMCPTools() {
           type === 'yellowDrum' || type === 'blueDrum' || type === 'greenDrum';
         const cymbal = (args.cymbal as boolean) ?? cymbalDefault;
         executeCommandRef.current(
-          new AddNoteCommand({tick, type, length: 0, flags: {cymbal}}),
+          new AddNoteCommand(
+            {tick, type, length: 0, flags: {cymbal}},
+            trackKeyFromScope(stateRef.current.activeScope),
+          ),
         );
         return {
           content: [{type: 'text', text: `Added ${type} at tick ${tick}`}],
@@ -328,9 +343,16 @@ export default function EditorMCPTools() {
         if (selected.size === 0)
           return {content: [{type: 'text', text: 'No notes selected'}]};
         executeCommandRef.current(
-          new DeleteNotesCommand(selected as Set<string>),
+          new DeleteNotesCommand(
+            selected as Set<string>,
+            trackKeyFromScope(s.activeScope),
+          ),
         );
-        dispatchRef.current({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
+        dispatchRef.current({
+          type: 'SET_SELECTION',
+          kind: 'note',
+          ids: new Set(),
+        });
         return {
           content: [{type: 'text', text: `Deleted ${selected.size} note(s)`}],
         };

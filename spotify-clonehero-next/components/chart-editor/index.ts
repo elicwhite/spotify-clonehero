@@ -7,11 +7,27 @@ export {
   getSelectedIds,
   getFirstSelectedId,
   isAnythingSelected,
+  selectActiveTrack,
   type ChartEditorState,
   type ChartEditorAction,
   type ChartEditorContextValue,
   type ToolMode,
 } from './ChartEditorContext';
+
+// Editor scope (replaces hardcoded expert-drums lookups)
+export {
+  DEFAULT_DRUMS_EXPERT_SCOPE,
+  DEFAULT_VOCALS_SCOPE,
+  describeScope,
+  entityContextFromScope,
+  isTrackScope,
+  isVocalsScope,
+  resolveScopeTrack,
+  trackKeyFromScope,
+  trackScope,
+  type EditorScope,
+  type TrackKey,
+} from './scope';
 
 // Capabilities
 export {

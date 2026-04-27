@@ -41,7 +41,12 @@ A movable entity, regardless of kind, needs three things from chart-edit: a stab
 New module `lib/chart-edit/entities/index.ts`:
 
 ```ts
-export type EntityKind = 'note' | 'section' | 'lyric' | 'phrase-start' | 'phrase-end';
+export type EntityKind =
+  | 'note'
+  | 'section'
+  | 'lyric'
+  | 'phrase-start'
+  | 'phrase-end';
 
 export interface EntityRef {
   kind: EntityKind;
@@ -55,7 +60,7 @@ export interface EntityKindHandler {
   listIds(doc: ChartDocument): string[];
 
   /** Resolve an id to the absolute tick (and, for notes, lane index). Returns null if missing. */
-  locate(doc: ChartDocument, id: string): { tick: number; lane?: number } | null;
+  locate(doc: ChartDocument, id: string): {tick: number; lane?: number} | null;
 
   /**
    * Apply a move to one entity. Mutates `doc` in place (callers always clone first).
@@ -113,6 +118,7 @@ export class MoveEntitiesCommand implements EditCommand {
 ```
 
 Migration path:
+
 - Step A: introduce `MoveEntitiesCommand` alongside the existing two commands, ported `MoveNotesCommand` callsite first as a regression check.
 - Step B: port `MoveSectionCommand` callsite.
 - Step C: delete the two old commands once both flows are on the new one.
@@ -124,7 +130,12 @@ Migration path:
 New module `components/chart-editor/capabilities.ts`:
 
 ```ts
-export type EntityKind = 'note' | 'section' | 'lyric' | 'phrase-start' | 'phrase-end';
+export type EntityKind =
+  | 'note'
+  | 'section'
+  | 'lyric'
+  | 'phrase-start'
+  | 'phrase-end';
 
 export interface EditorCapabilities {
   /** Entity kinds that respond to hover (cursor change, hit feedback). */
@@ -178,6 +189,7 @@ Capabilities flow through context (or a prop, see open question 1).
 Markers are billboarded text on the side of the highway (kind `'lyric'`, `'phrase-start'`, `'phrase-end'`). They live in `MarkerRenderer` per kind.
 
 Plan:
+
 - `MarkerRenderer` exposes a `getInstanceAtRay(ray)` raycast helper similar to the existing section path. Each marker mesh is tagged with its kind and id.
 - `InteractionManager.hitTest()` consults the three marker renderers in priority order (lyric > phrase-end > phrase-start, or whatever feels right under the cursor) **before** falling through to highway hits, but **after** notes (existing behavior for sections is the same — markers and sections are both off-highway, so order between them doesn't conflict).
 - New `HitResult` variants:
@@ -203,6 +215,7 @@ Drag flow today (`HighwayEditor.tsx:540-660`) branches on `isDragging` (notes) v
 ### 7. Add-lyrics integration
 
 `app/add-lyrics/page.tsx`:
+
 - The "done" branch (`showEditor` block) keeps `<ChartEditor>` but passes `capabilities={ADD_LYRICS_CAPABILITIES}`.
 - `editorData.track` becomes optional. The expert-drums-or-fallback lookup is removed; the editor receives `track: null` when drums are absent.
 - Export button + sidebar + transport unchanged.
@@ -246,4 +259,4 @@ Drag flow today (`HighwayEditor.tsx:540-660`) branches on `isDragging` (notes) v
 - Editing lyric **text** (only timing).
 - Splitting / merging phrases.
 - Multi-marker box selection.
-- Switching the chart editor to non-drum *note* tracks (guitar/bass) — only the lanes-off case is covered here.
+- Switching the chart editor to non-drum _note_ tracks (guitar/bass) — only the lanes-off case is covered here.

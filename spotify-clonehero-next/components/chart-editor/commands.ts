@@ -17,7 +17,9 @@ import type {
   DrumNote,
   DrumNoteType,
   DrumNoteFlags,
+  EntityContext,
   EntityKind,
+  TrackKey,
 } from '@/lib/chart-edit';
 import {
   addDrumNote,
@@ -32,6 +34,7 @@ import {
   removeSection,
   entityHandlers,
   cloneDocFor,
+  findTrack,
   noteId as entityNoteId,
 } from '@/lib/chart-edit';
 
@@ -74,11 +77,18 @@ function cloneDocWithSections(doc: ChartDocument): ChartDocument {
   };
 }
 
-/** Find the expert drums track index. */
-function findExpertDrumsIndex(doc: ChartDocument): number {
-  return doc.parsedChart.trackData.findIndex(
-    t => t.instrument === 'drums' && t.difficulty === 'expert',
-  );
+/** Default TrackKey commands fall back to when none was supplied. Removed
+ *  in phase 8 once every command captures its target explicitly at
+ *  construction time. */
+const DEFAULT_DRUMS_KEY: TrackKey = {
+  instrument: 'drums',
+  difficulty: 'expert',
+};
+
+/** Resolve the index of the track this command is targeting. Returns -1
+ *  if the chart doesn't contain that track. */
+function findTargetIndex(doc: ChartDocument, key: TrackKey): number {
+  return findTrack(doc, key)?.index ?? -1;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,13 +114,18 @@ export interface EditCommand {
 
 export class AddNoteCommand implements EditCommand {
   readonly description: string;
+  private readonly trackKey: TrackKey;
 
-  constructor(private note: DrumNote) {
+  constructor(
+    private note: DrumNote,
+    trackKey?: TrackKey,
+  ) {
+    this.trackKey = trackKey ?? DEFAULT_DRUMS_KEY;
     this.description = `Add ${note.type} at tick ${note.tick}`;
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    const idx = findExpertDrumsIndex(doc);
+    const idx = findTargetIndex(doc, this.trackKey);
     if (idx === -1) return doc;
 
     const newDoc = cloneDocWithTracks(doc);
@@ -132,7 +147,7 @@ export class AddNoteCommand implements EditCommand {
   }
 
   undo(doc: ChartDocument): ChartDocument {
-    const idx = findExpertDrumsIndex(doc);
+    const idx = findTargetIndex(doc, this.trackKey);
     if (idx === -1) return doc;
 
     const newDoc = cloneDocWithTracks(doc);
@@ -149,13 +164,18 @@ export class AddNoteCommand implements EditCommand {
 export class DeleteNotesCommand implements EditCommand {
   readonly description: string;
   private deletedNotes: DrumNote[] = [];
+  private readonly trackKey: TrackKey;
 
-  constructor(private noteIds: Set<string>) {
+  constructor(
+    private noteIds: Set<string>,
+    trackKey?: TrackKey,
+  ) {
+    this.trackKey = trackKey ?? DEFAULT_DRUMS_KEY;
     this.description = `Delete ${noteIds.size} note(s)`;
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    const idx = findExpertDrumsIndex(doc);
+    const idx = findTargetIndex(doc, this.trackKey);
     if (idx === -1) return doc;
 
     const newDoc = cloneDocWithTracks(doc);
@@ -175,7 +195,7 @@ export class DeleteNotesCommand implements EditCommand {
   }
 
   undo(doc: ChartDocument): ChartDocument {
-    const idx = findExpertDrumsIndex(doc);
+    const idx = findTargetIndex(doc, this.trackKey);
     if (idx === -1) return doc;
 
     const newDoc = cloneDocWithTracks(doc);
@@ -209,13 +229,16 @@ export class MoveEntitiesCommand implements EditCommand {
   readonly description: string;
   /** Ids of entities after the move (computed during execute, used by undo). */
   private movedIds: string[] = [];
+  private readonly ctx: EntityContext;
 
   constructor(
     private kind: EntityKind,
     private ids: readonly string[],
     private tickDelta: number,
     private laneDelta: number,
+    ctx?: EntityContext,
   ) {
+    this.ctx = ctx ?? {};
     const noun = KIND_LABELS[kind];
     this.description = `Move ${ids.length} ${noun}${ids.length === 1 ? '' : 's'}`;
   }
@@ -225,7 +248,7 @@ export class MoveEntitiesCommand implements EditCommand {
     const newDoc = cloneDocFor(this.kind, doc);
     const laneDelta = handler.supportsLaneDelta ? this.laneDelta : 0;
     this.movedIds = this.ids.map(id =>
-      handler.move(newDoc, id, this.tickDelta, laneDelta),
+      handler.move(newDoc, id, this.tickDelta, laneDelta, this.ctx),
     );
     return newDoc;
   }
@@ -238,7 +261,7 @@ export class MoveEntitiesCommand implements EditCommand {
     // We re-walk in input order; result ids land back on the original
     // ids modulo any clamping the handler applied on either pass.
     for (const movedId of this.movedIds) {
-      handler.move(newDoc, movedId, -this.tickDelta, laneDelta);
+      handler.move(newDoc, movedId, -this.tickDelta, laneDelta, this.ctx);
     }
     return newDoc;
   }
@@ -252,11 +275,14 @@ export type FlagName = 'cymbal' | 'accent' | 'ghost';
 
 export class ToggleFlagCommand implements EditCommand {
   readonly description: string;
+  private readonly trackKey: TrackKey;
 
   constructor(
     private noteIds: string[],
     private flag: FlagName,
+    trackKey?: TrackKey,
   ) {
+    this.trackKey = trackKey ?? DEFAULT_DRUMS_KEY;
     this.description = `Toggle ${flag} on ${noteIds.length} note(s)`;
   }
 
@@ -269,7 +295,7 @@ export class ToggleFlagCommand implements EditCommand {
   }
 
   private toggle(doc: ChartDocument): ChartDocument {
-    const idx = findExpertDrumsIndex(doc);
+    const idx = findTargetIndex(doc, this.trackKey);
     if (idx === -1) return doc;
 
     const newDoc = cloneDocWithTracks(doc);

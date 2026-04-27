@@ -86,9 +86,11 @@ export {addSection, removeSection} from './helpers/sections';
 
 // Lyric helpers (vocal part lyrics)
 export {
+  DEFAULT_VOCALS_PART,
   lyricId,
   listLyricTicks,
   moveLyric,
+  parseLyricId,
 } from './helpers/lyrics';
 
 // Vocal phrase helpers
@@ -99,6 +101,7 @@ export {
   listPhraseEndTicks,
   movePhraseStart,
   movePhraseEnd,
+  parsePhraseId,
 } from './helpers/phrases';
 
 // Per-entity-kind dispatch
@@ -109,7 +112,35 @@ export {
   type EntityKind,
   type EntityRef,
   type EntityKindHandler,
+  type EntityContext,
 } from './entities';
+
+// Generic active-track lookup (replaces findExpertDrumsTrack across the editor)
+export {
+  findTrack,
+  findTrackInParsedChart,
+  findTrackOnly,
+  type TrackKey,
+} from './find-track';
+
+// Per-instrument display schemas (lane data, flag bindings, default keys)
+export {
+  drums4LaneSchema,
+  drums5LaneSchema,
+  drumSchemaFor,
+  bassSchema,
+  guitarSchema,
+  keysSchema,
+  rhythmSchema,
+  laneAt,
+  laneForNoteType,
+  schemaForInstrument,
+  schemaForTrack,
+  type InstrumentSchema,
+  type LaneDefinition,
+  type FlagBinding,
+  type NoteFlagName,
+} from './instruments';
 
 // ---------------------------------------------------------------------------
 // readChart — parses a chart folder into a ChartDocument

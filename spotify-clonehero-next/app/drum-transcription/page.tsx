@@ -39,6 +39,7 @@ import AudioUploader from './components/AudioUploader';
 import ProcessingView from './components/ProcessingView';
 import EditorApp from './components/EditorApp';
 import {ChartEditorProvider} from '@/components/chart-editor/ChartEditorContext';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
 import {
   listProjects,
   getProject,
@@ -518,7 +519,7 @@ function DrumTranscriptionInner() {
             Back to Projects
           </Button>
         </div>
-        <ChartEditorProvider>
+        <ChartEditorProvider activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
           <EditorApp projectId={projectId} />
         </ChartEditorProvider>
       </div>

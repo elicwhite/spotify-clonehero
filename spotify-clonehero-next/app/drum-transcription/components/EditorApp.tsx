@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback, useEffect, useMemo, useState} from 'react';
-import {parseChartFile} from '@eliwhite/scan-chart';
+import {defaultIniChartModifiers, parseChartFile} from '@eliwhite/scan-chart';
 import {Loader2, AlertCircle} from 'lucide-react';
 import {toast} from 'sonner';
 
@@ -37,15 +37,11 @@ import {getDrumNotes} from '@/lib/chart-edit';
 import {buildTimedTempos} from '@/lib/drum-transcription/timing';
 import type {DrumNote} from '@/lib/chart-edit';
 
-/** Pro drums modifiers for scan-chart parsing. */
+/** Drum-transcription always parses charts with pro-drums interpretation
+ *  — the editor is drum-only and pro-drums tom/cymbal modifiers are
+ *  meaningful regardless of any upstream song.ini. */
 const PRO_DRUMS_MODIFIERS = {
-  song_length: 0,
-  hopo_frequency: 0,
-  eighthnote_hopo: false,
-  multiplier_note: 0,
-  sustain_cutoff_threshold: -1,
-  chord_snap_threshold: 0,
-  five_lane_drums: false,
+  ...defaultIniChartModifiers,
   pro_drums: true,
 } as const;
 

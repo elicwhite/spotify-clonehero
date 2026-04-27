@@ -433,7 +433,11 @@ export const setupRenderer = (
     // power the cursor / ghost / hit-testing surface for both drum-edit
     // and lanes-off (lyrics) modes. Drum-specific render paths inside them
     // simply have nothing to draw when no drum notes are present.
-    const sceneOverlays = new SceneOverlays(scene, highwaySpeed, clippingPlanes);
+    const sceneOverlays = new SceneOverlays(
+      scene,
+      highwaySpeed,
+      clippingPlanes,
+    );
 
     const getElapsedMs = () => {
       const currentMs = (audioManager?.chartTime ?? 0) * 1000;

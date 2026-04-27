@@ -107,39 +107,39 @@ All work follows the plan-driven workflow in `plans/`. Read the plan before star
 
 **Completed:**
 
-| Plan                             | Description                                                  |
-| -------------------------------- | ------------------------------------------------------------ |
-| `0001-project-scaffolding`       | Page shell, dependencies, directory structure                |
-| `0002-chart-file-writing`        | .chart serializer with scan-chart round-trip tests           |
-| `0003-audio-acquisition`         | File upload, Web Audio decode, OPFS storage, demo file       |
-| `0004-stem-separation`           | Demucs via ONNX + WebGPU, STFT/iSTFT in JS                   |
-| `0005-ml-model-integration`      | ADTOF Frame_RNN via ONNX + WebGPU, post-processing           |
-| `0006-chart-preview-integration` | CloneHeroRenderer + AudioManager integration                 |
-| `0007-editor-core`               | Read-only editor page, SheetMusic + highway views, transport |
-| `0007a-highway-editing`          | Note editing on highway (Moonscraper-style), BPM/TS editing  |
-| `0007b-editor-workflow`          | Confidence viz, undo/redo, auto-save, stem volume controls   |
-| `0008-pipeline-orchestration`    | End-to-end flow: upload → process → edit → export            |
-| `0009-chart-export-packaging`    | ZIP export with chart + stems + song.ini                     |
-| `0010-sng-export`                | SNG binary export                                            |
-| `0011-chart-edit-bugfixes`       | chart-edit bug fixes and test coverage                       |
-| `0012-consolidate-chart-io`      | Consolidate drum-transcription chart-io → chart-edit         |
-| `0013-extract-shared-editor`     | Extract editor UI to `components/chart-editor/`              |
-| `0014-drum-edit-page`            | `/drum-edit` page with chart loading (SNG/ZIP/folder)        |
-| `0015-moonscraper-layout-timeline` | Moonscraper-inspired layout + timeline minimap             |
-| `0016-grid-navigation-keys-mode` | Grid-based cursor + keyboard note placement (1-5)            |
-| `0017-section-editing`           | Add/edit/delete named section markers                        |
-| `0018-tanstack-hotkeys-migration` | @tanstack/react-hotkeys keyboard handling                   |
-| `0019-highway-decomposition`     | Split highway.ts into HighwayScene/NotesManager/etc.         |
-| `0020-scene-integration`         | Move overlay drawing into Three.js scene                     |
-| `0021-interaction-manager`       | Hybrid Three.js hit testing + React selection                |
-| `0022-incremental-editing`       | Diff-based note updates                                      |
-| `0023-waveform-highway-surface`  | Waveform highway texture + grid overlay                      |
-| `0024-highway-bugs-and-polish`   | Highway bug fixes and polish                                 |
-| `0025-scene-reconciler`          | Key-based scene reconciler                                   |
-| `0026-highway-markers-lyrics-bpm-ts` | Lyric, BPM, TS markers on highway                        |
-| `0027-chart-audio-delay-alignment` | Audio delay alignment                                      |
-| `0028-scan-chart-parsing-refactor` | Move chart parsing into scan-chart                         |
-| `0029-configurable-editor-lyric-phrase-drag` | Capabilities config + lyric/phrase drag + lanes-off |
+| Plan                                         | Description                                                  |
+| -------------------------------------------- | ------------------------------------------------------------ |
+| `0001-project-scaffolding`                   | Page shell, dependencies, directory structure                |
+| `0002-chart-file-writing`                    | .chart serializer with scan-chart round-trip tests           |
+| `0003-audio-acquisition`                     | File upload, Web Audio decode, OPFS storage, demo file       |
+| `0004-stem-separation`                       | Demucs via ONNX + WebGPU, STFT/iSTFT in JS                   |
+| `0005-ml-model-integration`                  | ADTOF Frame_RNN via ONNX + WebGPU, post-processing           |
+| `0006-chart-preview-integration`             | CloneHeroRenderer + AudioManager integration                 |
+| `0007-editor-core`                           | Read-only editor page, SheetMusic + highway views, transport |
+| `0007a-highway-editing`                      | Note editing on highway (Moonscraper-style), BPM/TS editing  |
+| `0007b-editor-workflow`                      | Confidence viz, undo/redo, auto-save, stem volume controls   |
+| `0008-pipeline-orchestration`                | End-to-end flow: upload → process → edit → export            |
+| `0009-chart-export-packaging`                | ZIP export with chart + stems + song.ini                     |
+| `0010-sng-export`                            | SNG binary export                                            |
+| `0011-chart-edit-bugfixes`                   | chart-edit bug fixes and test coverage                       |
+| `0012-consolidate-chart-io`                  | Consolidate drum-transcription chart-io → chart-edit         |
+| `0013-extract-shared-editor`                 | Extract editor UI to `components/chart-editor/`              |
+| `0014-drum-edit-page`                        | `/drum-edit` page with chart loading (SNG/ZIP/folder)        |
+| `0015-moonscraper-layout-timeline`           | Moonscraper-inspired layout + timeline minimap               |
+| `0016-grid-navigation-keys-mode`             | Grid-based cursor + keyboard note placement (1-5)            |
+| `0017-section-editing`                       | Add/edit/delete named section markers                        |
+| `0018-tanstack-hotkeys-migration`            | @tanstack/react-hotkeys keyboard handling                    |
+| `0019-highway-decomposition`                 | Split highway.ts into HighwayScene/NotesManager/etc.         |
+| `0020-scene-integration`                     | Move overlay drawing into Three.js scene                     |
+| `0021-interaction-manager`                   | Hybrid Three.js hit testing + React selection                |
+| `0022-incremental-editing`                   | Diff-based note updates                                      |
+| `0023-waveform-highway-surface`              | Waveform highway texture + grid overlay                      |
+| `0024-highway-bugs-and-polish`               | Highway bug fixes and polish                                 |
+| `0025-scene-reconciler`                      | Key-based scene reconciler                                   |
+| `0026-highway-markers-lyrics-bpm-ts`         | Lyric, BPM, TS markers on highway                            |
+| `0027-chart-audio-delay-alignment`           | Audio delay alignment                                        |
+| `0028-scan-chart-parsing-refactor`           | Move chart parsing into scan-chart                           |
+| `0029-configurable-editor-lyric-phrase-drag` | Capabilities config + lyric/phrase drag + lanes-off          |
 
 ## Browser Validation
 

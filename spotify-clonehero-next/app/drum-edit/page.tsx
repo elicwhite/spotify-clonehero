@@ -35,11 +35,13 @@ import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
+import {defaultIniChartModifiers} from '@eliwhite/scan-chart';
 import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {
   ChartEditorProvider,
+  DEFAULT_DRUMS_EXPERT_SCOPE,
   useChartEditorContext,
 } from '@/components/chart-editor';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
@@ -58,15 +60,12 @@ import {
   type ProjectMetadata,
 } from '@/lib/drum-edit/storage/opfs';
 
-/** scan-chart modifiers for pro drums. */
+/** Drum-edit always parses charts with pro-drums interpretation — the
+ *  page edits a drum chart, and pro-drums tom/cymbal modifiers are
+ *  meaningful regardless of what an upstream song.ini says. Everything
+ *  else falls back to scan-chart's defaults. */
 const PRO_DRUMS_MODIFIERS = {
-  song_length: 0,
-  hopo_frequency: 0,
-  eighthnote_hopo: false,
-  multiplier_note: 0,
-  sustain_cutoff_threshold: -1,
-  chord_snap_threshold: 0,
-  five_lane_drums: false,
+  ...defaultIniChartModifiers,
   pro_drums: true,
 } as const;
 
@@ -76,7 +75,7 @@ const PRO_DRUMS_MODIFIERS = {
 
 export default function DrumEditPage() {
   return (
-    <ChartEditorProvider>
+    <ChartEditorProvider activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
       <Suspense
         fallback={
           <div className="flex items-center justify-center h-screen">

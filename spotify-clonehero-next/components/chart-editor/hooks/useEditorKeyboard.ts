@@ -7,8 +7,10 @@ import {
   useChartEditorContext,
   getSelectedIds,
   getFirstSelectedId,
+  selectActiveTrack,
   type ToolMode,
 } from '../ChartEditorContext';
+import {trackKeyFromScope} from '../scope';
 import {useExecuteCommand, useUndoRedo} from './useEditCommands';
 import {
   AddNoteCommand,
@@ -105,15 +107,10 @@ export function useEditorKeyboard(
   const {executeCommand} = useExecuteCommand();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
 
-  // Get expert notes for clipboard and navigation
-  const getExpertTrack = useCallback(() => {
-    if (!state.chartDoc) return null;
-    return (
-      state.chartDoc.parsedChart.trackData.find(
-        t => t.instrument === 'drums' && t.difficulty === 'expert',
-      ) ?? null
-    );
-  }, [state.chartDoc]);
+  // Active-scope notes for clipboard and navigation. When the editor is
+  // pinned to a non-track scope (e.g. add-lyrics with `{kind: 'vocals'}`)
+  // there's no notes track to operate on.
+  const getActiveTrack = useCallback(() => selectActiveTrack(state), [state]);
 
   // Helper: sync cursor tick from current audio position.
   // After playback or timeline clicks, the audio position may have moved
@@ -204,7 +201,7 @@ export function useEditorKeyboard(
     'Mod+C',
     () => {
       if (getSelectedIds(state, 'note').size === 0) return;
-      const track = getExpertTrack();
+      const track = getActiveTrack();
       if (!track) return;
       const selected = getDrumNotes(track).filter(n =>
         getSelectedIds(state, 'note').has(noteId(n)),
@@ -229,7 +226,7 @@ export function useEditorKeyboard(
     'Mod+X',
     () => {
       if (getSelectedIds(state, 'note').size === 0) return;
-      const track = getExpertTrack();
+      const track = getActiveTrack();
       if (!track) return;
       const selected = getDrumNotes(track).filter(n =>
         getSelectedIds(state, 'note').has(noteId(n)),
@@ -247,7 +244,10 @@ export function useEditorKeyboard(
 
       // Delete
       executeCommand(
-        new DeleteNotesCommand(new Set(getSelectedIds(state, 'note'))),
+        new DeleteNotesCommand(
+          new Set(getSelectedIds(state, 'note')),
+          trackKeyFromScope(state.activeScope),
+        ),
       );
       dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
     },
@@ -263,13 +263,17 @@ export function useEditorKeyboard(
       if (state.clipboard.length === 0 || !state.chartDoc) return;
       const cursorTick = state.cursorTick;
 
+      const trackKey = trackKeyFromScope(state.activeScope);
       const commands = state.clipboard.map(
         n =>
-          new AddNoteCommand({
-            ...n,
-            tick: n.tick + cursorTick,
-            flags: {...n.flags},
-          }),
+          new AddNoteCommand(
+            {
+              ...n,
+              tick: n.tick + cursorTick,
+              flags: {...n.flags},
+            },
+            trackKey,
+          ),
       );
 
       if (commands.length > 0) {
@@ -301,7 +305,7 @@ export function useEditorKeyboard(
   // Select all (Mod+A)
   // -----------------------------------------------------------------------
   useHotkey('Mod+A', () => {
-    const track = getExpertTrack();
+    const track = getActiveTrack();
     if (track) {
       const allIds = new Set(getDrumNotes(track).map(n => noteId(n)));
       dispatch({type: 'SET_SELECTION', kind: 'note', ids: allIds});
@@ -474,14 +478,15 @@ export function useEditorKeyboard(
         const type: DrumNoteType = laneToType(lane);
         const tick = state.cursorTick;
 
-        const track = getExpertTrack();
+        const track = getActiveTrack();
         if (track) {
           const existing = getDrumNotes(track).find(
             n => n.tick === tick && n.type === type,
           );
+          const trackKey = trackKeyFromScope(state.activeScope);
           if (existing) {
             const id = noteId(existing);
-            executeCommand(new DeleteNotesCommand(new Set([id])));
+            executeCommand(new DeleteNotesCommand(new Set([id]), trackKey));
             onNotesModified?.([id]);
           } else {
             const newNote: DrumNote = {
@@ -490,7 +495,7 @@ export function useEditorKeyboard(
               length: 0,
               flags: defaultFlagsForType(type),
             };
-            executeCommand(new AddNoteCommand(newNote));
+            executeCommand(new AddNoteCommand(newNote, trackKey));
             onNotesModified?.([noteId(newNote)]);
           }
         }
@@ -523,13 +528,18 @@ export function useEditorKeyboard(
       () => {
         if (getSelectedIds(state, 'note').size > 0 && state.chartDoc) {
           executeCommand(
-            new ToggleFlagCommand(Array.from(getSelectedIds(state, 'note')), flag),
+            new ToggleFlagCommand(
+              Array.from(getSelectedIds(state, 'note')),
+              flag,
+              trackKeyFromScope(state.activeScope),
+            ),
           );
           onNotesModified?.(Array.from(getSelectedIds(state, 'note')));
         }
       },
       {
-        enabled: getSelectedIds(state, 'note').size > 0 && state.chartDoc !== null,
+        enabled:
+          getSelectedIds(state, 'note').size > 0 && state.chartDoc !== null,
         conflictBehavior: 'allow',
       },
     );
@@ -541,7 +551,9 @@ export function useEditorKeyboard(
   const handleDelete = useCallback(() => {
     const selectedSectionId = getFirstSelectedId(state, 'section');
     const selectedSectionTick =
-      selectedSectionId !== null ? Number.parseInt(selectedSectionId, 10) : null;
+      selectedSectionId !== null
+        ? Number.parseInt(selectedSectionId, 10)
+        : null;
     if (selectedSectionTick !== null && state.chartDoc) {
       const section = state.chartDoc.parsedChart.sections.find(
         s => s.tick === selectedSectionTick,
@@ -555,7 +567,12 @@ export function useEditorKeyboard(
     const selectedNotes = getSelectedIds(state, 'note');
     if (selectedNotes.size > 0) {
       onNotesModified?.(Array.from(selectedNotes));
-      executeCommand(new DeleteNotesCommand(selectedNotes as Set<string>));
+      executeCommand(
+        new DeleteNotesCommand(
+          selectedNotes as Set<string>,
+          trackKeyFromScope(state.activeScope),
+        ),
+      );
       dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
     }
   }, [state, executeCommand, dispatch, onNotesModified]);

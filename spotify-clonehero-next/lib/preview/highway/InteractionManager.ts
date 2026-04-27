@@ -112,12 +112,7 @@ export class InteractionManager {
     // The flag boxes sit outside the highway lanes, so they can't conflict
     // with notes. Picking them first means the side-mounted text always
     // responds to hover even if a note is at the same tick.
-    const flagHit = this.hitTestMarkerFlags(
-      canvasX,
-      canvasY,
-      canvasW,
-      canvasH,
-    );
+    const flagHit = this.hitTestMarkerFlags(canvasX, canvasY, canvasW, canvasH);
     if (flagHit) return flagHit;
 
     // --- 2. Notes ---
