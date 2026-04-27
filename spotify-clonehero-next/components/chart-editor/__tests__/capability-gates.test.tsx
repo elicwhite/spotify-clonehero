@@ -46,14 +46,30 @@ function renderWith(
   );
 }
 
+/**
+ * Buttons rendered by the Tools palette. Querying for these directly
+ * pins the gate to the actual interactive controls — a bug that hides
+ * the section header but keeps the buttons would still fail this test.
+ */
+const TOOL_BUTTON_NAMES = [
+  /cursor/i,
+  /place note/i,
+  /eraser/i,
+  /bpm/i,
+  /time sig/i,
+  /section/i,
+] as const;
+
 describe('LeftSidebar capability gating', () => {
   describe('DRUM_EDIT_CAPABILITIES', () => {
     beforeEach(() => {
       renderWith(DRUM_EDIT_CAPABILITIES);
     });
 
-    it('shows the Tools palette section', () => {
-      expect(screen.getByText('Tools')).toBeInTheDocument();
+    it('renders every Tools-palette button', () => {
+      for (const name of TOOL_BUTTON_NAMES) {
+        expect(screen.getByRole('button', {name})).toBeInTheDocument();
+      }
     });
 
     it('shows the Highway-mode toggle', () => {
@@ -66,8 +82,10 @@ describe('LeftSidebar capability gating', () => {
       renderWith(ADD_LYRICS_CAPABILITIES, DEFAULT_VOCALS_SCOPE);
     });
 
-    it('hides the Tools palette section', () => {
-      expect(screen.queryByText('Tools')).not.toBeInTheDocument();
+    it('hides every Tools-palette button', () => {
+      for (const name of TOOL_BUTTON_NAMES) {
+        expect(screen.queryByRole('button', {name})).not.toBeInTheDocument();
+      }
     });
 
     it('hides the Highway-mode toggle', () => {

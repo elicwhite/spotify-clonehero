@@ -831,7 +831,9 @@ function makeVocalDoc(): ChartDocument {
 describe('MoveEntitiesCommand: lyric', () => {
   it('moves a lyric within its phrase and undo restores it', () => {
     const doc = makeVocalDoc();
-    const cmd = new MoveEntitiesCommand('lyric', ['240'], 120, 0);
+    const cmd = new MoveEntitiesCommand('lyric', ['vocals:240'], 120, 0, {
+      partName: 'vocals',
+    });
 
     const after = cmd.execute(doc);
     const phrase = after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
@@ -847,7 +849,9 @@ describe('MoveEntitiesCommand: lyric', () => {
 
   it('clamps the lyric drag to the phrase upper bound', () => {
     const doc = makeVocalDoc();
-    const cmd = new MoveEntitiesCommand('lyric', ['240'], 9999, 0);
+    const cmd = new MoveEntitiesCommand('lyric', ['vocals:240'], 9999, 0, {
+      partName: 'vocals',
+    });
     const after = cmd.execute(doc);
     expect(
       after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0].lyrics[0].tick,
@@ -858,7 +862,9 @@ describe('MoveEntitiesCommand: lyric', () => {
 describe('MoveEntitiesCommand: phrase markers', () => {
   it('phrase-start drag adjusts length only; undo restores the original tick', () => {
     const doc = makeVocalDoc();
-    const cmd = new MoveEntitiesCommand('phrase-start', ['0'], 120, 0);
+    const cmd = new MoveEntitiesCommand('phrase-start', ['vocals:0'], 120, 0, {
+      partName: 'vocals',
+    });
 
     const after = cmd.execute(doc);
     const moved = after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
@@ -874,7 +880,9 @@ describe('MoveEntitiesCommand: phrase markers', () => {
 
   it('phrase-end drag adjusts length only; undo restores the original end tick', () => {
     const doc = makeVocalDoc();
-    const cmd = new MoveEntitiesCommand('phrase-end', ['480'], 240, 0);
+    const cmd = new MoveEntitiesCommand('phrase-end', ['vocals:480'], 240, 0, {
+      partName: 'vocals',
+    });
 
     const after = cmd.execute(doc);
     const moved = after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];

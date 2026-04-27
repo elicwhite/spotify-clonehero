@@ -291,10 +291,14 @@ function EditorAppInner({projectId}: {projectId: string}) {
           );
         }
 
-        // 5. Build editable ChartDocument from chart bytes
-        const chartDoc = readChart([
-          {fileName: 'notes.chart', data: chartBytes},
-        ]);
+        // 5. Build editable ChartDocument from chart bytes. Force pro_drums
+        // so the chartDoc parses with the same interpretation we validated
+        // with PRO_DRUMS_MODIFIERS just above; otherwise edits run against
+        // a different interpretation than the validation pass.
+        const chartDoc = readChart(
+          [{fileName: 'notes.chart', data: chartBytes}],
+          {pro_drums: true},
+        );
 
         // 6. Load confidence data (if available)
         try {

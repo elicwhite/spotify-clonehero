@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import {SCALE, calculateNoteXOffset} from './types';
+import {SCALE} from './types';
+import {drums4LaneSchema} from '@/lib/chart-edit';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -8,22 +9,25 @@ import {SCALE, calculateNoteXOffset} from './types';
 const HIGHWAY_HALF_WIDTH = 0.45;
 
 /** Number of editor lanes (kick + 4 pad lanes). */
-const NUM_LANES = 5;
+const NUM_LANES = drums4LaneSchema.lanes.length;
 
-/** 3D X positions for each editor lane (0=kick, 1-4=red/yellow/blue/green). */
-const LANE_X_POSITIONS = [
-  0, // kick -- centered
-  ...Array.from({length: 4}, (_, i) => calculateNoteXOffset('drums', i)),
-];
+/** 3D X positions for each editor lane, sourced from the drum schema's
+ *  `worldXOffset`. InteractionManager reads the same field. */
+const LANE_X_POSITIONS: number[] = drums4LaneSchema.lanes.map(l => {
+  if (l.worldXOffset === undefined) {
+    throw new Error(
+      `drums4LaneSchema lane ${l.index} (${l.label}) is missing worldXOffset`,
+    );
+  }
+  return l.worldXOffset;
+});
 
-/** Lane colors for ghost notes (RGBA). */
-const LANE_COLORS_HEX = [
-  0xf8b272, // kick/orange
-  0xdd2214, // red
-  0xdeeb52, // yellow
-  0x006caf, // blue
-  0x01b11a, // green
-];
+/** Lane colors for ghost notes (THREE.js color number). Derived from the
+ *  schema's hex strings so adding/recoloring a lane is a schema-only
+ *  change. */
+const LANE_COLORS_HEX: number[] = drums4LaneSchema.lanes.map(l =>
+  Number.parseInt(l.color.replace(/^#/, ''), 16),
+);
 
 // Cursor line color
 const CURSOR_LINE_COLOR = 0x00ff80;

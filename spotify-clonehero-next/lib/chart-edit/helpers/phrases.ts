@@ -44,18 +44,13 @@ export function phraseEndId(
 }
 
 /**
- * Unpack a phrase-start or phrase-end id. Accepts the `{part}:{tick}`
- * form and the legacy bare-tick form (interpreted as `'vocals'`).
+ * Unpack a phrase-start or phrase-end id of the form `{part}:{tick}`.
  */
 export function parsePhraseId(
   id: string,
 ): {tick: number; partName: string} | null {
   const colon = id.indexOf(':');
-  if (colon === -1) {
-    const tick = Number.parseInt(id, 10);
-    if (!Number.isFinite(tick)) return null;
-    return {tick, partName: DEFAULT_VOCALS_PART};
-  }
+  if (colon === -1) return null;
   const partName = id.slice(0, colon);
   const tick = Number.parseInt(id.slice(colon + 1), 10);
   if (!Number.isFinite(tick) || partName.length === 0) return null;

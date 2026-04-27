@@ -387,10 +387,10 @@ describe('multi-part vocal helpers', () => {
     expect(listPhraseStartTicks(cloned, 'harm2')).toEqual([120]);
   });
 
-  it('legacy bare-tick id falls back to vocals (back-compat)', () => {
+  it('rejects malformed ids without a part:tick separator', () => {
     const doc = chartWithMultiPartVocals({
       vocals: [makePhrase(0, 480, [240])],
     });
-    expect(entityHandlers.lyric.locate(doc, '240')).toEqual({tick: 240});
+    expect(entityHandlers.lyric.locate(doc, '240')).toBeNull();
   });
 });

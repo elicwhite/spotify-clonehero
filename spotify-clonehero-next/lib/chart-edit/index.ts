@@ -9,6 +9,7 @@
 
 import {
   parseChartAndIni,
+  parseChartFile,
   createEmptyChart,
   writeChartFolder,
 } from '@eliwhite/scan-chart';
@@ -151,11 +152,12 @@ export {
  * assets) into a scan-chart `ChartDocument`. Throws if the chart file can't
  * be found or parsed.
  *
- * `iniChartModifiersOverride` merges into the parsed chart's
- * `iniChartModifiers` so callers can force interpretation that song.ini
- * (or scan-chart's defaults) wouldn't otherwise produce. The drum-edit
- * page uses this with `{pro_drums: true}` so tom/cymbal modifiers stay
- * meaningful through edit / re-parse cycles.
+ * `iniChartModifiersOverride` merges into the modifiers used for the
+ * parse itself, so derived fields (HOPO/cymbal/etc.) reflect the
+ * consumer's intended interpretation rather than song.ini's. The
+ * drum-edit page uses this with `{pro_drums: true}` so tom/cymbal
+ * modifiers are honored from the very first parse, not just on
+ * subsequent edit round-trips.
  */
 export function readChart(
   files: File[],
@@ -173,14 +175,30 @@ export function readChart(
   const assets = files.filter(
     f => !chartFileNames.has(f.fileName.toLowerCase()),
   );
-  const parsedChart = iniChartModifiersOverride
-    ? {
-        ...result.parsedChart,
-        iniChartModifiers: {
-          ...result.parsedChart.iniChartModifiers,
-          ...iniChartModifiersOverride,
-        },
-      }
-    : result.parsedChart;
+
+  let {parsedChart} = result;
+  if (iniChartModifiersOverride) {
+    // parseChartAndIni already parsed once with song.ini's modifiers; re-parse
+    // the same bytes with the merged modifiers so HOPO/cymbal/etc. derivation
+    // matches the override from the start. parseChartFile returns the narrow
+    // shape (no chartBytes/format/iniChartModifiers) so we re-stitch the wider
+    // ParsedChart that consumers expect.
+    const mergedModifiers = {
+      ...parsedChart.iniChartModifiers,
+      ...iniChartModifiersOverride,
+    };
+    const reparsed = parseChartFile(
+      parsedChart.chartBytes,
+      parsedChart.format,
+      mergedModifiers,
+    );
+    parsedChart = {
+      ...reparsed,
+      chartBytes: parsedChart.chartBytes,
+      format: parsedChart.format,
+      iniChartModifiers: mergedModifiers,
+    };
+  }
+
   return {parsedChart, assets};
 }

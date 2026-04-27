@@ -29,20 +29,14 @@ export function lyricId(
 }
 
 /**
- * Unpack a `lyricId`. Accepts the new `{part}:{tick}` form and the legacy
- * bare-tick form (e.g. `'480'`); the legacy form is interpreted as the
- * default `'vocals'` part for backwards-compat with stored selections.
- * Returns null when the id is malformed.
+ * Unpack a `lyricId` of the form `{part}:{tick}`. Returns null when the
+ * id is malformed.
  */
 export function parseLyricId(
   id: string,
 ): {tick: number; partName: string} | null {
   const colon = id.indexOf(':');
-  if (colon === -1) {
-    const tick = Number.parseInt(id, 10);
-    if (!Number.isFinite(tick)) return null;
-    return {tick, partName: DEFAULT_VOCALS_PART};
-  }
+  if (colon === -1) return null;
   const partName = id.slice(0, colon);
   const tick = Number.parseInt(id.slice(colon + 1), 10);
   if (!Number.isFinite(tick) || partName.length === 0) return null;

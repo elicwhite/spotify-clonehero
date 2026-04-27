@@ -322,6 +322,7 @@ export default function LeftSidebar({
                           state.activeTool === mode ? 'secondary' : 'ghost'
                         }
                         size="icon"
+                        aria-label={label}
                         className={cn(
                           'h-9 w-full',
                           state.activeTool === mode && 'ring-1 ring-primary',
