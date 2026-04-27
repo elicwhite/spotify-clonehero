@@ -11,19 +11,16 @@ import LocalScanLoaderCard from '../spotify/app/LocalScanLoaderCard';
 import UpdateChorusLoaderCard from '../spotify/app/UpdateChorusLoaderCard';
 import {getLocalDb} from '@/lib/local-db/client';
 import {upsertLocalCharts} from '@/lib/local-db/local-charts';
-import {sql} from 'kysely';
+import {
+  findMissingCharts,
+  type MissingChartRow,
+} from '@/lib/local-db/chorus/missing';
 import {SngStream} from '@eliwhite/parse-sng';
 import scanLocalCharts, {
   SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
 
-type MissingChart = {
-  md5: string;
-  name: string;
-  artist: string;
-  charter: string;
-  has_video_background: number;
-};
+type MissingChart = MissingChartRow;
 
 type DownloadStatus =
   | 'not-started'
@@ -128,7 +125,7 @@ export default function ChartDownloader() {
 
     // Find missing charts
     setStatus('finding-missing');
-    const missing = await findMissingCharts();
+    const missing = await findMissingCharts(await getLocalDb());
     setMissingCharts(missing);
 
     if (missing.length === 0) {
@@ -498,27 +495,6 @@ function sanitizeFolderName(name: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 200); // Keep reasonable length
-}
-
-/** Query the DB for chorus charts that don't match any local chart by name+artist+charter */
-async function findMissingCharts(): Promise<MissingChart[]> {
-  const db = await getLocalDb();
-
-  const result = await sql<MissingChart>`
-    SELECT c.md5, c.name, c.artist, c.charter, c.has_video_background
-    FROM chorus_charts c
-    WHERE NOT EXISTS (
-      SELECT 1 FROM local_charts lc
-      WHERE lc.artist_normalized = c.artist_normalized
-        AND lc.song_normalized = c.name_normalized
-        AND lc.charter_normalized = c.charter_normalized
-    )
-    AND c.name IS NOT NULL
-    AND c.artist IS NOT NULL
-    ORDER BY c.modified_time DESC
-  `.execute(db);
-
-  return result.rows;
 }
 
 function formatEta(progress: DownloadProgress): string {

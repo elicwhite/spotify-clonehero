@@ -1,7 +1,9 @@
-import {SQLocalKysely} from 'sqlocal/kysely';
-import {Kysely, Migrator, ParseJSONResultsPlugin} from 'kysely';
+import type {SQLocalKysely} from 'sqlocal/kysely';
+import {Kysely, ParseJSONResultsPlugin} from 'kysely';
 import type {DB} from './types';
 import {normalizeStrForMatching} from './normalize';
+import {applyMigrations} from './migrations-runner';
+import {getTestDbOverride} from './test-override';
 
 // Database client - will be initialized in initializeLocalDb()
 let localDb: Kysely<DB> | null = null;
@@ -10,6 +12,13 @@ let sqlocalClient: SQLocalKysely | null = null;
 
 // Initialize the database with migrations
 export async function getLocalDb(): Promise<Kysely<DB>> {
+  // Tests can install an in-memory better-sqlite3-backed Kysely instance via
+  // `__setLocalDbForTesting` (in `./test-override`).
+  const override = getTestDbOverride();
+  if (override) {
+    return override;
+  }
+
   // If database is already initialized, return it immediately
   if (localDb) {
     return localDb;
@@ -25,6 +34,13 @@ export async function getLocalDb(): Promise<Kysely<DB>> {
   return dbInitializationPromise;
 }
 
+// Reset cached production state so the next `getLocalDb()` call reinitializes.
+// Tests use this alongside `__resetLocalDbForTesting` from `./test-override`.
+export function __resetLocalDbCache(): void {
+  localDb = null;
+  dbInitializationPromise = null;
+}
+
 if (typeof window !== 'undefined') {
   window.getLocalDb = getLocalDb;
 }
@@ -32,6 +48,10 @@ if (typeof window !== 'undefined') {
 async function initializeDatabase(): Promise<Kysely<DB>> {
   try {
     console.log('Initializing SQLocal database...');
+
+    // Lazy-import sqlocal so this module can be loaded outside the browser
+    // (e.g. by Jest under Node) without pulling in OPFS-only code.
+    const {SQLocalKysely} = await import('sqlocal/kysely');
 
     // Create the SQLocal database client.
     //
@@ -58,31 +78,8 @@ async function initializeDatabase(): Promise<Kysely<DB>> {
       return normalizeStrForMatching(str);
     });
 
-    // Create migrator
-    const migrator = new Migrator({
-      db,
-      provider: {
-        async getMigrations() {
-          const {migrations} = await import('./migrations/');
-          return migrations;
-        },
-      },
-    });
-
-    // Run migrations
     console.log('Running database migrations...');
-    const {error, results} = await migrator.migrateToLatest();
-
-    if (error) {
-      console.error('Migration failed:', error);
-      throw error;
-    }
-
-    if (results) {
-      console.log('Migrations completed:', results);
-    } else {
-      console.log('Database is up to date');
-    }
+    await applyMigrations(db);
 
     console.log('Local database initialized successfully');
 
