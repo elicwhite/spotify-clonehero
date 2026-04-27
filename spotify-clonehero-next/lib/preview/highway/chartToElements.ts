@@ -9,20 +9,33 @@ import type {Track} from './types';
 // ---------------------------------------------------------------------------
 
 /**
- * Converts a ParsedChart + Track to a combined ChartElement[] containing
- * notes, sections, lyrics, vocal phrases, BPM changes, and time signatures.
+ * Converts a ParsedChart + (optional) Track to a combined ChartElement[]
+ * containing notes, sections, lyrics, vocal phrases, BPM changes, and
+ * time signatures.
  *
  * Notes come from the existing trackToElements(). All other marker types
  * are extracted from the ParsedChart's global metadata.
+ *
+ * `track` is optional: pages that edit something other than a notes
+ * track (e.g. add-lyrics with `EditorScope = { kind: 'vocals' }`) pass
+ * `null` and only the chart-wide markers + lyric + phrase elements are
+ * produced.
+ *
+ * `vocalPartName` selects which vocal part contributes lyrics + phrase
+ * markers. Defaults to `'vocals'`. Used by add-lyrics to switch between
+ * `vocals` / `harm1` / `harm2` / `harm3` on multi-part charts.
  */
 export function chartToElements(
   parsedChart: ParsedChart,
-  track: Track,
+  track: Track | null,
+  vocalPartName: string = 'vocals',
 ): ChartElement[] {
   const elements: ChartElement[] = [];
 
-  // Notes (existing converter)
-  elements.push(...trackToElements(track));
+  // Notes (existing converter) — skipped when no track is being edited.
+  if (track) {
+    elements.push(...trackToElements(track));
+  }
 
   // Sections
   for (const section of parsedChart.sections) {
@@ -34,9 +47,10 @@ export function chartToElements(
     });
   }
 
-  // Lyrics (pulled from the vocal part's note phrases)
-  const vocals = parsedChart.vocalTracks.parts.vocals;
-  const lyrics = vocals?.notePhrases.flatMap(p => p.lyrics) ?? [];
+  // Lyrics + phrases for the active vocal part. Only one part is shown
+  // at a time; the picker in LeftSidebar switches the part.
+  const activePart = parsedChart.vocalTracks.parts[vocalPartName];
+  const lyrics = activePart?.notePhrases.flatMap(p => p.lyrics) ?? [];
   for (const lyric of lyrics) {
     elements.push({
       key: `lyric:${lyric.tick}`,
@@ -47,7 +61,7 @@ export function chartToElements(
   }
 
   // Vocal phrases (start and end markers)
-  const vocalPhrases = vocals?.notePhrases ?? [];
+  const vocalPhrases = activePart?.notePhrases ?? [];
   for (const phrase of vocalPhrases) {
     elements.push({
       key: `phrase-start:${phrase.tick}`,

@@ -1,45 +1,90 @@
 /**
  * Vocal phrase marker helpers.
  *
- * Phrases bracket lyric runs in `vocalTracks.parts.vocals.notePhrases`. The
- * highway renders each phrase as two text-event markers (`phrase-start` at
- * `phrase.tick`, `phrase-end` at `phrase.tick + phrase.length`).
+ * Phrases bracket lyric runs in `vocalTracks.parts[partName].notePhrases`.
+ * The highway renders each phrase as two text-event markers (`phrase-start`
+ * at `phrase.tick`, `phrase-end` at `phrase.tick + phrase.length`).
  *
  * `movePhraseStart` repositions the start without touching the end (length
  * shrinks/grows). `movePhraseEnd` repositions the end without touching the
  * start. Both clamp against neighboring phrases so they never invert or
  * cross. All mutations are in-place.
+ *
+ * The `partName` argument selects which vocal part (`vocals`, `harm1`,
+ * `harm2`, `harm3`) the helper operates on; defaults to `'vocals'`.
  */
 
 import type {ChartDocument, NormalizedVocalPart} from '../types';
-
-const VOCALS_PART = 'vocals';
+import {DEFAULT_VOCALS_PART} from './lyrics';
 
 /** Minimum length (in ticks) a phrase can be reduced to via drag. */
 const MIN_PHRASE_LENGTH = 1;
 
-export function phraseStartId(tick: number): string {
-  return String(tick);
+/**
+ * Pack `{partName, tick}` into a stable id for a phrase-start entity.
+ * Defaults to `'vocals'` so charts without harmonies keep ids that look
+ * like `vocals:0`.
+ */
+export function phraseStartId(
+  tick: number,
+  partName: string = DEFAULT_VOCALS_PART,
+): string {
+  return `${partName}:${tick}`;
 }
 
-export function phraseEndId(endTick: number): string {
-  return String(endTick);
+/**
+ * Pack `{partName, endTick}` into a stable id for a phrase-end entity.
+ * The "end tick" is `phrase.tick + phrase.length`.
+ */
+export function phraseEndId(
+  endTick: number,
+  partName: string = DEFAULT_VOCALS_PART,
+): string {
+  return `${partName}:${endTick}`;
 }
 
-function getVocalsPart(doc: ChartDocument): NormalizedVocalPart | null {
-  return doc.parsedChart.vocalTracks?.parts?.[VOCALS_PART] ?? null;
+/**
+ * Unpack a phrase-start or phrase-end id. Accepts the `{part}:{tick}`
+ * form and the legacy bare-tick form (interpreted as `'vocals'`).
+ */
+export function parsePhraseId(
+  id: string,
+): {tick: number; partName: string} | null {
+  const colon = id.indexOf(':');
+  if (colon === -1) {
+    const tick = Number.parseInt(id, 10);
+    if (!Number.isFinite(tick)) return null;
+    return {tick, partName: DEFAULT_VOCALS_PART};
+  }
+  const partName = id.slice(0, colon);
+  const tick = Number.parseInt(id.slice(colon + 1), 10);
+  if (!Number.isFinite(tick) || partName.length === 0) return null;
+  return {tick, partName};
 }
 
-/** All phrase start ticks. */
-export function listPhraseStartTicks(doc: ChartDocument): number[] {
-  const part = getVocalsPart(doc);
+function getVocalPart(
+  doc: ChartDocument,
+  partName: string,
+): NormalizedVocalPart | null {
+  return doc.parsedChart.vocalTracks?.parts?.[partName] ?? null;
+}
+
+/** All phrase start ticks in the named vocal part. */
+export function listPhraseStartTicks(
+  doc: ChartDocument,
+  partName: string = DEFAULT_VOCALS_PART,
+): number[] {
+  const part = getVocalPart(doc, partName);
   if (!part) return [];
   return part.notePhrases.map(p => p.tick);
 }
 
-/** All phrase end ticks (`phrase.tick + phrase.length`). */
-export function listPhraseEndTicks(doc: ChartDocument): number[] {
-  const part = getVocalsPart(doc);
+/** All phrase end ticks (`phrase.tick + phrase.length`) in the named vocal part. */
+export function listPhraseEndTicks(
+  doc: ChartDocument,
+  partName: string = DEFAULT_VOCALS_PART,
+): number[] {
+  const part = getVocalPart(doc, partName);
   if (!part) return [];
   return part.notePhrases.map(p => p.tick + p.length);
 }
@@ -55,8 +100,9 @@ export function movePhraseStart(
   doc: ChartDocument,
   oldStartTick: number,
   newStartTick: number,
+  partName: string = DEFAULT_VOCALS_PART,
 ): number {
-  const part = getVocalsPart(doc);
+  const part = getVocalPart(doc, partName);
   if (!part) return oldStartTick;
 
   const phrases = part.notePhrases;
@@ -88,8 +134,9 @@ export function movePhraseEnd(
   doc: ChartDocument,
   oldEndTick: number,
   newEndTick: number,
+  partName: string = DEFAULT_VOCALS_PART,
 ): number {
-  const part = getVocalsPart(doc);
+  const part = getVocalPart(doc, partName);
   if (!part) return oldEndTick;
 
   const phrases = part.notePhrases;

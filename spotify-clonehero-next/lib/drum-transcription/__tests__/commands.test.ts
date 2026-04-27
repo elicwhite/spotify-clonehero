@@ -772,7 +772,14 @@ function makeVocalDoc(): ChartDocument {
             msLength: 0,
             isPercussion: false,
             notes: [
-              {tick: 240, msTime: 0, length: 60, msLength: 0, pitch: 60, type: 'pitched'},
+              {
+                tick: 240,
+                msTime: 0,
+                length: 60,
+                msLength: 0,
+                pitch: 60,
+                type: 'pitched',
+              },
             ],
             lyrics: [{tick: 240, msTime: 0, text: 'la', flags: 0}],
           },

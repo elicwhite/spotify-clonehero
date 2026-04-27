@@ -6,25 +6,62 @@
  * tick (added by writers like add-lyrics so scan-chart preserves the lyric
  * on round-trip). All mutations are in-place.
  *
- * Lyrics are uniquely identified within a vocal part by their tick.
+ * Lyrics are uniquely identified within a vocal part by their tick. The
+ * `partName` argument selects which vocal part (`vocals`, `harm1`,
+ * `harm2`, `harm3`) the helper operates on; defaults to `'vocals'`.
  */
 
 import type {ChartDocument, NormalizedVocalPart} from '../types';
 
-/** Default vocal part name — matches the part used by add-lyrics. */
-const VOCALS_PART = 'vocals';
+/** Default vocal part — matches the part used by add-lyrics. */
+export const DEFAULT_VOCALS_PART = 'vocals';
 
-export function lyricId(tick: number): string {
-  return String(tick);
+/**
+ * Pack `{partName, tick}` into a stable id used by the editor's entity
+ * adapter and reconciler keys. Part defaults to `'vocals'` so charts
+ * without harmonies keep ids that look like `vocals:480`.
+ */
+export function lyricId(
+  tick: number,
+  partName: string = DEFAULT_VOCALS_PART,
+): string {
+  return `${partName}:${tick}`;
 }
 
-function getVocalsPart(doc: ChartDocument): NormalizedVocalPart | null {
-  return doc.parsedChart.vocalTracks?.parts?.[VOCALS_PART] ?? null;
+/**
+ * Unpack a `lyricId`. Accepts the new `{part}:{tick}` form and the legacy
+ * bare-tick form (e.g. `'480'`); the legacy form is interpreted as the
+ * default `'vocals'` part for backwards-compat with stored selections.
+ * Returns null when the id is malformed.
+ */
+export function parseLyricId(
+  id: string,
+): {tick: number; partName: string} | null {
+  const colon = id.indexOf(':');
+  if (colon === -1) {
+    const tick = Number.parseInt(id, 10);
+    if (!Number.isFinite(tick)) return null;
+    return {tick, partName: DEFAULT_VOCALS_PART};
+  }
+  const partName = id.slice(0, colon);
+  const tick = Number.parseInt(id.slice(colon + 1), 10);
+  if (!Number.isFinite(tick) || partName.length === 0) return null;
+  return {tick, partName};
 }
 
-/** All lyric ticks in the vocals part, sorted ascending. */
-export function listLyricTicks(doc: ChartDocument): number[] {
-  const part = getVocalsPart(doc);
+function getVocalPart(
+  doc: ChartDocument,
+  partName: string,
+): NormalizedVocalPart | null {
+  return doc.parsedChart.vocalTracks?.parts?.[partName] ?? null;
+}
+
+/** All lyric ticks in the named vocal part, sorted ascending. */
+export function listLyricTicks(
+  doc: ChartDocument,
+  partName: string = DEFAULT_VOCALS_PART,
+): number[] {
+  const part = getVocalPart(doc, partName);
   if (!part) return [];
   const ticks: number[] = [];
   for (const phrase of part.notePhrases) {
@@ -38,9 +75,7 @@ function findPhraseIndexWithLyric(
   part: NormalizedVocalPart,
   tick: number,
 ): number {
-  return part.notePhrases.findIndex(p =>
-    p.lyrics.some(l => l.tick === tick),
-  );
+  return part.notePhrases.findIndex(p => p.lyrics.some(l => l.tick === tick));
 }
 
 /**
@@ -58,8 +93,9 @@ export function moveLyric(
   doc: ChartDocument,
   oldTick: number,
   newTick: number,
+  partName: string = DEFAULT_VOCALS_PART,
 ): number {
-  const part = getVocalsPart(doc);
+  const part = getVocalPart(doc, partName);
   if (!part) return oldTick;
 
   const phraseIdx = findPhraseIndexWithLyric(part, oldTick);

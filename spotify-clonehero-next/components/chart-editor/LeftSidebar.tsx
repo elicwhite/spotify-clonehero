@@ -92,6 +92,17 @@ export default function LeftSidebar({
   const canSlower = speedIdx > 0;
   const canFaster = speedIdx < SPEED_PRESETS.length - 1;
 
+  // Vocal-part picker. Only renders when:
+  //   - the active scope is vocals (else there's nothing to pick)
+  //   - the chart actually has more than one part (single-part charts hide it)
+  // Part names follow scan-chart's NormalizedVocalTrack.parts shape.
+  const vocalParts =
+    state.activeScope.kind === 'vocals'
+      ? Object.keys(state.chartDoc?.parsedChart.vocalTracks?.parts ?? {})
+      : [];
+  const showVocalPartPicker =
+    state.activeScope.kind === 'vocals' && vocalParts.length > 1;
+
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex flex-col w-64 shrink-0 border-r bg-background overflow-y-auto overflow-x-hidden">
@@ -210,6 +221,55 @@ export default function LeftSidebar({
             </div>
           </div>
 
+          {/* Vocal part picker — only for multi-part vocal charts. Switching
+              parts clears any active marker selection (selection is
+              part-scoped via the EntityRef id format), and the editor
+              re-derives which lyrics/phrases are visible from the new
+              part. */}
+          {showVocalPartPicker && (
+            <div className="space-y-2 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Vocal Part</span>
+                <Select
+                  value={
+                    state.activeScope.kind === 'vocals'
+                      ? state.activeScope.part
+                      : 'vocals'
+                  }
+                  onValueChange={value => {
+                    dispatch({
+                      type: 'SET_ACTIVE_SCOPE',
+                      scope: {kind: 'vocals', part: value},
+                    });
+                    // Clear any cross-part selections that wouldn't survive
+                    // the part switch — selection ids carry the part.
+                    for (const k of [
+                      'lyric',
+                      'phrase-start',
+                      'phrase-end',
+                    ] as const) {
+                      dispatch({
+                        type: 'SET_SELECTION',
+                        kind: k,
+                        ids: new Set(),
+                      });
+                    }
+                  }}>
+                  <SelectTrigger className="h-8 w-[7rem] text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vocalParts.map(part => (
+                      <SelectItem key={part} value={part}>
+                        {part}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
           {/* Highway mode toggle — hidden on pages that pin the mode (add-lyrics) */}
           {capabilities.showHighwayModeToggle && (
             <div className="space-y-2 pt-4 border-t">
@@ -219,7 +279,9 @@ export default function LeftSidebar({
                   <TooltipTrigger asChild>
                     <Button
                       variant={
-                        state.highwayMode === 'waveform' ? 'secondary' : 'outline'
+                        state.highwayMode === 'waveform'
+                          ? 'secondary'
+                          : 'outline'
                       }
                       size="sm"
                       className="h-7 gap-1.5 text-xs"
@@ -233,7 +295,9 @@ export default function LeftSidebar({
                         })
                       }>
                       <AudioWaveform className="h-3.5 w-3.5" />
-                      {state.highwayMode === 'waveform' ? 'Waveform' : 'Classic'}
+                      {state.highwayMode === 'waveform'
+                        ? 'Waveform'
+                        : 'Classic'}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="right">
