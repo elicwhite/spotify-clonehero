@@ -53,7 +53,6 @@ import quarterNote from '@/public/assets/svgs/quarter-note.svg';
 import eighthNote from '@/public/assets/svgs/eighth-note.svg';
 import tripletNote from '@/public/assets/svgs/triplet-note.svg';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
-import {extractFills, defaultConfig} from '@/lib/fill-detector';
 import {toast} from '@/components/ui/toast';
 import {createClient} from '@/lib/supabase/client';
 import {unfavoriteSongByHash} from '../../account/actions';
@@ -656,124 +655,6 @@ export default function Renderer({
     }
   }, [metadata]);
 
-  // Derive fills from chart + track (dev mode only). Keeping this as
-  // a useMemo rather than useState-in-effect means the component's
-  // render output is a pure function of its props.
-  const fillDetectionResult = useMemo(() => {
-    if (process.env.NODE_ENV !== 'development') {
-      return {fills: [], error: null as unknown};
-    }
-    if (track.instrument !== 'drums') {
-      return {fills: [], error: null as unknown};
-    }
-    try {
-      return {fills: extractFills(chart, track, defaultConfig), error: null};
-    } catch (error) {
-      return {fills: [], error};
-    }
-  }, [chart, track]);
-  const detectedFills = useMemo(
-    () =>
-      fillDetectionResult.fills.map((fill, index) => ({
-        fillNumber: index + 1,
-        startTimeMs: fill.startMs,
-        endTimeMs: fill.endMs,
-        durationMs: fill.endMs - fill.startMs,
-        startTick: fill.startTick,
-        endTick: fill.endTick,
-        measureStartMs: fill.measureStartMs,
-        measureNumber: fill.measureNumber,
-      })),
-    [fillDetectionResult],
-  );
-
-  // Dev-mode fill-detection debug logging, separated from the pure
-  // derivation above so the logging side effect runs only when the
-  // underlying result actually changes.
-  useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') return;
-    if (track.instrument !== 'drums') return;
-
-    const {fills, error} = fillDetectionResult;
-    if (error) {
-      console.warn('⚠️ Fill detection failed:', error);
-      console.log('Chart structure for debugging:', {
-        trackInstrument: track.instrument,
-        trackDifficulty: track.difficulty,
-        hasTempos: !!chart.tempos,
-        tempoCount: chart.tempos?.length || 0,
-        resolution: chart.resolution,
-      });
-      return;
-    }
-
-    console.log('🥁 Detected Drum Fills Debug Info:', {
-      songName: metadata.name,
-      artist: metadata.artist,
-      charter: metadata.charter,
-      difficulty: track.difficulty,
-      totalFills: fills.length,
-      fillDetails: fills.map((fill, index) => ({
-        fillNumber: index + 1,
-        measureNumber: fill.measureNumber,
-        measureStartMs: fill.measureStartMs,
-        startTick: fill.startTick,
-        endTick: fill.endTick,
-        startTimeMs: fill.startMs,
-        endTimeMs: fill.endMs,
-        durationMs: fill.endMs - fill.startMs,
-        durationBeats: (fill.endTick - fill.startTick) / chart.resolution,
-        scores: {
-          densityZ: fill.densityZ,
-          grooveDistance: fill.grooveDist,
-          tomRatioJump: fill.tomRatioJump,
-          hatDropout: fill.hatDropout,
-          kickDrop: fill.kickDrop,
-          ioiStdZ: fill.ioiStdZ,
-          ngramNovelty: fill.ngramNovelty,
-          samePadBurst: fill.samePadBurst,
-          crashResolve: fill.crashResolve,
-        },
-        combinedScore: fill.densityZ + fill.grooveDist + fill.tomRatioJump,
-      })),
-      summary:
-        fills.length > 0
-          ? {
-              shortestFillMs: Math.min(...fills.map(f => f.endMs - f.startMs)),
-              longestFillMs: Math.max(...fills.map(f => f.endMs - f.startMs)),
-              avgFillDurationMs:
-                fills.reduce((sum, f) => sum + (f.endMs - f.startMs), 0) /
-                fills.length,
-              totalFillTimeMs: fills.reduce(
-                (sum, f) => sum + (f.endMs - f.startMs),
-                0,
-              ),
-            }
-          : null,
-    });
-  }, [fillDetectionResult, track, chart, metadata]);
-
-  // Function to play from a specific fill
-  const playFill = useCallback((fillStartTimeMs: number) => {
-    if (audioManagerRef.current == null) {
-      return;
-    }
-    // Convert milliseconds to seconds for audio manager
-    const timeInSeconds = fillStartTimeMs / 1000;
-    audioManagerRef.current.play({time: timeInSeconds});
-    setIsPlaying(true);
-  }, []);
-
-  // Function to play from the start of the measure containing a fill
-  const playFromMeasure = useCallback((measureStartTimeMs: number) => {
-    if (audioManagerRef.current == null) {
-      return;
-    }
-    // Convert milliseconds to seconds for audio manager
-    const timeInSeconds = measureStartTimeMs / 1000;
-    audioManagerRef.current.play({time: timeInSeconds});
-    setIsPlaying(true);
-  }, []);
 
   // Modify the play function to handle practice mode
   const handlePlay = useCallback(() => {
@@ -1284,53 +1165,6 @@ export default function Renderer({
 
           {/* Practice Mode Button */}
           {practiceModeButton}
-
-          {/* Drum Fills Section - Only in development */}
-          {false &&
-            process.env.NODE_ENV === 'development' &&
-            detectedFills.length > 0 && (
-              <div className="space-y-2 pt-4 border-t">
-                <label className="text-sm font-medium">
-                  Drum Fills ({detectedFills.length})
-                </label>
-                <div className="space-y-1 overflow-y-auto">
-                  {detectedFills.map(fill => (
-                    <div
-                      key={fill.fillNumber}
-                      className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted transition-colors">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">
-                          Fill #{fill.fillNumber}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Measure {fill.measureNumber} •{' '}
-                          {Math.round(fill.startTimeMs / 1000)}s •{' '}
-                          {Math.round(fill.durationMs / 1000)}s duration
-                        </div>
-                      </div>
-                      <div className="flex gap-1 ml-2 flex-shrink-0">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => playFromMeasure(fill.measureStartMs)}
-                          title={`Play from measure ${fill.measureNumber} start`}>
-                          <Play className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => playFill(fill.startTimeMs)}
-                          title={`Play from fill #${fill.fillNumber} start`}>
-                          <Play className="h-3 w-3 fill-current" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
         </>
       }
       sidebarFooter={
