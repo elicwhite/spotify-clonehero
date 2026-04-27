@@ -1,10 +1,7 @@
 /**
  * EditorScope — what the editor is currently editing.
  *
- * The editor used to assume `instrument === 'drums' && difficulty === 'expert'`
- * everywhere. After phase 1 of the chart-editor architecture rewrite
- * (`plans/in-progress/0030-editor-active-scope-instrument-schema.md`),
- * every callsite that resolves "the active track" reads this scope.
+ * Every callsite that resolves "the active track" reads this scope.
  *
  * Three kinds:
  *
@@ -17,8 +14,7 @@
  *    entities.
  *
  *  - `global` — chart-wide editing only (sections, BPM, time-signature).
- *    No instrument is highlighted. Phase-1 has no consumer for this yet
- *    but the type is reserved for phase-9 + later.
+ *    Reserved for future use; no consumer today.
  */
 
 import type {

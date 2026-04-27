@@ -24,7 +24,7 @@ import {
   type FlagName,
 } from '../commands';
 import type {DrumNote, DrumNoteType} from '@/lib/chart-edit';
-import {getDrumNotes} from '@/lib/chart-edit';
+import {getDrumNotes, drums4LaneSchema} from '@/lib/chart-edit';
 import {
   buildTimedTempos,
   tickToMs,
@@ -62,24 +62,25 @@ const TOOL_SHORTCUT_MAP: Record<string, ToolMode> = {
 };
 
 /**
- * Lane key mapping for keys mode (Place tool): 1=kick, 2=red, 3=yellow, 4=blue, 5=green.
+ * Lane key mapping for keys mode (Place tool): derived from
+ * `drums4LaneSchema.lanes[i].defaultKey` so the schema is the single source
+ * of truth. (1=kick, 2=red, 3=yellow, 4=blue, 5=green by default.)
  */
-const LANE_KEY_MAP: Record<string, number> = {
-  '1': 0, // kick
-  '2': 1, // redDrum
-  '3': 2, // yellowDrum
-  '4': 3, // blueDrum
-  '5': 4, // greenDrum
-};
+const LANE_KEY_MAP: Record<string, number> = Object.fromEntries(
+  drums4LaneSchema.lanes
+    .filter(l => l.defaultKey !== undefined)
+    .map(l => [l.defaultKey!, l.index]),
+);
 
 /**
- * Flag shortcuts: Q=cymbal, A=accent, S=ghost
+ * Flag shortcuts: derived from `drums4LaneSchema.flagBindings[i].defaultKey`
+ * (Q=cymbal, A=accent, S=ghost by default).
  */
-const FLAG_SHORTCUT_MAP: Record<string, FlagName> = {
-  q: 'cymbal',
-  a: 'accent',
-  s: 'ghost',
-};
+const FLAG_SHORTCUT_MAP: Record<string, FlagName> = Object.fromEntries(
+  drums4LaneSchema.flagBindings
+    .filter(b => b.defaultKey !== undefined)
+    .map(b => [b.defaultKey!, b.flag as FlagName]),
+);
 
 /**
  * Registers global keyboard shortcuts for the chart editor using
@@ -243,10 +244,12 @@ export function useEditorKeyboard(
       dispatch({type: 'SET_CLIPBOARD', notes: normalized});
 
       // Delete
+      const trackKey = trackKeyFromScope(state.activeScope);
+      if (!trackKey) return;
       executeCommand(
         new DeleteNotesCommand(
           new Set(getSelectedIds(state, 'note')),
-          trackKeyFromScope(state.activeScope),
+          trackKey,
         ),
       );
       dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
@@ -264,6 +267,7 @@ export function useEditorKeyboard(
       const cursorTick = state.cursorTick;
 
       const trackKey = trackKeyFromScope(state.activeScope);
+      if (!trackKey) return;
       const commands = state.clipboard.map(
         n =>
           new AddNoteCommand(
@@ -475,6 +479,8 @@ export function useEditorKeyboard(
       key as Hotkey,
       () => {
         if (!state.chartDoc) return;
+        const trackKey = trackKeyFromScope(state.activeScope);
+        if (!trackKey) return;
         const type: DrumNoteType = laneToType(lane);
         const tick = state.cursorTick;
 
@@ -483,7 +489,6 @@ export function useEditorKeyboard(
           const existing = getDrumNotes(track).find(
             n => n.tick === tick && n.type === type,
           );
-          const trackKey = trackKeyFromScope(state.activeScope);
           if (existing) {
             const id = noteId(existing);
             executeCommand(new DeleteNotesCommand(new Set([id]), trackKey));
@@ -526,12 +531,14 @@ export function useEditorKeyboard(
     useHotkey(
       key.toUpperCase() as Hotkey,
       () => {
+        const trackKey = trackKeyFromScope(state.activeScope);
+        if (!trackKey) return;
         if (getSelectedIds(state, 'note').size > 0 && state.chartDoc) {
           executeCommand(
             new ToggleFlagCommand(
               Array.from(getSelectedIds(state, 'note')),
               flag,
-              trackKeyFromScope(state.activeScope),
+              trackKey,
             ),
           );
           onNotesModified?.(Array.from(getSelectedIds(state, 'note')));
@@ -566,12 +573,11 @@ export function useEditorKeyboard(
     }
     const selectedNotes = getSelectedIds(state, 'note');
     if (selectedNotes.size > 0) {
+      const trackKey = trackKeyFromScope(state.activeScope);
+      if (!trackKey) return;
       onNotesModified?.(Array.from(selectedNotes));
       executeCommand(
-        new DeleteNotesCommand(
-          selectedNotes as Set<string>,
-          trackKeyFromScope(state.activeScope),
-        ),
+        new DeleteNotesCommand(selectedNotes as Set<string>, trackKey),
       );
       dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
     }

@@ -265,7 +265,6 @@ async function decodeAudioForWaveform(
 
 interface EditorData {
   chart: ParsedChart;
-  track: ParsedChart['trackData'][0] | null;
   chartDoc: ChartDocument;
   audioManager: AudioManager;
   audioData?: Float32Array;
@@ -608,24 +607,12 @@ function LyricsAlignInner() {
         }
 
         const durationSeconds = audioManager.duration;
-        // No drum-track fallback — add-lyrics doesn't require a drum track
-        // and the lanes-off renderer synthesizes an empty one when needed.
-        const track =
-          nextDoc.parsedChart.trackData.find(
-            t => t.instrument === 'drums' && t.difficulty === 'expert',
-          ) ?? null;
 
         audioManagerRef.current = audioManager;
-        dispatch({
-          type: 'SET_CHART',
-          chart: nextDoc.parsedChart as ParsedChart,
-          track,
-        });
         dispatch({type: 'SET_CHART_DOC', chartDoc: nextDoc});
 
         setEditorData({
           chart: nextDoc.parsedChart as ParsedChart,
-          track,
           chartDoc: nextDoc,
           audioManager,
           audioData: waveform?.interleaved,

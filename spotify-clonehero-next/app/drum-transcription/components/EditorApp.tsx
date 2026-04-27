@@ -403,8 +403,8 @@ function EditorAppInner({projectId}: {projectId: string}) {
         audioManagerRef.current = audioManager;
         setAudioManager(audioManager);
 
-        // 11. Update editor state
-        dispatch({type: 'SET_CHART', chart: parsed, track: drumTrack});
+        // 11. Update editor state. ChartDoc carries the parsed chart;
+        // consumers derive the active track via selectActiveTrack().
         dispatch({type: 'SET_CHART_DOC', chartDoc});
         setLoadingState('ready');
       } catch (err) {
@@ -544,7 +544,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
     );
   }
 
-  const {chart} = state;
+  const chart = state.chartDoc?.parsedChart ?? null;
   if (!chart || !audioManager || !cloneHeroMetadata) {
     return null;
   }

@@ -1,14 +1,11 @@
 /**
  * Command inversion tests.
  *
- * Phase 8 will replace doc-snapshot undo with inverse-operation undo. That
- * switch is dangerous without proof that every command's `execute(doc) →
- * undo(executedDoc)` recovers the input doc. These tests are the safety
- * net.
- *
- * Equality is structural (via `expectDocsEqual`) — `msTime` / `msLength`
- * and File-blob assets are stripped before compare since they don't
- * survive the writer/parser round-trip exactly bit-for-bit.
+ * Asserts every command's `execute(doc) → undo(executedDoc)` recovers
+ * the input doc. Equality is structural (via `expectDocsEqual`) —
+ * `msTime` / `msLength` and File-blob assets are stripped before compare
+ * since they don't survive the writer/parser round-trip exactly
+ * bit-for-bit.
  */
 
 import {
@@ -29,17 +26,23 @@ import {
   makeFixtureDoc,
   makeMultiPartVocalsDoc,
 } from './fixtures';
+import type {TrackKey} from '@/lib/chart-edit';
+
+const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
 
 describe('command inversion', () => {
   describe('AddNoteCommand', () => {
     it('execute then undo restores the original doc', () => {
       const before = makeFixtureDoc();
-      const cmd = new AddNoteCommand({
-        tick: 240,
-        type: 'redDrum',
-        length: 0,
-        flags: {},
-      });
+      const cmd = new AddNoteCommand(
+        {
+          tick: 240,
+          type: 'redDrum',
+          length: 0,
+          flags: {},
+        },
+        DRUMS_KEY,
+      );
       const after = cmd.execute(before);
       expect(after).not.toBe(before);
       expectDocsEqual(cmd.undo(after), before);
@@ -47,12 +50,15 @@ describe('command inversion', () => {
 
     it('does not mutate the input doc', () => {
       const before = makeFixtureDoc();
-      const cmd = new AddNoteCommand({
-        tick: 240,
-        type: 'kick',
-        length: 0,
-        flags: {},
-      });
+      const cmd = new AddNoteCommand(
+        {
+          tick: 240,
+          type: 'kick',
+          length: 0,
+          flags: {},
+        },
+        DRUMS_KEY,
+      );
       const snap = JSON.parse(
         JSON.stringify(
           before.parsedChart.trackData[0].noteEventGroups.flat().map(n => ({
@@ -77,6 +83,7 @@ describe('command inversion', () => {
           noteId({tick: 480, type: 'redDrum'}),
           noteId({tick: 1440, type: 'blueDrum'}),
         ]),
+        DRUMS_KEY,
       );
       const after = cmd.execute(before);
       expectDocsEqual(cmd.undo(after), before);
@@ -86,6 +93,7 @@ describe('command inversion', () => {
       const before = makeFixtureDoc();
       const cmd = new DeleteNotesCommand(
         new Set([noteId({tick: 99999, type: 'kick'})]),
+        DRUMS_KEY,
       );
       const after = cmd.execute(before);
       expectDocsEqual(after, before);
@@ -97,7 +105,7 @@ describe('command inversion', () => {
     it('toggling cymbal twice returns to the original state', () => {
       const before = makeFixtureDoc();
       const yellowId = noteId({tick: 960, type: 'yellowDrum'});
-      const cmd = new ToggleFlagCommand([yellowId], 'cymbal');
+      const cmd = new ToggleFlagCommand([yellowId], 'cymbal', DRUMS_KEY);
       const after = cmd.execute(before);
       const restored = cmd.undo(after);
       expectDocsEqual(restored, before);
@@ -106,7 +114,7 @@ describe('command inversion', () => {
     it('execute then undo when starting from no cymbal', () => {
       const before = makeFixtureDoc();
       const redId = noteId({tick: 480, type: 'redDrum'});
-      const cmd = new ToggleFlagCommand([redId], 'accent');
+      const cmd = new ToggleFlagCommand([redId], 'accent', DRUMS_KEY);
       const after = cmd.execute(before);
       expectDocsEqual(cmd.undo(after), before);
     });
@@ -283,19 +291,28 @@ describe('command inversion', () => {
     it('round-trips a real edit batch (add three notes)', () => {
       const before = makeFixtureDoc();
       const batch = new BatchCommand([
-        new AddNoteCommand({tick: 60, type: 'kick', length: 0, flags: {}}),
-        new AddNoteCommand({
-          tick: 120,
-          type: 'redDrum',
-          length: 0,
-          flags: {},
-        }),
-        new AddNoteCommand({
-          tick: 180,
-          type: 'yellowDrum',
-          length: 0,
-          flags: {},
-        }),
+        new AddNoteCommand(
+          {tick: 60, type: 'kick', length: 0, flags: {}},
+          DRUMS_KEY,
+        ),
+        new AddNoteCommand(
+          {
+            tick: 120,
+            type: 'redDrum',
+            length: 0,
+            flags: {},
+          },
+          DRUMS_KEY,
+        ),
+        new AddNoteCommand(
+          {
+            tick: 180,
+            type: 'yellowDrum',
+            length: 0,
+            flags: {},
+          },
+          DRUMS_KEY,
+        ),
       ]);
       const after = batch.execute(before);
       expectDocsEqual(batch.undo(after), before);

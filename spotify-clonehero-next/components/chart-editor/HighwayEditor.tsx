@@ -158,7 +158,7 @@ export default function HighwayEditor({
   // drives it from the pointer handlers.
   const {markerDrag, beginMarkerDrag, updateMarkerDrag, commitMarkerDrag} =
     useMarkerDrag({
-      chart: state.chart,
+      chart: state.chartDoc?.parsedChart ?? null,
       activeScope: state.activeScope,
       activePartName,
       executeCommand,
@@ -300,7 +300,7 @@ export default function HighwayEditor({
   useChartElements({
     reconcilerRef,
     rendererVersion,
-    chart: state.chart,
+    chart: state.chartDoc?.parsedChart ?? null,
     activeScope: state.activeScope,
     partName: activePartName,
     capabilities,

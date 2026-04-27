@@ -150,8 +150,19 @@ export {
  * Parse a chart folder (notes.chart / notes.mid + song.ini + passthrough
  * assets) into a scan-chart `ChartDocument`. Throws if the chart file can't
  * be found or parsed.
+ *
+ * `iniChartModifiersOverride` merges into the parsed chart's
+ * `iniChartModifiers` so callers can force interpretation that song.ini
+ * (or scan-chart's defaults) wouldn't otherwise produce. The drum-edit
+ * page uses this with `{pro_drums: true}` so tom/cymbal modifiers stay
+ * meaningful through edit / re-parse cycles.
  */
-export function readChart(files: File[]): ChartDocument {
+export function readChart(
+  files: File[],
+  iniChartModifiersOverride?: Partial<
+    import('@eliwhite/scan-chart').IniChartModifiers
+  >,
+): ChartDocument {
   const result = parseChartAndIni(files);
   if (!result.parsedChart) {
     const reason =
@@ -162,5 +173,14 @@ export function readChart(files: File[]): ChartDocument {
   const assets = files.filter(
     f => !chartFileNames.has(f.fileName.toLowerCase()),
   );
-  return {parsedChart: result.parsedChart, assets};
+  const parsedChart = iniChartModifiersOverride
+    ? {
+        ...result.parsedChart,
+        iniChartModifiers: {
+          ...result.parsedChart.iniChartModifiers,
+          ...iniChartModifiersOverride,
+        },
+      }
+    : result.parsedChart;
+  return {parsedChart, assets};
 }

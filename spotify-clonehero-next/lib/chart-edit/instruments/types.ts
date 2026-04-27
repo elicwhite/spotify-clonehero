@@ -14,10 +14,9 @@
  * (`components/chart-editor/`) and renderer (`lib/preview/highway/`)
  * consume the same schemas.
  *
- * World-space positions for the highway are NOT stored on the schema — the
- * renderer keeps its own geometry math (`calculateNoteXOffset`) and the
- * editor passes lane definitions through to InteractionManager which
- * computes positions per instrument. Phase-9 reorganization may revisit.
+ * Highway world-space X positions for each lane live on
+ * `LaneDefinition.worldXOffset`; InteractionManager + place-mode logic
+ * read them so the schema is the single source of truth for geometry.
  */
 
 import type {Instrument, NoteType} from '@eliwhite/scan-chart';
@@ -42,6 +41,14 @@ export interface LaneDefinition {
    *  in a different display slot than 4-lane green; `variant: '5-lane'`
    *  separates them. */
   variant?: string;
+  /**
+   * Highway world-space X position (Three.js units) where this lane sits.
+   * Hit-testing and note-placement code consume this so the schema is the
+   * single source of truth for lane geometry. Must stay in sync with
+   * `calculateNoteXOffset` in `lib/preview/highway/types.ts`. Optional
+   * because some lanes (vocals, dance) have no highway position.
+   */
+  worldXOffset?: number;
 }
 
 export interface FlagBinding {

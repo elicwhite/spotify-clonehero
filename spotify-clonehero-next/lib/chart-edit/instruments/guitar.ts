@@ -2,9 +2,9 @@
  * Five-fret InstrumentSchema — guitar / bass / rhythm / keys.
  *
  * Open notes (lane 0) plus green/red/yellow/blue/orange (lanes 1-5).
- * Lane key bindings mirror common chart-editor conventions; nothing
- * consumes them yet (no five-fret editing in this phase) — they're the
- * defaults phase-9 will plug in when `/guitar-edit` ships.
+ * Lane key bindings mirror common chart-editor conventions; no
+ * five-fret editor consumes them yet, but the defaults are kept here
+ * so the schema stays the source of truth when one ships.
  *
  * Flag bindings cover scan-chart's HOPO / tap / strum-flag set. Sustain
  * editing isn't a flag in scan-chart (it's `length` on the NoteEvent),

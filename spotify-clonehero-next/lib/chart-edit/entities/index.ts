@@ -14,14 +14,14 @@
  *
  * **EntityContext.** Each handler method takes an optional context object
  * carrying the active editing scope (which `TrackKey` for notes /
- * star-power / etc., which vocal `partName` for lyrics + phrases). When a
- * caller omits the context the handlers default to expert drums + the
- * `'vocals'` part — the same hardcoded behavior the editor used before
- * phase 1. Phase 2 (lyrics part-aware) and phase 8 (full adapter
- * rewrite) will tighten this further.
+ * star-power / etc., which vocal `partName` for lyrics + phrases).
+ * Note-targeting handlers require a `trackKey`; vocal handlers default to
+ * the `'vocals'` part when `partName` is omitted; chart-wide handlers
+ * (sections, tempos, time signatures) ignore the context entirely.
  */
 
 import type {ChartDocument, DrumNoteType, ParsedTrackData} from '../types';
+import {noteTypeToDrumNote} from '../types';
 import {findTrackOnly, type TrackKey} from '../find-track';
 import {addDrumNote, removeDrumNote, getDrumNotes} from '../helpers/drum-notes';
 import {addSection, removeSection} from '../helpers/sections';
@@ -41,6 +41,7 @@ import {
   phraseEndId,
   phraseStartId,
 } from '../helpers/phrases';
+import {drums4LaneSchema} from '../instruments/drums';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -67,26 +68,23 @@ export interface EntityRef {
 export interface EntityContext {
   /**
    * Track to scope notes / star-power / solo / activation / flex against.
-   * Defaults to expert drums when omitted.
+   * Required when invoking note-targeting handlers; chart-wide kinds
+   * (sections, tempos, time signatures) ignore it.
    */
   trackKey?: TrackKey;
   /**
    * Vocal part to scope lyrics + phrase markers against. Defaults to
-   * `'vocals'` when omitted (phase 2 will lift this through the helpers).
+   * `'vocals'` when omitted.
    */
   partName?: string;
 }
-
-const DEFAULT_DRUMS_KEY: TrackKey = {
-  instrument: 'drums',
-  difficulty: 'expert',
-};
 
 function resolveTrack(
   doc: ChartDocument,
   ctx?: EntityContext,
 ): ParsedTrackData | null {
-  return findTrackOnly(doc, ctx?.trackKey ?? DEFAULT_DRUMS_KEY);
+  if (!ctx?.trackKey) return null;
+  return findTrackOnly(doc, ctx.trackKey);
 }
 
 function resolvePartName(ctx?: EntityContext): string {
@@ -125,13 +123,17 @@ export interface EntityKindHandler {
 // Note ID helpers (re-exported for the command layer)
 // ---------------------------------------------------------------------------
 
-const LANE_ORDER: DrumNoteType[] = [
-  'kick',
-  'redDrum',
-  'yellowDrum',
-  'blueDrum',
-  'greenDrum',
-];
+// Lane order for the default 4-lane drum kit, derived from
+// `drums4LaneSchema` via the scan-chart NoteType → DrumNoteType reverse map.
+const LANE_ORDER: DrumNoteType[] = drums4LaneSchema.lanes.map(l => {
+  const name = noteTypeToDrumNote[l.noteType];
+  if (!name) {
+    throw new Error(
+      `drums4LaneSchema lane ${l.index} has unknown noteType ${l.noteType}`,
+    );
+  }
+  return name;
+});
 
 export function noteId(note: {tick: number; type: DrumNoteType}): string {
   return `${note.tick}:${note.type}`;

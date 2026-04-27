@@ -8,7 +8,6 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import {parseChartFile} from '@eliwhite/scan-chart';
 import {HotkeysProvider} from '@tanstack/react-hotkeys';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {
@@ -17,7 +16,7 @@ import type {
   EntityKind,
   ParsedTrackData,
 } from '@/lib/chart-edit';
-import {findTrack, findTrackInParsedChart} from '@/lib/chart-edit';
+import {findTrack} from '@/lib/chart-edit';
 import type {EditCommand} from './commands';
 import type {EditorCapabilities} from './capabilities';
 import {DRUM_EDIT_CAPABILITIES} from './capabilities';
@@ -31,8 +30,6 @@ import {DEFAULT_DRUMS_EXPERT_SCOPE, isTrackScope} from './scope';
 // Types
 // ---------------------------------------------------------------------------
 
-type ParsedChart = ReturnType<typeof parseChartFile>;
-
 export type ToolMode =
   | 'cursor'
   | 'place'
@@ -45,19 +42,18 @@ export type ToolMode =
 const UNDO_STACK_CAP = 200;
 
 export interface ChartEditorState {
-  /** Parsed chart data (for rendering -- derived from chartDoc). */
-  chart: ParsedChart | null;
-  /** The active drum track from the parsed chart. */
-  track: ParsedChart['trackData'][0] | null;
-
-  /** The editable chart document (source of truth for editing). */
+  /**
+   * Editable chart document — source of truth for both editing and
+   * rendering. `chartDoc.parsedChart` is the fully-derived parsed chart
+   * (HOPOs, chord flags, section ms times, etc.); commands re-parse on
+   * apply so this stays consistent with the writer's output. Consumers
+   * use {@link selectActiveTrack} to resolve the scoped track.
+   */
   chartDoc: ChartDocument | null;
 
   /**
-   * What the editor is currently editing. Replaces the implicit
-   * "expert drums" assumption that used to be hardcoded across the
-   * editor surface. Defaults to `DEFAULT_DRUMS_EXPERT_SCOPE` for
-   * pre-migration compatibility; consumer pages set it explicitly via
+   * What the editor is currently editing. Defaults to
+   * `DEFAULT_DRUMS_EXPERT_SCOPE`; consumer pages override it explicitly via
    * the `<ChartEditorProvider activeScope={...}>` prop.
    */
   activeScope: EditorScope;
@@ -126,11 +122,6 @@ export interface ChartEditorState {
 }
 
 export type ChartEditorAction =
-  | {
-      type: 'SET_CHART';
-      chart: ParsedChart;
-      track: ParsedChart['trackData'][0] | null;
-    }
   | {type: 'SET_CHART_DOC'; chartDoc: ChartDocument}
   | {type: 'SET_PLAYING'; isPlaying: boolean}
   | {type: 'SET_CURRENT_TIME'; timeMs: number}
@@ -145,14 +136,12 @@ export type ChartEditorAction =
   | {
       type: 'EXECUTE_COMMAND';
       command: EditCommand;
-      /** Re-parsed chart after the command was applied. */
-      chart: ParsedChart;
-      /** Updated chart document after the command was applied. */
+      /** Updated chart document (with re-parsed parsedChart) after apply. */
       chartDoc: ChartDocument;
     }
   // -- Undo/Redo --
-  | {type: 'UNDO'; chart: ParsedChart; chartDoc: ChartDocument}
-  | {type: 'REDO'; chart: ParsedChart; chartDoc: ChartDocument}
+  | {type: 'UNDO'; chartDoc: ChartDocument}
+  | {type: 'REDO'; chartDoc: ChartDocument}
   | {type: 'MARK_SAVED'}
   // -- Clipboard --
   | {type: 'SET_CLIPBOARD'; notes: DrumNote[]}
@@ -188,8 +177,6 @@ export interface ChartEditorContextValue {
 
 /** @internal — exported for unit tests. */
 export const initialState: ChartEditorState = {
-  chart: null,
-  track: null,
   chartDoc: null,
   activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
   isPlaying: false,
@@ -229,8 +216,6 @@ export function chartEditorReducer(
   action: ChartEditorAction,
 ): ChartEditorState {
   switch (action.type) {
-    case 'SET_CHART':
-      return {...state, chart: action.chart, track: action.track};
     case 'SET_CHART_DOC':
       return {...state, chartDoc: action.chartDoc};
     case 'SET_PLAYING':
@@ -276,16 +261,9 @@ export function chartEditorReducer(
         );
       }
 
-      const newTrack = isTrackScope(state.activeScope)
-        ? (findTrackInParsedChart(action.chart, state.activeScope.track)
-            ?.track ?? null)
-        : null;
-
       return {
         ...state,
-        chart: action.chart,
         chartDoc: action.chartDoc,
-        track: newTrack ?? state.track,
         dirty: true,
         undoStack: newUndoStack,
         undoDocStack: newUndoDocStack,
@@ -299,12 +277,6 @@ export function chartEditorReducer(
       if (state.undoStack.length === 0 || !state.chartDoc) return state;
 
       const undoneCommand = state.undoStack[state.undoStack.length - 1];
-      const prevDoc = state.undoDocStack[state.undoDocStack.length - 1];
-
-      const newTrack = isTrackScope(state.activeScope)
-        ? (findTrackInParsedChart(action.chart, state.activeScope.track)
-            ?.track ?? null)
-        : null;
 
       // Check if we've returned to the saved state
       const newUndoDepth = state.undoStack.length - 1;
@@ -312,9 +284,7 @@ export function chartEditorReducer(
 
       return {
         ...state,
-        chart: action.chart,
-        chartDoc: prevDoc,
-        track: newTrack ?? state.track,
+        chartDoc: action.chartDoc,
         dirty: isDirty,
         undoStack: state.undoStack.slice(0, -1),
         undoDocStack: state.undoDocStack.slice(0, -1),
@@ -327,21 +297,13 @@ export function chartEditorReducer(
       if (state.redoStack.length === 0 || !state.chartDoc) return state;
 
       const redoneCommand = state.redoStack[state.redoStack.length - 1];
-      const redoDoc = state.redoDocStack[state.redoDocStack.length - 1];
-
-      const newTrack = isTrackScope(state.activeScope)
-        ? (findTrackInParsedChart(action.chart, state.activeScope.track)
-            ?.track ?? null)
-        : null;
 
       const newUndoDepth = state.undoStack.length + 1;
       const isDirty = newUndoDepth !== state.savedUndoDepth;
 
       return {
         ...state,
-        chart: action.chart,
-        chartDoc: redoDoc,
-        track: newTrack ?? state.track,
+        chartDoc: action.chartDoc,
         dirty: isDirty,
         undoStack: [...state.undoStack, redoneCommand],
         undoDocStack: [...state.undoDocStack, state.chartDoc],

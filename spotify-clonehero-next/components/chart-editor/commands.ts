@@ -36,6 +36,8 @@ import {
   cloneDocFor,
   findTrack,
   noteId as entityNoteId,
+  drums4LaneSchema,
+  noteTypeToDrumNote,
 } from '@/lib/chart-edit';
 
 // ---------------------------------------------------------------------------
@@ -77,14 +79,6 @@ function cloneDocWithSections(doc: ChartDocument): ChartDocument {
   };
 }
 
-/** Default TrackKey commands fall back to when none was supplied. Removed
- *  in phase 8 once every command captures its target explicitly at
- *  construction time. */
-const DEFAULT_DRUMS_KEY: TrackKey = {
-  instrument: 'drums',
-  difficulty: 'expert',
-};
-
 /** Resolve the index of the track this command is targeting. Returns -1
  *  if the chart doesn't contain that track. */
 function findTargetIndex(doc: ChartDocument, key: TrackKey): number {
@@ -114,13 +108,11 @@ export interface EditCommand {
 
 export class AddNoteCommand implements EditCommand {
   readonly description: string;
-  private readonly trackKey: TrackKey;
 
   constructor(
     private note: DrumNote,
-    trackKey?: TrackKey,
+    private readonly trackKey: TrackKey,
   ) {
-    this.trackKey = trackKey ?? DEFAULT_DRUMS_KEY;
     this.description = `Add ${note.type} at tick ${note.tick}`;
   }
 
@@ -164,13 +156,11 @@ export class AddNoteCommand implements EditCommand {
 export class DeleteNotesCommand implements EditCommand {
   readonly description: string;
   private deletedNotes: DrumNote[] = [];
-  private readonly trackKey: TrackKey;
 
   constructor(
     private noteIds: Set<string>,
-    trackKey?: TrackKey,
+    private readonly trackKey: TrackKey,
   ) {
-    this.trackKey = trackKey ?? DEFAULT_DRUMS_KEY;
     this.description = `Delete ${noteIds.size} note(s)`;
   }
 
@@ -275,14 +265,12 @@ export type FlagName = 'cymbal' | 'accent' | 'ghost';
 
 export class ToggleFlagCommand implements EditCommand {
   readonly description: string;
-  private readonly trackKey: TrackKey;
 
   constructor(
     private noteIds: string[],
     private flag: FlagName,
-    trackKey?: TrackKey,
+    private readonly trackKey: TrackKey,
   ) {
-    this.trackKey = trackKey ?? DEFAULT_DRUMS_KEY;
     this.description = `Toggle ${flag} on ${noteIds.length} note(s)`;
   }
 
@@ -494,16 +482,30 @@ export class RenameSectionCommand implements EditCommand {
 }
 
 // ---------------------------------------------------------------------------
-// Lane helpers
+// Lane helpers — driven by `drums4LaneSchema` so adding/renaming a lane is
+// a schema-only change.
 // ---------------------------------------------------------------------------
 
-const LANE_ORDER: DrumNoteType[] = [
-  'kick',
-  'redDrum',
-  'yellowDrum',
-  'blueDrum',
-  'greenDrum',
-];
+const LANE_ORDER: DrumNoteType[] = drums4LaneSchema.lanes.map(l => {
+  const name = noteTypeToDrumNote[l.noteType];
+  if (!name) {
+    throw new Error(
+      `drums4LaneSchema lane ${l.index} has unknown noteType ${l.noteType}`,
+    );
+  }
+  return name;
+});
+
+/** scan-chart `NoteType`s that get a `cymbal` flag by default in 4-lane
+ *  drums. Sourced from the schema's flag bindings rather than re-listed. */
+const CYMBAL_DEFAULT_TYPES = new Set<DrumNoteType>(
+  (
+    drums4LaneSchema.flagBindings.find(b => b.flag === 'cymbal')?.appliesTo ??
+    []
+  )
+    .map(nt => noteTypeToDrumNote[nt])
+    .filter((t): t is DrumNoteType => !!t),
+);
 
 /** Map a DrumNoteType to a lane index (0-4). */
 export function typeToLane(type: DrumNoteType): number {
@@ -521,10 +523,8 @@ export function shiftLane(type: DrumNoteType, delta: number): DrumNoteType {
   return laneToType(currentLane + delta);
 }
 
-/** Default flags for a new note in a given lane. Yellow/blue/green default to cymbal. */
+/** Default flags for a new note in a given lane. Cymbal-by-default lanes
+ *  come from the schema's `cymbal.appliesTo` binding. */
 export function defaultFlagsForType(type: DrumNoteType): DrumNoteFlags {
-  if (type === 'yellowDrum' || type === 'blueDrum' || type === 'greenDrum') {
-    return {cymbal: true};
-  }
-  return {};
+  return CYMBAL_DEFAULT_TYPES.has(type) ? {cymbal: true} : {};
 }

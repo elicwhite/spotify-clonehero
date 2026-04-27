@@ -2,14 +2,12 @@
  * Reducer-correctness tests.
  *
  * Covers EXECUTE_COMMAND / UNDO / REDO / SET_SELECTION / MARK_SAVED /
- * SET_ACTIVE_SCOPE and the snapshot stack-cap. These are pre-phase-8
- * tests — they exercise the doc-snapshot undo path. Phase 8 will
- * replace that path with invertible operations and rebuild the test set
- * around `apply(invert(apply(doc, op))) === doc`.
+ * SET_ACTIVE_SCOPE and the snapshot stack-cap.
  */
 
-import {parseChartFile, writeChartFolder} from '@eliwhite/scan-chart';
 import type {ChartDocument} from '@/lib/chart-edit';
+import type {TrackKey} from '@/lib/chart-edit';
+const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
 import {
   chartEditorReducer,
   initialState,
@@ -20,18 +18,6 @@ import {AddNoteCommand} from '../commands';
 import {DEFAULT_DRUMS_EXPERT_SCOPE, DEFAULT_VOCALS_SCOPE} from '../scope';
 import {makeFixtureDoc} from './fixtures';
 
-/** Helper: round-trip a ChartDocument through the writer + parser the way
- *  `useExecuteCommand` does, so EXECUTE_COMMAND actions can be assembled
- *  with a real `chart` field. */
-function reparse(doc: ChartDocument) {
-  const files = writeChartFolder({
-    parsedChart: {...doc.parsedChart, format: 'chart'},
-    assets: doc.assets,
-  });
-  const chartFile = files.find(f => f.fileName === 'notes.chart')!;
-  return parseChartFile(chartFile.data, 'chart', undefined);
-}
-
 /** Build an `EXECUTE_COMMAND` action from a command + the doc it was
  *  executed against. */
 function executeAction(command: EditCommand, prevDoc: ChartDocument) {
@@ -39,7 +25,6 @@ function executeAction(command: EditCommand, prevDoc: ChartDocument) {
   return {
     type: 'EXECUTE_COMMAND' as const,
     command,
-    chart: reparse(newDoc),
     chartDoc: newDoc,
   };
 }
@@ -125,12 +110,15 @@ describe('chartEditorReducer', () => {
       const doc = makeFixtureDoc();
       const seeded = {...initialState, chartDoc: doc};
 
-      const cmd = new AddNoteCommand({
-        tick: 240,
-        type: 'kick',
-        length: 0,
-        flags: {},
-      });
+      const cmd = new AddNoteCommand(
+        {
+          tick: 240,
+          type: 'kick',
+          length: 0,
+          flags: {},
+        },
+        DRUMS_KEY,
+      );
       const next = chartEditorReducer(seeded, executeAction(cmd, doc));
 
       expect(next.undoStack).toHaveLength(1);
@@ -147,21 +135,27 @@ describe('chartEditorReducer', () => {
         ...initialState,
         chartDoc: doc,
         redoStack: [
-          new AddNoteCommand({
-            tick: 0,
-            type: 'kick',
-            length: 0,
-            flags: {},
-          }),
+          new AddNoteCommand(
+            {
+              tick: 0,
+              type: 'kick',
+              length: 0,
+              flags: {},
+            },
+            DRUMS_KEY,
+          ),
         ],
         redoDocStack: [doc],
       };
-      const cmd = new AddNoteCommand({
-        tick: 60,
-        type: 'redDrum',
-        length: 0,
-        flags: {},
-      });
+      const cmd = new AddNoteCommand(
+        {
+          tick: 60,
+          type: 'redDrum',
+          length: 0,
+          flags: {},
+        },
+        DRUMS_KEY,
+      );
       const next = chartEditorReducer(seeded, executeAction(cmd, doc));
       expect(next.redoStack).toHaveLength(0);
       expect(next.redoDocStack).toHaveLength(0);
@@ -172,12 +166,15 @@ describe('chartEditorReducer', () => {
       let state: ChartEditorState = {...initialState, chartDoc: doc};
 
       for (let i = 0; i < 205; i++) {
-        const cmd = new AddNoteCommand({
-          tick: i + 1,
-          type: 'kick',
-          length: 0,
-          flags: {},
-        });
+        const cmd = new AddNoteCommand(
+          {
+            tick: i + 1,
+            type: 'kick',
+            length: 0,
+            flags: {},
+          },
+          DRUMS_KEY,
+        );
         const action = executeAction(cmd, state.chartDoc!);
         state = chartEditorReducer(state, action);
         doc = action.chartDoc;
@@ -188,16 +185,18 @@ describe('chartEditorReducer', () => {
     });
 
     it('returns state unchanged when chartDoc is null', () => {
-      const cmd = new AddNoteCommand({
-        tick: 0,
-        type: 'kick',
-        length: 0,
-        flags: {},
-      });
+      const cmd = new AddNoteCommand(
+        {
+          tick: 0,
+          type: 'kick',
+          length: 0,
+          flags: {},
+        },
+        DRUMS_KEY,
+      );
       const next = chartEditorReducer(initialState, {
         type: 'EXECUTE_COMMAND',
         command: cmd,
-        chart: {} as never,
         chartDoc: {} as never,
       });
       expect(next).toBe(initialState);
@@ -208,17 +207,19 @@ describe('chartEditorReducer', () => {
     it('UNDO pops the most recent command and pushes it onto redo', () => {
       const doc = makeFixtureDoc();
       const seeded = {...initialState, chartDoc: doc};
-      const cmd = new AddNoteCommand({
-        tick: 240,
-        type: 'kick',
-        length: 0,
-        flags: {},
-      });
+      const cmd = new AddNoteCommand(
+        {
+          tick: 240,
+          type: 'kick',
+          length: 0,
+          flags: {},
+        },
+        DRUMS_KEY,
+      );
       const afterExec = chartEditorReducer(seeded, executeAction(cmd, doc));
 
       const undone = chartEditorReducer(afterExec, {
         type: 'UNDO',
-        chart: reparse(doc),
         chartDoc: doc,
       });
 
@@ -232,21 +233,22 @@ describe('chartEditorReducer', () => {
     it('REDO replays the topmost redo command', () => {
       const doc = makeFixtureDoc();
       const seeded = {...initialState, chartDoc: doc};
-      const cmd = new AddNoteCommand({
-        tick: 240,
-        type: 'kick',
-        length: 0,
-        flags: {},
-      });
+      const cmd = new AddNoteCommand(
+        {
+          tick: 240,
+          type: 'kick',
+          length: 0,
+          flags: {},
+        },
+        DRUMS_KEY,
+      );
       const exec = chartEditorReducer(seeded, executeAction(cmd, doc));
       const undone = chartEditorReducer(exec, {
         type: 'UNDO',
-        chart: reparse(doc),
         chartDoc: doc,
       });
       const redone = chartEditorReducer(undone, {
         type: 'REDO',
-        chart: exec.chart!,
         chartDoc: exec.chartDoc!,
       });
 
@@ -260,7 +262,6 @@ describe('chartEditorReducer', () => {
       const seeded = {...initialState, chartDoc: doc};
       const next = chartEditorReducer(seeded, {
         type: 'UNDO',
-        chart: reparse(doc),
         chartDoc: doc,
       });
       expect(next).toBe(seeded);
@@ -271,7 +272,6 @@ describe('chartEditorReducer', () => {
       const seeded = {...initialState, chartDoc: doc};
       const next = chartEditorReducer(seeded, {
         type: 'REDO',
-        chart: reparse(doc),
         chartDoc: doc,
       });
       expect(next).toBe(seeded);
@@ -282,12 +282,15 @@ describe('chartEditorReducer', () => {
     it('snapshots the current undo depth and clears dirty', () => {
       const doc = makeFixtureDoc();
       const seeded = {...initialState, chartDoc: doc};
-      const cmd = new AddNoteCommand({
-        tick: 0,
-        type: 'kick',
-        length: 0,
-        flags: {},
-      });
+      const cmd = new AddNoteCommand(
+        {
+          tick: 0,
+          type: 'kick',
+          length: 0,
+          flags: {},
+        },
+        DRUMS_KEY,
+      );
       const exec = chartEditorReducer(seeded, executeAction(cmd, doc));
       const saved = chartEditorReducer(exec, {type: 'MARK_SAVED'});
 
@@ -301,18 +304,20 @@ describe('chartEditorReducer', () => {
       // Mark-saved at depth 0.
       state = chartEditorReducer(state, {type: 'MARK_SAVED'});
       // Edit -> dirty.
-      const cmd = new AddNoteCommand({
-        tick: 0,
-        type: 'kick',
-        length: 0,
-        flags: {},
-      });
+      const cmd = new AddNoteCommand(
+        {
+          tick: 0,
+          type: 'kick',
+          length: 0,
+          flags: {},
+        },
+        DRUMS_KEY,
+      );
       state = chartEditorReducer(state, executeAction(cmd, doc));
       expect(state.dirty).toBe(true);
       // Undo -> back to depth 0 -> not dirty.
       state = chartEditorReducer(state, {
         type: 'UNDO',
-        chart: reparse(doc),
         chartDoc: doc,
       });
       expect(state.dirty).toBe(false);

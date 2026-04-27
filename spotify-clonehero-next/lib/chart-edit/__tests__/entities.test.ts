@@ -205,6 +205,9 @@ describe('entityHandlers dispatch', () => {
       lyricShifts: [],
     };
 
+    const drumsCtx = {
+      trackKey: {instrument: 'drums', difficulty: 'expert'},
+    } as const;
     for (const kind of [
       'note',
       'section',
@@ -213,10 +216,12 @@ describe('entityHandlers dispatch', () => {
       'phrase-end',
     ] as const) {
       const handler = entityHandlers[kind];
-      const ids = handler.listIds(doc);
+      // Note kind requires a trackKey; chart-wide and vocal kinds ignore it.
+      const ctx = kind === 'note' ? drumsCtx : undefined;
+      const ids = handler.listIds(doc, ctx);
       expect(ids.length).toBeGreaterThan(0);
       for (const id of ids) {
-        expect(handler.locate(doc, id)).not.toBeNull();
+        expect(handler.locate(doc, id, ctx)).not.toBeNull();
       }
     }
   });
@@ -231,6 +236,7 @@ describe('entityHandlers dispatch', () => {
       noteId({tick: 480, type: 'redDrum'}),
       240,
       1,
+      {trackKey: {instrument: 'drums', difficulty: 'expert'}},
     );
     expect(newId).toBe(noteId({tick: 720, type: 'yellowDrum'}));
     // Original untouched

@@ -17,7 +17,7 @@ import {
   type FlagName,
 } from './commands';
 import type {DrumNoteType} from '@/lib/chart-edit';
-import {getDrumNotes} from '@/lib/chart-edit';
+import {getDrumNotes, drums4LaneSchema} from '@/lib/chart-edit';
 
 const DRUM_TYPE_LABELS: Record<DrumNoteType, string> = {
   kick: 'Kick',
@@ -28,11 +28,17 @@ const DRUM_TYPE_LABELS: Record<DrumNoteType, string> = {
   fiveGreenDrum: '5-Lane Green',
 };
 
-const FLAG_ITEMS: {key: FlagName; label: string; shortcut: string}[] = [
-  {key: 'cymbal', label: 'Cymbal', shortcut: 'Q'},
-  {key: 'accent', label: 'Accent', shortcut: 'A'},
-  {key: 'ghost', label: 'Ghost', shortcut: 'S'},
-];
+// Flag items shown in the inspector are derived from the drum schema.
+// Only flags with a keyboard shortcut surface here; flags without one
+// (e.g. flam, doubleKick) live on the schema but aren't bound to a UI button.
+const FLAG_ITEMS: {key: FlagName; label: string; shortcut: string}[] =
+  drums4LaneSchema.flagBindings
+    .filter(b => b.defaultKey !== undefined)
+    .map(b => ({
+      key: b.flag as FlagName,
+      label: b.label,
+      shortcut: b.defaultKey!.toUpperCase(),
+    }));
 
 interface NoteInspectorProps {
   className?: string;
@@ -70,7 +76,10 @@ export default function NoteInspector({
     return {key, allTrue, someTrue, indeterminate: someTrue && !allTrue};
   });
 
+  // Note inspector only mounts when notes are selected, which only happens
+  // in track scopes — so trackKey is always defined here.
   const trackKey = trackKeyFromScope(state.activeScope);
+  if (!trackKey) return null;
 
   const handleToggleFlag = (flag: FlagName) => {
     const ids = selectedNotes.map(n => noteId(n));

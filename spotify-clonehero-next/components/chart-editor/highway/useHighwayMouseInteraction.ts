@@ -8,8 +8,7 @@
  * The hook is *pure-ish* w.r.t. its inputs: it holds local state for
  * hover/drag, but every action flows out via `onOpenPopover`,
  * `executeCommand`, `dispatch`, and the marker-drag handlers. That makes the
- * hook unit-testable with stub inputs (phase 9 will lean on this for tool
- * plugins).
+ * hook unit-testable with stub inputs.
  *
  * Coordinate helpers (`screenToLane` / `screenToMs` / `screenToTick` /
  * `hitTest`) live inline because they depend on the interaction manager ref
@@ -47,6 +46,16 @@ import type {EditorCapabilities} from '../capabilities';
 import {selectNotesInRange} from './selectInRange';
 import type {HighwayPopoverState} from './HighwayPopovers';
 import type {MarkerDragState, MarkerKind} from './useMarkerDrag';
+import {chartMarkerKey, vocalMarkerKey} from '@/lib/preview/highway/markerKeys';
+
+function markerHoverReconcilerKey(
+  kind: MarkerKind,
+  tick: number,
+  partName: string,
+): string {
+  if (kind === 'section') return chartMarkerKey('section', tick);
+  return vocalMarkerKey(kind, partName, tick);
+}
 
 export type HoveredHitType =
   | 'note'
@@ -359,8 +368,9 @@ export function useHighwayMouseInteraction(
           break;
         }
         case 'place': {
-          const type = laneToType(lane);
           const trackKey = trackKeyFromScope(state.activeScope);
+          if (!trackKey) break;
+          const type = laneToType(lane);
           // Toggle: if a note exists at this position, remove it.
           if (hit?.type === 'note') {
             executeCommand(
@@ -382,12 +392,11 @@ export function useHighwayMouseInteraction(
           break;
         }
         case 'erase': {
+          const trackKey = trackKeyFromScope(state.activeScope);
+          if (!trackKey) break;
           if (hit?.type === 'note') {
             executeCommand(
-              new DeleteNotesCommand(
-                new Set([hit.noteId]),
-                trackKeyFromScope(state.activeScope),
-              ),
+              new DeleteNotesCommand(new Set([hit.noteId]), trackKey),
             );
           }
           setIsErasing(true);
@@ -471,7 +480,11 @@ export function useHighwayMouseInteraction(
         markerRef &&
         capabilities.hoverable.has(markerRef.kind)
       ) {
-        nextMarkerKey = `${markerRef.kind}:${markerRef.tick}`;
+        nextMarkerKey = markerHoverReconcilerKey(
+          markerRef.kind,
+          markerRef.tick,
+          activePartName,
+        );
       }
       if (nextMarkerKey !== hoveredMarkerKey) {
         setHoveredMarkerKey(nextMarkerKey);
@@ -490,12 +503,10 @@ export function useHighwayMouseInteraction(
 
       // Erase mode: paint-erase while dragging.
       if (isErasing && state.activeTool === 'erase') {
-        if (hit?.type === 'note') {
+        const trackKey = trackKeyFromScope(state.activeScope);
+        if (trackKey && hit?.type === 'note') {
           executeCommand(
-            new DeleteNotesCommand(
-              new Set([hit.noteId]),
-              trackKeyFromScope(state.activeScope),
-            ),
+            new DeleteNotesCommand(new Set([hit.noteId]), trackKey),
           );
         }
       }

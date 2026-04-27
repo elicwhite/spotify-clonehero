@@ -143,8 +143,9 @@ function DrumEditInner() {
       try {
         const {files, sourceFormat, originalName, sngMetadata} = loaded;
 
-        // Parse chart
-        const chartDoc = readChart(files);
+        // Parse chart. Force pro_drums so tom/cymbal modifiers survive
+        // edit / re-parse cycles even if song.ini omits the flag.
+        const chartDoc = readChart(files, {pro_drums: true});
         const name =
           chartDoc.parsedChart.metadata.name ?? originalName ?? 'Unknown';
         const artist = chartDoc.parsedChart.metadata.artist ?? 'Unknown';
@@ -447,10 +448,12 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
           );
         }
 
-        // 5. Build editable ChartDocument
-        const chartDoc = readChart([
-          {fileName: 'notes.chart', data: chartBytes},
-        ]);
+        // 5. Build editable ChartDocument. Force pro_drums so tom/cymbal
+        // modifiers survive edit / re-parse cycles.
+        const chartDoc = readChart(
+          [{fileName: 'notes.chart', data: chartBytes}],
+          {pro_drums: true},
+        );
 
         // 6. Load audio files from OPFS
         setLoadingStep('Loading audio...');
@@ -500,8 +503,8 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
         }
         if (cancelled) return;
 
-        // 9. Update editor state
-        dispatch({type: 'SET_CHART', chart: parsed, track: drumTrack});
+        // 9. Update editor state. ChartDoc carries the parsed chart;
+        // consumers derive the active track via selectActiveTrack().
         dispatch({type: 'SET_CHART_DOC', chartDoc});
         setLoadingState('ready');
         onReady();
@@ -589,7 +592,7 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
     );
   }
 
-  const {chart} = state;
+  const chart = state.chartDoc?.parsedChart ?? null;
   if (!chart || !audioManager || !cloneHeroMetadata) {
     return null;
   }

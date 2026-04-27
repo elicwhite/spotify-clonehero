@@ -26,15 +26,15 @@ function activeVocalPartName(scope: EditorScope): string {
 
 /**
  * Round-trip a ChartDocument through the writer + parser so derived fields
- * (HOPOs, chord flags, section timing, etc.) are recomputed after an edit.
- * The editor only writes `.chart` right now, so we look for `notes.chart` in
- * the serialized output.
+ * (HOPOs, chord flags, section timing, etc.) are recomputed after an edit,
+ * and return a new ChartDocument carrying the re-parsed chart. The editor
+ * only writes `.chart` right now, so we look for `notes.chart` in the
+ * serialized output.
  *
- * Modifiers come from the parsed chart's `iniChartModifiers` when present
- * (i.e. the chart we loaded had a `song.ini` and scan-chart populated this
- * field). Otherwise we fall back to scan-chart's exported defaults.
+ * Modifiers come from the parsed chart's `iniChartModifiers` when present.
+ * Falls back to scan-chart's exported defaults otherwise.
  */
-function chartDocumentToParsedChart(doc: ChartDocument) {
+function rebuildChartDocument(doc: ChartDocument): ChartDocument {
   const files = writeChartFolder({
     parsedChart: {...doc.parsedChart, format: 'chart'},
     assets: doc.assets,
@@ -42,7 +42,16 @@ function chartDocumentToParsedChart(doc: ChartDocument) {
   const chartFile = files.find(f => f.fileName === 'notes.chart')!;
   const modifiers =
     doc.parsedChart.iniChartModifiers ?? defaultIniChartModifiers;
-  return parseChartFile(chartFile.data, 'chart', modifiers);
+  const parsed = parseChartFile(chartFile.data, 'chart', modifiers);
+  return {
+    parsedChart: {
+      ...parsed,
+      chartBytes: chartFile.data,
+      format: 'chart',
+      iniChartModifiers: modifiers,
+    },
+    assets: doc.assets,
+  };
 }
 
 /**
@@ -61,33 +70,27 @@ export function useExecuteCommand() {
       const doc = state.chartDoc;
       if (!doc) return;
 
-      const newDoc = command.execute(doc);
-      const newChart = chartDocumentToParsedChart(newDoc);
+      const newDoc = rebuildChartDocument(command.execute(doc));
 
       // Update the reconciler with new elements (if available).
       // The reconciler diffs internally and only patches what changed.
       const reconciler = reconcilerRef.current;
       if (reconciler) {
         const newTrack = isTrackScope(state.activeScope)
-          ? (findTrackInParsedChart(newChart, state.activeScope.track)?.track ??
-            null)
+          ? (findTrackInParsedChart(newDoc.parsedChart, state.activeScope.track)
+              ?.track ?? null)
           : null;
         // chartToElements tolerates a null track (lyrics-only / global scopes).
         reconciler.setElements(
           chartToElements(
-            newChart,
+            newDoc.parsedChart,
             newTrack,
             activeVocalPartName(state.activeScope),
           ),
         );
       }
 
-      dispatch({
-        type: 'EXECUTE_COMMAND',
-        command,
-        chart: newChart,
-        chartDoc: newDoc,
-      });
+      dispatch({type: 'EXECUTE_COMMAND', command, chartDoc: newDoc});
     },
     [state.chartDoc, state.activeScope, dispatch, reconcilerRef],
   );
@@ -106,30 +109,26 @@ export function useUndoRedo() {
   const undo = useCallback(() => {
     if (state.undoStack.length === 0 || state.undoDocStack.length === 0) return;
 
+    // Snapshots in undoDocStack are stored in derived form (rebuilt at
+    // EXECUTE_COMMAND time), so we can use them directly without re-parsing.
     const prevDoc = state.undoDocStack[state.undoDocStack.length - 1];
-    const prevChart = chartDocumentToParsedChart(prevDoc);
 
-    // Update the reconciler with the previous state's elements
     const reconciler = reconcilerRef.current;
     if (reconciler) {
       const prevTrack = isTrackScope(state.activeScope)
-        ? (findTrackInParsedChart(prevChart, state.activeScope.track)?.track ??
-          null)
+        ? (findTrackInParsedChart(prevDoc.parsedChart, state.activeScope.track)
+            ?.track ?? null)
         : null;
       reconciler.setElements(
         chartToElements(
-          prevChart,
+          prevDoc.parsedChart,
           prevTrack,
           activeVocalPartName(state.activeScope),
         ),
       );
     }
 
-    dispatch({
-      type: 'UNDO',
-      chart: prevChart,
-      chartDoc: prevDoc,
-    });
+    dispatch({type: 'UNDO', chartDoc: prevDoc});
   }, [
     state.undoStack,
     state.undoDocStack,
@@ -142,29 +141,23 @@ export function useUndoRedo() {
     if (state.redoStack.length === 0 || state.redoDocStack.length === 0) return;
 
     const redoDoc = state.redoDocStack[state.redoDocStack.length - 1];
-    const redoChart = chartDocumentToParsedChart(redoDoc);
 
-    // Update the reconciler with the redo state's elements
     const reconciler = reconcilerRef.current;
     if (reconciler) {
       const redoTrack = isTrackScope(state.activeScope)
-        ? (findTrackInParsedChart(redoChart, state.activeScope.track)?.track ??
-          null)
+        ? (findTrackInParsedChart(redoDoc.parsedChart, state.activeScope.track)
+            ?.track ?? null)
         : null;
       reconciler.setElements(
         chartToElements(
-          redoChart,
+          redoDoc.parsedChart,
           redoTrack,
           activeVocalPartName(state.activeScope),
         ),
       );
     }
 
-    dispatch({
-      type: 'REDO',
-      chart: redoChart,
-      chartDoc: redoDoc,
-    });
+    dispatch({type: 'REDO', chartDoc: redoDoc});
   }, [
     state.redoStack,
     state.redoDocStack,

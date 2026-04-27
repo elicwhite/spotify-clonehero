@@ -4,11 +4,10 @@
  * Pushes editor-side state into the Three.js renderer/scene each time
  * relevant slices change.
  *
- * This collects what used to be five separate `useEffect` blocks in
- * `HighwayEditor.tsx`, all of which had the same shape: read a renderer
- * handle, read some React state, call one of `handle.setX(...)`. Co-locating
- * them keeps the editor component focused on UI, and makes it obvious which
- * pieces of state the renderer actually consumes.
+ * Each effect has the same shape: read a renderer handle, read some React
+ * state, call one of `handle.setX(...)`. Co-locating them keeps the editor
+ * component focused on UI, and makes it obvious which pieces of state the
+ * renderer actually consumes.
  *
  * One-way data flow: editor state → renderer. The renderer never reads
  * back; it just consumes the most recent push.

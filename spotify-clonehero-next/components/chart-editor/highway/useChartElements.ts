@@ -28,12 +28,23 @@ import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {tickToMs} from '@/lib/drum-transcription/timing';
 import {findTrackInParsedChart} from '@/lib/chart-edit';
 import {chartToElements} from '@/lib/preview/highway/chartToElements';
+import {chartMarkerKey, vocalMarkerKey} from '@/lib/preview/highway/markerKeys';
 import type {EditorCapabilities} from '../capabilities';
 import type {EditorScope} from '../scope';
 import {trackKeyFromScope} from '../scope';
+import type {MarkerKind} from './useMarkerDrag';
+
+function markerDragReconcilerKey(
+  kind: MarkerKind,
+  tick: number,
+  partName: string,
+): string {
+  if (kind === 'section') return chartMarkerKey('section', tick);
+  return vocalMarkerKey(kind, partName, tick);
+}
 
 export interface MarkerDragHint {
-  kind: string;
+  kind: MarkerKind;
   originalTick: number;
   currentTick: number;
 }
@@ -88,7 +99,11 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
     const elements = chartToElements(chart, track, partName);
 
     const dragKey = markerDrag
-      ? `${markerDrag.kind}:${markerDrag.originalTick}`
+      ? markerDragReconcilerKey(
+          markerDrag.kind,
+          markerDrag.originalTick,
+          partName,
+        )
       : null;
     const dragMs =
       markerDrag && timedTempos.length > 0

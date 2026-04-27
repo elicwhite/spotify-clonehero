@@ -135,15 +135,15 @@ All six extractions completed. HighwayEditor.tsx went from **1,470 lines → 447
 
 New files (under `components/chart-editor/highway/`):
 
-| File | Lines | Concern |
-| --- | --- | --- |
-| `selectInRange.ts` | 72 | Box-select math (pure). 4 unit tests. |
-| `useChartElements.ts` | 128 | SceneReconciler element push, hover/drag overlays. |
-| `useHighwaySync.ts` | 196 | Five renderer state-pushes (waveform, grid, mode, overlays, timing). |
-| `useMarkerDrag.ts` | 219 | Marker drag state + per-kind clamp + commit handler. |
-| `useHighwayMouseInteraction.ts` | 663 | All four pointer handlers + hover/drag state + coord helpers + tool dispatch. |
-| `HighwayPopovers.tsx` | 328 | Four popover-forms (BPM / TS / Section / Section-rename). |
-| `TickPopover.tsx` | 58 | Shared chrome + Escape-to-close primitive. |
+| File                            | Lines | Concern                                                                       |
+| ------------------------------- | ----- | ----------------------------------------------------------------------------- |
+| `selectInRange.ts`              | 72    | Box-select math (pure). 4 unit tests.                                         |
+| `useChartElements.ts`           | 128   | SceneReconciler element push, hover/drag overlays.                            |
+| `useHighwaySync.ts`             | 196   | Five renderer state-pushes (waveform, grid, mode, overlays, timing).          |
+| `useMarkerDrag.ts`              | 219   | Marker drag state + per-kind clamp + commit handler.                          |
+| `useHighwayMouseInteraction.ts` | 663   | All four pointer handlers + hover/drag state + coord helpers + tool dispatch. |
+| `HighwayPopovers.tsx`           | 328   | Four popover-forms (BPM / TS / Section / Section-rename).                     |
+| `TickPopover.tsx`               | 58    | Shared chrome + Escape-to-close primitive.                                    |
 
 ### Deviations from the plan
 
@@ -151,7 +151,7 @@ New files (under `components/chart-editor/highway/`):
 2. **No new unit tests for the extracted hooks.** The plan called for `useChartElements` snapshot test, `useHighwayMouseInteraction` synthetic-pointer-event test, and `<TickPopover>` open/close test. These are not yet written. The behavior is covered transitively by the existing reducer/command tests + browser validation, but the hooks themselves are now structured to be unit-testable (pure inputs, explicit outputs); writing the tests is a clean follow-up.
 3. **`<TickPopover>` is minimal.** No outside-click-closes (ESC works, click on Cancel works). The plan called this out as acceptable.
 4. **Each popover-form is its own subcomponent inside `HighwayPopovers.tsx`** rather than a single component with one form-state map. This was necessary to satisfy React-19's `react-compiler` lint rule about setState-in-effect: by giving each form its own component, `useState`'s initializer can read from props at mount time, no effect needed.
-5. **Hook order matters.** `useHighwayMouseInteraction` is called *before* `useHighwaySync` inside HighwayEditor because the sync hook reads `hoverLane`/`hoverTick`/`hoveredMarkerKey` from the mouse hook's outputs. Reversing them would not violate React semantics but would force `useHighwaySync` to read stale values for one render.
+5. **Hook order matters.** `useHighwayMouseInteraction` is called _before_ `useHighwaySync` inside HighwayEditor because the sync hook reads `hoverLane`/`hoverTick`/`hoveredMarkerKey` from the mouse hook's outputs. Reversing them would not violate React semantics but would force `useHighwaySync` to read stale values for one render.
 
 ### What this unlocks
 
