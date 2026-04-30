@@ -93,6 +93,11 @@ export async function alignVocals(
   words: AlignedWord[];
   syllables: AlignedSyllable[];
   durationMs: number;
+  /** Fraction of syllables Viterbi was unconfident about (mean score < -3). */
+  lowConfidenceFrac: number;
+  /** True when `lowConfidenceFrac >= 0.75` — used internally to escalate
+   *  to tier-2 Demucs retry. Not surfaced to the user. */
+  lowConfidence: boolean;
 }> {
   // Ensure model is downloaded (no-op if already done)
   await init(onProgress);
@@ -111,6 +116,8 @@ export async function alignVocals(
           words: msg.words,
           syllables: msg.syllables,
           durationMs: msg.durationMs,
+          lowConfidenceFrac: msg.lowConfidenceFrac,
+          lowConfidence: msg.lowConfidence,
         });
       } else if (msg.type === 'error') {
         w.removeEventListener('message', handler);

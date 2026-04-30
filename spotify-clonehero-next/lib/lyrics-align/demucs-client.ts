@@ -109,3 +109,48 @@ export async function resampleTo16kMono(
   const rendered = await offlineCtx.startRendering();
   return rendered.getChannelData(0);
 }
+
+/**
+ * Sum a list of audio stems into a single 44.1kHz stereo AudioBuffer suitable
+ * for runDemucsInWorker. Used when a chart's bundled vocal stem produced a
+ * low-confidence alignment and we want to fall back to AI separation against
+ * a reconstructed full mix.
+ *
+ * Each stem is decoded (codec is whatever the browser supports), resampled to
+ * 44.1kHz by OfflineAudioContext, and summed at the destination. A 1/√N gain
+ * keeps loudness ~stable so Demucs sees a sane signal level regardless of
+ * stem count.
+ */
+export async function mixStemsToAudioBuffer(
+  stems: Array<{data: Uint8Array; mimeType: string}>,
+): Promise<AudioBuffer> {
+  if (stems.length === 0) {
+    throw new Error('mixStemsToAudioBuffer: no stems');
+  }
+
+  const decoded = await Promise.all(
+    stems.map(async s => {
+      const blob = new Blob([s.data as Uint8Array<ArrayBuffer>], {
+        type: s.mimeType,
+      });
+      const arrayBuffer = await blob.arrayBuffer();
+      const ctx = new OfflineAudioContext(1, 1, 44100);
+      return ctx.decodeAudioData(arrayBuffer);
+    }),
+  );
+
+  const numSamples = Math.max(
+    ...decoded.map(b => Math.ceil(b.duration * 44100)),
+  );
+  const ctx = new OfflineAudioContext(2, numSamples, 44100);
+  const stemGain = 1 / Math.sqrt(decoded.length);
+  for (const buf of decoded) {
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const gain = ctx.createGain();
+    gain.gain.value = stemGain;
+    src.connect(gain).connect(ctx.destination);
+    src.start(0);
+  }
+  return ctx.startRendering();
+}

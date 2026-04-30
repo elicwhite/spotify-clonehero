@@ -36,6 +36,10 @@ import {
 import {exportAsZip, exportAsSng} from '@/lib/chart-export';
 import {alignedSyllablesToChartLyrics} from '@/lib/lyrics-align/chart-lyrics';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
+import {
+  runDemucsInWorker,
+  mixStemsToAudioBuffer,
+} from '@/lib/lyrics-align/demucs-client';
 import {buildTimedTempos, tickToMs} from '@/lib/drum-transcription/timing';
 import {
   detectFormat,
@@ -82,9 +86,18 @@ interface LoadedChart {
  * fields ProcessingStep wants plus startTime so we can compute
  * durationMs on completion.
  */
+type AlignStepKey =
+  | 'decode'
+  | 'separate'
+  | 'syllabify'
+  | 'align'
+  | 'separate2'
+  | 'align2';
+
 interface AlignStepState {
-  key: 'decode' | 'separate' | 'syllabify' | 'align';
+  key: AlignStepKey;
   label: string;
+  description?: string;
   status: 'pending' | 'active' | 'done' | 'error';
   detail?: string;
   progress?: number;
@@ -100,12 +113,22 @@ const ALIGN_STEPS: AlignStepState[] = [
   {key: 'align', label: 'Aligning syllables to audio', status: 'pending'},
 ];
 
+const TIER2_STEPS: AlignStepState[] = [
+  {
+    key: 'separate2',
+    label: 'Re-separating vocals from full mix',
+    status: 'pending',
+  },
+  {key: 'align2', label: 'Re-aligning with new vocal stem', status: 'pending'},
+];
+
 function alignStepsToProcessingSteps(
   steps: AlignStepState[],
 ): ProcessingStep[] {
   return steps.map(s => ({
     key: s.key,
     label: s.label,
+    description: s.description,
     status: s.status,
     detail: s.detail,
     progress: s.progress,
@@ -519,9 +542,6 @@ function LyricsAlignInner() {
           startTime: Date.now(),
         });
 
-        const {runDemucsInWorker} = await import(
-          '@/lib/lyrics-align/demucs-client'
-        );
         vocals16k = await runDemucsInWorker(audioBuffer, p =>
           updateAlignStep('separate', {
             detail: p.message,
@@ -553,7 +573,7 @@ function LyricsAlignInner() {
 
       const {alignVocals} = await import('@/lib/lyrics-align/aligner');
 
-      const result = await alignVocals(vocals16k, lyrics, msg => {
+      let result = await alignVocals(vocals16k, lyrics, msg => {
         if (msg.startsWith('Syllabified:')) {
           updateAlignStep('syllabify', {
             status: 'done',
@@ -565,6 +585,75 @@ function LyricsAlignInner() {
           updateAlignStep('align', {status: 'done', endTime: Date.now()});
         }
       });
+
+      // Tier-2 fallback: when pass-1 used the chart's bundled vocals stem
+      // and the alignment was catastrophic (lowConfidenceFrac >= 0.75),
+      // retry with a fresh Demucs separation against a reconstructed mix.
+      // Only escalate if there's something new to try — pass 1 already
+      // ran Demucs, or there's only one stem to mix → no point.
+      const canEscalate =
+        result.lowConfidence &&
+        chart.vocalsFile != null &&
+        chart.audioFiles.length >= 2;
+
+      if (canEscalate) {
+        const lowPct = Math.round(result.lowConfidenceFrac * 100);
+        updateAlignStep('align', {
+          description: `Confidence was low (${lowPct}% of syllables). Trying again with a fresh separation.`,
+        });
+        setAlignSteps(prev => [
+          ...prev,
+          ...TIER2_STEPS.map(s => ({...s})),
+        ]);
+
+        updateAlignStep('separate2', {
+          status: 'active',
+          detail: 'Mixing chart stems for re-separation...',
+          startTime: Date.now(),
+        });
+
+        const stemInputs = chart.audioFiles.map(f => ({
+          data: f.data,
+          mimeType: getMimeForExtension(getExtension(f.fileName)),
+        }));
+        const mixedBuffer = await mixStemsToAudioBuffer(stemInputs);
+
+        updateAlignStep('separate2', {
+          detail: 'Starting Demucs worker...',
+        });
+
+        const vocals16k_2 = await runDemucsInWorker(mixedBuffer, p =>
+          updateAlignStep('separate2', {
+            detail: p.message,
+            progress: p.percent,
+            etaSeconds: p.etaSeconds,
+          }),
+        );
+        updateAlignStep('separate2', {
+          status: 'done',
+          detail: `${(vocals16k_2.length / 16000).toFixed(1)}s mono 16kHz — re-separated`,
+          endTime: Date.now(),
+        });
+
+        setVocalsWaveform(new Float32Array(vocals16k_2));
+
+        updateAlignStep('align2', {
+          status: 'active',
+          startTime: Date.now(),
+        });
+        const result2 = await alignVocals(vocals16k_2, lyrics, msg => {
+          if (msg.startsWith('Done:')) {
+            updateAlignStep('align2', {
+              status: 'done',
+              endTime: Date.now(),
+            });
+          }
+        });
+
+        // Use the second pass unconditionally — first-pass timings were
+        // already discarded above when we set vocalsWaveform.
+        result = result2;
+      }
 
       setAlignSteps(prev =>
         prev.map(s => ({
@@ -581,6 +670,8 @@ function LyricsAlignInner() {
       track({
         event: 'add_lyrics_align_completed',
         totalMs: Date.now() - alignStartedAt,
+        lowConfidence: result.lowConfidence ? 1 : 0,
+        lowConfidenceFrac: Math.round(result.lowConfidenceFrac * 100) / 100,
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

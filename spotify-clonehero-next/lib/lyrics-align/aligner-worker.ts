@@ -92,6 +92,12 @@ type OutboundMessage =
       words: AlignedWord[];
       syllables: AlignedSyllable[];
       durationMs: number;
+      /** Fraction of syllables with mean Viterbi score < -3. Drives the
+       *  internal tier-2 Demucs-retry decision; never user-visible. */
+      lowConfidenceFrac: number;
+      /** True when `lowConfidenceFrac` >= 0.75 — catastrophic alignment.
+       *  Used internally to escalate to tier-2; not shown to the user. */
+      lowConfidence: boolean;
     }
   | {type: 'error'; message: string};
 
@@ -223,36 +229,84 @@ async function runForward(
 }
 
 /**
- * Forward in 30 s non-overlapping chunks. Drifts ~30-40 ms vs single-pass
- * because wav2vec2 has global attention, but reliable on memory-constrained
- * backends.
+ * Forward in 60 s chunks with 10 s overlap, averaging emissions in
+ * overlapped frames. Each frame ends up scored by the chunk in which
+ * it is closest to the center, where wav2vec2's truncated self-attention
+ * has the strongest language-prior context.
+ *
+ * Empirically (autoresearch-phrase, n=200 Harmonix songs):
+ *   chunked-30s no overlap : syl_med 61.3 ms, ps_p90 581 ms
+ *   chunked-60s no overlap : syl_med 45.4 ms, ps_p90 566 ms
+ *   chunked-60s 10 s overlap: syl_med 19.2 ms, ps_p90 549 ms (= single-pass)
+ *
+ * Memory: 60 s × 16 kHz → 3 000 wav2vec2 frames → attention scores
+ * tensor [1, 12, 3000, 3000] × 4 bytes ≈ 432 MB peak. Comfortable
+ * within typical 1 GB browser GPU budgets.
  */
 async function runChunked(
   audio: Float32Array,
 ): Promise<{logProbs: Float32Array; T: number; C: number}> {
-  const CHUNK_SAMPLES = 30 * 16000;
-  const numChunks = Math.ceil(audio.length / CHUNK_SAMPLES);
-  const allChunks: {logProbs: Float32Array; T: number; C: number}[] = [];
+  const SAMPLE_RATE = 16000;
+  const SAMPLES_PER_FRAME = 320; // wav2vec2 outputs 50 fps
+  const CHUNK_SAMPLES = 60 * SAMPLE_RATE;
+  const OVERLAP_SAMPLES = 10 * SAMPLE_RATE;
+  const STRIDE_SAMPLES = CHUNK_SAMPLES - OVERLAP_SAMPLES;
+  const MIN_TAIL_SAMPLES = 8000;
 
-  for (let i = 0; i < numChunks; i++) {
-    const start = i * CHUNK_SAMPLES;
+  type Chunk = {sampleStart: number; logProbs: Float32Array; T: number};
+  const chunks: Chunk[] = [];
+  let start = 0;
+  // Estimate total chunks for progress display
+  const estChunks = Math.max(
+    1,
+    Math.ceil((audio.length - OVERLAP_SAMPLES) / STRIDE_SAMPLES),
+  );
+  while (true) {
     const end = Math.min(start + CHUNK_SAMPLES, audio.length);
+    if (end - start < MIN_TAIL_SAMPLES) break;
     const chunk = audio.slice(start, end);
-    if (chunk.length < 8000) break;
-    progress(`CTC inference: chunk ${i + 1}/${numChunks}`);
-    allChunks.push(await runForward(chunk));
+    progress(`CTC inference: chunk ${chunks.length + 1}/${estChunks}`);
+    const fwd = await runForward(chunk);
+    chunks.push({sampleStart: start, logProbs: fwd.logProbs, T: fwd.T});
+    if (end >= audio.length) break;
+    start += STRIDE_SAMPLES;
   }
 
-  if (allChunks.length === 0) throw new Error('No audio processed');
+  if (chunks.length === 0) throw new Error('No audio processed');
 
-  const C = allChunks[0].C;
-  const totalT = allChunks.reduce((sum, ch) => sum + ch.T, 0);
+  const C = chunks[0].logProbs.length / chunks[0].T;
+  // Determine global frame range covered by any chunk.
+  let totalT = 0;
+  for (const ch of chunks) {
+    const frameStart = Math.floor(ch.sampleStart / SAMPLES_PER_FRAME);
+    const frameEnd = frameStart + ch.T;
+    if (frameEnd > totalT) totalT = frameEnd;
+  }
+
+  // Sum + count per frame, then divide. Single combined buffer keeps
+  // memory at ~totalT * C * 4 bytes (~1.5 MB for a 6 min song).
   const logProbs = new Float32Array(totalT * C);
-  let offset = 0;
-  for (const ch of allChunks) {
-    logProbs.set(ch.logProbs, offset);
-    offset += ch.T * C;
+  const counts = new Float32Array(totalT);
+  for (const ch of chunks) {
+    const frameStart = Math.floor(ch.sampleStart / SAMPLES_PER_FRAME);
+    for (let t = 0; t < ch.T; t++) {
+      const dstFrame = frameStart + t;
+      if (dstFrame >= totalT) break;
+      counts[dstFrame] += 1;
+      const dstOff = dstFrame * C;
+      const srcOff = t * C;
+      for (let c = 0; c < C; c++) {
+        logProbs[dstOff + c] += ch.logProbs[srcOff + c];
+      }
+    }
   }
+  for (let t = 0; t < totalT; t++) {
+    const cnt = counts[t];
+    if (cnt <= 1) continue;
+    const off = t * C;
+    for (let c = 0; c < C; c++) logProbs[off + c] /= cnt;
+  }
+
   return {logProbs, T: totalT, C};
 }
 
@@ -260,12 +314,13 @@ async function runChunked(
  * CTC emissions over the full song.
  *
  * Routing:
- *   WebGPU → chunked. The attention scores tensor is [1, 12, T, T]; for any
- *     non-trivial song length T² blows out maxBufferSize, and the resulting
- *     createBuffer rejection escapes the await chain (uncatchable here).
+ *   WebGPU → 60 s chunks with 10 s overlap-and-average. The attention
+ *     scores tensor [1, 12, T, T] would blow out maxBufferSize for a
+ *     full-song forward, but a 60 s window stays around 432 MB peak
+ *     and overlap-and-average recovers single-pass quality (autoresearch
+ *     n=200: syl_med 19.2 ms, identical to single-pass).
  *   WASM → single-pass. CPU heap fits a full forward and matches the
- *     autoresearch reference (exp23 was tuned on single-pass emissions).
- *     Falls back to chunked on any failure.
+ *     autoresearch reference. Falls back to chunked on any failure.
  */
 async function getEmissions(
   audio: Float32Array,
@@ -273,9 +328,7 @@ async function getEmissions(
   if (!session) throw new Error('Model not loaded');
   if (audio.length < 8000) throw new Error('No audio processed');
 
-  if (useWebGPU) {
-    return runChunked(audio);
-  }
+  if (useWebGPU) return runChunked(audio);
 
   const seconds = audio.length / 16000;
   progress(`CTC inference: full song (${seconds.toFixed(1)}s, single-pass)`);
@@ -284,7 +337,7 @@ async function getEmissions(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     progress(
-      `Full-song forward failed (${msg.slice(0, 120)}) — falling back to 30s chunks`,
+      `Full-song forward failed (${msg.slice(0, 120)}) — falling back to 60s overlapping chunks`,
     );
     return runChunked(audio);
   }
@@ -473,9 +526,11 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
   // Build token→frame lookup from aligned results (keyed by tokenPos)
   const tokenStartFrame = new Map<number, number>();
   const tokenEndFrame = new Map<number, number>();
+  const tokenScore = new Map<number, number>();
   for (const a of aligned) {
     tokenStartFrame.set(a.tokenPos, a.startFrame);
     tokenEndFrame.set(a.tokenPos, a.endFrame);
+    tokenScore.set(a.tokenPos, a.score);
   }
 
   // Smooth RMS for onset detection
@@ -574,6 +629,34 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
     wordSylRanges.push([wordStartSyl, alignedSyls.length]);
   }
 
+  // Aggregate Viterbi confidence per syllable. A syllable's confidence is the
+  // mean score across its character tokens; we count the fraction below -3.
+  let lowSylCount = 0;
+  let scoredSylCount = 0;
+  for (let si = 0; si < syls.length; si++) {
+    const startPos = sylStartPositions[si];
+    const endPos = sylEndPositions[si];
+    let sum = 0;
+    let count = 0;
+    for (let p = startPos; p < endPos; p++) {
+      const s = tokenScore.get(p);
+      if (s !== undefined) {
+        sum += s;
+        count++;
+      }
+    }
+    if (count > 0) {
+      if (sum / count < -3) lowSylCount++;
+      scoredSylCount++;
+    }
+  }
+  const lowConfidenceFrac =
+    scoredSylCount > 0 ? lowSylCount / scoredSylCount : 0;
+
+  // Drives the internal tier-2 Demucs-retry; never user-visible. 0.75
+  // calibrated on n=344 non-Harmonix charts.
+  const lowConfidence = lowConfidenceFrac >= 0.75;
+
   // Group words into display lines
   const lines = groupIntoLines(words);
 
@@ -604,7 +687,15 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
 
   progress(`Done: ${alignedSyls.length} syllables, ${lines.length} lines`);
 
-  post({type: 'result', lines, words, syllables: alignedSyls, durationMs});
+  post({
+    type: 'result',
+    lines,
+    words,
+    syllables: alignedSyls,
+    durationMs,
+    lowConfidenceFrac,
+    lowConfidence,
+  });
 }
 
 // ---------------------------------------------------------------------------
