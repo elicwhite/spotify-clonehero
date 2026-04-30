@@ -50,7 +50,12 @@ export default function Home() {
         </Card>
         <Card className="flex flex-col justify-between">
           <CardHeader>
-            <CardTitle>Add Lyrics to a Chart</CardTitle>
+            <CardTitle>
+              Add Lyrics to a Chart
+              <Badge className="ml-2 align-middle" variant="default">
+                New
+              </Badge>
+            </CardTitle>
             <CardDescription>
               Paste your lyrics and they&apos;re automatically synced to any
               Clone Hero chart, syllable-by-syllable. Runs entirely in your
@@ -67,12 +72,7 @@ export default function Home() {
         </Card>
         <Card className="flex flex-col justify-between">
           <CardHeader>
-            <CardTitle>
-              Spotify Library Scanner
-              <Badge className="ml-2 align-middle" variant="default">
-                Beta
-              </Badge>
-            </CardTitle>
+            <CardTitle>Spotify Library Scanner</CardTitle>
             <CardDescription>
               Find charts on Chorus that match songs you have saved in your
               Spotify playlists.
@@ -82,7 +82,7 @@ export default function Home() {
             <Link
               href="/spotify"
               className={buttonVariants({variant: 'default'})}>
-              Try the Beta
+              Go to Tool
             </Link>
           </CardFooter>
         </Card>
