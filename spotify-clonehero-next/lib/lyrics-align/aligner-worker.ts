@@ -23,6 +23,7 @@ import * as ort from 'onnxruntime-web';
 import {forcedAlign} from './viterbi';
 import {getCachedModel} from './model-cache';
 import {syllabifyLyrics} from './syllabify';
+import {wav2vecFrames} from './frames';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -266,8 +267,25 @@ async function runChunked(
     if (end - start < MIN_TAIL_SAMPLES) break;
     const chunk = audio.slice(start, end);
     progress(`CTC inference: chunk ${chunks.length + 1}/${estChunks}`);
-    const fwd = await runForward(chunk);
-    chunks.push({sampleStart: start, logProbs: fwd.logProbs, T: fwd.T});
+
+    // onnxruntime-web's WebGPU EP specializes the attention Reshape to the
+    // first run's sequence length and fails on any later run with a
+    // different length on the same (singleton) session — e.g. the shorter
+    // tail chunk, or a second alignment pass on different-length vocals.
+    // Pad every WebGPU run to a fixed CHUNK_SAMPLES so each session.run
+    // sees an identical shape; the silent padded frames are trimmed off.
+    const realFrames = wav2vecFrames(chunk.length);
+    let fwdInput = chunk;
+    if (useWebGPU && chunk.length < CHUNK_SAMPLES) {
+      fwdInput = new Float32Array(CHUNK_SAMPLES);
+      fwdInput.set(chunk);
+    }
+    const fwd = await runForward(fwdInput);
+    const C = fwd.logProbs.length / fwd.T;
+    const T = Math.min(fwd.T, realFrames);
+    const logProbs =
+      T === fwd.T ? fwd.logProbs : fwd.logProbs.slice(0, T * C);
+    chunks.push({sampleStart: start, logProbs, T});
     if (end >= audio.length) break;
     start += STRIDE_SAMPLES;
   }
