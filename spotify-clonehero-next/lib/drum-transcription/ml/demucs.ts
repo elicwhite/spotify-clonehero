@@ -2,7 +2,7 @@
  * Demucs stem separation pipeline.
  *
  * Runs the htdemucs ONNX model entirely in the browser via WebGPU.
- * Audio is segmented into overlapping 10-second chunks, processed through
+ * Audio is segmented into overlapping 7.8 s chunks, processed through
  * STFT -> ONNX model -> iSTFT, then stitched back together with linear
  * crossfade overlap-add.
  *
@@ -25,6 +25,7 @@ import {
   runInference,
   type OrtInferenceSession,
 } from './onnx-runtime';
+import {MODEL_URLS} from '@/lib/lyrics-align/model-urls';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -34,9 +35,9 @@ import {
 export const MODEL_SOURCES = ['drums', 'bass', 'other', 'vocals'] as const;
 export type SourceName = (typeof MODEL_SOURCES)[number];
 
-/** HuggingFace URL for the htdemucs ONNX model (~161 MB). */
-const MODEL_URL =
-  'https://huggingface.co/Ryan5453/demucs-onnx/resolve/main/htdemucs.onnx';
+/** Self-hosted htdemucs ONNX model (fp32, ~169 MB). The upstream
+ *  HuggingFace repo was removed/renamed; see lib/lyrics-align/model-urls. */
+const MODEL_URL = MODEL_URLS.demucs;
 
 /** Number of stereo channels. */
 const NUM_CHANNELS = 2;

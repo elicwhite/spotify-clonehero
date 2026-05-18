@@ -29,8 +29,12 @@ export const NFFT = 4096;
 /** Hop length between successive STFT frames. */
 export const HOP_LENGTH = NFFT / 4; // 1024
 
-/** Number of samples in a 10-second segment at 44.1 kHz. */
-export const SEGMENT_SAMPLES = 441000;
+/**
+ * HTDemucs training length (7.8 s @ 44.1 kHz). The htdemucs ONNX graph is
+ * traced at exactly this size, so every segment fed to the model must be
+ * this length — matches demucs-next `constants.ts`.
+ */
+export const SEGMENT_SAMPLES = 343980;
 
 /** Number of stereo channels. */
 const NUM_CHANNELS = 2;

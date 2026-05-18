@@ -29,12 +29,12 @@ import {
   SEGMENT_SAMPLES,
 } from '@/lib/drum-transcription/audio/stft';
 import {getCachedModel} from './model-cache';
+import {MODEL_URLS} from './model-urls';
 
 const ORT_WASM_CDN =
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
 
-const DEMUCS_MODEL_URL =
-  'https://huggingface.co/Ryan5453/demucs-onnx/resolve/main/htdemucs.onnx';
+const DEMUCS_MODEL_URL = MODEL_URLS.demucs;
 const SAMPLE_RATE = 44100;
 const VOCALS_INDEX = 3;
 const NUM_CHANNELS = 2;
@@ -74,11 +74,13 @@ async function loadModel() {
   // WebGPU is the primary speed path; WASM stays single-threaded as fallback.
   ort.env.wasm.numThreads = 1;
 
-  progress('Downloading Demucs model (~80 MB)...');
+  progress('Downloading audio separator...');
   const buffer = await getCachedModel(
     DEMUCS_MODEL_URL,
-    'htdemucs.onnx',
+    'htdemucs_fp32.onnx',
     progress,
+    140_000_000, // real size ~169 MB (htdemucs_fp32)
+    'audio separator',
   );
 
   progress('Creating Demucs session...');

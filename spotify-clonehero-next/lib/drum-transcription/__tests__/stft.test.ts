@@ -74,8 +74,10 @@ describe('STFT constants', () => {
     expect(HOP_LENGTH).toBe(1024);
   });
 
-  it('has segment = 10 seconds at 44.1 kHz', () => {
-    expect(SEGMENT_SAMPLES).toBe(441000);
+  it('has segment = HTDemucs traced length (7.8 s at 44.1 kHz)', () => {
+    // The htdemucs ONNX graph is traced at exactly this size — must match
+    // demucs-next constants.ts. 343980 / 44100 = 7.8 s.
+    expect(SEGMENT_SAMPLES).toBe(343980);
   });
 });
 

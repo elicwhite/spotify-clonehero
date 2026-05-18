@@ -22,6 +22,7 @@
 import * as ort from 'onnxruntime-web';
 import {forcedAlign} from './viterbi';
 import {getCachedModel} from './model-cache';
+import {MODEL_URLS} from './model-urls';
 import {syllabifyLyrics} from './syllabify';
 import {wav2vecFrames} from './frames';
 
@@ -114,10 +115,8 @@ function progress(message: string) {
 // Init — download + cache model
 // ---------------------------------------------------------------------------
 
-const WAV2VEC2_FP16_URL =
-  'https://huggingface.co/elicwhite/wav2vec2-base-960h-fp16-onnx/resolve/main/wav2vec2-base-960h-fp16.onnx';
-const WAV2VEC2_QUANTIZED_URL =
-  'https://huggingface.co/onnx-community/wav2vec2-base-960h-ONNX/resolve/main/onnx/model_quantized.onnx';
+const WAV2VEC2_FP16_URL = MODEL_URLS.wav2vec2Fp16;
+const WAV2VEC2_QUANTIZED_URL = MODEL_URLS.wav2vec2Quantized;
 
 async function handleInit() {
   ort.env.wasm.wasmPaths = ORT_WASM_CDN;
@@ -135,6 +134,7 @@ async function handleInit() {
         WAV2VEC2_FP16_URL,
         'wav2vec2-base-960h-fp16.onnx',
         progress,
+        150_000_000, // real size ~189 MB
       );
       useWebGPU = true;
       progress('Model cached — will load when needed');
@@ -152,6 +152,7 @@ async function handleInit() {
     WAV2VEC2_QUANTIZED_URL,
     'wav2vec2-base-960h-quantized.onnx',
     progress,
+    80_000_000, // real size ~95 MB
   );
   progress('Model cached — will load when needed');
   post({type: 'initDone'});
