@@ -32,6 +32,12 @@ export default function CloneHeroRenderer({
     );
     rendererRef.current = renderer;
     renderer.prepTrack(track);
+    renderer.setGridData({
+      tempos: chart.tempos,
+      timeSignatures: chart.timeSignatures,
+      resolution: chart.resolution,
+      durationMs: metadata.song_length || 60 * 5 * 1000,
+    });
     renderer.startRender();
     return () => {
       renderer.destroy();
