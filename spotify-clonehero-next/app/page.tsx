@@ -72,6 +72,27 @@ export default function Home() {
         </Card>
         <Card className="flex flex-col justify-between">
           <CardHeader>
+            <CardTitle>
+              SNG File Manager
+              <Badge className="ml-2 align-middle" variant="default">
+                New
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Create and modify Clone Hero <code>.sng</code> files. Build a
+              package from a folder or files, inspect an existing one, add or
+              remove files, and download as <code>.sng</code> or{' '}
+              <code>.zip</code>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 py-4">
+            <Link href="sng" className={buttonVariants({variant: 'default'})}>
+              Go to Tool
+            </Link>
+          </CardContent>
+        </Card>
+        <Card className="flex flex-col justify-between">
+          <CardHeader>
             <CardTitle>Spotify Library Scanner</CardTitle>
             <CardDescription>
               Find charts on Chorus that match songs you have saved in your
