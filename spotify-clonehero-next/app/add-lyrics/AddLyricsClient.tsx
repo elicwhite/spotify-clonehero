@@ -34,6 +34,7 @@ import {
   type ChartDocument,
 } from '@/lib/chart-edit';
 import {exportAsZip, exportAsSng} from '@/lib/chart-export';
+import {downloadBlob} from '@/lib/download';
 import {alignedSyllablesToChartLyrics} from '@/lib/lyrics-align/chart-lyrics';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
 import {
@@ -721,13 +722,7 @@ function LyricsAlignInner() {
 
       const filename = chart.originalName + ext;
 
-      // Trigger browser download
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, filename);
 
       const manualMoveCount = state.undoStack.filter(
         cmd =>

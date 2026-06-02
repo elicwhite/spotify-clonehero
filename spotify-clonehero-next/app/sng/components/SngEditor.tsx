@@ -7,13 +7,14 @@ import ChartInfoCard from './ChartInfoCard';
 import DropZone from './DropZone';
 import PackageFileTable, {type WorkingFile} from './PackageFileTable';
 
+export type DownloadFormat = 'sng' | 'zip';
+
 interface SngEditorProps {
   files: WorkingFile[];
   originalName: string;
   onAdd: (entries: FileEntry[]) => void;
   onDelete: (id: string) => void;
-  onDownloadSng: () => void;
-  onDownloadZip: () => void;
+  onDownload: (format: DownloadFormat) => void;
   onBack: () => void;
 }
 
@@ -22,8 +23,7 @@ export default function SngEditor({
   originalName,
   onAdd,
   onDelete,
-  onDownloadSng,
-  onDownloadZip,
+  onDownload,
   onBack,
 }: SngEditorProps) {
   const empty = files.length === 0;
@@ -37,14 +37,14 @@ export default function SngEditor({
         </Button>
         <h1 className="truncate text-lg font-semibold">{originalName}</h1>
         <div className="flex gap-2">
-          <Button size="sm" onClick={onDownloadSng} disabled={empty}>
+          <Button size="sm" onClick={() => onDownload('sng')} disabled={empty}>
             <Download className="mr-2 h-4 w-4" />
             Download .sng
           </Button>
           <Button
             size="sm"
             variant="outline"
-            onClick={onDownloadZip}
+            onClick={() => onDownload('zip')}
             disabled={empty}>
             <FileArchive className="mr-2 h-4 w-4" />
             Download .zip

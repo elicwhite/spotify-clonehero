@@ -5,7 +5,7 @@
  * project's `findChartData` so chart selection matches the rest of the app.
  */
 
-import {parseChartFile} from '@eliwhite/scan-chart';
+import {parseChartFile, defaultIniChartModifiers} from '@eliwhite/scan-chart';
 import {findChartData} from '@/lib/preview/chorus-chart-processing';
 import {
   getExtension,
@@ -43,19 +43,6 @@ export interface ChartPreview {
   instruments: {instrument: string; difficulties: Difficulty[]}[];
 }
 
-// scan-chart needs a full modifier object; these mirror the defaults used in
-// lib/preview/chorus-chart-processing.ts when no song.ini values are supplied.
-const DEFAULT_INI_MODIFIERS = {
-  song_length: 0,
-  hopo_frequency: 0,
-  eighthnote_hopo: false,
-  multiplier_note: 0,
-  sustain_cutoff_threshold: -1,
-  chord_snap_threshold: 0,
-  five_lane_drums: false,
-  pro_drums: false,
-} as const;
-
 /**
  * Parse the chart in `files` into a preview summary, or `null` if the package
  * contains no chart file (`.chart`/`.mid`).
@@ -64,7 +51,9 @@ export function parseChartPreview(files: PreviewFile[]): ChartPreview | null {
   if (!files.some(f => hasChartExtension(f.fileName))) return null;
 
   const {chartData, format} = findChartData(files);
-  const parsed = parseChartFile(chartData, format, DEFAULT_INI_MODIFIERS);
+  // Use scan-chart's exported defaults (the canonical source of truth) so the
+  // modifier set can't drift as the format gains fields.
+  const parsed = parseChartFile(chartData, format, defaultIniChartModifiers);
 
   const byInstrument = new Map<string, Set<Difficulty>>();
   for (const track of parsed.trackData) {

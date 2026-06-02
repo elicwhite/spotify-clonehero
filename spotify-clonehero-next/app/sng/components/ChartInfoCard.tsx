@@ -16,6 +16,12 @@ import {
   type PreviewFile,
 } from '@/lib/sng/parse-chart-preview';
 
+function isRenderedInstrument(
+  instrument: string,
+): instrument is AllowedInstrument {
+  return (RENDERED_INSTRUMENTS as readonly string[]).includes(instrument);
+}
+
 export default function ChartInfoCard({files}: {files: PreviewFile[]}) {
   // Re-parse whenever the file set changes (add/delete). Keyed on the file
   // names + sizes so identical content doesn't trigger needless re-parses.
@@ -109,11 +115,9 @@ export default function ChartInfoCard({files}: {files: PreviewFile[]}) {
             )}
             {info.instruments.map(({instrument, difficulties}) => (
               <div key={instrument} className="flex items-center gap-2">
-                {RENDERED_INSTRUMENTS.includes(
-                  instrument as AllowedInstrument,
-                ) ? (
+                {isRenderedInstrument(instrument) ? (
                   <InstrumentImage
-                    instrument={instrument as AllowedInstrument}
+                    instrument={instrument}
                     size="md"
                     classNames="h-6 w-6"
                   />

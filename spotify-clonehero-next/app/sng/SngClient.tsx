@@ -7,9 +7,10 @@ import {
   type FileEntry,
 } from '@/components/chart-picker/chart-file-readers';
 import {exportAsSng, exportAsZip} from '@/lib/chart-export';
+import {downloadBlob} from '@/lib/download';
 import {dedupeByName} from '@/lib/sng/file-utils';
 import SngLanding from './components/SngLanding';
-import SngEditor from './components/SngEditor';
+import SngEditor, {type DownloadFormat} from './components/SngEditor';
 import type {WorkingFile} from './components/PackageFileTable';
 
 type Mode = 'landing' | 'editor';
@@ -25,17 +26,6 @@ function toWorkingFiles(entries: FileEntry[]): WorkingFile[] {
 function sanitizeName(name: string): string {
   const trimmed = name.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
   return trimmed.length > 0 ? trimmed : 'song';
-}
-
-function triggerDownload(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
 }
 
 export default function SngClient() {
@@ -81,39 +71,28 @@ export default function SngClient() {
     setFiles(prev => prev.filter(f => f.id !== id));
   }, []);
 
-  const toExportEntries = useCallback(
-    (): FileEntry[] => files.map(f => ({fileName: f.fileName, data: f.data})),
-    [files],
+  const download = useCallback(
+    (format: DownloadFormat) => {
+      // chart-export expects { filename }; song.ini is folded into the SNG
+      // header (and kept as a file in the zip) by the exporters themselves.
+      const entries = files.map(f => ({filename: f.fileName, data: f.data}));
+      const name = sanitizeName(originalName);
+      try {
+        const blob =
+          format === 'sng'
+            ? new Blob([exportAsSng(entries) as Uint8Array<ArrayBuffer>], {
+                type: 'application/octet-stream',
+              })
+            : exportAsZip(entries);
+        downloadBlob(blob, `${name}.${format}`);
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : `Failed to export .${format}`,
+        );
+      }
+    },
+    [files, originalName],
   );
-
-  const downloadSng = useCallback(() => {
-    try {
-      // exportAsSng expects { filename } (not { fileName }) and folds song.ini
-      // into the SNG header metadata automatically.
-      const sngBytes = exportAsSng(
-        toExportEntries().map(f => ({filename: f.fileName, data: f.data})),
-      );
-      triggerDownload(
-        new Blob([sngBytes as Uint8Array<ArrayBuffer>], {
-          type: 'application/octet-stream',
-        }),
-        `${sanitizeName(originalName)}.sng`,
-      );
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to export .sng');
-    }
-  }, [originalName, toExportEntries]);
-
-  const downloadZip = useCallback(() => {
-    try {
-      const blob = exportAsZip(
-        toExportEntries().map(f => ({filename: f.fileName, data: f.data})),
-      );
-      triggerDownload(blob, `${sanitizeName(originalName)}.zip`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to export .zip');
-    }
-  }, [originalName, toExportEntries]);
 
   if (mode === 'landing') {
     return <SngLanding onCreate={startCreate} onPickSng={startModify} />;
@@ -125,8 +104,7 @@ export default function SngClient() {
       originalName={originalName}
       onAdd={addEntries}
       onDelete={removeFile}
-      onDownloadSng={downloadSng}
-      onDownloadZip={downloadZip}
+      onDownload={download}
       onBack={() => setMode('landing')}
     />
   );

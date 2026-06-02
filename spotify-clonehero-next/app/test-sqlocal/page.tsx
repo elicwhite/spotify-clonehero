@@ -12,6 +12,7 @@ import {
   analyzeDataConsistency,
   deleteOrphanedTracks,
 } from '@/lib/local-db/spotify';
+import {downloadBlob} from '@/lib/download';
 
 export default function TestSQLocalPage() {
   const [status, setStatus] = useState<
@@ -106,14 +107,7 @@ export default function TestSQLocalPage() {
   const downloadDb = async () => {
     try {
       const file = await exportLocalDbFile();
-      const url = URL.createObjectURL(file);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = file.name || 'spotify-clonehero-local.sqlite3';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(file, file.name || 'spotify-clonehero-local.sqlite3');
     } catch (e) {
       alert(
         'Failed to export DB: ' + (e instanceof Error ? e.message : String(e)),
