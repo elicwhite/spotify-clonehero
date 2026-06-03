@@ -94,18 +94,21 @@ export default function OpengraphImage() {
 
           <div style={arrow}>→</div>
 
-          {/* the files inside the package */}
-          <div
-            style={{
-              ...square,
-              flexDirection: 'column',
-              gap: 10,
-              fontSize: 20,
-              fontWeight: 400,
-              color: 'rgba(255,255,255,0.82)',
-            }}>
+          {/* the files inside the package, each in its own rectangle */}
+          <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
             {PACKAGE_FILES.map(name => (
-              <div key={name} style={{display: 'flex'}}>
+              <div
+                key={name}
+                style={{
+                  display: 'flex',
+                  fontSize: 26,
+                  fontFamily: 'monospace',
+                  color: 'rgba(255,255,255,0.82)',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 12,
+                  padding: '10px 20px',
+                }}>
                 {name}
               </div>
             ))}
