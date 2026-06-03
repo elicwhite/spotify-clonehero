@@ -1,11 +1,7 @@
 import {describe, test, expect} from '@jest/globals';
 import {readFileSync} from 'fs';
 import {join} from 'path';
-import {
-  parseChartPreview,
-  findAlbumArt,
-  type PreviewFile,
-} from '../parse-chart-preview';
+import {parseChartPreview, type PreviewFile} from '../parse-chart-preview';
 
 const drumsChart = readFileSync(
   join(__dirname, '../../chart-edit/__tests__/fixtures/drums-basic.chart'),
@@ -36,22 +32,8 @@ describe('parseChartPreview', () => {
     expect(preview!.instruments).toEqual([
       {instrument: 'drums', difficulties: ['expert']},
     ]);
-  });
-});
 
-describe('findAlbumArt', () => {
-  test('finds album.png / album.jpg case-insensitively', () => {
-    expect(
-      findAlbumArt([{fileName: 'Album.PNG', data: new Uint8Array()}])?.fileName,
-    ).toBe('Album.PNG');
-    expect(
-      findAlbumArt([{fileName: 'album.jpg', data: new Uint8Array()}])?.fileName,
-    ).toBe('album.jpg');
-  });
-
-  test('returns undefined when no album art is present', () => {
-    expect(
-      findAlbumArt([{fileName: 'background.png', data: new Uint8Array()}]),
-    ).toBeUndefined();
+    // No album art file in this fixture.
+    expect(preview!.albumArt).toBeUndefined();
   });
 });

@@ -11,7 +11,6 @@ import {Badge} from '@/components/ui/badge';
 import {Card, CardContent} from '@/components/ui/card';
 import {
   parseChartPreview,
-  findAlbumArt,
   DIFFICULTY_LABEL,
   type PreviewFile,
 } from '@/lib/sng/parse-chart-preview';
@@ -39,22 +38,18 @@ export default function ChartInfoCard({files}: {files: PreviewFile[]}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fingerprint]);
 
-  const albumArt = useMemo(
-    () => findAlbumArt(files),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [fingerprint],
-  );
-
   // Create the object URL during render (memoized on the art bytes) and revoke
   // the previous one in an effect cleanup — avoids setState-in-effect.
   const albumArtUrl = useMemo(
     () =>
-      albumArt
+      info?.albumArt
         ? URL.createObjectURL(
-            new Blob([albumArt.data as Uint8Array<ArrayBuffer>]),
+            new Blob([info.albumArt as Uint8Array<ArrayBuffer>], {
+              type: 'image/jpeg',
+            }),
           )
         : null,
-    [albumArt],
+    [info],
   );
 
   useEffect(() => {

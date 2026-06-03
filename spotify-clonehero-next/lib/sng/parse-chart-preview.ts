@@ -1,17 +1,14 @@
 /**
- * Parse the chart inside an SNG/zip package into the small summary the
- * preview card shows: song name, artist, charter, and which difficulties are
- * charted for each instrument. Reuses scan-chart's `parseChartFile` and the
- * project's `findChartData` so chart selection matches the rest of the app.
+ * Parse the chart inside an SNG/zip package into the small summary the preview
+ * card shows: song name, artist, charter, the difficulties charted for each
+ * instrument, and album art.
+ *
+ * Uses scan-chart's `parseChartAndIni()` + `scanChart()`, which already derive
+ * the instrument list, per-instrument note counts, and extracted album art in
+ * one pass — so we don't reimplement chart selection or track grouping here.
  */
 
-import {parseChartFile, defaultIniChartModifiers} from '@eliwhite/scan-chart';
-import {findChartData} from '@/lib/preview/chorus-chart-processing';
-import {
-  getExtension,
-  getBasename,
-  hasChartExtension,
-} from '@/lib/src-shared/utils';
+import {parseChartAndIni, scanChart} from '@eliwhite/scan-chart';
 
 export interface PreviewFile {
   fileName: string;
@@ -39,51 +36,48 @@ export interface ChartPreview {
   artist: string;
   charter: string;
   album?: string;
+  /** Extracted album art (jpg bytes), if the package contains any. */
+  albumArt?: Uint8Array;
   /** instruments present, each with its charted difficulties (hardest first) */
   instruments: {instrument: string; difficulties: Difficulty[]}[];
 }
 
 /**
  * Parse the chart in `files` into a preview summary, or `null` if the package
- * contains no chart file (`.chart`/`.mid`).
+ * contains no parseable chart (`.chart`/`.mid`).
  */
 export function parseChartPreview(files: PreviewFile[]): ChartPreview | null {
-  if (!files.some(f => hasChartExtension(f.fileName))) return null;
+  const parseResult = parseChartAndIni(files);
+  if (!parseResult.parsedChart) return null;
 
-  const {chartData, format} = findChartData(files);
-  // Use scan-chart's exported defaults (the canonical source of truth) so the
-  // modifier set can't drift as the format gains fields.
-  const parsed = parseChartFile(chartData, format, defaultIniChartModifiers);
+  // md5/btrack hashing isn't needed for a preview; skip it.
+  const scanned = scanChart(files, parseResult, {
+    includeMd5: false,
+    includeBTrack: false,
+  });
+  if (!scanned.notesData) return null;
 
-  const byInstrument = new Map<string, Set<Difficulty>>();
-  for (const track of parsed.trackData) {
-    if (!byInstrument.has(track.instrument)) {
-      byInstrument.set(track.instrument, new Set());
-    }
-    byInstrument.get(track.instrument)!.add(track.difficulty as Difficulty);
+  const difficultiesByInstrument = new Map<string, Set<Difficulty>>();
+  for (const {instrument, difficulty} of scanned.notesData.noteCounts) {
+    const difficulties =
+      difficultiesByInstrument.get(instrument) ?? new Set<Difficulty>();
+    difficulties.add(difficulty);
+    difficultiesByInstrument.set(instrument, difficulties);
   }
 
-  const instruments = Array.from(byInstrument.entries()).map(
-    ([instrument, diffs]) => ({
-      instrument,
-      difficulties: DIFFICULTY_ORDER.filter(d => diffs.has(d)),
-    }),
-  );
+  const instruments = scanned.notesData.instruments.map(instrument => ({
+    instrument,
+    difficulties: DIFFICULTY_ORDER.filter(d =>
+      difficultiesByInstrument.get(instrument)?.has(d),
+    ),
+  }));
 
   return {
-    name: parsed.metadata.name ?? 'Unknown',
-    artist: parsed.metadata.artist ?? 'Unknown Artist',
-    charter: parsed.metadata.charter ?? 'Unknown Charter',
-    album: parsed.metadata.album,
+    name: scanned.name ?? 'Unknown',
+    artist: scanned.artist ?? 'Unknown Artist',
+    charter: scanned.charter ?? 'Unknown Charter',
+    album: scanned.album,
+    albumArt: scanned.albumArt?.data,
     instruments,
   };
-}
-
-/** Locate an album-art image in the package, if present. */
-export function findAlbumArt(files: PreviewFile[]): PreviewFile | undefined {
-  return files.find(
-    f =>
-      getBasename(f.fileName).toLowerCase() === 'album' &&
-      ['png', 'jpg', 'jpeg'].includes(getExtension(f.fileName).toLowerCase()),
-  );
 }

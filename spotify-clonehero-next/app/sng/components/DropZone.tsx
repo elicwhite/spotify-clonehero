@@ -72,9 +72,10 @@ export default function DropZone({onAdd, disabled}: DropZoneProps) {
       setIsReading(true);
       const result = await readChartDirectory(dirHandle);
       onAdd(result.files);
-    } catch (err: any) {
-      if (err?.name === 'AbortError') return; // user cancelled
-      toast.error(err?.message ?? 'Failed to read folder');
+    } catch (err) {
+      // showDirectoryPicker rejects with an AbortError DOMException on cancel.
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      toast.error(err instanceof Error ? err.message : 'Failed to read folder');
     } finally {
       setIsReading(false);
     }
