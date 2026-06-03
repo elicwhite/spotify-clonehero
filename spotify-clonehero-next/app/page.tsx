@@ -108,6 +108,26 @@ export default function Home() {
             </Link>
           </CardContent>
         </Card>
+        <Card className="flex flex-col justify-between">
+          <CardHeader>
+            <CardTitle>
+              SNG File Manager
+              <Badge className="ml-2 align-middle" variant="default">
+                New
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Create, modify, and convert Clone Hero <code>.sng</code> files. Build a
+              package from a folder or files, inspect an existing one, add or
+              remove files, and convert to <code>.zip</code>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 py-4">
+            <Link href="sng" className={buttonVariants({variant: 'default'})}>
+              Go to Tool
+            </Link>
+          </CardContent>
+        </Card>
       </section>
       <footer className="mt-10 border-t border-border/60 pt-4 text-xs text-muted-foreground flex justify-end">
         <Link href="/privacy" className="hover:underline">

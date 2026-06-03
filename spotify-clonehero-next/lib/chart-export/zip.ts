@@ -6,18 +6,18 @@
  */
 
 import {zipSync} from 'fflate';
-import type {FileEntry} from './types';
+import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 /**
  * Package file entries into a ZIP blob.
  *
- * @param files - Array of {filename, data} entries to include.
+ * @param files - Array of {fileName, data} entries to include.
  * @returns A Blob with MIME type application/zip.
  */
 export function exportAsZip(files: FileEntry[]): Blob {
   const entries: Record<string, Uint8Array> = {};
   for (const f of files) {
-    entries[f.filename] = f.data;
+    entries[f.fileName] = f.data;
   }
   const zipData = zipSync(entries);
   return new Blob([zipData as Uint8Array<ArrayBuffer>], {

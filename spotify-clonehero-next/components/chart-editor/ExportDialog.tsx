@@ -26,6 +26,7 @@ import {Switch} from '@/components/ui/switch';
 
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
 import {exportAsZip, exportAsSng} from '@/lib/chart-export';
+import {downloadBlob} from '@/lib/download';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -127,12 +128,12 @@ export default function ExportDialog({
 
       // 4. Build file entries and package as ZIP or SNG
       const fileEntries = chartFiles.map(f => ({
-        filename: f.fileName,
+        fileName: f.fileName,
         data: f.data,
       }));
       for (const audio of audioFiles) {
         fileEntries.push({
-          filename: audio.fileName,
+          fileName: audio.fileName,
           data: new Uint8Array(audio.data),
         });
       }
@@ -153,14 +154,10 @@ export default function ExportDialog({
       }
 
       // 5. Trigger browser download
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `${songName.replace(/[^a-zA-Z0-9_-]/g, '_')}.${extension}`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      URL.revokeObjectURL(url);
+      downloadBlob(
+        blob,
+        `${songName.replace(/[^a-zA-Z0-9_-]/g, '_')}.${extension}`,
+      );
 
       toast.success('Chart exported successfully');
       setOpen(false);

@@ -9,11 +9,7 @@ import {unzipSync} from 'fflate';
 import {SngStream} from '@eliwhite/parse-sng';
 import type {SngHeader} from '@eliwhite/parse-sng';
 import {getExtension} from '@/lib/src-shared/utils';
-
-export interface FileEntry {
-  fileName: string;
-  data: Uint8Array;
-}
+import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 export type SourceFormat = 'folder' | 'zip' | 'sng';
 

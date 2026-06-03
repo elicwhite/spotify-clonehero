@@ -2,7 +2,7 @@ import {describe, test, expect} from '@jest/globals';
 import {SngStream} from '@eliwhite/parse-sng';
 import type {SngHeader} from '@eliwhite/parse-sng';
 import {exportAsSng} from '../sng';
-import type {FileEntry} from '../types';
+import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 // ---------------------------------------------------------------------------
 // Helper: parse SNG bytes back using parse-sng
@@ -65,9 +65,9 @@ describe('exportAsSng', () => {
     const songIni =
       '[song]\nname = Test Song\nartist = Test Artist\npro_drums = True';
     const files: FileEntry[] = [
-      {filename: 'notes.chart', data: new TextEncoder().encode('[Song]\n{}')},
-      {filename: 'song.ini', data: new TextEncoder().encode(songIni)},
-      {filename: 'song.ogg', data: new Uint8Array([1, 2, 3])},
+      {fileName: 'notes.chart', data: new TextEncoder().encode('[Song]\n{}')},
+      {fileName: 'song.ini', data: new TextEncoder().encode(songIni)},
+      {fileName: 'song.ogg', data: new Uint8Array([1, 2, 3])},
     ];
 
     const sngBytes = exportAsSng(files);
@@ -93,12 +93,12 @@ describe('exportAsSng', () => {
     for (let i = 0; i < 256; i++) audioData[i] = i;
 
     const files: FileEntry[] = [
-      {filename: 'notes.chart', data: chartData},
+      {fileName: 'notes.chart', data: chartData},
       {
-        filename: 'song.ini',
+        fileName: 'song.ini',
         data: new TextEncoder().encode('[song]\nname = RT'),
       },
-      {filename: 'drums.wav', data: audioData},
+      {fileName: 'drums.wav', data: audioData},
     ];
 
     const sngBytes = exportAsSng(files);
@@ -112,7 +112,7 @@ describe('exportAsSng', () => {
 
   test('works without song.ini (empty metadata)', async () => {
     const files: FileEntry[] = [
-      {filename: 'notes.chart', data: new TextEncoder().encode('chart data')},
+      {fileName: 'notes.chart', data: new TextEncoder().encode('chart data')},
     ];
 
     const sngBytes = exportAsSng(files);
@@ -125,9 +125,9 @@ describe('exportAsSng', () => {
 
   test('song.ini matching is case-insensitive', async () => {
     const files: FileEntry[] = [
-      {filename: 'notes.chart', data: new TextEncoder().encode('data')},
+      {fileName: 'notes.chart', data: new TextEncoder().encode('data')},
       {
-        filename: 'Song.INI',
+        fileName: 'Song.INI',
         data: new TextEncoder().encode('[song]\nname = CaseTest'),
       },
     ];
@@ -142,7 +142,7 @@ describe('exportAsSng', () => {
 
   test('SNG header has correct identifier and version', async () => {
     const files: FileEntry[] = [
-      {filename: 'test.txt', data: new TextEncoder().encode('hello')},
+      {fileName: 'test.txt', data: new TextEncoder().encode('hello')},
     ];
 
     const sngBytes = exportAsSng(files);
