@@ -6,8 +6,7 @@ import type {FileEntry} from '@/components/chart-picker/chart-file-readers';
 import ChartInfoCard from './ChartInfoCard';
 import DropZone from './DropZone';
 import PackageFileTable from './PackageFileTable';
-
-export type DownloadFormat = 'sng' | 'zip';
+import type {DownloadFormat} from '../SngContext';
 
 interface SngEditorProps {
   files: FileEntry[];

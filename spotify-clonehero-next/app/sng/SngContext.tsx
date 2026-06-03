@@ -1,6 +1,6 @@
 'use client';
 
-import {useCallback, useState} from 'react';
+import {createContext, useCallback, useContext, useState} from 'react';
 import {toast} from 'sonner';
 import {
   readSngFile,
@@ -10,10 +10,28 @@ import {exportAsSng, exportAsZip} from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
 import {mergeByName} from '@/lib/sng/file-utils';
 import {parseChartPreview} from '@/lib/sng/parse-chart-preview';
-import SngLanding from './components/SngLanding';
-import SngEditor, {type DownloadFormat} from './components/SngEditor';
 
-type Mode = 'landing' | 'editor';
+export type DownloadFormat = 'sng' | 'zip';
+
+interface SngContextValue {
+  files: FileEntry[];
+  /** Add files, replacing any existing file of the same name. */
+  addEntries: (entries: FileEntry[]) => void;
+  removeFile: (fileName: string) => void;
+  download: (format: DownloadFormat) => void;
+  /** Start a new, empty package. */
+  reset: () => void;
+  /** Load an existing .sng. Returns whether it was read successfully. */
+  loadSng: (file: File) => Promise<boolean>;
+}
+
+const SngContext = createContext<SngContextValue | null>(null);
+
+export function useSng(): SngContextValue {
+  const ctx = useContext(SngContext);
+  if (!ctx) throw new Error('useSng must be used within an SngProvider');
+  return ctx;
+}
 
 /** Strip characters illegal in file names while keeping spaces, parens, etc. */
 function sanitizeFileName(name: string): string {
@@ -21,27 +39,26 @@ function sanitizeFileName(name: string): string {
   return cleaned.length > 0 ? cleaned : 'song';
 }
 
-export default function SngClient() {
-  const [mode, setMode] = useState<Mode>('landing');
+export function SngProvider({children}: {children: React.ReactNode}) {
   const [files, setFiles] = useState<FileEntry[]>([]);
-  // Name of the opened .sng (Modify flow). Empty when creating from scratch,
-  // in which case the download name is derived from the chart metadata.
+  // Name of the opened .sng (Modify flow). Null when creating from scratch, in
+  // which case the download name is derived from the chart metadata.
   const [openedSngName, setOpenedSngName] = useState<string | null>(null);
 
-  const startCreate = useCallback(() => {
+  const reset = useCallback(() => {
     setFiles([]);
     setOpenedSngName(null);
-    setMode('editor');
   }, []);
 
-  const startModify = useCallback(async (file: File) => {
+  const loadSng = useCallback(async (file: File): Promise<boolean> => {
     try {
       const loaded = await readSngFile(file);
       setFiles(loaded.files);
       setOpenedSngName(loaded.originalName || 'song');
-      setMode('editor');
+      return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to read .sng file');
+      return false;
     }
   }, []);
 
@@ -98,17 +115,10 @@ export default function SngClient() {
     [files, openedSngName],
   );
 
-  if (mode === 'landing') {
-    return <SngLanding onCreate={startCreate} onPickSng={startModify} />;
-  }
-
   return (
-    <SngEditor
-      files={files}
-      onAdd={addEntries}
-      onDelete={removeFile}
-      onDownload={download}
-      onBack={() => setMode('landing')}
-    />
+    <SngContext.Provider
+      value={{files, addEntries, removeFile, download, reset, loadSng}}>
+      {children}
+    </SngContext.Provider>
   );
 }
