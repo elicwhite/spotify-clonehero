@@ -5,10 +5,8 @@ import {Upload, FilePlus, FolderOpen} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
-import {
-  readChartDirectory,
-  type FileEntry,
-} from '@/components/chart-picker/chart-file-readers';
+import type {File as FileEntry} from '@eliwhite/scan-chart';
+import {readChartDirectory} from '@/components/chart-picker/chart-file-readers';
 import {
   pickFiles,
   readDroppedItems,

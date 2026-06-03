@@ -1,18 +1,17 @@
 'use client';
 
 import {useCallback, useState} from 'react';
-import {useRouter} from 'next/navigation';
 import {toast} from 'sonner';
-import {
-  readSngFile,
-  type FileEntry,
-} from '@/components/chart-picker/chart-file-readers';
+import type {File as FileEntry} from '@eliwhite/scan-chart';
+import {readSngFile} from '@/components/chart-picker/chart-file-readers';
 import {exportAsSng, exportAsZip} from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
 import {mergeByName} from '@/lib/sng/file-utils';
 import {parseChartPreview} from '@/lib/sng/parse-chart-preview';
-import {pickFiles} from '@/lib/sng/read-dropped-entries';
-import SngEditor, {type DownloadFormat} from '../components/SngEditor';
+import SngLanding from './components/SngLanding';
+import SngEditor, {type DownloadFormat} from './components/SngEditor';
+
+type Mode = 'landing' | 'editor';
 
 /** Strip characters illegal in file names while keeping spaces, parens, etc. */
 function sanitizeFileName(name: string): string {
@@ -20,31 +19,34 @@ function sanitizeFileName(name: string): string {
   return cleaned.length > 0 ? cleaned : 'song';
 }
 
-export default function SngManage() {
-  const router = useRouter();
+export default function SngClient() {
+  const [mode, setMode] = useState<Mode>('landing');
   const [files, setFiles] = useState<FileEntry[]>([]);
   // Name of the opened .sng (Modify flow). Null when building from scratch, in
   // which case the download name is derived from the chart metadata.
   const [openedSngName, setOpenedSngName] = useState<string | null>(null);
 
-  const openSng = useCallback(async () => {
+  const startCreate = useCallback(() => {
+    setFiles([]);
+    setOpenedSngName(null);
+    setMode('editor');
+  }, []);
+
+  const startModify = useCallback(async (file: File) => {
     try {
-      const picked = await pickFiles({
-        id: 'sng-modify',
-        types: [
-          {
-            description: 'SNG package',
-            accept: {'application/octet-stream': ['.sng']},
-          },
-        ],
-      });
-      if (!picked?.[0]) return;
-      const loaded = await readSngFile(picked[0]);
+      const loaded = await readSngFile(file);
       setFiles(loaded.files);
       setOpenedSngName(loaded.originalName || 'song');
+      setMode('editor');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to read .sng file');
     }
+  }, []);
+
+  const goBack = useCallback(() => {
+    setMode('landing');
+    setFiles([]);
+    setOpenedSngName(null);
   }, []);
 
   const addEntries = useCallback((entries: FileEntry[]) => {
@@ -100,14 +102,17 @@ export default function SngManage() {
     [files, openedSngName],
   );
 
+  if (mode === 'landing') {
+    return <SngLanding onCreate={startCreate} onPickSng={startModify} />;
+  }
+
   return (
     <SngEditor
       files={files}
       onAdd={addEntries}
       onDelete={removeFile}
       onDownload={download}
-      onOpenSng={openSng}
-      onBack={() => router.push('/sng')}
+      onBack={goBack}
     />
   );
 }

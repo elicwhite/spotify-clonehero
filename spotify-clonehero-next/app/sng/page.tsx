@@ -1,5 +1,5 @@
 import type {Metadata} from 'next';
-import SngLanding from './components/SngLanding';
+import SngClient from './SngClient';
 
 export const metadata: Metadata = {
   title: 'SNG File Manager',
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <SngLanding />;
+  return <SngClient />;
 }

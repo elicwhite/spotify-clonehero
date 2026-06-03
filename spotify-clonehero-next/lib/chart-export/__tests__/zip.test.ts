@@ -1,7 +1,7 @@
 import {describe, test, expect} from '@jest/globals';
 import {unzipSync} from 'fflate';
 import {exportAsZip} from '../zip';
-import type {FileEntry} from '../types';
+import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 describe('exportAsZip', () => {
   test('round-trips file entries', () => {

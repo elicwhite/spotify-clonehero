@@ -12,7 +12,7 @@ import {
   parseChartPreview,
   DIFFICULTY_LABEL,
 } from '@/lib/sng/parse-chart-preview';
-import type {FileEntry} from '@/lib/chart-export';
+import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 function isRenderedInstrument(
   instrument: string,

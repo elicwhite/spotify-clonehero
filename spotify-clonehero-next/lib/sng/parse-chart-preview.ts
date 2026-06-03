@@ -9,8 +9,7 @@
  */
 
 import {parseChartAndIni, scanChart} from '@eliwhite/scan-chart';
-import type {Instrument} from '@eliwhite/scan-chart';
-import type {FileEntry} from '@/lib/chart-export';
+import type {Instrument, File as FileEntry} from '@eliwhite/scan-chart';
 import {removeStyleTags} from '@/lib/ui-utils';
 
 export type Difficulty = 'expert' | 'hard' | 'medium' | 'easy';

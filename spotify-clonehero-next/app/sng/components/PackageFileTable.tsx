@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/table';
 import {hasAudioExtension} from '@/lib/src-shared/utils';
 import {audioMimeType, formatBytes} from '@/lib/sng/file-utils';
-import type {FileEntry} from '@/components/chart-picker/chart-file-readers';
+import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 interface PackageFileTableProps {
   files: FileEntry[];

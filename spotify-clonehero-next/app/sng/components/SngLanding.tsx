@@ -1,7 +1,9 @@
 'use client';
 
-import {useRouter} from 'next/navigation';
+import {useCallback} from 'react';
 import {FilePlus2, FolderInput} from 'lucide-react';
+import {toast} from 'sonner';
+import {pickFiles} from '@/lib/sng/read-dropped-entries';
 import {Button} from '@/components/ui/button';
 import {
   Card,
@@ -11,9 +13,28 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 
-export default function SngLanding() {
-  const router = useRouter();
-  const openManager = () => router.push('/sng/manage');
+interface SngLandingProps {
+  onCreate: () => void;
+  onPickSng: (file: File) => void;
+}
+
+export default function SngLanding({onCreate, onPickSng}: SngLandingProps) {
+  const handleModify = useCallback(async () => {
+    try {
+      const files = await pickFiles({
+        id: 'sng-modify',
+        types: [
+          {
+            description: 'SNG package',
+            accept: {'application/octet-stream': ['.sng']},
+          },
+        ],
+      });
+      if (files?.[0]) onPickSng(files[0]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to open file');
+    }
+  }, [onPickSng]);
 
   return (
     <main className="mx-auto max-w-3xl p-4 sm:p-8">
@@ -41,7 +62,7 @@ export default function SngLanding() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button className="w-full" onClick={openManager}>
+            <Button className="w-full" onClick={onCreate}>
               Create SNG
             </Button>
           </CardContent>
@@ -54,12 +75,12 @@ export default function SngLanding() {
               Modify SNG
             </CardTitle>
             <CardDescription>
-              Open the manager and load an existing <code>.sng</code> to see
-              what&apos;s inside and make changes.
+              Open an existing <code>.sng</code> file to see what&apos;s inside
+              and make changes.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button className="w-full" variant="outline" onClick={openManager}>
+            <Button className="w-full" variant="outline" onClick={handleModify}>
               Modify SNG
             </Button>
           </CardContent>

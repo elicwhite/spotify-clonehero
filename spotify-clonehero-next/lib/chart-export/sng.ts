@@ -10,7 +10,7 @@
  */
 
 import {parse as parseIni, $NoSection} from '@/lib/ini-parser';
-import type {FileEntry} from './types';
+import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 // ---------------------------------------------------------------------------
 // Internal types

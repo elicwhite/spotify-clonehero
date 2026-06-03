@@ -1,8 +1,8 @@
 'use client';
 
-import {ArrowLeft, Download, FileArchive, FolderInput} from 'lucide-react';
+import {ArrowLeft, Download, FileArchive} from 'lucide-react';
 import {Button} from '@/components/ui/button';
-import type {FileEntry} from '@/components/chart-picker/chart-file-readers';
+import type {File as FileEntry} from '@eliwhite/scan-chart';
 import ChartInfoCard from './ChartInfoCard';
 import DropZone from './DropZone';
 import PackageFileTable from './PackageFileTable';
@@ -14,8 +14,6 @@ interface SngEditorProps {
   onAdd: (entries: FileEntry[]) => void;
   onDelete: (fileName: string) => void;
   onDownload: (format: DownloadFormat) => void;
-  /** Open an existing .sng, replacing the current package. */
-  onOpenSng: () => void;
   onBack: () => void;
 }
 
@@ -24,7 +22,6 @@ export default function SngEditor({
   onAdd,
   onDelete,
   onDownload,
-  onOpenSng,
   onBack,
 }: SngEditorProps) {
   const empty = files.length === 0;
@@ -60,12 +57,6 @@ export default function SngEditor({
 
         {/* Right: drop target + file list */}
         <div className="space-y-3">
-          {empty && (
-            <Button variant="secondary" className="w-full" onClick={onOpenSng}>
-              <FolderInput className="mr-2 h-4 w-4" />
-              Open an existing .sng
-            </Button>
-          )}
           <DropZone onAdd={onAdd} />
           <PackageFileTable files={files} onDelete={onDelete} />
         </div>

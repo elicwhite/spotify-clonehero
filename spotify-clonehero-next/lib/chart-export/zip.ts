@@ -6,7 +6,7 @@
  */
 
 import {zipSync} from 'fflate';
-import type {FileEntry} from './types';
+import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 /**
  * Package file entries into a ZIP blob.

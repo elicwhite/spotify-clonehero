@@ -8,7 +8,7 @@
  * exposes top-level files, not folder contents.
  */
 
-import type {FileEntry} from '@/components/chart-picker/chart-file-readers';
+import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 async function fileToEntry(file: File): Promise<FileEntry> {
   return {fileName: file.name, data: new Uint8Array(await file.arrayBuffer())};

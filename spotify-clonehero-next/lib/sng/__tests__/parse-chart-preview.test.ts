@@ -2,7 +2,7 @@ import {describe, test, expect} from '@jest/globals';
 import {readFileSync} from 'fs';
 import {join} from 'path';
 import {parseChartPreview} from '../parse-chart-preview';
-import type {FileEntry} from '@/lib/chart-export';
+import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 const drumsChart = readFileSync(
   join(__dirname, '../../chart-edit/__tests__/fixtures/drums-basic.chart'),
