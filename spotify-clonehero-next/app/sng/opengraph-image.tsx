@@ -4,9 +4,30 @@ export const alt = 'SNG File Manager';
 export const size = {width: 1200, height: 630};
 export const contentType = 'image/png';
 
-// The files that typically make up a Clone Hero package, shown collapsing
-// into a single .sng (and convertible to .zip).
+// The files that typically make up a Clone Hero package.
 const PACKAGE_FILES = ['notes.chart', 'song.opus', 'album.png'];
+
+const square = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 168,
+  height: 168,
+  fontSize: 46,
+  fontWeight: 700,
+  fontFamily: 'monospace',
+  color: 'white',
+  background: 'rgba(255,255,255,0.08)',
+  border: '1px solid rgba(255,255,255,0.18)',
+  borderRadius: 22,
+} as const;
+
+const arrow = {
+  display: 'flex',
+  flexShrink: 0,
+  fontSize: 56,
+  color: 'rgba(255,255,255,0.5)',
+} as const;
 
 export default function OpengraphImage() {
   return new ImageResponse(
@@ -61,70 +82,40 @@ export default function OpengraphImage() {
           browser.
         </div>
 
-        {/* loose files → .sng / .zip */}
+        {/* .sng → its files → .sng / .zip */}
         <div
           style={{
             display: 'flex',
             flexShrink: 0,
             alignItems: 'center',
-            gap: 28,
+            gap: 24,
           }}>
-          <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
+          <div style={square}>.sng</div>
+
+          <div style={arrow}>→</div>
+
+          {/* the files inside the package */}
+          <div
+            style={{
+              ...square,
+              flexDirection: 'column',
+              gap: 10,
+              fontSize: 20,
+              fontWeight: 400,
+              color: 'rgba(255,255,255,0.82)',
+            }}>
             {PACKAGE_FILES.map(name => (
-              <div
-                key={name}
-                style={{
-                  display: 'flex',
-                  fontSize: 26,
-                  fontFamily: 'monospace',
-                  color: 'rgba(255,255,255,0.82)',
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 12,
-                  padding: '10px 20px',
-                }}>
+              <div key={name} style={{display: 'flex'}}>
                 {name}
               </div>
             ))}
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              fontSize: 64,
-              color: 'rgba(255,255,255,0.5)',
-              margin: '0 8px',
-            }}>
-            →
-          </div>
+          <div style={arrow}>→</div>
 
           <div style={{display: 'flex', gap: 22}}>
-            {['.sng', '.zip'].map(ext => (
-              <div
-                key={ext}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 168,
-                  height: 168,
-                  fontSize: 50,
-                  fontWeight: 700,
-                  fontFamily: 'monospace',
-                  color: 'white',
-                  background:
-                    ext === '.sng'
-                      ? 'linear-gradient(135deg, #f84b61 0%, #a5002c 100%)'
-                      : 'rgba(255,255,255,0.08)',
-                  border:
-                    ext === '.sng'
-                      ? 'none'
-                      : '1px solid rgba(255,255,255,0.18)',
-                  borderRadius: 22,
-                }}>
-                {ext}
-              </div>
-            ))}
+            <div style={square}>.sng</div>
+            <div style={square}>.zip</div>
           </div>
         </div>
       </div>
