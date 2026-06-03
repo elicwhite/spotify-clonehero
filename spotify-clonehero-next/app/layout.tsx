@@ -98,13 +98,6 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
           <main className="flex flex-col flex-1 items-center align-center min-h-0 p-4">
             {children}
           </main>
-          <footer className="shrink-0 border-t border-border/60 px-4 md:px-8 py-2">
-            <div className="max-w-screen-xl mx-auto text-xs text-muted-foreground flex justify-end">
-              <Link href="/privacy" className="hover:underline">
-                Privacy
-              </Link>
-            </div>
-          </footer>
         </ContextProviders>
         <Toaster />
         <WebMCPInit />

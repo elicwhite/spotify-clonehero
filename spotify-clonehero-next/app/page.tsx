@@ -109,6 +109,11 @@ export default function Home() {
           </CardContent>
         </Card>
       </section>
+      <footer className="mt-10 border-t border-border/60 pt-4 text-xs text-muted-foreground flex justify-end">
+        <Link href="/privacy" className="hover:underline">
+          Privacy
+        </Link>
+      </footer>
     </main>
   );
 }
