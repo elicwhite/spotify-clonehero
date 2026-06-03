@@ -41,11 +41,9 @@ export default function SngLanding({onCreate, onPickSng}: SngLandingProps) {
       <section className="mb-8">
         <h1 className="text-3xl font-bold">SNG File Manager</h1>
         <p className="mt-2 text-lg text-muted-foreground">
-          Create and modify <code>.sng</code> files — the packaged song format
-          used by Clone Hero and YARG. Build a new package from a folder or
+          Create and modify <code>.sng</code> files. Build a new package from a folder or
           loose files, or open an existing <code>.sng</code> to inspect it, add
-          or remove files, and download it again as <code>.sng</code> or{' '}
-          <code>.zip</code>. Everything runs in your browser.
+          or remove files, and convert it again to <code>.zip</code>. Everything runs in your browser.
         </p>
       </section>
 
