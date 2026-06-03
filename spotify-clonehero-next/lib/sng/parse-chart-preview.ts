@@ -11,6 +11,7 @@
 import {parseChartAndIni, scanChart} from '@eliwhite/scan-chart';
 import type {Instrument} from '@eliwhite/scan-chart';
 import type {FileEntry} from '@/lib/chart-export';
+import {removeStyleTags} from '@/lib/ui-utils';
 
 export type Difficulty = 'expert' | 'hard' | 'medium' | 'easy';
 
@@ -98,9 +99,10 @@ export function parseChartPreview(files: FileEntry[]): ChartPreview | null {
   }));
 
   return {
-    name: scanned.name ?? 'Unknown',
-    artist: scanned.artist ?? 'Unknown Artist',
-    charter: scanned.charter ?? 'Unknown Charter',
+    // Strip Clone Hero rich-text tags (e.g. <color=#a5002c>…</color>).
+    name: removeStyleTags(scanned.name ?? 'Unknown'),
+    artist: removeStyleTags(scanned.artist ?? 'Unknown Artist'),
+    charter: removeStyleTags(scanned.charter ?? 'Unknown Charter'),
     album: scanned.album,
     albumArt: scanned.albumArt?.data,
     instruments,
