@@ -1,7 +1,8 @@
 import {describe, test, expect} from '@jest/globals';
 import {readFileSync} from 'fs';
 import {join} from 'path';
-import {parseChartPreview, type PreviewFile} from '../parse-chart-preview';
+import {parseChartPreview} from '../parse-chart-preview';
+import type {FileEntry} from '@/lib/chart-export';
 
 const drumsChart = readFileSync(
   join(__dirname, '../../chart-edit/__tests__/fixtures/drums-basic.chart'),
@@ -9,7 +10,7 @@ const drumsChart = readFileSync(
 
 describe('parseChartPreview', () => {
   test('returns null when there is no chart file', () => {
-    const files: PreviewFile[] = [
+    const files: FileEntry[] = [
       {fileName: 'song.opus', data: new Uint8Array([1, 2, 3])},
       {fileName: 'album.png', data: new Uint8Array([4, 5, 6])},
     ];
@@ -17,7 +18,7 @@ describe('parseChartPreview', () => {
   });
 
   test('parses metadata and per-instrument difficulties from a .chart', () => {
-    const files: PreviewFile[] = [
+    const files: FileEntry[] = [
       {fileName: 'notes.chart', data: new Uint8Array(drumsChart)},
       {fileName: 'song.opus', data: new Uint8Array([1, 2, 3])},
     ];

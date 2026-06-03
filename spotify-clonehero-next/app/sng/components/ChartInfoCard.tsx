@@ -11,8 +11,8 @@ import {Card, CardContent} from '@/components/ui/card';
 import {
   parseChartPreview,
   DIFFICULTY_LABEL,
-  type PreviewFile,
 } from '@/lib/sng/parse-chart-preview';
+import type {FileEntry} from '@/lib/chart-export';
 
 function isRenderedInstrument(
   instrument: string,
@@ -20,7 +20,7 @@ function isRenderedInstrument(
   return (RENDERED_INSTRUMENTS as readonly string[]).includes(instrument);
 }
 
-export default function ChartInfoCard({files}: {files: PreviewFile[]}) {
+export default function ChartInfoCard({files}: {files: FileEntry[]}) {
   // Re-parse whenever the file set changes (add/delete). Keyed on the file
   // names + sizes so identical content doesn't trigger needless re-parses.
   const fingerprint = files

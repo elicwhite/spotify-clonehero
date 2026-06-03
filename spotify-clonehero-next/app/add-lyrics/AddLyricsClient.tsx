@@ -51,9 +51,7 @@ import {
   type SourceFormat,
 } from '@/components/chart-picker/chart-file-readers';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
-import ProcessingView, {
-  type ProcessingStep,
-} from '@/components/ProcessingView';
+import ProcessingView, {type ProcessingStep} from '@/components/ProcessingView';
 import {
   ChartEditorProvider,
   DEFAULT_VOCALS_SCOPE,
@@ -110,7 +108,11 @@ interface AlignStepState {
 const ALIGN_STEPS: AlignStepState[] = [
   {key: 'decode', label: 'Decoding audio', status: 'pending'},
   {key: 'separate', label: 'Separating vocal stem', status: 'pending'},
-  {key: 'syllabify', label: 'Splitting lyrics into syllables', status: 'pending'},
+  {
+    key: 'syllabify',
+    label: 'Splitting lyrics into syllables',
+    status: 'pending',
+  },
   {key: 'align', label: 'Aligning syllables to audio', status: 'pending'},
 ];
 
@@ -135,7 +137,9 @@ function alignStepsToProcessingSteps(
     progress: s.progress,
     etaSeconds: s.etaSeconds,
     durationMs:
-      s.status === 'done' && s.startTime !== undefined && s.endTime !== undefined
+      s.status === 'done' &&
+      s.startTime !== undefined &&
+      s.endTime !== undefined
         ? s.endTime - s.startTime
         : undefined,
   }));
@@ -602,10 +606,7 @@ function LyricsAlignInner() {
         updateAlignStep('align', {
           description: `Confidence was low (${lowPct}% of syllables). Trying again with a fresh separation.`,
         });
-        setAlignSteps(prev => [
-          ...prev,
-          ...TIER2_STEPS.map(s => ({...s})),
-        ]);
+        setAlignSteps(prev => [...prev, ...TIER2_STEPS.map(s => ({...s}))]);
 
         updateAlignStep('separate2', {
           status: 'active',
@@ -678,8 +679,8 @@ function LyricsAlignInner() {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
       setStatus('error');
-      const failedStep = alignSteps.find(s => s.status === 'active')?.key
-        ?? 'unknown';
+      const failedStep =
+        alignSteps.find(s => s.status === 'active')?.key ?? 'unknown';
       setAlignSteps(prev =>
         prev.map(s =>
           s.status === 'active' ? {...s, status: 'error', detail: msg} : s,
@@ -703,7 +704,7 @@ function LyricsAlignInner() {
       // chart-like file in the asset list. That covers the full export —
       // no need to merge in chart.rawFiles separately.
       const exportFiles = chartFiles.map(f => ({
-        filename: f.fileName,
+        fileName: f.fileName,
         data: f.data,
       }));
 
@@ -985,11 +986,7 @@ function LyricsAlignInner() {
                   desc="Song lyrics"
                 />
                 <FlowArrow />
-                <FlowStep
-                  Icon={AudioWaveform}
-                  label="Align"
-                  desc="Automatic"
-                />
+                <FlowStep Icon={AudioWaveform} label="Align" desc="Automatic" />
                 <FlowArrow />
                 <FlowStep
                   Icon={Download}
@@ -1039,7 +1036,8 @@ function LyricsAlignInner() {
                     )}{' '}
                     &middot; {chart.audioFiles.length} audio file
                     {chart.audioFiles.length !== 1 ? 's' : ''}
-                    {chart.vocalsFile && ' (vocals stem available)'} &middot;{' '}
+                    {chart.vocalsFile &&
+                      ' (vocals stem available)'} &middot;{' '}
                     {chart.sourceFormat === 'sng'
                       ? '.sng'
                       : chart.sourceFormat === 'zip'
@@ -1248,4 +1246,3 @@ function ReplaceChartButton({
     </div>
   );
 }
-

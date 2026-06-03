@@ -69,10 +69,6 @@ export default function SngClient() {
 
   const download = useCallback(
     (format: DownloadFormat) => {
-      // chart-export expects { filename }; song.ini is folded into the SNG
-      // header (and kept as a file in the zip) by the exporters themselves.
-      const entries = files.map(f => ({filename: f.fileName, data: f.data}));
-
       // Modify flow keeps the opened file's name; Create flow names the package
       // after the chart's "artist - song (charter)".
       let baseName = openedSngName ?? '';
@@ -84,12 +80,14 @@ export default function SngClient() {
       }
 
       try {
+        // song.ini is folded into the SNG header (and kept as a file in the
+        // zip) by the exporters themselves.
         const blob =
           format === 'sng'
-            ? new Blob([exportAsSng(entries) as Uint8Array<ArrayBuffer>], {
+            ? new Blob([exportAsSng(files) as Uint8Array<ArrayBuffer>], {
                 type: 'application/octet-stream',
               })
-            : exportAsZip(entries);
+            : exportAsZip(files);
         downloadBlob(blob, `${sanitizeFileName(baseName)}.${format}`);
       } catch (e) {
         toast.error(

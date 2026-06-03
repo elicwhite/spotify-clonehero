@@ -1,5 +1,5 @@
 /** A file with its name and binary data. */
 export interface FileEntry {
-  filename: string;
+  fileName: string;
   data: Uint8Array;
 }

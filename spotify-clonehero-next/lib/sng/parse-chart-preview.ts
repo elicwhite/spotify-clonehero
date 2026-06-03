@@ -9,11 +9,7 @@
  */
 
 import {parseChartAndIni, scanChart} from '@eliwhite/scan-chart';
-
-export interface PreviewFile {
-  fileName: string;
-  data: Uint8Array;
-}
+import type {FileEntry} from '@/lib/chart-export';
 
 export type Difficulty = 'expert' | 'hard' | 'medium' | 'easy';
 
@@ -74,7 +70,7 @@ function intensityFor(
  * Parse the chart in `files` into a preview summary, or `null` if the package
  * contains no parseable chart (`.chart`/`.mid`).
  */
-export function parseChartPreview(files: PreviewFile[]): ChartPreview | null {
+export function parseChartPreview(files: FileEntry[]): ChartPreview | null {
   const parseResult = parseChartAndIni(files);
   if (!parseResult.parsedChart) return null;
 

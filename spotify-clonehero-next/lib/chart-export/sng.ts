@@ -82,7 +82,7 @@ function calculateSizes(
   // FileIndex section: 8 (fileMetaLen) + 8 (fileCount) + sum of file metas
   let fileIndexPayloadSize = 8; // fileCount
   for (const file of files) {
-    fileIndexPayloadSize += 1 + encoder.encode(file.filename).length;
+    fileIndexPayloadSize += 1 + encoder.encode(file.fileName).length;
     fileIndexPayloadSize += 8 + 8; // contentsLen + contentsIndex
   }
   const fileIndexSectionSize = 8 + fileIndexPayloadSize;
@@ -184,10 +184,10 @@ export function buildSngFile(
 
   let fileOffset = sizes.fileDataStartOffset;
   for (const file of files) {
-    const filenameBytes = encoder.encode(file.filename);
+    const filenameBytes = encoder.encode(file.fileName);
     if (filenameBytes.length > 255) {
       throw new Error(
-        `Filename "${file.filename}" exceeds 255 bytes (got ${filenameBytes.length})`,
+        `Filename "${file.fileName}" exceeds 255 bytes (got ${filenameBytes.length})`,
       );
     }
     view.setUint8(offset, filenameBytes.length);
@@ -226,12 +226,12 @@ export function buildSngFile(
  * in the header, not as a separate file). The song.ini is then excluded
  * from the packaged files.
  *
- * @param files - Array of {filename, data} entries to include.
+ * @param files - Array of {fileName, data} entries to include.
  * @returns The complete .sng file as a Uint8Array.
  */
 export function exportAsSng(files: FileEntry[]): Uint8Array {
   // Find and extract song.ini for SNG header metadata
-  const songIniEntry = files.find(f => f.filename.toLowerCase() === 'song.ini');
+  const songIniEntry = files.find(f => f.fileName.toLowerCase() === 'song.ini');
 
   let metadata: SngMetadata = {};
   let filteredFiles = files;
@@ -258,7 +258,7 @@ export function exportAsSng(files: FileEntry[]): Uint8Array {
       }
     }
 
-    filteredFiles = files.filter(f => f.filename.toLowerCase() !== 'song.ini');
+    filteredFiles = files.filter(f => f.fileName.toLowerCase() !== 'song.ini');
   }
 
   return buildSngFile(metadata, filteredFiles);
