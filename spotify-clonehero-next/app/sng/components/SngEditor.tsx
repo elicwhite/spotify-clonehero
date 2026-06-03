@@ -5,14 +5,14 @@ import {Button} from '@/components/ui/button';
 import type {FileEntry} from '@/components/chart-picker/chart-file-readers';
 import ChartInfoCard from './ChartInfoCard';
 import DropZone from './DropZone';
-import PackageFileTable, {type WorkingFile} from './PackageFileTable';
+import PackageFileTable from './PackageFileTable';
 
 export type DownloadFormat = 'sng' | 'zip';
 
 interface SngEditorProps {
-  files: WorkingFile[];
+  files: FileEntry[];
   onAdd: (entries: FileEntry[]) => void;
-  onDelete: (id: string) => void;
+  onDelete: (fileName: string) => void;
   onDownload: (format: DownloadFormat) => void;
   onBack: () => void;
 }

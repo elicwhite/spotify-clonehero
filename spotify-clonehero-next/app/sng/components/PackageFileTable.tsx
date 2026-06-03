@@ -13,16 +13,11 @@ import {
 } from '@/components/ui/table';
 import {hasAudioExtension} from '@/lib/src-shared/utils';
 import {audioMimeType, formatBytes} from '@/lib/sng/file-utils';
-
-export interface WorkingFile {
-  id: string;
-  fileName: string;
-  data: Uint8Array;
-}
+import type {FileEntry} from '@/components/chart-picker/chart-file-readers';
 
 interface PackageFileTableProps {
-  files: WorkingFile[];
-  onDelete: (id: string) => void;
+  files: FileEntry[];
+  onDelete: (fileName: string) => void;
 }
 
 export default function PackageFileTable({
@@ -31,7 +26,8 @@ export default function PackageFileTable({
 }: PackageFileTableProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlRef = useRef<string | null>(null);
-  const [playingId, setPlayingId] = useState<string | null>(null);
+  // File names are unique within a package, so they double as the row key.
+  const [playingName, setPlayingName] = useState<string | null>(null);
 
   const releaseUrl = useCallback(() => {
     if (urlRef.current) {
@@ -50,26 +46,26 @@ export default function PackageFileTable({
   }, [releaseUrl]);
 
   // If the currently playing file was removed, stop the audio. We derive the
-  // effective playing id for rendering (below) rather than resetting state
+  // effective playing name for rendering (below) rather than resetting state
   // here, so this effect only touches the audio element.
-  const playingExists = files.some(f => f.id === playingId);
+  const playingExists = files.some(f => f.fileName === playingName);
   useEffect(() => {
-    if (playingId && !playingExists) {
+    if (playingName && !playingExists) {
       audioRef.current?.pause();
       releaseUrl();
     }
-  }, [playingId, playingExists, releaseUrl]);
+  }, [playingName, playingExists, releaseUrl]);
 
-  const effectivePlayingId = playingExists ? playingId : null;
+  const effectivePlayingName = playingExists ? playingName : null;
 
   const togglePlay = useCallback(
-    (file: WorkingFile) => {
+    (file: FileEntry) => {
       const audio = audioRef.current;
       if (!audio) return;
 
-      if (playingId === file.id) {
+      if (playingName === file.fileName) {
         audio.pause();
-        setPlayingId(null);
+        setPlayingName(null);
         return;
       }
 
@@ -84,10 +80,10 @@ export default function PackageFileTable({
       audio.src = url;
       audio
         .play()
-        .then(() => setPlayingId(file.id))
-        .catch(() => setPlayingId(null));
+        .then(() => setPlayingName(file.fileName))
+        .catch(() => setPlayingName(null));
     },
-    [playingId, releaseUrl],
+    [playingName, releaseUrl],
   );
 
   return (
@@ -112,9 +108,9 @@ export default function PackageFileTable({
           ) : (
             files.map(file => {
               const isAudio = hasAudioExtension(file.fileName);
-              const isPlaying = effectivePlayingId === file.id;
+              const isPlaying = effectivePlayingName === file.fileName;
               return (
-                <TableRow key={file.id}>
+                <TableRow key={file.fileName}>
                   <TableCell className="font-mono text-sm break-all">
                     {file.fileName}
                   </TableCell>
@@ -140,7 +136,7 @@ export default function PackageFileTable({
                         variant="ghost"
                         size="icon"
                         aria-label="Delete file"
-                        onClick={() => onDelete(file.id)}>
+                        onClick={() => onDelete(file.fileName)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </div>
@@ -153,7 +149,7 @@ export default function PackageFileTable({
       </Table>
       <audio
         ref={audioRef}
-        onEnded={() => setPlayingId(null)}
+        onEnded={() => setPlayingName(null)}
         className="hidden"
       />
     </>

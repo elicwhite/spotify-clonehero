@@ -12,17 +12,8 @@ import {mergeByName} from '@/lib/sng/file-utils';
 import {parseChartPreview} from '@/lib/sng/parse-chart-preview';
 import SngLanding from './components/SngLanding';
 import SngEditor, {type DownloadFormat} from './components/SngEditor';
-import type {WorkingFile} from './components/PackageFileTable';
 
 type Mode = 'landing' | 'editor';
-
-function toWorkingFiles(entries: FileEntry[]): WorkingFile[] {
-  return entries.map(e => ({
-    id: crypto.randomUUID(),
-    fileName: e.fileName,
-    data: e.data,
-  }));
-}
 
 /** Strip characters illegal in file names while keeping spaces, parens, etc. */
 function sanitizeFileName(name: string): string {
@@ -32,7 +23,7 @@ function sanitizeFileName(name: string): string {
 
 export default function SngClient() {
   const [mode, setMode] = useState<Mode>('landing');
-  const [files, setFiles] = useState<WorkingFile[]>([]);
+  const [files, setFiles] = useState<FileEntry[]>([]);
   // Name of the opened .sng (Modify flow). Empty when creating from scratch,
   // in which case the download name is derived from the chart metadata.
   const [openedSngName, setOpenedSngName] = useState<string | null>(null);
@@ -46,7 +37,7 @@ export default function SngClient() {
   const startModify = useCallback(async (file: File) => {
     try {
       const loaded = await readSngFile(file);
-      setFiles(toWorkingFiles(loaded.files));
+      setFiles(loaded.files);
       setOpenedSngName(loaded.originalName || 'song');
       setMode('editor');
     } catch (e) {
@@ -57,10 +48,7 @@ export default function SngClient() {
   const addEntries = useCallback((entries: FileEntry[]) => {
     setFiles(prev => {
       // Files with a name that already exists replace the existing file.
-      const {merged, added, replaced} = mergeByName(
-        prev,
-        toWorkingFiles(entries),
-      );
+      const {merged, added, replaced} = mergeByName(prev, entries);
       const parts: string[] = [];
       if (added > 0) parts.push(`Added ${added} file${added === 1 ? '' : 's'}`);
       if (replaced > 0) {
@@ -71,8 +59,8 @@ export default function SngClient() {
     });
   }, []);
 
-  const removeFile = useCallback((id: string) => {
-    setFiles(prev => prev.filter(f => f.id !== id));
+  const removeFile = useCallback((fileName: string) => {
+    setFiles(prev => prev.filter(f => f.fileName !== fileName));
   }, []);
 
   const download = useCallback(
