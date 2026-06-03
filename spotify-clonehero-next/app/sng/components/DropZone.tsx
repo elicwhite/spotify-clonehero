@@ -1,6 +1,6 @@
 'use client';
 
-import {useCallback, useRef, useState} from 'react';
+import {useCallback, useState} from 'react';
 import {Upload, FilePlus, FolderOpen} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
@@ -19,7 +19,6 @@ interface DropZoneProps {
 export default function DropZone({onAdd, disabled}: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isReading, setIsReading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const busy = disabled || isReading;
 
@@ -47,21 +46,24 @@ export default function DropZone({onAdd, disabled}: DropZoneProps) {
     [busy, onAdd],
   );
 
-  const handleFileInput = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const list = e.target.files;
-      if (list && list.length > 0) {
-        setIsReading(true);
-        try {
-          onAdd(await readFileList(list));
-        } finally {
-          setIsReading(false);
-        }
-      }
-      e.target.value = '';
-    },
-    [onAdd],
-  );
+  const handleSelectFiles = useCallback(async () => {
+    if (busy) return;
+    try {
+      // A distinct picker id keeps its own remembered location.
+      const handles: FileSystemFileHandle[] = await window.showOpenFilePicker({
+        id: 'sng-add-files',
+        multiple: true,
+      });
+      setIsReading(true);
+      const files = await Promise.all(handles.map(h => h.getFile()));
+      onAdd(await readFileList(files));
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      toast.error(err instanceof Error ? err.message : 'Failed to read files');
+    } finally {
+      setIsReading(false);
+    }
+  }, [busy, onAdd]);
 
   const handlePickFolder = useCallback(async () => {
     if (busy) return;
@@ -111,7 +113,7 @@ export default function DropZone({onAdd, disabled}: DropZoneProps) {
           variant="outline"
           size="sm"
           disabled={busy}
-          onClick={() => fileInputRef.current?.click()}>
+          onClick={handleSelectFiles}>
           <FilePlus className="mr-2 h-4 w-4" />
           Select files
         </Button>
@@ -125,13 +127,6 @@ export default function DropZone({onAdd, disabled}: DropZoneProps) {
           Add folder
         </Button>
       </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        onChange={handleFileInput}
-        className="hidden"
-      />
     </div>
   );
 }

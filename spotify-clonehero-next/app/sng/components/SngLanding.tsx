@@ -1,7 +1,8 @@
 'use client';
 
-import {useRef} from 'react';
+import {useCallback} from 'react';
 import {FilePlus2, FolderInput} from 'lucide-react';
+import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {
   Card,
@@ -17,7 +18,26 @@ interface SngLandingProps {
 }
 
 export default function SngLanding({onCreate, onPickSng}: SngLandingProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleModify = useCallback(async () => {
+    try {
+      // A distinct picker id keeps its own remembered location, separate from
+      // the file/folder pickers used when building a package.
+      const handles: FileSystemFileHandle[] = await window.showOpenFilePicker({
+        id: 'sng-modify',
+        multiple: false,
+        types: [
+          {
+            description: 'SNG package',
+            accept: {'application/octet-stream': ['.sng']},
+          },
+        ],
+      });
+      onPickSng(await handles[0].getFile());
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      toast.error(err instanceof Error ? err.message : 'Failed to open file');
+    }
+  }, [onPickSng]);
 
   return (
     <main className="mx-auto max-w-3xl p-4 sm:p-8">
@@ -63,23 +83,9 @@ export default function SngLanding({onCreate, onPickSng}: SngLandingProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button
-              className="w-full"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}>
+            <Button className="w-full" variant="outline" onClick={handleModify}>
               Modify SNG
             </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".sng"
-              className="hidden"
-              onChange={e => {
-                const file = e.target.files?.[0];
-                if (file) onPickSng(file);
-                e.target.value = '';
-              }}
-            />
           </CardContent>
         </Card>
       </section>

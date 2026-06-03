@@ -82,8 +82,10 @@ export async function readDroppedItems(
   return Promise.all(files.map(fileToEntry));
 }
 
-/** Convert a plain FileList (e.g. from an <input multiple>) to FileEntry[]. */
-export async function readFileList(fileList: FileList): Promise<FileEntry[]> {
-  const files = Array.from(fileList).filter(f => !f.name.startsWith('.'));
-  return Promise.all(files.map(fileToEntry));
+/** Convert a FileList or File[] (e.g. from showOpenFilePicker) to FileEntry[]. */
+export async function readFileList(
+  files: FileList | File[],
+): Promise<FileEntry[]> {
+  const list = Array.from(files).filter(f => !f.name.startsWith('.'));
+  return Promise.all(list.map(fileToEntry));
 }
