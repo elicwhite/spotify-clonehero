@@ -10,8 +10,9 @@ import {mergeByName} from '@/lib/sng/file-utils';
 import {parseChartPreview} from '@/lib/sng/parse-chart-preview';
 import SngLanding from './components/SngLanding';
 import SngEditor, {type DownloadFormat} from './components/SngEditor';
+import SngFolderConverter from './components/SngFolderConverter';
 
-type Mode = 'landing' | 'editor';
+type Mode = 'landing' | 'editor' | 'convert';
 
 /** Strip characters illegal in file names while keeping spaces, parens, etc. */
 function sanitizeFileName(name: string): string {
@@ -25,6 +26,27 @@ export default function SngClient() {
   // Name of the opened .sng (Modify flow). Null when building from scratch, in
   // which case the download name is derived from the chart metadata.
   const [openedSngName, setOpenedSngName] = useState<string | null>(null);
+  // Directory being batch-converted to .sng (Convert Folder flow).
+  const [convertDir, setConvertDir] =
+    useState<FileSystemDirectoryHandle | null>(null);
+
+  const startConvert = useCallback(async () => {
+    let dirHandle: FileSystemDirectoryHandle;
+    try {
+      // readwrite so the .sng files can be written back next to each chart.
+      dirHandle = await window.showDirectoryPicker({
+        id: 'sng-convert-folder',
+        mode: 'readwrite',
+      });
+    } catch (err) {
+      // showDirectoryPicker rejects with AbortError when the user cancels.
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      toast.error(err instanceof Error ? err.message : 'Failed to open folder');
+      return;
+    }
+    setConvertDir(dirHandle);
+    setMode('convert');
+  }, []);
 
   const startCreate = useCallback(() => {
     setFiles([]);
@@ -47,6 +69,7 @@ export default function SngClient() {
     setMode('landing');
     setFiles([]);
     setOpenedSngName(null);
+    setConvertDir(null);
   }, []);
 
   const addEntries = useCallback((entries: FileEntry[]) => {
@@ -103,7 +126,17 @@ export default function SngClient() {
   );
 
   if (mode === 'landing') {
-    return <SngLanding onCreate={startCreate} onPickSng={startModify} />;
+    return (
+      <SngLanding
+        onCreate={startCreate}
+        onPickSng={startModify}
+        onConvertFolder={startConvert}
+      />
+    );
+  }
+
+  if (mode === 'convert' && convertDir) {
+    return <SngFolderConverter dirHandle={convertDir} onBack={goBack} />;
   }
 
   return (

@@ -24,6 +24,7 @@ import {hasIniName} from '@/lib/src-shared/utils';
 import scanLocalCharts, {
   type SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
+import {coalesceProgress} from '@/lib/local-songs-folder/scan-progress';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -536,9 +537,9 @@ export default function ChartReviewClient() {
 
       // Scan for charts using scanLocalCharts
       const accumulator: SongAccumulator[] = [];
-      await scanLocalCharts(chartsDir, accumulator, () => {
-        setScanProgress(accumulator.length);
-      });
+      const progress = coalesceProgress(count => setScanProgress(count));
+      await scanLocalCharts(chartsDir, accumulator, progress.bump);
+      progress.flush();
       if (cancelled) return;
       setAllEntries(accumulator);
 

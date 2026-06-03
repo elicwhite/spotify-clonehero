@@ -4,6 +4,7 @@ import filenamify from 'filenamify/browser';
 import {track} from '@/lib/analytics/track';
 import {writeFile} from '@/lib/fileSystemHelpers';
 import scanLocalCharts, {SongAccumulator} from './scanLocalCharts';
+import {coalesceProgress} from './scan-progress';
 import {SngStream} from '@eliwhite/parse-sng';
 import {upsertLocalCharts} from '@/lib/local-db/local-charts';
 
@@ -51,34 +52,16 @@ export async function scanForInstalledCharts(
 
   const handle = await getSongsDirectoryHandle();
 
-  // Coalesce per-chart progress ticks to one rAF-paced update so the caller's
-  // React setState doesn't re-render ~15k times during a full library scan.
-  let scanned = 0;
-  let rafPending = false;
-  let lastEmitted = 0;
-  const flushProgress = () => {
-    rafPending = false;
-    if (scanned !== lastEmitted) {
-      lastEmitted = scanned;
-      onProgress(scanned);
-    }
-  };
-  const bumpProgress = () => {
-    scanned++;
-    if (!rafPending) {
-      rafPending = true;
-      requestAnimationFrame(flushProgress);
-    }
-  };
+  // Coalesce per-chart progress ticks so the caller's React setState doesn't
+  // re-render ~15k times during a full library scan.
+  const progress = coalesceProgress(onProgress);
 
   const {lastScanned, installedCharts} = await scanDirectoryForCharts(
-    bumpProgress,
+    progress.bump,
     handle,
   );
 
-  // Emit the final count immediately so the UI shows the total without waiting
-  // on a trailing animation frame.
-  flushProgress();
+  progress.flush();
 
   track({
     event: 'charts_scanned',

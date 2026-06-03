@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback} from 'react';
-import {FilePlus2, FolderInput} from 'lucide-react';
+import {FilePlus2, FolderInput, FolderCog} from 'lucide-react';
 import {toast} from 'sonner';
 import {pickFiles} from '@/lib/sng/read-dropped-entries';
 import {Button} from '@/components/ui/button';
@@ -16,9 +16,14 @@ import {
 interface SngLandingProps {
   onCreate: () => void;
   onPickSng: (file: File) => void;
+  onConvertFolder: () => void;
 }
 
-export default function SngLanding({onCreate, onPickSng}: SngLandingProps) {
+export default function SngLanding({
+  onCreate,
+  onPickSng,
+  onConvertFolder,
+}: SngLandingProps) {
   const handleModify = useCallback(async () => {
     try {
       const files = await pickFiles({
@@ -73,13 +78,35 @@ export default function SngLanding({onCreate, onPickSng}: SngLandingProps) {
               Modify SNG
             </CardTitle>
             <CardDescription>
-              Open an existing <code>.sng</code> file to see what&apos;s inside
+              Open an existing <code>.sng</code>{' '}file to see what&apos;s inside
               and make changes.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button className="w-full" variant="outline" onClick={handleModify}>
               Modify SNG
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col justify-between">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FolderCog className="h-5 w-5" />
+              Convert Folder to SNG
+            </CardTitle>
+            <CardDescription>
+              Convert a folder of charts to .sng Every chart inside is converted to a{' '}
+              <code>.sng</code> saved next to it. Existing <code>.sng</code>{' '}
+              files are left as they are.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              className="w-full"
+              variant="outline"
+              onClick={onConvertFolder}>
+              Convert Folder
             </Button>
           </CardContent>
         </Card>
