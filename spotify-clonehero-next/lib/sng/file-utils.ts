@@ -42,28 +42,36 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
- * Filter `incoming` down to entries whose names don't already exist in
- * `existing` (file names must be unique inside both a zip and an sng index).
- * Collisions within `incoming` itself are also dropped after the first.
+ * Merge `incoming` files into `existing` by name. A file whose name matches an
+ * existing one replaces it in place (file names must be unique inside both a
+ * zip and an sng index); a new name is appended. Within `incoming`, a later
+ * entry replacing the same name wins.
  *
- * @returns `merged` — the entries safe to append — and `skipped` — the names
- *   that were dropped because of a collision.
+ * @returns `merged` — the resulting list — plus how many entries were `added`
+ *   (new names) and `replaced` (existing names overwritten).
  */
-export function dedupeByName<T extends {fileName: string}>(
+export function mergeByName<T extends {fileName: string}>(
   existing: readonly T[],
   incoming: readonly T[],
-): {merged: T[]; skipped: string[]} {
-  const seen = new Set(existing.map(f => f.fileName.toLowerCase()));
-  const merged: T[] = [];
-  const skipped: string[] = [];
+): {merged: T[]; added: number; replaced: number} {
+  const merged: T[] = [...existing];
+  const indexByName = new Map<string, number>();
+  merged.forEach((f, i) => indexByName.set(f.fileName.toLowerCase(), i));
+
+  const replacedNames = new Set<string>();
+  let added = 0;
   for (const entry of incoming) {
     const key = entry.fileName.toLowerCase();
-    if (seen.has(key)) {
-      skipped.push(entry.fileName);
+    const existingIndex = indexByName.get(key);
+    if (existingIndex !== undefined) {
+      merged[existingIndex] = entry;
+      // Only count overwrites of files that were already in the package.
+      if (existingIndex < existing.length) replacedNames.add(key);
     } else {
-      seen.add(key);
+      indexByName.set(key, merged.length);
       merged.push(entry);
+      added++;
     }
   }
-  return {merged, skipped};
+  return {merged, added, replaced: replacedNames.size};
 }

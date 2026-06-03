@@ -8,7 +8,8 @@ import {
 } from '@/components/chart-picker/chart-file-readers';
 import {exportAsSng, exportAsZip} from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
-import {dedupeByName} from '@/lib/sng/file-utils';
+import {mergeByName} from '@/lib/sng/file-utils';
+import {parseChartPreview} from '@/lib/sng/parse-chart-preview';
 import SngLanding from './components/SngLanding';
 import SngEditor, {type DownloadFormat} from './components/SngEditor';
 import type {WorkingFile} from './components/PackageFileTable';
@@ -23,19 +24,22 @@ function toWorkingFiles(entries: FileEntry[]): WorkingFile[] {
   }));
 }
 
-function sanitizeName(name: string): string {
-  const trimmed = name.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
-  return trimmed.length > 0 ? trimmed : 'song';
+/** Strip characters illegal in file names while keeping spaces, parens, etc. */
+function sanitizeFileName(name: string): string {
+  const cleaned = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '').trim();
+  return cleaned.length > 0 ? cleaned : 'song';
 }
 
 export default function SngClient() {
   const [mode, setMode] = useState<Mode>('landing');
   const [files, setFiles] = useState<WorkingFile[]>([]);
-  const [originalName, setOriginalName] = useState('new-song');
+  // Name of the opened .sng (Modify flow). Empty when creating from scratch,
+  // in which case the download name is derived from the chart metadata.
+  const [openedSngName, setOpenedSngName] = useState<string | null>(null);
 
   const startCreate = useCallback(() => {
     setFiles([]);
-    setOriginalName('new-song');
+    setOpenedSngName(null);
     setMode('editor');
   }, []);
 
@@ -43,7 +47,7 @@ export default function SngClient() {
     try {
       const loaded = await readSngFile(file);
       setFiles(toWorkingFiles(loaded.files));
-      setOriginalName(loaded.originalName || 'song');
+      setOpenedSngName(loaded.originalName || 'song');
       setMode('editor');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to read .sng file');
@@ -52,18 +56,18 @@ export default function SngClient() {
 
   const addEntries = useCallback((entries: FileEntry[]) => {
     setFiles(prev => {
-      const {merged, skipped} = dedupeByName(prev, entries);
-      if (skipped.length > 0) {
-        toast.warning(
-          `Skipped ${skipped.length} file${skipped.length === 1 ? '' : 's'} already in the package: ${skipped.join(', ')}`,
-        );
+      // Files with a name that already exists replace the existing file.
+      const {merged, added, replaced} = mergeByName(
+        prev,
+        toWorkingFiles(entries),
+      );
+      const parts: string[] = [];
+      if (added > 0) parts.push(`Added ${added} file${added === 1 ? '' : 's'}`);
+      if (replaced > 0) {
+        parts.push(`replaced ${replaced} file${replaced === 1 ? '' : 's'}`);
       }
-      if (merged.length > 0) {
-        toast.success(
-          `Added ${merged.length} file${merged.length === 1 ? '' : 's'}`,
-        );
-      }
-      return [...prev, ...toWorkingFiles(merged)];
+      if (parts.length > 0) toast.success(parts.join(', '));
+      return merged;
     });
   }, []);
 
@@ -76,7 +80,17 @@ export default function SngClient() {
       // chart-export expects { filename }; song.ini is folded into the SNG
       // header (and kept as a file in the zip) by the exporters themselves.
       const entries = files.map(f => ({filename: f.fileName, data: f.data}));
-      const name = sanitizeName(originalName);
+
+      // Modify flow keeps the opened file's name; Create flow names the package
+      // after the chart's "artist - song (charter)".
+      let baseName = openedSngName ?? '';
+      if (!baseName) {
+        const preview = parseChartPreview(files);
+        baseName = preview
+          ? `${preview.artist} - ${preview.name} (${preview.charter})`
+          : 'song';
+      }
+
       try {
         const blob =
           format === 'sng'
@@ -84,14 +98,14 @@ export default function SngClient() {
                 type: 'application/octet-stream',
               })
             : exportAsZip(entries);
-        downloadBlob(blob, `${name}.${format}`);
+        downloadBlob(blob, `${sanitizeFileName(baseName)}.${format}`);
       } catch (e) {
         toast.error(
           e instanceof Error ? e.message : `Failed to export .${format}`,
         );
       }
     },
-    [files, originalName],
+    [files, openedSngName],
   );
 
   if (mode === 'landing') {
@@ -101,7 +115,6 @@ export default function SngClient() {
   return (
     <SngEditor
       files={files}
-      originalName={originalName}
       onAdd={addEntries}
       onDelete={removeFile}
       onDownload={download}

@@ -7,7 +7,6 @@ import {
   RENDERED_INSTRUMENTS,
   type AllowedInstrument,
 } from '@/components/ChartInstruments';
-import {Badge} from '@/components/ui/badge';
 import {Card, CardContent} from '@/components/ui/card';
 import {
   parseChartPreview,
@@ -102,35 +101,43 @@ export default function ChartInfoCard({files}: {files: PreviewFile[]}) {
             </p>
           </div>
 
-          <div className="mt-1 flex flex-col gap-2">
+          <div className="mt-1 flex flex-wrap gap-2">
             {info.instruments.length === 0 && (
               <p className="text-sm text-muted-foreground">
                 No instrument tracks detected.
               </p>
             )}
-            {info.instruments.map(({instrument, difficulties}) => (
-              <div key={instrument} className="flex items-center gap-2">
-                {isRenderedInstrument(instrument) ? (
-                  <InstrumentImage
-                    instrument={instrument}
-                    size="md"
-                    classNames="h-6 w-6"
-                  />
-                ) : (
-                  <span className="text-sm font-medium capitalize">
-                    {instrument}
+            {info.instruments.map(({instrument, difficulties, intensity}) => (
+              <div
+                key={instrument}
+                className="flex flex-col items-center gap-1 rounded-md bg-muted/50 px-3 py-2"
+                title={`${instrument}${
+                  difficulties[0]
+                    ? ` · ${DIFFICULTY_LABEL[difficulties[0]]}`
+                    : ''
+                }`}>
+                {difficulties[0] && (
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {DIFFICULTY_LABEL[difficulties[0]]}
                   </span>
                 )}
-                <div className="flex flex-wrap gap-1">
-                  {difficulties.map(d => (
-                    <Badge
-                      key={d}
-                      variant="secondary"
-                      className="text-xs"
-                      title={DIFFICULTY_LABEL[d]}>
-                      {DIFFICULTY_LABEL[d]}
-                    </Badge>
-                  ))}
+                <div className="relative">
+                  {isRenderedInstrument(instrument) ? (
+                    <InstrumentImage
+                      instrument={instrument}
+                      size="md"
+                      classNames="h-8 w-8"
+                    />
+                  ) : (
+                    <span className="text-sm font-medium capitalize">
+                      {instrument}
+                    </span>
+                  )}
+                  {intensity != null && (
+                    <span className="absolute -bottom-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold leading-none text-destructive-foreground">
+                      {intensity}
+                    </span>
+                  )}
                 </div>
               </div>
             ))}

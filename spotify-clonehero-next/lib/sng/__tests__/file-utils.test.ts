@@ -1,5 +1,5 @@
 import {describe, test, expect} from '@jest/globals';
-import {audioMimeType, formatBytes, dedupeByName} from '../file-utils';
+import {audioMimeType, formatBytes, mergeByName} from '../file-utils';
 
 describe('audioMimeType', () => {
   test('maps opus and ogg to audio/ogg', () => {
@@ -32,26 +32,46 @@ describe('formatBytes', () => {
   });
 });
 
-describe('dedupeByName', () => {
-  test('drops entries colliding with existing names (case-insensitive)', () => {
-    const existing = [{fileName: 'notes.chart'}, {fileName: 'song.opus'}];
-    const incoming = [{fileName: 'Song.opus'}, {fileName: 'album.png'}];
-    const {merged, skipped} = dedupeByName(existing, incoming);
-    expect(merged.map(f => f.fileName)).toEqual(['album.png']);
-    expect(skipped).toEqual(['Song.opus']);
+describe('mergeByName', () => {
+  test('replaces a same-name file in place (case-insensitive) and appends new ones', () => {
+    const existing = [
+      {fileName: 'notes.chart', v: 1},
+      {fileName: 'song.opus', v: 1},
+    ];
+    const incoming = [
+      {fileName: 'Song.opus', v: 2},
+      {fileName: 'album.png', v: 2},
+    ];
+    const {merged, added, replaced} = mergeByName(existing, incoming);
+
+    // notes.chart untouched; song.opus overwritten in place; album.png appended.
+    expect(merged.map(f => f.fileName)).toEqual([
+      'notes.chart',
+      'Song.opus',
+      'album.png',
+    ]);
+    expect(merged[1].v).toBe(2);
+    expect(added).toBe(1);
+    expect(replaced).toBe(1);
   });
 
-  test('drops duplicates within the incoming list', () => {
-    const incoming = [{fileName: 'a.txt'}, {fileName: 'a.txt'}];
-    const {merged, skipped} = dedupeByName([], incoming);
-    expect(merged.map(f => f.fileName)).toEqual(['a.txt']);
-    expect(skipped).toEqual(['a.txt']);
+  test('within incoming, the later same-name entry wins', () => {
+    const incoming = [
+      {fileName: 'a.txt', v: 1},
+      {fileName: 'a.txt', v: 2},
+    ];
+    const {merged, added, replaced} = mergeByName([], incoming);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].v).toBe(2);
+    expect(added).toBe(1);
+    expect(replaced).toBe(0);
   });
 
-  test('keeps everything when there are no collisions', () => {
+  test('appends everything when there are no collisions', () => {
     const incoming = [{fileName: 'a.txt'}, {fileName: 'b.txt'}];
-    const {merged, skipped} = dedupeByName([], incoming);
+    const {merged, added, replaced} = mergeByName([], incoming);
     expect(merged).toHaveLength(2);
-    expect(skipped).toHaveLength(0);
+    expect(added).toBe(2);
+    expect(replaced).toBe(0);
   });
 });

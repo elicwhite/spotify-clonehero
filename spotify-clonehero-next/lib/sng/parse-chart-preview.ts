@@ -38,8 +38,36 @@ export interface ChartPreview {
   album?: string;
   /** Extracted album art (jpg bytes), if the package contains any. */
   albumArt?: Uint8Array;
-  /** instruments present, each with its charted difficulties (hardest first) */
-  instruments: {instrument: string; difficulties: Difficulty[]}[];
+  /** instruments present, each with its charted difficulties + intensity. */
+  instruments: {
+    instrument: string;
+    /** charted difficulty tiers, hardest first */
+    difficulties: Difficulty[];
+    /** the chart's difficulty-intensity rating (0-6), if declared */
+    intensity?: number;
+  }[];
+}
+
+/** The chart's declared intensity (0-6) for an instrument, if any (>= 0). */
+function intensityFor(
+  scanned: ReturnType<typeof scanChart>,
+  instrument: string,
+): number | undefined {
+  const value = (
+    {
+      guitar: scanned.diff_guitar,
+      guitarcoop: scanned.diff_guitar_coop,
+      rhythm: scanned.diff_rhythm,
+      bass: scanned.diff_bass,
+      drums: scanned.diff_drums,
+      keys: scanned.diff_keys,
+      guitarghl: scanned.diff_guitarghl,
+      guitarcoopghl: scanned.diff_guitar_coop_ghl,
+      rhythmghl: scanned.diff_rhythm_ghl,
+      bassghl: scanned.diff_bassghl,
+    } as Record<string, number | undefined>
+  )[instrument];
+  return value != null && value >= 0 ? value : undefined;
 }
 
 /**
@@ -70,6 +98,7 @@ export function parseChartPreview(files: PreviewFile[]): ChartPreview | null {
     difficulties: DIFFICULTY_ORDER.filter(d =>
       difficultiesByInstrument.get(instrument)?.has(d),
     ),
+    intensity: intensityFor(scanned, instrument),
   }));
 
   return {

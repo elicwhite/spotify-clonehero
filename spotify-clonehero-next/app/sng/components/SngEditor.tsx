@@ -11,7 +11,6 @@ export type DownloadFormat = 'sng' | 'zip';
 
 interface SngEditorProps {
   files: WorkingFile[];
-  originalName: string;
   onAdd: (entries: FileEntry[]) => void;
   onDelete: (id: string) => void;
   onDownload: (format: DownloadFormat) => void;
@@ -20,7 +19,6 @@ interface SngEditorProps {
 
 export default function SngEditor({
   files,
-  originalName,
   onAdd,
   onDelete,
   onDownload,
@@ -35,7 +33,6 @@ export default function SngEditor({
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
-        <h1 className="truncate text-lg font-semibold">{originalName}</h1>
         <div className="flex gap-2">
           <Button size="sm" onClick={() => onDownload('sng')} disabled={empty}>
             <Download className="mr-2 h-4 w-4" />
