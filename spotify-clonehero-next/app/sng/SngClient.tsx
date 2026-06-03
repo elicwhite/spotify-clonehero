@@ -48,14 +48,18 @@ export default function SngClient() {
   const addEntries = useCallback((entries: FileEntry[]) => {
     setFiles(prev => {
       // Files with a name that already exists replace the existing file.
-      const {merged, added, replaced} = mergeByName(prev, entries);
+      const existingNames = new Set(prev.map(f => f.fileName.toLowerCase()));
+      const replaced = entries.filter(e =>
+        existingNames.has(e.fileName.toLowerCase()),
+      ).length;
+      const added = entries.length - replaced;
       const parts: string[] = [];
       if (added > 0) parts.push(`Added ${added} file${added === 1 ? '' : 's'}`);
       if (replaced > 0) {
         parts.push(`replaced ${replaced} file${replaced === 1 ? '' : 's'}`);
       }
       if (parts.length > 0) toast.success(parts.join(', '));
-      return merged;
+      return mergeByName(prev, entries);
     });
   }, []);
 

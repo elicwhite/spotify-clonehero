@@ -43,35 +43,20 @@ export function formatBytes(bytes: number): string {
 
 /**
  * Merge `incoming` files into `existing` by name. A file whose name matches an
- * existing one replaces it in place (file names must be unique inside both a
- * zip and an sng index); a new name is appended. Within `incoming`, a later
- * entry replacing the same name wins.
+ * existing one replaces it in place (names must be unique inside both a zip and
+ * an sng index); a new name is appended. Names match case-insensitively, and
+ * within `incoming` a later same-name entry wins.
  *
- * @returns `merged` — the resulting list — plus how many entries were `added`
- *   (new names) and `replaced` (existing names overwritten).
+ * A Map keyed by the lowercased name does all of this: re-setting an existing
+ * key updates its value while keeping its original position.
  */
 export function mergeByName<T extends {fileName: string}>(
   existing: readonly T[],
   incoming: readonly T[],
-): {merged: T[]; added: number; replaced: number} {
-  const merged: T[] = [...existing];
-  const indexByName = new Map<string, number>();
-  merged.forEach((f, i) => indexByName.set(f.fileName.toLowerCase(), i));
-
-  const replacedNames = new Set<string>();
-  let added = 0;
-  for (const entry of incoming) {
-    const key = entry.fileName.toLowerCase();
-    const existingIndex = indexByName.get(key);
-    if (existingIndex !== undefined) {
-      merged[existingIndex] = entry;
-      // Only count overwrites of files that were already in the package.
-      if (existingIndex < existing.length) replacedNames.add(key);
-    } else {
-      indexByName.set(key, merged.length);
-      merged.push(entry);
-      added++;
-    }
+): T[] {
+  const byName = new Map<string, T>();
+  for (const file of [...existing, ...incoming]) {
+    byName.set(file.fileName.toLowerCase(), file);
   }
-  return {merged, added, replaced: replacedNames.size};
+  return [...byName.values()];
 }

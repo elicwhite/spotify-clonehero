@@ -42,7 +42,7 @@ describe('mergeByName', () => {
       {fileName: 'Song.opus', v: 2},
       {fileName: 'album.png', v: 2},
     ];
-    const {merged, added, replaced} = mergeByName(existing, incoming);
+    const merged = mergeByName(existing, incoming);
 
     // notes.chart untouched; song.opus overwritten in place; album.png appended.
     expect(merged.map(f => f.fileName)).toEqual([
@@ -51,27 +51,22 @@ describe('mergeByName', () => {
       'album.png',
     ]);
     expect(merged[1].v).toBe(2);
-    expect(added).toBe(1);
-    expect(replaced).toBe(1);
   });
 
   test('within incoming, the later same-name entry wins', () => {
-    const incoming = [
-      {fileName: 'a.txt', v: 1},
-      {fileName: 'a.txt', v: 2},
-    ];
-    const {merged, added, replaced} = mergeByName([], incoming);
+    const merged = mergeByName(
+      [],
+      [
+        {fileName: 'a.txt', v: 1},
+        {fileName: 'a.txt', v: 2},
+      ],
+    );
     expect(merged).toHaveLength(1);
     expect(merged[0].v).toBe(2);
-    expect(added).toBe(1);
-    expect(replaced).toBe(0);
   });
 
   test('appends everything when there are no collisions', () => {
-    const incoming = [{fileName: 'a.txt'}, {fileName: 'b.txt'}];
-    const {merged, added, replaced} = mergeByName([], incoming);
-    expect(merged).toHaveLength(2);
-    expect(added).toBe(2);
-    expect(replaced).toBe(0);
+    const merged = mergeByName([], [{fileName: 'a.txt'}, {fileName: 'b.txt'}]);
+    expect(merged.map(f => f.fileName)).toEqual(['a.txt', 'b.txt']);
   });
 });
