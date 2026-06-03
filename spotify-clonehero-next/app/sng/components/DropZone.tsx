@@ -9,7 +9,11 @@ import {
   readChartDirectory,
   type FileEntry,
 } from '@/components/chart-picker/chart-file-readers';
-import {readDroppedItems, readFileList} from '@/lib/sng/read-dropped-entries';
+import {
+  pickFiles,
+  readDroppedItems,
+  readFileList,
+} from '@/lib/sng/read-dropped-entries';
 
 interface DropZoneProps {
   onAdd: (files: FileEntry[]) => void;
@@ -50,15 +54,11 @@ export default function DropZone({onAdd, disabled}: DropZoneProps) {
     if (busy) return;
     try {
       // A distinct picker id keeps its own remembered location.
-      const handles: FileSystemFileHandle[] = await window.showOpenFilePicker({
-        id: 'sng-add-files',
-        multiple: true,
-      });
+      const files = await pickFiles({id: 'sng-add-files', multiple: true});
+      if (!files) return;
       setIsReading(true);
-      const files = await Promise.all(handles.map(h => h.getFile()));
       onAdd(await readFileList(files));
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return;
       toast.error(err instanceof Error ? err.message : 'Failed to read files');
     } finally {
       setIsReading(false);

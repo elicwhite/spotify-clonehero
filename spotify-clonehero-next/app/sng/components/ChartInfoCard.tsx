@@ -21,12 +21,8 @@ function isRenderedInstrument(
 }
 
 export default function ChartInfoCard({files}: {files: FileEntry[]}) {
-  // Re-parse whenever the file set changes (add/delete). Keyed on the file
-  // names + sizes so identical content doesn't trigger needless re-parses.
-  const fingerprint = files
-    .map(f => `${f.fileName}:${f.data.length}`)
-    .join('|');
-
+  // `files` is React state whose identity only changes when files are
+  // added/removed, so re-parsing keyed on it is correct and sufficient.
   const info = useMemo(() => {
     try {
       return parseChartPreview(files);
@@ -34,8 +30,7 @@ export default function ChartInfoCard({files}: {files: FileEntry[]}) {
       console.warn('Failed to parse chart for preview:', e);
       return null;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fingerprint]);
+  }, [files]);
 
   // Create the object URL during render (memoized on the art bytes) and revoke
   // the previous one in an effect cleanup — avoids setState-in-effect.

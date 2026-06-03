@@ -9,6 +9,7 @@
  */
 
 import {parseChartAndIni, scanChart} from '@eliwhite/scan-chart';
+import type {Instrument} from '@eliwhite/scan-chart';
 import type {FileEntry} from '@/lib/chart-export';
 
 export type Difficulty = 'expert' | 'hard' | 'medium' | 'easy';
@@ -47,22 +48,21 @@ export interface ChartPreview {
 /** The chart's declared intensity (0-6) for an instrument, if any (>= 0). */
 function intensityFor(
   scanned: ReturnType<typeof scanChart>,
-  instrument: string,
+  instrument: Instrument,
 ): number | undefined {
-  const value = (
-    {
-      guitar: scanned.diff_guitar,
-      guitarcoop: scanned.diff_guitar_coop,
-      rhythm: scanned.diff_rhythm,
-      bass: scanned.diff_bass,
-      drums: scanned.diff_drums,
-      keys: scanned.diff_keys,
-      guitarghl: scanned.diff_guitarghl,
-      guitarcoopghl: scanned.diff_guitar_coop_ghl,
-      rhythmghl: scanned.diff_rhythm_ghl,
-      bassghl: scanned.diff_bassghl,
-    } as Record<string, number | undefined>
-  )[instrument];
+  const byInstrument: Record<Instrument, number | undefined> = {
+    guitar: scanned.diff_guitar,
+    guitarcoop: scanned.diff_guitar_coop,
+    rhythm: scanned.diff_rhythm,
+    bass: scanned.diff_bass,
+    drums: scanned.diff_drums,
+    keys: scanned.diff_keys,
+    guitarghl: scanned.diff_guitarghl,
+    guitarcoopghl: scanned.diff_guitar_coop_ghl,
+    rhythmghl: scanned.diff_rhythm_ghl,
+    bassghl: scanned.diff_bassghl,
+  };
+  const value = byInstrument[instrument];
   return value != null && value >= 0 ? value : undefined;
 }
 

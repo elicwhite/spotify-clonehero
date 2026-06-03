@@ -89,3 +89,28 @@ export async function readFileList(
   const list = Array.from(files).filter(f => !f.name.startsWith('.'));
   return Promise.all(list.map(fileToEntry));
 }
+
+interface PickFilesOptions {
+  /** Persistent id so the picker remembers its own last-used location. */
+  id: string;
+  multiple?: boolean;
+  types?: Array<{description?: string; accept: Record<string, string[]>}>;
+}
+
+/**
+ * Open the OS file picker and return the chosen files, or `null` if the user
+ * cancelled. Centralizes the File System Access call, its loose typing, and the
+ * AbortError-on-cancel handling.
+ */
+export async function pickFiles(
+  options: PickFilesOptions,
+): Promise<File[] | null> {
+  let handles: FileSystemFileHandle[];
+  try {
+    handles = await window.showOpenFilePicker(options);
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return null;
+    throw err;
+  }
+  return Promise.all(handles.map(h => h.getFile()));
+}

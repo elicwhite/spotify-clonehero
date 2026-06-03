@@ -3,6 +3,7 @@
 import {useCallback} from 'react';
 import {FilePlus2, FolderInput} from 'lucide-react';
 import {toast} from 'sonner';
+import {pickFiles} from '@/lib/sng/read-dropped-entries';
 import {Button} from '@/components/ui/button';
 import {
   Card,
@@ -22,9 +23,8 @@ export default function SngLanding({onCreate, onPickSng}: SngLandingProps) {
     try {
       // A distinct picker id keeps its own remembered location, separate from
       // the file/folder pickers used when building a package.
-      const handles: FileSystemFileHandle[] = await window.showOpenFilePicker({
+      const files = await pickFiles({
         id: 'sng-modify',
-        multiple: false,
         types: [
           {
             description: 'SNG package',
@@ -32,9 +32,8 @@ export default function SngLanding({onCreate, onPickSng}: SngLandingProps) {
           },
         ],
       });
-      onPickSng(await handles[0].getFile());
+      if (files?.[0]) onPickSng(files[0]);
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return;
       toast.error(err instanceof Error ? err.message : 'Failed to open file');
     }
   }, [onPickSng]);
