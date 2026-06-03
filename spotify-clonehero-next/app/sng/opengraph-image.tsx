@@ -78,8 +78,7 @@ export default function OpengraphImage() {
             lineHeight: 1.3,
             marginBottom: 44,
           }}>
-          Create, inspect, and convert Clone Hero .sng packages — right in your
-          browser.
+          Create, inspect, and convert Clone Hero .sng packages.
         </div>
 
         {/* .sng → its files → .sng / .zip */}
