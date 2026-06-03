@@ -1,6 +1,7 @@
 'use client';
 
-import {createContext, useCallback, useContext, useState} from 'react';
+import {useCallback, useState} from 'react';
+import {useRouter} from 'next/navigation';
 import {toast} from 'sonner';
 import {
   readSngFile,
@@ -10,28 +11,8 @@ import {exportAsSng, exportAsZip} from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
 import {mergeByName} from '@/lib/sng/file-utils';
 import {parseChartPreview} from '@/lib/sng/parse-chart-preview';
-
-export type DownloadFormat = 'sng' | 'zip';
-
-interface SngContextValue {
-  files: FileEntry[];
-  /** Add files, replacing any existing file of the same name. */
-  addEntries: (entries: FileEntry[]) => void;
-  removeFile: (fileName: string) => void;
-  download: (format: DownloadFormat) => void;
-  /** Start a new, empty package. */
-  reset: () => void;
-  /** Load an existing .sng. Returns whether it was read successfully. */
-  loadSng: (file: File) => Promise<boolean>;
-}
-
-const SngContext = createContext<SngContextValue | null>(null);
-
-export function useSng(): SngContextValue {
-  const ctx = useContext(SngContext);
-  if (!ctx) throw new Error('useSng must be used within an SngProvider');
-  return ctx;
-}
+import {pickFiles} from '@/lib/sng/read-dropped-entries';
+import SngEditor, {type DownloadFormat} from '../components/SngEditor';
 
 /** Strip characters illegal in file names while keeping spaces, parens, etc. */
 function sanitizeFileName(name: string): string {
@@ -39,26 +20,30 @@ function sanitizeFileName(name: string): string {
   return cleaned.length > 0 ? cleaned : 'song';
 }
 
-export function SngProvider({children}: {children: React.ReactNode}) {
+export default function SngManage() {
+  const router = useRouter();
   const [files, setFiles] = useState<FileEntry[]>([]);
-  // Name of the opened .sng (Modify flow). Null when creating from scratch, in
+  // Name of the opened .sng (Modify flow). Null when building from scratch, in
   // which case the download name is derived from the chart metadata.
   const [openedSngName, setOpenedSngName] = useState<string | null>(null);
 
-  const reset = useCallback(() => {
-    setFiles([]);
-    setOpenedSngName(null);
-  }, []);
-
-  const loadSng = useCallback(async (file: File): Promise<boolean> => {
+  const openSng = useCallback(async () => {
     try {
-      const loaded = await readSngFile(file);
+      const picked = await pickFiles({
+        id: 'sng-modify',
+        types: [
+          {
+            description: 'SNG package',
+            accept: {'application/octet-stream': ['.sng']},
+          },
+        ],
+      });
+      if (!picked?.[0]) return;
+      const loaded = await readSngFile(picked[0]);
       setFiles(loaded.files);
       setOpenedSngName(loaded.originalName || 'song');
-      return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to read .sng file');
-      return false;
     }
   }, []);
 
@@ -116,9 +101,13 @@ export function SngProvider({children}: {children: React.ReactNode}) {
   );
 
   return (
-    <SngContext.Provider
-      value={{files, addEntries, removeFile, download, reset, loadSng}}>
-      {children}
-    </SngContext.Provider>
+    <SngEditor
+      files={files}
+      onAdd={addEntries}
+      onDelete={removeFile}
+      onDownload={download}
+      onOpenSng={openSng}
+      onBack={() => router.push('/sng')}
+    />
   );
 }

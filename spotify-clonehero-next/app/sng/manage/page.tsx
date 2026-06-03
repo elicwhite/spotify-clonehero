@@ -1,5 +1,5 @@
 import type {Metadata} from 'next';
-import SngManageRoute from './SngManageRoute';
+import SngManage from './SngManage';
 
 export const metadata: Metadata = {
   title: 'Edit SNG package',
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <SngManageRoute />;
+  return <SngManage />;
 }
