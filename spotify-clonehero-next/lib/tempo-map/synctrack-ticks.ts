@@ -2,9 +2,16 @@
  * ms ↔ tick conversion under a predicted synctrack.
  *
  * The synctrack is a piecewise-constant tempo map: each segment carries
- * (segment_start_tick, segment_start_ms, bpm). ms=0 is anchored at tick=0
- * using the first predicted BPM, so chart events before the predicted origin
- * still get non-negative ticks.
+ * (segment_start_tick, segment_start_ms, bpm).
+ *
+ * Anchoring: the predicted origin (the first downbeat) must land exactly on
+ * a bar boundary of the tick grid — bars start at tick 0 because the time
+ * signature is written there. Anchoring ms=0 at tick 0 instead would put
+ * every predicted beat `origin_beats * resolution` ticks off the grid, so
+ * notes sitting perfectly on predicted beats would get off-grid ticks and
+ * notation would render as offbeat/tuplet soup. We pick the smallest
+ * whole-bar tick ≥ the origin's beat distance from ms=0, which also keeps
+ * every event at ms ≥ 0 on a non-negative tick.
  */
 
 import type {Synctrack} from './types';
@@ -25,11 +32,22 @@ export function buildSegments(sync: Synctrack, resolution: number): TempoSegment
     return [{tick: 0, ms: 0, bpm: 120}];
   }
   const firstBpm = tempos[0].bpm;
+
+  // Place the origin (= first tempo event = first predicted downbeat) on a
+  // bar boundary, then extrapolate backward at the first BPM to find the
+  // tick of ms=0.
+  const numerator = sync.timeSignatures[0]?.numerator ?? 4;
+  const barBeats = Math.max(1, numerator);
+  const originBeats = (tempos[0].ms / 60000) * firstBpm;
+  const originBarIndex =
+    tempos[0].ms > 0 ? Math.ceil(originBeats / barBeats - 1e-9) : 0;
+  const originTick = originBarIndex * barBeats * resolution;
+  const ms0Tick = originTick - originBeats * resolution;
+
   const segs: TempoSegment[] = [];
-  // Anchor: ms=0 at tick=0, using the first BPM up to the first tempo event.
-  segs.push({tick: 0, ms: 0, bpm: firstBpm});
+  segs.push({tick: ms0Tick, ms: 0, bpm: firstBpm});
   let curMs = 0;
-  let curTick = 0;
+  let curTick = ms0Tick;
   if (Math.abs(tempos[0].ms - 0) > 1e-6) {
     const dMs = tempos[0].ms - curMs;
     const beats = (dMs / 60000) * firstBpm;

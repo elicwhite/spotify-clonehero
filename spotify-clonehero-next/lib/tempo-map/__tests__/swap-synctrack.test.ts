@@ -110,6 +110,39 @@ describe('swapSynctrack', () => {
     expect(out.timeSignatures).toHaveLength(1);
   });
 
+  test('quantizeNotes snaps notes to 16ths or triplets', () => {
+    const steady: Synctrack = {
+      origin_ms: 0,
+      tempos: [{ms: 0, bpm: 120}],
+      timeSignatures: [{ms: 0, numerator: 4, denominator: 4}],
+    };
+    const chart = makeChart();
+    // At 120 BPM / res 480, 1 tick = 1.0416̅ ms.
+    // 507 ms → fractional tick 486.7: near the beat (480).
+    // 590 ms → fractional tick 566.4: near a 16th-triplet position (560).
+    const note = (ms: number) => ({tick: 0, msTime: ms, length: 0, msLength: 0, type: 0, flags: 0});
+    (chart.trackData[0].noteEventGroups as any).push([note(507)], [note(590)]);
+
+    const exact = swapSynctrack(chart, steady);
+    const exactTicks = exact.trackData[0].noteEventGroups.flat().map(n => n.tick);
+    expect(exactTicks).toContain(487);
+
+    const snapped = swapSynctrack(chart, steady, {quantizeNotes: true});
+    const STRAIGHT = 480 / 4; // 16ths
+    const TRIPLET = 480 / 6; // 16th triplets
+    const ticks = snapped.trackData[0].noteEventGroups.flat().map(n => n.tick);
+    for (const t of ticks) {
+      expect(t % STRAIGHT === 0 || t % TRIPLET === 0).toBe(true);
+    }
+    expect(ticks).toContain(480); // 486.7 → beat
+    expect(ticks).toContain(560); // 566.4 → 16th triplet
+
+    // Non-note events keep their exact (unquantized) re-tick.
+    const segs = buildSegments(steady, RES);
+    const section = snapped.sections[0];
+    expect(Math.abs(tickToMs(section.tick, segs, RES) - chart.sections[0].msTime)).toBeLessThan(3);
+  });
+
   test('clamps pre-origin events to tick 0', () => {
     const lateSync: Synctrack = {
       origin_ms: 5000,

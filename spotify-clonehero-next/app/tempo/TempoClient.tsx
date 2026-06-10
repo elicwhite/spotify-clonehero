@@ -24,6 +24,7 @@ import {
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Slider} from '@/components/ui/slider';
+import {Switch} from '@/components/ui/switch';
 import {cn} from '@/lib/utils';
 import {calculateTimeRemaining} from '@/lib/ui-utils';
 import {findAudioFiles, type Files} from '@/lib/preview/chorus-chart-processing';
@@ -60,9 +61,13 @@ interface ResultState {
   audioFiles: Files;
   /** Present in chart mode only. */
   originalChart: ParsedChart | null;
+  /** Chart-mode inputs for re-deriving the new chart when toggling snap. */
+  chartAssets: ScanFile[];
+  modifiers: typeof defaultIniChartModifiers;
+  /** Audio-mode precomputed chart (no notes, nothing to snap). */
   newChart: ParsedChart;
   synctrack: Synctrack;
-  /** writeChartFolder output for the download button. */
+  /** writeChartFolder output for the download button (audio mode). */
   exportFiles: ScanFile[];
   /** 'sng' downloads as .sng, everything else as .zip. */
   sourceFormat: SourceFormat | null;
@@ -340,15 +345,14 @@ export default function TempoClient() {
         startStep('chart');
         const sync = pipelineResult.synctrack;
 
+        // Chart mode derives the new chart inside ResultsView (so the
+        // snap-to-grid toggle can re-derive it); audio mode is fixed here.
         let newChart: ParsedChart;
-        let exportFiles: ScanFile[];
+        let exportFiles: ScanFile[] = [];
+        let modifiers = {...PRO_DRUMS_MODIFIERS};
         if (originalChart) {
-          const swapped = swapSynctrack(originalChart, sync);
-          ({chart: newChart, files: exportFiles} = writeAndReparse(
-            swapped,
-            chartAssets,
-            {...originalChart.iniChartModifiers, pro_drums: true},
-          ));
+          modifiers = {...originalChart.iniChartModifiers, pro_drums: true};
+          newChart = originalChart; // placeholder; ResultsView derives the real one
         } else {
           const built = buildChartFromSynctrack({
             sync,
@@ -362,7 +366,7 @@ export default function TempoClient() {
           ({chart: newChart, files: exportFiles} = writeAndReparse(
             built,
             [audioAsset],
-            {...PRO_DRUMS_MODIFIERS},
+            modifiers,
           ));
         }
 
@@ -372,6 +376,8 @@ export default function TempoClient() {
           name,
           audioFiles,
           originalChart,
+          chartAssets,
+          modifiers,
           newChart,
           synctrack: sync,
           exportFiles,
@@ -385,24 +391,6 @@ export default function TempoClient() {
     },
     [startStep, finishAll, onPipelineProgress],
   );
-
-  // ---------- download ----------
-  const handleDownload = useCallback(() => {
-    if (!result) return;
-    const base = `${result.name} (retempo)`;
-    if (result.sourceFormat === 'sng') {
-      const sngBytes = exportAsSng(result.exportFiles);
-      downloadBlob(
-        new Blob([sngBytes as Uint8Array<ArrayBuffer>], {
-          type: 'application/octet-stream',
-        }),
-        `${base}.sng`,
-      );
-    } else {
-      downloadBlob(exportAsZip(result.exportFiles), `${base}.zip`);
-    }
-    toast.success('Chart downloaded');
-  }, [result]);
 
   // ---------- render ----------
   if (webGPU === false) {
@@ -441,7 +429,7 @@ export default function TempoClient() {
   }
 
   if (phase === 'results' && result) {
-    return <ResultsView result={result} variant={variant} setVariant={setVariant} onDownload={handleDownload} onBack={() => setPhase('pick')} />;
+    return <ResultsView result={result} variant={variant} setVariant={setVariant} onBack={() => setPhase('pick')} />;
   }
 
   // pick / pick-chart
@@ -521,25 +509,63 @@ function ResultsView({
   result,
   variant,
   setVariant,
-  onDownload,
   onBack,
 }: {
   result: ResultState;
   variant: Variant;
   setVariant: (v: Variant) => void;
-  onDownload: () => void;
   onBack: () => void;
 }) {
   const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
   const audioManagerRef = useRef<AudioManager | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [snapNotes, setSnapNotes] = useState(true);
 
   const hasOriginal = result.originalChart !== null;
+
+  // Chart mode: derive the new chart from the prediction, optionally
+  // quantizing notes to the 24-slots-per-beat grid. Without snapping,
+  // notes sit on fractional beat positions and notation renders as
+  // rest/tuplet soup; with clean human-charted notes naive snapping is
+  // the validated-correct quantizer (see autoresearch-subdiv).
+  const derived = useMemo(() => {
+    if (!result.originalChart) {
+      return {newChart: result.newChart, exportFiles: result.exportFiles};
+    }
+    const swapped = swapSynctrack(
+      result.originalChart,
+      result.synctrack,
+      snapNotes ? {quantizeNotes: true} : {},
+    );
+    const {chart, files} = writeAndReparse(
+      swapped,
+      result.chartAssets,
+      result.modifiers,
+    );
+    return {newChart: chart, exportFiles: files};
+  }, [result, snapNotes]);
+
+  const handleDownload = useCallback(() => {
+    const base = `${result.name} (retempo)`;
+    if (result.sourceFormat === 'sng') {
+      const sngBytes = exportAsSng(derived.exportFiles);
+      downloadBlob(
+        new Blob([sngBytes as Uint8Array<ArrayBuffer>], {
+          type: 'application/octet-stream',
+        }),
+        `${base}.sng`,
+      );
+    } else {
+      downloadBlob(exportAsZip(derived.exportFiles), `${base}.zip`);
+    }
+    toast.success('Chart downloaded');
+  }, [result, derived]);
+
   const currentChart =
     variant === 'original' && result.originalChart
       ? result.originalChart
-      : result.newChart;
+      : derived.newChart;
 
   // ---------- audio manager (same audio for both variants) ----------
   useEffect(() => {
@@ -659,11 +685,15 @@ function ResultsView({
               onClick={() => setVariant('new')}>
               New tempo map
             </Button>
+            <label className="flex items-center gap-1.5 ml-2 text-xs text-muted-foreground cursor-pointer">
+              <Switch checked={snapNotes} onCheckedChange={setSnapNotes} />
+              Snap notes to grid
+            </label>
           </div>
         )}
 
         <div className="ml-auto flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={onDownload}>
+          <Button variant="outline" size="sm" onClick={handleDownload}>
             <Download className="h-4 w-4 mr-1" />
             Download .{result.sourceFormat === 'sng' ? 'sng' : 'zip'}
           </Button>
@@ -763,7 +793,7 @@ function ResultsView({
                     am.playChartTime(time);
                     setIsPlaying(true);
                   }}
-                  triggerRerender={`${variant}-${result.name}`}
+                  triggerRerender={`${variant}-${snapNotes}-${result.name}`}
                   practiceModeConfig={null}
                   onPracticeMeasureSelect={() => {}}
                   selectionIndex={null}
@@ -774,7 +804,7 @@ function ResultsView({
               {audioManager && (
                 <div className="flex-1 min-w-0 flex p-2">
                   <CloneHeroRenderer
-                    key={variant}
+                    key={`${variant}-${snapNotes}`}
                     metadata={metadata}
                     chart={currentChart}
                     track={currentTrack}
