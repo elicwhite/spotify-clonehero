@@ -4,42 +4,51 @@ import type {Synctrack} from '../types';
 const RES = 480;
 
 describe('buildSegments', () => {
-  test('places the origin on a bar boundary', () => {
+  test('lead-in bar spans exactly the origin time and ends on a bar boundary', () => {
     const sync: Synctrack = {
       origin_ms: 1000,
       tempos: [{ms: 1000, bpm: 120}],
       timeSignatures: [{ms: 1000, numerator: 4, denominator: 4}],
     };
     const segs = buildSegments(sync, RES);
-    // Origin is 2 beats after ms=0; the nearest whole bar at/after that is
-    // bar 1 (tick 1920), so ms=0 anchors at 1920 - 960 = 960.
-    expect(segs[0]).toEqual({tick: 960, ms: 0, bpm: 120});
+    // One 4-beat lead-in bar covering 1000ms → 240 BPM lead.
+    expect(segs[0]).toEqual({tick: 0, ms: 0, bpm: 240});
     expect(segs[1]).toEqual({tick: 1920, ms: 1000, bpm: 120});
     expect(segs[1].tick % (4 * RES)).toBe(0);
+    // Audio anchor: ms=0 is exactly tick 0.
+    expect(msToTick(0, segs, RES)).toBe(0);
+    expect(tickToMs(0, segs, RES)).toBe(0);
   });
 
-  test('small positive origin still lands on a bar boundary with ms=0 ≥ tick 0', () => {
+  test('small positive origin: fast lead-in bar, origin on a bar boundary', () => {
     const sync: Synctrack = {
       origin_ms: 65.2,
       tempos: [{ms: 65.2, bpm: 181.28}],
       timeSignatures: [{ms: 65.2, numerator: 4, denominator: 4}],
     };
     const segs = buildSegments(sync, RES);
-    expect(segs[0].tick).toBeGreaterThanOrEqual(0);
+    expect(segs[0].tick).toBe(0);
+    expect(segs[0].ms).toBe(0);
+    // 4 beats in 65.2ms
+    expect(segs[0].bpm).toBeCloseTo((4 * 60000) / 65.2, 6);
     expect(segs[1].ms).toBeCloseTo(65.2, 6);
     expect(segs[1].tick % (4 * RES)).toBe(0);
+    expect(tickToMs(0, segs, RES)).toBe(0);
   });
 
-  test('negative origin anchors at tick 0 with ms=0 slightly after', () => {
+  test('negative origin: pre-audio region compressed, ms=0 ≈ its tick', () => {
     const sync: Synctrack = {
-      origin_ms: -11,
-      tempos: [{ms: -11, bpm: 96.77}],
-      timeSignatures: [{ms: -11, numerator: 4, denominator: 4}],
+      origin_ms: -200,
+      tempos: [{ms: -200, bpm: 96.77}],
+      timeSignatures: [{ms: -200, numerator: 4, denominator: 4}],
     };
     const segs = buildSegments(sync, RES);
-    expect(segs[0].ms).toBe(0);
-    expect(segs[0].tick).toBeGreaterThan(0);
-    expect(segs[0].tick).toBeLessThan(20);
+    // Origin (the downbeat) is tick 0; ms=0 lands shortly after.
+    expect(segs[1].ms).toBe(0);
+    expect(segs[1].tick).toBeGreaterThan(0);
+    // The compressed region occupies ≤ 0.5ms of chart time.
+    expect(tickToMs(0, segs, RES)).toBeGreaterThanOrEqual(-0.51);
+    expect(tickToMs(segs[1].tick, segs, RES)).toBe(0);
   });
 
   test('accumulates ticks across tempo changes', () => {

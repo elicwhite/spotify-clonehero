@@ -95,25 +95,23 @@ export function swapSynctrack(
     return {...ev, tick: startTick, length: Math.max(0, endTick - startTick)};
   };
 
-  // --- New tempos with computed ticks ---
-  const sortedTempos = [...sync.tempos].sort((a, b) => a.ms - b.ms);
-  const firstBpm = sortedTempos[0]?.bpm ?? 120;
-  // Always emit a synthetic tempo at tick 0 using the FIRST predicted BPM so
-  // chart events before the predicted origin still have a defined tempo
-  // (without it, MIDI parsers default to 120 BPM and shift pre-origin events).
-  const newTemposRaw = [
-    {tick: 0, beatsPerMinute: firstBpm, msTime: 0},
-    ...sortedTempos.map(t => ({
-      tick: Math.max(0, Math.round(msToTick(t.ms, segs, resolution))),
-      beatsPerMinute: t.bpm,
-      msTime: t.ms,
-    })),
-  ];
-  // Dedup on identical ticks (first wins, so the tick-0 anchor survives a
-  // collision with the first predicted event).
+  // --- New tempos, written directly from the segment map ---
+  // The game integrates the tempo events from tick 0 = time 0, so the
+  // written list must BE the segment map (including the lead-in / collapse
+  // segment buildSegments synthesizes to anchor ms=0 at tick 0). Writing
+  // sync.tempos with a plain tick-0 anchor instead would re-time the
+  // pre-origin tick region and shift every note against the audio.
+  const newTemposRaw = segs.map(s => ({
+    tick: Math.max(0, Math.round(s.tick)),
+    beatsPerMinute: s.bpm,
+    msTime: Math.max(0, s.ms),
+  }));
+  // Dedup on identical ticks. Last wins: when a synthesized anchor segment
+  // rounds onto the same tick as the segment after it, the later BPM is the
+  // one that governs the region from that tick onward.
   const tempoByTick = new Map<number, (typeof newTemposRaw)[number]>();
   for (const t of newTemposRaw) {
-    if (!tempoByTick.has(t.tick)) tempoByTick.set(t.tick, t);
+    tempoByTick.set(t.tick, t);
   }
   const dedupTempos = [...tempoByTick.values()].sort((a, b) => a.tick - b.tick);
   // Collapse consecutive same-BPM runs (the predictor emits one tempo per

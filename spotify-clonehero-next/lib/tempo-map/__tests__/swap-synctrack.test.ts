@@ -50,6 +50,59 @@ const sync: Synctrack = {
   timeSignatures: [{ms: 0, numerator: 3, denominator: 4}],
 };
 
+/** Game-style integration: compute ms(tick) from the written tempo events
+ * exactly the way a chart parser does (tick 0 = time 0, piecewise BPM). */
+function gameMsAtTick(
+  tempos: Array<{tick: number; beatsPerMinute: number}>,
+  tick: number,
+  resolution: number,
+): number {
+  const sorted = [...tempos].sort((a, b) => a.tick - b.tick);
+  let ms = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    const segStart = sorted[i].tick;
+    const segEnd = i + 1 < sorted.length ? sorted[i + 1].tick : Infinity;
+    if (tick <= segStart) break;
+    const span = Math.min(tick, segEnd) - segStart;
+    ms += (span / resolution) * (60000 / sorted[i].beatsPerMinute);
+    if (tick <= segEnd) break;
+  }
+  return ms;
+}
+
+describe('swapSynctrack audio alignment', () => {
+  // The written chart must play every note at its original audio time:
+  // integrating the WRITTEN tempo events (the only thing the game sees)
+  // over each note's new tick must reproduce the note's original msTime.
+  for (const originMs of [0, 65.2, 1500, -200]) {
+    test(`origin ${originMs}ms: notes keep their audio times in the written chart`, () => {
+      const beat = 60000 / 176;
+      const tempos = [];
+      for (let i = 0; i < 600; i++) {
+        tempos.push({ms: originMs + i * beat, bpm: 176 + (i % 3)});
+      }
+      const syncAtOrigin: Synctrack = {
+        origin_ms: originMs,
+        tempos,
+        timeSignatures: [{ms: originMs, numerator: 4, denominator: 4}],
+      };
+      const chart = makeChart();
+      // Notes across the song, mostly aligned with predicted beats but not exactly.
+      const noteMs = Array.from({length: 60}, (_, i) => 2000 + i * 2000.37);
+      (chart.trackData[0].noteEventGroups as any) = noteMs.map(ms => [
+        {tick: 0, msTime: ms, length: 0, msLength: 0, type: 0, flags: 0},
+      ]);
+
+      const out = swapSynctrack(chart, syncAtOrigin);
+      const notes = out.trackData[0].noteEventGroups.flat();
+      for (let i = 0; i < notes.length; i++) {
+        const playedMs = gameMsAtTick(out.tempos, notes[i].tick, RES);
+        expect(Math.abs(playedMs - noteMs[i])).toBeLessThan(3);
+      }
+    });
+  }
+});
+
 describe('swapSynctrack', () => {
   test('installs predicted tempos and time signatures with tick-0 anchors', () => {
     const out = swapSynctrack(makeChart(), sync);
