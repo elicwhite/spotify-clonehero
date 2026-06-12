@@ -72,6 +72,28 @@ export default function Home() {
         </Card>
         <Card className="flex flex-col justify-between">
           <CardHeader>
+            <CardTitle>
+              Drum Fills Practice
+              <Badge className="ml-2 align-middle" variant="default">
+                New
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Detect drum fills across your Clone Hero library, then drill them
+              with MIDI scoring and spaced repetition. Runs entirely in your
+              browser.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 py-4">
+            <Link
+              href="drum-fills"
+              className={buttonVariants({variant: 'default'})}>
+              Go to Tool
+            </Link>
+          </CardContent>
+        </Card>
+        <Card className="flex flex-col justify-between">
+          <CardHeader>
             <CardTitle>Spotify Library Scanner</CardTitle>
             <CardDescription>
               Find charts on Chorus that match songs you have saved in your

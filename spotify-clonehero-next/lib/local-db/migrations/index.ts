@@ -8,6 +8,7 @@ import {migration_006_add_normalized_indexes} from './006_add_normalized_indexes
 import {migration_007_add_track_chart_matches} from './007_add_track_chart_matches';
 import {migration_008_add_spotify_history} from './008_add_spotify_history';
 import {migration_009_renormalize_strip_articles} from './009_renormalize_strip_articles';
+import {migration_010_drum_fills} from './010_drum_fills';
 
 export const migrations: Record<string, Migration> = {
   '001_initial': InitialMigration,
@@ -19,4 +20,5 @@ export const migrations: Record<string, Migration> = {
   '007_add_track_chart_matches': migration_007_add_track_chart_matches,
   '008_add_spotify_history': migration_008_add_spotify_history,
   '009_renormalize_strip_articles': migration_009_renormalize_strip_articles,
+  '010_drum_fills': migration_010_drum_fills,
 };

@@ -1,4 +1,4 @@
-import {set} from 'idb-keyval';
+import {get, set} from 'idb-keyval';
 import filenamify from 'filenamify/browser';
 
 import {track} from '@/lib/analytics/track';
@@ -30,9 +30,61 @@ async function promptForSongsDirectory() {
 
 let currentSongDirectoryCache: FileSystemDirectoryHandle | undefined;
 
+/**
+ * Try to recover a previously-picked Songs directory handle from idb-keyval
+ * without showing the picker. Returns the handle only if read/write permission
+ * is (or can be re-granted to be) available; otherwise null so the caller can
+ * fall back to the picker. A re-grant may require a user gesture, which is why
+ * permission failures resolve to null rather than throwing.
+ */
+export async function getCachedSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
+  if (currentSongDirectoryCache) {
+    return currentSongDirectoryCache;
+  }
+
+  let handle: FileSystemDirectoryHandle | undefined;
+  try {
+    handle = await get<FileSystemDirectoryHandle>('songsDirectoryHandle');
+  } catch {
+    return null;
+  }
+
+  if (handle == null) {
+    return null;
+  }
+
+  // TS's built-in FileSystem*Handle types don't include the experimental
+  // permission methods; cast through a minimal interface.
+  type WithPerm = {
+    queryPermission(d: {mode: 'readwrite'}): Promise<PermissionState>;
+    requestPermission(d: {mode: 'readwrite'}): Promise<PermissionState>;
+  };
+  const perm = handle as unknown as WithPerm;
+  const opts = {mode: 'readwrite'} as const;
+  try {
+    let permission = await perm.queryPermission(opts);
+    if (permission !== 'granted') {
+      permission = await perm.requestPermission(opts);
+    }
+    if (permission !== 'granted') {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  currentSongDirectoryCache = handle;
+  return handle;
+}
+
 async function getSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle> {
   if (currentSongDirectoryCache) {
     return currentSongDirectoryCache;
+  }
+
+  const cached = await getCachedSongsDirectoryHandle();
+  if (cached) {
+    return cached;
   }
 
   const promptedHandle = await promptForSongsDirectory();
