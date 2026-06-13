@@ -149,6 +149,23 @@ describe('detectFills', () => {
     const fills = detectFills(chart);
     expect(fills[0].features.endsOnCrash).toBe(true);
   });
+
+  it('skips charts longer than maxSongMs (e.g. album charts)', () => {
+    const notes = songWithFill(4, 4, 2);
+    // Same chart detects normally...
+    expect(detectFills(buildChart({notes}))).toHaveLength(1);
+    // ...but is skipped entirely once it exceeds the duration cap. The chart
+    // has no song_length metadata, so the fallback (last note time) applies.
+    expect(detectFills(buildChart({notes}), {maxSongMs: 1})).toHaveLength(0);
+  });
+
+  it('uses declared song_length to skip over-long charts', () => {
+    const notes = songWithFill(4, 4, 2);
+    const chart = buildChart({notes});
+    // A short chart with a 20-minute declared length is treated as over-long.
+    (chart.metadata as {song_length?: number}).song_length = 20 * 60 * 1000;
+    expect(detectFills(chart)).toHaveLength(0);
+  });
 });
 
 describe('detectFills substance gate (plan 0045 §5)', () => {

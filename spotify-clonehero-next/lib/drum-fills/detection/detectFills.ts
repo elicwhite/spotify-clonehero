@@ -34,6 +34,25 @@ export function getExpertDrumsTrack(
   );
 }
 
+/**
+ * Total song duration in ms. Prefers the declared `song_length`; falls back to
+ * the last Expert-drums note time when the metadata is missing or non-positive.
+ */
+export function songDurationMs(
+  chart: ParsedChart,
+  track: ParsedTrackData,
+): number {
+  const declared = chart.metadata?.song_length;
+  if (typeof declared === 'number' && declared > 0) return declared;
+  let lastTick = 0;
+  for (const group of track.noteEventGroups) {
+    for (const n of group) {
+      if (n.tick > lastTick) lastTick = n.tick;
+    }
+  }
+  return tickToMs(chart, lastTick);
+}
+
 interface BarStats {
   fingerprint: BarFingerprint;
   /** voice-onset count (each voice at each onset counts once). */
@@ -120,6 +139,10 @@ export function detectFills(
   const opts = {...DEFAULT_DETECTION_OPTIONS, ...options};
   const track = getExpertDrumsTrack(chart);
   if (!track) return [];
+
+  // Skip over-long charts (e.g. full-album charts). Prefer the declared song
+  // length; fall back to the last note's time if it isn't available.
+  if (songDurationMs(chart, track) > opts.maxSongMs) return [];
 
   const fingerprints = buildFingerprints(chart, track);
   if (fingerprints.length === 0) return [];

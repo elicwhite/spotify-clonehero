@@ -159,6 +159,12 @@ export interface DetectionOptions {
    * it off to measure how many candidates the gate removes.
    */
   substanceGate: boolean;
+  /**
+   * Skip charts longer than this (ms) entirely. Excludes full-album charts,
+   * which are single very long charts whose fills aren't useful practice
+   * material. Default 15 minutes.
+   */
+  maxSongMs: number;
 }
 
 export const DEFAULT_DETECTION_OPTIONS: DetectionOptions = {
@@ -170,4 +176,5 @@ export const DEFAULT_DETECTION_OPTIONS: DetectionOptions = {
   tomHeavy: 0.35,
   minConfidence: 0.5,
   substanceGate: true,
+  maxSongMs: 15 * 60 * 1000,
 };
