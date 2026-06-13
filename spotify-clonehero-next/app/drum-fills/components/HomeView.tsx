@@ -15,7 +15,7 @@ import {
   type ProgressSummary,
 } from '@/lib/drum-fills/db';
 import type {ScanProgress} from '@/lib/drum-fills/scan/types';
-import GrooveSketch from './GrooveSketch';
+import GrooveStave from './GrooveStave';
 
 /**
  * Practice-first home (plan 0045 §7). Answers "what should I drill right now?"
@@ -203,7 +203,7 @@ export default function HomeView({
           <Card>
             <CardContent className="flex flex-wrap items-center gap-4 pt-6">
               <div className="w-40 shrink-0">
-                <GrooveSketch
+                <GrooveStave
                   fingerprint={suggested.representativeFingerprint}
                 />
               </div>
@@ -264,7 +264,7 @@ function LadderCard({
   return (
     <Card className="flex flex-col">
       <CardContent className="flex flex-1 flex-col gap-3 pt-4">
-        <GrooveSketch fingerprint={ladder.cluster.representativeFingerprint} />
+        <GrooveStave fingerprint={ladder.cluster.representativeFingerprint} />
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium">
             Rung {ladder.rungIndex + 1} of {ladder.rungCount}

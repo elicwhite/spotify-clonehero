@@ -2,6 +2,7 @@
 
 import {useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
+import {useGrooveFilters} from '../hooks/useGrooveFilters';
 import {Button} from '@/components/ui/button';
 import {Badge} from '@/components/ui/badge';
 import {Card, CardContent} from '@/components/ui/card';
@@ -25,7 +26,7 @@ import {
   type GrooveSort,
 } from '@/lib/drum-fills/grooveClusters';
 import type {DrumVoice} from '@/lib/drum-fills/detection/types';
-import GrooveSketch from './GrooveSketch';
+import GrooveStave from './GrooveStave';
 
 const SUBDIVISION_LABEL: Record<string, string> = {
   '8ths': '8ths',
@@ -82,11 +83,17 @@ export default function GroovesView({
   const [clusters, setClusters] = useState<GrooveCluster[] | null>(null);
   const [needsRescan, setNeedsRescan] = useState(false);
 
-  // Filter / sort state.
-  const [sort, setSort] = useState<GrooveSort>('difficulty-asc');
-  const [progress, setProgress] = useState<GrooveProgress[]>([]);
-  const [voices, setVoices] = useState<DrumVoice[]>([]);
-  const [minFills, setMinFills] = useState(MIN_DRILLABLE_FILLS);
+  // Filter / sort state, persisted in the URL (survives reload).
+  const {
+    sort,
+    progress,
+    voices,
+    minFills,
+    setSort,
+    setMinFills,
+    toggleProgress,
+    toggleVoice,
+  } = useGrooveFilters();
 
   useEffect(() => {
     (async () => {
@@ -131,15 +138,6 @@ export default function GroovesView({
   const drillableCount = clusters.filter(
     c => c.fillCount >= MIN_DRILLABLE_FILLS,
   ).length;
-
-  const toggleProgress = (p: GrooveProgress) =>
-    setProgress(prev =>
-      prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p],
-    );
-  const toggleVoice = (v: DrumVoice) =>
-    setVoices(prev =>
-      prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v],
-    );
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -287,7 +285,7 @@ function GrooveCard({
   return (
     <Card className="flex flex-col">
       <CardContent className="flex flex-1 flex-col gap-3 pt-4">
-        <GrooveSketch fingerprint={cluster.representativeFingerprint} />
+        <GrooveStave fingerprint={cluster.representativeFingerprint} />
 
         <div className="flex flex-wrap gap-1.5 text-xs">
           <Badge variant="secondary">

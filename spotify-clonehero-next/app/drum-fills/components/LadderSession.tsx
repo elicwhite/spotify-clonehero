@@ -19,7 +19,7 @@ import {
   type RungProgress,
 } from '@/lib/drum-fills/practice/fillLadder';
 import DifficultyBar from './DifficultyBar';
-import GrooveSketch from './GrooveSketch';
+import GrooveStave from './GrooveStave';
 import PracticeView from './PracticeView';
 
 /**
@@ -147,7 +147,7 @@ export default function LadderSession({
       <div className="flex shrink-0 flex-col gap-2 lg:w-64">
         <div className="flex items-center gap-3 rounded-lg border bg-card p-2">
           <div className="w-28 shrink-0">
-            <GrooveSketch fingerprint={cluster.representativeFingerprint} />
+            <GrooveStave fingerprint={cluster.representativeFingerprint} />
           </div>
           <div className="text-sm">
             <p className="font-semibold">Ladder</p>

@@ -9,7 +9,7 @@ import {
   type FillWithSrs,
   type GrooveCluster,
 } from '@/lib/drum-fills/db';
-import GrooveSketch from './GrooveSketch';
+import GrooveStave from './GrooveStave';
 import FillRotationSession from './FillRotationSession';
 import LadderSession from './LadderSession';
 
@@ -148,7 +148,7 @@ function GrooveHeader({
   return (
     <div className="flex items-center gap-3 rounded-lg border bg-card p-2">
       <div className="w-40 shrink-0">
-        <GrooveSketch fingerprint={cluster.representativeFingerprint} />
+        <GrooveStave fingerprint={cluster.representativeFingerprint} />
       </div>
       <div className="text-sm">
         <p className="font-semibold">Groove session</p>
