@@ -380,12 +380,7 @@ export const setupRenderer = (
       if (lyrics.length === 0) return;
       const width = sizingRef.current?.offsetWidth ?? window.innerWidth;
       const height = sizingRef.current?.offsetHeight ?? window.innerHeight;
-      lyricsOverlay = new LyricsOverlay(
-        lyrics,
-        vocalPhrases,
-        width,
-        height,
-      );
+      lyricsOverlay = new LyricsOverlay(lyrics, vocalPhrases, width, height);
     },
   };
 

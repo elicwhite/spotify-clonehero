@@ -1,15 +1,15 @@
 /**
- * WebAudio-synthesized backing track for the isolated / roulette practice modes.
+ * Synthesized backing-track kit for the isolated / roulette practice modes.
  *
- * Plays a synthesized kit (kick / snare / hat) plus a click for a groove pattern
- * over N bars, then leaves the fill bar(s) empty (space for the player to play
- * the fill), looping at an arbitrary BPM.
+ * A backing pattern is a synthesized kit (kick / snare / hat) plus a click for a
+ * groove over N bars, with the fill bar(s) left empty (space for the player to
+ * play the fill).
  *
  * The scheduling logic — turning a groove pattern + tempo + bar layout into a
- * flat list of timed events with a lookahead window — is a pure function
- * ({@link scheduleLoopEvents}) so it can be unit-tested without WebAudio. The
- * thin WebAudio layer ({@link BackingTrackPlayer}) only turns those events into
- * oscillator/noise voices on a provided AudioContext.
+ * flat list of timed events — is a pure function ({@link scheduleLoopEvents})
+ * so it can be unit-tested without WebAudio. {@link renderEvent} turns one
+ * event into oscillator/noise voices on a provided (offline) AudioContext; see
+ * ./backingAudio for the WAV rendering used by the practice modes.
  */
 
 /** Voices the synthesized kit can produce. */
@@ -271,93 +271,5 @@ export function renderEvent(
     case 'click':
       playClick(ctx, event.time, gain);
       break;
-  }
-}
-
-export type BackingTrackPlayerOptions = {
-  /** How far ahead (seconds) to schedule on each tick. */
-  lookaheadSeconds: number;
-  /** How often (ms) to run the scheduling tick. */
-  tickIntervalMs: number;
-};
-
-export const DEFAULT_PLAYER_OPTIONS: BackingTrackPlayerOptions = {
-  lookaheadSeconds: 0.25,
-  tickIntervalMs: 50,
-};
-
-/**
- * Thin driver that repeatedly calls {@link scheduleLoopEvents} over a lookahead
- * window and renders the resulting events via WebAudio. All musical decisions
- * live in the pure scheduler; this class only manages the timer and audio nodes.
- */
-export class BackingTrackPlayer {
-  private readonly ctx: MinimalAudioContext;
-  private readonly pattern: BackingPattern;
-  private readonly bpm: number;
-  private readonly opts: BackingTrackPlayerOptions;
-
-  private anchorTime = 0;
-  private scheduledUntil = 0;
-  private timer: ReturnType<typeof setInterval> | null = null;
-
-  constructor(
-    ctx: MinimalAudioContext,
-    pattern: BackingPattern,
-    bpm: number,
-    options: Partial<BackingTrackPlayerOptions> = {},
-  ) {
-    this.ctx = ctx;
-    this.pattern = pattern;
-    this.bpm = bpm;
-    this.opts = {...DEFAULT_PLAYER_OPTIONS, ...options};
-  }
-
-  start(): void {
-    if (this.timer !== null) return;
-    this.anchorTime = this.ctx.currentTime;
-    this.scheduledUntil = this.anchorTime;
-    this.tick();
-    this.timer = setInterval(() => this.tick(), this.opts.tickIntervalMs);
-  }
-
-  stop(): void {
-    if (this.timer !== null) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
-  }
-
-  /**
-   * Position within the current loop, in seconds from bar-0 beat-0, or null
-   * when the player is stopped. Lets callers (e.g. live scoring) track where
-   * the playhead sits relative to the groove/fill window.
-   */
-  loopPositionSeconds(): number | null {
-    if (this.timer === null) return null;
-    const loopDur = loopDurationSeconds(this.pattern, this.bpm);
-    if (loopDur <= 0) return null;
-    const elapsed = this.ctx.currentTime - this.anchorTime;
-    if (elapsed < 0) return 0;
-    return elapsed % loopDur;
-  }
-
-  private tick(): void {
-    const windowStart = Math.max(this.ctx.currentTime, this.scheduledUntil);
-    const windowEnd = this.ctx.currentTime + this.opts.lookaheadSeconds;
-    const windowSeconds = windowEnd - windowStart;
-    if (windowSeconds <= 0) return;
-
-    const events = scheduleLoopEvents(this.pattern, {
-      bpm: this.bpm,
-      startTime: windowStart,
-      windowSeconds,
-      loopAnchorTime: this.anchorTime,
-    });
-
-    for (const event of events) {
-      renderEvent(this.ctx, event);
-    }
-    this.scheduledUntil = windowEnd;
   }
 }

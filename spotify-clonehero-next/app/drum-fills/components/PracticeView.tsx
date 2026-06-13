@@ -14,9 +14,10 @@ import type {ChartResponseEncore} from '@/lib/chartSelection';
 import CloneHeroRenderer from '@/app/sheet-music/[slug]/CloneHeroRenderer';
 import SheetMusic from '@/app/sheet-music/[slug]/SheetMusic';
 import {
-  BackingTrackPlayer,
-  fillWindowSeconds,
-} from '@/lib/drum-fills/practice/backingTrack';
+  buildPracticeChart,
+  fillNotesToBeatOffsets,
+} from '@/lib/drum-fills/practice/practiceChart';
+import {renderBackingWav} from '@/lib/drum-fills/practice/backingAudio';
 import {
   applyAttempt,
   initFillSrsState,
@@ -333,6 +334,30 @@ function PracticeSession({
 
   const chartDelayMs = useMemo(() => getChartDelayMs(chart.metadata), [chart]);
 
+  // --- Synthetic practice chart (synth modes) ---
+  // The groove and fill may come from different songs (groove sessions /
+  // roulette), so synth modes never display or play the source chart. Instead
+  // we author a small chart — groove bars + the fill at one tempo, starting at
+  // t=0 — and everything (highway, sheet music, scoring window, backing audio)
+  // derives from it. See lib/drum-fills/practice/practiceChart.
+  const synthBundle = useMemo(() => {
+    if (!groovePattern) return null;
+    return buildPracticeChart({
+      pattern: groovePattern,
+      bpm: practiceData.bpm,
+      fillNotes: fillNotesToBeatOffsets(
+        practiceData.notes,
+        fill.startTick,
+        chart.resolution,
+      ),
+    });
+  }, [groovePattern, practiceData, fill.startTick, chart.resolution]);
+
+  const useSynthChart = isSynth && synthBundle !== null;
+  const activeChart = useSynthChart ? synthBundle.chart : chart;
+  const activeTrack = useSynthChart ? synthBundle.track : track;
+  const activeChartDelayMs = useSynthChart ? 0 : chartDelayMs;
+
   // Metadata shim for the highway + sheet music (only song_length is read).
   const metadata = useMemo<ChartResponseEncore>(
     () =>
@@ -341,25 +366,40 @@ function PracticeSession({
         name: fill.song,
         artist: fill.artist,
         charter: fill.charter,
-        song_length: Math.ceil(
-          ((chart.metadata as {length?: number} | undefined)?.length ?? 0) ||
-            practiceData.fillEndMs + 4000,
-        ),
+        song_length: useSynthChart
+          ? Math.ceil(synthBundle.fillEndMs + 1000)
+          : Math.ceil(
+              ((chart.metadata as {length?: number} | undefined)?.length ??
+                0) ||
+                practiceData.fillEndMs + 4000,
+            ),
         hasVideoBackground: false,
         albumArtMd5: '',
         notesData: undefined as never,
         modifiedTime: '',
         file: '',
       }) as unknown as ChartResponseEncore,
-    [fill, chart, practiceData],
+    [fill, chart, practiceData, useSynthChart, synthBundle],
   );
 
-  // --- Audio: AudioManager drives the highway clock + song-loop modes ---
+  // --- Audio: AudioManager is the single clock for every mode. Song modes play
+  // the song stems; synth modes play the rendered backing WAV. The highway,
+  // playhead, and scoring all poll the active manager's chartTime. ---
   const audioManagerRef = useRef<AudioManager | null>(null);
   const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
-  const backingRef = useRef<BackingTrackPlayer | null>(null);
+  const synthAmRef = useRef<AudioManager | null>(null);
+  const [synthAudioManager, setSynthAudioManager] =
+    useState<AudioManager | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
+
+  const activeAudioManager = isSynth ? synthAudioManager : audioManager;
+  // Stable ref to the active manager for the playhead's rAF poll and the loop
+  // tick. Updated via effect (one-way push, no render-time mutation).
+  const activeAmRef = useRef<AudioManager | null>(null);
+  useEffect(() => {
+    activeAmRef.current = activeAudioManager;
+  }, [activeAudioManager]);
 
   // --- Speed trainer / tempo ---
   const [tempoPct, setTempoPct] = useState(() => initialTempoPct());
@@ -386,20 +426,36 @@ function PracticeSession({
     srsRef.current = srs;
   }, [srs]);
 
-  // --- Live scoring ---
+  // --- Live scoring (against the active chart's fill notes) ---
+  const scoringNotes = useSynthChart
+    ? synthBundle.expectedNotes
+    : practiceData.notes;
   const {
     state: scoring,
     beginAttempt,
     finishAttempt,
     reset: resetScoring,
-  } = useLiveScoring(practiceData.notes);
+  } = useLiveScoring(scoringNotes);
 
-  // Loop region (chart ms).
-  const loopStartMs = Math.max(0, practiceData.grooveStartMs - LOOP_PAD_MS);
-  const loopEndMs = practiceData.fillEndMs + LOOP_PAD_MS;
+  // Loop region in the active chart's ms. Song modes pad around the source
+  // chart's groove+fill span; the synthetic chart IS the loop (starts at 0,
+  // ends at the fill end), so no pads.
+  const loopStartMs = useSynthChart
+    ? 0
+    : Math.max(0, practiceData.grooveStartMs - LOOP_PAD_MS);
+  const loopEndMs = useSynthChart
+    ? synthBundle.fillEndMs
+    : practiceData.fillEndMs + LOOP_PAD_MS;
+  const grooveStartChartMs = useSynthChart ? 0 : practiceData.grooveStartMs;
+  const fillStartChartMs = useSynthChart
+    ? synthBundle.fillStartMs
+    : practiceData.fillStartMs;
+  const fillEndChartMs = useSynthChart
+    ? synthBundle.fillEndMs
+    : practiceData.fillEndMs;
 
-  // Build the AudioManager when song audio is available. (No audio → leave the
-  // manager null; the previous run's cleanup already cleared it.)
+  // Build the song AudioManager when song audio is available. (No audio →
+  // leave the manager null; the previous run's cleanup already cleared it.)
   useEffect(() => {
     if (!audioFiles || audioFiles.length === 0) return;
     let cancelled = false;
@@ -412,6 +468,12 @@ function PracticeSession({
       am.setChartDelay(chartDelayMs / 1000);
       audioManagerRef.current = am;
       setAudioManager(am);
+      // Anchor the views on the groove before the user presses Play: seek the
+      // (paused) manager to the loop start so the highway and sheet music show
+      // the fill's measures instead of the top of the song.
+      void am.seekToChartTime(
+        Math.max(0, practiceData.grooveStartMs - LOOP_PAD_MS) / 1000,
+      );
     });
     return () => {
       cancelled = true;
@@ -420,9 +482,43 @@ function PracticeSession({
       audioManagerRef.current = null;
       setAudioManager(null);
     };
-  }, [audioFiles, chartDelayMs]);
+  }, [audioFiles, chartDelayMs, practiceData.grooveStartMs]);
 
-  // Apply tempo to song audio (pitch-preserving) when the speed trainer changes.
+  // Build the synth AudioManager when a synth mode is active: render the
+  // backing WAV (groove bars with kit + click, fill bars silent) at the
+  // practice chart's exact timing and feed it to AudioManager as a track.
+  useEffect(() => {
+    if (!isSynth || !groovePattern || !synthBundle) return;
+    let cancelled = false;
+    let created: AudioManager | null = null;
+    (async () => {
+      const wav = await renderBackingWav(groovePattern, synthBundle.bpm);
+      if (cancelled) return;
+      const am = new AudioManager([{fileName: 'backing.wav', data: wav}], () =>
+        setIsPlaying(false),
+      );
+      created = am;
+      await am.ready;
+      if (cancelled) {
+        am.destroy();
+        return;
+      }
+      am.setChartDelay(0);
+      synthAmRef.current = am;
+      setSynthAudioManager(am);
+    })().catch(err => {
+      console.error('Failed to build synth backing track', err);
+      if (!cancelled) toast.error('Could not build the synth backing track.');
+    });
+    return () => {
+      cancelled = true;
+      created?.destroy();
+      synthAmRef.current = null;
+      setSynthAudioManager(null);
+    };
+  }, [isSynth, groovePattern, synthBundle]);
+
+  // Apply tempo (pitch-preserving) when the speed trainer changes.
   useEffect(() => {
     const am = audioManagerRef.current;
     if (!am) return;
@@ -435,17 +531,16 @@ function PracticeSession({
 
   // The attempt loop: track when the playhead crosses the fill window so we can
   // begin/finish scoring attempts on each loop pass. Driven off a poll, never a
-  // setState updater.
+  // setState updater. One handler for every mode — the active AudioManager is
+  // the only clock, so what's scored is exactly what the views show.
   const inFillRef = useRef(false);
-  const fillStartChartMs = practiceData.fillStartMs;
-  const fillEndChartMs = practiceData.fillEndMs;
 
   // Latest attempt-scored handler, called from the loop tick without coupling
   // the tick's identity to it (defined below).
   const onAttemptScoredRef = useRef<(result: ScoredAttempt) => void>(() => {});
 
   const handleLoopTick = useCallback(() => {
-    const am = audioManagerRef.current;
+    const am = activeAmRef.current;
     if (!am || !am.isInitialized) return;
     const chartMs = am.chartTime * 1000;
 
@@ -464,42 +559,20 @@ function PracticeSession({
       const result = finishAttempt();
       if (result) onAttemptScoredRef.current(result);
     } else if (!inFill && inFillRef.current && chartMs < fillStartChartMs) {
-      // Looped back before scoring (shouldn't normally happen) — discard.
       inFillRef.current = false;
-      finishAttempt();
+      if (isSynth) {
+        // The synth loop ends exactly at the fill end, so a wrap back to the
+        // groove means the pass completed — finish + score.
+        const result = finishAttempt();
+        if (result) onAttemptScoredRef.current(result);
+      } else {
+        // Song loop wrapped mid-fill (shouldn't normally happen) — discard.
+        finishAttempt();
+      }
     }
-  }, [beginAttempt, finishAttempt, fillStartChartMs, fillEndChartMs]);
+  }, [beginAttempt, finishAttempt, fillStartChartMs, fillEndChartMs, isSynth]);
 
-  useInterval(handleLoopTick, isPlaying && !isSynth ? 30 : null);
-
-  // Synth-mode attempt loop: the backing player owns the clock, so track the
-  // loop position and anchor scoring to the empty fill bars at the end of each
-  // loop pass.
-  const handleSynthTick = useCallback(() => {
-    const player = backingRef.current;
-    if (!player || !groovePattern) return;
-    const posSec = player.loopPositionSeconds();
-    if (posSec === null) return;
-
-    const {start: fillStartSec} = fillWindowSeconds(
-      groovePattern,
-      practiceData.bpm,
-    );
-    const inFill = posSec >= fillStartSec;
-    if (inFill && !inFillRef.current) {
-      // Entered the fill bars: anchor scoring to now mapped to fill start.
-      inFillRef.current = true;
-      beginAttempt(performance.now() - (posSec - fillStartSec) * 1000);
-    } else if (!inFill && inFillRef.current) {
-      // Wrapped back to the groove bars: the fill window (which runs to the
-      // end of the loop) is over — finish + score the attempt.
-      inFillRef.current = false;
-      const result = finishAttempt();
-      if (result) onAttemptScoredRef.current(result);
-    }
-  }, [groovePattern, practiceData.bpm, beginAttempt, finishAttempt]);
-
-  useInterval(handleSynthTick, isPlaying && isSynth ? 30 : null);
+  useInterval(handleLoopTick, isPlaying ? 30 : null);
 
   // Persist an attempt + advance SRS / speed trainer.
   const onAttemptScored = useCallback(
@@ -556,52 +629,47 @@ function PracticeSession({
     onAttemptScoredRef.current = onAttemptScored;
   }, [onAttemptScored]);
 
+  // No song audio → song modes can't play; fall back to the synth loop once so
+  // sessions that default to Song loop still work (e.g. ladder rungs whose
+  // song has no audio files).
+  const hasSongAudio = !!(audioFiles && audioFiles.length > 0);
+  useEffect(() => {
+    if (hasSongAudio) return;
+    if (mode !== 'song-context' && mode !== 'speed-trainer') return;
+    toast.message('No song audio for this fill — using Isolated synth.');
+    onModeChange('isolated');
+  }, [hasSongAudio, mode, onModeChange]);
+
   // --- Playback controls ---
-  const startSongLoop = useCallback(() => {
-    const am = audioManagerRef.current;
+  const startLoop = useCallback(() => {
+    const am = isSynth ? synthAmRef.current : audioManagerRef.current;
     if (!am) {
-      toast.error('No song audio available — try Isolated synth mode.');
+      toast.error(
+        isSynth ? 'Backing track still loading…' : 'Song audio still loading…',
+      );
       return;
     }
     const config: PracticeModeConfig = {
-      startMeasureMs: practiceData.grooveStartMs,
-      endMeasureMs: practiceData.fillEndMs,
-      startTimeMs: loopStartMs + chartDelayMs,
-      endTimeMs: loopEndMs + chartDelayMs,
+      startMeasureMs: grooveStartChartMs,
+      endMeasureMs: fillEndChartMs,
+      startTimeMs: loopStartMs + activeChartDelayMs,
+      endTimeMs: loopEndMs + activeChartDelayMs,
     };
     am.setPracticeMode(config);
     am.playChartTime(loopStartMs / 1000);
     setIsPlaying(true);
-  }, [practiceData, loopStartMs, loopEndMs, chartDelayMs]);
-
-  const startSynthLoop = useCallback(() => {
-    if (!groovePattern) return;
-    const am = audioManagerRef.current;
-    // Mute song audio if present; synth is the audio source.
-    if (am) {
-      try {
-        am.setPracticeMode(null);
-        am.pause();
-      } catch {
-        // ignore
-      }
-    }
-    const ctx = (window.ctx as AudioContext | undefined) ?? new AudioContext();
-    window.ctx = ctx;
-    void ctx.resume();
-    backingRef.current?.stop();
-    const synthTempo = mode === 'speed-trainer' ? tempoPct / 100 : 1;
-    const bpm = practiceData.bpm * synthTempo;
-    const player = new BackingTrackPlayer(ctx, groovePattern, bpm);
-    backingRef.current = player;
-    player.start();
-    setIsPlaying(true);
-  }, [groovePattern, practiceData.bpm, mode, tempoPct]);
+  }, [
+    isSynth,
+    grooveStartChartMs,
+    fillEndChartMs,
+    loopStartMs,
+    loopEndMs,
+    activeChartDelayMs,
+  ]);
 
   const stopAll = useCallback(() => {
     audioManagerRef.current?.pause();
-    backingRef.current?.stop();
-    backingRef.current = null;
+    synthAmRef.current?.pause();
     inFillRef.current = false;
     finishAttempt();
     setIsPlaying(false);
@@ -612,19 +680,17 @@ function PracticeSession({
       stopAll();
       return;
     }
-    if (isSynth) startSynthLoop();
-    else startSongLoop();
-  }, [isPlaying, isSynth, startSynthLoop, startSongLoop, stopAll]);
+    startLoop();
+  }, [isPlaying, startLoop, stopAll]);
 
   const restartLoop = useCallback(() => {
     stopAll();
     resetScoring();
     // Restart on next tick.
     setTimeout(() => {
-      if (isSynth) startSynthLoop();
-      else startSongLoop();
+      startLoop();
     }, 0);
-  }, [stopAll, resetScoring, isSynth, startSynthLoop, startSongLoop]);
+  }, [stopAll, resetScoring, startLoop]);
 
   const nudgeTempo = useCallback((delta: number) => {
     setTempoPct(prev => Math.max(50, Math.min(110, prev + delta)));
@@ -674,12 +740,12 @@ function PracticeSession({
   // Practice-mode config for SheetMusic highlighting.
   const sheetPracticeConfig = useMemo<PracticeModeConfig>(
     () => ({
-      startMeasureMs: practiceData.grooveStartMs,
-      endMeasureMs: practiceData.fillEndMs,
+      startMeasureMs: grooveStartChartMs,
+      endMeasureMs: fillEndChartMs,
       startTimeMs: loopStartMs,
       endTimeMs: loopEndMs,
     }),
-    [practiceData, loopStartMs, loopEndMs],
+    [grooveStartChartMs, fillEndChartMs, loopStartMs, loopEndMs],
   );
 
   return (
@@ -720,7 +786,7 @@ function PracticeSession({
 
       {/* Transport */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-lg border bg-card p-2">
-        <Button onClick={togglePlay} disabled={!audioManager && !isSynth}>
+        <Button onClick={togglePlay} disabled={!activeAudioManager}>
           {isPlaying ? 'Pause (space)' : 'Play (space)'}
         </Button>
         <Button variant="outline" onClick={restartLoop}>
@@ -757,23 +823,23 @@ function PracticeSession({
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto lg:flex-row lg:overflow-hidden">
         <div className="flex min-h-[280px] flex-1 flex-col gap-3 lg:min-h-0 lg:flex-row">
           <div className="flex min-h-[280px] flex-1 overflow-hidden rounded-lg border lg:min-h-0">
-            {audioManager ? (
+            {activeAudioManager ? (
               <CloneHeroRenderer
                 metadata={metadata}
-                chart={chart}
-                track={track}
-                audioManager={audioManager}
+                chart={activeChart}
+                track={activeTrack}
+                audioManager={activeAudioManager}
               />
             ) : (
               <div className="flex flex-1 items-center justify-center bg-muted text-sm text-muted-foreground">
-                Highway preview needs song audio (Song loop mode).
+                Loading audio…
               </div>
             )}
           </div>
           <div className="flex min-h-[280px] flex-1 overflow-hidden lg:min-h-0">
             <SheetMusic
-              chart={chart}
-              track={track}
+              chart={activeChart}
+              track={activeTrack}
               showBarNumbers={false}
               enableColors
               showLyrics={false}
@@ -784,7 +850,7 @@ function PracticeSession({
               practiceModeConfig={sheetPracticeConfig}
               onPracticeMeasureSelect={() => {}}
               selectionIndex={null}
-              audioManagerRef={audioManagerRef}
+              audioManagerRef={activeAmRef}
             />
           </div>
         </div>

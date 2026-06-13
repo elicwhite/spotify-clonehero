@@ -22,9 +22,9 @@ type SessionMode = 'rotate' | 'ladder';
  *  - Ladder: the cluster's unique patterns ordered simple→complex; the user
  *    climbs rungs (LadderSession, plan 0045 §6).
  *
- * Rotate mode: a cluster spans many songs/tempos, so we default to the isolated
- * synth loop; when every fill is from the same song we use the song-context loop
- * so the player hears the real track.
+ * Both modes default to the song-context loop (each fill loads its own song
+ * audio); PracticeView falls back to the isolated synth loop per fill when its
+ * song has no audio.
  */
 export default function GrooveSession({
   cluster,
@@ -49,11 +49,6 @@ export default function GrooveSession({
       }
     })();
   }, [cluster.fillIds]);
-
-  const singleSong = useMemo(
-    () => pool != null && new Set(pool.map(f => f.chartHash)).size === 1,
-    [pool],
-  );
 
   // Rotate in difficulty order (simple→complex) so sequential rotation also
   // ramps up; shuffle still randomizes. Null scores sort last.
@@ -133,10 +128,11 @@ export default function GrooveSession({
   }
 
   return (
+    /* Defaults to Song loop (each fill loads its own song audio); PracticeView
+       falls back to Isolated synth per fill when its song has no audio. */
     <FillRotationSession
       pool={orderedPool ?? pool}
       onExit={onExit}
-      initialMode={singleSong ? 'song-context' : 'isolated'}
       header={<GrooveHeader cluster={cluster} extra={modeSwitch} />}
     />
   );

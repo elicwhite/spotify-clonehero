@@ -3,8 +3,6 @@ import {
   loopDurationSeconds,
   fillWindowSeconds,
   BackingPattern,
-  BackingTrackPlayer,
-  MinimalAudioContext,
   ScheduledEvent,
 } from '../backingTrack';
 
@@ -149,55 +147,5 @@ describe('fillWindowSeconds', () => {
   it('scales with tempo', () => {
     // 60bpm: 1s/beat → groove 8s, loop 12s.
     expect(fillWindowSeconds(PATTERN, 60)).toEqual({start: 8, end: 12});
-  });
-});
-
-describe('BackingTrackPlayer.loopPositionSeconds', () => {
-  function fakeCtx(time: {now: number}): MinimalAudioContext {
-    const param = {
-      setValueAtTime: () => undefined,
-      exponentialRampToValueAtTime: () => undefined,
-      linearRampToValueAtTime: () => undefined,
-    };
-    const node = () => ({
-      connect: () => node(),
-      start: () => undefined,
-      stop: () => undefined,
-      frequency: param,
-      gain: param,
-      type: '',
-      buffer: null,
-      Q: param,
-    });
-    return {
-      get currentTime() {
-        return time.now;
-      },
-      sampleRate: 44100,
-      destination: node() as unknown as AudioNode,
-      createOscillator: node,
-      createGain: node,
-      createBufferSource: node,
-      createBiquadFilter: node,
-      createBuffer: () => ({
-        getChannelData: () => new Float32Array(0),
-      }),
-    } as unknown as MinimalAudioContext;
-  }
-
-  it('returns null when stopped and the loop position while playing', () => {
-    const time = {now: 10};
-    const player = new BackingTrackPlayer(fakeCtx(time), PATTERN, 120);
-    expect(player.loopPositionSeconds()).toBeNull();
-
-    player.start(); // anchors at t=10; loop is 6s
-    expect(player.loopPositionSeconds()).toBeCloseTo(0);
-    time.now = 14.5;
-    expect(player.loopPositionSeconds()).toBeCloseTo(4.5);
-    time.now = 17; // wrapped: 7s elapsed % 6
-    expect(player.loopPositionSeconds()).toBeCloseTo(1);
-
-    player.stop();
-    expect(player.loopPositionSeconds()).toBeNull();
   });
 });

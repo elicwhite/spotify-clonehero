@@ -9,7 +9,7 @@
  */
 
 import {describe, test, expect} from '@jest/globals';
-import {encodeWav} from '../audio/wav-encoder';
+import {encodeWav} from '@/lib/audio/wav-encoder';
 
 // ---------------------------------------------------------------------------
 // Helpers

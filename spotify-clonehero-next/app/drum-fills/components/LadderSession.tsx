@@ -186,12 +186,14 @@ export default function LadderSession({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
+        {/* Defaults to Song loop (real audio for the rung's representative
+            fill); PracticeView falls back to Isolated synth when the song has
+            no audio. */}
         <PracticeView
           key={current.representative.id}
           fillId={current.representative.id}
           onExit={onExit}
           onAttemptScored={onAttemptScored}
-          initialMode="isolated"
         />
       </div>
     </div>

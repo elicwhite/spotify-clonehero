@@ -166,9 +166,21 @@ export default function ClientPage() {
 
   const goHome = () => setView({kind: 'home'});
 
+  // Practice surfaces (highway + notation side by side) use the full viewport
+  // width; browse/list views stay centered at the site width.
+  const isPracticeSurface =
+    view.kind === 'practice' ||
+    view.kind === 'today' ||
+    view.kind === 'roulette' ||
+    view.kind === 'groove-session';
+
   return (
     <MidiProvider>
-      <div className="flex min-h-0 w-full max-w-screen-xl flex-1 flex-col gap-4">
+      <div
+        className={cn(
+          'flex min-h-0 w-full flex-1 flex-col gap-4',
+          !isPracticeSurface && 'max-w-screen-xl',
+        )}>
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-6">
             <button

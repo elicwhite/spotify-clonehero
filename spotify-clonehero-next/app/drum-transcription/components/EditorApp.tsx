@@ -15,7 +15,7 @@ import {
   type ProjectMetadata,
   type AudioStorageMeta,
 } from '@/lib/drum-transcription/storage/opfs';
-import {encodeWavBlob} from '@/lib/drum-transcription/audio/wav-encoder';
+import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
 import {useHotkey} from '@tanstack/react-hotkeys';
 import {
@@ -470,9 +470,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
     const aMeta = audioMeta;
     if (!aMeta) return sources;
 
-    const {encodeWav} = await import(
-      '@/lib/drum-transcription/audio/wav-encoder'
-    );
+    const {encodeWav} = await import('@/lib/audio/wav-encoder');
 
     // Drum stem
     try {
