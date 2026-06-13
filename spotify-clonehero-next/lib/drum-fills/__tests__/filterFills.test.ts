@@ -7,7 +7,7 @@ import {
   DEFAULT_LIBRARY_FILTERS,
   type LibraryFilters,
 } from '../library/filterFills';
-import type {FillWithSrs, SrsState} from '@/lib/local-db/drum-fills';
+import type {FillWithSrs, SrsState} from '@/lib/drum-fills/db';
 
 function makeFill(over: Partial<FillWithSrs> = {}): FillWithSrs {
   return {

@@ -5,7 +5,7 @@ import {Card, CardContent, CardHeader} from '@/components/ui/card';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
-import type {FillWithSrs} from '@/lib/local-db/drum-fills';
+import type {FillWithSrs} from '@/lib/drum-fills/db';
 import {masteryOf} from '@/lib/drum-fills/library/filterFills';
 import FillSketch from './FillSketch';
 import DifficultyBar from './DifficultyBar';

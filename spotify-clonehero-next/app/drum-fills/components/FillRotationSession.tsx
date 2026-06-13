@@ -3,7 +3,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
-import type {FillWithSrs} from '@/lib/local-db/drum-fills';
+import type {FillWithSrs} from '@/lib/drum-fills/db';
 import type {ScoredAttempt} from '@/lib/drum-fills/practice/attempt';
 import {
   nextRotationIndex,

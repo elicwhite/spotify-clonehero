@@ -5,18 +5,16 @@ const Database = require('better-sqlite3') as new (path: string) => {
   pragma(source: string): unknown;
 };
 
-// The drum-fills helpers import getLocalDb from ../client, which pulls in
+// The drum-fills helpers import getDrumFillsDb from ../client, which pulls in
 // sqlocal (browser-only). Every query in these tests passes an explicit db, so
 // the real client is never invoked — mock it to avoid loading sqlocal in jest.
 jest.mock('../client', () => ({
-  getLocalDb: jest.fn(async () => {
-    throw new Error('getLocalDb should not be called in tests');
+  getDrumFillsDb: jest.fn(async () => {
+    throw new Error('getDrumFillsDb should not be called in tests');
   }),
 }));
 
-import {migration_010_drum_fills} from '../migrations/010_drum_fills';
-import {migration_011_groove_fingerprint} from '../migrations/011_groove_fingerprint';
-import {migration_012_fill_dedupe_difficulty} from '../migrations/012_fill_dedupe_difficulty';
+import {InitialMigration} from '../migrations/001_initial';
 import type {DB} from '../types';
 import {
   type FillInput,
@@ -42,7 +40,7 @@ import {
   setLadderProgress,
   startScanRun,
   upsertSrs,
-} from '../drum-fills';
+} from '../';
 
 function makeDb(): Kysely<DB> {
   const sqlite = new Database(':memory:');
@@ -85,9 +83,7 @@ describe('drum-fills queries', () => {
 
   beforeEach(async () => {
     db = makeDb();
-    await migration_010_drum_fills.up(db as unknown as Kysely<any>);
-    await migration_011_groove_fingerprint.up(db as unknown as Kysely<any>);
-    await migration_012_fill_dedupe_difficulty.up(db as unknown as Kysely<any>);
+    await InitialMigration.up(db as unknown as Kysely<any>);
   });
 
   afterEach(async () => {

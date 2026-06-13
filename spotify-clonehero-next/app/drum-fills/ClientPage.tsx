@@ -4,7 +4,7 @@ import {useCallback, useEffect, useState, useSyncExternalStore} from 'react';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
-import {getFillCount, type GrooveCluster} from '@/lib/local-db/drum-fills';
+import {getFillCount, type GrooveCluster} from '@/lib/drum-fills/db';
 import {MidiProvider} from './contexts/MidiContext';
 import {useLibraryScan} from './hooks/useLibraryScan';
 import HomeView from './components/HomeView';

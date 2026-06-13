@@ -4,7 +4,7 @@ import {Input} from '@/components/ui/input';
 import {Button} from '@/components/ui/button';
 import {Slider} from '@/components/ui/slider';
 import {cn} from '@/lib/utils';
-import type {Subdivision} from '@/lib/local-db/drum-fills';
+import type {Subdivision} from '@/lib/drum-fills/db';
 import {
   type LibraryFilters,
   type MasteryFilter,

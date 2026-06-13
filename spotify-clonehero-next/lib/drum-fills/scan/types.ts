@@ -4,7 +4,7 @@
  * worker boundary via postMessage.
  */
 
-import type {Subdivision} from '@/lib/local-db/drum-fills';
+import type {Subdivision} from '@/lib/drum-fills/db';
 import type {FillFeatures} from '@/lib/drum-fills/detection/types';
 
 /** Per-song metadata captured during the scan, attached to each detected fill. */

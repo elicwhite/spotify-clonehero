@@ -33,9 +33,9 @@ import {
   recordAttempt,
   upsertSrs,
   type FillWithSrs,
-} from '@/lib/local-db/drum-fills';
+} from '@/lib/drum-fills/db';
 import type {ScoredAttempt} from '@/lib/drum-fills/practice/attempt';
-import type {FillMode} from '@/lib/local-db/drum-fills';
+import type {FillMode} from '@/lib/drum-fills/db';
 import {useFillChart} from '../hooks/useFillChart';
 import {useLiveScoring} from '../hooks/useLiveScoring';
 import {useMidi} from '../contexts/MidiContext';

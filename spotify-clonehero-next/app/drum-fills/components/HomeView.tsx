@@ -13,7 +13,7 @@ import {
   type ActiveLadder,
   type GrooveCluster,
   type ProgressSummary,
-} from '@/lib/local-db/drum-fills';
+} from '@/lib/drum-fills/db';
 import type {ScanProgress} from '@/lib/drum-fills/scan/types';
 import GrooveSketch from './GrooveSketch';
 

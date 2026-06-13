@@ -10,7 +10,7 @@ import {
   setLadderProgress,
   type GrooveCluster,
   type LadderRung,
-} from '@/lib/local-db/drum-fills';
+} from '@/lib/drum-fills/db';
 import type {ScoredAttempt} from '@/lib/drum-fills/practice/attempt';
 import {
   advanceLadder,

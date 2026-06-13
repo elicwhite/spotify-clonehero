@@ -9,7 +9,7 @@ import {
   getGrooveClusters,
   hasFillsNeedingGrooveRescan,
   type GrooveCluster,
-} from '@/lib/local-db/drum-fills';
+} from '@/lib/drum-fills/db';
 import GrooveSketch from './GrooveSketch';
 
 const SUBDIVISION_LABEL: Record<string, string> = {

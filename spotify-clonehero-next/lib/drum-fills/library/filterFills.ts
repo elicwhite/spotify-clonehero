@@ -11,7 +11,7 @@ import type {
   FillWithSrs,
   Subdivision,
   SrsState,
-} from '@/lib/local-db/drum-fills';
+} from '@/lib/drum-fills/db';
 
 export type MasteryFilter = SrsState | 'unpracticed';
 

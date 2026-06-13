@@ -4,7 +4,7 @@ import {useCallback, useEffect, useState} from 'react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
-import {getTodayQueue, type FillWithSrs} from '@/lib/local-db/drum-fills';
+import {getTodayQueue, type FillWithSrs} from '@/lib/drum-fills/db';
 import PracticeView from './PracticeView';
 
 /**

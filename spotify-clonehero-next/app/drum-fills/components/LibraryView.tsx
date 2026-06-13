@@ -11,7 +11,7 @@ import {
   queryFills,
   type FillWithSrs,
   type GroupedFill,
-} from '@/lib/local-db/drum-fills';
+} from '@/lib/drum-fills/db';
 import {useLibraryScan} from '../hooks/useLibraryScan';
 import {useLibraryFilters, useLibraryView} from '../hooks/useLibraryFilters';
 import {

@@ -10,7 +10,7 @@ const startScanRun = jest.fn().mockResolvedValue(42);
 const finishScanRun = jest.fn().mockResolvedValue(undefined);
 const getCachedSongsDirectoryHandle = jest.fn();
 
-jest.mock('../../local-db/drum-fills', () => ({
+jest.mock('../db', () => ({
   replaceFillsForSong: (...args: unknown[]) => replaceFillsForSong(...args),
   startScanRun: (...args: unknown[]) => startScanRun(...args),
   finishScanRun: (...args: unknown[]) => finishScanRun(...args),

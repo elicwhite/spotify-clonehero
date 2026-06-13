@@ -1,6 +1,6 @@
 import {Kysely, Selectable} from 'kysely';
-import {getLocalDb} from '../client';
-import type {DB, ScanRuns} from '../types';
+import {getDrumFillsDb} from './client';
+import type {DB, ScanRuns} from './types';
 import {
   buildGrooveClusters,
   type GrooveCluster,
@@ -185,7 +185,7 @@ export async function replaceFillsForSong(
   fills: FillInput[],
   db?: Kysely<DB>,
 ): Promise<void> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const createdAt = Date.now();
 
   await database.transaction().execute(async trx => {
@@ -230,7 +230,7 @@ export async function queryFills(
   filters: FillFilters = {},
   db?: Kysely<DB>,
 ): Promise<FillWithSrs[]> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
 
   let query = database
     .selectFrom('fills')
@@ -306,7 +306,7 @@ export async function getFillById(
   id: string,
   db?: Kysely<DB>,
 ): Promise<FillWithSrs | null> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const rows = await queryFillsRaw(database, eb =>
     eb.where('fills.id', '=', id),
   );
@@ -323,7 +323,7 @@ export async function getFillsByIds(
   db?: Kysely<DB>,
 ): Promise<FillWithSrs[]> {
   if (ids.length === 0) return [];
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const rows = await queryFillsRaw(database, qb =>
     qb.where('fills.id', 'in', ids),
   );
@@ -342,7 +342,7 @@ export async function getFillSiblings(
   db?: Kysely<DB>,
 ): Promise<FillWithSrs[]> {
   if (!fillSimilarityKey) return [];
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const rows = await queryFillsRaw(database, qb =>
     qb.where('fills.fill_similarity_key', '=', fillSimilarityKey),
   );
@@ -402,7 +402,7 @@ async function queryFillsRaw(
 export async function getAttemptStats(
   db?: Kysely<DB>,
 ): Promise<Map<string, {count: number; lastTs: number}>> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const rows = await database
     .selectFrom('fill_attempts')
     .select(eb => [
@@ -425,7 +425,7 @@ export async function recordAttempt(
   attempt: AttemptInput,
   db?: Kysely<DB>,
 ): Promise<number> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const result = await database
     .insertInto('fill_attempts')
     .values({
@@ -443,7 +443,7 @@ export async function recordAttempt(
 
 /** Insert or replace the SRS row for a fill. */
 export async function upsertSrs(srs: SrsInput, db?: Kysely<DB>): Promise<void> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const updatedAt = srs.updatedAt ?? Date.now();
   await database
     .insertInto('fill_srs')
@@ -478,7 +478,7 @@ export async function getDueFills(
   limit?: number,
   db?: Kysely<DB>,
 ): Promise<FillWithSrs[]> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const rows = await queryFillsRaw(database, qb => {
     let q = qb
       .where('fill_srs.due_at', '<=', now)
@@ -498,7 +498,7 @@ export async function getTodayQueue(
   limit = 20,
   db?: Kysely<DB>,
 ): Promise<FillWithSrs[]> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
 
   const due = await getDueFills(now, limit, database);
   if (due.length >= limit) return due.slice(0, limit);
@@ -521,7 +521,7 @@ export async function getTodayQueue(
 export async function hasFillsNeedingGrooveRescan(
   db?: Kysely<DB>,
 ): Promise<boolean> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const row = await database
     .selectFrom('fills')
     .select(eb => eb.fn.countAll<number>().as('n'))
@@ -537,7 +537,7 @@ export async function hasFillsNeedingGrooveRescan(
  * library + ladder. Returns false when there are no fills at all.
  */
 export async function hasFillsNeedingRescan(db?: Kysely<DB>): Promise<boolean> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const row = await database
     .selectFrom('fills')
     .select(eb => eb.fn.countAll<number>().as('n'))
@@ -603,7 +603,7 @@ export async function getGroupedLibrary(
   filters: FillFilters = {},
   db?: Kysely<DB>,
 ): Promise<GroupedFill[]> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   // queryFills applies taxonomy/state filters and the SRS join for us.
   const fills = await queryFills({...filters, limit: undefined}, database);
 
@@ -700,7 +700,7 @@ export async function getGrooveLadder(
   grooveSimilarityKey: string,
   db?: Kysely<DB>,
 ): Promise<LadderRung[]> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const rows = await queryFillsRaw(database, qb =>
     qb.where('fills.groove_similarity_key', '=', grooveSimilarityKey),
   );
@@ -774,7 +774,7 @@ export async function getLadderProgress(
   grooveSimilarityKey: string,
   db?: Kysely<DB>,
 ): Promise<LadderProgress | null> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const row = await database
     .selectFrom('groove_ladder_progress')
     .selectAll()
@@ -797,7 +797,7 @@ export async function setLadderProgress(
   },
   db?: Kysely<DB>,
 ): Promise<void> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const updatedAt = progress.updatedAt ?? Date.now();
   await database
     .insertInto('groove_ladder_progress')
@@ -827,7 +827,7 @@ export async function setLadderProgress(
 export async function getGrooveClusters(
   db?: Kysely<DB>,
 ): Promise<GrooveCluster[]> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const rows = await database
     .selectFrom('fills')
     .select([
@@ -867,7 +867,7 @@ export async function startScanRun(
   startedAt: number = Date.now(),
   db?: Kysely<DB>,
 ): Promise<number> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const result = await database
     .insertInto('scan_runs')
     .values({started_at: startedAt})
@@ -881,7 +881,7 @@ export async function finishScanRun(
   stats: {songsScanned: number; fillsFound: number; finishedAt?: number},
   db?: Kysely<DB>,
 ): Promise<void> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   await database
     .updateTable('scan_runs')
     .set({
@@ -896,7 +896,7 @@ export async function finishScanRun(
 export async function getLatestScanRun(
   db?: Kysely<DB>,
 ): Promise<ScanRun | null> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const row = await database
     .selectFrom('scan_runs')
     .selectAll()
@@ -910,7 +910,7 @@ export async function getLatestScanRun(
 
 /** Total fill rows in the DB — drives the first-run / has-data home gate. */
 export async function getFillCount(db?: Kysely<DB>): Promise<number> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const row = await database
     .selectFrom('fills')
     .select(eb => eb.fn.countAll<number>().as('n'))
@@ -944,7 +944,7 @@ export async function getProgressSummary(
   now: number = Date.now(),
   db?: Kysely<DB>,
 ): Promise<ProgressSummary> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
 
   const [clusters, ladderRows, dueRow, masteredRows] = await Promise.all([
     getGrooveClusters(database),
@@ -1021,7 +1021,7 @@ export async function getActiveLadders(
   limit = 6,
   db?: Kysely<DB>,
 ): Promise<ActiveLadder[]> {
-  const database = db ?? (await getLocalDb());
+  const database = db ?? (await getDrumFillsDb());
   const [progressRows, clusters] = await Promise.all([
     database
       .selectFrom('groove_ladder_progress')

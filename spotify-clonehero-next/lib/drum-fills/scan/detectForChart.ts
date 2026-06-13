@@ -24,7 +24,7 @@ import type {
   ClassifiedFill,
   FillSubdivision,
 } from '@/lib/drum-fills/detection/types';
-import type {Subdivision} from '@/lib/local-db/drum-fills';
+import type {Subdivision} from '@/lib/drum-fills/db';
 import type {ScannedFill, ScannedSongMeta} from './types';
 
 /** Map detection-engine subdivisions onto the DB/taxonomy vocabulary. */

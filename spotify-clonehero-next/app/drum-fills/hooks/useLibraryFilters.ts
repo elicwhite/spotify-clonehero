@@ -11,7 +11,7 @@ import {
   useQueryState,
   useQueryStates,
 } from 'nuqs';
-import type {Subdivision} from '@/lib/local-db/drum-fills';
+import type {Subdivision} from '@/lib/drum-fills/db';
 import {
   DEFAULT_LIBRARY_FILTERS,
   FULL_TEMPO_RANGE,

@@ -3,7 +3,7 @@
 import {useEffect, useState} from 'react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
-import {queryFills, type FillWithSrs} from '@/lib/local-db/drum-fills';
+import {queryFills, type FillWithSrs} from '@/lib/drum-fills/db';
 import FillRotationSession from './FillRotationSession';
 
 /**

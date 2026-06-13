@@ -18,7 +18,7 @@ import {
   replaceFillsForSong,
   startScanRun,
   type FillInput,
-} from '@/lib/local-db/drum-fills';
+} from '@/lib/drum-fills/db';
 
 import type {
   ScanProgress,

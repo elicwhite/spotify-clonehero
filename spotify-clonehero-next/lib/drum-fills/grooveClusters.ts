@@ -4,7 +4,7 @@
  * Groups detected fills by their `grooveSimilarityKey` so that the same groove
  * (e.g. a straight-8ths backbeat) clusters across many songs, then summarizes
  * each cluster: how many fills, which songs/tempos/taxonomy it spans. The DB
- * query layer (`lib/local-db/drum-fills`) feeds rows into this; keeping the
+ * query layer (`lib/drum-fills/db`) feeds rows into this; keeping the
  * aggregation here makes it unit-testable without a database.
  */
 

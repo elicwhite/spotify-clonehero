@@ -14,7 +14,7 @@
  * server and client.
  */
 
-import type {Subdivision} from '@/lib/local-db/drum-fills';
+import type {Subdivision} from '@/lib/drum-fills/db';
 
 /** A single lane row of the sketch grid. */
 export interface SketchLane {

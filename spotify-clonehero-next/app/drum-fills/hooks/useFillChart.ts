@@ -3,7 +3,7 @@
 import {useEffect, useState} from 'react';
 import {parseChartAndIni} from '@eliwhite/scan-chart';
 import {getCachedSongsDirectoryHandle} from '@/lib/local-songs-folder';
-import {getFillById, type FillWithSrs} from '@/lib/local-db/drum-fills';
+import {getFillById, type FillWithSrs} from '@/lib/drum-fills/db';
 import {locateAndLoadSong} from '@/lib/drum-fills/practice/songLocator';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import type {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';

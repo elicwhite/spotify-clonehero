@@ -11,6 +11,7 @@ import {migration_009_renormalize_strip_articles} from './009_renormalize_strip_
 import {migration_010_drum_fills} from './010_drum_fills';
 import {migration_011_groove_fingerprint} from './011_groove_fingerprint';
 import {migration_012_fill_dedupe_difficulty} from './012_fill_dedupe_difficulty';
+import {migration_013_drop_drum_fills} from './013_drop_drum_fills';
 
 export const migrations: Record<string, Migration> = {
   '001_initial': InitialMigration,
@@ -25,4 +26,5 @@ export const migrations: Record<string, Migration> = {
   '010_drum_fills': migration_010_drum_fills,
   '011_groove_fingerprint': migration_011_groove_fingerprint,
   '012_fill_dedupe_difficulty': migration_012_fill_dedupe_difficulty,
+  '013_drop_drum_fills': migration_013_drop_drum_fills,
 };
