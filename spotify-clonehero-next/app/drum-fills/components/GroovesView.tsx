@@ -7,6 +7,7 @@ import {Button} from '@/components/ui/button';
 import {Badge} from '@/components/ui/badge';
 import {Card, CardContent} from '@/components/ui/card';
 import {Slider} from '@/components/ui/slider';
+import {cn} from '@/lib/utils';
 import {
   Select,
   SelectContent,
@@ -27,6 +28,11 @@ import {
 } from '@/lib/drum-fills/grooveClusters';
 import type {DrumVoice} from '@/lib/drum-fills/detection/types';
 import GrooveStave from './GrooveStave';
+import VirtualCardGrid from './VirtualCardGrid';
+
+/** Groove cards are taller than fill cards (full stave); tune the row height.
+ * Card ≈ 364px rendered + the 16px grid gap. */
+const GROOVE_ROW_HEIGHT = 384;
 
 const SUBDIVISION_LABEL: Record<string, string> = {
   '8ths': '8ths',
@@ -140,7 +146,7 @@ export default function GroovesView({
   ).length;
 
   return (
-    <div className="flex flex-1 flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       {needsRescan && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
           <p className="text-sm text-amber-900">
@@ -254,15 +260,20 @@ export default function GroovesView({
               No grooves match these filters.
             </p>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {visible.map(cluster => (
+            <VirtualCardGrid
+              items={visible}
+              getKey={c => c.similarityKey}
+              rowHeight={GROOVE_ROW_HEIGHT}
+              onActivate={index => onStartSession(visible[index])}
+              renderCard={(cluster, _index, {focused, onFocus}) => (
                 <GrooveCard
-                  key={cluster.similarityKey}
                   cluster={cluster}
+                  focused={focused}
+                  onFocus={onFocus}
                   onStart={() => onStartSession(cluster)}
                 />
-              ))}
-            </div>
+              )}
+            />
           )}
         </>
       )}
@@ -273,9 +284,13 @@ export default function GroovesView({
 function GrooveCard({
   cluster,
   onStart,
+  focused = false,
+  onFocus,
 }: {
   cluster: GrooveCluster;
   onStart: () => void;
+  focused?: boolean;
+  onFocus?: () => void;
 }) {
   const tempoLabel =
     Math.round(cluster.tempoMin) === Math.round(cluster.tempoMax)
@@ -283,7 +298,10 @@ function GrooveCard({
       : `${Math.round(cluster.tempoMin)}–${Math.round(cluster.tempoMax)} BPM`;
 
   return (
-    <Card className="flex flex-col">
+    <Card
+      role="gridcell"
+      onFocus={onFocus}
+      className={cn('flex flex-col', focused && 'ring-2 ring-ring')}>
       <CardContent className="flex flex-1 flex-col gap-3 pt-4">
         <GrooveStave fingerprint={cluster.representativeFingerprint} />
 

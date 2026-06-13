@@ -26,7 +26,10 @@ const VOICE_FILL: Record<StaveVoice, string> = {
   crash: '#22c55e',
 };
 
-const STAVE_HEIGHT = 96;
+// The staff itself is ~40px; leave headroom above for crash ledger noteheads
+// and ample room below for the (drum) down-stems and beams so nothing clips.
+const STAVE_TOP = 28;
+const STAVE_HEIGHT = 150;
 
 function draw(el: HTMLDivElement, data: GrooveStaveData, width: number) {
   el.innerHTML = '';
@@ -36,7 +39,7 @@ function draw(el: HTMLDivElement, data: GrooveStaveData, width: number) {
   renderer.resize(width, STAVE_HEIGHT);
   const ctx = renderer.getContext();
 
-  const stave = new Stave(0, 18, width - 2, {});
+  const stave = new Stave(0, STAVE_TOP, width - 2, {});
   stave.setContext(ctx).draw();
 
   const duration = data.cellsPerBar === 8 ? '8' : '16';

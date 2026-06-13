@@ -3,8 +3,8 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useGridWindow, useResponsiveColumns} from '../hooks/useGridWindow';
 
-/** Estimated rendered height of one card row, including the grid gap (px). */
-const ROW_HEIGHT = 280;
+/** Default rendered height of one card row, including the grid gap (px). */
+const DEFAULT_ROW_HEIGHT = 280;
 
 /**
  * Generic windowed (virtualized) card grid with keyboard navigation. Only the
@@ -20,6 +20,7 @@ export default function VirtualCardGrid<T>({
   getKey,
   renderCard,
   onActivate,
+  rowHeight = DEFAULT_ROW_HEIGHT,
 }: {
   items: T[];
   getKey: (item: T) => string;
@@ -31,6 +32,8 @@ export default function VirtualCardGrid<T>({
   ) => React.ReactNode;
   /** Activate the item at `index` (Enter on a focused card). */
   onActivate: (index: number) => void;
+  /** Row height incl. grid gap; tune per card body. Defaults to 280. */
+  rowHeight?: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const columns = useResponsiveColumns(scrollRef);
@@ -39,7 +42,7 @@ export default function VirtualCardGrid<T>({
   const window = useGridWindow({
     scrollRef,
     itemCount: items.length,
-    rowHeight: ROW_HEIGHT,
+    rowHeight,
     columns,
   });
 
@@ -53,12 +56,12 @@ export default function VirtualCardGrid<T>({
     const el = scrollRef.current;
     if (!el) return;
     const row = Math.floor(focusIndex / columns);
-    const top = row * ROW_HEIGHT;
-    const bottom = top + ROW_HEIGHT;
+    const top = row * rowHeight;
+    const bottom = top + rowHeight;
     if (top < el.scrollTop) el.scrollTo({top});
     else if (bottom > el.scrollTop + el.clientHeight)
       el.scrollTo({top: bottom - el.clientHeight});
-  }, [focusIndex, columns]);
+  }, [focusIndex, columns, rowHeight]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

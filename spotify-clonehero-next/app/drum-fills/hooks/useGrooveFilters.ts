@@ -1,62 +1,56 @@
 'use client';
 
 import {
-  parseAsArrayOf,
-  parseAsInteger,
-  parseAsStringLiteral,
-  useQueryStates,
-} from 'nuqs';
-import {
   MIN_DRILLABLE_FILLS,
   type GrooveProgress,
   type GrooveSort,
 } from '@/lib/drum-fills/grooveClusters';
 import type {DrumVoice} from '@/lib/drum-fills/detection/types';
+import {useLocalStorageState} from './useLocalStorageState';
 
-const SORTS: GrooveSort[] = [
-  'difficulty-asc',
-  'difficulty-desc',
-  'fills-desc',
-  'tempo-asc',
-];
-const PROGRESS: GrooveProgress[] = ['not-started', 'in-progress', 'mastered'];
-const VOICES: DrumVoice[] = ['kick', 'snare', 'hat', 'tom', 'crash'];
+interface GrooveFilterState {
+  sort: GrooveSort;
+  progress: GrooveProgress[];
+  voices: DrumVoice[];
+  minFills: number;
+}
+
+const DEFAULT_GROOVE_FILTERS: GrooveFilterState = {
+  sort: 'difficulty-asc',
+  progress: [],
+  voices: [],
+  minFills: MIN_DRILLABLE_FILLS,
+};
 
 /**
- * Grooves-page filter state, persisted in the URL search params (survives
- * reload, like the Library filters). Param names are prefixed `g` so they don't
- * collide with the Library's params in the shared SPA URL. nuqs only serializes
- * non-default values, so a default view keeps a clean URL.
+ * Grooves-page filter state, persisted in localStorage (survives reload).
  */
 export function useGrooveFilters() {
-  const [raw, setRaw] = useQueryStates(
-    {
-      gsort: parseAsStringLiteral(SORTS).withDefault('difficulty-asc'),
-      gprog: parseAsArrayOf(parseAsStringLiteral(PROGRESS)).withDefault([]),
-      gvoice: parseAsArrayOf(parseAsStringLiteral(VOICES)).withDefault([]),
-      gmin: parseAsInteger.withDefault(MIN_DRILLABLE_FILLS),
-    },
-    {history: 'replace', clearOnDefault: true},
+  const [state, setState] = useLocalStorageState<GrooveFilterState>(
+    'drum-fills:groove-filters',
+    DEFAULT_GROOVE_FILTERS,
   );
 
   return {
-    sort: raw.gsort,
-    progress: raw.gprog,
-    voices: raw.gvoice,
-    minFills: raw.gmin,
-    setSort: (sort: GrooveSort) => void setRaw({gsort: sort}),
-    setMinFills: (minFills: number) => void setRaw({gmin: minFills}),
+    sort: state.sort,
+    progress: state.progress,
+    voices: state.voices,
+    minFills: state.minFills,
+    setSort: (sort: GrooveSort) => setState(prev => ({...prev, sort})),
+    setMinFills: (minFills: number) => setState(prev => ({...prev, minFills})),
     toggleProgress: (p: GrooveProgress) =>
-      void setRaw(prev => ({
-        gprog: prev.gprog.includes(p)
-          ? prev.gprog.filter(x => x !== p)
-          : [...prev.gprog, p],
+      setState(prev => ({
+        ...prev,
+        progress: prev.progress.includes(p)
+          ? prev.progress.filter(x => x !== p)
+          : [...prev.progress, p],
       })),
     toggleVoice: (v: DrumVoice) =>
-      void setRaw(prev => ({
-        gvoice: prev.gvoice.includes(v)
-          ? prev.gvoice.filter(x => x !== v)
-          : [...prev.gvoice, v],
+      setState(prev => ({
+        ...prev,
+        voices: prev.voices.includes(v)
+          ? prev.voices.filter(x => x !== v)
+          : [...prev.voices, v],
       })),
   };
 }
