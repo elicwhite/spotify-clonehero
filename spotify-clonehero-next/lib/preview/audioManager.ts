@@ -86,6 +86,11 @@ export class AudioManager {
     // Initialize SoundTouch worklet first
     await this.#initializeSoundTouchWorklet();
 
+    // If the manager was destroyed while the worklet loaded (StrictMode
+    // double-mount, or the user left the view), stop here — building tracks
+    // would connect nodes on a closed context.
+    if (this.#destroyed) return;
+
     const groupedFiles: GroupedFile = audioFiles.reduce(
       (acc, file) => {
         const isDrums = file.fileName.includes('drums');
@@ -130,6 +135,10 @@ export class AudioManager {
           Boolean,
         ) as AudioBuffer[];
 
+        // Decoding is async; bail if we were destroyed meanwhile so we don't
+        // construct/connect nodes on a closed context.
+        if (this.#destroyed) return;
+
         this.#tracks[trackName] = new AudioTrack(
           this.#context,
           filteredAudioBuffers,
@@ -141,9 +150,13 @@ export class AudioManager {
   }
 
   async #initializeSoundTouchWorklet() {
+    if (this.#destroyed) return;
     try {
       // Load the SoundTouch worklet
       await this.#context.audioWorklet.addModule('/soundtouch-worklet.js');
+
+      // The load is async; the context may have closed while it ran.
+      if (this.#destroyed) return;
 
       // Create the worklet node
       this.#soundTouchWorklet = new AudioWorkletNode(
@@ -178,8 +191,11 @@ export class AudioManager {
       // Connect the worklet to destination so audio can flow through
       this.#soundTouchWorklet.connect(this.#context.destination);
     } catch (error) {
-      console.error('Failed to initialize SoundTouch worklet:', error);
       this.#soundTouchWorklet = null;
+      // An AbortError here is expected when the context was closed mid-load
+      // (teardown / StrictMode double-mount) — don't surface it as an error.
+      if (this.#destroyed) return;
+      console.error('Failed to initialize SoundTouch worklet:', error);
     }
   }
 

@@ -11,7 +11,15 @@
  */
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {AudioWaveform, Download, FolderSearch, Loader2, Music, Pause, Play} from 'lucide-react';
+import {
+  AudioWaveform,
+  Download,
+  FolderSearch,
+  Loader2,
+  Music,
+  Pause,
+  Play,
+} from 'lucide-react';
 import {toast} from 'sonner';
 
 import {
@@ -22,12 +30,21 @@ import {
   type ParsedChart,
 } from '@eliwhite/scan-chart';
 import {Button} from '@/components/ui/button';
-import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
 import {cn} from '@/lib/utils';
 import {calculateTimeRemaining} from '@/lib/ui-utils';
-import {findAudioFiles, type Files} from '@/lib/preview/chorus-chart-processing';
+import {
+  findAudioFiles,
+  type Files,
+} from '@/lib/preview/chorus-chart-processing';
 import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
@@ -36,7 +53,10 @@ import {exportAsZip, exportAsSng} from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
 import {isWebGPUAvailable} from '@/lib/drum-transcription/ml/onnx-runtime';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
-import type {LoadedFiles, SourceFormat} from '@/components/chart-picker/chart-file-readers';
+import type {
+  LoadedFiles,
+  SourceFormat,
+} from '@/components/chart-picker/chart-file-readers';
 import ProcessingView, {type ProcessingStep} from '@/components/ProcessingView';
 
 import {runTempoPipeline} from '@/lib/tempo-map/pipeline-client';
@@ -87,7 +107,8 @@ const STEP_DEFS: Array<{key: string; label: string; description?: string}> = [
   {
     key: 'download-separation-model',
     label: 'Downloading the drum-separation model',
-    description: 'About 336 MB — only happens the first time, then it’s saved in your browser.',
+    description:
+      'About 336 MB — only happens the first time, then it’s saved in your browser.',
   },
   {
     key: 'separate',
@@ -113,7 +134,10 @@ function initialSteps(): ProcessingStep[] {
 // Small helpers
 // ---------------------------------------------------------------------------
 
-function buildMetadata(name: string, songLengthMs: number): ChartResponseEncore {
+function buildMetadata(
+  name: string,
+  songLengthMs: number,
+): ChartResponseEncore {
   return {
     name,
     artist: '',
@@ -212,7 +236,9 @@ function writeAndReparse(
 
 export default function TempoClient() {
   const [webGPU, setWebGPU] = useState<boolean | null>(null);
-  const [phase, setPhase] = useState<'pick' | 'pick-chart' | 'processing' | 'results'>('pick');
+  const [phase, setPhase] = useState<
+    'pick' | 'pick-chart' | 'processing' | 'results'
+  >('pick');
   const [steps, setSteps] = useState<ProcessingStep[]>(initialSteps());
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ResultState | null>(null);
@@ -233,28 +259,25 @@ export default function TempoClient() {
     [],
   );
 
-  const startStep = useCallback(
-    (key: string) => {
-      stepTimers.current[key] = Date.now();
-      setSteps(prev =>
-        prev.map(s => {
-          if (s.key === key) return {...s, status: 'active'};
-          // Anything still active before this step finished.
-          if (s.status === 'active') {
-            return {
-              ...s,
-              status: 'done',
-              durationMs: Date.now() - (stepTimers.current[s.key] ?? Date.now()),
-              etaSeconds: undefined,
-              detail: undefined,
-            };
-          }
-          return s;
-        }),
-      );
-    },
-    [],
-  );
+  const startStep = useCallback((key: string) => {
+    stepTimers.current[key] = Date.now();
+    setSteps(prev =>
+      prev.map(s => {
+        if (s.key === key) return {...s, status: 'active'};
+        // Anything still active before this step finished.
+        if (s.status === 'active') {
+          return {
+            ...s,
+            status: 'done',
+            durationMs: Date.now() - (stepTimers.current[s.key] ?? Date.now()),
+            etaSeconds: undefined,
+            detail: undefined,
+          };
+        }
+        return s;
+      }),
+    );
+  }, []);
 
   const finishAll = useCallback(() => {
     setSteps(prev =>
@@ -263,7 +286,8 @@ export default function TempoClient() {
           ? {
               ...s,
               status: 'done',
-              durationMs: Date.now() - (stepTimers.current[s.key] ?? Date.now()),
+              durationMs:
+                Date.now() - (stepTimers.current[s.key] ?? Date.now()),
               etaSeconds: undefined,
             }
           : s,
@@ -276,11 +300,20 @@ export default function TempoClient() {
       const key = p.stage;
       if (!stepTimers.current[key]) startStep(key);
       let etaSeconds = p.etaSeconds;
-      if (etaSeconds === undefined && p.percent !== undefined && p.percent > 0) {
+      if (
+        etaSeconds === undefined &&
+        p.percent !== undefined &&
+        p.percent > 0
+      ) {
         // Derive an ETA from elapsed time and fraction complete.
         const startedAt = new Date(stepTimers.current[key]);
         etaSeconds =
-          calculateTimeRemaining(startedAt, 100, Math.round(p.percent * 100), 0) / 1000;
+          calculateTimeRemaining(
+            startedAt,
+            100,
+            Math.round(p.percent * 100),
+            0,
+          ) / 1000;
       }
       updateStep(key, {
         progress: p.percent,
@@ -293,7 +326,9 @@ export default function TempoClient() {
 
   // ---------- the pipeline ----------
   const process = useCallback(
-    async (input: {kind: 'audio'; file: File} | {kind: 'chart'; loaded: LoadedFiles}) => {
+    async (
+      input: {kind: 'audio'; file: File} | {kind: 'chart'; loaded: LoadedFiles},
+    ) => {
       setPhase('processing');
       setError(null);
       setSteps(initialSteps());
@@ -401,8 +436,8 @@ export default function TempoClient() {
             <CardTitle>Your browser can’t run this tool</CardTitle>
             <CardDescription>
               Tempo mapping runs AI models on your graphics card using WebGPU,
-              which this browser doesn’t support. Try a recent version of
-              Chrome or Edge on a computer.
+              which this browser doesn’t support. Try a recent version of Chrome
+              or Edge on a computer.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -429,7 +464,14 @@ export default function TempoClient() {
   }
 
   if (phase === 'results' && result) {
-    return <ResultsView result={result} variant={variant} setVariant={setVariant} onBack={() => setPhase('pick')} />;
+    return (
+      <ResultsView
+        result={result}
+        variant={variant}
+        setVariant={setVariant}
+        onBack={() => setPhase('pick')}
+      />
+    );
   }
 
   // pick / pick-chart
@@ -485,15 +527,18 @@ export default function TempoClient() {
                 id="tempo-chart-picker"
                 onLoaded={loaded => process({kind: 'chart', loaded})}
               />
-              <Button variant="ghost" size="sm" onClick={() => setPhase('pick')}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPhase('pick')}>
                 ← Back
               </Button>
             </div>
           )}
           <p className="text-xs text-muted-foreground">
             Everything runs on your computer — nothing is uploaded. The first
-            run downloads two AI models (about 420 MB total) that are then
-            saved in your browser.
+            run downloads two AI models (about 420 MB total) that are then saved
+            in your browser.
           </p>
         </CardContent>
       </Card>
@@ -570,7 +615,9 @@ function ResultsView({
   // ---------- audio manager (same audio for both variants) ----------
   useEffect(() => {
     let cancelled = false;
-    const manager = new AudioManager(result.audioFiles, () => setIsPlaying(false));
+    const manager = new AudioManager(result.audioFiles, () =>
+      setIsPlaying(false),
+    );
     manager.ready.then(() => {
       if (cancelled) {
         manager.destroy();
@@ -629,8 +676,9 @@ function ResultsView({
 
   const lyrics = useMemo(
     () =>
-      currentChart.vocalTracks.parts.vocals?.notePhrases.flatMap(p => p.lyrics) ??
-      [],
+      currentChart.vocalTracks.parts.vocals?.notePhrases.flatMap(
+        p => p.lyrics,
+      ) ?? [],
     [currentChart],
   );
 
@@ -669,7 +717,9 @@ function ResultsView({
       {/* Top bar */}
       <div className="flex items-center gap-3 px-4 py-2 border-b bg-card">
         <AudioWaveform className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="text-sm font-medium truncate max-w-md">{result.name}</span>
+        <span className="text-sm font-medium truncate max-w-md">
+          {result.name}
+        </span>
 
         {hasOriginal && (
           <div className="flex items-center gap-2 ml-4">
@@ -706,7 +756,11 @@ function ResultsView({
             className="rounded-full"
             disabled={!audioManager}
             onClick={handlePlay}>
-            {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+            {isPlaying ? (
+              <Pause className="h-5 w-5" />
+            ) : (
+              <Play className="h-5 w-5" />
+            )}
           </Button>
           <span className="text-xs font-mono text-muted-foreground">
             {formatTimeMs(currentTime * 1000)}
@@ -778,28 +832,28 @@ function ResultsView({
           ) : (
             <>
               {hasNotes && (
-              <div className="flex-1 min-w-0 flex p-2">
-                <SheetMusic
-                  chart={currentChart}
-                  track={currentTrack}
-                  showBarNumbers={true}
-                  enableColors={true}
-                  showLyrics={true}
-                  lyrics={lyrics}
-                  zoom={1}
-                  onSelectMeasure={time => {
-                    const am = audioManagerRef.current;
-                    if (!am) return;
-                    am.playChartTime(time);
-                    setIsPlaying(true);
-                  }}
-                  triggerRerender={`${variant}-${snapNotes}-${result.name}`}
-                  practiceModeConfig={null}
-                  onPracticeMeasureSelect={() => {}}
-                  selectionIndex={null}
-                  audioManagerRef={audioManagerRef}
-                />
-              </div>
+                <div className="flex-1 min-w-0 flex p-2">
+                  <SheetMusic
+                    chart={currentChart}
+                    track={currentTrack}
+                    showBarNumbers={true}
+                    enableColors={true}
+                    showLyrics={true}
+                    lyrics={lyrics}
+                    zoom={1}
+                    onSelectMeasure={time => {
+                      const am = audioManagerRef.current;
+                      if (!am) return;
+                      am.playChartTime(time);
+                      setIsPlaying(true);
+                    }}
+                    triggerRerender={`${variant}-${snapNotes}-${result.name}`}
+                    practiceModeConfig={null}
+                    onPracticeMeasureSelect={() => {}}
+                    selectionIndex={null}
+                    getChartTimeSec={() => audioManagerRef.current?.chartTime}
+                  />
+                </div>
               )}
               {audioManager && (
                 <div className="flex-1 min-w-0 flex p-2">

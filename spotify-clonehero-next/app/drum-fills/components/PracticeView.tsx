@@ -1004,8 +1004,9 @@ function PracticeSession({
               practiceModeConfig={sheetPracticeConfig}
               onPracticeMeasureSelect={() => {}}
               selectionIndex={null}
-              audioManagerRef={activeAmRef}
+              getChartTimeSec={() => activeAmRef.current?.chartTime}
               noteFeedback={noteFeedback}
+              measureWindowMs={{startMs: loopStartMs, endMs: loopEndMs}}
             />
           </div>
         </div>

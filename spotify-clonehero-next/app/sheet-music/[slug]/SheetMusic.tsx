@@ -1,12 +1,5 @@
 import {parseChartFile} from '@eliwhite/scan-chart';
-import {
-  RefObject,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  forwardRef,
-} from 'react';
+import {useEffect, useMemo, useRef, useState, forwardRef} from 'react';
 import convertToVexFlow from './convertToVexflow';
 import {
   RenderData,
@@ -36,8 +29,9 @@ export default function SheetMusic({
   practiceModeConfig,
   onPracticeMeasureSelect,
   selectionIndex,
-  audioManagerRef,
+  getChartTimeSec,
   noteFeedback,
+  measureWindowMs,
 }: {
   chart: ParsedChart;
   track: ParsedChart['trackData'][0];
@@ -51,7 +45,12 @@ export default function SheetMusic({
   practiceModeConfig: PracticeModeConfig | null;
   onPracticeMeasureSelect: (measureIndex: number) => void;
   selectionIndex: number | null;
-  audioManagerRef: RefObject<any>;
+  /**
+   * Returns current chart-relative playback time in seconds (or null). Passed
+   * to the Playhead as a getter instead of the AudioManager object — see
+   * Playhead for why handing React the manager object is harmful.
+   */
+  getChartTimeSec: () => number | null | undefined;
   /**
    * Drum-fills only: per-note hit/miss feedback keyed by fill-note id. When
    * provided, an overlay marks each rendered notehead with its judgment. Absent
@@ -59,12 +58,26 @@ export default function SheetMusic({
    * unchanged — no markers are collected or drawn.
    */
   noteFeedback?: Map<string, NoteFeedback> | null;
+  /**
+   * Render only the measures overlapping this chart-ms window, instead of the
+   * whole chart. Used by the drum-fills practice view so a fill from a long
+   * (e.g. full-album) chart renders just its few bars — rendering an entire
+   * 50-minute chart produces millions of notation elements and OOMs. Absent on
+   * the standalone /sheet-music page, which renders the full chart unchanged.
+   */
+  measureWindowMs?: {startMs: number; endMs: number} | null;
 }) {
   const vexflowContainerRef = useRef<HTMLDivElement>(null!);
   const [windowWidth, setWindowWidth] = useState<number>(window.innerWidth);
   const measures = useMemo(() => {
-    return convertToVexFlow(chart, track);
-  }, [chart, track]);
+    const all = convertToVexFlow(chart, track);
+    if (!measureWindowMs) return all;
+    return all.filter(
+      m =>
+        m.endMs >= measureWindowMs.startMs &&
+        m.startMs <= measureWindowMs.endMs,
+    );
+  }, [chart, track, measureWindowMs]);
 
   const [renderData, setRenderData] = useState<RenderData[]>([]);
 
@@ -196,7 +209,7 @@ export default function SheetMusic({
         {consolidatedTimeMap.length > 0 && (
           <Playhead
             timePositionMap={consolidatedTimeMap}
-            audioManagerRef={audioManagerRef}
+            getChartTimeSec={getChartTimeSec}
             zoom={zoom}
           />
         )}

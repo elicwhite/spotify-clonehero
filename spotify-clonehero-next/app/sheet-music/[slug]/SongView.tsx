@@ -1335,7 +1335,7 @@ export default function Renderer({
               practiceModeConfig={practiceMode}
               onPracticeMeasureSelect={handlePracticeMeasureSelect}
               selectionIndex={selectionIndex}
-              audioManagerRef={audioManagerRef}
+              getChartTimeSec={() => audioManagerRef.current?.chartTime}
             />
           </div>
           {viewCloneHero && (

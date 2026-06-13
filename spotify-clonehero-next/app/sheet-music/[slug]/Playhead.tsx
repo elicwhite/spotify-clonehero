@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, memo} from 'react';
+import {useEffect, useRef, memo} from 'react';
 import {findPositionForTime} from './renderVexflow';
 
 interface PlayheadProps {
@@ -8,13 +8,20 @@ interface PlayheadProps {
     y: number;
     flag: 'measure-start' | 'measure-end' | 'note';
   }>;
-  audioManagerRef: React.RefObject<any>;
+  /**
+   * Returns the current chart-relative playback time in seconds (or null when
+   * unavailable). A lightweight getter rather than the AudioManager itself —
+   * passing the manager object as a prop makes React's dev "Performance Track"
+   * try to structured-clone its (huge, cyclic) Web Audio graph, which throws a
+   * DataCloneError and can freeze the tab.
+   */
+  getChartTimeSec: () => number | null | undefined;
   zoom: number;
 }
 
 export const Playhead = memo(function ({
   timePositionMap,
-  audioManagerRef,
+  getChartTimeSec,
   zoom,
 }: PlayheadProps) {
   const playheadRef = useRef<HTMLDivElement>(null);
@@ -31,9 +38,9 @@ export const Playhead = memo(function ({
   useEffect(() => {
     // Set up animation frame loop for smooth movement
     const animate = () => {
-      if (audioManagerRef.current != null) {
-        // Get current time directly from audio manager (chart-relative)
-        const currentTimeMs = audioManagerRef.current.chartTime * 1000;
+      const chartTimeSec = getChartTimeSec();
+      if (chartTimeSec != null) {
+        const currentTimeMs = chartTimeSec * 1000;
         // Find position for current time
         const newPosition = findPositionForTime(timePositionMap, currentTimeMs);
         if (newPosition && playheadRef.current) {
@@ -59,7 +66,7 @@ export const Playhead = memo(function ({
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [timePositionMap, audioManagerRef]);
+  }, [timePositionMap, getChartTimeSec]);
 
   return (
     <div
