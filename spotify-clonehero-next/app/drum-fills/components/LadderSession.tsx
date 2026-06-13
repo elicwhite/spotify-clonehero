@@ -19,7 +19,6 @@ import {
   type RungProgress,
 } from '@/lib/drum-fills/practice/fillLadder';
 import DifficultyBar from './DifficultyBar';
-import GrooveStave from './GrooveStave';
 import PracticeView from './PracticeView';
 
 /**
@@ -142,20 +141,18 @@ export default function LadderSession({
 
   const current = rungs[progress.index];
 
+  // Ladder position shown in the practice bar's session slot ([T]); the rung
+  // list below keeps full functionality. The groove identity itself lives in
+  // the shared header `[H]` (published by GrooveSession).
+  const rungCtx = (
+    <span className="rounded border bg-background px-2 py-1 text-xs font-medium">
+      Rung {progress.index + 1}/{rungs.length}
+    </span>
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
       <div className="flex shrink-0 flex-col gap-2 lg:w-64">
-        <div className="flex items-center gap-3 rounded-lg border bg-card p-2">
-          <div className="w-28 shrink-0">
-            <GrooveStave fingerprint={cluster.representativeFingerprint} />
-          </div>
-          <div className="text-sm">
-            <p className="font-semibold">Ladder</p>
-            <p className="text-xs text-muted-foreground">
-              Rung {progress.index + 1} of {rungs.length}
-            </p>
-          </div>
-        </div>
         <ol className="min-h-0 flex-1 space-y-1 overflow-y-auto rounded-lg border bg-card p-2">
           {rungs.map((rung, i) => {
             const isCurrent = i === progress.index;
@@ -194,6 +191,7 @@ export default function LadderSession({
           fillId={current.representative.id}
           onExit={onExit}
           onAttemptScored={onAttemptScored}
+          sessionCtx={rungCtx}
         />
       </div>
     </div>

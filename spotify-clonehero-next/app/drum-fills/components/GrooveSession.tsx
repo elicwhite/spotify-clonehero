@@ -9,6 +9,7 @@ import {
   type FillWithSrs,
   type GrooveCluster,
 } from '@/lib/drum-fills/db';
+import {useChromeSlot} from '../contexts/DrumFillsChromeContext';
 import GrooveStave from './GrooveStave';
 import FillRotationSession from './FillRotationSession';
 import LadderSession from './LadderSession';
@@ -25,17 +26,24 @@ type SessionMode = 'rotate' | 'ladder';
  * Both modes default to the song-context loop (each fill loads its own song
  * audio); PracticeView falls back to the isolated synth loop per fill when its
  * song has no audio.
+ *
+ * Groove identity + the Rotate/Ladder toggle live in the shared header `[H]`
+ * context slot (driving `?mode=`), so the old 170px GrooveHeader card is gone
+ * and the highway/notation reclaim the space.
  */
 export default function GrooveSession({
   cluster,
   initialMode = 'rotate',
+  onModeChange,
   onExit,
 }: {
   cluster: GrooveCluster;
   initialMode?: SessionMode;
+  /** Switch session mode; deep-link-driven (router.replace('?mode=…')). */
+  onModeChange: (mode: SessionMode) => void;
   onExit: () => void;
 }) {
-  const [mode, setMode] = useState<SessionMode>(initialMode);
+  const mode = initialMode;
   const [pool, setPool] = useState<FillWithSrs[] | null>(null);
 
   useEffect(() => {
@@ -70,6 +78,31 @@ export default function GrooveSession({
     [pool],
   );
 
+  // Publish groove identity + the Rotate/Ladder toggle into the shared header
+  // context slot (single canonical copy of the groove metadata).
+  const headerSlot = useMemo(
+    () => (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="hidden w-28 shrink-0 sm:block">
+          <GrooveStave fingerprint={cluster.representativeFingerprint} />
+        </div>
+        <div className="text-xs">
+          <span className="font-semibold text-foreground">Groove</span> ·{' '}
+          {cluster.fillCount} fill{cluster.fillCount === 1 ? '' : 's'} ·{' '}
+          {cluster.distinctSongs} song{cluster.distinctSongs === 1 ? '' : 's'} ·{' '}
+          {Math.round(cluster.tempoMin)}–{Math.round(cluster.tempoMax)} BPM
+        </div>
+        <ModeToggle
+          mode={mode}
+          ladderReady={ladderReady}
+          onModeChange={onModeChange}
+        />
+      </div>
+    ),
+    [cluster, mode, ladderReady, onModeChange],
+  );
+  useChromeSlot(headerSlot);
+
   if (pool === null) {
     return (
       <div className="flex flex-1 items-center justify-center text-muted-foreground">
@@ -89,13 +122,34 @@ export default function GrooveSession({
     );
   }
 
-  const modeSwitch = (
+  if (mode === 'ladder' && ladderReady) {
+    return <LadderSession cluster={cluster} onExit={onExit} />;
+  }
+
+  return (
+    /* Defaults to Song loop (each fill loads its own song audio); PracticeView
+       falls back to Isolated synth per fill when its song has no audio. */
+    <FillRotationSession pool={orderedPool ?? pool} onExit={onExit} />
+  );
+}
+
+/** Rotate ⇄ Ladder segmented toggle; deep-link-driven via `onModeChange`. */
+function ModeToggle({
+  mode,
+  ladderReady,
+  onModeChange,
+}: {
+  mode: SessionMode;
+  ladderReady: boolean;
+  onModeChange: (mode: SessionMode) => void;
+}) {
+  return (
     <div className="flex items-center gap-2">
       <div className="flex overflow-hidden rounded-md border text-xs">
         {(['rotate', 'ladder'] as SessionMode[]).map(m => (
           <button
             key={m}
-            onClick={() => setMode(m)}
+            onClick={() => onModeChange(m)}
             disabled={m === 'ladder' && !ladderReady}
             title={
               m === 'ladder' && !ladderReady
@@ -113,52 +167,8 @@ export default function GrooveSession({
         ))}
       </div>
       {!ladderReady && (
-        <span className="text-xs text-amber-600">Rescan to enable ladder</span>
+        <span className="text-amber-600">Rescan to enable ladder</span>
       )}
-    </div>
-  );
-
-  if (mode === 'ladder' && ladderReady) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <GrooveHeader cluster={cluster} extra={modeSwitch} />
-        <LadderSession cluster={cluster} onExit={onExit} />
-      </div>
-    );
-  }
-
-  return (
-    /* Defaults to Song loop (each fill loads its own song audio); PracticeView
-       falls back to Isolated synth per fill when its song has no audio. */
-    <FillRotationSession
-      pool={orderedPool ?? pool}
-      onExit={onExit}
-      header={<GrooveHeader cluster={cluster} extra={modeSwitch} />}
-    />
-  );
-}
-
-function GrooveHeader({
-  cluster,
-  extra,
-}: {
-  cluster: GrooveCluster;
-  extra?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-lg border bg-card p-2">
-      <div className="w-40 shrink-0">
-        <GrooveStave fingerprint={cluster.representativeFingerprint} />
-      </div>
-      <div className="text-sm">
-        <p className="font-semibold">Groove session</p>
-        <p className="text-xs text-muted-foreground">
-          {cluster.fillCount} fill{cluster.fillCount === 1 ? '' : 's'} ·{' '}
-          {cluster.distinctSongs} song{cluster.distinctSongs === 1 ? '' : 's'} ·{' '}
-          {Math.round(cluster.tempoMin)}–{Math.round(cluster.tempoMax)} BPM
-        </p>
-      </div>
-      {extra && <div className="ml-auto">{extra}</div>}
     </div>
   );
 }

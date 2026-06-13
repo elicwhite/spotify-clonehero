@@ -1,9 +1,10 @@
 'use client';
 
-import {useEffect, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {queryFills, type FillWithSrs} from '@/lib/drum-fills/db';
+import {useChromeSlot} from '../contexts/DrumFillsChromeContext';
 import FillRotationSession from './FillRotationSession';
 
 /**
@@ -14,6 +15,20 @@ import FillRotationSession from './FillRotationSession';
  */
 export default function RouletteSession({onExit}: {onExit: () => void}) {
   const [pool, setPool] = useState<FillWithSrs[] | null>(null);
+
+  // "Fill roulette" label + End live in the shared header `[H]` context slot.
+  const headerSlot = useMemo(
+    () => (
+      <div className="flex items-center gap-3">
+        <span>Fill roulette</span>
+        <Button variant="ghost" size="sm" onClick={onExit}>
+          End
+        </Button>
+      </div>
+    ),
+    [onExit],
+  );
+  useChromeSlot(headerSlot);
 
   useEffect(() => {
     (async () => {

@@ -1,10 +1,11 @@
 'use client';
 
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import {getTodayQueue, type FillWithSrs} from '@/lib/drum-fills/db';
+import {useChromeSlot} from '../contexts/DrumFillsChromeContext';
 import PracticeView from './PracticeView';
 
 /**
@@ -36,6 +37,27 @@ export default function TodayQueue({onExit}: {onExit: () => void}) {
   const advance = useCallback(() => {
     setIndex(i => i + 1);
   }, []);
+
+  // Queue progress + Exit live in the shared header `[H]` context slot; the
+  // thin standalone queue row is gone (only render the counter while walking
+  // through fills).
+  const queueLength = queue?.length ?? 0;
+  const active = queueLength > 0 && index < queueLength;
+  const headerSlot = useMemo(
+    () =>
+      active ? (
+        <div className="flex items-center gap-3">
+          <span>
+            Today queue — {index + 1} / {queueLength}
+          </span>
+          <Button variant="ghost" size="sm" onClick={onExit}>
+            Exit queue
+          </Button>
+        </div>
+      ) : null,
+    [active, index, queueLength, onExit],
+  );
+  useChromeSlot(headerSlot);
 
   if (queue === null) {
     return (
@@ -92,21 +114,11 @@ export default function TodayQueue({onExit}: {onExit: () => void}) {
   const current = queue[index];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex shrink-0 items-center justify-between text-sm text-muted-foreground">
-        <span>
-          Today queue — {index + 1} / {queue.length}
-        </span>
-        <Button variant="ghost" size="sm" onClick={onExit}>
-          Exit queue
-        </Button>
-      </div>
-      <PracticeView
-        key={current.id}
-        fillId={current.id}
-        onExit={onExit}
-        onNext={advance}
-      />
-    </div>
+    <PracticeView
+      key={current.id}
+      fillId={current.id}
+      onExit={onExit}
+      onNext={advance}
+    />
   );
 }

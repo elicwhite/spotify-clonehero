@@ -18,8 +18,6 @@ export interface FillRotationSessionProps {
   onExit: () => void;
   /** Mode PracticeView starts in. */
   initialMode?: 'song-context' | 'isolated' | 'speed-trainer' | 'roulette';
-  /** Optional heading + sub-heading rendered above the practice view. */
-  header?: React.ReactNode;
   /** Starting rotation order (default sequential). */
   initialOrder?: RotationOrder;
 }
@@ -45,7 +43,6 @@ export default function FillRotationSession({
   pool,
   onExit,
   initialMode,
-  header,
   initialOrder = 'sequential',
 }: FillRotationSessionProps) {
   const firstIndex = () =>
@@ -139,7 +136,7 @@ export default function FillRotationSession({
   }
 
   const shuffleToggle = (
-    <div className="ml-2 flex items-center gap-2">
+    <div className="flex items-center gap-2">
       <div className="flex overflow-hidden rounded-md border text-xs">
         {(['sequential', 'shuffle'] as RotationOrder[]).map(o => (
           <button
@@ -162,19 +159,16 @@ export default function FillRotationSession({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {header && <div className="shrink-0">{header}</div>}
-      <PracticeView
-        key={current.id}
-        fillId={current.id}
-        onExit={onExit}
-        onNext={advance}
-        nextLabel={pool.length > 1 ? previewFill.song : undefined}
-        onAttemptScored={onAttemptScored}
-        transportExtras={shuffleToggle}
-        initialMode={initialMode}
-      />
-    </div>
+    <PracticeView
+      key={current.id}
+      fillId={current.id}
+      onExit={onExit}
+      onNext={advance}
+      nextLabel={pool.length > 1 ? previewFill.song : undefined}
+      onAttemptScored={onAttemptScored}
+      transportExtras={shuffleToggle}
+      initialMode={initialMode}
+    />
   );
 }
 

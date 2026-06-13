@@ -7,8 +7,8 @@ export const metadata: Metadata = {
     'Learn and master drum fills from your Clone Hero library with MIDI scoring and spaced repetition.',
 };
 
-const ClientPage = dynamic(() => import('./ClientPage'));
+const HomeRoute = dynamic(() => import('./HomeRoute'));
 
 export default function Page() {
-  return <ClientPage />;
+  return <HomeRoute />;
 }

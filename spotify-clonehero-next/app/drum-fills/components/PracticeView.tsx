@@ -4,7 +4,6 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import useInterval from 'use-interval';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
-import {cn} from '@/lib/utils';
 import {
   AudioManager,
   type PracticeModeConfig,
@@ -44,6 +43,7 @@ import {useFillChart} from '../hooks/useFillChart';
 import {useLiveScoring} from '../hooks/useLiveScoring';
 import {useMidi} from '../contexts/MidiContext';
 import PracticeHud from './PracticeHud';
+import PracticeContextBar, {type PracticeMode} from './PracticeContextBar';
 
 export interface PracticeViewProps {
   fillId: string;
@@ -59,6 +59,12 @@ export interface PracticeViewProps {
   onAttemptScored?: (result: ScoredAttempt) => void;
   /** Extra controls rendered in the transport row (e.g. shuffle toggle). */
   transportExtras?: React.ReactNode;
+  /**
+   * Optional session-context node rendered in the practice bar's session slot
+   * (e.g. a ladder "Rung n/N" readout). Sessions also publish identity into the
+   * header `[H]` context slot themselves.
+   */
+  sessionCtx?: React.ReactNode;
   /** Practice mode to start in (defaults to song loop). */
   initialMode?: Mode;
   /**
@@ -70,14 +76,7 @@ export interface PracticeViewProps {
   enableInstanceSwitcher?: boolean;
 }
 
-type Mode = 'song-context' | 'isolated' | 'speed-trainer' | 'roulette';
-
-const MODE_LABELS: Record<Mode, string> = {
-  'song-context': 'Song loop',
-  isolated: 'Isolated synth',
-  'speed-trainer': 'Speed trainer',
-  roulette: 'Roulette',
-};
+type Mode = PracticeMode;
 
 const MODE_TO_DB: Record<Mode, FillMode> = {
   'song-context': 'song-context',
@@ -101,7 +100,6 @@ const SYNTH_LEAD_IN_BARS = 1;
 // the speed trainer. Well within AudioManager's 0.25–4.0 support.
 const TEMPO_MIN_PCT = 40;
 const TEMPO_MAX_PCT = 110;
-const TEMPO_PRESETS = [50, 75, 100] as const;
 
 export default function PracticeView({
   fillId,
@@ -110,6 +108,7 @@ export default function PracticeView({
   nextLabel,
   onAttemptScored,
   transportExtras,
+  sessionCtx,
   initialMode,
   enableInstanceSwitcher,
 }: PracticeViewProps) {
@@ -247,114 +246,8 @@ export default function PracticeView({
       nextLabel={nextLabel}
       onAttemptScored={onAttemptScored}
       transportExtras={mergedExtras}
+      sessionCtx={sessionCtx}
     />
-  );
-}
-
-/**
- * Mode picker as a collapsed disclosure: the active (journey-implied) mode shows
- * as a chip with a "Change mode" toggle; expanding reveals the full strip. Keeps
- * configuration reachable without making it the loudest element on the page.
- */
-function ModeSwitcher({
-  mode,
-  onModeChange,
-}: {
-  mode: Mode;
-  onModeChange: (m: Mode) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  if (!open) {
-    return (
-      <div className="flex shrink-0 items-center gap-2 text-sm">
-        <span className="rounded bg-primary px-3 py-1.5 font-medium text-primary-foreground">
-          {MODE_LABELS[mode]}
-        </span>
-        <button
-          onClick={() => setOpen(true)}
-          className="text-xs text-muted-foreground hover:text-foreground">
-          Change mode
-        </button>
-      </div>
-    );
-  }
-  return (
-    <div className="flex shrink-0 flex-wrap items-center gap-1 rounded-lg border bg-card p-1">
-      {(Object.keys(MODE_LABELS) as Mode[]).map(m => (
-        <button
-          key={m}
-          onClick={() => {
-            onModeChange(m);
-            setOpen(false);
-          }}
-          className={cn(
-            'rounded px-3 py-1.5 text-sm font-medium transition-colors',
-            m === mode
-              ? 'bg-primary text-primary-foreground'
-              : 'hover:bg-muted',
-          )}>
-          {MODE_LABELS[m]}
-        </button>
-      ))}
-      <button
-        onClick={() => setOpen(false)}
-        className="ml-1 px-2 text-xs text-muted-foreground hover:text-foreground">
-        Done
-      </button>
-    </div>
-  );
-}
-
-/**
- * Tempo / slow-down control for the transport, shown in every mode. A slider +
- * readout + quick presets, wired to the shared tempo state (→ effectiveTempo →
- * AudioManager.setTempo, pitch-preserving). In speed-trainer mode the trainer
- * drives the same state automatically, so the control reflects the live tempo
- * and is marked auto.
- */
-function TempoControl({
-  tempoPct,
-  onChange,
-  auto,
-}: {
-  tempoPct: number;
-  onChange: (pct: number) => void;
-  auto: boolean;
-}) {
-  return (
-    <div className="ml-2 flex items-center gap-2 text-sm">
-      <span className="text-xs text-muted-foreground">
-        {auto ? 'Tempo (auto)' : 'Tempo'}
-      </span>
-      <input
-        type="range"
-        min={TEMPO_MIN_PCT}
-        max={TEMPO_MAX_PCT}
-        step={5}
-        value={tempoPct}
-        onChange={e => onChange(Number(e.target.value))}
-        className="h-1 w-28 cursor-pointer accent-primary"
-        aria-label="Playback tempo"
-      />
-      <span className="w-12 text-center font-mono tabular-nums">
-        {tempoPct}%
-      </span>
-      <div className="flex items-center gap-1">
-        {TEMPO_PRESETS.map(p => (
-          <button
-            key={p}
-            onClick={() => onChange(p)}
-            className={cn(
-              'rounded px-1.5 py-0.5 text-xs',
-              tempoPct === p
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-muted',
-            )}>
-            {p}
-          </button>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -386,6 +279,7 @@ function PracticeSession({
   nextLabel,
   onAttemptScored: onAttemptScoredExternal,
   transportExtras,
+  sessionCtx,
 }: {
   fillId: string;
   mode: Mode;
@@ -396,6 +290,7 @@ function PracticeSession({
   nextLabel?: string;
   onAttemptScored?: (result: ScoredAttempt) => void;
   transportExtras?: React.ReactNode;
+  sessionCtx?: React.ReactNode;
 }) {
   const {chart, track, practiceData, fill, audioFiles, groovePattern} = data;
   const {connectedIds} = useMidi();
@@ -910,63 +805,44 @@ function PracticeSession({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">
-            {fill.song}{' '}
-            <span className="text-muted-foreground">— {fill.artist}</span>
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            {Math.round(fill.tempoBpm)} BPM · {fill.lengthBars} bar ·{' '}
-            {fill.subdivision} · complexity {fill.complexity} ·{' '}
-            {fill.voicingTags.join(', ')}
-          </p>
-        </div>
-        <Button
-          variant="ghost"
-          onClick={() => {
-            stopAll();
-            onExit();
-          }}>
-          Back
-        </Button>
-      </div>
-
-      {/* Mode switcher — the journey implies a default (ladder → isolated synth,
-          song-launched → song loop), so the current mode leads and the full
-          picker is a one-click disclosure rather than an always-on tab strip. */}
-      <ModeSwitcher mode={mode} onModeChange={onModeChange} />
-
-      {!hasMidi && (
-        <div className="shrink-0 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          No MIDI device connected — connect your kit from the Library to score
-          your hits.
-        </div>
-      )}
-
-      {/* Transport */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-lg border bg-card p-2">
-        <Button onClick={togglePlay} disabled={!activeAudioManager}>
-          {isPlaying ? 'Pause (space)' : 'Play (space)'}
-        </Button>
-        <Button variant="outline" onClick={restartLoop}>
-          Restart (R)
-        </Button>
-        {(mode === 'roulette' || onNext) && (
-          <Button variant="outline" onClick={() => (onNext ?? onExit)()}>
-            {nextLabel ? `Next: ${nextLabel} (N)` : 'Next (N)'}
-          </Button>
-        )}
-        {transportExtras}
-        <TempoControl
-          tempoPct={tempoPct}
-          onChange={setTempoPct}
-          auto={mode === 'speed-trainer'}
-        />
-        <span className="ml-auto text-xs text-muted-foreground">
-          Hits this pass: {scoring.pendingHits}
-        </span>
-      </div>
+      {/* [T] — the single practice context + transport bar (replaces the old
+          title / mode switcher / MIDI-warning / transport quartet). The journey
+          implies a default loop mode, so the current mode leads with a one-click
+          picker; the "no kit" state is an inline chip, not a full-width band. */}
+      <PracticeContextBar
+        identity={{
+          song: fill.song,
+          artist: fill.artist,
+          tempoBpm: fill.tempoBpm,
+          lengthBars: fill.lengthBars,
+          subdivision: fill.subdivision,
+          complexity: fill.complexity,
+          voicingTags: fill.voicingTags,
+        }}
+        onBack={() => {
+          stopAll();
+          onExit();
+        }}
+        mode={mode}
+        onModeChange={onModeChange}
+        sessionCtx={sessionCtx}
+        isPlaying={isPlaying}
+        onTogglePlay={togglePlay}
+        playDisabled={!activeAudioManager}
+        onRestart={restartLoop}
+        onNext={
+          mode === 'roulette' || onNext ? () => (onNext ?? onExit)() : undefined
+        }
+        nextLabel={nextLabel}
+        transportExtras={transportExtras}
+        tempoPct={tempoPct}
+        tempoMin={TEMPO_MIN_PCT}
+        tempoMax={TEMPO_MAX_PCT}
+        onTempoChange={setTempoPct}
+        tempoAuto={mode === 'speed-trainer'}
+        hasMidi={hasMidi}
+        pendingHits={scoring.pendingHits}
+      />
 
       {/* Views: highway + sheet music + HUD.
           The row fills the remaining bounded height (min-h-0 so flex children
@@ -1016,14 +892,10 @@ function PracticeSession({
             bestAttempt={scoring.bestAttempt}
             newBest={scoring.newBest}
             srs={srs}
+            dueNow={!!srs && isDue(srs, new Date())}
             tempoPct={tempoPct}
             speedTrainer={mode === 'speed-trainer'}
           />
-          {srs && isDue(srs, new Date()) && (
-            <p className="mt-2 text-center text-xs text-amber-600">
-              Due for review
-            </p>
-          )}
         </div>
       </div>
     </div>

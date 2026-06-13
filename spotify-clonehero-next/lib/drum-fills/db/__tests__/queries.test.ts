@@ -28,6 +28,7 @@ import {
   getFillSiblings,
   getGroupedLibrary,
   getGrooveClusters,
+  getGrooveClusterByKey,
   getGrooveLadder,
   getLadderProgress,
   getLatestScanRun,
@@ -577,6 +578,31 @@ describe('drum-fills queries', () => {
       .where('id', '=', 'a1')
       .execute();
     expect(await getGrooveClusters(db)).toEqual([]);
+  });
+
+  it('getGrooveClusterByKey returns the cluster matching the similarity key', async () => {
+    await replaceFillsForSong(
+      'hashA',
+      [
+        fill({id: 'a1', grooveSimilarityKey: 'beat', tempoBpm: 100}),
+        fill({id: 'a2', grooveSimilarityKey: 'beat', tempoBpm: 140}),
+        fill({id: 'a3', grooveSimilarityKey: 'other', tempoBpm: 90}),
+      ],
+      db,
+    );
+
+    const cluster = await getGrooveClusterByKey('beat', db);
+    expect(cluster).not.toBeNull();
+    expect(cluster!.similarityKey).toBe('beat');
+    expect(cluster!.fillIds.sort()).toEqual(['a1', 'a2']);
+    expect(cluster!.fillCount).toBe(2);
+    expect(cluster!.tempoMin).toBe(100);
+    expect(cluster!.tempoMax).toBe(140);
+  });
+
+  it('getGrooveClusterByKey returns null for an unknown key', async () => {
+    await replaceFillsForSong('hashA', [fill({id: 'a1'})], db);
+    expect(await getGrooveClusterByKey('does-not-exist', db)).toBeNull();
   });
 
   it('hasFillsNeedingRescan: false when all fills have §5/§6 columns', async () => {

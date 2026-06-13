@@ -925,6 +925,22 @@ export async function getGrooveClusters(
   return buildGrooveClusters(inputs, {ladderKeys});
 }
 
+/**
+ * Look up a single groove cluster by its similarity key. Backs deep-linking a
+ * groove session (the route only carries the key, not a {@link GrooveCluster}
+ * object). Reuses {@link getGrooveClusters} + the same `byKey` lookup pattern
+ * `getActiveLadders` builds — no separate clustering path.
+ */
+export async function getGrooveClusterByKey(
+  similarityKey: string,
+  db?: Kysely<DB>,
+): Promise<GrooveCluster | null> {
+  const database = db ?? (await getDrumFillsDb());
+  const clusters = await getGrooveClusters(database);
+  const byKey = new Map(clusters.map(c => [c.similarityKey, c]));
+  return byKey.get(similarityKey) ?? null;
+}
+
 // --- Scan run bookkeeping ---------------------------------------------------
 
 export async function startScanRun(

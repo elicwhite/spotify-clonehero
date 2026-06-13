@@ -3,7 +3,6 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
-import {Progress} from '@/components/ui/progress';
 import {
   getAttemptStats,
   getGroupedLibrary,
@@ -12,7 +11,7 @@ import {
   type FillWithSrs,
   type GroupedFill,
 } from '@/lib/drum-fills/db';
-import {useLibraryScan} from '../hooks/useLibraryScan';
+import {useDrumFillsChrome} from '../contexts/DrumFillsChromeContext';
 import {useLibraryFilters, useLibraryView} from '../hooks/useLibraryFilters';
 import {
   filterFills,
@@ -79,7 +78,11 @@ export default function LibraryView({
     void loadFills();
   }, [loadFills]);
 
-  const {scanning, progress, runScan, cancelScan} = useLibraryScan(loadFills);
+  // The scan/rescan control lives in the shared header `[H]`; the Library reads
+  // the shared scan state (for the rescan banner) and triggers the same scan.
+  // LibraryRoute re-keys this view on scan completion, so a finished scan
+  // reloads the grid.
+  const {scanning, runScan} = useDrumFillsChrome();
 
   const voicingTags = useMemo(() => availableVoicingTags(fills), [fills]);
 
@@ -112,40 +115,6 @@ export default function LibraryView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3">
-        <Button onClick={() => void runScan()} disabled={scanning}>
-          {scanning ? 'Scanning…' : hasData ? 'Rescan Library' : 'Scan Library'}
-        </Button>
-        {scanning && (
-          <Button variant="outline" onClick={cancelScan}>
-            Cancel
-          </Button>
-        )}
-        {scanning && progress && (
-          <div className="flex flex-1 flex-col gap-1">
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>
-                {progress.songsScanned}
-                {progress.totalEstimate > 0
-                  ? ` / ${progress.totalEstimate}`
-                  : ''}{' '}
-                songs · {progress.fillsFound} fills
-              </span>
-              <span className="truncate max-w-[40%]">
-                {progress.currentSong ?? ''}
-              </span>
-            </div>
-            <Progress
-              value={
-                progress.totalEstimate > 0
-                  ? (progress.songsScanned / progress.totalEstimate) * 100
-                  : undefined
-              }
-            />
-          </div>
-        )}
-      </div>
-
       {needsRescan && hasData && !scanning && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
           <p className="text-sm text-amber-900">
@@ -153,7 +122,7 @@ export default function LibraryView({
             Rescan to dedupe duplicates across songs and enable difficulty
             sorting + ladders.
           </p>
-          <Button onClick={() => void runScan()} disabled={scanning} size="sm">
+          <Button onClick={runScan} disabled={scanning} size="sm">
             Rescan Library
           </Button>
         </div>
@@ -168,6 +137,9 @@ export default function LibraryView({
             Scan your Clone Hero Songs folder to detect drum fills across your
             library. Everything runs in your browser.
           </p>
+          <Button onClick={runScan} disabled={scanning}>
+            {scanning ? 'Scanning…' : 'Scan Library'}
+          </Button>
         </div>
       ) : (
         <>

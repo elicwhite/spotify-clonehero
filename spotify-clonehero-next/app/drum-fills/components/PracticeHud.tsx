@@ -19,6 +19,7 @@ export default function PracticeHud({
   bestAttempt,
   newBest,
   srs,
+  dueNow,
   tempoPct,
   speedTrainer,
 }: {
@@ -26,6 +27,8 @@ export default function PracticeHud({
   bestAttempt: BestAttempt | null;
   newBest: boolean;
   srs: FillSrsState | null;
+  /** Whether this fill is currently due for review (drives the inline badge). */
+  dueNow: boolean;
   tempoPct: number;
   speedTrainer: boolean;
 }) {
@@ -133,9 +136,19 @@ export default function PracticeHud({
           <MasteryBadge state={srs?.state ?? 'new'} />
         </div>
         {srs && (
-          <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-            <span>Streak: {srs.passStreak}</span>
-            {srs.dueAt && <span>Due: {srs.dueAt.toLocaleDateString()}</span>}
+          <div className="mt-1 flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">
+              Streak: {srs.passStreak}
+            </span>
+            {dueNow ? (
+              <span className="font-medium text-amber-600">Due now</span>
+            ) : (
+              srs.dueAt && (
+                <span className="text-muted-foreground">
+                  Due: {srs.dueAt.toLocaleDateString()}
+                </span>
+              )
+            )}
           </div>
         )}
       </div>

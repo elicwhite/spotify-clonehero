@@ -20,6 +20,7 @@ import {
   hasFillsNeedingGrooveRescan,
   type GrooveCluster,
 } from '@/lib/drum-fills/db';
+import {useDrumFillsChrome} from '../contexts/DrumFillsChromeContext';
 import {
   MIN_DRILLABLE_FILLS,
   filterAndSortGrooves,
@@ -79,15 +80,17 @@ const PROGRESS_BADGE: Record<
 
 export default function GroovesView({
   onStartSession,
-  onRescan,
-  scanning,
 }: {
   onStartSession: (cluster: GrooveCluster) => void;
-  onRescan: () => void;
-  scanning: boolean;
 }) {
   const [clusters, setClusters] = useState<GrooveCluster[] | null>(null);
   const [needsRescan, setNeedsRescan] = useState(false);
+
+  // The scan/rescan control lives in the shared header `[H]`; the Grooves view
+  // reads the shared scan state (for the rescan banner + empty state) and
+  // triggers the same scan. GroovesRoute re-keys this view on scan completion,
+  // so a finished scan reloads the cluster list.
+  const {scanning, runScan} = useDrumFillsChrome();
 
   // Filter / sort state, persisted in the URL (survives reload).
   const {
@@ -153,8 +156,8 @@ export default function GroovesView({
             Some fills were detected before groove tracking. Rescan your library
             to enable Grooves for them.
           </p>
-          <Button onClick={onRescan} disabled={scanning} size="sm">
-            {scanning ? 'Scanning…' : 'Rescan Library'}
+          <Button onClick={runScan} disabled={scanning} size="sm">
+            {scanning ? 'Scanning…' : 'Rescan'}
           </Button>
         </div>
       )}
@@ -166,7 +169,7 @@ export default function GroovesView({
             Scan your library to detect fills and the grooves they sit on. Pick
             a groove to drill many different fills over the same beat.
           </p>
-          <Button onClick={onRescan} disabled={scanning}>
+          <Button onClick={runScan} disabled={scanning}>
             {scanning ? 'Scanning…' : 'Scan Library'}
           </Button>
         </div>
