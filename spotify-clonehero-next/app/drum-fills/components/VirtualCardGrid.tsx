@@ -1,19 +1,24 @@
 'use client';
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {useGridWindow, useResponsiveColumns} from '../hooks/useGridWindow';
+import {useVirtual} from 'react-virtual';
+import {useResponsiveColumns} from '../hooks/useResponsiveColumns';
 
-/** Default rendered height of one card row, including the grid gap (px). */
+/** Initial per-row height estimate (incl. grid gap); rows self-measure after. */
 const DEFAULT_ROW_HEIGHT = 280;
 
+/** One grid row; columns match `useResponsiveColumns`'s breakpoints. `pb-4`
+ * supplies the vertical gap so each measured row includes it. */
+const ROW_CLASS =
+  'grid grid-cols-1 gap-4 pb-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
+
 /**
- * Generic windowed (virtualized) card grid with keyboard navigation. Only the
- * rows in/around the viewport are mounted as DOM nodes, so the library stays
- * interactive with thousands of items. Owns its own scroll container; arrows
- * move focus across the grid and Enter activates the focused item. Shared by the
- * ungrouped fill grid and the grouped (cross-song dedupe) grid — both render
- * cards, only the card body differs, so the windowing + keyboard math lives here
- * once.
+ * Generic windowed (virtualized) card grid with keyboard navigation, backed by
+ * `react-virtual`. Only the rows in/around the viewport are mounted, so the grid
+ * stays interactive with thousands of items; rows self-measure (the `rowHeight`
+ * prop is just the initial estimate). Owns its own scroll container; arrows move
+ * focus and Enter activates the focused item. Shared by the fill grids and the
+ * grooves grid — only the card body differs.
  */
 export default function VirtualCardGrid<T>({
   items,
@@ -32,18 +37,20 @@ export default function VirtualCardGrid<T>({
   ) => React.ReactNode;
   /** Activate the item at `index` (Enter on a focused card). */
   onActivate: (index: number) => void;
-  /** Row height incl. grid gap; tune per card body. Defaults to 280. */
+  /** Initial row-height estimate; rows self-measure. Defaults to 280. */
   rowHeight?: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const columns = useResponsiveColumns(scrollRef);
   const [rawFocus, setRawFocus] = useState<number | null>(null);
 
-  const window = useGridWindow({
-    scrollRef,
-    itemCount: items.length,
-    rowHeight,
-    columns,
+  const rowCount = Math.ceil(items.length / columns);
+
+  const rowVirtualizer = useVirtual({
+    size: rowCount,
+    parentRef: scrollRef,
+    estimateSize: useCallback(() => rowHeight, [rowHeight]),
+    overscan: 3,
   });
 
   const focusIndex = useMemo(
@@ -51,17 +58,18 @@ export default function VirtualCardGrid<T>({
     [rawFocus, items.length],
   );
 
+  // Keep the latest `scrollToIndex` in a ref (the virtualizer returns a new
+  // callback each render) so the scroll-into-view effect can fire only when the
+  // focused row changes, rather than every render where it would fight the
+  // user's own scrolling. The ref is written in an effect, never during render.
+  const scrollToIndexRef = useRef(rowVirtualizer.scrollToIndex);
+  useEffect(() => {
+    scrollToIndexRef.current = rowVirtualizer.scrollToIndex;
+  });
   useEffect(() => {
     if (focusIndex == null) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    const row = Math.floor(focusIndex / columns);
-    const top = row * rowHeight;
-    const bottom = top + rowHeight;
-    if (top < el.scrollTop) el.scrollTo({top});
-    else if (bottom > el.scrollTop + el.clientHeight)
-      el.scrollTo({top: bottom - el.clientHeight});
-  }, [focusIndex, columns, rowHeight]);
+    scrollToIndexRef.current(Math.floor(focusIndex / columns));
+  }, [focusIndex, columns]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -96,31 +104,45 @@ export default function VirtualCardGrid<T>({
     [items.length, focusIndex, columns, onActivate],
   );
 
-  const visible = items.slice(window.startIndex, window.endIndex);
+  const {virtualItems, totalSize} = rowVirtualizer;
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0;
+  const paddingBottom =
+    virtualItems.length > 0
+      ? totalSize - virtualItems[virtualItems.length - 1].end
+      : 0;
 
   return (
     <div
       ref={scrollRef}
       tabIndex={0}
       role="grid"
-      aria-rowcount={window.rowCount}
+      aria-rowcount={rowCount}
       onKeyDown={onKeyDown}
       className="min-h-0 flex-1 overflow-y-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      <div style={{height: window.paddingTop}} />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {visible.map((item, i) => {
-          const index = window.startIndex + i;
-          return (
-            <span key={getKey(item)} className="contents">
-              {renderCard(item, index, {
-                focused: index === focusIndex,
-                onFocus: () => setRawFocus(index),
-              })}
-            </span>
-          );
-        })}
-      </div>
-      <div style={{height: window.paddingBottom}} />
+      <div style={{height: paddingTop}} />
+      {virtualItems.map(virtualRow => {
+        const start = virtualRow.index * columns;
+        const rowItems = items.slice(start, start + columns);
+        return (
+          <div
+            key={virtualRow.key}
+            ref={virtualRow.measureRef}
+            className={ROW_CLASS}>
+            {rowItems.map((item, c) => {
+              const index = start + c;
+              return (
+                <span key={getKey(item)} className="contents">
+                  {renderCard(item, index, {
+                    focused: index === focusIndex,
+                    onFocus: () => setRawFocus(index),
+                  })}
+                </span>
+              );
+            })}
+          </div>
+        );
+      })}
+      <div style={{height: paddingBottom}} />
     </div>
   );
 }
