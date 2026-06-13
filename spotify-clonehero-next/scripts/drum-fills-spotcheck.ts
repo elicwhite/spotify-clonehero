@@ -166,6 +166,7 @@ async function main() {
         subdivision: cf.classification.subdivision,
         complexity: cf.classification.complexity,
         lengthBars: cf.classification.lengthBars,
+        difficultyScore: cf.classification.difficultyScore,
       });
     }
 
@@ -288,16 +289,44 @@ async function main() {
   );
   console.log(`Largest cluster:         ${cstats.largestCluster} fills`);
 
-  console.log('\n  Top 10 groove clusters (fills / songs / tempo / subdiv):');
-  for (const c of clusters.slice(0, 10)) {
+  const byFillCount = [...clusters].sort((a, b) => b.fillCount - a.fillCount);
+  console.log(
+    '\n  Top 10 groove clusters by fill count (fills / songs / diff):',
+  );
+  for (const c of byFillCount.slice(0, 10)) {
     const subdiv = c.subdivisions.map(s => `${s.value}:${s.count}`).join(' ');
     console.log(
       `    ${String(c.fillCount).padStart(5)} fills  ` +
         `${String(c.distinctSongs).padStart(4)} songs  ` +
+        `diff ${String(c.grooveDifficulty).padStart(3)}  ` +
         `${c.tempoMin.toFixed(0)}-${c.tempoMax.toFixed(0)} BPM  ` +
         `[${subdiv}]`,
     );
     console.log(`        key: ${c.similarityKey}`);
+  }
+
+  // Clusters are sorted easiest-first; show the difficulty ladder ends so the
+  // intrinsic-difficulty scoring can be sanity-checked (proposal 1).
+  const drillable = clusters.filter(c => c.fillCount >= 3);
+  console.log(
+    `\n  Easiest 8 drillable grooves (diff / tempo / fills / fingerprint):`,
+  );
+  for (const c of drillable.slice(0, 8)) {
+    console.log(
+      `    diff ${String(c.grooveDifficulty).padStart(3)}  ` +
+        `${c.tempoMin.toFixed(0)}-${c.tempoMax.toFixed(0)} BPM  ` +
+        `${String(c.fillCount).padStart(4)} fills  ` +
+        `${c.representativeFingerprint}`,
+    );
+  }
+  console.log(`\n  Hardest 8 drillable grooves:`);
+  for (const c of drillable.slice(-8).reverse()) {
+    console.log(
+      `    diff ${String(c.grooveDifficulty).padStart(3)}  ` +
+        `${c.tempoMin.toFixed(0)}-${c.tempoMax.toFixed(0)} BPM  ` +
+        `${String(c.fillCount).padStart(4)} fills  ` +
+        `${c.representativeFingerprint}`,
+    );
   }
 
   console.log(`\n--- ${sampleCount} sample fills (ASCII grids) ---`);

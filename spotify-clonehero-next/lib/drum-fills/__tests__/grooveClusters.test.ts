@@ -16,9 +16,17 @@ function input(over: Partial<GrooveClusterInput> = {}): GrooveClusterInput {
     subdivision: '16ths',
     complexity: 3,
     lengthBars: 1,
+    difficultyScore: 50,
     ...over,
   };
 }
+
+// Real canonical fingerprints (slot:mask, 48/bar). kick=1 snare=2 hat=4.
+// Straight-8ths backbeat: hat every 8th, kick on 1&3, snare on 2&4.
+const EASY_GROOVE = '0:5|6:4|12:6|18:4|24:5|30:4|36:6|42:4';
+// Busy 16th-hat groove with a syncopated extra kick (harder beat).
+const HARD_GROOVE =
+  '0:5|3:4|6:4|9:4|12:6|15:4|18:5|21:4|24:5|27:4|30:4|33:4|36:6|39:4|42:5|45:4';
 
 describe('buildGrooveClusters', () => {
   it('groups fills by similarity key and counts them', () => {
@@ -35,14 +43,49 @@ describe('buildGrooveClusters', () => {
     expect(clusters[1].fillCount).toBe(1);
   });
 
-  it('sorts clusters by fill count descending', () => {
+  it('sorts clusters by intrinsic groove difficulty ascending', () => {
     const clusters = buildGrooveClusters([
-      input({id: '1', grooveSimilarityKey: 'small'}),
-      input({id: '2', grooveSimilarityKey: 'big'}),
-      input({id: '3', grooveSimilarityKey: 'big'}),
-      input({id: '4', grooveSimilarityKey: 'big'}),
+      input({
+        id: '1',
+        grooveSimilarityKey: 'hard',
+        grooveFingerprint: HARD_GROOVE,
+        tempoBpm: 180,
+      }),
+      input({
+        id: '2',
+        grooveSimilarityKey: 'easy',
+        grooveFingerprint: EASY_GROOVE,
+        tempoBpm: 110,
+      }),
     ]);
-    expect(clusters.map(c => c.similarityKey)).toEqual(['big', 'small']);
+    // Easiest beat first, regardless of fill count.
+    expect(clusters.map(c => c.similarityKey)).toEqual(['easy', 'hard']);
+    expect(clusters[0].grooveDifficulty).toBeLessThan(
+      clusters[1].grooveDifficulty,
+    );
+  });
+
+  it('breaks difficulty ties by the easiest available fill', () => {
+    // Same groove fingerprint/tempo => equal grooveDifficulty; the cluster with
+    // an easier entry-point fill sorts first.
+    const clusters = buildGrooveClusters([
+      input({
+        id: 'a',
+        grooveSimilarityKey: 'harder-entry',
+        grooveFingerprint: EASY_GROOVE,
+        difficultyScore: 60,
+      }),
+      input({
+        id: 'b',
+        grooveSimilarityKey: 'easier-entry',
+        grooveFingerprint: EASY_GROOVE,
+        difficultyScore: 20,
+      }),
+    ]);
+    expect(clusters.map(c => c.similarityKey)).toEqual([
+      'easier-entry',
+      'harder-entry',
+    ]);
   });
 
   it('skips fills with a null/empty similarity key', () => {

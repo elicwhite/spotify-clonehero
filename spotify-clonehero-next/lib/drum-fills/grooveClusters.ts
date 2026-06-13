@@ -8,6 +8,14 @@
  * aggregation here makes it unit-testable without a database.
  */
 
+import {scoreGrooveDifficulty} from './detection/grooveDifficulty';
+
+/**
+ * Minimum fills for a groove cluster to be worth drilling. Grooves with fewer
+ * are suppressed from the Grooves list — too little fill vocabulary to rotate.
+ */
+export const MIN_DRILLABLE_FILLS = 3;
+
 /** Minimal per-fill shape needed to build groove clusters. */
 export interface GrooveClusterInput {
   id: string;
@@ -20,6 +28,8 @@ export interface GrooveClusterInput {
   subdivision: string;
   complexity: number;
   lengthBars: number;
+  /** Continuous fill difficulty (0-100); used as the groove-sort tie-break. */
+  difficultyScore: number;
 }
 
 /** A cluster of fills that share a groove (by similarity key). */
@@ -43,14 +53,24 @@ export interface GrooveCluster {
   complexities: number[];
   /** Distinct length-in-bars values present, ascending. */
   lengths: number[];
+  /**
+   * Intrinsic difficulty of the beat itself (0-100) — the primary sort key.
+   * Scored from the representative fingerprint + median tempo (see
+   * `scoreGrooveDifficulty`); falls back to median complexity when no
+   * fingerprint is available.
+   */
+  grooveDifficulty: number;
+  /** Easiest member fill's difficulty (0-100) — the sort tie-break. */
+  easiestFillDifficulty: number;
 }
 
 /**
  * Build groove clusters from fills.
  *
  * Fills with a null/empty similarity key are skipped (they have no usable
- * groove — e.g. a fill with no preceding groove). Clusters are sorted by fill
- * count descending, then by similarity key for stable ordering.
+ * groove — e.g. a fill with no preceding groove). Clusters are sorted by
+ * intrinsic groove difficulty ascending (easiest beats first), then by the
+ * easiest available fill, then by similarity key for stable ordering.
  */
 export function buildGrooveClusters(
   fills: GrooveClusterInput[],
@@ -71,7 +91,8 @@ export function buildGrooveClusters(
 
   clusters.sort(
     (a, b) =>
-      b.fillCount - a.fillCount ||
+      a.grooveDifficulty - b.grooveDifficulty ||
+      a.easiestFillDifficulty - b.easiestFillDifficulty ||
       (a.similarityKey < b.similarityKey
         ? -1
         : a.similarityKey > b.similarityKey
@@ -79,6 +100,15 @@ export function buildGrooveClusters(
           : 0),
   );
   return clusters;
+}
+
+/** Median of a non-empty numeric list. */
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function summarizeCluster(
@@ -93,11 +123,15 @@ function summarizeCluster(
   const complexities = new Set<number>();
   const lengths = new Set<number>();
   const fillIds: string[] = [];
+  const tempos: number[] = [];
+  const complexityValues: number[] = [];
+  let easiestFillDifficulty = Infinity;
 
   for (const m of members) {
     fillIds.push(m.id);
     if (m.tempoBpm < tempoMin) tempoMin = m.tempoBpm;
     if (m.tempoBpm > tempoMax) tempoMax = m.tempoBpm;
+    tempos.push(m.tempoBpm);
     songs.add(m.chartHash);
     subdivCounts.set(m.subdivision, (subdivCounts.get(m.subdivision) ?? 0) + 1);
     if (m.grooveFingerprint) {
@@ -107,7 +141,11 @@ function summarizeCluster(
       );
     }
     complexities.add(m.complexity);
+    complexityValues.push(m.complexity);
     lengths.add(m.lengthBars);
+    if (m.difficultyScore < easiestFillDifficulty) {
+      easiestFillDifficulty = m.difficultyScore;
+    }
   }
 
   // Representative exact fingerprint = most common within the cluster.
@@ -127,6 +165,14 @@ function summarizeCluster(
     .map(([value, count]) => ({value, count}))
     .sort((a, b) => b.count - a.count || (a.value < b.value ? -1 : 1));
 
+  // Intrinsic difficulty of the beat (proposal 1): score the representative
+  // fingerprint at the cluster's median tempo. With no fingerprint (rare),
+  // fall back to median fill complexity scaled to 0-100.
+  const medianBpm = tempos.length > 0 ? median(tempos) : 0;
+  const grooveDifficulty = representativeFingerprint
+    ? scoreGrooveDifficulty(representativeFingerprint, medianBpm)
+    : Math.round((median(complexityValues) / 5) * 100);
+
   return {
     similarityKey,
     representativeFingerprint,
@@ -138,6 +184,9 @@ function summarizeCluster(
     subdivisions,
     complexities: [...complexities].sort((a, b) => a - b),
     lengths: [...lengths].sort((a, b) => a - b),
+    grooveDifficulty,
+    easiestFillDifficulty:
+      easiestFillDifficulty === Infinity ? 0 : easiestFillDifficulty,
   };
 }
 

@@ -3,6 +3,7 @@ import {getDrumFillsDb} from './client';
 import type {DB, ScanRuns} from './types';
 import {
   buildGrooveClusters,
+  MIN_DRILLABLE_FILLS,
   type GrooveCluster,
   type GrooveClusterInput,
 } from '@/lib/drum-fills/grooveClusters';
@@ -891,6 +892,7 @@ export async function getGrooveClusters(
       'subdivision',
       'complexity',
       'length_bars',
+      'difficulty_score',
     ])
     .where('groove_similarity_key', 'is not', null)
     .execute();
@@ -906,6 +908,7 @@ export async function getGrooveClusters(
     subdivision: r.subdivision,
     complexity: r.complexity,
     lengthBars: r.length_bars,
+    difficultyScore: r.difficulty_score ?? 0,
   }));
 
   return buildGrooveClusters(inputs);
@@ -1016,7 +1019,7 @@ export async function getProgressSummary(
       .execute(),
   ]);
 
-  const drillable = clusters.filter(c => c.fillCount >= 2);
+  const drillable = clusters.filter(c => c.fillCount >= MIN_DRILLABLE_FILLS);
 
   // rungsClimbed: resolve each saved rung to its index in its ladder.
   let rungsClimbed = 0;

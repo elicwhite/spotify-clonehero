@@ -10,6 +10,7 @@ import {
   hasFillsNeedingGrooveRescan,
   type GrooveCluster,
 } from '@/lib/drum-fills/db';
+import {MIN_DRILLABLE_FILLS} from '@/lib/drum-fills/grooveClusters';
 import GrooveSketch from './GrooveSketch';
 
 const SUBDIVISION_LABEL: Record<string, string> = {
@@ -56,11 +57,11 @@ export default function GroovesView({
     );
   }
 
-  // A groove worth drilling needs more than one fill to rotate through; a
-  // singleton "cluster" is just a single fill (practiceable from the Library).
-  // Hiding them keeps the grid focused and avoids rendering thousands of cards.
-  const drillable = clusters.filter(c => c.fillCount >= 2);
-  const singletonCount = clusters.length - drillable.length;
+  // A groove worth drilling needs enough fills to rotate through; clusters with
+  // only a couple are too thin and just clutter the grid. Sorted by intrinsic
+  // groove difficulty (easiest beats first) upstream.
+  const drillable = clusters.filter(c => c.fillCount >= MIN_DRILLABLE_FILLS);
+  const hiddenCount = clusters.length - drillable.length;
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -103,11 +104,11 @@ export default function GroovesView({
               />
             ))}
           </div>
-          {singletonCount > 0 && (
+          {hiddenCount > 0 && (
             <p className="pb-4 text-center text-xs text-muted-foreground">
-              {singletonCount.toLocaleString()} one-off groove
-              {singletonCount === 1 ? '' : 's'} hidden — practice those fills
-              from the Library.
+              {hiddenCount.toLocaleString()} thinly-populated groove
+              {hiddenCount === 1 ? '' : 's'} hidden — practice those fills from
+              the Library.
             </p>
           )}
         </>
