@@ -19,7 +19,7 @@
  * order unknowns).
  */
 
-import {GRID_DIVISIONS_PER_BAR} from './types';
+import {GRID_DIVISIONS_PER_BAR, type DrumVoice} from './types';
 
 /** Voice bits, matching grooveFingerprint's VOICE_BITS. */
 const KICK = 1;
@@ -27,6 +27,26 @@ const SNARE = 2;
 const HAT = 4;
 const TOM = 8;
 const CRASH = 16;
+
+/** Voice bit → voice name, for deriving which voices a groove's beat uses. */
+const BIT_TO_VOICE: Array<[number, DrumVoice]> = [
+  [KICK, 'kick'],
+  [SNARE, 'snare'],
+  [HAT, 'hat'],
+  [TOM, 'tom'],
+  [CRASH, 'crash'],
+];
+
+/**
+ * The set of voices the groove's beat itself uses (kick/snare/hat/tom/crash),
+ * derived from its canonical fingerprint. Used to filter grooves by voicing
+ * (e.g. "beats with a crash"). Returns voices in a stable order.
+ */
+export function grooveVoicesFromFingerprint(fingerprint: string): DrumVoice[] {
+  let union = 0;
+  for (const onset of parseGrooveFingerprint(fingerprint)) union |= onset.mask;
+  return BIT_TO_VOICE.filter(([bit]) => union & bit).map(([, voice]) => voice);
+}
 
 /** Assumed beats per bar — the fingerprint grid is per-bar; 4/4 dominates. */
 const BEATS_PER_BAR = 4;

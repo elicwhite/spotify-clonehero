@@ -879,23 +879,33 @@ export async function getGrooveClusters(
   db?: Kysely<DB>,
 ): Promise<GrooveCluster[]> {
   const database = db ?? (await getDrumFillsDb());
-  const rows = await database
-    .selectFrom('fills')
-    .select([
-      'id',
-      'groove_fingerprint',
-      'groove_similarity_key',
-      'chart_hash',
-      'song',
-      'artist',
-      'tempo_bpm',
-      'subdivision',
-      'complexity',
-      'length_bars',
-      'difficulty_score',
-    ])
-    .where('groove_similarity_key', 'is not', null)
-    .execute();
+  const [rows, ladderRows] = await Promise.all([
+    database
+      .selectFrom('fills')
+      .leftJoin('fill_srs', 'fill_srs.fill_id', 'fills.id')
+      .select([
+        'fills.id as id',
+        'fills.groove_fingerprint as groove_fingerprint',
+        'fills.groove_similarity_key as groove_similarity_key',
+        'fills.chart_hash as chart_hash',
+        'fills.song as song',
+        'fills.artist as artist',
+        'fills.tempo_bpm as tempo_bpm',
+        'fills.subdivision as subdivision',
+        'fills.complexity as complexity',
+        'fills.length_bars as length_bars',
+        'fills.difficulty_score as difficulty_score',
+        'fill_srs.state as srs_state',
+      ])
+      .where('fills.groove_similarity_key', 'is not', null)
+      .execute(),
+    database
+      .selectFrom('groove_ladder_progress')
+      .select('groove_similarity_key')
+      .execute(),
+  ]);
+
+  const ladderKeys = new Set(ladderRows.map(r => r.groove_similarity_key));
 
   const inputs: GrooveClusterInput[] = rows.map(r => ({
     id: r.id,
@@ -909,9 +919,10 @@ export async function getGrooveClusters(
     complexity: r.complexity,
     lengthBars: r.length_bars,
     difficultyScore: r.difficulty_score ?? 0,
+    srsState: (r.srs_state as 'new' | 'learning' | 'mastered' | null) ?? null,
   }));
 
-  return buildGrooveClusters(inputs);
+  return buildGrooveClusters(inputs, {ladderKeys});
 }
 
 // --- Scan run bookkeeping ---------------------------------------------------

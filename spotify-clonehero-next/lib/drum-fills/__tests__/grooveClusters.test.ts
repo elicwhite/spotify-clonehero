@@ -1,6 +1,8 @@
 import {
   buildGrooveClusters,
+  filterAndSortGrooves,
   summarizeClusterDistribution,
+  type GrooveCluster,
   type GrooveClusterInput,
 } from '../grooveClusters';
 
@@ -146,6 +148,133 @@ describe('buildGrooveClusters', () => {
       input({id: 'c', grooveSimilarityKey: 'k', grooveFingerprint: 'fpY'}),
     ]);
     expect(clusters[0].representativeFingerprint).toBe('fpX');
+  });
+});
+
+describe('groove voicing + progress', () => {
+  it('derives the beat voices from the representative fingerprint', () => {
+    // EASY_GROOVE uses kick(1), snare(2), hat(4) — no tom/crash.
+    const c = buildGrooveClusters([
+      input({grooveSimilarityKey: 'k', grooveFingerprint: EASY_GROOVE}),
+    ])[0];
+    expect(c.grooveVoices.sort()).toEqual(['hat', 'kick', 'snare']);
+  });
+
+  it('classifies progress: not-started / in-progress / mastered', () => {
+    const notStarted = buildGrooveClusters([
+      input({id: 'a', grooveSimilarityKey: 'n', srsState: 'new'}),
+      input({id: 'b', grooveSimilarityKey: 'n', srsState: null}),
+    ])[0];
+    expect(notStarted.progress).toBe('not-started');
+
+    const inProgress = buildGrooveClusters([
+      input({id: 'a', grooveSimilarityKey: 'p', srsState: 'learning'}),
+      input({id: 'b', grooveSimilarityKey: 'p', srsState: 'new'}),
+    ])[0];
+    expect(inProgress.progress).toBe('in-progress');
+
+    const mastered = buildGrooveClusters([
+      input({id: 'a', grooveSimilarityKey: 'm', srsState: 'mastered'}),
+      input({id: 'b', grooveSimilarityKey: 'm', srsState: 'mastered'}),
+    ])[0];
+    expect(mastered.progress).toBe('mastered');
+  });
+
+  it('marks in-progress when a ladder is started even with no SRS', () => {
+    const c = buildGrooveClusters(
+      [input({grooveSimilarityKey: 'lad', srsState: null})],
+      {ladderKeys: new Set(['lad'])},
+    )[0];
+    expect(c.progress).toBe('in-progress');
+  });
+});
+
+describe('filterAndSortGrooves', () => {
+  const base = (over: Partial<GrooveCluster>): GrooveCluster => ({
+    similarityKey: 'k',
+    representativeFingerprint: '',
+    fillCount: 5,
+    fillIds: [],
+    tempoMin: 120,
+    tempoMax: 120,
+    distinctSongs: 1,
+    subdivisions: [],
+    complexities: [],
+    lengths: [],
+    grooveDifficulty: 50,
+    easiestFillDifficulty: 50,
+    grooveVoices: ['kick', 'snare', 'hat'],
+    progress: 'not-started',
+    ...over,
+  });
+
+  const crit = (over = {}) => ({
+    minFills: 3,
+    progress: [] as GrooveCluster['progress'][],
+    voices: [] as GrooveCluster['grooveVoices'],
+    sort: 'difficulty-asc' as const,
+    ...over,
+  });
+
+  it('filters by minFills', () => {
+    const out = filterAndSortGrooves(
+      [
+        base({similarityKey: 'a', fillCount: 3}),
+        base({similarityKey: 'b', fillCount: 8}),
+      ],
+      crit({minFills: 5}),
+    );
+    expect(out.map(c => c.similarityKey)).toEqual(['b']);
+  });
+
+  it('filters by progress', () => {
+    const out = filterAndSortGrooves(
+      [
+        base({similarityKey: 'a', progress: 'mastered'}),
+        base({similarityKey: 'b', progress: 'not-started'}),
+      ],
+      crit({progress: ['not-started']}),
+    );
+    expect(out.map(c => c.similarityKey)).toEqual(['b']);
+  });
+
+  it('filters by voicing with contains-all semantics', () => {
+    const out = filterAndSortGrooves(
+      [
+        base({
+          similarityKey: 'withCrash',
+          grooveVoices: ['kick', 'snare', 'hat', 'crash'],
+        }),
+        base({
+          similarityKey: 'noCrash',
+          grooveVoices: ['kick', 'snare', 'hat'],
+        }),
+      ],
+      crit({voices: ['crash']}),
+    );
+    expect(out.map(c => c.similarityKey)).toEqual(['withCrash']);
+  });
+
+  it('sorts by difficulty asc/desc and most-fills', () => {
+    const cs = [
+      base({similarityKey: 'easy', grooveDifficulty: 20, fillCount: 4}),
+      base({similarityKey: 'hard', grooveDifficulty: 80, fillCount: 9}),
+    ];
+    expect(
+      filterAndSortGrooves(cs, crit({sort: 'difficulty-asc'})).map(
+        c => c.similarityKey,
+      ),
+    ).toEqual(['easy', 'hard']);
+    expect(
+      filterAndSortGrooves(cs, crit({sort: 'difficulty-desc'})).map(
+        c => c.similarityKey,
+      ),
+    ).toEqual(['hard', 'easy']);
+    expect(
+      filterAndSortGrooves(cs, crit({sort: 'fills-desc'})).map(
+        c => c.similarityKey,
+      ),
+    ).toEqual(['hard', 'easy']);
   });
 });
 

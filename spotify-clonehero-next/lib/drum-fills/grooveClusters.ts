@@ -8,13 +8,20 @@
  * aggregation here makes it unit-testable without a database.
  */
 
-import {scoreGrooveDifficulty} from './detection/grooveDifficulty';
+import {
+  scoreGrooveDifficulty,
+  grooveVoicesFromFingerprint,
+} from './detection/grooveDifficulty';
+import type {DrumVoice} from './detection/types';
 
 /**
  * Minimum fills for a groove cluster to be worth drilling. Grooves with fewer
  * are suppressed from the Grooves list — too little fill vocabulary to rotate.
  */
 export const MIN_DRILLABLE_FILLS = 3;
+
+/** Per-groove practice progress, from ladder progress + member fill mastery. */
+export type GrooveProgress = 'not-started' | 'in-progress' | 'mastered';
 
 /** Minimal per-fill shape needed to build groove clusters. */
 export interface GrooveClusterInput {
@@ -30,6 +37,8 @@ export interface GrooveClusterInput {
   lengthBars: number;
   /** Continuous fill difficulty (0-100); used as the groove-sort tie-break. */
   difficultyScore: number;
+  /** This fill's mastery state, if practiced (drives groove progress). */
+  srsState?: 'new' | 'learning' | 'mastered' | null;
 }
 
 /** A cluster of fills that share a groove (by similarity key). */
@@ -62,6 +71,10 @@ export interface GrooveCluster {
   grooveDifficulty: number;
   /** Easiest member fill's difficulty (0-100) — the sort tie-break. */
   easiestFillDifficulty: number;
+  /** Voices the beat itself uses (kick/snare/hat/tom/crash), for voicing filter. */
+  grooveVoices: DrumVoice[];
+  /** Practice progress across the cluster. */
+  progress: GrooveProgress;
 }
 
 /**
@@ -74,6 +87,7 @@ export interface GrooveCluster {
  */
 export function buildGrooveClusters(
   fills: GrooveClusterInput[],
+  opts: {ladderKeys?: ReadonlySet<string>} = {},
 ): GrooveCluster[] {
   const byKey = new Map<string, GrooveClusterInput[]>();
   for (const fill of fills) {
@@ -86,7 +100,13 @@ export function buildGrooveClusters(
 
   const clusters: GrooveCluster[] = [];
   for (const [similarityKey, members] of byKey) {
-    clusters.push(summarizeCluster(similarityKey, members));
+    clusters.push(
+      summarizeCluster(
+        similarityKey,
+        members,
+        opts.ladderKeys?.has(similarityKey) ?? false,
+      ),
+    );
   }
 
   clusters.sort(
@@ -114,6 +134,7 @@ function median(values: number[]): number {
 function summarizeCluster(
   similarityKey: string,
   members: GrooveClusterInput[],
+  hasLadderProgress: boolean,
 ): GrooveCluster {
   let tempoMin = Infinity;
   let tempoMax = -Infinity;
@@ -173,6 +194,24 @@ function summarizeCluster(
     ? scoreGrooveDifficulty(representativeFingerprint, medianBpm)
     : Math.round((median(complexityValues) / 5) * 100);
 
+  // Progress: mastered when every member fill is mastered; in-progress when a
+  // ladder has been started or any member fill is past 'new'; else not started.
+  const srsStates = members
+    .map(m => m.srsState)
+    .filter((s): s is 'new' | 'learning' | 'mastered' => s != null);
+  const allMastered =
+    srsStates.length === members.length &&
+    srsStates.length > 0 &&
+    srsStates.every(s => s === 'mastered');
+  const anyProgress =
+    hasLadderProgress ||
+    srsStates.some(s => s === 'learning' || s === 'mastered');
+  const progress: GrooveProgress = allMastered
+    ? 'mastered'
+    : anyProgress
+      ? 'in-progress'
+      : 'not-started';
+
   return {
     similarityKey,
     representativeFingerprint,
@@ -187,7 +226,83 @@ function summarizeCluster(
     grooveDifficulty,
     easiestFillDifficulty:
       easiestFillDifficulty === Infinity ? 0 : easiestFillDifficulty,
+    grooveVoices: grooveVoicesFromFingerprint(representativeFingerprint),
+    progress,
   };
+}
+
+/** Sort options for the Grooves list. */
+export type GrooveSort =
+  | 'difficulty-asc'
+  | 'difficulty-desc'
+  | 'fills-desc'
+  | 'tempo-asc';
+
+export interface GrooveFilterCriteria {
+  /** Minimum fills in the cluster (>= MIN_DRILLABLE_FILLS). */
+  minFills: number;
+  /** Allowed progress states; empty = all. */
+  progress: GrooveProgress[];
+  /** Required voices (contains-all); empty = no voicing constraint. */
+  voices: DrumVoice[];
+  sort: GrooveSort;
+}
+
+/**
+ * Filter and sort groove clusters for the Grooves list. Pure, so the filter
+ * UI's behaviour is unit-testable. Drops clusters below `minFills`, with a
+ * progress not in the selected set, or missing any required voice; then sorts.
+ */
+export function filterAndSortGrooves(
+  clusters: GrooveCluster[],
+  criteria: GrooveFilterCriteria,
+): GrooveCluster[] {
+  const filtered = clusters.filter(c => {
+    if (c.fillCount < criteria.minFills) return false;
+    if (criteria.progress.length > 0 && !criteria.progress.includes(c.progress))
+      return false;
+    if (
+      criteria.voices.length > 0 &&
+      !criteria.voices.every(v => c.grooveVoices.includes(v))
+    )
+      return false;
+    return true;
+  });
+
+  const byKey = (a: GrooveCluster, b: GrooveCluster) =>
+    a.similarityKey < b.similarityKey
+      ? -1
+      : a.similarityKey > b.similarityKey
+        ? 1
+        : 0;
+
+  const sorted = [...filtered];
+  switch (criteria.sort) {
+    case 'difficulty-desc':
+      sorted.sort(
+        (a, b) =>
+          b.grooveDifficulty - a.grooveDifficulty ||
+          b.easiestFillDifficulty - a.easiestFillDifficulty ||
+          byKey(a, b),
+      );
+      break;
+    case 'fills-desc':
+      sorted.sort((a, b) => b.fillCount - a.fillCount || byKey(a, b));
+      break;
+    case 'tempo-asc':
+      sorted.sort((a, b) => a.tempoMin - b.tempoMin || byKey(a, b));
+      break;
+    case 'difficulty-asc':
+    default:
+      sorted.sort(
+        (a, b) =>
+          a.grooveDifficulty - b.grooveDifficulty ||
+          a.easiestFillDifficulty - b.easiestFillDifficulty ||
+          byKey(a, b),
+      );
+      break;
+  }
+  return sorted;
 }
 
 /** Summary stats over a set of clusters, for inspection / spot-check output. */

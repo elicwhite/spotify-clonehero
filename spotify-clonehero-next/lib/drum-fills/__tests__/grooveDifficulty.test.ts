@@ -1,6 +1,7 @@
 import {
   parseGrooveFingerprint,
   scoreGrooveDifficulty,
+  grooveVoicesFromFingerprint,
 } from '../detection/grooveDifficulty';
 
 // Canonical fingerprints (slot:mask over a 48/bar grid). kick=1 snare=2 hat=4.
@@ -24,6 +25,27 @@ describe('parseGrooveFingerprint', () => {
   it('returns [] for empty or malformed input', () => {
     expect(parseGrooveFingerprint('')).toEqual([]);
     expect(parseGrooveFingerprint('gfp')).toEqual([]);
+  });
+});
+
+describe('grooveVoicesFromFingerprint', () => {
+  it('returns the union of voices used, in stable order', () => {
+    // 0:5 = kick(1)+hat(4); 12:6 = snare(2)+hat(4).
+    expect(grooveVoicesFromFingerprint('0:5|12:6')).toEqual([
+      'kick',
+      'snare',
+      'hat',
+    ]);
+    // mask 8 = tom, mask 16 = crash.
+    expect(grooveVoicesFromFingerprint('0:1|24:8|36:16').sort()).toEqual([
+      'crash',
+      'kick',
+      'tom',
+    ]);
+  });
+
+  it('returns [] for an empty fingerprint', () => {
+    expect(grooveVoicesFromFingerprint('')).toEqual([]);
   });
 });
 
