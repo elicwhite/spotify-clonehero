@@ -27,6 +27,16 @@ import {
 } from '../lib/drum-fills/detection/detectFills';
 import {classifyAndDedupe} from '../lib/drum-fills/detection/classify';
 import {buildFingerprints} from '../lib/drum-fills/detection/grooveModel';
+import {
+  canonicalGrooveFingerprint,
+  grooveSimilarityKey,
+  grooveSpanFingerprints,
+} from '../lib/drum-fills/detection/grooveFingerprint';
+import {
+  buildGrooveClusters,
+  summarizeClusterDistribution,
+  type GrooveClusterInput,
+} from '../lib/drum-fills/grooveClusters';
 import type {
   ClassifiedFill,
   DrumVoice,
@@ -69,6 +79,16 @@ async function main() {
   const voicingDist = new Map<string, number>();
   const complexityDist = new Map<number, number>();
 
+  // Groove-cluster inputs across the whole library (one per detected fill).
+  const grooveInputs: GrooveClusterInput[] = [];
+  let totalFillsForClusters = 0;
+
+  // §5/§6 metrics.
+  let candidatesNoGate = 0; // detection without the substance gate
+  let gatedFills = 0; // detection with the gate (== sum of fills)
+  const fillKeyCounts = new Map<string, number>(); // fill similarity key → count
+  const difficultyScores: number[] = [];
+
   for (const cp of chartPaths) {
     let files: File[];
     try {
@@ -96,6 +116,11 @@ async function main() {
     let fills;
     try {
       const raw = detectFills(chart);
+      // Same detection without the substance gate, to measure how many
+      // degenerate candidates the gate removes.
+      const rawNoGate = detectFills(chart, {substanceGate: false});
+      candidatesNoGate += rawNoGate.length;
+      gatedFills += raw.length;
       fills = classifyAndDedupe(chart, track, raw);
     } catch {
       parseErrors++;
@@ -105,6 +130,10 @@ async function main() {
     fillsPerSong.push(fills.length);
     if (fills.length > 0) withFills++;
 
+    // Per-song fingerprints reused for both ASCII rendering and groove keys.
+    const songFps = buildFingerprints(chart, track);
+    const songId = path.basename(cp.path);
+
     for (const cf of fills) {
       tally(lengthDist, `${cf.classification.lengthBars}bar`);
       tally(subdivDist, cf.classification.subdivision);
@@ -113,6 +142,31 @@ async function main() {
         cf.classification.complexity,
         (complexityDist.get(cf.classification.complexity) ?? 0) + 1,
       );
+
+      // Fill-dedupe + difficulty (§5/§6).
+      const fk = cf.classification.similarityKey;
+      if (fk) fillKeyCounts.set(fk, (fillKeyCounts.get(fk) ?? 0) + 1);
+      difficultyScores.push(cf.classification.difficultyScore);
+
+      totalFillsForClusters++;
+      const span = grooveSpanFingerprints(
+        songFps,
+        cf.fill.grooveStartTick,
+        cf.fill.grooveEndTick,
+      );
+      const simKey = grooveSimilarityKey(span);
+      grooveInputs.push({
+        id: `${songId}:${grooveInputs.length}`,
+        grooveFingerprint: canonicalGrooveFingerprint(span),
+        grooveSimilarityKey: simKey || null,
+        chartHash: songId,
+        song: songId,
+        artist: '',
+        tempoBpm: cf.fill.tempoBpm,
+        subdivision: cf.classification.subdivision,
+        complexity: cf.classification.complexity,
+        lengthBars: cf.classification.lengthBars,
+      });
     }
 
     results.push({name: path.basename(cp.path), fills, chart});
@@ -150,6 +204,100 @@ async function main() {
   console.log('\n--- Complexity distribution (1..5) ---');
   for (let c = 1; c <= 5; c++) {
     console.log(`  ${c}: ${complexityDist.get(c) ?? 0}`);
+  }
+
+  // ---- §5 substance gate ----
+  console.log('\n--- Substance gate (plan 0045 §5) ---');
+  console.log(`Candidates w/o gate:     ${candidatesNoGate}`);
+  console.log(`Fills with gate:         ${gatedFills}`);
+  const excluded = candidatesNoGate - gatedFills;
+  const pct =
+    candidatesNoGate > 0
+      ? ((excluded / candidatesNoGate) * 100).toFixed(1)
+      : '0';
+  console.log(`Excluded by gate:        ${excluded} (${pct}%)`);
+
+  // ---- §5 fill dedupe (cross-song) ----
+  console.log('\n--- Fill dedupe (by fill similarity key) ---');
+  let dedupeTotal = 0;
+  for (const n of fillKeyCounts.values()) dedupeTotal += n;
+  const distinctPatterns = fillKeyCounts.size;
+  console.log(`Fills with a fill key:   ${dedupeTotal}`);
+  console.log(`Distinct patterns:       ${distinctPatterns}`);
+  if (distinctPatterns > 0) {
+    console.log(
+      `Dedupe ratio:            ${(dedupeTotal / distinctPatterns).toFixed(2)} ` +
+        `instances/pattern`,
+    );
+    const topPatterns = [...fillKeyCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10);
+    console.log('\n  Top 10 duplicated fill patterns (count / key):');
+    for (const [key, count] of topPatterns) {
+      const shown = key.length > 60 ? key.slice(0, 57) + '...' : key;
+      console.log(`    ${String(count).padStart(5)}  ${shown}`);
+    }
+  }
+
+  // ---- §6 difficulty score distribution ----
+  console.log('\n--- Difficulty score distribution (0..100) ---');
+  if (difficultyScores.length > 0) {
+    const sorted = [...difficultyScores].sort((a, b) => a - b);
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    const mean =
+      difficultyScores.reduce((a, b) => a + b, 0) / difficultyScores.length;
+    const q = (p: number) =>
+      sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+    console.log(
+      `min ${min}  p25 ${q(0.25)}  median ${q(0.5)}  p75 ${q(0.75)}  ` +
+        `max ${max}  mean ${mean.toFixed(1)}`,
+    );
+    const buckets = new Map<string, number>();
+    for (const v of difficultyScores) {
+      const b = Math.min(9, Math.floor(v / 10));
+      const label = `${b * 10}-${b * 10 + 9}`;
+      buckets.set(label, (buckets.get(label) ?? 0) + 1);
+    }
+    const maxBucket = Math.max(1, ...buckets.values());
+    for (let b = 0; b < 10; b++) {
+      const label = `${b * 10}-${b * 10 + 9}`;
+      const n = buckets.get(label) ?? 0;
+      const bar = '#'.repeat(Math.round((n / maxBucket) * 40));
+      console.log(`  ${label.padStart(6)} | ${bar} ${n}`);
+    }
+  } else {
+    console.log('  (no fills)');
+  }
+
+  // ---- Groove clusters ----
+  const clusters = buildGrooveClusters(grooveInputs);
+  const cstats = summarizeClusterDistribution(totalFillsForClusters, clusters);
+  console.log('\n--- Groove clusters (by similarity key) ---');
+  console.log(`Fills total:             ${cstats.totalFills}`);
+  console.log(`Fills with a groove key: ${cstats.clusterableFills}`);
+  console.log(`Distinct grooves:        ${cstats.distinctClusters}`);
+  console.log(
+    `Singleton grooves:       ${cstats.singletonClusters}` +
+      (cstats.distinctClusters > 0
+        ? ` (${(
+            (cstats.singletonClusters / cstats.distinctClusters) *
+            100
+          ).toFixed(1)}% of clusters)`
+        : ''),
+  );
+  console.log(`Largest cluster:         ${cstats.largestCluster} fills`);
+
+  console.log('\n  Top 10 groove clusters (fills / songs / tempo / subdiv):');
+  for (const c of clusters.slice(0, 10)) {
+    const subdiv = c.subdivisions.map(s => `${s.value}:${s.count}`).join(' ');
+    console.log(
+      `    ${String(c.fillCount).padStart(5)} fills  ` +
+        `${String(c.distinctSongs).padStart(4)} songs  ` +
+        `${c.tempoMin.toFixed(0)}-${c.tempoMax.toFixed(0)} BPM  ` +
+        `[${subdiv}]`,
+    );
+    console.log(`        key: ${c.similarityKey}`);
   }
 
   console.log(`\n--- ${sampleCount} sample fills (ASCII grids) ---`);

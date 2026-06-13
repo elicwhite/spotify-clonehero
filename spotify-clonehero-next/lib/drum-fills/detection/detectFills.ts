@@ -235,6 +235,45 @@ export function detectFills(
       if (first.slot <= 2 && first.voices.has('crash')) lastCrash = true;
     }
 
+    // --- Substance gate (plan 0045 §5) ----------------------------------
+    // Reject degenerate "fills" that are really one-shot accents/pushes: a lone
+    // crash on a downbeat, a crash+kick push, or a single flam. A real fill has
+    // genuine rhythmic content, not just a landing hit. Require:
+    //   (a) >= 3 distinct onsets in the span,
+    //   (b) >= 2 onsets strictly before the final landing onset (the resolving
+    //       crash/downbeat hit) — so "two setup notes + crash" is the minimum,
+    //   (c) the deviating onsets span >= a quarter bar in ticks, so a cluster of
+    //       grace notes right on the downbeat doesn't qualify.
+    const spanOnsetTicks: number[] = [];
+    for (let b = span.startBar; b <= span.endBar; b++) {
+      for (const o of fingerprints[b].onsets) spanOnsetTicks.push(o.tick);
+    }
+    spanOnsetTicks.sort((a, b) => a - b);
+
+    if (opts.substanceGate) {
+      if (spanOnsetTicks.length < 3) continue;
+
+      // The "final landing" is the last onset of the span (the resolving hit,
+      // typically a crash on/near the downbeat). Onsets before it are the
+      // fill's actual rhythmic work.
+      const landingTick = spanOnsetTicks[spanOnsetTicks.length - 1];
+      const onsetsBeforeLanding = spanOnsetTicks.filter(
+        t => t < landingTick,
+      ).length;
+      if (onsetsBeforeLanding < 2) continue;
+
+      // Deviation span: tick distance from the first to the last onset. Must
+      // cover at least a quarter of the fill's first bar.
+      const firstBarTicks =
+        fingerprints[span.startBar].endTick -
+        fingerprints[span.startBar].startTick;
+      const quarterBarTicks = firstBarTicks / 4;
+      const deviationSpanTicks =
+        spanOnsetTicks[spanOnsetTicks.length - 1] - spanOnsetTicks[0];
+      if (deviationSpanTicks < quarterBarTicks) continue;
+    }
+    // --------------------------------------------------------------------
+
     const grooveStats = barStats(chart, groove);
     const spanDurationMs = Math.max(
       1,

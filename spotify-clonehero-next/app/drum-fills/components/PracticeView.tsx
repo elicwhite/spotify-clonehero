@@ -13,7 +13,10 @@ import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import CloneHeroRenderer from '@/app/sheet-music/[slug]/CloneHeroRenderer';
 import SheetMusic from '@/app/sheet-music/[slug]/SheetMusic';
-import {BackingTrackPlayer} from '@/lib/drum-fills/practice/backingTrack';
+import {
+  BackingTrackPlayer,
+  fillWindowSeconds,
+} from '@/lib/drum-fills/practice/backingTrack';
 import {
   applyAttempt,
   initFillSrsState,
@@ -24,7 +27,12 @@ import {
   nextTempoPct,
   initialTempoPct,
 } from '@/lib/drum-fills/practice/speedTrainer';
-import {recordAttempt, upsertSrs} from '@/lib/local-db/drum-fills';
+import {
+  getFillSiblings,
+  recordAttempt,
+  upsertSrs,
+  type FillWithSrs,
+} from '@/lib/local-db/drum-fills';
 import type {ScoredAttempt} from '@/lib/drum-fills/practice/attempt';
 import type {FillMode} from '@/lib/local-db/drum-fills';
 import {useFillChart} from '../hooks/useFillChart';
@@ -37,6 +45,24 @@ export interface PracticeViewProps {
   onExit: () => void;
   /** Called when the user advances (queue/roulette). Falls back to onExit. */
   onNext?: () => void;
+  /**
+   * Optional label for the Next control and a preview of the upcoming item
+   * (groove/roulette sessions show the next fill one ahead).
+   */
+  nextLabel?: string;
+  /** Notified after each scored attempt (for session summaries). */
+  onAttemptScored?: (result: ScoredAttempt) => void;
+  /** Extra controls rendered in the transport row (e.g. shuffle toggle). */
+  transportExtras?: React.ReactNode;
+  /** Practice mode to start in (defaults to song loop). */
+  initialMode?: Mode;
+  /**
+   * When true, PracticeView offers an instance switcher in the transport: it
+   * loads the other fill instances that share this fill's pattern (cross-song
+   * dedupe group) and lets the user practice a different one. Used when
+   * launching from a grouped Library card.
+   */
+  enableInstanceSwitcher?: boolean;
 }
 
 type Mode = 'song-context' | 'isolated' | 'speed-trainer' | 'roulette';
@@ -62,9 +88,83 @@ export default function PracticeView({
   fillId,
   onExit,
   onNext,
+  nextLabel,
+  onAttemptScored,
+  transportExtras,
+  initialMode,
+  enableInstanceSwitcher,
 }: PracticeViewProps) {
-  const data = useFillChart(fillId);
-  const [mode, setMode] = useState<Mode>('song-context');
+  // When instance switching is enabled the user can practice a sibling instance
+  // of the same pattern; `activeFillId` overrides the prop until they exit. The
+  // override resets when the prop changes, adjusted during render (no effect) so
+  // there's no cascading-render flash. See react.dev "adjusting state on prop
+  // change".
+  const [activeFill, setActiveFill] = useState<{anchor: string; id: string}>(
+    () => ({anchor: fillId, id: fillId}),
+  );
+  if (activeFill.anchor !== fillId) {
+    setActiveFill({anchor: fillId, id: fillId});
+  }
+  const activeFillId = activeFill.id;
+  const setActiveFillId = (id: string) => setActiveFill({anchor: fillId, id});
+
+  const [siblings, setSiblings] = useState<FillWithSrs[] | null>(null);
+  const data = useFillChart(activeFillId);
+  const [mode, setMode] = useState<Mode>(initialMode ?? 'song-context');
+
+  // Load the pattern's sibling instances once the fill resolves (the chart load
+  // gives us its similarity key). Only when switching is enabled and there is a
+  // key to group by; otherwise the resolved value is null.
+  const similarityKey = enableInstanceSwitcher
+    ? (data.fill?.fillSimilarityKey ?? null)
+    : null;
+  useEffect(() => {
+    let cancelled = false;
+    if (!similarityKey) {
+      Promise.resolve().then(() => {
+        if (!cancelled) setSiblings(null);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    getFillSiblings(similarityKey)
+      .then(rows => {
+        if (!cancelled) setSiblings(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setSiblings(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [similarityKey]);
+
+  const instanceSwitcher =
+    siblings && siblings.length > 1 ? (
+      <label className="ml-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+        Instance
+        <select
+          name="fill-instance"
+          value={activeFillId}
+          onChange={e => setActiveFillId(e.target.value)}
+          className="max-w-[12rem] rounded border bg-background px-2 py-1 text-xs">
+          {siblings.map(s => (
+            <option key={s.id} value={s.id}>
+              {s.song} · {Math.round(s.tempoBpm)} BPM
+            </option>
+          ))}
+        </select>
+      </label>
+    ) : null;
+
+  const mergedExtras =
+    instanceSwitcher || transportExtras ? (
+      <>
+        {transportExtras}
+        {instanceSwitcher}
+      </>
+    ) : undefined;
 
   if (data.status === 'loading') {
     return <Centered>Loading fill…</Centered>;
@@ -111,8 +211,8 @@ export default function PracticeView({
 
   return (
     <PracticeSession
-      key={fillId}
-      fillId={fillId}
+      key={activeFillId}
+      fillId={activeFillId}
       mode={mode}
       onModeChange={setMode}
       data={{
@@ -125,7 +225,64 @@ export default function PracticeView({
       }}
       onExit={onExit}
       onNext={onNext}
+      nextLabel={nextLabel}
+      onAttemptScored={onAttemptScored}
+      transportExtras={mergedExtras}
     />
+  );
+}
+
+/**
+ * Mode picker as a collapsed disclosure: the active (journey-implied) mode shows
+ * as a chip with a "Change mode" toggle; expanding reveals the full strip. Keeps
+ * configuration reachable without making it the loudest element on the page.
+ */
+function ModeSwitcher({
+  mode,
+  onModeChange,
+}: {
+  mode: Mode;
+  onModeChange: (m: Mode) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <div className="flex shrink-0 items-center gap-2 text-sm">
+        <span className="rounded bg-primary px-3 py-1.5 font-medium text-primary-foreground">
+          {MODE_LABELS[mode]}
+        </span>
+        <button
+          onClick={() => setOpen(true)}
+          className="text-xs text-muted-foreground hover:text-foreground">
+          Change mode
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-1 rounded-lg border bg-card p-1">
+      {(Object.keys(MODE_LABELS) as Mode[]).map(m => (
+        <button
+          key={m}
+          onClick={() => {
+            onModeChange(m);
+            setOpen(false);
+          }}
+          className={cn(
+            'rounded px-3 py-1.5 text-sm font-medium transition-colors',
+            m === mode
+              ? 'bg-primary text-primary-foreground'
+              : 'hover:bg-muted',
+          )}>
+          {MODE_LABELS[m]}
+        </button>
+      ))}
+      <button
+        onClick={() => setOpen(false)}
+        className="ml-1 px-2 text-xs text-muted-foreground hover:text-foreground">
+        Done
+      </button>
+    </div>
   );
 }
 
@@ -154,6 +311,9 @@ function PracticeSession({
   data,
   onExit,
   onNext,
+  nextLabel,
+  onAttemptScored: onAttemptScoredExternal,
+  transportExtras,
 }: {
   fillId: string;
   mode: Mode;
@@ -161,6 +321,9 @@ function PracticeSession({
   data: ReadyData;
   onExit: () => void;
   onNext?: () => void;
+  nextLabel?: string;
+  onAttemptScored?: (result: ScoredAttempt) => void;
+  transportExtras?: React.ReactNode;
 }) {
   const {chart, track, practiceData, fill, audioFiles, groovePattern} = data;
   const {connectedIds} = useMidi();
@@ -309,6 +472,35 @@ function PracticeSession({
 
   useInterval(handleLoopTick, isPlaying && !isSynth ? 30 : null);
 
+  // Synth-mode attempt loop: the backing player owns the clock, so track the
+  // loop position and anchor scoring to the empty fill bars at the end of each
+  // loop pass.
+  const handleSynthTick = useCallback(() => {
+    const player = backingRef.current;
+    if (!player || !groovePattern) return;
+    const posSec = player.loopPositionSeconds();
+    if (posSec === null) return;
+
+    const {start: fillStartSec} = fillWindowSeconds(
+      groovePattern,
+      practiceData.bpm,
+    );
+    const inFill = posSec >= fillStartSec;
+    if (inFill && !inFillRef.current) {
+      // Entered the fill bars: anchor scoring to now mapped to fill start.
+      inFillRef.current = true;
+      beginAttempt(performance.now() - (posSec - fillStartSec) * 1000);
+    } else if (!inFill && inFillRef.current) {
+      // Wrapped back to the groove bars: the fill window (which runs to the
+      // end of the loop) is over — finish + score the attempt.
+      inFillRef.current = false;
+      const result = finishAttempt();
+      if (result) onAttemptScoredRef.current(result);
+    }
+  }, [groovePattern, practiceData.bpm, beginAttempt, finishAttempt]);
+
+  useInterval(handleSynthTick, isPlaying && isSynth ? 30 : null);
+
   // Persist an attempt + advance SRS / speed trainer.
   const onAttemptScored = useCallback(
     (result: ScoredAttempt) => {
@@ -354,8 +546,10 @@ function PracticeSession({
           deltaMs: j.deltaMs,
         })),
       }).catch(() => {});
+
+      onAttemptScoredExternal?.(result);
     },
-    [fillId, mode, tempoPct],
+    [fillId, mode, tempoPct, onAttemptScoredExternal],
   );
 
   useEffect(() => {
@@ -489,8 +683,8 @@ function PracticeSession({
   );
 
   return (
-    <div className="flex flex-1 flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">
             {fill.song}{' '}
@@ -508,36 +702,24 @@ function PracticeSession({
             stopAll();
             onExit();
           }}>
-          Back to Library
+          Back
         </Button>
       </div>
 
-      {/* Mode switcher */}
-      <div className="flex flex-wrap gap-1 rounded-lg border bg-card p-1">
-        {(Object.keys(MODE_LABELS) as Mode[]).map(m => (
-          <button
-            key={m}
-            onClick={() => onModeChange(m)}
-            className={cn(
-              'rounded px-3 py-1.5 text-sm font-medium transition-colors',
-              m === mode
-                ? 'bg-primary text-primary-foreground'
-                : 'hover:bg-muted',
-            )}>
-            {MODE_LABELS[m]}
-          </button>
-        ))}
-      </div>
+      {/* Mode switcher — the journey implies a default (ladder → isolated synth,
+          song-launched → song loop), so the current mode leads and the full
+          picker is a one-click disclosure rather than an always-on tab strip. */}
+      <ModeSwitcher mode={mode} onModeChange={onModeChange} />
 
       {!hasMidi && (
-        <div className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div className="shrink-0 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
           No MIDI device connected — connect your kit from the Library to score
           your hits.
         </div>
       )}
 
       {/* Transport */}
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-lg border bg-card p-2">
         <Button onClick={togglePlay} disabled={!audioManager && !isSynth}>
           {isPlaying ? 'Pause (space)' : 'Play (space)'}
         </Button>
@@ -546,9 +728,10 @@ function PracticeSession({
         </Button>
         {(mode === 'roulette' || onNext) && (
           <Button variant="outline" onClick={() => (onNext ?? onExit)()}>
-            Next (N)
+            {nextLabel ? `Next: ${nextLabel} (N)` : 'Next (N)'}
           </Button>
         )}
+        {transportExtras}
         {mode === 'speed-trainer' && (
           <div className="ml-2 flex items-center gap-1 text-sm">
             <Button variant="outline" size="sm" onClick={() => nudgeTempo(-5)}>
@@ -565,10 +748,15 @@ function PracticeSession({
         </span>
       </div>
 
-      {/* Views: highway + sheet music + HUD */}
-      <div className="flex flex-1 flex-col gap-3 lg:flex-row">
-        <div className="flex min-h-[280px] flex-1 flex-col gap-3 lg:flex-row">
-          <div className="flex min-h-[280px] flex-1 overflow-hidden rounded-lg border">
+      {/* Views: highway + sheet music + HUD.
+          The row fills the remaining bounded height (min-h-0 so flex children
+          can shrink); the highway gets a stable, fully-visible container and
+          the sheet-music pane scrolls internally (SheetMusic owns its own
+          overflow-y-auto). On narrow screens the panes stack and the row
+          itself scrolls so nothing is clipped. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto lg:flex-row lg:overflow-hidden">
+        <div className="flex min-h-[280px] flex-1 flex-col gap-3 lg:min-h-0 lg:flex-row">
+          <div className="flex min-h-[280px] flex-1 overflow-hidden rounded-lg border lg:min-h-0">
             {audioManager ? (
               <CloneHeroRenderer
                 metadata={metadata}
@@ -582,7 +770,7 @@ function PracticeSession({
               </div>
             )}
           </div>
-          <div className="flex min-h-[280px] flex-1 overflow-hidden">
+          <div className="flex min-h-[280px] flex-1 overflow-hidden lg:min-h-0">
             <SheetMusic
               chart={chart}
               track={track}
@@ -600,7 +788,7 @@ function PracticeSession({
             />
           </div>
         </div>
-        <div className="w-full lg:w-64">
+        <div className="w-full shrink-0 lg:w-64 lg:overflow-y-auto">
           <PracticeHud
             lastAttempt={scoring.lastAttempt}
             srs={srs}

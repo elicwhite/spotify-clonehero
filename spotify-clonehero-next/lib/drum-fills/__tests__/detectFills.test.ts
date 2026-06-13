@@ -150,3 +150,77 @@ describe('detectFills', () => {
     expect(fills[0].features.endsOnCrash).toBe(true);
   });
 });
+
+describe('detectFills substance gate (plan 0045 §5)', () => {
+  /** Groove for `n` bars, then `fillBar` content, then groove + landing crash. */
+  function songWith(
+    grooveBars: number,
+    fillBarNotes: PlannedNote[],
+    landingBar: number,
+  ): PlannedNote[] {
+    const notes: PlannedNote[] = [];
+    for (let b = 0; b < grooveBars; b++) notes.push(...backbeatBar(b * BAR));
+    notes.push(...fillBarNotes);
+    for (let b = landingBar; b < landingBar + 2; b++) {
+      notes.push(...backbeatBar(b * BAR));
+    }
+    return notes;
+  }
+
+  it('does NOT flag a lone crash on the downbeat as a fill', () => {
+    // Groove, then a bar whose only departure is a single crash on beat 1.
+    const fillBar: PlannedNote[] = [
+      {tick: 5 * BAR, voices: ['crashGreen']},
+      // sparse backbeat kept so the bar isn't empty, but no roll
+    ];
+    for (let i = 0; i < 8; i++) {
+      const tick = 5 * BAR + i * (RES / 2);
+      const voices: ('hatYellow' | 'kick' | 'snare')[] = ['hatYellow'];
+      if (i === 0 || i === 4) voices.push('kick');
+      if (i === 2 || i === 6) voices.push('snare');
+      fillBar.push({tick, voices});
+    }
+    const notes = songWith(5, fillBar, 6);
+    const fills = detectFills(buildChart({notes}));
+    expect(fills).toHaveLength(0);
+  });
+
+  it('does NOT flag a crash+kick push as a fill', () => {
+    const fillBar: PlannedNote[] = [
+      {tick: 5 * BAR, voices: ['crashGreen', 'kick']},
+    ];
+    const notes = songWith(5, fillBar, 6);
+    const fills = detectFills(buildChart({notes}));
+    expect(fills).toHaveLength(0);
+  });
+
+  it('does NOT flag a single flam as a fill', () => {
+    const fillBar: PlannedNote[] = [
+      {tick: 5 * BAR, voices: ['snare'], extraFlags: 0},
+    ];
+    const notes = songWith(5, fillBar, 6);
+    const fills = detectFills(buildChart({notes}));
+    expect(fills).toHaveLength(0);
+  });
+
+  it('does NOT flag two grace notes clustered on the downbeat (sub-quarter span)', () => {
+    // Three onsets but all within the first 16th of the bar: deviation span is
+    // tiny, so the quarter-bar span requirement rejects it.
+    const fillBar: PlannedNote[] = [
+      {tick: 5 * BAR, voices: ['snare']},
+      {tick: 5 * BAR + RES / 8, voices: ['tomYellow']},
+      {tick: 5 * BAR + RES / 4, voices: ['crashGreen']},
+    ];
+    const notes = songWith(5, fillBar, 6);
+    const fills = detectFills(buildChart({notes}));
+    expect(fills).toHaveLength(0);
+  });
+
+  it('still detects a real 16th tom roll', () => {
+    const notes = songWith(5, tomFillBar(5 * BAR), 6);
+    notes.push({tick: 6 * BAR, voices: ['crashGreen']});
+    const fills = detectFills(buildChart({notes}));
+    expect(fills.length).toBe(1);
+    expect(fills[0].startTick).toBe(5 * BAR);
+  });
+});

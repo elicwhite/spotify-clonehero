@@ -1,47 +1,30 @@
 'use client';
 
-import {useCallback, useEffect, useState} from 'react';
+import {useEffect, useState} from 'react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {queryFills, type FillWithSrs} from '@/lib/local-db/drum-fills';
-import PracticeView from './PracticeView';
-
-/** Pick a random index different from `avoid` (when possible). */
-function pickNext(count: number, avoid: number): number {
-  if (count <= 1) return 0;
-  let next = Math.floor(Math.random() * count);
-  if (next === avoid) next = (next + 1) % count;
-  return next;
-}
+import FillRotationSession from './FillRotationSession';
 
 /**
- * Fill roulette: draws a random fill from the library and, on Next, advances to
- * another random fill — sight-reading practice across the whole vocabulary.
- * PracticeView's roulette mode supplies the steady synth beat + notation.
+ * Fill roulette: rotates random fills from the whole library — sight-reading
+ * practice across the entire vocabulary. This is the unconstrained case of a
+ * rotating-fill session (a groove session is the same loop limited to one
+ * groove cluster), so it just feeds the full pool to FillRotationSession.
  */
 export default function RouletteSession({onExit}: {onExit: () => void}) {
   const [pool, setPool] = useState<FillWithSrs[] | null>(null);
-  const [index, setIndex] = useState(0);
 
   useEffect(() => {
     (async () => {
       try {
-        const rows = await queryFills({});
-        setPool(rows);
-        setIndex(rows.length > 0 ? Math.floor(Math.random() * rows.length) : 0);
+        setPool(await queryFills({}));
       } catch (err) {
         console.error('Failed to load roulette pool', err);
         toast.error('Could not load fills for roulette.');
         setPool([]);
       }
     })();
-  }, []);
-
-  const next = useCallback(() => {
-    setPool(p => {
-      if (p) setIndex(i => pickNext(p.length, i));
-      return p;
-    });
   }, []);
 
   if (pool === null) {
@@ -66,11 +49,6 @@ export default function RouletteSession({onExit}: {onExit: () => void}) {
   }
 
   return (
-    <PracticeView
-      key={pool[index].id}
-      fillId={pool[index].id}
-      onExit={onExit}
-      onNext={next}
-    />
+    <FillRotationSession pool={pool} onExit={onExit} initialOrder="shuffle" />
   );
 }

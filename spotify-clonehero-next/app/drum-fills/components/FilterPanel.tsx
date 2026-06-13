@@ -60,6 +60,7 @@ export default function FilterPanel({
   onReset,
   hasActive,
   resultCount,
+  extras,
 }: {
   filters: LibraryFilters;
   onChange: (next: LibraryFilters) => void;
@@ -67,6 +68,8 @@ export default function FilterPanel({
   onReset: () => void;
   hasActive: boolean;
   resultCount: number;
+  /** View-level controls (grouped toggle, sort) rendered in the header row. */
+  extras?: React.ReactNode;
 }) {
   const set = (patch: Partial<LibraryFilters>) =>
     onChange({...filters, ...patch});
@@ -82,6 +85,7 @@ export default function FilterPanel({
           className="max-w-xs"
         />
         <div className="flex items-center gap-2">
+          {extras}
           <span className="text-sm text-muted-foreground">
             {resultCount} fill{resultCount === 1 ? '' : 's'}
           </span>

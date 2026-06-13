@@ -131,6 +131,16 @@ export interface Fills {
   confidence: number;
   features: string;
   created_at: number;
+  groove_fingerprint: string | null;
+  groove_similarity_key: string | null;
+  fill_similarity_key: string | null;
+  difficulty_score: number | null;
+}
+
+export interface GrooveLadderProgress {
+  groove_similarity_key: string;
+  current_rung_fill_id: string | null;
+  updated_at: number;
 }
 
 export interface FillAttempts {
@@ -168,6 +178,7 @@ export interface DB {
   fill_attempts: FillAttempts;
   fill_srs: FillSrs;
   fills: Fills;
+  groove_ladder_progress: GrooveLadderProgress;
   local_charts: LocalCharts;
   scan_runs: ScanRuns;
   spotify_album_tracks: SpotifyAlbumTracks;

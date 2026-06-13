@@ -92,8 +92,8 @@ export default function TodayQueue({onExit}: {onExit: () => void}) {
   const current = queue[index];
 
   return (
-    <div className="flex flex-1 flex-col gap-2">
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="flex shrink-0 items-center justify-between text-sm text-muted-foreground">
         <span>
           Today queue — {index + 1} / {queue.length}
         </span>

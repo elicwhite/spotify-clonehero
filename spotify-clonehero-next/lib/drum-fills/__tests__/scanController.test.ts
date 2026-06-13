@@ -59,7 +59,11 @@ function fill(id: string, chartHash: string): ScannedFill {
     subdivision: '16ths',
     complexity: 3,
     voicingTags: ['toms'],
+    difficultyScore: 50,
     fingerprint: 'fp',
+    grooveFingerprint: 'gfp',
+    grooveSimilarityKey: 'gsk',
+    fillSimilarityKey: 'fsk',
     confidence: 0.8,
     features: {} as never,
   };

@@ -14,6 +14,12 @@ import {
   getExpertDrumsTrack,
 } from '@/lib/drum-fills/detection/detectFills';
 import {classifyAndDedupe} from '@/lib/drum-fills/detection/classify';
+import {buildFingerprints} from '@/lib/drum-fills/detection/grooveModel';
+import {
+  canonicalGrooveFingerprint,
+  grooveSimilarityKey,
+  grooveSpanFingerprints,
+} from '@/lib/drum-fills/detection/grooveFingerprint';
 import type {
   ClassifiedFill,
   FillSubdivision,
@@ -79,8 +85,19 @@ export function detectFillsForChart(
 
   const chartHash = meta.chartHash ?? computeChartHash(chart);
 
+  // Fingerprints are needed to derive each fill's groove fingerprint/key; build
+  // once and reuse across all fills in the chart.
+  const fingerprints = buildFingerprints(chart, track);
+
   return classified.map((cf, i) => {
     const c = cf.classification;
+    const grooveSpan = grooveSpanFingerprints(
+      fingerprints,
+      cf.fill.grooveStartTick,
+      cf.fill.grooveEndTick,
+    );
+    const grooveFingerprint = canonicalGrooveFingerprint(grooveSpan);
+    const grooveSimKey = grooveSimilarityKey(grooveSpan);
     // Stable id: chartHash + fingerprint keeps the same fill stable across
     // rescans; the ordinal disambiguates the rare empty-fingerprint case.
     const idSuffix = c.fingerprint ? c.fingerprint : `pos${cf.fill.startTick}`;
@@ -100,7 +117,11 @@ export function detectFillsForChart(
       subdivision: mapSubdivision(c.subdivision),
       complexity: c.complexity,
       voicingTags: c.voicingTags,
+      difficultyScore: c.difficultyScore,
       fingerprint: c.fingerprint,
+      grooveFingerprint,
+      grooveSimilarityKey: grooveSimKey,
+      fillSimilarityKey: c.similarityKey,
       confidence: cf.fill.confidence,
       features: cf.fill.features,
     };

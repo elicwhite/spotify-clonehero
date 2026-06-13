@@ -80,7 +80,11 @@ function toFillInput(fill: ScannedFill): FillInput {
     subdivision: fill.subdivision,
     complexity: fill.complexity,
     voicingTags: fill.voicingTags,
+    difficultyScore: fill.difficultyScore,
     fingerprint: fill.fingerprint,
+    grooveFingerprint: fill.grooveFingerprint,
+    grooveSimilarityKey: fill.grooveSimilarityKey,
+    fillSimilarityKey: fill.fillSimilarityKey,
     confidence: fill.confidence,
     features: fill.features as unknown as Record<string, unknown>,
   };

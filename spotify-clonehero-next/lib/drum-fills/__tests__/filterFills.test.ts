@@ -3,6 +3,7 @@ import {
   hasActiveFilters,
   masteryOf,
   availableVoicingTags,
+  sortFills,
   DEFAULT_LIBRARY_FILTERS,
   type LibraryFilters,
 } from '../library/filterFills';
@@ -25,7 +26,11 @@ function makeFill(over: Partial<FillWithSrs> = {}): FillWithSrs {
     subdivision: '16ths',
     complexity: 4,
     voicingTags: ['toms', 'crash-end'],
+    difficultyScore: 50,
     fingerprint: 'fp',
+    grooveFingerprint: 'gfp',
+    grooveSimilarityKey: 'gsk',
+    fillSimilarityKey: 'fsk',
     confidence: 0.9,
     features: {},
     createdAt: 0,
@@ -196,5 +201,62 @@ describe('availableVoicingTags', () => {
   });
   it('returns empty for no fills', () => {
     expect(availableVoicingTags([])).toEqual([]);
+  });
+});
+
+describe('sortFills', () => {
+  const fills = [
+    f({id: 'mid', difficultyScore: 50, tempoBpm: 120}),
+    f({id: 'easy', difficultyScore: 10, tempoBpm: 90}),
+    f({id: 'hard', difficultyScore: 90, tempoBpm: 180}),
+    f({id: 'unrated', difficultyScore: null, tempoBpm: 150}),
+  ];
+
+  it('leaves order unchanged for default', () => {
+    expect(sortFills(fills, 'default').map(x => x.id)).toEqual([
+      'mid',
+      'easy',
+      'hard',
+      'unrated',
+    ]);
+  });
+
+  it('sorts difficulty ascending with null last', () => {
+    expect(sortFills(fills, 'difficulty-asc').map(x => x.id)).toEqual([
+      'easy',
+      'mid',
+      'hard',
+      'unrated',
+    ]);
+  });
+
+  it('sorts difficulty descending with null last', () => {
+    expect(sortFills(fills, 'difficulty-desc').map(x => x.id)).toEqual([
+      'hard',
+      'mid',
+      'easy',
+      'unrated',
+    ]);
+  });
+
+  it('sorts by tempo', () => {
+    expect(sortFills(fills, 'tempo-asc').map(x => x.id)).toEqual([
+      'easy',
+      'mid',
+      'unrated',
+      'hard',
+    ]);
+    expect(sortFills(fills, 'tempo-desc').map(x => x.id)).toEqual([
+      'hard',
+      'unrated',
+      'mid',
+      'easy',
+    ]);
+  });
+
+  it('does not mutate the input', () => {
+    const input = [...fills];
+    sortFills(input, 'difficulty-asc');
+    expect(input.map(x => x.id)).toEqual(['mid', 'easy', 'hard', 'unrated']);
   });
 });

@@ -1,5 +1,6 @@
 'use client';
 
+import {memo, useEffect, useRef} from 'react';
 import {Card, CardContent, CardHeader} from '@/components/ui/card';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
@@ -7,6 +8,20 @@ import {cn} from '@/lib/utils';
 import type {FillWithSrs} from '@/lib/local-db/drum-fills';
 import {masteryOf} from '@/lib/drum-fills/library/filterFills';
 import FillSketch from './FillSketch';
+import DifficultyBar from './DifficultyBar';
+
+/** Compact relative-time label for the last practice attempt. */
+function formatLastPracticed(ts: number): string {
+  const diff = Date.now() - ts;
+  const day = 86_400_000;
+  if (diff < day) return 'today';
+  if (diff < 2 * day) return 'yesterday';
+  const days = Math.floor(diff / day);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}
 
 const SUBDIVISION_LABEL: Record<string, string> = {
   '8ths': '8ths',
@@ -45,17 +60,36 @@ function MasteryBadge({fill}: {fill: FillWithSrs}) {
   );
 }
 
-export default function FillCard({
+function FillCard({
   fill,
   attemptCount,
+  lastAttemptTs,
+  focused,
+  onFocus,
   onPractice,
 }: {
   fill: FillWithSrs;
   attemptCount?: number;
+  lastAttemptTs?: number;
+  focused?: boolean;
+  onFocus?: () => void;
   onPractice: (fillId: string) => void;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focused) ref.current?.focus({preventScroll: true});
+  }, [focused]);
+
   return (
-    <Card className="flex flex-col">
+    <Card
+      ref={ref}
+      role="gridcell"
+      tabIndex={focused ? 0 : -1}
+      onFocus={onFocus}
+      className={cn(
+        'flex flex-col outline-none',
+        focused && 'ring-2 ring-ring',
+      )}>
       <CardHeader className="space-y-1 pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -90,6 +124,7 @@ export default function FillCard({
             {SUBDIVISION_LABEL[fill.subdivision] ?? fill.subdivision}
           </Badge>
           <Badge variant="outline">Cx {fill.complexity}</Badge>
+          <DifficultyBar score={fill.difficultyScore} className="ml-auto" />
         </div>
 
         {fill.voicingTags.length > 0 && (
@@ -105,7 +140,11 @@ export default function FillCard({
         <div className="mt-auto flex items-center justify-between">
           <span className="text-xs text-muted-foreground">
             {attemptCount
-              ? `${attemptCount} attempt${attemptCount === 1 ? '' : 's'}`
+              ? `${attemptCount} attempt${attemptCount === 1 ? '' : 's'}${
+                  lastAttemptTs
+                    ? ` · ${formatLastPracticed(lastAttemptTs)}`
+                    : ''
+                }`
               : 'No attempts'}
           </span>
           <Button size="sm" onClick={() => onPractice(fill.id)}>
@@ -116,3 +155,5 @@ export default function FillCard({
     </Card>
   );
 }
+
+export default memo(FillCard);

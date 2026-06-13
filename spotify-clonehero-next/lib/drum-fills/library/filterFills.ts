@@ -131,6 +131,59 @@ export function hasActiveFilters(filters: LibraryFilters): boolean {
 }
 
 /**
+ * Library sort order. The default leaves DB/grouping order untouched; the other
+ * keys sort by the continuous difficulty score or tempo. Difficulty-less fills
+ * (pre-migration NULL) sort last in difficulty modes.
+ */
+export type LibrarySort =
+  | 'default'
+  | 'difficulty-asc'
+  | 'difficulty-desc'
+  | 'tempo-asc'
+  | 'tempo-desc';
+
+export const LIBRARY_SORTS: LibrarySort[] = [
+  'default',
+  'difficulty-asc',
+  'difficulty-desc',
+  'tempo-asc',
+  'tempo-desc',
+];
+
+/**
+ * Sort fills by the given key. Pure; returns a new array. NULL difficulty
+ * scores sort to the end in either difficulty direction so unrated fills don't
+ * masquerade as the easiest.
+ */
+export function sortFills<
+  T extends {difficultyScore: number | null; tempoBpm: number},
+>(fills: T[], sort: LibrarySort): T[] {
+  if (sort === 'default') return fills;
+  const copy = [...fills];
+  switch (sort) {
+    case 'difficulty-asc':
+      copy.sort(
+        (a, b) =>
+          (a.difficultyScore ?? Infinity) - (b.difficultyScore ?? Infinity),
+      );
+      break;
+    case 'difficulty-desc':
+      copy.sort(
+        (a, b) =>
+          (b.difficultyScore ?? -Infinity) - (a.difficultyScore ?? -Infinity),
+      );
+      break;
+    case 'tempo-asc':
+      copy.sort((a, b) => a.tempoBpm - b.tempoBpm);
+      break;
+    case 'tempo-desc':
+      copy.sort((a, b) => b.tempoBpm - a.tempoBpm);
+      break;
+  }
+  return copy;
+}
+
+/**
  * Distinct voicing tags present across a set of fills, sorted, so the filter UI
  * only offers tags that actually occur in the user's library.
  */

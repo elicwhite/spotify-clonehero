@@ -1,29 +1,40 @@
 'use client';
 
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {set as idbSet} from 'idb-keyval';
+import {useCallback, useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {Progress} from '@/components/ui/progress';
-import {queryFills, type FillWithSrs} from '@/lib/local-db/drum-fills';
 import {
-  startLibraryScan,
-  NEEDS_PICKER,
-  type ScanHandle,
-} from '@/lib/drum-fills/scan/scanController';
-import type {ScanProgress} from '@/lib/drum-fills/scan/types';
+  getAttemptStats,
+  getGroupedLibrary,
+  hasFillsNeedingRescan,
+  queryFills,
+  type FillWithSrs,
+  type GroupedFill,
+} from '@/lib/local-db/drum-fills';
+import {useLibraryScan} from '../hooks/useLibraryScan';
+import {useLibraryFilters, useLibraryView} from '../hooks/useLibraryFilters';
 import {
-  DEFAULT_LIBRARY_FILTERS,
   filterFills,
   hasActiveFilters,
+  sortFills,
   availableVoicingTags,
-  type LibraryFilters,
+  type LibrarySort,
 } from '@/lib/drum-fills/library/filterFills';
-import MidiStatus from './MidiStatus';
 import FilterPanel from './FilterPanel';
-import FillCard from './FillCard';
+import FillGrid from './FillGrid';
+import GroupedFillGrid from './GroupedFillGrid';
+import {FillGridSkeleton} from './FillGridSkeleton';
 
 type LoadState = 'loading' | 'ready';
+
+const SORT_LABELS: Record<LibrarySort, string> = {
+  default: 'Default',
+  'difficulty-asc': 'Difficulty ↑',
+  'difficulty-desc': 'Difficulty ↓',
+  'tempo-asc': 'Tempo ↑',
+  'tempo-desc': 'Tempo ↓',
+};
 
 export default function LibraryView({
   onPracticeFill,
@@ -32,22 +43,32 @@ export default function LibraryView({
 }) {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [fills, setFills] = useState<FillWithSrs[]>([]);
-  const [filters, setFilters] = useState<LibraryFilters>(
-    DEFAULT_LIBRARY_FILTERS,
-  );
+  const [groups, setGroups] = useState<GroupedFill[]>([]);
+  const [needsRescan, setNeedsRescan] = useState(false);
+  const [attemptStats, setAttemptStats] = useState<
+    Map<string, {count: number; lastTs: number}>
+  >(new Map());
+  const {filters, setFilters, reset} = useLibraryFilters();
+  const {grouped, setGrouped, sort, setSort} = useLibraryView();
 
-  const [scanning, setScanning] = useState(false);
-  const [progress, setProgress] = useState<ScanProgress | null>(null);
-  const scanHandleRef = useRef<ScanHandle | null>(null);
-
-  const loadFills = useCallback(() => {
-    return queryFills({})
-      .then(rows => {
+  const loadFills = useCallback((): Promise<number> => {
+    return Promise.all([
+      queryFills({}),
+      getGroupedLibrary({}),
+      getAttemptStats(),
+      hasFillsNeedingRescan(),
+    ])
+      .then(([rows, grouped, stats, stale]) => {
         setFills(rows);
+        setGroups(grouped);
+        setAttemptStats(stats);
+        setNeedsRescan(stale);
+        return rows.length;
       })
       .catch(err => {
         console.error('Failed to load fills', err);
         toast.error('Could not load saved fills.');
+        return 0;
       })
       .finally(() => {
         setLoadState('ready');
@@ -58,81 +79,42 @@ export default function LibraryView({
     void loadFills();
   }, [loadFills]);
 
-  const runScan = useCallback(
-    async (initialHandle?: FileSystemDirectoryHandle) => {
-      const doScan = async (
-        directoryHandle?: FileSystemDirectoryHandle,
-      ): Promise<void> => {
-        setScanning(true);
-        setProgress(null);
-        try {
-          const handle = await startLibraryScan({
-            directoryHandle,
-            onProgress: p => setProgress(p),
-          });
-          scanHandleRef.current = handle;
-          const result = await handle.done;
-          if (result.cancelled) {
-            toast.info('Scan cancelled.');
-          } else {
-            toast.success(
-              `Scanned ${result.songsScanned} songs — found ${result.fillsFound} fills.`,
-            );
-          }
-          await loadFills();
-        } catch (err) {
-          if (err instanceof Error && err.message === NEEDS_PICKER) {
-            // No cached handle: prompt for the Songs folder, cache it, retry.
-            try {
-              const picked = await window.showDirectoryPicker({
-                id: 'clone-hero-songs',
-                mode: 'readwrite',
-              });
-              await idbSet('songsDirectoryHandle', picked);
-              setScanning(false);
-              await doScan(picked);
-              return;
-            } catch (pickErr) {
-              // User cancelled the picker.
-              console.warn('Directory pick cancelled', pickErr);
-            }
-          } else {
-            console.error('Scan failed', err);
-            toast.error('Library scan failed. See console for details.');
-          }
-        } finally {
-          scanHandleRef.current = null;
-          setScanning(false);
-          setProgress(null);
-        }
-      };
-      await doScan(initialHandle);
-    },
-    [loadFills],
-  );
-
-  const cancelScan = useCallback(() => {
-    scanHandleRef.current?.cancel();
-  }, []);
+  const {scanning, progress, runScan, cancelScan} = useLibraryScan(loadFills);
 
   const voicingTags = useMemo(() => availableVoicingTags(fills), [fills]);
+
+  // Ungrouped: in-memory filter + sort.
   const visibleFills = useMemo(
-    () => filterFills(fills, filters),
-    [fills, filters],
+    () => sortFills(filterFills(fills, filters), sort),
+    [fills, filters, sort],
   );
+
+  // Grouped: getGroupedLibrary applied DB-level taxonomy filters; apply the
+  // remaining in-memory predicates (search/tempo/mastery) against each group's
+  // representative, then sort.
+  const visibleGroups = useMemo(() => {
+    const reps = groups.map(g => g.representative);
+    const kept = new Set(filterFills(reps, filters).map(f => f.id));
+    const filtered = groups.filter(g => kept.has(g.representative.id));
+    return sortFills(
+      filtered.map(g => ({
+        ...g,
+        // sortFills reads difficultyScore + tempoBpm; expose group-level values.
+        tempoBpm: g.tempoMedian,
+      })),
+      sort,
+    );
+  }, [groups, filters, sort]);
+
   const active = hasActiveFilters(filters);
+  const hasData = fills.length > 0;
+  const resultCount = grouped ? visibleGroups.length : visibleFills.length;
 
   return (
-    <div className="flex flex-1 flex-col gap-4">
-      <MidiStatus />
-
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3">
         <Button onClick={() => void runScan()} disabled={scanning}>
-          {scanning
-            ? 'Scanning…'
-            : fills.length > 0
-              ? 'Rescan Library'
-              : 'Scan Library'}
+          {scanning ? 'Scanning…' : hasData ? 'Rescan Library' : 'Scan Library'}
         </Button>
         {scanning && (
           <Button variant="outline" onClick={cancelScan}>
@@ -164,7 +146,22 @@ export default function LibraryView({
         )}
       </div>
 
-      {loadState === 'ready' && fills.length === 0 && !scanning ? (
+      {needsRescan && hasData && !scanning && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-900">
+            Some fills predate cross-song grouping and the difficulty score.
+            Rescan to dedupe duplicates across songs and enable difficulty
+            sorting + ladders.
+          </p>
+          <Button onClick={() => void runScan()} disabled={scanning} size="sm">
+            Rescan Library
+          </Button>
+        </div>
+      )}
+
+      {loadState === 'loading' ? (
+        <FillGridSkeleton />
+      ) : !hasData && !scanning ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
           <h2 className="text-xl font-semibold">No fills yet</h2>
           <p className="max-w-md text-muted-foreground">
@@ -174,31 +171,72 @@ export default function LibraryView({
         </div>
       ) : (
         <>
-          {fills.length > 0 && (
+          {hasData && (
             <FilterPanel
               filters={filters}
               onChange={setFilters}
               voicingTags={voicingTags}
-              onReset={() => setFilters(DEFAULT_LIBRARY_FILTERS)}
+              onReset={reset}
               hasActive={active}
-              resultCount={visibleFills.length}
+              resultCount={resultCount}
+              extras={
+                <div className="flex items-center gap-3">
+                  <div className="flex overflow-hidden rounded-md border text-xs">
+                    <button
+                      onClick={() => setGrouped(true)}
+                      className={
+                        'px-2.5 py-1 font-medium transition-colors ' +
+                        (grouped
+                          ? 'bg-primary text-primary-foreground'
+                          : 'hover:bg-muted')
+                      }>
+                      Grouped
+                    </button>
+                    <button
+                      onClick={() => setGrouped(false)}
+                      className={
+                        'px-2.5 py-1 font-medium transition-colors ' +
+                        (!grouped
+                          ? 'bg-primary text-primary-foreground'
+                          : 'hover:bg-muted')
+                      }>
+                      All instances
+                    </button>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    Sort
+                    <select
+                      name="library-sort"
+                      value={sort}
+                      onChange={e => setSort(e.target.value as LibrarySort)}
+                      className="rounded border bg-background px-2 py-1 text-xs">
+                      {(Object.keys(SORT_LABELS) as LibrarySort[]).map(s => (
+                        <option key={s} value={s}>
+                          {SORT_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              }
             />
           )}
 
-          {fills.length > 0 && visibleFills.length === 0 ? (
+          {hasData && resultCount === 0 ? (
             <p className="py-10 text-center text-muted-foreground">
               No fills match the current filters.
             </p>
+          ) : grouped ? (
+            <GroupedFillGrid
+              groups={visibleGroups}
+              onPracticeFill={onPracticeFill}
+            />
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {visibleFills.map(fill => (
-                <FillCard
-                  key={fill.id}
-                  fill={fill}
-                  onPractice={onPracticeFill}
-                />
-              ))}
-            </div>
+            <FillGrid
+              fills={visibleFills}
+              attemptStats={attemptStats}
+              onPracticeFill={onPracticeFill}
+            />
           )}
         </>
       )}

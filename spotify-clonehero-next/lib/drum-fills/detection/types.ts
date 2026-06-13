@@ -109,10 +109,24 @@ export interface Classification {
   /** Complexity 1 (easy) .. 5 (hard). */
   complexity: number;
   /**
+   * Continuous difficulty in [0, 100], computed from onset count, peak hit rate
+   * at the fill's actual tempo, subdivision level/mixing, voice variety/switch
+   * rate, syncopation, ornaments, and length. Used to order a groove cluster's
+   * fills into a simple→complex ladder (`complexity` stays for coarse
+   * filtering). See `computeDifficultyScore`.
+   */
+  difficultyScore: number;
+  /**
    * Stable fingerprint string for dedupe within a song — derived from the
    * fill's quantized onset/voice pattern (tempo/position independent).
    */
   fingerprint: string;
+  /**
+   * Cross-song fill similarity key: canonical fill fingerprint with dynamics
+   * stripped (cymbal choice collapsed, 16th-grid quantized). Equivalent fills
+   * across different songs share this key, enabling library-wide dedupe.
+   */
+  similarityKey: string;
 }
 
 /** A detected fill plus its classification. */
@@ -139,6 +153,12 @@ export interface DetectionOptions {
   tomHeavy: number;
   /** Min confidence to emit a fill. */
   minConfidence: number;
+  /**
+   * Apply the substance gate (reject degenerate one-shot "fills": lone crash,
+   * crash+kick push, single flam). Default true; the spot-check harness toggles
+   * it off to measure how many candidates the gate removes.
+   */
+  substanceGate: boolean;
 }
 
 export const DEFAULT_DETECTION_OPTIONS: DetectionOptions = {
@@ -149,4 +169,5 @@ export const DEFAULT_DETECTION_OPTIONS: DetectionOptions = {
   densitySpike: 1.4,
   tomHeavy: 0.35,
   minConfidence: 0.5,
+  substanceGate: true,
 };

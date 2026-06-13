@@ -1,5 +1,11 @@
 import {detectFills, getExpertDrumsTrack} from '../detection/detectFills';
-import {classifyFill, classifyAndDedupe} from '../detection/classify';
+import {
+  classifyFill,
+  classifyAndDedupe,
+  computeDifficultyScore,
+} from '../detection/classify';
+import {buildFingerprints} from '../detection/grooveModel';
+import type {DetectedFill, FillFeatures} from '../detection/types';
 import {
   buildChart,
   backbeatBar,
@@ -76,6 +82,133 @@ describe('classifyFill', () => {
     const c = classifyFill(chart, track, fills[0]);
     expect(c.complexity).toBeGreaterThanOrEqual(1);
     expect(c.complexity).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('computeDifficultyScore (plan 0045 §6)', () => {
+  const EMPTY_FEATURES: FillFeatures = {
+    onsetCount: 0,
+    notesPerSecond: 0,
+    grooveNotesPerSecond: 0,
+    densityRatio: 1,
+    tomFraction: 0,
+    snareFraction: 0,
+    kickFraction: 0,
+    grooveDissimilarity: 0,
+    endsOnCrash: false,
+    endsAtSection: false,
+    voiceCount: 0,
+  };
+
+  /**
+   * Score a single hand-built fill bar (notes at `barStart=0`) at `bpm`. The
+   * chart is just that one bar; the "fill" spans bar 0.
+   */
+  function scoreBar(notes: PlannedNote[], bpm: number): number {
+    const chart = buildChart({notes, bpm});
+    const track = getExpertDrumsTrack(chart)!;
+    const fps = buildFingerprints(chart, track);
+    const spanFps = fps.filter(fp => fp.startTick >= 0 && fp.endTick <= BAR);
+    const subdivision =
+      // reuse the real subdivision detection by classifying through it
+      classifyFill(chart, track, {
+        startTick: 0,
+        endTick: BAR,
+        grooveStartTick: 0,
+        grooveEndTick: 0,
+        tempoBpm: bpm,
+        confidence: 1,
+        features: EMPTY_FEATURES,
+      } as DetectedFill).subdivision;
+    const fill: DetectedFill = {
+      startTick: 0,
+      endTick: BAR,
+      grooveStartTick: 0,
+      grooveEndTick: 0,
+      tempoBpm: bpm,
+      confidence: 1,
+      features: EMPTY_FEATURES,
+    };
+    return computeDifficultyScore(chart, track, fill, spanFps, subdivision, 1);
+  }
+
+  // Hand-built bars of increasing difficulty.
+  function quarterSnare(): PlannedNote[] {
+    const out: PlannedNote[] = [];
+    for (let i = 0; i < 4; i++) out.push({tick: i * RES, voices: ['snare']});
+    return out;
+  }
+  function eighthTomRun(): PlannedNote[] {
+    const out: PlannedNote[] = [];
+    const toms = ['tomYellow', 'tomBlue'] as const;
+    for (let i = 0; i < 8; i++) {
+      out.push({tick: i * (RES / 2), voices: [toms[i % 2]]});
+    }
+    return out;
+  }
+  function sixteenthTomRun(): PlannedNote[] {
+    const out: PlannedNote[] = [];
+    const toms = ['snare', 'tomYellow', 'tomBlue', 'tomGreen'] as const;
+    for (let i = 0; i < 16; i++) {
+      out.push({tick: i * (RES / 4), voices: [toms[Math.floor(i / 4)]]});
+    }
+    return out;
+  }
+  function mixedTripletLinear(): PlannedNote[] {
+    // 12 triplet onsets across the bar, linear movement K-S-T around the kit,
+    // with ghosts + a flam (ornaments) and an off-grid feel.
+    const out: PlannedNote[] = [];
+    const third = RES / 3; // 8th-note triplet spacing
+    const cycle = [
+      'kick',
+      'snare',
+      'tomYellow',
+      'kick',
+      'tomBlue',
+      'snare',
+    ] as const;
+    for (let i = 0; i < 12; i++) {
+      const flags =
+        i === 0 ? noteFlags.flam : i % 4 === 1 ? noteFlags.ghost : 0;
+      out.push({
+        tick: Math.round(i * third),
+        voices: [cycle[i % cycle.length]],
+        extraFlags: flags,
+      });
+    }
+    return out;
+  }
+
+  it('sorts quarter snare < 8th tom < 16th tom < mixed-triplet linear', () => {
+    const bpm = 120;
+    const q = scoreBar(quarterSnare(), bpm);
+    const e = scoreBar(eighthTomRun(), bpm);
+    const s = scoreBar(sixteenthTomRun(), bpm);
+    const m = scoreBar(mixedTripletLinear(), bpm);
+    expect(q).toBeLessThan(e);
+    expect(e).toBeLessThan(s);
+    expect(s).toBeLessThan(m);
+  });
+
+  it('scores the same pattern higher at a higher tempo', () => {
+    const slow = scoreBar(sixteenthTomRun(), 90);
+    const fast = scoreBar(sixteenthTomRun(), 180);
+    expect(fast).toBeGreaterThan(slow);
+  });
+
+  it('stays within [0, 100]', () => {
+    for (const bpm of [60, 120, 240]) {
+      for (const notes of [
+        quarterSnare(),
+        eighthTomRun(),
+        sixteenthTomRun(),
+        mixedTripletLinear(),
+      ]) {
+        const v = scoreBar(notes, bpm);
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThanOrEqual(100);
+      }
+    }
   });
 });
 

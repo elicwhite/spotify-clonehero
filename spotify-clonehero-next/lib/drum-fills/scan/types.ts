@@ -39,7 +39,15 @@ export interface ScannedFill {
   subdivision: Subdivision;
   complexity: number;
   voicingTags: string[];
+  /** Continuous difficulty in [0, 100] for ladder ordering. */
+  difficultyScore: number;
   fingerprint: string;
+  /** Canonical fingerprint of the fill's preceding-groove span (exact match). */
+  grooveFingerprint: string;
+  /** Groove fingerprint with cymbal collapsed + coarse grid, for clustering. */
+  grooveSimilarityKey: string;
+  /** Cross-song fill similarity key (dynamics stripped) for library dedupe. */
+  fillSimilarityKey: string;
   confidence: number;
   features: FillFeatures;
 }

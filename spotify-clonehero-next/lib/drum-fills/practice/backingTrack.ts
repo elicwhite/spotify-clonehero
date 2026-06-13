@@ -69,6 +69,22 @@ export function loopDurationSeconds(
 }
 
 /**
+ * The fill window within one loop, in loop-relative seconds: it opens at the
+ * end of the groove bars and closes at the end of the loop (the empty fill
+ * bars are the space the player fills).
+ */
+export function fillWindowSeconds(
+  pattern: BackingPattern,
+  bpm: number,
+): {start: number; end: number} {
+  const secondsPerBeat = 60 / bpm;
+  return {
+    start: pattern.grooveBars * pattern.beatsPerBar * secondsPerBeat,
+    end: loopDurationSeconds(pattern, bpm),
+  };
+}
+
+/**
  * Build the events for one full loop starting at `loopStart`.
  * Click hits land on every integer beat across the groove bars only; groove
  * hits land at their `beatOffset` within each groove bar. Fill bars are empty.
@@ -310,6 +326,20 @@ export class BackingTrackPlayer {
       clearInterval(this.timer);
       this.timer = null;
     }
+  }
+
+  /**
+   * Position within the current loop, in seconds from bar-0 beat-0, or null
+   * when the player is stopped. Lets callers (e.g. live scoring) track where
+   * the playhead sits relative to the groove/fill window.
+   */
+  loopPositionSeconds(): number | null {
+    if (this.timer === null) return null;
+    const loopDur = loopDurationSeconds(this.pattern, this.bpm);
+    if (loopDur <= 0) return null;
+    const elapsed = this.ctx.currentTime - this.anchorTime;
+    if (elapsed < 0) return 0;
+    return elapsed % loopDur;
   }
 
   private tick(): void {
