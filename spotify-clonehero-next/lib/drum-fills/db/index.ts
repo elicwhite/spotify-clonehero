@@ -441,6 +441,56 @@ export async function recordAttempt(
   return Number(result.id);
 }
 
+/** A single recorded judgment as persisted in a fill_attempts row. */
+export type StoredJudgment = {
+  id: string | number;
+  judgment: 'perfect' | 'good' | 'miss';
+  deltaMs: number | null;
+};
+
+/** The best recorded attempt for a fill, with its judgments. */
+export type FillBest = {
+  /** Attempt score on the 0–100 scale. */
+  score: number;
+  /** Mode the best attempt was recorded in. */
+  mode: FillMode;
+  /** Tempo percentage of the best attempt. */
+  tempoPct: number;
+  /** Timestamp (ms) the best attempt was recorded. */
+  ts: number;
+  /** Per-note judgments of the best attempt. */
+  judgments: StoredJudgment[];
+};
+
+/**
+ * The best recorded attempt for a fill: highest `score`, breaking ties toward
+ * the most recent (so a fresh equal-best re-marks the stave). Returns null when
+ * the fill has never been attempted. Used to seed + persist the HUD's "best"
+ * readout across reloads.
+ */
+export async function getFillBest(
+  fillId: string,
+  db?: Kysely<DB>,
+): Promise<FillBest | null> {
+  const database = db ?? (await getDrumFillsDb());
+  const row = await database
+    .selectFrom('fill_attempts')
+    .select(['score', 'mode', 'tempo_pct', 'ts', 'judgments'])
+    .where('fill_id', '=', fillId)
+    .orderBy('score', 'desc')
+    .orderBy('ts', 'desc')
+    .limit(1)
+    .executeTakeFirst();
+  if (!row) return null;
+  return {
+    score: row.score,
+    mode: row.mode as FillMode,
+    tempoPct: row.tempo_pct,
+    ts: row.ts,
+    judgments: parseJson<StoredJudgment[]>(row.judgments, []),
+  };
+}
+
 /** Insert or replace the SRS row for a fill. */
 export async function upsertSrs(srs: SrsInput, db?: Kysely<DB>): Promise<void> {
   const database = db ?? (await getDrumFillsDb());

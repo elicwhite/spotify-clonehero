@@ -17,7 +17,6 @@
 
 import {tickToMs} from '@/lib/chart-utils/tickToMs';
 import type {ParsedChart, ParsedTrackData} from '@/lib/chart-edit/types';
-import {noteFlags, noteTypes} from '@/lib/chart-edit/types';
 import {
   computeBars,
   noteEventToVoice,
@@ -26,6 +25,7 @@ import {
 } from '@/lib/drum-fills/detection/grooveModel';
 import type {DrumVoice} from '@/lib/drum-fills/detection/types';
 import type {DrumLane} from '@/lib/drum-fills/midi/padMapping';
+import {fillNoteIdFromRaw} from '@/lib/drum-fills/midi/noteId';
 import type {BackingPattern, GrooveHit} from './backingTrack';
 
 /** A single note inside the fill, in absolute ms time, classified for scoring. */
@@ -58,24 +58,6 @@ export interface FillPracticeData {
   beatsPerBar: number;
   /** Tempo in quarter-note BPM at the fill start. */
   bpm: number;
-}
-
-/** scan-chart NoteType → Clone Hero drum lane. */
-function voiceToLane(note: {type: number}): DrumLane | null {
-  switch (note.type) {
-    case noteTypes.kick:
-      return 'kick';
-    case noteTypes.redDrum:
-      return 'red';
-    case noteTypes.yellowDrum:
-      return 'yellow';
-    case noteTypes.blueDrum:
-      return 'blue';
-    case noteTypes.greenDrum:
-      return 'green';
-    default:
-      return null;
-  }
 }
 
 /** Map a detection voice to the synthesizer's backing voice. */
@@ -123,18 +105,14 @@ export function buildFillPracticeData(
     if (tick < fill.startTick || tick >= fill.endTick) continue;
     const msTime = tickToMs(chart, tick);
     for (const note of group) {
-      const lane = voiceToLane(note);
-      if (!lane) continue;
-      const isCymbal =
-        lane !== 'kick' &&
-        lane !== 'red' &&
-        (note.flags & noteFlags.cymbal) !== 0;
+      const resolved = fillNoteIdFromRaw(tick, note);
+      if (!resolved) continue;
       notes.push({
-        id: `${tick}:${lane}:${isCymbal ? 'c' : 'p'}`,
+        id: resolved.id,
         tick,
         msTime,
-        lane,
-        isCymbal,
+        lane: resolved.lane,
+        isCymbal: resolved.isCymbal,
       });
     }
   }

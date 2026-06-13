@@ -15,12 +15,28 @@ import type {DrumLane} from './padMapping';
 /** Timing judgment for a matched note. */
 export type Judgment = 'perfect' | 'good' | 'miss';
 
-/** Default timing windows in milliseconds. */
+/**
+ * Default timing windows in milliseconds.
+ *
+ * The hit (`good`) boundary of ±70 ms matches YARG's static symmetric drums
+ * window: YARG.Core `Engine/Drums/EnginePreset.Instruments.cs` sets the drums
+ * default MaxWindow/MinWindow to 0.14 s (full window) with FrontToBackRatio 1.0,
+ * and `Engine/HitWindowSettings.cs` `GetFrontEnd`/`GetBackEnd` split that full
+ * window into ±0.07 s front/back. Beyond ±70 ms is a miss. YARG matches the
+ * first in-window note whose pad matches (forward scan) and treats any input
+ * matching no in-window note as an overhit; we match nearest-first instead,
+ * which is equivalent for a single hit and slightly more forgiving for clusters
+ * — acceptable for a practice scorer.
+ *
+ * YARG has no perfect/good split. The tighter ±30 ms `perfect` window is our
+ * own pedagogical addition: it only affects feedback granularity (green vs
+ * amber on the stave), never whether a note counts as hit.
+ */
 export const DEFAULT_WINDOWS = {
-  /** |delta| ≤ perfect → perfect. */
-  perfect: 35,
-  /** |delta| ≤ good → good (otherwise out of range / miss). */
-  good: 75,
+  /** |delta| ≤ perfect → perfect (pedagogical inner window, not from YARG). */
+  perfect: 30,
+  /** |delta| ≤ good → hit; otherwise miss. Matches YARG's ±70 ms drums window. */
+  good: 70,
 } as const;
 
 export interface TimingWindows {

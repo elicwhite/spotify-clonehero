@@ -29,12 +29,16 @@ import {
   initialTempoPct,
 } from '@/lib/drum-fills/practice/speedTrainer';
 import {
+  getFillBest,
   getFillSiblings,
   recordAttempt,
   upsertSrs,
   type FillWithSrs,
 } from '@/lib/drum-fills/db';
-import type {ScoredAttempt} from '@/lib/drum-fills/practice/attempt';
+import {
+  bestFromStored,
+  type ScoredAttempt,
+} from '@/lib/drum-fills/practice/attempt';
 import type {FillMode} from '@/lib/drum-fills/db';
 import {useFillChart} from '../hooks/useFillChart';
 import {useLiveScoring} from '../hooks/useLiveScoring';
@@ -82,8 +86,22 @@ const MODE_TO_DB: Record<Mode, FillMode> = {
   roulette: 'roulette',
 };
 
-// Pad (ms) before the groove and after the fill for the practice loop region.
+// Pad (ms) after the fill before the loop wraps.
 const LOOP_PAD_MS = 600;
+
+// Lead-in before the practiced content (Clone Hero practice-mode behaviour): the
+// loop starts here with an empty highway so the upcoming notes scroll into view
+// and the player can prepare instead of being surprised by the first note. Song
+// mode pads back from the groove by this many ms (clamped to chart start); synth
+// mode authors whole empty bars ahead of the groove instead.
+const LEAD_IN_MS = 1600;
+const SYNTH_LEAD_IN_BARS = 1;
+
+// Manual tempo (slow-down) range, shared by the slider, keyboard nudges, and
+// the speed trainer. Well within AudioManager's 0.25–4.0 support.
+const TEMPO_MIN_PCT = 40;
+const TEMPO_MAX_PCT = 110;
+const TEMPO_PRESETS = [50, 75, 100] as const;
 
 export default function PracticeView({
   fillId,
@@ -287,6 +305,59 @@ function ModeSwitcher({
   );
 }
 
+/**
+ * Tempo / slow-down control for the transport, shown in every mode. A slider +
+ * readout + quick presets, wired to the shared tempo state (→ effectiveTempo →
+ * AudioManager.setTempo, pitch-preserving). In speed-trainer mode the trainer
+ * drives the same state automatically, so the control reflects the live tempo
+ * and is marked auto.
+ */
+function TempoControl({
+  tempoPct,
+  onChange,
+  auto,
+}: {
+  tempoPct: number;
+  onChange: (pct: number) => void;
+  auto: boolean;
+}) {
+  return (
+    <div className="ml-2 flex items-center gap-2 text-sm">
+      <span className="text-xs text-muted-foreground">
+        {auto ? 'Tempo (auto)' : 'Tempo'}
+      </span>
+      <input
+        type="range"
+        min={TEMPO_MIN_PCT}
+        max={TEMPO_MAX_PCT}
+        step={5}
+        value={tempoPct}
+        onChange={e => onChange(Number(e.target.value))}
+        className="h-1 w-28 cursor-pointer accent-primary"
+        aria-label="Playback tempo"
+      />
+      <span className="w-12 text-center font-mono tabular-nums">
+        {tempoPct}%
+      </span>
+      <div className="flex items-center gap-1">
+        {TEMPO_PRESETS.map(p => (
+          <button
+            key={p}
+            onClick={() => onChange(p)}
+            className={cn(
+              'rounded px-1.5 py-0.5 text-xs',
+              tempoPct === p
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-muted',
+            )}>
+            {p}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Centered({children}: {children: React.ReactNode}) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
@@ -350,6 +421,9 @@ function PracticeSession({
         fill.startTick,
         chart.resolution,
       ),
+      // One empty bar of lead-in so the highway clears before the groove and the
+      // practiced notes scroll into view (Clone Hero practice-mode behaviour).
+      leadInBars: SYNTH_LEAD_IN_BARS,
     });
   }, [groovePattern, practiceData, fill.startTick, chart.resolution]);
 
@@ -401,11 +475,17 @@ function PracticeSession({
     activeAmRef.current = activeAudioManager;
   }, [activeAudioManager]);
 
-  // --- Speed trainer / tempo ---
-  const [tempoPct, setTempoPct] = useState(() => initialTempoPct());
+  // --- Tempo (shared by the manual slider, keyboard nudges, and the speed
+  // trainer's automatic ramp; one state so they never fight). The speed trainer
+  // starts slow; other modes start at full speed. ---
+  const [tempoPct, setTempoPct] = useState(() =>
+    mode === 'speed-trainer' ? initialTempoPct() : 100,
+  );
   const recentAttemptsRef = useRef<{passed: boolean}[]>([]);
 
-  const effectiveTempo = mode === 'speed-trainer' ? tempoPct / 100 : 1;
+  // Manual tempo applies in every mode (the plan's slow-down control); the
+  // speed trainer also drives this same value automatically.
+  const effectiveTempo = tempoPct / 100;
 
   // --- SRS state (seeded from the DB row; PracticeSession remounts per fill) ---
   const [srs, setSrs] = useState<FillSrsState>(() =>
@@ -434,19 +514,43 @@ function PracticeSession({
     state: scoring,
     beginAttempt,
     finishAttempt,
+    seedBest,
     reset: resetScoring,
   } = useLiveScoring(scoringNotes);
+
+  // Seed the best attempt from history so it survives reloads + reflects prior
+  // sessions. PracticeSession remounts per fill (keyed on fillId), so this runs
+  // once per fill. The judgment ids are the same scheme the renderer uses, so a
+  // seeded best can immediately mark the stave.
+  useEffect(() => {
+    let cancelled = false;
+    getFillBest(fillId)
+      .then(best => {
+        if (cancelled) return;
+        seedBest(best ? bestFromStored(best.score, best.judgments) : null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [fillId, seedBest]);
 
   // Loop region in the active chart's ms. Song modes pad around the source
   // chart's groove+fill span; the synthetic chart IS the loop (starts at 0,
   // ends at the fill end), so no pads.
+  // The synth chart authors its own lead-in bars (synthBundle.grooveStartMs is
+  // where the groove begins, after the empty lead-in), so the loop starts at 0
+  // and the empty bars are the lead-in. Song mode starts LEAD_IN_MS before the
+  // groove (clamped to 0) so the highway shows notes scrolling in first.
   const loopStartMs = useSynthChart
     ? 0
-    : Math.max(0, practiceData.grooveStartMs - LOOP_PAD_MS);
+    : Math.max(0, practiceData.grooveStartMs - LEAD_IN_MS);
   const loopEndMs = useSynthChart
     ? synthBundle.fillEndMs
     : practiceData.fillEndMs + LOOP_PAD_MS;
-  const grooveStartChartMs = useSynthChart ? 0 : practiceData.grooveStartMs;
+  const grooveStartChartMs = useSynthChart
+    ? synthBundle.grooveStartMs
+    : practiceData.grooveStartMs;
   const fillStartChartMs = useSynthChart
     ? synthBundle.fillStartMs
     : practiceData.fillStartMs;
@@ -468,11 +572,11 @@ function PracticeSession({
       am.setChartDelay(chartDelayMs / 1000);
       audioManagerRef.current = am;
       setAudioManager(am);
-      // Anchor the views on the groove before the user presses Play: seek the
+      // Anchor the views on the lead-in before the user presses Play: seek the
       // (paused) manager to the loop start so the highway and sheet music show
       // the fill's measures instead of the top of the song.
       void am.seekToChartTime(
-        Math.max(0, practiceData.grooveStartMs - LOOP_PAD_MS) / 1000,
+        Math.max(0, practiceData.grooveStartMs - LEAD_IN_MS) / 1000,
       );
     });
     return () => {
@@ -518,16 +622,19 @@ function PracticeSession({
     };
   }, [isSynth, groovePattern, synthBundle]);
 
-  // Apply tempo (pitch-preserving) when the speed trainer changes.
+  // Apply tempo (pitch-preserving) to the active manager whenever the tempo or
+  // the active manager changes. Both song and synth managers are driven so the
+  // slow-down control works in every mode; AudioManager.chartTime already
+  // accounts for tempo, so the highway + playhead + scoring stay in sync.
   useEffect(() => {
-    const am = audioManagerRef.current;
+    const am = activeAudioManager;
     if (!am) return;
     try {
       am.setTempo(effectiveTempo);
     } catch {
       // tempo out of supported range — ignore
     }
-  }, [effectiveTempo, audioManager]);
+  }, [effectiveTempo, activeAudioManager]);
 
   // The attempt loop: track when the playhead crosses the fill window so we can
   // begin/finish scoring attempts on each loop pass. Driven off a poll, never a
@@ -573,6 +680,26 @@ function PracticeSession({
   }, [beginAttempt, finishAttempt, fillStartChartMs, fillEndChartMs, isSynth]);
 
   useInterval(handleLoopTick, isPlaying ? 30 : null);
+
+  // Dev-only test seam (parallels MidiContext.__drumFillsInjectHit): exposes the
+  // active manager's chart time and the fill window so browser validation can
+  // inject hits at precise loop-relative offsets and assert the per-note markers.
+  // No-op in production.
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return;
+    const w = window as unknown as {__drumFillsDebug?: unknown};
+    w.__drumFillsDebug = {
+      chartMs: () => (activeAmRef.current?.chartTime ?? 0) * 1000,
+      isPlaying: () => !!activeAmRef.current?.isPlaying,
+      fillStartChartMs,
+      fillEndChartMs,
+      scoringNotes,
+    };
+    return () => {
+      delete (window as unknown as {__drumFillsDebug?: unknown})
+        .__drumFillsDebug;
+    };
+  }, [fillStartChartMs, fillEndChartMs, scoringNotes]);
 
   // Persist an attempt + advance SRS / speed trainer.
   const onAttemptScored = useCallback(
@@ -693,8 +820,21 @@ function PracticeSession({
   }, [stopAll, resetScoring, startLoop]);
 
   const nudgeTempo = useCallback((delta: number) => {
-    setTempoPct(prev => Math.max(50, Math.min(110, prev + delta)));
+    setTempoPct(prev =>
+      Math.max(TEMPO_MIN_PCT, Math.min(TEMPO_MAX_PCT, prev + delta)),
+    );
   }, []);
+
+  // Entering speed-trainer resets tempo to the trainer's slow start; the manual
+  // slider value is left untouched when switching between the other modes.
+  // Adjusted during render (React's "adjusting state on prop change" pattern, as
+  // with activeFill above — prev value held in state, not a ref) so there's no
+  // setState-in-effect cascade.
+  const [tempoModeMark, setTempoModeMark] = useState(mode);
+  if (tempoModeMark !== mode) {
+    setTempoModeMark(mode);
+    if (mode === 'speed-trainer') setTempoPct(initialTempoPct());
+  }
 
   // Stop everything on mode change (skip the initial mount — nothing to stop).
   const prevModeRef = useRef(mode);
@@ -703,6 +843,8 @@ function PracticeSession({
     prevModeRef.current = mode;
     stopAll();
     resetScoring();
+    // Reset the speed trainer's run history when (re)entering it.
+    if (mode === 'speed-trainer') recentAttemptsRef.current = [];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
@@ -736,6 +878,24 @@ function PracticeSession({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [togglePlay, nudgeTempo, restartLoop, onNext, onExit]);
+
+  // Per-note hit feedback for the sheet-music overlay: the most recent pass's
+  // judgments keyed by fill-note id (the same ids the renderer attaches to each
+  // notehead). Cleared while a fresh pass is in progress (inFillRef) so stale
+  // markers don't linger, repainted when the pass is scored. Always defined (an
+  // empty map) in practice so SheetMusic collects notehead positions.
+  const noteFeedback = useMemo(() => {
+    const map = new Map<
+      string,
+      {judgment: 'perfect' | 'good' | 'miss'; deltaMs: number | null}
+    >();
+    const attempt = scoring.lastAttempt;
+    if (!attempt) return map;
+    for (const j of attempt.match.judgments) {
+      map.set(String(j.note.id), {judgment: j.judgment, deltaMs: j.deltaMs});
+    }
+    return map;
+  }, [scoring.lastAttempt]);
 
   // Practice-mode config for SheetMusic highlighting.
   const sheetPracticeConfig = useMemo<PracticeModeConfig>(
@@ -798,17 +958,11 @@ function PracticeSession({
           </Button>
         )}
         {transportExtras}
-        {mode === 'speed-trainer' && (
-          <div className="ml-2 flex items-center gap-1 text-sm">
-            <Button variant="outline" size="sm" onClick={() => nudgeTempo(-5)}>
-              −
-            </Button>
-            <span className="w-12 text-center font-mono">{tempoPct}%</span>
-            <Button variant="outline" size="sm" onClick={() => nudgeTempo(5)}>
-              +
-            </Button>
-          </div>
-        )}
+        <TempoControl
+          tempoPct={tempoPct}
+          onChange={setTempoPct}
+          auto={mode === 'speed-trainer'}
+        />
         <span className="ml-auto text-xs text-muted-foreground">
           Hits this pass: {scoring.pendingHits}
         </span>
@@ -851,12 +1005,15 @@ function PracticeSession({
               onPracticeMeasureSelect={() => {}}
               selectionIndex={null}
               audioManagerRef={activeAmRef}
+              noteFeedback={noteFeedback}
             />
           </div>
         </div>
         <div className="w-full shrink-0 lg:w-64 lg:overflow-y-auto">
           <PracticeHud
             lastAttempt={scoring.lastAttempt}
+            bestAttempt={scoring.bestAttempt}
+            newBest={scoring.newBest}
             srs={srs}
             tempoPct={tempoPct}
             speedTrainer={mode === 'speed-trainer'}

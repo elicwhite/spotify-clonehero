@@ -184,6 +184,36 @@ describe('buildPracticeChart', () => {
     expect(bundle.chart.sections[1].tick).toBe(2 * 4 * RES);
   });
 
+  it('prepends lead-in bars: groove + fill shift forward, no notes in the lead-in', () => {
+    const msPerBeat = 60000 / 120; // 500ms
+    const withLead = buildPracticeChart({
+      pattern: PATTERN, // 2 groove bars, 1 fill bar, 4/4
+      bpm: 120,
+      fillNotes: FILL_NOTES,
+      leadInBars: 1,
+    });
+    // Groove now starts one bar (4 beats) in; the empty lead-in carries no notes.
+    expect(withLead.grooveStartMs).toBeCloseTo(4 * msPerBeat);
+    const firstNoteTick = Math.min(...allNotes(withLead).map(n => n.tick));
+    expect(firstNoteTick).toBe(1 * 4 * RES); // first groove note at bar 1, not 0
+    // Groove section starts at the lead-in, fill section shifts by one bar too.
+    expect(withLead.chart.sections[0].tick).toBe(1 * 4 * RES);
+    expect(withLead.chart.sections[1].tick).toBe((1 + 2) * 4 * RES);
+    // Window spans shift by the lead-in; fillEnd is lead-in+groove+fill bars.
+    expect(withLead.grooveEndMs).toBeCloseTo((1 + 2) * 4 * msPerBeat);
+    expect(withLead.fillEndMs).toBeCloseTo((1 + 2 + 1) * 4 * msPerBeat);
+    // Expected-note ids + ms reflect the shifted ticks (so the renderer's
+    // notehead ids still match the scorer in synth mode).
+    const noLead = buildPracticeChart({
+      pattern: PATTERN,
+      bpm: 120,
+      fillNotes: FILL_NOTES,
+    });
+    expect(withLead.expectedNotes[0].msTime).toBeCloseTo(
+      noLead.expectedNotes[0].msTime + 4 * msPerBeat,
+    );
+  });
+
   it('handles multi-bar grooves and multi-bar fills', () => {
     const pattern: BackingPattern = {
       ...PATTERN,

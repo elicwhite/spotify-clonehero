@@ -6,6 +6,7 @@ import {
   interpretDrumNote,
   type DrumNoteInstrument,
 } from '@/lib/drum-mapping/noteToInstrument';
+import {fillNoteIdFromRaw} from '@/lib/drum-fills/midi/noteId';
 
 // Re-export for any existing consumers
 export type {DrumNoteInstrument};
@@ -57,6 +58,13 @@ export interface Beat {
 
 export interface Note {
   notes: string[];
+  /**
+   * Stable fill-note id per notehead (parallel to `notes`), or null for
+   * noteheads with no drum-lane identity (e.g. rests). Lets the drum-fills
+   * practice overlay correlate a rendered notehead with a scoring judgment.
+   * See lib/drum-fills/midi/noteId.ts for the scheme.
+   */
+  noteIds: (string | null)[];
   dotted: boolean;
   duration: string;
   isTriplet: boolean;
@@ -169,10 +177,14 @@ class Parser {
             noteGroups[noteGroupIndex] != null &&
             noteGroups[noteGroupIndex][0].tick === currentTick
           ) {
+            const group = noteGroups[noteGroupIndex];
             beat.notes.push({
-              notes: noteGroups[noteGroupIndex].map(note => {
+              notes: group.map(note => {
                 return mapping[interpretDrumNote(note).instrument];
               }),
+              noteIds: group.map(
+                note => fillNoteIdFromRaw(currentTick, note)?.id ?? null,
+              ),
               isRest: false,
               dotted: false,
               isTriplet: false,
@@ -185,6 +197,7 @@ class Parser {
           } else if (currentTick === beat.startTick) {
             beat.notes.push({
               notes: ['b/4'],
+              noteIds: [null],
               isTriplet: false,
               isRest: true,
               dotted: false,
@@ -250,6 +263,7 @@ class Parser {
 
     return {
       notes: ['b/4'],
+      noteIds: [null],
       isRest: true,
       dotted,
       isTriplet: false,
@@ -329,6 +343,7 @@ class Parser {
                   ms: 0,
                   duration: `${duration}${isRest ? 'r' : ''}`,
                   notes: isRest ? ['b/4'] : note.notes,
+                  noteIds: isRest ? [null] : note.noteIds,
                 };
 
                 return newNote;
@@ -364,6 +379,7 @@ class Parser {
         ms: 0,
         duration: `${duration}${note.isRest ? 'r' : ''}`,
         notes: note.isRest ? ['b/4'] : note.notes,
+        noteIds: note.isRest ? [null] : note.noteIds,
       },
     ];
   }

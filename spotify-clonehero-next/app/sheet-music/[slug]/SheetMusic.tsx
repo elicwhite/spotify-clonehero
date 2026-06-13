@@ -15,6 +15,7 @@ import {
 } from './renderVexflow';
 import {PracticeModeConfig} from '@/lib/preview/audioManager';
 import {Playhead} from './Playhead';
+import {NoteFeedbackOverlay, type NoteFeedback} from './NoteFeedbackOverlay';
 
 import {cn} from '@/lib/utils';
 import debounce from 'debounce';
@@ -36,6 +37,7 @@ export default function SheetMusic({
   onPracticeMeasureSelect,
   selectionIndex,
   audioManagerRef,
+  noteFeedback,
 }: {
   chart: ParsedChart;
   track: ParsedChart['trackData'][0];
@@ -50,6 +52,13 @@ export default function SheetMusic({
   onPracticeMeasureSelect: (measureIndex: number) => void;
   selectionIndex: number | null;
   audioManagerRef: RefObject<any>;
+  /**
+   * Drum-fills only: per-note hit/miss feedback keyed by fill-note id. When
+   * provided, an overlay marks each rendered notehead with its judgment. Absent
+   * (undefined) on the shared /sheet-music page, which leaves behaviour
+   * unchanged — no markers are collected or drawn.
+   */
+  noteFeedback?: Map<string, NoteFeedback> | null;
 }) {
   const vexflowContainerRef = useRef<HTMLDivElement>(null!);
   const [windowWidth, setWindowWidth] = useState<number>(window.innerWidth);
@@ -59,11 +68,22 @@ export default function SheetMusic({
 
   const [renderData, setRenderData] = useState<RenderData[]>([]);
 
+  // Whether to collect per-notehead positions for the drum-fills overlay. A
+  // stable boolean (presence of the prop), so toggling the feedback map's
+  // contents never forces an expensive SVG re-render.
+  const collectNoteMarkers = noteFeedback !== undefined;
+
   // Create consolidated time->position map for the playhead
   const consolidatedTimeMap = useMemo(() => {
     if (renderData.length === 0) return [];
     return createConsolidatedTimePositionMap(renderData);
   }, [renderData]);
+
+  // Flatten per-measure notehead positions for the drum-fills overlay.
+  const noteMarkers = useMemo(
+    () => (collectNoteMarkers ? renderData.flatMap(d => d.noteMarkers) : []),
+    [renderData, collectNoteMarkers],
+  );
 
   useEffect(() => {
     // Re-render whenever the vexflow container's width changes —
@@ -112,6 +132,7 @@ export default function SheetMusic({
       showBarNumbers,
       enableColors,
       practiceModeConfig,
+      collectNoteMarkers,
     );
     setRenderData(data);
   }, [
@@ -125,6 +146,7 @@ export default function SheetMusic({
     chart.sections,
     practiceModeConfig,
     zoom,
+    collectNoteMarkers,
   ]);
 
   // Remove automatic highlighting of the currently playing measure and auto-scroll
@@ -179,6 +201,9 @@ export default function SheetMusic({
           />
         )}
         {measureHighlights}
+        {collectNoteMarkers && noteFeedback && (
+          <NoteFeedbackOverlay markers={noteMarkers} feedback={noteFeedback} />
+        )}
       </div>
     </div>
   );

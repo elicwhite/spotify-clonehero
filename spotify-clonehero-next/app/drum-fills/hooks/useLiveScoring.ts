@@ -6,7 +6,10 @@ import {applyCalibration} from '@/lib/drum-fills/midi/calibration';
 import type {ExpectedNote, TimedHit} from '@/lib/drum-fills/midi/hitMatcher';
 import type {DrumLane} from '@/lib/drum-fills/midi/padMapping';
 import {
+  bestFromScored,
   evaluateAttempt,
+  isNewBest,
+  type BestAttempt,
   type ScoredAttempt,
 } from '@/lib/drum-fills/practice/attempt';
 import type {ExpectedFillNote} from '@/lib/drum-fills/practice/fillNotes';
@@ -23,6 +26,10 @@ export interface HitFlash {
 export interface LiveScoringState {
   /** The most recently completed attempt's result, or null. */
   lastAttempt: ScoredAttempt | null;
+  /** Best attempt for this fill (seeded from history, updated on finish). */
+  bestAttempt: BestAttempt | null;
+  /** True briefly when the latest attempt set a new best. */
+  newBest: boolean;
   /** Recent flashes (caller renders + ages them out). */
   flashes: HitFlash[];
   /** Number of hits buffered for the in-progress attempt. */
@@ -43,11 +50,19 @@ export function useLiveScoring(notes: ExpectedFillNote[]): {
   state: LiveScoringState;
   beginAttempt: (fillStartPerfNow: number) => void;
   finishAttempt: () => ScoredAttempt | null;
+  /** Seed the best attempt from history (replaces any current best). */
+  seedBest: (best: BestAttempt | null) => void;
   reset: () => void;
 } {
   const {subscribe, calibrationOffsetMs} = useMidi();
 
   const [lastAttempt, setLastAttempt] = useState<ScoredAttempt | null>(null);
+  const [bestAttempt, setBestAttempt] = useState<BestAttempt | null>(null);
+  const [newBest, setNewBest] = useState(false);
+  const bestRef = useRef<BestAttempt | null>(null);
+  useEffect(() => {
+    bestRef.current = bestAttempt;
+  }, [bestAttempt]);
   const [flashes, setFlashes] = useState<HitFlash[]>([]);
   const [pendingHits, setPendingHits] = useState(0);
 
@@ -122,14 +137,31 @@ export function useLiveScoring(notes: ExpectedFillNote[]): {
     if (relativeNotes.length === 0 && hits.length === 0) return null;
     const result = evaluateAttempt(relativeNotes, hits);
     setLastAttempt(result);
+
+    // Update best (no work inside a setState updater — decide from the ref).
+    if (isNewBest(bestRef.current, result.score.score)) {
+      const next = bestFromScored(result);
+      bestRef.current = next;
+      setBestAttempt(next);
+      setNewBest(true);
+    } else {
+      setNewBest(false);
+    }
     return result;
   }, [relativeNotes]);
+
+  const seedBest = useCallback((best: BestAttempt | null) => {
+    bestRef.current = best;
+    setBestAttempt(best);
+    setNewBest(false);
+  }, []);
 
   const reset = useCallback(() => {
     anchorRef.current = null;
     hitsRef.current = [];
     setPendingHits(0);
     setLastAttempt(null);
+    setNewBest(false);
     setFlashes([]);
   }, []);
 
@@ -151,9 +183,10 @@ export function useLiveScoring(notes: ExpectedFillNote[]): {
   void baseMs;
 
   return {
-    state: {lastAttempt, flashes, pendingHits},
+    state: {lastAttempt, bestAttempt, newBest, flashes, pendingHits},
     beginAttempt,
     finishAttempt,
+    seedBest,
     reset,
   };
 }

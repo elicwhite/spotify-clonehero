@@ -21,6 +21,7 @@ import type {
 } from '@/lib/chart-edit/types';
 import {noteFlags, noteTypes} from '@/lib/chart-edit/types';
 import type {DrumLane} from '@/lib/drum-fills/midi/padMapping';
+import {fillNoteId} from '@/lib/drum-fills/midi/noteId';
 import type {BackingPattern} from './backingTrack';
 import type {ExpectedFillNote} from './fillNotes';
 
@@ -41,7 +42,7 @@ export interface PracticeChartBundle {
   track: ParsedTrackData;
   /** The fill notes to score, in this chart's absolute ms time. */
   expectedNotes: ExpectedFillNote[];
-  /** Chart ms where the groove starts (always 0). */
+  /** Chart ms where the groove starts (after any lead-in bars; 0 with none). */
   grooveStartMs: number;
   /** Chart ms where the groove ends / the fill window opens. */
   grooveEndMs: number;
@@ -146,26 +147,35 @@ function toNoteEventGroups(
 }
 
 /**
- * Author the practice chart: `pattern.grooveBars` bars of the (folded) groove,
- * then the fill notes across `pattern.fillBars` bars, at `bpm`, in
- * `pattern.beatsPerBar`/4 time, starting at tick 0.
+ * Author the practice chart: optional `leadInBars` of empty bars (so the loop
+ * starts with a clear highway and the practiced content scrolls into view, like
+ * Clone Hero's practice mode), then `pattern.grooveBars` bars of the (folded)
+ * groove, then the fill notes across `pattern.fillBars` bars, at `bpm`, in
+ * `pattern.beatsPerBar`/4 time. The groove starts at the first beat after the
+ * lead-in (tick 0 when there is no lead-in).
  */
 export function buildPracticeChart(args: {
   pattern: BackingPattern;
   bpm: number;
   fillNotes: PracticeChartFillNote[];
+  /** Empty bars before the groove (lead-in). Default 0. */
+  leadInBars?: number;
 }): PracticeChartBundle {
-  const {pattern, bpm, fillNotes} = args;
+  const {pattern, bpm, fillNotes, leadInBars = 0} = args;
   const res = PRACTICE_CHART_RESOLUTION;
   const msPerBeat = 60000 / bpm;
   const msPerTick = msPerBeat / res;
   const {beatsPerBar, grooveBars, fillBars} = pattern;
 
+  // Lead-in shifts every authored beat forward; the groove begins after it.
+  const leadInBeats = leadInBars * beatsPerBar;
+
   const planned: PlannedNote[] = [];
 
-  // Groove bars: the folded one-bar groove repeated for each groove bar.
+  // Groove bars: the folded one-bar groove repeated for each groove bar,
+  // positioned after the lead-in.
   for (let bar = 0; bar < grooveBars; bar++) {
-    const barStartBeat = bar * beatsPerBar;
+    const barStartBeat = (leadInBars + bar) * beatsPerBar;
     for (const hit of pattern.groove) {
       // Click is a separate layer in the backing audio, never a chart note.
       if (hit.lane === 'click') continue;
@@ -178,8 +188,8 @@ export function buildPracticeChart(args: {
     }
   }
 
-  // Fill notes, re-authored after the groove bars.
-  const fillStartBeat = grooveBars * beatsPerBar;
+  // Fill notes, re-authored after the lead-in + groove bars.
+  const fillStartBeat = (leadInBars + grooveBars) * beatsPerBar;
   const fillStartTick = Math.round(fillStartBeat * res);
   const expectedNotes: ExpectedFillNote[] = [];
   for (const note of fillNotes) {
@@ -187,7 +197,7 @@ export function buildPracticeChart(args: {
     const def = laneToNote(note.lane, note.isCymbal);
     planned.push({tick, type: def.type, flags: def.flags});
     expectedNotes.push({
-      id: `${tick}:${note.lane}:${note.isCymbal ? 'c' : 'p'}`,
+      id: fillNoteId(tick, note.lane, note.isCymbal),
       tick,
       msTime: tick * msPerTick,
       lane: note.lane,
@@ -199,8 +209,10 @@ export function buildPracticeChart(args: {
     (a, b) => a.msTime - b.msTime || a.lane.localeCompare(b.lane),
   );
 
+  const grooveStartMs = leadInBeats * msPerBeat;
   const grooveEndMs = fillStartBeat * msPerBeat;
-  const fillEndMs = (grooveBars + fillBars) * beatsPerBar * msPerBeat;
+  const fillEndMs =
+    (leadInBars + grooveBars + fillBars) * beatsPerBar * msPerBeat;
   const fillStartMs =
     expectedNotes.length > 0 ? expectedNotes[0].msTime : grooveEndMs;
 
@@ -235,7 +247,12 @@ export function buildPracticeChart(args: {
       },
     ],
     sections: [
-      {tick: 0, name: 'Groove', msTime: 0, msLength: grooveEndMs},
+      {
+        tick: Math.round(leadInBeats * res),
+        name: 'Groove',
+        msTime: grooveStartMs,
+        msLength: grooveEndMs - grooveStartMs,
+      },
       {
         tick: fillStartTick,
         name: 'Fill',
@@ -250,7 +267,7 @@ export function buildPracticeChart(args: {
     chart,
     track,
     expectedNotes,
-    grooveStartMs: 0,
+    grooveStartMs,
     grooveEndMs,
     fillStartMs,
     fillEndMs,

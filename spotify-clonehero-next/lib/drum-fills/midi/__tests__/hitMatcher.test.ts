@@ -30,25 +30,82 @@ describe('matchHits', () => {
     expect(res.counts).toEqual({perfect: 1, good: 0, miss: 0, extra: 0});
   });
 
-  it('classifies windows: perfect ≤35, good ≤75, miss otherwise', () => {
+  it('classifies windows: perfect ≤30, good ≤70, miss otherwise', () => {
     const notes = [
       note('p', 1000, 'red'),
       note('g', 2000, 'red'),
       note('m', 3000, 'red'),
     ];
-    const hits = [hit(1030, 'red'), hit(2070, 'red'), hit(3100, 'red')];
+    const hits = [hit(1025, 'red'), hit(2065, 'red'), hit(3100, 'red')];
     const res = matchHits(notes, hits);
-    expect(res.judgments[0].judgment).toBe('perfect'); // 30ms
-    expect(res.judgments[1].judgment).toBe('good'); // 70ms
+    expect(res.judgments[0].judgment).toBe('perfect'); // 25ms
+    expect(res.judgments[1].judgment).toBe('good'); // 65ms
     expect(res.judgments[2].judgment).toBe('miss'); // 100ms out of window
     // The 3100 hit becomes an extra (no note in range).
     expect(res.counts.extra).toBe(1);
+  });
+
+  it('perfect/good boundary at ±30ms (late and early)', () => {
+    // 29ms inside, 31ms outside the perfect window — both still hits.
+    expect(
+      matchHits([note('a', 1000, 'red')], [hit(1029, 'red')]).judgments[0]
+        .judgment,
+    ).toBe('perfect');
+    expect(
+      matchHits([note('a', 1000, 'red')], [hit(1031, 'red')]).judgments[0]
+        .judgment,
+    ).toBe('good');
+    // Symmetric early side.
+    expect(
+      matchHits([note('a', 1000, 'red')], [hit(971, 'red')]).judgments[0]
+        .judgment,
+    ).toBe('perfect');
+    expect(
+      matchHits([note('a', 1000, 'red')], [hit(969, 'red')]).judgments[0]
+        .judgment,
+    ).toBe('good');
+  });
+
+  it('good/miss boundary at ±70ms (late and early)', () => {
+    // 69ms inside (good), 71ms outside (miss + extra), both directions.
+    const late69 = matchHits([note('a', 1000, 'red')], [hit(1069, 'red')]);
+    expect(late69.judgments[0].judgment).toBe('good');
+    const late71 = matchHits([note('a', 1000, 'red')], [hit(1071, 'red')]);
+    expect(late71.judgments[0].judgment).toBe('miss');
+    expect(late71.counts.extra).toBe(1);
+
+    const early69 = matchHits([note('a', 1000, 'red')], [hit(931, 'red')]);
+    expect(early69.judgments[0].judgment).toBe('good'); // -69ms
+    const early71 = matchHits([note('a', 1000, 'red')], [hit(929, 'red')]);
+    expect(early71.judgments[0].judgment).toBe('miss'); // -71ms
+    expect(early71.counts.extra).toBe(1);
   });
 
   it('respects early hits (negative delta) symmetrically', () => {
     const res = matchHits([note('a', 1000, 'blue')], [hit(960, 'blue')]);
     expect(res.judgments[0].judgment).toBe('good'); // -40ms
     expect(res.judgments[0].deltaMs).toBe(-40);
+  });
+
+  it('an overhit (no in-window note) is an extra, not a match', () => {
+    // A lone snare hit nowhere near the one expected note → miss + extra.
+    const res = matchHits(
+      [note('a', 1000, 'red')],
+      [hit(1000, 'red'), hit(1500, 'red')],
+    );
+    expect(res.counts.perfect).toBe(1);
+    expect(res.counts.miss).toBe(0);
+    expect(res.counts.extra).toBe(1);
+    expect(res.extras[0].hit.msTime).toBe(1500);
+  });
+
+  it('a cymbal hit never matches a tom note on the same lane', () => {
+    const res = matchHits(
+      [note('a', 1000, 'blue', false)],
+      [hit(1000, 'blue', true)],
+    );
+    expect(res.judgments[0].judgment).toBe('miss');
+    expect(res.counts.extra).toBe(1);
   });
 
   it('requires lane to match', () => {
@@ -146,8 +203,8 @@ describe('matchHits', () => {
     expect(res2.judgments[0].judgment).toBe('miss');
   });
 
-  it('exposes default windows of 35 / 75', () => {
-    expect(DEFAULT_WINDOWS.perfect).toBe(35);
-    expect(DEFAULT_WINDOWS.good).toBe(75);
+  it('exposes YARG-aligned default windows of 30 / 70', () => {
+    expect(DEFAULT_WINDOWS.perfect).toBe(30);
+    expect(DEFAULT_WINDOWS.good).toBe(70);
   });
 });

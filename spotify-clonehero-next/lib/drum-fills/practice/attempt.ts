@@ -43,6 +43,89 @@ export interface ScoredAttempt {
 }
 
 /**
+ * A compact best-attempt summary for the HUD + the sheet-music overlay. Derived
+ * either from a freshly scored {@link ScoredAttempt} or seeded from a persisted
+ * `fill_attempts` row (which stores per-note judgments but not extras).
+ */
+export interface BestAttempt {
+  score: number;
+  perfect: number;
+  good: number;
+  miss: number;
+  /** Extra hits; null when seeded from history (not persisted per-attempt). */
+  extra: number | null;
+  /** Per-note judgments keyed by fill-note id, for the stave overlay. */
+  judgments: Map<
+    string,
+    {judgment: 'perfect' | 'good' | 'miss'; deltaMs: number | null}
+  >;
+}
+
+/** Build a {@link BestAttempt} summary from a freshly scored attempt. */
+export function bestFromScored(result: ScoredAttempt): BestAttempt {
+  const judgments = new Map<
+    string,
+    {judgment: 'perfect' | 'good' | 'miss'; deltaMs: number | null}
+  >();
+  for (const j of result.match.judgments) {
+    judgments.set(String(j.note.id), {
+      judgment: j.judgment,
+      deltaMs: j.deltaMs,
+    });
+  }
+  return {
+    score: result.score.score,
+    perfect: result.score.perfect,
+    good: result.score.good,
+    miss: result.score.miss,
+    extra: result.score.extraHits,
+    judgments,
+  };
+}
+
+/**
+ * Build a {@link BestAttempt} from persisted judgments (a `fill_attempts` row).
+ * Counts are recomputed from the stored per-note judgments; extras are unknown.
+ */
+export function bestFromStored(
+  score: number,
+  stored: {
+    id: string | number;
+    judgment: 'perfect' | 'good' | 'miss';
+    deltaMs: number | null;
+  }[],
+): BestAttempt {
+  const judgments = new Map<
+    string,
+    {judgment: 'perfect' | 'good' | 'miss'; deltaMs: number | null}
+  >();
+  let perfect = 0;
+  let good = 0;
+  let miss = 0;
+  for (const j of stored) {
+    judgments.set(String(j.id), {judgment: j.judgment, deltaMs: j.deltaMs});
+    if (j.judgment === 'perfect') perfect++;
+    else if (j.judgment === 'good') good++;
+    else miss++;
+  }
+  return {score, perfect, good, miss, extra: null, judgments};
+}
+
+/**
+ * Whether `candidate` should replace `current` as the best attempt: a higher or
+ * equal score wins, so a fresh equal-best re-marks the stave with the latest
+ * pass. When `current` is null, any candidate is the new best. (The persisted
+ * tie-break toward the most recent row lives in `getFillBest`.)
+ */
+export function isNewBest(
+  current: BestAttempt | null,
+  candidateScore: number,
+): boolean {
+  if (!current) return true;
+  return candidateScore >= current.score;
+}
+
+/**
  * Run one practice attempt: match the player's hits against the expected notes
  * and score the result. `hits` must already be calibration-corrected and in the
  * same clock domain as the notes.

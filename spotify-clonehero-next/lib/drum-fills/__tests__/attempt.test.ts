@@ -1,4 +1,10 @@
-import {evaluateAttempt, matchResultToJudgments} from '../practice/attempt';
+import {
+  bestFromScored,
+  bestFromStored,
+  evaluateAttempt,
+  isNewBest,
+  matchResultToJudgments,
+} from '../practice/attempt';
 import {matchHits, type ExpectedNote, type TimedHit} from '../midi/hitMatcher';
 
 const notes: ExpectedNote[] = [
@@ -54,7 +60,7 @@ describe('evaluateAttempt', () => {
 
   it('respects custom timing windows', () => {
     const hits: TimedHit[] = [{msTime: 50, lane: 'red', isCymbal: false}];
-    // Default good window is 75ms → matched as good.
+    // Default good window is 70ms → 50ms matched as good.
     const loose = evaluateAttempt([notes[0]], hits);
     expect(loose.score.good).toBe(1);
     // Tighten to 30ms → out of range → miss.
@@ -62,5 +68,45 @@ describe('evaluateAttempt', () => {
       windows: {perfect: 10, good: 30},
     });
     expect(tight.score.miss).toBe(1);
+  });
+});
+
+describe('best attempt summaries', () => {
+  it('bestFromScored carries counts + per-note judgments keyed by id', () => {
+    const result = evaluateAttempt(notes, [
+      {msTime: 0, lane: 'red', isCymbal: false}, // n0 perfect
+      {msTime: 250, lane: 'yellow', isCymbal: false}, // n1 perfect
+      {msTime: 900, lane: 'blue', isCymbal: false}, // extra; n2 missed
+    ]);
+    const best = bestFromScored(result);
+    expect(best.score).toBe(result.score.score);
+    expect(best.perfect).toBe(2);
+    expect(best.miss).toBe(1);
+    expect(best.extra).toBe(1);
+    expect(best.judgments.get('n0')!.judgment).toBe('perfect');
+    expect(best.judgments.get('n2')!.judgment).toBe('miss');
+    expect(best.judgments.get('n2')!.deltaMs).toBeNull();
+  });
+
+  it('bestFromStored recomputes counts; extras unknown (null)', () => {
+    const best = bestFromStored(82, [
+      {id: '0:red:p', judgment: 'perfect', deltaMs: 4},
+      {id: '0:yellow:p', judgment: 'good', deltaMs: -40},
+      {id: '0:blue:c', judgment: 'miss', deltaMs: null},
+    ]);
+    expect(best.score).toBe(82);
+    expect(best.perfect).toBe(1);
+    expect(best.good).toBe(1);
+    expect(best.miss).toBe(1);
+    expect(best.extra).toBeNull();
+    expect(best.judgments.get('0:yellow:p')!.deltaMs).toBe(-40);
+  });
+
+  it('isNewBest: any candidate beats null; ties count as a new best', () => {
+    expect(isNewBest(null, 0)).toBe(true);
+    const cur = bestFromStored(90, []);
+    expect(isNewBest(cur, 91)).toBe(true);
+    expect(isNewBest(cur, 90)).toBe(true); // tie → re-mark
+    expect(isNewBest(cur, 89)).toBe(false);
   });
 });

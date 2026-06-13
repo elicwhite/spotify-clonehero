@@ -1,7 +1,10 @@
 'use client';
 
 import {cn} from '@/lib/utils';
-import type {ScoredAttempt} from '@/lib/drum-fills/practice/attempt';
+import type {
+  BestAttempt,
+  ScoredAttempt,
+} from '@/lib/drum-fills/practice/attempt';
 import type {FillSrsState} from '@/lib/drum-fills/practice/srs';
 
 function scoreColor(score: number): string {
@@ -13,11 +16,15 @@ function scoreColor(score: number): string {
 /** Live scoring + mastery readout shown beside the practice views. */
 export default function PracticeHud({
   lastAttempt,
+  bestAttempt,
+  newBest,
   srs,
   tempoPct,
   speedTrainer,
 }: {
   lastAttempt: ScoredAttempt | null;
+  bestAttempt: BestAttempt | null;
+  newBest: boolean;
   srs: FillSrsState | null;
   tempoPct: number;
   speedTrainer: boolean;
@@ -71,6 +78,54 @@ export default function PracticeHud({
           {s.passed ? 'PASS' : 'Keep trying'}
         </div>
       )}
+
+      <div className="border-t pt-2">
+        <div className="flex items-baseline justify-between">
+          <span className="font-semibold">
+            Best
+            {newBest && (
+              <span className="ml-1 rounded bg-green-100 px-1 py-0.5 text-[10px] font-bold text-green-700">
+                NEW BEST!
+              </span>
+            )}
+          </span>
+          {bestAttempt ? (
+            <span
+              className={cn(
+                'text-xl font-bold tabular-nums',
+                scoreColor(bestAttempt.score),
+              )}>
+              {Math.round(bestAttempt.score)}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </div>
+        {bestAttempt && (
+          <div className="mt-1 grid grid-cols-4 gap-1 text-center text-[11px]">
+            <Stat
+              label="Perfect"
+              value={bestAttempt.perfect}
+              className="text-green-600"
+            />
+            <Stat
+              label="Good"
+              value={bestAttempt.good}
+              className="text-amber-600"
+            />
+            <Stat
+              label="Miss"
+              value={bestAttempt.miss}
+              className="text-red-600"
+            />
+            <Stat
+              label="Extra"
+              value={bestAttempt.extra ?? 0}
+              className="text-muted-foreground"
+            />
+          </div>
+        )}
+      </div>
 
       <div className="border-t pt-2">
         <div className="flex items-center justify-between">

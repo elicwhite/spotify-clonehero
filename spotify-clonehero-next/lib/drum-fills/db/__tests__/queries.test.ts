@@ -22,6 +22,7 @@ import {
   getActiveLadders,
   getAttemptStats,
   getDueFills,
+  getFillBest,
   getFillById,
   getFillsByIds,
   getFillSiblings,
@@ -281,6 +282,84 @@ describe('drum-fills queries', () => {
     expect(stats.get('a2')).toEqual({count: 1, lastTs: 3000});
     // a3 has no attempts → absent.
     expect(stats.has('a3')).toBe(false);
+  });
+
+  it('getFillBest returns the highest-scoring attempt with its judgments', async () => {
+    await replaceFillsForSong('hashA', [fill({id: 'a1'})], db);
+    expect(await getFillBest('a1', db)).toBeNull();
+
+    await recordAttempt(
+      {
+        fillId: 'a1',
+        mode: 'isolated',
+        tempoPct: 80,
+        score: 60,
+        judgments: [{id: '0:red:p', judgment: 'good', deltaMs: 40}],
+        ts: 1000,
+      },
+      db,
+    );
+    await recordAttempt(
+      {
+        fillId: 'a1',
+        mode: 'song-context',
+        tempoPct: 100,
+        score: 95,
+        judgments: [{id: '0:red:p', judgment: 'perfect', deltaMs: 5}],
+        ts: 2000,
+      },
+      db,
+    );
+    await recordAttempt(
+      {
+        fillId: 'a1',
+        mode: 'isolated',
+        tempoPct: 90,
+        score: 70,
+        judgments: [],
+        ts: 3000,
+      },
+      db,
+    );
+
+    const best = await getFillBest('a1', db);
+    expect(best).not.toBeNull();
+    expect(best!.score).toBe(95);
+    expect(best!.mode).toBe('song-context');
+    expect(best!.tempoPct).toBe(100);
+    expect(best!.judgments).toEqual([
+      {id: '0:red:p', judgment: 'perfect', deltaMs: 5},
+    ]);
+  });
+
+  it('getFillBest breaks score ties toward the most recent attempt', async () => {
+    await replaceFillsForSong('hashA', [fill({id: 'a1'})], db);
+    await recordAttempt(
+      {
+        fillId: 'a1',
+        mode: 'isolated',
+        tempoPct: 100,
+        score: 90,
+        judgments: [{id: 'old', judgment: 'good', deltaMs: 10}],
+        ts: 1000,
+      },
+      db,
+    );
+    await recordAttempt(
+      {
+        fillId: 'a1',
+        mode: 'isolated',
+        tempoPct: 100,
+        score: 90,
+        judgments: [{id: 'new', judgment: 'perfect', deltaMs: 1}],
+        ts: 2000,
+      },
+      db,
+    );
+    const best = await getFillBest('a1', db);
+    expect(best!.judgments).toEqual([
+      {id: 'new', judgment: 'perfect', deltaMs: 1},
+    ]);
   });
 
   it('returns an empty attempt-stats map when nothing is practiced', async () => {

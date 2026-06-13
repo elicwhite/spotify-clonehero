@@ -19,6 +19,15 @@ import {
 import {Measure} from './convertToVexflow';
 import {PracticeModeConfig} from '@/lib/preview/audioManager';
 
+/** Screen position of a single rendered notehead, keyed by its fill-note id. */
+export interface NoteMarker {
+  noteId: string;
+  /** Notehead centre x (already scaled by zoom). */
+  x: number;
+  /** Notehead centre y (already scaled by zoom). */
+  y: number;
+}
+
 export interface RenderData {
   stave: Stave;
   measure: Measure;
@@ -28,6 +37,11 @@ export interface RenderData {
     y: number;
     flag: 'measure-start' | 'measure-end' | 'note';
   }>;
+  /**
+   * Per-notehead screen positions for the drum-fills practice overlay, populated
+   * only when `collectNoteMarkers` is set. Empty on the shared /sheet-music page.
+   */
+  noteMarkers: NoteMarker[];
 }
 
 const MIN_STAVE_WIDTH = 250;
@@ -78,6 +92,7 @@ export function renderMusic(
   showBarNumbers: boolean = true,
   enableColors: boolean = false,
   practiceModeConfig?: PracticeModeConfig | null,
+  collectNoteMarkers: boolean = false,
 ): RenderData[] {
   if (!elementRef.current) {
     return [];
@@ -287,6 +302,7 @@ export function renderMusic(
   }> = [];
 
   return measures.map((measure, index) => {
+    const noteMarkers: NoteMarker[] = [];
     const stave = renderMeasure(
       context,
       measure,
@@ -303,12 +319,14 @@ export function renderMusic(
       processedLyricsMap.get(index), // Pass processed lyrics if this measure contains lyrics
       index > 0 ? measures[index - 1] : undefined, // Pass previous measure for repeat detection
       practiceModeConfig, // Pass practice mode configuration
+      collectNoteMarkers ? noteMarkers : null,
     );
 
     return {
       measure,
       stave,
       timePositionMap,
+      noteMarkers,
     };
   });
 }
@@ -427,6 +445,7 @@ function renderMeasure(
   lyrics?: {text: string; position: number}[],
   previousMeasure?: Measure,
   practiceModeConfig?: PracticeModeConfig | null,
+  noteMarkers?: NoteMarker[] | null,
 ) {
   const stave = new Stave(xOffset, yOffset, staveWidth);
 
@@ -549,6 +568,9 @@ function renderMeasure(
 
     // @ts-ignore Store ms in the stave note for later use
     staveNote.ms = note.ms;
+    // @ts-ignore Store the source note so post-draw marker collection can read
+    // its per-notehead fill-note ids.
+    staveNote.sourceNote = note;
 
     if (enableColors) {
       staveNote.keys.forEach((n, idx) => {
@@ -604,6 +626,28 @@ function renderMeasure(
         y: stave.getY() * zoom,
         flag: 'note',
       });
+
+      // Per-notehead markers for the drum-fills practice overlay. getYs()
+      // returns one y per notehead (top→bottom, matching the key order); pair
+      // each with its source fill-note id. x is the notehead's left edge.
+      if (noteMarkers) {
+        // @ts-ignore sourceNote stashed above carries the per-head ids.
+        const sourceNote = note.sourceNote as
+          | {noteIds?: (string | null)[]}
+          | undefined;
+        const ids = sourceNote?.noteIds;
+        if (ids && ids.length > 0) {
+          const ys = note.getYs();
+          const headX = note.getNoteHeadBeginX();
+          const headWidth = note.getNoteHeadEndX() - note.getNoteHeadBeginX();
+          const centreX = headX + headWidth / 2;
+          ids.forEach((id, i) => {
+            if (id == null) return;
+            const y = ys[i] ?? ys[ys.length - 1] ?? stave.getY();
+            noteMarkers.push({noteId: id, x: centreX * zoom, y: y * zoom});
+          });
+        }
+      }
     }
   });
 
