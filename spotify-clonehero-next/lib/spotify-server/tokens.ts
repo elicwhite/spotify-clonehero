@@ -35,8 +35,8 @@ export async function getSpotifyAccessToken(
     };
   }
 
-  const clientId = process.env.SPOTIFY_CLIENT_ID;
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+  const clientId = process.env['SPOTIFY_CLIENT_ID'];
+  const clientSecret = process.env['SPOTIFY_CLIENT_SECRET'];
   if (!clientId || !clientSecret) return null;
 
   let tokenResp: Response | null = null;

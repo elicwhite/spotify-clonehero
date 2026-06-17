@@ -492,7 +492,7 @@ export default function ChartReviewClient() {
 
   const handlePickFolder = useCallback(async () => {
     try {
-      const dirHandle = await window.showDirectoryPicker({
+      const dirHandle = await window['showDirectoryPicker']({
         id: 'chart-review-charts',
         mode: 'read',
       });
@@ -505,7 +505,7 @@ export default function ChartReviewClient() {
 
   const handlePickTsvFile = useCallback(async () => {
     try {
-      const [handle] = await window.showOpenFilePicker({
+      const [handle] = await window['showOpenFilePicker']({
         id: 'chart-review-results',
         multiple: false,
         types: [

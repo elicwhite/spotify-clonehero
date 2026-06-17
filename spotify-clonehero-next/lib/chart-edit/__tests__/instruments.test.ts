@@ -28,11 +28,11 @@ describe('drum schemas', () => {
     const map = Object.fromEntries(
       drums4LaneSchema.lanes.map(l => [l.label, l.noteType]),
     );
-    expect(map.Kick).toBe(noteTypes.kick);
-    expect(map.Red).toBe(noteTypes.redDrum);
-    expect(map.Yellow).toBe(noteTypes.yellowDrum);
-    expect(map.Blue).toBe(noteTypes.blueDrum);
-    expect(map.Green).toBe(noteTypes.greenDrum);
+    expect(map['Kick']).toBe(noteTypes.kick);
+    expect(map['Red']).toBe(noteTypes.redDrum);
+    expect(map['Yellow']).toBe(noteTypes.yellowDrum);
+    expect(map['Blue']).toBe(noteTypes.blueDrum);
+    expect(map['Green']).toBe(noteTypes.greenDrum);
   });
 
   it('5-lane drums has kick + 5 strip lanes', () => {

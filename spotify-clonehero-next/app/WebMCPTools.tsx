@@ -32,7 +32,7 @@ export default function WebMCPTools() {
         },
       },
       execute: async (args: Record<string, unknown>) => {
-        const path = (args.path as string) || '';
+        const path = (args['path'] as string) || '';
 
         async function listDir(
           dir: FileSystemDirectoryHandle,
@@ -125,8 +125,8 @@ export default function WebMCPTools() {
         required: ['path'],
       },
       execute: async (args: Record<string, unknown>) => {
-        const path = args.path as string;
-        const maxLines = args.maxLines as number | undefined;
+        const path = args['path'] as string;
+        const maxLines = args['maxLines'] as number | undefined;
 
         try {
           const parts = path.split('/').filter(Boolean);
@@ -175,7 +175,7 @@ export default function WebMCPTools() {
         required: ['path'],
       },
       execute: async (args: Record<string, unknown>) => {
-        const path = args.path as string;
+        const path = args['path'] as string;
 
         try {
           const parts = path.split('/').filter(Boolean);
@@ -263,7 +263,7 @@ export default function WebMCPTools() {
         required: ['path'],
       },
       execute: async (args: Record<string, unknown>) => {
-        const path = args.path as string;
+        const path = args['path'] as string;
 
         try {
           const parts = path.split('/').filter(Boolean);
@@ -308,7 +308,7 @@ export default function WebMCPTools() {
         required: ['sql'],
       },
       execute: async (args: Record<string, unknown>) => {
-        const sql = args.sql as string;
+        const sql = args['sql'] as string;
         try {
           const rows = await runRawSql(sql);
           return {

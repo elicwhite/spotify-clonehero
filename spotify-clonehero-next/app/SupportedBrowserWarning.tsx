@@ -9,7 +9,7 @@ import {useSyncExternalStore} from 'react';
 // would otherwise run.
 const noopSubscribe = () => () => {};
 const getDirectoryPickerSupport = () =>
-  typeof window.showDirectoryPicker === 'function';
+  typeof window['showDirectoryPicker'] === 'function';
 const getServerSupport = () => true;
 
 export default function SupportedBrowserWarning({

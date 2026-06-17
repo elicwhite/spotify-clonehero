@@ -257,7 +257,7 @@ async function scanLocalSngFileInner(
 
   // The SNG header's metadata mirrors the [Song] section of song.ini — same
   // key/value shape. convertValues() coerces numeric/boolean strings below.
-  if (!metadata.name && !metadata.artist) return;
+  if (!metadata['name'] && !metadata['artist']) return;
   const songIniData = metadata as unknown as SongIniData;
 
   const convertedSongIniData = convertValues(songIniData);

@@ -92,7 +92,7 @@ export default function ChartDropZone({
   const handlePickFolder = useCallback(async () => {
     if (disabled || isLoading) return;
     try {
-      const dirHandle = await window.showDirectoryPicker({id});
+      const dirHandle = await window['showDirectoryPicker']({id});
       setIsLoading(true);
       const result = await readChartDirectory(dirHandle);
       onLoaded(result);

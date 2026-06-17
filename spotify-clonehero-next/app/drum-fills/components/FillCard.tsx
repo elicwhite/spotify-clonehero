@@ -48,7 +48,7 @@ function MasteryBadge({fill}: {fill: FillWithSrs}) {
     learning: {label: 'Learning', className: 'bg-amber-500 text-white'},
     mastered: {label: 'Mastered', className: 'bg-green-600 text-white'},
   };
-  const {label, className} = map[state] ?? map.unpracticed;
+  const {label, className} = map[state] ?? map['unpracticed'];
   return (
     <span
       className={cn(

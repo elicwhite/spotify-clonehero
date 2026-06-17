@@ -26,7 +26,7 @@ export async function getLocalDb(): Promise<Kysely<DB>> {
 }
 
 if (typeof window !== 'undefined') {
-  window.getLocalDb = getLocalDb;
+  window['getLocalDb'] = getLocalDb;
 }
 
 async function initializeDatabase(): Promise<Kysely<DB>> {

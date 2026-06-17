@@ -107,7 +107,7 @@ export async function pickFiles(
 ): Promise<File[] | null> {
   let handles: FileSystemFileHandle[];
   try {
-    handles = await window.showOpenFilePicker(options);
+    handles = await window['showOpenFilePicker'](options);
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') return null;
     throw err;

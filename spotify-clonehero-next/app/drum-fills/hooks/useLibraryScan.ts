@@ -55,7 +55,7 @@ export function useLibraryScan(
         } catch (err) {
           if (err instanceof Error && err.message === NEEDS_PICKER) {
             try {
-              const picked = await window.showDirectoryPicker({
+              const picked = await window['showDirectoryPicker']({
                 id: 'clone-hero-songs',
                 mode: 'readwrite',
               });

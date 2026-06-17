@@ -78,8 +78,8 @@ export async function runBeatThisOnnx({
     const t = new ort.Tensor('float32', chunk, [1, CHUNK_SIZE, nMels]);
     const out = await session.run({input_spectrogram: t});
     t.dispose();
-    const beat = out.beat.data as Float32Array;
-    const downbeat = out.downbeat.data as Float32Array;
+    const beat = out['beat'].data as Float32Array;
+    const downbeat = out['downbeat'].data as Float32Array;
     // shape [1, CHUNK_SIZE]; keep [BORDER, CHUNK-BORDER) clamped into [0, T)
     const lo = start + BORDER_SIZE;
     const srcLo = BORDER_SIZE;
@@ -90,8 +90,8 @@ export async function runBeatThisOnnx({
       beatLogits[tIdx] = beat[srcLo + j];
       downbeatLogits[tIdx] = downbeat[srcLo + j];
     }
-    out.beat.dispose();
-    out.downbeat.dispose();
+    out['beat'].dispose();
+    out['downbeat'].dispose();
     done++;
     onChunk?.(done, chunks.length);
   }

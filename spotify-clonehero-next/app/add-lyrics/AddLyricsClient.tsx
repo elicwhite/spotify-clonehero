@@ -261,7 +261,7 @@ function applyAlignedLyricsToDoc(
     };
   });
 
-  const existingVocals = source.parsedChart.vocalTracks?.parts?.vocals;
+  const existingVocals = source.parsedChart.vocalTracks?.parts?.['vocals'];
   const vocalsPart = {
     ...(existingVocals ?? {
       staticLyricPhrases: [],
@@ -431,9 +431,9 @@ function LyricsAlignInner() {
 
       // Check for existing lyrics and warn
       const existingLyrics =
-        result.chartDoc.parsedChart.vocalTracks.parts.vocals?.notePhrases.flatMap(
-          p => p.lyrics,
-        ) ?? [];
+        result.chartDoc.parsedChart.vocalTracks.parts[
+          'vocals'
+        ]?.notePhrases.flatMap(p => p.lyrics) ?? [];
       if (existingLyrics.length > 0) {
         setShowLyricsWarning(true);
       }
@@ -1200,7 +1200,7 @@ function ReplaceChartButton({
   const handlePickFolder = useCallback(async () => {
     if (isLoading) return;
     try {
-      const dirHandle = await window.showDirectoryPicker({
+      const dirHandle = await window['showDirectoryPicker']({
         id: 'add-lyrics-chart',
       });
       setIsLoading(true);

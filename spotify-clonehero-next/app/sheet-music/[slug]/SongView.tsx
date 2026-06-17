@@ -413,7 +413,8 @@ export default function Renderer({
   // (the same source the highway uses).
   const chartLyrics = useMemo(
     () =>
-      chart.vocalTracks.parts.vocals?.notePhrases.flatMap(p => p.lyrics) ?? [],
+      chart.vocalTracks.parts['vocals']?.notePhrases.flatMap(p => p.lyrics) ??
+      [],
     [chart],
   );
 
@@ -625,7 +626,7 @@ export default function Renderer({
         audioManager.setVolume('click', playClickTrack ? masterClickVolume : 0);
         audioManagerRef.current = audioManager;
         setAudioManager(audioManager);
-        window.am = audioManager;
+        window['am'] = audioManager;
 
         // Restore practice mode configuration if it exists
         const currentPracticeMode = practiceModeRef.current;

@@ -247,12 +247,12 @@ export async function separateDrumStem({
 
       // .data is a view into ORT-owned memory; .slice() gives an owned buffer
       // we can transfer to the worker without invalidating ORT's pointer.
-      const realCopy = (out.out_spec_real.data as Float32Array).slice();
-      const imagCopy = (out.out_spec_imag.data as Float32Array).slice();
+      const realCopy = (out['out_spec_real'].data as Float32Array).slice();
+      const imagCopy = (out['out_spec_imag'].data as Float32Array).slice();
       tIn1.dispose();
       tIn2.dispose();
-      out.out_spec_real.dispose();
-      out.out_spec_imag.dispose();
+      out['out_spec_real'].dispose();
+      out['out_spec_imag'].dispose();
 
       if (pendingIstft) mixSegment(await pendingIstft);
       pendingIstft = postIstftDrums(

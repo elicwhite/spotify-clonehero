@@ -572,11 +572,11 @@ export function useSpotifyLibraryUpdate(): [
 
         console.log(
           '[Spotify] Integrity check starting for',
-          playlistMetadata.length,
+          playlistMetadata['length'],
           'playlists',
         );
         const integrity = {
-          total: playlistMetadata.length,
+          total: playlistMetadata['length'],
           complete: 0,
           resume: 0,
           fresh: 0,

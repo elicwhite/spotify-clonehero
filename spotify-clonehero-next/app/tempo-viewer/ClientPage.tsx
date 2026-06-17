@@ -357,7 +357,7 @@ export default function TempoViewerClient() {
   // ---------- chart lyrics (sheet music expects this prop) ----------
   const lyrics = useMemo(
     () =>
-      currentChart?.vocalTracks.parts.vocals?.notePhrases.flatMap(
+      currentChart?.vocalTracks.parts['vocals']?.notePhrases.flatMap(
         p => p.lyrics,
       ) ?? [],
     [currentChart],

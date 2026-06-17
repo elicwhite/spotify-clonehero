@@ -168,22 +168,22 @@ export default function EditorMCPTools() {
         const s = stateRef.current;
         if (!am) return {content: [{type: 'text', text: 'No AudioManager'}]};
         let seekMs: number;
-        if (args.tick !== undefined && s.chartDoc) {
+        if (args['tick'] !== undefined && s.chartDoc) {
           const tt = buildTimedTempos(
             s.chartDoc.parsedChart.tempos,
             s.chartDoc.parsedChart.resolution,
           );
           seekMs = tickToMs(
-            args.tick as number,
+            args['tick'] as number,
             tt,
             s.chartDoc.parsedChart.resolution,
           );
           dispatchRef.current({
             type: 'SET_CURSOR_TICK',
-            tick: args.tick as number,
+            tick: args['tick'] as number,
           });
-        } else if (args.timeMs !== undefined) {
-          seekMs = args.timeMs as number;
+        } else if (args['timeMs'] !== undefined) {
+          seekMs = args['timeMs'] as number;
         } else {
           return {content: [{type: 'text', text: 'Provide timeMs or tick'}]};
         }
@@ -222,9 +222,9 @@ export default function EditorMCPTools() {
                 },
               ],
             };
-          const startTick = (args.startTick as number) ?? 0;
-          const endTick = (args.endTick as number) ?? startTick + 1920;
-          const limit = (args.limit as number) ?? 50;
+          const startTick = (args['startTick'] as number) ?? 0;
+          const endTick = (args['endTick'] as number) ?? startTick + 1920;
+          const limit = (args['limit'] as number) ?? 50;
           const notes = getDrumNotes(track)
             .filter(n => n.tick >= startTick && n.tick <= endTick)
             .slice(0, limit)
@@ -259,8 +259,8 @@ export default function EditorMCPTools() {
           required: ['tick', 'type'],
         },
         execute: async args => {
-          const id = `${args.tick}:${args.type}`;
-          const add = (args.addToSelection as boolean) ?? false;
+          const id = `${args['tick']}:${args['type']}`;
+          const add = (args['addToSelection'] as boolean) ?? false;
           const newIds = add
             ? new Set(getSelectedIds(stateRef.current, 'note'))
             : new Set<string>();
@@ -317,7 +317,7 @@ export default function EditorMCPTools() {
           required: ['flag'],
         },
         execute: async args => {
-          const flag = args.flag as FlagName;
+          const flag = args['flag'] as FlagName;
           if (!['cymbal', 'accent', 'ghost'].includes(flag))
             return {content: [{type: 'text', text: 'Invalid flag'}]};
           const s = stateRef.current;
@@ -358,13 +358,13 @@ export default function EditorMCPTools() {
           const trackKey = trackKeyFromScope(stateRef.current.activeScope);
           if (!trackKey)
             return {content: [{type: 'text', text: 'Not editing a track'}]};
-          const type = args.type as DrumNoteType;
-          const tick = args.tick as number;
+          const type = args['type'] as DrumNoteType;
+          const tick = args['tick'] as number;
           const cymbalDefault =
             type === 'yellowDrum' ||
             type === 'blueDrum' ||
             type === 'greenDrum';
-          const cymbal = (args.cymbal as boolean) ?? cymbalDefault;
+          const cymbal = (args['cymbal'] as boolean) ?? cymbalDefault;
           executeCommandRef.current(
             new AddNoteCommand(
               {tick, type, length: 0, flags: {cymbal}},
@@ -392,9 +392,9 @@ export default function EditorMCPTools() {
         execute: async args => {
           dispatchRef.current({
             type: 'SET_ACTIVE_TOOL',
-            tool: args.tool as any,
+            tool: args['tool'] as any,
           });
-          return {content: [{type: 'text', text: `Tool: ${args.tool}`}]};
+          return {content: [{type: 'text', text: `Tool: ${args['tool']}`}]};
         },
       });
     }

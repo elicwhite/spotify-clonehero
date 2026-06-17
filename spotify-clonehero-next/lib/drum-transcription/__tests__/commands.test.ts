@@ -836,13 +836,14 @@ describe('MoveEntitiesCommand: lyric', () => {
     });
 
     const after = cmd.execute(doc);
-    const phrase = after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+    const phrase =
+      after.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(phrase.lyrics[0].tick).toBe(360);
     expect(phrase.notes[0].tick).toBe(360);
 
     const reverted = cmd.undo(after);
     const original =
-      reverted.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+      reverted.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(original.lyrics[0].tick).toBe(240);
     expect(original.notes[0].tick).toBe(240);
   });
@@ -854,7 +855,8 @@ describe('MoveEntitiesCommand: lyric', () => {
     });
     const after = cmd.execute(doc);
     expect(
-      after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0].lyrics[0].tick,
+      after.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0].lyrics[0]
+        .tick,
     ).toBe(480);
   });
 });
@@ -867,13 +869,13 @@ describe('MoveEntitiesCommand: phrase markers', () => {
     });
 
     const after = cmd.execute(doc);
-    const moved = after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+    const moved = after.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(moved.tick).toBe(120);
     expect(moved.length).toBe(360);
 
     const reverted = cmd.undo(after);
     const original =
-      reverted.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+      reverted.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(original.tick).toBe(0);
     expect(original.length).toBe(480);
   });
@@ -885,13 +887,13 @@ describe('MoveEntitiesCommand: phrase markers', () => {
     });
 
     const after = cmd.execute(doc);
-    const moved = after.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+    const moved = after.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(moved.tick).toBe(0);
     expect(moved.length).toBe(720);
 
     const reverted = cmd.undo(after);
     const original =
-      reverted.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+      reverted.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(original.length).toBe(480);
   });
 });

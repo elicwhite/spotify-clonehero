@@ -50,8 +50,8 @@ function runConverter(song: string) {
   const sync = beatsToSynctrack({
     beats: ppFm.beats,
     downbeats: ppFm.downbeats,
-    beatLogits: logits.beat_logits.data,
-    fps: logits.fps.data[0],
+    beatLogits: logits['beat_logits'].data,
+    fps: logits['fps'].data[0],
     drumStemPpIoiMs: dsIoiMs,
     drumOnsetOffsetMs: offset.offset_ms,
     drumPpBeatsSec: ppDs.beats,

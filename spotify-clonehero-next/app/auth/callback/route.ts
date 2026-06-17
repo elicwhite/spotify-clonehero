@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
       const providersIncludeSpotify =
         appMetadata?.provider == 'spotify' ||
-        (appMetadata?.providers || []).includes('spotify');
+        (appMetadata?.['providers'] || []).includes('spotify');
       if (providersIncludeSpotify) {
         await storeSpotifyToken();
       }

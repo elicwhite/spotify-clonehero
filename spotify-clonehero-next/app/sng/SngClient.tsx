@@ -34,7 +34,7 @@ export default function SngClient() {
     let dirHandle: FileSystemDirectoryHandle;
     try {
       // readwrite so the .sng files can be written back next to each chart.
-      dirHandle = await window.showDirectoryPicker({
+      dirHandle = await window['showDirectoryPicker']({
         id: 'sng-convert-folder',
         mode: 'readwrite',
       });

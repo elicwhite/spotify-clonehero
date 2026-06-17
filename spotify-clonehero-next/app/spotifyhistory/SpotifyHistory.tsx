@@ -170,7 +170,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
         'Select the folder containing your extracted Spotify Extended Streaming History',
       );
       try {
-        spotifyDataHandle = await window.showDirectoryPicker({
+        spotifyDataHandle = await window['showDirectoryPicker']({
           id: 'spotify-dump',
         });
       } catch {

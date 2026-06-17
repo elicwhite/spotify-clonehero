@@ -9,6 +9,7 @@
     "noImplicitOverride": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",

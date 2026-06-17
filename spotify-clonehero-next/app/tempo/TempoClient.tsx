@@ -676,7 +676,7 @@ function ResultsView({
 
   const lyrics = useMemo(
     () =>
-      currentChart.vocalTracks.parts.vocals?.notePhrases.flatMap(
+      currentChart.vocalTracks.parts['vocals']?.notePhrases.flatMap(
         p => p.lyrics,
       ) ?? [],
     [currentChart],

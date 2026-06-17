@@ -59,7 +59,7 @@ export default function ClientPage({md5}: {md5: string}) {
 
         if (cancelled) return;
 
-        const vocals = chart.vocalTracks.parts.vocals;
+        const vocals = chart.vocalTracks.parts['vocals'];
         const rawLyrics = vocals?.notePhrases.flatMap(p => p.lyrics) ?? [];
         const vocalPhrases = vocals?.notePhrases ?? [];
         const lines = parseLyrics(rawLyrics, vocalPhrases);

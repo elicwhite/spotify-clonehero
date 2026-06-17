@@ -116,7 +116,7 @@ describe('lyric helpers', () => {
     const doc = chartWithVocals([makePhrase(0, 480, [120, 240])]);
     const final = moveLyric(doc, 240, 360);
     expect(final).toBe(360);
-    const phrase = doc.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+    const phrase = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(phrase.lyrics.map(l => l.tick)).toEqual([120, 360]);
     expect(phrase.notes.map(n => n.tick)).toEqual([120, 360]);
   });
@@ -150,7 +150,7 @@ describe('phrase helpers', () => {
     const doc = chartWithVocals([makePhrase(0, 480)]);
     const final = movePhraseStart(doc, 0, 120);
     expect(final).toBe(120);
-    const phrase = doc.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+    const phrase = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(phrase.tick).toBe(120);
     expect(phrase.length).toBe(360);
   });
@@ -171,7 +171,7 @@ describe('phrase helpers', () => {
     const doc = chartWithVocals([makePhrase(0, 480)]);
     const final = movePhraseEnd(doc, 480, 720);
     expect(final).toBe(720);
-    const phrase = doc.parsedChart.vocalTracks!.parts.vocals.notePhrases[0];
+    const phrase = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(phrase.length).toBe(720);
   });
 
