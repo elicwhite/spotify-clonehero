@@ -49,31 +49,31 @@ export interface PracticeViewProps {
   fillId: string;
   onExit: () => void;
   /** Called when the user advances (queue/roulette). Falls back to onExit. */
-  onNext?: () => void;
+  onNext?: (() => void) | undefined;
   /**
    * Optional label for the Next control and a preview of the upcoming item
    * (groove/roulette sessions show the next fill one ahead).
    */
-  nextLabel?: string;
+  nextLabel?: string | undefined;
   /** Notified after each scored attempt (for session summaries). */
-  onAttemptScored?: (result: ScoredAttempt) => void;
+  onAttemptScored?: ((result: ScoredAttempt) => void) | undefined;
   /** Extra controls rendered in the transport row (e.g. shuffle toggle). */
-  transportExtras?: React.ReactNode;
+  transportExtras?: React.ReactNode | undefined;
   /**
    * Optional session-context node rendered in the practice bar's session slot
    * (e.g. a ladder "Rung n/N" readout). Sessions also publish identity into the
    * header `[H]` context slot themselves.
    */
-  sessionCtx?: React.ReactNode;
+  sessionCtx?: React.ReactNode | undefined;
   /** Practice mode to start in (defaults to song loop). */
-  initialMode?: Mode;
+  initialMode?: Mode | undefined;
   /**
    * When true, PracticeView offers an instance switcher in the transport: it
    * loads the other fill instances that share this fill's pattern (cross-song
    * dedupe group) and lets the user practice a different one. Used when
    * launching from a grouped Library card.
    */
-  enableInstanceSwitcher?: boolean;
+  enableInstanceSwitcher?: boolean | undefined;
 }
 
 type Mode = PracticeMode;
@@ -286,11 +286,11 @@ function PracticeSession({
   onModeChange: (m: Mode) => void;
   data: ReadyData;
   onExit: () => void;
-  onNext?: () => void;
-  nextLabel?: string;
-  onAttemptScored?: (result: ScoredAttempt) => void;
-  transportExtras?: React.ReactNode;
-  sessionCtx?: React.ReactNode;
+  onNext?: (() => void) | undefined;
+  nextLabel?: string | undefined;
+  onAttemptScored?: ((result: ScoredAttempt) => void) | undefined;
+  transportExtras?: React.ReactNode | undefined;
+  sessionCtx?: React.ReactNode | undefined;
 }) {
   const {chart, track, practiceData, fill, audioFiles, groovePattern} = data;
   const {connectedIds} = useMidi();

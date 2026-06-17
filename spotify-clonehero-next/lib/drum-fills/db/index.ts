@@ -115,15 +115,15 @@ export type FillWithSrs = {
 };
 
 export type FillFilters = {
-  subdivision?: Subdivision[];
+  subdivision?: Subdivision[] | undefined;
   /** Inclusive complexity range. */
-  minComplexity?: number;
-  maxComplexity?: number;
+  minComplexity?: number | undefined;
+  maxComplexity?: number | undefined;
   /** Match fills whose voicing_tags include ALL of these tags. */
-  voicingTags?: string[];
-  lengthBars?: number[];
-  state?: SrsState[];
-  limit?: number;
+  voicingTags?: string[] | undefined;
+  lengthBars?: number[] | undefined;
+  state?: SrsState[] | undefined;
+  limit?: number | undefined;
 };
 
 function rowToFillWithSrs(row: any): FillWithSrs {

@@ -44,7 +44,7 @@ interface ExportDialogProps {
   /** Song name for display and metadata. */
   songName: string;
   /** Artist name for metadata. */
-  artistName?: string;
+  artistName?: string | undefined;
   /**
    * Provides the chart text to export. Must return a valid .chart string.
    * This decouples the dialog from any specific storage backend.
@@ -54,9 +54,9 @@ interface ExportDialogProps {
    * Provides audio sources to include in the package.
    * Returns an array of AudioSource objects with named WAV data.
    */
-  getAudioSources?: () => Promise<AudioSource[]>;
+  getAudioSources?: (() => Promise<AudioSource[]>) | undefined;
   /** Whether to show stem inclusion toggles (default: true if getAudioSources is provided). */
-  showStemToggles?: boolean;
+  showStemToggles?: boolean | undefined;
 }
 
 type PackageFormat = 'zip' | 'sng';

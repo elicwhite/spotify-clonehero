@@ -41,7 +41,7 @@ export interface ProjectMetadata {
   durationSeconds: number;
   sourceFormat: SourceFormat;
   originalName: string;
-  sngMetadata?: Record<string, string>;
+  sngMetadata?: Record<string, string> | undefined;
 }
 
 export interface ProjectSummary {
@@ -101,7 +101,7 @@ export async function createProject(opts: {
   durationSeconds: number;
   sourceFormat: SourceFormat;
   originalName: string;
-  sngMetadata?: Record<string, string>;
+  sngMetadata?: Record<string, string> | undefined;
   /** The .chart text content. */
   chartText: string;
   /** Audio files to store (fileName + raw bytes). */

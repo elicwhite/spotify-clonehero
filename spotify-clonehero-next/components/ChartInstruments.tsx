@@ -25,10 +25,10 @@ export const InstrumentImage = memo(function InstrumentImage({
   size,
 }: {
   instrument: AllowedInstrument;
-  classNames?: string;
-  onClick?: (instrument: AllowedInstrument) => void;
-  responsive?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  classNames?: string | undefined;
+  onClick?: ((instrument: AllowedInstrument) => void) | undefined;
+  responsive?: boolean | undefined;
+  size?: 'sm' | 'md' | 'lg' | undefined;
 }) {
   if (responsive != null && size != null) {
     throw new Error('responsive and size cannot be used together');

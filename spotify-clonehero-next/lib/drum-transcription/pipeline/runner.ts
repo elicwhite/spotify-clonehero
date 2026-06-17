@@ -52,17 +52,17 @@ export interface PipelineProgress {
   /** Progress within the current step, 0-1. */
   progress: number;
   /** Project ID once created. */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Project name. */
-  projectName?: string;
+  projectName?: string | undefined;
   /** Error message if step === 'error'. */
-  error?: string;
+  error?: string | undefined;
   /**
    * Estimated seconds remaining within the current step. Provided when
    * the underlying step has a meaningful estimate (e.g. Demucs's
    * exponential moving average over segment durations).
    */
-  etaSeconds?: number;
+  etaSeconds?: number | undefined;
 }
 
 export type PipelineProgressCallback = (progress: PipelineProgress) => void;

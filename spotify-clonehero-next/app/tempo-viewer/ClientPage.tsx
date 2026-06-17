@@ -418,7 +418,7 @@ export default function TempoViewerClient() {
       <div className="flex items-center gap-3 px-4 py-2 border-b bg-card">
         <span className="text-sm font-medium shrink-0">Song</span>
         <Select
-          value={selectedId ?? undefined}
+          {...(selectedId != null ? {value: selectedId} : {})}
           onValueChange={v => setSelectedId(v)}>
           <SelectTrigger className="max-w-xl">
             <SelectValue placeholder="Pick a song" />

@@ -72,8 +72,8 @@ const SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
 interface LeftSidebarProps {
   audioManager: AudioManager;
-  onNotesModified?: (noteIds: string[]) => void;
-  leftPanelChildren?: ReactNode;
+  onNotesModified?: ((noteIds: string[]) => void) | undefined;
+  leftPanelChildren?: ReactNode | undefined;
 }
 
 // ---------------------------------------------------------------------------

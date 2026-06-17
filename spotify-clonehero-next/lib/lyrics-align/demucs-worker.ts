@@ -48,9 +48,9 @@ type OutboundMessage =
       type: 'progress';
       message: string;
       /** 0..1 progress within the separation step. Omitted for setup messages. */
-      percent?: number;
+      percent?: number | undefined;
       /** Estimated seconds remaining in the separation step. */
-      etaSeconds?: number;
+      etaSeconds?: number | undefined;
     }
   | {type: 'loaded'}
   | {type: 'result'; vocals16k: Float32Array}
@@ -62,7 +62,7 @@ function post(msg: OutboundMessage, transfer?: Transferable[]) {
 
 function progress(
   message: string,
-  extra?: {percent?: number; etaSeconds?: number},
+  extra?: {percent?: number | undefined; etaSeconds?: number | undefined},
 ) {
   post({type: 'progress', message, ...extra});
 }

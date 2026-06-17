@@ -54,14 +54,14 @@ const STEP = SEGMENT_SAMPLES - OVERLAP;
 
 export interface SeparationProgress {
   step: 'loading-model' | 'processing' | 'storing' | 'done';
-  segment?: number;
-  totalSegments?: number;
+  segment?: number | undefined;
+  totalSegments?: number | undefined;
   percent: number; // 0-1
   /**
    * Estimated seconds remaining in the segment loop (only set during
    * 'processing' once we have at least one segment of timing data).
    */
-  etaSeconds?: number;
+  etaSeconds?: number | undefined;
 }
 
 export type ProgressCallback = (progress: SeparationProgress) => void;

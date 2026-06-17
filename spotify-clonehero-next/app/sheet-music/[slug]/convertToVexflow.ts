@@ -71,7 +71,7 @@ export interface Note {
   isRest: boolean;
   tick: number;
   ms: number;
-  durationTicks?: number;
+  durationTicks?: number | undefined;
 }
 
 export interface Duration {

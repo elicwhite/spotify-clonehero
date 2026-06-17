@@ -34,25 +34,25 @@ export interface PracticeContextBarProps {
   identity: PracticeIdentity;
   /** Back / exit affordance (label + handler). */
   onBack: () => void;
-  backLabel?: string;
+  backLabel?: string | undefined;
 
   // --- Mode (loop kind) ---
   mode: PracticeMode;
   onModeChange: (m: PracticeMode) => void;
 
   // --- Optional session context (groove "Rung n/N", etc.) ---
-  sessionCtx?: React.ReactNode;
+  sessionCtx?: React.ReactNode | undefined;
 
   // --- Transport ---
   isPlaying: boolean;
   onTogglePlay: () => void;
-  playDisabled?: boolean;
+  playDisabled?: boolean | undefined;
   onRestart: () => void;
   /** When set (or roulette mode), show a Next control. */
-  onNext?: () => void;
-  nextLabel?: string;
+  onNext?: (() => void) | undefined;
+  nextLabel?: string | undefined;
   /** Extra transport controls (shuffle toggle / instance switcher). */
-  transportExtras?: React.ReactNode;
+  transportExtras?: React.ReactNode | undefined;
 
   // --- Tempo ---
   tempoPct: number;

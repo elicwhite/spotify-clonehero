@@ -78,7 +78,7 @@ function capitalize(fileName: string): string {
 interface VolumeControl {
   trackName: string;
   volume: number;
-  previousVolume?: number;
+  previousVolume?: number | undefined;
   isMuted: boolean;
   isSoloed: boolean;
 }

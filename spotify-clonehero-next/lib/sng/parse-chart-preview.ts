@@ -32,16 +32,16 @@ export interface ChartPreview {
   name: string;
   artist: string;
   charter: string;
-  album?: string;
+  album?: string | undefined;
   /** Extracted album art (jpg bytes), if the package contains any. */
-  albumArt?: Uint8Array;
+  albumArt?: Uint8Array | undefined;
   /** instruments present, each with its charted difficulties + intensity. */
   instruments: {
     instrument: string;
     /** charted difficulty tiers, hardest first */
     difficulties: Difficulty[];
     /** the chart's difficulty-intensity rating (0-6), if declared */
-    intensity?: number;
+    intensity?: number | undefined;
   }[];
 }
 

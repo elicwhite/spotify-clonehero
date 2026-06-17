@@ -15,7 +15,7 @@ export type AnalyticsEvent =
         | 'karaoke'
         | 'unknown';
       format: 'sng' | 'chart';
-      md5?: string;
+      md5?: string | undefined;
     }
 
   // Spotify pages

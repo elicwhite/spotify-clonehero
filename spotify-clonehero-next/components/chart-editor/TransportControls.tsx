@@ -22,11 +22,11 @@ interface TransportControlsProps {
   /** Total song duration in seconds. */
   durationSeconds: number;
   /** Chart sections for section jumping (optional). */
-  sections?: Section[];
+  sections?: Section[] | undefined;
   /** Content rendered between the time display and speed controls (e.g. waveform). */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
   /** Optional CSS class for the container. */
-  className?: string;
+  className?: string | undefined;
 }
 
 /** Format seconds as m:ss or h:mm:ss. */

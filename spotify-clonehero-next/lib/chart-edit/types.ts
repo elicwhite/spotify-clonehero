@@ -81,11 +81,11 @@ export type DrumNoteType =
   | 'fiveGreenDrum';
 
 export interface DrumNoteFlags {
-  cymbal?: boolean;
-  doubleKick?: boolean;
-  accent?: boolean;
-  ghost?: boolean;
-  flam?: boolean;
+  cymbal?: boolean | undefined;
+  doubleKick?: boolean | undefined;
+  accent?: boolean | undefined;
+  ghost?: boolean | undefined;
+  flam?: boolean | undefined;
 }
 
 /** Friendly view of a drum note, returned by getDrumNotes(). */

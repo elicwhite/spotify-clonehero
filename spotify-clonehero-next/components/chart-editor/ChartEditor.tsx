@@ -31,46 +31,46 @@ export interface ChartEditorProps {
   /** The AudioManager instance driving playback. */
   audioManager: AudioManager;
   /** Raw PCM audio data (Float32 interleaved) for waveform display. */
-  audioData?: Float32Array;
+  audioData?: Float32Array | undefined;
   /** Number of audio channels (1 or 2). */
-  audioChannels?: number;
+  audioChannels?: number | undefined;
   /** Total song duration in seconds. */
   durationSeconds: number;
   /** Chart sections for section jumping in transport. */
-  sections?: Section[];
+  sections?: Section[] | undefined;
   /** Song name for display. */
   songName: string;
   /** Artist name for display. */
-  artistName?: string;
+  artistName?: string | undefined;
   /** Charter name for display. */
-  charterName?: string;
+  charterName?: string | undefined;
   /** Whether the chart has unsaved changes. */
-  dirty?: boolean;
+  dirty?: boolean | undefined;
   /**
    * Hide the editor's built-in top bar (song info + Export). Pages that
    * already render their own header above the editor (e.g. add-lyrics)
    * should set this to true to avoid duplicated headings.
    */
-  hideHeader?: boolean;
+  hideHeader?: boolean | undefined;
   /** Content rendered in the left sidebar panel (page-specific). */
-  leftPanelChildren?: ReactNode;
+  leftPanelChildren?: ReactNode | undefined;
   /** Callback to provide chart text for export. */
-  getChartText?: () => Promise<string>;
+  getChartText?: (() => Promise<string>) | undefined;
   /** Callback to provide audio sources for export. */
-  getAudioSources?: () => Promise<AudioSource[]>;
+  getAudioSources?: (() => Promise<AudioSource[]>) | undefined;
   /** Callback when notes are modified (e.g. for marking reviewed). */
-  onNotesModified?: (noteIds: string[]) => void;
+  onNotesModified?: ((noteIds: string[]) => void) | undefined;
 
   // -- Optional confidence/review overlays (passed through to HighwayEditor) --
 
   /** Confidence scores for notes, keyed by noteId (tick:type). */
-  confidence?: Map<string, number>;
+  confidence?: Map<string, number> | undefined;
   /** Whether to show confidence overlays on the highway. */
-  showConfidence?: boolean;
+  showConfidence?: boolean | undefined;
   /** Confidence threshold below which notes are flagged. */
-  confidenceThreshold?: number;
+  confidenceThreshold?: number | undefined;
   /** Set of note IDs that have been reviewed by the user. */
-  reviewedNoteIds?: Set<string>;
+  reviewedNoteIds?: Set<string> | undefined;
 }
 
 /**

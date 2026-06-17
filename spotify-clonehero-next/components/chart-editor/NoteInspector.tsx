@@ -41,9 +41,9 @@ const FLAG_ITEMS: {key: FlagName; label: string; shortcut: string}[] =
     }));
 
 interface NoteInspectorProps {
-  className?: string;
+  className?: string | undefined;
   /** Optional callback when notes are modified via this inspector. */
-  onNotesModified?: (noteIds: string[]) => void;
+  onNotesModified?: ((noteIds: string[]) => void) | undefined;
 }
 
 /**

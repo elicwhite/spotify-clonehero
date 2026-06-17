@@ -57,10 +57,10 @@ type PlaylistItem = {
 type AlbumItem = {
   id: string;
   name: string;
-  externalUrl?: string;
-  artistName?: string;
+  externalUrl?: string | undefined;
+  artistName?: string | undefined;
   addedAt: string; // ISO string
-  totalTracks?: number;
+  totalTracks?: number | undefined;
 };
 
 type PlaylistProgressMetadata = {
@@ -82,8 +82,8 @@ export type PlaylistProgressItem = PlaylistItem & {
 export type RateLimitState = {retryAfterSeconds: number} | null;
 
 export type SavedAlbumItem = AlbumItem & {
-  fetched?: number;
-  status?: ProgressStatus;
+  fetched?: number | undefined;
+  status?: ProgressStatus | undefined;
 };
 
 const cacheUpdateListeners: Set<() => void> = new Set();

@@ -30,21 +30,21 @@ interface HighwayEditorProps {
   metadata: ChartResponseEncore;
   chart: ParsedChart;
   audioManager: AudioManager;
-  className?: string;
+  className?: string | undefined;
   /** Optional confidence scores for notes, keyed by noteId (tick:type). */
-  confidence?: Map<string, number>;
+  confidence?: Map<string, number> | undefined;
   /** Whether to show confidence overlays. Defaults to false. */
-  showConfidence?: boolean;
+  showConfidence?: boolean | undefined;
   /** Confidence threshold below which notes are flagged. Defaults to 0.7. */
-  confidenceThreshold?: number;
+  confidenceThreshold?: number | undefined;
   /** Set of note IDs that have been reviewed by the user. */
-  reviewedNoteIds?: Set<string>;
+  reviewedNoteIds?: Set<string> | undefined;
   /** Raw PCM audio data for waveform highway surface. */
-  audioData?: Float32Array;
+  audioData?: Float32Array | undefined;
   /** Number of audio channels. */
-  audioChannels?: number;
+  audioChannels?: number | undefined;
   /** Total duration in seconds. */
-  durationSeconds?: number;
+  durationSeconds?: number | undefined;
 }
 
 /**

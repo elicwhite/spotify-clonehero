@@ -69,10 +69,10 @@ function FillCard({
   onPractice,
 }: {
   fill: FillWithSrs;
-  attemptCount?: number;
-  lastAttemptTs?: number;
-  focused?: boolean;
-  onFocus?: () => void;
+  attemptCount?: number | undefined;
+  lastAttemptTs?: number | undefined;
+  focused?: boolean | undefined;
+  onFocus?: (() => void) | undefined;
   onPractice: (fillId: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);

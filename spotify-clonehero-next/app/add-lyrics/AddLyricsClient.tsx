@@ -77,7 +77,7 @@ interface LoadedChart {
   chartDoc: ChartDocument;
   sourceFormat: SourceFormat;
   originalName: string;
-  sngMetadata?: Record<string, string>;
+  sngMetadata?: Record<string, string> | undefined;
 }
 
 /**
@@ -96,13 +96,13 @@ type AlignStepKey =
 interface AlignStepState {
   key: AlignStepKey;
   label: string;
-  description?: string;
+  description?: string | undefined;
   status: 'pending' | 'active' | 'done' | 'error';
-  detail?: string;
-  progress?: number;
-  etaSeconds?: number;
-  startTime?: number;
-  endTime?: number;
+  detail?: string | undefined;
+  progress?: number | undefined;
+  etaSeconds?: number | undefined;
+  startTime?: number | undefined;
+  endTime?: number | undefined;
 }
 
 const ALIGN_STEPS: AlignStepState[] = [
@@ -329,7 +329,7 @@ interface EditorData {
   chart: ParsedChart;
   chartDoc: ChartDocument;
   audioManager: AudioManager;
-  audioData?: Float32Array;
+  audioData?: Float32Array | undefined;
   audioChannels: number;
   durationSeconds: number;
 }

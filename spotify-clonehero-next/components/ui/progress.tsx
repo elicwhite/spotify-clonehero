@@ -5,7 +5,7 @@ import {cn} from '@/lib/utils';
 
 interface ProgressProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Progress value from 0 to 100. */
-  value?: number;
+  value?: number | undefined;
 }
 
 const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(

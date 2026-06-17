@@ -56,10 +56,10 @@ export interface HighwaySyncInputs {
 
   // Note overlays (confidence, reviewed-state). Selection visuals are
   // dispatched through the reconciler's hook channels — see useChartElements.
-  confidence?: Map<string, number>;
+  confidence?: Map<string, number> | undefined;
   showConfidence: boolean;
   confidenceThreshold: number;
-  reviewedNoteIds?: Set<string>;
+  reviewedNoteIds?: Set<string> | undefined;
 }
 
 /**

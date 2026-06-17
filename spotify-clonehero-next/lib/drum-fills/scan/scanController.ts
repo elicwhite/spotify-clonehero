@@ -29,15 +29,15 @@ import type {
 
 export interface RunScanOptions {
   /** Progress callback, fired on the main thread as the worker reports. */
-  onProgress?: (progress: ScanProgress) => void;
+  onProgress?: ((progress: ScanProgress) => void) | undefined;
   /**
    * Provide a directory handle directly (e.g. the UI just ran the picker).
    * When omitted, the cached handle is used; if there is none, the scan rejects
    * with `NEEDS_PICKER` so the UI can prompt and retry.
    */
-  directoryHandle?: FileSystemDirectoryHandle;
+  directoryHandle?: FileSystemDirectoryHandle | undefined;
   /** Hook for tests / alternative bundlers to supply the worker. */
-  createWorker?: () => Worker;
+  createWorker?: (() => Worker) | undefined;
 }
 
 export interface ScanRunResult {

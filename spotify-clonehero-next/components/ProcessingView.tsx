@@ -41,38 +41,38 @@ export interface ProcessingStep {
   /** Bold first line, e.g. "Separating vocal stem". */
   label: string;
   /** Optional muted second line under the label. */
-  description?: string;
+  description?: string | undefined;
   status: 'pending' | 'active' | 'done' | 'error';
   /**
    * 0..1 progress within this step. If omitted on an active step the
    * inner bar renders as indeterminate.
    */
-  progress?: number;
+  progress?: number | undefined;
   /**
    * Seconds remaining for the active step. Only displayed when
    * status==='active' && progress > 0.05 && etaSeconds > 5.
    */
-  etaSeconds?: number;
+  etaSeconds?: number | undefined;
   /** Wall-clock duration once status==='done'. Rendered as " 1.4s ". */
-  durationMs?: number;
+  durationMs?: number | undefined;
   /** Dynamic detail line ("Separating segment 5/34"). Optional. */
-  detail?: string;
+  detail?: string | undefined;
 }
 
 export interface ProcessingViewProps {
   /** Card title, e.g. "Adding lyrics to your chart". */
   title: string;
   /** Optional second line in the header — typically the song title. */
-  subtitle?: string;
+  subtitle?: string | undefined;
   /** Optional caption under the subtitle. */
-  description?: string;
+  description?: string | undefined;
   steps: ProcessingStep[];
   /** Top-level pipeline error message. Renders the error card layout. */
-  error?: string | null;
-  onRetry?: () => void;
-  onCancel?: () => void;
+  error?: string | null | undefined;
+  onRetry?: (() => void) | undefined;
+  onCancel?: (() => void) | undefined;
   /** Tailwind class overrides for the outer Card. */
-  className?: string;
+  className?: string | undefined;
 }
 
 function formatEta(seconds: number): string {

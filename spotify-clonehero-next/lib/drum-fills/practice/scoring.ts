@@ -23,7 +23,7 @@ export type JudgmentQuality = 'perfect' | 'good' | 'miss';
 export type NoteJudgment = {
   quality: JudgmentQuality;
   /** Signed timing error in milliseconds, when the note was hit. */
-  timingErrorMs?: number;
+  timingErrorMs?: number | undefined;
 };
 
 /**

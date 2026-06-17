@@ -110,15 +110,17 @@ type SongRow = {
   id: number;
   artist: string;
   song: string;
-  playCount?: number;
-  spotifyUrl?: string | null;
-  previewUrl?: string | null;
+  playCount?: number | undefined;
+  spotifyUrl?: string | null | undefined;
+  previewUrl?: string | null | undefined;
   modifiedTime: Date; // Most recent chart from this song
   subRows: ChartRow[];
-  source?: {
-    albums: PickedSpotifyAlbums[];
-    playlists: PickedSpotifyPlaylists[];
-  };
+  source?:
+    | {
+        albums: PickedSpotifyAlbums[];
+        playlists: PickedSpotifyPlaylists[];
+      }
+    | undefined;
 };
 
 type ChartRow = {
