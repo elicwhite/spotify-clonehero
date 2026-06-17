@@ -12,22 +12,28 @@ import {
 import {Button} from '@/components/ui/button';
 import {toast} from 'sonner';
 import {calibrate} from '@/lib/drum-fills/midi/calibration';
-import {renderEvent} from '@/lib/drum-fills/practice/backingTrack';
+import {renderClickTrackWav} from '@/lib/drum-fills/practice/clickTrack';
+import {AudioManager} from '@/lib/preview/audioManager';
 import {useMidi} from '../contexts/MidiContext';
 
 const CLICK_COUNT = 16;
 const CLICK_BPM = 100;
-const CLICK_INTERVAL_MS = (60 / CLICK_BPM) * 1000;
+const CLICK_INTERVAL_SEC = 60 / CLICK_BPM;
+const LEAD_IN_SEC = 0.6;
+const TAIL_SEC = 0.5;
 
-type Phase = 'idle' | 'running' | 'done';
+type Phase = 'idle' | 'loading' | 'running' | 'done';
 
 /**
  * Tap-along latency calibration.
  *
- * A click plays {@link CLICK_COUNT} times; the user taps any pad on each click.
- * We record the click times and the MIDI tap times in the same performance.now
- * domain and estimate the median offset via {@link calibrate}. The resulting
- * offset is persisted through the MIDI context (localStorage).
+ * A click track plays through {@link AudioManager} — the same audio path and
+ * `chartTime` clock that scoring uses — and the user taps any pad on each click.
+ * Each hit is mapped to chart time with the same anchor formula as live scoring
+ * (`chartMs = hit.timeStamp − (perfNow − chartTime)`), then paired against the
+ * known click times. The median offset (hit − click, in chart time) is exactly
+ * the latency scoring needs to subtract, so {@link calibrate} returns the right
+ * sign by construction. The result is persisted through the MIDI context.
  */
 export default function CalibrationDialog({
   open,
@@ -43,56 +49,62 @@ export default function CalibrationDialog({
   const [tapsCaptured, setTapsCaptured] = useState(0);
   const [result, setResult] = useState<number | null>(null);
 
-  const clickTimesRef = useRef<number[]>([]);
-  const hitTimesRef = useRef<number[]>([]);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Chart-time (ms) of each click and of each captured tap, paired at finish.
+  const clickMsRef = useRef<number[]>([]);
+  const hitMsRef = useRef<number[]>([]);
+  // perfNow → chartMs anchor, refreshed every animation frame while playing.
+  const anchorMsRef = useRef<number | null>(null);
+  const amRef = useRef<AudioManager | null>(null);
+  const rafRef = useRef<number>(0);
   const runningRef = useRef(false);
+  const finishRef = useRef<() => void>(() => {});
 
-  const cleanup = useCallback(() => {
-    if (timerRef.current !== null) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+  const teardown = useCallback(() => {
     runningRef.current = false;
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+    }
+    anchorMsRef.current = null;
+    amRef.current?.destroy();
+    amRef.current = null;
   }, []);
 
-  // Capture taps only while a run is active.
+  // Capture taps only while a run is active, mapping each to chart time via the
+  // current anchor (identical to live scoring).
   useEffect(() => {
     if (!open) return;
     return subscribe(hit => {
-      if (!runningRef.current) return;
-      hitTimesRef.current.push(hit.timeStamp);
-      setTapsCaptured(hitTimesRef.current.length);
+      if (!runningRef.current || anchorMsRef.current === null) return;
+      hitMsRef.current.push(hit.timeStamp - anchorMsRef.current);
+      setTapsCaptured(hitMsRef.current.length);
     });
   }, [open, subscribe]);
 
-  useEffect(() => {
-    return () => cleanup();
-  }, [cleanup]);
+  useEffect(() => () => teardown(), [teardown]);
 
   // Reset when the dialog closes.
   const handleOpenChange = useCallback(
     (next: boolean) => {
       if (!next) {
-        cleanup();
+        teardown();
         setPhase('idle');
         setClicksPlayed(0);
         setTapsCaptured(0);
         setResult(null);
-        clickTimesRef.current = [];
-        hitTimesRef.current = [];
+        clickMsRef.current = [];
+        hitMsRef.current = [];
       }
       onOpenChange(next);
     },
-    [cleanup, onOpenChange],
+    [teardown, onOpenChange],
   );
 
   const finish = useCallback(() => {
-    cleanup();
+    teardown();
     const {offsetMs, sampleCount} = calibrate(
-      clickTimesRef.current,
-      hitTimesRef.current,
+      clickMsRef.current,
+      hitMsRef.current,
     );
     setPhase('done');
     if (sampleCount === 0) {
@@ -100,46 +112,71 @@ export default function CalibrationDialog({
       return;
     }
     setResult(offsetMs);
-  }, [cleanup]);
+  }, [teardown]);
+  useEffect(() => {
+    finishRef.current = finish;
+  }, [finish]);
 
-  const start = useCallback(() => {
-    let ctx = audioCtxRef.current;
-    if (!ctx) {
-      ctx = new AudioContext();
-      audioCtxRef.current = ctx;
-    }
-    void ctx.resume();
+  const start = useCallback(async () => {
+    if (runningRef.current || phase === 'loading') return;
 
-    clickTimesRef.current = [];
-    hitTimesRef.current = [];
+    clickMsRef.current = [];
+    hitMsRef.current = [];
+    anchorMsRef.current = null;
     setClicksPlayed(0);
     setTapsCaptured(0);
     setResult(null);
-    setPhase('running');
-    runningRef.current = true;
+    setPhase('loading');
 
-    let count = 0;
-    const playOne = () => {
-      const audioCtx = audioCtxRef.current!;
-      // Audible click slightly in the future; record the intended click time in
-      // the performance.now domain to match MIDI event timestamps.
-      renderEvent(audioCtx, {
-        time: audioCtx.currentTime + 0.02,
-        voice: 'click',
-      });
-      clickTimesRef.current.push(performance.now() + 20);
-      count += 1;
-      setClicksPlayed(count);
-      if (count >= CLICK_COUNT) {
-        cleanup();
-        // Give the last tap a moment to arrive before computing.
-        setTimeout(finish, 400);
+    let am: AudioManager;
+    try {
+      const {wav, clickTimesSec} = await renderClickTrackWav(
+        CLICK_COUNT,
+        CLICK_INTERVAL_SEC,
+        LEAD_IN_SEC,
+        TAIL_SEC,
+      );
+      clickMsRef.current = clickTimesSec.map(s => s * 1000);
+      am = new AudioManager(
+        [{fileName: 'calibration-click.wav', data: wav}],
+        () => {},
+      );
+      amRef.current = am;
+      await am.ready;
+      am.setChartDelay(0);
+    } catch (err) {
+      console.error('Failed to start calibration', err);
+      teardown();
+      setPhase('idle');
+      toast.error('Could not start calibration audio.');
+      return;
+    }
+
+    runningRef.current = true;
+    setPhase('running');
+
+    const lastClickMs = clickMsRef.current[clickMsRef.current.length - 1] ?? 0;
+    const endMs = lastClickMs + TAIL_SEC * 1000;
+
+    const tick = () => {
+      const manager = amRef.current;
+      if (!runningRef.current || !manager) return;
+      const chartMs = manager.chartTime * 1000;
+      // Same anchor scoring uses: relate this perfNow to this chart position.
+      anchorMsRef.current = performance.now() - chartMs;
+      setClicksPlayed(
+        clickMsRef.current.filter(c => c <= chartMs + 1).length,
+      );
+      if (chartMs >= endMs) {
+        finishRef.current();
+        return;
       }
+      rafRef.current = requestAnimationFrame(tick);
     };
 
-    playOne();
-    timerRef.current = setInterval(playOne, CLICK_INTERVAL_MS);
-  }, [cleanup, finish]);
+    await am.playChartTime(0);
+    rafRef.current = requestAnimationFrame(tick);
+  }, [phase, teardown]);
 
   const apply = useCallback(() => {
     if (result == null) return;
@@ -191,11 +228,18 @@ export default function CalibrationDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          {phase !== 'running' && (
-            <Button variant="outline" onClick={start}>
-              {phase === 'done' ? 'Redo' : 'Start'}
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            onClick={start}
+            disabled={phase === 'loading' || phase === 'running'}>
+            {phase === 'loading'
+              ? 'Loading…'
+              : phase === 'running'
+                ? 'Listening…'
+                : phase === 'done'
+                  ? 'Redo'
+                  : 'Start'}
+          </Button>
           {phase === 'done' && result != null && (
             <Button onClick={apply}>Apply offset</Button>
           )}
