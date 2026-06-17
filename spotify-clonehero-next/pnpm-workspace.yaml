@@ -1,0 +1,13 @@
+# Supply-chain hardening: never install a dependency version published less
+# than 7 days ago, so a freshly-compromised release isn't pulled in before the
+# ecosystem has a chance to flag it. 10080 minutes = 7 days.
+minimumReleaseAge: 10080
+
+# Dependencies allowed to run install/build lifecycle scripts. pnpm blocks all
+# dependency build scripts by default (supply-chain hardening); only these
+# native/CLI packages genuinely need theirs.
+onlyBuiltDependencies:
+  - better-sqlite3
+  - sharp
+  - '@sentry/cli'
+  - supabase

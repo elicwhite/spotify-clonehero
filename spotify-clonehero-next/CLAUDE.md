@@ -5,16 +5,16 @@ Next.js 15 app with Clone Hero chart tools. Active development: adding a drum tr
 ## Getting Started
 
 ```bash
-yarn install
-yarn dev        # Start dev server
-yarn test       # Run Jest tests
-yarn lint       # ESLint
+pnpm install
+pnpm dev        # Start dev server
+pnpm test       # Run Jest tests
+pnpm lint       # ESLint + Prettier check
 ```
 
 ## Tech Stack
 
 - **Framework:** Next.js 15 (App Router) + React 19 + TypeScript (strict)
-- **Package manager:** yarn
+- **Package manager:** pnpm (7-day `minimumReleaseAge`; dependency build scripts blocked by default, allowlisted in `pnpm-workspace.yaml` `onlyBuiltDependencies`)
 - **Styling:** Tailwind CSS + shadcn/ui (Radix primitives in `components/ui/`)
 - **State:** React state + context (`useState`, `useReducer`, context). No zustand or other state libraries.
 - **Database:** SQLocal (SQLite in OPFS) + Kysely
@@ -45,7 +45,7 @@ Fully browser-based: upload a song → separate stems via Demucs (ONNX + WebGPU)
 - **OPFS for storage** (`navigator.storage.getDirectory()`). No IndexedDB for audio/chart data. Namespace under `drum-transcription/` to avoid collisions.
 - **Demo audio** at `public/drumsample.mp3`.
 - **Don't duplicate code.** If a utility exists elsewhere in the project, extract it to a shared lib and update the original callsite first (in its own commit), then use it from the new code.
-- **Tests required** for all business logic. Use Jest (`yarn test`).
+- **Tests required** for all business logic. Use Jest (`pnpm test`).
 - **Validate in the browser.** Use chrome-devtools MCP tools to test changes as you make them (see Browser Validation section below).
 
 ### Code Locations

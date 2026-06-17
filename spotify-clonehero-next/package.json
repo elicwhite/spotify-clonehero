@@ -2,11 +2,10 @@
   "name": "spotify-clonehero",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.22.0",
   "scripts": {
     "dev": "next dev",
-    "dev:guarded": "scripts/dev-guarded.sh",
     "dev:webpack": "next dev --webpack",
-    "dev:webpack:guarded": "DEV_CMD='yarn dev:webpack' scripts/dev-guarded.sh",
     "build": "NODE_ENV=test jest --ci && next build",
     "start": "next start",
     "lint": "eslint . && prettier --check .",
@@ -112,8 +111,10 @@
     "tailwindcss": "^3.3.5",
     "typescript": "^6.0.3"
   },
-  "resolutions": {
-    "@types/react": "19.2.14",
-    "@types/react-dom": "19.2.3"
+  "pnpm": {
+    "overrides": {
+      "@types/react": "19.2.14",
+      "@types/react-dom": "19.2.3"
+    }
   }
 }
