@@ -21,7 +21,13 @@ export default function MidiPopover() {
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Element | null;
+      if (containerRef.current?.contains(target)) return;
+      // The calibration dialog renders in a portal at document.body, outside
+      // our container. Clicks inside it must not dismiss the popover (which
+      // would unmount the dialog mid-interaction).
+      if (target?.closest('[role="dialog"]')) return;
+      setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
