@@ -23,6 +23,17 @@ import {
   type ScoringOptions,
 } from './scoring';
 
+/**
+ * Whether a loop pass counts as a real attempt: the player hit at least one drum
+ * during it. Idle passes — no input at all, e.g. a water break or not yet
+ * playing — are ignored entirely (not scored, not persisted, no ladder/SRS
+ * movement) so they never register as a pass or a fail. Fills with no notes
+ * never count.
+ */
+export function isRealAttempt(hitCount: number, noteCount: number): boolean {
+  return noteCount > 0 && hitCount > 0;
+}
+
 /** Convert a matcher result into the scorer's input shape. */
 export function matchResultToJudgments(result: MatchResult): AttemptJudgments {
   return {

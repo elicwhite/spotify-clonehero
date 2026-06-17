@@ -3,6 +3,7 @@ import {
   bestFromStored,
   evaluateAttempt,
   isNewBest,
+  isRealAttempt,
   matchResultToJudgments,
 } from '../practice/attempt';
 import {matchHits, type ExpectedNote, type TimedHit} from '../midi/hitMatcher';
@@ -108,5 +109,21 @@ describe('best attempt summaries', () => {
     expect(isNewBest(cur, 91)).toBe(true);
     expect(isNewBest(cur, 90)).toBe(true); // tie → re-mark
     expect(isNewBest(cur, 89)).toBe(false);
+  });
+});
+
+describe('isRealAttempt', () => {
+  it('is false when no drum was hit (idle pass)', () => {
+    expect(isRealAttempt(0, 12)).toBe(false);
+  });
+
+  it('is true once any drum is hit', () => {
+    expect(isRealAttempt(1, 12)).toBe(true);
+    expect(isRealAttempt(20, 12)).toBe(true);
+  });
+
+  it('is false when the fill has no notes regardless of hits', () => {
+    expect(isRealAttempt(0, 0)).toBe(false);
+    expect(isRealAttempt(5, 0)).toBe(false);
   });
 });

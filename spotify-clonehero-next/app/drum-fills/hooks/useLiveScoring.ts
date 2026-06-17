@@ -9,10 +9,16 @@ import {
   bestFromScored,
   evaluateAttempt,
   isNewBest,
+  isRealAttempt,
   type BestAttempt,
   type ScoredAttempt,
 } from '@/lib/drum-fills/practice/attempt';
 import type {ExpectedFillNote} from '@/lib/drum-fills/practice/fillNotes';
+import {
+  buildAttemptDebug,
+  recordAttemptDebug,
+  type DebugHit,
+} from '@/lib/drum-fills/practice/scoringDebug';
 
 /** A live per-hit flash for highway feedback. */
 export interface HitFlash {
@@ -46,9 +52,19 @@ export interface LiveScoringState {
  * to fill-start), and {@link finishAttempt} when the pass ends. Hits arriving
  * between those calls are matched against the notes.
  */
-export function useLiveScoring(notes: ExpectedFillNote[]): {
+export function useLiveScoring(
+  notes: ExpectedFillNote[],
+  /**
+   * Current playback tempo as a fraction (1 = full speed, 0.9 = 90%). Hits land
+   * in real time but notes are in chart (musical) time; at a slowed tempo real
+   * time runs ahead of chart time, so each hit's real elapsed must be scaled by
+   * tempo to recover its chart position. Without this, slowing down pushes later
+   * notes out of the timing window (phantom misses) — worse the slower you go.
+   */
+  tempo: number = 1,
+): {
   state: LiveScoringState;
-  beginAttempt: (fillStartPerfNow: number) => void;
+  beginAttempt: (entryChartMs: number, entryPerfNow: number) => void;
   finishAttempt: () => ScoredAttempt | null;
   /** Seed the best attempt from history (replaces any current best). */
   seedBest: (best: BestAttempt | null) => void;
@@ -66,14 +82,24 @@ export function useLiveScoring(notes: ExpectedFillNote[]): {
   const [flashes, setFlashes] = useState<HitFlash[]>([]);
   const [pendingHits, setPendingHits] = useState(0);
 
-  // Loop anchor: performance.now() that maps to fill-start (notes[i].msTime is
-  // relative to the fill's first note via the offset we compute).
-  const anchorRef = useRef<number | null>(null);
+  // Loop anchor sampled at fill entry: the chart position and the real time
+  // (performance.now) at that instant. A hit's chart position is then
+  // anchorChartMs + (realElapsed × tempo); see the subscribe handler.
+  const anchorChartMsRef = useRef<number | null>(null);
+  const anchorPerfNowRef = useRef<number>(0);
   const hitsRef = useRef<TimedHit[]>([]);
+  // Parallel to hitsRef, carrying the raw MIDI info dropped for scoring so the
+  // debug log can explain why a hit was classified the way it was.
+  const debugHitsRef = useRef<DebugHit[]>([]);
+  const attemptCountRef = useRef(0);
   const calibrationRef = useRef(calibrationOffsetMs);
   useEffect(() => {
     calibrationRef.current = calibrationOffsetMs;
   }, [calibrationOffsetMs]);
+  const tempoRef = useRef(tempo);
+  useEffect(() => {
+    tempoRef.current = tempo;
+  }, [tempo]);
 
   // Expected notes shifted so the first note sits at t=0 (loop-relative ms).
   const {relativeNotes, baseMs} = useMemo(() => {
@@ -90,21 +116,41 @@ export function useLiveScoring(notes: ExpectedFillNote[]): {
       })),
     };
   }, [notes]);
+  // relativeNotes are relative to the first note (baseMs); read it in the hit
+  // handler without resubscribing.
+  const baseMsRef = useRef(baseMs);
+  useEffect(() => {
+    baseMsRef.current = baseMs;
+  }, [baseMs]);
 
   // Classify and buffer every incoming hit while an attempt is active.
   useEffect(() => {
     const unsub = subscribe(hit => {
-      if (anchorRef.current === null) return;
+      if (anchorChartMsRef.current === null) return;
       if (hit.lane === null || hit.isCymbal === null) return; // unmapped pad
+      // Latency is a real-time quantity, so correct it in real time first, then
+      // convert the real elapsed since fill entry into chart (musical) time by
+      // scaling by the current playback tempo. loopRelMs is chart-ms relative to
+      // the first note, matching relativeNotes.
       const correctedPerfNow = applyCalibration(
         hit.timeStamp,
         calibrationRef.current,
       );
-      const loopRelMs = correctedPerfNow - anchorRef.current;
+      const realSinceEntry = correctedPerfNow - anchorPerfNowRef.current;
+      const chartMsOfHit =
+        anchorChartMsRef.current + realSinceEntry * tempoRef.current;
+      const loopRelMs = chartMsOfHit - baseMsRef.current;
       hitsRef.current.push({
         msTime: loopRelMs,
         lane: hit.lane as DrumLane,
         isCymbal: hit.isCymbal,
+      });
+      debugHitsRef.current.push({
+        noteNumber: hit.noteNumber,
+        velocity: hit.velocity,
+        lane: hit.lane as DrumLane,
+        isCymbal: hit.isCymbal,
+        loopRelMs,
       });
       setPendingHits(hitsRef.current.length);
       setFlashes(prev => [
@@ -121,22 +167,47 @@ export function useLiveScoring(notes: ExpectedFillNote[]): {
     return unsub;
   }, [subscribe]);
 
-  const beginAttempt = useCallback((fillStartPerfNow: number) => {
-    anchorRef.current = fillStartPerfNow;
-    hitsRef.current = [];
-    setPendingHits(0);
-  }, []);
+  const beginAttempt = useCallback(
+    (entryChartMs: number, entryPerfNow: number) => {
+      anchorChartMsRef.current = entryChartMs;
+      anchorPerfNowRef.current = entryPerfNow;
+      hitsRef.current = [];
+      debugHitsRef.current = [];
+      setPendingHits(0);
+    },
+    [],
+  );
 
   const finishAttempt = useCallback((): ScoredAttempt | null => {
-    if (anchorRef.current === null) return null;
+    if (anchorChartMsRef.current === null) return null;
     const hits = hitsRef.current;
-    anchorRef.current = null;
+    const debugHits = debugHitsRef.current;
+    anchorChartMsRef.current = null;
     hitsRef.current = [];
+    debugHitsRef.current = [];
     setPendingHits(0);
 
-    if (relativeNotes.length === 0 && hits.length === 0) return null;
+    // Ignore passes where no drum was hit at all (a water break, not yet
+    // playing): they don't score, persist, or move the ladder/SRS in either
+    // direction.
+    if (!isRealAttempt(hits.length, relativeNotes.length)) return null;
     const result = evaluateAttempt(relativeNotes, hits);
     setLastAttempt(result);
+
+    // Persistent per-attempt diagnostics (survives loop passes; readable from
+    // window.__drumFillScoringLog).
+    attemptCountRef.current += 1;
+    recordAttemptDebug(
+      buildAttemptDebug({
+        attempt: attemptCountRef.current,
+        calibrationOffsetMs: calibrationRef.current,
+        tempoPct: Math.round(tempoRef.current * 100),
+        notes: relativeNotes,
+        hits: debugHits,
+        match: result.match,
+        score: result.score.score,
+      }),
+    );
 
     // Update best (no work inside a setState updater — decide from the ref).
     if (isNewBest(bestRef.current, result.score.score)) {
@@ -157,8 +228,9 @@ export function useLiveScoring(notes: ExpectedFillNote[]): {
   }, []);
 
   const reset = useCallback(() => {
-    anchorRef.current = null;
+    anchorChartMsRef.current = null;
     hitsRef.current = [];
+    debugHitsRef.current = [];
     setPendingHits(0);
     setLastAttempt(null);
     setNewBest(false);

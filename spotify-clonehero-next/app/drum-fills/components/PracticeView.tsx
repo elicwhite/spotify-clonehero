@@ -68,6 +68,14 @@ export interface PracticeViewProps {
   /** Practice mode to start in (defaults to song loop). */
   initialMode?: Mode | undefined;
   /**
+   * Controlled tempo (percent). When provided, the parent owns tempo: the
+   * manual slider/nudges report through {@link onTempoPctChange} and the
+   * speed-trainer auto-ramp is disabled (the ladder drives tempo externally).
+   * Omit for the default self-managed tempo.
+   */
+  tempoPct?: number | undefined;
+  onTempoPctChange?: ((pct: number) => void) | undefined;
+  /**
    * When true, PracticeView offers an instance switcher in the transport: it
    * loads the other fill instances that share this fill's pattern (cross-song
    * dedupe group) and lets the user practice a different one. Used when
@@ -111,6 +119,8 @@ export default function PracticeView({
   sessionCtx,
   initialMode,
   enableInstanceSwitcher,
+  tempoPct: controlledTempoPct,
+  onTempoPctChange,
 }: PracticeViewProps) {
   // When instance switching is enabled the user can practice a sibling instance
   // of the same pattern; `activeFillId` overrides the prop until they exit. The
@@ -247,6 +257,8 @@ export default function PracticeView({
       onAttemptScored={onAttemptScored}
       transportExtras={mergedExtras}
       sessionCtx={sessionCtx}
+      controlledTempoPct={controlledTempoPct}
+      onTempoPctChange={onTempoPctChange}
     />
   );
 }
@@ -280,6 +292,8 @@ function PracticeSession({
   onAttemptScored: onAttemptScoredExternal,
   transportExtras,
   sessionCtx,
+  controlledTempoPct,
+  onTempoPctChange,
 }: {
   fillId: string;
   mode: Mode;
@@ -291,6 +305,8 @@ function PracticeSession({
   onAttemptScored?: ((result: ScoredAttempt) => void) | undefined;
   transportExtras?: React.ReactNode | undefined;
   sessionCtx?: React.ReactNode | undefined;
+  controlledTempoPct?: number | undefined;
+  onTempoPctChange?: ((pct: number) => void) | undefined;
 }) {
   const {chart, track, practiceData, fill, audioFiles, groovePattern} = data;
   const {connectedIds} = useMidi();
@@ -372,9 +388,23 @@ function PracticeSession({
 
   // --- Tempo (shared by the manual slider, keyboard nudges, and the speed
   // trainer's automatic ramp; one state so they never fight). The speed trainer
-  // starts slow; other modes start at full speed. ---
-  const [tempoPct, setTempoPct] = useState(() =>
+  // starts slow; other modes start at full speed.
+  //
+  // When `controlledTempoPct` is provided the parent owns tempo (the ladder
+  // drives it): `tempoPct` reflects the prop and `setTempoPct` reports upward.
+  // Exactly one writer is live, so the internal auto-ramp must stay off while
+  // controlled (gated below). ---
+  const tempoControlled = controlledTempoPct !== undefined;
+  const [internalTempoPct, setInternalTempoPct] = useState(() =>
     mode === 'speed-trainer' ? initialTempoPct() : 100,
+  );
+  const tempoPct = tempoControlled ? controlledTempoPct : internalTempoPct;
+  const setTempoPct = useMemo(
+    () =>
+      tempoControlled
+        ? (onTempoPctChange ?? (() => {}))
+        : setInternalTempoPct,
+    [tempoControlled, onTempoPctChange],
   );
   const recentAttemptsRef = useRef<{passed: boolean}[]>([]);
 
@@ -411,7 +441,7 @@ function PracticeSession({
     finishAttempt,
     seedBest,
     reset: resetScoring,
-  } = useLiveScoring(scoringNotes);
+  } = useLiveScoring(scoringNotes, effectiveTempo);
 
   // Seed the best attempt from history so it survives reloads + reflects prior
   // sessions. PracticeSession remounts per fill (keyed on fillId), so this runs
@@ -552,9 +582,10 @@ function PracticeSession({
 
     const inFill = chartMs >= fillStartChartMs && chartMs < fillEndChartMs;
     if (inFill && !inFillRef.current) {
-      // Entered the fill: anchor scoring to now mapped to fill start.
+      // Entered the fill: sample the chart position and the real clock together
+      // so the scorer can map hits to chart time at the current tempo.
       inFillRef.current = true;
-      beginAttempt(performance.now() - (chartMs - fillStartChartMs));
+      beginAttempt(chartMs, performance.now());
     } else if (!inFill && inFillRef.current && chartMs >= fillEndChartMs) {
       // Left the fill (forward): finish + score the attempt.
       inFillRef.current = false;
@@ -605,11 +636,11 @@ function PracticeSession({
       // SRS — compute next state from the current ref (no work inside the
       // setState updater), persist, then push to state.
       const base = srsRef.current ?? initFillSrsState(fillId);
-      const updated = applyAttempt(
-        base,
-        {passed, tempoPct: mode === 'speed-trainer' ? tempoPct : 100},
-        now,
-      );
+      // Report the real playback tempo so SRS only credits full-speed passes
+      // toward mastery (masteryTempoPct). Under the controlled-tempo ladder this
+      // means a rung isn't "mastered" until it's passed at full speed.
+      const attemptTempoPct = Math.round(tempoPct);
+      const updated = applyAttempt(base, {passed, tempoPct: attemptTempoPct}, now);
       setSrs(updated);
       void upsertSrs({
         fillId,
@@ -620,8 +651,10 @@ function PracticeSession({
         passStreak: updated.passStreak,
       }).catch(() => {});
 
-      // Speed trainer ramp.
-      if (mode === 'speed-trainer') {
+      // Speed trainer ramp — only when this component owns tempo. Under a
+      // controlled tempo (the ladder) the parent drives tempo, so the internal
+      // ramp must stay off to avoid two writers fighting over one value.
+      if (mode === 'speed-trainer' && !tempoControlled) {
         recentAttemptsRef.current = [
           ...recentAttemptsRef.current.slice(-9),
           {passed},
@@ -633,7 +666,7 @@ function PracticeSession({
       void recordAttempt({
         fillId,
         mode: MODE_TO_DB[mode],
-        tempoPct: mode === 'speed-trainer' ? tempoPct : 100,
+        tempoPct: attemptTempoPct,
         score: result.score.score,
         judgments: result.match.judgments.map(j => ({
           id: j.note.id,
@@ -644,7 +677,7 @@ function PracticeSession({
 
       onAttemptScoredExternal?.(result);
     },
-    [fillId, mode, tempoPct, onAttemptScoredExternal],
+    [fillId, mode, tempoPct, tempoControlled, setTempoPct, onAttemptScoredExternal],
   );
 
   useEffect(() => {
@@ -714,11 +747,16 @@ function PracticeSession({
     }, 0);
   }, [stopAll, resetScoring, startLoop]);
 
-  const nudgeTempo = useCallback((delta: number) => {
-    setTempoPct(prev =>
-      Math.max(TEMPO_MIN_PCT, Math.min(TEMPO_MAX_PCT, prev + delta)),
-    );
-  }, []);
+  // Compute from the current value (not a functional updater) so it works
+  // whether tempo is self-managed or controlled by the parent.
+  const nudgeTempo = useCallback(
+    (delta: number) => {
+      setTempoPct(
+        Math.max(TEMPO_MIN_PCT, Math.min(TEMPO_MAX_PCT, tempoPct + delta)),
+      );
+    },
+    [setTempoPct, tempoPct],
+  );
 
   // Entering speed-trainer resets tempo to the trainer's slow start; the manual
   // slider value is left untouched when switching between the other modes.
@@ -728,7 +766,10 @@ function PracticeSession({
   const [tempoModeMark, setTempoModeMark] = useState(mode);
   if (tempoModeMark !== mode) {
     setTempoModeMark(mode);
-    if (mode === 'speed-trainer') setTempoPct(initialTempoPct());
+    // Don't touch a controlled tempo (the parent owns it).
+    if (mode === 'speed-trainer' && !tempoControlled) {
+      setTempoPct(initialTempoPct());
+    }
   }
 
   // Stop everything on mode change (skip the initial mount — nothing to stop).
@@ -839,7 +880,7 @@ function PracticeSession({
         tempoMin={TEMPO_MIN_PCT}
         tempoMax={TEMPO_MAX_PCT}
         onTempoChange={setTempoPct}
-        tempoAuto={mode === 'speed-trainer'}
+        tempoAuto={mode === 'speed-trainer' || tempoControlled}
         hasMidi={hasMidi}
         pendingHits={scoring.pendingHits}
       />
