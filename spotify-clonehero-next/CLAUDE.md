@@ -1,6 +1,6 @@
 # Music Charts Tools (spotify-clonehero-next)
 
-Next.js 15 app with Clone Hero chart tools. Active development: adding a drum transcription feature as a new page at `/drum-transcription`.
+Next.js 16 app with Clone Hero chart tools. Active development: adding a drum transcription feature as a new page at `/drum-transcription`.
 
 ## Getting Started
 
@@ -13,7 +13,7 @@ pnpm lint       # ESLint + Prettier check
 
 ## Tech Stack
 
-- **Framework:** Next.js 15 (App Router) + React 19 + TypeScript (strict)
+- **Framework:** Next.js 16 (App Router) + React 19 + TypeScript (strict)
 - **Package manager:** pnpm (7-day `minimumReleaseAge`; dependency build scripts blocked by default, allowlisted in `pnpm-workspace.yaml` `onlyBuiltDependencies`)
 - **Styling:** Tailwind CSS + shadcn/ui (Radix primitives in `components/ui/`)
 - **State:** React state + context (`useState`, `useReducer`, context). No zustand or other state libraries.
