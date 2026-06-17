@@ -477,6 +477,16 @@ export default function Renderer({
     wasPlaying: false,
   });
 
+  // Latest practice-mode and tempo values, read by the audio-manager
+  // creation effect at init time only. Held in refs so updates don't
+  // rebuild the AudioManager.
+  const practiceModeRef = useRef(practiceMode);
+  const tempoRef = useRef(tempo);
+  useEffect(() => {
+    practiceModeRef.current = practiceMode;
+    tempoRef.current = tempo;
+  }, [practiceMode, tempo]);
+
   // Persist settings whenever they change
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -618,8 +628,11 @@ export default function Renderer({
         window.am = audioManager;
 
         // Restore practice mode configuration if it exists
-        if (practiceMode && practiceMode.endMeasureMs > 0) {
-          audioManager.setPracticeMode(toAudioPracticeMode(practiceMode));
+        const currentPracticeMode = practiceModeRef.current;
+        if (currentPracticeMode && currentPracticeMode.endMeasureMs > 0) {
+          audioManager.setPracticeMode(
+            toAudioPracticeMode(currentPracticeMode),
+          );
         }
 
         // Apply initial per-track volumes loaded from storage
@@ -631,7 +644,7 @@ export default function Renderer({
 
         // Apply initial tempo configuration
         try {
-          audioManager.setTempo(tempo);
+          audioManager.setTempo(tempoRef.current);
         } catch {}
 
         if (lastAudioState.current.wasPlaying) {
@@ -680,7 +693,7 @@ export default function Renderer({
         toAudioPracticeMode(practiceMode),
       );
     }
-  }, [practiceMode, toAudioPracticeMode]);
+  }, [practiceMode, selectionIndex, toAudioPracticeMode]);
 
   useEffect(() => {
     if (volumeControls.length === 0 || audioManagerRef.current == null) {

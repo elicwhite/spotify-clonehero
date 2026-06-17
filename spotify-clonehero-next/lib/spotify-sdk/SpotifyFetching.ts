@@ -996,8 +996,8 @@ export function useSpotifyLibraryUpdate(): [
         }));
 
         resolve({
-          playlistMetadata: progress.playlists,
-          albumMetadata: progress.albums,
+          playlistMetadata,
+          albumMetadata,
           playlistTracks: newPlaylistCache,
           albumTracks: newAlbumCache,
         });

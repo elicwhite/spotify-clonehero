@@ -1,10 +1,11 @@
 'use client';
 
-import {useMemo, useEffect, useState} from 'react';
+import {useMemo, useEffect, useRef, useState} from 'react';
 import {parseAsString, useQueryState} from 'nuqs';
 import {Search as SearchIcon} from 'lucide-react';
 import {Input} from '@/components/ui/input';
 import Link from 'next/link';
+import Image from 'next/image';
 import debounce from 'debounce';
 import {
   ChartInstruments,
@@ -49,12 +50,17 @@ export default function Search({
     debouncedSearch(query);
   };
 
+  const latestSearchQuery = useRef(searchQuery);
   useEffect(() => {
-    if (initialQuery && initialQuery !== searchQuery) {
+    latestSearchQuery.current = searchQuery;
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (initialQuery && initialQuery !== latestSearchQuery.current) {
       setSearchQuery(initialQuery);
       debouncedSearch(initialQuery);
     }
-  }, []);
+  }, [initialQuery, debouncedSearch, setSearchQuery]);
 
   return (
     <main className="min-h-screen bg-background w-full">
@@ -102,7 +108,7 @@ export default function Search({
                   key={song.md5}
                   className="flex items-stretch bg-card rounded-lg border border-border hover:bg-accent transition-colors cursor-pointer overflow-hidden">
                   <div className="flex-shrink-0">
-                    <img
+                    <Image
                       src={`https://files.enchor.us/${song.albumArtMd5}.jpg`}
                       alt={`${song.name} album art`}
                       width={160}

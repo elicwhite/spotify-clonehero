@@ -82,6 +82,7 @@ export default async function OpengraphImage({
         }}>
         <img
           src={albumArt}
+          alt="Album art"
           width={420}
           height={420}
           style={{borderRadius: 20, objectFit: 'cover'}}

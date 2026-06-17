@@ -273,7 +273,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
       setSongs(results);
       console.log(results);
     }
-  }, []);
+  }, [fetchChorusCharts]);
 
   const isLoading = status.status !== 'not-started' && status.status !== 'done';
 

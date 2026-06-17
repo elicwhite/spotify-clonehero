@@ -480,6 +480,7 @@ export default function SpotifyTableDownloader({
   showPlayCount?: boolean;
   source: SpotifyTableSource;
 }) {
+  'use no memo';
   const hasPlayCount = showPlayCount ?? tracks[0].playCount != null;
   const hasSource = tracks.some(
     t =>

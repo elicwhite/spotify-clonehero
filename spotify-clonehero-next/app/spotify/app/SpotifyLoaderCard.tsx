@@ -322,7 +322,7 @@ export default function SpotifyLoaderCard({
     if (!isVisible) {
       target.scrollIntoView({behavior: 'smooth', block: 'center'});
     }
-  }, [allItems]);
+  }, [allItems, autoScroll, containerEl, inViewMap]);
 
   return (
     <div className="bg-background flex items-center justify-center p-4">

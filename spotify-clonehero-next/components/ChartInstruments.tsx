@@ -1,5 +1,6 @@
 import {ChartInfo} from '@/lib/chartSelection';
 import {cn} from '@/lib/utils';
+import Image from 'next/image';
 import {memo, useCallback} from 'react';
 
 export const RENDERED_INSTRUMENTS = [
@@ -39,14 +40,16 @@ export const InstrumentImage = memo(function InstrumentImage({
     }
   }, [instrument, onClick]);
 
+  const dimension = size == 'sm' ? 16 : size == 'md' ? 32 : 64;
+
   return (
-    <img
+    <Image
       className={cn('inline-block', classNames)}
       key={instrument}
       alt={`Icon for instrument ${instrument}`}
       src={`/assets/instruments/${instrument}.png`}
-      width={size == 'sm' ? 16 : size == 'md' ? 32 : 64}
-      height={size == 'sm' ? 16 : size == 'md' ? 32 : 64}
+      width={dimension}
+      height={dimension}
       onClick={clickCallback}
     />
   );

@@ -179,7 +179,7 @@ function LoggedIn() {
       ...prevStatus,
       status: 'done',
     }));
-  }, []);
+  }, [fetchChorusCharts, updateSpotifyLibrary]);
 
   return (
     <>
