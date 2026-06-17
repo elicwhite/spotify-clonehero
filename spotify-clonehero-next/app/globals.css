@@ -87,11 +87,4 @@
   body {
     @apply bg-background text-foreground;
   }
-
-  /* The drum-fills tool reclaims the global site nav's height on every one of
-     its surfaces. Its layout toggles `hide-site-nav` on <body> via effect;
-     scoped to that body class so no other tool is affected. */
-  body.hide-site-nav nav.site-nav {
-    display: none;
-  }
 }
