@@ -293,16 +293,14 @@ export function renderMusic(
     processedLyricsMap.set(measureIndex, processed);
   });
 
-  // Build time->position map for this measure
-  const timePositionMap: Array<{
-    ms: number;
-    x: number;
-    y: number;
-    flag: 'measure-start' | 'measure-end' | 'note';
-  }> = [];
-
   return measures.map((measure, index) => {
     const noteMarkers: NoteMarker[] = [];
+    // Each measure owns its own time->position slice. Sharing one array across
+    // measures (then concatenating per measure in
+    // createConsolidatedTimePositionMap) duplicated the full map once per
+    // measure, producing a non-monotonic array that broke the playhead's
+    // binary search.
+    const timePositionMap: RenderData['timePositionMap'] = [];
     const stave = renderMeasure(
       context,
       measure,

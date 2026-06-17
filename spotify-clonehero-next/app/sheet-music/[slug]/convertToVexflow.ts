@@ -334,13 +334,18 @@ class Parser {
                   this.durationMap[durationTicks];
 
                 const isRest = note.isRest || index !== 0;
+                // Only the first atomic piece (index 0) carries the original
+                // onset; the trailing pieces are rests filling out the
+                // duration, so they keep tick/ms 0 (rests have no playhead
+                // entry). Stamping the onset piece with 0 would give the
+                // notehead a real x but a time of 0, teleporting the playhead.
                 const newNote: Note = {
                   isTriplet: isTriplet ?? false,
                   dotted: dotted ?? false,
                   durationTicks,
                   isRest,
-                  tick: 0,
-                  ms: 0,
+                  tick: index === 0 ? note.tick : 0,
+                  ms: index === 0 ? note.ms : 0,
                   duration: `${duration}${isRest ? 'r' : ''}`,
                   notes: isRest ? ['b/4'] : note.notes,
                   noteIds: isRest ? [null] : note.noteIds,
@@ -375,8 +380,8 @@ class Parser {
         dotted: dotted ?? false,
         durationTicks: note.durationTicks,
         isRest: note.isRest,
-        tick: 0,
-        ms: 0,
+        tick: note.tick,
+        ms: note.ms,
         duration: `${duration}${note.isRest ? 'r' : ''}`,
         notes: note.isRest ? ['b/4'] : note.notes,
         noteIds: note.isRest ? [null] : note.noteIds,
