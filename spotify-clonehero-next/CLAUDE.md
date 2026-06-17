@@ -23,6 +23,7 @@ pnpm lint       # ESLint + Prettier check
 - **Audio:** `AudioManager` (`lib/preview/audioManager.ts`) — Web Audio API, multiple stems, speed control
 - **Notation:** VexFlow (`app/sheet-music/[slug]/SheetMusic.tsx`)
 - **Testing:** Jest
+- **Type-check:** `tsgo` (TypeScript 7 native preview, `@typescript/native-preview`) is the primary checker — `pnpm typecheck` (fast; run it in CI). `tsc` stays as `pnpm typecheck:tsc` and as the peer Next.js/the editor use, and `next build` still type-checks with it, so the stable compiler remains on the release path. tsgo is pinned to a dated nightly (`7.0.0-dev.*`, exempted from `minimumReleaseAge`); when bumping it, run `pnpm typecheck:tsc` to confirm parity before committing.
 - **Auth:** Supabase
 
 ## Code Style

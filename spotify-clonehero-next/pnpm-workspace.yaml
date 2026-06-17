@@ -3,6 +3,21 @@
 # ecosystem has a chance to flag it. 10080 minutes = 7 days.
 minimumReleaseAge: 10080
 
+# Exempt from the min-age gate: the TypeScript 7 native preview ships as dated
+# nightly dev builds (@typescript/native-preview@7.0.0-dev.*), which are by
+# definition newer than 7 days — we adopt it intentionally as the tsgo typecheck.
+minimumReleaseAgeExclude:
+  - '@typescript/native-preview'
+  # Platform binary optional-deps are same-dated nightlies; exempt them too or
+  # the tsgo executable can't be resolved on disk. All platforms listed so the
+  # lockfile carries every binary (dev: darwin; CI: linux; Windows contributors).
+  - '@typescript/native-preview-darwin-arm64'
+  - '@typescript/native-preview-darwin-x64'
+  - '@typescript/native-preview-linux-x64'
+  - '@typescript/native-preview-linux-arm64'
+  - '@typescript/native-preview-win32-x64'
+  - '@typescript/native-preview-win32-arm64'
+
 # Dependencies allowed to run install/build lifecycle scripts. pnpm blocks all
 # dependency build scripts by default (supply-chain hardening); only these
 # native/CLI packages genuinely need theirs.
