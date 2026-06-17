@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect, useState} from 'react';
+import {useSyncExternalStore} from 'react';
 import {GoogleAnalytics} from '@next/third-parties/google';
 import {REGION_COOKIE} from '@/lib/analytics/region';
 
@@ -24,11 +24,13 @@ function readRegion(): string | null {
 // some routing edge case bypassed the proxy — in all of those, defaulting
 // to no-GA is the right call.
 export default function RegionAwareAnalytics({gaId}: {gaId: string}) {
-  const [shouldLoad, setShouldLoad] = useState(false);
-
-  useEffect(() => {
-    setShouldLoad(readRegion() === 'other');
-  }, []);
+  // The region cookie is fixed for the session, so subscribe is a no-op and we
+  // read it directly. SSR renders nothing; the client resolves the real value.
+  const shouldLoad = useSyncExternalStore(
+    () => () => {},
+    () => readRegion() === 'other',
+    () => false,
+  );
 
   if (!shouldLoad) return null;
   return <GoogleAnalytics gaId={gaId} />;

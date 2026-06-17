@@ -188,6 +188,8 @@ export default function Renderer({
   const router = useRouter();
   const [isSaved, setIsSaved] = useState(false);
 
+  const instrument = 'drums';
+
   // Fire sheet_music_loaded once per chart mount.
   useEffect(() => {
     trackEvent({
@@ -453,8 +455,6 @@ export default function Renderer({
   //   const clickTrack = await generateClickTrack(metadata, chart);
   //   console.log(clickTrack);
   // }, [chart]);
-
-  const instrument = 'drums';
 
   const track: ParsedChart['trackData'][0] = useMemo(() => {
     const drumPart = chart.trackData.find(

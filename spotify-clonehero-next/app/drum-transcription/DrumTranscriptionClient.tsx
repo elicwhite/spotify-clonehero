@@ -4,7 +4,6 @@ import {
   Suspense,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -38,7 +37,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import AudioUploader from './components/AudioUploader';
-import ProcessingView from '@/components/ProcessingView';
+import ProcessingView, {type ProcessingStep} from '@/components/ProcessingView';
 import {
   createPipelineStepTimer,
   markStepCompletions,
@@ -97,38 +96,39 @@ function DrumTranscriptionInner() {
     useState<PipelineProgress | null>(null);
   const [pipelineAudioFile, setPipelineAudioFile] = useState<File | null>(null);
   const stepTimerRef = useRef(createPipelineStepTimer());
-  const [stepTick, setStepTick] = useState(0);
+  const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
 
-  // Mark step completions whenever the active step changes. The runner
-  // doesn't separately notify us; advancing past a step implicitly
-  // completes it.
+  // Derive the ProcessingView step list from progress + a wall-clock
+  // timer. The timer is a mutable ref read and updated only inside this
+  // effect's callbacks (never during render): pipelineProgressToSteps
+  // records per-step start/completion times and smoothed ETA values that
+  // must persist across renders.
+  //
+  // recompute runs immediately when progress changes and again once per
+  // second so the active step's elapsed-based ETA refreshes even when the
+  // worker hasn't sent a new progress message. The runner doesn't
+  // separately notify us that a previous step finished, so we mark
+  // completions before converting (advancing past a step implicitly
+  // completes it).
   useEffect(() => {
     if (!pipelineProgress) {
+      // Reset the timer so the next pipeline starts with fresh wall-clock
+      // tracking. processingSteps isn't cleared here: it's only read while
+      // pipelineProgress is non-null, and recompute() below overwrites it
+      // the moment a new pipeline starts.
       stepTimerRef.current = createPipelineStepTimer();
       return;
     }
-    markStepCompletions(pipelineProgress, stepTimerRef.current);
-  }, [pipelineProgress]);
-
-  // Tick every second so the active step's elapsed-based ETA updates
-  // even when the worker hasn't sent a new progress message. Cheap;
-  // only runs while a pipeline is in flight.
-  useEffect(() => {
-    if (!pipelineProgress) return;
-    const id = setInterval(() => setStepTick(t => t + 1), 1000);
+    const recompute = () => {
+      markStepCompletions(pipelineProgress, stepTimerRef.current);
+      setProcessingSteps(
+        pipelineProgressToSteps(pipelineProgress, stepTimerRef.current),
+      );
+    };
+    recompute();
+    const id = setInterval(recompute, 1000);
     return () => clearInterval(id);
   }, [pipelineProgress]);
-
-  const processingSteps = useMemo(
-    () =>
-      pipelineProgress
-        ? pipelineProgressToSteps(pipelineProgress, stepTimerRef.current)
-        : [],
-    // stepTick is intentionally a dependency: it forces ETA recomputation
-    // even when pipelineProgress is unchanged.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pipelineProgress, stepTick],
-  );
 
   // Result of checking a project's stage, tagged with the projectId we
   // checked for. Tagging lets us derive UI state from a single source:

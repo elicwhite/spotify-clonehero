@@ -376,18 +376,6 @@ function LyricsAlignInner() {
   const [showIntroModal, setShowIntroModal] = useState(false);
   const initStartedRef = useRef(false);
 
-  // Open the intro modal once per browser, the first time the user
-  // lands in the editor. Versioned key so a future copy update (v2)
-  // re-fires once for returning users.
-  useEffect(() => {
-    if (!editorData) return;
-    const KEY = 'add-lyrics:editor-intro-shown-v1';
-    if (typeof localStorage === 'undefined') return;
-    if (localStorage.getItem(KEY)) return;
-    setShowIntroModal(true);
-    localStorage.setItem(KEY, '1');
-  }, [editorData]);
-
   const updateAlignStep = useCallback(
     (key: AlignStepState['key'], update: Partial<AlignStepState>) => {
       setAlignSteps(prev =>
@@ -799,6 +787,18 @@ function LyricsAlignInner() {
           audioChannels: waveform?.channels ?? 1,
           durationSeconds,
         });
+
+        // Open the intro modal once per browser, the first time the user
+        // lands in the editor. Versioned key so a future copy update (v2)
+        // re-fires once for returning users.
+        const INTRO_KEY = 'add-lyrics:editor-intro-shown-v1';
+        if (
+          typeof localStorage !== 'undefined' &&
+          !localStorage.getItem(INTRO_KEY)
+        ) {
+          setShowIntroModal(true);
+          localStorage.setItem(INTRO_KEY, '1');
+        }
 
         // add-lyrics defaults to the waveform highway since the user is
         // syncing lyrics to vocal energy, not navigating notes.

@@ -207,10 +207,21 @@ function formatTimeMs(ms: number): string {
 export default function TempoViewerClient() {
   const [pairs, setPairs] = useState<SongPair[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<{id: string; message: string} | null>(
+    null,
+  );
   const [loaded, setLoaded] = useState<LoadedSong | null>(null);
   const [variant, setVariant] = useState<Variant>('modified');
+
+  // Loading is derived: a selection is loading while neither the loaded song
+  // nor an error is tagged with the current selectedId. This avoids flipping a
+  // loading flag synchronously inside the load effect.
+  const loading =
+    selectedId != null &&
+    loaded?.pair.id !== selectedId &&
+    loadError?.id !== selectedId;
+  const error = listError ?? (loadError?.id === selectedId ? loadError.message : null);
 
   const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
   const audioManagerRef = useRef<AudioManager | null>(null);
@@ -227,7 +238,7 @@ export default function TempoViewerClient() {
         setPairs(json.pairs as SongPair[]);
         if (json.pairs.length > 0) setSelectedId(json.pairs[0].id);
       })
-      .catch(err => setError(err.message ?? String(err)));
+      .catch(err => setListError(err.message ?? String(err)));
   }, []);
 
   // ---------- load selected song ----------
@@ -237,9 +248,6 @@ export default function TempoViewerClient() {
     if (!pair) return;
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setLoaded(null);
 
     (async () => {
       try {
@@ -256,9 +264,11 @@ export default function TempoViewerClient() {
           modified: {files: modifiedFiles, chart: modifiedChart},
         });
       } catch (err) {
-        if (!cancelled) setError((err as Error).message ?? String(err));
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled)
+          setLoadError({
+            id: pair.id,
+            message: (err as Error).message ?? String(err),
+          });
       }
     })();
 
