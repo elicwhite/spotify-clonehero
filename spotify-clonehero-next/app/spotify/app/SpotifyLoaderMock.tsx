@@ -206,6 +206,7 @@ export default function SpotifyLoaderMock() {
       }, 1000);
       return () => clearInterval(countdownInterval);
     }
+    return undefined;
   }, [progress.rateLimitCountdown]);
 
   return <SpotifyLoaderCard progress={progress} />;

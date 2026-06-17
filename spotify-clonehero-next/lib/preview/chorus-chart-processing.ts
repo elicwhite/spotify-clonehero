@@ -106,6 +106,8 @@ async function getChartFiles(chartData: ChartResponseEncore) {
         );
       }
     }
+    // File not present in the manifest: nothing to truncate.
+    return false;
   };
 
   const files: {fileName: string; data: Uint8Array}[] = [];

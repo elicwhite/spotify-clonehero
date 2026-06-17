@@ -17,12 +17,14 @@ export const testSameCharter: ChartTest = (recommendedChart, chart) => {
   ) {
     return 'Chart from same charter is newer';
   }
+  return undefined;
 };
 
 export const testPreferHarmonix: ChartTest = (recommendedChart, chart) => {
   if (recommendedChart.charter != 'Harmonix' && chart.charter == 'Harmonix') {
     return 'Better chart is from Harmonix';
   }
+  return undefined;
 };
 
 export const testPreferOfficialTracks: ChartTest = (
@@ -35,6 +37,7 @@ export const testPreferOfficialTracks: ChartTest = (
   ) {
     return 'Better chart is from official game';
   }
+  return undefined;
 };
 
 export const testPreferDrums: ChartTest = (recommendedChart, chart) => {
@@ -45,6 +48,7 @@ export const testPreferDrums: ChartTest = (recommendedChart, chart) => {
   ) {
     return "Better chart has drums, current chart doesn't";
   }
+  return undefined;
 };
 
 export const testPreferGuitar: ChartTest = (recommendedChart, chart) => {
@@ -56,6 +60,7 @@ export const testPreferGuitar: ChartTest = (recommendedChart, chart) => {
   ) {
     return "Better chart has guitar, current chart doesn't";
   }
+  return undefined;
 };
 
 export const testPreferHigherDiffSum: ChartTest = (recommendedChart, chart) => {
@@ -75,4 +80,5 @@ export const testPreferHigherDiffSum: ChartTest = (recommendedChart, chart) => {
   if (chartDiffSum > recommendedDiffSum) {
     return 'Better chart has more instruments or difficulty';
   }
+  return undefined;
 };

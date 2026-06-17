@@ -35,11 +35,11 @@ class MockScene extends MockObject3D {
   addedGroups: MockObject3D[] = [];
   removedGroups: MockObject3D[] = [];
 
-  add(obj: MockObject3D) {
+  override add(obj: MockObject3D) {
     super.add(obj);
     this.addedGroups.push(obj);
   }
-  remove(obj: MockObject3D) {
+  override remove(obj: MockObject3D) {
     super.remove(obj);
     this.removedGroups.push(obj);
   }
