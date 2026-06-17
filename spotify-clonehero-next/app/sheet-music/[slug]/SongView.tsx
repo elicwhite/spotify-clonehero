@@ -32,7 +32,6 @@ import {
 } from 'lucide-react';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useRouter} from 'next/navigation';
-import useInterval from 'use-interval';
 import {ChartResponseEncore} from '@/lib/chartSelection';
 
 import {getBasename} from '@/lib/src-shared/utils';
@@ -42,6 +41,8 @@ import SheetMusic from './SheetMusic';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import {AudioManager, PracticeModeConfig} from '@/lib/preview/audioManager';
 import CloneHeroRenderer from './CloneHeroRenderer';
+import PlaybackBar from './PlaybackBar';
+import {formatTimeMs} from './formatTime';
 import Image from 'next/image';
 import ChartDetailLayout from '@/components/chart-detail/ChartDetailLayout';
 import SongHeader from '@/components/chart-detail/SongHeader';
@@ -82,16 +83,6 @@ interface VolumeControl {
   isSoloed: boolean;
 }
 
-function formatSeconds(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${String(mins)}:${String(secs).padStart(2, '0')}`;
-}
-
-function formatTimeMs(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  return formatSeconds(seconds);
-}
 export default function Renderer({
   metadata,
   chart,
@@ -156,7 +147,6 @@ export default function Renderer({
   const [viewCloneHero, setViewCloneHero] = useState(
     persistedSettings.viewCloneHero ?? false,
   );
-  const [currentPlayback, setCurrentPlayback] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volumeControls, setVolumeControls] = useState<VolumeControl[]>([]);
   const [isMobileMode, setIsMobileMode] = useState(false);
@@ -691,18 +681,6 @@ export default function Renderer({
       );
     }
   }, [practiceMode, toAudioPracticeMode]);
-
-  useInterval(
-    () => {
-      setCurrentPlayback(audioManagerRef.current?.currentTime ?? 0);
-
-      // Check for practice mode looping
-      if (audioManagerRef.current && isPlaying) {
-        audioManagerRef.current.checkPracticeModeLoop();
-      }
-    },
-    isPlaying ? 100 : null,
-  );
 
   useEffect(() => {
     if (volumeControls.length === 0 || audioManagerRef.current == null) {
@@ -1261,32 +1239,14 @@ export default function Renderer({
           providing much of this tool.
         </p>
       }>
-      <div
-        className={cn(
-          'h-12 border-b flex items-center md:px-4 gap-4 bg-background/95 backdrop-blur-sm',
-          'sticky top-[60px] z-30',
-          !isMobileMode && 'md:static',
-        )}>
-        <Slider
-          value={[currentPlayback]}
-          max={songDuration || 100}
-          min={0}
-          onValueChange={values => {
-            const newTime = values[0];
-            setCurrentPlayback(newTime);
-            if (audioManagerRef.current) {
-              audioManagerRef.current.play({
-                time: newTime,
-              });
-              setIsPlaying(true);
-            }
-          }}
-        />
-        <span className="text-sm text-muted-foreground whitespace-nowrap">
-          {formatSeconds(currentPlayback)} /{' '}
-          {formatSeconds((metadata.song_length || 0) / 1000)}
-        </span>
-      </div>
+      <PlaybackBar
+        audioManagerRef={audioManagerRef}
+        isPlaying={isPlaying}
+        setIsPlaying={setIsPlaying}
+        songDuration={songDuration}
+        songLengthMs={metadata.song_length || 0}
+        isMobileMode={isMobileMode}
+      />
 
       <div className="md:pt-4 md:px-4 pt-2 flex-1 flex flex-col overflow-hidden">
         <SongHeader
