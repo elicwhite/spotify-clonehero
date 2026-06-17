@@ -99,6 +99,7 @@
     "@types/react-table": "^7.7.17",
     "@types/three": "^0.160.0",
     "autoprefixer": "^10.4.16",
+    "babel-plugin-react-compiler": "1.0.0",
     "better-sqlite3": "^12.2.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",

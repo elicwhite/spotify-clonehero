@@ -2,7 +2,10 @@ const path = require('path');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Pin Turbopack workspace root to this directory (parent has its own yarn.lock)
+  // Auto-memoize components/hooks via the React Compiler (babel-plugin-react-
+  // compiler). Next applies it only to files with JSX/hooks via an SWC pre-pass.
+  reactCompiler: true,
+  // Pin Turbopack workspace root to this directory (parent has its own lockfile)
   turbopack: {
     root: path.resolve(__dirname),
   },
