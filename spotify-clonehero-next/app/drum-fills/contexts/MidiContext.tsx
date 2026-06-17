@@ -18,40 +18,72 @@ import {
 } from '@/lib/drum-fills/midi/chProfile';
 import {PadMapping} from '@/lib/drum-fills/midi/padMapping';
 
-const CALIBRATION_STORAGE_KEY = 'drum-fills:calibration-offset-ms';
+// Calibration is per MIDI instrument: audio + MIDI latency differs by device, so
+// each connected instrument gets its own persisted offset. The base key (no
+// device suffix) is the legacy/global fallback used when nothing is connected.
+const CALIBRATION_KEY_BASE = 'drum-fills:calibration-offset-ms';
+
+function calibrationStorageKey(deviceKey: string | null): string {
+  return deviceKey ? `${CALIBRATION_KEY_BASE}:${deviceKey}` : CALIBRATION_KEY_BASE;
+}
 
 const noopSubscribe = () => () => {};
 const getSupportedClient = () =>
   typeof navigator !== 'undefined' && 'requestMIDIAccess' in navigator;
 const getSupportedServer = () => false;
 
-// The calibration offset lives in a tiny module-level store backed by
-// localStorage so the provider can read it hydration-safely via
-// useSyncExternalStore (server renders 0, client re-renders with the
-// persisted value).
-let calibrationOffset: number | null = null;
+// The per-device calibration offsets live in a tiny module-level store backed by
+// localStorage so the provider can read them hydration-safely via
+// useSyncExternalStore (server renders 0, client re-renders with the persisted
+// value). `activeDeviceKey` selects which instrument's offset is current.
+let activeDeviceKey: string | null = null;
+const calibrationCache = new Map<string, number>();
 const calibrationListeners = new Set<() => void>();
 
-function readCalibrationOffset(): number {
-  if (calibrationOffset === null) {
-    try {
-      const raw = localStorage.getItem(CALIBRATION_STORAGE_KEY);
-      const parsed = raw == null ? NaN : Number(raw);
-      calibrationOffset = Number.isFinite(parsed) ? parsed : 0;
-    } catch {
-      calibrationOffset = 0;
-    }
+function loadStoredOffset(key: string): number | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
   }
-  return calibrationOffset;
+}
+
+function readCalibrationOffset(): number {
+  const key = calibrationStorageKey(activeDeviceKey);
+  let cached = calibrationCache.get(key);
+  if (cached === undefined) {
+    let val = loadStoredOffset(key);
+    // A device with no saved offset yet falls back to the legacy/global value so
+    // existing calibrations carry over until the device is recalibrated.
+    if (val === null && activeDeviceKey !== null) {
+      val = loadStoredOffset(CALIBRATION_KEY_BASE);
+    }
+    cached = val ?? 0;
+    calibrationCache.set(key, cached);
+  }
+  return cached;
 }
 
 function writeCalibrationOffset(offsetMs: number): void {
-  calibrationOffset = offsetMs;
+  const key = calibrationStorageKey(activeDeviceKey);
+  calibrationCache.set(key, offsetMs);
   try {
-    localStorage.setItem(CALIBRATION_STORAGE_KEY, String(offsetMs));
+    localStorage.setItem(key, String(offsetMs));
   } catch {
     // ignore storage failures
   }
+  for (const listener of calibrationListeners) listener();
+}
+
+/** Switch which instrument's calibration is active; notifies subscribers so the
+ * exposed offset re-reads for the newly connected device. */
+function setActiveCalibrationDevice(deviceKey: string | null): void {
+  const next = deviceKey || null;
+  if (next === activeDeviceKey) return;
+  activeDeviceKey = next;
   for (const listener of calibrationListeners) listener();
 }
 
@@ -166,18 +198,25 @@ export function MidiProvider({children}: {children: React.ReactNode}) {
     if (!access) return;
     const inputs: MidiDeviceInfo[] = [];
     const connected: string[] = [];
+    const connectedNames: string[] = [];
     access.inputs.forEach(input => {
+      const name = input.name ?? 'Unknown device';
       inputs.push({
         id: input.id,
-        name: input.name ?? 'Unknown device',
+        name,
         manufacturer: input.manufacturer ?? '',
       });
-      if (input.state === 'connected') connected.push(input.id);
+      if (input.state === 'connected') {
+        connected.push(input.id);
+        connectedNames.push(name);
+      }
       // Attach handler (idempotent; assigning replaces any prior).
       input.onmidimessage = handleMessage;
     });
     setDevices(inputs);
     setConnectedIds(connected);
+    // Calibration follows the connected instrument (first one if several).
+    setActiveCalibrationDevice(connectedNames[0] ?? null);
   }, [handleMessage]);
 
   const requestAccess = useCallback(async () => {
@@ -199,6 +238,16 @@ export function MidiProvider({children}: {children: React.ReactNode}) {
       setReady(true);
     }
   }, [supported, refreshDevices]);
+
+  // Auto-connect on load so a plugged-in kit just works (and its calibration
+  // loads) without clicking "Connect MIDI". requestMIDIAccess (no sysex) needs
+  // no user gesture in Chromium; runs once.
+  const autoConnectedRef = useRef(false);
+  useEffect(() => {
+    if (!supported || autoConnectedRef.current) return;
+    autoConnectedRef.current = true;
+    void requestAccess();
+  }, [supported, requestAccess]);
 
   const loadProfileYaml = useCallback((yaml: string) => {
     try {
