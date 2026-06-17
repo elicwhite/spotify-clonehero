@@ -12,14 +12,25 @@ import {
   type LadderRung,
 } from '@/lib/drum-fills/db';
 import type {ScoredAttempt} from '@/lib/drum-fills/practice/attempt';
+import {resolveRungIndex} from '@/lib/drum-fills/practice/fillLadder';
 import {
-  advanceLadder,
-  initRungProgress,
-  resolveRungIndex,
-  type RungProgress,
-} from '@/lib/drum-fills/practice/fillLadder';
+  climbLadder,
+  initRungClimb,
+  type LadderClimbOptions,
+  type RungClimb,
+} from '@/lib/drum-fills/practice/ladderClimb';
 import DifficultyBar from './DifficultyBar';
 import PracticeView from './PracticeView';
+
+/**
+ * Entry tempo for a rung by its ladder position: the easiest rung starts near
+ * full speed, the hardest a bit slower, so early rungs aren't tediously slow.
+ */
+function rungStartTempoPct(index: number, rungCount: number): number {
+  if (rungCount <= 1) return 90;
+  const frac = index / (rungCount - 1);
+  return Math.round(90 - 15 * frac); // 90% (easiest) → 75% (hardest)
+}
 
 /**
  * Ladder mode for a groove cluster (plan 0045 §6). The cluster's unique fill
@@ -39,11 +50,27 @@ export default function LadderSession({
   onExit: () => void;
 }) {
   const [rungs, setRungs] = useState<LadderRung[] | null>(null);
-  const [progress, setProgress] = useState<RungProgress | null>(null);
-  const progressRef = useRef<RungProgress | null>(null);
+  const [climb, setClimb] = useState<RungClimb | null>(null);
+  const climbRef = useRef<RungClimb | null>(null);
   useEffect(() => {
-    progressRef.current = progress;
-  }, [progress]);
+    climbRef.current = climb;
+  }, [climb]);
+
+  // Per-rung tempo, remembered for this session so re-climbing a rung resumes
+  // where it left off instead of resetting to the rung's start tempo. Lives in
+  // the parent so it survives PracticeView's per-rung remount.
+  const tempoMemoryRef = useRef<Map<number, number>>(new Map());
+
+  // Climb-machine options. rungEntryTempoPct consults the session tempo memory
+  // first, falling back to the difficulty-scaled start.
+  const climbOptions = useCallback(
+    (rungCount: number): Partial<LadderClimbOptions> => ({
+      rungEntryTempoPct: (index: number) =>
+        tempoMemoryRef.current.get(index) ??
+        rungStartTempoPct(index, rungCount),
+    }),
+    [],
+  );
 
   // Load the ladder + saved position once.
   useEffect(() => {
@@ -59,8 +86,9 @@ export default function LadderSession({
           ladder,
           saved?.currentRungFillId ?? null,
         );
+        tempoMemoryRef.current = new Map();
         setRungs(ladder);
-        setProgress(initRungProgress(startIndex));
+        setClimb(initRungClimb(startIndex, climbOptions(ladder.length)));
       } catch (err) {
         console.error('Failed to load ladder', err);
         toast.error('Could not load this groove ladder.');
@@ -70,7 +98,7 @@ export default function LadderSession({
     return () => {
       cancelled = true;
     };
-  }, [cluster.similarityKey]);
+  }, [cluster.similarityKey, climbOptions]);
 
   // Persist the current rung whenever it changes.
   const persist = useCallback(
@@ -85,39 +113,61 @@ export default function LadderSession({
     [rungs, cluster.similarityKey],
   );
 
-  // Run the ladder state machine on each scored attempt. Event handler — no
-  // setState inside an updater.
+  // Run the tempo-aware climb machine on each scored attempt. Event handler —
+  // no setState inside an updater.
   const onAttemptScored = useCallback(
     (result: ScoredAttempt) => {
       const list = rungs;
-      const cur = progressRef.current;
+      const cur = climbRef.current;
       if (!list || list.length === 0 || !cur) return;
-      const step = advanceLadder(cur, list.length, result.score.passed);
-      setProgress(step.progress);
-      if (step.moved) {
-        persist(step.progress.index);
-        const rung = list[step.progress.index];
+      const opts = climbOptions(list.length);
+      const {climb: next, change} = climbLadder(
+        cur,
+        list.length,
+        result.score.passed,
+        opts,
+      );
+      tempoMemoryRef.current.set(next.index, next.tempoPct);
+      setClimb(next);
+
+      if (change === 'advance' || change === 'step-back') {
+        persist(next.index);
+        const rung = list[next.index];
         toast.message(
-          step.direction === 'advance'
-            ? `Rung ${step.progress.index + 1} — difficulty ${Math.round(
+          change === 'advance'
+            ? `Rung ${next.index + 1} — difficulty ${Math.round(
                 rung.difficultyScore,
               )}`
-            : `Stepped back to rung ${step.progress.index + 1}`,
+            : `Stepped back to rung ${next.index + 1} — get it solid here`,
         );
+      } else if (change === 'speed-up') {
+        toast.message(`Speeding up to ${next.tempoPct}%`);
+      } else if (change === 'slow-down') {
+        toast.message(`Slowing to ${next.tempoPct}% — lock it in first`);
       }
     },
-    [rungs, persist],
+    [rungs, persist, climbOptions],
   );
+
+  // Manual tempo override from the slider/keyboard. Changing the tempo makes the
+  // pass/fail streak at the old tempo stale, so reset the tally. Decide from the
+  // ref (no side effects inside a setState updater).
+  const onTempoPctChange = useCallback((pct: number) => {
+    const cur = climbRef.current;
+    if (!cur) return;
+    tempoMemoryRef.current.set(cur.index, pct);
+    setClimb({...cur, tempoPct: pct, passesAtTempo: 0, failsAtTempo: 0});
+  }, []);
 
   const selectRung = useCallback(
     (index: number) => {
-      setProgress(initRungProgress(index));
+      setClimb(initRungClimb(index, climbOptions(rungs?.length ?? 1)));
       persist(index);
     },
-    [persist],
+    [persist, climbOptions, rungs],
   );
 
-  if (rungs === null || progress === null) {
+  if (rungs === null || climb === null) {
     return (
       <div className="flex flex-1 items-center justify-center text-muted-foreground">
         Loading ladder…
@@ -139,14 +189,15 @@ export default function LadderSession({
     );
   }
 
-  const current = rungs[progress.index];
+  const current = rungs[climb.index];
 
-  // Ladder position shown in the practice bar's session slot ([T]); the rung
-  // list below keeps full functionality. The groove identity itself lives in
-  // the shared header `[H]` (published by GrooveSession).
+  // Ladder position + current climb tempo shown in the practice bar's session
+  // slot ([T]); the rung list below keeps full functionality. The groove
+  // identity itself lives in the shared header `[H]` (published by
+  // GrooveSession).
   const rungCtx = (
     <span className="rounded border bg-background px-2 py-1 text-xs font-medium">
-      Rung {progress.index + 1}/{rungs.length}
+      Rung {climb.index + 1}/{rungs.length} · {climb.tempoPct}%
     </span>
   );
 
@@ -155,7 +206,7 @@ export default function LadderSession({
       <div className="flex shrink-0 flex-col gap-2 lg:w-64">
         <ol className="min-h-0 flex-1 space-y-1 overflow-y-auto rounded-lg border bg-card p-2">
           {rungs.map((rung, i) => {
-            const isCurrent = i === progress.index;
+            const isCurrent = i === climb.index;
             return (
               <li key={rung.fillSimilarityKey}>
                 <button
@@ -192,6 +243,8 @@ export default function LadderSession({
           onExit={onExit}
           onAttemptScored={onAttemptScored}
           sessionCtx={rungCtx}
+          tempoPct={climb.tempoPct}
+          onTempoPctChange={onTempoPctChange}
         />
       </div>
     </div>
