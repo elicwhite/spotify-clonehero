@@ -22,3 +22,7 @@ lib/tempo-map/__tests__/fixtures
 
 # OS / editor
 .DS_Store
+
+# Local Claude Code state (gitignored / machine-generated, reformatted live)
+.claude/settings.local.json
+.claude/worktrees
