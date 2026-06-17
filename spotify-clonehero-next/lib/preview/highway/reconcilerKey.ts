@@ -34,7 +34,11 @@ export function reconcilerKeyFor(
 }
 
 /** Marker drag operates on this subset of entity kinds. */
-export type MarkerDragKind = 'section' | 'lyric' | 'phrase-start' | 'phrase-end';
+export type MarkerDragKind =
+  | 'section'
+  | 'lyric'
+  | 'phrase-start'
+  | 'phrase-end';
 
 /**
  * Reconciler key for a marker mid-drag, derived from the raw (kind, tick,

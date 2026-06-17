@@ -91,7 +91,11 @@ jest.mock('three', () => {
   }
 
   class MockColor {
-    constructor(public r = 1, public g = 1, public b = 1) {}
+    constructor(
+      public r = 1,
+      public g = 1,
+      public b = 1,
+    ) {}
   }
 
   class MockPlaneGeometry {
@@ -167,7 +171,9 @@ function createTestRenderer(): MarkerRenderer {
   return new MarkerRenderer([], 'right', [255, 200, 100]);
 }
 
-function makeData(overrides: Partial<MarkerElementData> = {}): MarkerElementData {
+function makeData(
+  overrides: Partial<MarkerElementData> = {},
+): MarkerElementData {
   return {text: 'verse', ...overrides};
 }
 

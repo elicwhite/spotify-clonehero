@@ -59,7 +59,11 @@ function tempoArrays(tempos: TempoEvent[], originMs: number) {
   return {segMs: ms, segBpm: bpm};
 }
 
-function timeToBeta(tsMs: number, tempos: TempoEvent[], originMs: number): number {
+function timeToBeta(
+  tsMs: number,
+  tempos: TempoEvent[],
+  originMs: number,
+): number {
   const {segMs, segBpm} = tempoArrays(tempos, originMs);
   const segDur = segBpm.map(b => 60_000.0 / b);
   const cum = [0.0];
@@ -73,7 +77,11 @@ function timeToBeta(tsMs: number, tempos: TempoEvent[], originMs: number): numbe
   return cum[idx] + (tsMs - segMs[idx]) / segDur[idx];
 }
 
-function betasToTime(betas: number[], tempos: TempoEvent[], originMs: number): number[] {
+function betasToTime(
+  betas: number[],
+  tempos: TempoEvent[],
+  originMs: number,
+): number[] {
   const {segMs, segBpm} = tempoArrays(tempos, originMs);
   const segDur = segBpm.map(b => 60_000.0 / b);
   const cum = [0.0];
@@ -88,7 +96,11 @@ function betasToTime(betas: number[], tempos: TempoEvent[], originMs: number): n
   });
 }
 
-function beatTimes(tempos: TempoEvent[], originMs: number, endMs: number): number[] {
+function beatTimes(
+  tempos: TempoEvent[],
+  originMs: number,
+  endMs: number,
+): number[] {
   const lastBeta = timeToBeta(endMs, tempos, originMs);
   const n = Math.floor(lastBeta) + 1;
   if (n <= 0) return [];
@@ -130,7 +142,9 @@ function median(arr: number[]): number {
   if (arr.length === 0) return 0;
   const sorted = Array.from(arr).sort((a, b) => a - b);
   const mid = sorted.length >> 1;
-  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
 }
 
 function diff(arr: number[]): number[] {
@@ -311,8 +325,10 @@ export function beatsToSynctrack({
       if (ii > 0) best = Math.min(best, Math.abs(dsMs[ii - 1] - fm));
       if (ii < dsMs.length) best = Math.min(best, Math.abs(dsMs[ii] - fm));
       let bestVal = fm;
-      if (ii > 0 && Math.abs(dsMs[ii - 1] - fm) === best) bestVal = dsMs[ii - 1];
-      if (ii < dsMs.length && Math.abs(dsMs[ii] - fm) === best) bestVal = dsMs[ii];
+      if (ii > 0 && Math.abs(dsMs[ii - 1] - fm) === best)
+        bestVal = dsMs[ii - 1];
+      if (ii < dsMs.length && Math.abs(dsMs[ii] - fm) === best)
+        bestVal = dsMs[ii];
       if (best <= tol) newBeats[i] = (1 - w) * fm + w * bestVal;
       else newBeats[i] = fm;
     }
@@ -325,7 +341,10 @@ export function beatsToSynctrack({
   if (SOTA.CONTINUOUS_LAG && drumOnsetOffsetMs != null) {
     lagAmt = Math.max(
       0,
-      Math.min(SOTA.CONTINUOUS_LAG_MAX_MS, -drumOnsetOffsetMs - SOTA.CONTINUOUS_LAG_INTERCEPT),
+      Math.min(
+        SOTA.CONTINUOUS_LAG_MAX_MS,
+        -drumOnsetOffsetMs - SOTA.CONTINUOUS_LAG_INTERCEPT,
+      ),
     );
   }
   if (lagAmt > 0) {
@@ -337,7 +356,10 @@ export function beatsToSynctrack({
   let logitsAtBeats: number[] | null = null;
   if (beatLogits && beatsMs.length > 0) {
     logitsAtBeats = beatsMs.map(b => {
-      const idx = Math.max(0, Math.min(beatLogits.length - 1, Math.floor((b / 1000) * fps)));
+      const idx = Math.max(
+        0,
+        Math.min(beatLogits.length - 1, Math.floor((b / 1000) * fps)),
+      );
       return sigmoid(beatLogits[idx]);
     });
   }
@@ -358,7 +380,8 @@ export function beatsToSynctrack({
   const iois = diff(beatsMs);
   const bpms = iois.map(io => 60_000.0 / Math.max(io, 1e-3));
   let tempos: TempoEvent[] = [];
-  for (let i = 0; i < iois.length; i++) tempos.push({ms: beatsMs[i], bpm: bpms[i]});
+  for (let i = 0; i < iois.length; i++)
+    tempos.push({ms: beatsMs[i], bpm: bpms[i]});
   tempos.push({ms: beatsMs[beatsMs.length - 1], bpm: bpms[bpms.length - 1]});
 
   // Numerator via selfconsist with N4_PRIOR.
@@ -407,7 +430,12 @@ export function beatsToSynctrack({
   }
 
   // ORIGIN_PHASE_SHIFT.
-  if (SOTA.ORIGIN_PHASE_SHIFT && num >= 2 && tempos.length >= 4 && downbeatsMs.length >= 3) {
+  if (
+    SOTA.ORIGIN_PHASE_SHIFT &&
+    num >= 2 &&
+    tempos.length >= 4 &&
+    downbeatsMs.length >= 3
+  ) {
     const opsUnion = downbeatsMs.slice();
     if (opsUnion.length >= 3) {
       const margin = SOTA.ORIGIN_PHASE_MARGIN;

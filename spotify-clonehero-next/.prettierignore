@@ -16,5 +16,9 @@ public
 *.min.js
 *.min.css
 
+# Data blobs and test fixtures (not source — keep minified/as-authored)
+lib/tempo-map/beat-this-mel-fb.json
+lib/tempo-map/__tests__/fixtures
+
 # OS / editor
 .DS_Store

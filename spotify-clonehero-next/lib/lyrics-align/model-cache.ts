@@ -24,7 +24,13 @@ function assertLooksLikeModel(buffer: ArrayBuffer, minBytes: number): void {
   const head = new Uint8Array(buffer, 0, Math.min(64, buffer.byteLength));
   // Skip leading whitespace, then look for text-format markers.
   let i = 0;
-  while (i < head.length && (head[i] === 0x20 || head[i] === 0x0a || head[i] === 0x0d || head[i] === 0x09)) {
+  while (
+    i < head.length &&
+    (head[i] === 0x20 ||
+      head[i] === 0x0a ||
+      head[i] === 0x0d ||
+      head[i] === 0x09)
+  ) {
     i++;
   }
   const c = head[i];
@@ -184,9 +190,7 @@ async function downloadModel(
   try {
     assertLooksLikeModel(buffer, minBytes);
   } catch (e) {
-    throw new ModelDownloadError(
-      e instanceof Error ? e.message : String(e),
-    );
+    throw new ModelDownloadError(e instanceof Error ? e.message : String(e));
   }
   return buffer;
 }

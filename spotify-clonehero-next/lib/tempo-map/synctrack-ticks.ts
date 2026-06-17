@@ -40,7 +40,10 @@ const COLLAPSE_MS = 0.5;
  * Guarantees ms(0) ≈ tick 0 (exact for origins after the audio start) and
  * that the origin lands on a bar boundary.
  */
-export function buildSegments(sync: Synctrack, resolution: number): TempoSegment[] {
+export function buildSegments(
+  sync: Synctrack,
+  resolution: number,
+): TempoSegment[] {
   const tempos = [...sync.tempos].sort((a, b) => a.ms - b.ms);
   if (tempos.length === 0) {
     return [{tick: 0, ms: 0, bpm: 120}];
@@ -95,7 +98,11 @@ export function buildSegments(sync: Synctrack, resolution: number): TempoSegment
  * Convert wall-clock ms to a (fractional) tick under the segment map.
  * Times before the first segment extrapolate backward using its BPM.
  */
-export function msToTick(ms: number, segs: TempoSegment[], resolution: number): number {
+export function msToTick(
+  ms: number,
+  segs: TempoSegment[],
+  resolution: number,
+): number {
   let i = 0;
   for (let k = 1; k < segs.length; k++) {
     if (segs[k].ms <= ms) i = k;
@@ -108,7 +115,11 @@ export function msToTick(ms: number, segs: TempoSegment[], resolution: number): 
 }
 
 /** Convert a tick back to wall-clock ms under the segment map. */
-export function tickToMs(tick: number, segs: TempoSegment[], resolution: number): number {
+export function tickToMs(
+  tick: number,
+  segs: TempoSegment[],
+  resolution: number,
+): number {
   let i = 0;
   for (let k = 1; k < segs.length; k++) {
     if (segs[k].tick <= tick) i = k;

@@ -69,7 +69,8 @@ function getHann(N: number): Float32Array {
   // torchaudio.MelSpectrogram → torch.stft default window is
   // hann_window(N, periodic=True): 0.5*(1 - cos(2π i/N)).
   const w = new Float32Array(N);
-  for (let i = 0; i < N; i++) w[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / N));
+  for (let i = 0; i < N; i++)
+    w[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / N));
   _hann = w;
   return w;
 }
@@ -98,7 +99,16 @@ export function computeLogMel(signal: Float32Array): {
   nMels: number;
 } {
   const fb = getFilterbank();
-  const {flat: fbFlat, nMels, nBins, nFft, hopLength, winLength, logMultiplier, stftDivisor} = fb;
+  const {
+    flat: fbFlat,
+    nMels,
+    nBins,
+    nFft,
+    hopLength,
+    winLength,
+    logMultiplier,
+    stftDivisor,
+  } = fb;
 
   // center=True: pad both sides by n_fft/2. T = 1 + floor(len / hop).
   const pad = Math.floor(nFft / 2);

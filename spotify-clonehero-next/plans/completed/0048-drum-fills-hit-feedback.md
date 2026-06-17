@@ -67,6 +67,7 @@ is an **overhit**, and the engine matches the first in-window note whose pad mat
 (forward scan). YARG doesn't expose an early/late offset — it's `currentTime − note.Time`.
 
 Changes to `lib/drum-fills/midi/hitMatcher.ts` (`DEFAULT_WINDOWS`):
+
 - Set the **hit (good) boundary to ±70 ms** to match YARG's default; keep a tighter inner
   **perfect window (±30 ms)** for feedback granularity (YARG has no perfect/good split;
   this is our pedagogical addition, documented as such). Beyond 70 ms = miss.

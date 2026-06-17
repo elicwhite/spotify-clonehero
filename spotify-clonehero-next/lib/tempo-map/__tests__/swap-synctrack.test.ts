@@ -26,7 +26,12 @@ function makeChart(): ParsedChart {
         instrument: 'drums',
         difficulty: 'expert',
         starPowerSections: [
-          {tick: 480, msTime: 480 * msPerTick, length: 960, msLength: 960 * msPerTick},
+          {
+            tick: 480,
+            msTime: 480 * msPerTick,
+            length: 960,
+            msLength: 960 * msPerTick,
+          },
         ],
         rejectedStarPowerSections: [],
         soloSections: [],
@@ -159,7 +164,9 @@ describe('swapSynctrack', () => {
       ],
     };
     const out = swapSynctrack(makeChart(), noisy);
-    expect(out.tempos.map(t => Math.round(t.beatsPerMinute))).toEqual([120, 90]);
+    expect(out.tempos.map(t => Math.round(t.beatsPerMinute))).toEqual([
+      120, 90,
+    ]);
     expect(out.timeSignatures).toHaveLength(1);
   });
 
@@ -173,11 +180,20 @@ describe('swapSynctrack', () => {
     // At 120 BPM / res 480, 1 tick = 1.0416̅ ms.
     // 507 ms → fractional tick 486.7: near the beat (480).
     // 590 ms → fractional tick 566.4: near a 16th-triplet position (560).
-    const note = (ms: number) => ({tick: 0, msTime: ms, length: 0, msLength: 0, type: 0, flags: 0});
+    const note = (ms: number) => ({
+      tick: 0,
+      msTime: ms,
+      length: 0,
+      msLength: 0,
+      type: 0,
+      flags: 0,
+    });
     (chart.trackData[0].noteEventGroups as any).push([note(507)], [note(590)]);
 
     const exact = swapSynctrack(chart, steady);
-    const exactTicks = exact.trackData[0].noteEventGroups.flat().map(n => n.tick);
+    const exactTicks = exact.trackData[0].noteEventGroups
+      .flat()
+      .map(n => n.tick);
     expect(exactTicks).toContain(487);
 
     const snapped = swapSynctrack(chart, steady, {quantizeNotes: true});
@@ -193,7 +209,9 @@ describe('swapSynctrack', () => {
     // Non-note events keep their exact (unquantized) re-tick.
     const segs = buildSegments(steady, RES);
     const section = snapped.sections[0];
-    expect(Math.abs(tickToMs(section.tick, segs, RES) - chart.sections[0].msTime)).toBeLessThan(3);
+    expect(
+      Math.abs(tickToMs(section.tick, segs, RES) - chart.sections[0].msTime),
+    ).toBeLessThan(3);
   });
 
   test('clamps pre-origin events to tick 0', () => {

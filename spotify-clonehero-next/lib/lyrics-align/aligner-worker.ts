@@ -284,8 +284,7 @@ async function runChunked(
     const fwd = await runForward(fwdInput);
     const C = fwd.logProbs.length / fwd.T;
     const T = Math.min(fwd.T, realFrames);
-    const logProbs =
-      T === fwd.T ? fwd.logProbs : fwd.logProbs.slice(0, T * C);
+    const logProbs = T === fwd.T ? fwd.logProbs : fwd.logProbs.slice(0, T * C);
     chunks.push({sampleStart: start, logProbs, T});
     if (end >= audio.length) break;
     start += STRIDE_SAMPLES;

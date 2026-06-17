@@ -5,13 +5,18 @@ import {
 } from '../drum-onset';
 
 /** Synthesize clicks (short bursts of noise-free sine) at the given times. */
-function clickTrack(sr: number, durationSec: number, clickTimesSec: number[]): Float32Array {
+function clickTrack(
+  sr: number,
+  durationSec: number,
+  clickTimesSec: number[],
+): Float32Array {
   const pcm = new Float32Array(Math.floor(sr * durationSec));
   for (const t of clickTimesSec) {
     const start = Math.floor(t * sr);
     for (let i = 0; i < Math.floor(sr * 0.01); i++) {
       if (start + i < pcm.length) {
-        pcm[start + i] = Math.sin((2 * Math.PI * 1000 * i) / sr) * Math.exp(-i / (sr * 0.003));
+        pcm[start + i] =
+          Math.sin((2 * Math.PI * 1000 * i) / sr) * Math.exp(-i / (sr * 0.003));
       }
     }
   }

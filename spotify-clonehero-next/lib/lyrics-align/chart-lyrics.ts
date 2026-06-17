@@ -63,7 +63,9 @@ export function alignedSyllablesToChartLyrics(
 
   for (let p = 0; p < phraseRanges.length; p++) {
     const backwardGap =
-      p === 0 ? firstOnsetMs[p] : Math.max(0, firstOnsetMs[p] - lastEndMs[p - 1]);
+      p === 0
+        ? firstOnsetMs[p]
+        : Math.max(0, firstOnsetMs[p] - lastEndMs[p - 1]);
     const forwardGap =
       p + 1 < phraseRanges.length
         ? Math.max(0, firstOnsetMs[p + 1] - lastEndMs[p])

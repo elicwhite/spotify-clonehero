@@ -13,25 +13,24 @@ export default function PrivacyPage() {
 
       <p>
         Music Charts Tools is a browser-based set of utilities for working with
-        Clone Hero charts. Most of what the tools do — scanning your local
-        songs folder, viewing sheet music, transcribing drums, aligning
-        lyrics — runs entirely in your browser. Files you load never leave
-        your device.
+        Clone Hero charts. Most of what the tools do — scanning your local songs
+        folder, viewing sheet music, transcribing drums, aligning lyrics — runs
+        entirely in your browser. Files you load never leave your device.
       </p>
 
       <h2>Where Google Analytics runs</h2>
 
       <p>
         We use Google Analytics 4 (measurement ID <code>G-LEE7EDJH14</code>)
-        only for visitors <strong>outside</strong>{' '}
-        the EEA, UK, and Switzerland. The classification happens at the edge: our proxy reads
-        Vercel&apos;s <code>x-vercel-ip-country</code> header on the first
-        request and writes a <code>gaRegion=eea|other</code> cookie. For
-        visitors classified as <code>eea</code>, the page does not load{' '}
-        <code>gtag.js</code> or any other analytics script — there is no
-        analytics processing happening, so there is nothing to consent to.
-        The IP itself is not stored or sent to Google Analytics; only the
-        coarse country label is used to gate the script.
+        only for visitors <strong>outside</strong> the EEA, UK, and Switzerland.
+        The classification happens at the edge: our proxy reads Vercel&apos;s{' '}
+        <code>x-vercel-ip-country</code> header on the first request and writes
+        a <code>gaRegion=eea|other</code> cookie. For visitors classified as{' '}
+        <code>eea</code>, the page does not load <code>gtag.js</code> or any
+        other analytics script — there is no analytics processing happening, so
+        there is nothing to consent to. The IP itself is not stored or sent to
+        Google Analytics; only the coarse country label is used to gate the
+        script.
       </p>
 
       <h2>What GA receives (for tracked visitors)</h2>
@@ -40,15 +39,15 @@ export default function PrivacyPage() {
         <li>Standard pageviews (URL path, referrer, browser, device type).</li>
         <li>Approximate location derived from IP at country level.</li>
         <li>
-          Custom events for feature usage and conversion funnels — e.g.
-          &quot;a chart was downloaded from the Spotify page&quot;, &quot;a
-          sheet-music viewer was opened&quot;, &quot;a lyric was manually
-          moved before export&quot;. The full list lives in{' '}
+          Custom events for feature usage and conversion funnels — e.g. &quot;a
+          chart was downloaded from the Spotify page&quot;, &quot;a sheet-music
+          viewer was opened&quot;, &quot;a lyric was manually moved before
+          export&quot;. The full list lives in{' '}
           <code>lib/analytics/track.ts</code> in the source repo.
         </li>
         <li>
-          For signed-in users, your Supabase user ID (a UUID) so a session
-          can be stitched across devices. No email or other PII is sent.
+          For signed-in users, your Supabase user ID (a UUID) so a session can
+          be stitched across devices. No email or other PII is sent.
         </li>
       </ul>
 
@@ -67,17 +66,16 @@ export default function PrivacyPage() {
       <h2>Retention</h2>
 
       <p>
-        Google Analytics retains event-level data for 14 months by default;
-        we have not changed that retention. Aggregated reports remain
-        available indefinitely.
+        Google Analytics retains event-level data for 14 months by default; we
+        have not changed that retention. Aggregated reports remain available
+        indefinitely.
       </p>
 
       <h2>Opting out (visitors outside the EEA/UK/CH)</h2>
 
       <p>
-        Visitors classified as <code>other</code> (i.e. outside EEA/UK/CH)
-        who want to opt out of Google Analytics can use any of the standard
-        tools:
+        Visitors classified as <code>other</code> (i.e. outside EEA/UK/CH) who
+        want to opt out of Google Analytics can use any of the standard tools:
       </p>
 
       <ul>
@@ -92,9 +90,9 @@ export default function PrivacyPage() {
           .
         </li>
         <li>
-          Browser tracking-protection features: uBlock Origin,
-          Brave&apos;s shields, Firefox&apos;s Enhanced Tracking Protection,
-          Safari&apos;s Intelligent Tracking Prevention. All of these block{' '}
+          Browser tracking-protection features: uBlock Origin, Brave&apos;s
+          shields, Firefox&apos;s Enhanced Tracking Protection, Safari&apos;s
+          Intelligent Tracking Prevention. All of these block{' '}
           <code>gtag.js</code> by default or on demand.
         </li>
       </ul>

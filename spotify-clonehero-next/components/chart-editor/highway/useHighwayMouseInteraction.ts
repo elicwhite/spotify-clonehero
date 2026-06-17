@@ -506,12 +506,7 @@ export function useHighwayMouseInteraction(
       // other entities mid-drag.
       if (!markerDrag && !isDragging) {
         let nextHover: {
-          kind:
-            | 'note'
-            | 'section'
-            | 'lyric'
-            | 'phrase-start'
-            | 'phrase-end';
+          kind: 'note' | 'section' | 'lyric' | 'phrase-start' | 'phrase-end';
           id: string;
         } | null = null;
         if (hit?.type === 'note' && capabilities.hoverable.has('note')) {

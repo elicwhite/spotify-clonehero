@@ -22,7 +22,11 @@ const BORDER_SIZE = 6; // frames discarded at each chunk edge
  */
 function splitPiece(mel: Float32Array, T: number, nMels = 128) {
   const starts: number[] = [];
-  for (let s = -BORDER_SIZE; s < T - BORDER_SIZE; s += CHUNK_SIZE - 2 * BORDER_SIZE) {
+  for (
+    let s = -BORDER_SIZE;
+    s < T - BORDER_SIZE;
+    s += CHUNK_SIZE - 2 * BORDER_SIZE
+  ) {
     starts.push(s);
   }
   if (T > CHUNK_SIZE - 2 * BORDER_SIZE) {

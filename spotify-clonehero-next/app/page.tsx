@@ -117,9 +117,9 @@ export default function Home() {
               </Badge>
             </CardTitle>
             <CardDescription>
-              Create, modify, and convert Clone Hero <code>.sng</code> files. Build a
-              package from a folder or files, inspect an existing one, add or
-              remove files, and convert to <code>.zip</code>.
+              Create, modify, and convert Clone Hero <code>.sng</code> files.
+              Build a package from a folder or files, inspect an existing one,
+              add or remove files, and convert to <code>.zip</code>.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 py-4">

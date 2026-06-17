@@ -26,6 +26,7 @@ audio (decoded at native rate, mixed if multiple stems)
 ```
 
 Key fidelity decisions inherited from the POC (do not relitigate):
+
 - libsoxr WASM for all resampling (Web Audio's resampler is too lossy).
 - Beat This! on the **wasm** EP (WebGPU EP silently runs fp16 and drifts logits).
 - bs-roformer on WebGPU fp16; decode audio at its native rate (no 44.1k
@@ -77,6 +78,7 @@ DropZone), `components/ProcessingView` (step list + per-step ETA),
 ## Progress UI
 
 ProcessingView steps, plain language:
+
 1. "Downloading AI models" (first run only; streaming % + ETA)
 2. "Isolating the drums" (segment progress + ETA from separateStems)
 3. "Finding the beat" (Beat This! chunk progress, full mix then drums)

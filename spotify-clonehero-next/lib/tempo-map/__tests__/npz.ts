@@ -30,27 +30,40 @@ export function parseNpz(arrayBuffer: ArrayBuffer): Record<string, NpyArray> {
   const out: Record<string, NpyArray> = {};
   let p = cdOffset;
   for (let e = 0; e < cdEntries; e++) {
-    if (view.getUint32(p, true) !== 0x02014b50) throw new Error('npz: bad CD sig');
+    if (view.getUint32(p, true) !== 0x02014b50)
+      throw new Error('npz: bad CD sig');
     const compMethod = view.getUint16(p + 10, true);
     const compSize = view.getUint32(p + 20, true);
     const fnLen = view.getUint16(p + 28, true);
     const extraLen = view.getUint16(p + 30, true);
     const commentLen = view.getUint16(p + 32, true);
     const localOffset = view.getUint32(p + 42, true);
-    const fname = new TextDecoder().decode(new Uint8Array(arrayBuffer, p + 46, fnLen));
+    const fname = new TextDecoder().decode(
+      new Uint8Array(arrayBuffer, p + 46, fnLen),
+    );
     if (compMethod !== 0) {
-      throw new Error(`npz: ${fname} compressed; savez (not savez_compressed) required`);
+      throw new Error(
+        `npz: ${fname} compressed; savez (not savez_compressed) required`,
+      );
     }
     const lhFnLen = view.getUint16(localOffset + 26, true);
     const lhExtraLen = view.getUint16(localOffset + 28, true);
     const dataStart = localOffset + 30 + lhFnLen + lhExtraLen;
-    out[fname.replace(/\.npy$/, '')] = parseNpy(arrayBuffer, dataStart, compSize);
+    out[fname.replace(/\.npy$/, '')] = parseNpy(
+      arrayBuffer,
+      dataStart,
+      compSize,
+    );
     p += 46 + fnLen + extraLen + commentLen;
   }
   return out;
 }
 
-function parseNpy(arrayBuffer: ArrayBuffer, offset: number, _length: number): NpyArray {
+function parseNpy(
+  arrayBuffer: ArrayBuffer,
+  offset: number,
+  _length: number,
+): NpyArray {
   const v = new DataView(arrayBuffer);
   if (v.getUint8(offset) !== 0x93) throw new Error('npy: bad magic');
   const major = v.getUint8(offset + 6);

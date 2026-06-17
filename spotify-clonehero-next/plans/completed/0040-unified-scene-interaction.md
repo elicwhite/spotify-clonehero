@@ -27,7 +27,7 @@ Beyond the marker bug, the inline `switch (hit.type)` in `useHighwayMouseInterac
 
 ## Non-goals
 
-- **Does not unify drag implementations.** Marker drag still goes through `useMarkerDrag`; note drag still goes through `MoveEntitiesCommand`. The affordance registry only declares *whether* a kind is interactive — it does not implement drag.
+- **Does not unify drag implementations.** Marker drag still goes through `useMarkerDrag`; note drag still goes through `MoveEntitiesCommand`. The affordance registry only declares _whether_ a kind is interactive — it does not implement drag.
 - **Does not introduce `EntityRef`.** Plan 0037 commits to a structured `{kind, scope, key}` ref. Introducing a third shape (`{kind, key, tick}`) here would force 0037 to re-change it. Instead, keep `HitResult` in its current discriminated-union form and add `kindOf(hit)` / `keyOf(hit)` helpers that 0037 can swap out for the structured ref later.
 - **Does not change the selection store key format.** Selection state continues using its current opaque per-kind ids (`tick:type`, `tick`, `lyricId`, etc.). A single `reconcilerKeyFor(kind, id, partName?)` utility translates between selection ids and reconciler keys.
 - **Does not unify `EditorCapabilities` and `EditorProfile`.** That's plan 0037. For now, `EditorCapabilities` continues to filter which kinds are exposed; `EntityAffordance` declares per-kind interactivity; the two compose at lookup time (`editor exposes kind && affordance.X`).
@@ -60,6 +60,7 @@ The existing `setHoverChangeCallback` / `setSelectionChangeCallback` API gets re
 - **`updateWindow` (group entry)**: when a group enters the window, reapply current hover/selection state via the renderer hooks. This is the third dispatch site (alongside `setHoveredKey` and `setSelectedKeys`); easy to forget.
 
 **`dataEqual` invariants** (audit before task 1):
+
 - No renderer caches `msTime` outside `group.position.y`. `MarkerRenderer.create` doesn't read msTime ✓. `NoteRenderer.create` reads `data.msLength` (in element data, not msTime) ✓.
 - A renderer that adds new msTime-derived state must either (a) recompute it in `updateWindow` or (b) expose its own `setMsTime(group, ms)` hook — same pattern as hover/select.
 - **`sortedElements` is not stable across emits.** Re-sorted on every `setElements`. Consumers (`updateWindow`'s binary search, `getElements()`) tolerate sort changes mid-frame and must not cache indices across emits. Document this so future refactors don't introduce a hidden dependency.
@@ -78,7 +79,7 @@ sprite.userData.textures = {
   selected: () => createMarkerTexture(text, color, true, false),
   selectedHover: () => createMarkerTexture(text, color, true, true),
 };
-sprite.userData.state = { hovered: false, selected: false };
+sprite.userData.state = {hovered: false, selected: false};
 ```
 
 `setHovered(group, on)` and `setSelected(group, on)` mutate `userData.state`, resolve the getter for the current `(hovered, selected)` quad on demand (replacing the entry with the cached texture once baked), set `material.map = currentTexture`, and `material.needsUpdate = true`. Steady-state memory matches today; a marker that's never hovered or selected only holds the rest texture. `recycle` does nothing special: the getter and any baked entries on `userData` go to GC with the group; the shared module-level `textureCache` retains its entries (existing pre-existing memory behavior).
@@ -99,13 +100,13 @@ Drop `isHovered` and `isSelected` from `MarkerElementData` entirely. `MarkerElem
 
 The selection store is `Map<EntityKind, Set<string>>` keyed by per-kind opaque ids:
 
-| kind          | selection-store key (today)         | reconciler key (today)              |
-| ------------- | ----------------------------------- | ----------------------------------- |
-| note          | `2880:yellowDrum`                   | `note:2880:yellowDrum`              |
-| section       | `2880`                              | `section:2880`                      |
-| lyric         | `2880:harm1`                        | `lyric:harm1:2880`                  |
-| phrase-start  | `phraseStartId(2880, 'harm1')`      | `phrase-start:harm1:2880`           |
-| phrase-end    | `phraseEndId(3360, 'harm1')`        | `phrase-end:harm1:3360`             |
+| kind         | selection-store key (today)    | reconciler key (today)    |
+| ------------ | ------------------------------ | ------------------------- |
+| note         | `2880:yellowDrum`              | `note:2880:yellowDrum`    |
+| section      | `2880`                         | `section:2880`            |
+| lyric        | `2880:harm1`                   | `lyric:harm1:2880`        |
+| phrase-start | `phraseStartId(2880, 'harm1')` | `phrase-start:harm1:2880` |
+| phrase-end   | `phraseEndId(3360, 'harm1')`   | `phrase-end:harm1:3360`   |
 
 These are not the same string. Reading a `Set<string>` from selection state and passing it directly to `reconciler.setSelectedKeys` would highlight nothing for notes (and silently work for sections by accident).
 
@@ -127,7 +128,8 @@ useEffect(() => {
 useEffect(() => {
   const reconcilerKeys = new Set<string>();
   for (const [kind, ids] of selection) {
-    for (const id of ids) reconcilerKeys.add(reconcilerKeyFor(kind, id, partName));
+    for (const id of ids)
+      reconcilerKeys.add(reconcilerKeyFor(kind, id, partName));
   }
   reconciler.setSelectedKeys(reconcilerKeys);
 }, [selection, partName]);
@@ -140,6 +142,7 @@ Add a unit test that exercises the round-trip per kind, including the part-names
 ### 6. Hovered-key state lives in the editor reducer
 
 Today there are two places that hold "what's hovered":
+
 - `hoveredMarkerKey` in `useHighwayMouseInteraction`'s local state.
 - `hoveredNoteId` inside `NoteRenderer`'s instance state.
 
@@ -164,18 +167,53 @@ interface EntityAffordance {
 }
 
 const AFFORDANCES: Record<EntityKind, EntityAffordance> = {
-  note:          { kind: 'note',          hoverable: true, selectable: true, deletable: true, inlineEditable: false, laneAxis: true  },
-  section:       { kind: 'section',       hoverable: true, selectable: true, deletable: true, inlineEditable: true,  laneAxis: false },
-  lyric:         { kind: 'lyric',         hoverable: true, selectable: true, deletable: true, inlineEditable: true,  laneAxis: false },
-  'phrase-start':{ kind: 'phrase-start',  hoverable: true, selectable: true, deletable: true, inlineEditable: false, laneAxis: false },
-  'phrase-end':  { kind: 'phrase-end',    hoverable: true, selectable: true, deletable: true, inlineEditable: false, laneAxis: false },
+  note: {
+    kind: 'note',
+    hoverable: true,
+    selectable: true,
+    deletable: true,
+    inlineEditable: false,
+    laneAxis: true,
+  },
+  section: {
+    kind: 'section',
+    hoverable: true,
+    selectable: true,
+    deletable: true,
+    inlineEditable: true,
+    laneAxis: false,
+  },
+  lyric: {
+    kind: 'lyric',
+    hoverable: true,
+    selectable: true,
+    deletable: true,
+    inlineEditable: true,
+    laneAxis: false,
+  },
+  'phrase-start': {
+    kind: 'phrase-start',
+    hoverable: true,
+    selectable: true,
+    deletable: true,
+    inlineEditable: false,
+    laneAxis: false,
+  },
+  'phrase-end': {
+    kind: 'phrase-end',
+    hoverable: true,
+    selectable: true,
+    deletable: true,
+    inlineEditable: false,
+    laneAxis: false,
+  },
 };
 ```
 
 **No `onDoubleClick`, no `onDelete`, no `draggable: 'whole' | 'endpoint-*'` enum, no `endpointAlias`.** Reasons:
 
 - `onDoubleClick`/`onDelete` mix declarative metadata with controller behavior. They'd force `affordances.ts` to import commands, popover state types, and dispatch — making the registry a controller, not data. Plan 0037's `EntityAdapter` is the right home for behavior; the affordance only carries metadata.
-- `draggable` enum was a workaround for "is this entity an endpoint of a length-bearing object." That's a property of the entity *kind*, not its drag affordance. Plan 0037's structured ref handles paired entities cleanly; encoding the same workaround here would just need to be re-changed.
+- `draggable` enum was a workaround for "is this entity an endpoint of a length-bearing object." That's a property of the entity _kind_, not its drag affordance. Plan 0037's structured ref handles paired entities cleanly; encoding the same workaround here would just need to be re-changed.
 - `endpointAlias` would mark `phrase-end` as the partner of `phrase-start`, but no code in this plan consumes it. Reintroduce it in plan 0034 alongside the consumer (e.g. a `getEndpointSibling(kind)` util used by drag clamping for length-bearing entities).
 - `EditorCapabilities.draggable` already exists and is profile-specific; affordances don't need to duplicate it.
 - Tools (`SelectMoveTool`, `EraseTool`, `BPMTool`, etc.) own the actual handlers. Plan 0038 envisions exactly this. A double-click on a section in `SelectMoveTool` consults `affordances[section].inlineEditable`, then opens the popover via `ctx.openPopover(...)`. Different tool → different behavior on the same affordance.
@@ -208,7 +246,7 @@ onMouseDown(e):
 
 `useChartElements` still injects new `msTime` for the dragged key while drag is in progress. Because `dataEqual` no longer compares `msTime`, the reconciler treats this as a no-op data change; `updateWindow` repositions the group via `group.position.y`. The bright-on-drag visual flows from `setHoveredKey(draggedKey)` (drag begin dispatches `SET_HOVER` to the dragged entity).
 
-**Invariant:** during drag, the reconciler key is stable. `markerDragReconcilerKey(kind, originalTick, partName)` is computed once at drag begin from the pre-move tick and does not change as `currentTick` updates. Element data may change msTime; the key does not. After commit, `MoveEntitiesCommand` produces a new chart and `useChartElements` re-emits with the *new* tick, which generates a *new* reconciler key — the old key disappears, the new key appears. Hovered-key from before the commit points at the now-removed old key; the next mousemove resolves it to the new key.
+**Invariant:** during drag, the reconciler key is stable. `markerDragReconcilerKey(kind, originalTick, partName)` is computed once at drag begin from the pre-move tick and does not change as `currentTick` updates. Element data may change msTime; the key does not. After commit, `MoveEntitiesCommand` produces a new chart and `useChartElements` re-emits with the _new_ tick, which generates a _new_ reconciler key — the old key disappears, the new key appears. Hovered-key from before the commit points at the now-removed old key; the next mousemove resolves it to the new key.
 
 `useChartElements`'s drag-msTime-injection is independent of hover. The drag-driven "looks hovered" must come entirely from `setHoveredKey(draggedKey)` (per §6, dispatched from drag begin into the editor reducer). Drop `isHovered: isHover || isDrag` from the data emission entirely.
 
@@ -217,6 +255,7 @@ onMouseDown(e):
 ### 10. Multi-select hover semantics — composed visuals
 
 `hoveredKey` is a single key — the cursor-anchored entity. Selection is a set. During multi-note drag:
+
 - The cursor-anchored note is hovered AND selected → renders with both visuals composited.
 - The other selected notes are selected but not hovered → render with selection only.
 
@@ -226,8 +265,7 @@ onMouseDown(e):
 
 ```ts
 const opacity =
-  (group.userData.selected ? 0.35 : 0) +
-  (group.userData.hovered  ? 0.25 : 0);
+  (group.userData.selected ? 0.35 : 0) + (group.userData.hovered ? 0.25 : 0);
 mesh.visible = opacity > 0;
 mesh.material.opacity = Math.min(opacity, 0.6);
 ```
@@ -242,7 +280,7 @@ Box-select drag is not affected: it never touches the reconciler hover/select ch
 
 Reversible; no editor-side contract changes; each step is testable in isolation.
 
-1. **`SceneReconciler.dataEqual` ignores `msTime`.** Add a regression test: drag-only msTime change does not call `recycle`. Audit `MarkerRenderer.create` and `NoteRenderer.create` for msTime use; add invariant comments where needed. Add a regression test for the *win* on tempo edits: changing a tempo that shifts msTime for 50 downstream notes results in 0 `recycle` calls (only repositions).
+1. **`SceneReconciler.dataEqual` ignores `msTime`.** Add a regression test: drag-only msTime change does not call `recycle`. Audit `MarkerRenderer.create` and `NoteRenderer.create` for msTime use; add invariant comments where needed. Add a regression test for the _win_ on tempo edits: changing a tempo that shifts msTime for 50 downstream notes results in 0 `recycle` calls (only repositions).
 
 2. **Rewrite `SceneReconciler.test.ts:605-707`** to drop the callback API tests in favor of renderer-hook dispatch tests. This is the precondition for removing the callback API in step 3 — the existing tests are the only consumers.
 
@@ -313,7 +351,7 @@ Resume playback briefly to confirm counter increments only as elements legitimat
 
 - **`reconcilerKey.test.ts`**
   - Round-trip per kind: `(kind, id, partName?)` → reconciler key matches what the renderer would use.
-  - Note path ignores `partName`; lyric/phrase-* paths require it.
+  - Note path ignores `partName`; lyric/phrase-\* paths require it.
   - **Consumer-side test:** given a `Map<EntityKind, Set<string>>` with one note, one section, one lyric (harm1), one phrase-start, one phrase-end — translating produces the expected `Set<string>` of reconciler keys.
 
 - **`affordances.test.ts`**

@@ -19,14 +19,23 @@ import * as ort from 'onnxruntime-web';
 import {getCachedModel} from '@/lib/lyrics-align/model-cache';
 import {resampleSoxr, initSoxr} from './resampler-soxr';
 import {separateDrumStem} from './stem-separation';
-import {computeLogMel, resampleToBeatThis, BEAT_THIS_SAMPLE_RATE} from './beat-this-mel';
+import {
+  computeLogMel,
+  resampleToBeatThis,
+  BEAT_THIS_SAMPLE_RATE,
+} from './beat-this-mel';
 import {runBeatThisOnnx} from './beat-this-onnx';
 import {runPostprocessor} from './beat-this-pp';
 import {computeDrumOnsetOffsetMs} from './drum-onset';
 import {beatsToSynctrack} from './converter';
-import type {PipelineProgress, PipelineRunRequest, PipelineWorkerMessage} from './types';
+import type {
+  PipelineProgress,
+  PipelineRunRequest,
+  PipelineWorkerMessage,
+} from './types';
 
-const ORT_WASM_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
+const ORT_WASM_CDN =
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
 
 const ROFORMER_MODEL_URL =
   'https://huggingface.co/elicwhite/bs-roformer-sw-6stem-onnx/resolve/main/bs_roformer_sw_6stem_fp16.onnx';
@@ -58,7 +67,11 @@ function downloadProgressAdapter(stage: PipelineProgress['stage']) {
   return (msg: string) => {
     const m = msg.match(/(\d+)\/(\d+) MB \((\d+)%\)/);
     if (m) {
-      progress({stage, percent: parseInt(m[3], 10) / 100, detail: `${m[1]} / ${m[2]} MB`});
+      progress({
+        stage,
+        percent: parseInt(m[3], 10) / 100,
+        detail: `${m[1]} / ${m[2]} MB`,
+      });
     } else {
       progress({stage, detail: msg});
     }
@@ -128,7 +141,11 @@ async function run(req: PipelineRunRequest) {
     const cached = await loadStemFromCache(cacheKey);
     if (cached && cached.length === N) {
       drumStem = cached;
-      progress({stage: 'separate', percent: 1, detail: 'Reused drums from a previous run'});
+      progress({
+        stage: 'separate',
+        percent: 1,
+        detail: 'Reused drums from a previous run',
+      });
     }
   }
 
@@ -143,10 +160,13 @@ async function run(req: PipelineRunRequest) {
     );
     progress({stage: 'download-separation-model', percent: 1});
 
-    const roformerSession = await ort.InferenceSession.create(new Uint8Array(roformerBytes), {
-      executionProviders: ['webgpu', 'wasm'],
-      graphOptimizationLevel: 'disabled',
-    });
+    const roformerSession = await ort.InferenceSession.create(
+      new Uint8Array(roformerBytes),
+      {
+        executionProviders: ['webgpu', 'wasm'],
+        graphOptimizationLevel: 'disabled',
+      },
+    );
 
     progress({stage: 'separate', percent: 0});
     drumStem = await separateDrumStem({
@@ -176,10 +196,13 @@ async function run(req: PipelineRunRequest) {
     'beat tracker',
   );
   progress({stage: 'download-beat-model', percent: 1});
-  const beatThisSession = await ort.InferenceSession.create(new Uint8Array(beatThisBytes), {
-    executionProviders: ['wasm'],
-    graphOptimizationLevel: 'all',
-  });
+  const beatThisSession = await ort.InferenceSession.create(
+    new Uint8Array(beatThisBytes),
+    {
+      executionProviders: ['wasm'],
+      graphOptimizationLevel: 'all',
+    },
+  );
 
   // One session, two sequential calls: full mix, then drum stem.
   const runBeatThisOn = async (
@@ -206,11 +229,19 @@ async function run(req: PipelineRunRequest) {
   progress({stage: 'beats-fullmix', percent: 0});
   const fullMixMono = new Float32Array(N);
   for (let i = 0; i < N; i++) fullMixMono[i] = (left[i] + right[i]) * 0.5;
-  const fm = await runBeatThisOn(fullMixMono, SEPARATION_SAMPLE_RATE, 'beats-fullmix');
+  const fm = await runBeatThisOn(
+    fullMixMono,
+    SEPARATION_SAMPLE_RATE,
+    'beats-fullmix',
+  );
 
   // ---- S3: Beat This! on the drum stem ----
   progress({stage: 'beats-drums', percent: 0});
-  const ds = await runBeatThisOn(drumStem, SEPARATION_SAMPLE_RATE, 'beats-drums');
+  const ds = await runBeatThisOn(
+    drumStem,
+    SEPARATION_SAMPLE_RATE,
+    'beats-drums',
+  );
   await beatThisSession.release();
 
   // ---- S2b: drum-onset offset ----
@@ -263,7 +294,10 @@ self.addEventListener('message', (e: MessageEvent) => {
   const msg = e.data as PipelineRunRequest;
   if (msg.type === 'run') {
     run(msg).catch(err => {
-      post({type: 'error', message: err instanceof Error ? err.message : String(err)});
+      post({
+        type: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      });
     });
   }
 });

@@ -112,10 +112,7 @@ describe('alignedSyllablesToChartLyrics', () => {
     //   postroll cap = 100*0.25 = 25ms
     //   55 + 25 = 80ms <= 100ms gap, so phrases stay non-overlapping.
     const result = alignedSyllablesToChartLyrics(
-      [
-        syl('a', 500, false, true, 700),
-        syl('b', 800, false, true, 1000),
-      ],
+      [syl('a', 500, false, true, 700), syl('b', 800, false, true, 1000)],
       TEMPOS,
       RES,
     );

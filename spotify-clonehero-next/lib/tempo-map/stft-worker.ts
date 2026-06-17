@@ -20,7 +20,8 @@ import {fftRadix2InPlace} from './fft-radix2';
 
 function makeHannWindow(n: number): Float32Array {
   const w = new Float32Array(n);
-  for (let i = 0; i < n; i++) w[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / n));
+  for (let i = 0; i < n; i++)
+    w[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / n));
   return w;
 }
 
@@ -36,7 +37,11 @@ function reflectIndex(i: number, len: number): number {
 // ----- Forward STFT (matches torch.stft center=True, normalized=False, hann)
 function stftStereo(
   planarAudio: Float32Array,
-  {nFft, hopLength, winLength}: {nFft: number; hopLength: number; winLength: number},
+  {
+    nFft,
+    hopLength,
+    winLength,
+  }: {nFft: number; hopLength: number; winLength: number},
 ) {
   const numSamples = planarAudio.length / 2;
   const numChannels = 2;
@@ -70,9 +75,19 @@ function stftStereo(
 // ----- iSTFT cache: window·invN and 1/windowSum precomputed per signature
 const cache = new Map<
   string,
-  {windowInvN: Float32Array; invWindowSum: Float32Array; paddedLen: number; pad: number}
+  {
+    windowInvN: Float32Array;
+    invWindowSum: Float32Array;
+    paddedLen: number;
+    pad: number;
+  }
 >();
-function getCached(nFft: number, T: number, hopLength: number, winLength: number) {
+function getCached(
+  nFft: number,
+  T: number,
+  hopLength: number,
+  winLength: number,
+) {
   const key = `${nFft}-${T}-${hopLength}-${winLength}`;
   let entry = cache.get(key);
   if (entry) return entry;
@@ -82,7 +97,8 @@ function getCached(nFft: number, T: number, hopLength: number, winLength: number
   const windowSum = new Float32Array(paddedLen);
   for (let t = 0; t < T; t++) {
     const frameStart = t * hopLength;
-    for (let i = 0; i < nFft; i++) windowSum[frameStart + i] += window[i] * window[i];
+    for (let i = 0; i < nFft; i++)
+      windowSum[frameStart + i] += window[i] * window[i];
   }
   const invN = 1 / nFft;
   const windowInvN = new Float32Array(nFft);
@@ -98,11 +114,27 @@ function getCached(nFft: number, T: number, hopLength: number, winLength: number
 
 // ----- Batched iSTFT for all (stem, channel) slices in one call -----
 function istftBatch(msg: any) {
-  const {realBuf, imagBuf, numStems, numChannels, F, T, length, nFft, hopLength, winLength} = msg;
+  const {
+    realBuf,
+    imagBuf,
+    numStems,
+    numChannels,
+    F,
+    T,
+    length,
+    nFft,
+    hopLength,
+    winLength,
+  } = msg;
 
   const real = new Float32Array(realBuf);
   const imag = new Float32Array(imagBuf);
-  const {windowInvN, invWindowSum, paddedLen, pad} = getCached(nFft, T, hopLength, winLength);
+  const {windowInvN, invWindowSum, paddedLen, pad} = getCached(
+    nFft,
+    T,
+    hopLength,
+    winLength,
+  );
 
   const audio = new Float32Array(numStems * numChannels * length);
   const fftBuf = new Float32Array(nFft * 2);

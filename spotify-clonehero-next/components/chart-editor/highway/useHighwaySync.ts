@@ -163,8 +163,10 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
     const vocals = chartDoc.parsedChart.vocalTracks?.parts?.[partName];
     const lyrics = vocals?.notePhrases.flatMap(p => p.lyrics) ?? [];
     const phrases =
-      vocals?.notePhrases.map(p => ({msTime: p.msTime, msLength: p.msLength})) ??
-      [];
+      vocals?.notePhrases.map(p => ({
+        msTime: p.msTime,
+        msLength: p.msLength,
+      })) ?? [];
     handle.setLyricsData(lyrics, phrases);
   }, [rendererHandleRef, rendererVersion, chartDoc, partName]);
 

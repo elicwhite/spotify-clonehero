@@ -23,12 +23,7 @@
  *     done check (looks correct in both modes).
  */
 
-import {
-  AlertCircle,
-  CheckCircle2,
-  Circle,
-  Loader2,
-} from 'lucide-react';
+import {AlertCircle, CheckCircle2, Circle, Loader2} from 'lucide-react';
 import {
   Card,
   CardContent,

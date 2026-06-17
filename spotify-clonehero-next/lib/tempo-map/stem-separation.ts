@@ -38,7 +38,10 @@ export interface SeparationProgress {
 function spawnWorkerPool(n: number) {
   const workers = Array.from(
     {length: n},
-    () => new Worker(new URL('./stft-worker.ts', import.meta.url), {type: 'module'}),
+    () =>
+      new Worker(new URL('./stft-worker.ts', import.meta.url), {
+        type: 'module',
+      }),
   );
   const pending = new Map<number, (data: any) => void>();
   let nextId = 1;
@@ -124,7 +127,12 @@ export async function separateDrumStem({
       return pool.send(
         w,
         'stft',
-        {planarBuf: planarTA.buffer, nFft: N_FFT, hopLength: HOP_LENGTH, winLength: WIN_LENGTH},
+        {
+          planarBuf: planarTA.buffer,
+          nFft: N_FFT,
+          hopLength: HOP_LENGTH,
+          winLength: WIN_LENGTH,
+        },
         [planarTA.buffer],
       );
     };
@@ -140,10 +148,16 @@ export async function separateDrumStem({
     ) => {
       const perStemSize = NUM_CHANNELS * F * T;
       const realSub = realArr
-        .subarray(DRUM_STEM_INDEX * perStemSize, (DRUM_STEM_INDEX + 1) * perStemSize)
+        .subarray(
+          DRUM_STEM_INDEX * perStemSize,
+          (DRUM_STEM_INDEX + 1) * perStemSize,
+        )
         .slice();
       const imagSub = imagArr
-        .subarray(DRUM_STEM_INDEX * perStemSize, (DRUM_STEM_INDEX + 1) * perStemSize)
+        .subarray(
+          DRUM_STEM_INDEX * perStemSize,
+          (DRUM_STEM_INDEX + 1) * perStemSize,
+        )
         .slice();
       return pool
         .send(
@@ -206,7 +220,11 @@ export async function separateDrumStem({
       const stft = await stftPromise;
       if (seg + 1 < numSegments) {
         const {buf, start: ns, len: nl} = buildPlanarChunk(seg + 1);
-        stftPromise = postStft(buf).then(r => ({...r, segStart: ns, segLen: nl}));
+        stftPromise = postStft(buf).then(r => ({
+          ...r,
+          segStart: ns,
+          segLen: nl,
+        }));
       }
 
       const tIn1 = new ort.Tensor('float32', new Float32Array(stft.realBuf), [
@@ -224,7 +242,8 @@ export async function separateDrumStem({
       const tInfer = performance.now();
       const out = await session.run({spec_real: tIn1, spec_imag: tIn2});
       const inferMs = performance.now() - tInfer;
-      avgInferMs = avgInferMs === 0 ? inferMs : avgInferMs * 0.8 + inferMs * 0.2;
+      avgInferMs =
+        avgInferMs === 0 ? inferMs : avgInferMs * 0.8 + inferMs * 0.2;
 
       // .data is a view into ORT-owned memory; .slice() gives an owned buffer
       // we can transfer to the worker without invalidating ORT's pointer.

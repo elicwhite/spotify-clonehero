@@ -4,7 +4,11 @@
  * WASM/GPU memory.
  */
 
-import type {PipelineProgress, PipelineResult, PipelineWorkerMessage} from './types';
+import type {
+  PipelineProgress,
+  PipelineResult,
+  PipelineWorkerMessage,
+} from './types';
 
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', bytes);
@@ -21,7 +25,9 @@ export async function runTempoPipeline(
     onProgress?: (p: PipelineProgress) => void;
   } = {},
 ): Promise<PipelineResult> {
-  const sourceHash = options.sourceBytes ? await sha256Hex(options.sourceBytes) : null;
+  const sourceHash = options.sourceBytes
+    ? await sha256Hex(options.sourceBytes)
+    : null;
 
   const left = audioBuffer.getChannelData(0).slice();
   const right =
@@ -30,9 +36,12 @@ export async function runTempoPipeline(
       : left.slice();
 
   return new Promise<PipelineResult>((resolve, reject) => {
-    const worker = new Worker(new URL('./pipeline-worker.ts', import.meta.url), {
-      type: 'module',
-    });
+    const worker = new Worker(
+      new URL('./pipeline-worker.ts', import.meta.url),
+      {
+        type: 'module',
+      },
+    );
 
     worker.onmessage = (e: MessageEvent) => {
       const msg = e.data as PipelineWorkerMessage;

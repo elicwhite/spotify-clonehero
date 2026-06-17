@@ -4,12 +4,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {ArrowLeft, CheckCircle2, FolderCog} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import scanLocalCharts, {
   type SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
@@ -88,7 +83,9 @@ export default function SngFolderConverter({
 
       setPhase({status: 'done', written, failed, skipped});
       if (failed > 0) {
-        toast.error(`${failed} chart${failed === 1 ? '' : 's'} failed to convert`);
+        toast.error(
+          `${failed} chart${failed === 1 ? '' : 's'} failed to convert`,
+        );
       }
     } catch (e) {
       setPhase({
@@ -163,7 +160,9 @@ function ConverterStatus({phase, dirName}: {phase: Phase; dirName: string}) {
   }
 
   if (phase.status === 'done') {
-    const parts = [`Converted ${phase.written} chart${phase.written === 1 ? '' : 's'} to .sng`];
+    const parts = [
+      `Converted ${phase.written} chart${phase.written === 1 ? '' : 's'} to .sng`,
+    ];
     if (phase.skipped > 0) parts.push(`skipped ${phase.skipped} existing .sng`);
     if (phase.failed > 0) parts.push(`${phase.failed} failed`);
     return (

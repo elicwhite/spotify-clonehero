@@ -208,9 +208,10 @@ export default function TempoViewerClient() {
   const [pairs, setPairs] = useState<SongPair[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<{id: string; message: string} | null>(
-    null,
-  );
+  const [loadError, setLoadError] = useState<{
+    id: string;
+    message: string;
+  } | null>(null);
   const [loaded, setLoaded] = useState<LoadedSong | null>(null);
   const [variant, setVariant] = useState<Variant>('modified');
 
@@ -221,7 +222,8 @@ export default function TempoViewerClient() {
     selectedId != null &&
     loaded?.pair.id !== selectedId &&
     loadError?.id !== selectedId;
-  const error = listError ?? (loadError?.id === selectedId ? loadError.message : null);
+  const error =
+    listError ?? (loadError?.id === selectedId ? loadError.message : null);
 
   const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
   const audioManagerRef = useRef<AudioManager | null>(null);

@@ -619,21 +619,18 @@ export default function SpotifyTableDownloader({
   // Filters fires its initial empty selection on mount via a useEffect; skip
   // that one to avoid spurious "filter changed to nothing" events.
   const skippedInitialFilterFireRef = useRef(false);
-  const filtersChangedCallback = useCallback(
-    (filters: AllowedInstrument[]) => {
-      setInstrumentFilters(filters);
-      if (!skippedInitialFilterFireRef.current) {
-        skippedInitialFilterFireRef.current = true;
-        return;
-      }
-      track({
-        event: 'spotify_instrument_filter_changed',
-        instruments: filters.join(','),
-        count: filters.length,
-      });
-    },
-    [],
-  );
+  const filtersChangedCallback = useCallback((filters: AllowedInstrument[]) => {
+    setInstrumentFilters(filters);
+    if (!skippedInitialFilterFireRef.current) {
+      skippedInitialFilterFireRef.current = true;
+      return;
+    }
+    track({
+      event: 'spotify_instrument_filter_changed',
+      instruments: filters.join(','),
+      count: filters.length,
+    });
+  }, []);
 
   const downloadedFilterChangedCallback = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {

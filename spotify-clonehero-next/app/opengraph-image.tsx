@@ -50,7 +50,7 @@ export default function OpengraphImage() {
             maxWidth: 1000,
             lineHeight: 1.25,
           }}>
-            Find, view, and edit Clone Hero charts.
+          Find, view, and edit Clone Hero charts.
         </div>
         <div
           style={{

@@ -49,7 +49,10 @@ function reTickEvent<T extends {tick: number; msTime: number}>(
 function reTickLengthEvent<
   T extends {tick: number; msTime: number; length: number; msLength: number},
 >(ev: T, segs: TempoSegment[], resolution: number): T {
-  const startTick = Math.max(0, Math.round(msToTick(ev.msTime, segs, resolution)));
+  const startTick = Math.max(
+    0,
+    Math.round(msToTick(ev.msTime, segs, resolution)),
+  );
   const endMs = ev.msTime + ev.msLength;
   const endTick = Math.round(msToTick(endMs, segs, resolution));
   const newLength = Math.max(0, endTick - startTick);
@@ -78,7 +81,9 @@ export function swapSynctrack(
       const triplet = Math.round(frac / tripletTicks) * tripletTicks;
       // Tie goes to the straight position.
       tick = Math.round(
-        Math.abs(straight - frac) <= Math.abs(triplet - frac) ? straight : triplet,
+        Math.abs(straight - frac) <= Math.abs(triplet - frac)
+          ? straight
+          : triplet,
       );
     } else {
       tick = Math.round(frac);
@@ -91,7 +96,8 @@ export function swapSynctrack(
     ev: T,
   ): T => {
     const startTick = noteTick(ev.msTime);
-    const endTick = ev.msLength > 0 ? noteTick(ev.msTime + ev.msLength) : startTick;
+    const endTick =
+      ev.msLength > 0 ? noteTick(ev.msTime + ev.msLength) : startTick;
     return {...ev, tick: startTick, length: Math.max(0, endTick - startTick)};
   };
 
@@ -119,7 +125,8 @@ export function swapSynctrack(
   const newTempos: typeof dedupTempos = [];
   for (const t of dedupTempos) {
     const prev = newTempos[newTempos.length - 1];
-    if (prev && Math.abs(prev.beatsPerMinute - t.beatsPerMinute) < BPM_EPS) continue;
+    if (prev && Math.abs(prev.beatsPerMinute - t.beatsPerMinute) < BPM_EPS)
+      continue;
     newTempos.push(t);
   }
 
@@ -127,7 +134,8 @@ export function swapSynctrack(
   const sortedTs = [...sync.timeSignatures].sort((a, b) => a.ms - b.ms);
   const newTsRaw = sortedTs.map((t, i) => {
     // The FIRST TS event must be at tick 0 — MIDI requires a TS at tick 0.
-    const tick = i === 0 ? 0 : Math.max(0, Math.round(msToTick(t.ms, segs, resolution)));
+    const tick =
+      i === 0 ? 0 : Math.max(0, Math.round(msToTick(t.ms, segs, resolution)));
     return {
       tick,
       numerator: t.numerator,
@@ -140,14 +148,21 @@ export function swapSynctrack(
   const newTs: typeof newTsRaw = [];
   for (const t of newTsRaw) {
     const prev = newTs[newTs.length - 1];
-    if (prev && prev.numerator === t.numerator && prev.denominator === t.denominator) continue;
+    if (
+      prev &&
+      prev.numerator === t.numerator &&
+      prev.denominator === t.denominator
+    )
+      continue;
     newTs.push(t);
   }
 
   // --- Re-tick every other event ---
   const rtE = <T extends {tick: number; msTime: number}>(e: T) =>
     reTickEvent(e, segs, resolution);
-  const rtL = <T extends {tick: number; msTime: number; length: number; msLength: number}>(
+  const rtL = <
+    T extends {tick: number; msTime: number; length: number; msLength: number},
+  >(
     e: T,
   ) => reTickLengthEvent(e, segs, resolution);
 
@@ -163,7 +178,9 @@ export function swapSynctrack(
       flexLanes: td.flexLanes.map(rtL),
       drumFreestyleSections: td.drumFreestyleSections.map(rtL),
       textEvents: td.textEvents.map(rtE),
-      ...(anyTd.versusPhrases ? {versusPhrases: anyTd.versusPhrases.map(rtL)} : {}),
+      ...(anyTd.versusPhrases
+        ? {versusPhrases: anyTd.versusPhrases.map(rtL)}
+        : {}),
       ...(anyTd.animations ? {animations: anyTd.animations.map(rtL)} : {}),
       noteEventGroups: td.noteEventGroups.map(group => group.map(reTickNote)),
     };
@@ -198,7 +215,8 @@ export function swapSynctrack(
     timeSignatures: newTs,
     endEvents: chart.endEvents.map(rtE),
     sections: chart.sections.map(rtE),
-    unrecognizedEventsTrackTextEvents: chart.unrecognizedEventsTrackTextEvents.map(rtE),
+    unrecognizedEventsTrackTextEvents:
+      chart.unrecognizedEventsTrackTextEvents.map(rtE),
     trackData: newTrackData,
     vocalTracks: newVocalTracks,
   } as ParsedChart;

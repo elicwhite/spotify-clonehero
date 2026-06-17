@@ -42,7 +42,10 @@ function pickPeaks(logits: Float32Array): number[] {
 
 /** Mirror of beat_this.postprocessor.deduplicate_peaks(width=1): groups of
  * adjacent peaks (each ≤ width frames apart) collapse to a running mean. */
-export function deduplicatePeaks(peaks: number[], width = DEDUP_WIDTH): number[] {
+export function deduplicatePeaks(
+  peaks: number[],
+  width = DEDUP_WIDTH,
+): number[] {
   if (peaks.length === 0) return [];
   const out: number[] = [];
   let p = peaks[0];

@@ -17,7 +17,12 @@ async function decodeNativeRate(data: Uint8Array): Promise<AudioBuffer> {
   // opus/ogg containers and 44.1k otherwise, which avoids the implicit
   // resample for the dominant cases.
   const u8 = data;
-  const isOgg = u8.length >= 4 && u8[0] === 0x4f && u8[1] === 0x67 && u8[2] === 0x67 && u8[3] === 0x53;
+  const isOgg =
+    u8.length >= 4 &&
+    u8[0] === 0x4f &&
+    u8[1] === 0x67 &&
+    u8[2] === 0x67 &&
+    u8[3] === 0x53;
   const rate = isOgg ? 48000 : 44100;
   const ctx = new OfflineAudioContext(2, 1, rate);
   // Copy into a fresh ArrayBuffer — decodeAudioData detaches the buffer.
@@ -37,7 +42,9 @@ export async function mergeAudioFiles(files: Files): Promise<AudioBuffer> {
   if (decoded.length === 1) return decoded[0];
 
   const rate = decoded[0].sampleRate;
-  const numSamples = Math.max(...decoded.map(b => Math.ceil((b.duration + 0.05) * rate)));
+  const numSamples = Math.max(
+    ...decoded.map(b => Math.ceil((b.duration + 0.05) * rate)),
+  );
   const ctx = new OfflineAudioContext(2, numSamples, rate);
   const gainValue = 1 / Math.sqrt(decoded.length);
   for (const buf of decoded) {

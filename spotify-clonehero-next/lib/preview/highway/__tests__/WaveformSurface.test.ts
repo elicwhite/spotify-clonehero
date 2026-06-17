@@ -1,7 +1,4 @@
-import {
-  computeGlobalPeak,
-  computeRowHalfWidth,
-} from '../WaveformSurface';
+import {computeGlobalPeak, computeRowHalfWidth} from '../WaveformSurface';
 
 describe('computeGlobalPeak', () => {
   it('returns 0 for an empty buffer', () => {

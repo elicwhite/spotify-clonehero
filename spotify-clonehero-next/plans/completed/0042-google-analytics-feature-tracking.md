@@ -35,43 +35,62 @@ A discriminated union of every event with its parameters. One `track()` entrypoi
 ```ts
 export type AnalyticsEvent =
   // Library scan / downloads
-  | { event: 'charts_scanned'; value: number }
-  | { event: 'chart_downloaded';
-      source: 'spotify' | 'spotify_history' | 'sheet_music' | 'karaoke' | 'unknown';
+  | {event: 'charts_scanned'; value: number}
+  | {
+      event: 'chart_downloaded';
+      source:
+        | 'spotify'
+        | 'spotify_history'
+        | 'sheet_music'
+        | 'karaoke'
+        | 'unknown';
       format: 'sng' | 'chart';
       md5?: string;
     }
 
   // Spotify pages
-  | { event: 'spotify_instrument_filter_changed'; instruments: string; count: number }
-  | { event: 'spotify_hide_downloaded_toggled'; enabled: boolean }
+  | {
+      event: 'spotify_instrument_filter_changed';
+      instruments: string;
+      count: number;
+    }
+  | {event: 'spotify_hide_downloaded_toggled'; enabled: boolean}
 
   // Sheet music
-  | { event: 'sheet_music_loaded';
-      slug: string; instrument: string; difficulty: string;
-      hasAudio: boolean; hasVideo: boolean }
-  | { event: 'sheet_music_play' }
-  | { event: 'sheet_music_pause' }
-  | { event: 'sheet_music_speed_changed'; speed: number }
-  | { event: 'sheet_music_zoom_changed'; zoom: number }
-  | { event: 'sheet_music_difficulty_changed'; difficulty: string }
-  | { event: 'sheet_music_clone_hero_toggled'; enabled: boolean }
-  | { event: 'sheet_music_click_track_toggled'; enabled: boolean }
-  | { event: 'sheet_music_show_lyrics_toggled'; enabled: boolean }
-  | { event: 'sheet_music_show_bar_numbers_toggled'; enabled: boolean }
-  | { event: 'sheet_music_enable_colors_toggled'; enabled: boolean }
-  | { event: 'sheet_music_practice_section_saved' }
-  | { event: 'sheet_music_favorited' }
-  | { event: 'sheet_music_unfavorited' }
-  | { event: 'sheet_music_playback_session'; playSeconds: number }
+  | {
+      event: 'sheet_music_loaded';
+      slug: string;
+      instrument: string;
+      difficulty: string;
+      hasAudio: boolean;
+      hasVideo: boolean;
+    }
+  | {event: 'sheet_music_play'}
+  | {event: 'sheet_music_pause'}
+  | {event: 'sheet_music_speed_changed'; speed: number}
+  | {event: 'sheet_music_zoom_changed'; zoom: number}
+  | {event: 'sheet_music_difficulty_changed'; difficulty: string}
+  | {event: 'sheet_music_clone_hero_toggled'; enabled: boolean}
+  | {event: 'sheet_music_click_track_toggled'; enabled: boolean}
+  | {event: 'sheet_music_show_lyrics_toggled'; enabled: boolean}
+  | {event: 'sheet_music_show_bar_numbers_toggled'; enabled: boolean}
+  | {event: 'sheet_music_enable_colors_toggled'; enabled: boolean}
+  | {event: 'sheet_music_practice_section_saved'}
+  | {event: 'sheet_music_favorited'}
+  | {event: 'sheet_music_unfavorited'}
+  | {event: 'sheet_music_playback_session'; playSeconds: number}
 
   // Add-lyrics
-  | { event: 'add_lyrics_chart_loaded'; sourceFormat: 'chart' | 'sng' | 'zip' }
-  | { event: 'add_lyrics_align_started' }
-  | { event: 'add_lyrics_align_completed'; totalMs: number }
-  | { event: 'add_lyrics_align_failed'; step: string }
-  | { event: 'add_lyrics_realign' }
-  | { event: 'add_lyrics_exported'; format: 'sng' | 'zip'; manualMoveCount: number };
+  | {event: 'add_lyrics_chart_loaded'; sourceFormat: 'chart' | 'sng' | 'zip'}
+  | {event: 'add_lyrics_align_started'}
+  | {event: 'add_lyrics_align_completed'; totalMs: number}
+  | {event: 'add_lyrics_align_failed'; step: string}
+  | {event: 'add_lyrics_realign'}
+  | {
+      event: 'add_lyrics_exported';
+      format: 'sng' | 'zip';
+      manualMoveCount: number;
+    };
 
 export function track(e: AnalyticsEvent): void;
 ```
@@ -84,9 +103,9 @@ GA4 Consent Mode v2 default: outside EEA/UK we set `analytics_storage: 'granted'
 
 **Geo detection.** Vercel attaches `x-vercel-ip-country` to incoming requests. Read it in `proxy.ts` (existing Next 16 proxy that already runs on every request) and forward via response header `x-region-eea: 1` when the country is EU/EEA/UK. The root layout reads that header (server-side, via `headers()`) and passes a single boolean to a client `ConsentBanner` component.
 
-EEA list: 27 EU countries + Iceland, Liechtenstein, Norway, UK. (Switzerland is *not* in EEA but enforces FADP — out of scope for v1; revisit if needed.)
+EEA list: 27 EU countries + Iceland, Liechtenstein, Norway, UK. (Switzerland is _not_ in EEA but enforces FADP — out of scope for v1; revisit if needed.)
 
-**Default consent script.** Inject a tiny inline script before `<GoogleAnalytics>` that sets `dataLayer`/`gtag` and calls `gtag('consent', 'default', { analytics_storage: <value> })`. This must run *before* the GA snippet to be respected.
+**Default consent script.** Inject a tiny inline script before `<GoogleAnalytics>` that sets `dataLayer`/`gtag` and calls `gtag('consent', 'default', { analytics_storage: <value> })`. This must run _before_ the GA snippet to be respected.
 
 ### 3. User ID
 
@@ -104,7 +123,7 @@ EEA list: 27 EU countries + Iceland, Liechtenstein, Norway, UK. (Switzerland is 
 
 - Auth flow events (login/sign-up). Out of scope; can add later.
 - Chart-review, drum-edit, drum-transcription, karaoke. Out of scope.
-- Per-feature events on flow pages we *aren't* prioritizing (e.g. account, search inputs).
+- Per-feature events on flow pages we _aren't_ prioritizing (e.g. account, search inputs).
 
 ## Commit plan
 

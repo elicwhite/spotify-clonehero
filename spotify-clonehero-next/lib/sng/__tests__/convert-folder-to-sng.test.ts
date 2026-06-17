@@ -31,10 +31,9 @@ describe('selectChartFoldersToConvert', () => {
       chart('Already Packaged.sng'),
       chart('Another Folder'),
     ];
-    expect(selectChartFoldersToConvert(charts).map(c => c.handleInfo.fileName)).toEqual([
-      'Artist - Song (Charter)',
-      'Another Folder',
-    ]);
+    expect(
+      selectChartFoldersToConvert(charts).map(c => c.handleInfo.fileName),
+    ).toEqual(['Artist - Song (Charter)', 'Another Folder']);
   });
 
   test('matches the .sng extension case-insensitively', () => {
@@ -45,9 +44,9 @@ describe('selectChartFoldersToConvert', () => {
   });
 
   test('returns an empty list when every chart is already a .sng', () => {
-    expect(selectChartFoldersToConvert([chart('a.sng'), chart('b.sng')])).toEqual(
-      [],
-    );
+    expect(
+      selectChartFoldersToConvert([chart('a.sng'), chart('b.sng')]),
+    ).toEqual([]);
   });
 });
 

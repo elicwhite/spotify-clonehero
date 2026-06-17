@@ -62,7 +62,7 @@ export default function OpengraphImage() {
             lineHeight: 1.25,
             marginBottom: 36,
           }}>
-            Find charts for every song you&rsquo;ve listened to on Spotify.
+          Find charts for every song you&rsquo;ve listened to on Spotify.
         </div>
         <div
           style={{
@@ -99,8 +99,7 @@ export default function OpengraphImage() {
                   />
                 </svg>
               </div>
-              <div
-                style={{display: 'flex', fontSize: 38, fontWeight: 600}}>
+              <div style={{display: 'flex', fontSize: 38, fontWeight: 600}}>
                 {song}
               </div>
             </div>

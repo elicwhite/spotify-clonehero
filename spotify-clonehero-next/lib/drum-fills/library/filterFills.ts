@@ -7,11 +7,7 @@
  * These pure functions back that UI; they are unit-tested independently.
  */
 
-import type {
-  FillWithSrs,
-  Subdivision,
-  SrsState,
-} from '@/lib/drum-fills/db';
+import type {FillWithSrs, Subdivision, SrsState} from '@/lib/drum-fills/db';
 
 export type MasteryFilter = SrsState | 'unpracticed';
 

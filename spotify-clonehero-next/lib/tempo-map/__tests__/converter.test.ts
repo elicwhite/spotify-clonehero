@@ -7,7 +7,12 @@
 
 import {readFileSync} from 'fs';
 import path from 'path';
-import {beatsToSynctrack, fillBeatGaps, backExtrapOrigin, dedupShortIois} from '../converter';
+import {
+  beatsToSynctrack,
+  fillBeatGaps,
+  backExtrapOrigin,
+  dedupShortIois,
+} from '../converter';
 import {parseNpz} from './npz';
 
 function loadFixture(song: string) {

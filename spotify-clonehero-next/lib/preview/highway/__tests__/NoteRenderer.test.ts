@@ -73,17 +73,21 @@ jest.mock('three', () => {
     Group: MockGroup,
     Object3D: MockObject3D,
     Mesh: MockMesh,
-    MeshBasicMaterial: jest.fn().mockImplementation(
-      (opts: {color?: any; opacity?: number; transparent?: boolean} = {}) => ({
-        color: {set: jest.fn()},
-        clippingPlanes: [],
-        depthTest: false,
-        transparent: opts.transparent ?? true,
-        opacity: opts.opacity ?? 0.35,
-        side: 2,
-        dispose: jest.fn(),
-      }),
-    ),
+    MeshBasicMaterial: jest
+      .fn()
+      .mockImplementation(
+        (
+          opts: {color?: any; opacity?: number; transparent?: boolean} = {},
+        ) => ({
+          color: {set: jest.fn()},
+          clippingPlanes: [],
+          depthTest: false,
+          transparent: opts.transparent ?? true,
+          opacity: opts.opacity ?? 0.35,
+          side: 2,
+          dispose: jest.fn(),
+        }),
+      ),
     PlaneGeometry: jest.fn().mockImplementation(() => ({dispose: jest.fn()})),
     RingGeometry: jest.fn().mockImplementation(() => ({dispose: jest.fn()})),
     CircleGeometry: jest.fn().mockImplementation(() => ({dispose: jest.fn()})),

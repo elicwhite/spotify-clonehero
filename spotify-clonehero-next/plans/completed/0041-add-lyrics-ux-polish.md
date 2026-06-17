@@ -10,7 +10,7 @@
 
 1. **Landing.** Hero has emoji-icons (`📁 ✏️ 🎵 📥`) that look unfinished next to the rest of the app's lucide-icons. The "Or select a chart folder" button is full-width and equal weight to the drop zone, even though folder-picker is a fallback path with weaker browser support.
 
-2. **Chart-loaded / paste view.** The full ChartDropZone is rendered *again* below the loaded-chart header — a second drop area + folder-picker button — taking ~120px of vertical space the user no longer needs. The "this chart already has lyrics" warning uses `text-yellow-200` on `bg-yellow-500/10`, which is fine in dark mode but **unreadable in light mode**. The textarea has no formatting hints; users don't know whether `[Chorus]` headers, `(backing vocals)` parentheses, or blank lines matter, so they get nervous.
+2. **Chart-loaded / paste view.** The full ChartDropZone is rendered _again_ below the loaded-chart header — a second drop area + folder-picker button — taking ~120px of vertical space the user no longer needs. The "this chart already has lyrics" warning uses `text-yellow-200` on `bg-yellow-500/10`, which is fine in dark mode but **unreadable in light mode**. The textarea has no formatting hints; users don't know whether `[Chorus]` headers, `(backing vocals)` parentheses, or blank lines matter, so they get nervous.
 
 3. **Processing.** Adequate but stark. Loses chart context (no song name once you click Align). The active step shows no progress bar or time-remaining for Demucs even though the worker already computes both — the step-list just shows a spinner for ~30 s. The `text-yellow-200` text-color in step-detail also has the same light-mode contrast bug if any step ever produces yellow text.
 
@@ -44,12 +44,12 @@ A landing → paste → processing → editor flow that:
 
 **Replace emoji icons with lucide icons** that match the existing app's visual language:
 
-| Step     | Icon (lucide) |
-| -------- | ------------- |
-| Open     | `FolderOpen`  |
+| Step     | Icon (lucide)    |
+| -------- | ---------------- |
+| Open     | `FolderOpen`     |
 | Paste    | `ClipboardPaste` |
-| Align    | `AudioWaveform` |
-| Download | `Download`    |
+| Align    | `AudioWaveform`  |
+| Download | `Download`       |
 
 Render each as `<Icon className="h-6 w-6 text-muted-foreground" />` inside a circular `bg-background` chip — gives the diagram structure in both modes without a flat-emoji feel.
 
@@ -70,8 +70,11 @@ Render each as `<Icon className="h-6 w-6 text-muted-foreground" />` inside a cir
     <p className="text-sm text-yellow-800 dark:text-yellow-200">
       This chart already has lyrics. Aligning will replace them.
     </p>
-    <Button variant="outline" size="sm" className="mt-2"
-            onClick={() => setShowLyricsWarning(false)}>
+    <Button
+      variant="outline"
+      size="sm"
+      className="mt-2"
+      onClick={() => setShowLyricsWarning(false)}>
       OK, continue
     </Button>
   </div>
@@ -122,9 +125,9 @@ export interface ProcessingStep {
 }
 
 export interface ProcessingViewProps {
-  title: string;            // "Processing" or "Adding lyrics to your chart"
-  subtitle?: string;        // song title, etc.
-  description?: string;     // small caption under title
+  title: string; // "Processing" or "Adding lyrics to your chart"
+  subtitle?: string; // song title, etc.
+  description?: string; // small caption under title
   steps: ProcessingStep[];
   error?: string | null;
   onRetry?: () => void;
@@ -170,6 +173,7 @@ There are two sources of progress data; the component only consumes the merged s
 - **Generic fallback** for steps that report only `progress`. Compute in the page adapter as `etaSeconds = elapsedSec * (1 - p) / p` once `p > 0.05`. Smooth with a single-pole low-pass to avoid jitter (`smoothed = 0.7 * smoothed + 0.3 * raw`).
 
 Display rules live in the component, not the adapters:
+
 - Hide ETA if `status !== 'active'`.
 - Hide if `progress === undefined || progress < 0.05` (too early; the estimate is noise).
 - Hide if `etaSeconds < 5` (granular seconds-countdown is more annoying than helpful at the tail).
@@ -208,7 +212,7 @@ The aligner step renders as indeterminate (spinner, no inner bar, no ETA) — by
 - The Viterbi step is a single synchronous DP pass with no natural yield points.
 - For a typical 3-minute song the full alignment step is ~5–15 s wall-time on WebGPU; an indeterminate spinner reads honestly.
 
-There is one sub-case where ETA *is* possible: the chunked fallback in `getEmissions` (`aligner-worker.ts:258–269`) — kicks in only when WebGPU OOMs on long songs (~6 min+). It iterates `chunk i/numChunks` and could surface an EMA ETA the same way Demucs does. **Out of scope for this plan** because (a) it's a rare branch and (b) wiring requires reshaping the worker outbound message contract for a path most users will never hit. Capture as a follow-up if anyone reports the long-song flow feels stuck.
+There is one sub-case where ETA _is_ possible: the chunked fallback in `getEmissions` (`aligner-worker.ts:258–269`) — kicks in only when WebGPU OOMs on long songs (~6 min+). It iterates `chunk i/numChunks` and could surface an EMA ETA the same way Demucs does. **Out of scope for this plan** because (a) it's a rare branch and (b) wiring requires reshaping the worker outbound message contract for a path most users will never hit. Capture as a follow-up if anyone reports the long-song flow feels stuck.
 
 #### Drum-transcription adapter changes
 
@@ -259,26 +263,32 @@ useEffect(() => {
     <ul className="space-y-3 text-sm">
       <li className="flex items-start gap-3">
         <Move className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-        <span><strong>Drag any lyric</strong> on the highway to nudge its
-        timing. Useful when the aligner picked the wrong onset.</span>
+        <span>
+          <strong>Drag any lyric</strong> on the highway to nudge its timing.
+          Useful when the aligner picked the wrong onset.
+        </span>
       </li>
       <li className="flex items-start gap-3">
         <AudioWaveform className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-        <span>The waveform on the highway is the <strong>isolated vocal
-        stem</strong>, not the full song mix — easier to spot where each
-        line should sit.</span>
+        <span>
+          The waveform on the highway is the{' '}
+          <strong>isolated vocal stem</strong>, not the full song mix — easier
+          to spot where each line should sit.
+        </span>
       </li>
       <li className="flex items-start gap-3">
         <Download className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-        <span>When the timing looks right, hit <strong>Download</strong>
-        in the top-right to get the updated chart.</span>
+        <span>
+          When the timing looks right, hit <strong>Download</strong>
+          in the top-right to get the updated chart.
+        </span>
       </li>
     </ul>
     <DialogFooter>
       <Button onClick={() => setShowIntro(false)}>Got it</Button>
     </DialogFooter>
   </DialogContent>
-</Dialog>
+</Dialog>;
 ```
 
 Lucide icons (`Move`, `AudioWaveform`, `Download`) ride `text-muted-foreground` so the modal works in both light and dark. The Dialog primitive already handles overlay, focus trap, escape-to-close, and inert-background — no extra wiring.
@@ -314,7 +324,8 @@ export const metadata: Metadata = {
     default: 'Music Charts Tools',
     template: '%s · Music Charts Tools',
   },
-  description: 'Browser-based tools for Clone Hero charts: drum transcription, lyric alignment, sheet music, and more.',
+  description:
+    'Browser-based tools for Clone Hero charts: drum transcription, lyric alignment, sheet music, and more.',
   openGraph: {
     type: 'website',
     siteName: 'Music Charts Tools',
@@ -356,14 +367,17 @@ import AddLyricsClient from './AddLyricsClient';
 
 export const metadata: Metadata = {
   title: 'Add lyrics to a chart',
-  description: 'Add timed, syllable-level lyrics to any Clone Hero chart. Runs entirely in your browser.',
+  description:
+    'Add timed, syllable-level lyrics to any Clone Hero chart. Runs entirely in your browser.',
   openGraph: {
     title: 'Add lyrics to a chart',
-    description: 'Add timed, syllable-level lyrics to any Clone Hero chart. Runs entirely in your browser.',
+    description:
+      'Add timed, syllable-level lyrics to any Clone Hero chart. Runs entirely in your browser.',
   },
   twitter: {
     title: 'Add lyrics to a chart',
-    description: 'Add timed, syllable-level lyrics to any Clone Hero chart. Runs entirely in your browser.',
+    description:
+      'Add timed, syllable-level lyrics to any Clone Hero chart. Runs entirely in your browser.',
   },
 };
 
@@ -378,13 +392,13 @@ The `openGraph`/`twitter` blocks inherit `images`, `siteName`, etc. from the roo
 
 This plan only touches the routes shipped in 0041's scope; other tool pages get the same treatment in a follow-up if desired:
 
-| Route                | Title                                  | One-line description                                                                                |
-| -------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `/` (home)           | (default — `Music Charts Tools`)       | (default)                                                                                           |
-| `/add-lyrics`        | Add lyrics to a chart                  | Add timed, syllable-level lyrics to any Clone Hero chart. Runs entirely in your browser.            |
-| `/drum-transcription`| Transcribe drums from audio            | Upload a song, get a Clone Hero drum chart. AI stem-separation + transcription, all in the browser. |
-| `/drum-edit`         | Edit a drum chart                      | Browser-based drum chart editor for Clone Hero — like Moonscraper, no install.                      |
-| `/chart-review`      | Review drum charts                     | Batch-review drum chart quality with a preloaded highway preview.                                   |
+| Route                 | Title                            | One-line description                                                                                |
+| --------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `/` (home)            | (default — `Music Charts Tools`) | (default)                                                                                           |
+| `/add-lyrics`         | Add lyrics to a chart            | Add timed, syllable-level lyrics to any Clone Hero chart. Runs entirely in your browser.            |
+| `/drum-transcription` | Transcribe drums from audio      | Upload a song, get a Clone Hero drum chart. AI stem-separation + transcription, all in the browser. |
+| `/drum-edit`          | Edit a drum chart                | Browser-based drum chart editor for Clone Hero — like Moonscraper, no install.                      |
+| `/chart-review`       | Review drum charts               | Batch-review drum chart quality with a preloaded highway preview.                                   |
 
 Out of scope (covered separately or already done): `/karaoke/[slug]` (already has per-chart metadata), `/sheet-music`, `/spotify`, `/spotifyhistory`, `/account`, `/auth/*`.
 
@@ -397,6 +411,7 @@ curl -s http://localhost:3000/add-lyrics | grep -E "og:|twitter:|<title>"
 ```
 
 Should show:
+
 - `<title>Add lyrics to a chart · Music Charts Tools</title>`
 - `<meta property="og:title" content="Add lyrics to a chart">`
 - `<meta property="og:image" content="https://.../og-default.png">` (absolute URL — confirms `metadataBase` works)

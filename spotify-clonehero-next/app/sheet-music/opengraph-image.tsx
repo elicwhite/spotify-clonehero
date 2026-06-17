@@ -80,7 +80,7 @@ export default function OpengraphImage() {
             lineHeight: 1.3,
             marginBottom: 36,
           }}>
-            Any Clone Hero drum chart as sheet music — synced to the audio.
+          Any Clone Hero drum chart as sheet music — synced to the audio.
         </div>
         <div
           style={{
@@ -91,7 +91,10 @@ export default function OpengraphImage() {
             borderRadius: 20,
             alignSelf: 'flex-start',
           }}>
-          <svg width={STAFF_W} height={STAFF_H} viewBox={`0 -28 ${STAFF_W} ${STAFF_H}`}>
+          <svg
+            width={STAFF_W}
+            height={STAFF_H}
+            viewBox={`0 -28 ${STAFF_W} ${STAFF_H}`}>
             {[0, 1, 2, 3, 4].map(i => (
               <line
                 key={`l${i}`}
@@ -103,8 +106,20 @@ export default function OpengraphImage() {
                 strokeWidth="3"
               />
             ))}
-            <rect x="0" y="0" width="6" height="112" fill="rgba(255,255,255,0.55)" />
-            <rect x={STAFF_W - 6} y="0" width="6" height="112" fill="rgba(255,255,255,0.55)" />
+            <rect
+              x="0"
+              y="0"
+              width="6"
+              height="112"
+              fill="rgba(255,255,255,0.55)"
+            />
+            <rect
+              x={STAFF_W - 6}
+              y="0"
+              width="6"
+              height="112"
+              fill="rgba(255,255,255,0.55)"
+            />
             {NOTES.map((n, i) => (
               <circle
                 key={i}

@@ -1,6 +1,10 @@
 import {runPostprocessor, deduplicatePeaks} from '../beat-this-pp';
 
-function logitsWithPeaks(length: number, peaks: number[], value = 5): Float32Array {
+function logitsWithPeaks(
+  length: number,
+  peaks: number[],
+  value = 5,
+): Float32Array {
   const arr = new Float32Array(length).fill(-5);
   for (const p of peaks) arr[p] = value;
   return arr;
@@ -10,7 +14,11 @@ describe('runPostprocessor', () => {
   test('converts isolated positive peaks to seconds at fps', () => {
     const beatLogits = logitsWithPeaks(500, [50, 100, 150, 200]);
     const downbeatLogits = logitsWithPeaks(500, [50, 200]);
-    const {beats, downbeats} = runPostprocessor({beatLogits, downbeatLogits, fps: 50});
+    const {beats, downbeats} = runPostprocessor({
+      beatLogits,
+      downbeatLogits,
+      fps: 50,
+    });
     expect(beats).toEqual([1, 2, 3, 4]);
     expect(downbeats).toEqual([1, 4]);
   });

@@ -39,7 +39,7 @@ MIDI warning is its own full band even when it could be an inline chip.
   and swaps components. No deep-linkable URLs; browser back doesn't move between views.
 - Shared across views: **MidiProvider** (device state + profile + calibration offset in
   localStorage — must stay global), **useLibraryScan** (scan state used by Home + Grooves
-  + Library). Library/Groove filters are localStorage-backed already (survive nav).
+  - Library). Library/Groove filters are localStorage-backed already (survive nav).
 - Audio managers + SRS state are per-PracticeView (not shared) — safe to isolate per route.
 - Layout: body is `flex flex-col h-screen`; `<main class="flex flex-col flex-1 min-h-0">`.
   ClientPage drops `max-w-screen-xl` on practice surfaces to go full-bleed. Practice
@@ -90,10 +90,10 @@ filter persistence stays; browser-validate with chrome-devtools.
 ## Appendix: chosen IA (2026-06-12)
 
 Synthesis of the three proposals: **real App-Router routes + a shared `app/drum-fills/layout.tsx`**
-(from the *routes* proposal — it is the only clean seam to host the shared providers AND scope
+(from the _routes_ proposal — it is the only clean seam to host the shared providers AND scope
 the global-nav change, and it fixes deep-linking + browser-back + the nav-highlight bug "for
 free") combined with the **single context+transport bar** for practice surfaces (from the
-*consolidate* proposal — the lowest-risk, highest-payoff band collapse). The full *instrument*
+_consolidate_ proposal — the lowest-risk, highest-payoff band collapse). The full _instrument_
 "hide all nav, 36px perch" angle is **rejected**: hiding the in-tool nav during practice hurts
 discoverability for no extra band savings beyond what the shared slim header already gives, and
 the "two-mode physical split" adds complexity. We keep a persistent, slim in-tool nav on every
@@ -109,7 +109,7 @@ Move from the `view` union in `ClientPage.tsx` to App-Router routes under a new
   which Next keeps mounted while child routes swap — so device connection, calibration offset,
   and an in-flight scan survive navigation exactly as they do today. Filters are already
   localStorage-backed and survive hard navigation. Audio managers + SRS are per-`PracticeView`
-  and are *meant* to reset per fill, so per-route remount is correct.
+  and are _meant_ to reset per fill, so per-route remount is correct.
 - A shared layout is **required anyway** to scope any global-nav change (the global nav is in the
   root `app/layout.tsx`, shared by every tool). Once we own that layout, real child routes are
   nearly free and deliver: deep-linkable surfaces, working browser Back/Forward, and a correct
@@ -136,6 +136,7 @@ app/drum-fills/
 ```
 
 Navigation rules (replace every `setView`):
+
 - `goHome`/nav pills → `router.push('/drum-fills' | '/drum-fills/grooves' | '/drum-fills/library')`.
 - Practice a fill → `router.push('/drum-fills/practice/' + fillId)`; groove card → `router.push('/drum-fills/groove/' + cluster.similarityKey + '?mode=rotate')`; Home "Start ladder" → same with `?mode=ladder`; Start review → `/today`; Surprise/roulette → `/roulette`.
 - Rotate⇄Ladder toggle = `router.replace('?mode=…')` (no history spam, deep-linkable, survives reload). `GrooveSession` keeps its internal `initialMode`, fed from the `mode` searchParam.
@@ -145,6 +146,7 @@ Navigation rules (replace every `setView`):
 ### Global site nav — scoped suppression, never a global edit
 
 The drum-fills tool reclaims the root nav's 64px on every surface, with zero impact on other tools:
+
 - Give the root `<nav>` in `app/layout.tsx:56` a stable class `site-nav` (additive, no behavior change).
 - `app/drum-fills/layout.tsx` runs an **effect** (not a render-time DOM write) that adds
   `hide-site-nav` to `document.body` on mount and removes it on cleanup (and on pathname leaving
@@ -224,35 +226,35 @@ title/mode/MIDI-warning/transport into one `[T]` bar. The +20px MIDI-expansion s
 
 ### Nothing-dropped mapping (every current item → new home)
 
-| Current item | New home |
-|---|---|
-| App-header wordmark + Home/Grooves/Library | `[H]` (Link-driven, active from pathname) |
-| Global nav escape (More Tools) | `[H]` "← All tools" link; Discord/GitHub/Log-In unchanged on other routes |
-| GrooveHeader stave + "N fills · N songs · BPM range" | `[H]` context slot (single canonical copy) + `[T]` session-ctx small stave |
-| Rotate/Ladder toggle | `[H]` context slot + `[T]` session-ctx slot, drives `?mode=` |
-| PracticeView title (song — artist) | `[T]` identity slot |
-| Taxonomy sub-line (BPM · bars · subdiv · cx · voicing) | `[T]` meta slot (ONLY place; HUD/`[H]` never repeat BPM) |
-| ModeSwitcher (Song loop / Change mode) | `[T]` Loop-mode ▾ chip |
-| MIDI-warning full-width band | `[T]` inline ⚠ chip → opens `[H]` MIDI popover; sentence in popover body |
-| Transport (Play/Restart/Next/Tempo/presets/Hits) | `[T]` transport slots (unchanged controls) |
-| transportExtras (shuffle+End session; instance dropdown) | `[T]` inline, unchanged |
-| PracticeHud (Last/Best/Mastery/Streak/Due) | content-row sidebar, unchanged (BPM removed; "Due" line + Mastery-due deduped) |
-| Library scan bar (Scan/Rescan/Cancel/Progress) | `[H]` scan control + inline progress |
-| GroovesView rescan | `[H]` scan control |
-| `needsRescan` amber banner | stays in Library page |
-| Ladder "Ladder / Rung n of N" stave card | `[H]` context ("Rung n/N"); rail keeps the `<ol>` |
-| Ladder rung `<ol>` list | left rail, unchanged |
-| Today queue progress row + Exit | `[H]` context slot + Exit |
-| MidiStatus (Connect/Profile/Load/Reset/Calibrate) | `[H]` MIDI popover (content unchanged) |
-| CalibrationDialog | unchanged modal, opened from popover |
-| SessionSummary (fills seen/practiced/avg) | unchanged (End session in `[T]`) |
-| `refreshKey` remount-on-scan | `scanVersion` in chrome context; pages re-fetch on change |
+| Current item                                             | New home                                                                       |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| App-header wordmark + Home/Grooves/Library               | `[H]` (Link-driven, active from pathname)                                      |
+| Global nav escape (More Tools)                           | `[H]` "← All tools" link; Discord/GitHub/Log-In unchanged on other routes      |
+| GrooveHeader stave + "N fills · N songs · BPM range"     | `[H]` context slot (single canonical copy) + `[T]` session-ctx small stave     |
+| Rotate/Ladder toggle                                     | `[H]` context slot + `[T]` session-ctx slot, drives `?mode=`                   |
+| PracticeView title (song — artist)                       | `[T]` identity slot                                                            |
+| Taxonomy sub-line (BPM · bars · subdiv · cx · voicing)   | `[T]` meta slot (ONLY place; HUD/`[H]` never repeat BPM)                       |
+| ModeSwitcher (Song loop / Change mode)                   | `[T]` Loop-mode ▾ chip                                                         |
+| MIDI-warning full-width band                             | `[T]` inline ⚠ chip → opens `[H]` MIDI popover; sentence in popover body      |
+| Transport (Play/Restart/Next/Tempo/presets/Hits)         | `[T]` transport slots (unchanged controls)                                     |
+| transportExtras (shuffle+End session; instance dropdown) | `[T]` inline, unchanged                                                        |
+| PracticeHud (Last/Best/Mastery/Streak/Due)               | content-row sidebar, unchanged (BPM removed; "Due" line + Mastery-due deduped) |
+| Library scan bar (Scan/Rescan/Cancel/Progress)           | `[H]` scan control + inline progress                                           |
+| GroovesView rescan                                       | `[H]` scan control                                                             |
+| `needsRescan` amber banner                               | stays in Library page                                                          |
+| Ladder "Ladder / Rung n of N" stave card                 | `[H]` context ("Rung n/N"); rail keeps the `<ol>`                              |
+| Ladder rung `<ol>` list                                  | left rail, unchanged                                                           |
+| Today queue progress row + Exit                          | `[H]` context slot + Exit                                                      |
+| MidiStatus (Connect/Profile/Load/Reset/Calibrate)        | `[H]` MIDI popover (content unchanged)                                         |
+| CalibrationDialog                                        | unchanged modal, opened from popover                                           |
+| SessionSummary (fills seen/practiced/avg)                | unchanged (End session in `[T]`)                                               |
+| `refreshKey` remount-on-scan                             | `scanVersion` in chrome context; pages re-fetch on change                      |
 
 ### Implementation order (dependency-first)
 
 1. **DB getter (testable, no UI):** add `getGrooveClusterByKey(similarityKey)` to
    `lib/drum-fills/db/index.ts` reusing `buildGrooveClusters` + the existing `byKey` lookup pattern;
-   Jest test. *(Commit-able unit on its own per the per-plan commit rule — but this whole plan is one commit.)*
+   Jest test. _(Commit-able unit on its own per the per-plan commit rule — but this whole plan is one commit.)_
 2. **Shared layout + nav scope:** `app/drum-fills/layout.tsx` ('use client') hosting `MidiProvider`,
    `useLibraryScan`, `UnsupportedGate`, the single `[H]` header (wordmark + nav pills + context slot +
    scan control + MIDI popover), `DrumFillsChromeContext` (context slot + `scanVersion`), and the

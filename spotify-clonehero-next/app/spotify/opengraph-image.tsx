@@ -9,9 +9,7 @@ const SPOTIFY_GREEN = '#1DB954';
 // Made-up, whimsical-feeling playlist names with realistic match
 // counts. The 2000s rock one finds every song — illustrates the
 // best-case outcome alongside two partial-match playlists.
-const SAMPLE_PLAYLISTS: ReadonlyArray<
-  readonly [string, number, number]
-> = [
+const SAMPLE_PLAYLISTS: ReadonlyArray<readonly [string, number, number]> = [
   ['treadmill bangers', 38, 45],
   ['synth dreams', 27, 34],
   ['y2k rock forever', 50, 50],
@@ -63,7 +61,7 @@ export default function OpengraphImage() {
             lineHeight: 1.25,
             marginBottom: 48,
           }}>
-            Scan your Spotify playlists for Clone Hero charts.
+          Scan your Spotify playlists for Clone Hero charts.
         </div>
         <div
           style={{

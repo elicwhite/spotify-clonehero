@@ -905,9 +905,7 @@ describe('SceneReconciler', () => {
 
       // Simulate 60 frames of drag at 16ms
       for (let i = 0; i < 60; i++) {
-        reconciler.setElements([
-          el('marker:480', 500 + i * 5, data, 'marker'),
-        ]);
+        reconciler.setElements([el('marker:480', 500 + i * 5, data, 'marker')]);
         reconciler.updateWindow(0);
       }
 
