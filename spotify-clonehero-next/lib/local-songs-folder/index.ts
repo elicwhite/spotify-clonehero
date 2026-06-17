@@ -13,7 +13,7 @@ async function promptForSongsDirectory() {
 
   let handle;
   try {
-    handle = await window['showDirectoryPicker']({
+    handle = await window.showDirectoryPicker({
       id: 'clone-hero-songs',
       mode: 'readwrite',
     });

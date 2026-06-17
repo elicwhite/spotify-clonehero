@@ -29,7 +29,7 @@ let clientCaps: Capabilities | null = null;
 const getClientCaps = (): Capabilities => {
   if (clientCaps === null) {
     clientCaps = {
-      fileSystem: typeof window['showDirectoryPicker'] === 'function',
+      fileSystem: typeof window.showDirectoryPicker === 'function',
       midi: 'requestMIDIAccess' in navigator,
     };
   }

@@ -66,7 +66,7 @@ export default function DropZone({onAdd, disabled}: DropZoneProps) {
   const handlePickFolder = useCallback(async () => {
     if (busy) return;
     try {
-      const dirHandle = await window['showDirectoryPicker']({
+      const dirHandle = await window.showDirectoryPicker({
         id: 'sng-add-folder',
       });
       setIsReading(true);

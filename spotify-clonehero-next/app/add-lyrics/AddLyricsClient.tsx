@@ -1200,7 +1200,7 @@ function ReplaceChartButton({
   const handlePickFolder = useCallback(async () => {
     if (isLoading) return;
     try {
-      const dirHandle = await window['showDirectoryPicker']({
+      const dirHandle = await window.showDirectoryPicker({
         id: 'add-lyrics-chart',
       });
       setIsLoading(true);

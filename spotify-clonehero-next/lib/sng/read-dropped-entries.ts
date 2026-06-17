@@ -90,12 +90,9 @@ export async function readFileList(
   return Promise.all(list.map(fileToEntry));
 }
 
-interface PickFilesOptions {
-  /** Persistent id so the picker remembers its own last-used location. */
-  id: string;
-  multiple?: boolean;
-  types?: Array<{description?: string; accept: Record<string, string[]>}>;
-}
+// The File System Access API's own option type (from wicg-file-system-access),
+// with `id` made required so each picker remembers its own last-used location.
+type PickFilesOptions = OpenFilePickerOptions & {id: string};
 
 /**
  * Open the OS file picker and return the chosen files, or `null` if the user
@@ -107,7 +104,7 @@ export async function pickFiles(
 ): Promise<File[] | null> {
   let handles: FileSystemFileHandle[];
   try {
-    handles = await window['showOpenFilePicker'](options);
+    handles = await window.showOpenFilePicker(options);
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') return null;
     throw err;
