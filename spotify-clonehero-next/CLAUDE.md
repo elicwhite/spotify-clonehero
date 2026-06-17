@@ -29,6 +29,18 @@ pnpm lint       # ESLint + Prettier check
 
 - **Comments:** Don't mention how things used to be. Comments should only ever describe the current state of the code, if they are needed at all.
 
+## Next.js DevTools MCP (AI agent tooling)
+
+Next.js 16 exposes a DevTools MCP server (default-on while `pnpm dev` runs) at
+`http://localhost:3000/_next/mcp` (stateless streamable-HTTP JSON-RPC). Tools:
+`get_routes`, `get_errors`, `get_logs`, `get_page_metadata`, `get_project_metadata`,
+`get_server_action_by_id` — let an agent introspect the running app's routes,
+build/runtime errors, and logs.
+
+`.mcp.json` wires this to coding agents via the official `next-devtools-mcp`
+bridge (it auto-discovers the running dev server). Start `pnpm dev`, then the
+agent can call the tools above.
+
 ## Drum Transcription Feature
 
 Fully browser-based: upload a song → separate stems via Demucs (ONNX + WebGPU) → transcribe drums via ADTOF model (ONNX + WebGPU) → edit on a Clone Hero highway (like Moonscraper) → export as .zip or .sng.
