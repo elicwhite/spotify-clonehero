@@ -45,6 +45,41 @@ def decode_to_mono(source: str | bytes, sr: int = SR) -> np.ndarray:
     return np.frombuffer(proc.stdout, dtype=np.float32).copy()
 
 
+def phat_offset(a: np.ndarray, b: np.ndarray, search_lo: int, search_hi: int) -> tuple[int, float]:
+    """GCC-PHAT delay: peak chosen within lags `[search_lo, search_hi]`, but the
+    peak-to-sidelobe ratio judged over ALL valid lags.
+
+    Searching a narrow band keeps a wrong-beat peak from being *selected*; judging
+    PSR over the wide range means a window whose true peak lies outside the band
+    (e.g. after an inserted gap) scores low — which is the signal to escalate.
+    Returns (lag, psr) with `a[n] ≈ b[n - lag]`.
+    """
+    n = 1
+    while n < a.size + b.size:
+        n <<= 1
+    R = np.fft.rfft(a, n) * np.conj(np.fft.rfft(b, n))
+    R /= np.abs(R) + 1e-10
+    cc = np.fft.irfft(R, n)
+
+    lo_l, hi_l = -(b.size - 1), a.size - 1  # valid overlap lags
+    all_lags = np.arange(lo_l, hi_l + 1)
+    all_vals = np.abs(cc[all_lags % n])
+
+    s_lo, s_hi = max(search_lo, lo_l), min(search_hi, hi_l)
+    if s_hi < s_lo:
+        return 0, 0.0
+    band = np.arange(s_lo, s_hi + 1)
+    bvals = np.abs(cc[band % n])
+    j = int(np.argmax(bvals))
+    lag, peak = int(band[j]), float(bvals[j])
+
+    guard = 8
+    side_mask = np.abs(all_lags - lag) > guard
+    sidelobe = float(all_vals[side_mask].std()) if side_mask.any() else 0.0
+    psr = peak / sidelobe if sidelobe > 1e-12 else (float("inf") if peak > 0 else 0.0)
+    return lag, psr
+
+
 def gcc_phat(a: np.ndarray, b: np.ndarray, max_lag: int | None = None) -> tuple[int, float]:
     """Generalized cross-correlation with phase transform (GCC-PHAT).
 

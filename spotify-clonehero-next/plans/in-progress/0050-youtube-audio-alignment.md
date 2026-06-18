@@ -63,26 +63,39 @@ includes a non-zero-delay case.
 2. **Chart mix reconstruction:** prefer a single `song.*` full mix if present;
    otherwise equal-power sum (`1/sqrt(n)`) of stems, excluding `preview.*` and
    `crowd.*`. Record `mix_source`.
-3. **Coarse global offset:** cross-correlate the two **onset-strength
-   envelopes** (spectral flux, ~100 Hz frame rate, normalized). Robust to
-   EQ/loudness/codec differences between the copyright master and a YouTube
-   re-upload. Gate on peak-to-sidelobe ratio (PSR) — low PSR ⇒ likely not the
-   same recording.
-4. **Dense offset(t):** slide overlapping windows across the song; for each,
-   estimate local delay via **GCC-PHAT** (phase transform — whitens magnitude,
-   so robust to the master/EQ differences). Produces `(t_i, offset_i, psr_i)`.
-   Discard low-PSR windows (silence / no content).
-5. **Interpret offset(t)** with a robust line fit `offset = a + b·t`:
-   - slope `b` ⇒ `speed_ratio` (constant speed difference / drift),
-   - residual **step** discontinuities ⇒ interruptions (inserted gap),
-   - `coverage` = fraction of valid windows whose residual is within tolerance.
-6. **Match decision / abstain:** require PSR and coverage above thresholds, else
-   emit `match=none`. At corpus scale even a 1% false-positive rate ships
-   hundreds of wrong URLs, so abstaining is a feature. A near-miss (same song,
-   different mix) aligns only in patches ⇒ low coverage ⇒ abstain.
+3. **Dense offset(t) — predictive GCC-PHAT tracker.** GCC-PHAT (phase transform)
+   gives a sharp, EQ/loudness/codec-robust delay peak. The tracker follows the
+   offset window-by-window:
+   - It searches a **tight band** around a short extrapolation of the recent good
+     track, so a wrong-beat peak (the periodic-beat ambiguity of steady drums)
+     can't be selected; the PSR is judged over the **wide** region so a window
+     whose true peak is elsewhere (e.g. after a gap) scores low.
+   - A confident **off-track** offset that *persists* across two windows is a
+     real step → the track **re-locks** to the new level (follows interruptions
+     and large jumps without a fixed lag ceiling). A lone glitch is ignored.
+   - Several **candidate initial offsets** (top PHAT peaks + 0) are tracked and
+     the most internally consistent track is kept — robust to a bad initial lock
+     (which the earlier single-coarse-peak design got wrong on slow-downs).
+4. **Interpret offset(t):**
+   - detect/remove **steps** on the *raw* offset (piecewise-flat) — measure each
+     with a before/after median (a step badly contaminates a global slope fit, so
+     steps are handled first) ⇒ `interruptions` + magnitudes;
+   - fit the slope on the **step-corrected** series ⇒ `speed_ratio`;
+   - `coverage` = fraction of **all** windows sitting on the flat corrected level
+     (computed over all windows, so a near-miss whose bad half drops out can't
+     inflate it).
+5. **Match decision / abstain:** require `coverage` and median PSR above
+   thresholds and not too many steps, else emit `match=none`. At corpus scale
+   even a 1% false-positive rate ships hundreds of wrong URLs, so abstaining is a
+   feature. A near-miss (same song, different mix) aligns only in patches ⇒ low
+   coverage ⇒ abstain.
 
 Pitch is intentionally **not** detected: for playback alignment only speed/timing
 matters, key does not.
+
+> Note: the final tracker uses pure GCC-PHAT, not the onset-strength envelope the
+> coarse stage originally proposed — PHAT already provides the EQ-robustness the
+> envelope was for, with sharper localization.
 
 ## Matching the YouTube video
 
@@ -128,12 +141,25 @@ tools/youtube-align/
 ## Validation done here
 
 - SNG reader round-trips a synthetically-built container (matches `sng.ts`).
-- Aligner recovers a known offset within tolerance.
-- Aligner recovers a known speed_ratio (time-stretched copy).
-- Aligner flags a known mid-song inserted gap as an interruption at the right
-  time.
-- Negative case (unrelated audio) abstains (`match=none`).
+- Aligner recovers a known offset within tolerance (through lossy Opus).
+- Aligner recovers a known speed_ratio (time-stretched copy), both faster and
+  slower.
+- Aligner flags a known mid-song inserted gap (including > 1 s) as an
+  interruption at the right place and magnitude.
+- Negative case (unrelated audio) and a diverging-half near-miss abstain
+  (`match=none`).
 - Chart-relative offset = `audio_offset_ms + delay_ms` on a non-zero-delay case.
+
+A 60-seed synthetic sweep recovered offset / ±1% speed / mid-song gap with **0
+failures**; unrelated audio abstained except a **~3% residual false-positive**
+that is an artifact of the synthetic (its "unrelated" songs share structure and
+correlate about as much as a 1% time-stretch — a regime where PSR can't separate
+true from false, so `coverage` is the real gate). Real false-positive control
+must be validated on a labeled real sample before trusting corpus output.
+
+> Known cost: trying several candidate initial offsets makes `align()` a few×
+> heavier (many FFTs/song). Fine for a batch job; optimize (more decimation, FFT
+> caching, fewer candidates) only if corpus runtime matters.
 
 ## If this graduates into the app
 

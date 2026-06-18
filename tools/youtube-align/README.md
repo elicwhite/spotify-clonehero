@@ -39,15 +39,23 @@ chart that has one.
 1. Decode both mixes through one ffmpeg pass to mono at a common sample rate.
 2. **Chart mix:** prefer a `song.*` full mix; otherwise equal-power (`1/√n`) sum
    of stems, excluding `preview.*`/`crowd.*`.
-3. **Coarse offset:** GCC-PHAT on an early raw-audio span (sharp, EQ-robust,
-   avoids the periodic-peak ambiguity of steady beats).
-4. **Dense offset(t):** GCC-PHAT on overlapping windows across the whole song.
-5. **Interpret:** robust line fit → `speed_ratio`; step discontinuities →
-   `interruptions`; residual coverage → `aligned`; low PSR/coverage → abstain
-   (`match=none`). At corpus scale a confident wrong match is worse than no
-   match, so abstaining is deliberate.
+3. **Dense offset(t):** a predictive tracker follows the offset window-by-window
+   with GCC-PHAT. It searches a tight band around a short extrapolation of the
+   recent good track (so a wrong-beat peak can't be selected) and re-locks when a
+   confident off-track offset *persists* (a real step). Several candidate initial
+   offsets are tried and the most consistent track is kept, so a bad initial lock
+   can't derail it.
+4. **Interpret:** detect/remove steps on the raw offset (→ `interruptions` and
+   their magnitudes), fit the slope on the step-corrected series (→ `speed_ratio`),
+   measure `coverage` of the flat corrected level over *all* windows, and gate
+   match/abstain on coverage + PSR + step count. At corpus scale a confident
+   wrong match is worse than no match, so abstaining (`match=none`) is deliberate.
 
 Pitch is intentionally not detected — only timing matters for playback.
+
+Cost: trying multiple candidate tracks makes `align()` a few× heavier (many FFTs
+per song). That's fine for a batch job; if corpus runtime matters, decimate the
+feature rate further, cache FFTs, or reduce candidates.
 
 ## Usage
 
@@ -76,8 +84,19 @@ This was built in a sandbox whose network policy **blocks** `api.enchor.us`,
   (known offset/speed/gap recovered within tolerance). That de-risks the
   algorithm but is **not** the real-song spot-check the task asked for.
 - The Encore-download and YouTube-search/download steps are implemented but
-  **unrun**. Thresholds (`PSR_MIN`, `COVERAGE_*`, `STEP_MS`) are calibrated on
-  synthetic data and **will need recalibration on real recordings**.
+  **unrun**. Thresholds (`PSR_MIN`, `COVERAGE_*`, `CONFIDENCE_MIN`, `STEP_MS`)
+  are calibrated on synthetic data and **will need recalibration on real
+  recordings**.
+
+Measured on a synthetic sweep (60 seeds): offset, ±1% speed, and mid-song gap
+were recovered with **0 failures**; unrelated-audio abstained except a **~3%**
+residual false-positive. That residual is an artifact of the synthetic — its
+"unrelated" songs share structure, so they correlate about as much as a 1%
+time-stretch of the same song, and a confidence/PSR gate can't separate the two
+(legit speed matches have the *same* low PSR). `coverage` is therefore the real
+match gate; on real recordings, genuinely different songs won't reach the
+coverage threshold, but the abstain thresholds should still be validated on a
+labeled sample before trusting the corpus output.
 
 To do the real spot-check, run on a machine where those hosts are allowed:
 
