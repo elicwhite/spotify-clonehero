@@ -2,6 +2,7 @@ import {
   bestFromScored,
   bestFromStored,
   evaluateAttempt,
+  isHitWithinFill,
   isNewBest,
   isRealAttempt,
   matchResultToJudgments,
@@ -60,8 +61,8 @@ describe('evaluateAttempt', () => {
   });
 
   it('respects custom timing windows', () => {
-    const hits: TimedHit[] = [{msTime: 50, lane: 'red', isCymbal: false}];
-    // Default good window is 70ms → 50ms matched as good.
+    const hits: TimedHit[] = [{msTime: 60, lane: 'red', isCymbal: false}];
+    // Default windows: 60ms is inside ±70 (good) but outside ±50 (perfect).
     const loose = evaluateAttempt([notes[0]], hits);
     expect(loose.score.good).toBe(1);
     // Tighten to 30ms → out of range → miss.
@@ -109,6 +110,25 @@ describe('best attempt summaries', () => {
     expect(isNewBest(cur, 91)).toBe(true);
     expect(isNewBest(cur, 90)).toBe(true); // tie → re-mark
     expect(isNewBest(cur, 89)).toBe(false);
+  });
+});
+
+describe('isHitWithinFill', () => {
+  // fill spans 0..1000ms, ±70ms window.
+  it('keeps hits inside the note span', () => {
+    expect(isHitWithinFill(0, 1000, 70)).toBe(true);
+    expect(isHitWithinFill(500, 1000, 70)).toBe(true);
+    expect(isHitWithinFill(1000, 1000, 70)).toBe(true);
+  });
+
+  it('keeps hits within one window before the first / after the last note', () => {
+    expect(isHitWithinFill(-70, 1000, 70)).toBe(true);
+    expect(isHitWithinFill(1070, 1000, 70)).toBe(true);
+  });
+
+  it('drops the post-fill resolution (a kick/crash well after the last note)', () => {
+    expect(isHitWithinFill(1170, 1000, 70)).toBe(false); // +170ms after last note
+    expect(isHitWithinFill(-90, 1000, 70)).toBe(false); // too early
   });
 });
 

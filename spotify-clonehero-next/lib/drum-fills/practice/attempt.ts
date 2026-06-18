@@ -34,6 +34,21 @@ export function isRealAttempt(hitCount: number, noteCount: number): boolean {
   return noteCount > 0 && hitCount > 0;
 }
 
+/**
+ * Whether a hit (loop-relative ms, 0 = the fill's first note) falls inside the
+ * fill's playable span: within one timing window of the first or last note.
+ * Hits outside it aren't part of the fill and must not be scored as extras —
+ * most commonly the kick + crash a player lands on the downbeat *after* the
+ * fill resolves.
+ */
+export function isHitWithinFill(
+  msTime: number,
+  lastNoteMs: number,
+  windowMs: number,
+): boolean {
+  return msTime >= -windowMs && msTime <= lastNoteMs + windowMs;
+}
+
 /** Convert a matcher result into the scorer's input shape. */
 export function matchResultToJudgments(result: MatchResult): AttemptJudgments {
   return {

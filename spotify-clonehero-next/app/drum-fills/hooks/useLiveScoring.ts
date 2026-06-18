@@ -3,11 +3,16 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useMidi} from '../contexts/MidiContext';
 import {applyCalibration} from '@/lib/drum-fills/midi/calibration';
-import type {ExpectedNote, TimedHit} from '@/lib/drum-fills/midi/hitMatcher';
+import {
+  DEFAULT_WINDOWS,
+  type ExpectedNote,
+  type TimedHit,
+} from '@/lib/drum-fills/midi/hitMatcher';
 import type {DrumLane} from '@/lib/drum-fills/midi/padMapping';
 import {
   bestFromScored,
   evaluateAttempt,
+  isHitWithinFill,
   isNewBest,
   isRealAttempt,
   type BestAttempt,
@@ -187,11 +192,26 @@ export function useLiveScoring(
     debugHitsRef.current = [];
     setPendingHits(0);
 
+    // Keep only hits inside the fill's note span (± one timing window). Hits
+    // outside it aren't part of the fill and must not count as extras — most
+    // commonly the kick + crash you land on the downbeat *after* the fill
+    // resolves, which would otherwise be penalised as extra strikes.
+    const good = DEFAULT_WINDOWS.good;
+    const lastNoteMs = relativeNotes.reduce((m, n) => Math.max(m, n.msTime), 0);
+    const keptIdx: number[] = [];
+    for (let i = 0; i < hits.length; i++) {
+      if (isHitWithinFill(hits[i].msTime, lastNoteMs, good)) {
+        keptIdx.push(i);
+      }
+    }
+    const fillHits = keptIdx.map(i => hits[i]);
+    const fillDebugHits = keptIdx.map(i => debugHits[i]);
+
     // Ignore passes where no drum was hit at all (a water break, not yet
     // playing): they don't score, persist, or move the ladder/SRS in either
     // direction.
-    if (!isRealAttempt(hits.length, relativeNotes.length)) return null;
-    const result = evaluateAttempt(relativeNotes, hits);
+    if (!isRealAttempt(fillHits.length, relativeNotes.length)) return null;
+    const result = evaluateAttempt(relativeNotes, fillHits);
     setLastAttempt(result);
 
     // Persistent per-attempt diagnostics (survives loop passes; readable from
@@ -203,7 +223,7 @@ export function useLiveScoring(
         calibrationOffsetMs: calibrationRef.current,
         tempoPct: Math.round(tempoRef.current * 100),
         notes: relativeNotes,
-        hits: debugHits,
+        hits: fillDebugHits,
         match: result.match,
         score: result.score.score,
       }),
