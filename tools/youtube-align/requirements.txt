@@ -1,0 +1,6 @@
+numpy>=2.0
+scipy>=1.10
+yt-dlp>=2024.0
+requests>=2.31
+# ffmpeg + ffprobe must be on PATH (system package, or `pip install static-ffmpeg`).
+# Dev: pytest
