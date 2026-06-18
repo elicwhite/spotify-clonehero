@@ -43,6 +43,9 @@ import {useFillChart} from '../hooks/useFillChart';
 import {useLiveScoring} from '../hooks/useLiveScoring';
 import {useMidi} from '../contexts/MidiContext';
 import PracticeHud from './PracticeHud';
+import PracticeFeedbackBanner, {
+  type FeedbackCallout,
+} from './PracticeFeedbackBanner';
 import PracticeContextBar, {type PracticeMode} from './PracticeContextBar';
 
 export interface PracticeViewProps {
@@ -82,6 +85,11 @@ export interface PracticeViewProps {
    * launching from a grouped Library card.
    */
   enableInstanceSwitcher?: boolean | undefined;
+  /** Persistent status shown in the across-the-room feedback banner (e.g. the
+   * ladder rung). The tempo is appended automatically. */
+  feedbackStatus?: string | undefined;
+  /** Transient big callout in the banner on a rung/tempo change (replaces toasts). */
+  feedbackCallout?: FeedbackCallout | null | undefined;
 }
 
 type Mode = PracticeMode;
@@ -128,6 +136,8 @@ export default function PracticeView({
   enableInstanceSwitcher,
   tempoPct: controlledTempoPct,
   onTempoPctChange,
+  feedbackStatus,
+  feedbackCallout,
 }: PracticeViewProps) {
   // When instance switching is enabled the user can practice a sibling instance
   // of the same pattern; `activeFillId` overrides the prop until they exit. The
@@ -266,6 +276,8 @@ export default function PracticeView({
       sessionCtx={sessionCtx}
       controlledTempoPct={controlledTempoPct}
       onTempoPctChange={onTempoPctChange}
+      feedbackStatus={feedbackStatus}
+      feedbackCallout={feedbackCallout}
     />
   );
 }
@@ -301,6 +313,8 @@ function PracticeSession({
   sessionCtx,
   controlledTempoPct,
   onTempoPctChange,
+  feedbackStatus,
+  feedbackCallout,
 }: {
   fillId: string;
   mode: Mode;
@@ -314,6 +328,8 @@ function PracticeSession({
   sessionCtx?: React.ReactNode | undefined;
   controlledTempoPct?: number | undefined;
   onTempoPctChange?: ((pct: number) => void) | undefined;
+  feedbackStatus?: string | undefined;
+  feedbackCallout?: FeedbackCallout | null | undefined;
 }) {
   const {chart, track, practiceData, fill, audioFiles, groovePattern} = data;
   const {connectedIds} = useMidi();
@@ -960,6 +976,12 @@ function PracticeSession({
           />
         </div>
       </div>
+
+      <PracticeFeedbackBanner
+        lastAttempt={scoring.lastAttempt}
+        statusText={`${feedbackStatus ? `${feedbackStatus} · ` : ''}${tempoPct}%`}
+        callout={feedbackCallout}
+      />
     </div>
   );
 }

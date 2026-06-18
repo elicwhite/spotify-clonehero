@@ -129,6 +129,14 @@ export function useLiveScoring(
   }, [baseMs]);
 
   // Classify and buffer every incoming hit while an attempt is active.
+  //
+  // PERF: setFlashes/setPendingHits below fire per MIDI hit and re-render the
+  // component that calls this hook (PracticeSession), which also renders the
+  // THREE.js highway and the VexFlow sheet. Keep it this way only because those
+  // are the existing consumers. Any NEW per-hit live feedback (e.g. a timing
+  // dot) MUST live in its own leaf that subscribes to MIDI itself — do not lift
+  // more per-hit state into PracticeSession or you reintroduce the PlaybackBar
+  // stutter (heavy subtree re-rendering on every hit).
   useEffect(() => {
     const unsub = subscribe(hit => {
       if (anchorChartMsRef.current === null) return;

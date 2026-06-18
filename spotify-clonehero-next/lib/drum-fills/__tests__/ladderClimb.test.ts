@@ -83,52 +83,29 @@ describe('climbLadder — slowing down before stepping back', () => {
     expect(r.change).toBe('none'); // streak restarted, only 1 fail
   });
 
-  it('steps back only once at/under the floor tempo, then resets to the easier rung', () => {
-    // From 90: fail-run → 80, fail-run → 70 (== floor), fail-run → step back.
+  it('never steps back a rung — slows to the floor and holds there', () => {
+    // From 90: fail-runs slow 90 → 80 → 70 → 60 (min), then hold. Rung unchanged.
     let c = initRungClimb(2, OPTS);
     let r = fail(fail(c, 3).climb, 3); // → 80
     expect(r.climb.tempoPct).toBe(80);
+    expect(r.change).toBe('slow-down');
     r = fail(fail(r.climb, 3).climb, 3); // → 70
     expect(r.climb.tempoPct).toBe(70);
+    r = fail(fail(r.climb, 3).climb, 3); // → 60 (min)
+    expect(r.climb.tempoPct).toBe(60);
     expect(r.change).toBe('slow-down');
-    r = fail(r.climb, 3); // 1 fail at floor
-    expect(r.change).toBe('none');
-    r = fail(r.climb, 3); // 2nd fail at floor → step back
-    expect(r.change).toBe('step-back');
-    expect(r.climb.index).toBe(1);
-    expect(r.climb.tempoPct).toBe(90); // entry tempo of the easier rung
-  });
-
-  it('takes 4–6 failing runs to step back depending on entry tempo', () => {
-    const runsToStepBack = (entry: number) => {
-      let c = initRungClimb(2, {rungEntryTempoPct: () => entry});
-      let runs = 0;
-      for (let i = 0; i < 50; i++) {
-        const r = climbLadder(
-          climbLadder(c, 3, false, {rungEntryTempoPct: () => entry}).climb,
-          3,
-          false,
-          {rungEntryTempoPct: () => entry},
-        );
-        runs++;
-        if (r.change === 'step-back') return runs;
-        c = r.climb;
-      }
-      return runs;
-    };
-    expect(runsToStepBack(75)).toBeLessThanOrEqual(2);
-    expect(runsToStepBack(90)).toBe(3);
-  });
-
-  it('cannot step back from the bottom rung; pins at the floor', () => {
-    let c: RungClimb = {index: 0, tempoPct: 70, passesAtTempo: 0, failsAtTempo: 0};
-    let r = fail(fail(c, 3).climb, 3); // floor-gated but index 0 → slow toward min
-    expect(r.climb.index).toBe(0);
-    expect(r.climb.tempoPct).toBe(60); // min
-    // Further failing runs can't lower it or change rung.
+    // Further failing runs hold at the floor; rung never changes.
     r = fail(fail(r.climb, 3).climb, 3);
     expect(r.change).toBe('none');
     expect(r.climb.tempoPct).toBe(60);
-    expect(r.climb.index).toBe(0);
+    expect(r.climb.index).toBe(2);
+  });
+
+  it('climbs the tempo back up from the floor once passes resume', () => {
+    let c: RungClimb = {index: 2, tempoPct: 60, passesAtTempo: 0, failsAtTempo: 0};
+    let r = pass(pass(c, 3).climb, 3); // → 70
+    expect(r.change).toBe('speed-up');
+    expect(r.climb.tempoPct).toBe(70);
+    expect(r.climb.index).toBe(2);
   });
 });

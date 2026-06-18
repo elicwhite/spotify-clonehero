@@ -2,18 +2,18 @@
  * Tempo-aware fill-ladder progression.
  *
  * The plain ladder ({@link ./fillLadder}) changes rungs straight off pass/fail
- * counts, ignoring tempo. This machine inserts a tempo buffer between rungs so
- * the player slows the *current* fill down before dropping to an easier one, and
- * speeds back up to full tempo before advancing to a harder one:
+ * counts, ignoring tempo. This machine instead drives tempo within a rung:
  *
  *   pass run  → at full tempo: ADVANCE a rung; otherwise SPEED UP
- *   fail run  → at/under the floor tempo: STEP BACK a rung; otherwise SLOW DOWN
+ *   fail run  → SLOW DOWN, down to the floor tempo, then hold there
  *
- * A rung change resets to that rung's entry tempo (supplied by the caller, which
+ * Missing never drops you to an easier rung — you stay on the rung and the tempo
+ * sinks to the floor, then climbs back up as you start passing again. The only
+ * automatic rung change is advancing upward at full speed; going back down is a
+ * manual choice (the rung picker).
+ *
+ * Advancing resets to the new rung's entry tempo (supplied by the caller, which
  * can scale it by difficulty and remember a per-rung tempo across the session).
- * Stepping back is floor-gated rather than fired on the first fail run, which is
- * what makes "slow down, *then* step back" hold — a step-back takes roughly 4–6
- * failing runs depending on the rung's entry tempo, not a single run.
  *
  * Pure and unit-tested: no DB, highway, MIDI, or React.
  */
@@ -21,9 +21,7 @@
 export interface LadderClimbOptions {
   /** Tempo (pct) the player must reach before a passing run advances a rung. */
   fullTempoPct: number;
-  /** At/under this tempo, a failing run steps back instead of slowing further. */
-  floorTempoPct: number;
-  /** Hard lower bound; tempo never drops below this. */
+  /** Lowest tempo a failing run will sink to; it holds here, never stepping back. */
   minTempoPct: number;
   /** Tempo gained per speed-up. Symmetric with stepDownPct so recovery from a
    * slow-down isn't punitive. */
@@ -41,7 +39,6 @@ export interface LadderClimbOptions {
 
 export const DEFAULT_LADDER_CLIMB_OPTIONS: LadderClimbOptions = {
   fullTempoPct: 100,
-  floorTempoPct: 70,
   minTempoPct: 60,
   stepUpPct: 10,
   stepDownPct: 10,
@@ -60,12 +57,7 @@ export interface RungClimb {
   failsAtTempo: number;
 }
 
-export type ClimbChange =
-  | 'advance'
-  | 'step-back'
-  | 'speed-up'
-  | 'slow-down'
-  | 'none';
+export type ClimbChange = 'advance' | 'speed-up' | 'slow-down' | 'none';
 
 export interface ClimbResult {
   climb: RungClimb;
@@ -145,18 +137,14 @@ export function climbLadder(
 
   const failsAtTempo = climb.failsAtTempo + 1;
   if (failsAtTempo >= opts.failsToStep) {
-    if (climb.tempoPct <= opts.floorTempoPct && climb.index > 0) {
-      // Slow enough and still failing: drop to the easier rung.
-      return {climb: initRungClimb(climb.index - 1, opts), change: 'step-back'};
-    }
-    // Above the floor (or already on the easiest rung): slow this rung down.
+    // Slow this rung down — never step back to an easier rung.
     const tempoPct = clamp(
       climb.tempoPct - opts.stepDownPct,
       opts.minTempoPct,
       opts.fullTempoPct,
     );
     if (tempoPct === climb.tempoPct) {
-      // Pinned at the floor on the bottom rung: nowhere lower to go.
+      // Pinned at the floor tempo: hold here until passes resume.
       return {
         climb: {...climb, passesAtTempo: 0, failsAtTempo},
         change: 'none',

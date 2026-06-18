@@ -21,6 +21,7 @@ import {
 } from '@/lib/drum-fills/practice/ladderClimb';
 import DifficultyBar from './DifficultyBar';
 import PracticeView from './PracticeView';
+import type {FeedbackCallout} from './PracticeFeedbackBanner';
 
 /**
  * Entry tempo for a rung by its ladder position: the easiest rung starts near
@@ -51,6 +52,9 @@ export default function LadderSession({
 }) {
   const [rungs, setRungs] = useState<LadderRung[] | null>(null);
   const [climb, setClimb] = useState<RungClimb | null>(null);
+  // Big transient callout for the feedback banner (replaces toasts).
+  const [callout, setCallout] = useState<FeedbackCallout | null>(null);
+  const calloutIdRef = useRef(0);
   const climbRef = useRef<RungClimb | null>(null);
   useEffect(() => {
     climbRef.current = climb;
@@ -130,20 +134,15 @@ export default function LadderSession({
       tempoMemoryRef.current.set(next.index, next.tempoPct);
       setClimb(next);
 
-      if (change === 'advance' || change === 'step-back') {
+      const emit = (text: string, tone: FeedbackCallout['tone']) =>
+        setCallout({id: ++calloutIdRef.current, text, tone});
+      if (change === 'advance') {
         persist(next.index);
-        const rung = list[next.index];
-        toast.message(
-          change === 'advance'
-            ? `Rung ${next.index + 1} — difficulty ${Math.round(
-                rung.difficultyScore,
-              )}`
-            : `Stepped back to rung ${next.index + 1} — get it solid here`,
-        );
+        emit(`↑ RUNG ${next.index + 1}`, 'up');
       } else if (change === 'speed-up') {
-        toast.message(`Speeding up to ${next.tempoPct}%`);
+        emit(`▲ ${next.tempoPct}%`, 'up');
       } else if (change === 'slow-down') {
-        toast.message(`Slowing to ${next.tempoPct}% — lock it in first`);
+        emit(`▼ ${next.tempoPct}% — lock it in`, 'down');
       }
     },
     [rungs, persist, climbOptions],
@@ -245,6 +244,8 @@ export default function LadderSession({
           sessionCtx={rungCtx}
           tempoPct={climb.tempoPct}
           onTempoPctChange={onTempoPctChange}
+          feedbackStatus={`Rung ${climb.index + 1}/${rungs.length}`}
+          feedbackCallout={callout}
         />
       </div>
     </div>
