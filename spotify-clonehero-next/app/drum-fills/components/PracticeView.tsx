@@ -96,6 +96,13 @@ const MODE_TO_DB: Record<Mode, FillMode> = {
 // Pad (ms) after the fill before the loop wraps.
 const LOOP_PAD_MS = 600;
 
+// Arm scoring this many chart-ms before the fill's first note. The downbeat is
+// commonly struck a hair early; without this, a hit landing before the fill
+// window opened was dropped (the first note read as a miss). One timing window
+// (the matcher's ±70ms `good` boundary) is enough to catch it while staying
+// clear of the preceding groove note.
+const SCORING_PREROLL_MS = 70;
+
 // Lead-in before the practiced content (Clone Hero practice-mode behaviour): the
 // loop starts here with an empty highway so the upcoming notes scroll into view
 // and the player can prepare instead of being surprised by the first note. Song
@@ -580,7 +587,10 @@ function PracticeSession({
     // but we re-anchor scoring here based on the fill window crossings.
     if (am.isPlaying) am.checkPracticeModeLoop();
 
-    const inFill = chartMs >= fillStartChartMs && chartMs < fillEndChartMs;
+    // Arm a timing-window early so an early downbeat hit is captured and
+    // credited to the first note instead of being dropped.
+    const enterAt = fillStartChartMs - SCORING_PREROLL_MS;
+    const inFill = chartMs >= enterAt && chartMs < fillEndChartMs;
     if (inFill && !inFillRef.current) {
       // Entered the fill: sample the chart position and the real clock together
       // so the scorer can map hits to chart time at the current tempo.
@@ -844,6 +854,17 @@ function PracticeSession({
     [grooveStartChartMs, fillEndChartMs, loopStartMs, loopEndMs],
   );
 
+  // The highway mirrors the sheet music's practice region: only notes within the
+  // groove+fill span are drawn, so the player isn't shown (and lured into
+  // playing) notes after the fill that the scorer doesn't count.
+  const highwayTrack = useMemo(() => {
+    const noteEventGroups = activeTrack.noteEventGroups.filter(group => {
+      const ms = group[0]?.msTime ?? 0;
+      return ms >= grooveStartChartMs && ms <= fillEndChartMs;
+    });
+    return {...activeTrack, noteEventGroups};
+  }, [activeTrack, grooveStartChartMs, fillEndChartMs]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {/* [T] — the single practice context + transport bar (replaces the old
@@ -898,7 +919,7 @@ function PracticeSession({
               <CloneHeroRenderer
                 metadata={metadata}
                 chart={activeChart}
-                track={activeTrack}
+                track={highwayTrack}
                 audioManager={activeAudioManager}
               />
             ) : (
