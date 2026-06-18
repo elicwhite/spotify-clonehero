@@ -32,8 +32,32 @@ describe('scoreAttempt', () => {
     const result = scoreAttempt(j);
     // 2 * 0.7 / 2 = 0.7 -> 70
     expect(result.score).toBeCloseTo(70);
-    expect(result.passed).toBe(false);
     expect(result.good).toBe(2);
+    // Complete + clean (no miss, no extra) passes even though the score (70) is
+    // below the threshold.
+    expect(result.passed).toBe(true);
+  });
+
+  it('a complete clean run passes below threshold; a miss or extra does not', () => {
+    const allGood: AttemptJudgments = {
+      notes: [note('good', 60), note('good', -55), note('good', 50)],
+      extraHits: [],
+    };
+    expect(scoreAttempt(allGood).passed).toBe(true);
+
+    // One miss (incomplete) → falls back to the score gate, which it fails.
+    const withMiss: AttemptJudgments = {
+      notes: [note('good', 60), note('good', -55), note('miss')],
+      extraHits: [],
+    };
+    expect(scoreAttempt(withMiss).passed).toBe(false);
+
+    // An extra hit (not clean) → score gate, fails.
+    const withExtra: AttemptJudgments = {
+      notes: [note('good', 60), note('good', -55), note('good', 50)],
+      extraHits: [{lane: 'red'}],
+    };
+    expect(scoreAttempt(withExtra).passed).toBe(false);
   });
 
   it('penalizes misses', () => {

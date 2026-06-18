@@ -30,7 +30,7 @@ describe('matchHits', () => {
     expect(res.counts).toEqual({perfect: 1, good: 0, miss: 0, extra: 0});
   });
 
-  it('classifies windows: perfect ≤30, good ≤70, miss otherwise', () => {
+  it('classifies windows: perfect ≤50, good ≤70, miss otherwise', () => {
     const notes = [
       note('p', 1000, 'red'),
       note('g', 2000, 'red'),
@@ -45,23 +45,23 @@ describe('matchHits', () => {
     expect(res.counts.extra).toBe(1);
   });
 
-  it('perfect/good boundary at ±30ms (late and early)', () => {
-    // 29ms inside, 31ms outside the perfect window — both still hits.
+  it('perfect/good boundary at ±50ms (late and early)', () => {
+    // 49ms inside, 51ms outside the perfect window — both still hits.
     expect(
-      matchHits([note('a', 1000, 'red')], [hit(1029, 'red')]).judgments[0]
+      matchHits([note('a', 1000, 'red')], [hit(1049, 'red')]).judgments[0]
         .judgment,
     ).toBe('perfect');
     expect(
-      matchHits([note('a', 1000, 'red')], [hit(1031, 'red')]).judgments[0]
+      matchHits([note('a', 1000, 'red')], [hit(1051, 'red')]).judgments[0]
         .judgment,
     ).toBe('good');
     // Symmetric early side.
     expect(
-      matchHits([note('a', 1000, 'red')], [hit(971, 'red')]).judgments[0]
+      matchHits([note('a', 1000, 'red')], [hit(951, 'red')]).judgments[0]
         .judgment,
     ).toBe('perfect');
     expect(
-      matchHits([note('a', 1000, 'red')], [hit(969, 'red')]).judgments[0]
+      matchHits([note('a', 1000, 'red')], [hit(949, 'red')]).judgments[0]
         .judgment,
     ).toBe('good');
   });
@@ -82,9 +82,9 @@ describe('matchHits', () => {
   });
 
   it('respects early hits (negative delta) symmetrically', () => {
-    const res = matchHits([note('a', 1000, 'blue')], [hit(960, 'blue')]);
-    expect(res.judgments[0].judgment).toBe('good'); // -40ms
-    expect(res.judgments[0].deltaMs).toBe(-40);
+    const res = matchHits([note('a', 1000, 'blue')], [hit(940, 'blue')]);
+    expect(res.judgments[0].judgment).toBe('good'); // -60ms (inside good, outside perfect)
+    expect(res.judgments[0].deltaMs).toBe(-60);
   });
 
   it('an overhit (no in-window note) is an extra, not a match', () => {
@@ -203,8 +203,8 @@ describe('matchHits', () => {
     expect(res2.judgments[0].judgment).toBe('miss');
   });
 
-  it('exposes YARG-aligned default windows of 30 / 70', () => {
-    expect(DEFAULT_WINDOWS.perfect).toBe(30);
+  it('exposes default windows of 50 (perfect) / 70 (good, YARG-aligned)', () => {
+    expect(DEFAULT_WINDOWS.perfect).toBe(50);
     expect(DEFAULT_WINDOWS.good).toBe(70);
   });
 });

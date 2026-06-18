@@ -28,13 +28,16 @@ export type Judgment = 'perfect' | 'good' | 'miss';
  * which is equivalent for a single hit and slightly more forgiving for clusters
  * — acceptable for a practice scorer.
  *
- * YARG has no perfect/good split. The tighter ±30 ms `perfect` window is our
- * own pedagogical addition: it only affects feedback granularity (green vs
- * amber on the stave), never whether a note counts as hit.
+ * YARG has no perfect/good split. The ±50 ms `perfect` window is our own
+ * pedagogical addition: it drives feedback granularity (green vs amber) and the
+ * score weighting, never whether a note counts as hit. It sits at ±50 (not the
+ * tighter ±30 a game might use) because real play telemetry showed the bulk of
+ * accurate, in-pocket hits land 30–50 ms off the grid; ±30 under-credited them
+ * and made complete clean fills feel unfairly low.
  */
 export const DEFAULT_WINDOWS = {
   /** |delta| ≤ perfect → perfect (pedagogical inner window, not from YARG). */
-  perfect: 30,
+  perfect: 50,
   /** |delta| ≤ good → hit; otherwise miss. Matches YARG's ±70 ms drums window. */
   good: 70,
 } as const;

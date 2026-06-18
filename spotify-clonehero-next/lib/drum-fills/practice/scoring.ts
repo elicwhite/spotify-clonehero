@@ -3,7 +3,8 @@
  *
  * Converts the per-note judgments produced by the MIDI hit matcher into a single
  * attempt score on a 0–100 scale. An attempt passes when its score is ≥ the pass
- * threshold (90 by default).
+ * threshold (90 by default) OR when it was complete and clean (every note hit,
+ * no extra hits) — a flawless-but-not-all-perfect run shouldn't be stuck failing.
  *
  * The {@link AttemptJudgments} input type is defined here so this module can be
  * unit-tested in isolation. It is intentionally structurally compatible with the
@@ -137,9 +138,16 @@ export function scoreAttempt(
 
   const score = clamp(scoreFraction * 100, 0, 100);
 
+  // A complete, clean run passes regardless of the perfect/good split: every
+  // expected note was hit (within the ±good window) and there were no extra
+  // hits. This keeps an all-"good" but flawless pass from being stuck below the
+  // score threshold. (The ladder still gates *advancing a rung* on full tempo.)
+  const completeAndClean = totalNotes > 0 && miss === 0 && extraHits === 0;
+  const passed = score >= opts.passThreshold || completeAndClean;
+
   return {
     score,
-    passed: score >= opts.passThreshold,
+    passed,
     perfect,
     good,
     miss,
