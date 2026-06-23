@@ -83,8 +83,9 @@ export class AudioManager {
   }
 
   async #createTracks(audioFiles: Files) {
-    // Initialize SoundTouch worklet first
-    await this.#initializeSoundTouchWorklet();
+    // Initialize SoundTouch worklet in the background (don't block track creation).
+    // The worklet is only needed for pitch-corrected tempo changes, not normal playback.
+    this.#initializeSoundTouchWorklet();
 
     // If the manager was destroyed while the worklet loaded (StrictMode
     // double-mount, or the user left the view), stop here — building tracks
@@ -143,7 +144,6 @@ export class AudioManager {
           this.#context,
           filteredAudioBuffers,
           this.#handleTrackEnded.bind(this),
-          this.#soundTouchWorklet,
         );
       }),
     );
@@ -190,6 +190,14 @@ export class AudioManager {
 
       // Connect the worklet to destination so audio can flow through
       this.#soundTouchWorklet.connect(this.#context.destination);
+
+      // If tempo was already changed before the worklet finished loading,
+      // route the tracks through the worklet now
+      if (this.#tempoConfig.tempo !== 1.0) {
+        Object.values(this.#tracks).forEach(track => {
+          track.setWorkletRouting(this.#soundTouchWorklet);
+        });
+      }
     } catch (error) {
       this.#soundTouchWorklet = null;
       // An AbortError here is expected when the context was closed mid-load
@@ -221,6 +229,7 @@ export class AudioManager {
       this.#lastTempoChangeEffectiveTime = this.#effectivePlayTime;
     }
 
+    const previousTempo = this.#tempoConfig.tempo;
     this.#tempoConfig.tempo = tempo;
 
     if (this.#soundTouchWorklet) {
@@ -233,6 +242,18 @@ export class AudioManager {
       if (rateParam)
         rateParam.setValueAtTime(1.0 / tempo, this.#context.currentTime);
       if (pitchParam) pitchParam.setValueAtTime(1.0, this.#context.currentTime);
+
+      // Route audio through the worklet only when tempo != 1.0 (for pitch correction).
+      // At tempo 1.0, bypass the worklet and connect directly to destination.
+      const wasUsingWorklet = previousTempo !== 1.0;
+      const shouldUseWorklet = tempo !== 1.0;
+      if (wasUsingWorklet !== shouldUseWorklet) {
+        Object.values(this.#tracks).forEach(track => {
+          track.setWorkletRouting(
+            shouldUseWorklet ? this.#soundTouchWorklet : null,
+          );
+        });
+      }
     }
 
     // Update all tracks to use the new tempo (drive playbackRate at the source)
@@ -617,23 +638,16 @@ class AudioTrack {
     context: AudioContext,
     audioBuffers: AudioBuffer[],
     onSongEnded: () => void,
-    workletNode?: AudioWorkletNode | null,
   ) {
     this.#context = context;
     this.#audioBuffers = audioBuffers;
     this.#onSongEnded = onSongEnded;
-    this.#workletNode = workletNode || null;
 
     this.#gainNodes = new Array(audioBuffers.length).fill(null).map(() => {
       const gainNode = this.#context.createGain();
-
-      // Connect through the worklet if available, otherwise directly to destination
-      if (this.#workletNode) {
-        gainNode.connect(this.#workletNode);
-      } else {
-        gainNode.connect(this.#context.destination);
-      }
-
+      // Connect directly to destination by default (bypass worklet).
+      // setWorkletRouting() can redirect through the worklet later.
+      gainNode.connect(this.#context.destination);
       return gainNode;
     });
 
@@ -642,6 +656,22 @@ class AudioTrack {
     );
 
     this.volume = 1;
+  }
+
+  /**
+   * Switch gain nodes between routing through the worklet (for pitch-corrected
+   * tempo changes) and routing directly to the AudioContext destination.
+   */
+  setWorkletRouting(workletNode: AudioWorkletNode | null) {
+    this.#workletNode = workletNode;
+    this.#gainNodes.forEach(gainNode => {
+      gainNode.disconnect();
+      if (workletNode) {
+        gainNode.connect(workletNode);
+      } else {
+        gainNode.connect(this.#context.destination);
+      }
+    });
   }
 
   get ended() {
