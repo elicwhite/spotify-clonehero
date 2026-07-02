@@ -6,7 +6,8 @@
  */
 
 import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
-import convertToVexFlow, {Measure, Note} from '../convertToVexflow';
+import convertToVexFlow, {Measure} from '../convertToVexflow';
+import {Note} from '../notation/types';
 import {tickToMs} from '@/lib/chart-utils/tickToMs';
 
 type Ev = {type: number; flags?: number};

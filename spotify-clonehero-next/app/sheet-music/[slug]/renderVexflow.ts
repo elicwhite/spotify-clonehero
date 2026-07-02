@@ -22,7 +22,7 @@ import {
   Glyph,
   Flow,
 } from 'vexflow';
-import {Measure, Note} from './convertToVexflow';
+import {Measure} from './convertToVexflow';
 import {PracticeModeConfig} from '@/lib/preview/audioManager';
 
 /** Screen position of a single rendered notehead, keyed by its fill-note id. */
@@ -73,48 +73,27 @@ const ACCENT_SCALE_RIGHT = Flow.NOTATION_FONT_SCALE * 0.8;
 const INK_COLOR = '#000';
 const INACTIVE_MEASURE_COLOR = 'rgba(0, 0, 0, 0.3)';
 
-// Tuplet ids are globally unique, so compare a note's tuplet membership by the
-// tuplet's index within its own measure instead.
-function tupletIndexOf(measure: Measure, note: Note): number {
-  return note.tupletId === undefined
-    ? -1
-    : measure.tuplets.findIndex(t => t.id === note.tupletId);
-}
+/**
+ * Canonical description of everything that affects how a measure's notes are
+ * drawn. Two measures with equal render keys draw identically, which is what
+ * the repeat-measure symbol stands in for. Tuplet ids are globally unique, so
+ * tuplet membership is compared by index within the measure.
+ */
+function measureRenderKey(measure: Measure): string {
+  const tupletIndex = new Map(measure.tuplets.map((t, i) => [t.id, i]));
 
-// Helper function to check if two measures have identical notes
-function measuresAreEqual(measure1: Measure, measure2: Measure): boolean {
-  if (
-    measure1.notes.length !== measure2.notes.length ||
-    measure1.tuplets.length !== measure2.tuplets.length
-  ) {
-    return false;
-  }
-
-  const tupletsMatch = measure1.tuplets.every((tuplet, index) => {
-    const tuplet2 = measure2.tuplets[index];
-    return (
-      tuplet.numNotes === tuplet2.numNotes &&
-      tuplet.notesOccupied === tuplet2.notesOccupied
-    );
-  });
-  if (!tupletsMatch) {
-    return false;
-  }
-
-  return measure1.notes.every((note, index) => {
-    const note2 = measure2.notes[index];
-    return (
-      note.duration === note2.duration &&
-      note.dots === note2.dots &&
-      note.isRest === note2.isRest &&
-      tupletIndexOf(measure1, note) === tupletIndexOf(measure2, note2) &&
-      JSON.stringify(note.notes) === JSON.stringify(note2.notes) &&
-      JSON.stringify(note.graceNotes ?? []) ===
-        JSON.stringify(note2.graceNotes ?? []) &&
-      JSON.stringify(note.accents ?? []) ===
-        JSON.stringify(note2.accents ?? []) &&
-      JSON.stringify(note.ghosts ?? []) === JSON.stringify(note2.ghosts ?? [])
-    );
+  return JSON.stringify({
+    tuplets: measure.tuplets.map(t => [t.numNotes, t.notesOccupied]),
+    notes: measure.notes.map(note => [
+      note.duration,
+      note.dots,
+      note.isRest,
+      note.tupletId === undefined ? -1 : tupletIndex.get(note.tupletId),
+      note.notes,
+      note.graceNotes ?? null,
+      note.accents ?? null,
+      note.ghosts ?? null,
+    ]),
   });
 }
 
@@ -564,7 +543,7 @@ function renderMeasure(
   // Check if this measure is a repeat of the previous measure (excluding rest-only measures)
   const isRepeat =
     previousMeasure &&
-    measuresAreEqual(measure, previousMeasure) &&
+    measureRenderKey(measure) === measureRenderKey(previousMeasure) &&
     !measureIsOnlyRests(measure) &&
     !measureIsOnlyRests(previousMeasure);
 
@@ -605,12 +584,6 @@ function renderMeasure(
       align_center: isMeasureRest,
       stem_direction: STEM_DIRECTION,
     });
-
-    // @ts-ignore Store ms in the stave note for later use
-    staveNote.ms = note.ms;
-    // @ts-ignore Store the source note so post-draw marker collection can read
-    // its per-notehead fill-note ids.
-    staveNote.sourceNote = note;
 
     if (note.dots > 0) {
       Dot.buildAndAttach([staveNote], {
@@ -699,43 +672,44 @@ function renderMeasure(
 
   voice.draw(context, stave);
 
-  notes.forEach(note => {
-    if (!note.isRest()) {
-      timePositionMap.push({
-        // @ts-ignore Use ms from the note object stored above
-        ms: note.ms,
-        x: note.getNoteHeadBeginX() * zoom,
-        y: stave.getY() * zoom,
-        flag: 'note',
-      });
+  // `notes` is built 1:1 from `measure.notes`, so the shared index pairs each
+  // drawn StaveNote with its source note.
+  notes.forEach((staveNote, index) => {
+    if (staveNote.isRest()) {
+      return;
+    }
 
-      // Per-notehead markers for the drum-fills practice overlay. getYs()
-      // returns one y per notehead (top→bottom, matching the key order); pair
-      // each with its source fill-note id. x is the notehead's left edge.
-      if (noteMarkers) {
-        // @ts-ignore sourceNote stashed above carries the per-head ids.
-        const sourceNote = note.sourceNote as Note | undefined;
-        const ids = sourceNote?.noteIds;
-        if (ids && ids.length > 0) {
-          const ys = note.getYs();
-          const headX = note.getNoteHeadBeginX();
-          const headWidth = note.getNoteHeadEndX() - note.getNoteHeadBeginX();
-          const centreX = headX + headWidth / 2;
-          ids.forEach((id, i) => {
-            if (id == null) return;
-            const y = ys[i] ?? ys[ys.length - 1] ?? stave.getY();
-            noteMarkers.push({noteId: id, x: centreX * zoom, y: y * zoom});
-          });
-          // Flam grace notes carry their own ids; anchor their markers to the
-          // main notehead so their feedback dot lands on the flam it belongs
-          // to.
-          sourceNote?.graceNoteIds?.flat().forEach(id => {
-            if (id == null) return;
-            const y = ys[0] ?? stave.getY();
-            noteMarkers.push({noteId: id, x: centreX * zoom, y: y * zoom});
-          });
+    const source = measure.notes[index];
+
+    timePositionMap.push({
+      ms: source.ms,
+      x: staveNote.getNoteHeadBeginX() * zoom,
+      y: stave.getY() * zoom,
+      flag: 'note',
+    });
+
+    // Per-notehead markers for the drum-fills practice overlay. getYs()
+    // returns one y per notehead (top→bottom, matching the key order); pair
+    // each with its source fill-note id. x is the notehead's centre.
+    if (noteMarkers) {
+      const ys = staveNote.getYs();
+      const headX = staveNote.getNoteHeadBeginX();
+      const headWidth = staveNote.getNoteHeadEndX() - headX;
+      const centreX = headX + headWidth / 2;
+      const pushMarker = (id: string | null, y: number) => {
+        if (id != null) {
+          noteMarkers.push({noteId: id, x: centreX * zoom, y: y * zoom});
         }
-      }
+      };
+
+      source.noteIds.forEach((id, i) =>
+        pushMarker(id, ys[i] ?? ys[ys.length - 1] ?? stave.getY()),
+      );
+      // Flam grace notes carry their own ids; anchor their markers to the
+      // main notehead so their feedback dot lands on the flam it belongs to.
+      source.graceNoteIds
+        ?.flat()
+        .forEach(id => pushMarker(id, ys[0] ?? stave.getY()));
     }
   });
 
