@@ -51,13 +51,22 @@ describe('convertToVexFlow note timing', () => {
   });
 
   it('keeps every playable note onset at its true chart time (never zeroed)', () => {
-    // Regression for the playhead "teleport on rests" bug: composite-duration
-    // splitting used to stamp the onset piece with tick/ms 0, giving a
-    // notehead a real x but a time of 0.
+    // Regression for the playhead "teleport on rests" bug: a rendered notehead
+    // must carry the audio time of a real charted onset, never 0. The notation
+    // engine may regularize a note's *written* position (note.tick), but its
+    // ms must still be the original chart onset's time.
+    const chartOnsetMs = new Set(
+      bundle.track.noteEventGroups.map(group =>
+        tickToMs(bundle.chart, group[0].tick),
+      ),
+    );
     for (const note of playableNotes) {
       if (note.tick === 0) continue; // a genuine note at tick 0 is allowed
       expect(note.ms).toBeGreaterThan(0);
-      expect(note.ms).toBeCloseTo(tickToMs(bundle.chart, note.tick));
+      const matches = [...chartOnsetMs].some(
+        ms => Math.abs(ms - note.ms) < 0.01,
+      );
+      expect(matches).toBe(true);
     }
   });
 

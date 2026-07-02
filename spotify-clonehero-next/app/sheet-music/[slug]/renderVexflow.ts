@@ -8,6 +8,7 @@ import {
   StaveNote,
   TextJustification,
   Formatter,
+  Fraction,
   ModifierPosition,
   Beam,
   Dot,
@@ -15,8 +16,13 @@ import {
   Tuplet,
   Voice,
   RepeatNote,
+  GraceNote,
+  GraceNoteGroup,
+  Parenthesis,
+  Glyph,
+  Flow,
 } from 'vexflow';
-import {Measure} from './convertToVexflow';
+import {Measure, Note} from './convertToVexflow';
 import {PracticeModeConfig} from '@/lib/preview/audioManager';
 
 /** Screen position of a single rendered notehead, keyed by its fill-note id. */
@@ -61,9 +67,37 @@ const NOTE_COLOR_MAP: {[key: string]: string} = {
   'a/4': '#27ae60', // green
 };
 
+const STEM_DIRECTION = -1;
+const ACCENT_SCALE = Flow.NOTATION_FONT_SCALE;
+const ACCENT_SCALE_RIGHT = Flow.NOTATION_FONT_SCALE * 0.8;
+const INK_COLOR = '#000';
+const INACTIVE_MEASURE_COLOR = 'rgba(0, 0, 0, 0.3)';
+
+// Tuplet ids are globally unique, so compare a note's tuplet membership by the
+// tuplet's index within its own measure instead.
+function tupletIndexOf(measure: Measure, note: Note): number {
+  return note.tupletId === undefined
+    ? -1
+    : measure.tuplets.findIndex(t => t.id === note.tupletId);
+}
+
 // Helper function to check if two measures have identical notes
 function measuresAreEqual(measure1: Measure, measure2: Measure): boolean {
-  if (measure1.notes.length !== measure2.notes.length) {
+  if (
+    measure1.notes.length !== measure2.notes.length ||
+    measure1.tuplets.length !== measure2.tuplets.length
+  ) {
+    return false;
+  }
+
+  const tupletsMatch = measure1.tuplets.every((tuplet, index) => {
+    const tuplet2 = measure2.tuplets[index];
+    return (
+      tuplet.numNotes === tuplet2.numNotes &&
+      tuplet.notesOccupied === tuplet2.notesOccupied
+    );
+  });
+  if (!tupletsMatch) {
     return false;
   }
 
@@ -71,9 +105,15 @@ function measuresAreEqual(measure1: Measure, measure2: Measure): boolean {
     const note2 = measure2.notes[index];
     return (
       note.duration === note2.duration &&
-      note.dotted === note2.dotted &&
-      note.isTriplet === note2.isTriplet &&
-      JSON.stringify(note.notes) === JSON.stringify(note2.notes)
+      note.dots === note2.dots &&
+      note.isRest === note2.isRest &&
+      tupletIndexOf(measure1, note) === tupletIndexOf(measure2, note2) &&
+      JSON.stringify(note.notes) === JSON.stringify(note2.notes) &&
+      JSON.stringify(note.graceNotes ?? []) ===
+        JSON.stringify(note2.graceNotes ?? []) &&
+      JSON.stringify(note.accents ?? []) ===
+        JSON.stringify(note2.accents ?? []) &&
+      JSON.stringify(note.ghosts ?? []) === JSON.stringify(note2.ghosts ?? [])
     );
   });
 }
@@ -456,8 +496,7 @@ function renderMeasure(
     shouldMute = !isInPracticeRange;
   }
 
-  const inactive_measure_color = 'rgba(0, 0, 0, 0.3)';
-  const fill_color = shouldMute ? inactive_measure_color : undefined;
+  const fill_color = shouldMute ? INACTIVE_MEASURE_COLOR : undefined;
 
   context.fillStyle = fill_color ?? '';
   context.strokeStyle = fill_color ?? '';
@@ -554,14 +593,17 @@ function renderMeasure(
   }
 
   // Original note rendering logic
-  const tuplets: StaveNote[][] = [];
-  let currentTuplet: StaveNote[] | null = null;
+  const tupletGroups = new Map<number, StaveNote[]>();
 
   const notes = measure.notes.map(note => {
+    const isMeasureRest = note.isRest && measure.notes.length === 1;
     const staveNote = new StaveNote({
       keys: note.notes,
-      duration: note.duration,
-      align_center: note.duration === 'wr',
+      duration: `${note.duration}${'d'.repeat(note.dots)}${
+        note.isRest ? 'r' : ''
+      }`,
+      align_center: isMeasureRest,
+      stem_direction: STEM_DIRECTION,
     });
 
     // @ts-ignore Store ms in the stave note for later use
@@ -570,30 +612,59 @@ function renderMeasure(
     // its per-notehead fill-note ids.
     staveNote.sourceNote = note;
 
-    if (enableColors) {
+    if (note.dots > 0) {
+      Dot.buildAndAttach([staveNote], {
+        all: true,
+      });
+    }
+
+    if (note.graceNotes?.length) {
+      const graceNotes = note.graceNotes.map(
+        keys =>
+          new GraceNote({
+            keys,
+            duration: '8',
+            slash: true,
+            stem_direction: STEM_DIRECTION,
+          }),
+      );
+      const graceGroup = new GraceNoteGroup(graceNotes, false);
+
+      if (graceNotes.length > 1) {
+        graceGroup.beamNotes();
+      }
+
+      staveNote.addModifier(graceGroup, 0);
+    }
+
+    if (!note.isRest && note.ghosts?.length) {
+      staveNote.keys.forEach((key, keyIndex) => {
+        if (note.ghosts?.includes(key)) {
+          staveNote.addModifier(
+            new Parenthesis(ModifierPosition.LEFT),
+            keyIndex,
+          );
+          staveNote.addModifier(
+            new Parenthesis(ModifierPosition.RIGHT),
+            keyIndex,
+          );
+        }
+      });
+    }
+
+    if (enableColors && !note.isRest) {
       staveNote.keys.forEach((n, idx) => {
         const suffix = shouldMute ? '4D' : '';
         staveNote.setKeyStyle(idx, {fillStyle: NOTE_COLOR_MAP[n] + suffix});
       });
     }
 
-    if (
-      note.isTriplet &&
-      (!currentTuplet || (currentTuplet && currentTuplet.length === 3))
-    ) {
-      currentTuplet = [staveNote];
-      tuplets.push(currentTuplet);
-    } else if (note.isTriplet && currentTuplet) {
-      currentTuplet.push(staveNote);
-    } else if (!note.isTriplet && currentTuplet) {
-      currentTuplet = null;
+    if (note.tupletId !== undefined) {
+      const group = tupletGroups.get(note.tupletId) ?? [];
+      group.push(staveNote);
+      tupletGroups.set(note.tupletId, group);
     }
 
-    if (note.dotted) {
-      Dot.buildAndAttach([staveNote], {
-        all: true,
-      });
-    }
     return staveNote;
   });
 
@@ -604,11 +675,24 @@ function renderMeasure(
     .setStrict(false)
     .addTickables(notes);
 
-  const drawableTuplets = tuplets.map(tupletNotes => new Tuplet(tupletNotes));
+  const drawableTuplets = measure.tuplets
+    .filter(meta => (tupletGroups.get(meta.id)?.length ?? 0) > 1)
+    .map(
+      meta =>
+        new Tuplet(tupletGroups.get(meta.id) as StaveNote[], {
+          num_notes: meta.numNotes,
+          notes_occupied: meta.notesOccupied,
+          ratioed: false,
+          location: STEM_DIRECTION,
+        }),
+    );
 
   const beams = Beam.generateBeams(notes, {
     flat_beams: true,
-    stem_direction: -1,
+    stem_direction: STEM_DIRECTION,
+    ...(measure.isCompound
+      ? {groups: [new Fraction(3, measure.timeSig.denominator)]}
+      : {}),
   });
 
   new Formatter().joinVoices([voice]).format([voice], staveWidth - 40);
@@ -630,9 +714,7 @@ function renderMeasure(
       // each with its source fill-note id. x is the notehead's left edge.
       if (noteMarkers) {
         // @ts-ignore sourceNote stashed above carries the per-head ids.
-        const sourceNote = note.sourceNote as
-          | {noteIds?: (string | null)[]}
-          | undefined;
+        const sourceNote = note.sourceNote as Note | undefined;
         const ids = sourceNote?.noteIds;
         if (ids && ids.length > 0) {
           const ys = note.getYs();
@@ -642,6 +724,14 @@ function renderMeasure(
           ids.forEach((id, i) => {
             if (id == null) return;
             const y = ys[i] ?? ys[ys.length - 1] ?? stave.getY();
+            noteMarkers.push({noteId: id, x: centreX * zoom, y: y * zoom});
+          });
+          // Flam grace notes carry their own ids; anchor their markers to the
+          // main notehead so their feedback dot lands on the flam it belongs
+          // to.
+          sourceNote?.graceNoteIds?.flat().forEach(id => {
+            if (id == null) return;
+            const y = ys[0] ?? stave.getY();
             noteMarkers.push({noteId: id, x: centreX * zoom, y: y * zoom});
           });
         }
@@ -664,5 +754,104 @@ function renderMeasure(
     tuplet.setContext(context).draw();
   });
 
+  drawAccents(context, stave, measure, notes, enableColors, shouldMute);
+
   return stave;
+}
+
+function drawAccentGlyph(
+  context: RenderContext,
+  x: number,
+  y: number,
+  originX: number,
+  originY: number,
+  scale: number,
+  color: string,
+) {
+  const glyph = new Glyph('articAccentAbove', scale);
+
+  glyph.setOrigin(originX, originY);
+  context.openGroup('accent');
+  context.setFillStyle(color);
+  context.setStrokeStyle(color);
+  glyph.render(context, x, y);
+  context.closeGroup();
+}
+
+function drawAccents(
+  context: RenderContext,
+  stave: Stave,
+  measure: Measure,
+  staveNotes: StaveNote[],
+  enableColors: boolean,
+  shouldMute: boolean,
+) {
+  const gap = stave.getSpacingBetweenLines();
+  const topLineY = stave.getYForLine(0);
+  const colorOf = (key: string) => {
+    if (shouldMute) {
+      return INACTIVE_MEASURE_COLOR;
+    }
+    return enableColors ? NOTE_COLOR_MAP[key] : INK_COLOR;
+  };
+
+  context.save();
+
+  staveNotes.forEach((staveNote, index) => {
+    const note = measure.notes[index];
+
+    if (!note.accents?.length) {
+      return;
+    }
+
+    const ys = staveNote.getYs();
+    const wholeChord = note.notes.every(key => note.accents?.includes(key));
+
+    if (wholeChord) {
+      const {x} = staveNote.getModifierStartXY(ModifierPosition.ABOVE, 0);
+      const color =
+        note.notes.length === 1
+          ? colorOf(note.notes[0])
+          : shouldMute
+            ? INACTIVE_MEASURE_COLOR
+            : INK_COLOR;
+
+      drawAccentGlyph(
+        context,
+        x,
+        Math.min(...ys, topLineY) - gap,
+        0.5,
+        1,
+        ACCENT_SCALE,
+        color,
+      );
+
+      return;
+    }
+
+    note.accents.forEach(key => {
+      const keyIndex = note.notes.indexOf(key);
+
+      if (keyIndex < 0) {
+        return;
+      }
+
+      const {x} = staveNote.getModifierStartXY(
+        ModifierPosition.RIGHT,
+        keyIndex,
+      );
+
+      drawAccentGlyph(
+        context,
+        x + gap / 2,
+        ys[keyIndex],
+        0.2,
+        0.5,
+        ACCENT_SCALE_RIGHT,
+        colorOf(key),
+      );
+    });
+  });
+
+  context.restore();
 }
