@@ -55,6 +55,9 @@ function runConverter(song: string) {
     drumStemPpIoiMs: dsIoiMs,
     drumOnsetOffsetMs: offset.offset_ms,
     drumPpBeatsSec: ppDs.beats,
+    // The frozen dbc913d Python reference predates PL_LSQ — pin the
+    // per-beat map for byte-exact comparison.
+    plLsqTolMs: 0,
   });
   expect(sync).not.toBeNull();
   return {sync: sync!, expected};

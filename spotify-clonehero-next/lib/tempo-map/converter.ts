@@ -418,10 +418,10 @@ export interface BeatsToSynctrackInput {
   drumPpBeatsSec?: number[] | null;
   /**
    * PL_LSQ piecewise least-squares tempo fitting tolerance (ms).
-   * 0 (default) = per-beat tempo events, byte-exact vs the dbc913d golden
-   * reference. Pass PL_LSQ_TOL_MS_DEFAULT (15) for the banked 2026-07-02
-   * behavior: ~6x sparser tempo maps AND better alignment (LSQ averages
-   * beat-detection jitter). The production pipeline passes 15.
+   * Default PL_LSQ_TOL_MS_DEFAULT (15) = the banked 2026-07-02 behavior:
+   * ~6x sparser tempo maps AND better alignment (LSQ averages beat-detection
+   * jitter). Pass 0 to reproduce the per-beat map, byte-exact vs the frozen
+   * dbc913d golden reference (the golden tests do this explicitly).
    */
   plLsqTolMs?: number;
 }
@@ -439,7 +439,7 @@ export function beatsToSynctrack({
   drumStemPpIoiMs = null,
   drumOnsetOffsetMs = null,
   drumPpBeatsSec = null,
-  plLsqTolMs = 0,
+  plLsqTolMs = PL_LSQ_TOL_MS_DEFAULT,
 }: BeatsToSynctrackInput): Synctrack | null {
   let beatsMs = beats
     .slice()

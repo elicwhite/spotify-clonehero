@@ -78,24 +78,27 @@ describe('beatsToSynctrack with plLsqTolMs', () => {
   const beatsSec = constantBeats(120, 200, 5).map(ms => ms / 1000);
   const downbeatsSec = beatsSec.filter((_, i) => i % 4 === 0);
 
-  test('default (0) preserves the per-beat golden behavior', () => {
-    const dense = beatsToSynctrack({beats: beatsSec, downbeats: downbeatsSec})!;
-    const denseExplicit = beatsToSynctrack({
+  test('plLsqTolMs: 0 reproduces the per-beat golden behavior', () => {
+    const dense = beatsToSynctrack({
       beats: beatsSec,
       downbeats: downbeatsSec,
       plLsqTolMs: 0,
     })!;
-    expect(denseExplicit).toEqual(dense);
     // Per-beat map: roughly one tempo event per beat (post dedup/collapse).
     expect(dense.tempos.length).toBeGreaterThan(50);
   });
 
-  test('enabled: sparse map, same downstream contract', () => {
+  test('default (PL_LSQ on): sparse map, same downstream contract', () => {
     const sparse = beatsToSynctrack({
+      beats: beatsSec,
+      downbeats: downbeatsSec,
+    })!;
+    const sparseExplicit = beatsToSynctrack({
       beats: beatsSec,
       downbeats: downbeatsSec,
       plLsqTolMs: PL_LSQ_TOL_MS_DEFAULT,
     })!;
+    expect(sparseExplicit).toEqual(sparse);
     expect(sparse.tempos.length).toBeLessThanOrEqual(8);
     expect(sparse.timeSignatures).toHaveLength(1);
     expect(sparse.timeSignatures[0].numerator).toBe(4);
