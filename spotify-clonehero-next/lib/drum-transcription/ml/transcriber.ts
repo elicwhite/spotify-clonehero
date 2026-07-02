@@ -49,8 +49,11 @@ export interface DrumTranscriber {
 // CRNN Transcriber (Web Worker-based inference)
 // ---------------------------------------------------------------------------
 
-/** URL for the CRNN ONNX model (served from /public/models/). */
-const CRNN_MODEL_URL = '/models/crnn_drum_transcriber.onnx';
+/** URL for the CRNN ONNX model. Hosted on R2 (assets.musiccharts.tools) —
+ * the local public/models/ copy is gitignored and never deploys, so a
+ * same-origin URL 404s in production. */
+const CRNN_MODEL_URL =
+  'https://assets.musiccharts.tools/models/crnn_drum_transcriber.onnx';
 
 /**
  * Real ONNX-based drum transcriber using the CRNN model.
