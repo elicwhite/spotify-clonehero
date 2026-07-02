@@ -27,7 +27,7 @@ import {
 import {runBeatThisOnnx} from './beat-this-onnx';
 import {runPostprocessor} from './beat-this-pp';
 import {computeDrumOnsetOffsetMs} from './drum-onset';
-import {beatsToSynctrack} from './converter';
+import {beatsToSynctrack, PL_LSQ_TOL_MS_DEFAULT} from './converter';
 import type {
   PipelineProgress,
   PipelineRunRequest,
@@ -272,6 +272,11 @@ async function run(req: PipelineRunRequest) {
     drumStemPpIoiMs: dsIoiMs,
     drumOnsetOffsetMs: offsetMs,
     drumPpBeatsSec: ds.pp.beats,
+    // PL_LSQ (banked drum-to-chart keep 83d432d, 2026-07-02): sparse
+    // jitter-averaged tempo maps — ~6x fewer tempo events AND better
+    // alignment than the per-beat map. Golden fixtures pin the per-beat
+    // behavior, so this is opt-in here rather than a converter default.
+    plLsqTolMs: PL_LSQ_TOL_MS_DEFAULT,
   });
   if (!sync) {
     throw new Error(

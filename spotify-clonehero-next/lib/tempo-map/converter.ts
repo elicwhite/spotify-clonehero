@@ -266,6 +266,140 @@ function maybeOctaveCorrect(
   return {beats: beatsMs, applied: false};
 }
 
+// --- PL_LSQ piecewise least-squares tempo map ----------------------------
+
+/**
+ * Default PL_LSQ tolerance (ms). Port of `_pl_lsq_segments` from
+ * drum-to-chart autoresearch-tempo train.py (banked keep 83d432d,
+ * 2026-07-02): keep-set chart_f1_abs +0.019 / rel +0.028, tempo events
+ * 76.6 → 13.3 per minute. Passing 0 (the converter default) reproduces the
+ * per-beat map, which is what the frozen dbc913d golden fixtures expect.
+ */
+export const PL_LSQ_TOL_MS_DEFAULT = 15;
+
+/**
+ * Continuous piecewise-LSQ tempo-map segmentation.
+ *
+ * Greedily grow constant-tempo segments left-to-right; within a segment the
+ * tempo (slope) is the least-squares fit to the detected beats, so detection
+ * jitter is averaged out and the fitted grid is typically CLOSER to the true
+ * beats than the jittery per-beat map. Continuity is maintained by pinning
+ * each segment's start to the previous segment's fitted endpoint, and each
+ * segment spans a whole number of beats so integer betas stay on beats
+ * (bar phase preserved). A segment closes when no constant-tempo line keeps
+ * every interior beat within tolMs of its detected time, so grid
+ * displacement is bounded everywhere. Click-track songs collapse to one
+ * segment; genuinely varying songs get a few segments that track the local
+ * tempo.
+ */
+export function plLsqSegments(
+  beatsMs: number[],
+  tolMs: number,
+): {tempos: TempoEvent[]; originMs: number} | null {
+  const n = beatsMs.length;
+  if (n < 2) return null;
+
+  /** Free LSQ line y = a + b*k over beats[p..q]; returns [b, maxAbsResid]. */
+  const fitMaxResid = (p: number, q: number): [number, number] => {
+    if (q - p < 1) {
+      return [p + 1 < n ? beatsMs[p + 1] - beatsMs[p] : 60_000.0 / 120, 0.0];
+    }
+    const m = q - p + 1;
+    let sx = 0,
+      sy = 0,
+      sxx = 0,
+      sxy = 0;
+    for (let k = p; k <= q; k++) {
+      sx += k;
+      sy += beatsMs[k];
+      sxx += k * k;
+      sxy += k * beatsMs[k];
+    }
+    const denom = m * sxx - sx * sx;
+    const b = denom !== 0 ? (m * sxy - sx * sy) / denom : 0;
+    const a = (sy - b * sx) / m;
+    let r = 0;
+    for (let k = p; k <= q; k++) {
+      r = Math.max(r, Math.abs(a + b * k - beatsMs[k]));
+    }
+    return [b, r];
+  };
+
+  // Forward greedy segmentation at the tolerance.
+  const bnds = [0];
+  let i = 0;
+  while (i < n - 1) {
+    let j = i + 1;
+    let jbest = i + 1;
+    while (j < n) {
+      const [, r] = fitMaxResid(i, j);
+      if (r <= tolMs) {
+        jbest = j;
+        j++;
+      } else {
+        break;
+      }
+    }
+    bnds.push(jbest);
+    i = jbest;
+  }
+
+  // Build continuous start-pinned tempos from the boundaries.
+  const tempos: TempoEvent[] = [];
+  let originMs: number | null = null;
+  let startT: number | null = null;
+  for (let s = 0; s < bnds.length - 1; s++) {
+    const i0 = bnds[s];
+    const i1 = bnds[s + 1];
+    let b: number;
+    let fi: number;
+    if (startT === null) {
+      // Free fit for the first segment.
+      const m = i1 - i0 + 1;
+      let sx = 0,
+        sy = 0,
+        sxx = 0,
+        sxy = 0;
+      for (let k = i0; k <= i1; k++) {
+        sx += k;
+        sy += beatsMs[k];
+        sxx += k * k;
+        sxy += k * beatsMs[k];
+      }
+      const denom = m * sxx - sx * sx;
+      b = denom !== 0 ? (m * sxy - sx * sy) / denom : 0;
+      const a = (sy - b * sx) / m;
+      fi = a + b * i0;
+    } else {
+      // Pinned fit: slope through the previous segment's fitted endpoint.
+      let num = 0,
+        den = 0;
+      for (let k = i0; k <= i1; k++) {
+        const dk = k - i0;
+        num += dk * (beatsMs[k] - startT);
+        den += dk * dk;
+      }
+      b = den > 0 ? num / den : (beatsMs[i1] - startT) / (i1 - i0);
+      fi = startT;
+    }
+    if (b <= 0) {
+      b = (beatsMs[i1] - beatsMs[i0]) / Math.max(i1 - i0, 1);
+      fi = startT === null ? beatsMs[i0] : startT;
+    }
+    if (originMs === null) {
+      const k0 = b > 0 ? Math.round(fi / b) : 0;
+      originMs = fi - k0 * b;
+    }
+    tempos.push({ms: fi, bpm: 60_000.0 / b});
+    startT = fi + b * (i1 - i0);
+  }
+  tempos.push({
+    ms: startT !== null ? startT : beatsMs[n - 1],
+    bpm: tempos.length ? tempos[tempos.length - 1].bpm : 120.0,
+  });
+  return {tempos, originMs: originMs ?? beatsMs[0]};
+}
+
 // --- main converter ------------------------------------------------------
 
 export interface BeatsToSynctrackInput {
@@ -282,6 +416,14 @@ export interface BeatsToSynctrackInput {
   drumOnsetOffsetMs?: number | null;
   /** Drum-stem PP beats (seconds); for DRUM_BEAT_AVG. */
   drumPpBeatsSec?: number[] | null;
+  /**
+   * PL_LSQ piecewise least-squares tempo fitting tolerance (ms).
+   * 0 (default) = per-beat tempo events, byte-exact vs the dbc913d golden
+   * reference. Pass PL_LSQ_TOL_MS_DEFAULT (15) for the banked 2026-07-02
+   * behavior: ~6x sparser tempo maps AND better alignment (LSQ averages
+   * beat-detection jitter). The production pipeline passes 15.
+   */
+  plLsqTolMs?: number;
 }
 
 /**
@@ -297,6 +439,7 @@ export function beatsToSynctrack({
   drumStemPpIoiMs = null,
   drumOnsetOffsetMs = null,
   drumPpBeatsSec = null,
+  plLsqTolMs = 0,
 }: BeatsToSynctrackInput): Synctrack | null {
   let beatsMs = beats
     .slice()
@@ -373,20 +516,37 @@ export function beatsToSynctrack({
     ({beats: beatsMs} = maybeOctaveCorrect(beatsMs, drumStemPpIoiMs));
   }
 
-  // Phase-aware origin via back-extrapolation.
-  let origin = backExtrapOrigin(beatsMs);
-
-  // Per-beat tempo events.
   const iois = diff(beatsMs);
-  const bpms = iois.map(io => 60_000.0 / Math.max(io, 1e-3));
-  let tempos: TempoEvent[] = [];
-  for (let i = 0; i < iois.length; i++)
-    tempos.push({ms: beatsMs[i], bpm: bpms[i]});
-  tempos.push({ms: beatsMs[beatsMs.length - 1], bpm: bpms[bpms.length - 1]});
+  let origin: number;
+  let tempos: TempoEvent[];
 
-  // Numerator via selfconsist with N4_PRIOR.
+  // PL_LSQ (banked 2026-07-02): sparse jitter-averaged tempo map with
+  // integer-beta origin pinning. Falls back to the per-beat map when
+  // disabled (plLsqTolMs=0, the golden-reference behavior) or degenerate.
+  const pl =
+    plLsqTolMs > 0 && beatsMs.length >= 2
+      ? plLsqSegments(beatsMs, plLsqTolMs)
+      : null;
+  if (pl) {
+    tempos = pl.tempos;
+    origin = pl.originMs;
+  } else {
+    // Phase-aware origin via back-extrapolation.
+    origin = backExtrapOrigin(beatsMs);
+    // Per-beat tempo events.
+    const bpms = iois.map(io => 60_000.0 / Math.max(io, 1e-3));
+    tempos = [];
+    for (let i = 0; i < iois.length; i++)
+      tempos.push({ms: beatsMs[i], bpm: bpms[i]});
+    tempos.push({ms: beatsMs[beatsMs.length - 1], bpm: bpms[bpms.length - 1]});
+  }
+
+  // Numerator via selfconsist with N4_PRIOR. Gate on detected-beat count,
+  // not tempo-event count (a PL_LSQ map can be 2 events for a whole song);
+  // with plLsqTolMs=0 tempos.length == beatsMs.length so this is identical
+  // to the golden-reference gate.
   let num = 4;
-  if (downbeatsMs.length >= 3 && tempos.length >= 4) {
+  if (downbeatsMs.length >= 3 && beatsMs.length >= 4) {
     const candidates = [3, 4, 5, 6, 7];
     let bestN = 4,
       bestScore = -1;
@@ -433,7 +593,7 @@ export function beatsToSynctrack({
   if (
     SOTA.ORIGIN_PHASE_SHIFT &&
     num >= 2 &&
-    tempos.length >= 4 &&
+    beatsMs.length >= 4 && // beat count, not tempo-event count (see above)
     downbeatsMs.length >= 3
   ) {
     const opsUnion = downbeatsMs.slice();
