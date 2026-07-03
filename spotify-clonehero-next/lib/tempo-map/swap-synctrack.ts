@@ -15,7 +15,7 @@
 
 import type {ParsedChart} from '@eliwhite/scan-chart';
 import type {Synctrack} from './types';
-import {buildSegments, msToTick, type TempoSegment} from './synctrack-ticks';
+import {buildSyncLayout, msToTick, type TempoSegment} from './synctrack-ticks';
 
 const BPM_EPS = 1e-3;
 
@@ -69,7 +69,7 @@ export function swapSynctrack(
   options: SwapSynctrackOptions = {},
 ): ParsedChart {
   const resolution = chart.resolution;
-  const segs = buildSegments(sync, resolution);
+  const {segs, leadInTs} = buildSyncLayout(sync, resolution);
 
   const straightTicks = resolution / 4; // 16th notes
   const tripletTicks = resolution / 6; // 16th-note triplets
@@ -133,9 +133,13 @@ export function swapSynctrack(
   // --- New time signatures ---
   const sortedTs = [...sync.timeSignatures].sort((a, b) => a.ms - b.ms);
   const newTsRaw = sortedTs.map((t, i) => {
-    // The FIRST TS event must be at tick 0 — MIDI requires a TS at tick 0.
+    // The FIRST real TS event anchors the grid: tick 0, or the end of the
+    // partial lead-in bar when the layout uses one. (MIDI requires a TS at
+    // tick 0 — provided by the lead-in TS in that case.)
     const tick =
-      i === 0 ? 0 : Math.max(0, Math.round(msToTick(t.ms, segs, resolution)));
+      i === 0
+        ? (leadInTs?.endTick ?? 0)
+        : Math.max(0, Math.round(msToTick(t.ms, segs, resolution)));
     return {
       tick,
       numerator: t.numerator,
@@ -144,6 +148,17 @@ export function swapSynctrack(
       msLength: 0,
     };
   });
+  if (leadInTs) {
+    // Charter "shortened first measure": the non-whole-bar remainder of the
+    // lead-in is its own r/4 bar so the origin still lands on a bar line.
+    newTsRaw.unshift({
+      tick: 0,
+      numerator: leadInTs.numerator,
+      denominator: leadInTs.denominator,
+      msTime: 0,
+      msLength: 0,
+    });
+  }
   // Drop no-op meter changes.
   const newTs: typeof newTsRaw = [];
   for (const t of newTsRaw) {

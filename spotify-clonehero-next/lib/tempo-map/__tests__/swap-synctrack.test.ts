@@ -214,6 +214,33 @@ describe('swapSynctrack', () => {
     ).toBeLessThan(3);
   });
 
+  test('writes the partial lead-in bar TS and re-ticks a pickup note sanely', () => {
+    // Origin 1000ms at 120 BPM = 2 beats → 2/4 partial first bar.
+    const trickSync: Synctrack = {
+      origin_ms: 1000,
+      tempos: [{ms: 1000, bpm: 120}],
+      timeSignatures: [{ms: 1000, numerator: 4, denominator: 4}],
+    };
+    const chart = makeChart();
+    // A pickup note before the origin (at 500ms) plus one on the origin.
+    (chart.trackData[0].noteEventGroups as any) = [
+      [{tick: 0, msTime: 500, length: 0, msLength: 0, type: 0, flags: 0}],
+      [{tick: 0, msTime: 1000, length: 0, msLength: 0, type: 0, flags: 0}],
+    ];
+    const out = swapSynctrack(chart, trickSync);
+    // TS: 2/4 at tick 0, real 4/4 where the partial bar ends (tick 960).
+    expect(out.timeSignatures.map(t => [t.tick, t.numerator])).toEqual([
+      [0, 2],
+      [960, 4],
+    ]);
+    // Lead tempo is the REAL tempo (no compressed bridge), so the pickup at
+    // 500ms lands on the beat at tick 480; the origin note on the bar line.
+    expect(out.tempos[0].tick).toBe(0);
+    expect(out.tempos[0].beatsPerMinute).toBeCloseTo(120, 6);
+    const ticks = out.trackData[0].noteEventGroups.flat().map(n => n.tick);
+    expect(ticks).toEqual([480, 960]);
+  });
+
   test('clamps pre-origin events to tick 0', () => {
     const lateSync: Synctrack = {
       origin_ms: 5000,
