@@ -15,7 +15,6 @@ import {
   AudioWaveform,
   Download,
   FolderSearch,
-  Loader2,
   Music,
   Pause,
   Play,
@@ -652,10 +651,15 @@ function ResultsView({
   }, [isPlaying]);
 
   const currentTrack = useMemo(() => {
-    const expert = currentChart.trackData.find(
-      t => t.instrument === 'drums' && t.difficulty === 'expert',
-    );
-    return expert ?? currentChart.trackData[0] ?? null;
+    // Drums only — the renderers interpret notes as drum pads, so falling
+    // back to a guitar/other track crashes interpretDrumNote (e.g. a
+    // guitar-only .sng). Prefer the highest charted drums difficulty.
+    const drums = currentChart.trackData.filter(t => t.instrument === 'drums');
+    if (drums.length === 0) return null;
+    const order = ['expert', 'hard', 'medium', 'easy'];
+    return [...drums].sort(
+      (a, b) => order.indexOf(a.difficulty) - order.indexOf(b.difficulty),
+    )[0];
   }, [currentChart]);
 
   // SheetMusic's VexFlow parser requires at least one note; a standalone-audio
@@ -827,7 +831,11 @@ function ResultsView({
         <section className="flex-1 min-w-0 flex">
           {!currentTrack ? (
             <div className="flex-1 flex items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin" />
+              <div className="text-sm text-muted-foreground text-center px-8">
+                This chart has no drum track, so there&apos;s no notation to
+                show — the detected tempo map on the left still applies to the
+                exported chart.
+              </div>
             </div>
           ) : (
             <>
