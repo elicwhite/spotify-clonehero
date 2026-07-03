@@ -8,8 +8,10 @@
  * origin semantics match. Drum events are then converted to ticks with
  * msToTick over the tick-domain tempo list actually written to the chart —
  * the ground truth the game integrates from tick 0 — and snapped to the
- * musical grid with the same quantizer /tempo uses (snapTickToGrid), so
- * onsets land on 16th / triplet grid lines instead of arbitrary ticks.
+ * musical grid with the same quantizer /tempo uses (snapGroupToGrid plus the
+ * caller-owned abstain band), so onsets land on 16th / triplet grid lines
+ * instead of arbitrary ticks — except onsets whose nearest grid line is past
+ * the tolerance, which are left un-snapped rather than dragged onto the grid.
  *
  * When no synctrack is available (tempo pipeline failed or unavailable),
  * falls back to a flat 120 BPM chart.
@@ -22,18 +24,22 @@ import {
   drumTypes,
 } from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
-import {swapSynctrack} from '@/lib/tempo-map/swap-synctrack';
-import {snapTickToGrid} from '@/lib/tempo-map/quantize-grid';
+import {
+  swapSynctrack,
+  DEFAULT_SNAP_TOLERANCE_MS,
+} from '@/lib/tempo-map/swap-synctrack';
+import {snapGroupToGrid} from '@/lib/tempo-map/quantize-grid';
 import type {Synctrack} from '@/lib/tempo-map/types';
 import type {MeterStats} from '@/lib/tempo-map/meter-confidence';
 import {
   buildTimedTempos,
   msToTick,
+  tickToMs,
   getNextMeasureTick,
 } from '../timing';
 import {getChartMapping} from '../ml/class-mapping';
 import type {RawDrumEvent} from '../ml/types';
-import type {DrumNote, DrumNoteFlags} from '../chart-types';
+import type {DrumNote, DrumNoteFlags, TimedTempo} from '../chart-types';
 
 /** Default resolution (ticks per quarter note). */
 export const RESOLUTION = 480;
@@ -102,10 +108,14 @@ export function buildChartDocument(
     beatsPerMinute: t.beatsPerMinute,
   }));
   // Snap each onset tick to the musical grid (16ths / 16th-triplets) with
-  // the SAME quantizer /tempo uses (swapSynctrack quantizeNotes). Without
-  // this, msToTick lands notes on arbitrary ticks (e.g. 1913 instead of
-  // 1920) and they read as off-grid in the editor. The confidence keys built
-  // by buildConfidenceData use these SAME snapped ticks so the editor's
+  // the SAME quantizer /tempo uses (swapSynctrack), including its abstain
+  // band: an onset whose nearest grid line is more than
+  // DEFAULT_SNAP_TOLERANCE_MS away (at the local tempo) is left at its raw
+  // rounded tick rather than force-snapped, since force-snapping genuine
+  // off-grid onsets makes the chart worse. Without any snapping, msToTick
+  // lands notes on arbitrary ticks (e.g. 1913 instead of 1920) and they read
+  // as off-grid in the editor. The confidence keys built by
+  // buildConfidenceData use these SAME snapped ticks so the editor's
   // confidence panel matches every note.
   //
   // Snapping can collapse two nearby onsets onto the same (tick, noteType) —
@@ -196,10 +206,35 @@ export function buildChartDocument(
 }
 
 /**
+ * Snap one onset's audio time to the musical grid, abstaining when the nearest
+ * grid line is too far to trust.
+ *
+ * Mirrors swap-synctrack's /tempo path exactly: the fractional tick is snapped
+ * to the 16th / 16th-triplet grid via {@link snapGroupToGrid}, but if that snap
+ * would move the note more than `toleranceMs` from its true audio position (at
+ * the local tempo, via {@link tickToMs}) the note is left at its raw rounded
+ * tick instead of force-snapped. Both {@link dedupSnappedNotes} and
+ * {@link buildConfidenceData} route through this one function so a note's tick
+ * and its confidence key are always the identical snap decision.
+ */
+function snapOnsetTick(
+  ms: number,
+  timedTempos: TimedTempo[],
+  resolution: number,
+  toleranceMs: number = DEFAULT_SNAP_TOLERANCE_MS,
+): number {
+  const frac = msToTick(ms, timedTempos, resolution);
+  const snapped = snapGroupToGrid(frac, resolution);
+  const driftMs = Math.abs(tickToMs(snapped, timedTempos, resolution) - ms);
+  return driftMs > toleranceMs ? Math.max(0, Math.round(frac)) : snapped;
+}
+
+/**
  * Convert raw events to snapped, deduplicated DrumNotes.
  *
  * Each onset is quantized with msToTick against the chart's tempo list and
- * snapped to the 16th / 16th-triplet grid. Events that land on the same
+ * snapped to the 16th / 16th-triplet grid (abstaining when off-grid past the
+ * tolerance — see {@link snapOnsetTick}). Events that land on the same
  * (tick, noteType) are collapsed to one note: the higher-confidence event
  * wins and its tom/cymbal flags are kept; on a confidence tie the cymbal
  * wins (cymbals dominate the shared yellow/blue/green pads in practice).
@@ -218,8 +253,9 @@ function dedupSnappedNotes(
 
   for (const event of events) {
     const mapping = getChartMapping(event.drumClass);
-    const tick = snapTickToGrid(
-      msToTick(event.timeSeconds * 1000, timedTempos, resolution),
+    const tick = snapOnsetTick(
+      event.timeSeconds * 1000,
+      timedTempos,
       resolution,
     );
     const key = `${tick}-${mapping.noteType}`;
@@ -267,12 +303,10 @@ export function buildConfidenceData(
   for (const event of events) {
     const mapping = getChartMapping(event.drumClass);
     const ms = event.timeSeconds * 1000;
-    // Snap to the same grid as the chart notes (see buildChartDocument) so the
+    // Snap to the same grid as the chart notes (see buildChartDocument), via
+    // the SAME snapOnsetTick helper (abstain band included), so the
     // `${tick}-${noteType}` keys line up with the notes written to the chart.
-    const tick = snapTickToGrid(
-      msToTick(ms, timedTempos, resolution),
-      resolution,
-    );
+    const tick = snapOnsetTick(ms, timedTempos, resolution);
     const key = `${tick}-${mapping.noteType}`;
     // If multiple events map to the same tick+type, keep the highest confidence
     if (notes[key] === undefined || event.confidence > notes[key]) {

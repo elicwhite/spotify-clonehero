@@ -13,33 +13,54 @@
  * The chart's resolution is kept as-is.
  */
 
-import type {ParsedChart} from '@eliwhite/scan-chart';
-import type {Synctrack} from './types';
-import {buildSyncLayout, msToTick, type TempoSegment} from './synctrack-ticks';
-import {snapTickToGrid} from './quantize-grid';
+import type { ParsedChart } from "@eliwhite/scan-chart";
+import type { Synctrack } from "./types";
+import {
+  buildSyncLayout,
+  msToTick,
+  tickToMs,
+  type TempoSegment,
+} from "./synctrack-ticks";
+import { snapGroupToGrid } from "./quantize-grid";
 
 const BPM_EPS = 1e-3;
+
+/** Default abstain band for {@link SwapSynctrackOptions.snapToleranceMs}. A
+ * measured 11.7% of real chart misalignment is grid error (the note's true
+ * audio position sits between musical subdivisions), and force-snapping those
+ * makes the chart worse — so a note whose nearest grid line is farther than
+ * this many ms (at the local tempo) is left un-snapped. Exported so the
+ * drum-transcription chart-builder applies the identical band on its path. */
+export const DEFAULT_SNAP_TOLERANCE_MS = 40;
 
 export interface SwapSynctrackOptions {
   /**
    * Quantize note start/end ticks to the nearest musical subdivision via
-   * {@link snapTickToGrid} (16th notes or 16th-note triplets). Only notes
+   * {@link snapGroupToGrid} (16th notes or 16th-note triplets). Only notes
    * are quantized; sections, star power, lyrics etc. keep their exact times.
    */
   quantizeNotes?: boolean;
+  /**
+   * Abstain band, in ms at the local tempo. When quantizing, a note whose
+   * nearest grid line is farther than this from its true audio position is
+   * left un-snapped (plain rounded tick) rather than force-snapped. Only
+   * applies when {@link quantizeNotes} is set. Defaults to
+   * {@link DEFAULT_SNAP_TOLERANCE_MS}.
+   */
+  snapToleranceMs?: number;
 }
 
-function reTickEvent<T extends {tick: number; msTime: number}>(
+function reTickEvent<T extends { tick: number; msTime: number }>(
   ev: T,
   segs: TempoSegment[],
   resolution: number,
 ): T {
   const newTick = Math.round(msToTick(ev.msTime, segs, resolution));
-  return {...ev, tick: Math.max(0, newTick)};
+  return { ...ev, tick: Math.max(0, newTick) };
 }
 
 function reTickLengthEvent<
-  T extends {tick: number; msTime: number; length: number; msLength: number},
+  T extends { tick: number; msTime: number; length: number; msLength: number },
 >(ev: T, segs: TempoSegment[], resolution: number): T {
   const startTick = Math.max(
     0,
@@ -48,7 +69,7 @@ function reTickLengthEvent<
   const endMs = ev.msTime + ev.msLength;
   const endTick = Math.round(msToTick(endMs, segs, resolution));
   const newLength = Math.max(0, endTick - startTick);
-  return {...ev, tick: startTick, length: newLength};
+  return { ...ev, tick: startTick, length: newLength };
 }
 
 /**
@@ -61,23 +82,73 @@ export function swapSynctrack(
   options: SwapSynctrackOptions = {},
 ): ParsedChart {
   const resolution = chart.resolution;
-  const {segs, leadInTs} = buildSyncLayout(sync, resolution);
+  const { segs, leadInTs } = buildSyncLayout(sync, resolution);
 
-  const noteTick = (ms: number) => {
-    const frac = msToTick(ms, segs, resolution);
-    return options.quantizeNotes
-      ? snapTickToGrid(frac, resolution)
-      : Math.max(0, Math.round(frac));
-  };
-  const reTickNote = <
-    T extends {tick: number; msTime: number; length: number; msLength: number},
+  const quantize = options.quantizeNotes ?? false;
+  const snapToleranceMs = options.snapToleranceMs ?? DEFAULT_SNAP_TOLERANCE_MS;
+
+  // Exact (un-quantized) re-tick: preserves every note's audio time to the
+  // nearest tick. Used for the quantizeNotes=false path (unchanged) and as
+  // the abstain fallback inside the quantized path.
+  const rawTick = (ms: number) =>
+    Math.max(0, Math.round(msToTick(ms, segs, resolution)));
+  const reTickNoteRaw = <
+    T extends {
+      tick: number;
+      msTime: number;
+      length: number;
+      msLength: number;
+    },
   >(
     ev: T,
   ): T => {
-    const startTick = noteTick(ev.msTime);
+    const startTick = rawTick(ev.msTime);
     const endTick =
-      ev.msLength > 0 ? noteTick(ev.msTime + ev.msLength) : startTick;
-    return {...ev, tick: startTick, length: Math.max(0, endTick - startTick)};
+      ev.msLength > 0 ? rawTick(ev.msTime + ev.msLength) : startTick;
+    return { ...ev, tick: startTick, length: Math.max(0, endTick - startTick) };
+  };
+
+  // Snap one audio position to a grid tick, abstaining (raw rounded tick)
+  // when the snap would move the note more than snapToleranceMs at the local
+  // tempo. groupLanes is threaded to the scorer so a future lane-dependent
+  // scorer keeps a chord on one subdivision family. Only called when
+  // quantizing.
+  const snapPos = (ms: number, groupLanes: number[]): number => {
+    const frac = msToTick(ms, segs, resolution);
+    const snapped = snapGroupToGrid(frac, resolution, groupLanes);
+    const driftMs = Math.abs(tickToMs(snapped, segs, resolution) - ms);
+    return driftMs > snapToleranceMs ? Math.max(0, Math.round(frac)) : snapped;
+  };
+
+  // Re-tick a whole noteEventGroup (a simultaneous chord). Off (raw) path is
+  // byte-identical to the pre-quantizer behavior. When quantizing, every
+  // member's START is decided by ONE snap of the group's shared audio time,
+  // so a chord can never split across slots under any scorer; each member's
+  // END is snapped independently (sustains have their own lengths).
+  const reTickGroup = <
+    T extends {
+      tick: number;
+      msTime: number;
+      length: number;
+      msLength: number;
+    },
+  >(
+    group: T[],
+  ): T[] => {
+    if (!quantize || group.length === 0) return group.map(reTickNoteRaw);
+    const groupLanes = group.map((n) => (n as { type?: number }).type ?? 0);
+    const startTick = snapPos(group[0].msTime, groupLanes);
+    return group.map((ev) => {
+      const endTick =
+        ev.msLength > 0
+          ? snapPos(ev.msTime + ev.msLength, groupLanes)
+          : startTick;
+      return {
+        ...ev,
+        tick: startTick,
+        length: Math.max(0, endTick - startTick),
+      };
+    });
   };
 
   // --- New tempos, written directly from the segment map ---
@@ -86,7 +157,7 @@ export function swapSynctrack(
   // segment buildSegments synthesizes to anchor ms=0 at tick 0). Writing
   // sync.tempos with a plain tick-0 anchor instead would re-time the
   // pre-origin tick region and shift every note against the audio.
-  const newTemposRaw = segs.map(s => ({
+  const newTemposRaw = segs.map((s) => ({
     tick: Math.max(0, Math.round(s.tick)),
     beatsPerMinute: s.bpm,
     msTime: Math.max(0, s.ms),
@@ -152,31 +223,38 @@ export function swapSynctrack(
   }
 
   // --- Re-tick every other event ---
-  const rtE = <T extends {tick: number; msTime: number}>(e: T) =>
+  const rtE = <T extends { tick: number; msTime: number }>(e: T) =>
     reTickEvent(e, segs, resolution);
   const rtL = <
-    T extends {tick: number; msTime: number; length: number; msLength: number},
+    T extends {
+      tick: number;
+      msTime: number;
+      length: number;
+      msLength: number;
+    },
   >(
     e: T,
   ) => reTickLengthEvent(e, segs, resolution);
 
-  const newTrackData = chart.trackData.map(td => {
+  const newTrackData = chart.trackData.map((td) => {
     const anyTd = td as any;
     return {
       ...td,
       starPowerSections: td.starPowerSections.map(rtL),
       ...(anyTd.rejectedStarPowerSections
-        ? {rejectedStarPowerSections: anyTd.rejectedStarPowerSections.map(rtL)}
+        ? {
+            rejectedStarPowerSections: anyTd.rejectedStarPowerSections.map(rtL),
+          }
         : {}),
       soloSections: td.soloSections.map(rtL),
       flexLanes: td.flexLanes.map(rtL),
       drumFreestyleSections: td.drumFreestyleSections.map(rtL),
       textEvents: td.textEvents.map(rtE),
       ...(anyTd.versusPhrases
-        ? {versusPhrases: anyTd.versusPhrases.map(rtL)}
+        ? { versusPhrases: anyTd.versusPhrases.map(rtL) }
         : {}),
-      ...(anyTd.animations ? {animations: anyTd.animations.map(rtL)} : {}),
-      noteEventGroups: td.noteEventGroups.map(group => group.map(reTickNote)),
+      ...(anyTd.animations ? { animations: anyTd.animations.map(rtL) } : {}),
+      noteEventGroups: td.noteEventGroups.map(reTickGroup),
     };
   });
 

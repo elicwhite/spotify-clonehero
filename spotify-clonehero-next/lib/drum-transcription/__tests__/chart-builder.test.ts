@@ -167,33 +167,39 @@ describe('buildChartDocument without a synctrack (fallback)', () => {
 });
 
 describe('grid snapping of transcribed onsets', () => {
-  // Flat 120 BPM (no synctrack): tick = ms * 0.96, snap grid = 16ths (120) /
-  // 16th-triplets (80). Onsets that msToTick lands off-grid must snap to the
-  // nearest musical subdivision, matching /tempo's swapSynctrack quantizer.
-  //   0.37s -> 355t -> 360 (16th)   0.17s -> 163t -> 160 (triplet)
-  //   0.198s -> 190t -> 160 (no tolerance: still snaps to nearest grid line)
+  // Flat 120 BPM (no synctrack): tick = ms * 0.96, so 1 tick = 1.0416̅ ms.
+  // Snap grid = 16ths (120) / 16th-triplets (80). Onsets near a subdivision
+  // snap to it; onsets whose nearest grid line is more than the default
+  // 40 ms abstain band away (at the local tempo) are left at their raw tick
+  // rather than force-snapped, matching /tempo's swapSynctrack quantizer.
+  //   0.37s  -> 355t -> 360 (16th,    drift 5.0 ms  -> snaps)
+  //   0.17s  -> 163t -> 160 (triplet, drift 3.3 ms  -> snaps)
+  //   0.208s -> 200t -> 240 (16th=triplet tie at 240, drift 42 ms > 40 ms
+  //                          -> ABSTAINS, note stays at raw tick 200)
   const events = [
-    ev(0.37, 'SD', 0.91), // near a 16th
-    ev(0.17, 'HH', 0.72), // near an 8th-triplet
-    ev(0.198, 'BD', 0.63), // genuinely off-grid, snaps anyway
+    ev(0.37, 'SD', 0.91), // near a 16th -> snaps
+    ev(0.17, 'HH', 0.72), // near an 8th-triplet -> snaps
+    ev(0.208, 'BD', 0.63), // in the widest 16th∪triplet gap -> abstains
   ];
 
-  it('snaps note ticks to 16th and triplet grid lines', () => {
+  it('snaps within-tolerance onsets and abstains on far-off-grid ones', () => {
     const doc = buildChartDocument(events, 'Snap Flat', 4, null);
     const notes = getDrumNotes(doc.parsedChart.trackData[0]);
     const byKey = new Map(notes.map(n => [`${n.tick}-${n.type}`, n]));
-    expect(byKey.has('360-redDrum')).toBe(true); // 16th
+    expect(byKey.has('360-redDrum')).toBe(true); // 16th (within tolerance)
     expect(byKey.has('160-yellowDrum')).toBe(true); // triplet (HH cymbal)
     expect(byKey.get('160-yellowDrum')?.flags.cymbal).toBe(true);
-    expect(byKey.has('160-kick')).toBe(true); // off-grid still snapped
-    // No raw (unsnapped) ticks survive.
+    // The far-off-grid kick abstains: it keeps its raw rounded tick (200),
+    // NOT the nearest grid line (240).
+    expect(byKey.has('200-kick')).toBe(true);
+    expect(byKey.has('240-kick')).toBe(false);
+    // The snapped onsets leave no raw residue behind.
     const ticks = notes.map(n => n.tick);
     expect(ticks).not.toContain(355);
     expect(ticks).not.toContain(163);
-    expect(ticks).not.toContain(190);
   });
 
-  it('keys confidence data by the SAME snapped ticks as the notes', () => {
+  it('keys confidence data by the SAME snapped/abstained ticks as the notes', () => {
     const doc = buildChartDocument(events, 'Snap Flat', 4, null);
     const conf = buildConfidenceData(
       events,
@@ -206,7 +212,7 @@ describe('grid snapping of transcribed onsets', () => {
     expect(conf.notes).toEqual({
       '360-redDrum': 0.91,
       '160-yellowDrum': 0.72,
-      '160-kick': 0.63,
+      '200-kick': 0.63, // abstained note: confidence key uses the raw tick too
     });
     // Every confidence key must correspond to a real note tick+type.
     const notes = getDrumNotes(doc.parsedChart.trackData[0]);
