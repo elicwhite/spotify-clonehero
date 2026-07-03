@@ -55,9 +55,10 @@ function runConverter(song: string) {
     drumStemPpIoiMs: dsIoiMs,
     drumOnsetOffsetMs: offset.offset_ms,
     drumPpBeatsSec: ppDs.beats,
-    // The frozen dbc913d Python reference predates PL_LSQ — pin the
-    // per-beat map for byte-exact comparison.
+    // The frozen dbc913d Python reference predates PL_LSQ and the origin
+    // anchor — pin both for byte-exact comparison.
     plLsqTolMs: 0,
+    anchorOrigin: false,
   });
   expect(sync).not.toBeNull();
   return {sync: sync!, expected};
@@ -115,5 +116,40 @@ describe('converter helpers', () => {
     // logit at the 500 beat is higher → 520 is dropped
     const logits2 = [0.9, 0.8, 0.2, 0.9];
     expect(dedupShortIois(beats, logits2, 0.6)).toEqual([0, 500, 1000]);
+  });
+});
+
+describe('anchorOriginToAudioStart', () => {
+  const {anchorOriginToAudioStart} = require('../converter');
+
+  test('origin whole bars before audio start advances to first downbeat >= 0', () => {
+    // 120 BPM (500ms beats), 4/4; origin realized 6 beats before t=0.
+    const tempos = [{ms: -3000, bpm: 120}];
+    const out = anchorOriginToAudioStart(tempos, -3000, 4);
+    // b0 = 6 beats -> advance ceil(6/4)*4 = 8 beats -> origin at +1000ms,
+    // still on the same bar-line lattice (…-3000, -1000, +1000…).
+    expect(out.originMs).toBeCloseTo(1000, 6);
+    expect(out.tempos[0]).toEqual({ms: 1000, bpm: 120});
+  });
+
+  test('origin within half a beat of t=0 is left alone', () => {
+    const tempos = [{ms: -200, bpm: 120}]; // b0 = 0.4 beats
+    const out = anchorOriginToAudioStart(tempos, -200, 4);
+    expect(out.originMs).toBe(-200);
+    expect(out.tempos).toBe(tempos);
+  });
+
+  test('tempo changes inside the skipped lead-in carry the active BPM', () => {
+    // Origin 5 beats early at 120; tempo change to 140 at -500ms.
+    const tempos = [
+      {ms: -2500, bpm: 120},
+      {ms: -500, bpm: 140},
+    ];
+    const out = anchorOriginToAudioStart(tempos, -2500, 4);
+    // b0 = 4 beats at 120 + ~1.17 beats at 140 ≈ 5.17 -> advance 8 beats.
+    // New origin lands after the 140 change, so it must carry bpm 140.
+    expect(out.originMs).toBeGreaterThan(0);
+    expect(out.tempos[0].bpm).toBe(140);
+    expect(out.tempos[0].ms).toBeCloseTo(out.originMs, 9);
   });
 });

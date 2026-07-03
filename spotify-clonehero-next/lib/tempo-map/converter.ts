@@ -402,6 +402,37 @@ export function plLsqSegments(
 
 // --- main converter ------------------------------------------------------
 
+/**
+ * ORIGIN_ANCHOR0 (drum-to-chart meter-phase keep a6fab70, 2026-07-03): if the
+ * origin was realized more than half a beat before the audio start, advance
+ * it by whole BARS to the first downbeat at/after t=0. Beat times are
+ * unchanged — this relabels which beat is beat 0 — and whole-bar steps keep
+ * the origin on a downbeat, so bar phase is preserved by construction.
+ */
+export function anchorOriginToAudioStart(
+  tempos: TempoEvent[],
+  originMs: number,
+  numerator: number,
+): {tempos: TempoEvent[]; originMs: number} {
+  const b0 = timeToBeta(0, tempos, originMs);
+  if (b0 <= 0.5) return {tempos, originMs};
+  const barBeats = Math.max(1, numerator);
+  const kBeats = Math.ceil((b0 - 1e-9) / barBeats) * barBeats;
+  const newOrigin = betasToTime([kBeats], tempos, originMs)[0];
+  let bpmAt = tempos[0].bpm;
+  for (const t of tempos) {
+    if (t.ms <= newOrigin + 1e-6) bpmAt = t.bpm;
+    else break;
+  }
+  return {
+    tempos: [
+      {ms: newOrigin, bpm: bpmAt},
+      ...tempos.filter(t => t.ms > newOrigin + 1e-6),
+    ],
+    originMs: newOrigin,
+  };
+}
+
 export interface BeatsToSynctrackInput {
   /** Full-mix PP beat times (seconds). */
   beats: number[];
@@ -424,6 +455,15 @@ export interface BeatsToSynctrackInput {
    * dbc913d golden reference (the golden tests do this explicitly).
    */
   plLsqTolMs?: number;
+  /**
+   * Anchor the origin at/after the audio start (drum-to-chart meter-phase
+   * keep a6fab70, 2026-07-03). The bar-phase/origin logic can realize the
+   * origin whole beats BEFORE the audio starts; a chart's beat/bar numbering
+   * must start at the audio, so that offset mis-bars the whole song
+   * (measured: abs chart F1 +0.10 on the meter stratum, +0.03 on 4/4).
+   * Default true. Pass false for byte-exact dbc913d golden parity.
+   */
+  anchorOrigin?: boolean;
 }
 
 /**
@@ -440,6 +480,7 @@ export function beatsToSynctrack({
   drumOnsetOffsetMs = null,
   drumPpBeatsSec = null,
   plLsqTolMs = PL_LSQ_TOL_MS_DEFAULT,
+  anchorOrigin = true,
 }: BeatsToSynctrackInput): Synctrack | null {
   let beatsMs = beats
     .slice()
@@ -687,6 +728,19 @@ export function beatsToSynctrack({
       kept.push(tempos[i]);
     }
     tempos = kept;
+  }
+
+  // ORIGIN_ANCHOR0 (drum-to-chart meter-phase keep a6fab70): if the origin
+  // was realized more than half a beat before the audio start, advance it by
+  // whole BARS to the first downbeat at/after t=0. Beat times are unchanged —
+  // this relabels which beat is beat 0 — and whole-bar steps keep the origin
+  // on a downbeat, so bar phase is preserved by construction (the eval-side
+  // fix advances whole beats and re-anchors the TS instead; that trick is a
+  // metric-robustness hack, not a chart convention).
+  if (anchorOrigin && tempos.length >= 1) {
+    const anchored = anchorOriginToAudioStart(tempos, origin, num);
+    tempos = anchored.tempos;
+    origin = anchored.originMs;
   }
 
   return {
