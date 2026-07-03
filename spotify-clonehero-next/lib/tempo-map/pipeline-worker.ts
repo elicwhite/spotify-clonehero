@@ -28,6 +28,7 @@ import {runBeatThisOnnx} from './beat-this-onnx';
 import {runPostprocessor} from './beat-this-pp';
 import {computeDrumOnsetOffsetMs} from './drum-onset';
 import {beatsToSynctrack, PL_LSQ_TOL_MS_DEFAULT} from './converter';
+import {computeMeterStats} from './meter-confidence';
 import type {
   PipelineProgress,
   PipelineRunRequest,
@@ -294,6 +295,7 @@ async function run(req: PipelineRunRequest) {
       drumOnsetOffsetMs: offsetMs,
       fullMixBeatCount: fm.pp.beats.length,
       drumStemBeatCount: ds.pp.beats.length,
+      meterStats: computeMeterStats(fm.pp.beats, fm.pp.downbeats),
     },
   });
 }

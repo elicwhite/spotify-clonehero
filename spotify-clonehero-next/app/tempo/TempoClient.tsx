@@ -63,6 +63,10 @@ import {mergeAudioFiles} from '@/lib/tempo-map/merge-audio';
 import {swapSynctrack} from '@/lib/tempo-map/swap-synctrack';
 import {buildChartFromSynctrack} from '@/lib/tempo-map/build-chart';
 import type {PipelineProgress, Synctrack} from '@/lib/tempo-map/types';
+import {
+  METER_CONFIDENCE_THRESHOLD,
+  type MeterStats,
+} from '@/lib/tempo-map/meter-confidence';
 
 import SheetMusic from '@/app/sheet-music/[slug]/SheetMusic';
 import CloneHeroRenderer from '@/app/sheet-music/[slug]/CloneHeroRenderer';
@@ -86,6 +90,8 @@ interface ResultState {
   /** Audio-mode precomputed chart (no notes, nothing to snap). */
   newChart: ParsedChart;
   synctrack: Synctrack;
+  /** Meter regularity from the pipeline (null = too short to measure). */
+  meterStats: MeterStats | null;
   /** writeChartFolder output for the download button (audio mode). */
   exportFiles: ScanFile[];
   /** 'sng' downloads as .sng, everything else as .zip. */
@@ -414,6 +420,7 @@ export default function TempoClient() {
           modifiers,
           newChart,
           synctrack: sync,
+          meterStats: pipelineResult.meterStats,
           exportFiles,
           sourceFormat,
         });
@@ -806,6 +813,17 @@ function ResultsView({
           />
         </div>
       )}
+
+      {result.meterStats &&
+        result.meterStats.frac4 < METER_CONFIDENCE_THRESHOLD && (
+          <div className="px-4 py-2 border-b bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-sm">
+            <span className="font-semibold">Irregular meter detected.</span>{' '}
+            Only {Math.round(result.meterStats.frac4 * 100)}% of this song's
+            measures look like steady 4/4. The beat grid and tempo map are still
+            useful, but expect to set time signatures and check bar lines
+            manually.
+          </div>
+        )}
 
       <div className="flex-1 min-h-0 flex">
         {/* Left: tempo / time-signature list */}

@@ -46,6 +46,10 @@ export interface PipelineResult {
   fullMixBeatCount: number;
   /** Drum-stem PP beat count (diagnostic). */
   drumStemBeatCount: number;
+  /** Meter regularity from the beat tracker (null = too short to measure).
+   * frac4 < METER_CONFIDENCE_THRESHOLD → warn that time signatures likely
+   * need manual work. */
+  meterStats: import('./meter-confidence').MeterStats | null;
 }
 
 // --- worker message protocol -------------------------------------------
