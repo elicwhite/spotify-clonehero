@@ -16,23 +16,15 @@
 import type {ParsedChart} from '@eliwhite/scan-chart';
 import type {Synctrack} from './types';
 import {buildSyncLayout, msToTick, type TempoSegment} from './synctrack-ticks';
+import {snapTickToGrid} from './quantize-grid';
 
 const BPM_EPS = 1e-3;
 
 export interface SwapSynctrackOptions {
   /**
-   * Quantize note start/end ticks to the nearest musical subdivision:
-   * 16th notes (resolution/4) or 16th-note triplets (resolution/6, which
-   * also covers 8th-note triplets). On clean human-charted notes with an
-   * accurate predicted tempo map, naive nearest-position snapping is the
-   * validated-correct quantizer (autoresearch-subdiv: acc1 = 1.000 on
-   * clean onsets). The vocabulary is deliberately coarser than that
-   * project's 24-slot metric grid: a uniform fine grid leaves notes one
-   * micro-slot off the beat (the predicted map's ~9 ms median residual
-   * exceeds half a 1/24-beat slot at fast tempos) and notation renders
-   * as tuplet soup. Ties prefer the straight (16th) position.
-   * Only notes are quantized; sections, star power, lyrics etc. keep
-   * their exact times.
+   * Quantize note start/end ticks to the nearest musical subdivision via
+   * {@link snapTickToGrid} (16th notes or 16th-note triplets). Only notes
+   * are quantized; sections, star power, lyrics etc. keep their exact times.
    */
   quantizeNotes?: boolean;
 }
@@ -71,24 +63,11 @@ export function swapSynctrack(
   const resolution = chart.resolution;
   const {segs, leadInTs} = buildSyncLayout(sync, resolution);
 
-  const straightTicks = resolution / 4; // 16th notes
-  const tripletTicks = resolution / 6; // 16th-note triplets
   const noteTick = (ms: number) => {
     const frac = msToTick(ms, segs, resolution);
-    let tick: number;
-    if (options.quantizeNotes) {
-      const straight = Math.round(frac / straightTicks) * straightTicks;
-      const triplet = Math.round(frac / tripletTicks) * tripletTicks;
-      // Tie goes to the straight position.
-      tick = Math.round(
-        Math.abs(straight - frac) <= Math.abs(triplet - frac)
-          ? straight
-          : triplet,
-      );
-    } else {
-      tick = Math.round(frac);
-    }
-    return Math.max(0, tick);
+    return options.quantizeNotes
+      ? snapTickToGrid(frac, resolution)
+      : Math.max(0, Math.round(frac));
   };
   const reTickNote = <
     T extends {tick: number; msTime: number; length: number; msLength: number},

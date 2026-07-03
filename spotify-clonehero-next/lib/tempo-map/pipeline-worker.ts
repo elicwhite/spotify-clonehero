@@ -138,10 +138,22 @@ async function run(req: PipelineRunRequest) {
   }
   const N = left.length;
 
-  // ---- S1: drum stem (OPFS-cached per source hash) ----
+  // ---- S1: drum stem (pre-separated, OPFS-cached, or freshly separated) ----
   let drumStem: Float32Array | null = null;
   const cacheKey = req.sourceHash ? stemCacheKey(req.sourceHash, N) : null;
-  if (cacheKey) {
+  if (req.drumStem && req.drumStem.length === N) {
+    // Caller already separated the drums (drum-transcription pipeline):
+    // skip BS-Roformer entirely. Seed the OPFS cache so a later standalone
+    // /tempo run on the same file also cache-hits.
+    drumStem = req.drumStem;
+    progress({
+      stage: 'separate',
+      percent: 1,
+      detail: 'Reused drums from transcription',
+    });
+    if (cacheKey) await saveStemToCache(cacheKey, drumStem);
+  }
+  if (!drumStem && cacheKey) {
     const cached = await loadStemFromCache(cacheKey);
     if (cached && cached.length === N) {
       drumStem = cached;
@@ -173,20 +185,23 @@ async function run(req: PipelineRunRequest) {
     );
 
     progress({stage: 'separate', percent: 0});
-    drumStem = await separateDrumStem({
-      ort,
-      left,
-      right,
-      session: roformerSession,
-      onProgress: ({segment, totalSegments, etaSec}) => {
-        progress({
-          stage: 'separate',
-          percent: segment / totalSegments,
-          etaSeconds: etaSec,
-        });
-      },
-    });
-    await roformerSession.release();
+    try {
+      drumStem = await separateDrumStem({
+        ort,
+        left,
+        right,
+        session: roformerSession,
+        onProgress: ({segment, totalSegments, etaSec}) => {
+          progress({
+            stage: 'separate',
+            percent: segment / totalSegments,
+            etaSeconds: etaSec,
+          });
+        },
+      });
+    } finally {
+      await roformerSession.release();
+    }
     if (cacheKey) await saveStemToCache(cacheKey, drumStem);
   }
 
@@ -229,24 +244,25 @@ async function run(req: PipelineRunRequest) {
     return {pp, beatLogits, fps};
   };
 
-  // ---- S2: Beat This! on the full mix ----
-  progress({stage: 'beats-fullmix', percent: 0});
-  const fullMixMono = new Float32Array(N);
-  for (let i = 0; i < N; i++) fullMixMono[i] = (left[i] + right[i]) * 0.5;
-  const fm = await runBeatThisOn(
-    fullMixMono,
-    SEPARATION_SAMPLE_RATE,
-    'beats-fullmix',
-  );
+  let fm: Awaited<ReturnType<typeof runBeatThisOn>>;
+  let ds: Awaited<ReturnType<typeof runBeatThisOn>>;
+  try {
+    // ---- S2: Beat This! on the full mix ----
+    progress({stage: 'beats-fullmix', percent: 0});
+    const fullMixMono = new Float32Array(N);
+    for (let i = 0; i < N; i++) fullMixMono[i] = (left[i] + right[i]) * 0.5;
+    fm = await runBeatThisOn(
+      fullMixMono,
+      SEPARATION_SAMPLE_RATE,
+      'beats-fullmix',
+    );
 
-  // ---- S3: Beat This! on the drum stem ----
-  progress({stage: 'beats-drums', percent: 0});
-  const ds = await runBeatThisOn(
-    drumStem,
-    SEPARATION_SAMPLE_RATE,
-    'beats-drums',
-  );
-  await beatThisSession.release();
+    // ---- S3: Beat This! on the drum stem ----
+    progress({stage: 'beats-drums', percent: 0});
+    ds = await runBeatThisOn(drumStem, SEPARATION_SAMPLE_RATE, 'beats-drums');
+  } finally {
+    await beatThisSession.release();
+  }
 
   // ---- S2b: drum-onset offset ----
   progress({stage: 'convert'});

@@ -86,10 +86,40 @@ function makeFades(overlap: number) {
   return {fadeIn, fadeOut};
 }
 
+export interface SeparateDrumStemOptions {
+  ort: typeof ortTypes;
+  left: Float32Array;
+  right: Float32Array;
+  session: ortTypes.InferenceSession;
+  onProgress?: (p: SeparationProgress) => void;
+  overlapFrac?: number;
+  numWorkers?: number;
+  /**
+   * Output shape:
+   * - 'mono' (default): mean(L,R) mono PCM at 44.1 kHz, used by the
+   *   tempo-map pipeline.
+   * - 'stereo': planar left/right Float32Arrays at 44.1 kHz (used by the
+   *   drum-transcription pipeline, whose CRNN consumes stereo mels).
+   */
+  output?: 'mono' | 'stereo';
+}
+
+export interface StereoDrumStem {
+  left: Float32Array;
+  right: Float32Array;
+}
+
 /**
  * Separate the drum stem from stereo 44.1 kHz audio. Returns mean(L,R) mono
- * PCM at 44.1 kHz. The other five stems are discarded to free memory.
+ * PCM at 44.1 kHz by default, or planar L/R when `output: 'stereo'`. The
+ * other five stems are discarded to free memory.
  */
+export async function separateDrumStem(
+  opts: SeparateDrumStemOptions & {output?: 'mono'},
+): Promise<Float32Array>;
+export async function separateDrumStem(
+  opts: SeparateDrumStemOptions & {output: 'stereo'},
+): Promise<StereoDrumStem>;
 export async function separateDrumStem({
   ort,
   left,
@@ -98,15 +128,8 @@ export async function separateDrumStem({
   onProgress,
   overlapFrac = 0.25,
   numWorkers = 2,
-}: {
-  ort: typeof ortTypes;
-  left: Float32Array;
-  right: Float32Array;
-  session: ortTypes.InferenceSession;
-  onProgress?: (p: SeparationProgress) => void;
-  overlapFrac?: number;
-  numWorkers?: number;
-}): Promise<Float32Array> {
+  output = 'mono',
+}: SeparateDrumStemOptions): Promise<Float32Array | StereoDrumStem> {
   const N = left.length;
   const OVERLAP = Math.floor(CHUNK_SAMPLES * overlapFrac);
   const STEP = CHUNK_SAMPLES - OVERLAP;
@@ -239,20 +262,26 @@ export async function separateDrumStem({
         stft.F,
         stft.T,
       ]);
-      const tInfer = performance.now();
-      const out = await session.run({spec_real: tIn1, spec_imag: tIn2});
-      const inferMs = performance.now() - tInfer;
+      let realCopy: Float32Array;
+      let imagCopy: Float32Array;
+      let inferMs: number;
+      try {
+        const tInfer = performance.now();
+        const out = await session.run({spec_real: tIn1, spec_imag: tIn2});
+        inferMs = performance.now() - tInfer;
+
+        // .data is a view into ORT-owned memory; .slice() gives an owned buffer
+        // we can transfer to the worker without invalidating ORT's pointer.
+        realCopy = (out['out_spec_real'].data as Float32Array).slice();
+        imagCopy = (out['out_spec_imag'].data as Float32Array).slice();
+        out['out_spec_real'].dispose();
+        out['out_spec_imag'].dispose();
+      } finally {
+        tIn1.dispose();
+        tIn2.dispose();
+      }
       avgInferMs =
         avgInferMs === 0 ? inferMs : avgInferMs * 0.8 + inferMs * 0.2;
-
-      // .data is a view into ORT-owned memory; .slice() gives an owned buffer
-      // we can transfer to the worker without invalidating ORT's pointer.
-      const realCopy = (out['out_spec_real'].data as Float32Array).slice();
-      const imagCopy = (out['out_spec_imag'].data as Float32Array).slice();
-      tIn1.dispose();
-      tIn2.dispose();
-      out['out_spec_real'].dispose();
-      out['out_spec_imag'].dispose();
 
       if (pendingIstft) mixSegment(await pendingIstft);
       pendingIstft = postIstftDrums(
@@ -277,7 +306,12 @@ export async function separateDrumStem({
     pool.terminate();
   }
 
-  // drums is planar [L0..LN, R0..RN]; mean(L,R) to mono.
+  // drums is planar [L0..LN, R0..RN].
+  if (output === 'stereo') {
+    return {left: drums.slice(0, N), right: drums.slice(N, 2 * N)};
+  }
+
+  // mean(L,R) to mono.
   const mono = new Float32Array(N);
   for (let i = 0; i < N; i++) mono[i] = (drums[i] + drums[N + i]) * 0.5;
   return mono;

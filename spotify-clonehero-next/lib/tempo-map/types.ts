@@ -62,6 +62,14 @@ export interface PipelineRunRequest {
   sampleRate: number;
   /** sha-256 hex of the source bytes, for the OPFS drum-stem cache. */
   sourceHash: string | null;
+  /**
+   * Optional pre-separated MONO drum stem at 44.1 kHz (mean of the stereo
+   * stem's channels — identical to what the worker's own mono separation
+   * path produces). When provided and its length matches the 44.1k input,
+   * the worker skips BS-Roformer separation entirely. Used by the
+   * drum-transcription pipeline, which has already separated the stem.
+   */
+  drumStem?: Float32Array | null;
 }
 
 export type PipelineWorkerMessage =
