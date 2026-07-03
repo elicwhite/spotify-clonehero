@@ -1,29 +1,27 @@
 /**
- * Web Worker for CRNN drum transcription inference.
+ * Web Worker for CRNN drum transcription inference (stereo 256-mel model).
  *
  * Runs all heavy computation off the main thread:
- *   - Mel spectrogram computation
- *   - Panning feature computation
- *   - Song context computation
- *   - ONNX model inference (windowed, two-pass)
- *   - Peak picking
+ *   - Per-channel stereo mel spectrogram (2, 256, T) @ 48 kHz / 100 fps
+ *   - Deploy song context (512-dim stereo time-mean tiled 10x -> 5120)
+ *   - Single-pass windowed ONNX inference (500-frame windows, stride 375,
+ *     sigmoid + overlap averaging)
+ *   - Post-processing (tom re-order + per-frame lane constraints)
+ *   - Peak picking with the provided per-lane thresholds
  *
  * Communication protocol:
- *   Main → Worker:  { type: 'transcribe', stereoAudio, sampleRate, modelUrl }
+ *   Main → Worker:  { type: 'transcribe', stereoAudio, sampleRate, modelUrl, thresholds }
+ *     stereoAudio is interleaved [L0, R0, L1, R1, ...] at 48000 Hz.
  *   Worker → Main:  { type: 'progress', step, percent, detail? }
  *   Worker → Main:  { type: 'result', events, modelOutput, durationSeconds }
  *   Worker → Main:  { type: 'error', message }
  */
 
-import {computeMelSpectrogram} from './spectrogram';
-import {computePanningFeatures} from './panning';
-import {computeFallbackContext, computeRealContext} from './song-context';
+import {computeStereoMel, computeMonoMelTMajor} from './spectrogram';
+import {computeDeployContext} from './song-context';
+import {applyPostprocess} from './postprocess';
 import {pickPeaksFromModelOutput} from './peak-picking';
-import type {
-  MelSpectrogramConfig,
-  ModelOutput,
-  TranscriptionProgress,
-} from './types';
+import type {ModelOutput, TranscriptionProgress} from './types';
 import {
   DEFAULT_MEL_CONFIG,
   NUM_DRUM_CLASSES,
@@ -59,109 +57,95 @@ async function loadOrt() {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: sigmoid
+// Helpers
 // ---------------------------------------------------------------------------
 
 function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
 }
 
-// ---------------------------------------------------------------------------
-// Helper: stereo to mono
-// ---------------------------------------------------------------------------
-
-function stereoToMono(stereo: Float32Array): Float32Array {
-  const numSamples = stereo.length / 2;
-  const mono = new Float32Array(numSamples);
+/** Split interleaved stereo [L0, R0, L1, R1, ...] into planar channels. */
+function deinterleave(stereo: Float32Array): {
+  left: Float32Array;
+  right: Float32Array;
+} {
+  const numSamples = stereo.length >> 1;
+  const left = new Float32Array(numSamples);
+  const right = new Float32Array(numSamples);
   for (let i = 0; i < numSamples; i++) {
-    mono[i] = (stereo[i * 2] + stereo[i * 2 + 1]) * 0.5;
+    left[i] = stereo[i * 2];
+    right[i] = stereo[i * 2 + 1];
   }
-  return mono;
+  return {left, right};
 }
 
 // ---------------------------------------------------------------------------
-// Windowed inference
+// Windowed inference (single pass)
 // ---------------------------------------------------------------------------
 
+/**
+ * Run windowed ONNX inference over the full stereo mel.
+ *
+ * @param melStereo - Stereo mel, layout [ch * nMels * T + m * T + t].
+ * @param context - Song context vector (5120).
+ * @returns Averaged sigmoid activations, layout [t * 9 + c].
+ */
 async function windowedInference(
   session: any,
-  mel: Float32Array,
+  melStereo: Float32Array,
   nFrames: number,
   nMels: number,
-  panning: Float32Array,
-  panNFrames: number,
   context: Float32Array,
-  passName: string,
   postProgress: (step: TranscriptionProgress['step'], percent: number) => void,
 ): Promise<ModelOutput> {
   const rtOrt = await loadOrt();
 
-  // Use the minimum frame count between mel and panning
-  const T = Math.min(nFrames, panNFrames);
+  const T = nFrames;
   const nClasses = NUM_DRUM_CLASSES;
 
   // Accumulation buffers
   const accum = new Float64Array(T * nClasses);
   const counts = new Float64Array(T);
 
-  // Count total windows for progress
-  const totalWindows = Math.max(
-    1,
-    Math.ceil((T - WINDOW_SIZE) / WINDOW_STRIDE) + 1,
-  );
+  // Count total windows for progress (loop runs while start < T)
+  const totalWindows = Math.max(1, Math.ceil(T / WINDOW_STRIDE));
   let windowIdx = 0;
 
-  const step = passName === 'pass-1' ? 'inference-pass-1' : 'inference-pass-2';
+  const ctxTensor = new rtOrt.Tensor('float32', context, [1, SONG_CONTEXT_DIM]);
 
   for (let start = 0; start < T; start += WINDOW_STRIDE) {
     const end = Math.min(start + WINDOW_SIZE, T);
     const W = end - start;
+    const padW = WINDOW_SIZE; // zero-pad shorter final window
 
-    // Pad window to WINDOW_SIZE (zero-pad shorter final window)
-    const padW = WINDOW_SIZE;
-
-    // Prepare mel window: (1, 1, 128, padW)
-    const melWindow = new Float32Array(1 * 1 * nMels * padW);
-    for (let f = 0; f < W; f++) {
+    // Mel window: (1, 2, nMels, padW), layout [ch*nMels*padW + m*padW + f]
+    const melWindow = new Float32Array(2 * nMels * padW);
+    for (let ch = 0; ch < 2; ch++) {
       for (let m = 0; m < nMels; m++) {
-        melWindow[m * padW + f] = mel[(start + f) * nMels + m];
+        const srcBase = (ch * nMels + m) * T + start;
+        const dstBase = (ch * nMels + m) * padW;
+        for (let f = 0; f < W; f++) {
+          melWindow[dstBase + f] = melStereo[srcBase + f];
+        }
       }
     }
 
-    // Prepare panning window: (1, 4, padW)
-    const panWindow = new Float32Array(1 * 4 * padW);
-    for (let b = 0; b < 4; b++) {
-      for (let f = 0; f < W; f++) {
-        panWindow[b * padW + f] = panning[b * panNFrames + (start + f)];
-      }
-    }
-
-    // Context: (1, 1280)
     const melTensor = new rtOrt.Tensor('float32', melWindow, [
       1,
-      1,
+      2,
       nMels,
       padW,
-    ]);
-    const panTensor = new rtOrt.Tensor('float32', panWindow, [1, 4, padW]);
-    const ctxTensor = new rtOrt.Tensor('float32', context, [
-      1,
-      SONG_CONTEXT_DIM,
     ]);
 
     const results = await session.run({
       mel: melTensor,
-      panning: panTensor,
       context: ctxTensor,
     });
 
     melTensor.dispose();
-    panTensor.dispose();
-    ctxTensor.dispose();
 
-    // Get logits output
-    const outputKey = Object.keys(results)[0];
-    const outputTensor = results[outputKey];
+    // Logits output: (1, 500, 9), row-major [f * 9 + c]
+    const outputTensor = results.logits ?? results[Object.keys(results)[0]];
     const logits = outputTensor.data as Float32Array;
 
     // Accumulate sigmoid(logits) into the correct position
@@ -175,11 +159,10 @@ async function windowedInference(
     outputTensor.dispose();
 
     windowIdx++;
-    postProgress(
-      step as TranscriptionProgress['step'],
-      windowIdx / totalWindows,
-    );
+    postProgress('inference', Math.min(1, windowIdx / totalWindows));
   }
+
+  ctxTensor.dispose();
 
   // Average overlapping predictions
   const predictions = new Float32Array(T * nClasses);
@@ -201,6 +184,7 @@ async function transcribe(
   stereoAudio: Float32Array,
   sampleRate: number,
   modelUrl: string,
+  thresholds: number[],
 ) {
   const durationSeconds = stereoAudio.length / 2 / sampleRate;
 
@@ -212,77 +196,56 @@ async function transcribe(
     self.postMessage({type: 'progress', step, percent, detail});
   }
 
+  let session: any = null;
   try {
-    // Step 1: Compute mel spectrogram (from mono)
+    if (sampleRate !== DEFAULT_MEL_CONFIG.sampleRate) {
+      throw new Error(
+        `CRNN worker expects ${DEFAULT_MEL_CONFIG.sampleRate} Hz audio, got ${sampleRate} Hz`,
+      );
+    }
+
+    // Step 1: Stereo mel spectrogram (2, 256, T)
     postProgress('computing-spectrogram', 0.05);
-    const mono = stereoToMono(stereoAudio);
+    const {left, right} = deinterleave(stereoAudio);
+    const {melStereo, nFrames, nMels} = computeStereoMel(left, right);
+    postProgress('computing-spectrogram', 1);
 
-    const config: MelSpectrogramConfig = {
-      ...DEFAULT_MEL_CONFIG,
-      sampleRate,
-    };
-    const {
-      spectrogram: mel,
-      nFrames,
-      nMels,
-    } = computeMelSpectrogram(mono, config);
-    postProgress('computing-spectrogram', 0.5);
+    if (nFrames === 0) {
+      throw new Error('Audio too short to compute a mel spectrogram');
+    }
 
-    // Step 2: Compute panning features (from stereo)
-    postProgress('computing-panning', 0);
-    const {panning, nFrames: panNFrames} = computePanningFeatures(
-      stereoAudio,
-      config,
-    );
-    postProgress('computing-panning', 1);
+    // Step 2: Deploy song context (single pass — no onset-conditioned repass)
+    const context = computeDeployContext(melStereo, nFrames, nMels);
 
     // Step 3: Load ONNX model
     postProgress('loading-model', 0);
     const rtOrt = await loadOrt();
-    const session = await rtOrt.InferenceSession.create(modelUrl, {
+    session = await rtOrt.InferenceSession.create(modelUrl, {
       executionProviders: ['webgpu', 'wasm'],
       graphOptimizationLevel: 'all',
     });
     postProgress('loading-model', 1);
 
-    // Step 4: Pass 1 — fallback context
-    const fallbackCtx = computeFallbackContext(mel, nFrames, nMels);
-    const pass1Output = await windowedInference(
+    // Step 4: Single-pass windowed inference
+    const rawOutput = await windowedInference(
       session,
-      mel,
+      melStereo,
       nFrames,
       nMels,
-      panning,
-      panNFrames,
-      fallbackCtx,
-      'pass-1',
+      context,
       postProgress,
     );
 
-    // Step 5: Peak pick Pass 1 to get onsets for real context
-    const pass1Events = pickPeaksFromModelOutput(pass1Output);
-
-    // Step 6: Compute real context from Pass 1 onsets
-    const realCtx = computeRealContext(mel, nFrames, nMels, pass1Events);
-
-    // Step 7: Pass 2 — real context
-    const pass2Output = await windowedInference(
-      session,
-      mel,
-      nFrames,
-      nMels,
-      panning,
-      panNFrames,
-      realCtx,
-      'pass-2',
-      postProgress,
-    );
-
-    // Step 8: Peak pick Pass 2 for final events
+    // Step 5: Post-processing (tom re-order + lane constraints) + peak picking
     postProgress('post-processing', 0.9);
-    const events = pickPeaksFromModelOutput(pass2Output);
-
-    await session.release();
+    const monoMel = computeMonoMelTMajor(melStereo, nFrames, nMels);
+    const processed = applyPostprocess(rawOutput.predictions, nFrames, monoMel);
+    const modelOutput: ModelOutput = {
+      predictions: processed,
+      nFrames,
+      nClasses: rawOutput.nClasses,
+    };
+    const events = pickPeaksFromModelOutput(modelOutput, thresholds);
 
     postProgress('done', 1);
 
@@ -290,11 +253,7 @@ async function transcribe(
     const result = {
       type: 'result' as const,
       events,
-      modelOutput: {
-        predictions: pass2Output.predictions,
-        nFrames: pass2Output.nFrames,
-        nClasses: pass2Output.nClasses,
-      },
+      modelOutput,
       durationSeconds,
     };
 
@@ -306,6 +265,8 @@ async function transcribe(
       type: 'error',
       message: err instanceof Error ? err.message : String(err),
     });
+  } finally {
+    if (session) await session.release();
   }
 }
 
@@ -314,8 +275,8 @@ async function transcribe(
 // ---------------------------------------------------------------------------
 
 self.onmessage = (e: MessageEvent) => {
-  const {type, stereoAudio, sampleRate, modelUrl} = e.data;
+  const {type, stereoAudio, sampleRate, modelUrl, thresholds} = e.data;
   if (type === 'transcribe') {
-    transcribe(stereoAudio, sampleRate, modelUrl);
+    transcribe(stereoAudio, sampleRate, modelUrl, thresholds);
   }
 };

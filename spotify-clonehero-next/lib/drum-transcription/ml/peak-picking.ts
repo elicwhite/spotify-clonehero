@@ -1,159 +1,81 @@
 /**
  * Peak picking for drum transcription model output.
  *
- * Ports madmom's NotePeakPickingProcessor to JavaScript.
- * Applied independently per class to the model's sigmoid output.
+ * Exact port of the reference `peak_pick` in
+ * analysis/stage1_eval/common.py (research repo), as inlined verbatim in
+ * scripts/dump_frontend_reference.py:
  *
- * Algorithm:
- *   1. Moving average (preAvg + postAvg window)
- *   2. Moving maximum (preMax + postMax window)
- *   3. Threshold + local max test: a frame is a peak if:
- *      - Its value exceeds the per-class threshold
- *      - Its value equals the local maximum
- *      - Its value exceeds the local average
- *   4. Combine: merge detections within `combine` window (keep highest)
+ *   1. Candidate peaks are STRICT local maxima:
+ *        e[i] > e[i-1] && e[i] >= e[i+1], for i in 1..n-2.
+ *   2. Greedy NMS: visit candidates by descending height (ties: lower frame
+ *      first, matching np.argsort(-e[loc]) order); keep a candidate unless a
+ *      previously kept peak is within PEAK_NMS_FRAMES (2 frames = 20 ms at
+ *      100 fps) on either side.
+ *   3. Keep peaks whose height is STRICTLY greater than the per-lane
+ *      threshold. Lanes with threshold > 1.5 are skipped entirely.
  *
- * Reference: madmom.features.notes.NotePeakPickingProcessor
+ * Events are sorted by (frame, lane), matching the reference pick_all().
  */
 
-import type {
-  ModelOutput,
-  RawDrumEvent,
-  PeakPickingParams,
-  DrumClassName,
-} from './types';
+import type {ModelOutput, RawDrumEvent, DrumClassName} from './types';
 import {
   DRUM_CLASSES,
   NUM_DRUM_CLASSES,
-  DEFAULT_PEAK_PICKING_PARAMS,
   CRNN_THRESHOLDS,
+  MODEL_FPS,
+  PEAK_NMS_FRAMES,
+  THRESHOLD_LANE_EXCLUDED,
 } from './types';
 
 // ---------------------------------------------------------------------------
-// Moving window helpers
+// Single-lane peak picking (reference common.peak_pick)
 // ---------------------------------------------------------------------------
 
-/**
- * Compute the moving average of a signal with asymmetric pre/post windows.
- *
- * For each index i, average over [i - preFrames, i + postFrames].
- * Values outside the signal boundaries are treated as 0.
- */
-export function movingAverage(
-  signal: Float32Array,
-  preFrames: number,
-  postFrames: number,
-): Float32Array {
-  const n = signal.length;
-  const result = new Float32Array(n);
-
-  for (let i = 0; i < n; i++) {
-    const start = Math.max(0, i - preFrames);
-    const end = Math.min(n - 1, i + postFrames);
-    let sum = 0;
-    for (let j = start; j <= end; j++) {
-      sum += signal[j];
-    }
-    result[i] = sum / (end - start + 1);
-  }
-
-  return result;
-}
-
-/**
- * Compute the moving maximum of a signal with asymmetric pre/post windows.
- *
- * For each index i, maximum over [i - preFrames, i + postFrames].
- */
-export function movingMaximum(
-  signal: Float32Array,
-  preFrames: number,
-  postFrames: number,
-): Float32Array {
-  const n = signal.length;
-  const result = new Float32Array(n);
-
-  for (let i = 0; i < n; i++) {
-    const start = Math.max(0, i - preFrames);
-    const end = Math.min(n - 1, i + postFrames);
-    let max = -Infinity;
-    for (let j = start; j <= end; j++) {
-      if (signal[j] > max) {
-        max = signal[j];
-      }
-    }
-    result[i] = max;
-  }
-
-  return result;
-}
-
-// ---------------------------------------------------------------------------
-// Single-class peak picking
-// ---------------------------------------------------------------------------
-
-interface PeakCandidate {
+export interface Peak {
   frame: number;
-  value: number;
+  height: number;
 }
 
 /**
- * Run peak picking on a single activation function (one class).
+ * Strict-local-maxima peak picking with greedy NMS.
  *
- * @param activations - Per-frame activation values for one class.
- * @param threshold - Detection threshold for this class.
- * @param params - Peak picking parameters.
- * @returns Array of (frame, value) peaks.
+ * @param env - Per-frame activation envelope for one lane.
+ * @param nmsFrames - NMS window in frames on each side (default 2 = 20 ms).
+ * @returns Kept peaks, in greedy (descending-height) keep order.
  */
-export function pickPeaks(
-  activations: Float32Array,
-  threshold: number,
-  params: PeakPickingParams,
-): PeakCandidate[] {
-  const n = activations.length;
-  if (n === 0) return [];
+export function peakPick(
+  env: Float32Array,
+  nmsFrames: number = PEAK_NMS_FRAMES,
+): Peak[] {
+  const n = env.length;
+  if (n < 3) return [];
 
-  // Convert time-based window sizes to frames
-  const preAvgFrames = Math.round(params.preAvg * params.fps);
-  const postAvgFrames = Math.round(params.postAvg * params.fps);
-  const preMaxFrames = Math.round(params.preMax * params.fps);
-  const postMaxFrames = Math.round(params.postMax * params.fps);
-  const combineFrames = Math.round(params.combine * params.fps);
+  // Strict local maxima: e[i] > e[i-1] && e[i] >= e[i+1].
+  const candidates: number[] = [];
+  for (let i = 1; i < n - 1; i++) {
+    if (env[i] > env[i - 1] && env[i] >= env[i + 1]) {
+      candidates.push(i);
+    }
+  }
+  if (candidates.length === 0) return [];
 
-  // Step 1: Moving average
-  const avg = movingAverage(activations, preAvgFrames, postAvgFrames);
+  // Order by descending height; ties broken by lower frame first
+  // (np.argsort(-e[loc]) yields the earlier index first on exact ties).
+  const order = candidates.slice().sort((a, b) => env[b] - env[a] || a - b);
 
-  // Step 2: Moving maximum
-  const max = movingMaximum(activations, preMaxFrames, postMaxFrames);
-
-  // Step 3: Threshold + local max + above average test
-  const candidates: PeakCandidate[] = [];
-  for (let i = 0; i < n; i++) {
-    const val = activations[i];
-    if (val >= threshold && val >= max[i] && val >= avg[i]) {
-      candidates.push({frame: i, value: val});
+  const taken = new Uint8Array(n);
+  const keep: Peak[] = [];
+  for (const f of order) {
+    if (taken[f]) continue;
+    keep.push({frame: f, height: env[f]});
+    const lo = Math.max(0, f - nmsFrames);
+    const hi = Math.min(n - 1, f + nmsFrames);
+    for (let j = lo; j <= hi; j++) {
+      taken[j] = 1;
     }
   }
 
-  // Step 4: Combine detections within window (keep highest)
-  if (combineFrames <= 0 || candidates.length === 0) {
-    return candidates;
-  }
-
-  const combined: PeakCandidate[] = [candidates[0]];
-  for (let i = 1; i < candidates.length; i++) {
-    const last = combined[combined.length - 1];
-    if (candidates[i].frame - last.frame <= combineFrames) {
-      // Within combine window: keep the one with higher activation
-      if (candidates[i].value > last.value) {
-        combined[combined.length - 1] = candidates[i];
-      }
-    } else {
-      combined.push(candidates[i]);
-    }
-  }
-
-  return combined;
+  return keep;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,49 +83,48 @@ export function pickPeaks(
 // ---------------------------------------------------------------------------
 
 /**
- * Run peak picking on the full model output (all classes).
+ * Run reference peak picking on the full (post-processed) model output.
  *
- * @param modelOutput - Model output with per-frame predictions.
- * @param thresholds - Per-class detection thresholds.
- * @param params - Peak picking parameters.
- * @returns Array of RawDrumEvent sorted by time.
+ * @param modelOutput - Model output with per-frame activations [t*nClasses+c].
+ * @param thresholds - Per-lane thresholds in model order; a peak fires when
+ *   its height is strictly greater than the lane threshold. Lanes with a
+ *   threshold > 1.5 are skipped.
+ * @returns RawDrumEvents sorted by (frame, lane); timeSeconds = frame / 100.
  */
 export function pickPeaksFromModelOutput(
   modelOutput: ModelOutput,
-  thresholds: Record<DrumClassName, number> = CRNN_THRESHOLDS,
-  params: PeakPickingParams = DEFAULT_PEAK_PICKING_PARAMS,
+  thresholds: readonly number[] = CRNN_THRESHOLDS,
 ): RawDrumEvent[] {
   const {predictions, nFrames, nClasses} = modelOutput;
-  const events: RawDrumEvent[] = [];
-  const frameDuration = 1.0 / params.fps;
 
-  for (let cls = 0; cls < Math.min(nClasses, NUM_DRUM_CLASSES); cls++) {
-    // Extract the activation function for this class
-    const activations = new Float32Array(nFrames);
-    for (let frame = 0; frame < nFrames; frame++) {
-      activations[frame] = predictions[frame * nClasses + cls];
+  const onsets: {frame: number; lane: number; height: number}[] = [];
+
+  for (let lane = 0; lane < Math.min(nClasses, NUM_DRUM_CLASSES); lane++) {
+    const threshold = thresholds[lane];
+    if (threshold > THRESHOLD_LANE_EXCLUDED) continue;
+
+    const env = new Float32Array(nFrames);
+    for (let t = 0; t < nFrames; t++) {
+      env[t] = predictions[t * nClasses + lane];
     }
 
-    const drumClass = DRUM_CLASSES[cls];
-    const className = drumClass.name as DrumClassName;
-    const threshold = thresholds[className];
-
-    // Pick peaks for this class
-    const peaks = pickPeaks(activations, threshold, params);
-
-    // Convert to RawDrumEvent
-    for (const peak of peaks) {
-      events.push({
-        timeSeconds: peak.frame * frameDuration,
-        drumClass: className,
-        midiPitch: drumClass.midiPitch,
-        confidence: peak.value,
-      });
+    for (const peak of peakPick(env)) {
+      if (peak.height > threshold) {
+        onsets.push({frame: peak.frame, lane, height: peak.height});
+      }
     }
   }
 
-  // Sort by time
-  events.sort((a, b) => a.timeSeconds - b.timeSeconds);
+  // Sort by (frame, lane), matching the reference pick_all().
+  onsets.sort((a, b) => a.frame - b.frame || a.lane - b.lane);
 
-  return events;
+  return onsets.map(o => {
+    const drumClass = DRUM_CLASSES[o.lane];
+    return {
+      timeSeconds: o.frame / MODEL_FPS,
+      drumClass: drumClass.name as DrumClassName,
+      midiPitch: drumClass.midiPitch,
+      confidence: o.height,
+    };
+  });
 }

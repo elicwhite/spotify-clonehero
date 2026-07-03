@@ -1,0 +1,15 @@
+{
+  "thresholds": [0.5, 0.5, 0.75, 0.75, 0.75, 0.65, 0.75, 2.0, 0.65],
+  "note": "PROVISIONAL: tuned array from a sibling checkpoint (same arch/pack, 2026-07-03 evals); replace with the 14eca18-specific adt_eval tune.",
+  "laneOrder": [
+    "kick",
+    "snare",
+    "high-tom",
+    "mid-tom",
+    "floor-tom",
+    "hihat",
+    "crash",
+    "crash-2",
+    "ride"
+  ]
+}

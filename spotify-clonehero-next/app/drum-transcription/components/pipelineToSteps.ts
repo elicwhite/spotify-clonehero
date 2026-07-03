@@ -36,19 +36,34 @@ const PIPELINE_STEPS: StepConfig[] = [
   {
     key: 'decoding',
     label: 'Decoding Audio',
-    description: 'Converting to 44.1kHz stereo PCM',
+    description: 'Converting to stereo PCM',
   },
   {
     key: 'separating',
     label: 'Separating Stems',
-    description: 'Running Demucs to isolate drum track (~161 MB model)',
+    description: 'Isolating drums with BS-Roformer (~336 MB model)',
+  },
+  {
+    key: 'tempo-mapping',
+    label: 'Building Tempo Map',
+    description: 'Detecting beats and fitting tempo changes',
   },
   {
     key: 'transcribing',
     label: 'Transcribing Drums',
-    description: 'Detecting drum hits with ADTOF model',
+    description: 'Detecting drum hits with the CRNN model',
   },
 ];
+
+/**
+ * Index of the active step, with terminal states normalized: 'ready' means
+ * every step is behind us (render all as done, not stuck), while
+ * idle/error report -1 (nothing in flight).
+ */
+function activeStepIndex(progress: PipelineProgress): number {
+  if (progress.step === 'ready') return PIPELINE_STEPS.length;
+  return PIPELINE_STEPS.findIndex(s => s.key === progress.step);
+}
 
 interface PerStepTiming {
   startedAt?: number;
@@ -70,7 +85,7 @@ export function pipelineProgressToSteps(
   timer: PipelineStepTimer,
   now: number = Date.now(),
 ): ProcessingStep[] {
-  const currentIndex = PIPELINE_STEPS.findIndex(s => s.key === progress.step);
+  const currentIndex = activeStepIndex(progress);
 
   return PIPELINE_STEPS.map((cfg, index) => {
     const timing = timer.get(cfg.key) ?? {};
@@ -78,6 +93,7 @@ export function pipelineProgressToSteps(
     let stepProgress: number | undefined;
     let etaSeconds: number | undefined;
     let durationMs: number | undefined;
+    let detail: string | undefined;
 
     if (currentIndex < 0) {
       // Step is 'idle' / 'ready' / 'error' — nothing in flight.
@@ -91,6 +107,7 @@ export function pipelineProgressToSteps(
     } else if (index === currentIndex) {
       status = 'active';
       stepProgress = progress.progress;
+      detail = progress.detail;
       // Track step start the first time we see it active.
       if (timing.startedAt === undefined) {
         timing.startedAt = now;
@@ -123,6 +140,7 @@ export function pipelineProgressToSteps(
       progress: stepProgress,
       etaSeconds,
       durationMs,
+      detail,
     };
   });
 }
@@ -138,7 +156,7 @@ export function markStepCompletions(
   timer: PipelineStepTimer,
   now: number = Date.now(),
 ): void {
-  const currentIndex = PIPELINE_STEPS.findIndex(s => s.key === progress.step);
+  const currentIndex = activeStepIndex(progress);
   if (currentIndex < 0) return;
   for (let i = 0; i < currentIndex; i++) {
     const cfg = PIPELINE_STEPS[i];

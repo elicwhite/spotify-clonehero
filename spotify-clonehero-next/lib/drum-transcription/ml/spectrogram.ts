@@ -511,55 +511,165 @@ export function getMelFilterbank(config: MelSpectrogramConfig): Float32Array[] {
   return filters;
 }
 
+// ---------------------------------------------------------------------------
+// CRNN mel spectrogram (48 kHz stereo pipeline)
+// ---------------------------------------------------------------------------
+//
+// Matches pipeline/build_packed_dataset.py compute_mel() exactly:
+//   - SYMMETRIC Hann window (np.hanning): w[i] = 0.5*(1 - cos(2*PI*i/(N-1)))
+//     — NOT the periodic Hann used by the legacy ADTOF path above.
+//   - No centering/padding: nFrames = 1 + floor((len - nFft) / hop)
+//   - power = |rfft|^2
+//   - 256-band HTK mel filterbank (unnormalized triangles), log(mel + 1e-6)
+//   - Computed per channel (L and R separately)
+
 /**
- * Compute the mel spectrogram for the CRNN model.
+ * Compute the power spectrogram with a SYMMETRIC Hann window and no
+ * padding/centering, matching numpy's np.hanning + strided no-center STFT.
  *
- * Pipeline:
- *   1. STFT (nFft=2048, hop=441)
- *   2. Power spectrogram (|STFT|²)
- *   3. Apply mel filterbank (128 bands)
- *   4. Log compression: log(power + 1e-6)
- *
- * @param audioData - Mono audio signal at the configured sample rate.
- * @param config - Mel spectrogram configuration.
- * @returns Float32Array of shape [nFrames, nMels] (row-major), plus nFrames and nMels.
+ * @returns powers: Float32Array [nFrames, numFftBins] row-major (|rfft|^2).
  */
-export function computeMelSpectrogram(
+function computePowerSpectrogramSymmetricHann(
+  audioData: Float32Array,
+  frameSize: number,
+  hopLength: number,
+): {powers: Float32Array; nFrames: number; numFftBins: number} {
+  const numFftBins = Math.floor(frameSize / 2) + 1;
+  const nFrames = Math.floor((audioData.length - frameSize) / hopLength) + 1;
+
+  if (nFrames <= 0) {
+    return {powers: new Float32Array(0), nFrames: 0, numFftBins};
+  }
+
+  const fft = new WebFFT(frameSize);
+
+  // Symmetric Hann window (np.hanning): denominator N-1, not N.
+  const hannWindow = new Float32Array(frameSize);
+  for (let i = 0; i < frameSize; i++) {
+    hannWindow[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (frameSize - 1)));
+  }
+
+  const powers = new Float32Array(nFrames * numFftBins);
+  const fftInput = new Float32Array(frameSize * 2);
+
+  for (let frame = 0; frame < nFrames; frame++) {
+    const frameStart = frame * hopLength;
+
+    for (let i = 0; i < frameSize; i++) {
+      fftInput[i * 2] = audioData[frameStart + i] * hannWindow[i];
+      fftInput[i * 2 + 1] = 0;
+    }
+
+    const fftOutput = fft.fft(fftInput);
+
+    const offset = frame * numFftBins;
+    for (let k = 0; k < numFftBins; k++) {
+      const re = fftOutput[k * 2];
+      const im = fftOutput[k * 2 + 1];
+      powers[offset + k] = re * re + im * im;
+    }
+  }
+
+  return {powers, nFrames, numFftBins};
+}
+
+/**
+ * Compute the log-mel spectrogram of a single channel.
+ *
+ * @param audioData - One channel of audio at config.sampleRate.
+ * @returns mel: Float32Array of shape (nMels, nFrames), m-major [m * nFrames + t]
+ *   — matching the reference (256, T) layout.
+ */
+export function computeMelChannel(
   audioData: Float32Array,
   config: MelSpectrogramConfig = DEFAULT_MEL_CONFIG,
-): {spectrogram: Float32Array; nFrames: number; nMels: number} {
-  // Step 1-2: STFT + magnitude
-  const {magnitudes, nFrames, numFftBins} = computeMagnitudeSpectrogram(
+): {mel: Float32Array; nFrames: number; nMels: number} {
+  const {powers, nFrames, numFftBins} = computePowerSpectrogramSymmetricHann(
     audioData,
     config.nFft,
     config.hopLength,
   );
 
   if (nFrames === 0) {
-    return {spectrogram: new Float32Array(0), nFrames: 0, nMels: config.nMels};
+    return {mel: new Float32Array(0), nFrames: 0, nMels: config.nMels};
   }
 
-  // Step 3: Apply mel filterbank to power spectrum
   const filters = getMelFilterbank(config);
   const nMels = filters.length;
-  const spectrogram = new Float32Array(nFrames * nMels);
+  const mel = new Float32Array(nMels * nFrames);
 
-  for (let frame = 0; frame < nFrames; frame++) {
-    const magOffset = frame * numFftBins;
-    const specOffset = frame * nMels;
+  for (let band = 0; band < nMels; band++) {
+    const filter = filters[band];
+    // Triangular filters are sparse: find the non-zero support once.
+    let lo = 0;
+    while (lo < numFftBins && filter[lo] === 0) lo++;
+    let hi = numFftBins - 1;
+    while (hi >= lo && filter[hi] === 0) hi--;
 
-    for (let band = 0; band < nMels; band++) {
+    const melOffset = band * nFrames;
+    for (let frame = 0; frame < nFrames; frame++) {
+      const powOffset = frame * numFftBins;
       let sum = 0;
-      const filter = filters[band];
-      for (let bin = 0; bin < numFftBins; bin++) {
-        // Power = magnitude² (magnitudes from computeMagnitudeSpectrogram are |STFT|)
-        const mag = magnitudes[magOffset + bin];
-        sum += mag * mag * filter[bin];
+      for (let bin = lo; bin <= hi; bin++) {
+        sum += powers[powOffset + bin] * filter[bin];
       }
-      // Step 4: Log compression matching training code: log(power + 1e-6)
-      spectrogram[specOffset + band] = Math.log(sum + 1e-6);
+      mel[melOffset + frame] = Math.log(sum + 1e-6);
     }
   }
 
-  return {spectrogram, nFrames, nMels};
+  return {mel, nFrames, nMels};
+}
+
+/**
+ * Compute the stereo log-mel spectrogram (2, nMels, T) from planar L/R audio.
+ *
+ * Layout matches the ONNX "mel" input: [ch * nMels * T + m * T + t]
+ * (channel-major, then mel bin, then time). T is the min of the two
+ * channels' frame counts (they are equal for equal-length inputs).
+ */
+export function computeStereoMel(
+  left: Float32Array,
+  right: Float32Array,
+  config: MelSpectrogramConfig = DEFAULT_MEL_CONFIG,
+): {melStereo: Float32Array; nFrames: number; nMels: number} {
+  const l = computeMelChannel(left, config);
+  const r = computeMelChannel(right, config);
+  const nMels = config.nMels;
+  const nFrames = Math.min(l.nFrames, r.nFrames);
+
+  const melStereo = new Float32Array(2 * nMels * nFrames);
+  for (let m = 0; m < nMels; m++) {
+    for (let t = 0; t < nFrames; t++) {
+      melStereo[m * nFrames + t] = l.mel[m * l.nFrames + t];
+      melStereo[(nMels + m) * nFrames + t] = r.mel[m * r.nFrames + t];
+    }
+  }
+
+  return {melStereo, nFrames, nMels};
+}
+
+/**
+ * Compute the mono (time-major) mel needed by post-processing: the mean of
+ * the L and R channels, laid out [t * nMels + m] (shape (T, nMels)).
+ *
+ * @param melStereo - Stereo mel from computeStereoMel, [ch*nMels*T + m*T + t].
+ */
+export function computeMonoMelTMajor(
+  melStereo: Float32Array,
+  nFrames: number,
+  nMels: number,
+): Float32Array {
+  const mono = new Float32Array(nFrames * nMels);
+  const rOffset = nMels * nFrames;
+  for (let m = 0; m < nMels; m++) {
+    const lBase = m * nFrames;
+    const rBase = rOffset + m * nFrames;
+    for (let t = 0; t < nFrames; t++) {
+      // Match numpy float32 mean of two values: (L + R) / 2 in float32.
+      mono[t * nMels + m] = Math.fround(
+        Math.fround(melStereo[lBase + t] + melStereo[rBase + t]) / 2,
+      );
+    }
+  }
+  return mono;
 }

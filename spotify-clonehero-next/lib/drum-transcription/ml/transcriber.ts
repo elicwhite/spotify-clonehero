@@ -33,7 +33,7 @@ export interface DrumTranscriber {
   /**
    * Transcribe drum events from audio data.
    *
-   * @param stereoAudio - Interleaved stereo audio [L0, R0, L1, R1, ...] at the expected sample rate (44100 Hz).
+   * @param stereoAudio - Interleaved stereo audio [L0, R0, L1, R1, ...] at the expected sample rate (48000 Hz for the stereo CRNN).
    * @param sampleRate - Sample rate of the audio.
    * @param onProgress - Optional progress callback.
    * @returns The transcription result with raw events and model output.
@@ -49,25 +49,68 @@ export interface DrumTranscriber {
 // CRNN Transcriber (Web Worker-based inference)
 // ---------------------------------------------------------------------------
 
-/** URL for the CRNN ONNX model. Hosted on R2 (assets.musiccharts.tools) —
- * the local public/models/ copy is gitignored and never deploys, so a
- * same-origin URL 404s in production. */
+/** URL for the stereo 256-mel CRNN ONNX model. Hosted on R2
+ * (assets.musiccharts.tools) — the local public/models/ copy is gitignored
+ * and never deploys, so a same-origin URL 404s in production. */
 const CRNN_MODEL_URL =
-  'https://assets.musiccharts.tools/models/crnn_drum_transcriber.onnx';
+  'https://assets.musiccharts.tools/models/crnn_stereo_256mel.onnx';
+
+/** Per-lane peak-picking thresholds config. The same-origin copy
+ * (public/models/crnn_stereo_256mel.thresholds.json) IS committed (tiny JSON,
+ * not covered by the *.onnx gitignore) so it deploys with the app; the R2
+ * copy is the production fallback and should be kept in sync when retuned. */
+const CRNN_THRESHOLDS_URL = '/models/crnn_stereo_256mel.thresholds.json';
+const CRNN_THRESHOLDS_URL_FALLBACK =
+  'https://assets.musiccharts.tools/models/crnn_stereo_256mel.thresholds.json';
+
+/** PROVISIONAL per-lane thresholds (lane order: kick, snare, high-tom,
+ * mid-tom, floor-tom, hihat, crash, crash-2, ride). A threshold > 1.5
+ * disables the lane entirely (crash-2 = 2.0 is intentional). Used when the
+ * thresholds JSON cannot be fetched. */
+const PROVISIONAL_THRESHOLDS: number[] = [
+  0.5, 0.5, 0.75, 0.75, 0.75, 0.65, 0.75, 2.0, 0.65,
+];
 
 /**
- * Real ONNX-based drum transcriber using the CRNN model.
+ * Fetch the per-lane thresholds config, trying same-origin first, then R2,
+ * then falling back to the hardcoded provisional array.
+ */
+async function loadThresholds(): Promise<number[]> {
+  for (const url of [CRNN_THRESHOLDS_URL, CRNN_THRESHOLDS_URL_FALLBACK]) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const json = (await res.json()) as {thresholds?: unknown};
+      if (
+        Array.isArray(json.thresholds) &&
+        json.thresholds.length === NUM_DRUM_CLASSES &&
+        json.thresholds.every(t => typeof t === 'number' && Number.isFinite(t))
+      ) {
+        return json.thresholds as number[];
+      }
+      console.warn(`Malformed thresholds config at ${url}; trying fallback`);
+    } catch {
+      // Network error — try the next source.
+    }
+  }
+  console.warn('Using hardcoded provisional CRNN thresholds');
+  return PROVISIONAL_THRESHOLDS.slice();
+}
+
+/**
+ * Real ONNX-based drum transcriber using the stereo 256-mel CRNN model.
  *
- * All heavy computation (mel spectrogram, panning, ONNX inference, peak picking)
- * runs in a Web Worker to keep the main thread responsive.
+ * All heavy computation (mel spectrograms, ONNX inference, post-processing,
+ * peak picking) runs in a Web Worker to keep the main thread responsive.
  *
- * Pipeline (inside worker):
- *   1. Compute mel spectrogram (128 bands, 100 fps)
- *   2. Compute panning features (4-band L/R ratio)
- *   3. Pass 1: inference with fallback context
- *   4. Compute real context from Pass 1 onsets
- *   5. Pass 2: inference with real context
- *   6. Peak picking on Pass 2 output
+ * Pipeline (inside worker) — single inference pass:
+ *   1. Per-channel log-mel spectrograms (256 bands @ 100 fps, 48 kHz input)
+ *   2. Song context vector: time-mean of the stereo mel (512 floats tiled
+ *      10x -> 5120)
+ *   3. Windowed inference (500-frame windows, stride 375, averaged overlaps)
+ *      + sigmoid -> per-frame activations (T, 9)
+ *   4. Post-processing: per-song tom re-order, per-frame lane constraints
+ *   5. Peak picking per lane with the provided per-lane thresholds
  */
 export class CrnnTranscriber implements DrumTranscriber {
   private modelUrl: string;
@@ -81,6 +124,7 @@ export class CrnnTranscriber implements DrumTranscriber {
     sampleRate: number,
     onProgress?: TranscriptionProgressCallback,
   ): Promise<TranscriptionResult> {
+    const thresholds = await loadThresholds();
     return new Promise((resolve, reject) => {
       const worker = new Worker(new URL('./crnn-worker.ts', import.meta.url));
 
@@ -126,6 +170,7 @@ export class CrnnTranscriber implements DrumTranscriber {
           stereoAudio,
           sampleRate,
           modelUrl: this.modelUrl,
+          thresholds,
         },
         [stereoAudio.buffer],
       );
@@ -166,7 +211,7 @@ export class MockTranscriber implements DrumTranscriber {
     // Simulate processing time
     await new Promise<void>(resolve => setTimeout(resolve, 100));
 
-    onProgress?.({step: 'inference-pass-1', percent: 0.5});
+    onProgress?.({step: 'inference', percent: 0.5});
 
     const events = this.generateMockPattern(durationSeconds);
     const modelOutput = this.generateMockModelOutput(durationSeconds, events);

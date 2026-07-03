@@ -55,14 +55,18 @@ export interface MelSpectrogramConfig {
   fMax: number;
 }
 
-/** Default mel spectrogram config matching the CRNN training pipeline. */
+/**
+ * Default mel spectrogram config matching the CRNN training pipeline
+ * (pipeline/build_packed_dataset.py: 48 kHz, nFft=1024, hop=480 -> 100 fps,
+ * 256 HTK mel bands, fmin=0, fmax=Nyquist).
+ */
 export const DEFAULT_MEL_CONFIG: MelSpectrogramConfig = {
-  sampleRate: 44100,
-  nFft: 2048,
-  hopLength: 441, // 100 fps
-  nMels: 128,
+  sampleRate: 48000,
+  nFft: 1024,
+  hopLength: 480, // 100 fps
+  nMels: 256,
   fMin: 0,
-  fMax: 22050, // Nyquist
+  fMax: 24000, // Nyquist
 };
 
 // ---------------------------------------------------------------------------
@@ -186,9 +190,7 @@ export interface TranscriptionProgress {
   step:
     | 'loading-model'
     | 'computing-spectrogram'
-    | 'computing-panning'
-    | 'inference-pass-1'
-    | 'inference-pass-2'
+    | 'inference'
     | 'post-processing'
     | 'done';
   /** Overall progress from 0 to 1. */
@@ -206,66 +208,46 @@ export type TranscriptionProgressCallback = (
 // Peak Picking Configuration
 // ---------------------------------------------------------------------------
 
-/** Parameters for the madmom-style peak picking algorithm. */
-export interface PeakPickingParams {
-  /** Pre-average window in seconds. */
-  preAvg: number;
-  /** Post-average window in seconds. */
-  postAvg: number;
-  /** Pre-max window in seconds. */
-  preMax: number;
-  /** Post-max window in seconds. */
-  postMax: number;
-  /** Combine window in seconds (merge detections within this window). */
-  combine: number;
-  /** Frames per second (100 for CRNN). */
-  fps: number;
-}
+/** Frames per second of the model output grid. */
+export const MODEL_FPS = 100;
 
-/** Default peak picking parameters. */
-export const DEFAULT_PEAK_PICKING_PARAMS: PeakPickingParams = {
-  preAvg: 0.1,
-  postAvg: 0.01,
-  preMax: 0.02,
-  postMax: 0.01,
-  combine: 0.02,
-  fps: 100,
-};
+/**
+ * NMS window for peak picking, in frames on each side of a kept peak
+ * (20 ms at 100 fps).
+ */
+export const PEAK_NMS_FRAMES = 2;
 
-/** Per-class detection thresholds for the CRNN model (initial values, tune later). */
-export const CRNN_THRESHOLDS: Record<DrumClassName, number> = {
-  BD: 0.25,
-  SD: 0.25,
-  HT: 0.3,
-  MT: 0.3,
-  FT: 0.3,
-  HH: 0.25,
-  CR: 0.3,
-  CR2: 0.3,
-  RD: 0.3,
-};
-
-// ---------------------------------------------------------------------------
-// Panning configuration
-// ---------------------------------------------------------------------------
-
-/** Frequency bands for panning feature computation (Hz). */
-export const PANNING_BANDS_HZ: readonly [number, number][] = [
-  [0, 300],
-  [300, 3000],
-  [3000, 8000],
-  [8000, 20000],
+/**
+ * Per-lane detection thresholds for the CRNN model, in model output order
+ * (BD, SD, HT, MT, FT, HH, CR, CR2, RD). A peak is kept when its height is
+ * strictly greater than the lane threshold. Lanes with a threshold > 1.5 are
+ * structurally excluded (never fire) — crash-2 = 2.0 matches the deployed
+ * reference (adt_eval provisional thresholds).
+ */
+export const CRNN_THRESHOLDS: readonly number[] = [
+  0.5, // BD
+  0.5, // SD
+  0.75, // HT
+  0.75, // MT
+  0.75, // FT
+  0.65, // HH
+  0.75, // CR
+  2.0, // CR2 (excluded)
+  0.65, // RD
 ];
+
+/** Lanes whose threshold exceeds this value are skipped entirely. */
+export const THRESHOLD_LANE_EXCLUDED = 1.5;
 
 // ---------------------------------------------------------------------------
 // Song context configuration
 // ---------------------------------------------------------------------------
 
-/** Dimensionality of the song context vector. */
-export const SONG_CONTEXT_DIM = 1280; // 128 (mean mel) + 9 * 128 (per-instrument onset mel)
-
-/** Radius (in frames) around each onset for computing per-instrument mel profiles. */
-export const ONSET_RADIUS = 5;
+/**
+ * Dimensionality of the song context vector: the 512-dim time-mean of the
+ * stereo mel (L 256 bins, then R 256 bins) tiled 10x.
+ */
+export const SONG_CONTEXT_DIM = 5120;
 
 // ---------------------------------------------------------------------------
 // Windowed inference configuration
