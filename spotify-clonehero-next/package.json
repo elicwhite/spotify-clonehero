@@ -15,6 +15,7 @@
     "format:check": "prettier --check .",
     "test": "jest",
     "test:fill-detector": "jest lib/fill-detector",
+    "test:onnx-parity": "NODE_OPTIONS=--experimental-vm-modules RUN_ONNX_PARITY=1 jest crnn-logits-reference",
     "update:db": "tsx ./downloadDb.ts",
     "update:db-types": "kysely-codegen --out-file ./lib/local-db/types.ts",
     "postinstall": "patch-package"
