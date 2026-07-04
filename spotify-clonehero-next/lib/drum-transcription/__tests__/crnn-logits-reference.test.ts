@@ -96,117 +96,130 @@ if (!enabled) {
   );
 }
 
-describeIf('CRNN inference: onnxruntime-web(t2) vs python onnxruntime(t2)', () => {
-  const fixture: CrnnFixture = JSON.parse(
-    fs.readFileSync(FIXTURE_PATH, 'utf8'),
-  );
-  const T = fixture.T;
-  const nMels = fixture.nMels;
-  const melStereo = decodeF32(fixture.melStereoB64);
-  const context = decodeF32(fixture.contextB64);
-  const refW0 = decodeF32(fixture.window0LogitsB64); // [f*9+c]
-  const refAvg = decodeF32(fixture.avgActB64); // [t*9+c]
+describeIf(
+  'CRNN inference: onnxruntime-web(t2) vs python onnxruntime(t2)',
+  () => {
+    const fixture: CrnnFixture = JSON.parse(
+      fs.readFileSync(FIXTURE_PATH, 'utf8'),
+    );
+    const T = fixture.T;
+    const nMels = fixture.nMels;
+    const melStereo = decodeF32(fixture.melStereoB64);
+    const context = decodeF32(fixture.contextB64);
+    const refW0 = decodeF32(fixture.window0LogitsB64); // [f*9+c]
+    const refAvg = decodeF32(fixture.avgActB64); // [t*9+c]
 
-  let session: any;
-  let webW0: Float32Array | null = null; // first-window raw logits [f*9+c]
-  let webAvg: Float32Array | null = null; // averaged sigmoid [t*9+c]
+    let session: any;
+    let webW0: Float32Array | null = null; // first-window raw logits [f*9+c]
+    let webAvg: Float32Array | null = null; // averaged sigmoid [t*9+c]
 
-  beforeAll(async () => {
-    ort.env.wasm.numThreads = 1;
-    ort.env.logLevel = 'error';
-    session = await ort.InferenceSession.create(MODEL_PATH, {
-      executionProviders: ['wasm'],
-      graphOptimizationLevel: 'all',
-    });
+    beforeAll(async () => {
+      ort.env.wasm.numThreads = 1;
+      ort.env.logLevel = 'error';
+      session = await ort.InferenceSession.create(MODEL_PATH, {
+        executionProviders: ['wasm'],
+        graphOptimizationLevel: 'all',
+      });
 
-    const nClasses = NUM_DRUM_CLASSES;
-    const accum = new Float64Array(T * nClasses);
-    const counts = new Float64Array(T);
-    const ctxTensor = new ort.Tensor('float32', context, [1, SONG_CONTEXT_DIM]);
+      const nClasses = NUM_DRUM_CLASSES;
+      const accum = new Float64Array(T * nClasses);
+      const counts = new Float64Array(T);
+      const ctxTensor = new ort.Tensor('float32', context, [
+        1,
+        SONG_CONTEXT_DIM,
+      ]);
 
-    for (let start = 0; start < T; start += WINDOW_STRIDE) {
-      const end = Math.min(start + WINDOW_SIZE, T);
-      const W = end - start;
-      const padW = WINDOW_SIZE;
+      for (let start = 0; start < T; start += WINDOW_STRIDE) {
+        const end = Math.min(start + WINDOW_SIZE, T);
+        const W = end - start;
+        const padW = WINDOW_SIZE;
 
-      // Mel window (1,2,nMels,padW), layout [ch*nMels*padW + m*padW + f].
-      // Mirrors crnn-worker.ts exactly.
-      const melWindow = new Float32Array(2 * nMels * padW);
-      for (let ch = 0; ch < 2; ch++) {
-        for (let m = 0; m < nMels; m++) {
-          const srcBase = (ch * nMels + m) * T + start;
-          const dstBase = (ch * nMels + m) * padW;
-          for (let f = 0; f < W; f++) {
-            melWindow[dstBase + f] = melStereo[srcBase + f];
+        // Mel window (1,2,nMels,padW), layout [ch*nMels*padW + m*padW + f].
+        // Mirrors crnn-worker.ts exactly.
+        const melWindow = new Float32Array(2 * nMels * padW);
+        for (let ch = 0; ch < 2; ch++) {
+          for (let m = 0; m < nMels; m++) {
+            const srcBase = (ch * nMels + m) * T + start;
+            const dstBase = (ch * nMels + m) * padW;
+            for (let f = 0; f < W; f++) {
+              melWindow[dstBase + f] = melStereo[srcBase + f];
+            }
           }
         }
-      }
-      const melTensor = new ort.Tensor('float32', melWindow, [1, 2, nMels, padW]);
-      const results = await session.run({mel: melTensor, context: ctxTensor});
-      const logits = (results.logits ?? results[Object.keys(results)[0]])
-        .data as Float32Array;
+        const melTensor = new ort.Tensor('float32', melWindow, [
+          1,
+          2,
+          nMels,
+          padW,
+        ]);
+        const results = await session.run({mel: melTensor, context: ctxTensor});
+        const logits = (results.logits ?? results[Object.keys(results)[0]])
+          .data as Float32Array;
 
-      if (start === 0) webW0 = logits.slice(0, WINDOW_SIZE * nClasses);
+        if (start === 0) webW0 = logits.slice(0, WINDOW_SIZE * nClasses);
 
-      for (let f = 0; f < W; f++) {
-        for (let c = 0; c < nClasses; c++) {
-          accum[(start + f) * nClasses + c] += sigmoid(logits[f * nClasses + c]);
+        for (let f = 0; f < W; f++) {
+          for (let c = 0; c < nClasses; c++) {
+            accum[(start + f) * nClasses + c] += sigmoid(
+              logits[f * nClasses + c],
+            );
+          }
+          counts[start + f] += 1;
         }
-        counts[start + f] += 1;
       }
-    }
 
-    webAvg = new Float32Array(T * nClasses);
-    for (let f = 0; f < T; f++) {
-      const c = Math.max(counts[f], 1);
-      for (let cls = 0; cls < nClasses; cls++) {
-        webAvg[f * nClasses + cls] = accum[f * nClasses + cls] / c;
+      webAvg = new Float32Array(T * nClasses);
+      for (let f = 0; f < T; f++) {
+        const c = Math.max(counts[f], 1);
+        for (let cls = 0; cls < nClasses; cls++) {
+          webAvg[f * nClasses + cls] = accum[f * nClasses + cls] / c;
+        }
       }
-    }
-  }, 120000);
+    }, 120000);
 
-  it('fixture matches this model + window config', () => {
-    expect(fixture.model).toBe('crnn_stereo_256mel_t2.onnx');
-    expect(fixture.nInst).toBe(NUM_DRUM_CLASSES);
-    expect(fixture.windowSize).toBe(WINDOW_SIZE);
-    expect(fixture.windowStride).toBe(WINDOW_STRIDE);
-    expect(melStereo.length).toBe(2 * nMels * T);
-    expect(context.length).toBe(SONG_CONTEXT_DIM);
-  });
+    it('fixture matches this model + window config', () => {
+      expect(fixture.model).toBe('crnn_stereo_256mel_t2.onnx');
+      expect(fixture.nInst).toBe(NUM_DRUM_CLASSES);
+      expect(fixture.windowSize).toBe(WINDOW_SIZE);
+      expect(fixture.windowStride).toBe(WINDOW_STRIDE);
+      expect(melStereo.length).toBe(2 * nMels * T);
+      expect(context.length).toBe(SONG_CONTEXT_DIM);
+    });
 
-  it('window-0 raw logits match python within 1e-3', () => {
-    expect(webW0).not.toBeNull();
-    let maxDiff = 0;
-    let at = '';
-    for (let i = 0; i < refW0.length; i++) {
-      const d = Math.abs(webW0![i] - refW0[i]);
-      if (d > maxDiff) {
-        maxDiff = d;
-        at = `i=${i} (f=${Math.floor(i / 9)} c=${i % 9})`;
+    it('window-0 raw logits match python within 1e-3', () => {
+      expect(webW0).not.toBeNull();
+      let maxDiff = 0;
+      let at = '';
+      for (let i = 0; i < refW0.length; i++) {
+        const d = Math.abs(webW0![i] - refW0[i]);
+        if (d > maxDiff) {
+          maxDiff = d;
+          at = `i=${i} (f=${Math.floor(i / 9)} c=${i % 9})`;
+        }
       }
-    }
-    // eslint-disable-next-line no-console
-    console.log(`crnn window-0 logits max abs diff = ${maxDiff} at ${at}`);
-    expect(maxDiff).toBeLessThan(1e-3);
-  });
+      // eslint-disable-next-line no-console
+      console.log(`crnn window-0 logits max abs diff = ${maxDiff} at ${at}`);
+      expect(maxDiff).toBeLessThan(1e-3);
+    });
 
-  it('overlap-averaged sigmoid activations match python within 1e-3', () => {
-    expect(webAvg).not.toBeNull();
-    let maxDiff = 0;
-    let at = '';
-    for (let i = 0; i < refAvg.length; i++) {
-      const d = Math.abs(webAvg![i] - refAvg[i]);
-      if (d > maxDiff) {
-        maxDiff = d;
-        at = `i=${i} (t=${Math.floor(i / 9)} c=${i % 9})`;
+    it('overlap-averaged sigmoid activations match python within 1e-3', () => {
+      expect(webAvg).not.toBeNull();
+      let maxDiff = 0;
+      let at = '';
+      for (let i = 0; i < refAvg.length; i++) {
+        const d = Math.abs(webAvg![i] - refAvg[i]);
+        if (d > maxDiff) {
+          maxDiff = d;
+          at = `i=${i} (t=${Math.floor(i / 9)} c=${i % 9})`;
+        }
       }
-    }
-    // eslint-disable-next-line no-console
-    console.log(`crnn averaged-acts max abs diff = ${maxDiff} at ${at}`);
-    expect(maxDiff).toBeLessThan(1e-3);
-  });
+      // eslint-disable-next-line no-console
+      console.log(`crnn averaged-acts max abs diff = ${maxDiff} at ${at}`);
+      expect(maxDiff).toBeLessThan(1e-3);
+    });
 
-  afterAll(async () => {
-    if (session) await session.release();
-  });
-});
+    afterAll(async () => {
+      if (session) await session.release();
+    });
+  },
+);

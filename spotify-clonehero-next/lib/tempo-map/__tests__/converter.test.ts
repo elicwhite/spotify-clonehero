@@ -1,8 +1,19 @@
 /**
- * Golden tests for the beats → synctrack converter against frozen Python
- * reference outputs from drum-to-chart's browser-pipeline (commit dbc913d).
- * When fed the Python reference PP beats/downbeats/logits/offset, the
- * converter must reproduce the Python synctrack exactly.
+ * Golden tests for the beats → synctrack converter against the SHIPPING-config
+ * Python reference (synctrack_shipping.json, dumped by drum-to-chart
+ * scripts/dump_converter_golden.py). The converter is run with the PRODUCTION
+ * config the app actually ships (pipeline-worker.ts): DRUM_BEAT_AVG on
+ * (drumPpBeatsSec passed), lag-0 (continuousLag default false), PL_LSQ=15,
+ * anchorOrigin default true, selfconsist numerator. Fed the same PP
+ * beats/downbeats/logits/offset, the converter must reproduce the Python
+ * synctrack EXACTLY (origin, time signatures, every tempo).
+ *
+ * This replaces the prior frozen dbc913d golden, which pinned the STALE lag-ON
+ * config (plLsqTolMs:0/anchorOrigin:false/continuousLag:true) the app no longer
+ * ships. The Python reference reconciles the two prior divergence points as
+ * reference choices (no app change): NUM_SELECTOR=selfconsist (the app's
+ * musically-correct numerator, e.g. okgo 3/4) and DUPBPM_COLLAPSE (drops a
+ * trailing duplicate-BPM tempo the app already collapses). See the dumper.
  */
 
 import {readFileSync} from 'fs';
@@ -12,8 +23,10 @@ import {
   fillBeatGaps,
   backExtrapOrigin,
   dedupShortIois,
+  PL_LSQ_TOL_MS_DEFAULT,
 } from '../converter';
 import {parseNpz} from './npz';
+import type {Synctrack} from '../types';
 
 function loadFixture(song: string) {
   const dir = path.join(__dirname, 'fixtures', song);
@@ -22,7 +35,7 @@ function loadFixture(song: string) {
   const ppFm = json('pp_fullmix.json');
   const ppDs = json('pp_drumstem.json');
   const offset = json('drum_onset_offset_ms.json');
-  const expected = json('synctrack.json');
+  const expected = json('synctrack_shipping.json');
   const npzBytes = readFileSync(path.join(dir, 'bt_fullmix_logits.npz'));
   const logits = parseNpz(
     npzBytes.buffer.slice(
@@ -36,7 +49,7 @@ function loadFixture(song: string) {
 function runConverter(song: string) {
   const {ppFm, ppDs, offset, expected, logits} = loadFixture(song);
 
-  // ds median IOI (same computation as the pipeline)
+  // ds median IOI (same computation as pipeline-worker.ts)
   let dsIoiMs: number | null = null;
   if (ppDs.beats.length >= 4) {
     const iois: number[] = [];
@@ -47,6 +60,9 @@ function runConverter(song: string) {
     dsIoiMs = iois[Math.floor(iois.length / 2)];
   }
 
+  // PRODUCTION config (pipeline-worker.ts): drumPpBeatsSec ON (DRUM_BEAT_AVG),
+  // plLsqTolMs 15, anchorOrigin + continuousLag left at their shipping defaults
+  // (true / false = lag-0).
   const sync = beatsToSynctrack({
     beats: ppFm.beats,
     downbeats: ppFm.downbeats,
@@ -55,36 +71,45 @@ function runConverter(song: string) {
     drumStemPpIoiMs: dsIoiMs,
     drumOnsetOffsetMs: offset.offset_ms,
     drumPpBeatsSec: ppDs.beats,
-    // The frozen dbc913d Python reference predates PL_LSQ and the origin
-    // anchor — pin both for byte-exact comparison.
-    plLsqTolMs: 0,
-    anchorOrigin: false,
+    plLsqTolMs: PL_LSQ_TOL_MS_DEFAULT,
   });
   expect(sync).not.toBeNull();
   return {sync: sync!, expected};
 }
 
-describe('beatsToSynctrack golden tests vs Python reference', () => {
-  test('Beck - E-Pro (4/4): exact synctrack match', () => {
+function expectExactSynctrack(sync: Synctrack, expected: Synctrack) {
+  expect(sync.origin_ms).toBeCloseTo(expected.origin_ms, 6);
+  expect(sync.timeSignatures.length).toBe(expected.timeSignatures.length);
+  for (let i = 0; i < expected.timeSignatures.length; i++) {
+    expect(sync.timeSignatures[i].ms).toBeCloseTo(
+      expected.timeSignatures[i].ms,
+      6,
+    );
+    expect(sync.timeSignatures[i].numerator).toBe(
+      expected.timeSignatures[i].numerator,
+    );
+    expect(sync.timeSignatures[i].denominator).toBe(
+      expected.timeSignatures[i].denominator,
+    );
+  }
+  expect(sync.tempos.length).toBe(expected.tempos.length);
+  for (let i = 0; i < expected.tempos.length; i++) {
+    expect(sync.tempos[i].ms).toBeCloseTo(expected.tempos[i].ms, 6);
+    expect(sync.tempos[i].bpm).toBeCloseTo(expected.tempos[i].bpm, 6);
+  }
+}
+
+describe('beatsToSynctrack golden vs SHIPPING-config Python reference', () => {
+  test('Beck - E-Pro (4/4): exact synctrack match (lag-0 + DRUM_BEAT_AVG)', () => {
     const {sync, expected} = runConverter('beck');
-    expect(sync.origin_ms).toBeCloseTo(expected.origin_ms, 6);
-    expect(sync.timeSignatures).toEqual(expected.timeSignatures);
-    expect(sync.tempos.length).toBe(expected.tempos.length);
-    for (let i = 0; i < expected.tempos.length; i++) {
-      expect(sync.tempos[i].ms).toBeCloseTo(expected.tempos[i].ms, 6);
-      expect(sync.tempos[i].bpm).toBeCloseTo(expected.tempos[i].bpm, 6);
-    }
+    expect(sync.timeSignatures[0].numerator).toBe(4);
+    expectExactSynctrack(sync, expected);
   });
 
-  test('OK Go - Shooting the Moon (3/4): picks 3/4 and matches tempos', () => {
+  test('OK Go - Shooting the Moon (3/4): exact synctrack match (picks 3/4)', () => {
     const {sync, expected} = runConverter('okgo');
     expect(sync.timeSignatures[0].numerator).toBe(3);
-    expect(sync.origin_ms).toBeCloseTo(expected.origin_ms, 6);
-    expect(sync.tempos.length).toBe(expected.tempos.length);
-    for (let i = 0; i < expected.tempos.length; i++) {
-      expect(sync.tempos[i].ms).toBeCloseTo(expected.tempos[i].ms, 6);
-      expect(sync.tempos[i].bpm).toBeCloseTo(expected.tempos[i].bpm, 6);
-    }
+    expectExactSynctrack(sync, expected);
   });
 });
 
