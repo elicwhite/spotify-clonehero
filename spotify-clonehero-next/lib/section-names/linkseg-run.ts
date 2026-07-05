@@ -66,8 +66,9 @@ export async function loadLinkSegSession(
 }
 
 /** Map raw 7-class labels to product names and drop boundaries between identically-labeled
- * segments (benign over-segmentation from tau=0). Returns S+1 times / S labels. */
-function mapAndMerge(raw: LinkSegSections): LinkSegSections {
+ * segments (benign over-segmentation from tau=0). Returns S+1 times / S labels.
+ * Exported for unit testing. */
+export function mapAndMerge(raw: LinkSegSections): LinkSegSections {
   const names = raw.labels.map(l => LABEL_NAMES[l] ?? l);
   const times: number[] = [raw.times[0]];
   const labels: string[] = [];

@@ -225,19 +225,20 @@ export function buildChartDocument(
     for (const name of sections.labels)
       total.set(name, (total.get(name) ?? 0) + 1);
     const seen = new Map<string, number>();
-    const timedTemposForSections = timedTempos;
+    let prevTick = -1;
     for (let i = 0; i < sections.labels.length; i++) {
       const base = sections.labels[i];
-      const rawTick = msToTick(
-        sections.times[i] * 1000,
-        timedTemposForSections,
-        RESOLUTION,
-      );
+      const rawTick = msToTick(sections.times[i] * 1000, timedTempos, RESOLUTION);
       const tick = snapToBar(rawTick);
+      // If two boundaries snap to the same bar-line, keep the first and skip this
+      // one WITHOUT advancing the repeat counter — otherwise addSection would
+      // replace the prior marker and leave an orphan (e.g. "Verse 2" with no "Verse 1").
+      if (tick === prevTick) continue;
       const idx = (seen.get(base) ?? 0) + 1;
       seen.set(base, idx);
       const name = (total.get(base) ?? 0) > 1 ? `${base} ${idx}` : base;
       addSection(doc, tick, name);
+      prevTick = tick;
     }
   } else {
     // Fallback (no LinkSeg): section markers every 4 bars.

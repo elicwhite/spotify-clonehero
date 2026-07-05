@@ -37,7 +37,7 @@ function edgePad(x: Float32Array, pad: number): Float32Array {
   const out = new Float32Array(L + 2 * pad);
   out.fill(x[0], 0, pad);
   out.set(x, pad);
-  out.fill(x[L - 1], pad + L, pad + 2 * pad + L);
+  out.fill(x[L - 1], pad + L); // to end (length L + 2*pad)
   return out;
 }
 

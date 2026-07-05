@@ -40,6 +40,21 @@ describe('buildChartDocument section markers', () => {
     ]);
   });
 
+  it('skips a section that snaps onto the previous marker without advancing repeat #', () => {
+    // Two 'Verse' boundaries both snap to bar-line tick 0 (0 s and 0.1 s); the second must be
+    // skipped and must NOT consume a repeat index, so the third Verse stays "Verse 2" (not an
+    // orphan "Verse 3" from addSection replacing the prior marker).
+    const sections: LinkSegSections = {
+      times: [0, 0.1, 10.0, DURATION],
+      labels: ['Verse', 'Verse', 'Verse'],
+    };
+    const doc = buildChartDocument([], 'test', DURATION, null, sections);
+    expect(sectionsOf(doc)).toEqual([
+      {tick: 0, name: 'Verse 1'},
+      {tick: 9600, name: 'Verse 2'}, // 10 s -> 9600 ticks (bar-line)
+    ]);
+  });
+
   it('falls back to every-4-bar Section N markers when no LinkSeg sections', () => {
     const doc = buildChartDocument([], 'test', DURATION, null, null);
     const secs = sectionsOf(doc);
