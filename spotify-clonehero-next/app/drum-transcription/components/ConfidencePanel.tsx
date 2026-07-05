@@ -8,7 +8,6 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import {Slider} from '@/components/ui/slider';
-import {Switch} from '@/components/ui/switch';
 import {Label} from '@/components/ui/label';
 import {TooltipProvider} from '@/components/ui/tooltip';
 import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
@@ -112,20 +111,6 @@ export default function ConfidencePanel({className}: ConfidencePanelProps) {
 
         {!isCollapsed && (
           <div className="px-3 pb-3 space-y-3">
-            {/* Toggle confidence overlay */}
-            <div className="flex items-center justify-between">
-              <Label htmlFor="show-confidence" className="text-xs">
-                Show overlay
-              </Label>
-              <Switch
-                id="show-confidence"
-                checked={dtState.showConfidence}
-                onCheckedChange={checked =>
-                  dtDispatch({type: 'SET_SHOW_CONFIDENCE', show: checked})
-                }
-              />
-            </div>
-
             {/* Threshold slider */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">

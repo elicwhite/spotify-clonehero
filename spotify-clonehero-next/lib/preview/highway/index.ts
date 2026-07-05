@@ -570,11 +570,7 @@ export const setupRenderer = (
         for (const [key, group] of reconciler.getActiveGroups()) {
           const el = reconciler.getElement(key);
           if (el && el.kind === 'note') {
-            noteRenderer.updateOverlays(
-              group,
-              key,
-              el.data as import('./NoteRenderer').NoteElementData,
-            );
+            noteRenderer.updateOverlays(group, key);
           }
         }
       }

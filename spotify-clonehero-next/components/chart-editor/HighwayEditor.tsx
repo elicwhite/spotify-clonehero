@@ -31,12 +31,6 @@ interface HighwayEditorProps {
   chart: ParsedChart;
   audioManager: AudioManager;
   className?: string | undefined;
-  /** Optional confidence scores for notes, keyed by noteId (tick:type). */
-  confidence?: Map<string, number> | undefined;
-  /** Whether to show confidence overlays. Defaults to false. */
-  showConfidence?: boolean | undefined;
-  /** Confidence threshold below which notes are flagged. Defaults to 0.7. */
-  confidenceThreshold?: number | undefined;
   /** Set of note IDs that have been reviewed by the user. */
   reviewedNoteIds?: Set<string> | undefined;
   /** Raw PCM audio data for waveform highway surface. */
@@ -62,9 +56,6 @@ export default function HighwayEditor({
   chart,
   audioManager,
   className,
-  confidence,
-  showConfidence = false,
-  confidenceThreshold = 0.7,
   reviewedNoteIds,
   audioData,
   audioChannels = 2,
@@ -235,9 +226,6 @@ export default function HighwayEditor({
     hoverLane,
     hoverTick,
     loopRegion: state.loopRegion,
-    confidence,
-    showConfidence,
-    confidenceThreshold,
     reviewedNoteIds,
   });
 

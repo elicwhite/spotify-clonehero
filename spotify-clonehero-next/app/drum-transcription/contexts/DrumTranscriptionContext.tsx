@@ -9,8 +9,6 @@ import {createContext, useContext, useReducer, type ReactNode} from 'react';
 export interface DrumTranscriptionState {
   /** Confidence scores for notes, keyed by noteId (tick:type). */
   confidence: Map<string, number>;
-  /** Whether to show confidence overlay on notes. */
-  showConfidence: boolean;
   /** Threshold below which notes are flagged as low-confidence. */
   confidenceThreshold: number;
   /** Set of note IDs that have been reviewed by the user. */
@@ -19,7 +17,6 @@ export interface DrumTranscriptionState {
 
 export type DrumTranscriptionAction =
   | {type: 'SET_CONFIDENCE'; confidence: Map<string, number>}
-  | {type: 'SET_SHOW_CONFIDENCE'; show: boolean}
   | {type: 'SET_CONFIDENCE_THRESHOLD'; threshold: number}
   | {type: 'MARK_REVIEWED'; noteIds: string[]}
   | {type: 'SET_REVIEWED_NOTES'; noteIds: Set<string>};
@@ -35,7 +32,6 @@ export interface DrumTranscriptionContextValue {
 
 const initialState: DrumTranscriptionState = {
   confidence: new Map(),
-  showConfidence: true,
   confidenceThreshold: 0.7,
   reviewedNoteIds: new Set(),
 };
@@ -51,9 +47,6 @@ function drumTranscriptionReducer(
   switch (action.type) {
     case 'SET_CONFIDENCE':
       return {...state, confidence: action.confidence};
-
-    case 'SET_SHOW_CONFIDENCE':
-      return {...state, showConfidence: action.show};
 
     case 'SET_CONFIDENCE_THRESHOLD':
       return {...state, confidenceThreshold: action.threshold};

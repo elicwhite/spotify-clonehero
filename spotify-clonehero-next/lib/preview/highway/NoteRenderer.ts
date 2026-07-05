@@ -28,23 +28,15 @@ export interface NoteElementData {
   msLength: number;
 }
 
-/** Confidence ring colors by tier */
-const CONFIDENCE_COLORS = {
-  low: 0xef4444, // red - conf < 0.5
-  medium: 0xf59e0b, // amber - conf < threshold
-  mild: 0xf59e0b, // amber - conf < 0.9
-};
-
 /**
  * Child indices within a note group:
  * [0] = main note sprite
  * [1] = sustain tail mesh (optional, guitar only)
  * [2] = selection highlight mesh (optional)
- * [3] = confidence indicator (optional)
+ * [3] = reserved (was confidence indicator; kept so review stays at [4])
  * [4] = review indicator (optional)
  */
 const CHILD_SELECTION = 2;
-const CHILD_CONFIDENCE = 3;
 const CHILD_REVIEW = 4;
 
 // ---------------------------------------------------------------------------
@@ -55,7 +47,7 @@ const CHILD_REVIEW = 4;
  * ElementRenderer for note chart elements.
  *
  * Handles creating note sprites (drums and guitar), sustain tails,
- * and overlay decorations (selection, hover, confidence, review).
+ * and overlay decorations (selection, hover, review).
  */
 export class NoteRenderer implements ElementRenderer<NoteElementData> {
   private getTextureForNote: (
@@ -82,15 +74,12 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
 
   // Overlay state (set externally) — hover/selection now live in the
   // SceneReconciler and dispatch via setHovered/setSelected hooks.
-  private confidenceMap: Map<string, number> | null = null;
-  private showConfidence = false;
-  private confidenceThreshold = 0.7;
   private reviewedNoteIds: Set<string> | null = null;
 
   /**
-   * True when confidence/review overlay state has changed and all visible
-   * notes need updating. Hover/selection don't set this — they update the
-   * affected group in place via setHovered/setSelected.
+   * True when review overlay state has changed and all visible notes need
+   * updating. Hover/selection don't set this — they update the affected
+   * group in place via setHovered/setSelected.
    */
   private overlaysDirty = true;
 
@@ -271,17 +260,6 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
   // Overlay setters (called by the reconciler integration layer)
   // -----------------------------------------------------------------------
 
-  setConfidenceData(
-    confidenceMap: Map<string, number> | null,
-    show: boolean,
-    threshold: number,
-  ): void {
-    this.confidenceMap = confidenceMap;
-    this.showConfidence = show;
-    this.confidenceThreshold = threshold;
-    this.overlaysDirty = true;
-  }
-
   setReviewedNoteIds(ids: Set<string> | null): void {
     this.reviewedNoteIds = ids;
     this.overlaysDirty = true;
@@ -308,23 +286,17 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
   // -----------------------------------------------------------------------
 
   /**
-   * Update overlay children (confidence, review) on a note group. Hover and
-   * selection visuals are owned by setHovered/setSelected hooks which
-   * mutate the highlight mesh in place; this path only repaints the
-   * decoration overlays that depend on per-frame state.
+   * Update the review overlay child on a note group. Hover and selection
+   * visuals are owned by setHovered/setSelected hooks which mutate the
+   * highlight mesh in place; this path only repaints the review decoration.
    *
    * Called for every active note group each frame via the reconciler's
    * updateWindow loop.
    */
-  updateOverlays(
-    group: THREE.Group,
-    noteKey: string,
-    data: NoteElementData,
-  ): void {
+  updateOverlays(group: THREE.Group, noteKey: string): void {
     // noteKey is e.g. 'note:2880:yellowDrum' -- extract the noteId part
     // which is 'tick:type', e.g. '2880:yellowDrum'
     const id = noteKey.startsWith('note:') ? noteKey.slice(5) : noteKey;
-    this.updateConfidenceIndicator(group, data, id);
     this.updateReviewIndicator(group, id);
   }
 
@@ -434,89 +406,6 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
       this.highlightGeometry = new THREE.PlaneGeometry(1, 1);
     }
     return this.highlightGeometry;
-  }
-
-  private updateConfidenceIndicator(
-    group: THREE.Group,
-    data: NoteElementData,
-    id: string,
-  ): void {
-    if (
-      !this.showConfidence ||
-      !this.confidenceMap ||
-      this.confidenceMap.size === 0
-    ) {
-      if (
-        group.children.length > CHILD_CONFIDENCE &&
-        group.children[CHILD_CONFIDENCE]
-      ) {
-        group.children[CHILD_CONFIDENCE].visible = false;
-      }
-      return;
-    }
-
-    const conf = this.confidenceMap.get(id);
-    if (conf === undefined || conf >= 0.9) {
-      if (
-        group.children.length > CHILD_CONFIDENCE &&
-        group.children[CHILD_CONFIDENCE]
-      ) {
-        group.children[CHILD_CONFIDENCE].visible = false;
-      }
-      return;
-    }
-
-    const noteScale = data.isKick ? 0.045 : SCALE;
-    const ringSize = noteScale * 2.8;
-    let color: number;
-    let opacity: number;
-
-    if (conf < 0.5) {
-      color = CONFIDENCE_COLORS.low;
-      opacity = 0.7;
-    } else if (conf < this.confidenceThreshold) {
-      color = CONFIDENCE_COLORS.medium;
-      opacity = 0.6;
-    } else {
-      color = CONFIDENCE_COLORS.mild;
-      opacity = 0.3;
-    }
-
-    let ring: THREE.Mesh;
-
-    if (
-      group.children.length > CHILD_CONFIDENCE &&
-      group.children[CHILD_CONFIDENCE] instanceof THREE.Mesh
-    ) {
-      ring = group.children[CHILD_CONFIDENCE] as THREE.Mesh;
-    } else {
-      while (group.children.length < CHILD_CONFIDENCE) {
-        const placeholder = new THREE.Object3D();
-        placeholder.visible = false;
-        group.add(placeholder);
-      }
-      const ringGeom = new THREE.RingGeometry(
-        ringSize * 0.4,
-        ringSize * 0.5,
-        24,
-      );
-      const ringMat = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity,
-        depthTest: false,
-        side: THREE.DoubleSide,
-      });
-      ringMat.clippingPlanes = this.clippingPlanes;
-      ring = new THREE.Mesh(ringGeom, ringMat);
-      ring.renderOrder = 5;
-      group.add(ring);
-    }
-
-    (ring.material as THREE.MeshBasicMaterial).color.set(color);
-    (ring.material as THREE.MeshBasicMaterial).opacity = opacity;
-    ring.position.set(0, 0, 0.001);
-    ring.visible = true;
   }
 
   private updateReviewIndicator(group: THREE.Group, id: string): void {
