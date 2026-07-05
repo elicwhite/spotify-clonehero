@@ -1,6 +1,7 @@
 'use client';
 
-import {type ReactNode, useMemo} from 'react';
+import {type ReactNode, useMemo, useState} from 'react';
+import {Pencil} from 'lucide-react';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
@@ -10,6 +11,7 @@ import HighwayEditor from './HighwayEditor';
 import TransportControls from './TransportControls';
 import WaveformDisplay from './WaveformDisplay';
 import ExportDialog from './ExportDialog';
+import SongMetadataDialog from './SongMetadataDialog';
 import LeftSidebar from './LeftSidebar';
 import TimelineMinimap from './TimelineMinimap';
 import EditorMCPTools from './EditorMCPTools';
@@ -44,6 +46,18 @@ export interface ChartEditorProps {
   artistName?: string | undefined;
   /** Charter name for display. */
   charterName?: string | undefined;
+  /**
+   * Called when the user edits song/artist/charter via the header dialog.
+   * When provided, the header song info becomes clickable to open that editor.
+   * The page is responsible for persisting the change.
+   */
+  onMetadataChange?:
+    | ((meta: {
+        name: string;
+        artist: string;
+        charter: string;
+      }) => void | Promise<void>)
+    | undefined;
   /** Whether the chart has unsaved changes. */
   dirty?: boolean | undefined;
   /**
@@ -57,18 +71,19 @@ export interface ChartEditorProps {
   /** Callback to provide chart text for export. */
   getChartText?: (() => Promise<string>) | undefined;
   /** Callback to provide audio sources for export. */
-  getAudioSources?: (() => Promise<AudioSource[]>) | undefined;
+  getAudioSources?:
+    | ((options: {includeStems: boolean}) => Promise<AudioSource[]>)
+    | undefined;
+  /**
+   * Whether the export can bundle either separated stems or the original
+   * audio. Enables the "Include stems?" toggle in the export dialog.
+   */
+  showStemChoice?: boolean | undefined;
   /** Callback when notes are modified (e.g. for marking reviewed). */
   onNotesModified?: ((noteIds: string[]) => void) | undefined;
 
-  // -- Optional confidence/review overlays (passed through to HighwayEditor) --
+  // -- Optional review overlay (passed through to HighwayEditor) --
 
-  /** Confidence scores for notes, keyed by noteId (tick:type). */
-  confidence?: Map<string, number> | undefined;
-  /** Whether to show confidence overlays on the highway. */
-  showConfidence?: boolean | undefined;
-  /** Confidence threshold below which notes are flagged. */
-  confidenceThreshold?: number | undefined;
   /** Set of note IDs that have been reviewed by the user. */
   reviewedNoteIds?: Set<string> | undefined;
 }
@@ -105,18 +120,18 @@ export default function ChartEditor({
   songName,
   artistName,
   charterName,
+  onMetadataChange,
   dirty,
   hideHeader,
   leftPanelChildren,
   getChartText,
   getAudioSources,
+  showStemChoice,
   onNotesModified,
-  confidence,
-  showConfidence,
-  confidenceThreshold,
   reviewedNoteIds,
 }: ChartEditorProps) {
   const {state} = useChartEditorContext();
+  const [metadataOpen, setMetadataOpen] = useState(false);
 
   // Compute section positions in ms for the timeline minimap
   const timelineSections = useMemo(() => {
@@ -149,39 +164,84 @@ export default function ChartEditor({
        *  add-lyrics) suppress this via `hideHeader`. */}
       {!hideHeader && (
         <div className="shrink-0 flex items-center justify-between border-b bg-background px-4 py-2">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-semibold text-foreground truncate">
-                {songName}
-              </h1>
-              {artistName && (
-                <span className="text-sm text-muted-foreground truncate">
-                  by {artistName}
-                </span>
+          {onMetadataChange ? (
+            <button
+              type="button"
+              onClick={() => setMetadataOpen(true)}
+              title="Edit song details"
+              className="group min-w-0 text-left rounded-sm -mx-1 px-1 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-semibold text-foreground truncate">
+                  {songName}
+                </h1>
+                {artistName && (
+                  <span className="text-sm text-muted-foreground truncate">
+                    by {artistName}
+                  </span>
+                )}
+                <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
+                {dirty && (
+                  <span className="text-[10px] text-amber-400 shrink-0">
+                    Unsaved
+                  </span>
+                )}
+              </div>
+              {charterName && (
+                <p className="text-xs text-muted-foreground truncate">
+                  Charted by {charterName}
+                </p>
               )}
-              {dirty && (
-                <span className="text-[10px] text-amber-400 shrink-0">
-                  Unsaved
-                </span>
+            </button>
+          ) : (
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-semibold text-foreground truncate">
+                  {songName}
+                </h1>
+                {artistName && (
+                  <span className="text-sm text-muted-foreground truncate">
+                    by {artistName}
+                  </span>
+                )}
+                {dirty && (
+                  <span className="text-[10px] text-amber-400 shrink-0">
+                    Unsaved
+                  </span>
+                )}
+              </div>
+              {charterName && (
+                <p className="text-xs text-muted-foreground truncate">
+                  Charted by {charterName}
+                </p>
               )}
             </div>
-            {charterName && (
-              <p className="text-xs text-muted-foreground truncate">
-                Charted by {charterName}
-              </p>
-            )}
-          </div>
+          )}
           {getChartText && (
             <div className="shrink-0 ml-4">
               <ExportDialog
                 songName={songName}
                 artistName={artistName}
+                charterName={charterName}
                 getChartText={getChartText}
                 getAudioSources={getAudioSources}
+                showStemChoice={showStemChoice}
               />
             </div>
           )}
         </div>
+      )}
+
+      {onMetadataChange && (
+        <SongMetadataDialog
+          open={metadataOpen}
+          onOpenChange={setMetadataOpen}
+          value={{
+            name: songName,
+            artist: artistName ?? '',
+            charter: charterName ?? '',
+          }}
+          onSave={onMetadataChange}
+        />
       )}
 
       {/* Main area: three-column layout */}
@@ -200,9 +260,6 @@ export default function ChartEditor({
             chart={chart}
             audioManager={audioManager}
             className="h-full w-full"
-            confidence={confidence}
-            showConfidence={showConfidence}
-            confidenceThreshold={confidenceThreshold}
             reviewedNoteIds={reviewedNoteIds}
             audioData={audioData}
             audioChannels={audioChannels}

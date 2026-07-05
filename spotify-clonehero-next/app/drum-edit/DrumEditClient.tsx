@@ -559,7 +559,8 @@ function DrumEditEditor({projectId, onBack, onReady}: DrumEditEditorProps) {
     return new TextDecoder().decode(chartFile.data);
   }, [state.chartDoc]);
 
-  // Export: provide audio sources (original audio files from the package)
+  // Export: provide audio sources (original audio files from the package).
+  // This page has no separated stems, so the stem preference is ignored.
   const getAudioSources = useCallback(async (): Promise<AudioSource[]> => {
     const audioFiles = await loadAudioFiles(projectId);
     return audioFiles.map(f => ({

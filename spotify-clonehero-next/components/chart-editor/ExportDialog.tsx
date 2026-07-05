@@ -24,9 +24,15 @@ import {
 import {Label} from '@/components/ui/label';
 import {Switch} from '@/components/ui/switch';
 
-import {readChart, writeChartFolder} from '@/lib/chart-edit';
-import {exportAsZip, exportAsSng} from '@/lib/chart-export';
+import {
+  exportAsZip,
+  exportAsSng,
+  assembleChartFiles,
+  chartPackageFileName,
+} from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
+
+import SongMetadataFields from './SongMetadataFields';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,10 +47,12 @@ export interface AudioSource {
 }
 
 interface ExportDialogProps {
-  /** Song name for display and metadata. */
+  /** Default song name, pre-filled into the export form. */
   songName: string;
-  /** Artist name for metadata. */
+  /** Default artist name, pre-filled into the export form. */
   artistName?: string | undefined;
+  /** Default charter credit, pre-filled into the export form. */
+  charterName?: string | undefined;
   /**
    * Provides the chart text to export. Must return a valid .chart string.
    * This decouples the dialog from any specific storage backend.
@@ -52,11 +60,21 @@ interface ExportDialogProps {
   getChartText: () => Promise<string>;
   /**
    * Provides audio sources to include in the package.
-   * Returns an array of AudioSource objects with named WAV data.
+   *
+   * Receives the user's stem preference: when `includeStems` is true the page
+   * should return separated stems (e.g. `drums.wav` + accompaniment
+   * `song.wav`); when false it should return the original un-separated audio as
+   * a single `song.wav`. Pages without separated stems may ignore the flag.
    */
-  getAudioSources?: (() => Promise<AudioSource[]>) | undefined;
-  /** Whether to show stem inclusion toggles (default: true if getAudioSources is provided). */
-  showStemToggles?: boolean | undefined;
+  getAudioSources?:
+    | ((options: {includeStems: boolean}) => Promise<AudioSource[]>)
+    | undefined;
+  /**
+   * Whether the audio can be exported either as separated stems or as the
+   * original file. When true the dialog shows an "Include stems?" toggle;
+   * when false the audio is always included as-is. Default: false.
+   */
+  showStemChoice?: boolean | undefined;
 }
 
 type PackageFormat = 'zip' | 'sng';
@@ -77,15 +95,36 @@ type PackageFormat = 'zip' | 'sng';
 export default function ExportDialog({
   songName,
   artistName,
+  charterName,
   getChartText,
   getAudioSources,
-  showStemToggles = true,
+  showStemChoice = false,
 }: ExportDialogProps) {
   const [open, setOpen] = useState(false);
   const [packageFormat, setPackageFormat] = useState<PackageFormat>('zip');
-  const [includeDrumStem, setIncludeDrumStem] = useState(true);
-  const [includeAccompaniment, setIncludeAccompaniment] = useState(true);
+  const [includeStems, setIncludeStems] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+
+  // Editable metadata, (re)seeded from the props each time the dialog opens.
+  const [metadata, setMetadata] = useState({
+    name: songName,
+    artist: artistName ?? '',
+    charter: charterName ?? '',
+  });
+
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      if (next) {
+        setMetadata({
+          name: songName,
+          artist: artistName ?? '',
+          charter: charterName ?? '',
+        });
+      }
+      setOpen(next);
+    },
+    [songName, artistName, charterName],
+  );
 
   const handleExport = useCallback(async () => {
     setIsExporting(true);
@@ -93,51 +132,32 @@ export default function ExportDialog({
       // 1. Get the chart text
       const chartText = await getChartText();
 
-      // 2. Parse chart into a ChartDocument, set metadata, and use
-      //    writeChartFolder to produce both notes.chart and song.ini
-      const chartBytes = new TextEncoder().encode(chartText);
-      const chartDoc = readChart([{fileName: 'notes.chart', data: chartBytes}]);
-      chartDoc.parsedChart.metadata = {
-        ...chartDoc.parsedChart.metadata,
-        name: songName,
-        artist: artistName ?? '',
-        pro_drums: true,
-        charter: chartDoc.parsedChart.metadata.charter ?? 'AutoDrums',
-      };
-      const chartFiles = writeChartFolder(chartDoc);
-
-      // 3. Get audio sources
-      const audioFiles: AudioSource[] = [];
+      // 2. Collect audio sources. When the page offers a stem choice, honor
+      //    the toggle; otherwise include whatever audio it provides.
+      let audioFiles: AudioSource[] = [];
       if (getAudioSources) {
         try {
-          const sources = await getAudioSources();
-          for (const source of sources) {
-            // Apply stem inclusion filters if toggles are shown
-            if (showStemToggles) {
-              if (source.fileName.startsWith('drums') && !includeDrumStem)
-                continue;
-              if (source.fileName.startsWith('song') && !includeAccompaniment)
-                continue;
-            }
-            audioFiles.push(source);
-          }
+          audioFiles = await getAudioSources({
+            includeStems: showStemChoice ? includeStems : true,
+          });
         } catch (err) {
           console.warn('Failed to get audio sources:', err);
         }
       }
 
-      // 4. Build file entries and package as ZIP or SNG
-      const fileEntries = chartFiles.map(f => ({
-        fileName: f.fileName,
-        data: f.data,
-      }));
-      for (const audio of audioFiles) {
-        fileEntries.push({
-          fileName: audio.fileName,
-          data: new Uint8Array(audio.data),
-        });
-      }
+      // 3. Assemble notes.chart + song.ini + audio into a flat file list
+      const cleanMetadata = {
+        name: metadata.name.trim() || 'Untitled',
+        artist: metadata.artist.trim(),
+        charter: metadata.charter.trim(),
+      };
+      const fileEntries = assembleChartFiles({
+        chartText,
+        metadata: cleanMetadata,
+        audioSources: audioFiles,
+      });
 
+      // 4. Package as ZIP or SNG
       let blob: Blob;
       let extension: string;
 
@@ -153,13 +173,14 @@ export default function ExportDialog({
         extension = 'zip';
       }
 
-      // 5. Trigger browser download
-      downloadBlob(
-        blob,
-        `${songName.replace(/[^a-zA-Z0-9_-]/g, '_')}.${extension}`,
-      );
+      // 5. Trigger browser download, named `Artist - Song (Charter)`
+      downloadBlob(blob, chartPackageFileName(cleanMetadata, extension));
 
-      toast.success('Chart exported successfully');
+      const audioNote =
+        audioFiles.length > 0
+          ? ` with ${audioFiles.length} audio file${audioFiles.length === 1 ? '' : 's'}`
+          : ' (no audio included)';
+      toast.success(`Chart exported${audioNote}`);
       setOpen(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Export failed';
@@ -169,18 +190,16 @@ export default function ExportDialog({
       setIsExporting(false);
     }
   }, [
-    songName,
-    artistName,
+    metadata,
     packageFormat,
-    includeDrumStem,
-    includeAccompaniment,
+    includeStems,
     getChartText,
     getAudioSources,
-    showStemToggles,
+    showStemChoice,
   ]);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Download className="h-4 w-4 mr-1" />
@@ -192,12 +211,18 @@ export default function ExportDialog({
         <DialogHeader>
           <DialogTitle>Export Chart</DialogTitle>
           <DialogDescription>
-            {songName}
-            {artistName ? ` - ${artistName}` : ''}
+            Confirm the song details and download the packaged chart.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
+          {/* Song / artist / charter metadata */}
+          <SongMetadataFields
+            value={metadata}
+            onChange={setMetadata}
+            idPrefix="export"
+          />
+
           {/* Package format selector */}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="package-format" className="text-right">
@@ -216,50 +241,23 @@ export default function ExportDialog({
             </Select>
           </div>
 
-          {/* Audio format display */}
-          {getAudioSources && (
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="audio-format" className="text-right">
-                Audio
+          {/* Stems vs. original audio */}
+          {getAudioSources && showStemChoice && (
+            <div className="grid grid-cols-4 items-start gap-4">
+              <Label htmlFor="include-stems" className="text-right pt-1">
+                Include stems?
               </Label>
-              <Select value="wav" disabled>
-                <SelectTrigger className="col-span-3" id="audio-format">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="wav">WAV (lossless)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Include checkboxes */}
-          {getAudioSources && showStemToggles && (
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Include</Label>
-              <div className="col-span-3 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="include-drums"
-                    checked={includeDrumStem}
-                    onCheckedChange={setIncludeDrumStem}
-                  />
-                  <Label htmlFor="include-drums" className="font-normal">
-                    Drum stem (drums.wav)
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="include-accompaniment"
-                    checked={includeAccompaniment}
-                    onCheckedChange={setIncludeAccompaniment}
-                  />
-                  <Label
-                    htmlFor="include-accompaniment"
-                    className="font-normal">
-                    Accompaniment (song.wav)
-                  </Label>
-                </div>
+              <div className="col-span-3 space-y-1">
+                <Switch
+                  id="include-stems"
+                  checked={includeStems}
+                  onCheckedChange={setIncludeStems}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {includeStems
+                    ? 'Separated drums and accompaniment stems are included.'
+                    : 'The original uploaded audio is included instead.'}
+                </p>
               </div>
             </div>
           )}

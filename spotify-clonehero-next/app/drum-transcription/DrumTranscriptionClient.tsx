@@ -59,19 +59,31 @@ import {
   type PipelineStep,
 } from '@/lib/drum-transcription/pipeline/runner';
 
-// WebGPU support is a static capability for the page lifetime, so the
-// subscribe function is a no-op. The server can't answer the question
-// at all, so getServerSnapshot returns null and callers treat that as
-// "checking" — which matches the prior initial state.
-const webGPUSubscribe = () => () => {};
+// Browser capabilities are static for the page lifetime, so the subscribe
+// function is a no-op. The server can't answer, so getServerSnapshot returns
+// null and callers treat that as "checking".
+const noopSubscribe = () => () => {};
+const nullServerSnapshot = (): boolean | null => null;
+
 const webGPUGetSnapshot = () => 'gpu' in navigator;
-const webGPUGetServerSnapshot = (): boolean | null => null;
 
 function useWebGPUCheck() {
   return useSyncExternalStore(
-    webGPUSubscribe,
+    noopSubscribe,
     webGPUGetSnapshot,
-    webGPUGetServerSnapshot,
+    nullServerSnapshot,
+  );
+}
+
+// WebCodecs AudioEncoder is required to encode exported stems to Opus.
+const audioEncoderGetSnapshot = () =>
+  typeof AudioEncoder !== 'undefined' && typeof AudioData !== 'undefined';
+
+function useAudioEncoderCheck() {
+  return useSyncExternalStore(
+    noopSubscribe,
+    audioEncoderGetSnapshot,
+    nullServerSnapshot,
   );
 }
 
@@ -81,6 +93,7 @@ function useWebGPUCheck() {
  */
 function DrumTranscriptionInner() {
   const webGPUSupported = useWebGPUCheck();
+  const audioEncoderSupported = useAudioEncoderCheck();
   const searchParams = useSearchParams();
   const router = useRouter();
   const projectId = searchParams.get('project');
@@ -467,8 +480,22 @@ function DrumTranscriptionInner() {
     }
   }, [deleteTarget]);
 
-  // WebGPU check -- block access if not supported
+  // Capability check -- block access if a required browser feature is missing.
+  const missingCapabilities: {name: string; reason: string}[] = [];
   if (webGPUSupported === false) {
+    missingCapabilities.push({
+      name: 'WebGPU',
+      reason: 'runs the drum separation and transcription ML models',
+    });
+  }
+  if (audioEncoderSupported === false) {
+    missingCapabilities.push({
+      name: 'WebCodecs AudioEncoder',
+      reason: 'encodes exported stems to Opus audio',
+    });
+  }
+
+  if (missingCapabilities.length > 0) {
     return (
       <div className="flex flex-col items-center justify-center flex-1 w-full max-w-lg gap-4">
         <Card className="w-full">
@@ -476,16 +503,26 @@ function DrumTranscriptionInner() {
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
               <AlertTriangle className="h-6 w-6 text-destructive" />
             </div>
-            <CardTitle>WebGPU Required</CardTitle>
+            <CardTitle>Unsupported Browser</CardTitle>
             <CardDescription>
-              Drum transcription requires WebGPU for ML inference. Your browser
-              does not support WebGPU.
+              Drum transcription needs browser features your current browser
+              doesn&apos;t support.
             </CardDescription>
           </CardHeader>
-          <CardContent className="text-center text-sm text-muted-foreground">
-            <p>
-              Please use a recent version of Chrome, Edge, or another
-              WebGPU-enabled browser.
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <ul className="space-y-1">
+              {missingCapabilities.map(cap => (
+                <li key={cap.name}>
+                  <span className="font-medium text-foreground">
+                    {cap.name}
+                  </span>{' '}
+                  — {cap.reason}.
+                </li>
+              ))}
+            </ul>
+            <p className="text-center">
+              Please use a recent version of Chrome, Edge, or another compatible
+              browser.
             </p>
           </CardContent>
         </Card>
@@ -493,8 +530,8 @@ function DrumTranscriptionInner() {
     );
   }
 
-  // Loading state while checking WebGPU
-  if (webGPUSupported === null) {
+  // Loading state while checking capabilities
+  if (webGPUSupported === null || audioEncoderSupported === null) {
     return null;
   }
 

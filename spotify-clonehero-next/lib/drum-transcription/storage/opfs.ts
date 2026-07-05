@@ -11,6 +11,7 @@
  *       metadata.json    - Project metadata (name, creation date, etc.)
  *       audio/
  *         full.pcm       - Decoded audio (Float32 interleaved stereo, 44100Hz)
+ *         original.<ext> - The user's uploaded file, byte-for-byte
  *         meta.json      - Audio metadata (sample rate, channels, duration)
  *       stems/
  *         drums.pcm      - Separated drum stem
@@ -34,6 +35,15 @@ const METADATA_FILE = 'metadata.json';
 const AUDIO_DIR = 'audio';
 const AUDIO_PCM_FILE = 'full.pcm';
 const AUDIO_META_FILE = 'meta.json';
+/** Basename of the untouched original upload; the extension is preserved. */
+const ORIGINAL_AUDIO_BASENAME = 'original';
+
+/** Lowercase file extension (without dot), or '' if none. */
+function extensionOf(fileName: string): string {
+  const lastDot = fileName.lastIndexOf('.');
+  if (lastDot <= 0) return '';
+  return fileName.slice(lastDot + 1).toLowerCase();
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -388,6 +398,70 @@ export async function storeAudio(
   await updateProject(projectId, {
     durationSeconds: audioMeta.durationMs / 1000,
   });
+}
+
+/**
+ * Stores the user's original uploaded audio file, byte-for-byte, so it can be
+ * exported unmodified. The extension is taken from `originalFileName`.
+ *
+ * Writes to: drum-transcription/{projectId}/audio/original.<ext>
+ */
+export async function storeOriginalAudio(
+  projectId: string,
+  data: ArrayBuffer,
+  originalFileName: string,
+): Promise<void> {
+  const audioDir = await getAudioDir(projectId, {create: true});
+  const ext = extensionOf(originalFileName);
+  const fileName = ext
+    ? `${ORIGINAL_AUDIO_BASENAME}.${ext}`
+    : ORIGINAL_AUDIO_BASENAME;
+  const handle = await audioDir.getFileHandle(fileName, {create: true});
+  const writable = await handle.createWritable();
+  await writable.write(data);
+  await writable.close();
+}
+
+/**
+ * Reads the original uploaded audio file for a project.
+ *
+ * @returns The raw bytes and the extension (e.g. 'mp3'), or `null` if no
+ *   original file was stored (e.g. projects created before this was added).
+ */
+export async function readOriginalAudio(
+  projectId: string,
+): Promise<{data: ArrayBuffer; extension: string} | null> {
+  let extension = '';
+  try {
+    const meta = await loadAudioMeta(projectId);
+    extension = extensionOf(meta.audioMetadata.originalFileName);
+  } catch {
+    // Fall through and try to locate the file by scanning below.
+  }
+
+  try {
+    const audioDir = await getAudioDir(projectId);
+    if (extension) {
+      const handle = await audioDir.getFileHandle(
+        `${ORIGINAL_AUDIO_BASENAME}.${extension}`,
+      );
+      const file = await handle.getFile();
+      return {data: await file.arrayBuffer(), extension};
+    }
+    // Unknown extension: scan for any `original.*` entry.
+    for await (const [name, handle] of audioDir.entries()) {
+      if (
+        handle.kind === 'file' &&
+        name.startsWith(`${ORIGINAL_AUDIO_BASENAME}.`)
+      ) {
+        const file = await (handle as FileSystemFileHandle).getFile();
+        return {data: await file.arrayBuffer(), extension: extensionOf(name)};
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**

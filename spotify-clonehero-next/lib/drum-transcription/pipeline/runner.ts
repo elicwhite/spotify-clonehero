@@ -15,6 +15,7 @@ import {createAudioMetadata, TARGET_SAMPLE_RATE} from '../audio/types';
 import {
   createProject,
   storeAudio,
+  storeOriginalAudio,
   updateProject,
   loadAudioForDemucs,
   hasStoredAudio,
@@ -349,6 +350,9 @@ export async function runPipeline(
 
   const interleavedPcm = interleaveAudioBuffer(audioBuffer);
   await storeAudio(projectId, interleavedPcm, metadata, audioBuffer.length);
+
+  // Persist the untouched upload so it can be exported as the original audio.
+  await storeOriginalAudio(projectId, sourceBytes, metadata.originalFileName);
 
   onProgress({
     step: 'decoding',

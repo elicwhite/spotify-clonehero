@@ -10,12 +10,16 @@ import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import {
   getProject,
   readProjectText,
+  writeProjectText,
   projectFileExists,
+  updateProject,
   loadAudioMeta,
+  readOriginalAudio,
   type ProjectMetadata,
   type AudioStorageMeta,
 } from '@/lib/drum-transcription/storage/opfs';
 import {encodeWavBlob} from '@/lib/audio/wav-encoder';
+import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
 import {useHotkey} from '@tanstack/react-hotkeys';
 import {
@@ -452,6 +456,52 @@ function EditorAppInner({projectId}: {projectId: string}) {
     [projectMeta],
   );
 
+  // Persist edited song/artist/charter from the header dialog. Updates the
+  // chart doc metadata (saved into notes.edited.chart's [Song] section) and
+  // renames the project to "Song by Artist" so the projects list reflects it.
+  const handleMetadataChange = useCallback(
+    async ({
+      name,
+      artist,
+      charter,
+    }: {
+      name: string;
+      artist: string;
+      charter: string;
+    }) => {
+      if (!state.chartDoc) return;
+
+      const updatedDoc = {
+        ...state.chartDoc,
+        parsedChart: {
+          ...state.chartDoc.parsedChart,
+          metadata: {
+            ...state.chartDoc.parsedChart.metadata,
+            name,
+            artist,
+            charter,
+          },
+        },
+      };
+      dispatch({type: 'SET_CHART_DOC', chartDoc: updatedDoc});
+
+      // Persist the chart (metadata rides along in the .chart [Song] section).
+      const files = writeChartFolder(updatedDoc);
+      const chartText = new TextDecoder().decode(
+        files.find(f => f.fileName === 'notes.chart')!.data,
+      );
+      await writeProjectText(projectId, 'notes.edited.chart', chartText);
+
+      // Rename the project — "Song by Artist" (charter is not included).
+      const projectName = artist.trim() ? `${name} by ${artist}` : name;
+      const updated = await updateProject(projectId, {name: projectName});
+      setProjectMeta(updated);
+
+      toast.success('Song details saved');
+    },
+    [projectId, state.chartDoc, dispatch],
+  );
+
   // Provide chart text for export
   const getChartText = useCallback(async (): Promise<string> => {
     let chartText: string;
@@ -464,44 +514,84 @@ function EditorAppInner({projectId}: {projectId: string}) {
     return chartText;
   }, [projectId]);
 
-  // Provide audio sources for export
-  const getAudioSources = useCallback(async (): Promise<AudioSource[]> => {
-    const sources: AudioSource[] = [];
-    const aMeta = audioMeta;
-    if (!aMeta) return sources;
+  // Provide audio sources for export.
+  //
+  // Stems live in the project's `stems/` subdirectory and the full mix in
+  // `audio/full.pcm` — the same handles the loader uses above.
+  //
+  // `includeStems` (from the export dialog) selects between:
+  //   true  → separated drums.opus + accompaniment song.opus, Opus-encoded
+  //           from the stem PCM via WebCodecs.
+  //   false → the user's original uploaded file, byte-for-byte, as song.<ext>.
+  const getAudioSources = useCallback(
+    async ({includeStems}: {includeStems: boolean}): Promise<AudioSource[]> => {
+      const sources: AudioSource[] = [];
+      const aMeta = audioMeta;
+      if (!aMeta) return sources;
 
-    const {encodeWav} = await import('@/lib/audio/wav-encoder');
+      const toOpus = (pcm: Float32Array): Promise<Uint8Array> =>
+        encodePcmToOpus(pcm, aMeta.sampleRate, aMeta.channels);
 
-    // Drum stem
-    try {
-      const {readProjectBinary} = await import(
-        '@/lib/drum-transcription/storage/opfs'
-      );
-      const drumsPcmBuffer = await readProjectBinary(projectId, 'drums.pcm');
-      const drumsPcm = new Float32Array(drumsPcmBuffer);
-      const drumsWav = encodeWav(drumsPcm, aMeta.sampleRate, aMeta.channels);
-      sources.push({fileName: 'drums.wav', data: drumsWav});
-    } catch {
-      // No drums stem
-    }
-
-    // Accompaniment (mix bass+other+vocals, or fall back to full mix)
-    try {
-      const {readProjectBinary} = await import(
-        '@/lib/drum-transcription/storage/opfs'
-      );
-      const stemNames = ['bass', 'other', 'vocals'];
-      const stemBuffers: Float32Array[] = [];
-
-      for (const stemName of stemNames) {
+      const readFullMix = async (): Promise<Float32Array | null> => {
         try {
-          const buffer = await readProjectBinary(projectId, `${stemName}.pcm`);
-          stemBuffers.push(new Float32Array(buffer));
+          const audioDir = await getAudioDir(projectId);
+          const handle = await audioDir.getFileHandle('full.pcm');
+          const file = await handle.getFile();
+          return new Float32Array(await file.arrayBuffer());
         } catch {
-          // Stem not available
+          return null;
         }
+      };
+
+      // Original audio: the uploaded file, unmodified, named song.<ext>.
+      if (!includeStems) {
+        const original = await readOriginalAudio(projectId);
+        if (original) {
+          const ext = original.extension || 'mp3';
+          sources.push({fileName: `song.${ext}`, data: original.data});
+          return sources;
+        }
+        // Older projects have no stored original: fall back to Opus full mix.
+        const fullPcm = await readFullMix();
+        if (fullPcm) {
+          const opus = await toOpus(fullPcm);
+          sources.push({
+            fileName: 'song.opus',
+            data: opus.buffer as ArrayBuffer,
+          });
+        }
+        return sources;
       }
 
+      const readStemPcm = async (
+        stemName: string,
+      ): Promise<Float32Array | null> => {
+        try {
+          const stemDir = await getStemsDir(projectId);
+          const handle = await stemDir.getFileHandle(`${stemName}.pcm`);
+          const file = await handle.getFile();
+          return new Float32Array(await file.arrayBuffer());
+        } catch {
+          return null;
+        }
+      };
+
+      // Drum stem → drums.opus
+      const drumsPcm = await readStemPcm('drums');
+      if (drumsPcm) {
+        const opus = await toOpus(drumsPcm);
+        sources.push({
+          fileName: 'drums.opus',
+          data: opus.buffer as ArrayBuffer,
+        });
+      }
+
+      // Accompaniment: mix bass+other+vocals, or fall back to the full mix.
+      const stemBuffers = (
+        await Promise.all(['bass', 'other', 'vocals'].map(readStemPcm))
+      ).filter((b): b is Float32Array => b !== null);
+
+      let accompaniment: Float32Array | null = null;
       if (stemBuffers.length > 0) {
         const maxLength = Math.max(...stemBuffers.map(b => b.length));
         const mixed = new Float32Array(maxLength);
@@ -513,20 +603,23 @@ function EditorAppInner({projectId}: {projectId: string}) {
         for (let i = 0; i < mixed.length; i++) {
           mixed[i] = Math.max(-1, Math.min(1, mixed[i]));
         }
-        const songWav = encodeWav(mixed, aMeta.sampleRate, aMeta.channels);
-        sources.push({fileName: 'song.wav', data: songWav});
+        accompaniment = mixed;
       } else {
-        const fullPcmBuffer = await readProjectBinary(projectId, 'full.pcm');
-        const fullPcm = new Float32Array(fullPcmBuffer);
-        const songWav = encodeWav(fullPcm, aMeta.sampleRate, aMeta.channels);
-        sources.push({fileName: 'song.wav', data: songWav});
+        accompaniment = await readFullMix();
       }
-    } catch {
-      // Can't create accompaniment
-    }
 
-    return sources;
-  }, [projectId, audioMeta]);
+      if (accompaniment) {
+        const opus = await toOpus(accompaniment);
+        sources.push({
+          fileName: 'song.opus',
+          data: opus.buffer as ArrayBuffer,
+        });
+      }
+
+      return sources;
+    },
+    [projectId, audioMeta],
+  );
 
   if (loadingState === 'loading') {
     return (
@@ -560,14 +653,15 @@ function EditorAppInner({projectId}: {projectId: string}) {
       audioChannels={audioChannels}
       durationSeconds={durationSeconds}
       sections={chart.sections}
-      songName={projectMeta?.name ?? 'Untitled'}
+      songName={chart.metadata.name || projectMeta?.name || 'Untitled'}
+      artistName={chart.metadata.artist || undefined}
+      charterName={chart.metadata.charter || undefined}
+      onMetadataChange={handleMetadataChange}
       dirty={state.dirty}
       getChartText={getChartText}
       getAudioSources={getAudioSources}
+      showStemChoice
       onNotesModified={handleNotesModified}
-      confidence={dtState.confidence}
-      showConfidence={dtState.showConfidence}
-      confidenceThreshold={dtState.confidenceThreshold}
       reviewedNoteIds={dtState.reviewedNoteIds}
       leftPanelChildren={
         <>
