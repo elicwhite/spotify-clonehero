@@ -276,12 +276,17 @@ function maybeOctaveCorrect(
 
 /**
  * Default PL_LSQ tolerance (ms). Port of `_pl_lsq_segments` from
- * drum-to-chart autoresearch-tempo train.py (banked keep 83d432d,
- * 2026-07-02): keep-set chart_f1_abs +0.019 / rel +0.028, tempo events
- * 76.6 → 13.3 per minute. Passing 0 (the converter default) reproduces the
- * per-beat map, which is what the frozen dbc913d golden fixtures expect.
+ * drum-to-chart autoresearch-tempo train.py, byte-exact under IEEE-754
+ * (train.py pinned to this converter's normal-equation fit at tol=8 in
+ * drum-to-chart commit 4c06bc1). The 8ms default was re-tuned on the
+ * product-edit metric with predicted notes and validated end-to-end on the
+ * held-out pack test (drum-to-chart plans/2026-07-04-next-phase-plan.md
+ * r18–r25): −0.0281 edits/note vs the prior 15ms, CI-clean, every drum
+ * family improves, over-fit ruled out (better held-out-beat generalization).
+ * The prior 15ms was tuned against chart_f1 on ground-truth notes. Passing 0
+ * reproduces the per-beat map.
  */
-export const PL_LSQ_TOL_MS_DEFAULT = 15;
+export const PL_LSQ_TOL_MS_DEFAULT = 8;
 
 /**
  * Continuous piecewise-LSQ tempo-map segmentation.
