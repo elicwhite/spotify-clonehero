@@ -11,7 +11,7 @@ import {getCachedModel} from '@/lib/lyrics-align/model-cache';
 import {buildLinkSegWindows} from './linkseg-windows';
 import {melForWindows, LINKSEG_N_MELS, LINKSEG_MEL_FRAMES} from './linkseg-mel';
 import {linksegDecode, LINKSEG_LABELS} from './linkseg-decode';
-import type {LinkSegSections} from './types';
+import type {LinkSegSections} from '@/lib/tempo-map/types';
 
 // Hosted on R2 like the other models; the local public/models copy is a dev fallback.
 const LINKSEG_MODEL_URL = 'https://assets.musiccharts.tools/models/linkseg_7c.onnx';

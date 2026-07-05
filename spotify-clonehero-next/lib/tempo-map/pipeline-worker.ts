@@ -29,7 +29,7 @@ import {runPostprocessor} from './beat-this-pp';
 import {computeDrumOnsetOffsetMs} from './drum-onset';
 import {beatsToSynctrack, PL_LSQ_TOL_MS_DEFAULT} from './converter';
 import {computeMeterStats} from './meter-confidence';
-import {loadLinkSegSession, runLinkSegSections} from './linkseg-run';
+import {loadLinkSegSession, runLinkSegSections} from '@/lib/section-names/linkseg-run';
 import type {
   LinkSegSections,
   PipelineProgress,

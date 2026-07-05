@@ -8,7 +8,7 @@
 // which this turns into a (64 mel x 64 time) dB image; the ONNX input is (N,1,64,64) with layout
 // [n*4096 + mel*64 + time].
 
-import {fftRadix2InPlace} from './fft-radix2';
+import {fftRadix2InPlace} from '@/lib/tempo-map/fft-radix2';
 import fbJson from './linkseg-mel-fb.json';
 
 export const LINKSEG_SR = 22050;
