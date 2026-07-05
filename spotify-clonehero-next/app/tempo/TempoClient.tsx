@@ -36,6 +36,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
 import {cn} from '@/lib/utils';
@@ -573,6 +581,13 @@ function ResultsView({
   const [currentTime, setCurrentTime] = useState(0);
   const [snapNotes, setSnapNotes] = useState(true);
 
+  const irregularMeter =
+    result.meterStats !== null &&
+    result.meterStats.frac4 < METER_CONFIDENCE_THRESHOLD;
+  // Warn once per result when the meter looks irregular. ResultsView mounts
+  // fresh for each processed song, so lazy init opens the modal on mount.
+  const [showMeterModal, setShowMeterModal] = useState(() => irregularMeter);
+
   const hasOriginal = result.originalChart !== null;
 
   // Chart mode: derive the new chart from the prediction, optionally
@@ -814,16 +829,26 @@ function ResultsView({
         </div>
       )}
 
-      {result.meterStats &&
-        result.meterStats.frac4 < METER_CONFIDENCE_THRESHOLD && (
-          <div className="px-4 py-2 border-b bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-sm">
-            <span className="font-semibold">Irregular meter detected.</span>{' '}
-            Only {Math.round(result.meterStats.frac4 * 100)}% of this song's
-            measures look like steady 4/4. The beat grid and tempo map are still
-            useful, but expect to set time signatures and check bar lines
-            manually.
-          </div>
-        )}
+      {irregularMeter && result.meterStats && (
+        <Dialog open={showMeterModal} onOpenChange={setShowMeterModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Irregular meter detected</DialogTitle>
+              <DialogDescription>
+                Only {Math.round(result.meterStats.frac4 * 100)}% of this
+                song&apos;s measures look like steady 4/4.
+              </DialogDescription>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              The beat grid and tempo map are still useful, but expect to set
+              time signatures and check bar lines manually.
+            </p>
+            <DialogFooter>
+              <Button onClick={() => setShowMeterModal(false)}>Got it</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <div className="flex-1 min-h-0 flex">
         {/* Left: tempo / time-signature list */}
