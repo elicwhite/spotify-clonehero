@@ -18,20 +18,34 @@ import {
 } from '../pipeline/chart-builder';
 import {buildTimedTempos, msToTick} from '../timing';
 import type {RawDrumEvent} from '../ml/types';
+import {SYSTEMATIC_ONSET_MS} from '../ml/types';
 import type {Synctrack} from '@/lib/tempo-map/types';
 import {
   writeChartFolder,
   readChart,
   getDrumNotes,
   drumTypes,
+  noteId,
 } from '@/lib/chart-edit';
 
+// `timeSeconds` here is the CHART-INTENDED position (where the note should land).
+// The pipeline adds SYSTEMATIC_ONSET_MS at chart placement to correct the CRNN's
+// systematic earliness, so a real model onset arrives that much before its chart
+// position. We pre-subtract the offset so these events simulate real model onsets
+// and land at the intended `timeSeconds` — keeping every tick assertion below
+// exact. A dedicated test ('applies the systematic onset offset') pins the offset
+// behavior itself.
 function ev(
   timeSeconds: number,
   drumClass: RawDrumEvent['drumClass'],
   confidence = 0.9,
 ): RawDrumEvent {
-  return {timeSeconds, drumClass, midiPitch: 0, confidence};
+  return {
+    timeSeconds: timeSeconds - SYSTEMATIC_ONSET_MS / 1000,
+    drumClass,
+    midiPitch: 0,
+    confidence,
+  };
 }
 
 describe('buildChartDocument with a multi-tempo synctrack', () => {
@@ -74,10 +88,13 @@ describe('buildChartDocument with a multi-tempo synctrack', () => {
     expect(byTick.get(6080)?.flags.cymbal).toBe(true);
 
     // Generic consistency: every note tick equals msToTick over the tempo
-    // map actually written into the chart.
+    // map actually written into the chart — including the systematic onset
+    // offset the pipeline applies at placement (chart-builder snapOnsetTick).
     const timed = buildTimedTempos(chart.tempos, RESOLUTION);
     const expected = events
-      .map(e => msToTick(e.timeSeconds * 1000, timed, RESOLUTION))
+      .map(e =>
+        msToTick(e.timeSeconds * 1000 + SYSTEMATIC_ONSET_MS, timed, RESOLUTION),
+      )
       .sort((a, b) => a - b);
     expect(notes.map(n => n.tick).sort((a, b) => a - b)).toEqual(expected);
   });
@@ -85,9 +102,9 @@ describe('buildChartDocument with a multi-tempo synctrack', () => {
   it('keys confidence data by the same real-tempo-map ticks', () => {
     const conf = buildConfidenceData(events, chart.tempos, RESOLUTION);
     expect(conf.notes).toEqual({
-      '960-kick': 0.9,
-      '5120-redDrum': 0.8,
-      '6080-yellowDrum': 0.7,
+      '960:kick': 0.9,
+      '5120:redDrum': 0.8,
+      '6080:yellowDrum': 0.7,
     });
   });
 
@@ -210,13 +227,14 @@ describe('grid snapping of transcribed onsets', () => {
       RESOLUTION,
     );
     expect(conf.notes).toEqual({
-      '360-redDrum': 0.91,
-      '160-yellowDrum': 0.72,
-      '200-kick': 0.63, // abstained note: confidence key uses the raw tick too
+      '360:redDrum': 0.91,
+      '160:yellowDrum': 0.72,
+      '200:kick': 0.63, // abstained note: confidence key uses the raw tick too
     });
-    // Every confidence key must correspond to a real note tick+type.
+    // Every confidence key must correspond to a real note's canonical noteId
+    // (`${tick}:${type}`) — the key the editor looks up per note.
     const notes = getDrumNotes(doc.parsedChart.trackData[0]);
-    const noteKeys = new Set(notes.map(n => `${n.tick}-${n.type}`));
+    const noteKeys = new Set(notes.map(n => noteId(n)));
     for (const key of Object.keys(conf.notes)) {
       expect(noteKeys.has(key)).toBe(true);
     }
@@ -237,6 +255,63 @@ describe('grid snapping of transcribed onsets', () => {
     const notes = getDrumNotes(doc.parsedChart.trackData[0]);
     expect(notes).toHaveLength(1);
     expect(notes[0].tick).toBe(360);
+  });
+});
+
+describe('single grid function keeps chords whole (per-lane carve-out dropped)', () => {
+  // Flat 120 BPM: an onset at 0.10s -> frac tick 96; candidate snaps to the
+  // nearest of 16th (120) / 16th-triplet (80) -> 80. ALL lanes use candidate,
+  // so notes sharing an onset land on the SAME tick — chords never split.
+  it('snaps a pitched lane and a cymbal at the same onset to the SAME tick', () => {
+    const events = [ev(0.1, 'SD', 0.9), ev(0.1, 'RD', 0.8)];
+    const doc = buildChartDocument(events, 'Chord Align', 4, null);
+    const notes = getDrumNotes(doc.parsedChart.trackData[0]);
+    const byType = new Map(notes.map(n => [n.type, n]));
+    expect(byType.get('redDrum')?.tick).toBe(80); // snare: candidate -> 80
+    // Ride: candidate -> 80 too (was uniform 100 under the dropped carve-out),
+    // so it stays aligned with the snare in the same chord.
+    expect(byType.get('blueDrum')?.tick).toBe(80);
+    expect(byType.get('blueDrum')?.flags.cymbal).toBe(true);
+  });
+
+  it('candidate-snaps hihat', () => {
+    const doc = buildChartDocument([ev(0.1, 'HH', 0.7)], 'Hihat', 4, null);
+    const notes = getDrumNotes(doc.parsedChart.trackData[0]);
+    expect(notes).toHaveLength(1);
+    expect(notes[0].tick).toBe(80);
+    expect(notes[0].flags.cymbal).toBe(true);
+  });
+
+  it('keeps a same-pad tom+cymbal chord as ONE gem (dedup regression guard)', () => {
+    // Floor-tom (FT) and crash (CR) both map to greenDrum. Under the dropped
+    // per-lane carve-out they snapped to different ticks (candidate 80 vs
+    // uniform 100) and rendered as TWO green gems ~21ms apart. With one grid
+    // function they share tick 80 and dedup collapses them to a single gem.
+    const events = [ev(0.1, 'FT', 0.8), ev(0.1, 'CR', 0.9)];
+    const doc = buildChartDocument(events, 'Tom+Cymbal', 4, null);
+    const green = getDrumNotes(doc.parsedChart.trackData[0]).filter(
+      n => n.type === 'greenDrum',
+    );
+    expect(green).toHaveLength(1); // ONE gem, not two split across ticks
+    expect(green[0].tick).toBe(80);
+    expect(green[0].flags.cymbal).toBe(true); // crash (higher conf) wins -> cymbal
+  });
+
+  it('keys confidence data by the snapped ticks', () => {
+    const events = [ev(0.1, 'SD', 0.9), ev(0.1, 'RD', 0.8)];
+    const doc = buildChartDocument(events, 'Conf', 4, null);
+    const conf = buildConfidenceData(
+      events,
+      doc.parsedChart.tempos.map(t => ({
+        tick: t.tick,
+        beatsPerMinute: t.beatsPerMinute,
+      })),
+      RESOLUTION,
+    );
+    expect(conf.notes).toEqual({
+      '80:redDrum': 0.9,
+      '80:blueDrum': 0.8,
+    });
   });
 });
 
@@ -293,10 +368,10 @@ describe('dedup of onsets colliding on the same snapped tick', () => {
       })),
       RESOLUTION,
     );
-    expect(conf.notes).toEqual({'960-yellowDrum': 0.9});
-    // Every confidence key must correspond to a real note tick+type.
+    expect(conf.notes).toEqual({'960:yellowDrum': 0.9});
+    // Every confidence key must correspond to a real note's canonical noteId.
     const notes = getDrumNotes(doc.parsedChart.trackData[0]);
-    const noteKeys = new Set(notes.map(n => `${n.tick}-${n.type}`));
+    const noteKeys = new Set(notes.map(n => noteId(n)));
     for (const key of Object.keys(conf.notes)) {
       expect(noteKeys.has(key)).toBe(true);
     }

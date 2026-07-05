@@ -49,11 +49,15 @@ export interface DrumTranscriber {
 // CRNN Transcriber (Web Worker-based inference)
 // ---------------------------------------------------------------------------
 
-/** URL for the stereo 256-mel CRNN ONNX model. Hosted on R2
- * (assets.musiccharts.tools) — the local public/models/ copy is gitignored
- * and never deploys, so a same-origin URL 404s in production. */
+/** URL for the stereo 256-mel CRNN ONNX model — the t2 checkpoint
+ * (5ec85b1_adt0_confirm_t2, val_f1 0.7145; torch↔ONNX parity 2.07e-6).
+ * Architecturally identical to the prior 14eca18 export (23.67M params, same
+ * mel+context -> 9-class-logits IO) — only the weights change. Hosted on R2
+ * (assets.musiccharts.tools); the local public/models/ copy is gitignored and
+ * never deploys, so a same-origin URL 404s in production. The t2 file MUST be
+ * uploaded to R2 under this key or model load 404s. */
 const CRNN_MODEL_URL =
-  'https://assets.musiccharts.tools/models/crnn_stereo_256mel.onnx';
+  'https://assets.musiccharts.tools/models/crnn_stereo_256mel_t2.onnx';
 
 /** Per-lane peak-picking thresholds config. The same-origin copy
  * (public/models/crnn_stereo_256mel.thresholds.json) IS committed (tiny JSON,

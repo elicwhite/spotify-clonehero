@@ -5,6 +5,8 @@ import {
   gridCandidates,
   snapGroupToGrid,
   snapTickToGrid,
+  snapTickUniform,
+  UNIFORM_SLOTS_PER_BEAT,
   nearestStraightTieScorer,
   type CandidateScorer,
 } from "../quantize-grid";
@@ -186,5 +188,26 @@ describe("quantize-grid primitives", () => {
       );
       expect(snapTickToGrid(t, RES)).toBe(expected);
     }
+  });
+
+  test("snapTickUniform snaps to the 1/24-beat grid (research naive)", () => {
+    const slot = RES / UNIFORM_SLOTS_PER_BEAT; // 20 ticks at res 480
+    expect(slot).toBe(20);
+    // On-grid ticks are unchanged; off-grid ticks round to the nearest slot.
+    expect(snapTickUniform(0, RES)).toBe(0);
+    expect(snapTickUniform(20, RES)).toBe(20);
+    expect(snapTickUniform(29, RES)).toBe(20); // closer to 20 than 40
+    expect(snapTickUniform(31, RES)).toBe(40); // closer to 40 than 20
+    expect(snapTickUniform(1913, RES)).toBe(1920); // 95.65 slots -> 96
+    // Never negative.
+    expect(snapTickUniform(-5, RES)).toBe(0);
+  });
+
+  test("uniform grid is finer than the musical-candidate grid", () => {
+    // Tick 100 snaps to the coarse 16th line (120) under candidate snapping,
+    // but the fine uniform grid keeps it near-raw at 100 — the whole point of
+    // uniform snapping for cymbals (barely moved off their true position).
+    expect(snapTickToGrid(100, RES)).toBe(120);
+    expect(snapTickUniform(100, RES)).toBe(100);
   });
 });

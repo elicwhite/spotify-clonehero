@@ -24,11 +24,13 @@ import {
   drumTypes,
 } from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
+import {noteId} from '@/lib/chart-edit';
 import {
   swapSynctrack,
   DEFAULT_SNAP_TOLERANCE_MS,
 } from '@/lib/tempo-map/swap-synctrack';
-import {snapGroupToGrid} from '@/lib/tempo-map/quantize-grid';
+import {snapGroupToGrid, snapTickUniform} from '@/lib/tempo-map/quantize-grid';
+import type {SnapMode} from '../ml/class-mapping';
 import type {Synctrack} from '@/lib/tempo-map/types';
 import type {MeterStats} from '@/lib/tempo-map/meter-confidence';
 import {
@@ -39,6 +41,7 @@ import {
 } from '../timing';
 import {getChartMapping} from '../ml/class-mapping';
 import type {RawDrumEvent} from '../ml/types';
+import {SYSTEMATIC_ONSET_MS} from '../ml/types';
 import type {DrumNote, DrumNoteFlags, TimedTempo} from '../chart-types';
 
 /** Default resolution (ticks per quarter note). */
@@ -97,7 +100,7 @@ export function buildChartDocument(
     ...parsedChart.metadata,
     name: songName,
     artist: 'Unknown',
-    charter: 'Drum Transcription AI',
+    charter: 'MusicCharts.tools',
     diff_drums: 0,
   };
 
@@ -206,26 +209,38 @@ export function buildChartDocument(
 }
 
 /**
- * Snap one onset's audio time to the musical grid, abstaining when the nearest
- * grid line is too far to trust.
+ * Snap one onset's audio time to the grid, abstaining when the nearest grid
+ * line is too far to trust.
  *
- * Mirrors swap-synctrack's /tempo path exactly: the fractional tick is snapped
- * to the 16th / 16th-triplet grid via {@link snapGroupToGrid}, but if that snap
- * would move the note more than `toleranceMs` from its true audio position (at
- * the local tempo, via {@link tickToMs}) the note is left at its raw rounded
- * tick instead of force-snapped. Both {@link dedupSnappedNotes} and
- * {@link buildConfidenceData} route through this one function so a note's tick
- * and its confidence key are always the identical snap decision.
+ * The grid is lane-dependent (Phase B per-lane quantizer). `snapMode`
+ * 'candidate' snaps to the nearest 16th / 16th-triplet musical subdivision via
+ * {@link snapGroupToGrid} (pitched lanes + hihat); 'uniform' snaps to the
+ * nearest 1/24-beat line via {@link snapTickUniform} (crash/crash-2/ride, where
+ * candidate snapping regressed). In both modes, if the snap would move the note
+ * more than `toleranceMs` from its true audio position (at the local tempo, via
+ * {@link tickToMs}) the note is left at its raw rounded tick instead of
+ * force-snapped. Both {@link dedupSnappedNotes} and {@link buildConfidenceData}
+ * route through this one function so a note's tick and its confidence key are
+ * always the identical snap decision.
  */
 function snapOnsetTick(
   ms: number,
   timedTempos: TimedTempo[],
   resolution: number,
+  snapMode: SnapMode = 'candidate',
   toleranceMs: number = DEFAULT_SNAP_TOLERANCE_MS,
 ): number {
-  const frac = msToTick(ms, timedTempos, resolution);
-  const snapped = snapGroupToGrid(frac, resolution);
-  const driftMs = Math.abs(tickToMs(snapped, timedTempos, resolution) - ms);
+  // Correct the systematic CRNN-vs-charter onset offset NOTE-side (the model
+  // fires ~SYSTEMATIC_ONSET_MS before charters place the note). Applied here at
+  // chart placement so the beat grid stays on true positions (not a grid
+  // shift). The drift/abstain check is relative to the corrected position too.
+  const adjMs = ms + SYSTEMATIC_ONSET_MS;
+  const frac = msToTick(adjMs, timedTempos, resolution);
+  const snapped =
+    snapMode === 'uniform'
+      ? snapTickUniform(frac, resolution)
+      : snapGroupToGrid(frac, resolution);
+  const driftMs = Math.abs(tickToMs(snapped, timedTempos, resolution) - adjMs);
   return driftMs > toleranceMs ? Math.max(0, Math.round(frac)) : snapped;
 }
 
@@ -257,6 +272,7 @@ function dedupSnappedNotes(
       event.timeSeconds * 1000,
       timedTempos,
       resolution,
+      mapping.snapMode,
     );
     const key = `${tick}-${mapping.noteType}`;
     const existing = byKey.get(key);
@@ -304,10 +320,12 @@ export function buildConfidenceData(
     const mapping = getChartMapping(event.drumClass);
     const ms = event.timeSeconds * 1000;
     // Snap to the same grid as the chart notes (see buildChartDocument), via
-    // the SAME snapOnsetTick helper (abstain band included), so the
-    // `${tick}-${noteType}` keys line up with the notes written to the chart.
-    const tick = snapOnsetTick(ms, timedTempos, resolution);
-    const key = `${tick}-${mapping.noteType}`;
+    // the SAME snapOnsetTick helper (abstain band + per-lane snapMode
+    // included). Key by the canonical noteId (`${tick}:${type}`) so these keys
+    // match exactly what the editor looks up per note — a `${tick}-${type}`
+    // (dash) key silently misses every lookup and shows all notes as 100%.
+    const tick = snapOnsetTick(ms, timedTempos, resolution, mapping.snapMode);
+    const key = noteId({tick, type: mapping.noteType});
     // If multiple events map to the same tick+type, keep the highest confidence
     if (notes[key] === undefined || event.confidence > notes[key]) {
       notes[key] = event.confidence;

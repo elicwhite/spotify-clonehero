@@ -14,7 +14,13 @@ export const SOTA = {
   DRUM_BEAT_AVG: true,
   DRUM_BEAT_AVG_TOL_MS: 50,
   DRUM_BEAT_AVG_WEIGHT: 0.45,
-  CONTINUOUS_LAG: true,
+  // CONTINUOUS_LAG default flipped to FALSE 2026-07-04: this ~7ms drum-onset
+  // GRID shift is net-negative on the product-edit metric (modeled 0.7016 vs
+  // 0.6983 at lag-0) and pushes the grid off true beat positions; the
+  // research/tempo-best grid runs lag-0 (music-true), so the app matches it and
+  // corrects the systematic onset earliness NOTE-side (SYSTEMATIC_ONSET_MS).
+  // Overridable per beatsToSynctrack() call (the dbc913d golden pins it true).
+  CONTINUOUS_LAG: false,
   CONTINUOUS_LAG_INTERCEPT: 9,
   CONTINUOUS_LAG_MAX_MS: 15,
   LAG_DOWNBEATS: true,
@@ -464,6 +470,18 @@ export interface BeatsToSynctrackInput {
    * Default true. Pass false for byte-exact dbc913d golden parity.
    */
   anchorOrigin?: boolean;
+  /**
+   * Apply the conditional drum-onset grid lag (shift beats earlier by
+   * clip(-drumOnsetOffset - INTERCEPT, 0, MAX)). Default SOTA.CONTINUOUS_LAG,
+   * which is now FALSE: on the product-edit metric this ~7ms GRID shift is
+   * net-negative (modeled 0.7016 vs 0.6983 lag-0) and pushes the grid off true
+   * beats, and the research/tempo-best grid runs lag-0 (BEATS_LAG_MS=0,
+   * music-true grid) — so the app must match it for parity, with the systematic
+   * onset earliness corrected NOTE-side (SYSTEMATIC_ONSET_MS) instead. Pass true
+   * for byte-exact dbc913d golden parity (that reference predates the lag-0
+   * decision and was dumped with the lag on).
+   */
+  continuousLag?: boolean;
 }
 
 /**
@@ -481,6 +499,7 @@ export function beatsToSynctrack({
   drumPpBeatsSec = null,
   plLsqTolMs = PL_LSQ_TOL_MS_DEFAULT,
   anchorOrigin = true,
+  continuousLag = SOTA.CONTINUOUS_LAG,
 }: BeatsToSynctrackInput): Synctrack | null {
   let beatsMs = beats
     .slice()
@@ -522,7 +541,7 @@ export function beatsToSynctrack({
   // CONTINUOUS_LAG: shift beats (and downbeats) by
   // clip(-drum_onset_offset - INTERCEPT, 0, MAX).
   let lagAmt = 0;
-  if (SOTA.CONTINUOUS_LAG && drumOnsetOffsetMs != null) {
+  if (continuousLag && drumOnsetOffsetMs != null) {
     lagAmt = Math.max(
       0,
       Math.min(

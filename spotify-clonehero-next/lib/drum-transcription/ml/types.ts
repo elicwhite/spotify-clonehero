@@ -212,6 +212,19 @@ export type TranscriptionProgressCallback = (
 export const MODEL_FPS = 100;
 
 /**
+ * Systematic CRNN onset offset (ms), added to every predicted note onset at
+ * chart placement (chart-builder snapOnsetTick). The CRNN is ~2 ms-accurate to
+ * the AUDIO onset, but charters place notes ~36 ms later by convention
+ * (measured vs chart ground truth). Correcting this NOTE-side (not by shifting
+ * the beat grid — that would push the grid off true beats, the slot-gaming
+ * class the research forbids) aligns placement to charter convention. Measured
+ * on the music-true (lag-0) grid: product-edit 0.6983 -> 0.6952 and the
+ * fraction of songs needing a manual timeline sync drops 100% -> 81%. This is
+ * the app-side twin of the research pipeline's `global_offset_ms` constant.
+ */
+export const SYSTEMATIC_ONSET_MS = 36;
+
+/**
  * NMS window for peak picking, in frames on each side of a kept peak
  * (20 ms at 100 fps).
  */

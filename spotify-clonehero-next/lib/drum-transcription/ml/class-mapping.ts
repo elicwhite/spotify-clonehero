@@ -33,6 +33,27 @@ import type {RawDrumEvent, DrumClassName} from './types';
 // CRNN class -> chart note mapping
 // ---------------------------------------------------------------------------
 
+/**
+ * Grid-quantizer policy for a lane.
+ *
+ *   - `candidate`: snap to the nearest musical subdivision (16th / 16th-triplet)
+ *     via the shared candidate scorer.
+ *   - `uniform`: snap to the nearest uniform 1/24-beat line (research "naive"
+ *     quantizer).
+ *
+ * ALL lanes currently use `candidate` (the deployed/pre-experiment behavior).
+ * A per-lane carve-out (uniform for crash/crash-2/ride) was trialled but
+ * DROPPED 2026-07-04: (1) it was a WASH on the corrected shipping grid (val-B
+ * edit-rate −0.0003, CI incl 0), and (2) because chart-builder snaps each note
+ * independently, giving cymbals a different grid function SPLIT chords — a
+ * same-onset floor-tom + crash (both greenDrum) snapped to different ticks and
+ * defeated the cross-class dedup, rendering two same-pad gems ~21ms apart. A
+ * single grid function keeps every note at one onset on one tick (chords stay
+ * whole). The field/type are retained so a future GROUP-level policy (decide
+ * one mode per onset group) can be added without splitting chords.
+ */
+export type SnapMode = 'candidate' | 'uniform';
+
 interface ChartNoteMapping {
   /** DrumNoteType for the chart. */
   noteType: DrumNoteType;
@@ -42,6 +63,8 @@ interface ChartNoteMapping {
   cymbalMarker: number | null;
   /** Whether the cymbal flag should be set. */
   isCymbal: boolean;
+  /** Grid-quantizer policy for this lane (see {@link SnapMode}). */
+  snapMode: SnapMode;
 }
 
 /** Map from CRNN class name to chart note properties. */
@@ -51,54 +74,65 @@ const CLASS_TO_CHART: Record<DrumClassName, ChartNoteMapping> = {
     noteNumber: 0,
     cymbalMarker: null,
     isCymbal: false,
+    snapMode: 'candidate',
   },
   SD: {
     noteType: 'redDrum',
     noteNumber: 1,
     cymbalMarker: null,
     isCymbal: false,
+    snapMode: 'candidate',
   },
   HT: {
     noteType: 'yellowDrum',
     noteNumber: 2,
     cymbalMarker: null,
     isCymbal: false,
+    snapMode: 'candidate',
   },
   MT: {
     noteType: 'blueDrum',
     noteNumber: 3,
     cymbalMarker: null,
     isCymbal: false,
+    snapMode: 'candidate',
   },
   FT: {
     noteType: 'greenDrum',
     noteNumber: 4,
     cymbalMarker: null,
     isCymbal: false,
+    snapMode: 'candidate',
   },
   HH: {
     noteType: 'yellowDrum',
     noteNumber: 2,
     cymbalMarker: 66,
     isCymbal: true,
+    snapMode: 'candidate',
   },
+  // crash/crash-2/ride: candidate like every other lane — see SnapMode (the
+  // uniform carve-out was dropped; a per-lane split rendered chords apart).
   CR: {
     noteType: 'greenDrum',
     noteNumber: 4,
     cymbalMarker: 68,
     isCymbal: true,
+    snapMode: 'candidate',
   },
   CR2: {
     noteType: 'blueDrum',
     noteNumber: 3,
     cymbalMarker: 67,
     isCymbal: true,
+    snapMode: 'candidate',
   },
   RD: {
     noteType: 'blueDrum',
     noteNumber: 3,
     cymbalMarker: 67,
     isCymbal: true,
+    snapMode: 'candidate',
   },
 };
 
