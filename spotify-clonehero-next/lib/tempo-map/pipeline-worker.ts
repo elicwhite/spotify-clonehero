@@ -29,7 +29,9 @@ import {runPostprocessor} from './beat-this-pp';
 import {computeDrumOnsetOffsetMs} from './drum-onset';
 import {beatsToSynctrack, PL_LSQ_TOL_MS_DEFAULT} from './converter';
 import {computeMeterStats} from './meter-confidence';
+import {loadLinkSegSession, runLinkSegSections} from './linkseg-run';
 import type {
+  LinkSegSections,
   PipelineProgress,
   PipelineRunRequest,
   PipelineWorkerMessage,
@@ -241,7 +243,7 @@ async function run(req: PipelineRunRequest) {
     const audioSeconds = mono22k.length / BEAT_THIS_SAMPLE_RATE;
     const fps = T / audioSeconds;
     const pp = runPostprocessor({beatLogits, downbeatLogits, fps});
-    return {pp, beatLogits, fps};
+    return {pp, beatLogits, fps, mono22k, audioSeconds};
   };
 
   let fm: Awaited<ReturnType<typeof runBeatThisOn>>;
@@ -262,6 +264,31 @@ async function run(req: PipelineRunRequest) {
     ds = await runBeatThisOn(drumStem, SEPARATION_SAMPLE_RATE, 'beats-drums');
   } finally {
     await beatThisSession.release();
+  }
+
+  // ---- S3b: LinkSeg functional section labels (full-mix beats + 22.05k audio) ----
+  let sections: LinkSegSections | null = null;
+  try {
+    progress({stage: 'sections', percent: 0});
+    const linksegSession = await loadLinkSegSession(ort, m =>
+      progress({stage: 'sections', detail: m}),
+    );
+    try {
+      sections = await runLinkSegSections({
+        session: linksegSession,
+        ortTensor: ort.Tensor,
+        beatTimes: fm.pp.beats,
+        wave22k: fm.mono22k,
+        duration: fm.audioSeconds,
+      });
+    } finally {
+      await linksegSession.release();
+    }
+    progress({stage: 'sections', percent: 1});
+  } catch (err) {
+    // Section labeling is a nice-to-have; never fail the whole pipeline over it.
+    console.warn('LinkSeg section labeling failed; continuing without labels:', err);
+    sections = null;
   }
 
   // ---- S2b: drum-onset offset ----
@@ -308,6 +335,7 @@ async function run(req: PipelineRunRequest) {
     type: 'result',
     result: {
       synctrack: sync,
+      sections,
       drumOnsetOffsetMs: offsetMs,
       fullMixBeatCount: fm.pp.beats.length,
       drumStemBeatCount: ds.pp.beats.length,
