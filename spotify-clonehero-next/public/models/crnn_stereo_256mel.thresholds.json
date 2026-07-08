@@ -1,6 +1,6 @@
 {
-  "thresholds": [0.5, 0.5, 0.75, 0.75, 0.75, 0.65, 0.75, 2.0, 0.65],
-  "note": "PROVISIONAL: tuned array from a sibling checkpoint (same arch/pack, 2026-07-03 evals); replace with the 14eca18-specific adt_eval tune.",
+  "thresholds": [0.5, 0.55, 0.75, 0.85, 0.65, 0.55, 0.7, 2.0, 0.55],
+  "note": "System-C tuned array (PIPELINE_AUDIT.md, 2026-07-08): control checkpoint (85f764d_stageb_originalgt_control2plane) + tom-reorder OFF, coordinate-ascent tuned on pack-VAL. From analysis/product_eval/stageb_tuned_thresholds.json (research repo, key C_control_2plane_reorder_off). Beats the prior t2 array on every family on pack-TEST.",
   "laneOrder": [
     "kick",
     "snare",
