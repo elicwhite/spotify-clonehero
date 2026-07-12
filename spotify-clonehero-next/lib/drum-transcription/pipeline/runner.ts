@@ -23,7 +23,10 @@ import {
   writeProjectJSON,
   readProjectJSON,
   projectFileExists,
+  writePackageInfo,
+  writeProjectAssets,
   type ProjectMetadata,
+  type PackageInfo,
 } from '../storage/opfs';
 import {
   separateDrums,
@@ -40,8 +43,10 @@ import type {
 } from '@/lib/tempo-map/types';
 import {CrnnTranscriber, type DrumTranscriber} from '../ml/transcriber';
 import {writeChartFolder} from '@/lib/chart-edit';
+import type {ChartDocument, File as FileEntry} from '@/lib/chart-edit';
 import {
   buildChartDocument,
+  buildChartDocumentFromExistingChart,
   buildConfidenceData,
   RESOLUTION,
   DEFAULT_BPM,
@@ -497,7 +502,171 @@ export async function runPipeline(
   }
 
   // Mark project as ready for editing
-  await updateProject(projectId, {stage: 'editing'});
+  await updateProject(projectId, {stage: 'editing', gridSource: 'predicted'});
+
+  onProgress({
+    step: 'ready',
+    progress: 1,
+    projectId,
+    projectName: metadata.name,
+  });
+
+  return projectId;
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline runner — existing-chart flow (chart-flow feature)
+// ---------------------------------------------------------------------------
+
+/** Input for {@link runPipelineFromChart}: an already-parsed chart package. */
+export interface ExistingChartPipelineInput {
+  /** The parsed existing chart (its SyncTrack is the provided grid). */
+  chartDoc: ChartDocument;
+  /** The audio file to transcribe (e.g. the package's primary song file). */
+  audioFile: File;
+  /** Original package identity, for re-export in the same shape. */
+  packageInfo: PackageInfo;
+  /**
+   * Every other file from the original package (not the chart/ini files, not
+   * `audioFile`) — album art, video, secondary audio, etc. Stored verbatim
+   * so export can round-trip them.
+   */
+  extraAssets: FileEntry[];
+}
+
+/**
+ * Run the drum transcription pipeline against an EXISTING chart package.
+ *
+ * Unlike {@link runPipeline} (audio-only: predicts a tempo map from scratch),
+ * this path reuses the supplied chart's own SyncTrack for note placement —
+ * the tempo-mapping step is skipped entirely, never a model-predicted one.
+ * Feature extraction and model inference (stem separation, CRNN transcribe)
+ * are otherwise identical. Scoring against a provided grid instead of a
+ * predicted one is worth ~+0.08 edit_rate_w offline (PIPELINE_AUDIT.md), so
+ * this is a meaningfully better result whenever the user already has a
+ * chart, not just a convenience.
+ *
+ * The existing chart's other tracks/sections/metadata/ini fields are left
+ * untouched; only the Expert Drums track is added or replaced (see
+ * {@link buildChartDocumentFromExistingChart}).
+ */
+export async function runPipelineFromChart(
+  input: ExistingChartPipelineInput,
+  onProgress: PipelineProgressCallback,
+  transcriber?: DrumTranscriber,
+): Promise<string> {
+  const txr = transcriber ?? createDefaultTranscriber();
+  const {chartDoc, audioFile, packageInfo, extraAssets} = input;
+
+  const projectName =
+    chartDoc.parsedChart.metadata.name || packageInfo.originalName;
+
+  // Step 1: Decode audio and create project (identical to runPipeline).
+  onProgress({step: 'decoding', progress: 0, projectName});
+
+  const arrayBuffer = await audioFile.arrayBuffer();
+  const sourceBytes = arrayBuffer.slice(0);
+  const audioBuffer = await decodeAudio(arrayBuffer);
+  const metadata = createAudioMetadata(audioFile, audioBuffer);
+
+  onProgress({step: 'decoding', progress: 0.5, projectName});
+
+  const projectMeta = await createProject(projectName);
+  const projectId = projectMeta.id;
+
+  const interleavedPcm = interleaveAudioBuffer(audioBuffer);
+  await storeAudio(projectId, interleavedPcm, metadata, audioBuffer.length);
+  await storeOriginalAudio(projectId, sourceBytes, metadata.originalFileName);
+
+  // Persist the package identity + passthrough assets up front so a crash
+  // mid-pipeline doesn't lose the "write back in the same shape" info.
+  await writePackageInfo(projectId, packageInfo);
+  await writeProjectAssets(projectId, extraAssets);
+
+  onProgress({
+    step: 'decoding',
+    progress: 1,
+    projectId,
+    projectName: metadata.name,
+  });
+
+  // Step 2: Stem separation (identical to runPipeline).
+  onProgress({
+    step: 'separating',
+    progress: 0,
+    projectId,
+    projectName: metadata.name,
+  });
+  await updateProject(projectId, {stage: 'separating'});
+  try {
+    const storedAudio = await loadAudioForDemucs(projectId);
+    await separateDrums(projectId, storedAudio, sepProgress => {
+      onProgress({
+        step: 'separating',
+        progress: separationProgressToFraction(sepProgress),
+        etaSeconds: sepProgress.etaSeconds,
+        projectId,
+        projectName: metadata.name,
+      });
+    });
+  } catch (err) {
+    console.warn('Stem separation failed, continuing with full mix:', err);
+  }
+  onProgress({
+    step: 'separating',
+    progress: 1,
+    projectId,
+    projectName: metadata.name,
+  });
+
+  // Step 3: Tempo mapping is SKIPPED — the existing chart's own SyncTrack is
+  // the provided grid (never a model-predicted one).
+
+  // Step 4: Transcription, chart-built against the PROVIDED grid.
+  onProgress({
+    step: 'transcribing',
+    progress: 0,
+    projectId,
+    projectName: metadata.name,
+  });
+  await updateProject(projectId, {stage: 'transcribing'});
+
+  const drumAudioStereo = await loadTranscriptionAudio48k(projectId);
+  const result: TranscriptionResult = await txr.transcribe(
+    drumAudioStereo,
+    CRNN_SAMPLE_RATE,
+    txrProgress => {
+      onProgress({
+        step: 'transcribing',
+        progress: txrProgress.percent,
+        projectId,
+        projectName: metadata.name,
+      });
+    },
+  );
+
+  const finalChartDoc = buildChartDocumentFromExistingChart(
+    chartDoc,
+    result.events,
+    result.durationSeconds,
+  );
+
+  const files = writeChartFolder(finalChartDoc);
+  const chartFile = files.find(f => f.fileName === 'notes.chart');
+  if (!chartFile) {
+    throw new Error('writeChartFolder did not produce notes.chart');
+  }
+  const chartText = new TextDecoder().decode(chartFile.data);
+
+  const confidenceData = buildConfidenceData(
+    result.events,
+    finalChartDoc.parsedChart.tempos,
+    finalChartDoc.parsedChart.resolution || RESOLUTION,
+  );
+  await writeProjectJSON(projectId, 'confidence.json', confidenceData);
+  await writeProjectText(projectId, 'notes.chart', chartText);
+
+  await updateProject(projectId, {stage: 'editing', gridSource: 'provided'});
 
   onProgress({
     step: 'ready',
@@ -532,6 +701,21 @@ export async function resumePipeline(
   if (!hasAudio) {
     throw new Error(
       `Project ${projectId} has no audio stored. Cannot resume pipeline.`,
+    );
+  }
+
+  // This generic resume path always rebuilds the chart against a freshly
+  // predicted tempo map (see Step 3/4 below) — it doesn't know how to
+  // reconstruct an existing-chart project's original ParsedChart (other
+  // tracks, sections, ini fields). Resuming an interrupted "existing chart"
+  // pipeline that way would silently drop the provided-grid guarantee, so
+  // refuse rather than corrupt it; the user re-uploads the chart package
+  // instead (chart-flow resume is a known follow-up, not yet supported).
+  if (meta.gridSource === 'provided' && !hasChart) {
+    throw new Error(
+      'This project was created from an existing chart and was interrupted ' +
+        'before finishing. Resuming an existing-chart pipeline is not yet ' +
+        'supported — please re-upload the chart package to restart it.',
     );
   }
 
@@ -634,7 +818,7 @@ export async function resumePipeline(
     await writeProjectText(projectId, 'notes.chart', chartText);
   }
 
-  await updateProject(projectId, {stage: 'editing'});
+  await updateProject(projectId, {stage: 'editing', gridSource: 'predicted'});
 
   onProgress({
     step: 'ready',

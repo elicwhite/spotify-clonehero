@@ -263,6 +263,114 @@ export function buildChartDocument(
 }
 
 /**
+ * Build a ChartDocument from raw drum events, reusing an EXISTING chart's own
+ * SyncTrack (tempos/timeSignatures/resolution) instead of a predicted one.
+ *
+ * Used by the "existing chart" flow (chart-flow feature): when the user
+ * supplies their own chart package, its tempo map is the ground truth for
+ * note placement — scoring against a provided grid instead of a predicted
+ * one is worth ~+0.08 edit_rate_w offline, so this path must snap onsets to
+ * `existing`'s own tempo list, never a freshly-predicted Synctrack. Feature
+ * extraction and model inference are unaffected; only this chart-WRITING
+ * step differs from {@link buildChartDocument}.
+ *
+ * Everything about the existing chart is preserved as-is (other instrument
+ * tracks, sections, metadata, ini fields, assets) — only the `drums`/
+ * `expert` track is replaced (or added, if the chart had none) and the end
+ * event is extended if the new drum notes or audio duration run past it.
+ */
+export function buildChartDocumentFromExistingChart(
+  existing: ChartDocument,
+  events: RawDrumEvent[],
+  durationSeconds: number,
+): ChartDocument {
+  const parsedChart = {
+    ...existing.parsedChart,
+    trackData: [...existing.parsedChart.trackData],
+  };
+
+  // Four-lane pro drums: without this, writeChartFolder drops the cymbal
+  // marker notes (66/67/68) and every cymbal re-parses as a tom.
+  parsedChart.drumType = drumTypes.fourLanePro;
+
+  const resolution = parsedChart.resolution || RESOLUTION;
+
+  // Quantize raw events against the EXISTING chart's own tempo list (the
+  // provided grid), not a predicted synctrack.
+  const tempos: TempoLike[] = parsedChart.tempos.map(t => ({
+    tick: t.tick,
+    beatsPerMinute: t.beatsPerMinute,
+  }));
+  const drumNotes = dedupSnappedNotes(events, tempos, resolution);
+
+  const drumsTrack = {
+    instrument: 'drums',
+    difficulty: 'expert',
+    starPowerSections: [],
+    rejectedStarPowerSections: [],
+    drumFreestyleSections: [],
+    soloSections: [],
+    flexLanes: [],
+    noteEventGroups: [],
+    textEvents: [],
+    versusPhrases: [],
+    animations: [],
+    unrecognizedMidiEvents: [],
+  } as never as ChartDocument['parsedChart']['trackData'][number];
+
+  for (const note of drumNotes) {
+    addDrumNote(drumsTrack, {
+      tick: note.tick,
+      type: note.type,
+      length: note.length,
+      flags: {
+        cymbal: note.flags.cymbal,
+        doubleKick: note.flags.doubleKick,
+        accent: note.flags.accent,
+        ghost: note.flags.ghost,
+      },
+    });
+  }
+
+  // Add-or-replace: if the existing chart already had an Expert Drums track,
+  // replace it in place; otherwise append the new track.
+  const existingIdx = parsedChart.trackData.findIndex(
+    t => t.instrument === 'drums' && t.difficulty === 'expert',
+  );
+  if (existingIdx >= 0) {
+    parsedChart.trackData[existingIdx] = drumsTrack;
+  } else {
+    parsedChart.trackData.push(drumsTrack);
+  }
+
+  // Extend the end event if the new drum notes (or the transcribed audio's
+  // duration) run past the chart's current end — never shorten it.
+  const timedTempos = buildTimedTempos(tempos, resolution);
+  const lastNoteTick =
+    drumNotes.length > 0 ? Math.max(...drumNotes.map(n => n.tick)) : 0;
+  const durationTicks = msToTick(
+    durationSeconds * 1000,
+    timedTempos,
+    resolution,
+    'ceil',
+  );
+  const existingEndTick =
+    parsedChart.endEvents.length > 0
+      ? Math.max(...parsedChart.endEvents.map(e => e.tick))
+      : 0;
+  const endTick = Math.max(
+    existingEndTick,
+    lastNoteTick + resolution,
+    durationTicks,
+  );
+  if (endTick > existingEndTick) {
+    parsedChart.endEvents = [{tick: endTick, msTime: 0, msLength: 0}];
+  }
+
+  return {parsedChart, assets: existing.assets};
+}
+
+/**
  * Snap one onset's audio time to the grid, abstaining when the nearest grid
  * line is too far to trust.
  *

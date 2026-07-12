@@ -21,10 +21,21 @@
  *       chart/
  *         notes.chart     - ML-generated chart
  *         notes.edited.chart - Human-edited chart
+ *       package-info.json - Set only for the "existing chart" flow (chart-flow
+ *                            feature): sourceFormat/originalName/sngMetadata of
+ *                            the package the user supplied, for re-export in
+ *                            the same shape.
+ *       assets/            - Set only for the "existing chart" flow: every
+ *                            file from the original package other than the
+ *                            chart/ini/primary-audio (album art, video,
+ *                            secondary audio, etc.), stored verbatim so
+ *                            export can round-trip them.
+ *       assets-manifest.json - File names stored under assets/.
  */
 
 import {writeFile, readJsonFile, readTextFile} from '@/lib/fileSystemHelpers';
 import type {AudioMetadata} from '@/lib/drum-transcription/audio/types';
+import type {SourceFormat} from '@/components/chart-picker/chart-file-readers';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -37,6 +48,9 @@ const AUDIO_PCM_FILE = 'full.pcm';
 const AUDIO_META_FILE = 'meta.json';
 /** Basename of the untouched original upload; the extension is preserved. */
 const ORIGINAL_AUDIO_BASENAME = 'original';
+const PACKAGE_INFO_FILE = 'package-info.json';
+const ASSETS_DIR = 'assets';
+const ASSETS_MANIFEST_FILE = 'assets-manifest.json';
 
 /** Lowercase file extension (without dot), or '' if none. */
 function extensionOf(fileName: string): string {
@@ -58,6 +72,29 @@ export interface ProjectMetadata {
   durationSeconds: number | null;
   /** Processing stage the project is currently in */
   stage: ProjectStage;
+  /**
+   * Which SyncTrack the chart's notes were placed against (chart-flow
+   * feature). `'provided'` — the user supplied an existing chart and its own
+   * tempo map was used (predicted tempo/beat detection was skipped
+   * entirely). `'predicted'` — the ML-predicted tempo map was used (the
+   * original audio-only flow). Undefined for projects created before this
+   * field existed; treat as `'predicted'`.
+   */
+  gridSource?: GridSource | undefined;
+}
+
+export type GridSource = 'provided' | 'predicted';
+
+/**
+ * Set only when the project was created from an existing chart package
+ * (chart-flow feature) — captures enough of the original package's identity
+ * to re-export in the same shape (folder/.zip/.sng) with its original ini
+ * fields and non-audio assets intact.
+ */
+export interface PackageInfo {
+  sourceFormat: SourceFormat;
+  originalName: string;
+  sngMetadata?: Record<string, string> | undefined;
 }
 
 export type ProjectStage =
@@ -198,7 +235,12 @@ export async function getProject(projectId: string): Promise<ProjectMetadata> {
  */
 export async function updateProject(
   projectId: string,
-  updates: Partial<Pick<ProjectMetadata, 'name' | 'durationSeconds' | 'stage'>>,
+  updates: Partial<
+    Pick<
+      ProjectMetadata,
+      'name' | 'durationSeconds' | 'stage' | 'gridSource'
+    >
+  >,
 ): Promise<ProjectMetadata> {
   const dir = await getProjectDir(projectId);
   const metaHandle = await dir.getFileHandle(METADATA_FILE);
@@ -506,4 +548,98 @@ export async function hasStoredAudio(projectId: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Existing-chart package info + passthrough assets (chart-flow feature)
+// ---------------------------------------------------------------------------
+
+/**
+ * Persists which package (folder/.zip/.sng) and identity the project's chart
+ * came from, when created via the "existing chart" flow. Absent for
+ * audio-only projects.
+ */
+export async function writePackageInfo(
+  projectId: string,
+  info: PackageInfo,
+): Promise<void> {
+  await writeProjectJSON(projectId, PACKAGE_INFO_FILE, info);
+}
+
+/** Reads package info, or `null` for audio-only projects (no such file). */
+export async function readPackageInfo(
+  projectId: string,
+): Promise<PackageInfo | null> {
+  try {
+    return await readProjectJSON<PackageInfo>(projectId, PACKAGE_INFO_FILE);
+  } catch {
+    return null;
+  }
+}
+
+/** Returns (creating if needed) the `assets/` subdirectory within a project. */
+async function getAssetsDir(
+  projectId: string,
+  options: {create: boolean} = {create: false},
+): Promise<FileSystemDirectoryHandle> {
+  const projectDir = await getProjectDir(projectId, options);
+  return projectDir.getDirectoryHandle(ASSETS_DIR, {create: options.create});
+}
+
+/**
+ * Stores passthrough files from an existing chart package verbatim (e.g.
+ * album art, video, secondary audio) — everything besides the chart/ini
+ * files and the single primary audio file used for transcription, which are
+ * stored via their own dedicated paths. A no-op when `files` is empty.
+ */
+export async function writeProjectAssets(
+  projectId: string,
+  files: {fileName: string; data: Uint8Array}[],
+): Promise<void> {
+  if (files.length === 0) return;
+  const assetsDir = await getAssetsDir(projectId, {create: true});
+  for (const file of files) {
+    const handle = await assetsDir.getFileHandle(file.fileName, {
+      create: true,
+    });
+    const writable = await handle.createWritable();
+    await writable.write(file.data as Uint8Array<ArrayBuffer>);
+    await writable.close();
+  }
+  await writeProjectJSON(
+    projectId,
+    ASSETS_MANIFEST_FILE,
+    files.map(f => f.fileName),
+  );
+}
+
+/**
+ * Reads back the passthrough asset files stored by {@link writeProjectAssets}.
+ * Returns an empty array for audio-only projects (no manifest).
+ */
+export async function readProjectAssets(
+  projectId: string,
+): Promise<{fileName: string; data: Uint8Array}[]> {
+  let manifest: string[];
+  try {
+    manifest = await readProjectJSON<string[]>(
+      projectId,
+      ASSETS_MANIFEST_FILE,
+    );
+  } catch {
+    return [];
+  }
+
+  const assetsDir = await getAssetsDir(projectId);
+  const files: {fileName: string; data: Uint8Array}[] = [];
+  for (const fileName of manifest) {
+    try {
+      const handle = await assetsDir.getFileHandle(fileName);
+      const file = await handle.getFile();
+      files.push({fileName, data: new Uint8Array(await file.arrayBuffer())});
+    } catch {
+      console.warn(`drum-transcription export: could not read asset "${fileName}"`);
+    }
+  }
+  return files;
 }

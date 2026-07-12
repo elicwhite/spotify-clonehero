@@ -37,6 +37,10 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import AudioUploader from './components/AudioUploader';
+import ChartDropZone from '@/components/chart-picker/ChartDropZone';
+import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
+import {readChart} from '@/lib/chart-edit';
+import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import ProcessingView, {type ProcessingStep} from '@/components/ProcessingView';
 import {
   createPipelineStepTimer,
@@ -54,6 +58,7 @@ import {
 } from '@/lib/drum-transcription/storage/opfs';
 import {
   runPipeline,
+  runPipelineFromChart,
   resumePipeline,
   type PipelineProgress,
   type PipelineStep,
@@ -110,6 +115,13 @@ function DrumTranscriptionInner() {
   const [pipelineAudioFile, setPipelineAudioFile] = useState<File | null>(null);
   const stepTimerRef = useRef(createPipelineStepTimer());
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
+
+  // Entry-point picker: audio-only (existing behavior, unchanged) vs an
+  // existing chart package, whose SyncTrack/audio drive transcription
+  // (chart-flow feature). `null` shows both options; the audio-only path
+  // never sets this away from `null` before handing off to ProcessingView.
+  const [sourceMode, setSourceMode] = useState<'audio' | 'chart' | null>(null);
+  const [chartFlowError, setChartFlowError] = useState<string | null>(null);
 
   // Derive the ProcessingView step list from progress + a wall-clock
   // timer. The timer is a mutable ref read and updated only inside this
@@ -321,6 +333,84 @@ function DrumTranscriptionInner() {
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Pipeline failed';
         console.error('Pipeline error:', err);
+        setPipelineProgress(prev => ({
+          step: 'error',
+          progress: 0,
+          projectId: prev?.projectId,
+          projectName: prev?.projectName,
+          error: message,
+        }));
+        toast.error(message);
+      }
+    },
+    [router, waitForOrt],
+  );
+
+  // Handle an existing chart package being dropped/selected -> start the
+  // chart-flow pipeline (transcribes drums but snaps them to the package's
+  // OWN SyncTrack, never a predicted tempo map).
+  const handleChartPackageLoaded = useCallback(
+    async (loaded: LoadedFiles) => {
+      setChartFlowError(null);
+      try {
+        const chartDoc = readChart(loaded.files, {pro_drums: true});
+        const audioFiles = findAudioFiles(loaded.files);
+        if (audioFiles.length === 0) {
+          throw new Error('No audio files found in the chart package.');
+        }
+        // The primary song audio: the largest audio file, which is the
+        // full mix in nearly every real chart package (stems, when present,
+        // are smaller partial mixes).
+        const primary = audioFiles.reduce((a, b) =>
+          b.data.length > a.data.length ? b : a,
+        );
+        const primaryAudioFile = new File(
+          [primary.data as BlobPart],
+          primary.fileName,
+        );
+        const primaryNameLower = primary.fileName.toLowerCase();
+        const chartFileNames = new Set([
+          'notes.chart',
+          'notes.mid',
+          'song.ini',
+        ]);
+        const extraAssets = loaded.files.filter(
+          f =>
+            !chartFileNames.has(f.fileName.toLowerCase()) &&
+            f.fileName.toLowerCase() !== primaryNameLower,
+        );
+
+        setPipelineAudioFile(primaryAudioFile);
+        await waitForOrt(primaryAudioFile.name);
+
+        setPipelineProgress({
+          step: 'decoding',
+          progress: 0,
+          projectName: primaryAudioFile.name,
+        });
+
+        const finalProjectId = await runPipelineFromChart(
+          {
+            chartDoc,
+            audioFile: primaryAudioFile,
+            packageInfo: {
+              sourceFormat: loaded.sourceFormat,
+              originalName: loaded.originalName,
+              sngMetadata: loaded.sngMetadata,
+            },
+            extraAssets,
+          },
+          progress => setPipelineProgress(progress),
+        );
+
+        toast.success('Processing complete! Opening editor.');
+        setPipelineProgress(null);
+        setPipelineAudioFile(null);
+        router.push(`/drum-transcription?project=${finalProjectId}`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Pipeline failed';
+        console.error('Chart-flow pipeline error:', err);
+        setChartFlowError(message);
         setPipelineProgress(prev => ({
           step: 'error',
           progress: 0,
@@ -627,10 +717,86 @@ function DrumTranscriptionInner() {
         </p>
       </div>
 
-      <AudioUploader
-        onFileSelected={handleStartPipeline}
-        onTryDemo={handleTryDemo}
-      />
+      {/* Either/or entry point: audio-only (unchanged) vs an existing chart
+          package, whose SyncTrack/audio drive transcription (chart-flow
+          feature). */}
+      {sourceMode === null && (
+        <Card className="w-full">
+          <CardContent className="pt-6 flex flex-col items-center gap-3">
+            <p className="text-sm text-muted-foreground text-center">
+              Have a chart already? Reuse its tempo map instead of predicting
+              one from scratch — this measurably improves note placement.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setSourceMode('audio')}>
+                Just a song (create a new chart)
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setSourceMode('chart')}>
+                <FolderOpen className="h-4 w-4 mr-2" />
+                Use an existing chart
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {sourceMode === 'audio' && (
+        <div className="w-full space-y-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSourceMode(null)}
+            className="gap-1">
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <p className="text-xs text-muted-foreground text-center">
+            Grid source: <strong>predicted</strong> — the tempo map is
+            estimated from the audio.
+          </p>
+          <AudioUploader
+            onFileSelected={handleStartPipeline}
+            onTryDemo={handleTryDemo}
+          />
+        </div>
+      )}
+
+      {sourceMode === 'chart' && (
+        <Card className="w-full">
+          <CardContent className="pt-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSourceMode(null)}
+                className="gap-1">
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              Grid source: <strong>provided</strong> — notes will be snapped
+              to this chart&apos;s own tempo map, not a predicted one.
+            </p>
+            <ChartDropZone
+              onLoaded={handleChartPackageLoaded}
+              id="drum-transcription-chart"
+              disabled={isProcessing}
+            />
+            {chartFlowError && (
+              <p className="text-xs text-destructive text-center">
+                {chartFlowError}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Existing projects */}
       {loadingProjects && (
