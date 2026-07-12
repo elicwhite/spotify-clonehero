@@ -49,6 +49,17 @@ export interface DrumTranscriber {
 // CRNN Transcriber (Web Worker-based inference)
 // ---------------------------------------------------------------------------
 
+/** R2 asset host for model files (checkpoints, thresholds configs, etc). */
+const MODEL_ASSET_BASE_URL = 'https://assets.musiccharts.tools/models';
+
+/** Checkpoint/model-version tag for the currently-deployed CRNN. Bumping this
+ * one constant re-derives BOTH the .onnx URL and the thresholds-JSON URL
+ * below, so a model swap can't silently drift the two apart (see the F63/t3
+ * thresholds-wiring note: previously the thresholds filename never carried a
+ * version tag, so there was no way to tell from the filename alone whether a
+ * hosted thresholds file was actually tuned for the checkpoint in use). */
+const CRNN_MODEL_VERSION = 't3';
+
 /** URL for the stereo 256-mel CRNN ONNX model — the t3/control checkpoint
  * (85f764d_stageb_originalgt_control2plane; PIPELINE_AUDIT.md System C
  * promotion, 2026-07-08 — label-revert-only, plain 2-plane stereo mel, no
@@ -59,16 +70,17 @@ export interface DrumTranscriber {
  * public/models/ copy is gitignored and never deploys, so a same-origin URL
  * 404s in production. The t3 file MUST be uploaded to R2 under this key or
  * model load 404s. */
-const CRNN_MODEL_URL =
-  'https://assets.musiccharts.tools/models/crnn_stereo_256mel_t3.onnx';
+const CRNN_MODEL_URL = `${MODEL_ASSET_BASE_URL}/crnn_stereo_256mel_${CRNN_MODEL_VERSION}.onnx`;
 
-/** Per-lane peak-picking thresholds config. The same-origin copy
- * (public/models/crnn_stereo_256mel.thresholds.json) IS committed (tiny JSON,
- * not covered by the *.onnx gitignore) so it deploys with the app; the R2
- * copy is the production fallback and should be kept in sync when retuned. */
-const CRNN_THRESHOLDS_URL = '/models/crnn_stereo_256mel.thresholds.json';
-const CRNN_THRESHOLDS_URL_FALLBACK =
-  'https://assets.musiccharts.tools/models/crnn_stereo_256mel.thresholds.json';
+/** Per-lane peak-picking thresholds config, version-tagged to match
+ * CRNN_MODEL_VERSION (filename convention: crnn_stereo_256mel.<version>.thresholds.json).
+ * The same-origin copy (public/models/crnn_stereo_256mel.t3.thresholds.json)
+ * IS committed (tiny JSON, not covered by the *.onnx gitignore) so it deploys
+ * with the app; the R2 copy is the production fallback and should be kept in
+ * sync when retuned. */
+const CRNN_THRESHOLDS_FILENAME = `crnn_stereo_256mel.${CRNN_MODEL_VERSION}.thresholds.json`;
+const CRNN_THRESHOLDS_URL = `/models/${CRNN_THRESHOLDS_FILENAME}`;
+const CRNN_THRESHOLDS_URL_FALLBACK = `${MODEL_ASSET_BASE_URL}/${CRNN_THRESHOLDS_FILENAME}`;
 
 /** System-C tuned per-lane thresholds (lane order: kick, snare, high-tom,
  * mid-tom, floor-tom, hihat, crash, crash-2, ride; PIPELINE_AUDIT.md,
@@ -79,22 +91,49 @@ const PROVISIONAL_THRESHOLDS: number[] = [
   0.5, 0.55, 0.75, 0.85, 0.65, 0.55, 0.7, 2.0, 0.55,
 ];
 
+/** Expected shape of the per-model thresholds JSON (see e.g.
+ * public/models/crnn_stereo_256mel.t3.thresholds.json). `laneOrder` is
+ * documentation of the lane<->index mapping (matches DRUM_CLASSES order);
+ * it isn't remapped against DRUM_CLASSES at runtime, but its presence/length
+ * is checked as a cheap sanity signal that the file is well-formed. */
+interface ThresholdsFile {
+  thresholds: number[];
+  laneOrder?: string[];
+  note?: string;
+}
+
+function isValidThresholdsFile(json: unknown): json is ThresholdsFile {
+  if (typeof json !== 'object' || json === null) return false;
+  const {thresholds, laneOrder} = json as Record<string, unknown>;
+  if (
+    !Array.isArray(thresholds) ||
+    thresholds.length !== NUM_DRUM_CLASSES ||
+    !thresholds.every(t => typeof t === 'number' && Number.isFinite(t))
+  ) {
+    return false;
+  }
+  if (laneOrder !== undefined) {
+    if (!Array.isArray(laneOrder) || laneOrder.length !== NUM_DRUM_CLASSES) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Fetch the per-lane thresholds config, trying same-origin first, then R2,
- * then falling back to the hardcoded provisional array.
+ * then falling back to the hardcoded provisional array. Both URLs are
+ * derived from CRNN_MODEL_VERSION so they always name-match the checkpoint
+ * loaded via CRNN_MODEL_URL.
  */
 async function loadThresholds(): Promise<number[]> {
   for (const url of [CRNN_THRESHOLDS_URL, CRNN_THRESHOLDS_URL_FALLBACK]) {
     try {
       const res = await fetch(url);
       if (!res.ok) continue;
-      const json = (await res.json()) as {thresholds?: unknown};
-      if (
-        Array.isArray(json.thresholds) &&
-        json.thresholds.length === NUM_DRUM_CLASSES &&
-        json.thresholds.every(t => typeof t === 'number' && Number.isFinite(t))
-      ) {
-        return json.thresholds as number[];
+      const json: unknown = await res.json();
+      if (isValidThresholdsFile(json)) {
+        return json.thresholds;
       }
       console.warn(`Malformed thresholds config at ${url}; trying fallback`);
     } catch {

@@ -7,11 +7,11 @@ Manual verification for the single-pass stereo CRNN pipeline
 
 - Chrome (or another WebGPU-capable browser) — BS-Roformer separation runs on
   WebGPU.
-- Local dev: `public/models/crnn_stereo_256mel.onnx` present (gitignored dev
-  fallback — see Deploy below; the transcriber fetches the R2 URL, so for a
-  purely local model swap point `CrnnTranscriber` at a local URL or ensure the
-  R2 copy is uploaded).
-- `public/models/crnn_stereo_256mel.thresholds.json` present (committed).
+- Local dev: `public/models/crnn_stereo_256mel_t3.onnx` present (gitignored
+  dev fallback — see Deploy below; the transcriber fetches the R2 URL, so for
+  a purely local model swap point `CrnnTranscriber` at a local URL or ensure
+  the R2 copy is uploaded).
+- `public/models/crnn_stereo_256mel.t3.thresholds.json` present (committed).
 
 ## What to click
 
@@ -68,14 +68,16 @@ Manual verification for the single-pass stereo CRNN pipeline
 local export. Repeat only when the model or thresholds are retuned.)
 
 1. Upload to R2 (`assets.musiccharts.tools/models/`):
-   - `public/models/crnn_stereo_256mel.onnx` (~94 MB, gitignored — never
+   - `public/models/crnn_stereo_256mel_t3.onnx` (~94 MB, gitignored — never
      deploys with the app)
-   - `public/models/crnn_stereo_256mel.thresholds.json` (production fallback
-     for the same-origin copy; keep in sync when thresholds are retuned)
-2. The URL constants in `lib/drum-transcription/ml/transcriber.ts` then serve
-   production:
-   - model: `https://assets.musiccharts.tools/models/crnn_stereo_256mel.onnx`
-   - thresholds: same-origin `/models/crnn_stereo_256mel.thresholds.json`
+   - `public/models/crnn_stereo_256mel.t3.thresholds.json` (production
+     fallback for the same-origin copy; keep in sync when thresholds are
+     retuned)
+2. The URL constants in `lib/drum-transcription/ml/transcriber.ts` are derived
+   from a single `CRNN_MODEL_VERSION` tag (currently `t3`), so both the model
+   and thresholds URLs stay name-matched when the version is bumped:
+   - model: `https://assets.musiccharts.tools/models/crnn_stereo_256mel_t3.onnx`
+   - thresholds: same-origin `/models/crnn_stereo_256mel.t3.thresholds.json`
      (committed, deploys with the app), R2 as fallback, hardcoded array as
      last resort.
 3. The local `public/models/*.onnx` copy is the gitignored dev fallback only.
