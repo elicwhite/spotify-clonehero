@@ -144,6 +144,63 @@ describe('chart-flow: transcribe against an existing chart, round-trip export', 
     expect(roundTripped.some(f => f.fileName === 'album.png')).toBe(true);
   });
 
+  test('MIDI-sourced existing chart (notes.mid) round-trips to notes.chart, not notes.mid', () => {
+    // Most real-world charts ship as notes.mid, not notes.chart. The
+    // chart-flow builder must normalize output to .chart format regardless
+    // of the uploaded chart's source format, since the app's own project
+    // storage and editor hardcode `notes.chart` (runner.ts). Regression
+    // test for "writeChartFolder did not produce notes.chart" (2026-07-12
+    // browser validation: a real MIDI-sourced .sng threw here).
+    const existing = {
+      parsedChart: createEmptyChart({
+        format: 'mid',
+        resolution: 480,
+        bpm: 140,
+        timeSignature: {numerator: 4, denominator: 4},
+      }),
+      assets: [] as FileEntry[],
+    };
+    expect(existing.parsedChart.format).toBe('mid');
+
+    const finalDoc = buildChartDocumentFromExistingChart(
+      existing,
+      EVENTS,
+      SONG_DURATION_SECONDS,
+    );
+
+    expect(finalDoc.parsedChart.format).toBe('chart');
+    expect(finalDoc.parsedChart.tempos).toEqual(existing.parsedChart.tempos);
+    expect(finalDoc.parsedChart.tempos[0]?.beatsPerMinute).toBe(140);
+
+    const files = writeChartFolder(finalDoc);
+    const chartFile = files.find(f => f.fileName === 'notes.chart');
+    expect(chartFile).toBeDefined();
+    expect(files.find(f => f.fileName === 'notes.mid')).toBeUndefined();
+
+    const chartText = new TextDecoder().decode(chartFile!.data);
+    expect(chartText.length).toBeGreaterThan(0);
+
+    const packageFiles = assembleChartFiles({
+      chartText,
+      metadata: {
+        name: 'MIDI-Sourced Chart',
+        artist: 'Test Artist',
+        charter: 'Original Charter',
+      },
+      audioSources: [{fileName: 'song.wav', data: fakeWav()}],
+      extraAssets: [],
+    });
+    const entries: Record<string, Uint8Array> = {};
+    for (const f of packageFiles) entries[f.fileName] = f.data;
+    const unzipped = unzipSync(zipSync(entries));
+    const roundTripped: FileEntry[] = Object.entries(unzipped).map(
+      ([fileName, data]) => ({fileName, data}),
+    );
+    const scanned = scanChartFolder(roundTripped);
+    expect(scanned.playable).toBe(true);
+    expect(scanned.notesData?.instruments).toContain('drums');
+  });
+
   test('add-or-replace: reprocessing a chart that already has a drums track replaces it, not merges', () => {
     const existing = existingChartDocument();
     const first = buildChartDocumentFromExistingChart(
