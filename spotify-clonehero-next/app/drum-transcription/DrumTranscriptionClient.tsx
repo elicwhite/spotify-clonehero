@@ -36,8 +36,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import AudioUploader from './components/AudioUploader';
-import ChartDropZone from '@/components/chart-picker/ChartDropZone';
+import SourcePicker from './components/SourcePicker';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {readChart} from '@/lib/chart-edit';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
@@ -116,11 +115,8 @@ function DrumTranscriptionInner() {
   const stepTimerRef = useRef(createPipelineStepTimer());
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
 
-  // Entry-point picker: audio-only (existing behavior, unchanged) vs an
-  // existing chart package, whose SyncTrack/audio drive transcription
-  // (chart-flow feature). `null` shows both options; the audio-only path
-  // never sets this away from `null` before handing off to ProcessingView.
-  const [sourceMode, setSourceMode] = useState<'audio' | 'chart' | null>(null);
+  // Chart-flow feature: error from the last existing-chart-package load
+  // attempt (SourcePicker owns the audio-vs-chart mode toggle itself).
   const [chartFlowError, setChartFlowError] = useState<string | null>(null);
 
   // Derive the ProcessingView step list from progress + a wall-clock
@@ -720,83 +716,13 @@ function DrumTranscriptionInner() {
       {/* Either/or entry point: audio-only (unchanged) vs an existing chart
           package, whose SyncTrack/audio drive transcription (chart-flow
           feature). */}
-      {sourceMode === null && (
-        <Card className="w-full">
-          <CardContent className="pt-6 flex flex-col items-center gap-3">
-            <p className="text-sm text-muted-foreground text-center">
-              Have a chart already? Reuse its tempo map instead of predicting
-              one from scratch — this measurably improves note placement.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 w-full">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setSourceMode('audio')}>
-                Just a song (create a new chart)
-              </Button>
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setSourceMode('chart')}>
-                <FolderOpen className="h-4 w-4 mr-2" />
-                Use an existing chart
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {sourceMode === 'audio' && (
-        <div className="w-full space-y-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSourceMode(null)}
-            className="gap-1">
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Button>
-          <p className="text-xs text-muted-foreground text-center">
-            Grid source: <strong>predicted</strong> — the tempo map is
-            estimated from the audio.
-          </p>
-          <AudioUploader
-            onFileSelected={handleStartPipeline}
-            onTryDemo={handleTryDemo}
-          />
-        </div>
-      )}
-
-      {sourceMode === 'chart' && (
-        <Card className="w-full">
-          <CardContent className="pt-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSourceMode(null)}
-                className="gap-1">
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground text-center">
-              Grid source: <strong>provided</strong> — notes will be snapped
-              to this chart&apos;s own tempo map, not a predicted one.
-            </p>
-            <ChartDropZone
-              onLoaded={handleChartPackageLoaded}
-              id="drum-transcription-chart"
-              disabled={isProcessing}
-            />
-            {chartFlowError && (
-              <p className="text-xs text-destructive text-center">
-                {chartFlowError}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      <SourcePicker
+        onFileSelected={handleStartPipeline}
+        onTryDemo={handleTryDemo}
+        onChartLoaded={handleChartPackageLoaded}
+        chartFlowError={chartFlowError}
+        disabled={isProcessing}
+      />
 
       {/* Existing projects */}
       {loadingProjects && (

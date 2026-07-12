@@ -161,6 +161,38 @@ function separationProgressToFraction(p: DrumSeparationProgress): number {
   return lo + (hi - lo) * Math.min(1, Math.max(0, p.percent));
 }
 
+/**
+ * Runs BS-Roformer drum-stem separation for a project, mapping progress into
+ * the pipeline's 'separating' step. Separation requires WebGPU/ONNX and is
+ * allowed to fail (e.g. WebGPU unavailable): failures are swallowed (logged)
+ * so the caller falls back to transcribing the full audio mix rather than
+ * failing the whole pipeline. Shared by all three entry points below
+ * (runPipeline, runPipelineFromChart, resumePipeline) — each still owns its
+ * own "already separated? skip" pre-check and progress bracketing, since
+ * that differs slightly (e.g. runPipelineFromChart never resumes).
+ */
+async function separateDrumsStep(
+  projectId: string,
+  projectName: string,
+  onProgress: PipelineProgressCallback,
+): Promise<void> {
+  try {
+    const storedAudio = await loadAudioForDemucs(projectId);
+    await separateDrums(projectId, storedAudio, sepProgress => {
+      onProgress({
+        step: 'separating',
+        progress: separationProgressToFraction(sepProgress),
+        etaSeconds: sepProgress.etaSeconds,
+        projectId,
+        projectName,
+      });
+    });
+  } catch (err) {
+    console.warn('Stem separation failed, continuing with full mix:', err);
+    onProgress({step: 'separating', progress: 1, projectId, projectName});
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tempo mapping (reuses the /tempo pipeline)
 // ---------------------------------------------------------------------------
@@ -393,31 +425,7 @@ export async function runPipeline(
     });
 
     await updateProject(projectId, {stage: 'separating'});
-
-    try {
-      // Load the interleaved audio from OPFS
-      const storedAudio = await loadAudioForDemucs(projectId);
-
-      await separateDrums(projectId, storedAudio, sepProgress => {
-        onProgress({
-          step: 'separating',
-          progress: separationProgressToFraction(sepProgress),
-          etaSeconds: sepProgress.etaSeconds,
-          projectId,
-          projectName: metadata.name,
-        });
-      });
-    } catch (err) {
-      // Stem separation failed. Log the full error for debugging,
-      // then continue — transcription will use the full audio mix.
-      console.warn('Stem separation failed, continuing with full mix:', err);
-      onProgress({
-        step: 'separating',
-        progress: 1,
-        projectId,
-        projectName: metadata.name,
-      });
-    }
+    await separateDrumsStep(projectId, metadata.name, onProgress);
   }
 
   onProgress({
@@ -593,27 +601,19 @@ export async function runPipelineFromChart(
     projectName: metadata.name,
   });
 
-  // Step 2: Stem separation (identical to runPipeline).
-  onProgress({
-    step: 'separating',
-    progress: 0,
-    projectId,
-    projectName: metadata.name,
-  });
-  await updateProject(projectId, {stage: 'separating'});
-  try {
-    const storedAudio = await loadAudioForDemucs(projectId);
-    await separateDrums(projectId, storedAudio, sepProgress => {
-      onProgress({
-        step: 'separating',
-        progress: separationProgressToFraction(sepProgress),
-        etaSeconds: sepProgress.etaSeconds,
-        projectId,
-        projectName: metadata.name,
-      });
+  // Step 2: Stem separation (identical to runPipeline, including the
+  // already-separated pre-check — inert today since this is always a fresh
+  // project, but kept for consistency with the other two entry points).
+  const stemsExist = await hasDrumStem(projectId);
+  if (!stemsExist) {
+    onProgress({
+      step: 'separating',
+      progress: 0,
+      projectId,
+      projectName: metadata.name,
     });
-  } catch (err) {
-    console.warn('Stem separation failed, continuing with full mix:', err);
+    await updateProject(projectId, {stage: 'separating'});
+    await separateDrumsStep(projectId, metadata.name, onProgress);
   }
   onProgress({
     step: 'separating',
@@ -732,27 +732,7 @@ export async function resumePipeline(
     });
 
     await updateProject(projectId, {stage: 'separating'});
-
-    try {
-      const storedAudio = await loadAudioForDemucs(projectId);
-
-      await separateDrums(projectId, storedAudio, sepProgress => {
-        onProgress({
-          step: 'separating',
-          progress: separationProgressToFraction(sepProgress),
-          projectId,
-          projectName: meta.name,
-        });
-      });
-    } catch (err) {
-      console.warn('Stem separation failed, continuing with full mix:', err);
-      onProgress({
-        step: 'separating',
-        progress: 1,
-        projectId,
-        projectName: meta.name,
-      });
-    }
+    await separateDrumsStep(projectId, meta.name, onProgress);
   }
 
   // Step 3: Tempo mapping (if needed). Resumed projects have no source

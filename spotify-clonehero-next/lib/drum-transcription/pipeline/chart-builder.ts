@@ -65,6 +65,48 @@ export interface TempoLike {
   beatsPerMinute: number;
 }
 
+/** One ExpertDrums track's shape, used by both {@link buildChartDocument}
+ * (fresh chart) and {@link buildChartDocumentFromExistingChart} (add-or-
+ * replace onto an existing chart). */
+type DrumsTrack = ChartDocument['parsedChart']['trackData'][number];
+
+/** An empty ExpertDrums track skeleton — every non-note field a fresh drums
+ * track needs, with no notes yet (see {@link addNotesToDrumsTrack}). */
+function createEmptyDrumsTrack(): DrumsTrack {
+  return {
+    instrument: 'drums',
+    difficulty: 'expert',
+    starPowerSections: [],
+    rejectedStarPowerSections: [],
+    drumFreestyleSections: [],
+    soloSections: [],
+    flexLanes: [],
+    noteEventGroups: [],
+    textEvents: [],
+    versusPhrases: [],
+    animations: [],
+    unrecognizedMidiEvents: [],
+  } as never as DrumsTrack;
+}
+
+/** Adds each snapped {@link DrumNote} to a drums track via chart-edit's
+ * addDrumNote (mutates `track` in place). */
+function addNotesToDrumsTrack(track: DrumsTrack, notes: DrumNote[]): void {
+  for (const note of notes) {
+    addDrumNote(track, {
+      tick: note.tick,
+      type: note.type,
+      length: note.length,
+      flags: {
+        cymbal: note.flags.cymbal,
+        doubleKick: note.flags.doubleKick,
+        accent: note.flags.accent,
+        ghost: note.flags.ghost,
+      },
+    });
+  }
+}
+
 /**
  * Build a ChartDocument from raw drum events.
  *
@@ -131,39 +173,9 @@ export function buildChartDocument(
   const drumNotes = dedupSnappedNotes(events, tempos, RESOLUTION);
 
   // Add an ExpertDrums track
-  parsedChart.trackData = [
-    {
-      instrument: 'drums',
-      difficulty: 'expert',
-      starPowerSections: [],
-      rejectedStarPowerSections: [],
-      drumFreestyleSections: [],
-      soloSections: [],
-      flexLanes: [],
-      noteEventGroups: [],
-      textEvents: [],
-      versusPhrases: [],
-      animations: [],
-      unrecognizedMidiEvents: [],
-    } as never,
-  ];
-
-  const track = parsedChart.trackData[0];
-
-  // Add each drum note using chart-edit's addDrumNote
-  for (const note of drumNotes) {
-    addDrumNote(track, {
-      tick: note.tick,
-      type: note.type,
-      length: note.length,
-      flags: {
-        cymbal: note.flags.cymbal,
-        doubleKick: note.flags.doubleKick,
-        accent: note.flags.accent,
-        ghost: note.flags.ghost,
-      },
-    });
-  }
+  const track = createEmptyDrumsTrack();
+  parsedChart.trackData = [track];
+  addNotesToDrumsTrack(track, drumNotes);
 
   // Calculate end tick (slightly after last note or based on duration),
   // using the real tempo map to convert the audio duration.
@@ -303,34 +315,8 @@ export function buildChartDocumentFromExistingChart(
   }));
   const drumNotes = dedupSnappedNotes(events, tempos, resolution);
 
-  const drumsTrack = {
-    instrument: 'drums',
-    difficulty: 'expert',
-    starPowerSections: [],
-    rejectedStarPowerSections: [],
-    drumFreestyleSections: [],
-    soloSections: [],
-    flexLanes: [],
-    noteEventGroups: [],
-    textEvents: [],
-    versusPhrases: [],
-    animations: [],
-    unrecognizedMidiEvents: [],
-  } as never as ChartDocument['parsedChart']['trackData'][number];
-
-  for (const note of drumNotes) {
-    addDrumNote(drumsTrack, {
-      tick: note.tick,
-      type: note.type,
-      length: note.length,
-      flags: {
-        cymbal: note.flags.cymbal,
-        doubleKick: note.flags.doubleKick,
-        accent: note.flags.accent,
-        ghost: note.flags.ghost,
-      },
-    });
-  }
+  const drumsTrack = createEmptyDrumsTrack();
+  addNotesToDrumsTrack(drumsTrack, drumNotes);
 
   // Add-or-replace: if the existing chart already had an Expert Drums track,
   // replace it in place; otherwise append the new track.
