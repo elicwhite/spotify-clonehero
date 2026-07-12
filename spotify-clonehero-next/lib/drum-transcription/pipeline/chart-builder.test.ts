@@ -1,4 +1,4 @@
-import {buildChartDocument, RESOLUTION} from './chart-builder';
+import {buildChartDocument} from './chart-builder';
 import type {LinkSegSections} from '@/lib/tempo-map/types';
 
 // Flat 120 BPM 4/4 (synctrack=null): 1 beat = 0.5 s = 480 ticks; 1 bar = 2 s = 1920 ticks.
