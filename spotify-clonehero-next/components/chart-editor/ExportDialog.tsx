@@ -75,6 +75,25 @@ interface ExportDialogProps {
    * when false the audio is always included as-is. Default: false.
    */
   showStemChoice?: boolean | undefined;
+  /**
+   * Provides passthrough asset files (e.g. album art, video, secondary
+   * audio) to append verbatim to the package — used by the chart-flow
+   * feature to round-trip an existing chart package's non-audio assets.
+   * Omitted (or empty) by pages that have none.
+   */
+  getExtraAssets?: (() => Promise<AssetFile[]>) | undefined;
+  /**
+   * Preselects the package format select (e.g. to match the original
+   * package's format when re-exporting an existing chart). Defaults to
+   * 'zip' when omitted.
+   */
+  defaultFormat?: PackageFormat | undefined;
+}
+
+/** A passthrough asset file for package assembly (see {@link getExtraAssets}). */
+export interface AssetFile {
+  fileName: string;
+  data: Uint8Array;
 }
 
 type PackageFormat = 'zip' | 'sng';
@@ -99,9 +118,12 @@ export default function ExportDialog({
   getChartText,
   getAudioSources,
   showStemChoice = false,
+  getExtraAssets,
+  defaultFormat = 'zip',
 }: ExportDialogProps) {
   const [open, setOpen] = useState(false);
-  const [packageFormat, setPackageFormat] = useState<PackageFormat>('zip');
+  const [packageFormat, setPackageFormat] =
+    useState<PackageFormat>(defaultFormat);
   const [includeStems, setIncludeStems] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -145,7 +167,16 @@ export default function ExportDialog({
         }
       }
 
-      // 3. Assemble notes.chart + song.ini + audio into a flat file list
+      // 3. Assemble notes.chart + song.ini + audio (+ any passthrough
+      //    assets from an existing chart package) into a flat file list.
+      let extraAssets: AssetFile[] = [];
+      if (getExtraAssets) {
+        try {
+          extraAssets = await getExtraAssets();
+        } catch (err) {
+          console.warn('Failed to get extra assets:', err);
+        }
+      }
       const cleanMetadata = {
         name: metadata.name.trim() || 'Untitled',
         artist: metadata.artist.trim(),
@@ -155,6 +186,7 @@ export default function ExportDialog({
         chartText,
         metadata: cleanMetadata,
         audioSources: audioFiles,
+        extraAssets,
       });
 
       // 4. Package as ZIP or SNG
@@ -196,6 +228,7 @@ export default function ExportDialog({
     getChartText,
     getAudioSources,
     showStemChoice,
+    getExtraAssets,
   ]);
 
   return (

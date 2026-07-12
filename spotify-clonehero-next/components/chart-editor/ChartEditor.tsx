@@ -5,7 +5,7 @@ import {Pencil} from 'lucide-react';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type {AudioSource} from './ExportDialog';
+import type {AudioSource, AssetFile} from './ExportDialog';
 
 import HighwayEditor from './HighwayEditor';
 import TransportControls from './TransportControls';
@@ -79,6 +79,15 @@ export interface ChartEditorProps {
    * audio. Enables the "Include stems?" toggle in the export dialog.
    */
   showStemChoice?: boolean | undefined;
+  /**
+   * Callback to provide passthrough asset files (e.g. album art, video,
+   * secondary audio) recovered from an existing chart package, so export can
+   * round-trip them (chart-flow feature). Omitted by pages with none.
+   */
+  getExtraAssets?: (() => Promise<AssetFile[]>) | undefined;
+  /** Preselects the export dialog's package format (e.g. to match an
+   * existing chart package's original format). */
+  defaultExportFormat?: 'zip' | 'sng' | undefined;
   /** Callback when notes are modified (e.g. for marking reviewed). */
   onNotesModified?: ((noteIds: string[]) => void) | undefined;
 
@@ -127,6 +136,8 @@ export default function ChartEditor({
   getChartText,
   getAudioSources,
   showStemChoice,
+  getExtraAssets,
+  defaultExportFormat,
   onNotesModified,
   reviewedNoteIds,
 }: ChartEditorProps) {
@@ -225,6 +236,8 @@ export default function ChartEditor({
                 getChartText={getChartText}
                 getAudioSources={getAudioSources}
                 showStemChoice={showStemChoice}
+                getExtraAssets={getExtraAssets}
+                defaultFormat={defaultExportFormat}
               />
             </div>
           )}

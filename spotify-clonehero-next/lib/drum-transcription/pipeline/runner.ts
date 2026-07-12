@@ -165,7 +165,10 @@ function separationProgressToFraction(p: DrumSeparationProgress): number {
 // Tempo mapping (reuses the /tempo pipeline)
 // ---------------------------------------------------------------------------
 
-const SYNCTRACK_FILE = 'synctrack.json';
+/** Filename for the persisted predicted tempo map (StoredSynctrack). Exported
+ * so other consumers (e.g. the F63 confidence gauge) can read it without
+ * duplicating the string. */
+export const SYNCTRACK_FILE = 'synctrack.json';
 
 /** Sub-ranges of the 'tempo-mapping' step assigned to each tempo-pipeline
  * stage, so the dialog's bar moves monotonically through the whole step. */

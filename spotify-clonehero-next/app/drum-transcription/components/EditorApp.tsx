@@ -10,14 +10,21 @@ import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import {
   getProject,
   readProjectText,
+  readProjectJSON,
   writeProjectText,
   projectFileExists,
   updateProject,
   loadAudioMeta,
   readOriginalAudio,
+  readProjectAssets,
+  readPackageInfo,
   type ProjectMetadata,
   type AudioStorageMeta,
 } from '@/lib/drum-transcription/storage/opfs';
+import {SYNCTRACK_FILE} from '@/lib/drum-transcription/pipeline/runner';
+import type {StoredSynctrack} from '@/lib/drum-transcription/pipeline/chart-builder';
+import {computeSongConfidence} from '@/lib/drum-transcription/confidence-gauge';
+import ConfidenceGauge from './ConfidenceGauge';
 import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
@@ -85,6 +92,18 @@ function EditorAppInner({projectId}: {projectId: string}) {
   // into render-visible state so ChartEditor and StemVolumeControls
   // receive a stable prop without reading ref.current during render.
   const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
+  // F63 confidence gauge input: BPM values from the PREDICTED tempo map, or
+  // null when the chart's grid came from an existing chart the user
+  // supplied (chart-flow path 3a) rather than a prediction — see
+  // lib/drum-transcription/confidence-gauge.ts.
+  const [predictedTempoBpms, setPredictedTempoBpms] = useState<
+    number[] | null
+  >(null);
+  // Original package format (chart-flow feature), for preselecting the
+  // export dialog's format. null for audio-only projects.
+  const [packageSourceFormat, setPackageSourceFormat] = useState<
+    'folder' | 'zip' | 'sng' | null
+  >(null);
 
   // Build the save function for auto-save
   const saveFn = useCallback(async () => {
@@ -325,6 +344,37 @@ function EditorAppInner({projectId}: {projectId: string}) {
           }
         } catch (err) {
           console.warn('Failed to load confidence data:', err);
+        }
+
+        // 6b. Load the predicted tempo map's BPM values for the F63
+        // confidence gauge (chart-flow projects have no synctrack.json —
+        // their grid came from the user's own chart, not a prediction).
+        try {
+          const hasSynctrack = await projectFileExists(
+            projectId,
+            SYNCTRACK_FILE,
+          );
+          if (hasSynctrack) {
+            const stored = await readProjectJSON<StoredSynctrack>(
+              projectId,
+              SYNCTRACK_FILE,
+            );
+            setPredictedTempoBpms(
+              stored.synctrack.tempos.map(t => t.bpm),
+            );
+          }
+        } catch (err) {
+          console.warn('Failed to load synctrack for confidence gauge:', err);
+        }
+
+        // 6c. Load original package format (chart-flow feature), to
+        // preselect the export dialog's format. Absent for audio-only
+        // projects.
+        try {
+          const info = await readPackageInfo(projectId);
+          if (info) setPackageSourceFormat(info.sourceFormat);
+        } catch (err) {
+          console.warn('Failed to load package info:', err);
         }
 
         // 7. Load review progress (if available)
@@ -621,6 +671,21 @@ function EditorAppInner({projectId}: {projectId: string}) {
     [projectId, audioMeta],
   );
 
+  // Passthrough assets from an existing chart package (chart-flow feature),
+  // for export round-tripping. Returns [] for audio-only projects.
+  const getExtraAssets = useCallback(async () => {
+    return readProjectAssets(projectId);
+  }, [projectId]);
+
+  // F63 confidence gauge: fraction of low-confidence model frames (always
+  // available) + predicted-tempo instability (null for the chart-flow path,
+  // whose grid came from the user's own chart, not a prediction).
+  const songConfidence = useMemo(
+    () => computeSongConfidence(dtState.confidence.values(), predictedTempoBpms),
+    [dtState.confidence, predictedTempoBpms],
+  );
+  const gridIsProvided = projectMeta?.gridSource === 'provided';
+
   if (loadingState === 'loading') {
     return (
       <div className="flex flex-col items-center justify-center flex-1 gap-4">
@@ -661,10 +726,18 @@ function EditorAppInner({projectId}: {projectId: string}) {
       getChartText={getChartText}
       getAudioSources={getAudioSources}
       showStemChoice
+      getExtraAssets={getExtraAssets}
+      defaultExportFormat={
+        packageSourceFormat === 'sng' ? 'sng' : packageSourceFormat ? 'zip' : undefined
+      }
       onNotesModified={handleNotesModified}
       reviewedNoteIds={dtState.reviewedNoteIds}
       leftPanelChildren={
         <>
+          <ConfidenceGauge
+            confidence={songConfidence}
+            gridIsProvided={gridIsProvided}
+          />
           <ConfidencePanel />
           <StemVolumeControls audioManager={audioManager} />
         </>

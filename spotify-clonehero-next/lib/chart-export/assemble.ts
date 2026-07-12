@@ -40,6 +40,14 @@ export interface AssembleChartFilesOptions {
   metadata: ChartPackageMetadata;
   /** Audio stems to bundle alongside the chart. */
   audioSources?: PackageAudioSource[];
+  /**
+   * Passthrough files to append verbatim (e.g. album art, video, secondary
+   * audio) — typically assets recovered from an original chart package that
+   * this export is round-tripping (chart-flow feature). Any entry whose
+   * `fileName` collides with `notes.chart`/`song.ini` or an `audioSources`
+   * entry is skipped, since those are already authoritative above.
+   */
+  extraAssets?: FileEntry[];
 }
 
 /**
@@ -54,6 +62,7 @@ export function assembleChartFiles({
   chartText,
   metadata,
   audioSources = [],
+  extraAssets = [],
 }: AssembleChartFilesOptions): FileEntry[] {
   const chartBytes = new TextEncoder().encode(chartText);
   const chartDoc = readChart([{fileName: 'notes.chart', data: chartBytes}]);
@@ -86,6 +95,13 @@ export function assembleChartFiles({
           ? audio.data
           : new Uint8Array(audio.data),
     });
+  }
+
+  const taken = new Set(entries.map(e => e.fileName.toLowerCase()));
+  for (const asset of extraAssets) {
+    if (taken.has(asset.fileName.toLowerCase())) continue;
+    entries.push(asset);
+    taken.add(asset.fileName.toLowerCase());
   }
 
   return entries;
