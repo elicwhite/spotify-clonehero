@@ -58,19 +58,23 @@ const MODEL_ASSET_BASE_URL = 'https://assets.musiccharts.tools/models';
  * thresholds-wiring note: previously the thresholds filename never carried a
  * version tag, so there was no way to tell from the filename alone whether a
  * hosted thresholds file was actually tuned for the checkpoint in use). */
-const CRNN_MODEL_VERSION = 't3';
+const CRNN_MODEL_VERSION = 't4';
 
-/** URL for the stereo 256-mel CRNN ONNX model — the t3/control checkpoint
- * (85f764d_stageb_originalgt_control2plane; PIPELINE_AUDIT.md System C
- * promotion, 2026-07-08 — label-revert-only, plain 2-plane stereo mel, no
- * HPSS, decoded with tom-reorder OFF; beats t2 on every family on the
- * product-edit metric, -6.8% aggregate). Architecturally identical to the
- * t2 export (23.67M params, same mel+context -> 9-class-logits IO) — only
- * the weights change. Hosted on R2 (assets.musiccharts.tools); the local
- * public/models/ copy is gitignored and never deploys, so a same-origin URL
- * 404s in production. The t3 file MUST be uploaded to R2 under this key or
- * model load 404s. */
-const CRNN_MODEL_URL = `${MODEL_ASSET_BASE_URL}/crnn_stereo_256mel_${CRNN_MODEL_VERSION}.onnx`;
+/** URL for the stereo 256-mel CRNN ONNX model — the t4/diagJ checkpoint
+ * (results/v2_retrain/phase1/ckpt_diagJ, deploy-context lever; FLIGHT_PLAN.md,
+ * 2026-07-11 — confirmed new baseline, clears the ship gate vs deployed t3 on
+ * every family/quantile). Architecturally identical to the t3 export (23.67M
+ * params, same mel+context -> 9-class-logits IO) — only the weights change.
+ * Hosted on R2 (assets.musiccharts.tools); the local public/models/ copy is
+ * gitignored and never deploys, so a same-origin URL 404s in production. The
+ * t4 file MUST be uploaded to R2 under this key or model load 404s in prod.
+ * In development, we load same-origin from public/models/ instead, since the
+ * CDN won't have the t4 file until it's uploaded there. */
+const CRNN_MODEL_FILENAME = `crnn_stereo_256mel_${CRNN_MODEL_VERSION}.onnx`;
+const CRNN_MODEL_URL =
+  process.env.NODE_ENV === 'development'
+    ? `/models/${CRNN_MODEL_FILENAME}`
+    : `${MODEL_ASSET_BASE_URL}/${CRNN_MODEL_FILENAME}`;
 
 /** Per-lane peak-picking thresholds config, version-tagged to match
  * CRNN_MODEL_VERSION (filename convention: crnn_stereo_256mel.<version>.thresholds.json).
@@ -82,13 +86,14 @@ const CRNN_THRESHOLDS_FILENAME = `crnn_stereo_256mel.${CRNN_MODEL_VERSION}.thres
 const CRNN_THRESHOLDS_URL = `/models/${CRNN_THRESHOLDS_FILENAME}`;
 const CRNN_THRESHOLDS_URL_FALLBACK = `${MODEL_ASSET_BASE_URL}/${CRNN_THRESHOLDS_FILENAME}`;
 
-/** System-C tuned per-lane thresholds (lane order: kick, snare, high-tom,
- * mid-tom, floor-tom, hihat, crash, crash-2, ride; PIPELINE_AUDIT.md,
- * 2026-07-08 — control model + tom-reorder OFF, matches ml/types.ts
- * CRNN_THRESHOLDS). A threshold > 1.5 disables the lane entirely (crash-2 =
- * 2.0 is intentional). Used when the thresholds JSON cannot be fetched. */
+/** diagJ tuned per-lane thresholds (lane order: kick, snare, high-tom,
+ * mid-tom, floor-tom, hihat, crash, crash-2, ride; FLIGHT_PLAN.md,
+ * 2026-07-11 — deploy-context checkpoint + tom-reorder OFF, matches
+ * crnn_stereo_256mel.t4.thresholds.json). A threshold > 1.5 disables the
+ * lane entirely (crash-2 = 2.0 is intentional). Used when the thresholds
+ * JSON cannot be fetched. */
 const PROVISIONAL_THRESHOLDS: number[] = [
-  0.5, 0.55, 0.75, 0.85, 0.65, 0.55, 0.7, 2.0, 0.55,
+  0.55, 0.6, 0.8, 0.8, 0.8, 0.6, 0.7, 2.0, 0.7,
 ];
 
 /** Expected shape of the per-model thresholds JSON (see e.g.

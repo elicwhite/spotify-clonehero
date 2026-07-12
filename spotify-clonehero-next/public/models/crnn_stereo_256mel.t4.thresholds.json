@@ -1,0 +1,15 @@
+{
+  "thresholds": [0.55, 0.6, 0.8, 0.8, 0.8, 0.6, 0.7, 2.0, 0.7],
+  "note": "diagJ tuned array (FLIGHT_PLAN.md, 2026-07-11): deploy-context checkpoint (results/v2_retrain/phase1/ckpt_diagJ, SONG_CONTEXT_DEPLOY lever) tom-reorder OFF, coordinate-ascent tuned on pack-VAL. From results/v2_retrain/phase1/phase1_diagJ_deployctx/tuned_thresholds.json (R2). Confirmed new baseline: clears the ship gate vs deployed t3 on every family/quantile (gt edit_rate_w=0.2486, tom=0.9265, cym=0.6465 vs t3).",
+  "laneOrder": [
+    "kick",
+    "snare",
+    "high-tom",
+    "mid-tom",
+    "floor-tom",
+    "hihat",
+    "crash",
+    "crash-2",
+    "ride"
+  ]
+}

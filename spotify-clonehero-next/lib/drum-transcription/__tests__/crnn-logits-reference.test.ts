@@ -5,8 +5,8 @@
  * do NOT cover. mel-reference.test.ts diffs the mel port; postprocess-
  * reference.test.ts feeds python's raw activations into the JS post-block. But
  * neither ran the CRNN model in onnxruntime-web and diffed it against python
- * onnxruntime. This test does: it loads the SAME t3/control .onnx the app
- * ships (public/models/crnn_stereo_256mel_t3.onnx) via onnxruntime-web, runs
+ * onnxruntime. This test does: it loads the SAME t4/diagJ .onnx the app
+ * ships (public/models/crnn_stereo_256mel_t4.onnx) via onnxruntime-web, runs
  * the identical windowing crnn-worker.ts runs (WINDOW_SIZE=500,
  * WINDOW_STRIDE=375, zero-pad final window, sigmoid + overlap-average) over
  * the python-computed fixture mel, and diffs against the python-onnxruntime
@@ -15,14 +15,17 @@
  * Feeding the shared python mel to both sides isolates the model (mel parity is
  * covered by mel-reference.test.ts).
  *
- * The 94 MB t3 .onnx is gitignored (never committed); this is the ONE
+ * The 90 MB t4 .onnx is gitignored (never committed); this is the ONE
  * checkpoint-specific parity gate, so a missing model FAILS LOUDLY here
  * (F36, PIPELINE_AUDIT.md — a silent skip let `pnpm test:onnx-parity` go
  * green without ever touching the shipped model). Set ALLOW_MISSING_MODEL=1
  * to explicitly skip with a loud warning (e.g. a CI lane that intentionally
  * doesn't have the model). Regenerate the fixture after any model change:
- *   drum-to-chart/.venv/bin/python3 scripts/dump_crnn_logits_reference.py
- * then copy scripts/frontend_ref_fixtures/crnn-logits-reference.json here.
+ *   drum-to-chart/.venv/bin/python3 scripts/dump_crnn_logits_reference.py \
+ *     --onnx scripts/crnn_stereo_256mel_t4.onnx \
+ *     --model-name crnn_stereo_256mel_t4.onnx \
+ *     --out scripts/frontend_ref_fixtures/crnn-logits-reference-t4.json
+ * then copy scripts/frontend_ref_fixtures/crnn-logits-reference-t4.json here.
  *
  * The onnxruntime-web wasm backend needs Node's --experimental-vm-modules to
  * load under jest's VM sandbox, so this suite only runs its assertions when
@@ -47,7 +50,7 @@ import {
 const FIXTURE_PATH = path.join(
   __dirname,
   'fixtures',
-  'crnn-logits-reference.json',
+  'crnn-logits-reference-t4.json',
 );
 const MODEL_PATH = path.join(
   __dirname,
@@ -56,7 +59,7 @@ const MODEL_PATH = path.join(
   '..',
   'public',
   'models',
-  'crnn_stereo_256mel_t3.onnx',
+  'crnn_stereo_256mel_t4.onnx',
 );
 
 interface CrnnFixture {
@@ -110,7 +113,7 @@ const shouldRun = enabled && haveModel;
 const describeIf = shouldRun || failLoud ? describe : describe.skip;
 
 describeIf(
-  'CRNN inference: onnxruntime-web(t3) vs python onnxruntime(t3)',
+  'CRNN inference: onnxruntime-web(t4) vs python onnxruntime(t4)',
   () => {
     if (failLoud) {
       it('FAILS LOUDLY: model missing and RUN_ONNX_PARITY=1 (F36)', () => {
@@ -203,7 +206,7 @@ describeIf(
     }, 120000);
 
     it('fixture matches this model + window config', () => {
-      expect(fixture.model).toBe('crnn_stereo_256mel_t3.onnx');
+      expect(fixture.model).toBe('crnn_stereo_256mel_t4.onnx');
       expect(fixture.nInst).toBe(NUM_DRUM_CLASSES);
       expect(fixture.windowSize).toBe(WINDOW_SIZE);
       expect(fixture.windowStride).toBe(WINDOW_STRIDE);
