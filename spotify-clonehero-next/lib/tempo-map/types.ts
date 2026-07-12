@@ -29,6 +29,7 @@ export interface PipelineProgress {
     | 'separate'
     | 'beats-fullmix'
     | 'beats-drums'
+    | 'sections'
     | 'convert';
   /** 0..1 within the stage, when known. */
   percent?: number;
@@ -38,8 +39,18 @@ export interface PipelineProgress {
   detail?: string;
 }
 
+/** LinkSeg section labeling: functional-section boundaries + labels.
+ * `times` has length S+1 (segment edges in seconds, incl. 0 and duration);
+ * `labels` has length S (one product-facing name per segment). */
+export interface LinkSegSections {
+  times: number[];
+  labels: string[];
+}
+
 export interface PipelineResult {
   synctrack: Synctrack;
+  /** LinkSeg functional section labels (null if too few beats or model failed). */
+  sections: LinkSegSections | null;
   /** Drum-onset offset in ms (diagnostic). */
   drumOnsetOffsetMs: number | null;
   /** Full-mix PP beat count (diagnostic). */

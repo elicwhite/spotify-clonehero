@@ -49,15 +49,18 @@ export interface DrumTranscriber {
 // CRNN Transcriber (Web Worker-based inference)
 // ---------------------------------------------------------------------------
 
-/** URL for the stereo 256-mel CRNN ONNX model — the t2 checkpoint
- * (5ec85b1_adt0_confirm_t2, val_f1 0.7145; torch↔ONNX parity 2.07e-6).
- * Architecturally identical to the prior 14eca18 export (23.67M params, same
- * mel+context -> 9-class-logits IO) — only the weights change. Hosted on R2
- * (assets.musiccharts.tools); the local public/models/ copy is gitignored and
- * never deploys, so a same-origin URL 404s in production. The t2 file MUST be
- * uploaded to R2 under this key or model load 404s. */
+/** URL for the stereo 256-mel CRNN ONNX model — the t3/control checkpoint
+ * (85f764d_stageb_originalgt_control2plane; PIPELINE_AUDIT.md System C
+ * promotion, 2026-07-08 — label-revert-only, plain 2-plane stereo mel, no
+ * HPSS, decoded with tom-reorder OFF; beats t2 on every family on the
+ * product-edit metric, -6.8% aggregate). Architecturally identical to the
+ * t2 export (23.67M params, same mel+context -> 9-class-logits IO) — only
+ * the weights change. Hosted on R2 (assets.musiccharts.tools); the local
+ * public/models/ copy is gitignored and never deploys, so a same-origin URL
+ * 404s in production. The t3 file MUST be uploaded to R2 under this key or
+ * model load 404s. */
 const CRNN_MODEL_URL =
-  'https://assets.musiccharts.tools/models/crnn_stereo_256mel_t2.onnx';
+  'https://assets.musiccharts.tools/models/crnn_stereo_256mel_t3.onnx';
 
 /** Per-lane peak-picking thresholds config. The same-origin copy
  * (public/models/crnn_stereo_256mel.thresholds.json) IS committed (tiny JSON,
@@ -67,12 +70,13 @@ const CRNN_THRESHOLDS_URL = '/models/crnn_stereo_256mel.thresholds.json';
 const CRNN_THRESHOLDS_URL_FALLBACK =
   'https://assets.musiccharts.tools/models/crnn_stereo_256mel.thresholds.json';
 
-/** PROVISIONAL per-lane thresholds (lane order: kick, snare, high-tom,
- * mid-tom, floor-tom, hihat, crash, crash-2, ride). A threshold > 1.5
- * disables the lane entirely (crash-2 = 2.0 is intentional). Used when the
- * thresholds JSON cannot be fetched. */
+/** System-C tuned per-lane thresholds (lane order: kick, snare, high-tom,
+ * mid-tom, floor-tom, hihat, crash, crash-2, ride; PIPELINE_AUDIT.md,
+ * 2026-07-08 — control model + tom-reorder OFF, matches ml/types.ts
+ * CRNN_THRESHOLDS). A threshold > 1.5 disables the lane entirely (crash-2 =
+ * 2.0 is intentional). Used when the thresholds JSON cannot be fetched. */
 const PROVISIONAL_THRESHOLDS: number[] = [
-  0.5, 0.5, 0.75, 0.75, 0.75, 0.65, 0.75, 2.0, 0.65,
+  0.5, 0.55, 0.75, 0.85, 0.65, 0.55, 0.7, 2.0, 0.55,
 ];
 
 /**
@@ -113,7 +117,8 @@ async function loadThresholds(): Promise<number[]> {
  *      10x -> 5120)
  *   3. Windowed inference (500-frame windows, stride 375, averaged overlaps)
  *      + sigmoid -> per-frame activations (T, 9)
- *   4. Post-processing: per-song tom re-order, per-frame lane constraints
+ *   4. Post-processing: per-frame lane constraints (tom pitch re-order OFF
+ *      for the t3/control lineage — F50, PIPELINE_AUDIT.md)
  *   5. Peak picking per lane with the provided per-lane thresholds
  */
 export class CrnnTranscriber implements DrumTranscriber {

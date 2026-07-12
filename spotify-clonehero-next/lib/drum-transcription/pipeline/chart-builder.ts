@@ -31,7 +31,7 @@ import {
 } from '@/lib/tempo-map/swap-synctrack';
 import {snapGroupToGrid, snapTickUniform} from '@/lib/tempo-map/quantize-grid';
 import type {SnapMode} from '../ml/class-mapping';
-import type {Synctrack} from '@/lib/tempo-map/types';
+import type {LinkSegSections, Synctrack} from '@/lib/tempo-map/types';
 import type {MeterStats} from '@/lib/tempo-map/meter-confidence';
 import {
   buildTimedTempos,
@@ -56,6 +56,8 @@ export interface StoredSynctrack {
   /** Meter regularity diagnostics for the editor (irregular-meter warning). */
   meterStats: MeterStats | null;
   drumOnsetOffsetMs: number | null;
+  /** LinkSeg functional section labels (null when unavailable). */
+  sections?: LinkSegSections | null;
 }
 
 export interface TempoLike {
@@ -75,6 +77,7 @@ export function buildChartDocument(
   songName: string,
   durationSeconds: number,
   synctrack?: Synctrack | null,
+  sections?: LinkSegSections | null,
 ): ChartDocument {
   // Create an empty parsed chart (single tempo + 4/4 time signature)
   let parsedChart = createEmptyChart({
@@ -182,27 +185,78 @@ export function buildChartDocument(
 
   const doc: ChartDocument = {parsedChart, assets: []};
 
-  // Create section markers every 4 bars, walking real measure boundaries
-  // under the (possibly variable) time signatures.
   const timeSigs = parsedChart.timeSignatures.map(ts => ({
     tick: ts.tick,
     numerator: ts.numerator,
     denominator: ts.denominator,
   }));
-  let barStartTick = 0;
-  let bar = 0;
-  while (barStartTick < endTick) {
-    if (bar % 4 === 0) {
-      addSection(
-        doc,
-        barStartTick,
-        bar === 0 ? 'Intro' : `Section ${bar / 4 + 1}`,
-      );
+
+  // Enumerate real measure (bar-line) ticks up to the chart end.
+  const barTicks: number[] = [];
+  {
+    let t = 0;
+    while (t < endTick) {
+      barTicks.push(t);
+      const next = getNextMeasureTick(t, 1, RESOLUTION, timeSigs);
+      if (next <= t) break; // safety: never loop in place
+      t = next;
     }
-    const next = getNextMeasureTick(barStartTick, 1, RESOLUTION, timeSigs);
-    if (next <= barStartTick) break; // safety: never loop in place
-    barStartTick = next;
-    bar++;
+  }
+  const snapToBar = (tick: number): number => {
+    // nearest bar-line to `tick`
+    let best = barTicks[0];
+    let bestD = Math.abs(tick - best);
+    for (let i = 1; i < barTicks.length; i++) {
+      const d = Math.abs(tick - barTicks[i]);
+      if (d < bestD) {
+        bestD = d;
+        best = barTicks[i];
+      } else if (barTicks[i] > tick) {
+        break; // barTicks ascending: distance only grows past `tick`
+      }
+    }
+    return best;
+  };
+
+  if (sections && sections.labels.length > 0) {
+    // LinkSeg functional labels: a marker at each segment start (times[0..S-1]),
+    // snapped to the nearest bar-line. Number repeated labels (Verse 1, Verse 2, ...).
+    const total = new Map<string, number>();
+    for (const name of sections.labels)
+      total.set(name, (total.get(name) ?? 0) + 1);
+    const seen = new Map<string, number>();
+    let prevTick = -1;
+    for (let i = 0; i < sections.labels.length; i++) {
+      const base = sections.labels[i];
+      const rawTick = msToTick(sections.times[i] * 1000, timedTempos, RESOLUTION);
+      const tick = snapToBar(rawTick);
+      // If two boundaries snap to the same bar-line, keep the first and skip this
+      // one WITHOUT advancing the repeat counter — otherwise addSection would
+      // replace the prior marker and leave an orphan (e.g. "Verse 2" with no "Verse 1").
+      if (tick === prevTick) continue;
+      const idx = (seen.get(base) ?? 0) + 1;
+      seen.set(base, idx);
+      const name = (total.get(base) ?? 0) > 1 ? `${base} ${idx}` : base;
+      addSection(doc, tick, name);
+      prevTick = tick;
+    }
+  } else {
+    // Fallback (no LinkSeg): section markers every 4 bars.
+    let barStartTick = 0;
+    let bar = 0;
+    while (barStartTick < endTick) {
+      if (bar % 4 === 0) {
+        addSection(
+          doc,
+          barStartTick,
+          bar === 0 ? 'Intro' : `Section ${bar / 4 + 1}`,
+        );
+      }
+      const next = getNextMeasureTick(barStartTick, 1, RESOLUTION, timeSigs);
+      if (next <= barStartTick) break; // safety: never loop in place
+      barStartTick = next;
+      bar++;
+    }
   }
 
   return doc;

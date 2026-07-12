@@ -5,19 +5,22 @@
  * do NOT cover. mel-reference.test.ts diffs the mel port; postprocess-
  * reference.test.ts feeds python's raw activations into the JS post-block. But
  * neither ran the CRNN model in onnxruntime-web and diffed it against python
- * onnxruntime. This test does: it loads the SAME t2 .onnx the app ships
- * (public/models/crnn_stereo_256mel_t2.onnx) via onnxruntime-web, runs the
- * identical windowing crnn-worker.ts runs (WINDOW_SIZE=500, WINDOW_STRIDE=375,
- * zero-pad final window, sigmoid + overlap-average) over the python-computed
- * fixture mel, and diffs against the python-onnxruntime reference produced by
- * drum-to-chart/scripts/dump_crnn_logits_reference.py.
+ * onnxruntime. This test does: it loads the SAME t3/control .onnx the app
+ * ships (public/models/crnn_stereo_256mel_t3.onnx) via onnxruntime-web, runs
+ * the identical windowing crnn-worker.ts runs (WINDOW_SIZE=500,
+ * WINDOW_STRIDE=375, zero-pad final window, sigmoid + overlap-average) over
+ * the python-computed fixture mel, and diffs against the python-onnxruntime
+ * reference produced by drum-to-chart/scripts/dump_crnn_logits_reference.py.
  *
  * Feeding the shared python mel to both sides isolates the model (mel parity is
  * covered by mel-reference.test.ts).
  *
- * The 94 MB t2 .onnx is gitignored (never committed); this test SKIPS if it is
- * absent so CI without the model stays green, but locally it is a real gate.
- * Regenerate the fixture after any model change:
+ * The 94 MB t3 .onnx is gitignored (never committed); this is the ONE
+ * checkpoint-specific parity gate, so a missing model FAILS LOUDLY here
+ * (F36, PIPELINE_AUDIT.md — a silent skip let `pnpm test:onnx-parity` go
+ * green without ever touching the shipped model). Set ALLOW_MISSING_MODEL=1
+ * to explicitly skip with a loud warning (e.g. a CI lane that intentionally
+ * doesn't have the model). Regenerate the fixture after any model change:
  *   drum-to-chart/.venv/bin/python3 scripts/dump_crnn_logits_reference.py
  * then copy scripts/frontend_ref_fixtures/crnn-logits-reference.json here.
  *
@@ -53,7 +56,7 @@ const MODEL_PATH = path.join(
   '..',
   'public',
   'models',
-  'crnn_stereo_256mel_t2.onnx',
+  'crnn_stereo_256mel_t3.onnx',
 );
 
 interface CrnnFixture {
@@ -80,7 +83,7 @@ function sigmoid(x: number): number {
 
 const haveModel = fs.existsSync(MODEL_PATH);
 const enabled = process.env['RUN_ONNX_PARITY'] === '1';
-const describeIf = haveModel && enabled ? describe : describe.skip;
+const allowMissingModel = process.env['ALLOW_MISSING_MODEL'] === '1';
 
 if (!enabled) {
   // eslint-disable-next-line no-console
@@ -88,17 +91,39 @@ if (!enabled) {
     '[crnn-logits-reference] SKIPPED — set RUN_ONNX_PARITY=1 (via ' +
       '`pnpm test:onnx-parity`) to run the onnxruntime-web parity gate.',
   );
-} else if (!haveModel) {
+} else if (!haveModel && allowMissingModel) {
   // eslint-disable-next-line no-console
   console.warn(
-    `[crnn-logits-reference] SKIPPED — model not found at ${MODEL_PATH}. ` +
-      'Place the t2 .onnx there to run the parity gate.',
+    `[crnn-logits-reference] SKIPPED (ALLOW_MISSING_MODEL=1) — model not ` +
+      `found at ${MODEL_PATH}. This means the checkpoint-specific parity ` +
+      'gate did NOT run; do not treat a green test:onnx-parity as having ' +
+      'validated the shipped model (F36, PIPELINE_AUDIT.md).',
   );
 }
 
+// F36 (PIPELINE_AUDIT.md): when the gate is enabled, a missing model is a
+// FAILURE, not a silent skip — `pnpm test:onnx-parity` must not go green
+// without ever touching the shipped model. ALLOW_MISSING_MODEL=1 is the
+// explicit, loud escape hatch for environments that intentionally lack it.
+const failLoud = enabled && !haveModel && !allowMissingModel;
+const shouldRun = enabled && haveModel;
+const describeIf = shouldRun || failLoud ? describe : describe.skip;
+
 describeIf(
-  'CRNN inference: onnxruntime-web(t2) vs python onnxruntime(t2)',
+  'CRNN inference: onnxruntime-web(t3) vs python onnxruntime(t3)',
   () => {
+    if (failLoud) {
+      it('FAILS LOUDLY: model missing and RUN_ONNX_PARITY=1 (F36)', () => {
+        throw new Error(
+          `[crnn-logits-reference] Model not found at ${MODEL_PATH} while ` +
+            'RUN_ONNX_PARITY=1. This is the ONE checkpoint-specific parity ' +
+            'gate (F36, PIPELINE_AUDIT.md) — it must fail loudly rather ' +
+            'than silently skip. Place the t3 .onnx there, or set ' +
+            'ALLOW_MISSING_MODEL=1 to explicitly skip with a warning.',
+        );
+      });
+      return;
+    }
     const fixture: CrnnFixture = JSON.parse(
       fs.readFileSync(FIXTURE_PATH, 'utf8'),
     );
@@ -178,7 +203,7 @@ describeIf(
     }, 120000);
 
     it('fixture matches this model + window config', () => {
-      expect(fixture.model).toBe('crnn_stereo_256mel_t2.onnx');
+      expect(fixture.model).toBe('crnn_stereo_256mel_t3.onnx');
       expect(fixture.nInst).toBe(NUM_DRUM_CLASSES);
       expect(fixture.windowSize).toBe(WINDOW_SIZE);
       expect(fixture.windowStride).toBe(WINDOW_STRIDE);

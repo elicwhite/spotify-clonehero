@@ -1,10 +1,10 @@
 /**
- * Numeric validation of the post-processing block (tom re-order + lane
- * constraints) and reference peak picking against the research repo's
- * scripts/dump_frontend_reference.py output. The fixture holds raw model
- * activations (T, 9), the mono mel (T, 256), the deployed per-lane
- * thresholds, and the exact onsets the reference produces (the tom
- * re-order FIRES in this fixture).
+ * Numeric validation of the post-processing block (per-frame lane
+ * constraints; tom pitch re-order OFF, matching the t3/control ship decode
+ * — F50, PIPELINE_AUDIT.md) and reference peak picking against the research
+ * repo's scripts/dump_frontend_reference.py output. The fixture holds raw
+ * model activations (T, 9), the mono mel (T, 256), the deployed per-lane
+ * (System-C tuned) thresholds, and the exact onsets the reference produces.
  */
 
 import fs from 'fs';
@@ -47,7 +47,7 @@ describe('postprocess + peak picking vs reference fixture', () => {
     expect(fixture.nMels).toBe(256);
     expect(rawAct.length).toBe(fixture.T * fixture.nInst);
     expect(monoMel.length).toBe(fixture.T * fixture.nMels);
-    expect(fixture.onsets.length).toBe(39);
+    expect(fixture.onsets.length).toBe(45);
   });
 
   it('does not mutate the input activations', () => {

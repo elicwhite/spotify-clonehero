@@ -36,7 +36,10 @@ describe('plLsqSegments', () => {
 
   test('jittered click track: few segments, slope recovers true bpm', () => {
     const beats = constantBeats(120, 200, 8); // ±8ms detector jitter
-    const res = plLsqSegments(beats, PL_LSQ_TOL_MS_DEFAULT)!;
+    // Pinned to 15ms tol: this exercises jitter-averaging, which only holds
+    // when the jitter is within tol. The shipping default is now 8ms (== this
+    // jitter), at which the map correctly fragments instead of averaging.
+    const res = plLsqSegments(beats, 15)!;
     // Far sparser than per-beat (which would be 200 events).
     expect(res.tempos.length).toBeLessThanOrEqual(6);
     // LSQ averages the jitter: fitted tempo is close to the true 120.

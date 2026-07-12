@@ -19,6 +19,18 @@
 
 import {NUM_DRUM_CLASSES} from './types';
 
+/**
+ * F50 — the tom pitch RE-ORDER (step 1 below) assumes the RELABELED-world
+ * tom convention. The t3/control model (PIPELINE_AUDIT.md System C
+ * promotion, 2026-07-08) is trained on original-charter tom convention and
+ * gets its toms RE-SORTED into the wrong slots by this step — the ablation
+ * measured every acoustic re-rank strategy (including this one) as net-
+ * negative on the control. OFF for the t3 ship decode. Flip back to `true`
+ * only if the deployed model lineage reverts to relabeled-convention
+ * training.
+ */
+const TOM_REORDER = false;
+
 const TOM_LANES = [2, 3, 4];
 const CYMBAL_LANES = [5, 6, 7, 8];
 /** Conflicting (a, b) lane pairs: HH/HT, RD/MT, CR/FT. */
@@ -69,66 +81,69 @@ export function applyPostprocess(
   const nMels = 256;
 
   // -------------------------------------------------------------------------
-  // (1) Per-song tom re-order via low-bin pitch proxy
+  // (1) Per-song tom re-order via low-bin pitch proxy (gated by TOM_REORDER,
+  //     F50 — see module-level comment above)
   // -------------------------------------------------------------------------
-  const pitch = new Float64Array(T);
-  for (let t = 0; t < T; t++) {
-    const base = t * nMels;
-    let rowMin = Infinity;
-    for (let m = LO_IDX; m < N_LOW; m++) {
-      const v = monoMel[base + m];
-      if (v < rowMin) rowMin = v;
-    }
-    let wSum = 0;
-    let wBinSum = 0;
-    for (let m = LO_IDX; m < N_LOW; m++) {
-      const w = Math.max(0, monoMel[base + m] - rowMin);
-      wSum += w;
-      wBinSum += w * m;
-    }
-    pitch[t] = wBinSum / (wSum + 1e-6);
-  }
-
-  // Median pitch per tom lane over its confident frames.
-  const med = new Map<number, number>();
-  for (const c of TOM_LANES) {
-    const framePitches: number[] = [];
+  if (TOM_REORDER) {
+    const pitch = new Float64Array(T);
     for (let t = 0; t < T; t++) {
-      const a = act[t * C + c];
-      const tomMax = Math.max(act[t * C + 2], act[t * C + 3], act[t * C + 4]);
-      if (a > 0.5 && a >= tomMax - 1e-6) {
-        framePitches.push(pitch[t]);
+      const base = t * nMels;
+      let rowMin = Infinity;
+      for (let m = LO_IDX; m < N_LOW; m++) {
+        const v = monoMel[base + m];
+        if (v < rowMin) rowMin = v;
       }
+      let wSum = 0;
+      let wBinSum = 0;
+      for (let m = LO_IDX; m < N_LOW; m++) {
+        const w = Math.max(0, monoMel[base + m] - rowMin);
+        wSum += w;
+        wBinSum += w * m;
+      }
+      pitch[t] = wBinSum / (wSum + 1e-6);
     }
-    if (framePitches.length >= 4) {
-      med.set(c, median(framePitches));
-    }
-  }
 
-  if (med.size >= 2) {
-    const lanes = [...med.keys()]; // insertion order = ascending lane
-    // src: lanes sorted by DESCENDING median pitch (stable; ties keep
-    // ascending lane order). dst: lanes sorted ascending.
-    const src = lanes.slice().sort((a, b) => med.get(b)! - med.get(a)!);
-    const dst = lanes.slice().sort((a, b) => a - b);
-    if (src.some((c, i) => c !== dst[i])) {
-      // Permute the tom columns: dst column receives src column.
-      const perm = new Float32Array(T * TOM_LANES.length);
+    // Median pitch per tom lane over its confident frames.
+    const med = new Map<number, number>();
+    for (const c of TOM_LANES) {
+      const framePitches: number[] = [];
       for (let t = 0; t < T; t++) {
-        for (let i = 0; i < TOM_LANES.length; i++) {
-          perm[t * TOM_LANES.length + i] = act[t * C + TOM_LANES[i]];
+        const a = act[t * C + c];
+        const tomMax = Math.max(act[t * C + 2], act[t * C + 3], act[t * C + 4]);
+        if (a > 0.5 && a >= tomMax - 1e-6) {
+          framePitches.push(pitch[t]);
         }
       }
-      const col = new Map<number, number>([
-        [2, 0],
-        [3, 1],
-        [4, 2],
-      ]);
-      for (let i = 0; i < src.length; i++) {
-        const sCol = col.get(src[i])!;
-        const dCol = col.get(dst[i])!;
+      if (framePitches.length >= 4) {
+        med.set(c, median(framePitches));
+      }
+    }
+
+    if (med.size >= 2) {
+      const lanes = [...med.keys()]; // insertion order = ascending lane
+      // src: lanes sorted by DESCENDING median pitch (stable; ties keep
+      // ascending lane order). dst: lanes sorted ascending.
+      const src = lanes.slice().sort((a, b) => med.get(b)! - med.get(a)!);
+      const dst = lanes.slice().sort((a, b) => a - b);
+      if (src.some((c, i) => c !== dst[i])) {
+        // Permute the tom columns: dst column receives src column.
+        const perm = new Float32Array(T * TOM_LANES.length);
         for (let t = 0; t < T; t++) {
-          act[t * C + TOM_LANES[dCol]] = perm[t * TOM_LANES.length + sCol];
+          for (let i = 0; i < TOM_LANES.length; i++) {
+            perm[t * TOM_LANES.length + i] = act[t * C + TOM_LANES[i]];
+          }
+        }
+        const col = new Map<number, number>([
+          [2, 0],
+          [3, 1],
+          [4, 2],
+        ]);
+        for (let i = 0; i < src.length; i++) {
+          const sCol = col.get(src[i])!;
+          const dCol = col.get(dst[i])!;
+          for (let t = 0; t < T; t++) {
+            act[t * C + TOM_LANES[dCol]] = perm[t * TOM_LANES.length + sCol];
+          }
         }
       }
     }

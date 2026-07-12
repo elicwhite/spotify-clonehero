@@ -117,11 +117,11 @@ describe('pickPeaksFromModelOutput', () => {
   });
 
   it('uses the provisional per-lane thresholds by default', () => {
-    // HH threshold 0.65: 0.6 peak silent, 0.7 fires.
+    // HH threshold 0.55 (System-C tuned): 0.5 peak silent, 0.6 fires.
     const events = pickPeaksFromModelOutput(
       makeOutput([
-        {frame: 100, cls: 5, value: 0.6},
-        {frame: 200, cls: 5, value: 0.7},
+        {frame: 100, cls: 5, value: 0.5},
+        {frame: 200, cls: 5, value: 0.6},
       ]),
     );
     expect(events.length).toBe(1);

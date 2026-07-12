@@ -214,15 +214,20 @@ export const MODEL_FPS = 100;
 /**
  * Systematic CRNN onset offset (ms), added to every predicted note onset at
  * chart placement (chart-builder snapOnsetTick). The CRNN is ~2 ms-accurate to
- * the AUDIO onset, but charters place notes ~36 ms later by convention
- * (measured vs chart ground truth). Correcting this NOTE-side (not by shifting
- * the beat grid — that would push the grid off true beats, the slot-gaming
- * class the research forbids) aligns placement to charter convention. Measured
- * on the music-true (lag-0) grid: product-edit 0.6983 -> 0.6952 and the
- * fraction of songs needing a manual timeline sync drops 100% -> 81%. This is
- * the app-side twin of the research pipeline's `global_offset_ms` constant.
+ * the AUDIO onset, but charters place notes later by convention (measured vs
+ * chart ground truth). Correcting this NOTE-side (not by shifting the beat
+ * grid — that would push the grid off true beats, the slot-gaming class the
+ * research forbids) aligns placement to charter convention.
+ *
+ * Re-pinned 36 -> 25 (F35, PIPELINE_AUDIT.md, 2026-07-08): a fresh raw
+ * measurement on the t3-class lineage (3.04M onset pairs, no nudge/re-anchor,
+ * analysis/probe_f35_systematic_offset.py in the research repo) found median
+ * -25 ms / mean -21.9 ms, family-uniform (spread 1 ms) and not tail-driven
+ * (7.6% of songs outside +/-10 ms) — the prior 36 ms overshot by ~11-15 ms.
+ * One shared constant; per-family split is unnecessary. This is the app-side
+ * twin of the research pipeline's `global_offset_ms` constant.
  */
-export const SYSTEMATIC_ONSET_MS = 36;
+export const SYSTEMATIC_ONSET_MS = 25;
 
 /**
  * NMS window for peak picking, in frames on each side of a kept peak
@@ -235,18 +240,24 @@ export const PEAK_NMS_FRAMES = 2;
  * (BD, SD, HT, MT, FT, HH, CR, CR2, RD). A peak is kept when its height is
  * strictly greater than the lane threshold. Lanes with a threshold > 1.5 are
  * structurally excluded (never fire) — crash-2 = 2.0 matches the deployed
- * reference (adt_eval provisional thresholds).
+ * reference.
+ *
+ * System-C tuned array (PIPELINE_AUDIT.md, 2026-07-08): control model +
+ * tom-reorder OFF, coordinate-ascent tuned on pack-VAL, from
+ * analysis/product_eval/stageb_tuned_thresholds.json
+ * ("C_control_2plane_reorder_off") in the research repo. Beats the prior t2
+ * array on every family on pack-TEST.
  */
 export const CRNN_THRESHOLDS: readonly number[] = [
   0.5, // BD
-  0.5, // SD
+  0.55, // SD
   0.75, // HT
-  0.75, // MT
-  0.75, // FT
-  0.65, // HH
-  0.75, // CR
+  0.85, // MT
+  0.65, // FT
+  0.55, // HH
+  0.7, // CR
   2.0, // CR2 (excluded)
-  0.65, // RD
+  0.55, // RD
 ];
 
 /** Lanes whose threshold exceeds this value are skipped entirely. */

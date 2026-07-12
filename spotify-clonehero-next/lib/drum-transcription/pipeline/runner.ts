@@ -34,6 +34,7 @@ import {
 import {resampleSoxr} from '@/lib/tempo-map/resampler-soxr';
 import {runTempoPipelineFromPcm} from '@/lib/tempo-map/pipeline-client';
 import type {
+  LinkSegSections,
   PipelineProgress as TempoPipelineProgress,
   Synctrack,
 } from '@/lib/tempo-map/types';
@@ -170,9 +171,10 @@ const TEMPO_STAGE_RANGES: Record<
   'download-separation-model': [0, 0.05],
   separate: [0.05, 0.3],
   'download-beat-model': [0.3, 0.4],
-  'beats-fullmix': [0.4, 0.65],
-  'beats-drums': [0.65, 0.95],
-  convert: [0.95, 1],
+  'beats-fullmix': [0.4, 0.62],
+  'beats-drums': [0.62, 0.88],
+  sections: [0.88, 0.96],
+  convert: [0.96, 1],
 };
 
 const TEMPO_STAGE_DETAIL: Record<TempoPipelineProgress['stage'], string> = {
@@ -181,6 +183,7 @@ const TEMPO_STAGE_DETAIL: Record<TempoPipelineProgress['stage'], string> = {
   'download-beat-model': 'Downloading beat-detection model',
   'beats-fullmix': 'Detecting beats (full mix)',
   'beats-drums': 'Detecting beats (drum stem)',
+  sections: 'Labeling song sections',
   convert: 'Fitting tempo map',
 };
 
@@ -209,19 +212,25 @@ function tempoProgressToPipeline(p: TempoPipelineProgress): {
  *
  * Returns null on failure — the caller falls back to a flat-tempo chart.
  */
+interface SynctrackResult {
+  synctrack: Synctrack;
+  sections: LinkSegSections | null;
+}
+
 async function ensureSynctrack(
   projectId: string,
   projectName: string,
   sourceBytes: ArrayBuffer | null,
   onProgress: PipelineProgressCallback,
-): Promise<Synctrack | null> {
+): Promise<SynctrackResult | null> {
   if (await projectFileExists(projectId, SYNCTRACK_FILE)) {
     try {
       const stored = await readProjectJSON<StoredSynctrack>(
         projectId,
         SYNCTRACK_FILE,
       );
-      if (stored?.synctrack) return stored.synctrack;
+      if (stored?.synctrack)
+        return {synctrack: stored.synctrack, sections: stored.sections ?? null};
       // Parsed but missing the synctrack: fall through and recompute.
     } catch {
       // Corrupt file: fall through and recompute.
@@ -282,11 +291,12 @@ async function ensureSynctrack(
       synctrack: result.synctrack,
       meterStats: result.meterStats,
       drumOnsetOffsetMs: result.drumOnsetOffsetMs,
+      sections: result.sections,
     };
     await writeProjectJSON(projectId, SYNCTRACK_FILE, stored);
 
     onProgress({step: 'tempo-mapping', progress: 1, projectId, projectName});
-    return result.synctrack;
+    return {synctrack: result.synctrack, sections: result.sections};
   } catch (err) {
     console.warn(
       `Tempo mapping failed, falling back to a flat ${DEFAULT_BPM} BPM chart:`,
@@ -414,13 +424,16 @@ export async function runPipeline(
   // chart on failure.
   const chartExists = await projectFileExists(projectId, 'notes.chart');
   let synctrack: Synctrack | null = null;
+  let sections: LinkSegSections | null = null;
   if (!chartExists) {
-    synctrack = await ensureSynctrack(
+    const st = await ensureSynctrack(
       projectId,
       metadata.name,
       sourceBytes,
       onProgress,
     );
+    synctrack = st?.synctrack ?? null;
+    sections = st?.sections ?? null;
   }
 
   // Step 4: Transcription
@@ -459,6 +472,7 @@ export async function runPipeline(
       metadata.name,
       result.durationSeconds,
       synctrack,
+      sections,
     );
 
     // Serialize chart to .chart format.
@@ -558,8 +572,11 @@ export async function resumePipeline(
   // bytes in scope (only OPFS PCM), so the tempo worker's stem cache
   // isn't seeded — the pre-separated stem still avoids re-separation.
   let synctrack: Synctrack | null = null;
+  let sections: LinkSegSections | null = null;
   if (!hasChart) {
-    synctrack = await ensureSynctrack(projectId, meta.name, null, onProgress);
+    const st = await ensureSynctrack(projectId, meta.name, null, onProgress);
+    synctrack = st?.synctrack ?? null;
+    sections = st?.sections ?? null;
   }
 
   // Step 4: Transcription (if needed)
@@ -594,6 +611,7 @@ export async function resumePipeline(
       meta.name,
       result.durationSeconds,
       synctrack,
+      sections,
     );
 
     const files = writeChartFolder(chartDoc);
