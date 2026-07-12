@@ -19,10 +19,11 @@ import {
   updateProject,
   loadAudioForDemucs,
   hasStoredAudio,
-  writeProjectText,
+  writeProjectBinary,
   writeProjectJSON,
   readProjectJSON,
   projectFileExists,
+  hasProjectChartFile,
   writePackageInfo,
   writeProjectAssets,
   type ProjectMetadata,
@@ -438,7 +439,7 @@ export async function runPipeline(
   // Step 3: Tempo mapping (reuses the /tempo pipeline; the pre-separated
   // drum stem avoids a second GPU separation). Falls back to a flat-tempo
   // chart on failure.
-  const chartExists = await projectFileExists(projectId, 'notes.chart');
+  const chartExists = await hasProjectChartFile(projectId);
   let synctrack: Synctrack | null = null;
   let sections: LinkSegSections | null = null;
   if (!chartExists) {
@@ -491,25 +492,30 @@ export async function runPipeline(
       sections,
     );
 
-    // Serialize chart to .chart format.
+    // Serialize the chart. This path always builds a fresh ParsedChart with
+    // format:'chart' (buildChartDocument, unlike buildChartDocumentFromExistingChart,
+    // has no source format to preserve), but find by content type rather
+    // than hardcoding the name, so this stays symmetric with the chart-flow
+    // write below.
     const files = writeChartFolder(chartDoc);
-    const chartFile = files.find(f => f.fileName === 'notes.chart');
+    const chartFile = files.find(
+      f => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
+    );
     if (!chartFile) {
-      throw new Error('writeChartFolder did not produce notes.chart');
+      throw new Error('writeChartFolder did not produce a chart file');
     }
-    const chartText = new TextDecoder().decode(chartFile.data);
 
-    // Write confidence.json before notes.chart: notes.chart is the resume
-    // gate, so writing it last guarantees a crash never leaves the chart
-    // present with confidence.json missing on resume. Both derive from the
-    // same events and tempo map.
+    // Write confidence.json before the chart file: the chart file's presence
+    // is the resume gate, so writing it last guarantees a crash never leaves
+    // the chart present with confidence.json missing on resume. Both derive
+    // from the same events and tempo map.
     const confidenceData = buildConfidenceData(
       result.events,
       chartDoc.parsedChart.tempos,
       RESOLUTION,
     );
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
-    await writeProjectText(projectId, 'notes.chart', chartText);
+    await writeProjectBinary(projectId, chartFile.fileName, chartFile.data);
   }
 
   // Mark project as ready for editing
@@ -654,12 +660,17 @@ export async function runPipelineFromChart(
     result.durationSeconds,
   );
 
+  // The chart-flow feature preserves the source chart's own format (see
+  // buildChartDocumentFromExistingChart) — a MIDI-sourced upload produces
+  // notes.mid here, not notes.chart. Find by content type, not by a
+  // hardcoded name, so both formats write out symmetrically.
   const files = writeChartFolder(finalChartDoc);
-  const chartFile = files.find(f => f.fileName === 'notes.chart');
+  const chartFile = files.find(
+    f => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
+  );
   if (!chartFile) {
-    throw new Error('writeChartFolder did not produce notes.chart');
+    throw new Error('writeChartFolder did not produce a chart file');
   }
-  const chartText = new TextDecoder().decode(chartFile.data);
 
   const confidenceData = buildConfidenceData(
     result.events,
@@ -667,7 +678,7 @@ export async function runPipelineFromChart(
     finalChartDoc.parsedChart.resolution || RESOLUTION,
   );
   await writeProjectJSON(projectId, 'confidence.json', confidenceData);
-  await writeProjectText(projectId, 'notes.chart', chartText);
+  await writeProjectBinary(projectId, chartFile.fileName, chartFile.data);
 
   await updateProject(projectId, {stage: 'editing', gridSource: 'provided'});
 
@@ -699,7 +710,7 @@ export async function resumePipeline(
   // Check what's already done
   const hasAudio = await hasStoredAudio(projectId);
   const hasStems = await hasDrumStem(projectId);
-  const hasChart = await projectFileExists(projectId, 'notes.chart');
+  const hasChart = await hasProjectChartFile(projectId);
 
   if (!hasAudio) {
     throw new Error(
@@ -782,23 +793,24 @@ export async function resumePipeline(
     );
 
     const files = writeChartFolder(chartDoc);
-    const chartFile = files.find(f => f.fileName === 'notes.chart');
+    const chartFile = files.find(
+      f => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
+    );
     if (!chartFile) {
-      throw new Error('writeChartFolder did not produce notes.chart');
+      throw new Error('writeChartFolder did not produce a chart file');
     }
-    const chartText = new TextDecoder().decode(chartFile.data);
 
-    // Write confidence.json before notes.chart: notes.chart is the resume
-    // gate, so writing it last guarantees a crash never leaves the chart
-    // present with confidence.json missing on resume. Both derive from the
-    // same events and tempo map.
+    // Write confidence.json before the chart file: the chart file's presence
+    // is the resume gate, so writing it last guarantees a crash never leaves
+    // the chart present with confidence.json missing on resume. Both derive
+    // from the same events and tempo map.
     const confidenceData = buildConfidenceData(
       result.events,
       chartDoc.parsedChart.tempos,
       RESOLUTION,
     );
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
-    await writeProjectText(projectId, 'notes.chart', chartText);
+    await writeProjectBinary(projectId, chartFile.fileName, chartFile.data);
   }
 
   await updateProject(projectId, {stage: 'editing', gridSource: 'predicted'});

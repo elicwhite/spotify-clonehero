@@ -1,7 +1,6 @@
 'use client';
 
 import {useCallback, useEffect, useMemo, useState} from 'react';
-import {defaultIniChartModifiers, parseChartFile} from '@eliwhite/scan-chart';
 import {Loader2, AlertCircle} from 'lucide-react';
 import {toast} from 'sonner';
 
@@ -10,9 +9,12 @@ import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import {
   getProject,
   readProjectText,
+  readProjectBinary,
+  writeProjectBinary,
   readProjectJSON,
-  writeProjectText,
   projectFileExists,
+  findProjectChartFile,
+  editedVariant,
   updateProject,
   loadAudioMeta,
   readOriginalAudio,
@@ -47,14 +49,6 @@ import StemVolumeControls from './StemVolumeControls';
 import {getDrumNotes} from '@/lib/chart-edit';
 import {buildTimedTempos} from '@/lib/drum-transcription/timing';
 import type {DrumNote} from '@/lib/chart-edit';
-
-/** Drum-transcription always parses charts with pro-drums interpretation
- *  — the editor is drum-only and pro-drums tom/cymbal modifiers are
- *  meaningful regardless of any upstream song.ini. */
-const PRO_DRUMS_MODIFIERS = {
-  ...defaultIniChartModifiers,
-  pro_drums: true,
-} as const;
 
 type LoadingState = 'loading' | 'ready' | 'error';
 
@@ -113,16 +107,25 @@ function EditorAppInner({projectId}: {projectId: string}) {
     const nsDir = await root.getDirectoryHandle('drum-transcription');
     const projectDir = await nsDir.getDirectoryHandle(projectId);
 
-    // Save edited chart
+    // Save edited chart, in whichever format the project's chart uses
+    // (notes.edited.chart or notes.edited.mid) — never force one onto the
+    // other. Raw bytes are written directly; text-decoding-then-encoding a
+    // .mid chart would corrupt it.
     const files = writeChartFolder(state.chartDoc);
-    const chartText = new TextDecoder().decode(
-      files.find(f => f.fileName === 'notes.chart')!.data,
+    const chartFileOut = files.find(
+      f => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
     );
-    const chartFile = await projectDir.getFileHandle('notes.edited.chart', {
-      create: true,
-    });
+    if (!chartFileOut) {
+      throw new Error('writeChartFolder did not produce a chart file');
+    }
+    const chartFile = await projectDir.getFileHandle(
+      editedVariant(chartFileOut.fileName),
+      {create: true},
+    );
     const chartWritable = await chartFile.createWritable();
-    await chartWritable.write(chartText);
+    // See opfs.ts writeProjectBinary: our chart bytes are always a
+    // plain-ArrayBuffer view, never SharedArrayBuffer-backed.
+    await chartWritable.write(chartFileOut.data as Uint8Array<ArrayBuffer>);
     await chartWritable.close();
 
     // Save review progress
@@ -280,48 +283,41 @@ function EditorAppInner({projectId}: {projectId: string}) {
         if (cancelled) return;
         setProjectMeta(meta);
 
-        // 2. Load chart - prefer edited version, fall back to generated
+        // 2. Load chart - prefer edited version, fall back to generated.
+        // Format-agnostic: the project's persisted chart file is whichever
+        // of notes.(edited.)chart / notes.(edited.)mid the source chart
+        // used (findProjectChartFile prefers the edited variant). Read as
+        // raw bytes — text-decoding a .mid file would corrupt it.
         setLoadingStep('Loading chart data...');
-        let loadedChartText: string;
-        const hasEdited = await projectFileExists(
-          projectId,
-          'notes.edited.chart',
-        );
-        if (hasEdited) {
-          loadedChartText = await readProjectText(
-            projectId,
-            'notes.edited.chart',
-          );
-        } else {
-          loadedChartText = await readProjectText(projectId, 'notes.chart');
+        const chartFileName = await findProjectChartFile(projectId);
+        if (!chartFileName) {
+          throw new Error('Project has no persisted chart file');
         }
+        const chartBuf = await readProjectBinary(projectId, chartFileName);
+        const chartBytes = new Uint8Array(chartBuf);
         if (cancelled) return;
 
-        // 3. Parse chart
-        const chartBytes = new TextEncoder().encode(loadedChartText);
-        const parsed = parseChartFile(chartBytes, 'chart', PRO_DRUMS_MODIFIERS);
+        // 3. Build editable ChartDocument from chart bytes. Force pro_drums
+        // — the editor is drum-only and pro-drums tom/cymbal modifiers are
+        // meaningful regardless of any upstream song.ini. readChart detects
+        // .chart vs .mid from chartFileName.
+        const chartDoc = readChart(
+          [{fileName: chartFileName, data: chartBytes}],
+          {pro_drums: true},
+        );
 
         // 4. Find expert drums track
-        const drumTrack = parsed.trackData.find(
+        const drumTrack = chartDoc.parsedChart.trackData.find(
           t => t.instrument === 'drums' && t.difficulty === 'expert',
         );
         if (!drumTrack) {
           throw new Error(
             'No Expert Drums track found in chart. Available tracks: ' +
-              parsed.trackData
+              chartDoc.parsedChart.trackData
                 .map(t => `${t.instrument}/${t.difficulty}`)
                 .join(', '),
           );
         }
-
-        // 5. Build editable ChartDocument from chart bytes. Force pro_drums
-        // so the chartDoc parses with the same interpretation we validated
-        // with PRO_DRUMS_MODIFIERS just above; otherwise edits run against
-        // a different interpretation than the validation pass.
-        const chartDoc = readChart(
-          [{fileName: 'notes.chart', data: chartBytes}],
-          {pro_drums: true},
-        );
 
         // 6. Load confidence data (if available)
         try {
@@ -507,8 +503,9 @@ function EditorAppInner({projectId}: {projectId: string}) {
   );
 
   // Persist edited song/artist/charter from the header dialog. Updates the
-  // chart doc metadata (saved into notes.edited.chart's [Song] section) and
-  // renames the project to "Song by Artist" so the projects list reflects it.
+  // chart doc metadata (saved into the edited chart file's [Song] section,
+  // notes.edited.chart or notes.edited.mid) and renames the project to
+  // "Song by Artist" so the projects list reflects it.
   const handleMetadataChange = useCallback(
     async ({
       name,
@@ -535,12 +532,20 @@ function EditorAppInner({projectId}: {projectId: string}) {
       };
       dispatch({type: 'SET_CHART_DOC', chartDoc: updatedDoc});
 
-      // Persist the chart (metadata rides along in the .chart [Song] section).
+      // Persist the chart (metadata rides along in the [Song] section),
+      // in whichever format this project's chart uses.
       const files = writeChartFolder(updatedDoc);
-      const chartText = new TextDecoder().decode(
-        files.find(f => f.fileName === 'notes.chart')!.data,
+      const chartFileOut = files.find(
+        f => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
       );
-      await writeProjectText(projectId, 'notes.edited.chart', chartText);
+      if (!chartFileOut) {
+        throw new Error('writeChartFolder did not produce a chart file');
+      }
+      await writeProjectBinary(
+        projectId,
+        editedVariant(chartFileOut.fileName),
+        chartFileOut.data,
+      );
 
       // Rename the project — "Song by Artist" (charter is not included).
       const projectName = artist.trim() ? `${name} by ${artist}` : name;
@@ -552,16 +557,17 @@ function EditorAppInner({projectId}: {projectId: string}) {
     [projectId, state.chartDoc, dispatch],
   );
 
-  // Provide chart text for export
-  const getChartText = useCallback(async (): Promise<string> => {
-    let chartText: string;
-    const hasEdited = await projectFileExists(projectId, 'notes.edited.chart');
-    if (hasEdited) {
-      chartText = await readProjectText(projectId, 'notes.edited.chart');
-    } else {
-      chartText = await readProjectText(projectId, 'notes.chart');
-    }
-    return chartText;
+  // Provide the chart file for export, in whichever format this project's
+  // chart uses (notes.chart text or notes.mid binary) — format-agnostic, so
+  // a .mid-sourced chart-flow project exports without corruption.
+  const getChartFile = useCallback(async (): Promise<{
+    fileName: string;
+    data: Uint8Array;
+  }> => {
+    const fileName = await findProjectChartFile(projectId);
+    if (!fileName) throw new Error('Project has no persisted chart file');
+    const buf = await readProjectBinary(projectId, fileName);
+    return {fileName, data: new Uint8Array(buf)};
   }, [projectId]);
 
   // Provide audio sources for export.
@@ -723,7 +729,7 @@ function EditorAppInner({projectId}: {projectId: string}) {
       charterName={chart.metadata.charter || undefined}
       onMetadataChange={handleMetadataChange}
       dirty={state.dirty}
-      getChartText={getChartText}
+      getChartFile={getChartFile}
       getAudioSources={getAudioSources}
       showStemChoice
       getExtraAssets={getExtraAssets}

@@ -70,6 +70,11 @@ export interface ChartEditorProps {
   leftPanelChildren?: ReactNode | undefined;
   /** Callback to provide chart text for export. */
   getChartText?: (() => Promise<string>) | undefined;
+  /** Format-agnostic alternative to `getChartText` — see ExportDialog's
+   * `getChartFile` doc. Needed by pages whose chart may be `.mid`. */
+  getChartFile?:
+    | (() => Promise<{fileName: string; data: Uint8Array}>)
+    | undefined;
   /** Callback to provide audio sources for export. */
   getAudioSources?:
     | ((options: {includeStems: boolean}) => Promise<AudioSource[]>)
@@ -134,6 +139,7 @@ export default function ChartEditor({
   hideHeader,
   leftPanelChildren,
   getChartText,
+  getChartFile,
   getAudioSources,
   showStemChoice,
   getExtraAssets,
@@ -227,13 +233,14 @@ export default function ChartEditor({
               )}
             </div>
           )}
-          {getChartText && (
+          {(getChartText || getChartFile) && (
             <div className="shrink-0 ml-4">
               <ExportDialog
                 songName={songName}
                 artistName={artistName}
                 charterName={charterName}
                 getChartText={getChartText}
+                getChartFile={getChartFile}
                 getAudioSources={getAudioSources}
                 showStemChoice={showStemChoice}
                 getExtraAssets={getExtraAssets}

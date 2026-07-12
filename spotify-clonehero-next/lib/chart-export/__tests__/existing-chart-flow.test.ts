@@ -144,13 +144,18 @@ describe('chart-flow: transcribe against an existing chart, round-trip export', 
     expect(roundTripped.some(f => f.fileName === 'album.png')).toBe(true);
   });
 
-  test('MIDI-sourced existing chart (notes.mid) round-trips to notes.chart, not notes.mid', () => {
+  test('MIDI-sourced existing chart (notes.mid) round-trips through notes.mid, symmetric with .chart', () => {
     // Most real-world charts ship as notes.mid, not notes.chart. The
-    // chart-flow builder must normalize output to .chart format regardless
-    // of the uploaded chart's source format, since the app's own project
-    // storage and editor hardcode `notes.chart` (runner.ts). Regression
-    // test for "writeChartFolder did not produce notes.chart" (2026-07-12
-    // browser validation: a real MIDI-sourced .sng threw here).
+    // chart-flow builder must NOT force one format onto the other — .mid
+    // and .chart are both first-class writeChartFolder outputs (Eli's
+    // architecture ruling, 2026-07-12), so a MIDI-sourced chart stays .mid
+    // all the way through: buildChartDocumentFromExistingChart preserves
+    // format, writeChartFolder emits notes.mid, and assembleChartFiles
+    // accepts it directly via chartFile (not chartText, which can't carry
+    // binary MIDI data). Regression test for "writeChartFolder did not
+    // produce notes.chart" (2026-07-12 browser validation: a real
+    // MIDI-sourced .sng threw here when the pipeline hardcoded a
+    // notes.chart-only lookup).
     const existing = {
       parsedChart: createEmptyChart({
         format: 'mid',
@@ -168,20 +173,22 @@ describe('chart-flow: transcribe against an existing chart, round-trip export', 
       SONG_DURATION_SECONDS,
     );
 
-    expect(finalDoc.parsedChart.format).toBe('chart');
+    // format is untouched — no format-sniffing/forcing in the builder.
+    expect(finalDoc.parsedChart.format).toBe('mid');
     expect(finalDoc.parsedChart.tempos).toEqual(existing.parsedChart.tempos);
     expect(finalDoc.parsedChart.tempos[0]?.beatsPerMinute).toBe(140);
 
     const files = writeChartFolder(finalDoc);
-    const chartFile = files.find(f => f.fileName === 'notes.chart');
+    const chartFile = files.find(f => f.fileName === 'notes.mid');
     expect(chartFile).toBeDefined();
-    expect(files.find(f => f.fileName === 'notes.mid')).toBeUndefined();
+    expect(files.find(f => f.fileName === 'notes.chart')).toBeUndefined();
+    expect(chartFile!.data.length).toBeGreaterThan(0);
 
-    const chartText = new TextDecoder().decode(chartFile!.data);
-    expect(chartText.length).toBeGreaterThan(0);
-
+    // assembleChartFiles takes the format-agnostic chartFile (not
+    // chartText, which would require text-decoding binary MIDI bytes and
+    // corrupting them) — readChart detects .mid from the filename.
     const packageFiles = assembleChartFiles({
-      chartText,
+      chartFile: {fileName: chartFile!.fileName, data: chartFile!.data},
       metadata: {
         name: 'MIDI-Sourced Chart',
         artist: 'Test Artist',
@@ -190,6 +197,11 @@ describe('chart-flow: transcribe against an existing chart, round-trip export', 
       audioSources: [{fileName: 'song.wav', data: fakeWav()}],
       extraAssets: [],
     });
+    // The re-serialized package still carries notes.mid, not notes.chart —
+    // writeChartFolder never converts.
+    expect(packageFiles.some(f => f.fileName === 'notes.mid')).toBe(true);
+    expect(packageFiles.some(f => f.fileName === 'notes.chart')).toBe(false);
+
     const entries: Record<string, Uint8Array> = {};
     for (const f of packageFiles) entries[f.fileName] = f.data;
     const unzipped = unzipSync(zipSync(entries));

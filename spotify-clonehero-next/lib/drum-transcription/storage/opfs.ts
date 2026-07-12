@@ -269,17 +269,24 @@ export async function deleteProject(projectId: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Writes binary data (e.g. PCM audio) to a file within a project directory.
+ * Writes binary data (e.g. PCM audio, or a chart file in either format) to a
+ * file within a project directory. Accepts a typed array view too, so chart
+ * bytes from `writeChartFolder` (`Uint8Array` for both `.chart` and `.mid`
+ * output) can be written verbatim without an extra copy.
  */
 export async function writeProjectBinary(
   projectId: string,
   fileName: string,
-  data: ArrayBuffer,
+  data: ArrayBuffer | Uint8Array,
 ): Promise<void> {
   const dir = await getProjectDir(projectId);
   const fileHandle = await dir.getFileHandle(fileName, {create: true});
   const writable = await fileHandle.createWritable();
-  await writable.write(data);
+  // FileSystemWritableFileStream.write() types its BufferSource param as
+  // ArrayBufferView<ArrayBuffer> specifically (excluding the
+  // SharedArrayBuffer-backed case) — our data is always a plain-ArrayBuffer
+  // view (TextEncoder/binary chart serializers never use SharedArrayBuffer).
+  await writable.write(data as ArrayBuffer | Uint8Array<ArrayBuffer>);
   await writable.close();
 }
 
@@ -361,6 +368,56 @@ export async function projectFileExists(
   } catch {
     return false;
   }
+}
+
+/**
+ * The two basenames `writeChartFolder` (scan-chart) can produce for a
+ * project's chart, keyed by `ParsedChart.format`. A project's persisted
+ * chart is ALWAYS exactly one of these — never both — since format is
+ * fixed at chart-flow ingest (or 'chart' for freshly-predicted, audio-only
+ * projects) and never converted.
+ */
+export const CHART_FILE_BASENAMES = {chart: 'notes.chart', mid: 'notes.mid'} as const;
+
+/**
+ * Basename -> its "edited" (post-autosave) sibling, same extension —
+ * `notes.chart` -> `notes.edited.chart`, `notes.mid` -> `notes.edited.mid`.
+ * Exported so the editor's autosave path can derive the right sibling name
+ * from whichever chart file `writeChartFolder` actually produced, instead
+ * of hardcoding `.chart`.
+ */
+export function editedVariant(baseName: string): string {
+  const dot = baseName.lastIndexOf('.');
+  return `${baseName.slice(0, dot)}.edited${baseName.slice(dot)}`;
+}
+
+/**
+ * Finds the project's persisted chart file — `notes.chart`/`notes.mid` (or
+ * their `.edited.` siblings, preferred if present) — whichever format the
+ * source chart used. Returns `null` if neither exists yet.
+ *
+ * Format-agnostic by construction: callers should never hardcode
+ * `notes.chart` and assume it exists (a MIDI-sourced chart-flow project
+ * only ever has `notes.mid`).
+ */
+export async function findProjectChartFile(
+  projectId: string,
+): Promise<string | null> {
+  const candidates = [
+    editedVariant(CHART_FILE_BASENAMES.chart),
+    editedVariant(CHART_FILE_BASENAMES.mid),
+    CHART_FILE_BASENAMES.chart,
+    CHART_FILE_BASENAMES.mid,
+  ];
+  for (const name of candidates) {
+    if (await projectFileExists(projectId, name)) return name;
+  }
+  return null;
+}
+
+/** Whether the project has a persisted chart file yet, in EITHER format. */
+export async function hasProjectChartFile(projectId: string): Promise<boolean> {
+  return (await findProjectChartFile(projectId)) !== null;
 }
 
 /**

@@ -55,9 +55,22 @@ interface ExportDialogProps {
   charterName?: string | undefined;
   /**
    * Provides the chart text to export. Must return a valid .chart string.
-   * This decouples the dialog from any specific storage backend.
+   * This decouples the dialog from any specific storage backend. Ignored
+   * when `getChartFile` is also supplied — that one wins, since it can
+   * represent a `.mid`-sourced chart too (see `getChartFile`).
    */
-  getChartText: () => Promise<string>;
+  getChartText?: (() => Promise<string>) | undefined;
+  /**
+   * Format-agnostic alternative to `getChartText`: provides the chart file's
+   * raw bytes and its own filename (`notes.chart` or `notes.mid`), whichever
+   * format the source chart used. Needed by pages (chart-flow) whose
+   * project's persisted chart may be `.mid` — `getChartText`'s `string`
+   * return can't carry binary MIDI data without corrupting it. Preferred
+   * over `getChartText` when both are supplied.
+   */
+  getChartFile?:
+    | (() => Promise<{fileName: string; data: Uint8Array}>)
+    | undefined;
   /**
    * Provides audio sources to include in the package.
    *
@@ -116,6 +129,7 @@ export default function ExportDialog({
   artistName,
   charterName,
   getChartText,
+  getChartFile,
   getAudioSources,
   showStemChoice = false,
   getExtraAssets,
@@ -151,8 +165,17 @@ export default function ExportDialog({
   const handleExport = useCallback(async () => {
     setIsExporting(true);
     try {
-      // 1. Get the chart text
-      const chartText = await getChartText();
+      // 1. Get the chart — prefer the format-agnostic getChartFile (handles
+      // .mid-sourced chart-flow projects) over getChartText.
+      if (!getChartFile && !getChartText) {
+        throw new Error(
+          'ExportDialog requires getChartFile or getChartText',
+        );
+      }
+      const chartFile = getChartFile ? await getChartFile() : undefined;
+      const chartText = chartFile || !getChartText
+        ? undefined
+        : await getChartText();
 
       // 2. Collect audio sources. When the page offers a stem choice, honor
       //    the toggle; otherwise include whatever audio it provides.
@@ -183,7 +206,8 @@ export default function ExportDialog({
         charter: metadata.charter.trim(),
       };
       const fileEntries = assembleChartFiles({
-        chartText,
+        ...(chartFile ? {chartFile} : {}),
+        ...(chartText !== undefined ? {chartText} : {}),
         metadata: cleanMetadata,
         audioSources: audioFiles,
         extraAssets,
@@ -226,6 +250,7 @@ export default function ExportDialog({
     packageFormat,
     includeStems,
     getChartText,
+    getChartFile,
     getAudioSources,
     showStemChoice,
     getExtraAssets,

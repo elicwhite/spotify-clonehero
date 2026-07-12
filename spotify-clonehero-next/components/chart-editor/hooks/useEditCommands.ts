@@ -27,27 +27,34 @@ function activeVocalPartName(scope: EditorScope): string {
 /**
  * Round-trip a ChartDocument through the writer + parser so derived fields
  * (HOPOs, chord flags, section timing, etc.) are recomputed after an edit,
- * and return a new ChartDocument carrying the re-parsed chart. The editor
- * only writes `.chart` right now, so we look for `notes.chart` in the
- * serialized output.
+ * and return a new ChartDocument carrying the re-parsed chart. Preserves
+ * whichever format (`.chart` or `.mid`) the document already has —
+ * writeChartFolder/parseChartFile both handle either symmetrically, so an
+ * edit must not silently convert a `.mid`-sourced chart-flow document to
+ * `.chart` (it previously did, unconditionally: every edit reset format to
+ * 'chart', so the FIRST edit on a MIDI-sourced project would flip its
+ * persisted chart file out from under the pipeline/storage layer that
+ * wrote notes.mid).
  *
  * Modifiers come from the parsed chart's `iniChartModifiers` when present.
  * Falls back to scan-chart's exported defaults otherwise.
  */
 function rebuildChartDocument(doc: ChartDocument): ChartDocument {
+  const format = doc.parsedChart.format;
   const files = writeChartFolder({
-    parsedChart: {...doc.parsedChart, format: 'chart'},
+    parsedChart: doc.parsedChart,
     assets: doc.assets,
   });
-  const chartFile = files.find(f => f.fileName === 'notes.chart')!;
+  const chartFileName = format === 'chart' ? 'notes.chart' : 'notes.mid';
+  const chartFile = files.find(f => f.fileName === chartFileName)!;
   const modifiers =
     doc.parsedChart.iniChartModifiers ?? defaultIniChartModifiers;
-  const parsed = parseChartFile(chartFile.data, 'chart', modifiers);
+  const parsed = parseChartFile(chartFile.data, format, modifiers);
   return {
     parsedChart: {
       ...parsed,
       chartBytes: chartFile.data,
-      format: 'chart',
+      format,
       iniChartModifiers: modifiers,
     },
     assets: doc.assets,

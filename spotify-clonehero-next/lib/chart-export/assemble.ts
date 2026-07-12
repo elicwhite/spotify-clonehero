@@ -33,9 +33,25 @@ export interface PackageAudioSource {
   data: ArrayBuffer | Uint8Array;
 }
 
+/** The project's chart file verbatim — `notes.chart` (text) or `notes.mid`
+ * (binary), whichever format the source chart used. `readChart` detects
+ * format from `fileName`, so passing either is symmetric. */
+export interface ChartPackageFile {
+  fileName: string;
+  data: Uint8Array;
+}
+
 export interface AssembleChartFilesOptions {
-  /** Valid `.chart` text. */
-  chartText: string;
+  /**
+   * Valid `.chart` text. Mutually exclusive with `chartFile` — supply
+   * exactly one. Convenience for callers that only ever deal in `.chart`
+   * format; `chartFile` is the format-agnostic alternative (needed by the
+   * chart-flow feature, where the source chart may be `.mid`).
+   */
+  chartText?: string;
+  /** The format-agnostic alternative to `chartText` — see
+   * {@link ChartPackageFile}. */
+  chartFile?: ChartPackageFile;
   /** Metadata to stamp into song.ini. */
   metadata: ChartPackageMetadata;
   /** Audio stems to bundle alongside the chart. */
@@ -53,19 +69,30 @@ export interface AssembleChartFilesOptions {
 /**
  * Assemble the flat file list for a chart package.
  *
- * Parses `chartText`, stamps the supplied metadata (name/artist/charter, plus
- * `pro_drums`), and runs it back through `writeChartFolder` so both
- * `notes.chart` and `song.ini` are regenerated consistently. Audio sources are
- * appended verbatim.
+ * Parses the chart (`chartText` as `.chart`, or `chartFile` in whichever
+ * format it names), stamps the supplied metadata (name/artist/charter, plus
+ * `pro_drums`), and runs it back through `writeChartFolder` so the chart file
+ * and `song.ini` are regenerated consistently — in the SAME format it was
+ * given (a `.mid`-sourced chart-flow project stays `.mid`; `writeChartFolder`
+ * doesn't convert). Audio sources are appended verbatim.
  */
 export function assembleChartFiles({
   chartText,
+  chartFile,
   metadata,
   audioSources = [],
   extraAssets = [],
 }: AssembleChartFilesOptions): FileEntry[] {
-  const chartBytes = new TextEncoder().encode(chartText);
-  const chartDoc = readChart([{fileName: 'notes.chart', data: chartBytes}]);
+  const inputFile: ChartPackageFile =
+    chartFile ??
+    (chartText !== undefined
+      ? {fileName: 'notes.chart', data: new TextEncoder().encode(chartText)}
+      : (() => {
+          throw new Error(
+            'assembleChartFiles requires either chartText or chartFile',
+          );
+        })());
+  const chartDoc = readChart([inputFile]);
   const existing = chartDoc.parsedChart.metadata;
   chartDoc.parsedChart.metadata = {
     ...existing,
@@ -74,8 +101,8 @@ export function assembleChartFiles({
     charter: metadata.charter.trim() || 'MusicCharts.tools',
     pro_drums: true,
     // Declare a drums difficulty so scan-chart / chart managers see a rated
-    // chart. `getChartText` only carries notes.chart, so any diff_drums the
-    // pipeline set in song.ini is gone by here; default to 0 when absent.
+    // chart. The chart file alone carries this; any diff_drums the pipeline
+    // set in song.ini separately is gone by here; default to 0 when absent.
     diff_drums:
       existing.diff_drums != null && existing.diff_drums >= 0
         ? existing.diff_drums

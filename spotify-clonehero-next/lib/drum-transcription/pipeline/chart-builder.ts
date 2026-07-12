@@ -305,18 +305,13 @@ export function buildChartDocumentFromExistingChart(
   // marker notes (66/67/68) and every cymbal re-parses as a tom.
   parsedChart.drumType = drumTypes.fourLanePro;
 
-  // Force .chart-format output regardless of the uploaded chart's own
-  // source format. `format` here is just a writeChartFolder serialization
-  // switch on the shared ParsedChart structure (mid vs. chart both parse
-  // into the same tick/track shape) — but the app's project storage and
-  // editor universally read/write `notes.chart` (runner.ts's
-  // projectFileExists/writeProjectText calls hardcode that filename). A
-  // MIDI-sourced existing chart (`notes.mid`) previously left `format:
-  // 'mid'` untouched, so writeChartFolder emitted `notes.mid` instead and
-  // the hardcoded notes.chart lookup after it threw ("writeChartFolder did
-  // not produce notes.chart") — every real chart shipped as .mid failed
-  // the chart-flow round trip.
-  parsedChart.format = 'chart';
+  // `parsedChart.format` (inherited from `existing` above) is left as-is.
+  // `.chart` and `.mid` are both first-class writeChartFolder output
+  // formats — this builder only touches note/track content, never format.
+  // Storage/editor code downstream must handle whichever format the source
+  // chart used (see lib/drum-transcription/storage/opfs.ts's
+  // findProjectChartFile / CHART_FILE_BASENAMES) rather than assuming
+  // `notes.chart`.
 
   const resolution = parsedChart.resolution || RESOLUTION;
 
