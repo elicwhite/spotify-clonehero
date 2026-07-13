@@ -54,7 +54,7 @@ Fully browser-based: upload a song → separate stems via Demucs (ONNX + WebGPU)
 - **No chart-preview npm package.** Use the project's own `CloneHeroRenderer.tsx` and `lib/preview/highway.ts`.
 - **AudioManager is the primary audio source.** WaveSurfer is for waveform visualization and seeking only, not playback.
 - **Editing happens on the Clone Hero highway** (like Moonscraper), not on a separate grid or sheet music UI.
-- **All stems stored separately** in OPFS: `drums.pcm`, `bass.pcm`, `other.pcm`, `vocals.pcm`. No merged `no_drums.pcm`.
+- **Stems stored in a fingerprint-keyed OPFS cache** (`drum-transcription/stem-cache/{fingerprint}/drums.pcm`), keyed by a SHA-256 of the uploaded audio bytes + separator model identity so identical inputs reuse separated stems across projects. Only the drum stem is produced. No merged `no_drums.pcm`.
 - **OPFS for storage** (`navigator.storage.getDirectory()`). No IndexedDB for audio/chart data. Namespace under `drum-transcription/` to avoid collisions.
 - **Demo audio** at `public/drumsample.mp3`.
 - **Don't duplicate code.** If a utility exists elsewhere in the project, extract it to a shared lib and update the original callsite first (in its own commit), then use it from the new code.

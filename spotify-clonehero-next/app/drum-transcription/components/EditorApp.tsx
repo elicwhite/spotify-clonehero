@@ -1,8 +1,20 @@
 'use client';
 
 import {useCallback, useEffect, useMemo, useState} from 'react';
-import {Loader2, AlertCircle} from 'lucide-react';
+import {Loader2, AlertCircle, RefreshCw} from 'lucide-react';
 import {toast} from 'sonner';
+
+import {Button} from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
@@ -24,6 +36,7 @@ import {
   type AudioStorageMeta,
 } from '@/lib/drum-transcription/storage/opfs';
 import {SYNCTRACK_FILE} from '@/lib/drum-transcription/pipeline/runner';
+import {loadDrumStem} from '@/lib/drum-transcription/ml/roformer-separation';
 import type {StoredSynctrack} from '@/lib/drum-transcription/pipeline/chart-builder';
 import {computeSongConfidence} from '@/lib/drum-transcription/confidence-gauge';
 import ConfidenceGauge from './ConfidenceGauge';
@@ -49,11 +62,19 @@ import StemVolumeControls from './StemVolumeControls';
 import {getDrumNotes} from '@/lib/chart-edit';
 import {buildTimedTempos} from '@/lib/drum-transcription/timing';
 import type {DrumNote} from '@/lib/chart-edit';
+import {cn} from '@/lib/utils';
 
 type LoadingState = 'loading' | 'ready' | 'error';
 
 interface EditorAppProps {
   projectId: string;
+  /**
+   * Re-run the beat grid + predicted notes for this project (using the
+   * cached separated stem). Invoked after the user confirms the destructive
+   * warning; the parent owns the pipeline run and remounts the editor.
+   * Omit to hide the Regenerate button.
+   */
+  onRegenerate?: (() => void) | undefined;
 }
 
 /**
@@ -63,15 +84,15 @@ interface EditorAppProps {
  * DrumTranscriptionProvider around the shared ChartEditor shell.
  * Passes ConfidencePanel and StemVolumeControls as leftPanelChildren.
  */
-export default function EditorApp({projectId}: EditorAppProps) {
+export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
   return (
     <DrumTranscriptionProvider>
-      <EditorAppInner projectId={projectId} />
+      <EditorAppInner projectId={projectId} onRegenerate={onRegenerate} />
     </DrumTranscriptionProvider>
   );
 }
 
-function EditorAppInner({projectId}: {projectId: string}) {
+function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
   const {state, dispatch, audioManagerRef} = useChartEditorContext();
   const {dtState, dtDispatch} = useDrumTranscriptionContext();
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
@@ -98,6 +119,11 @@ function EditorAppInner({projectId}: {projectId: string}) {
   const [packageSourceFormat, setPackageSourceFormat] = useState<
     'folder' | 'zip' | 'sng' | null
   >(null);
+  // Regenerate confirmation dialog + in-flight flag. While regenerating,
+  // autosave is disabled so a stale save can't rewrite the edited chart /
+  // review progress after the pipeline has deleted them.
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   // Build the save function for auto-save
   const saveFn = useCallback(async () => {
@@ -141,7 +167,9 @@ function EditorAppInner({projectId}: {projectId: string}) {
   }, [projectId, state.chartDoc, dtState.reviewedNoteIds]);
 
   // Auto-save hook (uses shared hook, passes the save function)
-  const {save} = useAutoSave(loadingState === 'ready' ? saveFn : null);
+  const {save} = useAutoSave(
+    loadingState === 'ready' && !regenerating ? saveFn : null,
+  );
 
   // Jump to low-confidence note
   const jumpToLowConfidence = useCallback(
@@ -421,28 +449,20 @@ function EditorAppInner({projectId}: {projectId: string}) {
           {fileName: 'song.wav', data: fullMixArray},
         ];
 
-        // Load separated stems if Demucs has run
+        // Load the separated drum stem (fingerprint cache, with legacy
+        // per-project fallback) if separation has run.
         setLoadingStep('Loading stems...');
-        const stemNames = ['drums', 'bass', 'other', 'vocals'];
-        for (const stemName of stemNames) {
-          try {
-            const stemDir = await getStemsDir(projectId);
-            const stemHandle = await stemDir.getFileHandle(`${stemName}.pcm`);
-            const stemFile = await stemHandle.getFile();
-            const stemPcm = new Float32Array(await stemFile.arrayBuffer());
-            const stemWav = encodeWavBlob(
-              stemPcm,
-              aMeta.sampleRate,
-              aMeta.channels,
-            );
-            const stemArray = new Uint8Array(await stemWav.arrayBuffer());
-            audioFiles.push({
-              fileName: `${stemName}.wav`,
-              data: stemArray,
-            });
-          } catch {
-            // Stem not available, skip
-          }
+        try {
+          const stemPcm = await loadDrumStem(projectId);
+          const stemWav = encodeWavBlob(
+            stemPcm,
+            aMeta.sampleRate,
+            aMeta.channels,
+          );
+          const stemArray = new Uint8Array(await stemWav.arrayBuffer());
+          audioFiles.push({fileName: 'drums.wav', data: stemArray});
+        } catch {
+          // Stem not available, skip
         }
 
         const audioManager = new AudioManager(audioFiles, () => {
@@ -619,21 +639,13 @@ function EditorAppInner({projectId}: {projectId: string}) {
         return sources;
       }
 
-      const readStemPcm = async (
-        stemName: string,
-      ): Promise<Float32Array | null> => {
-        try {
-          const stemDir = await getStemsDir(projectId);
-          const handle = await stemDir.getFileHandle(`${stemName}.pcm`);
-          const file = await handle.getFile();
-          return new Float32Array(await file.arrayBuffer());
-        } catch {
-          return null;
-        }
-      };
-
-      // Drum stem → drums.opus
-      const drumsPcm = await readStemPcm('drums');
+      // Drum stem → drums.opus (fingerprint cache, legacy fallback).
+      let drumsPcm: Float32Array | null = null;
+      try {
+        drumsPcm = await loadDrumStem(projectId);
+      } catch {
+        drumsPcm = null;
+      }
       if (drumsPcm) {
         const opus = await toOpus(drumsPcm);
         sources.push({
@@ -642,28 +654,9 @@ function EditorAppInner({projectId}: {projectId: string}) {
         });
       }
 
-      // Accompaniment: mix bass+other+vocals, or fall back to the full mix.
-      const stemBuffers = (
-        await Promise.all(['bass', 'other', 'vocals'].map(readStemPcm))
-      ).filter((b): b is Float32Array => b !== null);
-
-      let accompaniment: Float32Array | null = null;
-      if (stemBuffers.length > 0) {
-        const maxLength = Math.max(...stemBuffers.map(b => b.length));
-        const mixed = new Float32Array(maxLength);
-        for (const stem of stemBuffers) {
-          for (let i = 0; i < stem.length; i++) {
-            mixed[i] += stem[i];
-          }
-        }
-        for (let i = 0; i < mixed.length; i++) {
-          mixed[i] = Math.max(-1, Math.min(1, mixed[i]));
-        }
-        accompaniment = mixed;
-      } else {
-        accompaniment = await readFullMix();
-      }
-
+      // Accompaniment: only the drum stem is ever separated, so this is
+      // always the full mix.
+      const accompaniment = await readFullMix();
       if (accompaniment) {
         const opus = await toOpus(accompaniment);
         sources.push({
@@ -740,6 +733,47 @@ function EditorAppInner({projectId}: {projectId: string}) {
       reviewedNoteIds={dtState.reviewedNoteIds}
       leftPanelChildren={
         <>
+          {onRegenerate && !gridIsProvided && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full gap-2"
+                disabled={regenerating}
+                onClick={() => setConfirmRegenerate(true)}>
+                <RefreshCw
+                  className={cn('h-4 w-4', regenerating && 'animate-spin')}
+                />
+                Regenerate
+              </Button>
+              <AlertDialog
+                open={confirmRegenerate}
+                onOpenChange={setConfirmRegenerate}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Regenerate chart?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This re-runs the beat grid and predicted notes from the
+                      cached audio. All note edits and review progress for
+                      this project will be discarded.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        setConfirmRegenerate(false);
+                        setRegenerating(true);
+                        onRegenerate();
+                      }}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      Regenerate
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          )}
           <ConfidenceGauge
             confidence={songConfidence}
             gridIsProvided={gridIsProvided}
@@ -779,9 +813,3 @@ async function getAudioDir(
   return projectDir.getDirectoryHandle('audio');
 }
 
-async function getStemsDir(
-  projectId: string,
-): Promise<FileSystemDirectoryHandle> {
-  const projectDir = await getProjectDir(projectId);
-  return projectDir.getDirectoryHandle('stems');
-}

@@ -59,6 +59,7 @@ import {
   runPipeline,
   runPipelineFromChart,
   resumePipeline,
+  regenerateProject,
   type PipelineProgress,
   type PipelineStep,
 } from '@/lib/drum-transcription/pipeline/runner';
@@ -523,6 +524,44 @@ function DrumTranscriptionInner() {
     }
   }, [router, waitForOrt]);
 
+  // Regenerate the current project's beat grid + predicted notes from its
+  // stored audio. The separated stem comes from the fingerprint-keyed cache,
+  // so only tempo mapping + transcription re-run. Setting pipelineProgress
+  // switches to ProcessingView (unmounting the editor); clearing it on
+  // success remounts the editor, which reloads the fresh chart from OPFS.
+  const handleRegenerate = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const meta = await getProject(projectId);
+      await waitForOrt(meta.name, projectId);
+
+      setPipelineProgress({
+        step: 'tempo-mapping',
+        progress: 0,
+        projectId,
+        projectName: meta.name,
+      });
+
+      await regenerateProject(projectId, progress => {
+        setPipelineProgress(progress);
+      });
+
+      toast.success('Regenerated beat grid and notes.');
+      setPipelineProgress(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Regenerate failed';
+      console.error('Regenerate pipeline error:', err);
+      setPipelineProgress(prev => ({
+        step: 'error',
+        progress: 0,
+        projectId,
+        projectName: prev?.projectName,
+        error: message,
+      }));
+      toast.error(message);
+    }
+  }, [projectId, waitForOrt]);
+
   const handleRetryPipeline = useCallback(() => {
     if (pipelineProgress?.projectId) {
       // Resume existing project
@@ -694,7 +733,7 @@ function DrumTranscriptionInner() {
           </Button>
         </div>
         <ChartEditorProvider activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
-          <EditorApp projectId={projectId} />
+          <EditorApp projectId={projectId} onRegenerate={handleRegenerate} />
         </ChartEditorProvider>
       </div>
     );

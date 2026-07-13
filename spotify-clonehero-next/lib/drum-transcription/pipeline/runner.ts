@@ -26,6 +26,10 @@ import {
   hasProjectChartFile,
   writePackageInfo,
   writeProjectAssets,
+  deleteProjectFile,
+  getProject,
+  editedVariant,
+  CHART_FILE_BASENAMES,
   type ProjectMetadata,
   type PackageInfo,
 } from '../storage/opfs';
@@ -706,7 +710,6 @@ export async function resumePipeline(
 ): Promise<string> {
   const txr = transcriber ?? createDefaultTranscriber();
 
-  const {getProject} = await import('../storage/opfs');
   const meta = await getProject(projectId);
 
   // Check what's already done
@@ -826,6 +829,60 @@ export async function resumePipeline(
   });
 
   return projectId;
+}
+
+// ---------------------------------------------------------------------------
+// Regeneration
+// ---------------------------------------------------------------------------
+
+/**
+ * Derived artifacts deleted by {@link regenerateProject} so that
+ * {@link resumePipeline}'s gates recompute the tempo map and predicted notes.
+ * Covers both chart formats plus their edited (autosave) variants — the
+ * edited variant must go too, since findProjectChartFile prefers it and a
+ * leftover one would shadow the regenerated chart.
+ */
+export const REGENERATED_ARTIFACT_FILES: readonly string[] = [
+  SYNCTRACK_FILE,
+  'confidence.json',
+  'review-progress.json',
+  CHART_FILE_BASENAMES.chart,
+  CHART_FILE_BASENAMES.mid,
+  editedVariant(CHART_FILE_BASENAMES.chart),
+  editedVariant(CHART_FILE_BASENAMES.mid),
+];
+
+/**
+ * Regenerate a project's beat grid (predicted tempo map) and predicted notes
+ * from its stored audio, discarding all edits and review progress.
+ *
+ * The separated drum stem is reused from the fingerprint-keyed stem cache
+ * (resumePipeline's separation gate sees it as already done), so this only
+ * re-runs tempo mapping + transcription — no GPU separation.
+ *
+ * Only valid for predicted-grid projects: a provided-grid (chart-flow)
+ * project's grid is the user's own chart, and this generic path cannot
+ * reconstruct its original ParsedChart (same restriction as resume).
+ */
+export async function regenerateProject(
+  projectId: string,
+  onProgress: PipelineProgressCallback,
+  transcriber?: DrumTranscriber,
+): Promise<string> {
+  const meta = await getProject(projectId);
+  if (meta.gridSource === 'provided') {
+    throw new Error(
+      'This project was created from an existing chart; its grid came from ' +
+        'that chart, so there is nothing to regenerate.',
+    );
+  }
+
+  for (const fileName of REGENERATED_ARTIFACT_FILES) {
+    await deleteProjectFile(projectId, fileName);
+  }
+  await updateProject(projectId, {stage: 'transcribing'});
+
+  return resumePipeline(projectId, onProgress, transcriber);
 }
 
 // ---------------------------------------------------------------------------

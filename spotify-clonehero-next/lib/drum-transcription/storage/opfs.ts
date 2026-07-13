@@ -7,6 +7,9 @@
  *
  * Directory structure:
  *   drum-transcription/
+ *     stem-cache/        - Separated stems keyed by input fingerprint, shared
+ *       {fingerprint}/     across projects (see storage/stem-cache.ts).
+ *         drums.pcm
  *     {projectId}/
  *       metadata.json    - Project metadata (name, creation date, etc.)
  *       audio/
@@ -14,10 +17,8 @@
  *         original.<ext> - The user's uploaded file, byte-for-byte
  *         meta.json      - Audio metadata (sample rate, channels, duration)
  *       stems/
- *         drums.pcm      - Separated drum stem
- *         bass.pcm       - Separated bass stem
- *         other.pcm      - Separated other stem
- *         vocals.pcm     - Separated vocals stem
+ *         drums.pcm      - Legacy per-project drum stem (projects created
+ *                            before the fingerprint-keyed stem cache)
  *       chart/
  *         notes.chart     - ML-generated chart
  *         notes.edited.chart - Human-edited chart
@@ -72,6 +73,13 @@ export interface ProjectMetadata {
   durationSeconds: number | null;
   /** Processing stage the project is currently in */
   stage: ProjectStage;
+  /**
+   * Fingerprint key of the project's entry in the shared stem cache —
+   * SHA-256 over the uploaded audio bytes + separator identity (see
+   * storage/stem-cache.ts). Computed lazily on first separation for
+   * projects created before this field existed.
+   */
+  stemFingerprint?: string | undefined;
   /**
    * Which SyncTrack the chart's notes were placed against (chart-flow
    * feature). `'provided'` — the user supplied an existing chart and its own
@@ -192,6 +200,9 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 
   for await (const [name, handle] of ns.entries()) {
     if (handle.kind !== 'directory') continue;
+    // The shared stem cache lives alongside project directories but is not
+    // a project (see storage/stem-cache.ts).
+    if (name === 'stem-cache') continue;
 
     try {
       const metaHandle = await handle.getFileHandle(METADATA_FILE);
@@ -238,7 +249,7 @@ export async function updateProject(
   updates: Partial<
     Pick<
       ProjectMetadata,
-      'name' | 'durationSeconds' | 'stage' | 'gridSource'
+      'name' | 'durationSeconds' | 'stage' | 'gridSource' | 'stemFingerprint'
     >
   >,
 ): Promise<ProjectMetadata> {
@@ -352,6 +363,21 @@ export async function readProjectText(
   const dir = await getProjectDir(projectId);
   const fileHandle = await dir.getFileHandle(fileName);
   return readTextFile(fileHandle);
+}
+
+/**
+ * Deletes a file within a project directory. A missing file is a no-op.
+ */
+export async function deleteProjectFile(
+  projectId: string,
+  fileName: string,
+): Promise<void> {
+  try {
+    const dir = await getProjectDir(projectId);
+    await dir.removeEntry(fileName);
+  } catch {
+    // Already absent (or the project dir doesn't exist) — nothing to delete.
+  }
 }
 
 /**
