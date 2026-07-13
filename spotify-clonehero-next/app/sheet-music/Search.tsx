@@ -3,12 +3,16 @@
 import {useMemo, useEffect, useRef, useState, useCallback} from 'react';
 import {useInView} from 'react-intersection-observer';
 import {parseAsString, useQueryState} from 'nuqs';
-import {Search as SearchIcon} from 'lucide-react';
+import {ArrowLeft, Search as SearchIcon} from 'lucide-react';
 import {Input} from '@/components/ui/input';
 import {Button} from '@/components/ui/button';
 import Link from 'next/link';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import debounce from 'debounce';
+import LocalChartLoader, {type LocalChart} from './LocalChartLoader';
+
+const SongView = dynamic(() => import('./[slug]/SongView'), {ssr: false});
 import {
   ChartInstruments,
   preFilterInstruments,
@@ -96,6 +100,8 @@ export default function Search({
   //   parseAsString,
   // );
   const instrumentFilter = 'drums';
+
+  const [localChart, setLocalChart] = useState<LocalChart | null>(null);
 
   const [filteredSongs, setFilteredSongs] =
     useState<EncoreResponse>(defaultResults);
@@ -201,6 +207,27 @@ export default function Search({
     };
   }, [filteredSongs, inView, page, searchQuery, instrumentFilter]);
 
+  if (localChart) {
+    // Preserve the body's flex column height chain (body is
+    // `flex flex-col h-screen`) so SongView's ChartDetailLayout can
+    // constrain itself to the viewport like on the [slug] page.
+    return (
+      <div className="flex flex-col flex-1 min-h-0 w-full">
+        <div className="px-4 py-1 border-b border-border/60">
+          <Button variant="ghost" size="sm" onClick={() => setLocalChart(null)}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to search
+          </Button>
+        </div>
+        <SongView
+          metadata={localChart.metadata}
+          chart={localChart.chart}
+          audioFiles={localChart.audioFiles}
+        />
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-background w-full">
       <div className="container mx-auto px-4 py-8">
@@ -225,6 +252,20 @@ export default function Search({
                 onChange={handleSearch}
               />
             </div>
+
+            <details className="group">
+              <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground transition-colors list-none [&::-webkit-details-marker]:hidden">
+                <span className="group-open:hidden">
+                  ▸ Or play a local chart (folder, .zip, or .sng)
+                </span>
+                <span className="hidden group-open:inline">
+                  ▾ Play a local chart (folder, .zip, or .sng)
+                </span>
+              </summary>
+              <div className="mt-3 max-w-xl">
+                <LocalChartLoader onLoaded={setLocalChart} />
+              </div>
+            </details>
           </div>
         </header>
 
