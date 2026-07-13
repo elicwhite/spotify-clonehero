@@ -41,7 +41,21 @@ import {
 } from '../timing';
 import {getChartMapping} from '../ml/class-mapping';
 import type {RawDrumEvent} from '../ml/types';
-import {SYSTEMATIC_ONSET_MS} from '../ml/types';
+import {
+  SYSTEMATIC_ONSET_MS_CHART_FLOW,
+  SYSTEMATIC_ONSET_MS_AUDIO_FLOW,
+} from '../ml/types';
+
+/**
+ * Which grid a chart's note placement is measured against — selects the
+ * flow-specific {@link SYSTEMATIC_ONSET_MS_CHART_FLOW} /
+ * {@link SYSTEMATIC_ONSET_MS_AUDIO_FLOW} correction in {@link snapOnsetTick}.
+ * 'chart' = the existing-chart flow (buildChartDocumentFromExistingChart,
+ * placement measured against the chart's own SyncTrack). 'audio' = the
+ * audio-only flow (buildChartDocument, placement measured against a
+ * model-predicted grid, which carries its own bias).
+ */
+export type OnsetFlow = 'chart' | 'audio';
 import type {DrumNote, DrumNoteFlags, TimedTempo} from '../chart-types';
 
 /** Default resolution (ticks per quarter note). */
@@ -170,7 +184,7 @@ export function buildChartDocument(
   // including cross-class collisions like HT (yellow tom) + HH (yellow
   // cymbal) — which would write an invalid doubled note. Dedup keeps the
   // higher-confidence event (its flags win); ties prefer the cymbal.
-  const drumNotes = dedupSnappedNotes(events, tempos, RESOLUTION);
+  const drumNotes = dedupSnappedNotes(events, tempos, RESOLUTION, 'audio');
 
   // Add an ExpertDrums track
   const track = createEmptyDrumsTrack();
@@ -321,7 +335,7 @@ export function buildChartDocumentFromExistingChart(
     tick: t.tick,
     beatsPerMinute: t.beatsPerMinute,
   }));
-  const drumNotes = dedupSnappedNotes(events, tempos, resolution);
+  const drumNotes = dedupSnappedNotes(events, tempos, resolution, 'chart');
 
   const drumsTrack = createEmptyDrumsTrack();
   addNotesToDrumsTrack(drumsTrack, drumNotes);
@@ -385,12 +399,19 @@ function snapOnsetTick(
   resolution: number,
   snapMode: SnapMode = 'candidate',
   toleranceMs: number = DEFAULT_SNAP_TOLERANCE_MS,
+  flow: OnsetFlow = 'audio',
 ): number {
   // Correct the systematic CRNN-vs-charter onset offset NOTE-side (the model
-  // fires ~SYSTEMATIC_ONSET_MS before charters place the note). Applied here at
-  // chart placement so the beat grid stays on true positions (not a grid
-  // shift). The drift/abstain check is relative to the corrected position too.
-  const adjMs = ms + SYSTEMATIC_ONSET_MS;
+  // fires ~SYSTEMATIC_ONSET_MS_{CHART,AUDIO}_FLOW before charters place the
+  // note — the two differ because the audio-flow's predicted grid carries its
+  // own bias). Applied here at chart placement so the beat grid stays on true
+  // positions (not a grid shift). The drift/abstain check is relative to the
+  // corrected position too.
+  const systematicOnsetMs =
+    flow === 'chart'
+      ? SYSTEMATIC_ONSET_MS_CHART_FLOW
+      : SYSTEMATIC_ONSET_MS_AUDIO_FLOW;
+  const adjMs = ms + systematicOnsetMs;
   const frac = msToTick(adjMs, timedTempos, resolution);
   const snapped =
     snapMode === 'uniform'
@@ -414,6 +435,7 @@ function dedupSnappedNotes(
   events: RawDrumEvent[],
   tempos: TempoLike[],
   resolution: number,
+  flow: OnsetFlow,
 ): DrumNote[] {
   const timedTempos = buildTimedTempos(tempos, resolution);
 
@@ -429,6 +451,8 @@ function dedupSnappedNotes(
       timedTempos,
       resolution,
       mapping.snapMode,
+      DEFAULT_SNAP_TOLERANCE_MS,
+      flow,
     );
     const key = `${tick}-${mapping.noteType}`;
     const existing = byKey.get(key);
@@ -465,6 +489,7 @@ export function buildConfidenceData(
   events: RawDrumEvent[],
   tempos: TempoLike[],
   resolution: number,
+  flow: OnsetFlow = 'audio',
 ): {notes: Record<string, number>} {
   const notes: Record<string, number> = {};
 
@@ -476,11 +501,19 @@ export function buildConfidenceData(
     const mapping = getChartMapping(event.drumClass);
     const ms = event.timeSeconds * 1000;
     // Snap to the same grid as the chart notes (see buildChartDocument), via
-    // the SAME snapOnsetTick helper (abstain band + per-lane snapMode
-    // included). Key by the canonical noteId (`${tick}:${type}`) so these keys
-    // match exactly what the editor looks up per note — a `${tick}-${type}`
-    // (dash) key silently misses every lookup and shows all notes as 100%.
-    const tick = snapOnsetTick(ms, timedTempos, resolution, mapping.snapMode);
+    // the SAME snapOnsetTick helper (abstain band + per-lane snapMode +
+    // flow-specific systematic-onset constant included). Key by the canonical
+    // noteId (`${tick}:${type}`) so these keys match exactly what the editor
+    // looks up per note — a `${tick}-${type}` (dash) key silently misses every
+    // lookup and shows all notes as 100%.
+    const tick = snapOnsetTick(
+      ms,
+      timedTempos,
+      resolution,
+      mapping.snapMode,
+      DEFAULT_SNAP_TOLERANCE_MS,
+      flow,
+    );
     const key = noteId({tick, type: mapping.noteType});
     // If multiple events map to the same tick+type, keep the highest confidence
     if (notes[key] === undefined || event.confidence > notes[key]) {

@@ -13,35 +13,41 @@
 
 import {
   buildChartDocument,
+  buildChartDocumentFromExistingChart,
   buildConfidenceData,
   RESOLUTION,
 } from '../pipeline/chart-builder';
 import {buildTimedTempos, msToTick} from '../timing';
 import type {RawDrumEvent} from '../ml/types';
-import {SYSTEMATIC_ONSET_MS} from '../ml/types';
+import {
+  SYSTEMATIC_ONSET_MS_AUDIO_FLOW,
+  SYSTEMATIC_ONSET_MS_CHART_FLOW,
+} from '../ml/types';
 import type {Synctrack} from '@/lib/tempo-map/types';
 import {
   writeChartFolder,
   readChart,
   getDrumNotes,
+  createEmptyChart,
   drumTypes,
   noteId,
 } from '@/lib/chart-edit';
 
 // `timeSeconds` here is the CHART-INTENDED position (where the note should land).
-// The pipeline adds SYSTEMATIC_ONSET_MS at chart placement to correct the CRNN's
-// systematic earliness, so a real model onset arrives that much before its chart
-// position. We pre-subtract the offset so these events simulate real model onsets
-// and land at the intended `timeSeconds` — keeping every tick assertion below
-// exact. A dedicated test ('applies the systematic onset offset') pins the offset
-// behavior itself.
+// This file only exercises buildChartDocument (the audio-flow builder), so the
+// pipeline adds SYSTEMATIC_ONSET_MS_AUDIO_FLOW at chart placement to correct the
+// CRNN's systematic earliness, so a real model onset arrives that much before its
+// chart position. We pre-subtract the offset so these events simulate real model
+// onsets and land at the intended `timeSeconds` — keeping every tick assertion
+// below exact. A dedicated test ('applies the systematic onset offset') pins the
+// offset behavior itself.
 function ev(
   timeSeconds: number,
   drumClass: RawDrumEvent['drumClass'],
   confidence = 0.9,
 ): RawDrumEvent {
   return {
-    timeSeconds: timeSeconds - SYSTEMATIC_ONSET_MS / 1000,
+    timeSeconds: timeSeconds - SYSTEMATIC_ONSET_MS_AUDIO_FLOW / 1000,
     drumClass,
     midiPitch: 0,
     confidence,
@@ -93,7 +99,11 @@ describe('buildChartDocument with a multi-tempo synctrack', () => {
     const timed = buildTimedTempos(chart.tempos, RESOLUTION);
     const expected = events
       .map(e =>
-        msToTick(e.timeSeconds * 1000 + SYSTEMATIC_ONSET_MS, timed, RESOLUTION),
+        msToTick(
+          e.timeSeconds * 1000 + SYSTEMATIC_ONSET_MS_AUDIO_FLOW,
+          timed,
+          RESOLUTION,
+        ),
       )
       .sort((a, b) => a - b);
     expect(notes.map(n => n.tick).sort((a, b) => a - b)).toEqual(expected);
@@ -406,5 +416,58 @@ describe('cymbal round-trip through writeChartFolder/readChart', () => {
     const tom = byTick.get(1920); // HT at 2.0s
     expect(tom?.type).toBe('yellowDrum');
     expect(tom?.flags.cymbal).not.toBe(true);
+  });
+});
+
+describe('flow-specific systematic onset correction', () => {
+  // Flat 120 BPM: 0.96 ticks/ms exactly. The SAME raw (uncorrected) event,
+  // fed through each builder, must be corrected by that builder's OWN
+  // constant (audio-flow 39ms vs chart-flow 33ms) — not a shared one. At
+  // 1003ms raw the resulting adjusted positions land on opposite sides of
+  // the abstain tolerance around the 960/1040 grid pair, so the two flows
+  // produce genuinely different tick placements (1000 raw-abstained vs 960
+  // snapped), proving each flow reads its own constant rather than one
+  // leaking into the other.
+  const rawEvent: RawDrumEvent = {
+    timeSeconds: 1.003,
+    drumClass: 'BD',
+    midiPitch: 0,
+    confidence: 0.9,
+  };
+
+  it('buildChartDocument (audio-flow) applies SYSTEMATIC_ONSET_MS_AUDIO_FLOW (39ms)', () => {
+    const doc = buildChartDocument([rawEvent], 'AudioFlowOffset', 4, null);
+    const notes = getDrumNotes(doc.parsedChart.trackData[0]);
+    expect(notes).toHaveLength(1);
+    // 1003ms + 39ms = 1042ms -> 1000.32 ticks; nearest grid line (1040) is
+    // 41.33ms of drift away (> the 40ms tolerance) -> abstains at round(1000.32).
+    expect(notes[0].tick).toBe(1000);
+  });
+
+  it('buildChartDocumentFromExistingChart (chart-flow) applies SYSTEMATIC_ONSET_MS_CHART_FLOW (33ms)', () => {
+    const existing = {
+      parsedChart: createEmptyChart({
+        format: 'chart',
+        resolution: RESOLUTION,
+        bpm: 120,
+        timeSignature: {numerator: 4, denominator: 4},
+      }),
+      assets: [],
+    };
+    const doc = buildChartDocumentFromExistingChart(existing, [rawEvent], 4);
+    const track = doc.parsedChart.trackData.find(
+      t => t.instrument === 'drums' && t.difficulty === 'expert',
+    );
+    expect(track).toBeDefined();
+    const notes = getDrumNotes(track!);
+    expect(notes).toHaveLength(1);
+    // 1003ms + 33ms = 1036ms -> 994.56 ticks; nearest grid line (960) is
+    // 36ms of drift away (<= the 40ms tolerance) -> snaps to 960.
+    expect(notes[0].tick).toBe(960);
+  });
+
+  it('sanity check: SYSTEMATIC_ONSET_MS_AUDIO_FLOW and _CHART_FLOW are the measured 39/33ms optima', () => {
+    expect(SYSTEMATIC_ONSET_MS_AUDIO_FLOW).toBe(39);
+    expect(SYSTEMATIC_ONSET_MS_CHART_FLOW).toBe(33);
   });
 });

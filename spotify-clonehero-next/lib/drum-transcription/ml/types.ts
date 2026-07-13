@@ -219,15 +219,30 @@ export const MODEL_FPS = 100;
  * grid — that would push the grid off true beats, the slot-gaming class the
  * research forbids) aligns placement to charter convention.
  *
- * Re-pinned 36 -> 25 (F35, PIPELINE_AUDIT.md, 2026-07-08): a fresh raw
- * measurement on the t3-class lineage (3.04M onset pairs, no nudge/re-anchor,
- * analysis/probe_f35_systematic_offset.py in the research repo) found median
- * -25 ms / mean -21.9 ms, family-uniform (spread 1 ms) and not tail-driven
- * (7.6% of songs outside +/-10 ms) — the prior 36 ms overshot by ~11-15 ms.
- * One shared constant; per-family split is unnecessary. This is the app-side
- * twin of the research pipeline's `global_offset_ms` constant.
+ * Re-pinned 25 -> flow-specific 33/39 (drum-to-chart repo
+ * analysis/probe_timing_p8_offset_retune.py, 1ms-resolution sweep over the
+ * full corpus, 2026-07-13): the chart-flow (existing chart's own SyncTrack)
+ * and audio-flow (predicted grid) optima differ by a real 6ms because the
+ * predicted grid carries its own bias — a single shared constant systematically
+ * undershoots one flow or the other. The prior 25 (F35, 2026-07-08, measured
+ * on the t3-class lineage without a flow split) cost ~232k-295k excess edits
+ * corpus-wide vs these optima.
  */
-export const SYSTEMATIC_ONSET_MS = 25;
+export const SYSTEMATIC_ONSET_MS_CHART_FLOW = 33;
+
+/**
+ * Systematic CRNN onset offset (ms) for the audio-flow (predicted-grid) path.
+ * See {@link SYSTEMATIC_ONSET_MS_CHART_FLOW} for the measurement and rationale.
+ */
+export const SYSTEMATIC_ONSET_MS_AUDIO_FLOW = 39;
+
+/**
+ * @deprecated Use {@link SYSTEMATIC_ONSET_MS_CHART_FLOW} or
+ * {@link SYSTEMATIC_ONSET_MS_AUDIO_FLOW} — the correction is flow-specific as
+ * of 2026-07-13. Kept only for call sites not yet updated; equals the
+ * audio-flow value (the more common path) as a best-effort default.
+ */
+export const SYSTEMATIC_ONSET_MS = SYSTEMATIC_ONSET_MS_AUDIO_FLOW;
 
 /**
  * NMS window for peak picking, in frames on each side of a kept peak

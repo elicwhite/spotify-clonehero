@@ -20,18 +20,21 @@ import {createEmptyChart, writeChartFolder} from '@/lib/chart-edit';
 import {buildChartDocumentFromExistingChart} from '@/lib/drum-transcription/pipeline/chart-builder';
 import {encodeWav} from '@/lib/audio/wav-encoder';
 import type {RawDrumEvent} from '@/lib/drum-transcription/ml/types';
-import {SYSTEMATIC_ONSET_MS} from '@/lib/drum-transcription/ml/types';
+import {SYSTEMATIC_ONSET_MS_CHART_FLOW} from '@/lib/drum-transcription/ml/types';
 
 import {assembleChartFiles} from '../assemble';
 import {exportAsZip} from '../zip';
 
+// This file exercises buildChartDocumentFromExistingChart (the chart-flow
+// builder), so events are pre-subtracted by the chart-flow systematic onset
+// offset.
 function ev(
   timeSeconds: number,
   drumClass: RawDrumEvent['drumClass'],
   confidence = 0.9,
 ): RawDrumEvent {
   return {
-    timeSeconds: timeSeconds - SYSTEMATIC_ONSET_MS / 1000,
+    timeSeconds: timeSeconds - SYSTEMATIC_ONSET_MS_CHART_FLOW / 1000,
     drumClass,
     midiPitch: 0,
     confidence,

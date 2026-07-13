@@ -29,7 +29,7 @@ import {buildChartDocument} from '@/lib/drum-transcription/pipeline/chart-builde
 import {writeChartFolder} from '@/lib/chart-edit';
 import {encodeWav} from '@/lib/audio/wav-encoder';
 import type {RawDrumEvent} from '@/lib/drum-transcription/ml/types';
-import {SYSTEMATIC_ONSET_MS} from '@/lib/drum-transcription/ml/types';
+import {SYSTEMATIC_ONSET_MS_AUDIO_FLOW} from '@/lib/drum-transcription/ml/types';
 import type {Synctrack} from '@/lib/tempo-map/types';
 
 import {muxOggOpus} from '@/lib/audio/ogg-opus';
@@ -42,14 +42,15 @@ import {exportAsSng} from '../sng';
 // Fixtures
 // ---------------------------------------------------------------------------
 
-/** Pre-subtract the systematic onset offset so events land on intended ticks. */
+// This file exercises buildChartDocument (the audio-flow builder), so events
+// are pre-subtracted by the audio-flow systematic onset offset.
 function ev(
   timeSeconds: number,
   drumClass: RawDrumEvent['drumClass'],
   confidence = 0.9,
 ): RawDrumEvent {
   return {
-    timeSeconds: timeSeconds - SYSTEMATIC_ONSET_MS / 1000,
+    timeSeconds: timeSeconds - SYSTEMATIC_ONSET_MS_AUDIO_FLOW / 1000,
     drumClass,
     midiPitch: 0,
     confidence,

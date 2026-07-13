@@ -513,6 +513,7 @@ export async function runPipeline(
       result.events,
       chartDoc.parsedChart.tempos,
       RESOLUTION,
+      'audio',
     );
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
     await writeProjectBinary(projectId, chartFile.fileName, chartFile.data);
@@ -676,6 +677,7 @@ export async function runPipelineFromChart(
     result.events,
     finalChartDoc.parsedChart.tempos,
     finalChartDoc.parsedChart.resolution || RESOLUTION,
+    'chart',
   );
   await writeProjectJSON(projectId, 'confidence.json', confidenceData);
   await writeProjectBinary(projectId, chartFile.fileName, chartFile.data);
@@ -808,6 +810,7 @@ export async function resumePipeline(
       result.events,
       chartDoc.parsedChart.tempos,
       RESOLUTION,
+      'audio',
     );
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
     await writeProjectBinary(projectId, chartFile.fileName, chartFile.data);
