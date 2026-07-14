@@ -4,7 +4,7 @@ import {useCallback} from 'react';
 import {toast} from 'sonner';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
-import {readChart} from '@/lib/chart-edit';
+import {readChart, type ChartDocument} from '@/lib/chart-edit';
 import {
   findAudioFiles,
   type Files,
@@ -15,25 +15,31 @@ import {ChartResponseEncore} from '@/lib/chartSelection';
 export interface LocalChart {
   metadata: ChartResponseEncore;
   chart: ParsedChart;
+  chartDoc: ChartDocument;
   audioFiles: Files;
 }
 
 /**
  * Chart selector (folder / .zip / .sng) for playing a local chart in the
- * sheet-music viewer. Parses the chart client-side and hands the same
- * {metadata, chart, audioFiles} shape that the Encore-backed
- * [slug]/ClientPage feeds to SongView. Local charts have no Encore
- * identity, so `md5` is empty and save/practice persistence is inert.
+ * sheet-music viewer or the preview editor. Parses the chart client-side
+ * and hands the same {metadata, chart, audioFiles} shape that the
+ * Encore-backed pages feed to their viewers, plus the editable
+ * `chartDoc` for consumers built on the chart-editor shell. Local charts
+ * have no Encore identity, so `md5` is empty and save/practice
+ * persistence is inert.
  */
 export default function LocalChartLoader({
   onLoaded,
+  id,
 }: {
   onLoaded: (chart: LocalChart) => void;
+  id: string;
 }) {
   const handleLoaded = useCallback(
     (loaded: LoadedFiles) => {
       try {
-        const {parsedChart} = readChart(loaded.files);
+        const chartDoc = readChart(loaded.files);
+        const {parsedChart} = chartDoc;
 
         if (!parsedChart.trackData.some(t => t.instrument === 'drums')) {
           toast.error('No drum track found in this chart');
@@ -61,6 +67,7 @@ export default function LocalChartLoader({
             file: '',
           },
           chart: parsedChart,
+          chartDoc,
           audioFiles,
         });
       } catch (e) {
@@ -70,5 +77,5 @@ export default function LocalChartLoader({
     [onLoaded],
   );
 
-  return <ChartDropZone onLoaded={handleLoaded} id="sheet-music-local-chart" />;
+  return <ChartDropZone onLoaded={handleLoaded} id={id} />;
 }

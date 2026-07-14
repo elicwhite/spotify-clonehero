@@ -64,7 +64,7 @@ export async function getChartAndAudioFiles(chart: ChartResponseEncore) {
   return {metadata: chart, chart: parsedChart, audioFiles};
 }
 
-async function getChartFiles(chartData: ChartResponseEncore) {
+export async function getChartFiles(chartData: ChartResponseEncore) {
   console.log('chart', chartData);
   const chartUrl = `https://files.enchor.us/${
     chartData.md5 + (chartData.hasVideoBackground ? '_novideo' : '')

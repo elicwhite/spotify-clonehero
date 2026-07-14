@@ -10,7 +10,9 @@ import Link from 'next/link';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import debounce from 'debounce';
-import LocalChartLoader, {type LocalChart} from './LocalChartLoader';
+import LocalChartLoader, {
+  type LocalChart,
+} from '@/components/chart-picker/LocalChartLoader';
 
 const SongView = dynamic(() => import('./[slug]/SongView'), {ssr: false});
 import {
@@ -263,7 +265,10 @@ export default function Search({
                 </span>
               </summary>
               <div className="mt-3 max-w-xl">
-                <LocalChartLoader onLoaded={setLocalChart} />
+                <LocalChartLoader
+                  onLoaded={setLocalChart}
+                  id="sheet-music-local-chart"
+                />
               </div>
             </details>
           </div>
