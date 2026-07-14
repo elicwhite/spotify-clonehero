@@ -219,22 +219,25 @@ export const MODEL_FPS = 100;
  * grid — that would push the grid off true beats, the slot-gaming class the
  * research forbids) aligns placement to charter convention.
  *
- * Re-pinned 25 -> flow-specific 33/39 (drum-to-chart repo
- * analysis/probe_timing_p8_offset_retune.py, 1ms-resolution sweep over the
- * full corpus, 2026-07-13): the chart-flow (existing chart's own SyncTrack)
- * and audio-flow (predicted grid) optima differ by a real 6ms because the
- * predicted grid carries its own bias — a single shared constant systematically
- * undershoots one flow or the other. The prior 25 (F35, 2026-07-08, measured
- * on the t3-class lineage without a flow split) cost ~232k-295k excess edits
- * corpus-wide vs these optima.
+ * AMENDED 2026-07-14: the 33/39 pinned the day before came from System C's
+ * timing bias, not the model the app actually ships (t4). The app ships t4,
+ * and t4 has its own, unrelated bias profile — re-running the same P8 retune
+ * (drum-to-chart repo analysis/probe_timing_p8_offset_retune.py, 1ms-resolution
+ * sweep over the full corpus) on t4's own predictions
+ * (product_cache_t4_diagJ; wiki/t4-rebasing-report.md, commit ecff988) gives
+ * optima of 0ms (chart-flow, GT-basis) / 7ms (audio-flow, pred-basis) — not a
+ * scaled version of 33/39. The prior hardcoded 25 cost ~1.47M excess edits vs
+ * the t4 optimum corpus-wide; shipping 33/39 would have been similarly wrong
+ * in the other direction. Re-derive whenever the shipped model changes —
+ * this constant is model-specific, not a fixed property of the pipeline.
  */
-export const SYSTEMATIC_ONSET_MS_CHART_FLOW = 33;
+export const SYSTEMATIC_ONSET_MS_CHART_FLOW = 0;
 
 /**
  * Systematic CRNN onset offset (ms) for the audio-flow (predicted-grid) path.
  * See {@link SYSTEMATIC_ONSET_MS_CHART_FLOW} for the measurement and rationale.
  */
-export const SYSTEMATIC_ONSET_MS_AUDIO_FLOW = 39;
+export const SYSTEMATIC_ONSET_MS_AUDIO_FLOW = 7;
 
 /**
  * @deprecated Use {@link SYSTEMATIC_ONSET_MS_CHART_FLOW} or

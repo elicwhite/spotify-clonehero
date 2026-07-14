@@ -422,29 +422,20 @@ describe('cymbal round-trip through writeChartFolder/readChart', () => {
 describe('flow-specific systematic onset correction', () => {
   // Flat 120 BPM: 0.96 ticks/ms exactly. The SAME raw (uncorrected) event,
   // fed through each builder, must be corrected by that builder's OWN
-  // constant (audio-flow 39ms vs chart-flow 33ms) — not a shared one. At
-  // 1003ms raw the resulting adjusted positions land on opposite sides of
-  // the abstain tolerance around the 960/1040 grid pair, so the two flows
-  // produce genuinely different tick placements (1000 raw-abstained vs 960
-  // snapped), proving each flow reads its own constant rather than one
+  // constant (audio-flow 7ms vs chart-flow 0ms, the t4-basis optima) — not a
+  // shared one. At 1041ms raw the two adjusted positions land on opposite
+  // sides of the abstain tolerance around the 960/1040 grid pair, so the two
+  // flows produce genuinely different tick placements (999 raw-abstained vs
+  // 1040 snapped), proving each flow reads its own constant rather than one
   // leaking into the other.
   const rawEvent: RawDrumEvent = {
-    timeSeconds: 1.003,
+    timeSeconds: 1.041,
     drumClass: 'BD',
     midiPitch: 0,
     confidence: 0.9,
   };
 
-  it('buildChartDocument (audio-flow) applies SYSTEMATIC_ONSET_MS_AUDIO_FLOW (39ms)', () => {
-    const doc = buildChartDocument([rawEvent], 'AudioFlowOffset', 4, null);
-    const notes = getDrumNotes(doc.parsedChart.trackData[0]);
-    expect(notes).toHaveLength(1);
-    // 1003ms + 39ms = 1042ms -> 1000.32 ticks; nearest grid line (1040) is
-    // 41.33ms of drift away (> the 40ms tolerance) -> abstains at round(1000.32).
-    expect(notes[0].tick).toBe(1000);
-  });
-
-  it('buildChartDocumentFromExistingChart (chart-flow) applies SYSTEMATIC_ONSET_MS_CHART_FLOW (33ms)', () => {
+  it('buildChartDocumentFromExistingChart (chart-flow) applies SYSTEMATIC_ONSET_MS_CHART_FLOW (0ms)', () => {
     const existing = {
       parsedChart: createEmptyChart({
         format: 'chart',
@@ -461,13 +452,22 @@ describe('flow-specific systematic onset correction', () => {
     expect(track).toBeDefined();
     const notes = getDrumNotes(track!);
     expect(notes).toHaveLength(1);
-    // 1003ms + 33ms = 1036ms -> 994.56 ticks; nearest grid line (960) is
-    // 36ms of drift away (<= the 40ms tolerance) -> snaps to 960.
-    expect(notes[0].tick).toBe(960);
+    // 1041ms + 0ms = 1041ms -> 999.36 ticks; nearest grid line (960) is
+    // 41ms of drift away (> the 40ms tolerance) -> abstains at round(999.36).
+    expect(notes[0].tick).toBe(999);
   });
 
-  it('sanity check: SYSTEMATIC_ONSET_MS_AUDIO_FLOW and _CHART_FLOW are the measured 39/33ms optima', () => {
-    expect(SYSTEMATIC_ONSET_MS_AUDIO_FLOW).toBe(39);
-    expect(SYSTEMATIC_ONSET_MS_CHART_FLOW).toBe(33);
+  it('buildChartDocument (audio-flow) applies SYSTEMATIC_ONSET_MS_AUDIO_FLOW (7ms)', () => {
+    const doc = buildChartDocument([rawEvent], 'AudioFlowOffset', 4, null);
+    const notes = getDrumNotes(doc.parsedChart.trackData[0]);
+    expect(notes).toHaveLength(1);
+    // 1041ms + 7ms = 1048ms -> 1006.08 ticks; nearest grid line (1040) is
+    // 35.33ms of drift away (<= the 40ms tolerance) -> snaps to 1040.
+    expect(notes[0].tick).toBe(1040);
+  });
+
+  it('sanity check: SYSTEMATIC_ONSET_MS_AUDIO_FLOW and _CHART_FLOW are the t4-basis 7/0ms optima', () => {
+    expect(SYSTEMATIC_ONSET_MS_AUDIO_FLOW).toBe(7);
+    expect(SYSTEMATIC_ONSET_MS_CHART_FLOW).toBe(0);
   });
 });
