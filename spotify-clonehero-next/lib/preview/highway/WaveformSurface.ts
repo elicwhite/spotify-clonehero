@@ -23,6 +23,9 @@ const WAVE_COLOR = 'rgba(200, 200, 200, 0.7)';
  */
 const PEAK_FILL_RATIO = 0.8;
 
+/** Resting y position of the waveform mesh on the highway. */
+const MESH_BASE_Y = -0.1;
+
 /**
  * Compute the global peak amplitude (absolute value) across all samples and
  * channels in a PCM buffer. Returns 0 if the buffer is silent or empty.
@@ -54,6 +57,27 @@ export function computeRowHalfWidth(
   if (globalPeak <= 0) return 0;
   const normalized = rowPeak / globalPeak;
   return normalized * canvasHalfWidth * PEAK_FILL_RATIO;
+}
+
+/**
+ * Align a scroll position (in fractional samples) to the fixed bucket grid
+ * that canvas rows are drawn on. Buckets are anchored to the audio timeline
+ * (bucket `i` always covers samples `[i*bucketSize, (i+1)*bucketSize)`), so
+ * a given slice of audio renders identically at every scroll position —
+ * without this the row boundaries drift with the scroll and the per-row
+ * min/max peaks shimmer frame to frame.
+ *
+ * Returns the index of the bucket containing `startSamples` plus the
+ * fractional phase `[0, 1)` into that bucket, which the caller compensates
+ * for by nudging the mesh along the highway.
+ */
+export function computeBucketAlignment(
+  startSamples: number,
+  bucketSizeSamples: number,
+): {startBucket: number; phase: number} {
+  const exact = startSamples / bucketSizeSamples;
+  const startBucket = Math.floor(exact);
+  return {startBucket, phase: exact - startBucket};
 }
 
 export interface WaveformSurfaceConfig {
@@ -90,7 +114,7 @@ export class WaveformSurface {
   private sampleRate: number;
   private durationMs: number;
   private highwaySpeed: number;
-  private lastRenderedMs = -1;
+  private lastRenderedBucket: number | null = null;
   /**
    * Loudest absolute sample value across the entire audio buffer. Used to
    * normalize the per-row amplitudes so the visual peak fills a consistent
@@ -119,8 +143,15 @@ export class WaveformSurface {
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.wrapS = THREE.ClampToEdgeWrapping;
     this.texture.wrapT = THREE.ClampToEdgeWrapping;
-    this.texture.minFilter = THREE.NearestFilter;
-    this.texture.magFilter = THREE.NearestFilter;
+    // The 2048-row canvas is minified onto far fewer screen pixels. Nearest
+    // filtering would sample a different subset of texels as the scroll
+    // phase sweeps, making thin peaks sparkle frame to frame; mipmapped
+    // linear filtering averages the full footprint so the waveform holds
+    // still. Anisotropy keeps the grazing view angle from over-blurring.
+    this.texture.minFilter = THREE.LinearMipmapLinearFilter;
+    this.texture.magFilter = THREE.LinearFilter;
+    this.texture.generateMipmaps = true;
+    this.texture.anisotropy = 8;
 
     this.material = new THREE.MeshBasicMaterial({
       map: this.texture,
@@ -133,7 +164,7 @@ export class WaveformSurface {
 
     const geometry = new THREE.PlaneGeometry(config.highwayWidth, 2);
     this.mesh = new THREE.Mesh(geometry, this.material);
-    this.mesh.position.y = -0.1;
+    this.mesh.position.y = MESH_BASE_Y;
     // Render above the highway floor (HIGHWAY_FLOOR_RENDER_ORDER = 0) so
     // the gray plane stays visible at the edges as a frame, but below
     // markers / notes / cursor.
@@ -153,19 +184,25 @@ export class WaveformSurface {
     // The highway plane spans 2 world units. At highwaySpeed, that
     // corresponds to windowMs of visible time.
     const windowMs = (2 / this.highwaySpeed) * 1000;
+    const windowSamples = (windowMs / 1000) * this.sampleRate;
+    const bucketSize = windowSamples / CANVAS_HEIGHT;
 
     // The strikeline is at the bottom of the highway (world y = -1).
-    // currentTimeMs is at the strikeline. The top of the highway shows
-    // currentTimeMs + windowMs.
-    const startMs = currentTimeMs;
-    const endMs = currentTimeMs + windowMs;
+    // currentTimeMs is at the strikeline. Rows are drawn on a bucket grid
+    // anchored to the audio timeline so their content is independent of the
+    // scroll position; the sub-bucket phase is absorbed by nudging the mesh
+    // toward the strikeline (at most one row, ~0.001 world units).
+    const startSamples = (currentTimeMs / 1000) * this.sampleRate;
+    const {startBucket, phase} = computeBucketAlignment(
+      startSamples,
+      bucketSize,
+    );
+    this.mesh.position.y = MESH_BASE_Y - phase * (2 / CANVAS_HEIGHT);
 
-    // Quantise to the nearest ms to avoid re-drawing on sub-ms changes
-    const quantised = Math.round(startMs);
-    if (quantised === this.lastRenderedMs) return;
-    this.lastRenderedMs = quantised;
+    if (startBucket === this.lastRenderedBucket) return;
+    this.lastRenderedBucket = startBucket;
 
-    this.renderWindow(startMs, endMs);
+    this.renderWindow(startBucket, bucketSize);
     this.texture.needsUpdate = true;
   }
 
@@ -183,7 +220,7 @@ export class WaveformSurface {
   // Oscilloscope-style waveform rendering for the visible window
   // -----------------------------------------------------------------------
 
-  private renderWindow(startMs: number, endMs: number): void {
+  private renderWindow(startBucket: number, bucketSize: number): void {
     const ctx = this.ctx;
     const w = CANVAS_WIDTH;
     const h = CANVAS_HEIGHT;
@@ -193,34 +230,30 @@ export class WaveformSurface {
     // anywhere we don't draw a peak.
     ctx.clearRect(0, 0, w, h);
 
-    // Convert time range to sample range
-    const startSample = Math.max(
-      0,
-      Math.floor((startMs / 1000) * this.sampleRate),
-    );
-    const endSample = Math.min(
-      Math.floor((endMs / 1000) * this.sampleRate),
-      this.audioData.length / this.channels,
-    );
-    const totalWindowSamples = endSample - startSample;
-    if (totalWindowSamples <= 0) return;
+    const totalSamples = this.audioData.length / this.channels;
 
-    // How many audio samples per canvas row
-    const samplesPerRow = totalWindowSamples / h;
-
-    // Draw waveform: for each row, find the peak amplitude and draw a
-    // horizontal line extending from the center. This gives the oscilloscope
-    // look where louder parts have wider peaks (like Moonscraper).
+    // Draw waveform: for each row, find the peak amplitude across its fixed
+    // audio-timeline bucket and draw a horizontal line extending from the
+    // center. This gives the oscilloscope look where louder parts have wider
+    // peaks (like Moonscraper).
     ctx.fillStyle = WAVE_COLOR;
 
     for (let row = 0; row < h; row++) {
-      const rowStartSample = startSample + Math.floor(row * samplesPerRow);
-      const rowEndSample = startSample + Math.floor((row + 1) * samplesPerRow);
+      const bucket = startBucket + row;
+      // Bucket boundaries depend only on the bucket index, never on the
+      // scroll position, so a row covering a given slice of audio always
+      // renders the same peak.
+      const rowStartSample = Math.max(0, Math.floor(bucket * bucketSize));
+      const rowEndSample = Math.min(
+        totalSamples,
+        Math.floor((bucket + 1) * bucketSize),
+      );
+      if (rowEndSample <= rowStartSample) continue;
 
       // Find min/max amplitude across all channels for this row
       let minVal = 0;
       let maxVal = 0;
-      for (let s = rowStartSample; s < rowEndSample && s < endSample; s++) {
+      for (let s = rowStartSample; s < rowEndSample; s++) {
         for (let c = 0; c < this.channels; c++) {
           const val = this.audioData[s * this.channels + c];
           if (val < minVal) minVal = val;
