@@ -6,7 +6,11 @@
  * postprocess-reference.test.ts; these cover the algorithm's semantics.
  */
 
-import {peakPick, pickPeaksFromModelOutput} from '../ml/peak-picking';
+import {
+  peakPick,
+  pickPeaksFromModelOutput,
+  applyMaxTwoHands,
+} from '../ml/peak-picking';
 import type {ModelOutput} from '../ml/types';
 import {NUM_DRUM_CLASSES, CRNN_THRESHOLDS} from '../ml/types';
 
@@ -147,5 +151,115 @@ describe('pickPeaksFromModelOutput', () => {
       const cls = Math.round(e.timeSeconds * 100 - 50) / 50;
       expect(e.midiPitch).toBe(expectedPitches[cls]);
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // Max-2-hands (kick is a foot, so at most 2 non-kick lanes at one instant).
+  // Validated 2026-07-14 against the drum-to-chart research corpus
+  // (analysis/max2hands_*.py); see applyMaxTwoHands's doc comment.
+  // -------------------------------------------------------------------------
+  describe('max-2-hands constraint', () => {
+    it('keeps a 2-hand chord untouched (snare + one cymbal)', () => {
+      const events = pickPeaksFromModelOutput(
+        makeOutput([
+          {frame: 100, cls: 1, value: 0.9}, // SD
+          {frame: 100, cls: 6, value: 0.8}, // CR
+        ]),
+      );
+      expect(events.map(e => e.drumClass).sort()).toEqual(['CR', 'SD']);
+    });
+
+    it('drops the weakest lane from a 3-hand chord, keeping the top 2 by height', () => {
+      const events = pickPeaksFromModelOutput(
+        makeOutput([
+          {frame: 100, cls: 1, value: 0.9}, // SD, strongest
+          {frame: 100, cls: 6, value: 0.75}, // CR
+          {frame: 100, cls: 8, value: 0.6}, // RD, weakest -> dropped
+        ]),
+      );
+      expect(events.map(e => e.drumClass).sort()).toEqual(['CR', 'SD']);
+    });
+
+    it('the canonical crash+ride+snare hedge case (Rooftops REMIX instance)', () => {
+      // Real activation heights recovered from the auto-generated Rooftops
+      // REMIX chart at tick 195000 (2:42.6): snare clearly loudest, crash
+      // and ride hedge each other.
+      const events = pickPeaksFromModelOutput(
+        makeOutput([
+          {frame: 100, cls: 1, value: 0.894}, // SD
+          {frame: 100, cls: 6, value: 0.704}, // CR
+          {frame: 100, cls: 8, value: 0.796}, // RD, narrowly beats CR
+        ]),
+      );
+      expect(events.map(e => e.drumClass).sort()).toEqual(['RD', 'SD']);
+    });
+
+    it('kick plus a 2-hand chord is untouched (kick never counts toward the trigger)', () => {
+      const events = pickPeaksFromModelOutput(
+        makeOutput([
+          {frame: 100, cls: 0, value: 0.9}, // BD
+          {frame: 100, cls: 1, value: 0.9}, // SD
+          {frame: 100, cls: 6, value: 0.8}, // CR
+        ]),
+      );
+      expect(events.map(e => e.drumClass).sort()).toEqual(['BD', 'CR', 'SD']);
+    });
+
+    it('kick plus a 3-hand chord: kick untouched, non-kick lanes still constrained to 2', () => {
+      const events = pickPeaksFromModelOutput(
+        makeOutput([
+          {frame: 100, cls: 0, value: 0.9}, // BD
+          {frame: 100, cls: 1, value: 0.9}, // SD
+          {frame: 100, cls: 6, value: 0.75}, // CR
+          {frame: 100, cls: 8, value: 0.6}, // RD, weakest non-kick -> dropped
+        ]),
+      );
+      expect(events.map(e => e.drumClass).sort()).toEqual(['BD', 'CR', 'SD']);
+    });
+
+    it('does not touch 3 distinct lanes spread outside the clustering window', () => {
+      // 10ms window @ 100fps = 1 frame; 5 frames apart never clusters.
+      const events = pickPeaksFromModelOutput(
+        makeOutput([
+          {frame: 100, cls: 1, value: 0.9}, // SD
+          {frame: 105, cls: 6, value: 0.8}, // CR
+          {frame: 110, cls: 8, value: 0.7}, // RD
+        ]),
+      );
+      expect(events.map(e => e.drumClass).sort()).toEqual(['CR', 'RD', 'SD']);
+    });
+  });
+});
+
+describe('applyMaxTwoHands (unit)', () => {
+  it('is a no-op when every cluster has <3 distinct lanes', () => {
+    const onsets = [
+      {frame: 10, lane: 1, height: 0.9},
+      {frame: 10, lane: 6, height: 0.8},
+    ];
+    expect(applyMaxTwoHands(onsets)).toEqual(onsets);
+  });
+
+  it('chains adjacent onsets into one cluster even beyond the raw window span', () => {
+    // frame 10 -> 11 -> 12: each step is within 1 frame of its neighbor, so
+    // all three chain into one cluster despite the 10->12 span being 2
+    // frames (> the 1-frame window on its own).
+    const onsets = [
+      {frame: 10, lane: 1, height: 0.9},
+      {frame: 11, lane: 6, height: 0.8},
+      {frame: 12, lane: 8, height: 0.6},
+    ];
+    const kept = applyMaxTwoHands(onsets);
+    expect(kept.map(o => o.lane).sort()).toEqual([1, 6]);
+  });
+
+  it('breaks height ties by lower lane index', () => {
+    const onsets = [
+      {frame: 10, lane: 1, height: 0.9},
+      {frame: 10, lane: 8, height: 0.7},
+      {frame: 10, lane: 6, height: 0.7}, // tie with RD, lower lane index wins
+    ];
+    const kept = applyMaxTwoHands(onsets);
+    expect(kept.map(o => o.lane).sort()).toEqual([1, 6]);
   });
 });
