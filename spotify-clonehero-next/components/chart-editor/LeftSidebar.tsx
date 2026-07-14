@@ -114,31 +114,33 @@ export default function LeftSidebar({
         <div className="space-y-4 overflow-y-auto flex-1 p-4">
           {/* Loop controls */}
           <LoopControls audioManager={audioManager} />
-          {/* Grid step */}
-          <div className="space-y-2 pt-4 border-t">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Grid</span>
-              <Select
-                value={String(state.gridDivision)}
-                onValueChange={value =>
-                  dispatch({
-                    type: 'SET_GRID_DIVISION',
-                    division: Number(value),
-                  })
-                }>
-                <SelectTrigger className="h-8 w-[5.5rem] text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {GRID_OPTIONS.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Grid step — only meaningful when the chart can be edited */}
+          {capabilities.showEditingControls && (
+            <div className="space-y-2 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Grid</span>
+                <Select
+                  value={String(state.gridDivision)}
+                  onValueChange={value =>
+                    dispatch({
+                      type: 'SET_GRID_DIVISION',
+                      division: Number(value),
+                    })
+                  }>
+                  <SelectTrigger className="h-8 w-[5.5rem] text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GRID_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Speed */}
           <div className="space-y-2 pt-4 border-t">
@@ -346,42 +348,44 @@ export default function LeftSidebar({
             </div>
           )}
 
-          {/* Undo/Redo (always visible). */}
-          <div className="space-y-2 pt-4 border-t">
-            <span className="text-sm font-medium">History</span>
-            <div className="flex items-center gap-1.5">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={!canUndo}
-                    onClick={undo}>
-                    <Undo2 className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  Undo ({formatForDisplay('Mod+Z')})
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={!canRedo}
-                    onClick={redo}>
-                    <Redo2 className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  Redo ({formatForDisplay('Mod+Shift+Z')})
-                </TooltipContent>
-              </Tooltip>
+          {/* Undo/Redo — hidden on read-only pages. */}
+          {capabilities.showEditingControls && (
+            <div className="space-y-2 pt-4 border-t">
+              <span className="text-sm font-medium">History</span>
+              <div className="flex items-center gap-1.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={!canUndo}
+                      onClick={undo}>
+                      <Undo2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    Undo ({formatForDisplay('Mod+Z')})
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={!canRedo}
+                      onClick={redo}>
+                      <Redo2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    Redo ({formatForDisplay('Mod+Shift+Z')})
+                  </TooltipContent>
+                </Tooltip>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Note inspector — only useful when notes are selectable. */}
           {capabilities.selectable.has('note') && (

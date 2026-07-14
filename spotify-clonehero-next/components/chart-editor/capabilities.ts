@@ -9,6 +9,10 @@
  *  - {@link ADD_LYRICS_CAPABILITIES}: lyrics + phrase markers selectable
  *    + draggable; notes and sections render but are inert; drum lanes and
  *    placement tools are hidden.
+ *  - {@link PREVIEW_CAPABILITIES}: read-only playback — nothing is
+ *    interactive on the highway and all editing chrome is hidden; only
+ *    playback-related sidebar controls (loop, speed, zoom, highway mode)
+ *    remain.
  *
  * Pages mount `<ChartEditor capabilities={...}>` to pick a profile. Pages
  * that omit the prop fall back to drum-edit for backward compatibility.
@@ -51,6 +55,11 @@ export interface EditorCapabilities {
    * primary vocals track, so exposing other parts would mislead.
    */
   showVocalPartPicker: boolean;
+  /**
+   * Show sidebar controls that only matter when the chart can be edited
+   * (grid snapping, undo/redo history). Read-only pages hide them.
+   */
+  showEditingControls: boolean;
 }
 
 export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
@@ -62,6 +71,7 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
   showToolPalette: true,
   showHighwayModeToggle: true,
   showVocalPartPicker: true,
+  showEditingControls: true,
 };
 
 export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
@@ -73,4 +83,17 @@ export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
   showToolPalette: false,
   showHighwayModeToggle: false,
   showVocalPartPicker: false,
+  showEditingControls: true,
+};
+
+export const PREVIEW_CAPABILITIES: EditorCapabilities = {
+  hoverable: new Set(),
+  selectable: new Set(),
+  draggable: new Set(),
+  showNotePlacementTools: false,
+  showDrumLanes: true,
+  showToolPalette: false,
+  showHighwayModeToggle: true,
+  showVocalPartPicker: true,
+  showEditingControls: false,
 };

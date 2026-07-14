@@ -33,6 +33,7 @@ export {
 export {
   DRUM_EDIT_CAPABILITIES,
   ADD_LYRICS_CAPABILITIES,
+  PREVIEW_CAPABILITIES,
   type EditorCapabilities,
 } from './capabilities';
 
