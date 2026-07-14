@@ -45,6 +45,14 @@ import {
   SYSTEMATIC_ONSET_MS_CHART_FLOW,
   SYSTEMATIC_ONSET_MS_AUDIO_FLOW,
 } from '../ml/types';
+import {
+  DEFAULT_PHASE_ALIGN_CONFIG,
+  type PhaseAlignGateConfig,
+} from '../ml/phase-align-config';
+import {
+  computePhaseAlignShiftMs,
+  type PhaseAlignResult,
+} from './phase-align';
 
 /**
  * Which grid a chart's note placement is measured against — selects the
@@ -134,6 +142,13 @@ export function buildChartDocument(
   durationSeconds: number,
   synctrack?: Synctrack | null,
   sections?: LinkSegSections | null,
+  phaseAlignConfig: PhaseAlignGateConfig = DEFAULT_PHASE_ALIGN_CONFIG,
+  /** Mutated in place with the phase-align decision, when provided — lets
+   * callers (e.g. the pipeline runner) reuse the SAME shift for
+   * buildConfidenceData without recomputing it against a second, possibly
+   * inconsistent, tempo map. See {@link buildConfidenceData}'s
+   * `phaseAlignShiftMs` param. */
+  outPhaseAlign?: {result?: PhaseAlignResult},
 ): ChartDocument {
   // Create an empty parsed chart (single tempo + 4/4 time signature)
   let parsedChart = createEmptyChart({
@@ -169,6 +184,23 @@ export function buildChartDocument(
     tick: t.tick,
     beatsPerMinute: t.beatsPerMinute,
   }));
+  const timedTempos = buildTimedTempos(tempos, RESOLUTION);
+
+  // PHASE-ALIGN (audio-flow only): a per-song global time shift that
+  // maximizes onset alignment to strong metrical grid positions, applied
+  // BEFORE tick snapping below. Only fires under a decisive 3-condition
+  // gate (see phase-align.ts / phase-align-config.ts) — most songs are
+  // untouched (shiftMs stays 0). The search scores onsets at the same
+  // SYSTEMATIC_ONSET_MS_AUDIO_FLOW-corrected positions chart placement
+  // uses, mirroring the ported probe's search input.
+  const phaseAlignResult = computePhaseAlignShiftMs(
+    events.map(e => e.timeSeconds * 1000 + SYSTEMATIC_ONSET_MS_AUDIO_FLOW),
+    timedTempos,
+    RESOLUTION,
+    phaseAlignConfig,
+  );
+  if (outPhaseAlign) outPhaseAlign.result = phaseAlignResult;
+
   // Snap each onset tick to the musical grid (16ths / 16th-triplets) with
   // the SAME quantizer /tempo uses (swapSynctrack), including its abstain
   // band: an onset whose nearest grid line is more than
@@ -184,7 +216,13 @@ export function buildChartDocument(
   // including cross-class collisions like HT (yellow tom) + HH (yellow
   // cymbal) — which would write an invalid doubled note. Dedup keeps the
   // higher-confidence event (its flags win); ties prefer the cymbal.
-  const drumNotes = dedupSnappedNotes(events, tempos, RESOLUTION, 'audio');
+  const drumNotes = dedupSnappedNotes(
+    events,
+    tempos,
+    RESOLUTION,
+    'audio',
+    phaseAlignResult.shiftMs,
+  );
 
   // Add an ExpertDrums track
   const track = createEmptyDrumsTrack();
@@ -193,7 +231,6 @@ export function buildChartDocument(
 
   // Calculate end tick (slightly after last note or based on duration),
   // using the real tempo map to convert the audio duration.
-  const timedTempos = buildTimedTempos(tempos, RESOLUTION);
   // Snapping can nudge a note past its neighbor, so take the max tick rather
   // than assuming the last array element is latest.
   const lastNoteTick =
@@ -400,6 +437,10 @@ function snapOnsetTick(
   snapMode: SnapMode = 'candidate',
   toleranceMs: number = DEFAULT_SNAP_TOLERANCE_MS,
   flow: OnsetFlow = 'audio',
+  /** PHASE-ALIGN shift (ms), audio-flow only — see phase-align.ts. Always
+   * 0 for flow==='chart' (an existing chart's grid is trusted as-is; the
+   * lever never applies there — see {@link buildChartDocumentFromExistingChart}). */
+  phaseAlignShiftMs: number = 0,
 ): number {
   // Correct the systematic CRNN-vs-charter onset offset NOTE-side (the model
   // fires ~SYSTEMATIC_ONSET_MS_{CHART,AUDIO}_FLOW before charters place the
@@ -411,7 +452,8 @@ function snapOnsetTick(
     flow === 'chart'
       ? SYSTEMATIC_ONSET_MS_CHART_FLOW
       : SYSTEMATIC_ONSET_MS_AUDIO_FLOW;
-  const adjMs = ms + systematicOnsetMs;
+  const adjMs =
+    ms + systematicOnsetMs + (flow === 'audio' ? phaseAlignShiftMs : 0);
   const frac = msToTick(adjMs, timedTempos, resolution);
   const snapped =
     snapMode === 'uniform'
@@ -436,6 +478,7 @@ function dedupSnappedNotes(
   tempos: TempoLike[],
   resolution: number,
   flow: OnsetFlow,
+  phaseAlignShiftMs: number = 0,
 ): DrumNote[] {
   const timedTempos = buildTimedTempos(tempos, resolution);
 
@@ -453,6 +496,7 @@ function dedupSnappedNotes(
       mapping.snapMode,
       DEFAULT_SNAP_TOLERANCE_MS,
       flow,
+      phaseAlignShiftMs,
     );
     const key = `${tick}-${mapping.noteType}`;
     const existing = byKey.get(key);
@@ -490,6 +534,11 @@ export function buildConfidenceData(
   tempos: TempoLike[],
   resolution: number,
   flow: OnsetFlow = 'audio',
+  /** PHASE-ALIGN shift (ms) actually applied by {@link buildChartDocument}
+   * for this project — pass the SAME value the chart used (e.g.
+   * `outPhaseAlign.result.shiftMs`) so confidence keys match the chart's
+   * snapped ticks exactly. Ignored for flow==='chart'. */
+  phaseAlignShiftMs: number = 0,
 ): {notes: Record<string, number>} {
   const notes: Record<string, number> = {};
 
@@ -502,10 +551,10 @@ export function buildConfidenceData(
     const ms = event.timeSeconds * 1000;
     // Snap to the same grid as the chart notes (see buildChartDocument), via
     // the SAME snapOnsetTick helper (abstain band + per-lane snapMode +
-    // flow-specific systematic-onset constant included). Key by the canonical
-    // noteId (`${tick}:${type}`) so these keys match exactly what the editor
-    // looks up per note — a `${tick}-${type}` (dash) key silently misses every
-    // lookup and shows all notes as 100%.
+    // flow-specific systematic-onset constant + phase-align shift included).
+    // Key by the canonical noteId (`${tick}:${type}`) so these keys match
+    // exactly what the editor looks up per note — a `${tick}-${type}` (dash)
+    // key silently misses every lookup and shows all notes as 100%.
     const tick = snapOnsetTick(
       ms,
       timedTempos,
@@ -513,6 +562,7 @@ export function buildConfidenceData(
       mapping.snapMode,
       DEFAULT_SNAP_TOLERANCE_MS,
       flow,
+      phaseAlignShiftMs,
     );
     const key = noteId({tick, type: mapping.noteType});
     // If multiple events map to the same tick+type, keep the highest confidence

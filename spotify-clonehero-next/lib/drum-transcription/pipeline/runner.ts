@@ -57,6 +57,8 @@ import {
   DEFAULT_BPM,
   type StoredSynctrack,
 } from './chart-builder';
+import type {PhaseAlignResult} from './phase-align';
+import {loadPhaseAlignConfig} from '../ml/phase-align-config';
 import type {TranscriptionResult} from '../ml/types';
 
 // ---------------------------------------------------------------------------
@@ -487,13 +489,17 @@ export async function runPipeline(
     );
 
     // Build ChartDocument from transcription results under the real tempo
-    // map (or flat DEFAULT_BPM when tempo mapping failed).
+    // map (or flat DEFAULT_BPM when tempo mapping failed). PHASE-ALIGN's
+    // dev override (localStorage) is read once here, at pipeline start.
+    const phaseAlignOut: {result?: PhaseAlignResult} = {};
     const chartDoc = buildChartDocument(
       result.events,
       metadata.name,
       result.durationSeconds,
       synctrack,
       sections,
+      loadPhaseAlignConfig(),
+      phaseAlignOut,
     );
 
     // Serialize the chart. This path always builds a fresh ParsedChart with
@@ -512,12 +518,15 @@ export async function runPipeline(
     // Write confidence.json before the chart file: the chart file's presence
     // is the resume gate, so writing it last guarantees a crash never leaves
     // the chart present with confidence.json missing on resume. Both derive
-    // from the same events and tempo map.
+    // from the same events and tempo map — the SAME phase-align shift
+    // buildChartDocument applied above, so confidence keys match the
+    // chart's snapped ticks exactly.
     const confidenceData = buildConfidenceData(
       result.events,
       chartDoc.parsedChart.tempos,
       RESOLUTION,
       'audio',
+      phaseAlignOut.result?.shiftMs ?? 0,
     );
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
     await writeProjectBinary(projectId, chartFile.fileName, chartFile.data);
@@ -789,12 +798,15 @@ export async function resumePipeline(
       },
     );
 
+    const phaseAlignOut: {result?: PhaseAlignResult} = {};
     const chartDoc = buildChartDocument(
       result.events,
       meta.name,
       result.durationSeconds,
       synctrack,
       sections,
+      loadPhaseAlignConfig(),
+      phaseAlignOut,
     );
 
     const files = writeChartFolder(chartDoc);
@@ -808,12 +820,14 @@ export async function resumePipeline(
     // Write confidence.json before the chart file: the chart file's presence
     // is the resume gate, so writing it last guarantees a crash never leaves
     // the chart present with confidence.json missing on resume. Both derive
-    // from the same events and tempo map.
+    // from the same events and tempo map — the SAME phase-align shift
+    // buildChartDocument applied above.
     const confidenceData = buildConfidenceData(
       result.events,
       chartDoc.parsedChart.tempos,
       RESOLUTION,
       'audio',
+      phaseAlignOut.result?.shiftMs ?? 0,
     );
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
     await writeProjectBinary(projectId, chartFile.fileName, chartFile.data);
