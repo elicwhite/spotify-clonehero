@@ -38,21 +38,22 @@ import type {RawDrumEvent, DrumClassName} from './types';
  *
  *   - `candidate`: snap to the nearest musical subdivision (16th / 16th-triplet)
  *     via the shared candidate scorer.
- *   - `uniform`: snap to the nearest uniform 1/24-beat line (research "naive"
- *     quantizer).
  *
- * ALL lanes currently use `candidate` (the deployed/pre-experiment behavior).
- * A per-lane carve-out (uniform for crash/crash-2/ride) was trialled but
+ * ALL lanes use `candidate` (the deployed behavior). A per-lane `uniform`
+ * carve-out (1/24-beat "naive" snap for crash/crash-2/ride) was trialled but
  * DROPPED 2026-07-04: (1) it was a WASH on the corrected shipping grid (val-B
  * edit-rate −0.0003, CI incl 0), and (2) because chart-builder snaps each note
  * independently, giving cymbals a different grid function SPLIT chords — a
  * same-onset floor-tom + crash (both greenDrum) snapped to different ticks and
  * defeated the cross-class dedup, rendering two same-pad gems ~21ms apart. A
  * single grid function keeps every note at one onset on one tick (chords stay
- * whole). The field/type are retained so a future GROUP-level policy (decide
+ * whole). The `uniform` member and its snapTickUniform implementation were
+ * removed (drum-to-chart plan §4 step 5, R5-3) now that this dead-since-2026-
+ * 07-04 branch is confirmed unreachable (no lane maps to it). The field is
+ * retained (narrowed to `candidate`) so a future GROUP-level policy (decide
  * one mode per onset group) can be added without splitting chords.
  */
-export type SnapMode = 'candidate' | 'uniform';
+export type SnapMode = 'candidate';
 
 interface ChartNoteMapping {
   /** DrumNoteType for the chart. */

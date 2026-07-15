@@ -6,11 +6,13 @@
 // TODAY this dumps ONE stage's fixtures: stage 8-9 (offsets+snap), the
 // snapOnsetTick composition (chart-builder.ts:433-464) exercised via the real
 // exported primitives (buildTimedTempos/msToTick/tickToMs from
-// lib/drum-transcription/timing, snapGroupToGrid/snapTickUniform from
-// lib/tempo-map/quantize-grid, getChartMapping from ml/class-mapping) --
-// snapOnsetTick itself is module-private in chart-builder.ts and wasn't
-// exported for this test, so this composes the identical 5-step logic instead
-// of re-deriving a divergent copy.
+// lib/drum-transcription/timing, snapGroupToGrid from lib/tempo-map/
+// quantize-grid, getChartMapping from ml/class-mapping) -- snapOnsetTick
+// itself is module-private in chart-builder.ts and wasn't exported for this
+// test, so this composes the identical logic instead of re-deriving a
+// divergent copy. snapTickUniform / SnapMode's 'uniform' member were REMOVED
+// (drum-to-chart plan §4 step 5, R5-3: dead in the app since the 2026-07-04
+// uniform-grid carve-out drop) -- this generator no longer branches on it.
 //
 // Stages 3 (postprocess), 4 (peak-pick), 5 (max-2-hands filter), 7 (grid), 9b
 // (dedup) do NOT have a fixture generator here yet -- PARITY.md marks those
@@ -23,25 +25,18 @@
 // `{"stage89_snap": [...850 cases...]}`. sync_fixtures.py splits this into
 // per-stage fixture files.
 import {buildTimedTempos, msToTick, tickToMs} from '../lib/drum-transcription/timing';
-import {snapGroupToGrid, snapTickUniform} from '../lib/tempo-map/quantize-grid';
-import {getChartMapping} from '../lib/drum-transcription/ml/class-mapping';
-import {DRUM_CLASSES} from '../lib/drum-transcription/ml/types';
+import {snapGroupToGrid} from '../lib/tempo-map/quantize-grid';
 
 const RESOLUTION = 480;
 const DEFAULT_SNAP_TOLERANCE_MS = 40;
 const SYSTEMATIC_ONSET_MS_CHART_FLOW = 0;
 const SYSTEMATIC_ONSET_MS_AUDIO_FLOW = 7;
 
-// 2026-07-15 fix: this generator previously hardcoded lane 6/7/8 (crash/crash2/ride)
-// -> 'uniform', a stale assumption inherited from product_emit_lattice_check.py. The
-// real per-lane snapMode comes from ml/class-mapping.ts's getChartMapping, which as of
-// the 2026-07-04 uniform-carve-out removal assigns 'candidate' to ALL 9 lanes -- so the
-// snapMode must be read from the live mapping, not re-derived, or a future re-carve-out
-// would silently go unnoticed by this fixture set again.
-function snapModeForLane(lane: number): 'candidate' | 'uniform' {
-  return getChartMapping(DRUM_CLASSES[lane].name).snapMode;
-}
-
+// snapModeForLane / the 'uniform' branch REMOVED (drum-to-chart plan §4 step 5,
+// R5-3: dead in the app since the 2026-07-04 uniform-grid carve-out drop --
+// ml/class-mapping.ts's SnapMode is 'candidate'-only now, so every lane always
+// took this branch already). `lane` is kept as a parameter purely for the
+// fixture record (labeling), not for any snap-mode decision.
 function snapOnsetTickRef(
   ms: number,
   timedTempos: ReturnType<typeof buildTimedTempos>,
@@ -50,25 +45,18 @@ function snapOnsetTickRef(
   flow: 'chart' | 'audio',
   phaseAlignShiftMs: number,
 ): {tick: number; kind: string} {
+  void lane;
   const systematicOnsetMs =
     flow === 'chart' ? SYSTEMATIC_ONSET_MS_CHART_FLOW : SYSTEMATIC_ONSET_MS_AUDIO_FLOW;
   const adjMs = ms + systematicOnsetMs + (flow === 'audio' ? phaseAlignShiftMs : 0);
   const frac = msToTick(adjMs, timedTempos, resolution);
-  let snapped: number;
-  let kind: string;
-  if (snapModeForLane(lane) === 'uniform') {
-    snapped = snapTickUniform(frac, resolution);
-    kind = 'uniform';
-  } else {
-    const cand = snapGroupToGrid(frac, resolution);
-    snapped = cand;
-    // re-derive which candidate won for the fixture label (straight vs triplet)
-    const straightTicks = resolution / 4;
-    const tripletTicks = resolution / 6;
-    const straight = Math.round(frac / straightTicks) * straightTicks;
-    const triplet = Math.round(frac / tripletTicks) * tripletTicks;
-    kind = Math.abs(triplet - frac) < Math.abs(straight - frac) ? 'triplet' : 'straight';
-  }
+  const snapped = snapGroupToGrid(frac, resolution);
+  // re-derive which candidate won for the fixture label (straight vs triplet)
+  const straightTicks = resolution / 4;
+  const tripletTicks = resolution / 6;
+  const straight = Math.round(frac / straightTicks) * straightTicks;
+  const triplet = Math.round(frac / tripletTicks) * tripletTicks;
+  const kind = Math.abs(triplet - frac) < Math.abs(straight - frac) ? 'triplet' : 'straight';
   const driftMs = Math.abs(tickToMs(snapped, timedTempos, resolution) - adjMs);
   if (driftMs > DEFAULT_SNAP_TOLERANCE_MS) {
     return {tick: Math.max(0, Math.round(frac)), kind: 'abstain'};

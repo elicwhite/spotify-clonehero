@@ -121,28 +121,8 @@ export function snapTickToGrid(tick: number, resolution: number): number {
   return snapGroupToGrid(tick, resolution);
 }
 
-/**
- * Slots per beat for the uniform ("naive") metric grid. Matches the research
- * quantizer's TPB=24 (chart_eval.py `betas_to_ticks`): a uniform-snapped tick
- * lands on the nearest 1/24-beat line (resolution/24 ticks), NOT on a musical
- * subdivision candidate.
- */
-export const UNIFORM_SLOTS_PER_BEAT = 24;
-
-/**
- * Snap `tick` to the nearest uniform 1/{@link UNIFORM_SLOTS_PER_BEAT}-beat grid
- * line — the research "naive" quantizer (round(frac·24) to the nearest of 24
- * uniform ticks per beat). `tick` may be fractional; the result is a
- * non-negative integer tick.
- *
- * This is deliberately a MUCH finer grid than the 16th/triplet musical
- * candidates {@link snapGroupToGrid} uses. Phase B found candidate snapping
- * REGRESSED cymbals under the predicted grid (crash/crash-2/ride), so those
- * lanes use this uniform round instead — it barely moves a note off its true
- * audio position while still landing it on a clean metric slot. Pitched lanes
- * (kick/snare/toms/hihat) keep candidate snapping.
- */
-export function snapTickUniform(tick: number, resolution: number): number {
-  const slot = resolution / UNIFORM_SLOTS_PER_BEAT;
-  return Math.max(0, Math.round(Math.round(tick / slot) * slot));
-}
+// snapTickUniform / UNIFORM_SLOTS_PER_BEAT (the "naive" 1/24-beat cymbal
+// carve-out) REMOVED (drum-to-chart plan §4 step 5, R5-3: dead in the app
+// since the 2026-07-04 uniform-grid carve-out drop — see
+// lib/drum-transcription/ml/class-mapping.ts's SnapMode, now 'candidate'
+// only). All lanes have used candidate snapping exclusively since then.

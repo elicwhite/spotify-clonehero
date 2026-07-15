@@ -29,7 +29,7 @@ import {
   swapSynctrack,
   DEFAULT_SNAP_TOLERANCE_MS,
 } from '@/lib/tempo-map/swap-synctrack';
-import {snapGroupToGrid, snapTickUniform} from '@/lib/tempo-map/quantize-grid';
+import {snapGroupToGrid} from '@/lib/tempo-map/quantize-grid';
 import type {SnapMode} from '../ml/class-mapping';
 import type {LinkSegSections, Synctrack} from '@/lib/tempo-map/types';
 import type {MeterStats} from '@/lib/tempo-map/meter-confidence';
@@ -419,16 +419,17 @@ export function buildChartDocumentFromExistingChart(
  * Snap one onset's audio time to the grid, abstaining when the nearest grid
  * line is too far to trust.
  *
- * The grid is lane-dependent (Phase B per-lane quantizer). `snapMode`
- * 'candidate' snaps to the nearest 16th / 16th-triplet musical subdivision via
- * {@link snapGroupToGrid} (pitched lanes + hihat); 'uniform' snaps to the
- * nearest 1/24-beat line via {@link snapTickUniform} (crash/crash-2/ride, where
- * candidate snapping regressed). In both modes, if the snap would move the note
- * more than `toleranceMs` from its true audio position (at the local tempo, via
- * {@link tickToMs}) the note is left at its raw rounded tick instead of
- * force-snapped. Both {@link dedupSnappedNotes} and {@link buildConfidenceData}
- * route through this one function so a note's tick and its confidence key are
- * always the identical snap decision.
+ * The grid is lane-dependent (Phase B per-lane quantizer), though every lane's
+ * `snapMode` is currently 'candidate' — snap to the nearest 16th / 16th-triplet
+ * musical subdivision via {@link snapGroupToGrid} (the 'uniform' 1/24-beat
+ * carve-out for crash/crash-2/ride was dropped 2026-07-04 and its
+ * implementation removed, drum-to-chart plan §4 step 5 R5-3 — see
+ * {@link SnapMode}). If the snap would move the note more than `toleranceMs`
+ * from its true audio position (at the local tempo, via {@link tickToMs}) the
+ * note is left at its raw rounded tick instead of force-snapped. Both
+ * {@link dedupSnappedNotes} and {@link buildConfidenceData} route through this
+ * one function so a note's tick and its confidence key are always the
+ * identical snap decision.
  */
 function snapOnsetTick(
   ms: number,
@@ -455,10 +456,12 @@ function snapOnsetTick(
   const adjMs =
     ms + systematicOnsetMs + (flow === 'audio' ? phaseAlignShiftMs : 0);
   const frac = msToTick(adjMs, timedTempos, resolution);
-  const snapped =
-    snapMode === 'uniform'
-      ? snapTickUniform(frac, resolution)
-      : snapGroupToGrid(frac, resolution);
+  // snapMode is currently always 'candidate' (the 'uniform' branch was
+  // removed, drum-to-chart plan §4 step 5 R5-3); kept as a parameter so a
+  // future GROUP-level policy can reintroduce branching without re-widening
+  // the call sites (see SnapMode's docstring).
+  void snapMode;
+  const snapped = snapGroupToGrid(frac, resolution);
   const driftMs = Math.abs(tickToMs(snapped, timedTempos, resolution) - adjMs);
   return driftMs > toleranceMs ? Math.max(0, Math.round(frac)) : snapped;
 }
