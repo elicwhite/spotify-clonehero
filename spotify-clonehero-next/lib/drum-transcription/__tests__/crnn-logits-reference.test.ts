@@ -121,7 +121,7 @@ describeIf(
           `[crnn-logits-reference] Model not found at ${MODEL_PATH} while ` +
             'RUN_ONNX_PARITY=1. This is the ONE checkpoint-specific parity ' +
             'gate (F36, PIPELINE_AUDIT.md) — it must fail loudly rather ' +
-            'than silently skip. Place the t3 .onnx there, or set ' +
+            'than silently skip. Place the t4 .onnx there, or set ' +
             'ALLOW_MISSING_MODEL=1 to explicitly skip with a warning.',
         );
       });
