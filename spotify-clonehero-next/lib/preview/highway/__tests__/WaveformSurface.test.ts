@@ -1,4 +1,5 @@
 import {
+  bottomEdgeTimeMs,
   computeBucketAlignment,
   computeGlobalPeak,
   computeRowHalfWidth,
@@ -68,6 +69,28 @@ describe('computeRowHalfWidth', () => {
     // at 80% of the canvas half-width.
     const w = computeRowHalfWidth(0.1, 0.1, CANVAS_HALF);
     expect(w).toBeCloseTo(CANVAS_HALF * FILL, 6);
+  });
+});
+
+describe('bottomEdgeTimeMs', () => {
+  it('shows earlier audio at the mesh bottom than at the strikeline', () => {
+    // Mesh centered at -0.1 → bottom edge 0.1 world units below the
+    // strikeline. At highwaySpeed 1.5 that is 66.67ms of audio.
+    expect(bottomEdgeTimeMs(30000, -0.1, 1.5)).toBeCloseTo(
+      30000 - (0.1 / 1.5) * 1000,
+      6,
+    );
+  });
+
+  it('is the identity when the mesh bottom sits exactly on the strikeline', () => {
+    expect(bottomEdgeTimeMs(1234, 0, 1.5)).toBe(1234);
+  });
+
+  it('scales with highway speed (faster scroll = less time per world unit)', () => {
+    const slow = bottomEdgeTimeMs(1000, -0.1, 1);
+    const fast = bottomEdgeTimeMs(1000, -0.1, 2);
+    expect(1000 - slow).toBeCloseTo(100, 6);
+    expect(1000 - fast).toBeCloseTo(50, 6);
   });
 });
 

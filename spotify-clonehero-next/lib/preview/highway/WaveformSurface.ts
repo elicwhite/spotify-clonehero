@@ -27,6 +27,23 @@ const PEAK_FILL_RATIO = 0.8;
 const MESH_BASE_Y = -0.1;
 
 /**
+ * Time (ms) shown at the mesh's bottom edge for a given time at the
+ * strikeline. Notes place "now" at worldY = -1 (the receptor line), but the
+ * mesh — centered at `meshBaseY` with height 2 — has its bottom edge at
+ * `meshBaseY - 1`, slightly below the strikeline. The texture's bottom row
+ * must therefore show audio from slightly BEFORE the strikeline time, or
+ * the whole waveform renders offset from the notes (0.1 world units ≈ 67ms
+ * at highwaySpeed 1.5).
+ */
+export function bottomEdgeTimeMs(
+  strikelineTimeMs: number,
+  meshBaseY: number,
+  highwaySpeed: number,
+): number {
+  return strikelineTimeMs + (meshBaseY / highwaySpeed) * 1000;
+}
+
+/**
  * Compute the global peak amplitude (absolute value) across all samples and
  * channels in a PCM buffer. Returns 0 if the buffer is silent or empty.
  *
@@ -179,6 +196,10 @@ export class WaveformSurface {
   /**
    * Called every frame. Re-renders the waveform canvas for the currently
    * visible time window and marks the texture as needing upload.
+   *
+   * `currentTimeMs` is the AUDIO time at the strikeline (chart time plus
+   * any chart delay — the caller converts, since only the caller knows the
+   * delay).
    */
   update(currentTimeMs: number): void {
     // The highway plane spans 2 world units. At highwaySpeed, that
@@ -187,12 +208,18 @@ export class WaveformSurface {
     const windowSamples = (windowMs / 1000) * this.sampleRate;
     const bucketSize = windowSamples / CANVAS_HEIGHT;
 
-    // The strikeline is at the bottom of the highway (world y = -1).
-    // currentTimeMs is at the strikeline. Rows are drawn on a bucket grid
-    // anchored to the audio timeline so their content is independent of the
-    // scroll position; the sub-bucket phase is absorbed by nudging the mesh
-    // toward the strikeline (at most one row, ~0.001 world units).
-    const startSamples = (currentTimeMs / 1000) * this.sampleRate;
+    // The texture's bottom row sits at the mesh's bottom edge, slightly
+    // below the strikeline where notes at currentTimeMs are placed. Rows
+    // are drawn on a bucket grid anchored to the audio timeline so their
+    // content is independent of the scroll position; the sub-bucket phase
+    // is absorbed by nudging the mesh toward the strikeline (at most one
+    // row, ~0.001 world units).
+    const bottomMs = bottomEdgeTimeMs(
+      currentTimeMs,
+      MESH_BASE_Y,
+      this.highwaySpeed,
+    );
+    const startSamples = (bottomMs / 1000) * this.sampleRate;
     const {startBucket, phase} = computeBucketAlignment(
       startSamples,
       bucketSize,

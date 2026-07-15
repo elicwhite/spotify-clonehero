@@ -577,7 +577,11 @@ export const setupRenderer = (
 
       // Scroll waveform and grid surfaces (always, so they stay in sync when paused)
       if (waveformSurface && highwayMode === 'waveform') {
-        waveformSurface.update(elapsedTime);
+        // The waveform indexes into raw PCM, so it needs audio time:
+        // chart time + chart delay (charts with a song.ini delay start
+        // their audio late relative to tick 0).
+        const chartDelayMs = (audioManager?.chartDelay ?? 0) * 1000;
+        waveformSurface.update(elapsedTime + chartDelayMs);
       }
       if (gridOverlay) {
         gridOverlay.update(elapsedTime);
