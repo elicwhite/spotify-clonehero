@@ -16,6 +16,7 @@
     "test": "jest",
     "test:fill-detector": "jest lib/fill-detector",
     "test:onnx-parity": "NODE_OPTIONS=--experimental-vm-modules RUN_ONNX_PARITY=1 jest crnn-logits-reference",
+    "dump:product-pipeline-fixtures": "tsx scripts/dump_product_pipeline_fixtures.ts",
     "update:db": "tsx ./downloadDb.ts",
     "update:db-types": "kysely-codegen --out-file ./lib/local-db/types.ts",
     "postinstall": "patch-package"
@@ -63,7 +64,7 @@
     "lucide-react": "^0.546.0",
     "next": "16.2.9",
     "nuqs": "^2.4.0",
-    "onnxruntime-web": "^1.24.3",
+    "onnxruntime-web": "1.24.3",
     "p-limit": "^7.3.0",
     "p-map": "^6.0.0",
     "patch-package": "^8.0.1",
