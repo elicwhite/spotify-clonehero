@@ -46,7 +46,8 @@ export interface GridOverlayConfig {
 }
 
 /** Pre-computed beat entry with its ms time and visual weight. */
-interface BeatEntry {
+export interface BeatEntry {
+  tick: number;
   msTime: number;
   isMeasure: boolean;
 }
@@ -128,7 +129,7 @@ export class GridOverlay {
     }
 
     // Pre-compute all beat positions
-    this.computeBeats(config);
+    this.beats = computeBeatGrid(config);
   }
 
   // -----------------------------------------------------------------------
@@ -232,115 +233,97 @@ export class GridOverlay {
     return mesh;
   }
 
-  // -----------------------------------------------------------------------
-  // Beat computation
-  // -----------------------------------------------------------------------
-
-  /**
-   * Pre-compute all beat positions (in ms) for the entire song.
-   * Walks through the tempo map beat-by-beat, tracking time signatures
-   * to determine measure boundaries.
-   */
-  private computeBeats(config: GridOverlayConfig): void {
-    const {tempos, timeSignatures, resolution, durationMs} = config;
-    if (tempos.length === 0) return;
-
-    // Build timed tempos
-    const timedTempos = buildTimedTempos(tempos, resolution);
-
-    // Build time signature map: sorted by tick
-    const sortedTS = [...timeSignatures].sort((a, b) => a.tick - b.tick);
-    if (sortedTS.length === 0) {
-      sortedTS.push({tick: 0, numerator: 4, denominator: 4});
-    }
-
-    // Walk through the song beat-by-beat
-    let currentTick = 0;
-    let tempoIdx = 0;
-    let tsIdx = 0;
-    let beatInMeasure = 0;
-
-    const durationTicks = this.msTick(durationMs, timedTempos, resolution);
-
-    while (currentTick <= durationTicks) {
-      // Find active tempo
-      while (
-        tempoIdx < timedTempos.length - 1 &&
-        timedTempos[tempoIdx + 1].tick <= currentTick
-      ) {
-        tempoIdx++;
-      }
-
-      // Find active time signature
-      while (
-        tsIdx < sortedTS.length - 1 &&
-        sortedTS[tsIdx + 1].tick <= currentTick
-      ) {
-        tsIdx++;
-        beatInMeasure = 0;
-      }
-
-      const ts = sortedTS[tsIdx];
-      const beatsPerMeasure = ts.numerator;
-
-      // Convert tick to ms
-      const ms = this.tickToMs(currentTick, timedTempos, resolution);
-
-      if (ms > durationMs + 1000) break;
-
-      this.beats.push({
-        msTime: ms,
-        isMeasure: beatInMeasure === 0,
-      });
-
-      beatInMeasure = (beatInMeasure + 1) % beatsPerMeasure;
-      currentTick += resolution; // Advance by one beat (one quarter note)
-    }
-  }
-
-  // -----------------------------------------------------------------------
-  // Timing helpers (local, mirrors SceneOverlays logic)
-  // -----------------------------------------------------------------------
-
-  private tickToMs(
-    tick: number,
-    timedTempos: {tick: number; msTime: number; beatsPerMinute: number}[],
-    resolution: number,
-  ): number {
-    if (timedTempos.length === 0) return 0;
-    let idx = 0;
-    for (let i = 1; i < timedTempos.length; i++) {
-      if (timedTempos[i].tick <= tick) idx = i;
-      else break;
-    }
-    const tempo = timedTempos[idx];
-    return (
-      tempo.msTime +
-      ((tick - tempo.tick) * 60000) / (tempo.beatsPerMinute * resolution)
-    );
-  }
-
-  /** Approximate tick from ms (inverse of tickToMs, for duration estimate). */
-  private msTick(
-    ms: number,
-    timedTempos: {tick: number; msTime: number; beatsPerMinute: number}[],
-    resolution: number,
-  ): number {
-    if (timedTempos.length === 0) return 0;
-    let idx = 0;
-    for (let i = 1; i < timedTempos.length; i++) {
-      if (timedTempos[i].msTime <= ms) idx = i;
-      else break;
-    }
-    const tempo = timedTempos[idx];
-    const deltaMs = ms - tempo.msTime;
-    return tempo.tick + (deltaMs * tempo.beatsPerMinute * resolution) / 60000;
-  }
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Beat computation
 // ---------------------------------------------------------------------------
+
+/**
+ * Pre-compute all beat positions (in ms) for the entire song.
+ *
+ * Walks each time-signature region independently, anchored at the TS
+ * event's tick: the beat unit is `resolution * 4 / denominator` ticks
+ * (e.g. a sixteenth note for x/16 signatures), and a measure line falls
+ * every `numerator` beats. When a region's length isn't a whole number
+ * of beats (a 17/16 bar is 4.25 quarter notes), the next region
+ * re-anchors at its own tick so the grid stays aligned with the notes.
+ */
+export function computeBeatGrid(config: GridOverlayConfig): BeatEntry[] {
+  const {tempos, timeSignatures, resolution, durationMs} = config;
+  if (tempos.length === 0) return [];
+
+  const timedTempos = buildTimedTempos(tempos, resolution);
+
+  // Sorted TS regions; charts start in 4/4 if the first TS is missing or late
+  const sortedTS = [...timeSignatures].sort((a, b) => a.tick - b.tick);
+  if (sortedTS.length === 0 || sortedTS[0].tick > 0) {
+    sortedTS.unshift({tick: 0, numerator: 4, denominator: 4});
+  }
+
+  const durationTicks = msToTick(durationMs, timedTempos, resolution);
+  const beats: BeatEntry[] = [];
+
+  for (let tsIdx = 0; tsIdx < sortedTS.length; tsIdx++) {
+    const ts = sortedTS[tsIdx];
+    const regionEndTick =
+      tsIdx + 1 < sortedTS.length ? sortedTS[tsIdx + 1].tick : Infinity;
+
+    const beatTicks = (resolution * 4) / ts.denominator;
+    if (!(beatTicks > 0) || !(ts.numerator > 0)) continue;
+
+    for (
+      let tick = ts.tick, beatInMeasure = 0;
+      tick < regionEndTick && tick <= durationTicks;
+      tick += beatTicks, beatInMeasure = (beatInMeasure + 1) % ts.numerator
+    ) {
+      const ms = tickToMs(tick, timedTempos, resolution);
+      if (ms > durationMs + 1000) break;
+      beats.push({tick, msTime: ms, isMeasure: beatInMeasure === 0});
+    }
+  }
+
+  return beats;
+}
+
+// ---------------------------------------------------------------------------
+// Timing helpers (local, mirrors SceneOverlays logic)
+// ---------------------------------------------------------------------------
+
+function tickToMs(
+  tick: number,
+  timedTempos: {tick: number; msTime: number; beatsPerMinute: number}[],
+  resolution: number,
+): number {
+  if (timedTempos.length === 0) return 0;
+  let idx = 0;
+  for (let i = 1; i < timedTempos.length; i++) {
+    if (timedTempos[i].tick <= tick) idx = i;
+    else break;
+  }
+  const tempo = timedTempos[idx];
+  return (
+    tempo.msTime +
+    ((tick - tempo.tick) * 60000) / (tempo.beatsPerMinute * resolution)
+  );
+}
+
+/** Approximate tick from ms (inverse of tickToMs, for duration estimate). */
+function msToTick(
+  ms: number,
+  timedTempos: {tick: number; msTime: number; beatsPerMinute: number}[],
+  resolution: number,
+): number {
+  if (timedTempos.length === 0) return 0;
+  let idx = 0;
+  for (let i = 1; i < timedTempos.length; i++) {
+    if (timedTempos[i].msTime <= ms) idx = i;
+    else break;
+  }
+  const tempo = timedTempos[idx];
+  const deltaMs = ms - tempo.msTime;
+  return tempo.tick + (deltaMs * tempo.beatsPerMinute * resolution) / 60000;
+}
 
 /**
  * Build a timed tempos array (tick + msTime) from raw tempo events and
