@@ -12,8 +12,8 @@ import type {Synctrack, TempoEvent, TimeSignatureEvent} from './types';
 // --- locked SOTA constants ---------------------------------------------
 export const SOTA = {
   DRUM_BEAT_AVG: true,
-  DRUM_BEAT_AVG_TOL_MS: 50,
-  DRUM_BEAT_AVG_WEIGHT: 0.45,
+  DRUM_BEAT_AVG_TOL_MS: 70,
+  DRUM_BEAT_AVG_WEIGHT: 0.2,
   // CONTINUOUS_LAG default flipped to FALSE 2026-07-04: this ~7ms drum-onset
   // GRID shift is net-negative on the product-edit metric (modeled 0.7016 vs
   // 0.6983 at lag-0) and pushes the grid off true beat positions; the
