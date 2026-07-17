@@ -1,0 +1,32 @@
+[
+  {
+    "song": "kswarp-02",
+    "slug": "kswarp-02",
+    "admitted": true,
+    "file": "kswarp-02.json"
+  },
+  {
+    "song": "kswarp-03",
+    "slug": "kswarp-03",
+    "admitted": true,
+    "file": "kswarp-03.json"
+  },
+  {
+    "song": "kswarp-04",
+    "slug": "kswarp-04",
+    "admitted": true,
+    "file": "kswarp-04.json"
+  },
+  {
+    "song": "kswarp-05",
+    "slug": "kswarp-05",
+    "admitted": false,
+    "file": "kswarp-05.json"
+  },
+  {
+    "song": "kswarp-01",
+    "slug": "kswarp-01",
+    "admitted": false,
+    "file": "kswarp-01.json"
+  }
+]
