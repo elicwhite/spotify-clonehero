@@ -130,6 +130,13 @@ export interface ChartEditorState {
 
   /** Highway display mode: 'classic' (texture) or 'waveform' (audio waveform surface). */
   highwayMode: HighwayMode;
+
+  /**
+   * Whether the sheet-music notation pane renders beside the highway.
+   * The inverse of /sheet-music's viewCloneHero toggle: here the highway
+   * is always shown and notation is the optional pane.
+   */
+  showSheetMusic: boolean;
 }
 
 export type ChartEditorAction =
@@ -169,6 +176,8 @@ export type ChartEditorAction =
   | {type: 'SET_LOOP_REGION'; region: {startMs: number; endMs: number} | null}
   // -- Highway mode --
   | {type: 'SET_HIGHWAY_MODE'; mode: HighwayMode}
+  // -- Sheet music pane --
+  | {type: 'SET_SHOW_SHEET_MUSIC'; show: boolean}
   // -- Scope --
   | {type: 'SET_ACTIVE_SCOPE'; scope: EditorScope};
 
@@ -218,6 +227,8 @@ export const initialState: ChartEditorState = {
   loopRegion: null,
   // Highway mode
   highwayMode: 'classic' as HighwayMode,
+  // Sheet music pane
+  showSheetMusic: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -381,6 +392,10 @@ export function chartEditorReducer(
     case 'SET_HIGHWAY_MODE':
       if (state.highwayMode === action.mode) return state;
       return {...state, highwayMode: action.mode};
+
+    case 'SET_SHOW_SHEET_MUSIC':
+      if (state.showSheetMusic === action.show) return state;
+      return {...state, showSheetMusic: action.show};
 
     case 'SET_ACTIVE_SCOPE':
       if (state.activeScope === action.scope) return state;

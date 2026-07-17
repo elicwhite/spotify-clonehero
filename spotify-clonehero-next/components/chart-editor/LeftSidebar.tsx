@@ -13,6 +13,7 @@ import {
   Redo2,
   Minus,
   AudioWaveform,
+  Music,
 } from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {
@@ -106,6 +107,15 @@ export default function LeftSidebar({
     capabilities.showVocalPartPicker &&
     state.activeScope.kind === 'vocals' &&
     vocalParts.length > 1;
+
+  // Sheet-music pane toggle. Notation rendering only supports drums, so
+  // the toggle is hidden on charts without a drums track.
+  const showSheetMusicToggle =
+    capabilities.showSheetMusicToggle &&
+    (state.chartDoc?.parsedChart.trackData.some(
+      t => t.instrument === 'drums',
+    ) ??
+      false);
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -308,6 +318,36 @@ export default function LeftSidebar({
                   </TooltipTrigger>
                   <TooltipContent side="right">
                     Toggle waveform highway surface
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+          )}
+
+          {/* Sheet music pane toggle — shows VexFlow notation beside the
+              highway (the inverse of /sheet-music's highway toggle). */}
+          {showSheetMusicToggle && (
+            <div className="space-y-2 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Sheet Music</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={state.showSheetMusic ? 'secondary' : 'outline'}
+                      size="sm"
+                      className="h-7 gap-1.5 text-xs"
+                      onClick={() =>
+                        dispatch({
+                          type: 'SET_SHOW_SHEET_MUSIC',
+                          show: !state.showSheetMusic,
+                        })
+                      }>
+                      <Music className="h-3.5 w-3.5" />
+                      {state.showSheetMusic ? 'Shown' : 'Hidden'}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    Show sheet music notation beside the highway
                   </TooltipContent>
                 </Tooltip>
               </div>

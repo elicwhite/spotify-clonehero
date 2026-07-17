@@ -50,6 +50,13 @@ export interface EditorCapabilities {
    */
   showHighwayModeToggle: boolean;
   /**
+   * Show the sidebar's Sheet Music toggle, which opens a VexFlow notation
+   * pane beside the highway (the inverse of /sheet-music, where notation
+   * is primary and the highway is the optional pane). Only meaningful for
+   * charts with a drums track — the sidebar also checks that.
+   */
+  showSheetMusicToggle: boolean;
+  /**
    * Show the sidebar's Vocal Part picker on multi-part vocal charts.
    * Add-lyrics suppresses this — the aligner only writes lyrics to the
    * primary vocals track, so exposing other parts would mislead.
@@ -70,6 +77,7 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
   showDrumLanes: true,
   showToolPalette: true,
   showHighwayModeToggle: true,
+  showSheetMusicToggle: false,
   showVocalPartPicker: true,
   showEditingControls: true,
 };
@@ -82,6 +90,7 @@ export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
   showDrumLanes: false,
   showToolPalette: false,
   showHighwayModeToggle: false,
+  showSheetMusicToggle: false,
   showVocalPartPicker: false,
   showEditingControls: true,
 };
@@ -94,6 +103,7 @@ export const PREVIEW_CAPABILITIES: EditorCapabilities = {
   showDrumLanes: true,
   showToolPalette: false,
   showHighwayModeToggle: true,
+  showSheetMusicToggle: true,
   showVocalPartPicker: true,
   showEditingControls: false,
 };

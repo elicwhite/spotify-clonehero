@@ -17,6 +17,7 @@ import TimelineMinimap from './TimelineMinimap';
 import EditorMCPTools from './EditorMCPTools';
 import {useChartEditorContext} from './ChartEditorContext';
 import {buildTimedTempos, tickToMs} from '@/lib/drum-transcription/timing';
+import SheetMusic from '@/app/sheet-music/[slug]/SheetMusic';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -147,8 +148,31 @@ export default function ChartEditor({
   onNotesModified,
   reviewedNoteIds,
 }: ChartEditorProps) {
-  const {state} = useChartEditorContext();
+  const {state, dispatch} = useChartEditorContext();
   const [metadataOpen, setMetadataOpen] = useState(false);
+
+  // Drums track for the optional sheet-music pane. Prefers the expert
+  // difficulty (notation matches what the highway scope shows by default),
+  // falling back to any charted drums difficulty.
+  const sheetMusicTrack = useMemo(
+    () =>
+      chart.trackData.find(
+        t => t.instrument === 'drums' && t.difficulty === 'expert',
+      ) ??
+      chart.trackData.find(t => t.instrument === 'drums') ??
+      null,
+    [chart],
+  );
+
+  // Lyrics for the sheet-music pane, same source /sheet-music uses.
+  const sheetMusicLyrics = useMemo(
+    () =>
+      chart.vocalTracks?.parts['vocals']?.notePhrases.flatMap(p => p.lyrics) ??
+      [],
+    [chart],
+  );
+
+  const showSheetMusic = state.showSheetMusic && sheetMusicTrack !== null;
 
   // Compute section positions in ms for the timeline minimap
   const timelineSections = useMemo(() => {
@@ -273,7 +297,31 @@ export default function ChartEditor({
           leftPanelChildren={leftPanelChildren}
         />
 
-        {/* Center: Highway */}
+        {/* Center: optional sheet music pane + highway. The highway stays
+         *  mounted when the notation pane opens — same split-pane pattern
+         *  as /sheet-music's SongView, with the roles reversed. */}
+        {showSheetMusic && sheetMusicTrack && (
+          <div className="flex flex-1 min-w-0 min-h-0 p-2">
+            <SheetMusic
+              chart={chart}
+              track={sheetMusicTrack}
+              showBarNumbers={true}
+              enableColors={false}
+              showLyrics={true}
+              lyrics={sheetMusicLyrics}
+              zoom={state.zoom}
+              onSelectMeasure={time => {
+                audioManager.playChartTime(time);
+                dispatch({type: 'SET_PLAYING', isPlaying: true});
+              }}
+              triggerRerender=""
+              practiceModeConfig={null}
+              onPracticeMeasureSelect={() => {}}
+              selectionIndex={null}
+              getChartTimeSec={() => audioManager.chartTime}
+            />
+          </div>
+        )}
         <div className="relative flex-1 min-w-0 min-h-0">
           <HighwayEditor
             metadata={metadata}

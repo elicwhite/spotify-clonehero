@@ -104,6 +104,12 @@ export const setupRenderer = (
     setSize();
   }
   window.addEventListener('resize', onResize, false);
+  // Window resize misses layout-driven size changes (e.g. a sibling pane
+  // opening next to the highway), so also watch the sizing container itself.
+  const resizeObserver = new ResizeObserver(onResize);
+  if (sizingRef.current) {
+    resizeObserver.observe(sizingRef.current);
+  }
 
   ref.current?.children.item(0)?.remove();
   ref.current?.appendChild(renderer.domElement);
@@ -187,6 +193,7 @@ export const setupRenderer = (
     destroy: async () => {
       destroyed = true;
       window.removeEventListener('resize', onResize, false);
+      resizeObserver.disconnect();
       renderer.setAnimationLoop(null);
       renderer.renderLists.dispose();
       renderer.dispose();
