@@ -34,5 +34,29 @@
     "slug": "reach-05",
     "admitted": false,
     "file": "reach-05.json"
+  },
+  {
+    "song": "reach-08",
+    "slug": "reach-08",
+    "admitted": true,
+    "file": "reach-08.json"
+  },
+  {
+    "song": "reach-06",
+    "slug": "reach-06",
+    "admitted": true,
+    "file": "reach-06.json"
+  },
+  {
+    "song": "reach-10",
+    "slug": "reach-10",
+    "admitted": true,
+    "file": "reach-10.json"
+  },
+  {
+    "song": "reach-07",
+    "slug": "reach-07",
+    "admitted": true,
+    "file": "reach-07.json"
   }
 ]

@@ -772,6 +772,55 @@ export function postsnapNoteMedian(
 
 export interface KSWarpReachDiag extends KSWarpWindowedDiag {
   reason?: string;
+  originRevertedBeats?: number;
+}
+
+/** Shipped origin-revert gate (ms): an admitted warp whose beat0 moved more
+ * than this far triggers {@link partialOriginRevert}. `null` disables the
+ * revert (pre-2026-07-18 behavior — reach_v1). */
+export const REACH_ORIGIN_REVERT_GATE_MS = 400.0;
+
+/** Leading-run revert tolerance (ms) — see {@link partialOriginRevert}. */
+export const REACH_ORIGIN_REVERT_TOL_MS = 60.0;
+
+/**
+ * SURGICAL origin-mis-warp fix: port of
+ * `kick_snare_warp_reach.partial_origin_revert` (2026-07-18, Eli GO "keep the
+ * partial origin revert, apply it in all places"). The whole-song
+ * origin-shift guard is REFUTED (it throws away the body warp); this reverts
+ * ONLY the LEADING contiguous run of beats whose |warped − incumbent| >
+ * `revertTolMs` back to incumbent positions, keeping the rest of the song's
+ * warp — targets the sparse-intro pathology (a first window with no nearby
+ * KS drags beat0 by hundreds/thousands of ms) without touching the body warp
+ * (the audio win). Returns `{grid, nReverted}`; `nReverted === 0` (no
+ * leading mis-warp) returns `fullGrid` unchanged (byte-identical).
+ */
+export function partialOriginRevert(
+  fullGrid: Synctrack | null,
+  incumbentGrid: Synctrack | null,
+  revertTolMs: number = REACH_ORIGIN_REVERT_TOL_MS,
+): {grid: Synctrack | null; nReverted: number} {
+  if (fullGrid === null || incumbentGrid === null) {
+    return {grid: fullGrid, nReverted: 0};
+  }
+  const {beats: wbFull} = anchoredBeats(fullGrid);
+  const {beats: ibFull} = anchoredBeats(incumbentGrid);
+  const k0 = Math.min(wbFull.length, ibFull.length);
+  if (k0 < 8) {
+    return {grid: fullGrid, nReverted: 0};
+  }
+  const wb = wbFull.slice(0, k0);
+  const ib = ibFull.slice(0, k0);
+  const diff = wb.map((w, i) => Math.abs(w - ib[i]));
+  let k = 0;
+  while (k < diff.length && diff[k] > revertTolMs) k++;
+  if (k === 0) {
+    return {grid: fullGrid, nReverted: 0};
+  }
+  const pr = wb.slice();
+  for (let i = 0; i < k; i++) pr[i] = ib[i];
+  const g = gridFromWarped(pr, fullGrid.timeSignatures);
+  return {grid: g ?? fullGrid, nReverted: k};
 }
 
 /**
@@ -782,7 +831,9 @@ export interface KSWarpReachDiag extends KSWarpWindowedDiag {
  * incumbent grid, returning `null`) if it would worsen the median post-snap
  * note-to-onset fit, over ALL decoded onsets (`allOnsetsMs`, raw/uncorrected
  * ms — the same "raw" decode contract as `ksOnsetsMs`), by more than
- * `noteMsTolMs`.
+ * `noteMsTolMs`. Then, if the admitted warp moved beat0 by more than
+ * `originRevertGateMs`, applies {@link partialOriginRevert} (surgical
+ * leading-run revert, keeping the body warp) — `null` disables the revert.
  */
 export function warpGridReach(
   synctrack: Synctrack,
@@ -792,6 +843,7 @@ export function warpGridReach(
   winBeats: number = REACH_WIN_BEATS,
   hopBeats: number = REACH_HOP_BEATS,
   noteMsTolMs: number = REACH_NOTE_MS_TOL,
+  originRevertGateMs: number | null = REACH_ORIGIN_REVERT_GATE_MS,
 ): {grid: Synctrack | null; diag: KSWarpReachDiag} {
   const {grid, diag} = warpGridWindowed(
     synctrack,
@@ -811,5 +863,24 @@ export function warpGridReach(
   if (warpedMedian > incumbentMedian + noteMsTolMs) {
     return {grid: null, diag: {...diag, admitted: false, reason: 'note_ms_guard'}};
   }
-  return {grid, diag: {...diag, admitted: true}};
+
+  let finalGrid = grid;
+  let nReverted = 0;
+  if (originRevertGateMs !== null) {
+    const {beats: ib} = anchoredBeats(synctrack);
+    const {beats: wb} = anchoredBeats(grid);
+    if (
+      ib.length &&
+      wb.length &&
+      Math.abs(wb[0] - ib[0]) > originRevertGateMs
+    ) {
+      const reverted = partialOriginRevert(grid, synctrack);
+      finalGrid = reverted.grid ?? grid;
+      nReverted = reverted.nReverted;
+    }
+  }
+  return {
+    grid: finalGrid,
+    diag: {...diag, admitted: true, originRevertedBeats: nReverted},
+  };
 }

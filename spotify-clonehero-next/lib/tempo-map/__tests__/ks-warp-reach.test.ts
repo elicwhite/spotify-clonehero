@@ -1,16 +1,17 @@
 /**
  * Parity gate for the SHIPPED reach-extension lever (ks-warp.ts's warpGridReach /
- * warpGridWindowed / postsnapNoteMedian) against the Python reference
- * (drum-to-chart analysis/product_pipeline/levers/kick_snare_warp_reach.py), fixtures
- * dumped by analysis/product_pipeline/export_kswarp_reach_fixtures.py.
+ * warpGridWindowed / postsnapNoteMedian / partialOriginRevert) against the Python
+ * reference (drum-to-chart analysis/product_pipeline/levers/kick_snare_warp_reach.py),
+ * fixtures dumped by analysis/product_pipeline/export_kswarp_reach_fixtures.py.
  *
  * Each fixture carries: the pre-warp incumbent grid, the kick+snare onset times (ms)
  * used as warp targets, ALL decoded onset times (ms, any lane — what the post-snap
  * note_ms guard scores), and the expected output: either a warped grid
- * (gate-admitted AND guard-accepted songs) or `null` (gate-never-fired OR
- * gate-fired-but-guard-rejected songs, where the shipped reach sidecar's entry is
- * byte-identical to the incumbent — the export script asserts this at generation
- * time). See index.json for which case each fixture covers.
+ * (gate-admitted AND guard-accepted songs — some of which additionally exercise the
+ * 2026-07-18 partial-origin-revert amendment, see `diag.origin_reverted_beats`) or
+ * `null` (gate-never-fired OR gate-fired-but-guard-rejected songs, where the shipped
+ * reach+pr sidecar's entry is byte-identical to the incumbent — the export script
+ * asserts this at generation time). See index.json for which case each fixture covers.
  *
  * Tolerance: 1e-6 ms/bpm (toBeCloseTo digits=6) — same convention as ks-warp.test.ts's
  * d5 parity gate (numpy float64 vs JS float64, differing summation order across a
@@ -97,6 +98,15 @@ describe('warpGridReach vs Python kick_snare_warp_reach.warp_grid_reach referenc
           grid as Synctrack,
           fixture.expected_grid as Synctrack,
         );
+        // partial-origin-revert (#113): the fixture's diag.origin_reverted_beats
+        // (from the Python reference's warp_grid_reach) must match exactly —
+        // 0 for songs the revert never touches, >0 for the 3 discriminating
+        // reverted cases (reach-08 / reach-06 / reach-10).
+        if (typeof fixture.diag['origin_reverted_beats'] === 'number') {
+          expect(diag.originRevertedBeats).toBe(
+            fixture.diag['origin_reverted_beats'],
+          );
+        }
       } else {
         expect(diag.admitted).toBe(false);
         expect(grid).toBeNull();

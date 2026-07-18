@@ -2274,7 +2274,8 @@
     "n_win": 21,
     "n_adm_win": 13,
     "n_beats_warped": 288,
-    "admitted": true
+    "admitted": true,
+    "origin_reverted_beats": 0
   },
   "expected_grid": {
     "origin_ms": 88.79999999999973,
