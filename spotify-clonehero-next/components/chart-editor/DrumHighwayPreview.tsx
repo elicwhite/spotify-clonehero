@@ -84,7 +84,8 @@ interface DrumHighwayPreviewProps {
  * the Three.js renderer as long as the props remain referentially stable.
  *
  * Automatically finds and renders the Expert Drums track. If no drum
- * track is found, displays a placeholder message.
+ * track is found, renders the neutral floor (beat grid + markers) with
+ * no drum lanes.
  */
 const DrumHighwayPreview = memo(function DrumHighwayPreview({
   metadata,
@@ -99,39 +100,49 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
   const rendererRef = useRef<ReturnType<typeof setupRenderer> | null>(null);
 
   // Memoize so the reference is stable when chart hasn't changed.
-  // When the chart has no drum track but lanes-off mode is requested, fall
-  // back to a synthetic empty drum track so the renderer pipeline (which
-  // expects an `instrument: 'drums'` track for texture loading) still runs.
+  // When the chart has no expert drum track, fall back to a synthetic
+  // empty drum track so the renderer pipeline (which expects an
+  // `instrument: 'drums'` track for texture loading) still runs; the
+  // highway then renders as a neutral floor with the beat grid and
+  // markers but no drum lanes (see effectiveShowDrumLanes).
   const drumTrack = useMemo(() => {
     const found = chart.trackData.find(
       t => t.instrument === 'drums' && t.difficulty === 'expert',
     );
     if (found) return found;
-    if (!showDrumLanes) {
-      return {
-        instrument: 'drums',
-        difficulty: 'expert',
-        starPowerSections: [],
-        rejectedStarPowerSections: [],
-        soloSections: [],
-        flexLanes: [],
-        drumFreestyleSections: [],
-        trackEvents: [],
-        textEvents: [],
-        versusPhrases: [],
-        animations: [],
-        unrecognizedMidiEvents: [],
-        noteEventGroups: [],
-      } as unknown as ParsedChart['trackData'][number];
-    }
-    return undefined;
-  }, [chart, showDrumLanes]);
+    return {
+      instrument: 'drums',
+      difficulty: 'expert',
+      starPowerSections: [],
+      rejectedStarPowerSections: [],
+      soloSections: [],
+      flexLanes: [],
+      drumFreestyleSections: [],
+      trackEvents: [],
+      textEvents: [],
+      versusPhrases: [],
+      animations: [],
+      unrecognizedMidiEvents: [],
+      noteEventGroups: [],
+    } as unknown as ParsedChart['trackData'][number];
+  }, [chart]);
 
-  // Use a ref to capture the latest drumTrack for the initial prepTrack() call.
-  // The renderer lifecycle only depends on metadata and audioManager.
-  // Data updates (chart edits) flow through the SceneReconciler, not renderer recreation.
+  // Drum lanes only make sense when the chart actually has a drum track;
+  // otherwise render the neutral floor even when the capability profile
+  // asks for lanes.
+  const hasDrumTrack = chart.trackData.some(
+    t => t.instrument === 'drums' && t.difficulty === 'expert',
+  );
+  const effectiveShowDrumLanes = showDrumLanes && hasDrumTrack;
+
+  // Use refs to capture the latest track + lanes flag for the initial
+  // prepTrack()/setupRenderer() call. The renderer lifecycle only depends
+  // on metadata and audioManager. Data updates (chart edits) flow through
+  // the SceneReconciler, not renderer recreation.
   const drumTrackRef = useRef(drumTrack);
   drumTrackRef.current = drumTrack;
+  const showDrumLanesRef = useRef(effectiveShowDrumLanes);
+  showDrumLanesRef.current = effectiveShowDrumLanes;
 
   useEffect(() => {
     const track = drumTrackRef.current;
@@ -146,7 +157,7 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
       sizingRef,
       canvasRef,
       audioManager,
-      {showDrumLanes},
+      {showDrumLanes: showDrumLanesRef.current},
     );
     rendererRef.current = renderer;
     renderer.prepTrack(track);
@@ -179,15 +190,6 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
     // Chart data updates flow through the SceneReconciler (not renderer recreation).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [metadata, audioManager, onRendererReady]);
-
-  if (!drumTrack) {
-    return (
-      <div
-        className={`flex items-center justify-center bg-muted/50 rounded-lg border text-sm text-muted-foreground ${className ?? ''}`}>
-        No drum track found in chart data.
-      </div>
-    );
-  }
 
   return (
     <div
