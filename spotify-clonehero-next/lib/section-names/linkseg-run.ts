@@ -26,9 +26,10 @@ export const LINKSEG_TAU = 0;
 // Minimum beats for a meaningful graph (build_linkseg_cache errors below this).
 const MIN_BEATS = 4;
 
-// 7-class functional labels -> product-facing section names.
+// 7-class functional labels -> product-facing section names. `silence` has no direct product
+// name: it's relabeled/merged away in mapAndMerge before this map is applied to it, so it's
+// never looked up here.
 const LABEL_NAMES: Record<string, string> = {
-  silence: 'Silence',
   verse: 'Verse',
   chorus: 'Chorus',
   intro: 'Intro',
@@ -65,20 +66,39 @@ export async function loadLinkSegSession(
   });
 }
 
-/** Map raw 7-class labels to product names and drop boundaries between identically-labeled
- * segments (benign over-segmentation from tau=0). Returns S+1 times / S labels.
- * Exported for unit testing. */
+/** Map raw 7-class labels to product names, resolve `silence` (never a product-facing name —
+ * leading silence becomes "Intro", any other silence is absorbed into the preceding segment),
+ * and drop boundaries between identically-labeled segments (benign over-segmentation from
+ * tau=0). Returns S+1 times / S labels. Exported for unit testing. */
 export function mapAndMerge(raw: LinkSegSections): LinkSegSections {
-  const names = raw.labels.map(l => LABEL_NAMES[l] ?? l);
-  const times: number[] = [raw.times[0]];
-  const labels: string[] = [];
-  for (let i = 0; i < names.length; i++) {
-    if (labels.length > 0 && names[i] === labels[labels.length - 1]) {
-      // merge into previous segment: extend by moving its right edge forward
-      times[times.length - 1] = raw.times[i + 1];
+  type Seg = {name: string; start: number; end: number};
+  const segs: Seg[] = [];
+  for (let i = 0; i < raw.labels.length; i++) {
+    const label = raw.labels[i];
+    const start = raw.times[i];
+    const end = raw.times[i + 1];
+    if (label === 'silence') {
+      if (segs.length === 0) {
+        // Leading silence (or a wholly-silent song) reads as "Intro" rather than nothing.
+        segs.push({name: 'Intro', start, end});
+      } else {
+        // Absorb into the preceding segment: no marker, no label, for this silence.
+        segs[segs.length - 1].end = end;
+      }
     } else {
-      labels.push(names[i]);
-      times.push(raw.times[i + 1]);
+      segs.push({name: LABEL_NAMES[label] ?? label, start, end});
+    }
+  }
+
+  const times: number[] = segs.length > 0 ? [segs[0].start] : [raw.times[0]];
+  const labels: string[] = [];
+  for (const seg of segs) {
+    if (labels.length > 0 && seg.name === labels[labels.length - 1]) {
+      // merge into previous segment: extend by moving its right edge forward
+      times[times.length - 1] = seg.end;
+    } else {
+      labels.push(seg.name);
+      times.push(seg.end);
     }
   }
   return {times, labels};
