@@ -1,17 +1,84 @@
-# Appendix: interactive-tempo-map research findings (self-contained)
+# Appendix: interactive-tempo-map research findings (curated context)
 
-**Purpose.** Plan 0061 (engine) and 0062 (UI) cite measurements from a research
-phase that ran in a different repository (`drum-to-chart`,
-`autoresearch-pipeline/program.md` commits `18be5b7`/`bb6b077`/`c5bbd0d`,
-harness `interactive_probe.py`). **An implementer working only in this repo
-cannot open those files.** This appendix restates every finding those plans
-depend on as an established fact, with enough mechanism to make correct
-micro-decisions without access to the research repo. Treat everything below
-as given — it does not need to be re-derived or re-measured to implement
-0061/0062. The commit hashes are kept only as historical provenance, not as a
-pointer you need to follow.
+**Purpose.** Plan 0061 (engine) and 0062 (UI) build on measurements from a
+research phase in a sibling repository, `drum-to-chart`. **You (the
+implementing agent) CAN read that repo — read access is fine, read-only, no
+edits.** What you don't have is the accumulated interpretive context of the
+person who ran that research: which of several appended blocks in the same
+file is the final word, which numbers got corrected after being published,
+and which files are, by design, a running ledger of *rejected* ideas. This
+appendix exists to give you that interpretation up front — the findings,
+numbers, and mechanisms your implementation decisions depend on, stated
+authoritatively — plus a short annotated reading list if you want the
+underlying depth. Treat the "Curated findings" section below as given; you
+do not need to re-derive or re-measure it. Use the reading list only if you
+want more context than this appendix provides, and read its annotations
+about staleness before you draw conclusions from anything you find there.
 
-## What was measured, and how (context, not required reading)
+## READ THIS BEFORE OPENING drum-to-chart: authoritative vs. historical
+
+**`drum-to-chart` is a working research ledger, not a wiki of settled
+truths — it is built to preserve superseded and refuted material
+on purpose, right alongside the current state, with no deletion.** Finding
+an old number, an abandoned lever, or a "DON'T-RUN" entry in that repo is
+normal and expected; mistaking one for current guidance is the actual
+hazard. Two concrete traps in the exact files this appendix draws from:
+
+1. **`autoresearch-pipeline/program.md` contains THREE appended blocks for
+   this research, in this order, and the middle one explicitly corrects the
+   first:**
+   - `# INTERACTIVE TEMPO-MAP PHASE` (the first block, ~line 2106) — its
+     "supply true tempo" row reports `d_audio +0.032, d_keepable +1.47pp`
+     with the verdict **"TRADE (barely > phase, costs audio)"**, and its
+     product recommendation downgrades tap-tempo/half-double to
+     **"CONDITIONAL... not an auto-fix."** — **this is now known to be an
+     accidental measurement of the RESNAP op only** (the block predates the
+     discovery that there were multiple candidate ops at all).
+   - `# INTERACTIVE PHASE — CORRECTED 3-OP MATRIX` (~line 2157) — its own
+     header says why it exists: *"measure each interaction under the
+     product's THREE note-handling ops."* This block's RE-PREDICT row
+     (`+0.0054` audio, `+2.84pp` keepable) is the number that supersedes the
+     first block's TRADE verdict for the same interaction, and its
+     "CORRECTED PRODUCT RECOMMENDATION" upgrades tap-tempo/half-double to
+     **"BUILD."** **If you read only the first block, you will walk away
+     with the wrong (superseded) recommendation.**
+   - `# GUARDED RE-PREDICT` (~line 2205) — a further refinement layered ON
+     TOP of the corrected block's RE-PREDICT number (a batch/automated-use
+     variant), not a replacement of it. Both the corrected block's unguarded
+     number and this block's guarded number are simultaneously valid, for
+     two different invocation modes (interactive preview vs. automated
+     batch) — this appendix's "Curated findings" table already reflects
+     that distinction correctly.
+   - **The curated findings below already resolve this** — they cite only
+     the corrected/final numbers. If you go read `program.md` directly,
+     read the corrected block (and everything after it), not the first one.
+2. **`escalations.md` files (there is one per research phase —
+   `autoresearch-tempo/escalations.md`, `autoresearch-pipeline/escalations.md`,
+   `autoresearch-product/escalations.md`, `autoresearch-adt/escalations.md`)
+   are DON'T-lists by design** — each one's own header says something like
+   "AUTHORITATIVE DONT-LIST... a respawned agent MUST read this FIRST." Every
+   entry is a **closed, rejected, or superseded direction** — reading one and
+   treating an entry as "here's an idea to build" is backwards; the correct
+   reading is "this was tried/considered and the answer was no, don't
+   re-propose it." None of them are about the interactive-tempo-map ops this
+   plan depends on (they're about the separate — and also research-adjacent
+   but unrelated — grid-construction/threshold levers), but if you go looking
+   for context near this work, don't mistake one of their entries for a
+   live suggestion.
+
+## Annotated reading list (optional depth; not required to implement 0061/0062)
+
+| File (in `drum-to-chart`) | What to take from it |
+| --- | --- |
+| `autoresearch-pipeline/program.md`, the block headed `# INTERACTIVE PHASE — CORRECTED 3-OP MATRIX` (~line 2157) and everything below it in the file | The primary source for the "Curated findings" section below — the 3(4)-op measurements, the 13.3% figure, the guarded-vs-unguarded re-predict split. This is what to read for depth; the block ABOVE it (`# INTERACTIVE TEMPO-MAP PHASE`, ~line 2106) is the pre-correction version — see the warning above. |
+| `wiki/autoresearch-tempo-grid.md` | The terminal-state summary of a **different, unrelated** research arc (stage 7-9 grid *construction* quality — DBA weight/tolerance retuning, kick/snare warp — the shipped baseline grid this plan's numbers are measured against, e.g. "audio-flow raw 0.3401"). Useful only for understanding why the baseline numbers in the curated findings look the way they do; says nothing about interactive editing ops. Do not confuse "grid construction quality" (this page) with "what happens to notes when the user edits the tempo map" (this appendix's actual subject). |
+| `autoresearch-pipeline/PHASE_SUMMARY.md`, `autoresearch-tempo/PHASE_SUMMARY.md` | Terminal checkpoints for the same grid-construction arc as above — same caveat: unrelated to the interactive-editing ops, useful only for background on the shipped baseline. |
+| `autoresearch-tempo/escalations.md`, `autoresearch-pipeline/escalations.md`, `autoresearch-product/escalations.md`, `autoresearch-adt/escalations.md` | **DON'T-read-as-current lists** — every entry is a closed/refuted direction in a different (grid-construction or model-training) research line. Not required reading for 0061/0062 at all; listed here only so that if you end up in this repo poking around for context, you recognize what these files are and don't misread an entry as live guidance. |
+| `plans/2026-07-16-tempo-grid-ux.md` (drum-to-chart's own `plans/`, not this repo's) | The original design-of-record memo that first proposed the downbeat-nudge and half/double/tap-tempo levers (its own header marks it **"PARKED... NOT scheduled for execution"** as of 2026-07-16). 0061 §6/§7 and 0062 §8/§9 in this repo have since superseded and considerably extended this memo's UX sketches with concrete mechanics, data models, and measured numbers — treat it as the historical origin of the idea, not as a spec to implement against; where it and 0061/0062 differ, 0061/0062 (this repo) wins. |
+
+## Curated findings
+
+### What was measured, and how (context, not required reading)
 
 The research asked: when a chart's tempo map is corrected after notes
 already exist, what should happen to the notes? It built oracle-input
@@ -26,7 +93,7 @@ updating notes when the tempo map changes were compared head-to-head on the
 same corpus, holding the *new* tempo map fixed and varying only what happens
 to already-placed notes.
 
-## The three (four, with authoring mode) note-handling ops
+### The four note-handling ops (three measured by the corpus study, one — KEEP-TICKS — a functional addition for authoring mode)
 
 | Op | What happens to a note | Where it's the right default |
 | --- | --- | --- |

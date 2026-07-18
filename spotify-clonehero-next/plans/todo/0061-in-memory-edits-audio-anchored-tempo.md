@@ -720,12 +720,18 @@ landed; everything downstream of that (`61-5`, `61-7`, `62-4`) is the tail.
   future invertible-undo (0035 phase 8) must treat tempo remap as
   non-invertible-in-closed-form and keep snapshots for it.
 - **Re-predict without certification (new, §3a/§7):** the guarded batch/
-  automated re-predict path is NOT yet certified (parallel drum-to-chart
-  work) — shipping it un-flagged before that lands would ship an unguarded
-  claim on top of a guard whose false-negative rate isn't fully
-  characterized. The preview/accept-reject path (§7) sidesteps this since a
-  human is the guard, but any *automatic* invocation of re-predict must stay
-  behind the certification gate.
+  automated re-predict path is NOT yet certified. Tracked in
+  `drum-to-chart`'s own task list as item #117, "INTERACTIVE TEMPO-MAP
+  phase" (in progress as of this plan's writing); check that item's status,
+  or `autoresearch-pipeline/STATUS.md` in that repo, before assuming
+  certification has landed — do not infer landing from the presence of the
+  measured numbers in this plan's appendix (those numbers are the
+  measurement, not the certification). Shipping the batch path un-flagged
+  before certification lands would ship an unguarded claim on top of a
+  guard whose false-negative rate isn't fully characterized. The
+  preview/accept-reject path (§7) sidesteps this since a human is the
+  guard, but any *automatic* invocation of re-predict must stay behind the
+  certification gate.
 - **Decoded-onset staleness (new, §3a):** if a user re-transcribes a project
   (re-runs the audio-flow pipeline), the retained decoded onsets must be
   regenerated too, or class-(b) re-predict will re-snap against stale onsets
