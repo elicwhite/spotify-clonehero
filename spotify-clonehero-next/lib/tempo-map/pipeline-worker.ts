@@ -28,8 +28,8 @@ import {runBeatThisOnnx} from './beat-this-onnx';
 import {runPostprocessor} from './beat-this-pp';
 import {computeDrumOnsetOffsetMs} from './drum-onset';
 import {
-  packStereoStem,
-  unpackStereoStem,
+  encodeStemCacheBytes,
+  decodeStemCacheBytes,
   stereoStemToMono,
   type StereoStem,
 } from './stem-cache-format';
@@ -66,7 +66,7 @@ const SEPARATION_SAMPLE_RATE = 44100;
 // Bump when the separation pipeline changes in ways that affect output
 // (model swap, overlap, mixing, channel reduction) or the cache file
 // format changes (see stem-cache-format.ts).
-const STEM_CACHE_VERSION = 'v2_drums_stereo_44k1_overlap0.25_fp16_libsoxr';
+const STEM_CACHE_VERSION = 'v3_drums_stereo_gz_44k1_overlap0.25_fp16_libsoxr';
 const STEM_CACHE_DIR = 'tempo-map-stem-cache';
 
 function post(msg: PipelineWorkerMessage, transfer?: Transferable[]) {
@@ -102,7 +102,7 @@ async function getStemCacheDir() {
 }
 
 function stemCacheKey(sourceHash: string, sampleCount: number) {
-  return `${sourceHash.slice(0, 32)}__${STEM_CACHE_VERSION}__N${sampleCount}.f32`;
+  return `${sourceHash.slice(0, 32)}__${STEM_CACHE_VERSION}__N${sampleCount}.f32.gz`;
 }
 
 async function loadStemFromCache(
@@ -113,8 +113,8 @@ async function loadStemFromCache(
     const dir = await getStemCacheDir();
     const fh = await dir.getFileHandle(key);
     const file = await fh.getFile();
-    return unpackStereoStem(
-      new Float32Array(await file.arrayBuffer()),
+    return await decodeStemCacheBytes(
+      new Uint8Array(await file.arrayBuffer()),
       sampleCount,
     );
   } catch {
@@ -125,9 +125,10 @@ async function loadStemFromCache(
 async function saveStemToCache(key: string, stem: StereoStem) {
   try {
     const dir = await getStemCacheDir();
+    const bytes = await encodeStemCacheBytes(stem);
     const fh = await dir.getFileHandle(key, {create: true});
     const w = await fh.createWritable();
-    await w.write(packStereoStem(stem) as Float32Array<ArrayBuffer>);
+    await w.write(bytes);
     await w.close();
   } catch {
     // Cache write failures are non-fatal.
