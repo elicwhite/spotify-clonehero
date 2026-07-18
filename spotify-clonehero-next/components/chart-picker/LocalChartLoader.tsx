@@ -31,9 +31,16 @@ export interface LocalChart {
 export default function LocalChartLoader({
   onLoaded,
   id,
+  requireDrums = true,
 }: {
   onLoaded: (chart: LocalChart) => void;
   id: string;
+  /**
+   * Reject charts without a drums track. Consumers that render drum
+   * notation (/sheet-music) need this; the preview editor renders the
+   * beat grid alone when the chart has no drums.
+   */
+  requireDrums?: boolean;
 }) {
   const handleLoaded = useCallback(
     (loaded: LoadedFiles) => {
@@ -41,7 +48,10 @@ export default function LocalChartLoader({
         const chartDoc = readChart(loaded.files);
         const {parsedChart} = chartDoc;
 
-        if (!parsedChart.trackData.some(t => t.instrument === 'drums')) {
+        if (
+          requireDrums &&
+          !parsedChart.trackData.some(t => t.instrument === 'drums')
+        ) {
           toast.error('No drum track found in this chart');
           return;
         }
@@ -74,7 +84,7 @@ export default function LocalChartLoader({
         toast.error(e instanceof Error ? e.message : 'Failed to parse chart');
       }
     },
-    [onLoaded],
+    [onLoaded, requireDrums],
   );
 
   return <ChartDropZone onLoaded={handleLoaded} id={id} />;

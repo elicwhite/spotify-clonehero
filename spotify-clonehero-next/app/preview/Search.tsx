@@ -103,11 +103,6 @@ export default function Search({
       try {
         const files = await getChartFiles(track);
         const chartDoc = readChart(files);
-        if (
-          !chartDoc.parsedChart.trackData.some(t => t.instrument === 'drums')
-        ) {
-          throw new Error('No drum track found in this chart');
-        }
         const audioFiles = findAudioFiles(files);
         if (audioFiles.length === 0) {
           throw new Error('No audio files found in this chart');
@@ -261,6 +256,7 @@ export default function Search({
                 <LocalChartLoader
                   onLoaded={handleLocalChart}
                   id="preview-local-chart"
+                  requireDrums={false}
                 />
               </div>
             </details>

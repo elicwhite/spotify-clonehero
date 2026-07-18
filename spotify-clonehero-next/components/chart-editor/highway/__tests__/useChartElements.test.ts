@@ -17,7 +17,7 @@
  */
 
 import {makeFixtureDoc} from '../../__tests__/fixtures';
-import {DRUM_EDIT_CAPABILITIES} from '../../capabilities';
+import {DRUM_EDIT_CAPABILITIES, PREVIEW_CAPABILITIES} from '../../capabilities';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../../scope';
 import {computeChartElements} from '../useChartElements';
 import {markerDragReconcilerKey} from '@/lib/preview/highway/reconcilerKey';
@@ -160,6 +160,29 @@ describe('computeChartElements', () => {
 
     expect(elements.some(e => e.kind === 'note')).toBe(false);
     expect(elements.some(e => e.kind === 'lyric')).toBe(true);
+  });
+
+  it('drums scope on a chart with no drums track yields markers only', () => {
+    // /preview loads arbitrary charts under the drums/expert scope; a
+    // chart with no drums track must still produce the non-note
+    // elements (sections, lyrics) without throwing.
+    const doc = makeFixtureDoc();
+    doc.parsedChart.trackData = doc.parsedChart.trackData.filter(
+      t => t.instrument !== 'drums',
+    );
+
+    const elements = computeChartElements({
+      chart: doc.parsedChart,
+      activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
+      partName: 'vocals',
+      capabilities: PREVIEW_CAPABILITIES,
+      markerDrag: null,
+      timedTempos,
+      resolution,
+    });
+
+    expect(elements.some(e => e.kind === 'note')).toBe(false);
+    expect(elements.some(e => e.kind === 'section')).toBe(true);
   });
 
   it('omits dragged-msTime rewrite when timedTempos is empty', () => {
