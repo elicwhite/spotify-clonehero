@@ -53,8 +53,7 @@ export interface OrtInferenceSession {
  * Throws if the script has not been loaded yet.
  */
 /** CDN base URL — must match the version loaded via <Script> in page.tsx. */
-const ORT_CDN_BASE =
-  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.0-dev.20251116-b39e144322/dist/';
+const ORT_CDN_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
 
 let ortConfigured = false;
 

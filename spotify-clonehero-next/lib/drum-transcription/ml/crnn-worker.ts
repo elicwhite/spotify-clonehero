@@ -36,9 +36,8 @@ import {
 
 /** CDN URL for ONNX Runtime — must match the main thread version. */
 const ORT_CDN_URL =
-  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.0-dev.20251116-b39e144322/dist/ort.all.min.js';
-const ORT_CDN_BASE =
-  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.0-dev.20251116-b39e144322/dist/';
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.all.min.js';
+const ORT_CDN_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
 
 let ort: any = null;
 
@@ -185,6 +184,7 @@ async function transcribe(
   sampleRate: number,
   modelUrl: string,
   thresholds: number[],
+  executionProviders: string[] = ['webgpu', 'wasm'],
 ) {
   const durationSeconds = stereoAudio.length / 2 / sampleRate;
 
@@ -221,7 +221,7 @@ async function transcribe(
     postProgress('loading-model', 0);
     const rtOrt = await loadOrt();
     session = await rtOrt.InferenceSession.create(modelUrl, {
-      executionProviders: ['webgpu', 'wasm'],
+      executionProviders,
       graphOptimizationLevel: 'all',
     });
     postProgress('loading-model', 1);
@@ -275,8 +275,9 @@ async function transcribe(
 // ---------------------------------------------------------------------------
 
 self.onmessage = (e: MessageEvent) => {
-  const {type, stereoAudio, sampleRate, modelUrl, thresholds} = e.data;
+  const {type, stereoAudio, sampleRate, modelUrl, thresholds, executionProviders} =
+    e.data;
   if (type === 'transcribe') {
-    transcribe(stereoAudio, sampleRate, modelUrl, thresholds);
+    transcribe(stereoAudio, sampleRate, modelUrl, thresholds, executionProviders);
   }
 };

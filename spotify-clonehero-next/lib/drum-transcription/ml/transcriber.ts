@@ -167,9 +167,21 @@ async function loadThresholds(): Promise<number[]> {
  */
 export class CrnnTranscriber implements DrumTranscriber {
   private modelUrl: string;
+  private executionProviders: string[];
 
-  constructor(modelUrl: string = CRNN_MODEL_URL) {
+  /**
+   * @param executionProviders - ORT execution provider preference order.
+   *   Exposed (not just hardcoded in the worker) so the webgpu-vs-wasm
+   *   residual can be measured by running the same audio through
+   *   `['webgpu', 'wasm']` and `['wasm']` and diffing `modelOutput.predictions`
+   *   — see PARITY.md's stage-2 gate term (b). Default matches production.
+   */
+  constructor(
+    modelUrl: string = CRNN_MODEL_URL,
+    executionProviders: string[] = ['webgpu', 'wasm'],
+  ) {
     this.modelUrl = modelUrl;
+    this.executionProviders = executionProviders;
   }
 
   async transcribe(
@@ -224,6 +236,7 @@ export class CrnnTranscriber implements DrumTranscriber {
           sampleRate,
           modelUrl: this.modelUrl,
           thresholds,
+          executionProviders: this.executionProviders,
         },
         [stereoAudio.buffer],
       );
