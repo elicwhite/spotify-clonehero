@@ -39,7 +39,10 @@ import {
   loadDrumStem,
   type DrumSeparationProgress,
 } from '../ml/roformer-separation';
-import {resampleSoxr} from '@/lib/tempo-map/resampler-soxr';
+import {
+  planarStereoToCrnnInput,
+  CRNN_SAMPLE_RATE,
+} from './crnn-audio-prep';
 import {runTempoPipelineFromPcm} from '@/lib/tempo-map/pipeline-client';
 import type {
   LinkSegSections,
@@ -101,16 +104,14 @@ export type PipelineProgressCallback = (progress: PipelineProgress) => void;
 // Audio prep for the CRNN transcriber
 // ---------------------------------------------------------------------------
 
-/** The stereo CRNN model consumes 48 kHz audio (mel: 1024 FFT / 480 hop). */
-const CRNN_SAMPLE_RATE = 48000;
-
 /**
  * Load the audio to transcribe (drum stem if separated, else full mix) and
- * resample it to interleaved stereo at 48 kHz for the CRNN transcriber.
+ * resample it to interleaved stereo at 48 kHz for the CRNN transcriber, via
+ * the SAME resample step /tempo's tempo-track.ts uses on its in-memory
+ * separation output (crnn-audio-prep.ts).
  *
  * Both the stored drum stem and stored full-mix audio are interleaved stereo
- * at TARGET_SAMPLE_RATE (44.1 kHz); each channel is resampled independently
- * with libsoxr (Web Audio's resampler is too lossy) and re-interleaved.
+ * at TARGET_SAMPLE_RATE (44.1 kHz).
  */
 async function loadTranscriptionAudio48k(
   projectId: string,
@@ -132,18 +133,7 @@ async function loadTranscriptionAudio48k(
     right[i] = interleaved44k[i * 2 + 1];
   }
 
-  const [left48, right48] = await Promise.all([
-    resampleSoxr(left, TARGET_SAMPLE_RATE, CRNN_SAMPLE_RATE),
-    resampleSoxr(right, TARGET_SAMPLE_RATE, CRNN_SAMPLE_RATE),
-  ]);
-
-  const outN = Math.min(left48.length, right48.length);
-  const stereo48k = new Float32Array(outN * 2);
-  for (let i = 0; i < outN; i++) {
-    stereo48k[i * 2] = left48[i];
-    stereo48k[i * 2 + 1] = right48[i];
-  }
-  return stereo48k;
+  return planarStereoToCrnnInput(left, right, TARGET_SAMPLE_RATE);
 }
 
 // ---------------------------------------------------------------------------

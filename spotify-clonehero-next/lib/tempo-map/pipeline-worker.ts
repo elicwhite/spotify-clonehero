@@ -142,6 +142,13 @@ async function run(req: PipelineRunRequest) {
 
   // ---- S1: drum stem (pre-separated, OPFS-cached, or freshly separated) ----
   let drumStem: Float32Array | null = null;
+  // Planar stereo copy of a stem THIS run separated itself — surfaced in the
+  // result for a caller that wants to run CRNN transcription on the exact
+  // same separation output (drum-transcription/pipeline/tempo-track.ts),
+  // without a second BS-Roformer pass. Stays null when the stem came from
+  // the caller or the OPFS cache (mono-only), since a fresh separation is
+  // needed to get stereo in that case anyway.
+  let drumStemStereo: {left: Float32Array; right: Float32Array} | null = null;
   const cacheKey = req.sourceHash ? stemCacheKey(req.sourceHash, N) : null;
   if (req.drumStem && req.drumStem.length === N) {
     // Caller already separated the drums (drum-transcription pipeline):
@@ -188,11 +195,12 @@ async function run(req: PipelineRunRequest) {
 
     progress({stage: 'separate', percent: 0});
     try {
-      drumStem = await separateDrumStem({
+      const stereo = await separateDrumStem({
         ort,
         left,
         right,
         session: roformerSession,
+        output: 'stereo',
         onProgress: ({segment, totalSegments, etaSec}) => {
           progress({
             stage: 'separate',
@@ -201,6 +209,11 @@ async function run(req: PipelineRunRequest) {
           });
         },
       });
+      drumStemStereo = stereo;
+      const n = Math.min(stereo.left.length, stereo.right.length);
+      const mono = new Float32Array(n);
+      for (let i = 0; i < n; i++) mono[i] = (stereo.left[i] + stereo.right[i]) * 0.5;
+      drumStem = mono;
     } finally {
       await roformerSession.release();
     }
@@ -331,17 +344,23 @@ async function run(req: PipelineRunRequest) {
     );
   }
 
-  post({
-    type: 'result',
-    result: {
-      synctrack: sync,
-      sections,
-      drumOnsetOffsetMs: offsetMs,
-      fullMixBeatCount: fm.pp.beats.length,
-      drumStemBeatCount: ds.pp.beats.length,
-      meterStats: computeMeterStats(fm.pp.beats, fm.pp.downbeats),
+  post(
+    {
+      type: 'result',
+      result: {
+        synctrack: sync,
+        sections,
+        drumOnsetOffsetMs: offsetMs,
+        fullMixBeatCount: fm.pp.beats.length,
+        drumStemBeatCount: ds.pp.beats.length,
+        meterStats: computeMeterStats(fm.pp.beats, fm.pp.downbeats),
+        drumStemStereo,
+      },
     },
-  });
+    drumStemStereo
+      ? [drumStemStereo.left.buffer, drumStemStereo.right.buffer]
+      : [],
+  );
 }
 
 self.addEventListener('message', (e: MessageEvent) => {

@@ -61,6 +61,16 @@ export interface PipelineResult {
    * frac4 < METER_CONFIDENCE_THRESHOLD → warn that time signatures likely
    * need manual work. */
   meterStats: import('./meter-confidence').MeterStats | null;
+  /**
+   * The separated drum stem, planar stereo at 44.1 kHz — present only when
+   * this run performed its OWN separation (no pre-separated `drumStem` was
+   * supplied in the request). Lets a caller run CRNN transcription
+   * (lib/drum-transcription/pipeline/tempo-track.ts) on the SAME separation
+   * output without a second BS-Roformer pass. `null` when the caller
+   * supplied `drumStem` (it already has its own stereo copy) or when
+   * separation failed.
+   */
+  drumStemStereo: {left: Float32Array; right: Float32Array} | null;
 }
 
 // --- worker message protocol -------------------------------------------

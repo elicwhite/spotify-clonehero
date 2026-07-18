@@ -66,11 +66,14 @@ import type {
 } from '@/components/chart-picker/chart-file-readers';
 import ProcessingView, {type ProcessingStep} from '@/components/ProcessingView';
 
-import {runTempoPipeline} from '@/lib/tempo-map/pipeline-client';
+import {
+  runTempoTrack,
+  type TempoTrackProgress,
+} from '@/lib/drum-transcription/pipeline/tempo-track';
 import {mergeAudioFiles} from '@/lib/tempo-map/merge-audio';
 import {swapSynctrack} from '@/lib/tempo-map/swap-synctrack';
 import {buildChartFromSynctrack} from '@/lib/tempo-map/build-chart';
-import type {PipelineProgress, Synctrack} from '@/lib/tempo-map/types';
+import type {Synctrack} from '@/lib/tempo-map/types';
 import {
   METER_CONFIDENCE_THRESHOLD,
   type MeterStats,
@@ -136,6 +139,13 @@ const STEP_DEFS: Array<{key: string; label: string; description?: string}> = [
   {key: 'beats-fullmix', label: 'Finding the beat of the whole song'},
   {key: 'beats-drums', label: 'Finding the beat of the drums'},
   {key: 'convert', label: 'Building the tempo map'},
+  {
+    key: 'transcribe-drums',
+    label: 'Listening to the drum hits',
+    description:
+      'Runs the same drum-transcription model as /drum-transcription, used '
+      + 'here to anchor the tempo map to the actual kick/snare hits.',
+  },
   {key: 'chart', label: 'Writing the chart'},
 ];
 
@@ -309,7 +319,7 @@ export default function TempoClient() {
   }, []);
 
   const onPipelineProgress = useCallback(
-    (p: PipelineProgress) => {
+    (p: TempoTrackProgress) => {
       const key = p.stage;
       if (!stepTimers.current[key]) startStep(key);
       let etaSeconds = p.etaSeconds;
@@ -385,7 +395,7 @@ export default function TempoClient() {
           ) as ArrayBuffer;
         }
 
-        const pipelineResult = await runTempoPipeline(audioBuffer, {
+        const pipelineResult = await runTempoTrack(audioBuffer, {
           sourceBytes,
           onProgress: onPipelineProgress,
         });

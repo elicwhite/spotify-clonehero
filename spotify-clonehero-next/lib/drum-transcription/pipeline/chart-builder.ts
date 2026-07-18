@@ -30,12 +30,7 @@ import {
   DEFAULT_SNAP_TOLERANCE_MS,
 } from '@/lib/tempo-map/swap-synctrack';
 import {snapGroupToGrid} from '@/lib/tempo-map/quantize-grid';
-import {
-  warpGrid,
-  warpGridReach,
-  KS_WARP_ENABLED,
-  KS_WARP_REACH_ENABLED,
-} from '@/lib/tempo-map/ks-warp';
+import {finalizeSynctrack} from '@/lib/tempo-map/finalize-synctrack';
 import type {SnapMode} from '../ml/class-mapping';
 import type {LinkSegSections, Synctrack} from '@/lib/tempo-map/types';
 import type {MeterStats} from '@/lib/tempo-map/meter-confidence';
@@ -169,28 +164,17 @@ export function buildChartDocument(
     // (#112, SHIPPED — Eli GO "ship guard alone", 2026-07-17, supersedes the
     // whole-song d5 gate below): on songs where the predicted grid has
     // drifted from the true tempo, softly pull it back toward the decoded
-    // kick+snare backbeat before installing it — a structural no-op
-    // (byte-identical grid) unless the deployable gate admits. Onsets MUST be
-    // RAW (uncorrected) times, matching the Python reference's
-    // SF.decode("raw", ...) contract — see ks-warp.ts's module docstring.
-    // Only applies to a freshly-predicted synctrack, never to an existing
-    // chart's own tempo list (buildChartDocumentFromExistingChart below does
-    // not call this).
-    let effectiveSynctrack = synctrack;
-    if (KS_WARP_REACH_ENABLED) {
-      const ksOnsetsMs = events
-        .filter(e => e.drumClass === 'BD' || e.drumClass === 'SD')
-        .map(e => e.timeSeconds * 1000);
-      const allOnsetsMs = events.map(e => e.timeSeconds * 1000);
-      const {grid: warped} = warpGridReach(synctrack, ksOnsetsMs, allOnsetsMs);
-      if (warped) effectiveSynctrack = warped;
-    } else if (KS_WARP_ENABLED) {
-      const ksOnsetsMs = events
-        .filter(e => e.drumClass === 'BD' || e.drumClass === 'SD')
-        .map(e => e.timeSeconds * 1000);
-      const {grid: warped} = warpGrid(synctrack, ksOnsetsMs);
-      if (warped) effectiveSynctrack = warped;
-    }
+    // kick+snare backbeat before installing it. Delegated to
+    // finalizeSynctrack (lib/tempo-map/finalize-synctrack.ts) — the SAME
+    // function /tempo's tempo-only pipeline calls
+    // (drum-transcription/pipeline/tempo-track.ts) on the same
+    // (rawSynctrack, events) inputs, so the two features cannot produce
+    // different grids from the same audio. Onsets MUST be RAW (uncorrected)
+    // times, matching the Python reference's SF.decode("raw", ...) contract
+    // — see ks-warp.ts's module docstring. Only applies to a
+    // freshly-predicted synctrack, never to an existing chart's own tempo
+    // list (buildChartDocumentFromExistingChart below does not call this).
+    const effectiveSynctrack = finalizeSynctrack(synctrack, events);
     // The empty chart has no events to re-tick, so swapSynctrack just
     // installs the predicted tempos/time signatures with correct ticks
     // (including lead-in / origin handling — see synctrack-ticks.ts).
