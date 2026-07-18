@@ -31,13 +31,28 @@
  */
 
 import type {Synctrack, TempoEvent} from './types';
-import {buildTimedTempos, tickToMs} from '../drum-transcription/timing';
+import {buildTimedTempos, msToTick, tickToMs} from '../drum-transcription/timing';
 import type {TimedTempo} from '../drum-transcription/chart-types';
+import {snapGroupToGrid} from './quantize-grid';
+import {DEFAULT_SNAP_TOLERANCE_MS} from './swap-synctrack';
+import {SYSTEMATIC_ONSET_MS_AUDIO_FLOW} from '../drum-transcription/ml/types';
+import {DEFAULT_PHASE_ALIGN_CONFIG} from '../drum-transcription/ml/phase-align-config';
+import {
+  computePhaseAlignShiftMs,
+  MIN_ONSETS_FOR_SEARCH,
+} from '../drum-transcription/pipeline/phase-align';
 
 const RESOLUTION = 480;
 
 // --- SOTA-style config (mirrors converter.ts's SOTA block) ---------------
 export const KS_WARP_ENABLED = true;
+
+/** Master flag for the SHIPPED reach-extension (windowed warp + note_ms
+ * guard, see below) — when true (the shipped default), chart-builder.ts
+ * routes through {@link warpGridReach} instead of the whole-song `warpGrid`
+ * d5 lever, regardless of {@link KS_WARP_ENABLED}. Set false to fall back to
+ * the d5 whole-song-gate path (still gated by KS_WARP_ENABLED). */
+export const KS_WARP_REACH_ENABLED = true;
 export const KS_WARP_LAMBDA = 0.5;
 export const KS_WARP_WIN_MS = 70.0;
 export const KS_WARP_GATE_KS_P50_MAX_MS = 7.0;
@@ -206,11 +221,14 @@ function timeToBeta(
 // buildTimedTempos + tickToMs reproduces anchored_beats: beats[0] === origin_ms
 // by construction (the prepend guarantees a tick=0 anchor at origin's bpm).
 // ---------------------------------------------------------------------------
-export function anchoredBeats(
-  grid: Synctrack,
-  maxMs = 240000.0,
-  maxB = 4000,
-): {beats: number[]; origin: number} {
+/**
+ * The grid's own-origin-anchored timed-tempo schedule (tick=0 === origin_ms),
+ * matching `emit_tempos_from_gt_grid` + `build_timed_tempos` in the Python
+ * reference. Shared by {@link anchoredBeats} and the reach-extension's
+ * post-snap note_ms guard ({@link postsnapNoteMedian}), which both need to
+ * convert ms<->tick in this same origin-anchored frame.
+ */
+function buildOwnOriginTimedTempos(grid: Synctrack): TimedTempo[] {
   const origin = grid.origin_ms;
   const tempos = grid.tempos;
 
@@ -229,7 +247,16 @@ export function anchoredBeats(
     }
   }
 
-  const timed: TimedTempo[] = buildTimedTempos(emit, RESOLUTION);
+  return buildTimedTempos(emit, RESOLUTION);
+}
+
+export function anchoredBeats(
+  grid: Synctrack,
+  maxMs = 240000.0,
+  maxB = 4000,
+): {beats: number[]; origin: number} {
+  const origin = grid.origin_ms;
+  const timed = buildOwnOriginTimedTempos(grid);
 
   const beats: number[] = [];
   let b = 0;
@@ -493,5 +520,296 @@ export function warpGrid(
     tempos,
     timeSignatures,
   };
+  return {grid, diag: {...diag, admitted: true}};
+}
+
+// ---------------------------------------------------------------------------
+// REACH-EXTENSION (SHIPPED, Eli GO "ship guard alone", 2026-07-17). Port of
+// `levers/kick_snare_warp_reach.py` (drum-to-chart analysis/product_pipeline).
+// Supersedes the whole-song `warpGrid` above with a WINDOWED local-comb gate
+// (fires on locally-steady 32-beat windows instead of requiring the whole
+// song to pass one comb fit — 75% audio-material reach vs d5's 21%) plus a
+// deployable post-snap note_ms self-guard that rejects the warp outright if
+// it would worsen median post-snap note-to-onset fit by more than
+// `noteMsTolMs`. `warpGrid`/d5 is kept above, untouched, behind its own
+// `KS_WARP_ENABLED` flag — see chart-builder.ts.
+// ---------------------------------------------------------------------------
+
+/** Shipped reach config: `KSWarpConfig(lam=0.5, win_ms=70, gate_ks_p50_max=5,
+ * gate_ks_inlf_min=0.90, gate_drift_ks_min=5)` — ratioLo/ratioHi keep the
+ * DEFAULT_KS_WARP_CONFIG values (0.9/1.1), matching the Python reference's
+ * dataclass field defaults (only p50/inlf/drift are overridden there). */
+export const REACH_KS_WARP_CONFIG: KSWarpConfig = {
+  ...DEFAULT_KS_WARP_CONFIG,
+  gateKsP50MaxMs: 5.0,
+  gateKsInlfMin: 0.9,
+  gateDriftKsMinMs: 5.0,
+};
+
+export const REACH_WIN_BEATS = 32;
+export const REACH_HOP_BEATS = 16;
+export const REACH_NOTE_MS_TOL = 0.5;
+
+export interface KSWarpWindowedDiag {
+  nWin: number;
+  nAdmWin: number;
+  nBeatsWarped: number;
+  admitted: boolean;
+  reason?: string;
+}
+
+/** Port of kick_snare_warp_reach._beats_bpm_ts. */
+function beatsBpmTs(
+  synctrack: Synctrack,
+): {beats: number[]; bpm0: number; ts: Synctrack['timeSignatures']} | null {
+  const {beats} = anchoredBeats(synctrack);
+  if (beats.length < 8) return null;
+  const bpm0 = 60000.0 / median(diffArr(beats));
+  return {beats, bpm0, ts: synctrack.timeSignatures};
+}
+
+/** Port of kick_snare_warp_reach._grid_from_warped: rebuilds a per-beat tempo
+ * map from a (possibly non-monotonic, when mixing warped/incumbent beats)
+ * warped-beat array — re-applies the running-max monotonicity fix, then the
+ * same tempo-segment construction `warpGrid` uses. */
+function gridFromWarped(
+  warpedIn: number[],
+  timeSignatures: Synctrack['timeSignatures'],
+): Synctrack | null {
+  const warped = warpedIn.slice();
+  for (let k = 1; k < warped.length; k++) {
+    if (warped[k] < warped[k - 1]) warped[k] = warped[k - 1];
+  }
+  const ts =
+    timeSignatures && timeSignatures.length
+      ? timeSignatures
+      : [{ms: warped[0], numerator: 4, denominator: 4}];
+  const tempos: TempoEvent[] = [];
+  for (let bi = 0; bi < warped.length - 1; bi++) {
+    const dt = warped[bi + 1] - warped[bi];
+    if (dt > 1.0 && 60000.0 / dt >= 30.0 && 60000.0 / dt <= 400.0) {
+      tempos.push({ms: warped[bi], bpm: 60000.0 / dt});
+    }
+  }
+  if (tempos.length < 2) return null;
+  return {origin_ms: warped[0], tempos, timeSignatures: ts};
+}
+
+/**
+ * Windowed / sectional KS-warp gate: port of
+ * `kick_snare_warp_reach.warp_grid_windowed`. Warps only the beats that fall
+ * inside >=1 locally-steady, locally-drifted `winBeats`-beat window (hop
+ * `hopBeats`); beats outside any admitted window keep their incumbent
+ * position. The full-song soft-pull warp is computed once and then masked,
+ * so window seams stay phase-continuous by construction (no downbeat break
+ * at a boundary) — same trick as the Python reference.
+ */
+export function warpGridWindowed(
+  synctrack: Synctrack,
+  ksOnsetsMs: number[] | null,
+  cfg: KSWarpConfig = REACH_KS_WARP_CONFIG,
+  winBeats: number = REACH_WIN_BEATS,
+  hopBeats: number = REACH_HOP_BEATS,
+  minKsInWin = 8,
+  minAdmWinFrac = 0.0,
+  localDriftMaxMs: number | null = null,
+): {grid: Synctrack | null; diag: KSWarpWindowedDiag} {
+  const bt = beatsBpmTs(synctrack);
+  if (bt === null) {
+    return {
+      grid: null,
+      diag: {nWin: 0, nAdmWin: 0, nBeatsWarped: 0, admitted: false, reason: 'too_few_beats'},
+    };
+  }
+  const {beats, bpm0, ts} = bt;
+
+  const ks =
+    ksOnsetsMs && ksOnsetsMs.length
+      ? Array.from(ksOnsetsMs).sort((a, b) => a - b)
+      : null;
+  if (ks === null || ks.length < 8) {
+    return {
+      grid: null,
+      diag: {nWin: 0, nAdmWin: 0, nBeatsWarped: 0, admitted: false, reason: 'too_few_ks'},
+    };
+  }
+
+  const P = cfg.gateKsP50MaxMs;
+  const I = cfg.gateKsInlfMin;
+  const D = cfg.gateDriftKsMinMs;
+  const nb = beats.length;
+  const warpMask = new Array<boolean>(nb).fill(false);
+  let nWin = 0;
+  let nAdmWin = 0;
+  let start = 0;
+  while (start < nb) {
+    const end = Math.min(start + winBeats, nb);
+    if (end - start >= 8) {
+      const wb = beats.slice(start, end);
+      const lo = wb[0] - 1.0;
+      const hi = wb[wb.length - 1] + 1.0;
+      const wks = ks.filter(k => k >= lo && k <= hi);
+      if (wks.length >= minKsInWin) {
+        nWin++;
+        const comb = combFit(wks, bpm0);
+        const dloc = driftVsKs(wb, wks);
+        const steady =
+          comb !== null &&
+          comb.p50 <= P &&
+          comb.inlf >= I &&
+          cfg.ratioLo <= comb.ratio &&
+          comb.ratio <= cfg.ratioHi;
+        const withinCap =
+          localDriftMaxMs === null ||
+          (dloc !== null && dloc <= localDriftMaxMs);
+        if (steady && dloc !== null && dloc >= D && withinCap) {
+          nAdmWin++;
+          for (let k = start; k < end; k++) warpMask[k] = true;
+        }
+      }
+    }
+    if (end >= nb) break;
+    start += hopBeats;
+  }
+
+  const nBeatsWarped = warpMask.reduce((n, w) => n + (w ? 1 : 0), 0);
+  const diagBase = {nWin, nAdmWin, nBeatsWarped};
+  if (nBeatsWarped === 0) {
+    return {grid: null, diag: {...diagBase, admitted: false}};
+  }
+  if (nWin > 0 && nAdmWin / nWin < minAdmWinFrac) {
+    return {
+      grid: null,
+      diag: {...diagBase, admitted: false, reason: 'too_few_steady_windows'},
+    };
+  }
+
+  const warpedAll = warpBeats(beats, ks, cfg.winMs, cfg.lam);
+  if (warpedAll === null) {
+    return {
+      grid: null,
+      diag: {...diagBase, admitted: true, reason: 'warp_unconstructible'},
+    };
+  }
+  const mixed = beats.map((b, i) => (warpMask[i] ? warpedAll[i] : b));
+  const grid = gridFromWarped(mixed, ts);
+  if (grid === null) {
+    return {
+      grid: null,
+      diag: {...diagBase, admitted: true, reason: 'warp_unconstructible'},
+    };
+  }
+  return {grid, diag: {...diagBase, admitted: true}};
+}
+
+/**
+ * Snap one onset (already in the grid's own-origin frame, i.e.
+ * `msRaw - grid.origin_ms`) to the musical grid for the note_ms guard. Port
+ * of `stage89_snap.snap_onset_tick` with `flow="audio"` and
+ * `lattice_config=None` fixed (the guard never varies these — see the
+ * Python reference's `postsnap_note_median`), and the lane parameter
+ * dropped: every lane currently resolves to the same 'candidate'
+ * (16th/16th-triplet) snap mode (`CYMBAL_LANES` is empty in both the
+ * Python reference and this app's `class-mapping.ts`), so lane-branching
+ * would be dead code here too.
+ */
+function snapOnsetTickForGuard(
+  msOwnOrigin: number,
+  timed: TimedTempo[],
+  resolution: number,
+  toleranceMs: number,
+  phaseAlignShiftMs: number,
+): number {
+  const adjMs = msOwnOrigin + SYSTEMATIC_ONSET_MS_AUDIO_FLOW + phaseAlignShiftMs;
+  const frac = msToTick(adjMs, timed, resolution);
+  const snapped = snapGroupToGrid(frac, resolution);
+  const driftMs = Math.abs(tickToMs(snapped, timed, resolution) - adjMs);
+  return driftMs > toleranceMs ? Math.max(0, Math.round(frac)) : snapped;
+}
+
+/**
+ * Deployable post-snap note_ms self-guard: port of
+ * `kick_snare_warp_reach.postsnap_note_median`. Snaps EVERY decoded onset
+ * (all lanes, `ptMs` in absolute/raw ms — NOT pre-adjusted) to `grid`'s own
+ * [16th, 16th-triplet] lattice, in the grid's own-origin frame, and returns
+ * the median |snapped - onset| distance (ms). Applies the same audio-flow
+ * phase-align search chart placement uses (own-origin frame, +
+ * SYSTEMATIC_ONSET_MS_AUDIO_FLOW) before snapping, matching the reference
+ * exactly.
+ */
+export function postsnapNoteMedian(
+  grid: Synctrack | null,
+  ptMs: number[] | null,
+): number {
+  if (grid === null || ptMs === null || ptMs.length === 0) return 0.0;
+  const timed = buildOwnOriginTimedTempos(grid);
+  const ptf = ptMs.map(ms => ms - grid.origin_ms);
+
+  let pa = 0.0;
+  if (ptf.length >= MIN_ONSETS_FOR_SEARCH) {
+    const searchInput = ptf.map(ms => ms + SYSTEMATIC_ONSET_MS_AUDIO_FLOW);
+    pa = computePhaseAlignShiftMs(
+      searchInput,
+      timed,
+      RESOLUTION,
+      DEFAULT_PHASE_ALIGN_CONFIG,
+    ).shiftMs;
+  }
+
+  const notes: number[] = [];
+  for (const msOwnOrigin of ptf) {
+    const tk = snapOnsetTickForGuard(
+      msOwnOrigin,
+      timed,
+      RESOLUTION,
+      DEFAULT_SNAP_TOLERANCE_MS,
+      pa,
+    );
+    notes.push(Math.abs(tickToMs(tk, timed, RESOLUTION) - msOwnOrigin));
+  }
+  return notes.length ? median(notes) : 0.0;
+}
+
+export interface KSWarpReachDiag extends KSWarpWindowedDiag {
+  reason?: string;
+}
+
+/**
+ * SHIPPED reach-extension public entry: port of
+ * `kick_snare_warp_reach.warp_grid_reach`. Windowed KS-warp (no whole-song or
+ * fraction gate — {@link REACH_KS_WARP_CONFIG}, `minAdmWinFrac=0`) followed
+ * by the post-snap note_ms guard: rejects the warp (falls back to the
+ * incumbent grid, returning `null`) if it would worsen the median post-snap
+ * note-to-onset fit, over ALL decoded onsets (`allOnsetsMs`, raw/uncorrected
+ * ms — the same "raw" decode contract as `ksOnsetsMs`), by more than
+ * `noteMsTolMs`.
+ */
+export function warpGridReach(
+  synctrack: Synctrack,
+  ksOnsetsMs: number[] | null,
+  allOnsetsMs: number[] | null,
+  cfg: KSWarpConfig = REACH_KS_WARP_CONFIG,
+  winBeats: number = REACH_WIN_BEATS,
+  hopBeats: number = REACH_HOP_BEATS,
+  noteMsTolMs: number = REACH_NOTE_MS_TOL,
+): {grid: Synctrack | null; diag: KSWarpReachDiag} {
+  const {grid, diag} = warpGridWindowed(
+    synctrack,
+    ksOnsetsMs,
+    cfg,
+    winBeats,
+    hopBeats,
+    8,
+    0.0,
+    null,
+  );
+  if (grid === null) {
+    return {grid: null, diag: {...diag, admitted: false}};
+  }
+  const warpedMedian = postsnapNoteMedian(grid, allOnsetsMs);
+  const incumbentMedian = postsnapNoteMedian(synctrack, allOnsetsMs);
+  if (warpedMedian > incumbentMedian + noteMsTolMs) {
+    return {grid: null, diag: {...diag, admitted: false, reason: 'note_ms_guard'}};
+  }
   return {grid, diag: {...diag, admitted: true}};
 }

@@ -30,7 +30,12 @@ import {
   DEFAULT_SNAP_TOLERANCE_MS,
 } from '@/lib/tempo-map/swap-synctrack';
 import {snapGroupToGrid} from '@/lib/tempo-map/quantize-grid';
-import {warpGrid, KS_WARP_ENABLED} from '@/lib/tempo-map/ks-warp';
+import {
+  warpGrid,
+  warpGridReach,
+  KS_WARP_ENABLED,
+  KS_WARP_REACH_ENABLED,
+} from '@/lib/tempo-map/ks-warp';
 import type {SnapMode} from '../ml/class-mapping';
 import type {LinkSegSections, Synctrack} from '@/lib/tempo-map/types';
 import type {MeterStats} from '@/lib/tempo-map/meter-confidence';
@@ -160,17 +165,26 @@ export function buildChartDocument(
   });
 
   if (synctrack && synctrack.tempos.length > 0) {
-    // KS-WARP (kick+snare onset-anchored drift warp, #104): on songs where the
-    // predicted grid has drifted from the true tempo, softly pull it back
-    // toward the decoded kick+snare backbeat before installing it — a
-    // structural no-op (byte-identical grid) unless the deployable gate
-    // admits. Onsets MUST be RAW (uncorrected) times, matching the Python
-    // reference's SF.decode("raw", ...) contract — see ks-warp.ts's module
-    // docstring. Only applies to a freshly-predicted synctrack, never to an
-    // existing chart's own tempo list (buildChartDocumentFromExistingChart
-    // below does not call this).
+    // KS-WARP (kick+snare onset-anchored drift warp, #104) / REACH-EXTENSION
+    // (#112, SHIPPED — Eli GO "ship guard alone", 2026-07-17, supersedes the
+    // whole-song d5 gate below): on songs where the predicted grid has
+    // drifted from the true tempo, softly pull it back toward the decoded
+    // kick+snare backbeat before installing it — a structural no-op
+    // (byte-identical grid) unless the deployable gate admits. Onsets MUST be
+    // RAW (uncorrected) times, matching the Python reference's
+    // SF.decode("raw", ...) contract — see ks-warp.ts's module docstring.
+    // Only applies to a freshly-predicted synctrack, never to an existing
+    // chart's own tempo list (buildChartDocumentFromExistingChart below does
+    // not call this).
     let effectiveSynctrack = synctrack;
-    if (KS_WARP_ENABLED) {
+    if (KS_WARP_REACH_ENABLED) {
+      const ksOnsetsMs = events
+        .filter(e => e.drumClass === 'BD' || e.drumClass === 'SD')
+        .map(e => e.timeSeconds * 1000);
+      const allOnsetsMs = events.map(e => e.timeSeconds * 1000);
+      const {grid: warped} = warpGridReach(synctrack, ksOnsetsMs, allOnsetsMs);
+      if (warped) effectiveSynctrack = warped;
+    } else if (KS_WARP_ENABLED) {
       const ksOnsetsMs = events
         .filter(e => e.drumClass === 'BD' || e.drumClass === 'SD')
         .map(e => e.timeSeconds * 1000);

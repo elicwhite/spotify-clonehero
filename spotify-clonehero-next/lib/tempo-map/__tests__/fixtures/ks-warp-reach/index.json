@@ -1,0 +1,38 @@
+[
+  {
+    "song": "reach-01",
+    "slug": "reach-01",
+    "admitted": true,
+    "file": "reach-01.json"
+  },
+  {
+    "song": "reach-04",
+    "slug": "reach-04",
+    "admitted": true,
+    "file": "reach-04.json"
+  },
+  {
+    "song": "reach-09",
+    "slug": "reach-09",
+    "admitted": true,
+    "file": "reach-09.json"
+  },
+  {
+    "song": "reach-02",
+    "slug": "reach-02",
+    "admitted": false,
+    "file": "reach-02.json"
+  },
+  {
+    "song": "reach-03",
+    "slug": "reach-03",
+    "admitted": false,
+    "file": "reach-03.json"
+  },
+  {
+    "song": "reach-05",
+    "slug": "reach-05",
+    "admitted": false,
+    "file": "reach-05.json"
+  }
+]
