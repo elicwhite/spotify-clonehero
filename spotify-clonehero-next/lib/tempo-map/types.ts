@@ -62,13 +62,14 @@ export interface PipelineResult {
    * need manual work. */
   meterStats: import('./meter-confidence').MeterStats | null;
   /**
-   * The separated drum stem, planar stereo at 44.1 kHz — present only when
-   * this run performed its OWN separation (no pre-separated `drumStem` was
-   * supplied in the request). Lets a caller run CRNN transcription
-   * (lib/drum-transcription/pipeline/tempo-track.ts) on the SAME separation
-   * output without a second BS-Roformer pass. `null` when the caller
-   * supplied `drumStem` (it already has its own stereo copy) or when
-   * separation failed.
+   * The drum stem the pipeline ran on, planar stereo at 44.1 kHz —
+   * present whenever a stem exists, whether freshly separated, loaded
+   * from the OPFS cache, or supplied by the caller (echoed back; request
+   * buffers are transferred to the worker, so this is the caller's only
+   * live copy). Lets a caller run CRNN transcription
+   * (lib/drum-transcription/pipeline/tempo-track.ts) on the SAME stem
+   * without a second BS-Roformer pass. `null` only when separation
+   * failed.
    */
   drumStemStereo: {left: Float32Array; right: Float32Array} | null;
 }
@@ -84,13 +85,13 @@ export interface PipelineRunRequest {
   /** sha-256 hex of the source bytes, for the OPFS drum-stem cache. */
   sourceHash: string | null;
   /**
-   * Optional pre-separated MONO drum stem at 44.1 kHz (mean of the stereo
-   * stem's channels — identical to what the worker's own mono separation
-   * path produces). When provided and its length matches the 44.1k input,
-   * the worker skips BS-Roformer separation entirely. Used by the
-   * drum-transcription pipeline, which has already separated the stem.
+   * Optional pre-separated drum stem, planar stereo at 44.1 kHz. When
+   * provided and its length matches the 44.1k input, the worker skips
+   * BS-Roformer separation entirely (deriving its own mono mixdown for
+   * Beat This!). Used by the drum-transcription pipeline, which has
+   * already separated the stem.
    */
-  drumStem?: Float32Array | null;
+  drumStemStereo?: {left: Float32Array; right: Float32Array} | null;
 }
 
 export type PipelineWorkerMessage =

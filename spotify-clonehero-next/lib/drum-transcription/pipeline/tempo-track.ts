@@ -78,8 +78,9 @@ export interface TempoTrackFromPcmInput {
   /**
    * Pre-separated stereo drum stem at 44.1 kHz, when the caller already
    * separated (e.g. drum-transcription's fingerprint-keyed stem cache).
-   * Skips BS-Roformer separation for BOTH the Beat This!/DBA stage (a mono
-   * mixdown is derived here) and CRNN.
+   * Skips BS-Roformer separation for BOTH the Beat This!/DBA stage and
+   * CRNN. Buffers are transferred to the tempo worker (detached for the
+   * caller).
    */
   drumStemStereo?: {left: Float32Array; right: Float32Array} | null;
   /** Overridable for tests (mock transcriber) — defaults to the real
@@ -99,20 +100,9 @@ export async function runTempoTrackFromPcm(
   const {left, right, sampleRate, sourceBytes = null, onProgress} = input;
   const txr = input.transcriber ?? new CrnnTranscriber();
 
-  let stereoStem = input.drumStemStereo ?? null;
-  let drumStemMono: Float32Array | null = null;
-  if (stereoStem) {
-    const n = Math.min(stereoStem.left.length, stereoStem.right.length);
-    const mono = new Float32Array(n);
-    for (let i = 0; i < n; i++) {
-      mono[i] = (stereoStem.left[i] + stereoStem.right[i]) * 0.5;
-    }
-    drumStemMono = mono;
-  }
-
   const tempoOpts: TempoPipelineOptions = {
     sourceBytes,
-    drumStemMono,
+    drumStemStereo: input.drumStemStereo ?? null,
     onProgress: p => onProgress?.(p),
   };
   const tempoResult = await runTempoPipelineFromPcm(
@@ -120,17 +110,17 @@ export async function runTempoTrackFromPcm(
     tempoOpts,
   );
 
+  // The worker surfaces the stereo stem no matter where it came from —
+  // caller-supplied (echoed back; the input copy above was transferred
+  // away), OPFS cache hit, or fresh separation.
+  const stereoStem = tempoResult.drumStemStereo;
   if (!stereoStem) {
-    if (!tempoResult.drumStemStereo) {
-      // Separation failed or (defensively) didn't surface a stem — CRNN has
-      // nothing to transcribe. Callers should treat this the same way
-      // drum-transcription treats a failed separation: fall back rather
-      // than crash the whole tool.
-      throw new Error(
-        'Drum-stem separation did not produce audio for CRNN transcription.',
-      );
-    }
-    stereoStem = tempoResult.drumStemStereo;
+    // Separation failed — CRNN has nothing to transcribe. Callers should
+    // treat this the same way drum-transcription treats a failed
+    // separation: fall back rather than crash the whole tool.
+    throw new Error(
+      'Drum-stem separation did not produce audio for CRNN transcription.',
+    );
   }
 
   const crnnInput = await planarStereoToCrnnInput(
@@ -138,18 +128,18 @@ export async function runTempoTrackFromPcm(
     stereoStem.right,
   );
 
-  const transcribed = await txr.transcribe(
-    crnnInput,
-    CRNN_SAMPLE_RATE,
-    p =>
-      onProgress?.({
-        stage: 'transcribe-drums',
-        percent: p.percent,
-        ...(p.detail !== undefined ? {detail: p.detail} : {}),
-      }),
+  const transcribed = await txr.transcribe(crnnInput, CRNN_SAMPLE_RATE, p =>
+    onProgress?.({
+      stage: 'transcribe-drums',
+      percent: p.percent,
+      ...(p.detail !== undefined ? {detail: p.detail} : {}),
+    }),
   );
 
-  const synctrack = finalizeSynctrack(tempoResult.synctrack, transcribed.events);
+  const synctrack = finalizeSynctrack(
+    tempoResult.synctrack,
+    transcribed.events,
+  );
 
   return {
     synctrack,

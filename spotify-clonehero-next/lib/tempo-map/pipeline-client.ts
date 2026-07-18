@@ -21,11 +21,12 @@ export interface TempoPipelineOptions {
   /** Raw source bytes; hashed for the OPFS drum-stem cache. */
   sourceBytes?: ArrayBuffer | null;
   /**
-   * Pre-separated MONO drum stem at 44.1 kHz (mean of the stereo stem's
-   * channels). When provided, the worker skips BS-Roformer separation.
-   * The buffer is transferred to the worker (detached for the caller).
+   * Pre-separated drum stem, planar stereo at 44.1 kHz. When provided,
+   * the worker skips BS-Roformer separation and echoes the stem back in
+   * the result. The buffers are transferred to the worker (detached for
+   * the caller) — consume `PipelineResult.drumStemStereo` afterwards.
    */
-  drumStemMono?: Float32Array | null;
+  drumStemStereo?: {left: Float32Array; right: Float32Array} | null;
   onProgress?: (p: PipelineProgress) => void;
 }
 
@@ -59,7 +60,7 @@ export async function runTempoPipelineFromPcm(
     : null;
 
   const {left, right, sampleRate} = input;
-  const drumStem = options.drumStemMono ?? null;
+  const drumStemStereo = options.drumStemStereo ?? null;
 
   return new Promise<PipelineResult>((resolve, reject) => {
     const worker = new Worker(
@@ -88,7 +89,15 @@ export async function runTempoPipelineFromPcm(
     };
 
     const transfer: Transferable[] = [left.buffer, right.buffer];
-    if (drumStem) transfer.push(drumStem.buffer);
+    if (drumStemStereo) {
+      // Dedupe: the two channels may be views over one shared buffer.
+      for (const buf of new Set([
+        drumStemStereo.left.buffer,
+        drumStemStereo.right.buffer,
+      ])) {
+        transfer.push(buf);
+      }
+    }
     worker.postMessage(
       {
         type: 'run',
@@ -96,7 +105,7 @@ export async function runTempoPipelineFromPcm(
         right,
         sampleRate,
         sourceHash,
-        drumStem,
+        drumStemStereo,
       },
       transfer,
     );

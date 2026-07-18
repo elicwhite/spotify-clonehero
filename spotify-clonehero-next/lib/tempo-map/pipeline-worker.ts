@@ -2,8 +2,8 @@
  * Web worker running the full tempo-mapping pipeline:
  *
  *   stereo PCM (any rate)
- *     ├─ S1  bs-roformer fp16 (WebGPU) → drum stem 44.1k mono
- *     │       ├─ S3  Beat This! (WASM fp32) on drum stem
+ *     ├─ S1  bs-roformer fp16 (WebGPU) → drum stem 44.1k stereo
+ *     │       ├─ S3  Beat This! (WASM fp32) on drum-stem mono mixdown
  *     │       └─ S2b spectral-flux drum-onset offset
  *     ├─ S2  Beat This! (WASM fp32) on full mix
  *     └─ S4  beatsToSynctrack
@@ -27,9 +27,18 @@ import {
 import {runBeatThisOnnx} from './beat-this-onnx';
 import {runPostprocessor} from './beat-this-pp';
 import {computeDrumOnsetOffsetMs} from './drum-onset';
+import {
+  packStereoStem,
+  unpackStereoStem,
+  stereoStemToMono,
+  type StereoStem,
+} from './stem-cache-format';
 import {beatsToSynctrack, PL_LSQ_TOL_MS_DEFAULT} from './converter';
 import {computeMeterStats} from './meter-confidence';
-import {loadLinkSegSession, runLinkSegSections} from '@/lib/section-names/linkseg-run';
+import {
+  loadLinkSegSession,
+  runLinkSegSections,
+} from '@/lib/section-names/linkseg-run';
 import type {
   LinkSegSections,
   PipelineProgress,
@@ -55,8 +64,9 @@ const BEAT_THIS_MIN_BYTES = 70_000_000; // real size ~83 MB
 const SEPARATION_SAMPLE_RATE = 44100;
 
 // Bump when the separation pipeline changes in ways that affect output
-// (model swap, overlap, mixing, channel reduction).
-const STEM_CACHE_VERSION = 'v1_drums_mono_44k1_overlap0.25_fp16_libsoxr';
+// (model swap, overlap, mixing, channel reduction) or the cache file
+// format changes (see stem-cache-format.ts).
+const STEM_CACHE_VERSION = 'v2_drums_stereo_44k1_overlap0.25_fp16_libsoxr';
 const STEM_CACHE_DIR = 'tempo-map-stem-cache';
 
 function post(msg: PipelineWorkerMessage, transfer?: Transferable[]) {
@@ -95,26 +105,44 @@ function stemCacheKey(sourceHash: string, sampleCount: number) {
   return `${sourceHash.slice(0, 32)}__${STEM_CACHE_VERSION}__N${sampleCount}.f32`;
 }
 
-async function loadStemFromCache(key: string): Promise<Float32Array | null> {
+async function loadStemFromCache(
+  key: string,
+  sampleCount: number,
+): Promise<StereoStem | null> {
   try {
     const dir = await getStemCacheDir();
     const fh = await dir.getFileHandle(key);
     const file = await fh.getFile();
-    return new Float32Array(await file.arrayBuffer());
+    return unpackStereoStem(
+      new Float32Array(await file.arrayBuffer()),
+      sampleCount,
+    );
   } catch {
     return null;
   }
 }
 
-async function saveStemToCache(key: string, pcm: Float32Array) {
+async function saveStemToCache(key: string, stem: StereoStem) {
   try {
     const dir = await getStemCacheDir();
     const fh = await dir.getFileHandle(key, {create: true});
     const w = await fh.createWritable();
-    await w.write(pcm as Float32Array<ArrayBuffer>);
+    await w.write(packStereoStem(stem) as Float32Array<ArrayBuffer>);
     await w.close();
   } catch {
     // Cache write failures are non-fatal.
+  }
+  // Stale entries from older cache versions (e.g. the v1 mono format) can
+  // never hit again — reclaim their OPFS space, best-effort.
+  try {
+    const dir = await getStemCacheDir();
+    for await (const name of dir.keys()) {
+      if (!name.includes(`__${STEM_CACHE_VERSION}__`)) {
+        await dir.removeEntry(name);
+      }
+    }
+  } catch {
+    // Pruning failures are non-fatal.
   }
 }
 
@@ -141,31 +169,33 @@ async function run(req: PipelineRunRequest) {
   const N = left.length;
 
   // ---- S1: drum stem (pre-separated, OPFS-cached, or freshly separated) ----
-  let drumStem: Float32Array | null = null;
-  // Planar stereo copy of a stem THIS run separated itself — surfaced in the
-  // result for a caller that wants to run CRNN transcription on the exact
-  // same separation output (drum-transcription/pipeline/tempo-track.ts),
-  // without a second BS-Roformer pass. Stays null when the stem came from
-  // the caller or the OPFS cache (mono-only), since a fresh separation is
-  // needed to get stereo in that case anyway.
-  let drumStemStereo: {left: Float32Array; right: Float32Array} | null = null;
+  // Planar stereo throughout: CRNN transcription (drum-transcription/
+  // pipeline/tempo-track.ts) consumes the stereo stem from the result, so
+  // every source — caller, cache, fresh separation — must surface it.
+  let drumStemStereo: StereoStem | null = null;
   const cacheKey = req.sourceHash ? stemCacheKey(req.sourceHash, N) : null;
-  if (req.drumStem && req.drumStem.length === N) {
+  if (
+    req.drumStemStereo &&
+    Math.min(
+      req.drumStemStereo.left.length,
+      req.drumStemStereo.right.length,
+    ) === N
+  ) {
     // Caller already separated the drums (drum-transcription pipeline):
     // skip BS-Roformer entirely. Seed the OPFS cache so a later standalone
     // /tempo run on the same file also cache-hits.
-    drumStem = req.drumStem;
+    drumStemStereo = req.drumStemStereo;
     progress({
       stage: 'separate',
       percent: 1,
       detail: 'Reused drums from transcription',
     });
-    if (cacheKey) await saveStemToCache(cacheKey, drumStem);
+    if (cacheKey) await saveStemToCache(cacheKey, drumStemStereo);
   }
-  if (!drumStem && cacheKey) {
-    const cached = await loadStemFromCache(cacheKey);
-    if (cached && cached.length === N) {
-      drumStem = cached;
+  if (!drumStemStereo && cacheKey) {
+    const cached = await loadStemFromCache(cacheKey, N);
+    if (cached) {
+      drumStemStereo = cached;
       progress({
         stage: 'separate',
         percent: 1,
@@ -174,7 +204,7 @@ async function run(req: PipelineRunRequest) {
     }
   }
 
-  if (!drumStem) {
+  if (!drumStemStereo) {
     progress({stage: 'download-separation-model'});
     const roformerBytes = await getCachedModel(
       ROFORMER_MODEL_URL,
@@ -210,15 +240,13 @@ async function run(req: PipelineRunRequest) {
         },
       });
       drumStemStereo = stereo;
-      const n = Math.min(stereo.left.length, stereo.right.length);
-      const mono = new Float32Array(n);
-      for (let i = 0; i < n; i++) mono[i] = (stereo.left[i] + stereo.right[i]) * 0.5;
-      drumStem = mono;
     } finally {
       await roformerSession.release();
     }
-    if (cacheKey) await saveStemToCache(cacheKey, drumStem);
+    if (cacheKey) await saveStemToCache(cacheKey, drumStemStereo);
   }
+
+  const drumStem = stereoStemToMono(drumStemStereo);
 
   // ---- Beat This! model ----
   progress({stage: 'download-beat-model'});
@@ -300,7 +328,10 @@ async function run(req: PipelineRunRequest) {
     progress({stage: 'sections', percent: 1});
   } catch (err) {
     // Section labeling is a nice-to-have; never fail the whole pipeline over it.
-    console.warn('LinkSeg section labeling failed; continuing without labels:', err);
+    console.warn(
+      'LinkSeg section labeling failed; continuing without labels:',
+      err,
+    );
     sections = null;
   }
 
@@ -357,8 +388,10 @@ async function run(req: PipelineRunRequest) {
         drumStemStereo,
       },
     },
+    // A cache-hit stem's channels are two views over ONE packed buffer —
+    // dedupe so the same ArrayBuffer isn't transferred twice.
     drumStemStereo
-      ? [drumStemStereo.left.buffer, drumStemStereo.right.buffer]
+      ? [...new Set([drumStemStereo.left.buffer, drumStemStereo.right.buffer])]
       : [],
   );
 }

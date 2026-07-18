@@ -39,10 +39,7 @@ import {
   loadDrumStem,
   type DrumSeparationProgress,
 } from '../ml/roformer-separation';
-import {
-  planarStereoToCrnnInput,
-  CRNN_SAMPLE_RATE,
-} from './crnn-audio-prep';
+import {planarStereoToCrnnInput, CRNN_SAMPLE_RATE} from './crnn-audio-prep';
 import {runTempoPipelineFromPcm} from '@/lib/tempo-map/pipeline-client';
 import type {
   LinkSegSections,
@@ -287,16 +284,19 @@ async function ensureSynctrack(
       right[i] = interleaved[i * 2 + 1];
     }
 
-    // Mono drum stem from the transcription stem, when present.
-    let drumStemMono: Float32Array | null = null;
+    // Planar stereo drum stem from the transcription stem, when present.
+    let drumStemStereo: {left: Float32Array; right: Float32Array} | null = null;
     try {
       const stem = await loadDrumStem(projectId);
       const sn = Math.floor(stem.length / 2);
       if (sn === n) {
-        drumStemMono = new Float32Array(sn);
+        const stemLeft = new Float32Array(sn);
+        const stemRight = new Float32Array(sn);
         for (let i = 0; i < sn; i++) {
-          drumStemMono[i] = (stem[i * 2] + stem[i * 2 + 1]) * 0.5;
+          stemLeft[i] = stem[i * 2];
+          stemRight[i] = stem[i * 2 + 1];
         }
+        drumStemStereo = {left: stemLeft, right: stemRight};
       }
     } catch {
       // No stem stored (separation skipped/failed): the tempo worker will
@@ -309,7 +309,7 @@ async function ensureSynctrack(
         // Detached buffers (decodeAudioData) have byteLength 0 — skip them.
         sourceBytes:
           sourceBytes && sourceBytes.byteLength > 0 ? sourceBytes : null,
-        drumStemMono,
+        drumStemStereo,
         onProgress: p => {
           const mapped = tempoProgressToPipeline(p);
           onProgress({
