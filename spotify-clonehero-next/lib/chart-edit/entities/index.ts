@@ -158,18 +158,27 @@ function laneToType(lane: number): DrumNoteType {
   return LANE_ORDER[Math.max(0, Math.min(LANE_ORDER.length - 1, lane))];
 }
 
+/** Editor lane kick occupies (derived, not assumed to be a fixed index —
+ *  see `components/chart-editor/commands.ts`'s mirrored constant). */
+const KICK_LANE = typeToLane('kick');
+const PAD_LANE_INDICES = LANE_ORDER.map((_, i) => i).filter(
+  i => i !== KICK_LANE,
+);
+const FIRST_PAD_LANE = Math.min(...PAD_LANE_INDICES);
+const LAST_PAD_LANE = Math.max(...PAD_LANE_INDICES);
+
 /**
  * Kick renders across the full highway width rather than in a pad lane, so
- * lane moves only shuffle pads (lanes 1+): kick never changes type and pads
- * clamp at the first pad lane instead of converting to kick. Pad ↔ kick
+ * lane moves only shuffle pads: kick never changes type and pads clamp at
+ * the pad-lane boundaries instead of converting to kick. Pad ↔ kick
  * conversion is an explicit action (note inspector), not a lane shift.
  */
 function shiftLane(type: DrumNoteType, delta: number): DrumNoteType {
   const currentLane = typeToLane(type);
-  if (currentLane <= 0) return type;
+  if (currentLane < FIRST_PAD_LANE || currentLane > LAST_PAD_LANE) return type;
   const newLane = Math.max(
-    1,
-    Math.min(LANE_ORDER.length - 1, currentLane + delta),
+    FIRST_PAD_LANE,
+    Math.min(LAST_PAD_LANE, currentLane + delta),
   );
   return laneToType(newLane);
 }

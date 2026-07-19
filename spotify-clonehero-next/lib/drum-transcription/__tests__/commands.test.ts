@@ -157,25 +157,25 @@ describe('noteId', () => {
 
 describe('lane helpers', () => {
   it('typeToLane maps drum types to lane indices', () => {
-    expect(typeToLane('kick')).toBe(0);
-    expect(typeToLane('redDrum')).toBe(1);
-    expect(typeToLane('yellowDrum')).toBe(2);
-    expect(typeToLane('blueDrum')).toBe(3);
-    expect(typeToLane('greenDrum')).toBe(4);
+    expect(typeToLane('redDrum')).toBe(0);
+    expect(typeToLane('yellowDrum')).toBe(1);
+    expect(typeToLane('blueDrum')).toBe(2);
+    expect(typeToLane('greenDrum')).toBe(3);
+    expect(typeToLane('kick')).toBe(4);
   });
 
   it('laneToType maps lane indices to drum types', () => {
-    expect(laneToType(0)).toBe('kick');
-    expect(laneToType(1)).toBe('redDrum');
-    expect(laneToType(2)).toBe('yellowDrum');
-    expect(laneToType(3)).toBe('blueDrum');
-    expect(laneToType(4)).toBe('greenDrum');
+    expect(laneToType(0)).toBe('redDrum');
+    expect(laneToType(1)).toBe('yellowDrum');
+    expect(laneToType(2)).toBe('blueDrum');
+    expect(laneToType(3)).toBe('greenDrum');
+    expect(laneToType(4)).toBe('kick');
   });
 
   it('laneToType clamps out-of-range values', () => {
-    expect(laneToType(-1)).toBe('kick');
-    expect(laneToType(5)).toBe('greenDrum');
-    expect(laneToType(100)).toBe('greenDrum');
+    expect(laneToType(-1)).toBe('redDrum');
+    expect(laneToType(5)).toBe('kick');
+    expect(laneToType(100)).toBe('kick');
   });
 
   it('shiftLane moves a pad type by delta', () => {

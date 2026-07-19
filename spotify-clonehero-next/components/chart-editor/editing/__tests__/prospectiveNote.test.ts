@@ -8,22 +8,22 @@
 import {prospectiveNoteAt} from '../prospectiveNote';
 
 describe('prospectiveNoteAt', () => {
-  // Editor lanes: 0 kick, 1 red, 2 yellow, 3 blue, 4 green.
+  // Editor lanes: 0 red, 1 yellow, 2 blue, 3 green, 4 kick.
   it('maps each lane to its drum type', () => {
-    expect(prospectiveNoteAt(0, 0).type).toBe('kick');
-    expect(prospectiveNoteAt(1, 0).type).toBe('redDrum');
-    expect(prospectiveNoteAt(2, 0).type).toBe('yellowDrum');
-    expect(prospectiveNoteAt(3, 0).type).toBe('blueDrum');
-    expect(prospectiveNoteAt(4, 0).type).toBe('greenDrum');
+    expect(prospectiveNoteAt(0, 0).type).toBe('redDrum');
+    expect(prospectiveNoteAt(1, 0).type).toBe('yellowDrum');
+    expect(prospectiveNoteAt(2, 0).type).toBe('blueDrum');
+    expect(prospectiveNoteAt(3, 0).type).toBe('greenDrum');
+    expect(prospectiveNoteAt(4, 0).type).toBe('kick');
   });
 
   it('passes the already-snapped tick through unchanged', () => {
-    expect(prospectiveNoteAt(2, 720).tick).toBe(720);
-    expect(prospectiveNoteAt(0, 0).tick).toBe(0);
+    expect(prospectiveNoteAt(1, 720).tick).toBe(720);
+    expect(prospectiveNoteAt(4, 0).tick).toBe(0);
   });
 
   it('defaults cymbal-legal lanes (yellow/blue/green) to cymbals', () => {
-    for (const lane of [2, 3, 4]) {
+    for (const lane of [1, 2, 3]) {
       const p = prospectiveNoteAt(lane, 480);
       expect(p.cymbal).toBe(true);
       expect(p.flags.cymbal).toBe(true);
@@ -31,7 +31,7 @@ describe('prospectiveNoteAt', () => {
   });
 
   it('never marks kick or red as a cymbal (§6 lane legality)', () => {
-    for (const lane of [0, 1]) {
+    for (const lane of [4, 0]) {
       const p = prospectiveNoteAt(lane, 480);
       expect(p.cymbal).toBe(false);
       expect(p.flags.cymbal).toBeUndefined();

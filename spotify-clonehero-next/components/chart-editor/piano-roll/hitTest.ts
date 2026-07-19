@@ -15,7 +15,7 @@
 import {tickToMs} from '@/lib/drum-transcription/timing';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {msToX, xToMs, type PianoRollView} from './viewMath';
-import {LANE_COUNT, rowToLane, type PianoRollNote} from './notes';
+import {LANE_COUNT, type PianoRollNote} from './notes';
 
 /** Vertical layout of the note-lane band inside the panel canvas. */
 export interface LaneGeometry {
@@ -26,16 +26,16 @@ export interface LaneGeometry {
 }
 
 /**
- * Editor data lane (0..LANE_COUNT-1, `note.lane` space) under a y pixel, or
- * null when the point is outside the note-lane band (ruler / tempo lane /
- * waveform row). Translates the display row under the pointer through
- * `rowToLane` so every caller gets a data lane, never a raw row.
+ * Editor lane row (0..LANE_COUNT-1) under a y pixel, or null when the point
+ * is outside the note-lane band (ruler / tempo lane / waveform row). The
+ * panel's display row *is* the data lane (`note.lane`, `PIANO_ROLL_LANES`
+ * order) — no separate row↔lane mapping.
  */
 export function laneAtY(y: number, geo: LaneGeometry): number | null {
   if (geo.laneH <= 0) return null;
-  const row = Math.floor((y - geo.laneTop) / geo.laneH);
-  if (row < 0 || row >= LANE_COUNT) return null;
-  return rowToLane(row);
+  const idx = Math.floor((y - geo.laneTop) / geo.laneH);
+  if (idx < 0 || idx >= LANE_COUNT) return null;
+  return idx;
 }
 
 export interface PickContext {
@@ -92,15 +92,11 @@ export interface MarqueeBounds {
 }
 
 /**
- * Convert a screen-space marquee rectangle to (ms × row) bounds for
- * `selectNotesInRange`. `laneMin`/`laneMax` are display *rows* (0 = top,
- * inclusive, clamped to the lane count), not data lane indices — the display
- * order isn't a contiguous slice of data lane indices (kick sits at the
- * bottom row but is data lane 0), so a contiguous on-screen drag only maps to
- * a contiguous *row* range. Callers must pass `laneToRow` (from `./notes`) to
- * `selectNotesInRange` so a note's data lane is compared in the same row
- * space. The ms range comes from the view's x-axis; a top-to-bottom drag
- * yields `laneMin <= laneMax` directly.
+ * Convert a screen-space marquee rectangle to (ms × lane) bounds for
+ * `selectNotesInRange`. The lane range is inclusive and clamped to the lane
+ * count; the ms range comes from the view's x-axis. The display row is the
+ * data lane (see `laneAtY`), so a top-to-bottom drag yields
+ * `laneMin <= laneMax` directly.
  */
 export function marqueeBounds(
   rect: MarqueeRect,

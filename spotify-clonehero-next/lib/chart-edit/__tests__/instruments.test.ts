@@ -16,11 +16,11 @@ describe('drum schemas', () => {
   it('4-lane drums has kick + 4 strip lanes', () => {
     expect(drums4LaneSchema.instrument).toBe('drums');
     expect(drums4LaneSchema.lanes.map(l => l.label)).toEqual([
-      'Kick',
       'Red',
       'Yellow',
       'Blue',
       'Green',
+      'Kick',
     ]);
   });
 
@@ -109,8 +109,8 @@ describe('schemaForTrack', () => {
 
 describe('laneAt / laneForNoteType', () => {
   it('laneAt returns the right lane by index', () => {
-    expect(laneAt(drums4LaneSchema, 0)?.label).toBe('Kick');
-    expect(laneAt(drums4LaneSchema, 4)?.label).toBe('Green');
+    expect(laneAt(drums4LaneSchema, 0)?.label).toBe('Red');
+    expect(laneAt(drums4LaneSchema, 4)?.label).toBe('Kick');
     expect(laneAt(drums4LaneSchema, 99)).toBeNull();
   });
 

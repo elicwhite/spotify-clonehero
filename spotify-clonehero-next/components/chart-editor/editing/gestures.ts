@@ -25,25 +25,32 @@ export function exceedsDragThreshold(dx: number, dy: number): boolean {
 export interface NoteDragInput {
   /** Editor tick of the grabbed note when the drag began. */
   anchorTick: number;
-  /** Editor lane (0=kick, 1..N pads) of the grabbed note. */
+  /** Editor lane of the grabbed note. */
   anchorLane: number;
   /** Cursor tick, already snapped to the grid lattice. */
   snappedCursorTick: number;
   /**
-   * Cursor's editor lane, or null when the view can't resolve one this frame
-   * (e.g. the pointer is over the kick strip). Null / kick-lane leaves the
-   * lane delta at its previous value so a brief excursion off the pad lanes
-   * doesn't snap the preview back.
+   * Cursor's editor lane, or null when the view can't resolve one this frame.
+   * Null / kick's lane leaves the lane delta at its previous value so a
+   * brief excursion off the pad lanes doesn't snap the preview back.
    */
   cursorLane: number | null;
   /** Number of notes in the current selection — lanes lock when > 1. */
   selectionSize: number;
   /** Lane delta from the previous frame (fallback while off the pad lanes). */
   prevLaneDelta: number;
-  /** First pad lane index (kick is lane 0; pads start at 1). */
+  /** First pad lane index, for clamping a resolved pad cursor lane. */
   minPadLane: number;
-  /** Highest pad lane index. */
+  /** Highest pad lane index, for clamping a resolved pad cursor lane. */
   maxPadLane: number;
+  /**
+   * Kick's editor lane — excluded from the lane-change axis regardless of
+   * where in the schema's lane order it sits (unlike `minPadLane`/
+   * `maxPadLane`, this is an exact exclusion, not a range: a `cursorLane`
+   * beyond the pad range but not equal to `kickLane` still clamps into
+   * range, e.g. a drag that overshoots past the last pad).
+   */
+  kickLane: number;
 }
 
 export interface NoteDragDelta {
@@ -69,15 +76,16 @@ export function computeNoteDragDelta(input: NoteDragInput): NoteDragDelta {
   const tickDelta = input.snappedCursorTick - input.anchorTick;
   const laneLocked = input.selectionSize > 1;
   let laneDelta = laneLocked ? 0 : input.prevLaneDelta;
+  const cursorLane = input.cursorLane;
   if (
     !laneLocked &&
-    input.anchorLane > 0 &&
-    input.cursorLane !== null &&
-    input.cursorLane > 0
+    input.anchorLane !== input.kickLane &&
+    cursorLane !== null &&
+    cursorLane !== input.kickLane
   ) {
     const clamped = Math.max(
       input.minPadLane,
-      Math.min(input.maxPadLane, input.cursorLane),
+      Math.min(input.maxPadLane, cursorLane),
     );
     laneDelta = clamped - input.anchorLane;
   }

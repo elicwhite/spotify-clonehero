@@ -26,10 +26,10 @@ describe('selectNotesInRange', () => {
       note(960, 'yellowDrum'),
       note(1440, 'blueDrum'),
     ];
-    // 480 ticks @ 120 BPM is 500ms.
+    // 480 ticks @ 120 BPM is 500ms. Red=lane 0, yellow=lane 1.
     const result = selectNotesInRange(
       notes,
-      {msMin: 400, msMax: 1100, laneMin: 1, laneMax: 2},
+      {msMin: 400, msMax: 1100, laneMin: 0, laneMax: 1},
       TIMED_TEMPOS,
       RESOLUTION,
     );
@@ -42,7 +42,13 @@ describe('selectNotesInRange', () => {
   });
 
   it('lane bounds are inclusive on both ends', () => {
-    const notes = [note(0, 'kick'), note(0, 'redDrum'), note(0, 'yellowDrum')];
+    // Red=lane 0, yellow=lane 1, blue=lane 2 — bounds [0,1] should include
+    // red+yellow but not blue.
+    const notes = [
+      note(0, 'redDrum'),
+      note(0, 'yellowDrum'),
+      note(0, 'blueDrum'),
+    ];
     const result = selectNotesInRange(
       notes,
       {msMin: -1, msMax: 1, laneMin: 0, laneMax: 1},
@@ -51,8 +57,8 @@ describe('selectNotesInRange', () => {
     );
     expect(result).toEqual(
       new Set([
-        noteId({tick: 0, type: 'kick'}),
         noteId({tick: 0, type: 'redDrum'}),
+        noteId({tick: 0, type: 'yellowDrum'}),
       ]),
     );
   });
@@ -87,33 +93,5 @@ describe('selectNotesInRange', () => {
       RESOLUTION,
     );
     expect(result).toEqual(new Set([noteId({tick: 1440, type: 'yellowDrum'})]));
-  });
-
-  it('compares notes in the caller-provided row space, not raw lane index', () => {
-    // A display order where lane 0 (kick) maps to row 4 and lane 4 (green)
-    // maps to row 0 — the piano roll's kick-at-bottom order. A box over rows
-    // 3..4 (bounds expressed in that row space) should pick up kick (lane 0
-    // -> row 4) and green (lane 4 -> row 3), not red/yellow/blue.
-    const rowOf = (lane: number): number => (lane === 0 ? 4 : lane - 1);
-    const notes = [
-      note(0, 'kick'),
-      note(0, 'redDrum'),
-      note(0, 'yellowDrum'),
-      note(0, 'blueDrum'),
-      note(0, 'greenDrum'),
-    ];
-    const result = selectNotesInRange(
-      notes,
-      {msMin: -1, msMax: 1, laneMin: 3, laneMax: 4},
-      TIMED_TEMPOS,
-      RESOLUTION,
-      rowOf,
-    );
-    expect(result).toEqual(
-      new Set([
-        noteId({tick: 0, type: 'kick'}),
-        noteId({tick: 0, type: 'greenDrum'}),
-      ]),
-    );
   });
 });

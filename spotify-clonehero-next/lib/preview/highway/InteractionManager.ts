@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {noteTypes} from '@eliwhite/scan-chart';
 import type {SceneReconciler} from './SceneReconciler';
 import {NoteRenderer, type NoteElementData} from './NoteRenderer';
 import {MarkerRenderer, type MarkerElementData} from './MarkerRenderer';
@@ -25,6 +26,17 @@ const LANE_X_POSITIONS: number[] = drums4LaneSchema.lanes.map(l => {
   }
   return l.worldXOffset;
 });
+
+/**
+ * Editor lane kick occupies. Kick renders in the highway's center (world X
+ * 0) rather than in a schema lane slot visually, but `worldXToLane` still
+ * resolves clicks there to *some* array index — this is the one the schema
+ * currently assigns it, derived (not assumed to be a fixed number) so a
+ * future reorder of `drums4LaneSchema.lanes` can't silently desync this.
+ */
+const KICK_LANE = drums4LaneSchema.lanes.findIndex(
+  l => l.noteType === noteTypes.kick,
+);
 
 // ---------------------------------------------------------------------------
 // InteractionManager
@@ -220,7 +232,10 @@ export class InteractionManager {
     // Extract noteId from key: 'note:480:redDrum' -> '480:redDrum'
     const noteId = key.startsWith('note:') ? key.slice(5) : key;
     const tick = data.note.tick ?? 0;
-    const lane = data.isKick ? 0 : data.lane + 1; // editor lane (0=kick)
+    // `data.lane` is the pad-color index (0=red..3=green), which the schema
+    // now assigns the identical editor lane numbers to; kick alone needs
+    // translating to its (schema-derived) editor lane.
+    const lane = data.isKick ? KICK_LANE : data.lane;
 
     return {
       type: 'note',
@@ -381,7 +396,7 @@ export class InteractionManager {
     // click wasn't on a specific pad lane. Pad notes have higher
     // specificity; if the raycast missed a pad sprite, the user
     // probably intended to click empty highway, not a kick.
-    if (lane === 0) {
+    if (lane === KICK_LANE) {
       const kickHit = this.hitTestKickAtTick(tick, ms);
       if (kickHit) return kickHit;
     }
@@ -431,7 +446,7 @@ export class InteractionManager {
           isOpen: data.isOpen,
           lane: data.lane,
         },
-        lane: 0,
+        lane: KICK_LANE,
         tick: data.note.tick ?? 0,
       };
     }
@@ -443,7 +458,8 @@ export class InteractionManager {
   // -----------------------------------------------------------------------
 
   /**
-   * Map a canvas-pixel position to an editor lane index (0=kick, 1-4=pads).
+   * Map a canvas-pixel position to an editor lane index (schema order —
+   * see `drums4LaneSchema` in `lib/chart-edit/instruments/drums.ts`).
    */
   screenToLane(
     canvasX: number,

@@ -22,6 +22,7 @@ import {
   defaultFlagsForType,
   laneToType,
   typeToLane,
+  KICK_LANE,
   type EditCommand,
 } from '../../commands';
 import {computeNoteDragDelta} from '../gestures';
@@ -42,18 +43,19 @@ function applied(cmd: EditCommand) {
 
 describe('view parity: note drag → MoveEntitiesCommand', () => {
   it('an equivalent drag in each view produces the same command effect', () => {
-    // Gesture: grab the red note at tick 480 (lane 1), drag it to snapped
+    // Gesture: grab the red note at tick 480 (lane 0), drag it to snapped
     // tick 960 on the same lane, single-note selection. Both views resolve
     // this to the same anchor + snapped cursor tick + lane + selection size.
     const gesture = {
       anchorTick: 480,
-      anchorLane: 1,
+      anchorLane: 0,
       snappedCursorTick: 960,
-      cursorLane: 1,
+      cursorLane: 0,
       selectionSize: 1,
       prevLaneDelta: 0,
-      minPadLane: 1,
-      maxPadLane: 4,
+      minPadLane: 0,
+      maxPadLane: 3,
+      kickLane: KICK_LANE,
     };
     const ids = ['480:redDrum'];
 
@@ -87,13 +89,14 @@ describe('view parity: note drag → MoveEntitiesCommand', () => {
     // must lock lanes (time-only move) — same laneDelta 0.
     const gesture = {
       anchorTick: 480,
-      anchorLane: 1,
+      anchorLane: 0,
       snappedCursorTick: 720,
-      cursorLane: 3,
+      cursorLane: 2,
       selectionSize: 2,
       prevLaneDelta: 0,
-      minPadLane: 1,
-      maxPadLane: 4,
+      minPadLane: 0,
+      maxPadLane: 3,
+      kickLane: KICK_LANE,
     };
     const ids = ['480:redDrum', '1440:blueDrum'];
     const delta = computeNoteDragDelta(gesture);
@@ -115,18 +118,19 @@ describe('view parity: note drag → MoveEntitiesCommand', () => {
   });
 
   it('dragging a cymbal onto Red drops the flag (legality below the view)', () => {
-    // Yellow cymbal at tick 960 (lane 2) dragged down to red (lane 1). The
+    // Yellow cymbal at tick 960 (lane 1) dragged down to red (lane 0). The
     // gesture layer only computes laneDelta; the mutator strips the illegal
     // cymbal — same result regardless of which view issued the drag.
     const delta = computeNoteDragDelta({
       anchorTick: 960,
-      anchorLane: 2,
+      anchorLane: 1,
       snappedCursorTick: 960,
-      cursorLane: 1,
+      cursorLane: 0,
       selectionSize: 1,
       prevLaneDelta: 0,
-      minPadLane: 1,
-      maxPadLane: 4,
+      minPadLane: 0,
+      maxPadLane: 3,
+      kickLane: KICK_LANE,
     });
     expect(delta.laneDelta).toBe(-1);
     const result = new MoveEntitiesCommand(
@@ -147,8 +151,8 @@ describe('view parity: note drag → MoveEntitiesCommand', () => {
 describe('view parity: click-to-add → AddNoteCommand', () => {
   it('placing a note builds the identical command in both views', () => {
     // Both views: lane index → type via laneToType, snapped tick, default
-    // flags for that type. Yellow lane (2) → cymbal-by-default.
-    const lane = 2;
+    // flags for that type. Yellow lane (1) → cymbal-by-default.
+    const lane = 1;
     const tick = 240;
     const type = laneToType(lane);
     const highwayCmd = new AddNoteCommand(

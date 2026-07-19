@@ -1133,8 +1133,21 @@ export function typeToLane(type: DrumNoteType): number {
   return LANE_ORDER.indexOf(type);
 }
 
-/** Highest pad lane index (kick is lane 0; pads are 1..LAST_PAD_LANE). */
-export const LAST_PAD_LANE = LANE_ORDER.length - 1;
+/** Editor lane kick occupies. Kick isn't part of the pad-lane axis (it
+ *  spans the full highway), so this lane is always excluded from the pad
+ *  range below — derived from the schema, not assumed to be a fixed index. */
+export const KICK_LANE = typeToLane('kick');
+
+/** Every lane except kick's, in schema order. */
+const PAD_LANE_INDICES = LANE_ORDER.map((_, i) => i).filter(
+  i => i !== KICK_LANE,
+);
+
+/** First pad lane index — everything outside `[FIRST_PAD_LANE,
+ *  LAST_PAD_LANE]` is kick. */
+export const FIRST_PAD_LANE = Math.min(...PAD_LANE_INDICES);
+/** Highest pad lane index. */
+export const LAST_PAD_LANE = Math.max(...PAD_LANE_INDICES);
 
 /** Map a lane index (0-4) to a DrumNoteType. */
 export function laneToType(lane: number): DrumNoteType {
@@ -1144,15 +1157,15 @@ export function laneToType(lane: number): DrumNoteType {
 /**
  * Shift a note type by a lane delta among the pad lanes. Kick isn't part of
  * the lane axis (it spans the full highway), so kick never shifts and pads
- * clamp at the first pad lane. Pad ↔ kick conversion goes through
+ * clamp at the pad-lane boundaries. Pad ↔ kick conversion goes through
  * `ToggleKickCommand`.
  */
 export function shiftLane(type: DrumNoteType, delta: number): DrumNoteType {
   const currentLane = typeToLane(type);
-  if (currentLane <= 0) return type;
+  if (currentLane < FIRST_PAD_LANE || currentLane > LAST_PAD_LANE) return type;
   const newLane = Math.max(
-    1,
-    Math.min(LANE_ORDER.length - 1, currentLane + delta),
+    FIRST_PAD_LANE,
+    Math.min(LAST_PAD_LANE, currentLane + delta),
   );
   return laneToType(newLane);
 }

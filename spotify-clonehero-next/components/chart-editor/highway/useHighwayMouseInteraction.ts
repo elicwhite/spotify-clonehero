@@ -35,7 +35,9 @@ import {
   DeleteNotesCommand,
   MoveEntitiesCommand,
   typeToLane,
+  FIRST_PAD_LANE,
   LAST_PAD_LANE,
+  KICK_LANE,
   type EditCommand,
 } from '../commands';
 import {prospectiveNoteAt} from '../editing/prospectiveNote';
@@ -64,7 +66,8 @@ import type {MarkerDragState, MarkerKind} from './useMarkerDrag';
 export interface NoteDragState {
   /** Tick of the grabbed note when the drag began. */
   anchorTick: number;
-  /** Editor lane (0=kick, 1-4=pads) of the grabbed note. */
+  /** Editor lane of the grabbed note (see `typeToLane`/`FIRST_PAD_LANE`/
+   *  `LAST_PAD_LANE` in `../commands` for the current lane numbering). */
   anchorLane: number;
   tickDelta: number;
   laneDelta: number;
@@ -596,8 +599,9 @@ export function useHighwayMouseInteraction(
             cursorLane: screenToLane(coords.x, coords.y),
             selectionSize: getSelectedIds(state, 'note').size,
             prevLaneDelta: noteDrag.laneDelta,
-            minPadLane: 1,
+            minPadLane: FIRST_PAD_LANE,
             maxPadLane: LAST_PAD_LANE,
+            kickLane: KICK_LANE,
           });
           if (
             !noteDrag.active ||

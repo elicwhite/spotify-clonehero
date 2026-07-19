@@ -10,7 +10,7 @@ import {
   DRAG_THRESHOLD_PX,
 } from '../gestures';
 
-const PADS = {minPadLane: 1, maxPadLane: 4};
+const PADS = {minPadLane: 0, maxPadLane: 3, kickLane: 4};
 
 describe('exceedsDragThreshold', () => {
   it('is false at/under the threshold and true past it', () => {
@@ -42,9 +42,9 @@ describe('computeNoteDragDelta', () => {
   it('single-note drag changes lane', () => {
     const {laneDelta} = computeNoteDragDelta({
       anchorTick: 0,
-      anchorLane: 1, // red
+      anchorLane: 0, // red
       snappedCursorTick: 0,
-      cursorLane: 3, // blue
+      cursorLane: 2, // blue
       selectionSize: 1,
       prevLaneDelta: 0,
       ...PADS,
@@ -55,9 +55,9 @@ describe('computeNoteDragDelta', () => {
   it('multi-note selection locks lanes (time-only move)', () => {
     const {tickDelta, laneDelta} = computeNoteDragDelta({
       anchorTick: 0,
-      anchorLane: 1,
+      anchorLane: 0,
       snappedCursorTick: 240,
-      cursorLane: 4,
+      cursorLane: 3,
       selectionSize: 3,
       prevLaneDelta: 0,
       ...PADS,
@@ -69,7 +69,7 @@ describe('computeNoteDragDelta', () => {
   it('a kick anchor never changes lane', () => {
     const {laneDelta} = computeNoteDragDelta({
       anchorTick: 0,
-      anchorLane: 0, // kick
+      anchorLane: 4, // kick
       snappedCursorTick: 0,
       cursorLane: 3,
       selectionSize: 1,
@@ -84,12 +84,12 @@ describe('computeNoteDragDelta', () => {
       anchorTick: 0,
       anchorLane: 2,
       snappedCursorTick: 0,
-      cursorLane: 99, // out of range → clamps to maxPadLane (4)
+      cursorLane: 99, // out of range → clamps to maxPadLane (3)
       selectionSize: 1,
       prevLaneDelta: 0,
       ...PADS,
     });
-    expect(laneDelta).toBe(2); // 4 - 2
+    expect(laneDelta).toBe(1); // 3 - 2
   });
 
   it('keeps the previous lane delta while off the pad lanes', () => {

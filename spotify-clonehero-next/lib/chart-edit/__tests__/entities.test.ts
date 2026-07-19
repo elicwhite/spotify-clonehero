@@ -295,7 +295,7 @@ describe('entityHandlers dispatch', () => {
       cloned,
       noteId({tick: 480, type: 'yellowDrum'}),
       0,
-      -1, // yellow (lane 2) → red (lane 1)
+      -1, // yellow (lane 1) → red (lane 0)
       ctx,
     );
     expect(newId).toBe(noteId({tick: 480, type: 'redDrum'}));

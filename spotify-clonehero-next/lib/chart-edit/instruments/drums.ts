@@ -1,11 +1,17 @@
 /**
  * Drum InstrumentSchema — covers 4-lane (default) and 5-lane variants.
  *
- * Lane 0 is always kick. Lanes 1..N are the strip lanes. The 5-lane
- * variant adds an extra `greenDrum` lane disambiguated by `variant: '5-lane'`.
+ * Kick is always the *last* lane (index 4 in the 4-lane schema, 5 in the
+ * 5-lane schema); the strip lanes fill the lanes before it, lowest-first
+ * (red, yellow, blue, green, ...). `typeToLane`/`laneToType`
+ * (`components/chart-editor/commands.ts`) and every hit-test/drag/marquee
+ * that speaks in "editor lane" numbers derive from this array's order —
+ * reordering it is the one and only way to change lane numbering.
  *
  * `defaultKey` on each lane is the place-mode hotkey (`1` kick,
- * `2`-`5` strip lanes); `useEditorKeyboard.ts` reads these.
+ * `2`-`5` strip lanes) — independent of lane *number*, kept stable across
+ * the reorder above so muscle memory doesn't shift; `useEditorKeyboard.ts`
+ * reads these.
  *
  * Flag bindings cover the drum-specific `cymbal` / `accent` / `ghost` /
  * `flam` / `doubleKick` flags. Only flags with a `defaultKey` get a
@@ -29,8 +35,14 @@ import type {InstrumentSchema, LaneDefinition} from './types';
 const STRIP_X = (i: number): number => -0.235 + 0.169 * i;
 const KICK_X = 0; // kick centers on the highway
 
+// `index` mirrors each lane's position in `drums4LaneSchema.lanes` (the
+// schema `typeToLane`/`laneToType` and the editor's numeric lane logic
+// actually use). KICK is shared with `drums5LaneSchema` below, where its
+// true array position is one higher (5, not 4) — that schema isn't wired
+// into the editor's numeric lane logic today, so this is a display-only
+// approximation there, same as it was before this lane reordered.
 const KICK: LaneDefinition = {
-  index: 0,
+  index: 4,
   noteType: noteTypes.kick,
   label: 'Kick',
   color: '#f8b272',
@@ -39,7 +51,7 @@ const KICK: LaneDefinition = {
 };
 
 const RED: LaneDefinition = {
-  index: 1,
+  index: 0,
   noteType: noteTypes.redDrum,
   label: 'Red',
   color: '#dd2214',
@@ -48,7 +60,7 @@ const RED: LaneDefinition = {
 };
 
 const YELLOW: LaneDefinition = {
-  index: 2,
+  index: 1,
   noteType: noteTypes.yellowDrum,
   label: 'Yellow',
   color: '#deeb52',
@@ -57,7 +69,7 @@ const YELLOW: LaneDefinition = {
 };
 
 const BLUE: LaneDefinition = {
-  index: 3,
+  index: 2,
   noteType: noteTypes.blueDrum,
   label: 'Blue',
   color: '#006caf',
@@ -66,7 +78,7 @@ const BLUE: LaneDefinition = {
 };
 
 const GREEN_4LANE: LaneDefinition = {
-  index: 4,
+  index: 3,
   noteType: noteTypes.greenDrum,
   label: 'Green',
   color: '#01b11a',
@@ -75,7 +87,7 @@ const GREEN_4LANE: LaneDefinition = {
 };
 
 const GREEN_5LANE: LaneDefinition = {
-  index: 5,
+  index: 4,
   noteType: noteTypes.greenDrum,
   label: 'Green',
   color: '#01b11a',
@@ -85,11 +97,11 @@ const GREEN_5LANE: LaneDefinition = {
 };
 
 /**
- * Schema for 4-lane drums (kick + red/yellow/blue/green).
+ * Schema for 4-lane drums (red/yellow/blue/green + kick last).
  */
 export const drums4LaneSchema: InstrumentSchema = {
   instrument: 'drums',
-  lanes: [KICK, RED, YELLOW, BLUE, GREEN_4LANE],
+  lanes: [RED, YELLOW, BLUE, GREEN_4LANE, KICK],
   flagBindings: [
     {
       flag: 'cymbal',
@@ -109,7 +121,8 @@ export const drums4LaneSchema: InstrumentSchema = {
 };
 
 /**
- * Schema for 5-lane drums (kick + red/yellow/blue/green-as-orange + extra green).
+ * Schema for 5-lane drums (red/yellow/blue/green-as-orange + extra green +
+ * kick last).
  *
  * scan-chart's 5-lane mapping uses `greenDrum` for the rightmost lane;
  * the 4-lane "green" lane on the same NoteType is distinguished by
@@ -118,12 +131,12 @@ export const drums4LaneSchema: InstrumentSchema = {
 export const drums5LaneSchema: InstrumentSchema = {
   instrument: 'drums',
   lanes: [
-    KICK,
     RED,
     YELLOW,
     BLUE,
     {...GREEN_4LANE, label: 'Orange'},
     GREEN_5LANE,
+    KICK,
   ],
   flagBindings: drums4LaneSchema.flagBindings,
 };

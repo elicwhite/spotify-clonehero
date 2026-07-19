@@ -81,7 +81,9 @@ import {
   ToggleFlagCommand,
   UnmarkDownbeatCommand,
   laneToType,
+  FIRST_PAD_LANE,
   LAST_PAD_LANE,
+  KICK_LANE,
 } from '../commands';
 import {computeNoteDragDelta, exceedsDragThreshold} from '../editing/gestures';
 import {selectNotesInRange} from '../editing/marquee';
@@ -94,9 +96,7 @@ import {
   extractPianoRollNotes,
   LANE_COUNT,
   LANE_CYMBAL_OK,
-  laneToRow,
   PIANO_ROLL_LANES,
-  rowToLane,
   type PianoRollNote,
 } from './notes';
 import {buildBeatGrid, barBeatAtTick, type GridBeat} from './scene';
@@ -1295,8 +1295,9 @@ export default function PianoRollTimeline({
             cursorLane: laneAtY(y, laneGeometry()),
             selectionSize: getSelectedIds(editStateRef.current, 'note').size,
             prevLaneDelta: drag.laneDelta,
-            minPadLane: 1,
+            minPadLane: FIRST_PAD_LANE,
             maxPadLane: LAST_PAD_LANE,
+            kickLane: KICK_LANE,
           });
           if (
             !drag.active ||
@@ -1329,7 +1330,6 @@ export default function PianoRollTimeline({
           bounds,
           scene.timedTempos,
           scene.resolution,
-          laneToRow,
         );
         const merged = new Set(marqueeBaseRef.current);
         inBox.forEach(id => merged.add(id));
@@ -2231,10 +2231,11 @@ function drawNotes(
     let cymbal = note.cymbal;
     if (dragActive && selected) {
       tick = Math.max(0, note.tick + drag.tickDelta);
-      if (drag.laneDelta !== 0 && note.lane > 0) {
+      const isPad = note.lane >= FIRST_PAD_LANE && note.lane <= LAST_PAD_LANE;
+      if (drag.laneDelta !== 0 && isPad) {
         lane = Math.max(
-          1,
-          Math.min(LANE_COUNT - 1, note.lane + drag.laneDelta),
+          FIRST_PAD_LANE,
+          Math.min(LAST_PAD_LANE, note.lane + drag.laneDelta),
         );
       }
       // Would-be drop on an illegal lane renders as a tom (§6 affordance).
@@ -2250,7 +2251,7 @@ function drawNotes(
       continue;
     }
     const x = msToX(ms, view);
-    const cy = laneTop + laneToRow(lane) * laneH + laneH / 2;
+    const cy = laneTop + lane * laneH + laneH / 2;
     if (selected) {
       ctx.fillStyle = 'rgba(255,255,255,0.92)';
       roundRect(ctx, x - halfW, cy - nh / 2 - 2.5, halfW * 2, nh + 5, 3);
@@ -2269,7 +2270,7 @@ function drawNotes(
   if (ghost) {
     const gms = tickToMs(ghost.tick, scene.timedTempos, scene.resolution);
     const gx = msToX(gms, view);
-    const gcy = laneTop + laneToRow(ghost.lane) * laneH + laneH / 2;
+    const gcy = laneTop + ghost.lane * laneH + laneH / 2;
     if (gx >= -halfW && gx <= w + halfW) {
       ctx.globalAlpha = 0.5;
       ctx.fillStyle = PIANO_ROLL_LANES[ghost.lane].color;
@@ -2460,16 +2461,12 @@ function drawLaneLabels(
   laneH: number,
 ): void {
   ctx.font = '600 9.5px system-ui, sans-serif';
-  for (let row = 0; row < LANE_COUNT; row++) {
-    const y = laneTop + row * laneH;
+  for (let l = 0; l < LANE_COUNT; l++) {
+    const y = laneTop + l * laneH;
     ctx.fillStyle = 'rgba(13,16,23,0.72)';
     ctx.fillRect(0, y + 2, 44, 13);
     ctx.fillStyle = COLORS.laneLabel;
-    ctx.fillText(
-      PIANO_ROLL_LANES[rowToLane(row)].name.toUpperCase(),
-      5,
-      y + 12,
-    );
+    ctx.fillText(PIANO_ROLL_LANES[l].name.toUpperCase(), 5, y + 12);
   }
 }
 

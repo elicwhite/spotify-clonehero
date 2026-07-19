@@ -25,7 +25,7 @@ import {laneToType, defaultFlagsForType} from '../commands';
 export interface ProspectiveNote {
   /** Grid-snapped tick the note would land on. */
   tick: number;
-  /** Editor lane index (0=kick, 1=red, 2=yellow, 3=blue, 4=green). */
+  /** Editor lane index (0=red, 1=yellow, 2=blue, 3=green, 4=kick). */
   lane: number;
   /** scan-chart drum type the lane maps to. */
   type: DrumNoteType;
