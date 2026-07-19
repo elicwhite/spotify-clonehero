@@ -39,6 +39,18 @@ export interface NoteElementData {
 const CHILD_SELECTION = 2;
 const CHILD_REVIEW = 4;
 
+/** Height of the horizontal kick bar sprite (vertically centered on the beat line). */
+const KICK_SCALE = 0.045;
+/**
+ * Anchor for non-kick gem sprites: places the gem's visible bottom edge level
+ * with the bottom edge of the kick bar (half a kick height below the beat
+ * line), so gems appear to sit on the line instead of straddling it.
+ * center.y is the normalized point (0 = bottom) that coincides with the beat
+ * line; the extra half-kick compensates for transparent padding at the bottom
+ * of the gem texture, which otherwise leaves the visible bottom on the line.
+ */
+const GEM_ANCHOR_Y = KICK_SCALE / SCALE;
+
 // ---------------------------------------------------------------------------
 // NoteRenderer
 // ---------------------------------------------------------------------------
@@ -183,11 +195,10 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     const sprite = new THREE.Sprite(material);
 
     if (data.isKick) {
-      const kickScale = 0.045;
       sprite.center.set(0.5, 0.5);
       const aspectRatio =
         sprite.material.map!.image.width / sprite.material.map!.image.height;
-      sprite.scale.set(kickScale * aspectRatio, kickScale, kickScale);
+      sprite.scale.set(KICK_SCALE * aspectRatio, KICK_SCALE, KICK_SCALE);
       sprite.renderOrder = 1;
       group.position.x = 0;
     } else if (data.isOpen) {
@@ -199,7 +210,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
       sprite.renderOrder = 4;
       group.position.x = 0;
     } else {
-      sprite.center.set(0.5, 0.5);
+      sprite.center.set(0.5, GEM_ANCHOR_Y);
       const aspectRatio =
         sprite.material.map!.image.width / sprite.material.map!.image.height;
       sprite.scale.set(SCALE * aspectRatio, SCALE, SCALE);
@@ -219,10 +230,15 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
 
     // Cache highlight dimensions so setHovered/setSelected can size the
     // highlight mesh without re-reading note geometry.
-    const noteScale = data.isKick ? 0.045 : data.isOpen ? 0.11 : SCALE;
+    const noteScale = data.isKick ? KICK_SCALE : data.isOpen ? 0.11 : SCALE;
+    // Bottom-anchored gems have their visual center above the beat line;
+    // overlays (highlight, review dot) follow that offset.
+    const spriteYOffset =
+      data.isKick || data.isOpen ? 0 : (0.5 - GEM_ANCHOR_Y) * SCALE;
     group.userData = {
       hovered: false,
       selected: false,
+      spriteYOffset,
       highlightDims: {
         w: data.isKick ? 0.9 : noteScale * 2.2,
         h: noteScale * 1.8,
@@ -340,6 +356,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     const u = group.userData as {
       hovered?: boolean;
       selected?: boolean;
+      spriteYOffset?: number;
       highlightDims?: {w: number; h: number};
     };
     const hovered = !!u.hovered;
@@ -367,7 +384,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
       highlight.renderOrder = 5;
       const dims = u.highlightDims ?? {w: SCALE * 2.2, h: SCALE * 1.8};
       highlight.scale.set(dims.w, dims.h, 1);
-      highlight.position.set(0, 0, -0.001);
+      highlight.position.set(0, u.spriteYOffset ?? 0, -0.001);
       group.add(highlight);
       return;
     }
@@ -438,7 +455,9 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
       group.add(indicator);
     }
 
-    indicator.position.set(SCALE * 0.8, SCALE * 0.3, 0.001);
+    const yOffset =
+      (group.userData as {spriteYOffset?: number}).spriteYOffset ?? 0;
+    indicator.position.set(SCALE * 0.8, SCALE * 0.3 + yOffset, 0.001);
     indicator.visible = true;
   }
 
