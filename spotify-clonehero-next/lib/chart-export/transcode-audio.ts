@@ -94,6 +94,15 @@ function toUint8(data: ArrayBuffer | Uint8Array): Uint8Array {
   return data instanceof Uint8Array ? data : new Uint8Array(data);
 }
 
+/** Duration of interleaved PCM, in milliseconds. */
+function pcmDurationMs(
+  pcm: Float32Array,
+  sampleRate: number,
+  channels: number,
+): number {
+  return (pcm.length / channels / sampleRate) * 1000;
+}
+
 function toArrayBuffer(data: ArrayBuffer | Uint8Array): ArrayBuffer {
   if (data instanceof Uint8Array) {
     // Slice to a standalone ArrayBuffer (the view may be a window into a
@@ -120,10 +129,22 @@ export const defaultTranscodeIO: TranscodeIO = {
     encodePcmToOpus(pcm, sampleRate, channels),
 };
 
+/** Result of {@link transcodeAudioFilesToOpus}: the Opus-normalized file list
+ * plus the longest decoded audio duration found among them (for stamping
+ * `song.ini`'s `song_length`). `null` when the input had no audio files. */
+export interface TranscodeAudioResult {
+  files: {fileName: string; data: Uint8Array}[];
+  /** Longest audio duration among the input files, in milliseconds, or
+   * `null` if none of the inputs were audio. */
+  durationMs: number | null;
+}
+
 /**
  * Transcode a mixed list of files so every audio entry is Opus. Audio files
  * that aren't already `.opus` are decoded + re-encoded and renamed to
- * `.opus`; already-Opus audio and non-audio files pass through unchanged.
+ * `.opus`; already-Opus audio passes through untouched but is still decoded
+ * to measure its duration; non-audio files pass through unchanged and don't
+ * contribute to `durationMs`.
  *
  * Order is preserved. Runs sequentially so concurrent decodes don't spin up
  * many `AudioContext`s at once.
@@ -131,18 +152,38 @@ export const defaultTranscodeIO: TranscodeIO = {
 export async function transcodeAudioFilesToOpus(
   files: TranscodeEntry[],
   io: TranscodeIO = defaultTranscodeIO,
-): Promise<{fileName: string; data: Uint8Array}[]> {
+): Promise<TranscodeAudioResult> {
   const out: {fileName: string; data: Uint8Array}[] = [];
+  let durationMs: number | null = null;
   for (const file of files) {
+    if (!isAudioFileName(file.fileName)) {
+      out.push({fileName: file.fileName, data: toUint8(file.data)});
+      continue;
+    }
     if (needsOpusTranscode(file.fileName)) {
       const {pcm, sampleRate, channels} = await io.decode(
         toArrayBuffer(file.data),
       );
       const opus = await io.encode(pcm, sampleRate, channels);
       out.push({fileName: toOpusFileName(file.fileName), data: opus});
+      durationMs = Math.max(
+        durationMs ?? 0,
+        pcmDurationMs(pcm, sampleRate, channels),
+      );
     } else {
+      // Already Opus — no re-encode needed, but still decode once to learn
+      // its duration (the common case: separated stems are pre-encoded to
+      // Opus before assembly, so skipping this would leave song_length unset
+      // for most exports).
+      const {pcm, sampleRate, channels} = await io.decode(
+        toArrayBuffer(file.data),
+      );
       out.push({fileName: file.fileName, data: toUint8(file.data)});
+      durationMs = Math.max(
+        durationMs ?? 0,
+        pcmDurationMs(pcm, sampleRate, channels),
+      );
     }
   }
-  return out;
+  return {files: out, durationMs};
 }

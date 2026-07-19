@@ -7,4 +7,4 @@ export type {
   AssembleChartFilesOptions,
 } from './assemble';
 export {transcodeAudioFilesToOpus} from './transcode-audio';
-export type {TranscodeEntry} from './transcode-audio';
+export type {TranscodeEntry, TranscodeAudioResult} from './transcode-audio';

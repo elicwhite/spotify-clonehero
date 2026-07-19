@@ -11,7 +11,7 @@
  * without going through the React export dialog.
  */
 
-import type {File as FileEntry} from '@eliwhite/scan-chart';
+import type {File as FileEntry, ParsedChart} from '@eliwhite/scan-chart';
 
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
 
@@ -84,6 +84,31 @@ export interface AssembleChartFilesOptions {
    * entry is skipped, since those are already authoritative above.
    */
   extraAssets?: FileEntry[];
+  /**
+   * Song length in milliseconds, stamped as `song.ini`'s `song_length`. Best
+   * sourced from the actual (decoded) audio duration. Omitted, `undefined`,
+   * or non-positive falls back to the chart's own last event time.
+   */
+  songLengthMs?: number;
+}
+
+/** The chart's own duration, in milliseconds: the latest point any note ends
+ * or an end event fires, across every track. Used as the `song_length`
+ * fallback when no audio duration is available. */
+function chartEndMs(parsedChart: ParsedChart): number {
+  let maxMs = 0;
+  for (const track of parsedChart.trackData) {
+    for (const group of track.noteEventGroups) {
+      for (const note of group) {
+        const end = note.msTime + note.msLength;
+        if (end > maxMs) maxMs = end;
+      }
+    }
+  }
+  for (const end of parsedChart.endEvents) {
+    if (end.msTime > maxMs) maxMs = end.msTime;
+  }
+  return Math.round(maxMs);
 }
 
 /**
@@ -102,6 +127,7 @@ export function assembleChartFiles({
   metadata,
   audioSources = [],
   extraAssets = [],
+  songLengthMs,
 }: AssembleChartFilesOptions): FileEntry[] {
   const rawInputFile: ChartPackageFile =
     chartFile ??
@@ -123,19 +149,27 @@ export function assembleChartFiles({
   };
   const chartDoc = readChart([inputFile]);
   const existing = chartDoc.parsedChart.metadata;
+  // Declare a drums difficulty so scan-chart / chart managers see a rated
+  // chart. The chart file alone carries this; any diff_drums the pipeline
+  // set in song.ini separately is gone by here; default to 0 when absent.
+  const diffDrums =
+    existing.diff_drums != null && existing.diff_drums >= 0
+      ? existing.diff_drums
+      : 0;
   chartDoc.parsedChart.metadata = {
     ...existing,
     name: metadata.name,
     artist: metadata.artist,
     charter: metadata.charter.trim() || 'MusicCharts.tools',
     pro_drums: true,
-    // Declare a drums difficulty so scan-chart / chart managers see a rated
-    // chart. The chart file alone carries this; any diff_drums the pipeline
-    // set in song.ini separately is gone by here; default to 0 when absent.
-    diff_drums:
-      existing.diff_drums != null && existing.diff_drums >= 0
-        ? existing.diff_drums
-        : 0,
+    diff_drums: diffDrums,
+    // Phase Shift "real drums" difficulty — kept equal to diff_drums since
+    // this pipeline doesn't distinguish a separate real-drums chart.
+    diff_drums_real: diffDrums,
+    song_length:
+      songLengthMs != null && songLengthMs > 0
+        ? Math.round(songLengthMs)
+        : chartEndMs(chartDoc.parsedChart),
   };
 
   const entries: FileEntry[] = writeChartFolder(chartDoc).map(f => ({

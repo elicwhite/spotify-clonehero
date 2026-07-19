@@ -171,14 +171,11 @@ export default function ExportDialog({
       // 1. Get the chart — prefer the format-agnostic getChartFile (handles
       // .mid-sourced chart-flow projects) over getChartText.
       if (!getChartFile && !getChartText) {
-        throw new Error(
-          'ExportDialog requires getChartFile or getChartText',
-        );
+        throw new Error('ExportDialog requires getChartFile or getChartText');
       }
       const chartFile = getChartFile ? await getChartFile() : undefined;
-      const chartText = chartFile || !getChartText
-        ? undefined
-        : await getChartText();
+      const chartText =
+        chartFile || !getChartText ? undefined : await getChartText();
 
       // 2. Collect audio sources. When the page offers a stem choice, honor
       //    the toggle; otherwise include whatever audio it provides.
@@ -209,8 +206,16 @@ export default function ExportDialog({
       //     passthrough assets — transcode any non-Opus audio and rename it to
       //     `.opus`; non-audio assets pass through untouched. Assembly itself
       //     stays pure/sync; this async step is the seam.
-      const opusAudioSources = await transcodeAudioFilesToOpus(audioFiles);
-      const opusExtraAssets = await transcodeAudioFilesToOpus(extraAssets);
+      const {files: opusAudioSources, durationMs: audioDurationMs} =
+        await transcodeAudioFilesToOpus(audioFiles);
+      const {files: opusExtraAssets, durationMs: extraAssetDurationMs} =
+        await transcodeAudioFilesToOpus(extraAssets);
+      // Longest decoded stem/track wins — e.g. an instrumental stem can run
+      // longer than the drums stem.
+      const songLengthMs =
+        audioDurationMs != null || extraAssetDurationMs != null
+          ? Math.max(audioDurationMs ?? 0, extraAssetDurationMs ?? 0)
+          : undefined;
 
       const cleanMetadata = {
         name: metadata.name.trim() || 'Untitled',
@@ -223,6 +228,7 @@ export default function ExportDialog({
         metadata: cleanMetadata,
         audioSources: opusAudioSources,
         extraAssets: opusExtraAssets,
+        ...(songLengthMs != null ? {songLengthMs} : {}),
       });
 
       // 4. Package as ZIP or SNG
