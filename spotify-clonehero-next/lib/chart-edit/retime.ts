@@ -76,10 +76,7 @@ export function quantizeBpm(bpm: number, format: 'chart' | 'mid'): number {
  * entry anchors the table (parsed charts always have a tick-0 tempo, so
  * this only matters for hand-built docs).
  */
-function tempoTable(
-  tempos: ParsedChart['tempos'],
-  resolution: number,
-): TimedTempo[] {
+function tempoTable(tempos: ParsedChart['tempos']): TimedTempo[] {
   if (tempos.length > 0 && tempos[0].tick === 0) return tempos;
   const table: TimedTempo[] = [{tick: 0, beatsPerMinute: 120, msTime: 0}];
   for (const t of tempos) table.push(t);
@@ -105,7 +102,7 @@ export function makeChartTiming(
   parsedChart: Pick<ParsedChart, 'tempos' | 'resolution'>,
 ): ChartTiming {
   return {
-    timedTempos: tempoTable(parsedChart.tempos, parsedChart.resolution),
+    timedTempos: tempoTable(parsedChart.tempos),
     resolution: parsedChart.resolution,
   };
 }
@@ -273,7 +270,7 @@ function retimeNoteGroups(
 export function retimeChart(parsedChart: ParsedChart, fromTick = 0): void {
   const resolution = parsedChart.resolution;
   retimeTempos(parsedChart.tempos, resolution);
-  const timedTempos = tempoTable(parsedChart.tempos, resolution);
+  const timedTempos = tempoTable(parsedChart.tempos);
 
   const retime = (events: TimedEvent[]) =>
     retimeEvents(events, timedTempos, resolution, fromTick);

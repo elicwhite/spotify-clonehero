@@ -73,6 +73,27 @@ describe('command inversion', () => {
         .map(n => ({tick: n.tick, type: n.type}));
       expect(post).toEqual(snap);
     });
+
+    // Regression: a note added at a non-zero tick must carry a tempo-map
+    // msTime. When it stayed 0 the highway (which windows/positions by
+    // msTime) rendered the note at song start — off-window — so it appeared
+    // in the piano roll (positions by tick) but never on the highway.
+    it('computes the new note msTime from the tempo map (push model §2)', () => {
+      const before = makeFixtureDoc();
+      // 720 ticks at 120 BPM / res 480 = 750ms; the tick is empty in the
+      // fixture so the added event is unambiguous.
+      const cmd = new AddNoteCommand(
+        {tick: 720, type: 'redDrum', length: 0, flags: {}},
+        DRUMS_KEY,
+      );
+      const after = cmd.execute(before);
+      const drums = after.parsedChart.trackData.find(
+        t => t.instrument === 'drums',
+      )!;
+      const added = drums.noteEventGroups.flat().find(n => n.tick === 720)!;
+      expect(added).toBeDefined();
+      expect(added.msTime).toBeCloseTo(750, 5);
+    });
   });
 
   describe('DeleteNotesCommand', () => {

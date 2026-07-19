@@ -28,8 +28,6 @@ import {
   quantizeBpm,
 } from '../index';
 import {emptyTrackData} from './test-utils';
-import {buildSegments, tickToMs} from '@/lib/tempo-map/synctrack-ticks';
-import type {Synctrack} from '@/lib/tempo-map/types';
 
 const RES = 480;
 const MODIFIERS = {...defaultIniChartModifiers, pro_drums: true};

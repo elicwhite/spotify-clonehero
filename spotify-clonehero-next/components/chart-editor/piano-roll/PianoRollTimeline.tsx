@@ -81,17 +81,22 @@ import {
   ToggleFlagCommand,
   UnmarkDownbeatCommand,
   laneToType,
-  defaultFlagsForType,
   LAST_PAD_LANE,
 } from '../commands';
 import {computeNoteDragDelta, exceedsDragThreshold} from '../editing/gestures';
 import {selectNotesInRange} from '../editing/marquee';
+import {
+  prospectiveNoteAt,
+  type ProspectiveNote,
+} from '../editing/prospectiveNote';
 import {clampMarkerMs, hitTempoMarker, nearestBeatTick} from './tempoHitTest';
 import {
   extractPianoRollNotes,
   LANE_COUNT,
   LANE_CYMBAL_OK,
+  laneToRow,
   PIANO_ROLL_LANES,
+  rowToLane,
   type PianoRollNote,
 } from './notes';
 import {buildBeatGrid, barBeatAtTick, type GridBeat} from './scene';
@@ -359,16 +364,22 @@ export default function PianoRollTimeline({
   // DEFAULT source's decoded PCM as `audioData` (the drum stem, or the mix when
   // no stem exists), so reuse it there and avoid a redundant copy; any other
   // source is extracted from AudioManager on demand.
-  const wavePcm = useMemo<{data: Float32Array | undefined; channels: number}>(
-    () => {
-      if (selectedSourceId && selectedSourceId !== defaultSourceId) {
-        const pcm = audioManager.getTrackPcm?.(selectedSourceId);
-        if (pcm) return pcm;
-      }
-      return {data: audioData, channels: audioChannels};
-    },
-    [selectedSourceId, defaultSourceId, audioData, audioChannels, audioManager],
-  );
+  const wavePcm = useMemo<{
+    data: Float32Array | undefined;
+    channels: number;
+  }>(() => {
+    if (selectedSourceId && selectedSourceId !== defaultSourceId) {
+      const pcm = audioManager.getTrackPcm?.(selectedSourceId);
+      if (pcm) return pcm;
+    }
+    return {data: audioData, channels: audioChannels};
+  }, [
+    selectedSourceId,
+    defaultSourceId,
+    audioData,
+    audioChannels,
+    audioManager,
+  ]);
 
   // -- Panel height (§1): resizable via a top-edge drag handle, persisted to
   // localStorage under one key shared across every host page. Lazily read
@@ -397,6 +408,13 @@ export default function PianoRollTimeline({
   const marqueeRef = useRef<PanelMarquee | null>(null);
   /** Index of the tempo marker under the pointer (idle hover), or -1. */
   const hoverMarkerRef = useRef(-1);
+  /**
+   * Add-mode ghost: the note a click would place at the pointer's lane +
+   * snapped tick (null when not in add-mode / not over an empty lane / a
+   * structural preview locks editing). Rendered at ~50% opacity in the draw
+   * pass. A ref (not state) so pointer-move updates never re-render React.
+   */
+  const ghostRef = useRef<ProspectiveNote | null>(null);
   /** In-flight tempo-marker drag (§7); null when not dragging a marker. */
   const tempoDragRef = useRef<TempoMarkerDrag | null>(null);
   /** The committed doc a live tempo drag previews from (captured at grab). */
@@ -565,6 +583,21 @@ export default function PianoRollTimeline({
     dirtyRef.current = true;
   }, [state.hovered]);
 
+  // Tear down the add-mode ghost the instant the tool changes away from
+  // add-note or a structural preview locks editing — both happen without a
+  // pointer move, so the pointer-move clear path wouldn't fire.
+  useEffect(() => {
+    const locked = isStructuralPreview({
+      pendingTempoCandidate: state.pendingTempoCandidate,
+    });
+    if (state.activeTool === 'place' && !locked) return;
+    if (ghostRef.current) {
+      ghostRef.current = null;
+      dirtyRef.current = true;
+      drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+    }
+  }, [state.activeTool, state.pendingTempoCandidate, audioManager]);
+
   // Redraw immediately when the shared cursor moves from OUTSIDE this panel —
   // e.g. wheel-scrubbing the highway, which seeks `AudioManager` in continuous
   // ms and dispatches `SET_CURSOR_TICK` per wheel event. While paused the panel
@@ -626,6 +659,7 @@ export default function PianoRollTimeline({
         selection,
         hoverIdRef.current,
         noteDragRef.current,
+        ghostRef.current,
       );
       drawTempoLane(
         ctx,
@@ -928,6 +962,28 @@ export default function PianoRollTimeline({
     );
   }, []);
 
+  // Set (or clear) the add-mode ghost, redrawing only when it actually
+  // changes so a stationary pointer doesn't churn the canvas.
+  const setGhost = useCallback(
+    (next: ProspectiveNote | null) => {
+      const cur = ghostRef.current;
+      if (
+        cur === next ||
+        (cur !== null &&
+          next !== null &&
+          cur.tick === next.tick &&
+          cur.lane === next.lane &&
+          cur.cymbal === next.cymbal)
+      ) {
+        return;
+      }
+      ghostRef.current = next;
+      dirtyRef.current = true;
+      drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+    },
+    [audioManager],
+  );
+
   // Shared note selection (shift-aware), mirroring the highway's cursor tool.
   const selectNote = useCallback(
     (id: string, shift: boolean) => {
@@ -1080,14 +1136,16 @@ export default function PianoRollTimeline({
           // Toggle: a note already here is removed.
           executeCommand(new DeleteNotesCommand(new Set([hit.id]), trackKey));
         } else {
-          const type = laneToType(lane);
+          // Same shared prospective-note computation the ghost preview and the
+          // highway use, so all three predict the identical note.
+          const prospective = prospectiveNoteAt(lane, snappedTickAt(x));
           executeCommand(
             new AddNoteCommand(
               {
-                tick: snappedTickAt(x),
-                type,
+                tick: prospective.tick,
+                type: prospective.type,
                 length: 0,
-                flags: defaultFlagsForType(type),
+                flags: prospective.flags,
               },
               trackKey,
             ),
@@ -1271,6 +1329,7 @@ export default function PianoRollTimeline({
           bounds,
           scene.timedTempos,
           scene.resolution,
+          laneToRow,
         );
         const merged = new Set(marqueeBaseRef.current);
         inBox.forEach(id => merged.add(id));
@@ -1306,6 +1365,7 @@ export default function PianoRollTimeline({
           y <= RULER_H && hitSection(canvas, x, viewRef.current, scene);
         canvas.style.cursor = overSection ? 'grab' : 'pointer';
         clearMarkerHover();
+        setGhost(null);
         if (hoverIdRef.current !== null) {
           dispatch({type: 'SET_HOVER', hovered: null});
         }
@@ -1316,6 +1376,7 @@ export default function PianoRollTimeline({
         const k = hitTempoMarker(scene.tempos, viewRef.current, x);
         const hoverK = k > 0 ? k : -1;
         canvas.style.cursor = hoverK >= 0 ? 'ew-resize' : 'default';
+        setGhost(null);
         if (hoverK !== hoverMarkerRef.current) {
           hoverMarkerRef.current = hoverK;
           dirtyRef.current = true;
@@ -1325,7 +1386,26 @@ export default function PianoRollTimeline({
       }
       clearMarkerHover();
       const hovered = pickAt(x, y);
-      canvas.style.cursor = hovered ? 'grab' : 'default';
+      const st = editStateRef.current;
+      // Add-mode ghost: over an empty lane (a click there would ADD; over an
+      // existing note a click TOGGLES it off, so no ghost). Uses the same
+      // snap + prospective-note computation the highway and the actual add
+      // command use, so the ghost predicts the identical note. Suppressed
+      // while a structural preview locks editing.
+      const placing = st.activeTool === 'place' && !isStructuralPreview(st);
+      if (placing && !hovered) {
+        const lane = laneAtY(y, laneGeometry());
+        setGhost(
+          lane === null ? null : prospectiveNoteAt(lane, snappedTickAt(x)),
+        );
+      } else {
+        setGhost(null);
+      }
+      canvas.style.cursor = hovered
+        ? 'grab'
+        : placing
+          ? 'crosshair'
+          : 'default';
       const nextId = hovered ? hovered.id : null;
       if (nextId !== hoverIdRef.current) {
         dispatch({
@@ -1343,6 +1423,7 @@ export default function PianoRollTimeline({
       pickAt,
       seekTo,
       seekZone,
+      setGhost,
       snappedTickAt,
     ],
   );
@@ -1437,6 +1518,13 @@ export default function PianoRollTimeline({
     },
     [audioManager, dispatch, executeCommand, seekTo],
   );
+
+  // Drop the add-mode ghost when the pointer leaves the panel (no lane is
+  // under it any more). A gesture in flight keeps its own state; only the
+  // idle-hover ghost is cleared here.
+  const handlePointerLeave = useCallback(() => {
+    setGhost(null);
+  }, [setGhost]);
 
   // -- Context menus (§7 / §8 / §10) -----------------------------------------
   /** Build the tempo-lane menu (§7 delete-marker; §7/§8 add-marker + downbeat
@@ -1614,7 +1702,11 @@ export default function PianoRollTimeline({
       // its items (delete / cymbal toggle) execute against the committed doc,
       // which the read-only preview contract forbids editing.
       const hit = pickAt(x, y);
-      if (!hit || !capabilities.selectable.has('note') || isStructuralPreview(editStateRef.current)) {
+      if (
+        !hit ||
+        !capabilities.selectable.has('note') ||
+        isStructuralPreview(editStateRef.current)
+      ) {
         setMenu(null);
         return;
       }
@@ -1859,6 +1951,7 @@ export default function PianoRollTimeline({
           onPointerMove={handlePointerMove}
           onPointerUp={endPointer}
           onPointerCancel={endPointer}
+          onPointerLeave={handlePointerLeave}
           onContextMenu={handleContextMenu}
         />
         {/* Note anchoring under tempo edits ("glue", §9) is audio-glued
@@ -2090,6 +2183,7 @@ function drawNotes(
   selection: ReadonlySet<string>,
   hoverId: string | null,
   drag: PanelNoteDrag | null,
+  ghost: ProspectiveNote | null,
 ): void {
   const [msA, msB] = visibleMsRange(view, w);
   const nh = Math.min(laneH - 6, 13);
@@ -2110,6 +2204,22 @@ function drawNotes(
     pxPerMs: view.pxPerMs,
     glyphHeight: nh,
   });
+
+  // One glyph painter (triangle for cymbals, rounded rect for kick/tom) so the
+  // ghost preview is pixel-identical to a real note at the same size.
+  const paintGlyph = (gx: number, gcy: number, isCymbal: boolean): void => {
+    if (isCymbal) {
+      ctx.beginPath();
+      ctx.moveTo(gx, gcy - nh * 0.62);
+      ctx.lineTo(gx + nw * 0.6, gcy + nh * 0.5);
+      ctx.lineTo(gx - nw * 0.6, gcy + nh * 0.5);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      roundRect(ctx, gx - nw / 2, gcy - nh / 2, nw, nh, Math.min(2.5, nw / 3));
+      ctx.fill();
+    }
+  };
 
   const dragActive = drag?.active === true;
   const halfW = Math.max(nw, nh) / 2 + 2.5;
@@ -2140,7 +2250,7 @@ function drawNotes(
       continue;
     }
     const x = msToX(ms, view);
-    const cy = laneTop + lane * laneH + laneH / 2;
+    const cy = laneTop + laneToRow(lane) * laneH + laneH / 2;
     if (selected) {
       ctx.fillStyle = 'rgba(255,255,255,0.92)';
       roundRect(ctx, x - halfW, cy - nh / 2 - 2.5, halfW * 2, nh + 5, 3);
@@ -2151,16 +2261,20 @@ function drawNotes(
       ctx.fill();
     }
     ctx.fillStyle = PIANO_ROLL_LANES[lane].color;
-    if (cymbal) {
-      ctx.beginPath();
-      ctx.moveTo(x, cy - nh * 0.62);
-      ctx.lineTo(x + nw * 0.6, cy + nh * 0.5);
-      ctx.lineTo(x - nw * 0.6, cy + nh * 0.5);
-      ctx.closePath();
-      ctx.fill();
-    } else {
-      roundRect(ctx, x - nw / 2, cy - nh / 2, nw, nh, Math.min(2.5, nw / 3));
-      ctx.fill();
+    paintGlyph(x, cy, cymbal);
+  }
+
+  // Add-mode ghost: the note a click would place, drawn semi-transparent on
+  // the hovered lane at the snapped tick. Never hit-tested (it's paint only).
+  if (ghost) {
+    const gms = tickToMs(ghost.tick, scene.timedTempos, scene.resolution);
+    const gx = msToX(gms, view);
+    const gcy = laneTop + laneToRow(ghost.lane) * laneH + laneH / 2;
+    if (gx >= -halfW && gx <= w + halfW) {
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = PIANO_ROLL_LANES[ghost.lane].color;
+      paintGlyph(gx, gcy, ghost.cymbal);
+      ctx.globalAlpha = 1;
     }
   }
 }
@@ -2346,12 +2460,16 @@ function drawLaneLabels(
   laneH: number,
 ): void {
   ctx.font = '600 9.5px system-ui, sans-serif';
-  for (let l = 0; l < LANE_COUNT; l++) {
-    const y = laneTop + l * laneH;
+  for (let row = 0; row < LANE_COUNT; row++) {
+    const y = laneTop + row * laneH;
     ctx.fillStyle = 'rgba(13,16,23,0.72)';
     ctx.fillRect(0, y + 2, 44, 13);
     ctx.fillStyle = COLORS.laneLabel;
-    ctx.fillText(PIANO_ROLL_LANES[l].name.toUpperCase(), 5, y + 12);
+    ctx.fillText(
+      PIANO_ROLL_LANES[rowToLane(row)].name.toUpperCase(),
+      5,
+      y + 12,
+    );
   }
 }
 

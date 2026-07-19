@@ -164,12 +164,20 @@ export class AddNoteCommand implements EditCommand {
     );
     if (existing) return doc; // already exists, return unchanged
 
-    addDrumNote(track, {
-      tick: this.note.tick,
-      type: this.note.type,
-      length: this.note.length,
-      flags: {...this.note.flags},
-    });
+    // Push-model timing (plan 0061 §2): compute the new note's msTime/msLength
+    // from the chart's tempos at insertion time. Without this the note lands
+    // at msTime 0 and the highway (which windows by msTime) never renders it,
+    // even though the piano roll — which re-derives ms from tick — shows it.
+    addDrumNote(
+      track,
+      {
+        tick: this.note.tick,
+        type: this.note.type,
+        length: this.note.length,
+        flags: {...this.note.flags},
+      },
+      makeChartTiming(newDoc.parsedChart),
+    );
     return newDoc;
   }
 
@@ -226,13 +234,18 @@ export class DeleteNotesCommand implements EditCommand {
     const newDoc = cloneDocWithTracks(doc);
     const track = newDoc.parsedChart.trackData[idx];
 
+    const timing = makeChartTiming(newDoc.parsedChart);
     for (const note of this.deletedNotes) {
-      addDrumNote(track, {
-        tick: note.tick,
-        type: note.type,
-        length: note.length,
-        flags: {...note.flags},
-      });
+      addDrumNote(
+        track,
+        {
+          tick: note.tick,
+          type: note.type,
+          length: note.length,
+          flags: {...note.flags},
+        },
+        timing,
+      );
     }
     return newDoc;
   }
@@ -387,6 +400,10 @@ export class ToggleKickCommand implements EditCommand {
     this.originals = [];
     this.converted = [];
 
+    // Kick↔pad conversion keeps each note's tick, but the DrumNote read carries
+    // no msTime, so the remove+re-add must recompute timing or the converted
+    // note lands at msTime 0 and vanishes from the highway (push model, §2).
+    const timing = makeChartTiming(newDoc.parsedChart);
     for (const note of selected) {
       const targetType: DrumNoteType = toKick ? 'kick' : this.padType;
       if (note.type === targetType) continue;
@@ -406,7 +423,7 @@ export class ToggleKickCommand implements EditCommand {
         length: note.length,
         flags,
       };
-      addDrumNote(track, newNote);
+      addDrumNote(track, newNote, timing);
       this.converted.push({...newNote, flags: {...flags}});
     }
 
@@ -420,11 +437,12 @@ export class ToggleKickCommand implements EditCommand {
     const newDoc = cloneDocWithTracks(doc);
     const track = newDoc.parsedChart.trackData[idx];
 
+    const timing = makeChartTiming(newDoc.parsedChart);
     for (const note of this.converted) {
       removeDrumNote(track, note.tick, note.type);
     }
     for (const note of this.originals) {
-      addDrumNote(track, {...note, flags: {...note.flags}});
+      addDrumNote(track, {...note, flags: {...note.flags}}, timing);
     }
     return newDoc;
   }

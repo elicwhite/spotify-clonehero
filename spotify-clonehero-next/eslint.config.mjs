@@ -5,7 +5,14 @@ import unusedImports from 'eslint-plugin-unused-imports';
 
 export default defineConfig([
   {
-    ignores: ['public/**', '.next/**', 'next-env.d.ts'],
+    ignores: [
+      'public/**',
+      '**/.next/**',
+      'next-env.d.ts',
+      // Agent git worktrees are full repo checkouts (with their own build
+      // output); linting them duplicates every finding. Matches .prettierignore.
+      '.claude/worktrees/**',
+    ],
   },
   {
     extends: [...nextCoreWebVitals],

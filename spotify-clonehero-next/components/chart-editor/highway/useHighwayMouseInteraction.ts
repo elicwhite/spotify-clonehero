@@ -34,12 +34,11 @@ import {
   AddNoteCommand,
   DeleteNotesCommand,
   MoveEntitiesCommand,
-  laneToType,
   typeToLane,
-  defaultFlagsForType,
   LAST_PAD_LANE,
   type EditCommand,
 } from '../commands';
+import {prospectiveNoteAt} from '../editing/prospectiveNote';
 import {entityContextFromScope, trackKeyFromScope} from '../scope';
 import {
   getSelectedIds,
@@ -451,20 +450,23 @@ export function useHighwayMouseInteraction(
         case 'place': {
           const trackKey = trackKeyFromScope(state.activeScope);
           if (!trackKey) break;
-          const type = laneToType(lane);
           // Toggle: if a note exists at this position, remove it.
           if (hit?.type === 'note') {
             executeCommand(
               new DeleteNotesCommand(new Set([hit.noteId]), trackKey),
             );
           } else {
+            // The prospective note (lane → type → flags) is computed by the
+            // shared unit both views use, so the highway and the piano-roll
+            // ghost predict — and add — the identical note.
+            const prospective = prospectiveNoteAt(lane, tick);
             executeCommand(
               new AddNoteCommand(
                 {
-                  tick,
-                  type,
+                  tick: prospective.tick,
+                  type: prospective.type,
                   length: 0,
-                  flags: defaultFlagsForType(type),
+                  flags: prospective.flags,
                 },
                 trackKey,
               ),

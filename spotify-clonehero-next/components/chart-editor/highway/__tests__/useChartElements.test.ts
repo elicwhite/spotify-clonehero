@@ -20,7 +20,9 @@ import {makeFixtureDoc} from '../../__tests__/fixtures';
 import {DRUM_EDIT_CAPABILITIES, PREVIEW_CAPABILITIES} from '../../capabilities';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../../scope';
 import {computeChartElements} from '../useChartElements';
+import {AddNoteCommand} from '../../commands';
 import {markerDragReconcilerKey} from '@/lib/preview/highway/reconcilerKey';
+import type {TrackKey} from '@/lib/chart-edit';
 
 describe('computeChartElements', () => {
   // Resolution=480, 120 BPM in the fixture: 480 ticks = 500ms. Matches
@@ -123,6 +125,35 @@ describe('computeChartElements', () => {
         expect(after!.msTime).toBe(el.msTime);
       }
     }
+  });
+
+  // Regression: the highway renders from `computeChartElements`, which
+  // positions/windows notes by `msTime`. A note added via AddNoteCommand must
+  // therefore surface with a tempo-map msTime — not 0 — or it renders at song
+  // start (off-window) and is invisible on the highway while the tick-based
+  // piano roll shows it correctly.
+  it('surfaces a freshly added note with a tempo-map msTime', () => {
+    const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
+    const doc = new AddNoteCommand(
+      {tick: 720, type: 'redDrum', length: 0, flags: {}},
+      DRUMS_KEY,
+    ).execute(makeFixtureDoc());
+
+    const elements = computeChartElements({
+      chart: doc.parsedChart,
+      activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
+      partName: 'vocals',
+      capabilities: DRUM_EDIT_CAPABILITIES,
+      markerDrag: null,
+      noteDrag: null,
+      timedTempos,
+      resolution,
+    });
+
+    // 720 ticks at 120 BPM / res 480 = 750ms.
+    const added = elements.find(e => e.key === 'note:720:redDrum');
+    expect(added).toBeDefined();
+    expect(added!.msTime).toBeCloseTo(750, 5);
   });
 
   it('showDrumLanes=false filters out notes', () => {

@@ -20,6 +20,13 @@ import {noteId, typeToLane} from '../commands';
 export interface BoxSelectBounds {
   msMin: number;
   msMax: number;
+  /**
+   * Inclusive bounds on whatever axis the caller's `laneToRow` (below) maps
+   * a data lane onto. For the highway, where display order matches data
+   * lane order, that's the lane index itself. For the piano roll, where
+   * display order doesn't (kick moved to the bottom row), it's the display
+   * row.
+   */
   laneMin: number;
   laneMax: number;
 }
@@ -51,17 +58,22 @@ function tickToMsLinear(
  * Order is unspecified — caller should treat the result as a set.
  *
  * The lane comparison is inclusive on both ends, matching the mouse
- * lasso "if the box brushes the lane, the note is in" feel.
+ * lasso "if the box brushes the lane, the note is in" feel. `laneToRow`
+ * converts a note's data lane into the axis `bounds.laneMin`/`laneMax` were
+ * computed on — identity for the highway (display order == data lane
+ * order); the piano roll's row mapping otherwise (`laneToRow` in
+ * `piano-roll/notes.ts`), since it displays kick out of data-lane order.
  */
 export function selectNotesInRange(
   notes: readonly DrumNote[],
   bounds: BoxSelectBounds,
   timedTempos: TimedTempo[],
   resolution: number,
+  laneToRow: (lane: number) => number = lane => lane,
 ): Set<string> {
   const selected = new Set<string>();
   for (const note of notes) {
-    const lane = typeToLane(note.type);
+    const lane = laneToRow(typeToLane(note.type));
     if (lane < bounds.laneMin || lane > bounds.laneMax) continue;
 
     const noteMs = tickToMsLinear(note.tick, timedTempos, resolution);

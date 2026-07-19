@@ -43,6 +43,35 @@ export const LANE_CYMBAL_OK: readonly boolean[] = [
 export const LANE_COUNT = PIANO_ROLL_LANES.length;
 
 /**
+ * Display order (top→bottom) of lanes on the piano-roll panel: pads keep
+ * their red/yellow/blue/green order, kick moves to the bottom row. This is
+ * the *only* place lane display order is decided — data lane indices
+ * (`note.lane`, `typeToLane`/`laneToType`) stay in data-model order (0 kick,
+ * 1 red, 2 yellow, 3 blue, 4 green) everywhere else. Every lane↔row need in
+ * the panel — note rendering, lane backgrounds/labels, hit-testing, drag
+ * lane changes, marquee lane ranges, the ghost preview — goes through
+ * `laneToRow` / `rowToLane`, never its own row/lane arithmetic.
+ */
+const ROW_TO_LANE: readonly number[] = [1, 2, 3, 4, 0];
+const LANE_TO_ROW: readonly number[] = (() => {
+  const inv = new Array<number>(ROW_TO_LANE.length);
+  ROW_TO_LANE.forEach((lane, row) => {
+    inv[lane] = row;
+  });
+  return inv;
+})();
+
+/** Display row (0 = top) that data lane `lane` (`note.lane`) renders at. */
+export function laneToRow(lane: number): number {
+  return LANE_TO_ROW[lane];
+}
+
+/** Data lane (`note.lane`) displayed at row `row` (0 = top). */
+export function rowToLane(row: number): number {
+  return ROW_TO_LANE[row];
+}
+
+/**
  * Project a track's drum notes onto the 5-lane piano roll. Notes whose type
  * falls outside the 5 lanes are dropped (never negative-lane). Sorted by tick.
  */
