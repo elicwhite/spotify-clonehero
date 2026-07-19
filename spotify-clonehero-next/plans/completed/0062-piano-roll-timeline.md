@@ -405,6 +405,29 @@ the full four-op table and §3a's "Glue toggle scope note."
   that class's op choice (RE-PREDICT, with RESNAP as its only fallback) is
   governed entirely by decoded-onset availability, never by this toggle.
 
+> **Post-landing revision (2026-07-18, Eli).** After QA of the landed feature,
+> three UI surfaces spec'd above were removed or reframed (behavior/engine
+> unchanged — these are UI-only revisions):
+> - **Glue toggle removed from the UI (§9).** The panel is now always
+>   audio-glued (KEEP-MS). `tempoGlueMode` still lives on `ChartEditorContext`
+>   (defaults to `'audio'`, still settable via `SET_TEMPO_GLUE_MODE`) and all
+>   glue-aware commands are unchanged — there is simply no visible toggle. The
+>   grid-glued (KEEP-TICKS) path stays reachable in code only.
+> - **Anchor-fraction dropdown removed (§3).** The playhead follow anchor is
+>   code-level config only now (`followAnchor` prop, default 20%); no
+>   user-facing control.
+> - **Downbeat menu reframed as primary (§8 / 0061 §6).** The tempo-lane menu
+>   leads with **"Make this beat 1 (rephase song)"** → the whole-song
+>   `RephaseDownbeatsCommand` (disabled when the beat is already bar-aligned,
+>   since phase 0 is a no-op), because the phase error is global. The local
+>   mark/unmark op is kept as the secondary **"Insert / Remove time signature
+>   change"** item for the rare true mid-song meter change. No new engine logic.
+> - **Waveform source selector added (§11).** The waveform row's audio source
+>   (drum stem / full mix / any AudioManager stem) is now user-selectable via a
+>   right-click radio menu + a corner chip; default is the drum stem when
+>   present, else the mix. Selection is session-only panel view-state (no
+>   project id reaches the panel).
+
 ### 10. Context menus (general)
 
 - Custom positioned menu (shadcn/Radix `ContextMenu` or equivalent), opened

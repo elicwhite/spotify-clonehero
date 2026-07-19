@@ -342,6 +342,19 @@ export class AudioManager {
     return Object.keys(this.#tracks);
   }
 
+  /**
+   * Interleaved PCM for a track's primary decoded buffer, for waveform
+   * display (piano-roll source selector). Returns `null` for an unknown
+   * track or one whose buffer hasn't decoded yet. The data is a copy — the
+   * caller owns it and can't perturb playback.
+   */
+  getTrackPcm(
+    trackName: string,
+  ): {data: Float32Array; channels: number} | null {
+    const track = this.#tracks[trackName];
+    return track ? track.interleavedPcm() : null;
+  }
+
   get delay() {
     return this.#context.baseLatency + (this.#context.outputLatency || 0);
   }
@@ -646,6 +659,24 @@ class AudioTrack {
 
   get ended() {
     return this.#songEnded;
+  }
+
+  /**
+   * Interleaved Float32 PCM for this track's primary buffer (for waveform
+   * peaks). A copy, so the caller can't perturb the live graph. `null` when
+   * no buffer has decoded.
+   */
+  interleavedPcm(): {data: Float32Array; channels: number} | null {
+    const buffer = this.#audioBuffers[0];
+    if (!buffer) return null;
+    const channels = buffer.numberOfChannels;
+    const length = buffer.length;
+    const data = new Float32Array(length * channels);
+    for (let c = 0; c < channels; c++) {
+      const ch = buffer.getChannelData(c);
+      for (let i = 0; i < length; i++) data[i * channels + c] = ch[i];
+    }
+    return {data, channels};
   }
 
   get duration() {

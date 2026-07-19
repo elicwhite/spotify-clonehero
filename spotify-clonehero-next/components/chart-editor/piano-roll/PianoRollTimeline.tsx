@@ -6,7 +6,7 @@
  * A single DPR-aware canvas-2D panel that replaces the old `WaveformDisplay`
  * strip and the right-side `TimelineMinimap`. Bands, top→bottom: time ruler
  * (bar numbers + section flags), tempo lane (tempo markers + TS chips), five
- * note lanes (kick/red/yellow/blue/green), drum-stem waveform row.
+ * note lanes (kick/red/yellow/blue/green), source-selectable waveform row.
  *
  * Timing authority is `AudioManager` (the same clock the highway reads). The
  * x-axis is real time (`x = (ms - leftMs) * pxPerMs`) so the waveform stays
@@ -31,9 +31,10 @@
  * immovable). A drag previews live through `pendingTempoCandidate` — the one
  * preview channel — and commits `MoveTempoMarkerCommand` on release, reading
  * the glue mode (KEEP-MS / KEEP-TICKS) from `ChartEditorContext`. The tempo
- * lane's right-click menu adds/deletes markers and marks/unmarks downbeats via
+ * lane's right-click menu adds/deletes markers and rephases/marks downbeats via
  * the shared command layer (61-3 / 61-6); TS chips derive from the persisted
- * `timeSignatures` (real denominators). A visible glue toggle renders top-right.
+ * `timeSignatures` (real denominators). The glue mode is audio-glued (KEEP-MS)
+ * and code-level only — the visible toggle was removed in QA round-1.
  */
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
@@ -76,6 +77,7 @@ import {
   MoveEntitiesCommand,
   MoveTempoMarkerCommand,
   CommitTempoCandidateCommand,
+  RephaseDownbeatsCommand,
   ToggleFlagCommand,
   UnmarkDownbeatCommand,
   laneToType,
@@ -115,6 +117,11 @@ import {
 } from './panelHeight';
 import {buildAmpPyramid, sampleAmpRange, type AmpPyramid} from './wavePeaks';
 import {resolveEscapeTier} from './escapeRouting';
+import {
+  buildWaveformSources,
+  defaultWaveformSourceId,
+  type WaveformSource,
+} from './waveformSources';
 
 // ---------------------------------------------------------------------------
 // Layout + palette
@@ -201,6 +208,8 @@ interface MenuItem {
   disabled?: boolean;
   /** Renders in the destructive (red) style. */
   danger?: boolean;
+  /** Radio-style checkmark (waveform source picker, §11). */
+  checked?: boolean;
   onSelect: () => void;
 }
 
@@ -282,11 +291,9 @@ export interface PianoRollTimelineProps {
   /** Number of audio channels (1 or 2). */
   audioChannels?: number | undefined;
   /**
-   * Viewport fraction the playhead pins at while following (§3). Default 50%;
-   * 20% is a supported value. Exposed as a component prop (never hardcoded) —
-   * this is also the initial value of the panel's own live anchor-fraction
-   * setting control (top-right), which the user can change without a code
-   * change; the prop only seeds the default per host page.
+   * Viewport fraction the playhead pins at while following (§3). Default 20%.
+   * Code-level configuration only (per QA round-1: the user-facing anchor
+   * dropdown was removed); a host page may still override it via this prop.
    */
   followAnchor?: number | undefined;
   /**
@@ -304,7 +311,7 @@ export default function PianoRollTimeline({
   durationSeconds,
   audioData,
   audioChannels = 2,
-  followAnchor = 0.5,
+  followAnchor = 0.2,
   decodedOnsets,
   className,
 }: PianoRollTimelineProps) {
@@ -322,15 +329,52 @@ export default function PianoRollTimeline({
   // fitted BPM + phase align to the recording, not to wall-clock.
   const [tapTimes, setTapTimes] = useState<number[]>([]);
 
+  // -- Waveform source (§11, QA round-1 change 4): which of the project's audio
+  // sources the waveform row draws. The list comes from `AudioManager` (the
+  // runtime owner of the stems); selection is panel view-state (session-only —
+  // no project id reaches the panel, so nothing is persisted to localStorage).
+  const [waveSources, setWaveSources] = useState<WaveformSource[]>([]);
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve(audioManager.ready).then(() => {
+      if (cancelled) return;
+      const list = buildWaveformSources(audioManager.trackNames ?? []);
+      setWaveSources(list);
+      setSelectedSourceId(prev =>
+        prev && list.some(s => s.id === prev)
+          ? prev
+          : defaultWaveformSourceId(list),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [audioManager]);
+  const defaultSourceId = useMemo(
+    () => defaultWaveformSourceId(waveSources),
+    [waveSources],
+  );
+  // PCM + channel count for the selected source. The host already passes the
+  // DEFAULT source's decoded PCM as `audioData` (the drum stem, or the mix when
+  // no stem exists), so reuse it there and avoid a redundant copy; any other
+  // source is extracted from AudioManager on demand.
+  const wavePcm = useMemo<{data: Float32Array | undefined; channels: number}>(
+    () => {
+      if (selectedSourceId && selectedSourceId !== defaultSourceId) {
+        const pcm = audioManager.getTrackPcm?.(selectedSourceId);
+        if (pcm) return pcm;
+      }
+      return {data: audioData, channels: audioChannels};
+    },
+    [selectedSourceId, defaultSourceId, audioData, audioChannels, audioManager],
+  );
+
   // -- Panel height (§1): resizable via a top-edge drag handle, persisted to
   // localStorage under one key shared across every host page. Lazily read
   // once on mount (not during SSR — `loadPanelHeight` falls back to the
   // default when there's no `window`).
   const [panelHeight, setPanelHeight] = useState(() => loadPanelHeight());
-
-  // -- Follow anchor-fraction (§3): a live setting surface over the
-  // `followAnchor` prop, which only seeds its initial value.
-  const [anchorFraction, setAnchorFraction] = useState(followAnchor);
 
   const viewRef = useRef<
     PianoRollView & {follow: boolean; initialized: boolean}
@@ -339,7 +383,7 @@ export default function PianoRollTimeline({
   const ampRef = useRef<AmpPyramid>({levels: [], durationMs: 0});
   const selectionRef = useRef<ReadonlySet<string>>(new Set());
   const hoverIdRef = useRef<string | null>(null);
-  const followAnchorRef = useRef(anchorFraction);
+  const followAnchorRef = useRef(followAnchor);
   const scrubbingRef = useRef(false);
   const prevPlayingRef = useRef(false);
   const lastPlayheadRef = useRef(-1);
@@ -500,12 +544,13 @@ export default function PianoRollTimeline({
   // "peaks per zoom bucket" §11, not a single fixed-resolution envelope) -----
   useEffect(() => {
     ampRef.current = buildAmpPyramid(
-      audioData,
-      audioChannels,
+      wavePcm.data,
+      wavePcm.channels,
       durationSeconds * 1000,
     );
     dirtyRef.current = true;
-  }, [audioData, audioChannels, durationSeconds]);
+    drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+  }, [wavePcm, durationSeconds, audioManager]);
 
   // -- Selection push (shared with the highway) ------------------------------
   useEffect(() => {
@@ -520,13 +565,25 @@ export default function PianoRollTimeline({
     dirtyRef.current = true;
   }, [state.hovered]);
 
-  // The prop only seeds the setting's initial value (§3); once the user has
-  // a live anchorFraction, that's what drives follow — updating the ref here
-  // (not re-deriving from the prop) is what makes the setting control (below)
-  // actually take effect frame-to-frame.
+  // Redraw immediately when the shared cursor moves from OUTSIDE this panel —
+  // e.g. wheel-scrubbing the highway, which seeks `AudioManager` in continuous
+  // ms and dispatches `SET_CURSOR_TICK` per wheel event. While paused the panel
+  // is in its low-rate idle poll (IDLE_POLL_MS), so without this the playhead
+  // would only catch up ~8x/sec and read as stepped even though the seek target
+  // is continuous. The panel's own scrub seeks without dispatching the cursor,
+  // so it never double-handles here. We draw at the live `chartTime` (which
+  // `seekToChartTime` updates synchronously), never at the grid-rounded cursor.
   useEffect(() => {
-    followAnchorRef.current = anchorFraction;
-  }, [anchorFraction]);
+    if (audioManager.isPlaying) return;
+    lastPlayheadRef.current = -1;
+    dirtyRef.current = true;
+    drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+  }, [state.cursorTick, audioManager]);
+
+  // Keep the follow-anchor ref in sync with the (code-level) prop.
+  useEffect(() => {
+    followAnchorRef.current = followAnchor;
+  }, [followAnchor]);
 
   // -- Draw ------------------------------------------------------------------
   const draw = useCallback((playheadMs: number) => {
@@ -924,7 +981,12 @@ export default function PianoRollTimeline({
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       // Right-click never scrubs / drags / marquees — it only opens the
       // context menu (handled in onContextMenu). Left button only here (§3/§10).
-      if (e.button !== 0) return;
+      // macOS delivers a Control-click (the common laptop secondary-click) as
+      // `button === 0` with `ctrlKey` set; treat it as a right-click too. If we
+      // let it start a left gesture, the gesture's `setPointerCapture` suppresses
+      // the following `contextmenu` event in Blink/WebKit and the menu never
+      // opens (QA round-1 bug).
+      if (e.button !== 0 || e.ctrlKey) return;
       const canvas = canvasRef.current;
       const scene = sceneRef.current;
       if (!canvas || !scene) return;
@@ -1400,22 +1462,37 @@ export default function PianoRollTimeline({
           },
         ];
       }
-      // Empty lane: add a marker on the current tempo line, or toggle the
-      // downbeat, at the nearest beat.
+      // Empty lane, at the nearest beat.
       const beatTick = nearestBeatTick(scene.beats, view, x);
       if (beatTick === null) return [];
       const hasMarker = scene.tempos.some(t => t.tick === beatTick);
       const isDownbeat = editStateRef.current.downbeatFlags.downbeats.some(
         d => d.tick === beatTick,
       );
+      // PRIMARY (QA round-1 / 0061 §6): the expected fix for a mis-phased
+      // grid is a whole-song rephase — the phase error is global, not local.
+      // Anchoring at an already bar-aligned beat is phase 0 (a no-op), so the
+      // item is disabled there. Reuses the existing RephaseDownbeatsCommand.
+      // SECONDARY: the local mark/unmark op, framed explicitly as a meter
+      // (time-signature) change for the rare true mid-song case.
       return [
+        {
+          label: 'Make this beat 1 (rephase song)',
+          disabled: isDownbeat,
+          onSelect: () =>
+            executeCommand(
+              new RephaseDownbeatsCommand(beatTick, scene.endTick),
+            ),
+        },
         {
           label: 'Add tempo marker here',
           disabled: hasMarker,
           onSelect: () => executeCommand(new AddTempoMarkerCommand(beatTick)),
         },
         {
-          label: isDownbeat ? 'Remove downbeat' : 'Mark as downbeat',
+          label: isDownbeat
+            ? 'Remove time signature change'
+            : 'Insert time signature change here',
           // Beat 0 is always a downbeat and never removable (§8).
           disabled: beatTick === 0,
           onSelect: () =>
@@ -1488,6 +1565,19 @@ export default function PianoRollTimeline({
     [dispatch, executeCommand],
   );
 
+  // Waveform-source picker menu (§11): radio-style list of the project's audio
+  // sources, current one checked. Shared by the waveform-row right-click and
+  // the corner chip.
+  const buildSourceMenu = useCallback(
+    (): MenuItem[] =>
+      waveSources.map(s => ({
+        label: s.label,
+        checked: s.id === selectedSourceId,
+        onSelect: () => setSelectedSourceId(s.id),
+      })),
+    [waveSources, selectedSourceId],
+  );
+
   const handleContextMenu = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       e.preventDefault();
@@ -1504,8 +1594,18 @@ export default function PianoRollTimeline({
         return;
       }
 
-      // Ruler / waveform rows carry no menu.
-      if (y <= RULER_H || y >= g.laneBottom) {
+      // Waveform row (§11): choose which audio source is displayed.
+      if (y >= g.laneBottom) {
+        const items = buildSourceMenu();
+        // Open above the pointer so the list doesn't spill past the panel's
+        // bottom edge.
+        const top = Math.max(4, y - items.length * 30 - 6);
+        setMenu(items.length ? {x, y: top, items} : null);
+        return;
+      }
+
+      // Ruler carries no menu.
+      if (y <= RULER_H) {
         setMenu(null);
         return;
       }
@@ -1520,7 +1620,14 @@ export default function PianoRollTimeline({
       }
       setMenu({x, y, items: buildNoteMenu(scene, hit)});
     },
-    [buildNoteMenu, buildTempoMenu, capabilities, panelGeometry, pickAt],
+    [
+      buildNoteMenu,
+      buildSourceMenu,
+      buildTempoMenu,
+      capabilities,
+      panelGeometry,
+      pickAt,
+    ],
   );
 
   // Drop whichever pointer gesture is in flight WITHOUT committing a command
@@ -1754,31 +1861,11 @@ export default function PianoRollTimeline({
           onPointerCancel={endPointer}
           onContextMenu={handleContextMenu}
         />
-        {/* Glue toggle (§9): which op a class-(a) tempo command runs. Context
-            state, resets to audio-glued per load — the panel only renders it. */}
-        <button
-          type="button"
-          className="absolute right-2 top-1 z-40 rounded border border-border bg-popover/90 px-2 py-0.5 text-[11px] text-popover-foreground shadow-sm hover:bg-accent hover:text-accent-foreground"
-          onClick={() =>
-            dispatch({
-              type: 'SET_TEMPO_GLUE_MODE',
-              mode: state.tempoGlueMode === 'audio' ? 'grid' : 'audio',
-            })
-          }>
-          Notes: glued to {state.tempoGlueMode === 'audio' ? 'audio' : 'grid'}
-        </button>
-        {/* Follow anchor-fraction setting surface (§3): a live control over
-            the followAnchor prop's initial value. */}
-        <select
-          aria-label="Playhead follow anchor"
-          title="Where the playhead pins in the viewport while following"
-          className="absolute right-2 top-7 z-40 rounded border border-border bg-popover/90 px-1 py-0.5 text-[11px] text-popover-foreground shadow-sm"
-          value={anchorFraction}
-          onChange={e => setAnchorFraction(Number.parseFloat(e.target.value))}>
-          <option value={0.2}>Anchor 20%</option>
-          <option value={0.5}>Anchor 50%</option>
-          <option value={0.8}>Anchor 80%</option>
-        </select>
+        {/* Note anchoring under tempo edits ("glue", §9) is audio-glued
+            (KEEP-MS) and no longer user-toggleable (QA round-1). `tempoGlueMode`
+            still lives on `ChartEditorContext` (defaults to 'audio') and stays
+            settable in code via SET_TEMPO_GLUE_MODE — there is just no UI. The
+            playhead follow-anchor (§3) is likewise code-level only now. */}
         {/* Half/double + tap-tempo structural correction (§7). Sits in the tempo
           lane's control slot; a preview swaps it for an accept/reject bar. */}
         <div className="absolute left-2 top-1 z-40 flex items-center gap-1 text-[11px]">
@@ -1849,6 +1936,32 @@ export default function PianoRollTimeline({
             </>
           )}
         </div>
+        {/* Waveform-source chip (§11): shows the current source in the
+            waveform row's corner; click to open the same picker as the
+            waveform-row right-click. */}
+        {selectedSourceId && waveSources.length > 1 && (
+          <button
+            type="button"
+            aria-label="Waveform source"
+            title="Choose which audio the waveform shows"
+            className="absolute bottom-1 right-2 z-40 rounded border border-border bg-popover/80 px-1.5 py-0.5 text-[10px] text-popover-foreground/90 shadow-sm hover:bg-accent hover:text-accent-foreground"
+            onClick={e => {
+              const container = containerRef.current;
+              if (!container) return;
+              const rect = container.getBoundingClientRect();
+              const items = buildSourceMenu();
+              const px = e.clientX - rect.left;
+              const py = e.clientY - rect.top;
+              setMenu({
+                x: Math.max(4, px - 150),
+                y: Math.max(4, py - items.length * 30 - 6),
+                items,
+              });
+            }}>
+            {waveSources.find(s => s.id === selectedSourceId)?.label ??
+              selectedSourceId}
+          </button>
+        )}
         {menu && (
           <div
             className="absolute z-50 min-w-[160px] rounded-md border border-border bg-popover py-1 text-sm text-popover-foreground shadow-md"
@@ -1868,6 +1981,11 @@ export default function PianoRollTimeline({
                   item.onSelect();
                   setMenu(null);
                 }}>
+                {item.checked !== undefined && (
+                  <span className="mr-1.5 inline-block w-2 text-accent-foreground">
+                    {item.checked ? '✓' : ''}
+                  </span>
+                )}
                 {item.label}
               </button>
             ))}
