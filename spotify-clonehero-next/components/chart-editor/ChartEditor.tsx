@@ -42,13 +42,22 @@ export interface ChartEditorProps {
   highwayAudioData?: Float32Array | undefined;
   /** Number of audio channels (1 or 2). */
   audioChannels?: number | undefined;
+  /**
+   * PCM for the piano-roll lyrics row's background vocals waveform (plan
+   * 0063 Round 2 §5, Float32 interleaved). Absent when the project has no
+   * cached vocals stem — the row still works, just without the waveform.
+   */
+  lyricsWaveData?: Float32Array | undefined;
+  /** Channel count for `lyricsWaveData`. */
+  lyricsWaveChannels?: number | undefined;
   /** Total song duration in seconds. */
   durationSeconds: number;
   /**
    * The project's retained decoded onsets (plan 0061 §3a), passed through to
-   * the piano-roll timeline's half/double + tap-tempo control (0061 §7). Omit
-   * (or pass null) on a never-transcribed project — the control then falls back
-   * to RESNAP with a disclosure. Loaded from OPFS by the host page.
+   * the piano-roll timeline's half/double structural-correction control
+   * (0061 §7). Omit (or pass null) on a never-transcribed project — the
+   * control then falls back to RESNAP with a disclosure. Loaded from OPFS by
+   * the host page.
    */
   decodedOnsets?: DecodedOnsetsFile | null | undefined;
   /** Chart sections for section jumping in transport. */
@@ -136,6 +145,8 @@ export default function ChartEditor({
   audioData,
   highwayAudioData,
   audioChannels = 2,
+  lyricsWaveData,
+  lyricsWaveChannels,
   durationSeconds,
   decodedOnsets,
   sections,
@@ -332,6 +343,8 @@ export default function ChartEditor({
           durationSeconds={durationSeconds}
           audioData={highwayAudioData ?? audioData}
           audioChannels={audioChannels}
+          lyricsWaveData={lyricsWaveData}
+          lyricsWaveChannels={lyricsWaveChannels}
           decodedOnsets={decodedOnsets}
           className="border-t"
         />

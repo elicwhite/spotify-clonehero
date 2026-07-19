@@ -20,6 +20,8 @@ import type {
   DrumNoteFlags,
   EntityContext,
   EntityKind,
+  NormalizedVocalPhrase,
+  NormalizedVocalTrack,
   TrackKey,
 } from '@/lib/chart-edit';
 import {
@@ -52,7 +54,16 @@ import {
   rephaseDownbeats,
   snapTickToNearestBeat,
   chartEndTick,
+  DEFAULT_VOCALS_PART,
+  addLyric,
+  deleteLyric,
+  restoreLyric,
+  setLyricText,
+  addPhrase,
+  deletePhrase,
+  insertPhrase,
   type DownbeatFlags,
+  type RemovedLyric,
 } from '@/lib/chart-edit';
 
 /**
@@ -74,6 +85,8 @@ function downbeatSpanEndTick(
 import type {Synctrack} from '@/lib/tempo-map/types';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
 import {repredictTempo} from '@/lib/drum-transcription/pipeline/repredict';
+import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
+import {applyAlignedLyricsToDoc} from '@/lib/lyrics-align/apply-lyrics';
 
 // ---------------------------------------------------------------------------
 // Clone helpers — chart-edit mutates in place, so we clone before calling
@@ -723,8 +736,8 @@ export class DeleteTempoMarkerCommand implements EditCommand {
 // ---------------------------------------------------------------------------
 
 /**
- * Commit a class-(b) structural tempo correction (half/double flip, tap-tempo
- * fit) via RE-PREDICT (plan 0061 §3/§7). Given the caller's structurally-
+ * Commit a class-(b) structural tempo correction (half/double flip) via
+ * RE-PREDICT (plan 0061 §3/§7). Given the caller's structurally-
  * corrected `Synctrack` and the project's retained decoded onsets, re-runs the
  * KS-warp re-fit + fresh onset snap ({@link repredictTempo}) — or bounded
  * RESNAP when `onsets` is null (never-transcribed project).
@@ -768,11 +781,12 @@ export class RepredictTempoCommand implements EditCommand {
 
 /**
  * Commit an already-computed tempo candidate exactly (plan 0061 §7's
- * "accept-or-reject IS the guard" interactive path). The half/double + tap-tempo
- * control runs the RE-PREDICT op ONCE up front and previews the resulting
- * `ChartDocument` via `pendingTempoCandidate`; accepting must commit *that same
- * document* — not re-run the op and risk any drift between what the user
- * evaluated and what lands. So `execute` returns the captured candidate
+ * "accept-or-reject IS the guard" interactive path). The half/double
+ * structural-correction control runs the RE-PREDICT op ONCE up front and
+ * previews the resulting `ChartDocument` via `pendingTempoCandidate`;
+ * accepting must commit *that same document* — not re-run the op and risk
+ * any drift between what the user evaluated and what lands. So `execute`
+ * returns the captured candidate
  * verbatim (the warped tempo map and re-snapped notes included), ignoring the
  * live doc, which the pending-candidate invalidation rule guarantees is the doc
  * the candidate was derived from.
@@ -1174,4 +1188,202 @@ export function shiftLane(type: DrumNoteType, delta: number): DrumNoteType {
  *  come from the schema's `cymbal.appliesTo` binding. */
 export function defaultFlagsForType(type: DrumNoteType): DrumNoteFlags {
   return CYMBAL_DEFAULT_TYPES.has(type) ? {cymbal: true} : {};
+}
+
+// ---------------------------------------------------------------------------
+// ReplaceLyricsCommand — Add Lyrics dialog (plan 0063 Part C)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether any part of a chart's vocal tracks already carries lyrics — either
+ * on `notePhrases` (the karaoke/note-driven lyrics) or `staticLyricPhrases`
+ * (the display-only copy some formats carry separately). Used to gate the
+ * Add Lyrics dialog's overwrite confirmation before it replaces the primary
+ * `vocals` part.
+ */
+export function hasExistingLyrics(
+  vocalTracks: NormalizedVocalTrack | undefined,
+): boolean {
+  return Object.values(vocalTracks?.parts ?? {}).some(
+    part =>
+      part.notePhrases.some(p => p.lyrics.length > 0) ||
+      part.staticLyricPhrases.some(p => p.lyrics.length > 0),
+  );
+}
+
+/**
+ * Replace the chart's `vocals` part with freshly-aligned lyrics (Add Lyrics
+ * dialog, plan 0063 Part C). Execute applies {@link applyAlignedLyricsToDoc};
+ * undo restores the `vocalTracks` exactly as they were before this command
+ * ran (a snapshot, since the aligned syllables don't invert in closed form).
+ */
+export class ReplaceLyricsCommand implements EditCommand {
+  readonly description = 'Add lyrics';
+  private prevVocalTracks!: NormalizedVocalTrack;
+
+  constructor(private syllables: AlignedSyllable[]) {}
+
+  execute(doc: ChartDocument): ChartDocument {
+    this.prevVocalTracks = doc.parsedChart.vocalTracks;
+    return applyAlignedLyricsToDoc(doc, this.syllables);
+  }
+
+  undo(doc: ChartDocument): ChartDocument {
+    return {
+      ...doc,
+      parsedChart: {
+        ...doc.parsedChart,
+        vocalTracks: this.prevVocalTracks,
+      },
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Lyrics-row editing commands (plan 0063 Round 2 §2) — right-click add/edit/
+// delete on the piano-roll's lyrics row. All clone via `cloneDocFor('lyric',
+// ...)` (shared with `MoveEntitiesCommand`'s lyric/phrase-start/phrase-end
+// kinds): every kind here mutates `vocalTracks`, so they clone identically.
+// ---------------------------------------------------------------------------
+
+/** Add a syllable at `tick`, paired with a placeholder pitch-60 note (see
+ *  `lib/chart-edit/helpers/lyrics.ts` `addLyric`). No-op (returns `doc`
+ *  unchanged) when `tick` isn't inside an existing phrase, or a lyric
+ *  already exists there. */
+export class AddLyricCommand implements EditCommand {
+  readonly description = 'Add lyric';
+  private createdId: string | null = null;
+
+  constructor(
+    private tick: number,
+    private text: string,
+    private partName: string = DEFAULT_VOCALS_PART,
+  ) {}
+
+  execute(doc: ChartDocument): ChartDocument {
+    const newDoc = cloneDocFor('lyric', doc);
+    this.createdId = addLyric(newDoc, this.tick, this.text, this.partName);
+    return this.createdId ? newDoc : doc;
+  }
+
+  undo(doc: ChartDocument): ChartDocument {
+    if (!this.createdId) return doc;
+    const newDoc = cloneDocFor('lyric', doc);
+    deleteLyric(newDoc, this.tick, this.partName);
+    return newDoc;
+  }
+}
+
+/** Delete the lyric at `tick` (and its paired note); deletes the phrase too
+ *  if that empties it (see `deleteLyric`). No-op if no lyric exists there. */
+export class DeleteLyricCommand implements EditCommand {
+  readonly description = 'Delete lyric';
+  private removed: RemovedLyric | null = null;
+
+  constructor(
+    private tick: number,
+    private partName: string = DEFAULT_VOCALS_PART,
+  ) {}
+
+  execute(doc: ChartDocument): ChartDocument {
+    const newDoc = cloneDocFor('lyric', doc);
+    this.removed = deleteLyric(newDoc, this.tick, this.partName);
+    return this.removed ? newDoc : doc;
+  }
+
+  undo(doc: ChartDocument): ChartDocument {
+    if (!this.removed) return doc;
+    const newDoc = cloneDocFor('lyric', doc);
+    restoreLyric(newDoc, this.removed, this.tick, this.partName);
+    return newDoc;
+  }
+}
+
+/** Replace the syllable text of the lyric at `tick` (the context menu's
+ *  "Edit lyric…" inline editor). No-op if no lyric exists there. */
+export class SetLyricTextCommand implements EditCommand {
+  readonly description = 'Edit lyric text';
+  private prevText: string | null = null;
+
+  constructor(
+    private tick: number,
+    private text: string,
+    private partName: string = DEFAULT_VOCALS_PART,
+  ) {}
+
+  private currentText(doc: ChartDocument): string | null {
+    const part = doc.parsedChart.vocalTracks?.parts?.[this.partName];
+    for (const phrase of part?.notePhrases ?? []) {
+      const lyric = phrase.lyrics.find(l => l.tick === this.tick);
+      if (lyric) return lyric.text;
+    }
+    return null;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    this.prevText = this.currentText(doc);
+    if (this.prevText === null) return doc;
+    const newDoc = cloneDocFor('lyric', doc);
+    setLyricText(newDoc, this.tick, this.text, this.partName);
+    return newDoc;
+  }
+
+  undo(doc: ChartDocument): ChartDocument {
+    if (this.prevText === null) return doc;
+    const newDoc = cloneDocFor('lyric', doc);
+    setLyricText(newDoc, this.tick, this.prevText, this.partName);
+    return newDoc;
+  }
+}
+
+/** Create an empty phrase near `tick` (the lyrics row's "Add phrase here"
+ *  on empty row space), clamped against neighboring phrases (see
+ *  `addPhrase`). No-op if there's no room. */
+export class AddPhraseCommand implements EditCommand {
+  readonly description = 'Add phrase';
+  private createdTick: number | null = null;
+
+  constructor(
+    private tick: number,
+    private partName: string = DEFAULT_VOCALS_PART,
+  ) {}
+
+  execute(doc: ChartDocument): ChartDocument {
+    const newDoc = cloneDocFor('lyric', doc);
+    this.createdTick = addPhrase(newDoc, this.tick, this.partName);
+    return this.createdTick !== null ? newDoc : doc;
+  }
+
+  undo(doc: ChartDocument): ChartDocument {
+    if (this.createdTick === null) return doc;
+    const newDoc = cloneDocFor('lyric', doc);
+    deletePhrase(newDoc, this.createdTick, this.partName);
+    return newDoc;
+  }
+}
+
+/** Delete the phrase starting at `tick`, along with its lyrics/notes (the
+ *  phrase-band context menu's "Delete phrase"). No-op if no phrase starts
+ *  there. */
+export class DeletePhraseCommand implements EditCommand {
+  readonly description = 'Delete phrase';
+  private removed: NormalizedVocalPhrase | null = null;
+
+  constructor(
+    private tick: number,
+    private partName: string = DEFAULT_VOCALS_PART,
+  ) {}
+
+  execute(doc: ChartDocument): ChartDocument {
+    const newDoc = cloneDocFor('lyric', doc);
+    this.removed = deletePhrase(newDoc, this.tick, this.partName);
+    return this.removed ? newDoc : doc;
+  }
+
+  undo(doc: ChartDocument): ChartDocument {
+    if (!this.removed) return doc;
+    const newDoc = cloneDocFor('lyric', doc);
+    insertPhrase(newDoc, this.removed, this.partName);
+    return newDoc;
+  }
 }

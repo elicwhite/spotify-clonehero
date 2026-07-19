@@ -34,15 +34,11 @@ export interface SeparationProgress {
   etaSec: number;
 }
 
-/** Spawn N STFT workers and return a queryable handle. */
-function spawnWorkerPool(n: number) {
-  const workers = Array.from(
-    {length: n},
-    () =>
-      new Worker(new URL('./stft-worker.ts', import.meta.url), {
-        type: 'module',
-      }),
-  );
+/** Spawn N STFT workers and return a queryable handle. `createWorker` is an
+ * injectable factory (defaults to the real `stft-worker.ts`) so tests can
+ * substitute a fake Worker without a real Worker/module-URL environment. */
+function spawnWorkerPool(n: number, createWorker: () => Worker) {
+  const workers = Array.from({length: n}, () => createWorker());
   const pending = new Map<number, (data: any) => void>();
   let nextId = 1;
   for (const w of workers) {
@@ -86,6 +82,13 @@ function makeFades(overlap: number) {
   return {fadeIn, fadeOut};
 }
 
+/** Spawns the real `stft-worker.ts` module worker. */
+function defaultCreateWorker(): Worker {
+  return new Worker(new URL('./stft-worker.ts', import.meta.url), {
+    type: 'module',
+  });
+}
+
 export interface SeparateDrumStemOptions {
   ort: typeof ortTypes;
   left: Float32Array;
@@ -102,6 +105,15 @@ export interface SeparateDrumStemOptions {
    *   drum-transcription pipeline, whose CRNN consumes stereo mels).
    */
   output?: 'mono' | 'stereo';
+  /**
+   * Also separate + return the vocals stem (`output: 'stereo'` only). The
+   * tempo-map pipeline's mono-drums-only callers leave this off — the model
+   * still emits all six stems either way, but the extra vocals iSTFT is only
+   * paid for when requested.
+   */
+  includeVocals?: boolean;
+  /** Injectable Worker factory; defaults to the real stft-worker. Test seam. */
+  createWorker?: () => Worker;
 }
 
 export interface StereoDrumStem {
@@ -109,17 +121,25 @@ export interface StereoDrumStem {
   right: Float32Array;
 }
 
+export interface StereoStemsWithVocals extends StereoDrumStem {
+  vocals: StereoDrumStem;
+}
+
 /**
  * Separate the drum stem from stereo 44.1 kHz audio. Returns mean(L,R) mono
- * PCM at 44.1 kHz by default, or planar L/R when `output: 'stereo'`. The
- * other five stems are discarded to free memory.
+ * PCM at 44.1 kHz by default, or planar L/R when `output: 'stereo'` (plus a
+ * planar vocals stem when `includeVocals: true`). Stems other than the ones
+ * requested are discarded to free memory.
  */
 export async function separateDrumStem(
   opts: SeparateDrumStemOptions & {output?: 'mono'},
 ): Promise<Float32Array>;
 export async function separateDrumStem(
-  opts: SeparateDrumStemOptions & {output: 'stereo'},
+  opts: SeparateDrumStemOptions & {output: 'stereo'; includeVocals?: false},
 ): Promise<StereoDrumStem>;
+export async function separateDrumStem(
+  opts: SeparateDrumStemOptions & {output: 'stereo'; includeVocals: true},
+): Promise<StereoStemsWithVocals>;
 export async function separateDrumStem({
   ort,
   left,
@@ -129,19 +149,28 @@ export async function separateDrumStem({
   overlapFrac = 0.25,
   numWorkers = 2,
   output = 'mono',
-}: SeparateDrumStemOptions): Promise<Float32Array | StereoDrumStem> {
+  includeVocals = false,
+  createWorker = defaultCreateWorker,
+}: SeparateDrumStemOptions): Promise<
+  Float32Array | StereoDrumStem | StereoStemsWithVocals
+> {
   const N = left.length;
   const OVERLAP = Math.floor(CHUNK_SAMPLES * overlapFrac);
   const STEP = CHUNK_SAMPLES - OVERLAP;
   const numSegments = Math.max(1, Math.ceil((N - OVERLAP) / STEP));
 
-  // Only the drums accumulator is kept full-length; the other stems are mixed
-  // into a scratch buffer we never read, but the model emits all six so we
-  // simply skip writing them.
+  // Only the requested accumulators are kept full-length; the other stems
+  // are mixed into a scratch buffer we never read, but the model emits all
+  // six so we simply skip writing them.
   const drums = new Float32Array(2 * N);
+  const vocals = includeVocals ? new Float32Array(2 * N) : null;
   const {fadeIn, fadeOut} = makeFades(OVERLAP);
-  const pool = spawnWorkerPool(numWorkers);
+  const pool = spawnWorkerPool(numWorkers, createWorker);
   const DRUM_STEM_INDEX = STEM_NAMES.indexOf('drums');
+  const VOCALS_STEM_INDEX = STEM_NAMES.indexOf('vocals');
+  const stemIndices = includeVocals
+    ? [DRUM_STEM_INDEX, VOCALS_STEM_INDEX]
+    : [DRUM_STEM_INDEX];
 
   try {
     let stftWorkerIdx = 0;
@@ -159,7 +188,9 @@ export async function separateDrumStem({
         [planarTA.buffer],
       );
     };
-    // iSTFT only the drum stem — we drop the rest, so don't pay to invert them.
+    // iSTFT only the requested stems (drums, optionally + vocals) — we drop
+    // the rest, so don't pay to invert them. Batched into one istft-batch
+    // call per segment (numStems = stemIndices.length).
     const postIstftDrums = (
       realArr: Float32Array,
       imagArr: Float32Array,
@@ -170,26 +201,26 @@ export async function separateDrumStem({
       segLen: number,
     ) => {
       const perStemSize = NUM_CHANNELS * F * T;
-      const realSub = realArr
-        .subarray(
-          DRUM_STEM_INDEX * perStemSize,
-          (DRUM_STEM_INDEX + 1) * perStemSize,
-        )
-        .slice();
-      const imagSub = imagArr
-        .subarray(
-          DRUM_STEM_INDEX * perStemSize,
-          (DRUM_STEM_INDEX + 1) * perStemSize,
-        )
-        .slice();
+      const realBatch = new Float32Array(stemIndices.length * perStemSize);
+      const imagBatch = new Float32Array(stemIndices.length * perStemSize);
+      stemIndices.forEach((stemIdx, i) => {
+        realBatch.set(
+          realArr.subarray(stemIdx * perStemSize, (stemIdx + 1) * perStemSize),
+          i * perStemSize,
+        );
+        imagBatch.set(
+          imagArr.subarray(stemIdx * perStemSize, (stemIdx + 1) * perStemSize),
+          i * perStemSize,
+        );
+      });
       return pool
         .send(
           segIdx % pool.n,
           'istft-batch',
           {
-            realBuf: realSub.buffer,
-            imagBuf: imagSub.buffer,
-            numStems: 1,
+            realBuf: realBatch.buffer,
+            imagBuf: imagBatch.buffer,
+            numStems: stemIndices.length,
             numChannels: NUM_CHANNELS,
             F,
             T,
@@ -198,7 +229,7 @@ export async function separateDrumStem({
             hopLength: HOP_LENGTH,
             winLength: WIN_LENGTH,
           },
-          [realSub.buffer, imagSub.buffer],
+          [realBatch.buffer, imagBatch.buffer],
         )
         .then(reply => ({...reply, segIdx, segStart, segLen}));
     };
@@ -214,10 +245,18 @@ export async function separateDrumStem({
       return {buf, start, len};
     }
 
-    function mixSegment({audioBuf, segIdx, segStart, segLen}: any) {
-      const arr = new Float32Array(audioBuf);
-      const offL = 0;
-      const offR = CHUNK_SAMPLES;
+    // Mixes one stem's planar [L, R] chunk (offset `stemOffset` samples into
+    // `arr`) into `accum` with overlap-add crossfade weights.
+    function mixInto(
+      accum: Float32Array,
+      arr: Float32Array,
+      stemOffset: number,
+      segIdx: number,
+      segStart: number,
+      segLen: number,
+    ) {
+      const offL = stemOffset;
+      const offR = stemOffset + CHUNK_SAMPLES;
       for (let i = 0; i < segLen; i++) {
         const g = segStart + i;
         if (g >= N) break;
@@ -226,8 +265,26 @@ export async function separateDrumStem({
         if (segIdx < numSegments - 1 && i >= CHUNK_SAMPLES - OVERLAP) {
           w = fadeOut[i - (CHUNK_SAMPLES - OVERLAP)];
         }
-        drums[g] += arr[offL + i] * w;
-        drums[N + g] += arr[offR + i] * w;
+        accum[g] += arr[offL + i] * w;
+        accum[N + g] += arr[offR + i] * w;
+      }
+    }
+
+    // audioBuf layout is Float32 [numStems, numChannels, length] planar
+    // (stft-worker.ts), in the same order as stemIndices (drums, [vocals]).
+    function mixSegment({audioBuf, segIdx, segStart, segLen}: any) {
+      const arr = new Float32Array(audioBuf);
+      const perStemLen = NUM_CHANNELS * CHUNK_SAMPLES;
+      mixInto(drums, arr.subarray(0, perStemLen), 0, segIdx, segStart, segLen);
+      if (vocals) {
+        mixInto(
+          vocals,
+          arr.subarray(perStemLen, 2 * perStemLen),
+          0,
+          segIdx,
+          segStart,
+          segLen,
+        );
       }
     }
 
@@ -306,9 +363,19 @@ export async function separateDrumStem({
     pool.terminate();
   }
 
-  // drums is planar [L0..LN, R0..RN].
+  // drums/vocals are planar [L0..LN, R0..RN].
   if (output === 'stereo') {
-    return {left: drums.slice(0, N), right: drums.slice(N, 2 * N)};
+    const drumsOut: StereoDrumStem = {
+      left: drums.slice(0, N),
+      right: drums.slice(N, 2 * N),
+    };
+    if (vocals) {
+      return {
+        ...drumsOut,
+        vocals: {left: vocals.slice(0, N), right: vocals.slice(N, 2 * N)},
+      };
+    }
+    return drumsOut;
   }
 
   // mean(L,R) to mono.

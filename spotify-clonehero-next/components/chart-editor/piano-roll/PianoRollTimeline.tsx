@@ -5,8 +5,13 @@
  *
  * A single DPR-aware canvas-2D panel that replaces the old `WaveformDisplay`
  * strip and the right-side `TimelineMinimap`. Bands, top→bottom: time ruler
- * (bar numbers + section flags), tempo lane (tempo markers + TS chips), five
- * note lanes (kick/red/yellow/blue/green), source-selectable waveform row.
+ * (bar numbers + section flags), lyrics row (syllable chips + phrase bands,
+ * present only on charts with vocals), tempo lane (tempo markers + TS chips),
+ * five note lanes (kick/red/yellow/blue/green), source-selectable waveform
+ * row. The lyrics row sits directly under the ruler (plan 0063 Round 2 §4) —
+ * lyrics are ms-locked and never move under a tempo edit, so they read
+ * naturally as a "caption track" above the tempo/note grid rather than mixed
+ * into it.
  *
  * Timing authority is `AudioManager` (the same clock the highway reads). The
  * x-axis is real time (`x = (ms - leftMs) * pxPerMs`) so the waveform stays
@@ -31,10 +36,30 @@
  * immovable). A drag previews live through `pendingTempoCandidate` — the one
  * preview channel — and commits `MoveTempoMarkerCommand` on release, reading
  * the glue mode (KEEP-MS / KEEP-TICKS) from `ChartEditorContext`. The tempo
- * lane's right-click menu adds/deletes markers and rephases/marks downbeats via
- * the shared command layer (61-3 / 61-6); TS chips derive from the persisted
- * `timeSignatures` (real denominators). The glue mode is audio-glued (KEEP-MS)
- * and code-level only — the visible toggle was removed in QA round-1.
+ * lane's right-click menu adds/deletes markers, rephases/marks downbeats, and
+ * runs the half/double structural correction (×2 / ÷2, re-predict) via the
+ * shared command layer (61-3 / 61-6 / 61-7); TS chips derive from the
+ * persisted `timeSignatures` (real denominators). The glue mode is
+ * audio-glued (KEEP-MS) and code-level only — settable via
+ * SET_TEMPO_GLUE_MODE, with no visible toggle.
+ *
+ * Lyrics-row editing (0063 Round 2 §2/§3): a chip's hit box is its rendered
+ * pill rect (measured text width, not a fixed window), and hovering a chip
+ * (not just dragging one) shows the dashed ghost line at its tick so the
+ * grab point is visible before a drag starts. Right-click opens one of three
+ * menus depending on what's under the pointer — a chip ("Edit lyric…" /
+ * "Delete lyric"), a phrase band's body ("Delete phrase" / "Add lyric…"), or
+ * empty row space ("Add phrase here") — plus a waveform show/hide toggle on
+ * all three. "Edit lyric…"/"Add lyric…" open a small positioned `<input>`
+ * overlay (`LyricTextEditor`): Enter commits via `SetLyricTextCommand` /
+ * `AddLyricCommand`, Escape cancels, blur commits (so the overlay never
+ * lingers open). A phrase band's start/end edge is drag-resizable
+ * (`ew-resize` cursor within `PHRASE_EDGE_HIT_RADIUS` px), reusing the
+ * `phrase-start`/`phrase-end` entity kinds through `MoveEntitiesCommand` —
+ * the same command the highway's own marker drag issues. An optional vocals
+ * stem waveform (§5) renders faint behind the bands/chips, sourced from the
+ * `lyricsWaveData`/`lyricsWaveChannels` props (absent on legacy projects
+ * with no cached vocals stem — the row still works, just without it).
  */
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
@@ -51,13 +76,14 @@ import {
   findTrackInParsedChart,
   synctrackFromChart,
   audioExtendedEndTick,
+  lyricId,
+  phraseStartId,
+  phraseEndId,
+  DEFAULT_VOCALS_PART,
 } from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {Synctrack} from '@/lib/tempo-map/types';
-import {
-  octaveRescaleSync,
-  tapTempoSync,
-} from '@/lib/tempo-map/structural-correction';
+import {octaveRescaleSync} from '@/lib/tempo-map/structural-correction';
 import {repredictTempo} from '@/lib/drum-transcription/pipeline/repredict';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
 import {useChartEditorContext, selectRenderDoc} from '../ChartEditorContext';
@@ -80,6 +106,11 @@ import {
   RephaseDownbeatsCommand,
   ToggleFlagCommand,
   UnmarkDownbeatCommand,
+  AddLyricCommand,
+  DeleteLyricCommand,
+  SetLyricTextCommand,
+  AddPhraseCommand,
+  DeletePhraseCommand,
   laneToType,
   FIRST_PAD_LANE,
   LAST_PAD_LANE,
@@ -100,7 +131,24 @@ import {
   type PianoRollNote,
 } from './notes';
 import {buildBeatGrid, barBeatAtTick, type GridBeat} from './scene';
-import {laneAtY, marqueeBounds, pickNoteAt, type LaneGeometry} from './hitTest';
+import {
+  laneAtY,
+  marqueeBounds,
+  pickNoteAt,
+  pickLyricChipAt,
+  pickPhraseEdgeAt,
+  pickPhraseBandAt,
+  phraseEdgeDragBounds,
+  xToTickNoSnap,
+  LYRIC_CHIP_PAD_LEFT,
+  LYRIC_CHIP_PAD_RIGHT,
+  type LaneGeometry,
+} from './hitTest';
+import {
+  buildLyricsRowScene,
+  type LyricChip,
+  type LyricBand,
+} from './lyricsScene';
 import {
   fitToWidth,
   followLeftMs,
@@ -134,6 +182,9 @@ import {
 
 const RULER_H = 24;
 const TEMPO_H = 26;
+/** Lyrics row height (plan 0063 Part D) — present only when the 'vocals'
+ *  part has lyrics; see {@link lyricsRowHeight}. */
+const LYRICS_ROW_H = 22;
 const WAVE_ROW_H = 40;
 
 const COLORS = {
@@ -154,6 +205,11 @@ const COLORS = {
   tempoInk: '#a8c8ea',
   laneLabel: '#6b7484',
   ghost: '#f5c742',
+  lyricsBg: '#141726',
+  lyricBand: 'rgba(197,140,255,0.10)',
+  lyricChip: '#c58cff',
+  lyricWave: '#6b5a94',
+  phraseEdge: '#c58cff',
 } as const;
 
 /** Half-width (px) of a note's pointer hit box around its glyph center. */
@@ -205,6 +261,8 @@ type PointerMode =
   | 'erase'
   | 'tempo'
   | 'section'
+  | 'lyric'
+  | 'phrase-edge'
   | 'resize';
 
 /** One entry in a right-click context menu (§10). */
@@ -247,6 +305,43 @@ interface SectionDrag {
   moved: boolean;
 }
 
+/** Live lyric-chip drag state (plan 0063 Part D §2). Unlike a section drag,
+ *  the tick is NOT grid-snapped — it tracks the pointer continuously,
+ *  clamped to the owning phrase's bounds (mirrors `moveLyric`'s clamp). */
+interface LyricDrag {
+  /** Entity id of the chip as it existed at drag start. */
+  chipId: string;
+  originalTick: number;
+  currentTick: number;
+  phraseMinTick: number;
+  phraseMaxTick: number;
+  moved: boolean;
+}
+
+/** Live phrase-edge (band start/end) drag state (Round 2 §2). Grid-unsnapped
+ *  like a lyric drag, clamped to {@link phraseEdgeDragBounds} so the ghost
+ *  never overshoots what `movePhraseStart`/`movePhraseEnd` will clamp to. */
+interface PhraseEdgeDrag {
+  kind: 'phrase-start' | 'phrase-end';
+  originalTick: number;
+  currentTick: number;
+  minTick: number;
+  maxTick: number;
+  moved: boolean;
+}
+
+/** Inline text editor overlay state for the lyrics row's "Edit lyric…" /
+ *  "Add lyric…" context-menu actions (Round 2 §2). A small positioned
+ *  `<input>` rendered over the canvas; `onCommit` runs the corresponding
+ *  command with the input's final text. */
+interface LyricTextEditor {
+  /** Canvas-space position (px) to anchor the input at. */
+  x: number;
+  y: number;
+  initialText: string;
+  onCommit: (text: string) => void;
+}
+
 // ---------------------------------------------------------------------------
 // Scene (derived, cached per chartDoc / audio)
 // ---------------------------------------------------------------------------
@@ -281,6 +376,19 @@ interface ChartScene {
   durationMs: number;
   /** Audio-extended beat-grid span (shared with the downbeat commands). */
   endTick: number;
+  /** Lyrics row content (plan 0063 Part D) — the 'vocals' part's syllable
+   *  chips + phrase bands. Empty when the part has no lyrics. */
+  lyricChips: LyricChip[];
+  lyricBands: LyricBand[];
+  /** True when the lyrics row should render (non-empty `lyricChips`). */
+  lyricsVisible: boolean;
+}
+
+/** Lyrics-row height for the current scene — 0 (row hidden) when the
+ *  'vocals' part has no lyrics yet. Shared by `panelGeometry` and `draw` so
+ *  hit-testing and rendering can never disagree about the row's presence. */
+function lyricsRowHeight(scene: ChartScene | null): number {
+  return scene?.lyricsVisible ? LYRICS_ROW_H : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -303,11 +411,17 @@ export interface PianoRollTimelineProps {
   followAnchor?: number | undefined;
   /**
    * The project's retained decoded onsets (plan 0061 §3a), for the half/double
-   * + tap-tempo control's RE-PREDICT op (0061 §7). `null`/absent → a
+   * structural-correction op's RE-PREDICT (0061 §7). `null`/absent → a
    * never-transcribed project, so the control falls back to bounded RESNAP with
    * a disclosure. Loaded from OPFS by the host page.
    */
   decodedOnsets?: DecodedOnsetsFile | null | undefined;
+  /** Vocals-stem PCM for the lyrics row's background waveform (plan 0063
+   *  Round 2 §5, Float32 interleaved). Absent on legacy projects with no
+   *  cached vocals stem — the row still works, just without the waveform. */
+  lyricsWaveData?: Float32Array | undefined;
+  /** Channel count for `lyricsWaveData`. */
+  lyricsWaveChannels?: number | undefined;
   className?: string | undefined;
 }
 
@@ -318,6 +432,8 @@ export default function PianoRollTimeline({
   audioChannels = 2,
   followAnchor = 0.2,
   decodedOnsets,
+  lyricsWaveData,
+  lyricsWaveChannels = 2,
   className,
 }: PianoRollTimelineProps) {
   const {state, dispatch, capabilities} = useChartEditorContext();
@@ -329,10 +445,31 @@ export default function PianoRollTimeline({
 
   const [menu, setMenu] = useState<MenuState | null>(null);
 
-  // -- Structural tempo correction (61-7): half/double + tap-tempo re-predict --
-  // Captured tap times in AUDIO ms (audioManager.chartTime at each tap), so the
-  // fitted BPM + phase align to the recording, not to wall-clock.
-  const [tapTimes, setTapTimes] = useState<number[]>([]);
+  // -- Lyrics-row inline text editor (Round 2 §2): "Edit lyric…"/"Add lyric…"
+  // open a small positioned <input> over the canvas rather than a modal —
+  // consistent with the rest of the panel's lightweight canvas+DOM overlays
+  // (the context menu itself, the waveform-source chip).
+  const [lyricEditor, setLyricEditor] = useState<LyricTextEditor | null>(null);
+  // Escape sets `lyricEditor` to null, which unmounts the (focused) <input>;
+  // some browsers enqueue a `blur` for a removed focused element, which
+  // would otherwise re-run `onCommit` right after the cancel. This flag
+  // makes Escape's cancel win.
+  const lyricEditorCancelledRef = useRef(false);
+
+  // -- Vocals-stem waveform toggle (Round 2 §5): plain view state, not
+  // persisted (no project id reaches the panel — same rationale as the
+  // waveform-source selection below).
+  const [showVocalsWave, setShowVocalsWave] = useState(true);
+  // `draw` is a `useCallback` with an empty dep array (it reads everything
+  // else through refs) — mirror the state into a ref so it sees toggles
+  // without needing to be redefined (and re-threaded through every caller)
+  // on every flip.
+  const showVocalsWaveRef = useRef(showVocalsWave);
+  useEffect(() => {
+    showVocalsWaveRef.current = showVocalsWave;
+    dirtyRef.current = true;
+    drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+  }, [showVocalsWave, audioManager]);
 
   // -- Waveform source (§11, QA round-1 change 4): which of the project's audio
   // sources the waveform row draws. The list comes from `AudioManager` (the
@@ -392,8 +529,20 @@ export default function PianoRollTimeline({
   >({leftMs: 0, pxPerMs: 0.075, follow: true, initialized: false});
   const sceneRef = useRef<ChartScene | null>(null);
   const ampRef = useRef<AmpPyramid>({levels: [], durationMs: 0});
+  /** Vocals-stem waveform mip-map for the lyrics row (Round 2 §5) — built
+   *  from `lyricsWaveData`, empty when the prop is absent. */
+  const vocalsAmpRef = useRef<AmpPyramid>({levels: [], durationMs: 0});
   const selectionRef = useRef<ReadonlySet<string>>(new Set());
   const hoverIdRef = useRef<string | null>(null);
+  /** Lyric-kind mirrors of `selectionRef`/`hoverIdRef` (plan 0063 Part D) —
+   *  kept separate so a note-lane and a lyrics-row highlight never bleed
+   *  into each other's draw pass. */
+  const lyricSelectionRef = useRef<ReadonlySet<string>>(new Set());
+  const lyricHoverIdRef = useRef<string | null>(null);
+  /** Per-chip measured pill width (px), populated each frame by
+   *  `drawLyricsRow` (`ctx.measureText`) — hit-testing (`pickLyricChipAt`)
+   *  reads the SAME widths the pill was actually painted at (Round 2 §3). */
+  const lyricChipWidthsRef = useRef<Map<string, number>>(new Map());
   const followAnchorRef = useRef(followAnchor);
   const scrubbingRef = useRef(false);
   const prevPlayingRef = useRef(false);
@@ -421,6 +570,10 @@ export default function PianoRollTimeline({
   const tempoBaseDocRef = useRef<ChartDocument | null>(null);
   /** In-flight section-flag drag (§6); null when not dragging a section. */
   const sectionDragRef = useRef<SectionDrag | null>(null);
+  /** In-flight lyric-chip drag (plan 0063 Part D §2); null when idle. */
+  const lyricDragRef = useRef<LyricDrag | null>(null);
+  /** In-flight phrase-edge (band start/end) drag (Round 2 §2); null when idle. */
+  const phraseEdgeDragRef = useRef<PhraseEdgeDrag | null>(null);
   /** Selection captured at marquee start, for shift-add merging. */
   const marqueeBaseRef = useRef<ReadonlySet<string>>(new Set());
   const marqueeShiftRef = useRef(false);
@@ -431,6 +584,11 @@ export default function PianoRollTimeline({
   /** Latest state pieces the pointer handlers read without re-subscribing. */
   const editStateRef = useRef(state);
   editStateRef.current = state;
+  /** Latest `previewOctave` (defined below, after `executeCommand`/`dispatch`
+   *  are in scope) — the tempo-lane context menu (built earlier in the file)
+   *  reads through this ref rather than depending on the function directly,
+   *  so its `useCallback` doesn't need to be declared after it. */
+  const previewOctaveRef = useRef<(factor: number) => void>(() => {});
 
   // While a tempo gesture is in flight, both views render from the candidate
   // doc instead of the committed one (0061 §7 — the one preview channel). The
@@ -529,6 +687,12 @@ export default function PianoRollTimeline({
       name: s.name,
     }));
 
+    const {chips: lyricChips, bands: lyricBands} = buildLyricsRowScene(
+      parsed.vocalTracks,
+      timedTempos,
+      resolution,
+    );
+
     const withMs = (list: {ms: number}[]) =>
       list.reduce((m, x) => Math.max(m, x.ms), 0);
     const lastBeatMs = beats.length ? beats[beats.length - 1].ms : 0;
@@ -550,6 +714,9 @@ export default function PianoRollTimeline({
       totalMs,
       durationMs,
       endTick,
+      lyricChips,
+      lyricBands,
+      lyricsVisible: lyricChips.length > 0,
     };
   }, [tempoCache, effectiveDoc, state.activeScope]);
 
@@ -570,16 +737,32 @@ export default function PianoRollTimeline({
     drawRef.current(Math.max(0, audioManager.chartTime * 1000));
   }, [wavePcm, durationSeconds, audioManager]);
 
+  // -- Vocals-stem waveform mip-map for the lyrics row (Round 2 §5). Reuses
+  // the same peak-pyramid machinery as the bottom waveform row; empty when
+  // `lyricsWaveData` is absent (legacy projects with no cached vocals stem).
+  useEffect(() => {
+    vocalsAmpRef.current = buildAmpPyramid(
+      lyricsWaveData,
+      lyricsWaveChannels,
+      durationSeconds * 1000,
+    );
+    dirtyRef.current = true;
+    drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+  }, [lyricsWaveData, lyricsWaveChannels, durationSeconds, audioManager]);
+
   // -- Selection push (shared with the highway) ------------------------------
   useEffect(() => {
     selectionRef.current = getSelectedIds(state, 'note');
+    lyricSelectionRef.current = getSelectedIds(state, 'lyric');
     dirtyRef.current = true;
   }, [state]);
 
-  // -- Hover push (shared with the highway; note kind only) ------------------
+  // -- Hover push (shared with the highway; note + lyric kinds) --------------
   useEffect(() => {
     hoverIdRef.current =
       state.hovered?.kind === 'note' ? state.hovered.id : null;
+    lyricHoverIdRef.current =
+      state.hovered?.kind === 'lyric' ? state.hovered.id : null;
     dirtyRef.current = true;
   }, [state.hovered]);
 
@@ -632,12 +815,19 @@ export default function PianoRollTimeline({
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const laneTop = RULER_H + TEMPO_H;
-    const laneBottom = h - WAVE_ROW_H;
-    const laneH = (laneBottom - laneTop) / LANE_COUNT;
     const view = viewRef.current;
     const scene = sceneRef.current;
     const selection = selectionRef.current;
+    // Row order top→bottom (Round 2 §4): ruler, lyrics, tempo, note lanes,
+    // waveform. Lyrics sit directly under the ruler — they're ms-locked and
+    // never move under a tempo edit, so they read as a caption track above
+    // the tempo/note grid rather than mixed into it.
+    const lyricsTop = RULER_H;
+    const lyricsH = lyricsRowHeight(scene);
+    const tempoTop = lyricsTop + lyricsH;
+    const laneTop = tempoTop + TEMPO_H;
+    const laneBottom = h - WAVE_ROW_H;
+    const laneH = (laneBottom - laneTop) / LANE_COUNT;
 
     // chrome + lane tints
     ctx.fillStyle = COLORS.chrome;
@@ -668,7 +858,35 @@ export default function PianoRollTimeline({
         scene,
         hoverMarkerRef.current,
         tempoDragRef.current,
+        tempoTop,
       );
+      if (scene.lyricsVisible) {
+        // Ghost line (hover OR drag, Round 2 §3b): while dragging, anchor
+        // at the drag's original tick; otherwise, at the hovered chip's
+        // tick (so the grab point is visible before a drag even starts).
+        const drag = lyricDragRef.current;
+        const hoveredChip = !drag
+          ? scene.lyricChips.find(c => c.id === lyricHoverIdRef.current)
+          : undefined;
+        const ghostTick = drag?.moved
+          ? drag.originalTick
+          : (hoveredChip?.tick ?? null);
+        drawLyricsRow(
+          ctx,
+          w,
+          view,
+          scene,
+          lyricsTop,
+          lyricsH,
+          lyricSelectionRef.current,
+          lyricHoverIdRef.current,
+          drag,
+          ghostTick,
+          lyricChipWidthsRef.current,
+          showVocalsWaveRef.current ? vocalsAmpRef.current : null,
+          phraseEdgeDragRef.current,
+        );
+      }
       drawRuler(ctx, w, view, scene, laneBottom, sectionDragRef.current);
 
       // Dashed ghost line at a dragged marker's original position (§7).
@@ -914,15 +1132,21 @@ export default function PianoRollTimeline({
   }, []);
 
   // -- Note-lane geometry + hit-testing --------------------------------------
+  // Row order (Round 2 §4): ruler, lyrics, tempo, note lanes, waveform —
+  // MUST match the `draw()` callback's geometry exactly, or hit-testing and
+  // rendering disagree about which row a y pixel is in.
   const panelGeometry = useCallback(() => {
     const canvas = canvasRef.current;
     const dpr = window.devicePixelRatio || 1;
     const h = canvas ? canvas.height / dpr : 1;
     const w = canvas ? canvas.width / dpr : 1;
-    const laneTop = RULER_H + TEMPO_H;
+    const lyricsTop = RULER_H;
+    const lyricsH = lyricsRowHeight(sceneRef.current);
+    const tempoTop = lyricsTop + lyricsH;
+    const laneTop = tempoTop + TEMPO_H;
     const laneBottom = h - WAVE_ROW_H;
     const laneH = (laneBottom - laneTop) / LANE_COUNT;
-    return {w, h, laneTop, laneBottom, laneH};
+    return {w, h, laneTop, laneBottom, laneH, lyricsTop, lyricsH, tempoTop};
   }, []);
 
   const laneGeometry = useCallback((): LaneGeometry => {
@@ -1088,9 +1312,75 @@ export default function PianoRollTimeline({
         return;
       }
 
+      // Lyrics row (plan 0063 Part D §2; Round 2 §4 moved it directly under
+      // the ruler): grab a syllable chip and retime it continuously (NO grid
+      // snap), or grab a phrase-band edge and resize it (Round 2 §2). A miss
+      // falls through to nothing (right-click opens the row's context menu).
+      if (y < g.tempoTop) {
+        const hit = capabilities.selectable.has('lyric')
+          ? pickLyricChipAt(
+              scene.lyricChips,
+              viewRef.current,
+              x,
+              lyricChipWidthsRef.current,
+            )
+          : null;
+        if (hit) {
+          canvas.setPointerCapture(e.pointerId);
+          pointerModeRef.current = 'lyric';
+          viewRef.current.follow = false;
+          pointerStartRef.current = {x, y};
+          lyricDragRef.current = {
+            chipId: hit.id,
+            originalTick: hit.tick,
+            currentTick: hit.tick,
+            phraseMinTick: hit.phraseMinTick,
+            phraseMaxTick: hit.phraseMaxTick,
+            moved: false,
+          };
+          dispatch({
+            type: 'SET_SELECTION',
+            kind: 'lyric',
+            ids: new Set([hit.id]),
+          });
+          dirtyRef.current = true;
+          drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+          return;
+        }
+
+        const edgeHit =
+          capabilities.draggable.has('phrase-start') ||
+          capabilities.draggable.has('phrase-end')
+            ? pickPhraseEdgeAt(scene.lyricBands, viewRef.current, x)
+            : null;
+        if (edgeHit && capabilities.draggable.has(edgeHit.kind)) {
+          const bounds = phraseEdgeDragBounds(
+            scene.lyricBands,
+            edgeHit.bandIndex,
+            edgeHit.kind,
+          );
+          canvas.setPointerCapture(e.pointerId);
+          pointerModeRef.current = 'phrase-edge';
+          viewRef.current.follow = false;
+          pointerStartRef.current = {x, y};
+          phraseEdgeDragRef.current = {
+            kind: edgeHit.kind,
+            originalTick: edgeHit.tick,
+            currentTick: edgeHit.tick,
+            minTick: bounds.min,
+            maxTick: bounds.max,
+            moved: false,
+          };
+          canvas.style.cursor = 'ew-resize';
+          dirtyRef.current = true;
+          drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+        }
+        return;
+      }
+
       // Tempo lane: grab a sparse marker and drag to refit the grid (§7).
       // Marker 0 (song-start anchor) is immovable; a miss falls through to
-      // nothing (right-click opens the add/downbeat menu instead).
+      // nothing (right-click opens the add/downbeat/×2÷2 menu instead).
       if (y < g.laneTop) {
         const k = hitTempoMarker(scene.tempos, viewRef.current, x);
         if (k > 0) {
@@ -1281,6 +1571,64 @@ export default function PianoRollTimeline({
         return;
       }
 
+      // Live lyric-chip drag (plan 0063 Part D §2): NO grid snap — the tick
+      // tracks the pointer continuously, clamped to the chip's owning phrase
+      // (mirrors `moveLyric`'s clamp, and the highway's `useMarkerDrag`
+      // bounds for the `lyric` kind).
+      if (mode === 'lyric' && lyricDragRef.current) {
+        const drag = lyricDragRef.current;
+        const start = pointerStartRef.current;
+        const dx = start ? x - start.x : 0;
+        const rawTick = xToTickNoSnap(
+          x,
+          viewRef.current,
+          scene.timedTempos,
+          scene.resolution,
+        );
+        const clampedTick = Math.max(
+          drag.phraseMinTick,
+          Math.min(drag.phraseMaxTick, Math.max(0, rawTick)),
+        );
+        const moved = drag.moved || exceedsDragThreshold(dx, 0);
+        if (clampedTick !== drag.currentTick || moved !== drag.moved) {
+          lyricDragRef.current = {...drag, currentTick: clampedTick, moved};
+          dirtyRef.current = true;
+          drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+        }
+        return;
+      }
+
+      // Live phrase-edge drag (Round 2 §2): NO grid snap, clamped to
+      // `phraseEdgeDragBounds` (mirrors what `movePhraseStart`/`movePhraseEnd`
+      // will actually clamp to on commit).
+      if (mode === 'phrase-edge' && phraseEdgeDragRef.current) {
+        const drag = phraseEdgeDragRef.current;
+        const start = pointerStartRef.current;
+        const dx = start ? x - start.x : 0;
+        const rawTick = xToTickNoSnap(
+          x,
+          viewRef.current,
+          scene.timedTempos,
+          scene.resolution,
+        );
+        const clampedTick = Math.max(
+          drag.minTick,
+          Math.min(drag.maxTick, Math.max(0, rawTick)),
+        );
+        canvas.style.cursor = 'ew-resize';
+        const moved = drag.moved || exceedsDragThreshold(dx, 0);
+        if (clampedTick !== drag.currentTick || moved !== drag.moved) {
+          phraseEdgeDragRef.current = {
+            ...drag,
+            currentTick: clampedTick,
+            moved,
+          };
+          dirtyRef.current = true;
+          drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+        }
+        return;
+      }
+
       // Live note drag: delta-snapped, lane change single-note only.
       if (mode === 'drag' && noteDragRef.current) {
         const start = pointerStartRef.current;
@@ -1366,8 +1714,45 @@ export default function PianoRollTimeline({
         canvas.style.cursor = overSection ? 'grab' : 'pointer';
         clearMarkerHover();
         setGhost(null);
-        if (hoverIdRef.current !== null) {
+        if (hoverIdRef.current !== null || lyricHoverIdRef.current !== null) {
           dispatch({type: 'SET_HOVER', hovered: null});
+        }
+        return;
+      }
+      // Lyrics row (plan 0063 Part D; Round 2 §4 moved it under the ruler):
+      // hover a syllable chip (grab cursor + ghost line at its tick, §3b), or
+      // — when no chip is under the pointer — a phrase-band edge (ew-resize,
+      // Round 2 §2).
+      if (y < g.tempoTop) {
+        clearMarkerHover();
+        const hit = capabilities.selectable.has('lyric')
+          ? pickLyricChipAt(
+              scene.lyricChips,
+              viewRef.current,
+              x,
+              lyricChipWidthsRef.current,
+            )
+          : null;
+        setGhost(null);
+        if (hit) {
+          canvas.style.cursor = 'grab';
+        } else {
+          const edgeHit =
+            capabilities.draggable.has('phrase-start') ||
+            capabilities.draggable.has('phrase-end')
+              ? pickPhraseEdgeAt(scene.lyricBands, viewRef.current, x)
+              : null;
+          canvas.style.cursor =
+            edgeHit && capabilities.draggable.has(edgeHit.kind)
+              ? 'ew-resize'
+              : 'default';
+        }
+        const nextId = hit ? hit.id : null;
+        if (nextId !== lyricHoverIdRef.current || hoverIdRef.current !== null) {
+          dispatch({
+            type: 'SET_HOVER',
+            hovered: hit ? {kind: 'lyric', id: hit.id} : null,
+          });
         }
         return;
       }
@@ -1407,7 +1792,7 @@ export default function PianoRollTimeline({
           ? 'crosshair'
           : 'default';
       const nextId = hovered ? hovered.id : null;
-      if (nextId !== hoverIdRef.current) {
+      if (nextId !== hoverIdRef.current || lyricHoverIdRef.current !== null) {
         dispatch({
           type: 'SET_HOVER',
           hovered: hovered ? {kind: 'note', id: hovered.id} : null,
@@ -1416,6 +1801,7 @@ export default function PianoRollTimeline({
     },
     [
       audioManager,
+      capabilities,
       dispatch,
       executeCommand,
       laneGeometry,
@@ -1502,12 +1888,58 @@ export default function PianoRollTimeline({
         }
       }
 
+      // Commit a lyric-chip drag (plan 0063 Part D §2): the same
+      // `MoveEntitiesCommand('lyric', ...)` the highway's marker drag issues,
+      // but the delta comes from the continuous (unsnapped) drag preview.
+      if (mode === 'lyric' && lyricDragRef.current) {
+        const drag = lyricDragRef.current;
+        if (drag.moved && drag.currentTick !== drag.originalTick) {
+          executeCommand(
+            new MoveEntitiesCommand(
+              'lyric',
+              [drag.chipId],
+              drag.currentTick - drag.originalTick,
+              0,
+            ),
+          );
+          dispatch({
+            type: 'SET_SELECTION',
+            kind: 'lyric',
+            ids: new Set([lyricId(drag.currentTick, DEFAULT_VOCALS_PART)]),
+          });
+        }
+      }
+
+      // Commit a phrase-edge drag (Round 2 §2): the same `MoveEntitiesCommand`
+      // the highway's own phrase-marker drag issues (`phrase-start`/
+      // `phrase-end`), delta from the continuous (unsnapped) drag preview.
+      if (mode === 'phrase-edge' && phraseEdgeDragRef.current) {
+        const drag = phraseEdgeDragRef.current;
+        if (drag.moved && drag.currentTick !== drag.originalTick) {
+          const id =
+            drag.kind === 'phrase-start'
+              ? phraseStartId(drag.originalTick)
+              : phraseEndId(drag.originalTick);
+          executeCommand(
+            new MoveEntitiesCommand(
+              drag.kind,
+              [id],
+              drag.currentTick - drag.originalTick,
+              0,
+              entityContextFromScope(editStateRef.current.activeScope),
+            ),
+          );
+        }
+      }
+
       scrubbingRef.current = false;
       pointerModeRef.current = 'idle';
       noteDragRef.current = null;
       tempoDragRef.current = null;
       tempoBaseDocRef.current = null;
       sectionDragRef.current = null;
+      lyricDragRef.current = null;
+      phraseEdgeDragRef.current = null;
       marqueeRef.current = null;
       pointerStartRef.current = null;
       dirtyRef.current = true;
@@ -1528,14 +1960,36 @@ export default function PianoRollTimeline({
 
   // -- Context menus (§7 / §8 / §10) -----------------------------------------
   /** Build the tempo-lane menu (§7 delete-marker; §7/§8 add-marker + downbeat
-   *  toggle) at screen x. Returns [] when nothing actionable is under x. */
+   *  toggle; Round 2 §6's ×2/÷2 structural correction) at screen x. Returns
+   *  [] when nothing actionable is under x. */
   const buildTempoMenu = useCallback(
     (x: number, scene: ChartScene): MenuItem[] => {
       const view = viewRef.current;
+      const st = editStateRef.current;
+      // ×2/÷2 need the same gating the old floating buttons had: a chart
+      // loaded, no structural preview already up, and editing enabled.
+      const canStructuralNow =
+        !!st.chartDoc &&
+        !isStructuralPreview(st) &&
+        capabilities.showEditingControls;
+      const octaveItems: MenuItem[] = [
+        {
+          label: 'Double tempo (×2, re-predict)',
+          disabled: !canStructuralNow,
+          onSelect: () => previewOctaveRef.current(2),
+        },
+        {
+          label: 'Halve tempo (÷2, re-predict)',
+          disabled: !canStructuralNow,
+          onSelect: () => previewOctaveRef.current(0.5),
+        },
+      ];
+
       const k = hitTempoMarker(scene.tempos, view, x);
       if (k >= 0) {
         const marker = scene.tempos[k];
         return [
+          ...octaveItems,
           {
             label: `Delete tempo marker (${marker.bpm.toFixed(1)} BPM)`,
             disabled: k === 0, // marker 0 is the immovable song-start anchor
@@ -1552,7 +2006,7 @@ export default function PianoRollTimeline({
       }
       // Empty lane, at the nearest beat.
       const beatTick = nearestBeatTick(scene.beats, view, x);
-      if (beatTick === null) return [];
+      if (beatTick === null) return octaveItems;
       const hasMarker = scene.tempos.some(t => t.tick === beatTick);
       const isDownbeat = editStateRef.current.downbeatFlags.downbeats.some(
         d => d.tick === beatTick,
@@ -1564,6 +2018,7 @@ export default function PianoRollTimeline({
       // SECONDARY: the local mark/unmark op, framed explicitly as a meter
       // (time-signature) change for the rare true mid-song case.
       return [
+        ...octaveItems,
         {
           label: 'Make this beat 1 (rephase song)',
           disabled: isDownbeat,
@@ -1592,7 +2047,7 @@ export default function PianoRollTimeline({
         },
       ];
     },
-    [executeCommand],
+    [executeCommand, capabilities],
   );
 
   /** Build the note context menu (§10): cymbal switch + delete, selection-
@@ -1666,6 +2121,120 @@ export default function PianoRollTimeline({
     [waveSources, selectedSourceId],
   );
 
+  /** Open the lyrics row's inline text editor (Round 2 §2) at canvas
+   *  position `(x, y)`, prefilled with `initialText`. `onCommit` runs on
+   *  Enter or blur with the input's final text; Escape cancels without
+   *  calling it. */
+  const openLyricEditor = useCallback(
+    (
+      x: number,
+      y: number,
+      initialText: string,
+      onCommit: (text: string) => void,
+    ) => {
+      lyricEditorCancelledRef.current = false;
+      setLyricEditor({x, y, initialText, onCommit});
+    },
+    [],
+  );
+
+  /** Build the lyrics row's context menu (Round 2 §2): a chip's edit/delete,
+   *  a phrase band's delete/add-lyric, or empty row space's add-phrase — plus
+   *  a vocals-waveform show/hide toggle (§5) appended to all three. */
+  const buildLyricsMenu = useCallback(
+    (x: number, y: number, scene: ChartScene): MenuItem[] => {
+      const waveformToggle: MenuItem = {
+        label: showVocalsWave ? 'Hide vocals waveform' : 'Show vocals waveform',
+        onSelect: () => setShowVocalsWave(v => !v),
+      };
+
+      const chipHit = capabilities.selectable.has('lyric')
+        ? pickLyricChipAt(
+            scene.lyricChips,
+            viewRef.current,
+            x,
+            lyricChipWidthsRef.current,
+          )
+        : null;
+      if (chipHit) {
+        return [
+          {
+            label: 'Edit lyric…',
+            onSelect: () =>
+              openLyricEditor(x, y, chipHit.text, text => {
+                const trimmed = text.trim();
+                if (trimmed) {
+                  executeCommand(
+                    new SetLyricTextCommand(
+                      chipHit.tick,
+                      trimmed,
+                      DEFAULT_VOCALS_PART,
+                    ),
+                  );
+                }
+              }),
+          },
+          {
+            label: 'Delete lyric',
+            danger: true,
+            onSelect: () =>
+              executeCommand(
+                new DeleteLyricCommand(chipHit.tick, DEFAULT_VOCALS_PART),
+              ),
+          },
+          waveformToggle,
+        ];
+      }
+
+      const clickTick = Math.max(
+        0,
+        xToTickNoSnap(x, viewRef.current, scene.timedTempos, scene.resolution),
+      );
+      const band = pickPhraseBandAt(scene.lyricBands, viewRef.current, x);
+      if (band) {
+        return [
+          {
+            label: 'Delete phrase',
+            danger: true,
+            onSelect: () =>
+              executeCommand(
+                new DeletePhraseCommand(band.tick, DEFAULT_VOCALS_PART),
+              ),
+          },
+          {
+            label: 'Add lyric…',
+            onSelect: () =>
+              openLyricEditor(x, y, '', text => {
+                const trimmed = text.trim();
+                if (trimmed) {
+                  executeCommand(
+                    new AddLyricCommand(
+                      clickTick,
+                      trimmed,
+                      DEFAULT_VOCALS_PART,
+                    ),
+                  );
+                }
+              }),
+          },
+          waveformToggle,
+        ];
+      }
+
+      return [
+        {
+          label: 'Add phrase here',
+          onSelect: () =>
+            executeCommand(
+              new AddPhraseCommand(clickTick, DEFAULT_VOCALS_PART),
+            ),
+        },
+        waveformToggle,
+      ];
+    },
+    [capabilities, executeCommand, openLyricEditor, showVocalsWave],
+  );
+
   const handleContextMenu = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       e.preventDefault();
@@ -1675,8 +2244,16 @@ export default function PianoRollTimeline({
       const y = e.nativeEvent.offsetY;
       const x = e.nativeEvent.offsetX;
 
-      // Tempo lane (§7/§8): add/delete markers, mark/unmark downbeats.
-      if (y > RULER_H && y < g.laneTop) {
+      // Lyrics row (Round 2 §2/§4/§5): directly under the ruler now.
+      if (y > RULER_H && y < g.tempoTop) {
+        const items = buildLyricsMenu(x, y, scene);
+        setMenu(items.length ? {x, y, items} : null);
+        return;
+      }
+
+      // Tempo lane (§7/§8; Round 2 §6's ×2/÷2 structural correction):
+      // add/delete markers, mark/unmark downbeats.
+      if (y < g.laneTop) {
         const items = buildTempoMenu(x, scene);
         setMenu(items.length ? {x, y, items} : null);
         return;
@@ -1713,6 +2290,7 @@ export default function PianoRollTimeline({
       setMenu({x, y, items: buildNoteMenu(scene, hit)});
     },
     [
+      buildLyricsMenu,
       buildNoteMenu,
       buildSourceMenu,
       buildTempoMenu,
@@ -1738,6 +2316,8 @@ export default function PianoRollTimeline({
     tempoDragRef.current = null;
     tempoBaseDocRef.current = null;
     sectionDragRef.current = null;
+    lyricDragRef.current = null;
+    phraseEdgeDragRef.current = null;
     pointerStartRef.current = null;
     dirtyRef.current = true;
     drawRef.current(Math.max(0, audioManager.chartTime * 1000));
@@ -1851,22 +2431,10 @@ export default function PianoRollTimeline({
     },
     [previewStructural],
   );
-
-  const captureTap = useCallback(() => {
-    const ms = Math.max(0, audioManager.chartTime * 1000);
-    setTapTimes(prev => [...prev, ms]);
-  }, [audioManager]);
-
-  const applyTaps = useCallback(() => {
-    if (tapTimes.length < 2) return;
-    const base = editStateRef.current.chartDoc;
-    if (!base) return;
-    // The taps must span a positive audio interval (captured during playback);
-    // if they don't (all identical), fitTapTempo would throw — bail quietly.
-    if (tapTimes[tapTimes.length - 1] - tapTimes[0] <= 0) return;
-    previewStructural(tapTempoSync(tapTimes, base.parsedChart.timeSignatures));
-    setTapTimes([]);
-  }, [tapTimes, previewStructural]);
+  // The tempo-lane context menu (built earlier in the file, before this
+  // function exists) reads ×2/÷2 through this ref rather than depending on
+  // `previewOctave` directly.
+  previewOctaveRef.current = previewOctave;
 
   // Accept: commit EXACTLY the previewed candidate as one EditCommand (no
   // re-run, no drift). The pending-candidate invalidation rule guarantees it's
@@ -1874,15 +2442,11 @@ export default function PianoRollTimeline({
   const acceptStructural = useCallback(() => {
     const cand = editStateRef.current.pendingTempoCandidate;
     if (cand) executeCommand(new CommitTempoCandidateCommand(cand.doc));
-    setTapTimes([]);
   }, [executeCommand]);
 
   const rejectStructural = useCallback(() => {
     dispatch({type: 'SET_PENDING_TEMPO_CANDIDATE', candidate: null});
   }, [dispatch]);
-
-  const canStructural =
-    !!chartDoc && !structuralOp && capabilities.showEditingControls;
 
   // -- Panel height resize (§1) -----------------------------------------------
   const panelHeightRef = useRef(panelHeight);
@@ -1959,76 +2523,36 @@ export default function PianoRollTimeline({
             still lives on `ChartEditorContext` (defaults to 'audio') and stays
             settable in code via SET_TEMPO_GLUE_MODE — there is just no UI. The
             playhead follow-anchor (§3) is likewise code-level only now. */}
-        {/* Half/double + tap-tempo structural correction (§7). Sits in the tempo
-          lane's control slot; a preview swaps it for an accept/reject bar. */}
-        <div className="absolute left-2 top-1 z-40 flex items-center gap-1 text-[11px]">
-          {structuralOp ? (
-            <>
-              <span className="rounded bg-popover/90 px-2 py-0.5 text-popover-foreground shadow-sm">
-                {structuralOp === 're-predict'
-                  ? 'Re-predicted tempo — preview'
-                  : 'Re-snapped (no audio onsets) — preview'}
-              </span>
-              <button
-                type="button"
-                className="rounded border border-border bg-emerald-600/90 px-2 py-0.5 text-white shadow-sm hover:bg-emerald-600"
-                onClick={acceptStructural}>
-                Accept
-              </button>
-              <button
-                type="button"
-                className="rounded border border-border bg-popover/90 px-2 py-0.5 text-popover-foreground shadow-sm hover:bg-accent hover:text-accent-foreground"
-                onClick={rejectStructural}>
-                Reject
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                disabled={!canStructural}
-                className="rounded border border-border bg-popover/90 px-2 py-0.5 text-popover-foreground shadow-sm hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                title="Double the tempo (half-time → real time), then re-predict"
-                onClick={() => previewOctave(2)}>
-                ×2
-              </button>
-              <button
-                type="button"
-                disabled={!canStructural}
-                className="rounded border border-border bg-popover/90 px-2 py-0.5 text-popover-foreground shadow-sm hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                title="Halve the tempo (double-time → real time), then re-predict"
-                onClick={() => previewOctave(0.5)}>
-                ÷2
-              </button>
-              <button
-                type="button"
-                disabled={!canStructural}
-                className="rounded border border-border bg-popover/90 px-2 py-0.5 text-popover-foreground shadow-sm hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                title="Tap along ~4 beats (during playback), then Apply"
-                onClick={captureTap}>
-                Tap{tapTimes.length > 0 ? ` (${tapTimes.length})` : ''}
-              </button>
-              {tapTimes.length >= 2 && (
-                <button
-                  type="button"
-                  disabled={!canStructural}
-                  className="rounded border border-border bg-popover/90 px-2 py-0.5 text-popover-foreground shadow-sm hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                  onClick={applyTaps}>
-                  Apply taps
-                </button>
-              )}
-              {tapTimes.length > 0 && (
-                <button
-                  type="button"
-                  className="rounded border border-border bg-popover/90 px-1.5 py-0.5 text-popover-foreground shadow-sm hover:bg-accent hover:text-accent-foreground"
-                  title="Clear taps"
-                  onClick={() => setTapTimes([])}>
-                  ✕
-                </button>
-              )}
-            </>
-          )}
-        </div>
+        {/* Half/double structural-correction preview accept/reject bar (§7).
+            The ×2/÷2 triggers themselves live in the tempo lane's right-click
+            menu; this bar only appears once a correction is previewed.
+            Positioned just below the lyrics row (when present) so it never
+            overlaps it. */}
+        {structuralOp && (
+          <div
+            className="absolute left-2 z-40 flex items-center gap-1 text-[11px]"
+            style={{
+              top: RULER_H + (scene?.lyricsVisible ? LYRICS_ROW_H : 0) + 2,
+            }}>
+            <span className="rounded bg-popover/90 px-2 py-0.5 text-popover-foreground shadow-sm">
+              {structuralOp === 're-predict'
+                ? 'Re-predicted tempo — preview'
+                : 'Re-snapped (no audio onsets) — preview'}
+            </span>
+            <button
+              type="button"
+              className="rounded border border-border bg-emerald-600/90 px-2 py-0.5 text-white shadow-sm hover:bg-emerald-600"
+              onClick={acceptStructural}>
+              Accept
+            </button>
+            <button
+              type="button"
+              className="rounded border border-border bg-popover/90 px-2 py-0.5 text-popover-foreground shadow-sm hover:bg-accent hover:text-accent-foreground"
+              onClick={rejectStructural}>
+              Reject
+            </button>
+          </div>
+        )}
         {/* Waveform-source chip (§11): shows the current source in the
             waveform row's corner; click to open the same picker as the
             waveform-row right-click. */}
@@ -2083,6 +2607,37 @@ export default function PianoRollTimeline({
               </button>
             ))}
           </div>
+        )}
+        {/* Lyrics row inline text editor (Round 2 §2): "Edit lyric…" / "Add
+            lyric…" position a small `<input>` over the canvas rather than a
+            modal. Enter commits; Escape cancels; blur also commits (so the
+            input never lingers open with no way to close it). */}
+        {lyricEditor && (
+          <input
+            key={`${lyricEditor.x}:${lyricEditor.y}`}
+            autoFocus
+            defaultValue={lyricEditor.initialText}
+            className="absolute z-50 w-28 rounded border border-border bg-popover px-1.5 py-0.5 text-xs text-popover-foreground shadow-md focus:outline-none"
+            style={{left: lyricEditor.x, top: lyricEditor.y}}
+            onPointerDown={e => e.stopPropagation()}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.currentTarget.blur();
+              } else if (e.key === 'Escape') {
+                lyricEditorCancelledRef.current = true;
+                setLyricEditor(null);
+              }
+              e.stopPropagation();
+            }}
+            onBlur={e => {
+              if (lyricEditorCancelledRef.current) {
+                lyricEditorCancelledRef.current = false;
+                return;
+              }
+              lyricEditor.onCommit(e.currentTarget.value);
+              setLyricEditor(null);
+            }}
+          />
         )}
       </div>
     </div>
@@ -2287,16 +2842,17 @@ function drawTempoLane(
   scene: ChartScene,
   hoverMarker: number,
   tempoDrag: TempoMarkerDrag | null,
+  top: number,
 ): void {
   ctx.fillStyle = COLORS.tempoBg;
-  ctx.fillRect(0, RULER_H, w, TEMPO_H);
+  ctx.fillRect(0, top, w, TEMPO_H);
   ctx.strokeStyle = COLORS.gridBeat;
   ctx.beginPath();
-  ctx.moveTo(0, RULER_H + TEMPO_H + 0.5);
-  ctx.lineTo(w, RULER_H + TEMPO_H + 0.5);
+  ctx.moveTo(0, top + TEMPO_H + 0.5);
+  ctx.lineTo(w, top + TEMPO_H + 0.5);
   ctx.stroke();
 
-  const cy = RULER_H + TEMPO_H * 0.62;
+  const cy = top + TEMPO_H * 0.62;
   ctx.font = '600 9.5px ui-monospace, Menlo, monospace';
   for (let k = 0; k < scene.tempos.length; k++) {
     const marker = scene.tempos[k];
@@ -2332,10 +2888,170 @@ function drawTempoLane(
     if (x < -50 || x > w + 10) continue;
     const tw = ctx.measureText(ts.label).width;
     ctx.fillStyle = 'rgba(122,184,255,0.16)';
-    roundRect(ctx, x + 3, RULER_H + 2, tw + 8, 12, 3);
+    roundRect(ctx, x + 3, top + 2, tw + 8, 12, 3);
     ctx.fill();
     ctx.fillStyle = COLORS.tempoInk;
-    ctx.fillText(ts.label, x + 7, RULER_H + 11.5);
+    ctx.fillText(ts.label, x + 7, top + 11.5);
+  }
+}
+
+/**
+ * Lyrics row (plan 0063 Part D; Round 2 §2/§3/§5): an optional faint vocals
+ * waveform (behind everything else), a background band per vocal phrase
+ * (line structure at a glance, live-adjusted for an in-flight phrase-edge
+ * drag), and a small pill per syllable, showing its text. A chip mid-drag
+ * renders at its live (unsnapped) tick; a dashed ghost line marks either the
+ * drag's original tick or (when idle) the hovered chip's tick, so the grab
+ * point is visible before a drag even starts — the same ghost-line
+ * convention the tempo-marker and section-flag drags use elsewhere in this
+ * file. `widthsOut` is populated with each chip's measured pill width so
+ * `pickLyricChipAt` can hit-test the SAME rect that's painted here.
+ */
+function drawLyricsRow(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  view: PianoRollView,
+  scene: ChartScene,
+  top: number,
+  height: number,
+  selection: ReadonlySet<string>,
+  hoverId: string | null,
+  drag: LyricDrag | null,
+  ghostTick: number | null,
+  widthsOut: Map<string, number>,
+  vocalsWave: AmpPyramid | null,
+  phraseEdgeDrag: PhraseEdgeDrag | null,
+): void {
+  widthsOut.clear();
+
+  ctx.fillStyle = COLORS.lyricsBg;
+  ctx.fillRect(0, top, w, height);
+
+  if (vocalsWave && vocalsWave.levels.length > 0) {
+    drawWave(
+      ctx,
+      w,
+      top,
+      top + height,
+      view,
+      vocalsWave,
+      COLORS.lyricWave,
+      0.35,
+    );
+  }
+
+  ctx.strokeStyle = COLORS.gridBeat;
+  ctx.beginPath();
+  ctx.moveTo(0, top + height + 0.5);
+  ctx.lineTo(w, top + height + 0.5);
+  ctx.stroke();
+
+  for (const band of scene.lyricBands) {
+    // Live-preview a phrase-edge drag: the dragged edge renders at its
+    // current (unsnapped) tick rather than the band's static bound, so the
+    // band visibly grows/shrinks under the pointer during the resize.
+    let bandMs = band.ms;
+    let bandMsEnd = band.msEnd;
+    if (phraseEdgeDrag) {
+      if (
+        phraseEdgeDrag.kind === 'phrase-start' &&
+        band.tick === phraseEdgeDrag.originalTick
+      ) {
+        bandMs = tickToMs(
+          phraseEdgeDrag.currentTick,
+          scene.timedTempos,
+          scene.resolution,
+        );
+      } else if (
+        phraseEdgeDrag.kind === 'phrase-end' &&
+        band.tickEnd === phraseEdgeDrag.originalTick
+      ) {
+        bandMsEnd = tickToMs(
+          phraseEdgeDrag.currentTick,
+          scene.timedTempos,
+          scene.resolution,
+        );
+      }
+    }
+    const x0 = msToX(bandMs, view);
+    const x1 = msToX(bandMsEnd, view);
+    if (x1 < 0 || x0 > w) continue;
+    const bx = Math.max(0, x0);
+    const bw = Math.min(w, x1) - bx;
+    if (bw <= 0) continue;
+    ctx.fillStyle = COLORS.lyricBand;
+    ctx.fillRect(bx, top + 2, bw, height - 4);
+  }
+
+  // Phrase-edge drag ghost: a dashed line at the edge's original position,
+  // once the drag has actually moved past its origin.
+  if (phraseEdgeDrag && phraseEdgeDrag.moved) {
+    const gx =
+      Math.round(
+        msToX(
+          tickToMs(
+            phraseEdgeDrag.originalTick,
+            scene.timedTempos,
+            scene.resolution,
+          ),
+          view,
+        ),
+      ) + 0.5;
+    ctx.strokeStyle = COLORS.phraseEdge;
+    ctx.setLineDash([3, 3]);
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(gx, top);
+    ctx.lineTo(gx, top + height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+
+  // Chip drag/hover ghost line (§3b): drag origin while dragging, else the
+  // hovered chip's tick.
+  if (ghostTick !== null) {
+    const gx =
+      Math.round(
+        msToX(tickToMs(ghostTick, scene.timedTempos, scene.resolution), view),
+      ) + 0.5;
+    ctx.strokeStyle = COLORS.ghost;
+    ctx.setLineDash([3, 3]);
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(gx, top);
+    ctx.lineTo(gx, top + height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.font = '600 9.5px system-ui, sans-serif';
+  for (const chip of scene.lyricChips) {
+    const dragging = drag?.chipId === chip.id;
+    const ms = dragging
+      ? tickToMs(drag!.currentTick, scene.timedTempos, scene.resolution)
+      : chip.ms;
+    const x = msToX(ms, view);
+    const tw = ctx.measureText(chip.text).width;
+    widthsOut.set(chip.id, tw);
+    if (x < -60 || x > w + 10) continue;
+    const selected = selection.has(chip.id);
+    const hovered = chip.id === hoverId;
+    ctx.globalAlpha = selected ? 0.42 : hovered ? 0.28 : 0.16;
+    ctx.fillStyle = COLORS.lyricChip;
+    roundRect(
+      ctx,
+      x - LYRIC_CHIP_PAD_LEFT,
+      top + 3,
+      tw + LYRIC_CHIP_PAD_LEFT + LYRIC_CHIP_PAD_RIGHT,
+      height - 6,
+      3,
+    );
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = selected ? '#f4e9ff' : COLORS.lyricChip;
+    ctx.fillText(chip.text, x + 2, top + height - 7);
   }
 }
 
@@ -2425,6 +3141,8 @@ function drawWave(
   bottom: number,
   view: PianoRollView,
   pyramid: AmpPyramid,
+  color: string = COLORS.waveRow,
+  alpha: number = 0.9,
 ): void {
   if (pyramid.levels.length === 0) return;
   const mid = (top + bottom) / 2;
@@ -2440,8 +3158,8 @@ function drawWave(
     const msB = xToMs(x + STEP_PX, view);
     return sampleAmpRange(pyramid, msA, msB);
   };
-  ctx.globalAlpha = 0.9;
-  ctx.fillStyle = COLORS.waveRow;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
   ctx.beginPath();
   ctx.moveTo(0, mid);
   for (let x = 0; x <= w; x += STEP_PX) {

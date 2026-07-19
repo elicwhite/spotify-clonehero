@@ -11,13 +11,19 @@
  */
 
 import {decodeAudio, interleaveAudioBuffer} from '../audio/decoder';
-import {createAudioMetadata, TARGET_SAMPLE_RATE} from '../audio/types';
+import {
+  createAudioMetadata,
+  TARGET_SAMPLE_RATE,
+  TARGET_CHANNELS,
+  type AudioMetadata,
+} from '../audio/types';
+import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
+import {isOpusFileName} from '@/lib/chart-export/transcode-audio';
 import {
   createProject,
-  storeAudio,
-  storeOriginalAudio,
+  storeAudioOpus,
   updateProject,
-  loadAudioForDemucs,
+  loadFullMixPcm,
   hasStoredAudio,
   writeProjectBinary,
   writeProjectJSON,
@@ -99,6 +105,34 @@ export interface PipelineProgress {
 export type PipelineProgressCallback = (progress: PipelineProgress) => void;
 
 // ---------------------------------------------------------------------------
+// Upload storage (Opus at rest)
+// ---------------------------------------------------------------------------
+
+/**
+ * Stores a freshly uploaded, decoded audio file as Opus at rest
+ * ({@link storeAudioOpus}) — the only audio storage new uploads use, replacing
+ * the old raw-PCM (`full.pcm`) + verbatim-original storage. Already-`.opus`
+ * uploads are stored byte-for-byte; anything else is Opus-encoded from the
+ * decoded PCM.
+ */
+async function storeUploadedAudioAsOpus(
+  projectId: string,
+  sourceBytes: ArrayBuffer,
+  interleavedPcm: Float32Array,
+  metadata: AudioMetadata,
+  samplesPerChannel: number,
+): Promise<void> {
+  const opusBytes = isOpusFileName(metadata.originalFileName)
+    ? new Uint8Array(sourceBytes)
+    : await encodePcmToOpus(
+        interleavedPcm,
+        TARGET_SAMPLE_RATE,
+        TARGET_CHANNELS,
+      );
+  await storeAudioOpus(projectId, opusBytes, metadata, samplesPerChannel);
+}
+
+// ---------------------------------------------------------------------------
 // Audio prep for the CRNN transcriber
 // ---------------------------------------------------------------------------
 
@@ -120,7 +154,7 @@ async function loadTranscriptionAudio48k(
   } catch {
     // Stems unavailable (e.g. separation was skipped/failed):
     // fall back to the full audio mix (already stereo interleaved).
-    interleaved44k = await loadAudioForDemucs(projectId);
+    interleaved44k = await loadFullMixPcm(projectId);
   }
 
   const n = Math.floor(interleaved44k.length / 2);
@@ -172,7 +206,7 @@ async function separateDrumsStep(
   onProgress: PipelineProgressCallback,
 ): Promise<void> {
   try {
-    const storedAudio = await loadAudioForDemucs(projectId);
+    const storedAudio = await loadFullMixPcm(projectId);
     await separateDrums(projectId, storedAudio, sepProgress => {
       onProgress({
         step: 'separating',
@@ -276,7 +310,7 @@ async function ensureSynctrack(
 
   try {
     // Full mix, deinterleaved to planar 44.1 kHz stereo.
-    const interleaved = await loadAudioForDemucs(projectId);
+    const interleaved = await loadFullMixPcm(projectId);
     const n = Math.floor(interleaved.length / 2);
     const left = new Float32Array(n);
     const right = new Float32Array(n);
@@ -397,10 +431,13 @@ export async function runPipeline(
   projectId = projectMeta.id;
 
   const interleavedPcm = interleaveAudioBuffer(audioBuffer);
-  await storeAudio(projectId, interleavedPcm, metadata, audioBuffer.length);
-
-  // Persist the untouched upload so it can be exported as the original audio.
-  await storeOriginalAudio(projectId, sourceBytes, metadata.originalFileName);
+  await storeUploadedAudioAsOpus(
+    projectId,
+    sourceBytes,
+    interleavedPcm,
+    metadata,
+    audioBuffer.length,
+  );
 
   onProgress({
     step: 'decoding',
@@ -605,8 +642,13 @@ export async function runPipelineFromChart(
   const projectId = projectMeta.id;
 
   const interleavedPcm = interleaveAudioBuffer(audioBuffer);
-  await storeAudio(projectId, interleavedPcm, metadata, audioBuffer.length);
-  await storeOriginalAudio(projectId, sourceBytes, metadata.originalFileName);
+  await storeUploadedAudioAsOpus(
+    projectId,
+    sourceBytes,
+    interleavedPcm,
+    metadata,
+    audioBuffer.length,
+  );
 
   // Persist the package identity + passthrough assets up front so a crash
   // mid-pipeline doesn't lose the "write back in the same shape" info.

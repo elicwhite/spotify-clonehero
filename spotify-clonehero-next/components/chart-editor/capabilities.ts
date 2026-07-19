@@ -70,9 +70,35 @@ export interface EditorCapabilities {
 }
 
 export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
-  hoverable: new Set(['note', 'section']),
-  selectable: new Set(['note', 'section']),
-  draggable: new Set(['note', 'section']),
+  // 'lyric' joined this preset in plan 0063 Part D: the drum-transcription
+  // editor gained an Add Lyrics flow (Part C) that writes into the same
+  // `vocalTracks` the piano-roll lyrics row and the highway's marker drag
+  // both read/write, so lyric chips need to be hoverable/selectable/
+  // draggable here too — not just on the dedicated /add-lyrics page.
+  // 'phrase-start'/'phrase-end' joined in Round 2 §2: the piano roll's
+  // lyrics row supports resizing a phrase band by dragging its edges,
+  // which moves these same marker kinds via `MoveEntitiesCommand`.
+  hoverable: new Set([
+    'note',
+    'section',
+    'lyric',
+    'phrase-start',
+    'phrase-end',
+  ]),
+  selectable: new Set([
+    'note',
+    'section',
+    'lyric',
+    'phrase-start',
+    'phrase-end',
+  ]),
+  draggable: new Set([
+    'note',
+    'section',
+    'lyric',
+    'phrase-start',
+    'phrase-end',
+  ]),
   showNotePlacementTools: true,
   showDrumLanes: true,
   showToolPalette: true,

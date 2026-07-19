@@ -178,8 +178,11 @@ function fireAt(
   canvas.dispatchEvent(evt);
 }
 
-// Tempo lane sits between the ruler (24px) and the note lanes (50px).
-const TEMPO_LANE = {x: 120, y: 32};
+// Tempo lane sits below the ruler (24px) and the lyrics row (22px, present
+// here since `makeFixtureDoc`'s vocals part has lyrics — Round 2 §4 moved
+// the lyrics row directly under the ruler), so the tempo lane now starts at
+// y=46, not y=24.
+const TEMPO_LANE = {x: 120, y: 52};
 
 describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
   it('opens the tempo-lane menu on a right-click (button 2)', async () => {

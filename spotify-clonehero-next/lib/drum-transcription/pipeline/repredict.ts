@@ -1,8 +1,8 @@
 /**
  * Class-(b) RE-PREDICT tempo remap — plan 0061 §3 / §3a / §7.
  *
- * A structural tempo-map correction (half/double-time flip, tap-tempo fit,
- * meter change) changes what the lattice *means*: every note's tick was
+ * A structural tempo-map correction (half/double-time flip, meter change)
+ * changes what the lattice *means*: every note's tick was
  * assigned under a wrong-shaped grid, so keep-ms would fossilize the old
  * quantization into the corrected chart. RE-PREDICT throws the snapped note
  * positions away and re-derives each note fresh from the retained decoded
@@ -12,8 +12,8 @@
  *
  * The op is:
  *   1. Take the caller's structurally-corrected `Synctrack` (the octave
- *      rescale / tap fit). This is the warp's INCUMBENT input, not the map
- *      that gets committed.
+ *      rescale). This is the warp's INCUMBENT input, not the map that gets
+ *      committed.
  *   2. Re-run the SHIPPED windowed KS-warp ({@link warpGridReach}) with that
  *      grid as incumbent, re-fitting drift against the kick/snare onsets at
  *      the corrected octave. The committed tempo map is the WARPED output
@@ -96,7 +96,7 @@ function allOnsetsMs(onsets: readonly DecodedOnset[]): number[] {
  *
  * `doc`'s events must still carry their pre-edit `msTime` (the audio anchor).
  * `correctedSync` is the structurally-corrected grid produced by the caller
- * (octave rescale / tap fit — plan 0061 §7, phase 61-7 owns that control).
+ * (octave rescale — plan 0061 §7, phase 61-7 owns that control).
  * `onsets` is the project's retained decoded onsets, or `null` for a
  * never-transcribed project (→ RESNAP fallback).
  *
@@ -185,8 +185,9 @@ export function repredictTempo(
 // The op-disagreement check surfaces a KEEP-MS vs RE-PREDICT choice to the
 // user only when the two ops disagree by more than a calibrated ms threshold.
 // v1 has NO non-previewed class-(b) entry point (the only trigger, §7's
-// half/double + tap-tempo control, always previews before committing — the
-// preview IS the op choice), so this never runs live. The concrete ms
+// half/double structural-correction control, always previews before
+// committing — the preview IS the op choice), so this never runs live. The
+// concrete ms
 // threshold is an unresolved Eli decision (§3a's "UNRESOLVED" note); this is
 // wired as dead code so a FUTURE non-previewed entry point (e.g. a batch "fix
 // common issues" scanner) can enable it without re-deriving the plumbing.

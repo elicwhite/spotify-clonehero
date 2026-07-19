@@ -139,6 +139,11 @@ export {
   listLyricTicks,
   moveLyric,
   parseLyricId,
+  addLyric,
+  deleteLyric,
+  restoreLyric,
+  setLyricText,
+  type RemovedLyric,
 } from './helpers/lyrics';
 
 // Vocal phrase helpers
@@ -150,6 +155,9 @@ export {
   movePhraseStart,
   movePhraseEnd,
   parsePhraseId,
+  addPhrase,
+  deletePhrase,
+  insertPhrase,
 } from './helpers/phrases';
 
 // Per-entity-kind dispatch

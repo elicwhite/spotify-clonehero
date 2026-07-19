@@ -68,14 +68,13 @@ jest.mock('../storage/opfs', () => {
         projects.set(id, {...projects.get(id), ...patch});
       },
     ),
-    storeAudio: jest.fn(async (id: string) => {
+    storeAudioOpus: jest.fn(async (id: string) => {
       files.set(key(id, 'audio.pcm'), new Uint8Array(0));
     }),
-    storeOriginalAudio: jest.fn(async () => {}),
     hasStoredAudio: jest.fn(async (id: string) =>
       files.has(key(id, 'audio.pcm')),
     ),
-    loadAudioForDemucs: jest.fn(async () => new Float32Array(512)),
+    loadFullMixPcm: jest.fn(async () => new Float32Array(512)),
     writeProjectBinary: jest.fn(
       async (id: string, name: string, data: unknown) => {
         files.set(key(id, name), data);
@@ -132,6 +131,14 @@ jest.mock('../audio/decoder', () => ({
     numberOfChannels: 2,
   })),
   interleaveAudioBuffer: jest.fn(() => new Float32Array(1024)),
+}));
+
+// The upload path Opus-encodes the decoded PCM for storage; jsdom has no
+// WebCodecs, so this is stubbed like the other audio IO above.
+jest.mock('../../audio/opus-encoder', () => ({
+  encodePcmToOpus: jest.fn(
+    async () => new Uint8Array([0x4f, 0x67, 0x67, 0x53]),
+  ),
 }));
 
 jest.mock('./crnn-audio-prep', () => ({
@@ -301,9 +308,9 @@ describe('runner write sites', () => {
     // A project interrupted after audio storage but before transcription:
     // audio present, no chart, no decoded onsets.
     const meta = await opfs.createProject('resumed');
-    await opfs.storeAudio(
+    await opfs.storeAudioOpus(
       meta.id,
-      new Float32Array(0),
+      new Uint8Array(0),
       {} as never,
       0 as never,
     );
@@ -319,9 +326,9 @@ describe('runner write sites', () => {
     expect(REGENERATED_ARTIFACT_FILES).toContain(DECODED_ONSETS_FILE);
 
     const meta = await opfs.createProject('regen');
-    await opfs.storeAudio(
+    await opfs.storeAudioOpus(
       meta.id,
-      new Float32Array(0),
+      new Uint8Array(0),
       {} as never,
       0 as never,
     );

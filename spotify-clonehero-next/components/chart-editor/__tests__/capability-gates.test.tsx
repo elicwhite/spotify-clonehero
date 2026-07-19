@@ -102,10 +102,15 @@ describe('LeftSidebar capability gating', () => {
 });
 
 describe('EditorCapabilities preset shape', () => {
-  it('DRUM_EDIT exposes notes + sections, not lyrics', () => {
+  it('DRUM_EDIT exposes notes + sections + lyrics (plan 0063 Part D)', () => {
     expect(DRUM_EDIT_CAPABILITIES.selectable.has('note')).toBe(true);
     expect(DRUM_EDIT_CAPABILITIES.selectable.has('section')).toBe(true);
-    expect(DRUM_EDIT_CAPABILITIES.selectable.has('lyric')).toBe(false);
+    // The editor's Add Lyrics flow (plan 0063 Part C) writes into the same
+    // vocalTracks the piano-roll lyrics row and the highway marker drag both
+    // read/write, so lyrics are interactive here too, not just on
+    // /add-lyrics.
+    expect(DRUM_EDIT_CAPABILITIES.selectable.has('lyric')).toBe(true);
+    expect(DRUM_EDIT_CAPABILITIES.draggable.has('lyric')).toBe(true);
     expect(DRUM_EDIT_CAPABILITIES.showDrumLanes).toBe(true);
     expect(DRUM_EDIT_CAPABILITIES.showNotePlacementTools).toBe(true);
   });

@@ -11,6 +11,8 @@
  *     stem-cache/
  *       {fingerprint}/
  *         drums.pcm    - interleaved stereo Float32 @ 44.1 kHz
+ *         vocals.opus  - Opus-encoded vocals stem (written opportunistically
+ *                          alongside drums.pcm; see storeCachedStemOpus)
  *
  * The fingerprint is a SHA-256 over the raw audio bytes followed by a NUL
  * separator and the UTF-8 separator id, so changing either the audio or any
@@ -98,6 +100,55 @@ export async function hasCachedStem(
   try {
     const dir = await getCacheEntryDir(fingerprint, false);
     await dir.getFileHandle(`${stemName}.pcm`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Opus-encoded stems (e.g. vocals — kept Opus-encoded rather than raw PCM,
+// unlike drums, which may be reprocessed by the CRNN later)
+// ---------------------------------------------------------------------------
+
+/** Stores an already Opus-encoded stem in the cache. */
+export async function storeCachedStemOpus(
+  fingerprint: string,
+  stemName: string,
+  opusBytes: Uint8Array,
+): Promise<void> {
+  const dir = await getCacheEntryDir(fingerprint, true);
+  const fileHandle = await dir.getFileHandle(`${stemName}.opus`, {
+    create: true,
+  });
+  const writable = await fileHandle.createWritable();
+  await writable.write(opusBytes as Uint8Array<ArrayBuffer>);
+  await writable.close();
+}
+
+/**
+ * Loads a cached Opus-encoded stem's raw bytes (undecoded).
+ *
+ * @throws {Error} if the cache entry does not exist.
+ */
+export async function loadCachedStemOpus(
+  fingerprint: string,
+  stemName: string,
+): Promise<Uint8Array> {
+  const dir = await getCacheEntryDir(fingerprint, false);
+  const fileHandle = await dir.getFileHandle(`${stemName}.opus`);
+  const file = await fileHandle.getFile();
+  return new Uint8Array(await file.arrayBuffer());
+}
+
+/** Whether an Opus-encoded stem is present in the cache for this fingerprint. */
+export async function hasCachedStemOpus(
+  fingerprint: string,
+  stemName: string,
+): Promise<boolean> {
+  try {
+    const dir = await getCacheEntryDir(fingerprint, false);
+    await dir.getFileHandle(`${stemName}.opus`);
     return true;
   } catch {
     return false;

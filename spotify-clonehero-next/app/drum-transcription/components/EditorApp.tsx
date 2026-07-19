@@ -26,6 +26,8 @@ import {
   editedVariant,
   updateProject,
   loadAudioMeta,
+  loadFullMixPcm,
+  readSongOpus,
   readOriginalAudio,
   readProjectAssets,
   readPackageInfo,
@@ -34,7 +36,15 @@ import {
 } from '@/lib/drum-transcription/storage/opfs';
 import {loadDecodedOnsets} from '@/lib/drum-transcription/pipeline/decoded-onsets';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
-import {loadDrumStem} from '@/lib/drum-transcription/ml/roformer-separation';
+import {
+  loadDrumStem,
+  hasVocalsStem,
+  loadVocalsStem,
+} from '@/lib/drum-transcription/ml/roformer-separation';
+import {
+  decodeAudio,
+  interleaveAudioBuffer,
+} from '@/lib/drum-transcription/audio/decoder';
 import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
@@ -44,6 +54,7 @@ import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboa
 import {useAutoSave} from '@/components/chart-editor/hooks/useAutoSave';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
 import type {AudioSource} from '@/components/chart-editor/ExportDialog';
+import AddLyricsDialog from '@/components/chart-editor/AddLyricsDialog';
 import StemVolumeControls from './StemVolumeControls';
 import {cn} from '@/lib/utils';
 
@@ -77,15 +88,19 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
   // Separated drum stem PCM — the highway's waveform surface shows this
   // instead of the full mix when separation has run.
   const [drumStemPcm, setDrumStemPcm] = useState<Float32Array | null>(null);
+  // Separated vocals stem PCM (plan 0063 Round 2 §5) — background waveform
+  // in the piano-roll's lyrics row. null when no vocals stem is cached yet
+  // (legacy projects, or projects that haven't run Add Lyrics/separation).
+  const [vocalsStemPcm, setVocalsStemPcm] = useState<Float32Array | null>(null);
   const [audioChannels, setAudioChannels] = useState(2);
   const [durationSeconds, setDurationSeconds] = useState(0);
   // Mirrors audioManagerRef (shared via context for event-handler reads)
   // into render-visible state so ChartEditor and StemVolumeControls
   // receive a stable prop without reading ref.current during render.
   const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
-  // Retained decoded onsets (plan 0061 §3a) for the piano-roll's half/double +
-  // tap-tempo RE-PREDICT op. null when this project was never transcribed by
-  // this app (the control then falls back to RESNAP with a disclosure).
+  // Retained decoded onsets (plan 0061 §3a) for the piano-roll's half/double
+  // RE-PREDICT op. null when this project was never transcribed by this app
+  // (the control then falls back to RESNAP with a disclosure).
   const [decodedOnsets, setDecodedOnsets] = useState<DecodedOnsetsFile | null>(
     null,
   );
@@ -154,6 +169,27 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
   useHotkey('M', () => {
     dispatch({type: 'TOGGLE_MUTE_TRACK', track: 'drums'});
   });
+
+  // Decode the cached vocals stem (Round 2 §5) into PCM for the piano-roll
+  // lyrics row's background waveform. Called at project load AND again after
+  // the Add Lyrics dialog runs separation, so a stem produced mid-session
+  // shows up without a reload. No-op when no vocals stem is cached (legacy
+  // projects that haven't separated yet).
+  const refreshVocalsStem = useCallback(async () => {
+    try {
+      if (!(await hasVocalsStem(projectId))) return;
+      const vocalsOpus = await loadVocalsStem(projectId);
+      // Cached stem bytes are always a plain-ArrayBuffer view, never
+      // SharedArrayBuffer-backed (mirrors the same cast in `saveFn`).
+      const vocalsBuffer = await new Blob([
+        vocalsOpus as Uint8Array<ArrayBuffer>,
+      ]).arrayBuffer();
+      const decoded = await decodeAudio(vocalsBuffer);
+      setVocalsStemPcm(interleaveAudioBuffer(decoded));
+    } catch (err) {
+      console.warn('Failed to load vocals stem for waveform:', err);
+    }
+  }, [projectId]);
 
   // Load data from OPFS
   useEffect(() => {
@@ -231,11 +267,10 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
         setAudioMeta(aMeta);
         setDurationSeconds(aMeta.durationMs / 1000);
 
-        // 9. Load raw PCM for waveform visualization
-        const audioDir = await getAudioDir(projectId);
-        const pcmHandle = await audioDir.getFileHandle('full.pcm');
-        const pcmFile = await pcmHandle.getFile();
-        const pcmData = new Float32Array(await pcmFile.arrayBuffer());
+        // 9. Load the full mix as PCM for waveform visualization (decodes
+        // song.opus in memory for current projects; reads full.pcm directly
+        // for legacy ones).
+        const pcmData = await loadFullMixPcm(projectId);
         if (cancelled) return;
         setAudioPcm(pcmData);
         setAudioChannels(aMeta.channels);
@@ -269,6 +304,13 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
         } catch {
           // Stem not available, skip
         }
+
+        // Load the separated vocals stem (Round 2 §5), for the piano-roll
+        // lyrics row's background waveform only — not registered with
+        // AudioManager (it's not a playback source). Opportunistic: absent
+        // on legacy projects, or ones that haven't run separation/Add Lyrics.
+        await refreshVocalsStem();
+        if (cancelled) return;
 
         const audioManager = new AudioManager(audioFiles, () => {
           dispatch({type: 'SET_PLAYING', isPlaying: false});
@@ -397,13 +439,14 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
 
   // Provide audio sources for export.
   //
-  // Stems live in the project's `stems/` subdirectory and the full mix in
-  // `audio/full.pcm` — the same handles the loader uses above.
+  // Stems live in the fingerprint-keyed stem cache; the full mix is
+  // `audio/song.opus` (current projects) or `audio/full.pcm` (legacy).
   //
   // `includeStems` (from the export dialog) selects between:
   //   true  → separated drums.opus + accompaniment song.opus, Opus-encoded
   //           from the stem PCM via WebCodecs.
-  //   false → the user's original uploaded file, byte-for-byte, as song.<ext>.
+  //   false → the user's original uploaded file, byte-for-byte, as song.<ext>
+  //           (song.opus verbatim for current projects).
   const getAudioSources = useCallback(
     async ({includeStems}: {includeStems: boolean}): Promise<AudioSource[]> => {
       const sources: AudioSource[] = [];
@@ -413,12 +456,13 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
       const toOpus = (pcm: Float32Array): Promise<Uint8Array> =>
         encodePcmToOpus(pcm, aMeta.sampleRate, aMeta.channels);
 
-      const readFullMix = async (): Promise<Float32Array | null> => {
+      // Current projects store the full mix pre-encoded as Opus — reuse it
+      // verbatim rather than decoding + re-encoding.
+      const songOpus = await readSongOpus(projectId);
+
+      const readFullMixPcm = async (): Promise<Float32Array | null> => {
         try {
-          const audioDir = await getAudioDir(projectId);
-          const handle = await audioDir.getFileHandle('full.pcm');
-          const file = await handle.getFile();
-          return new Float32Array(await file.arrayBuffer());
+          return await loadFullMixPcm(projectId);
         } catch {
           return null;
         }
@@ -426,6 +470,10 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
 
       // Original audio: the uploaded file, unmodified, named song.<ext>.
       if (!includeStems) {
+        if (songOpus) {
+          sources.push({fileName: 'song.opus', data: songOpus});
+          return sources;
+        }
         const original = await readOriginalAudio(projectId);
         if (original) {
           const ext = original.extension || 'mp3';
@@ -433,7 +481,7 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
           return sources;
         }
         // Older projects have no stored original: fall back to Opus full mix.
-        const fullPcm = await readFullMix();
+        const fullPcm = await readFullMixPcm();
         if (fullPcm) {
           const opus = await toOpus(fullPcm);
           sources.push({
@@ -461,7 +509,11 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
 
       // Accompaniment: only the drum stem is ever separated, so this is
       // always the full mix.
-      const accompaniment = await readFullMix();
+      if (songOpus) {
+        sources.push({fileName: 'song.opus', data: songOpus});
+        return sources;
+      }
+      const accompaniment = await readFullMixPcm();
       if (accompaniment) {
         const opus = await toOpus(accompaniment);
         sources.push({
@@ -514,6 +566,8 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
       audioData={audioPcm ?? undefined}
       highwayAudioData={drumStemPcm ?? undefined}
       audioChannels={audioChannels}
+      lyricsWaveData={vocalsStemPcm ?? undefined}
+      lyricsWaveChannels={2}
       durationSeconds={durationSeconds}
       decodedOnsets={decodedOnsets}
       sections={chart.sections}
@@ -577,35 +631,14 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
             </>
           )}
           <StemVolumeControls audioManager={audioManager} />
+          <div className="pt-4 border-t">
+            <AddLyricsDialog
+              projectId={projectId}
+              onVocalsStemChanged={refreshVocalsStem}
+            />
+          </div>
         </>
       }
     />
   );
-}
-
-// ---------------------------------------------------------------------------
-// OPFS helpers
-// ---------------------------------------------------------------------------
-
-async function getOPFSRoot(): Promise<FileSystemDirectoryHandle> {
-  return navigator.storage.getDirectory();
-}
-
-async function getNamespaceDir(): Promise<FileSystemDirectoryHandle> {
-  const root = await getOPFSRoot();
-  return root.getDirectoryHandle('drum-transcription');
-}
-
-async function getProjectDir(
-  projectId: string,
-): Promise<FileSystemDirectoryHandle> {
-  const ns = await getNamespaceDir();
-  return ns.getDirectoryHandle(projectId);
-}
-
-async function getAudioDir(
-  projectId: string,
-): Promise<FileSystemDirectoryHandle> {
-  const projectDir = await getProjectDir(projectId);
-  return projectDir.getDirectoryHandle('audio');
 }

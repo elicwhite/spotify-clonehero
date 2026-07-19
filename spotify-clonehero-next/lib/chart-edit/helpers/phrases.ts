@@ -14,12 +14,21 @@
  * `harm2`, `harm3`) the helper operates on; defaults to `'vocals'`.
  */
 
-import type {ChartDocument, NormalizedVocalPart} from '../types';
+import type {
+  ChartDocument,
+  NormalizedVocalPart,
+  NormalizedVocalPhrase,
+} from '../types';
 import {DEFAULT_VOCALS_PART} from './lyrics';
 import {applyEventTiming, makeChartTiming} from '../retime';
 
 /** Minimum length (in ticks) a phrase can be reduced to via drag. */
 const MIN_PHRASE_LENGTH = 1;
+
+/** Default length (in beats, i.e. `resolution` ticks each) for a phrase
+ *  created via "Add phrase here" — roughly one 4/4 bar. Clamped against
+ *  neighboring phrases so the new phrase never overlaps them. */
+const DEFAULT_PHRASE_LENGTH_BEATS = 4;
 
 /**
  * Pack `{partName, tick}` into a stable id for a phrase-start entity.
@@ -150,4 +159,91 @@ export function movePhraseEnd(
   phrase.length = clamped - phrase.tick;
   applyEventTiming(phrase, makeChartTiming(doc.parsedChart));
   return clamped;
+}
+
+/**
+ * Create a new, empty (no lyrics/notes) phrase near `tick`, clamped so it
+ * can't overlap the neighboring phrases. Returns the created phrase's
+ * (possibly clamped) start tick, or `null` when `tick` already falls
+ * inside an existing phrase, or there isn't at least `MIN_PHRASE_LENGTH`
+ * ticks of room between the neighbors surrounding it.
+ */
+export function addPhrase(
+  doc: ChartDocument,
+  tick: number,
+  partName: string = DEFAULT_VOCALS_PART,
+): number | null {
+  const part = getVocalPart(doc, partName);
+  if (!part) return null;
+
+  const phrases = part.notePhrases;
+  const target = Math.max(0, tick);
+
+  let prevEnd = 0;
+  let nextStart = Number.POSITIVE_INFINITY;
+  for (const p of phrases) {
+    const end = p.tick + p.length;
+    if (p.tick <= target && target < end) return null; // already inside a phrase
+    if (end <= target && end > prevEnd) prevEnd = end;
+    if (p.tick >= target && p.tick < nextStart) nextStart = p.tick;
+  }
+  if (nextStart - prevEnd < MIN_PHRASE_LENGTH) return null;
+
+  const start = Math.max(
+    prevEnd,
+    Math.min(target, nextStart - MIN_PHRASE_LENGTH),
+  );
+  const resolution = doc.parsedChart.resolution;
+  const desiredLength = resolution * DEFAULT_PHRASE_LENGTH_BEATS;
+  const maxLength = Math.max(MIN_PHRASE_LENGTH, nextStart - start);
+  const length = Math.max(
+    MIN_PHRASE_LENGTH,
+    Math.min(desiredLength, maxLength),
+  );
+
+  const phrase: NormalizedVocalPhrase = {
+    tick: start,
+    msTime: 0,
+    length,
+    msLength: 0,
+    isPercussion: false,
+    notes: [],
+    lyrics: [],
+  };
+  applyEventTiming(phrase, makeChartTiming(doc.parsedChart));
+  phrases.push(phrase);
+  phrases.sort((a, b) => a.tick - b.tick);
+  return start;
+}
+
+/**
+ * Remove the phrase starting at `tick` (with its lyrics/notes). Returns
+ * the removed phrase (for undo, via {@link insertPhrase}), or `null` if no
+ * phrase starts there.
+ */
+export function deletePhrase(
+  doc: ChartDocument,
+  tick: number,
+  partName: string = DEFAULT_VOCALS_PART,
+): NormalizedVocalPhrase | null {
+  const part = getVocalPart(doc, partName);
+  if (!part) return null;
+
+  const idx = part.notePhrases.findIndex(p => p.tick === tick);
+  if (idx === -1) return null;
+  const [removed] = part.notePhrases.splice(idx, 1);
+  return removed;
+}
+
+/** Undo counterpart to {@link deletePhrase} (and undo of {@link addPhrase}'s
+ *  redo path): re-inserts `phrase` verbatim, tick-sorted. */
+export function insertPhrase(
+  doc: ChartDocument,
+  phrase: NormalizedVocalPhrase,
+  partName: string = DEFAULT_VOCALS_PART,
+): void {
+  const part = getVocalPart(doc, partName);
+  if (!part) return;
+  part.notePhrases.push(phrase);
+  part.notePhrases.sort((a, b) => a.tick - b.tick);
 }
