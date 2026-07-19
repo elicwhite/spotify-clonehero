@@ -50,10 +50,7 @@ import {
   DEFAULT_PHASE_ALIGN_CONFIG,
   type PhaseAlignGateConfig,
 } from '../ml/phase-align-config';
-import {
-  computePhaseAlignShiftMs,
-  type PhaseAlignResult,
-} from './phase-align';
+import {computePhaseAlignShiftMs, type PhaseAlignResult} from './phase-align';
 
 /**
  * Which grid a chart's note placement is measured against — selects the
@@ -165,7 +162,9 @@ export function buildDrumsTrackFromOnsets(
   const phaseAlign: PhaseAlignResult =
     flow === 'audio'
       ? computePhaseAlignShiftMs(
-          events.map(e => e.timeSeconds * 1000 + SYSTEMATIC_ONSET_MS_AUDIO_FLOW),
+          events.map(
+            e => e.timeSeconds * 1000 + SYSTEMATIC_ONSET_MS_AUDIO_FLOW,
+          ),
           buildTimedTempos(tempos, resolution),
           resolution,
           phaseAlignConfig,
@@ -337,7 +336,11 @@ export function buildChartDocument(
     let prevTick = -1;
     for (let i = 0; i < sections.labels.length; i++) {
       const base = sections.labels[i];
-      const rawTick = msToTick(sections.times[i] * 1000, timedTempos, RESOLUTION);
+      const rawTick = msToTick(
+        sections.times[i] * 1000,
+        timedTempos,
+        RESOLUTION,
+      );
       const tick = snapToBar(rawTick);
       // If two boundaries snap to the same bar-line, keep the first and skip this
       // one WITHOUT advancing the repeat counter — otherwise addSection would

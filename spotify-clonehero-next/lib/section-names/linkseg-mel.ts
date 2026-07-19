@@ -48,7 +48,11 @@ function reflectPad(x: Float32Array, pad: number): Float32Array {
  * One beat window (LINKSEG_WIN_SAMPLES samples) -> (64 mel x 64 time) dB, laid out [mel*64 + time].
  * Writes into `dst` at `dstOffset` (length 4096).
  */
-export function melWindowInto(window: Float32Array, dst: Float32Array, dstOffset: number): void {
+export function melWindowInto(
+  window: Float32Array,
+  dst: Float32Array,
+  dstOffset: number,
+): void {
   const hann = getHann();
   const padded = reflectPad(window, CENTER_PAD);
   const nBins = LINKSEG_N_FFT / 2 + 1; // 513
@@ -83,6 +87,7 @@ export function melWindowInto(window: Float32Array, dst: Float32Array, dstOffset
 export function melForWindows(windows: Float32Array[]): Float32Array {
   const N = windows.length;
   const out = new Float32Array(N * LINKSEG_N_MELS * LINKSEG_MEL_FRAMES);
-  for (let i = 0; i < N; i++) melWindowInto(windows[i], out, i * LINKSEG_N_MELS * LINKSEG_MEL_FRAMES);
+  for (let i = 0; i < N; i++)
+    melWindowInto(windows[i], out, i * LINKSEG_N_MELS * LINKSEG_MEL_FRAMES);
   return out;
 }

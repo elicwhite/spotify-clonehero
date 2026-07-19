@@ -94,7 +94,10 @@ describe('warpGrid vs Python kick_snare_warp.warp_grid reference fixtures', () =
         expect(diag.admitted).toBe(true);
         expect(grid).not.toBeNull();
         expect(fixture.expected_grid).not.toBeNull();
-        expectExactSynctrack(grid as Synctrack, fixture.expected_grid as Synctrack);
+        expectExactSynctrack(
+          grid as Synctrack,
+          fixture.expected_grid as Synctrack,
+        );
       } else {
         expect(diag.admitted).toBe(false);
         expect(grid).toBeNull();

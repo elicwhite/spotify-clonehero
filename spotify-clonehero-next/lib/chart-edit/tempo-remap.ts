@@ -143,8 +143,7 @@ export function applyMarkerMoveBpms(
   // The marker's ACTUAL landed ms once prev's quantized BPM is re-integrated —
   // not `clampedMs`, which was derived from an unrepresentable BPM. Deriving
   // cur's BPM from this landing (below) is what keeps the next marker put.
-  const landedMs =
-    prev.msTime + (beatsBefore / prev.beatsPerMinute) * 60000;
+  const landedMs = prev.msTime + (beatsBefore / prev.beatsPerMinute) * 60000;
 
   // Segment after the marker: cur governs [cur.tick, next.tick]. Choose the
   // quantized BPM that re-integrates the next marker's ms as close to its

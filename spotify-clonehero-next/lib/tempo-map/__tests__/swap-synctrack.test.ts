@@ -244,7 +244,9 @@ describe('swapSynctrack', () => {
   test('sectionPolicy defaults to preserve — byte-identical to no option', () => {
     const chart = makeChart();
     const withDefault = swapSynctrack(chart, sync);
-    const withPreserve = swapSynctrack(chart, sync, {sectionPolicy: 'preserve'});
+    const withPreserve = swapSynctrack(chart, sync, {
+      sectionPolicy: 'preserve',
+    });
     expect(withPreserve.sections).toEqual(withDefault.sections);
   });
 

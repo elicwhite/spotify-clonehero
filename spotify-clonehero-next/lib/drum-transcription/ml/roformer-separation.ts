@@ -169,7 +169,10 @@ export async function separateDrums(
     msg => {
       const m = msg.match(/\((\d+)%\)/);
       if (m) {
-        onProgress?.({step: 'loading-model', percent: parseInt(m[1], 10) / 100});
+        onProgress?.({
+          step: 'loading-model',
+          percent: parseInt(m[1], 10) / 100,
+        });
       }
     },
     ROFORMER_MIN_BYTES,

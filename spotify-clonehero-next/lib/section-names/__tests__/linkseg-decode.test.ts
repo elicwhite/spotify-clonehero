@@ -5,7 +5,10 @@ import {linksegDecode, LINKSEG_LABELS} from '../linkseg-decode';
 // Golden: Python post_process() output on song0's cached DGL activations. Locks the byte-exact
 // decode (peak-pick + majority-vote) so a future JS refactor can't silently drift it.
 const golden = JSON.parse(
-  readFileSync(join(__dirname, 'fixtures', 'linkseg-decode-golden.json'), 'utf8'),
+  readFileSync(
+    join(__dirname, 'fixtures', 'linkseg-decode-golden.json'),
+    'utf8',
+  ),
 ) as {
   bound: number[];
   label: number[];

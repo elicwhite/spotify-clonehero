@@ -74,6 +74,8 @@ describe('postprocess + peak picking vs reference fixture', () => {
     }));
 
     expect(got.length).toBe(fixture.onsets.length);
-    expect(got).toEqual(fixture.onsets.map(o => ({lane: o.lane, frame: o.frame})));
+    expect(got).toEqual(
+      fixture.onsets.map(o => ({lane: o.lane, frame: o.frame})),
+    );
   });
 });

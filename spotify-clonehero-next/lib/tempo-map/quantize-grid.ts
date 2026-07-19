@@ -34,7 +34,7 @@
  * 16th-note triplets (resolution/6). */
 export interface GridCandidate {
   tick: number;
-  kind: "straight" | "triplet";
+  kind: 'straight' | 'triplet';
 }
 
 /**
@@ -52,9 +52,9 @@ export function gridCandidates(
   return [
     {
       tick: Math.round(tick / straightTicks) * straightTicks,
-      kind: "straight",
+      kind: 'straight',
     },
-    { tick: Math.round(tick / tripletTicks) * tripletTicks, kind: "triplet" },
+    {tick: Math.round(tick / tripletTicks) * tripletTicks, kind: 'triplet'},
   ];
 }
 

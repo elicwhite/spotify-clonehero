@@ -21,11 +21,7 @@ import {createEmptyChart} from '@/lib/chart-edit';
 import {swapSynctrack} from '@/lib/tempo-map/swap-synctrack';
 import {finalizeSynctrack} from '@/lib/tempo-map/finalize-synctrack';
 import type {Synctrack} from '@/lib/tempo-map/types';
-import {
-  buildChartDocument,
-  RESOLUTION,
-  DEFAULT_BPM,
-} from './chart-builder';
+import {buildChartDocument, RESOLUTION, DEFAULT_BPM} from './chart-builder';
 import type {RawDrumEvent} from '../ml/types';
 
 const FIXTURES_DIR = path.join(
@@ -92,8 +88,7 @@ describe('tempo-mode output === full-pipeline synctrack (no-drift guarantee)', (
   it.each(index)('$song', ({file}) => {
     const fixture = loadFixture(file);
     const events = eventsFromFixture(fixture);
-    const durationSeconds =
-      Math.max(0, ...fixture.all_onsets_ms) / 1000 + 5;
+    const durationSeconds = Math.max(0, ...fixture.all_onsets_ms) / 1000 + 5;
 
     // What /tempo's tempo-track.ts produces as its final `synctrack` (the
     // exact composition runTempoTrackFromPcm performs after CRNN + Beat

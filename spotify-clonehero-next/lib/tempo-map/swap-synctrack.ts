@@ -13,15 +13,15 @@
  * The chart's resolution is kept as-is.
  */
 
-import type { ParsedChart } from "@eliwhite/scan-chart";
-import type { Synctrack } from "./types";
+import type {ParsedChart} from '@eliwhite/scan-chart';
+import type {Synctrack} from './types';
 import {
   buildSyncLayout,
   msToTick,
   tickToMs,
   type TempoSegment,
-} from "./synctrack-ticks";
-import { snapGroupToGrid } from "./quantize-grid";
+} from './synctrack-ticks';
+import {snapGroupToGrid} from './quantize-grid';
 
 const BPM_EPS = 1e-3;
 
@@ -58,20 +58,20 @@ export interface SwapSynctrackOptions {
    *    Decision 4 ("sections snap to the grid"). Used only by the
    *    audio-anchored hand-edit remap.
    */
-  sectionPolicy?: "preserve" | "snap-whole-note";
+  sectionPolicy?: 'preserve' | 'snap-whole-note';
 }
 
-function reTickEvent<T extends { tick: number; msTime: number }>(
+function reTickEvent<T extends {tick: number; msTime: number}>(
   ev: T,
   segs: TempoSegment[],
   resolution: number,
 ): T {
   const newTick = Math.round(msToTick(ev.msTime, segs, resolution));
-  return { ...ev, tick: Math.max(0, newTick) };
+  return {...ev, tick: Math.max(0, newTick)};
 }
 
 function reTickLengthEvent<
-  T extends { tick: number; msTime: number; length: number; msLength: number },
+  T extends {tick: number; msTime: number; length: number; msLength: number},
 >(ev: T, segs: TempoSegment[], resolution: number): T {
   const startTick = Math.max(
     0,
@@ -80,7 +80,7 @@ function reTickLengthEvent<
   const endMs = ev.msTime + ev.msLength;
   const endTick = Math.round(msToTick(endMs, segs, resolution));
   const newLength = Math.max(0, endTick - startTick);
-  return { ...ev, tick: startTick, length: newLength };
+  return {...ev, tick: startTick, length: newLength};
 }
 
 /**
@@ -93,11 +93,11 @@ export function swapSynctrack(
   options: SwapSynctrackOptions = {},
 ): ParsedChart {
   const resolution = chart.resolution;
-  const { segs, leadInTs } = buildSyncLayout(sync, resolution);
+  const {segs, leadInTs} = buildSyncLayout(sync, resolution);
 
   const quantize = options.quantizeNotes ?? false;
   const snapToleranceMs = options.snapToleranceMs ?? DEFAULT_SNAP_TOLERANCE_MS;
-  const sectionPolicy = options.sectionPolicy ?? "preserve";
+  const sectionPolicy = options.sectionPolicy ?? 'preserve';
 
   // Exact (un-quantized) re-tick: preserves every note's audio time to the
   // nearest tick. Used for the quantizeNotes=false path (unchanged) and as
@@ -117,7 +117,7 @@ export function swapSynctrack(
     const startTick = rawTick(ev.msTime);
     const endTick =
       ev.msLength > 0 ? rawTick(ev.msTime + ev.msLength) : startTick;
-    return { ...ev, tick: startTick, length: Math.max(0, endTick - startTick) };
+    return {...ev, tick: startTick, length: Math.max(0, endTick - startTick)};
   };
 
   // Snap one audio position to a grid tick, abstaining (raw rounded tick)
@@ -148,9 +148,9 @@ export function swapSynctrack(
     group: T[],
   ): T[] => {
     if (!quantize || group.length === 0) return group.map(reTickNoteRaw);
-    const groupLanes = group.map((n) => (n as { type?: number }).type ?? 0);
+    const groupLanes = group.map(n => (n as {type?: number}).type ?? 0);
     const startTick = snapPos(group[0].msTime, groupLanes);
-    return group.map((ev) => {
+    return group.map(ev => {
       const endTick =
         ev.msLength > 0
           ? snapPos(ev.msTime + ev.msLength, groupLanes)
@@ -169,7 +169,7 @@ export function swapSynctrack(
   // segment buildSegments synthesizes to anchor ms=0 at tick 0). Writing
   // sync.tempos with a plain tick-0 anchor instead would re-time the
   // pre-origin tick region and shift every note against the audio.
-  const newTemposRaw = segs.map((s) => ({
+  const newTemposRaw = segs.map(s => ({
     tick: Math.max(0, Math.round(s.tick)),
     beatsPerMinute: s.bpm,
     msTime: Math.max(0, s.ms),
@@ -235,7 +235,7 @@ export function swapSynctrack(
   }
 
   // --- Re-tick every other event ---
-  const rtE = <T extends { tick: number; msTime: number }>(e: T) =>
+  const rtE = <T extends {tick: number; msTime: number}>(e: T) =>
     reTickEvent(e, segs, resolution);
   const rtL = <
     T extends {
@@ -252,18 +252,18 @@ export function swapSynctrack(
   // audio-time re-tick); 'snap-whole-note' rounds to the nearest whole-note
   // gridline (resolution*4 ticks) to the section's old audio position.
   const wholeNoteTicks = resolution * 4;
-  const rtSection = <T extends { tick: number; msTime: number }>(e: T): T => {
-    if (sectionPolicy !== "snap-whole-note")
+  const rtSection = <T extends {tick: number; msTime: number}>(e: T): T => {
+    if (sectionPolicy !== 'snap-whole-note')
       return reTickEvent(e, segs, resolution);
     const frac = msToTick(e.msTime, segs, resolution);
     const snapped = Math.max(
       0,
       Math.round(frac / wholeNoteTicks) * wholeNoteTicks,
     );
-    return { ...e, tick: snapped };
+    return {...e, tick: snapped};
   };
 
-  const newTrackData = chart.trackData.map((td) => {
+  const newTrackData = chart.trackData.map(td => {
     const anyTd = td as any;
     return {
       ...td,
@@ -278,9 +278,9 @@ export function swapSynctrack(
       drumFreestyleSections: td.drumFreestyleSections.map(rtL),
       textEvents: td.textEvents.map(rtE),
       ...(anyTd.versusPhrases
-        ? { versusPhrases: anyTd.versusPhrases.map(rtL) }
+        ? {versusPhrases: anyTd.versusPhrases.map(rtL)}
         : {}),
-      ...(anyTd.animations ? { animations: anyTd.animations.map(rtL) } : {}),
+      ...(anyTd.animations ? {animations: anyTd.animations.map(rtL)} : {}),
       noteEventGroups: td.noteEventGroups.map(reTickGroup),
     };
   });

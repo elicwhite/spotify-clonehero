@@ -403,7 +403,10 @@ export async function projectFileExists(
  * fixed at chart-flow ingest (or 'chart' for freshly-predicted, audio-only
  * projects) and never converted.
  */
-export const CHART_FILE_BASENAMES = {chart: 'notes.chart', mid: 'notes.mid'} as const;
+export const CHART_FILE_BASENAMES = {
+  chart: 'notes.chart',
+  mid: 'notes.mid',
+} as const;
 
 /**
  * Basename -> its "edited" (post-autosave) sibling, same extension —
@@ -705,10 +708,7 @@ export async function readProjectAssets(
 ): Promise<{fileName: string; data: Uint8Array}[]> {
   let manifest: string[];
   try {
-    manifest = await readProjectJSON<string[]>(
-      projectId,
-      ASSETS_MANIFEST_FILE,
-    );
+    manifest = await readProjectJSON<string[]>(projectId, ASSETS_MANIFEST_FILE);
   } catch {
     return [];
   }
@@ -721,7 +721,9 @@ export async function readProjectAssets(
       const file = await handle.getFile();
       files.push({fileName, data: new Uint8Array(await file.arrayBuffer())});
     } catch {
-      console.warn(`drum-transcription export: could not read asset "${fileName}"`);
+      console.warn(
+        `drum-transcription export: could not read asset "${fileName}"`,
+      );
     }
   }
   return files;

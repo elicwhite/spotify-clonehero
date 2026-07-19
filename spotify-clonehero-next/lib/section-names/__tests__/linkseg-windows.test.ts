@@ -8,7 +8,10 @@ import {LINKSEG_WIN_SAMPLES} from '../linkseg-mel';
 // frames_to_time / edge-pad window extraction. Uses a ramp waveform (wave[i]=i) so each window's
 // first sample reveals its extraction offset, verifying bf1 without shipping real audio.
 const golden = JSON.parse(
-  readFileSync(join(__dirname, 'fixtures', 'linkseg-windows-golden.json'), 'utf8'),
+  readFileSync(
+    join(__dirname, 'fixtures', 'linkseg-windows-golden.json'),
+    'utf8',
+  ),
 ) as {
   rawBeats: number[];
   waveLen: number;

@@ -1,5 +1,8 @@
 import {createEmptyChart} from '@/lib/chart-edit';
-import {buildChartDocument, buildChartDocumentFromExistingChart} from './chart-builder';
+import {
+  buildChartDocument,
+  buildChartDocumentFromExistingChart,
+} from './chart-builder';
 import type {LinkSegSections} from '@/lib/tempo-map/types';
 import type {RawDrumEvent} from '../ml/types';
 
@@ -123,9 +126,9 @@ describe('buildChartDocumentFromExistingChart', () => {
       existing.parsedChart.timeSignatures,
     );
     expect(doc.parsedChart.resolution).toBe(existing.parsedChart.resolution);
-    expect(
-      doc.parsedChart.trackData.some(t => t.instrument === 'guitar'),
-    ).toBe(true);
+    expect(doc.parsedChart.trackData.some(t => t.instrument === 'guitar')).toBe(
+      true,
+    );
   });
 
   it('replaces an existing Expert Drums track rather than duplicating it', () => {

@@ -37,7 +37,6 @@
 import fs from 'fs';
 import path from 'path';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const ort = require('onnxruntime-web');
 
 import {
@@ -89,13 +88,11 @@ const enabled = process.env['RUN_ONNX_PARITY'] === '1';
 const allowMissingModel = process.env['ALLOW_MISSING_MODEL'] === '1';
 
 if (!enabled) {
-  // eslint-disable-next-line no-console
   console.warn(
     '[crnn-logits-reference] SKIPPED — set RUN_ONNX_PARITY=1 (via ' +
       '`pnpm test:onnx-parity`) to run the onnxruntime-web parity gate.',
   );
 } else if (!haveModel && allowMissingModel) {
-  // eslint-disable-next-line no-console
   console.warn(
     `[crnn-logits-reference] SKIPPED (ALLOW_MISSING_MODEL=1) — model not ` +
       `found at ${MODEL_PATH}. This means the checkpoint-specific parity ` +
@@ -225,7 +222,7 @@ describeIf(
           at = `i=${i} (f=${Math.floor(i / 9)} c=${i % 9})`;
         }
       }
-      // eslint-disable-next-line no-console
+
       console.log(`crnn window-0 logits max abs diff = ${maxDiff} at ${at}`);
       expect(maxDiff).toBeLessThan(1e-3);
     });
@@ -241,7 +238,7 @@ describeIf(
           at = `i=${i} (t=${Math.floor(i / 9)} c=${i % 9})`;
         }
       }
-      // eslint-disable-next-line no-console
+
       console.log(`crnn averaged-acts max abs diff = ${maxDiff} at ${at}`);
       expect(maxDiff).toBeLessThan(1e-3);
     });

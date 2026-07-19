@@ -14,7 +14,8 @@ import {linksegDecode, LINKSEG_LABELS} from './linkseg-decode';
 import type {LinkSegSections} from '@/lib/tempo-map/types';
 
 // Hosted on R2 like the other models; the local public/models copy is a dev fallback.
-const LINKSEG_MODEL_URL = 'https://assets.musiccharts.tools/models/linkseg_7c.onnx';
+const LINKSEG_MODEL_URL =
+  'https://assets.musiccharts.tools/models/linkseg_7c.onnx';
 const LINKSEG_CACHE_KEY = 'linkseg_7c_v1.onnx';
 const LINKSEG_MIN_BYTES = 1_000_000; // real size ~1.5 MB
 const LINKSEG_DEV_URL = '/models/linkseg_7c.onnx';
@@ -118,7 +119,10 @@ export async function runLinkSegSections(opts: {
   const {session, ortTensor, beatTimes, wave22k, duration} = opts;
   if (beatTimes.length < MIN_BEATS) return null;
 
-  const {beatTimes: processedBeats, windows} = buildLinkSegWindows(beatTimes, wave22k);
+  const {beatTimes: processedBeats, windows} = buildLinkSegWindows(
+    beatTimes,
+    wave22k,
+  );
   if (windows.length < MIN_BEATS) return null;
 
   const mel = melForWindows(windows);

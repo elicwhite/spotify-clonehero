@@ -4,7 +4,7 @@
 > 0035's "Best" option (replace the round trip with a local recompute) is adopted
 > here as the baseline, not the stretch goal. 0039 remains the eventual home for
 > the primitives; this plan ships them in-repo first.
-> **New over 0035/0039:** tempo edits become *audio-anchored* — notes keep their
+> **New over 0035/0039:** tempo edits become _audio-anchored_ — notes keep their
 > ms position and are re-ticked, instead of keeping ticks and sliding in ms.
 >
 > **REVISED 2026-07-18 (audit, Eli directive).** Decision 3 below ("tempo edits
@@ -12,7 +12,7 @@
 > ops"** — research findings (self-contained restatement in
 > `plans/todo/0061-appendix-research-findings.md` — read that first if you're
 > new to this plan; it does not require any file outside this repo) found
-> that audio-anchoring (keep-ms) is right for *some* tempo-map edit classes and
+> that audio-anchoring (keep-ms) is right for _some_ tempo-map edit classes and
 > measurably wrong for others. §3a is the new decision framework; the original
 > Decision 3 text is kept below, marked superseded, for provenance. Two new
 > feature specs (§6, §7) are folded in per Eli's directive: downbeat-tap
@@ -28,7 +28,7 @@
 >
 > **REVISED per adversarial review 2026-07-18 (Eli-resolved).** Substantive
 > fixes integrated in place: RE-PREDICT is defined as the full KS-warp
-> re-fit + snap, with the corrected tempo map an *output* of the op (§3,
+> re-fit + snap, with the corrected tempo map an _output_ of the op (§3,
 > §3a, §7 — §7's "Pipeline call surface" is canonical); `DownbeatFlags`
 > carries the time-signature denominator and both §3b derivations run in
 > denominator-scaled beat units; §6's rephase is whole-song; tempo values
@@ -69,9 +69,9 @@ Investigation findings (2026-07-18):
    helpers — after any helper call, the chart's derived timing is correct.
    (This also fixes non-editor callers like the pipeline chart builders.)
    The choke point stops doing timing work entirely.
-3. **Tempo edits are audio-anchored.** *(SUPERSEDED 2026-07-18 — see §3a below.
+3. **Tempo edits are audio-anchored.** _(SUPERSEDED 2026-07-18 — see §3a below.
    Kept verbatim for provenance: this was right as the DEFAULT for one edit
-   class, wrong as a universal rule.)* Editing the tempo grid must NOT move
+   class, wrong as a universal rule.)_ Editing the tempo grid must NOT move
    already-placed notes in wall-clock time. Notes are re-ticked from their
    preserved `msTime` under the new map, using the **existing** transcription
    quantizer (`snapGroupToGrid` + abstain band via `swapSynctrack`), not a new
@@ -91,7 +91,7 @@ Investigation findings (2026-07-18):
 the universal response to any tempo-map mutation. Research findings (fully
 restated, with mechanism and numbers, in
 `plans/todo/0061-appendix-research-findings.md`) measured three distinct
-note-handling ops against real charts and found the *right* op is a property
+note-handling ops against real charts and found the _right_ op is a property
 of **why** the tempo map changed, not a universal. A **fourth op is added
 here** (not part of the original research corpus study, but needed to give
 0062 §9's "glued to grid" toggle engine semantics — see the appendix's
@@ -105,12 +105,12 @@ justify: it's a functional definition, not an empirical claim):
 - **(2) BOUNDED RESNAP** — re-quantize note ticks to the new lattice (bounded
   by the existing abstain band). Measured **harmful** when the old grid was
   actually right (moves correct notes off their onsets for no gain) and, for
-  the octave-correction case specifically, only fixes the tempo *label* while
+  the octave-correction case specifically, only fixes the tempo _label_ while
   still moving notes off onsets (+0.032 audio cost measured — see appendix).
 - **(3) RE-PREDICT** — re-run the **full grid-conditioned pipeline** from
   **decoded onset times** (not from stored `msTime`): the windowed KS-warp
   re-fits drift against the onsets with the user's corrected grid as its
-  *incumbent* starting grid, then notes are freshly snapped through the
+  _incumbent_ starting grid, then notes are freshly snapped through the
   warped lattice. The committed tempo map is the **warped result**, not the
   user's supplied correction verbatim — the supplied correction is the
   warp's input, and re-running the warp at the correct octave is part of
@@ -126,21 +126,21 @@ justify: it's a functional definition, not an empirical claim):
   what this op runs in app terms.
 - **(4) KEEP-TICKS** ("glued to grid", new, 0062 §9) — notes keep their
   **tick**; `msTime` is recomputed from the new tempo map via plain
-  `retimeChart` (no re-quantization step at all — this is the *simplest* of
+  `retimeChart` (no re-quantization step at all — this is the _simplest_ of
   the four ops, a strict subset of `retimeChart`'s existing job). This is
   the authoring-mode op: the user trusts the tempo map and wants notes to
   ride it, e.g. hand-charting to a click track. **Never a default for a
   transcribed (audio-flow) chart's structural corrections** — it is an
-  explicit user *mode toggle* (0062 §9), never something §3a's edit-class
+  explicit user _mode toggle_ (0062 §9), never something §3a's edit-class
   table below selects automatically.
 
 **The decision framework (replaces Decision 3 as the universal rule):**
 
-| Edit class | Default op | Why |
-| --- | --- | --- |
-| **(a) User hand-edits to tempo** (nudge a marker, retype a section's BPM, drag a tempo-map point) | **KEEP-MS** (Decision 3's mechanism survives, scoped to this class), **unless the glue toggle (0062 §9) is set to "glued to grid," in which case KEEP-TICKS** | The user is correcting the map around notes — possibly ones they've already hand-placed or hand-fixed. Audio-anchoring is right by default: don't second-guess a correction the user just made by moving their notes. The glue toggle is an explicit opt-out for authoring workflows. |
-| **(b) Structural corrections that change lattice meaning** (half/double-time flip, meter change) | **RE-PREDICT** from preserved decoded-onset times, guarded (see below); **falls back to RESNAP** when no decoded onsets exist for this project (never KEEP-TICKS — the glue toggle only applies to class (a), see 0062 §9's note on this) | The old ms-times were quantized on a wrong lattice; keep-ms fossilizes that error into the corrected chart. Re-predict re-snaps from the source onsets through the corrected lattice — this is what the research measured as the winning op for this class specifically, not a general preference for re-predict over keep-ms. |
-| **(c) Bar relabel** (downbeat/bar-1 tap) | **NO NOTE OP** | Rotates bar-line *numbering* only; beat times and note times are untouched. Not a note-remapping decision at all — see §6 and §3b (downbeat-flag store). |
+| Edit class                                                                                        | Default op                                                                                                                                                                                                                                | Why                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **(a) User hand-edits to tempo** (nudge a marker, retype a section's BPM, drag a tempo-map point) | **KEEP-MS** (Decision 3's mechanism survives, scoped to this class), **unless the glue toggle (0062 §9) is set to "glued to grid," in which case KEEP-TICKS**                                                                             | The user is correcting the map around notes — possibly ones they've already hand-placed or hand-fixed. Audio-anchoring is right by default: don't second-guess a correction the user just made by moving their notes. The glue toggle is an explicit opt-out for authoring workflows.                                          |
+| **(b) Structural corrections that change lattice meaning** (half/double-time flip, meter change)  | **RE-PREDICT** from preserved decoded-onset times, guarded (see below); **falls back to RESNAP** when no decoded onsets exist for this project (never KEEP-TICKS — the glue toggle only applies to class (a), see 0062 §9's note on this) | The old ms-times were quantized on a wrong lattice; keep-ms fossilizes that error into the corrected chart. Re-predict re-snaps from the source onsets through the corrected lattice — this is what the research measured as the winning op for this class specifically, not a general preference for re-predict over keep-ms. |
+| **(c) Bar relabel** (downbeat/bar-1 tap)                                                          | **NO NOTE OP**                                                                                                                                                                                                                            | Rotates bar-line _numbering_ only; beat times and note times are untouched. Not a note-remapping decision at all — see §6 and §3b (downbeat-flag store).                                                                                                                                                                       |
 
 **Glue toggle scope note (reconciling with 0062 §9):** 0062 §9 describes the
 toggle as applying "to marker drags and marker deletes symmetrically" — both
@@ -173,8 +173,9 @@ neither `ChartDocument` nor `ParsedChart` carries a field for it, and no
 `decoded-onsets.json` exists in `storage/opfs.ts`'s `CHART_FILE_BASENAMES`.
 
 **Concrete spec:**
+
 - New type in `lib/drum-transcription/ml/types.ts` (or `lib/tempo-map/
-  types.ts` — either is fine, pick based on which module owns the read
+types.ts` — either is fine, pick based on which module owns the read
   side once §3 class (b) is wired):
   ```ts
   export interface DecodedOnsetsFile {
@@ -198,7 +199,7 @@ neither `ChartDocument` nor `ParsedChart` carries a field for it, and no
   }
   ```
 - Persist via the existing `writeProjectJSON(projectId, 'decoded-onsets.json',
-  data)` helper (`lib/drum-transcription/storage/opfs.ts`), at the SAME point
+data)` helper (`lib/drum-transcription/storage/opfs.ts`), at the SAME point
   `confidence.json` is written today in `runner.ts` — i.e. immediately after
   `buildConfidenceData`, before `writeProjectBinary` for the chart file.
   **The rule is "every site that writes `confidence.json`," not a fixed
@@ -206,7 +207,7 @@ neither `ChartDocument` nor `ParsedChart` carries a field for it, and no
   `runPipelineFromChart` (~:685), and `resumePipeline` (~:822, which has
   its own full transcribe→build path inside its `if (!hasChart)` block).
   All three transcribe real onsets. Missing `resumePipeline` would be a
-  *silent* failure: the null-loader semantics below would make a resumed —
+  _silent_ failure: the null-loader semantics below would make a resumed —
   but genuinely transcribed — project degrade to the RESNAP fallback with
   a wrong "never transcribed" disclosure. (An earlier draft said "both
   call sites," scoping to two; that undercounted.) Additionally,
@@ -242,10 +243,11 @@ keep-ms materially disagree (measured as more than a 0.01 movement on the
 research's internal audio-fit score) on ~13.3% of songs (see appendix). The
 op choice is surfaced to the user **only** on that disagreement set, never
 as a default modal on every tempo edit:
+
 1. Compute both ops' resulting note ms-times. KEEP-MS is a pure function of
    the stored ms-times and the supplied sync track (cheap). RE-PREDICT is
    **not** — the supplied correction is only the warp's incumbent input,
-   and the final sync track is an *output* of the op (§7's canonical
+   and the final sync track is an _output_ of the op (§7's canonical
    description), so producing its candidate means actually running the
    windowed KS-warp + snap. No re-transcription is involved, but it is not
    free; that's acceptable because this check only runs on class-(b) edits
@@ -254,14 +256,14 @@ as a default modal on every tempo edit:
    Aggregate (e.g. median or p90 across the track) against a threshold.
 3. Below threshold: apply the class's default op silently (no dialog).
    Above threshold: show both results (e.g. an A/B preview toggle) and let
-   the user pick — this is the *product*-level realization of "keep-or-reject
+   the user pick — this is the _product_-level realization of "keep-or-reject
    IS the guard" from §7 below.
 
 **UNRESOLVED — needs Eli, do not guess (workflow-readiness pass, 2026-07-18):
 the concrete ms threshold for step 2.** The research's 0.01 figure is on an
 internal audio-fit score computed over the whole 1022-song research corpus,
 not a per-note ms value this app can compute directly from a single edit.
-There is no existing corpus/fixture in *this* repo an implementing agent can
+There is no existing corpus/fixture in _this_ repo an implementing agent can
 run to calibrate a translated ms threshold, and picking one by feel risks
 either an annoying dialog on nearly every structural edit (threshold too
 low) or a silently-wrong auto-pick on real disagreement cases (threshold too
@@ -278,7 +280,7 @@ common issues" scanner).
 verdict: not deployable as specced).** The certification finished and the
 result changes this section's premise. The note-ms guard alone (tol 0.5) is
 **proven insufficient**: a wrong octave bit produces a denser grid that
-*trivially improves* note-fit, so the guard passes charts whose groove is
+_trivially improves_ note-fit, so the guard passes charts whose groove is
 destroyed (measured: 78% of abuse cases pass, groove damage uncontained up to
 +0.81). The only guard combination that contains misuse in both abuse
 directions (×2 and ÷2, both measured) is note-ms AND a one-sided
@@ -302,7 +304,7 @@ charts and **cannot run at inference**. Therefore:
 ### 3b. Downbeat-flag store (new, unifying 0061 §6 with 0062 §8)
 
 **Reconciliation note.** 0062 §8 introduced a "downbeat flag" model (beats
-carry a flag; bar lines/numbering/TS events are all *derived* from the
+carry a flag; bar lines/numbering/TS events are all _derived_ from the
 flags) as the storage model behind its downbeat-marking context menu. This
 plan's §6 (bar relabel) was drafted independently and described the same
 operation directly in terms of rewriting `origin_ms`/`timeSignatures`. These
@@ -313,6 +315,7 @@ that one store**, not two independent mechanisms that happen to produce
 similar results.
 
 **Data model:**
+
 ```ts
 /** The canonical source of truth for bar structure. Bar lines, bar
  * numbering, the bar.beat position readout, and the persisted TS events
@@ -331,6 +334,7 @@ interface DownbeatFlags {
   downbeats: Array<{tick: number; denominator: number}>;
 }
 ```
+
 This does not need to be a new persisted file — it is **derivable** from the
 chart's existing `timeSignatures` array on load and **re-derivable back into
 `timeSignatures`** on save/write (see "Derivation rules" below). Keep it as
@@ -339,6 +343,7 @@ selection/etc. per 0062's "Architecture and integration" section) computed
 once on chart load and invalidated whenever a downbeat-affecting op runs.
 
 **Derivation rules (both directions, in denominator-scaled beat units):**
+
 - **Load (`timeSignatures` → `DownbeatFlags`):** walk the TS event list in
   tick order; between consecutive TS events (numerator `N`, denominator
   `D`), the beat unit is `resolution * 4 / D` ticks and a downbeat falls
@@ -360,6 +365,7 @@ once on chart load and invalidated whenever a downbeat-affecting op runs.
   beat unit.
 
 **Operations on the store (both write `downbeats`, nothing else):**
+
 - **§6's phase-rotation (tap "this is beat 1"):** described in §6 below —
   re-anchors which existing beats are flagged, in bulk, over the **whole
   song** (see §6's mechanics for why whole-song, not forward-only).
@@ -367,8 +373,8 @@ once on chart load and invalidated whenever a downbeat-affecting op runs.
   add or remove one entry in `downbeats` (sorted insert / filtered
   removal; a new entry inherits its denominator per the rule above). This
   is the finer-grained sibling operation to §6's bulk rephase — and the
-  right tool for a genuinely *local* bar-structure change (it creates a
-  meter change by definition), where §6's tap fixes a *global* phase
+  right tool for a genuinely _local_ bar-structure change (it creates a
+  meter change by definition), where §6's tap fixes a _global_ phase
   mislabel. Both mutate the same array, so a mark/unmark done via the
   context menu and a later bulk rephase via §6's tap gesture compose
   correctly (neither can leave the store in an inconsistent state, because
@@ -427,7 +433,7 @@ the dependency direction.
   a bounded, non-drifting residue, not zero movement). Therefore: any
   mutator that writes or derives a BPM **quantizes it to the document's
   format-representable value at edit time** and recomputes all ms
-  (marker, notes, everything downstream) from the *quantized* value. The
+  (marker, notes, everything downstream) from the _quantized_ value. The
   in-memory doc is then serialization-exact by construction; the only
   user-visible effect is a one-time sub-ms snap of the dragged marker
   itself.
@@ -439,6 +445,7 @@ structural correction, (c) bar relabel — (c) skips this whole section, see
 §6). Then:
 
 **Class (a) — KEEP-MS (Decision 3's mechanism, scoped to this class):**
+
 1. Build the new synctrack from the mutated `tempos`/`timeSignatures`.
 2. Run `swapSynctrack(chart, newSync, {quantizeNotes: true})` semantics against
    the doc — notes keep `msTime`, get new ticks via the shared quantizer with
@@ -455,8 +462,9 @@ structural correction, (c) bar relabel — (c) skips this whole section, see
    sub-ms rounding only).
 
 **Class (b) — RE-PREDICT (new, §3a; requires decoded-onset retention, §3a):**
+
 1. Build the structurally-corrected synctrack (octave rescale / tap fit).
-   This is the *warp's incumbent input*, not the final map.
+   This is the _warp's incumbent input_, not the final map.
 2. If decoded onsets are available for this project: re-run the **full**
    audio-flow pipeline — the windowed KS-warp (`warpGridReach`) with the
    corrected synctrack from step 1 as its incumbent grid, re-fitting drift
@@ -474,7 +482,7 @@ structural correction, (c) bar relabel — (c) skips this whole section, see
 3. If decoded onsets are unavailable (hand-authored/imported chart, no
    audio-flow provenance): fall back to bounded RESNAP (step 2 of the
    class-(a) sequence above, i.e. `swapSynctrack` with `quantizeNotes: true`
-   against the *new* lattice) plus a UI disclosure that re-predict wasn't
+   against the _new_ lattice) plus a UI disclosure that re-predict wasn't
    available.
 4. Steps 3-6 of the class-(a) sequence (sections, lyrics, collisions,
    `retimeChart`) apply identically regardless of which of steps 2/3 ran.
@@ -562,6 +570,7 @@ beat or note in time.
 **Mechanics (operates on the §3b `DownbeatFlags` store — reimplement fresh
 against this repo's `Synctrack`/`TempoSegment` types; there is no existing
 implementation to port):**
+
 1. Snap the raw tap position to the **nearest existing beat** (not downbeat)
    — forgiving of up to ±50ms tap imprecision (this jitter band was
    measured safe/audio-neutral by the research corpus study — see the
@@ -604,7 +613,7 @@ component is required.
 
 **Measured value (informs priority, not a ship gate for this spec):** +1.17pp
 keepable corpus-wide, +4.19pp on the worst-191 cohort, op-invariant (same
-result regardless of which of the four §3a ops a *different* tempo edit on
+result regardless of which of the four §3a ops a _different_ tempo edit on
 the same song would use) — the highest value-per-build-effort lever measured
 in the research (see appendix).
 
@@ -630,6 +639,7 @@ plan's phase 7 landing** — see "Panel hosting contract" below for what the
 panel needs to expose in the meantime.
 
 **Interaction — one control, two ways to invoke it:**
+
 - **×2 / ÷2 button:** one click, no new tempo values supplied — the
   half/double bit alone.
 - **Tap-tempo (optional, supplies the general non-octave case):** user taps
@@ -639,6 +649,7 @@ panel needs to expose in the meantime.
   an octave bit alone cannot reach.
 
 **Default op: RE-PREDICT with preview.**
+
 1. User invokes the control (button or tap capture).
 2. Compute the corrected-lattice synctrack (octave rescale, or the
    tap-derived constant-BPM+phase fit for the general case). This is the
@@ -656,7 +667,7 @@ panel needs to expose in the meantime.
    here (it would silently discard user-visible improvements the guard's
    coarse threshold doesn't understand as well as the user looking at their
    own chart does). This is the "+2.84pp keepable, groove much better, audio
-   near-neutral" class from the appendix — the *unguarded* number, because
+   near-neutral" class from the appendix — the _unguarded_ number, because
    in-product the guard is unnecessary when a human is the one accepting.
 5. On accept: commit as one undoable `EditCommand` (one snapshot, same
    pattern as every other tempo mutation in this plan). "Commit exactly
@@ -676,6 +687,7 @@ feature-flagged off until a future plan update lifts the flag.
 concretely).** 0062 says the panel "will host their buttons when 0061 phase
 7 lands" without specifying the interface. Concretely, phase 7 needs the
 panel (and `ChartEditorContext`) to expose:
+
 - A **button/gesture slot** in the tempo lane (0062 §1's tempo-lane band)
   for the ×2/÷2 control and a tap-tempo capture affordance (visual design
   deferred to implementation; functionally, two entry points that each
@@ -751,7 +763,7 @@ committing, **§3a's standalone op-choice dialog has no live trigger in v1**
 (the user is looking at the RE-PREDICT result and can reject it, which is
 equivalent to picking KEEP-MS/RESNAP). Do not build a separate dialog
 component for v1. §3a's diff/threshold machinery stays spec'd (and
-feature-flagged off, per §3a's "UNRESOLVED" note) purely so a *future*
+feature-flagged off, per §3a's "UNRESOLVED" note) purely so a _future_
 class-(b) entry point without a preview step (e.g. a batch scanner) has
 something to wire into later — it is not live UI work for this plan.
 
@@ -824,6 +836,7 @@ cross-reference each other. Node names below match each plan's own numbering
 section).
 
 **Group A — parallel, no prerequisites (start immediately):**
+
 - `61-1` Retime primitive.
 - `61-4` Decoded-onset retention (pure `runner.ts`/storage plumbing —
   doesn't touch the edit path at all, so it has no real dependency on
@@ -846,12 +859,14 @@ section).
   which is small.
 
 **Group B — depends on Group A:**
+
 - `61-2` Cut the round trip (needs `61-1`).
 - `62-2` Note editing (shared selection, drag/marquee/delta-snap, lane
   rules, context menu, click-to-add/erase parity) — needs `62-1` only, no
   0061 dependency; can run fully in parallel with all of 0061.
 
 **Group C — depends on Group B:**
+
 - `61-3` Class (a) KEEP-MS (+ KEEP-TICKS) remap (needs `61-2`).
 - `61-6` Bar relabel + downbeat-flag store (needs `61-6a`; landing after
   `61-2` is **preferred order, not a gate** — its ops (single-array
@@ -862,6 +877,7 @@ section).
 
 **Group D — depends on Group C (and, for `62-3`, on Group A's `62-1`/`62-2`
 already being done):**
+
 - `61-5` Class (b) RE-PREDICT + op-disagreement plumbing (needs `61-3` for
   the shared steps-3–6 sequence, and `61-4` for decoded onsets).
 - `62-3` Tempo/downbeat editing UI (marker render + drag + menus, downbeat/TS
@@ -873,6 +889,7 @@ already being done):**
   (`61-3`, `61-6`) rather than "phases 1–3" generically.
 
 **Group E — depends on Group D:**
+
 - `61-7` Half/double + tap-tempo preview UI (needs `61-5` + `61-4`). The
   `pendingTempoCandidate` plumbing and the tempo-lane button/gesture slot
   (§7's "Panel hosting contract") can be stubbed in during `62-3` — they're
@@ -880,6 +897,7 @@ already being done):**
   gated here; the panel-side slot doesn't have to wait.
 
 **Group F — depends on Group D/E, no strict ordering between these two:**
+
 - `62-4` Polish (resizable height persistence, anchor-fraction setting
   surface, section dragging, perf pass) — needs `62-3` done; independent of
   `61-7`.
@@ -916,7 +934,7 @@ true critical path to `62-3`; everything downstream (`61-5`, `61-7`,
   before certification lands would ship an unguarded claim on top of a
   guard whose false-negative rate isn't fully characterized. The
   preview/accept-reject path (§7) sidesteps this since a human is the
-  guard, but any *automatic* invocation of re-predict must stay behind the
+  guard, but any _automatic_ invocation of re-predict must stay behind the
   certification gate.
 - **Decoded-onset staleness (new, §3a):** if a user re-transcribes a project
   (re-runs the audio-flow pipeline), the retained decoded onsets must be

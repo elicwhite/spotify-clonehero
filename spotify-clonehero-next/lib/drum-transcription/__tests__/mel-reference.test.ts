@@ -67,7 +67,6 @@ describe('mel spectrogram vs reference fixture', () => {
       }
     }
 
-    // eslint-disable-next-line no-console
     console.log(`mel-reference max abs diff = ${maxDiff} at ${maxAt}`);
     expect(maxDiff).toBeLessThan(5e-3);
   });

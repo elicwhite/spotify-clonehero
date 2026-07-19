@@ -527,7 +527,11 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
       showStemChoice
       getExtraAssets={getExtraAssets}
       defaultExportFormat={
-        packageSourceFormat === 'sng' ? 'sng' : packageSourceFormat ? 'zip' : undefined
+        packageSourceFormat === 'sng'
+          ? 'sng'
+          : packageSourceFormat
+            ? 'zip'
+            : undefined
       }
       leftPanelChildren={
         <>
@@ -552,8 +556,8 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
                     <AlertDialogTitle>Regenerate chart?</AlertDialogTitle>
                     <AlertDialogDescription>
                       This re-runs the beat grid and predicted notes from the
-                      cached audio. All note edits and review progress for
-                      this project will be discarded.
+                      cached audio. All note edits and review progress for this
+                      project will be discarded.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -605,4 +609,3 @@ async function getAudioDir(
   const projectDir = await getProjectDir(projectId);
   return projectDir.getDirectoryHandle('audio');
 }
-

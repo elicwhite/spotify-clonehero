@@ -46,7 +46,12 @@ describe('climbLadder — speeding up before advancing', () => {
   });
 
   it('advances a rung only at full tempo after a passing run', () => {
-    let c: RungClimb = {index: 0, tempoPct: 100, passesAtTempo: 0, failsAtTempo: 0};
+    let c: RungClimb = {
+      index: 0,
+      tempoPct: 100,
+      passesAtTempo: 0,
+      failsAtTempo: 0,
+    };
     let r = pass(c, 3);
     expect(r.change).toBe('none');
     r = pass(r.climb, 3);
@@ -56,7 +61,12 @@ describe('climbLadder — speeding up before advancing', () => {
   });
 
   it('holds at the top rung when already at full tempo', () => {
-    let c: RungClimb = {index: 2, tempoPct: 100, passesAtTempo: 1, failsAtTempo: 0};
+    let c: RungClimb = {
+      index: 2,
+      tempoPct: 100,
+      passesAtTempo: 1,
+      failsAtTempo: 0,
+    };
     const r = pass(c, 3); // would be a 2-pass run
     expect(r.change).toBe('none');
     expect(r.climb.index).toBe(2);
@@ -102,7 +112,12 @@ describe('climbLadder — slowing down before stepping back', () => {
   });
 
   it('climbs the tempo back up from the floor once passes resume', () => {
-    let c: RungClimb = {index: 2, tempoPct: 60, passesAtTempo: 0, failsAtTempo: 0};
+    let c: RungClimb = {
+      index: 2,
+      tempoPct: 60,
+      passesAtTempo: 0,
+      failsAtTempo: 0,
+    };
     let r = pass(pass(c, 3).climb, 3); // → 70
     expect(r.change).toBe('speed-up');
     expect(r.climb.tempoPct).toBe(70);

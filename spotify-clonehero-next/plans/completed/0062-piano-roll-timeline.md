@@ -16,6 +16,7 @@ requirements.
 > plan the same day — read 0061's §3a/§3b/§8 and its appendix
 > (`plans/todo/0061-appendix-research-findings.md`) for the full engine model
 > this section summarizes):
+>
 > - Marker drags/deletes are 0061 §3a class (a) hand-edits — KEEP-MS via
 >   `swapSynctrack` by default, or **KEEP-TICKS** (0061's new fourth op) when
 >   this panel's glue toggle (§9) is set to "glued to grid." The toggle only
@@ -81,7 +82,7 @@ all callsites directly; no compatibility shims.
 The highway and the piano-roll timeline are **two projections of the same
 data store**. Nothing about the chart, the selection, or an in-flight edit
 exists in only one of them, and there must be **no code path by which the two
-views can disagree** — not "kept in sync," but *incapable of desync* because
+views can disagree** — not "kept in sync," but _incapable of desync_ because
 there is only one state and one mutation path. Concretely:
 
 1. **One store.** `ChartEditorContext` state is the only authority:
@@ -155,12 +156,12 @@ there is only one state and one mutation path. Concretely:
 Horizontal panel docked at the bottom of the editor, full width. Vertical
 stack, top to bottom:
 
-| Band | Height | Contents |
-| --- | --- | --- |
-| Time ruler | ~24px | Bar numbers, section flags, scrub target |
-| Tempo lane | ~26px | Tempo markers (◆ + BPM label), time-signature chips, downbeat/tempo context menus |
-| Note lanes | remainder | 5 rows: Kick, Red, Yellow, Blue, Green (top→bottom), alternating row tint, lane name labels pinned left |
-| Waveform row | ~40px | Drum-stem waveform, scrub target |
+| Band         | Height    | Contents                                                                                                |
+| ------------ | --------- | ------------------------------------------------------------------------------------------------------- |
+| Time ruler   | ~24px     | Bar numbers, section flags, scrub target                                                                |
+| Tempo lane   | ~26px     | Tempo markers (◆ + BPM label), time-signature chips, downbeat/tempo context menus                       |
+| Note lanes   | remainder | 5 rows: Kick, Red, Yellow, Blue, Green (top→bottom), alternating row tint, lane name labels pinned left |
+| Waveform row | ~40px     | Drum-stem waveform, scrub target                                                                        |
 
 - **Compact 5-lane layout** mirroring the highway (decision: chosen over
   expanded per-instrument rows and over a toggleable hybrid). Cymbal vs tom is
@@ -267,7 +268,7 @@ requirements, all mockup-verified:
 - **Multi-selection drag moves in time only** — lanes are locked when more
   than one note is selected (decision).
 - **Delta-snapping** (decision, explicitly confirmed): the drag snaps the
-  *offset*, preserving each note's relative position — an off-grid note stays
+  _offset_, preserving each note's relative position — an off-grid note stays
   off-grid relative to its neighbors; the anchor point snaps to the grid.
 - **Box-select:** dragging on empty lane space draws a marquee; notes inside
   (time range × lane range) are selected live. Shift+drag adds to the existing
@@ -312,7 +313,7 @@ implement it):
   bounded by one BPM-quantization step per edit and does not accumulate across
   repeated drags of the same marker** (each drag re-derives from the current
   ms, and `applyMarkerMoveBpms` derives the far segment's BPM from the dragged
-  marker's *re-integrated* landing so the near segment's residue never leaks
+  marker's _re-integrated_ landing so the near segment's residue never leaks
   onto the far neighbour). The only other deviation is a one-time sub-ms snap
   of the dragged marker itself to the nearest format-representable BPM. A dashed
   ghost line shows the original position during the drag; the in-flight
@@ -324,7 +325,7 @@ implement it):
   widened hit targets deliberately; keep that).
 - **Context menu on the tempo lane** (right-click):
   - On empty lane: **"Add tempo marker here"** — inserts at the nearest beat,
-    positioned *on the current tempo line* so the mapping is unchanged until
+    positioned _on the current tempo line_ so the mapping is unchanged until
     the user drags it. Disabled if a marker already exists on that beat. Plus
     the downbeat item (§8).
   - On a marker: **"Delete tempo marker (⟨BPM⟩)"** — removes it; the mapping
@@ -408,6 +409,7 @@ the full four-op table and §3a's "Glue toggle scope note."
 > **Post-landing revision (2026-07-18, Eli).** After QA of the landed feature,
 > three UI surfaces spec'd above were removed or reframed (behavior/engine
 > unchanged — these are UI-only revisions):
+>
 > - **Glue toggle removed from the UI (§9).** The panel is now always
 >   audio-glued (KEEP-MS). `tempoGlueMode` still lives on `ChartEditorContext`
 >   (defaults to `'audio'`, still settable via `SET_TEMPO_GLUE_MODE`) and all

@@ -143,8 +143,8 @@ const STEP_DEFS: Array<{key: string; label: string; description?: string}> = [
     key: 'transcribe-drums',
     label: 'Listening to the drum hits',
     description:
-      'Runs the same drum-transcription model as /drum-transcription, used '
-      + 'here to anchor the tempo map to the actual kick/snare hits.',
+      'Runs the same drum-transcription model as /drum-transcription, used ' +
+      'here to anchor the tempo map to the actual kick/snare hits.',
   },
   {key: 'chart', label: 'Writing the chart'},
 ];

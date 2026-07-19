@@ -110,7 +110,11 @@ export function buildSyncLayout(
     if (barsDev <= MAX_STRETCH_DEV || (!trickOk && barsDev <= MAX_BEAT_DEV)) {
       // (a) whole stretched bars
       originTick = barsCnt * barTicks;
-      segs.push({tick: 0, ms: 0, bpm: (originTick / resolution) * (60000 / originMs)});
+      segs.push({
+        tick: 0,
+        ms: 0,
+        bpm: (originTick / resolution) * (60000 / originMs),
+      });
       segs.push({tick: originTick, ms: originMs, bpm: firstBpm});
     } else if (trickOk) {
       // (b) whole beats; non-whole-bar remainder becomes a partial first bar

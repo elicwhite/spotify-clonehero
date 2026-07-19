@@ -121,7 +121,8 @@ export function deriveBeatGrid(
 
   for (let i = 0; i < regions.length; i++) {
     const ts = regions[i];
-    const regionEndTick = i + 1 < regions.length ? regions[i + 1].tick : Infinity;
+    const regionEndTick =
+      i + 1 < regions.length ? regions[i + 1].tick : Infinity;
 
     const unit = beatUnitTicks(resolution, ts.denominator);
     if (!(unit > 0) || !(ts.numerator > 0)) continue;
@@ -212,7 +213,11 @@ export function deriveTimeSignatures(
     }
 
     if (numerator !== prevNumerator || entry.denominator !== prevDenominator) {
-      events.push({tick: entry.tick, numerator, denominator: entry.denominator});
+      events.push({
+        tick: entry.tick,
+        numerator,
+        denominator: entry.denominator,
+      });
     }
     prevNumerator = numerator;
     prevDenominator = entry.denominator;

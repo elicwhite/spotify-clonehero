@@ -80,10 +80,7 @@ function msToBeatPhase(
  * of a strong metrical position. Ported verbatim from the probe's
  * `metrical_mass`.
  */
-export function metricalMass(
-  betas: number[],
-  tol: number = TOL_BEAT,
-): number {
+export function metricalMass(betas: number[], tol: number = TOL_BEAT): number {
   if (betas.length === 0) return 0;
   let score = 0;
   for (const beta of betas) {

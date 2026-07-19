@@ -110,7 +110,10 @@ export function climbLadder(
       if (climb.tempoPct >= opts.fullTempoPct) {
         // At full speed and passing: climb to the next rung.
         if (climb.index < rungCount - 1) {
-          return {climb: initRungClimb(climb.index + 1, opts), change: 'advance'};
+          return {
+            climb: initRungClimb(climb.index + 1, opts),
+            change: 'advance',
+          };
         }
         // Already on the hardest rung at full speed: hold (mastered the top).
         return {
@@ -125,7 +128,12 @@ export function climbLadder(
         opts.fullTempoPct,
       );
       return {
-        climb: {index: climb.index, tempoPct, passesAtTempo: 0, failsAtTempo: 0},
+        climb: {
+          index: climb.index,
+          tempoPct,
+          passesAtTempo: 0,
+          failsAtTempo: 0,
+        },
         change: 'speed-up',
       };
     }

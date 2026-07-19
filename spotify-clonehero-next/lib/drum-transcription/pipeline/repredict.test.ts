@@ -53,7 +53,11 @@ const SYNC_120: Synctrack = {
  * positions and re-derive from onsets.
  */
 function makeDoc(): ChartDocument {
-  const parsedChart = createEmptyChart({format: 'chart', bpm: 120, resolution: RES});
+  const parsedChart = createEmptyChart({
+    format: 'chart',
+    bpm: 120,
+    resolution: RES,
+  });
   const track = emptyTrackData('drums', 'expert');
   parsedChart.trackData.push(track);
   const doc: ChartDocument = {parsedChart, assets: []};

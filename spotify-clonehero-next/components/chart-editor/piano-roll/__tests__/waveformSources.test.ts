@@ -35,21 +35,21 @@ describe('buildWaveformSources', () => {
 
 describe('defaultWaveformSourceId', () => {
   it('prefers the drum stem', () => {
-    expect(defaultWaveformSourceId(buildWaveformSources(['song', 'drums']))).toBe(
-      'drums',
-    );
+    expect(
+      defaultWaveformSourceId(buildWaveformSources(['song', 'drums'])),
+    ).toBe('drums');
   });
 
   it('falls back to the full mix when there is no drum stem', () => {
-    expect(defaultWaveformSourceId(buildWaveformSources(['song', 'bass']))).toBe(
-      'song',
-    );
+    expect(
+      defaultWaveformSourceId(buildWaveformSources(['song', 'bass'])),
+    ).toBe('song');
   });
 
   it('falls back to the first source when neither is present', () => {
-    expect(defaultWaveformSourceId(buildWaveformSources(['bass', 'other']))).toBe(
-      'bass',
-    );
+    expect(
+      defaultWaveformSourceId(buildWaveformSources(['bass', 'other'])),
+    ).toBe('bass');
   });
 
   it('returns null with no sources', () => {

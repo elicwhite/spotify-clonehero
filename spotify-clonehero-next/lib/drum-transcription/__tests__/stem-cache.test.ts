@@ -41,10 +41,7 @@ describe('computeStemFingerprint', () => {
   it('is not fooled by moving bytes across the audio/id boundary', async () => {
     // audio="ab" id="c" vs audio="a" id="bc" — the NUL separator between
     // audio and id must keep these distinct.
-    const a = await computeStemFingerprint(
-      new TextEncoder().encode('ab'),
-      'c',
-    );
+    const a = await computeStemFingerprint(new TextEncoder().encode('ab'), 'c');
     const b = await computeStemFingerprint(new TextEncoder().encode('a'), 'bc');
     expect(a).not.toBe(b);
   });

@@ -424,9 +424,7 @@ function PracticeSession({
   const tempoPct = tempoControlled ? controlledTempoPct : internalTempoPct;
   const setTempoPct = useMemo(
     () =>
-      tempoControlled
-        ? (onTempoPctChange ?? (() => {}))
-        : setInternalTempoPct,
+      tempoControlled ? (onTempoPctChange ?? (() => {})) : setInternalTempoPct,
     [tempoControlled, onTempoPctChange],
   );
   const recentAttemptsRef = useRef<{passed: boolean}[]>([]);
@@ -666,7 +664,11 @@ function PracticeSession({
       // toward mastery (masteryTempoPct). Under the controlled-tempo ladder this
       // means a rung isn't "mastered" until it's passed at full speed.
       const attemptTempoPct = Math.round(tempoPct);
-      const updated = applyAttempt(base, {passed, tempoPct: attemptTempoPct}, now);
+      const updated = applyAttempt(
+        base,
+        {passed, tempoPct: attemptTempoPct},
+        now,
+      );
       setSrs(updated);
       void upsertSrs({
         fillId,
@@ -703,7 +705,14 @@ function PracticeSession({
 
       onAttemptScoredExternal?.(result);
     },
-    [fillId, mode, tempoPct, tempoControlled, setTempoPct, onAttemptScoredExternal],
+    [
+      fillId,
+      mode,
+      tempoPct,
+      tempoControlled,
+      setTempoPct,
+      onAttemptScoredExternal,
+    ],
   );
 
   useEffect(() => {

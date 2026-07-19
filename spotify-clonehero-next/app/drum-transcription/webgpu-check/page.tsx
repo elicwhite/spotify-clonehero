@@ -24,7 +24,8 @@
 import {useState} from 'react';
 import Script from 'next/script';
 
-const ORT_CDN_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
+const ORT_CDN_BASE =
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
 const ORT_CDN_URL = `${ORT_CDN_BASE}ort.min.js`;
 const MODEL_URL = '/models/crnn_stereo_256mel_t4.onnx';
 const FIXTURE_URL = '/api/dev/crnn-fixture';
@@ -108,7 +109,9 @@ async function runInference(
 
     for (let f = 0; f < W; f++) {
       for (let c = 0; c < NUM_CLASSES; c++) {
-        accum[(start + f) * NUM_CLASSES + c] += sigmoid(logits[f * NUM_CLASSES + c]);
+        accum[(start + f) * NUM_CLASSES + c] += sigmoid(
+          logits[f * NUM_CLASSES + c],
+        );
       }
       counts[start + f] += 1;
     }
@@ -147,7 +150,9 @@ export default function WebgpuResidualCheckPage() {
 
       const ort = (window as any).ort;
       if (!ort) {
-        setStatus('ort global not found — CDN script has not finished loading.');
+        setStatus(
+          'ort global not found — CDN script has not finished loading.',
+        );
         return;
       }
       ort.env.wasm.wasmPaths = ORT_CDN_BASE;
@@ -186,7 +191,13 @@ export default function WebgpuResidualCheckPage() {
   }
 
   return (
-    <div style={{padding: 24, fontFamily: 'monospace', maxWidth: 760, lineHeight: 1.5}}>
+    <div
+      style={{
+        padding: 24,
+        fontFamily: 'monospace',
+        maxWidth: 760,
+        lineHeight: 1.5,
+      }}>
       <Script
         src={ORT_CDN_URL}
         strategy="afterInteractive"
@@ -195,9 +206,9 @@ export default function WebgpuResidualCheckPage() {
       <h1>CRNN webgpu-vs-wasm residual check</h1>
       <p>
         Dev-only. PARITY.md stage-2 gate, term (b) — the one-time device-side
-        measurement. Runs the shipped t4 model over the committed jest
-        parity fixture, once preferring webgpu (the shipped path) and once
-        forced to wasm, and reports the max abs diff between the two runs on
+        measurement. Runs the shipped t4 model over the committed jest parity
+        fixture, once preferring webgpu (the shipped path) and once forced to
+        wasm, and reports the max abs diff between the two runs on
         <em> this </em> browser/GPU/driver. Record the results (plus browser +
         GPU + OS) into PARITY.md&apos;s <code>webgpu_band</code> block.
       </p>
@@ -208,7 +219,9 @@ export default function WebgpuResidualCheckPage() {
       {result && (
         <ul>
           <li>window-0 raw logits max abs diff: {result.w0}</li>
-          <li>overlap-averaged sigmoid activations max abs diff: {result.avg}</li>
+          <li>
+            overlap-averaged sigmoid activations max abs diff: {result.avg}
+          </li>
         </ul>
       )}
     </div>

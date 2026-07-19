@@ -37,7 +37,8 @@ import {
 /** CDN URL for ONNX Runtime — must match the main thread version. */
 const ORT_CDN_URL =
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.all.min.js';
-const ORT_CDN_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
+const ORT_CDN_BASE =
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
 
 let ort: any = null;
 
@@ -275,9 +276,21 @@ async function transcribe(
 // ---------------------------------------------------------------------------
 
 self.onmessage = (e: MessageEvent) => {
-  const {type, stereoAudio, sampleRate, modelUrl, thresholds, executionProviders} =
-    e.data;
+  const {
+    type,
+    stereoAudio,
+    sampleRate,
+    modelUrl,
+    thresholds,
+    executionProviders,
+  } = e.data;
   if (type === 'transcribe') {
-    transcribe(stereoAudio, sampleRate, modelUrl, thresholds, executionProviders);
+    transcribe(
+      stereoAudio,
+      sampleRate,
+      modelUrl,
+      thresholds,
+      executionProviders,
+    );
   }
 };

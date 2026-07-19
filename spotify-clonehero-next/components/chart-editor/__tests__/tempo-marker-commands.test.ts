@@ -70,7 +70,9 @@ describe('AddBPMCommand (glue-aware class-(a) hand-edit, plan 0061 §3a)', () =>
     const before = fixture();
     // An arbitrary BPM that isn't milli-BPM representable.
     const after = new AddBPMCommand(0, 128.7654321, 'grid').execute(before);
-    const bpm = after.parsedChart.tempos.find(t => t.tick === 0)!.beatsPerMinute;
+    const bpm = after.parsedChart.tempos.find(
+      t => t.tick === 0,
+    )!.beatsPerMinute;
     expect(bpm).toBe(Math.round(128.7654321 * 1e3) / 1e3);
   });
 

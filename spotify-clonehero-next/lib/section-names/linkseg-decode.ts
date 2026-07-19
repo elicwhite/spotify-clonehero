@@ -44,14 +44,21 @@ function pickPeaksTimes(
 ): number[] {
   const peaks: number[] = [];
   for (let i = 1; i < nc.length - 1; i++) {
-    const [limitLeftMax, limitRightMax] = getIndices(beatTimes, i, maxFuture, maxPast);
+    const [limitLeftMax, limitRightMax] = getIndices(
+      beatTimes,
+      i,
+      maxFuture,
+      maxPast,
+    );
     // max over j in (i-1 .. limitLeftMax], stepping down; empty -> 0
     let maxLeft = -Infinity;
-    for (let j = i - 1; j > limitLeftMax; j--) maxLeft = Math.max(maxLeft, nc[j]);
+    for (let j = i - 1; j > limitLeftMax; j--)
+      maxLeft = Math.max(maxLeft, nc[j]);
     if (maxLeft === -Infinity) maxLeft = 0;
     // max over j in [i+1 .. limitRightMax); empty -> 10
     let maxRight = -Infinity;
-    for (let j = i + 1; j < limitRightMax; j++) maxRight = Math.max(maxRight, nc[j]);
+    for (let j = i + 1; j < limitRightMax; j++)
+      maxRight = Math.max(maxRight, nc[j]);
     if (maxRight === -Infinity) maxRight = 10;
 
     if (maxLeft < nc[i] && nc[i] > maxRight && nc[i] > tau) {
@@ -109,7 +116,8 @@ export function linksegDecode(
 ): LinkSegDecode {
   // midpoint-average adjacent beat times (matches post_process)
   const mid: number[] = [];
-  for (let i = 0; i < beatTimes.length - 1; i++) mid.push((beatTimes[i] + beatTimes[i + 1]) / 2);
+  for (let i = 0; i < beatTimes.length - 1; i++)
+    mid.push((beatTimes[i] + beatTimes[i + 1]) / 2);
 
   const estIdxs = pickPeaksTimes(bound, mid, maxFuture, maxPast, tau);
   // est peaks never contain 0 (loop starts at i=1), so reference always prepends 0 when non-empty
@@ -121,7 +129,8 @@ export function linksegDecode(
     const left = idxsPadded[i];
     const right = idxsPadded[i + 1];
     const preds: number[] = [];
-    for (let r = left; r < right; r++) preds.push(argmaxRow(label, r, nClasses));
+    for (let r = left; r < right; r++)
+      preds.push(argmaxRow(label, r, nClasses));
     const cls = preds.length > 0 ? modeSmallest(preds) : 0;
     estLabels.push(LINKSEG_LABELS[cls]);
   }

@@ -19,6 +19,9 @@ public
 # Data blobs and test fixtures (not source — keep minified/as-authored)
 lib/tempo-map/beat-this-mel-fb.json
 lib/tempo-map/__tests__/fixtures
+lib/drum-transcription/__tests__/fixtures
+lib/section-names/__tests__/fixtures
+lib/section-names/linkseg-mel-fb.json
 
 # OS / editor
 .DS_Store

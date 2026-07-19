@@ -17,7 +17,7 @@ measure doesn't show its 17 sixteenth-note beat lines.
    every beat line after that bar is permanently offset by 0.25 beat
    from the real beats (the notes use scan-chart's correct timing).
 3. **Measure counting in the wrong unit.** `beatsPerMeasure =
-   numerator` counted in quarter-note steps → a 17/16 "measure" line
+numerator` counted in quarter-note steps → a 17/16 "measure" line
    every 17 quarter notes; and `beatInMeasure` resets at a TS change
    without snapping `currentTick` to the TS tick.
 

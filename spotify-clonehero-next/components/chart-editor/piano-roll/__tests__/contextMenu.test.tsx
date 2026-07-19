@@ -38,7 +38,11 @@ import type {AudioManager} from '@/lib/preview/audioManager';
  *  which beat the click maps to. */
 function makeAllDownbeatsDoc(): ChartDocument {
   const parsed = createEmptyChart({bpm: 120, resolution: 480});
-  parsed.timeSignatures[0] = {...parsed.timeSignatures[0], numerator: 1, denominator: 4};
+  parsed.timeSignatures[0] = {
+    ...parsed.timeSignatures[0],
+    numerator: 1,
+    denominator: 4,
+  };
   parsed.trackData.push(emptyTrackData('drums', 'expert'));
   const doc: ChartDocument = {parsedChart: parsed, assets: []};
   const drums = doc.parsedChart.trackData[0];
@@ -150,14 +154,24 @@ async function mountPanel(make: () => ChartDocument = makeFixtureDoc) {
 function fireAt(
   canvas: HTMLCanvasElement,
   type: string,
-  {x, y, button = 0, ctrlKey = false}: {
+  {
+    x,
+    y,
+    button = 0,
+    ctrlKey = false,
+  }: {
     x: number;
     y: number;
     button?: number;
     ctrlKey?: boolean;
   },
 ) {
-  const evt = new MouseEvent(type, {bubbles: true, cancelable: true, button, ctrlKey});
+  const evt = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    button,
+    ctrlKey,
+  });
   Object.defineProperty(evt, 'offsetX', {value: x, configurable: true});
   Object.defineProperty(evt, 'offsetY', {value: y, configurable: true});
   Object.defineProperty(evt, 'pointerId', {value: 1, configurable: true});

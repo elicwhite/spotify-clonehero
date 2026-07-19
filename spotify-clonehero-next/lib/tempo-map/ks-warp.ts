@@ -31,7 +31,11 @@
  */
 
 import type {Synctrack, TempoEvent} from './types';
-import {buildTimedTempos, msToTick, tickToMs} from '../drum-transcription/timing';
+import {
+  buildTimedTempos,
+  msToTick,
+  tickToMs,
+} from '../drum-transcription/timing';
 import type {TimedTempo} from '../drum-transcription/chart-types';
 import {snapGroupToGrid} from './quantize-grid';
 import {DEFAULT_SNAP_TOLERANCE_MS} from './swap-synctrack';
@@ -434,7 +438,8 @@ function warpBeats(
     warped[k] = linearInterpInterior(k, ai, ap);
   }
   const s0 = (ap[1] - ap[0]) / (ai[1] - ai[0]);
-  const sN = (ap[ap.length - 1] - ap[ap.length - 2]) /
+  const sN =
+    (ap[ap.length - 1] - ap[ap.length - 2]) /
     (ai[ai.length - 1] - ai[ai.length - 2]);
   for (let k = 0; k < beats.length; k++) {
     if (k < ai[0]) warped[k] = ap[0] - (ai[0] - k) * s0;
@@ -618,7 +623,13 @@ export function warpGridWindowed(
   if (bt === null) {
     return {
       grid: null,
-      diag: {nWin: 0, nAdmWin: 0, nBeatsWarped: 0, admitted: false, reason: 'too_few_beats'},
+      diag: {
+        nWin: 0,
+        nAdmWin: 0,
+        nBeatsWarped: 0,
+        admitted: false,
+        reason: 'too_few_beats',
+      },
     };
   }
   const {beats, bpm0, ts} = bt;
@@ -630,7 +641,13 @@ export function warpGridWindowed(
   if (ks === null || ks.length < 8) {
     return {
       grid: null,
-      diag: {nWin: 0, nAdmWin: 0, nBeatsWarped: 0, admitted: false, reason: 'too_few_ks'},
+      diag: {
+        nWin: 0,
+        nAdmWin: 0,
+        nBeatsWarped: 0,
+        admitted: false,
+        reason: 'too_few_ks',
+      },
     };
   }
 
@@ -720,7 +737,8 @@ function snapOnsetTickForGuard(
   toleranceMs: number,
   phaseAlignShiftMs: number,
 ): number {
-  const adjMs = msOwnOrigin + SYSTEMATIC_ONSET_MS_AUDIO_FLOW + phaseAlignShiftMs;
+  const adjMs =
+    msOwnOrigin + SYSTEMATIC_ONSET_MS_AUDIO_FLOW + phaseAlignShiftMs;
   const frac = msToTick(adjMs, timed, resolution);
   const snapped = snapGroupToGrid(frac, resolution);
   const driftMs = Math.abs(tickToMs(snapped, timed, resolution) - adjMs);
@@ -861,7 +879,10 @@ export function warpGridReach(
   const warpedMedian = postsnapNoteMedian(grid, allOnsetsMs);
   const incumbentMedian = postsnapNoteMedian(synctrack, allOnsetsMs);
   if (warpedMedian > incumbentMedian + noteMsTolMs) {
-    return {grid: null, diag: {...diag, admitted: false, reason: 'note_ms_guard'}};
+    return {
+      grid: null,
+      diag: {...diag, admitted: false, reason: 'note_ms_guard'},
+    };
   }
 
   let finalGrid = grid;

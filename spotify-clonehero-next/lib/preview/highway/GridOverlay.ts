@@ -234,7 +234,6 @@ export class GridOverlay {
     this.group.add(mesh);
     return mesh;
   }
-
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +256,11 @@ export function computeBeatGrid(config: GridOverlayConfig): BeatEntry[] {
   const durationTicks = msToTick(durationMs, timedTempos, resolution);
 
   const beats: BeatEntry[] = [];
-  for (const beat of deriveBeatGrid(timeSignatures, resolution, durationTicks)) {
+  for (const beat of deriveBeatGrid(
+    timeSignatures,
+    resolution,
+    durationTicks,
+  )) {
     const ms = tickToMs(beat.tick, timedTempos, resolution);
     if (ms > durationMs + 1000) break;
     beats.push({tick: beat.tick, msTime: ms, isMeasure: beat.isDownbeat});

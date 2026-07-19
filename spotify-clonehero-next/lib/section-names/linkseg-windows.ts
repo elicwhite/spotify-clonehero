@@ -47,7 +47,10 @@ export type LinkSegWindows = {beatTimes: number[]; windows: Float32Array[]};
  * @param beatTimes Beat This! beat times in seconds (any beat source; LinkSeg is robust to it)
  * @param wave22k   mono waveform at 22050 Hz
  */
-export function buildLinkSegWindows(beatTimes: number[], wave22k: Float32Array): LinkSegWindows {
+export function buildLinkSegWindows(
+  beatTimes: number[],
+  wave22k: Float32Array,
+): LinkSegWindows {
   let frames = timeToFrames(beatTimes, LINKSEG_SR, HOP);
   frames = fixFrames(frames);
   frames = downsampleFrames(frames, MAX_LEN);

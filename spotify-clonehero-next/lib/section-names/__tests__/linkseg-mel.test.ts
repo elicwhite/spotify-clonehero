@@ -1,6 +1,10 @@
 import {readFileSync} from 'fs';
 import {join} from 'path';
-import {melForWindows, LINKSEG_N_MELS, LINKSEG_MEL_FRAMES} from '../linkseg-mel';
+import {
+  melForWindows,
+  LINKSEG_N_MELS,
+  LINKSEG_MEL_FRAMES,
+} from '../linkseg-mel';
 
 // Golden: torchaudio MelSpectrogram+AmplitudeToDB for one real beat window of song0. Locks the JS
 // STFT (radix-2 FFT) + shipped filterbank + dB. Tolerance covers radix-2-vs-pocketfft float noise

@@ -42,8 +42,8 @@ export default function SourcePicker({
       <Card className="w-full">
         <CardContent className="pt-6 flex flex-col items-center gap-3">
           <p className="text-sm text-muted-foreground text-center">
-            Have a chart already? Reuse its tempo map instead of predicting
-            one from scratch — this measurably improves note placement.
+            Have a chart already? Reuse its tempo map instead of predicting one
+            from scratch — this measurably improves note placement.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 w-full">
             <Button
@@ -77,8 +77,8 @@ export default function SourcePicker({
           Back
         </Button>
         <p className="text-xs text-muted-foreground text-center">
-          Grid source: <strong>predicted</strong> — the tempo map is
-          estimated from the audio.
+          Grid source: <strong>predicted</strong> — the tempo map is estimated
+          from the audio.
         </p>
         <AudioUploader onFileSelected={onFileSelected} onTryDemo={onTryDemo} />
       </div>
@@ -97,8 +97,8 @@ export default function SourcePicker({
           Back
         </Button>
         <p className="text-xs text-muted-foreground text-center">
-          Grid source: <strong>provided</strong> — notes will be snapped to
-          this chart&apos;s own tempo map, not a predicted one.
+          Grid source: <strong>provided</strong> — notes will be snapped to this
+          chart&apos;s own tempo map, not a predicted one.
         </p>
         <ChartDropZone
           onLoaded={onChartLoaded}

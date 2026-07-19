@@ -24,7 +24,9 @@ import {PadMapping} from '@/lib/drum-fills/midi/padMapping';
 const CALIBRATION_KEY_BASE = 'drum-fills:calibration-offset-ms';
 
 function calibrationStorageKey(deviceKey: string | null): string {
-  return deviceKey ? `${CALIBRATION_KEY_BASE}:${deviceKey}` : CALIBRATION_KEY_BASE;
+  return deviceKey
+    ? `${CALIBRATION_KEY_BASE}:${deviceKey}`
+    : CALIBRATION_KEY_BASE;
 }
 
 const noopSubscribe = () => () => {};

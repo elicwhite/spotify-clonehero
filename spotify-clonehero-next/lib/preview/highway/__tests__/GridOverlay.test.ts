@@ -111,9 +111,9 @@ describe('computeBeatGrid', () => {
       }),
     );
     expect(beats.slice(0, 5).map(b => b.tick)).toEqual([0, 192, 384, 576, 768]);
-    expect(
-      beats.filter(b => b.isMeasure).map(b => b.tick),
-    ).toEqual([0, 768, 1344]);
+    expect(beats.filter(b => b.isMeasure).map(b => b.tick)).toEqual([
+      0, 768, 1344,
+    ]);
   });
 
   test('tempo change affects msTime but not tick spacing', () => {

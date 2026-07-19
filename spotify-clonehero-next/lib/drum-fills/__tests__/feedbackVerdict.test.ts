@@ -19,7 +19,9 @@ describe('feedbackVerdict', () => {
 
   it('reads on-time within ±threshold as DIALED IN', () => {
     expect(feedbackVerdict(notes([0, 10, -10, 20]), 0).verdict).toBe('dialed');
-    expect(feedbackVerdict(notes([25, -25, 25, -25]), 0).verdict).toBe('dialed');
+    expect(feedbackVerdict(notes([25, -25, 25, -25]), 0).verdict).toBe(
+      'dialed',
+    );
   });
 
   it('reads a consistent early lean as RUSHING with a negative median', () => {

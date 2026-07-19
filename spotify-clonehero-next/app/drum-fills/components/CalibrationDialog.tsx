@@ -164,9 +164,7 @@ export default function CalibrationDialog({
       const chartMs = manager.chartTime * 1000;
       // Same anchor scoring uses: relate this perfNow to this chart position.
       anchorMsRef.current = performance.now() - chartMs;
-      setClicksPlayed(
-        clickMsRef.current.filter(c => c <= chartMs + 1).length,
-      );
+      setClicksPlayed(clickMsRef.current.filter(c => c <= chartMs + 1).length);
       if (chartMs >= endMs) {
         finishRef.current();
         return;

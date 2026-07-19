@@ -24,7 +24,11 @@
 // Output: newline-free JSON to stdout, keyed by stage name -- e.g.
 // `{"stage89_snap": [...850 cases...]}`. sync_fixtures.py splits this into
 // per-stage fixture files.
-import {buildTimedTempos, msToTick, tickToMs} from '../lib/drum-transcription/timing';
+import {
+  buildTimedTempos,
+  msToTick,
+  tickToMs,
+} from '../lib/drum-transcription/timing';
 import {snapGroupToGrid} from '../lib/tempo-map/quantize-grid';
 
 const RESOLUTION = 480;
@@ -47,8 +51,11 @@ function snapOnsetTickRef(
 ): {tick: number; kind: string} {
   void lane;
   const systematicOnsetMs =
-    flow === 'chart' ? SYSTEMATIC_ONSET_MS_CHART_FLOW : SYSTEMATIC_ONSET_MS_AUDIO_FLOW;
-  const adjMs = ms + systematicOnsetMs + (flow === 'audio' ? phaseAlignShiftMs : 0);
+    flow === 'chart'
+      ? SYSTEMATIC_ONSET_MS_CHART_FLOW
+      : SYSTEMATIC_ONSET_MS_AUDIO_FLOW;
+  const adjMs =
+    ms + systematicOnsetMs + (flow === 'audio' ? phaseAlignShiftMs : 0);
   const frac = msToTick(adjMs, timedTempos, resolution);
   const snapped = snapGroupToGrid(frac, resolution);
   // re-derive which candidate won for the fixture label (straight vs triplet)
@@ -56,7 +63,10 @@ function snapOnsetTickRef(
   const tripletTicks = resolution / 6;
   const straight = Math.round(frac / straightTicks) * straightTicks;
   const triplet = Math.round(frac / tripletTicks) * tripletTicks;
-  const kind = Math.abs(triplet - frac) < Math.abs(straight - frac) ? 'triplet' : 'straight';
+  const kind =
+    Math.abs(triplet - frac) < Math.abs(straight - frac)
+      ? 'triplet'
+      : 'straight';
   const driftMs = Math.abs(tickToMs(snapped, timedTempos, resolution) - adjMs);
   if (driftMs > DEFAULT_SNAP_TOLERANCE_MS) {
     return {tick: Math.max(0, Math.round(frac)), kind: 'abstain'};
@@ -94,7 +104,14 @@ function dumpStage89Fixtures() {
       const lane = Math.floor(rng() * 9);
       const flow: 'chart' | 'audio' = rng() < 0.5 ? 'chart' : 'audio';
       const phaseAlignShiftMs = flow === 'audio' ? (rng() - 0.5) * 20 : 0;
-      const {tick, kind} = snapOnsetTickRef(ms, timedTempos, RESOLUTION, lane, flow, phaseAlignShiftMs);
+      const {tick, kind} = snapOnsetTickRef(
+        ms,
+        timedTempos,
+        RESOLUTION,
+        lane,
+        flow,
+        phaseAlignShiftMs,
+      );
       out.push({
         tempoLabel: label,
         tempos,
@@ -112,11 +129,22 @@ function dumpStage89Fixtures() {
       for (const lane of [0, 1, 2, 6, 8]) {
         const flow: 'chart' | 'audio' = 'audio';
         const {tick, kind} = snapOnsetTickRef(
-          boundaryMs, timedTempos, RESOLUTION, lane, flow, 0,
+          boundaryMs,
+          timedTempos,
+          RESOLUTION,
+          lane,
+          flow,
+          0,
         );
         out.push({
-          tempoLabel: label, tempos, ms: boundaryMs, lane, flow,
-          phaseAlignShiftMs: 0, expectedTick: tick, expectedKind: kind,
+          tempoLabel: label,
+          tempos,
+          ms: boundaryMs,
+          lane,
+          flow,
+          phaseAlignShiftMs: 0,
+          expectedTick: tick,
+          expectedKind: kind,
         });
       }
     }

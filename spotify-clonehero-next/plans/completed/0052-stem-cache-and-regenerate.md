@@ -51,8 +51,8 @@
   - Deletes derived artifacts: `synctrack.json`, `confidence.json`,
     `review-progress.json`, `notes.(edited.)chart|mid`.
   - Delegates to `resumePipeline`, whose existing gates re-run tempo mapping
-    + transcription; separation is skipped via the (now cache-aware)
-    `hasDrumStem` check.
+    - transcription; separation is skipped via the (now cache-aware)
+      `hasDrumStem` check.
 
 ### UI
 

@@ -74,6 +74,8 @@ export async function renderClickTrackWav(
     renderEvent(ctx as unknown as MinimalAudioContext, {time, voice: 'click'});
   }
   const buffer = await ctx.startRendering();
-  const wav = new Uint8Array(encodeWav(buffer.getChannelData(0), sampleRate, 1));
+  const wav = new Uint8Array(
+    encodeWav(buffer.getChannelData(0), sampleRate, 1),
+  );
   return {wav, clickTimesSec};
 }

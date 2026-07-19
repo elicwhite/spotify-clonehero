@@ -338,7 +338,10 @@ export function guardedBatchRepredict(
   if (!onsets || onsets.onsets.length === 0) return repredicted;
 
   const keepMs = remapKeepMs(doc, correctedSync, options);
-  const repredictFit = medianNoteOnsetDistanceMs(repredicted.doc, onsets.onsets);
+  const repredictFit = medianNoteOnsetDistanceMs(
+    repredicted.doc,
+    onsets.onsets,
+  );
   const keepMsFit = medianNoteOnsetDistanceMs(keepMs, onsets.onsets);
   if (noteMsGuardPicksKeepMs(repredictFit, keepMsFit, tolMs)) {
     return {

@@ -115,7 +115,9 @@ describe('chart-flow: transcribe against an existing chart, round-trip export', 
     // The passthrough asset must be present, byte-for-byte.
     const roundTrippedArt = packageFiles.find(f => f.fileName === 'album.png');
     expect(roundTrippedArt).toBeDefined();
-    expect(Array.from(roundTrippedArt!.data)).toEqual(Array.from(albumArt.data));
+    expect(Array.from(roundTrippedArt!.data)).toEqual(
+      Array.from(albumArt.data),
+    );
 
     // Package as ZIP and unpack, mirroring a real download round-trip.
     const zipBlob = exportAsZip(packageFiles);
