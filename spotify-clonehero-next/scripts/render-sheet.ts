@@ -37,16 +37,15 @@ import {JSDOM} from 'jsdom';
 import sharp from 'sharp';
 
 // --- jsdom shim, installed before any vexflow/app-module import touches globals ---
-const dom = new JSDOM(
-  '<!doctype html><html><body></body></html>',
-  {pretendToBeVisual: true},
-);
+const dom = new JSDOM('<!doctype html><html><body></body></html>', {
+  pretendToBeVisual: true,
+});
 (global as any).window = dom.window;
-(global as any).document = dom.window.document;
+(global as any).document = dom.window['document'];
 (global as any).HTMLElement = dom.window.HTMLElement;
 (global as any).SVGElement = dom.window.SVGElement;
 Object.defineProperty(global, 'navigator', {
-  value: dom.window.navigator,
+  value: dom.window['navigator'],
   configurable: true,
 });
 
@@ -77,10 +76,16 @@ async function loadAppModules() {
   const {parseChartFile, defaultIniChartModifiers} = await import(
     '@eliwhite/scan-chart'
   );
-  const convertToVexFlow = (await import('../app/sheet-music/[slug]/convertToVexflow'))
-    .default;
+  const convertToVexFlow = (
+    await import('../app/sheet-music/[slug]/convertToVexflow')
+  ).default;
   const {renderMusic} = await import('../app/sheet-music/[slug]/renderVexflow');
-  return {parseChartFile, defaultIniChartModifiers, convertToVexFlow, renderMusic};
+  return {
+    parseChartFile,
+    defaultIniChartModifiers,
+    convertToVexFlow,
+    renderMusic,
+  };
 }
 
 const PRO_DRUMS_MODIFIERS_EXTRA = {pro_drums: true} as const;
@@ -145,24 +150,43 @@ function resolveChartFile(inputPath: string): string {
 
 async function renderChartToSvg(
   chartFilePath: string,
-  opts: {difficulty: string; measures?: [number, number]; width: number; zoom: number; colors: boolean; barNumbers: boolean},
-): Promise<{svg: string; heightPx: number; trueStartMeasure: number; totalMeasures: number}> {
-  const {parseChartFile, defaultIniChartModifiers, convertToVexFlow, renderMusic} =
-    await loadAppModules();
+  opts: {
+    difficulty: string;
+    measures?: [number, number];
+    width: number;
+    zoom: number;
+    colors: boolean;
+    barNumbers: boolean;
+  },
+): Promise<{
+  svg: string;
+  heightPx: number;
+  trueStartMeasure: number;
+  totalMeasures: number;
+}> {
+  const {
+    parseChartFile,
+    defaultIniChartModifiers,
+    convertToVexFlow,
+    renderMusic,
+  } = await loadAppModules();
 
   const format = chartFilePath.endsWith('.mid') ? 'mid' : 'chart';
-  const bytes = fs.readFileSync(chartFilePath);
+  const bytes = new Uint8Array(fs.readFileSync(chartFilePath));
   const chart = parseChartFile(bytes, format as 'chart' | 'mid', {
     ...defaultIniChartModifiers,
     ...PRO_DRUMS_MODIFIERS_EXTRA,
   });
 
-  const drumTracks = chart.trackData.filter((t: any) => t.instrument === 'drums');
+  const drumTracks = chart.trackData.filter(
+    (t: any) => t.instrument === 'drums',
+  );
   if (drumTracks.length === 0) {
     throw new Error(`No drum track found in ${chartFilePath}`);
   }
   const track =
-    drumTracks.find((t: any) => t.difficulty === opts.difficulty) ?? drumTracks[0];
+    drumTracks.find((t: any) => t.difficulty === opts.difficulty) ??
+    drumTracks[0];
   if (track.difficulty !== opts.difficulty) {
     console.warn(
       `Difficulty '${opts.difficulty}' not present; using '${track.difficulty}' instead.`,
@@ -222,15 +246,16 @@ async function renderChartToSvg(
 }
 
 async function svgToPngBuffer(svg: string): Promise<Buffer> {
-  return sharp(Buffer.from(svg), {density: 150}).flatten({background: '#ffffff'}).png().toBuffer();
+  return sharp(Buffer.from(svg), {density: 150})
+    .flatten({background: '#ffffff'})
+    .png()
+    .toBuffer();
 }
 
 async function renderOne(inputPath: string, outPath: string, opts: Args) {
   const chartFile = resolveChartFile(inputPath);
-  const {svg, heightPx, trueStartMeasure, totalMeasures} = await renderChartToSvg(
-    chartFile,
-    opts,
-  );
+  const {svg, heightPx, trueStartMeasure, totalMeasures} =
+    await renderChartToSvg(chartFile, opts);
   console.log(
     `${chartFile}: ${totalMeasures} measures total` +
       (opts.measures
@@ -244,13 +269,17 @@ async function renderOne(inputPath: string, outPath: string, opts: Args) {
     fs.writeFileSync(outPath, svg);
   } else {
     const png = await svgToPngBuffer(svg);
-    fs.writeFileSync(outPath, png);
+    fs.writeFileSync(outPath, new Uint8Array(png));
   }
   console.log(`Wrote ${outPath}`);
   return outPath;
 }
 
-async function renderAb(dirs: [string, string, string], outDir: string, opts: Args) {
+async function renderAb(
+  dirs: [string, string, string],
+  outDir: string,
+  opts: Args,
+) {
   const labels = ['A', 'B', 'GT'];
   fs.mkdirSync(outDir, {recursive: true});
   const pngPaths: string[] = [];
@@ -267,17 +296,16 @@ async function renderAb(dirs: [string, string, string], outDir: string, opts: Ar
   const gap = 12;
   const maxWidth = Math.max(...metas.map(m => m.width ?? 0));
   const totalHeight =
-    metas.reduce((sum, m) => sum + bannerHeight + (m.height ?? 0), 0) + gap * (dirs.length - 1);
+    metas.reduce((sum, m) => sum + bannerHeight + (m.height ?? 0), 0) +
+    gap * (dirs.length - 1);
 
-  const banners = labels
-    .map(
-      (label, i) =>
-        `<text x="10" y="${28}" font-family="Arial" font-size="24" font-weight="bold" fill="#111">${label} — ${path.basename(dirs[i])}</text>`,
-    );
+  const banners = labels.map(
+    (label, i) =>
+      `<text x="10" y="${28}" font-family="Arial" font-size="24" font-weight="bold" fill="#111">${label} — ${path.basename(dirs[i])}</text>`,
+  );
 
   let y = 0;
   const composites: sharp.OverlayOptions[] = [];
-  const bannerSvgs: {svg: Buffer; top: number}[] = [];
   for (let i = 0; i < pngPaths.length; i++) {
     const h = metas[i].height ?? 0;
     const bannerSvg = Buffer.from(
@@ -303,7 +331,7 @@ async function renderAb(dirs: [string, string, string], outDir: string, opts: Ar
     .toBuffer();
 
   const combinedPath = path.join(outDir, 'combined.png');
-  fs.writeFileSync(combinedPath, combined);
+  fs.writeFileSync(combinedPath, new Uint8Array(combined));
   console.log(`Wrote ${combinedPath}`);
 }
 
