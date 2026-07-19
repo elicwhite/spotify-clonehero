@@ -37,37 +37,7 @@ export interface NotesDiff {
  * [0] = main note sprite
  * [1] = sustain tail mesh (optional, guitar only)
  * [2] = selection highlight mesh (optional, owned by NoteRenderer hooks)
- * [3] = confidence indicator (optional)
- * [4] = review indicator (optional)
  */
-const CHILD_CONFIDENCE = 3;
-const CHILD_REVIEW = 4;
-
-/** Shared review material for overlay decorations */
-let reviewMaterial: THREE.MeshBasicMaterial | null = null;
-
-function getReviewMaterial(
-  clippingPlanes: THREE.Plane[],
-): THREE.MeshBasicMaterial {
-  if (!reviewMaterial) {
-    reviewMaterial = new THREE.MeshBasicMaterial({
-      color: 0x22c55e,
-      transparent: true,
-      opacity: 0.7,
-      depthTest: false,
-      side: THREE.DoubleSide,
-    });
-    reviewMaterial.clippingPlanes = clippingPlanes;
-  }
-  return reviewMaterial;
-}
-
-/** Confidence ring colors by tier */
-const CONFIDENCE_COLORS = {
-  low: 0xef4444, // red - conf < 0.5
-  medium: 0xf59e0b, // amber - conf < threshold
-  mild: 0xf59e0b, // amber - conf < 0.9
-};
 
 export class NotesManager {
   private scene: THREE.Scene;
@@ -92,17 +62,6 @@ export class NotesManager {
     opts: {inStarPower: boolean},
   ) => THREE.SpriteMaterial;
 
-  // -- Overlay state (set by HighwayEditor via public methods) --
-  private confidenceMap: Map<string, number> | null = null;
-  private showConfidence = false;
-  private confidenceThreshold = 0.7;
-  private reviewedNoteIds: Set<string> | null = null;
-
-  /** Pool of confidence ring meshes. */
-  private confidenceRingPool: THREE.Mesh[] = [];
-  /** Pool of question-mark sprites for low-confidence notes. */
-  private questionMarkPool: THREE.Sprite[] = [];
-
   constructor(
     scene: THREE.Scene,
     instrument: Instrument,
@@ -113,26 +72,6 @@ export class NotesManager {
     this.instrument = instrument;
     this.highwaySpeed = highwaySpeed;
     this.clippingPlanes = clippingPlanes;
-  }
-
-  // -----------------------------------------------------------------------
-  // Public overlay setters
-  // -----------------------------------------------------------------------
-
-  /** Update confidence display data. */
-  setConfidenceData(
-    confidenceMap: Map<string, number> | null,
-    show: boolean,
-    threshold: number,
-  ): void {
-    this.confidenceMap = confidenceMap;
-    this.showConfidence = show;
-    this.confidenceThreshold = threshold;
-  }
-
-  /** Set the IDs of reviewed notes. */
-  setReviewedNoteIds(ids: Set<string> | null): void {
-    this.reviewedNoteIds = ids;
   }
 
   // -----------------------------------------------------------------------
@@ -499,9 +438,6 @@ export class NotesManager {
           sustainMesh.position.y = 0.03 + pn.msLength / HIGHWAY_DURATION_MS;
         }
 
-        // Update overlay decorations (selection, confidence, review)
-        this.updateNoteOverlays(group, pn);
-
         if (noteIndex > maxNoteIndex) {
           maxNoteIndex = noteIndex;
         }
@@ -578,16 +514,13 @@ export class NotesManager {
         }
       }
 
-      // Update overlay decorations for new note
-      this.updateNoteOverlays(noteGroup, pn);
-
       this.activeNoteGroups.set(i, noteGroup);
       this.scene.add(noteGroup);
     }
   }
 
   // -----------------------------------------------------------------------
-  // Overlay decoration helpers
+  // Note ID helper
   // -----------------------------------------------------------------------
 
   /**
@@ -605,144 +538,6 @@ export class NotesManager {
       ? 'kick'
       : (NotesManager.LANE_TO_DRUM_TYPE[pn.lane] ?? 'redDrum');
     return `${pn.note.tick ?? 0}:${drumType}`;
-  }
-
-  /**
-   * Update overlay children (selection, confidence, review) on a note group.
-   * Called for every active note group each frame.
-   */
-  private updateNoteOverlays(group: THREE.Group, pn: PreparedNote): void {
-    const id = this.noteIdFromPrepared(pn);
-
-    // Hover/selection visuals are owned by NoteRenderer's setHovered/setSelected
-    // hooks (driven by SceneReconciler). NotesManager retains the confidence
-    // and review overlays only.
-    this.updateConfidenceIndicator(group, pn, id);
-    this.updateReviewIndicator(group, id);
-  }
-
-  private updateConfidenceIndicator(
-    group: THREE.Group,
-    pn: PreparedNote,
-    id: string,
-  ): void {
-    if (
-      !this.showConfidence ||
-      !this.confidenceMap ||
-      this.confidenceMap.size === 0
-    ) {
-      if (
-        group.children.length > CHILD_CONFIDENCE &&
-        group.children[CHILD_CONFIDENCE]
-      ) {
-        group.children[CHILD_CONFIDENCE].visible = false;
-      }
-      return;
-    }
-
-    const conf = this.confidenceMap.get(id);
-    if (conf === undefined || conf >= 0.9) {
-      if (
-        group.children.length > CHILD_CONFIDENCE &&
-        group.children[CHILD_CONFIDENCE]
-      ) {
-        group.children[CHILD_CONFIDENCE].visible = false;
-      }
-      return;
-    }
-
-    // Determine color and ring size
-    const noteScale = pn.isKick ? 0.045 : SCALE;
-    const ringSize = noteScale * 2.8;
-    let color: number;
-    let opacity: number;
-
-    if (conf < 0.5) {
-      color = CONFIDENCE_COLORS.low;
-      opacity = 0.7;
-    } else if (conf < this.confidenceThreshold) {
-      color = CONFIDENCE_COLORS.medium;
-      opacity = 0.6;
-    } else {
-      color = CONFIDENCE_COLORS.mild;
-      opacity = 0.3;
-    }
-
-    let ring: THREE.Mesh;
-
-    if (
-      group.children.length > CHILD_CONFIDENCE &&
-      group.children[CHILD_CONFIDENCE] instanceof THREE.Mesh
-    ) {
-      ring = group.children[CHILD_CONFIDENCE] as THREE.Mesh;
-    } else {
-      while (group.children.length < CHILD_CONFIDENCE) {
-        const placeholder = new THREE.Object3D();
-        placeholder.visible = false;
-        group.add(placeholder);
-      }
-      // Use a ring geometry (torus-like plane)
-      const ringGeom = new THREE.RingGeometry(
-        ringSize * 0.4,
-        ringSize * 0.5,
-        24,
-      );
-      const ringMat = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity,
-        depthTest: false,
-        side: THREE.DoubleSide,
-      });
-      ringMat.clippingPlanes = this.clippingPlanes;
-      ring = new THREE.Mesh(ringGeom, ringMat);
-      ring.renderOrder = 5;
-      group.add(ring);
-    }
-
-    // Update ring properties
-    (ring.material as THREE.MeshBasicMaterial).color.set(color);
-    (ring.material as THREE.MeshBasicMaterial).opacity = opacity;
-    ring.position.set(0, 0, 0.001);
-    ring.visible = true;
-  }
-
-  private updateReviewIndicator(group: THREE.Group, id: string): void {
-    if (!this.reviewedNoteIds || !this.reviewedNoteIds.has(id)) {
-      if (
-        group.children.length > CHILD_REVIEW &&
-        group.children[CHILD_REVIEW]
-      ) {
-        group.children[CHILD_REVIEW].visible = false;
-      }
-      return;
-    }
-
-    let indicator: THREE.Mesh;
-
-    if (
-      group.children.length > CHILD_REVIEW &&
-      group.children[CHILD_REVIEW] instanceof THREE.Mesh
-    ) {
-      indicator = group.children[CHILD_REVIEW] as THREE.Mesh;
-    } else {
-      while (group.children.length < CHILD_REVIEW) {
-        const placeholder = new THREE.Object3D();
-        placeholder.visible = false;
-        group.add(placeholder);
-      }
-      const dotGeom = new THREE.CircleGeometry(0.008, 12);
-      indicator = new THREE.Mesh(
-        dotGeom,
-        getReviewMaterial(this.clippingPlanes),
-      );
-      indicator.renderOrder = 6;
-      group.add(indicator);
-    }
-
-    // Position the dot at the top-right of the note
-    indicator.position.set(SCALE * 0.8, SCALE * 0.3, 0.001);
-    indicator.visible = true;
   }
 
   // -----------------------------------------------------------------------

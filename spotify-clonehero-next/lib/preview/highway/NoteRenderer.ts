@@ -33,11 +33,8 @@ export interface NoteElementData {
  * [0] = main note sprite
  * [1] = sustain tail mesh (optional, guitar only)
  * [2] = selection highlight mesh (optional)
- * [3] = reserved (was confidence indicator; kept so review stays at [4])
- * [4] = review indicator (optional)
  */
 const CHILD_SELECTION = 2;
-const CHILD_REVIEW = 4;
 
 /** Height of the horizontal kick bar sprite (vertically centered on the beat line). */
 const KICK_SCALE = 0.045;
@@ -59,7 +56,7 @@ const GEM_ANCHOR_Y = KICK_SCALE / SCALE;
  * ElementRenderer for note chart elements.
  *
  * Handles creating note sprites (drums and guitar), sustain tails,
- * and overlay decorations (selection, hover, review).
+ * and overlay decorations (selection, hover).
  */
 export class NoteRenderer implements ElementRenderer<NoteElementData> {
   private getTextureForNote: (
@@ -78,22 +75,10 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
   //   - selected+hovered : opacity 0.60
   // setHovered/setSelected swap a per-group highlight mesh's material
   // reference between these three (or hide the mesh when neither flag is
-  // set). Geometry is shared. The reviewMaterial is a separate decoration.
+  // set). Geometry is shared.
   private highlightMaterialHover: THREE.MeshBasicMaterial | null = null;
   private highlightMaterialSelected: THREE.MeshBasicMaterial | null = null;
   private highlightMaterialBoth: THREE.MeshBasicMaterial | null = null;
-  private reviewMaterial: THREE.MeshBasicMaterial | null = null;
-
-  // Overlay state (set externally) — hover/selection now live in the
-  // SceneReconciler and dispatch via setHovered/setSelected hooks.
-  private reviewedNoteIds: Set<string> | null = null;
-
-  /**
-   * True when review overlay state has changed and all visible notes need
-   * updating. Hover/selection don't set this — they update the affected
-   * group in place via setHovered/setSelected.
-   */
-  private overlaysDirty = true;
 
   /** Shared geometry for highlight overlays. */
   private highlightGeometry: THREE.PlaneGeometry | null = null;
@@ -150,20 +135,6 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     return m;
   }
 
-  private getReviewMaterial(): THREE.MeshBasicMaterial {
-    if (!this.reviewMaterial) {
-      this.reviewMaterial = new THREE.MeshBasicMaterial({
-        color: 0x22c55e,
-        transparent: true,
-        opacity: 0.7,
-        depthTest: false,
-        side: THREE.DoubleSide,
-      });
-      this.reviewMaterial.clippingPlanes = this.clippingPlanes;
-    }
-    return this.reviewMaterial;
-  }
-
   // -----------------------------------------------------------------------
   // Lifecycle
   // -----------------------------------------------------------------------
@@ -176,8 +147,6 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     this.highlightMaterialSelected = null;
     this.highlightMaterialBoth?.dispose();
     this.highlightMaterialBoth = null;
-    this.reviewMaterial?.dispose();
-    this.reviewMaterial = null;
     this.highlightGeometry?.dispose();
     this.highlightGeometry = null;
   }
@@ -232,7 +201,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     // highlight mesh without re-reading note geometry.
     const noteScale = data.isKick ? KICK_SCALE : data.isOpen ? 0.11 : SCALE;
     // Bottom-anchored gems have their visual center above the beat line;
-    // overlays (highlight, review dot) follow that offset.
+    // the highlight overlay follows that offset.
     const spriteYOffset =
       data.isKick || data.isOpen ? 0 : (0.5 - GEM_ANCHOR_Y) * SCALE;
     group.userData = {
@@ -262,7 +231,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
       group.remove(child);
       if (child instanceof THREE.Mesh) {
         child.geometry?.dispose();
-        // Don't dispose shared materials (highlight, review).
+        // Don't dispose shared materials (the highlight material).
       }
     }
     // Reset transient hover/selection flags so a re-used group doesn't
@@ -270,50 +239,6 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     const u = group.userData as {hovered?: boolean; selected?: boolean};
     u.hovered = false;
     u.selected = false;
-  }
-
-  // -----------------------------------------------------------------------
-  // Overlay setters (called by the reconciler integration layer)
-  // -----------------------------------------------------------------------
-
-  setReviewedNoteIds(ids: Set<string> | null): void {
-    this.reviewedNoteIds = ids;
-    this.overlaysDirty = true;
-  }
-
-  /**
-   * Returns true if overlay state has changed since the last
-   * call to consumeOverlaysDirty(). Used by the render loop
-   * to skip per-note overlay updates when nothing changed.
-   */
-  consumeOverlaysDirty(): boolean {
-    const dirty = this.overlaysDirty;
-    this.overlaysDirty = false;
-    return dirty;
-  }
-
-  /** Mark overlays as dirty (e.g. when new notes enter the window). */
-  markOverlaysDirty(): void {
-    this.overlaysDirty = true;
-  }
-
-  // -----------------------------------------------------------------------
-  // Overlay updates (called each frame for visible groups)
-  // -----------------------------------------------------------------------
-
-  /**
-   * Update the review overlay child on a note group. Hover and selection
-   * visuals are owned by setHovered/setSelected hooks which mutate the
-   * highlight mesh in place; this path only repaints the review decoration.
-   *
-   * Called for every active note group each frame via the reconciler's
-   * updateWindow loop.
-   */
-  updateOverlays(group: THREE.Group, noteKey: string): void {
-    // noteKey is e.g. 'note:2880:yellowDrum' -- extract the noteId part
-    // which is 'tick:type', e.g. '2880:yellowDrum'
-    const id = noteKey.startsWith('note:') ? noteKey.slice(5) : noteKey;
-    this.updateReviewIndicator(group, id);
   }
 
   // -----------------------------------------------------------------------
@@ -423,42 +348,6 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
       this.highlightGeometry = new THREE.PlaneGeometry(1, 1);
     }
     return this.highlightGeometry;
-  }
-
-  private updateReviewIndicator(group: THREE.Group, id: string): void {
-    if (!this.reviewedNoteIds || !this.reviewedNoteIds.has(id)) {
-      if (
-        group.children.length > CHILD_REVIEW &&
-        group.children[CHILD_REVIEW]
-      ) {
-        group.children[CHILD_REVIEW].visible = false;
-      }
-      return;
-    }
-
-    let indicator: THREE.Mesh;
-
-    if (
-      group.children.length > CHILD_REVIEW &&
-      group.children[CHILD_REVIEW] instanceof THREE.Mesh
-    ) {
-      indicator = group.children[CHILD_REVIEW] as THREE.Mesh;
-    } else {
-      while (group.children.length < CHILD_REVIEW) {
-        const placeholder = new THREE.Object3D();
-        placeholder.visible = false;
-        group.add(placeholder);
-      }
-      const dotGeom = new THREE.CircleGeometry(0.008, 12);
-      indicator = new THREE.Mesh(dotGeom, this.getReviewMaterial());
-      indicator.renderOrder = 6;
-      group.add(indicator);
-    }
-
-    const yOffset =
-      (group.userData as {spriteYOffset?: number}).spriteYOffset ?? 0;
-    indicator.position.set(SCALE * 0.8, SCALE * 0.3 + yOffset, 0.001);
-    indicator.visible = true;
   }
 
   private createSustain(group: THREE.Group, data: NoteElementData): THREE.Mesh {

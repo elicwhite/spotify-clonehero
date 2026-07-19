@@ -43,18 +43,13 @@ const FLAG_ITEMS: {key: FlagName; label: string; shortcut: string}[] =
 
 interface NoteInspectorProps {
   className?: string | undefined;
-  /** Optional callback when notes are modified via this inspector. */
-  onNotesModified?: ((noteIds: string[]) => void) | undefined;
 }
 
 /**
  * Panel that shows properties of the currently selected note(s).
  * Appears only when notes are selected in Cursor mode.
  */
-export default function NoteInspector({
-  className,
-  onNotesModified,
-}: NoteInspectorProps) {
+export default function NoteInspector({className}: NoteInspectorProps) {
   const {state, dispatch} = useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
 
@@ -85,12 +80,10 @@ export default function NoteInspector({
   const handleToggleFlag = (flag: FlagName) => {
     const ids = selectedNotes.map(n => noteId(n));
     executeCommand(new ToggleFlagCommand(ids, flag, trackKey));
-    onNotesModified?.(ids);
   };
 
   const handleDelete = () => {
     const ids = new Set(selectedNotes.map(n => noteId(n)));
-    onNotesModified?.(Array.from(ids));
     executeCommand(new DeleteNotesCommand(ids, trackKey));
     dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
   };
@@ -107,7 +100,6 @@ export default function NoteInspector({
   const handleToggleKick = () => {
     const ids = selectedNotes.map(n => noteId(n));
     executeCommand(new ToggleKickCommand(ids, trackKey));
-    onNotesModified?.(ids);
     // Note ids encode the type, so conversion renames them. Re-select the
     // converted notes under their new ids (collision-skipped notes keep
     // their old id and naturally stay selected either way).

@@ -20,11 +20,8 @@ import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import {
   getProject,
-  readProjectText,
   readProjectBinary,
   writeProjectBinary,
-  readProjectJSON,
-  projectFileExists,
   findProjectChartFile,
   editedVariant,
   updateProject,
@@ -35,35 +32,19 @@ import {
   type ProjectMetadata,
   type AudioStorageMeta,
 } from '@/lib/drum-transcription/storage/opfs';
-import {SYNCTRACK_FILE} from '@/lib/drum-transcription/pipeline/runner';
 import {loadDecodedOnsets} from '@/lib/drum-transcription/pipeline/decoded-onsets';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
 import {loadDrumStem} from '@/lib/drum-transcription/ml/roformer-separation';
-import type {StoredSynctrack} from '@/lib/drum-transcription/pipeline/chart-builder';
-import {computeSongConfidence} from '@/lib/drum-transcription/confidence-gauge';
-import ConfidenceGauge from './ConfidenceGauge';
 import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
 import {useHotkey} from '@tanstack/react-hotkeys';
-import {
-  useChartEditorContext,
-  getSelectedIds,
-} from '@/components/chart-editor/ChartEditorContext';
+import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
 import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboard';
 import {useAutoSave} from '@/components/chart-editor/hooks/useAutoSave';
-import {noteId} from '@/components/chart-editor/commands';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
 import type {AudioSource} from '@/components/chart-editor/ExportDialog';
-import {
-  useDrumTranscriptionContext,
-  DrumTranscriptionProvider,
-} from '../contexts/DrumTranscriptionContext';
-import ConfidencePanel from './ConfidencePanel';
 import StemVolumeControls from './StemVolumeControls';
-import {getDrumNotes} from '@/lib/chart-edit';
-import {buildTimedTempos} from '@/lib/drum-transcription/timing';
-import type {DrumNote} from '@/lib/chart-edit';
 import {cn} from '@/lib/utils';
 
 type LoadingState = 'loading' | 'ready' | 'error';
@@ -82,21 +63,11 @@ interface EditorAppProps {
 /**
  * Top-level editor layout for drum-transcription.
  *
- * Loads chart + audio from OPFS, creates AudioManager, and wraps
- * DrumTranscriptionProvider around the shared ChartEditor shell.
- * Passes ConfidencePanel and StemVolumeControls as leftPanelChildren.
+ * Loads chart + audio from OPFS, creates AudioManager, and renders the
+ * shared ChartEditor shell. Passes StemVolumeControls as leftPanelChildren.
  */
 export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
-  return (
-    <DrumTranscriptionProvider>
-      <EditorAppInner projectId={projectId} onRegenerate={onRegenerate} />
-    </DrumTranscriptionProvider>
-  );
-}
-
-function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
   const {state, dispatch, audioManagerRef} = useChartEditorContext();
-  const {dtState, dtDispatch} = useDrumTranscriptionContext();
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
   const [, setLoadingStep] = useState<string>('Loading project metadata...');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -112,13 +83,6 @@ function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
   // into render-visible state so ChartEditor and StemVolumeControls
   // receive a stable prop without reading ref.current during render.
   const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
-  // F63 confidence gauge input: BPM values from the PREDICTED tempo map, or
-  // null when the chart's grid came from an existing chart the user
-  // supplied (chart-flow path 3a) rather than a prediction — see
-  // lib/drum-transcription/confidence-gauge.ts.
-  const [predictedTempoBpms, setPredictedTempoBpms] = useState<
-    number[] | null
-  >(null);
   // Retained decoded onsets (plan 0061 §3a) for the piano-roll's half/double +
   // tap-tempo RE-PREDICT op. null when this project was never transcribed by
   // this app (the control then falls back to RESNAP with a disclosure).
@@ -164,138 +128,19 @@ function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
     // plain-ArrayBuffer view, never SharedArrayBuffer-backed.
     await chartWritable.write(chartFileOut.data as Uint8Array<ArrayBuffer>);
     await chartWritable.close();
-
-    // Save review progress
-    const reviewJson = JSON.stringify({
-      reviewed: Array.from(dtState.reviewedNoteIds),
-    });
-    const reviewFile = await projectDir.getFileHandle('review-progress.json', {
-      create: true,
-    });
-    const reviewWritable = await reviewFile.createWritable();
-    await reviewWritable.write(reviewJson);
-    await reviewWritable.close();
-  }, [projectId, state.chartDoc, dtState.reviewedNoteIds]);
+  }, [projectId, state.chartDoc]);
 
   // Auto-save hook (uses shared hook, passes the save function)
   const {save} = useAutoSave(
     loadingState === 'ready' && !regenerating ? saveFn : null,
   );
 
-  // Jump to low-confidence note
-  const jumpToLowConfidence = useCallback(
-    (direction: 'next' | 'prev') => {
-      if (!state.chartDoc) return;
-      const track = state.chartDoc.parsedChart.trackData.find(
-        t => t.instrument === 'drums' && t.difficulty === 'expert',
-      );
-      if (!track || dtState.confidence.size === 0) return;
-
-      const threshold = dtState.confidenceThreshold;
-      const currentMs = (audioManagerRef.current?.currentTime ?? 0) * 1000;
-
-      const timedTempos = buildTimedTempos(
-        state.chartDoc.parsedChart.tempos,
-        state.chartDoc.parsedChart.resolution,
-      );
-      const resolution = state.chartDoc.parsedChart.resolution;
-
-      const lowConfNotes: {note: DrumNote; ms: number}[] = [];
-      for (const note of getDrumNotes(track)) {
-        const id = noteId(note);
-        const conf = dtState.confidence.get(id);
-        if (conf !== undefined && conf < threshold) {
-          let tempoIdx = 0;
-          for (let i = 1; i < timedTempos.length; i++) {
-            if (timedTempos[i].tick <= note.tick) tempoIdx = i;
-            else break;
-          }
-          const tempo = timedTempos[tempoIdx];
-          const ms =
-            tempo.msTime +
-            ((note.tick - tempo.tick) * 60000) /
-              (tempo.beatsPerMinute * resolution);
-          lowConfNotes.push({note, ms});
-        }
-      }
-
-      if (lowConfNotes.length === 0) return;
-      lowConfNotes.sort((a, b) => a.ms - b.ms);
-
-      let target: {note: DrumNote; ms: number} | undefined;
-      if (direction === 'next') {
-        target = lowConfNotes.find(n => n.ms > currentMs + 50);
-        if (!target) target = lowConfNotes[0];
-      } else {
-        for (let i = lowConfNotes.length - 1; i >= 0; i--) {
-          if (lowConfNotes[i].ms < currentMs - 50) {
-            target = lowConfNotes[i];
-            break;
-          }
-        }
-        if (!target) target = lowConfNotes[lowConfNotes.length - 1];
-      }
-
-      if (target) {
-        const am = audioManagerRef.current;
-        if (am) {
-          am.play({time: target.ms / 1000});
-        }
-        dispatch({
-          type: 'SET_SELECTION',
-          kind: 'note',
-          ids: new Set([noteId(target.note)]),
-        });
-      }
-    },
-    [
-      state.chartDoc,
-      dtState.confidence,
-      dtState.confidenceThreshold,
-      audioManagerRef,
-      dispatch,
-    ],
-  );
-
-  // Callback for when notes are modified (mark reviewed)
-  const handleNotesModified = useCallback(
-    (noteIds: string[]) => {
-      dtDispatch({type: 'MARK_REVIEWED', noteIds});
-    },
-    [dtDispatch],
-  );
-
   // Register shared editor keyboard shortcuts
-  useEditorKeyboard(save, handleNotesModified);
+  useEditorKeyboard(save);
 
   // -----------------------------------------------------------------------
   // Drum-transcription-specific keyboard shortcuts via useHotkey
   // -----------------------------------------------------------------------
-
-  // Enter - confirm/review selected notes
-  useHotkey(
-    'Enter',
-    () => {
-      const selected = getSelectedIds(state, 'note');
-      if (selected.size > 0) {
-        dtDispatch({
-          type: 'MARK_REVIEWED',
-          noteIds: Array.from(selected),
-        });
-      }
-    },
-    {enabled: getSelectedIds(state, 'note').size > 0},
-  );
-
-  // N - jump to next low-confidence note
-  useHotkey('N', () => {
-    jumpToLowConfidence('next');
-  });
-
-  // Shift+N - jump to previous low-confidence note
-  useHotkey('Shift+N', () => {
-    jumpToLowConfidence('prev');
-  });
 
   // D - toggle drums solo
   useHotkey('D', () => {
@@ -358,29 +203,6 @@ function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
           );
         }
 
-        // 6. Load confidence data (if available)
-        try {
-          const hasConfidence = await projectFileExists(
-            projectId,
-            'confidence.json',
-          );
-          if (hasConfidence) {
-            const confText = await readProjectText(
-              projectId,
-              'confidence.json',
-            );
-            const confData = JSON.parse(confText) as {
-              notes: Record<string, number>;
-            };
-            const confMap = new Map<string, number>(
-              Object.entries(confData.notes),
-            );
-            dtDispatch({type: 'SET_CONFIDENCE', confidence: confMap});
-          }
-        } catch (err) {
-          console.warn('Failed to load confidence data:', err);
-        }
-
         // 6a. Load retained decoded onsets (plan 0061 §3a). Present for any
         // project the ML transcriber ran on; null for a never-transcribed
         // (hand-authored/imported) chart, which makes the piano-roll's
@@ -393,27 +215,6 @@ function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
           console.warn('Failed to load decoded onsets:', err);
         }
 
-        // 6b. Load the predicted tempo map's BPM values for the F63
-        // confidence gauge (chart-flow projects have no synctrack.json —
-        // their grid came from the user's own chart, not a prediction).
-        try {
-          const hasSynctrack = await projectFileExists(
-            projectId,
-            SYNCTRACK_FILE,
-          );
-          if (hasSynctrack) {
-            const stored = await readProjectJSON<StoredSynctrack>(
-              projectId,
-              SYNCTRACK_FILE,
-            );
-            setPredictedTempoBpms(
-              stored.synctrack.tempos.map(t => t.bpm),
-            );
-          }
-        } catch (err) {
-          console.warn('Failed to load synctrack for confidence gauge:', err);
-        }
-
         // 6c. Load original package format (chart-flow feature), to
         // preselect the export dialog's format. Absent for audio-only
         // projects.
@@ -422,27 +223,6 @@ function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
           if (info) setPackageSourceFormat(info.sourceFormat);
         } catch (err) {
           console.warn('Failed to load package info:', err);
-        }
-
-        // 7. Load review progress (if available)
-        try {
-          const hasReview = await projectFileExists(
-            projectId,
-            'review-progress.json',
-          );
-          if (hasReview) {
-            const reviewText = await readProjectText(
-              projectId,
-              'review-progress.json',
-            );
-            const reviewData = JSON.parse(reviewText) as {reviewed: string[]};
-            dtDispatch({
-              type: 'SET_REVIEWED_NOTES',
-              noteIds: new Set(reviewData.reviewed),
-            });
-          }
-        } catch (err) {
-          console.warn('Failed to load review progress:', err);
         }
 
         // 8. Load audio metadata
@@ -701,13 +481,6 @@ function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
     return readProjectAssets(projectId);
   }, [projectId]);
 
-  // F63 confidence gauge: fraction of low-confidence model frames (always
-  // available) + predicted-tempo instability (null for the chart-flow path,
-  // whose grid came from the user's own chart, not a prediction).
-  const songConfidence = useMemo(
-    () => computeSongConfidence(dtState.confidence.values(), predictedTempoBpms),
-    [dtState.confidence, predictedTempoBpms],
-  );
   const gridIsProvided = projectMeta?.gridSource === 'provided';
 
   if (loadingState === 'loading') {
@@ -756,8 +529,6 @@ function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
       defaultExportFormat={
         packageSourceFormat === 'sng' ? 'sng' : packageSourceFormat ? 'zip' : undefined
       }
-      onNotesModified={handleNotesModified}
-      reviewedNoteIds={dtState.reviewedNoteIds}
       leftPanelChildren={
         <>
           {onRegenerate && !gridIsProvided && (
@@ -801,11 +572,6 @@ function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
               </AlertDialog>
             </>
           )}
-          <ConfidenceGauge
-            confidence={songConfidence}
-            gridIsProvided={gridIsProvided}
-          />
-          <ConfidencePanel />
           <StemVolumeControls audioManager={audioManager} />
         </>
       }

@@ -98,12 +98,8 @@ const FLAG_SHORTCUT_MAP: Record<string, FlagName> = Object.fromEntries(
  * - Save (Mod+S)
  *
  * @param onSave - Callback for Mod+S save
- * @param onNotesModified - Optional callback when notes are modified (e.g. for marking reviewed)
  */
-export function useEditorKeyboard(
-  onSave?: () => void,
-  onNotesModified?: (noteIds: string[]) => void,
-) {
+export function useEditorKeyboard(onSave?: () => void) {
   const {state, dispatch, audioManagerRef} = useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
@@ -492,7 +488,6 @@ export function useEditorKeyboard(
           if (existing) {
             const id = noteId(existing);
             executeCommand(new DeleteNotesCommand(new Set([id]), trackKey));
-            onNotesModified?.([id]);
           } else {
             const newNote: DrumNote = {
               tick,
@@ -501,7 +496,6 @@ export function useEditorKeyboard(
               flags: defaultFlagsForType(type),
             };
             executeCommand(new AddNoteCommand(newNote, trackKey));
-            onNotesModified?.([noteId(newNote)]);
           }
         }
       },
@@ -541,7 +535,6 @@ export function useEditorKeyboard(
               trackKey,
             ),
           );
-          onNotesModified?.(Array.from(getSelectedIds(state, 'note')));
         }
       },
       {
@@ -575,13 +568,12 @@ export function useEditorKeyboard(
     if (selectedNotes.size > 0) {
       const trackKey = trackKeyFromScope(state.activeScope);
       if (!trackKey) return;
-      onNotesModified?.(Array.from(selectedNotes));
       executeCommand(
         new DeleteNotesCommand(selectedNotes as Set<string>, trackKey),
       );
       dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
     }
-  }, [state, executeCommand, dispatch, onNotesModified]);
+  }, [state, executeCommand, dispatch]);
 
   useHotkey('Delete', handleDelete, {
     enabled:

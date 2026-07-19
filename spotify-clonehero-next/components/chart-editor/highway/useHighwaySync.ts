@@ -15,7 +15,6 @@
 
 import {useEffect, type RefObject} from 'react';
 import type {HighwayRendererHandle} from '../DrumHighwayPreview';
-import type {NoteRenderer} from '@/lib/preview/highway/NoteRenderer';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import type {HighwayMode} from '@/lib/preview/highway';
@@ -23,7 +22,6 @@ import type {ToolMode} from '../ChartEditorContext';
 
 export interface HighwaySyncInputs {
   rendererHandleRef: RefObject<HighwayRendererHandle | null>;
-  noteRendererRef: RefObject<NoteRenderer | null>;
   /**
    * Bumped whenever the renderer handle is created or replaced. Drives
    * "first push after mount" — every effect lists this so the renderer
@@ -53,10 +51,6 @@ export interface HighwaySyncInputs {
   hoverLane: number | null;
   hoverTick: number | null;
   loopRegion: {startMs: number; endMs: number} | null;
-
-  // Note overlays (reviewed-state). Selection visuals are dispatched through
-  // the reconciler's hook channels — see useChartElements.
-  reviewedNoteIds?: Set<string> | undefined;
 }
 
 /**
@@ -66,7 +60,6 @@ export interface HighwaySyncInputs {
 export function useHighwaySync(inputs: HighwaySyncInputs): void {
   const {
     rendererHandleRef,
-    noteRendererRef,
     rendererVersion,
     chartDoc,
     durationSeconds,
@@ -82,7 +75,6 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
     hoverLane,
     hoverTick,
     loopRegion,
-    reviewedNoteIds,
   } = inputs;
 
   // -----------------------------------------------------------------------
@@ -165,8 +157,9 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
   }, [rendererHandleRef, rendererVersion, chartDoc, partName]);
 
   // -----------------------------------------------------------------------
-  // Overlay state (cursor, tool, hover, loop, playing) + note overlays
-  // (selection, confidence, reviewed-state)
+  // Overlay state (cursor, tool, hover, loop, playing). Selection visuals are
+  // pushed through SceneReconciler.setSelectedKeys (see useChartElements) so
+  // notes share the same dispatch path as the marker entities.
   // -----------------------------------------------------------------------
   useEffect(() => {
     const handle = rendererHandleRef.current;
@@ -180,25 +173,14 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
         loopRegion,
       });
     }
-
-    // Selection visuals are pushed through SceneReconciler.setSelectedKeys
-    // (see useChartElements) so notes share the same dispatch path as the
-    // marker entities. NoteRenderer keeps the review overlay on per-frame
-    // `updateOverlays`, which doesn't fit the reconciler's hover/select hooks.
-    const nr = noteRendererRef.current;
-    if (nr) {
-      nr.setReviewedNoteIds(reviewedNoteIds ?? null);
-    }
   }, [
     rendererHandleRef,
     rendererVersion,
-    noteRendererRef,
     cursorTick,
     isPlaying,
     activeTool,
     hoverLane,
     hoverTick,
     loopRegion,
-    reviewedNoteIds,
   ]);
 }

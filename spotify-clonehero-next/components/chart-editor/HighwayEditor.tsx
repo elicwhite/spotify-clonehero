@@ -36,8 +36,6 @@ interface HighwayEditorProps {
   chart: ParsedChart;
   audioManager: AudioManager;
   className?: string | undefined;
-  /** Set of note IDs that have been reviewed by the user. */
-  reviewedNoteIds?: Set<string> | undefined;
   /** Raw PCM audio data for waveform highway surface. */
   audioData?: Float32Array | undefined;
   /** Number of audio channels. */
@@ -61,7 +59,6 @@ export default function HighwayEditor({
   chart,
   audioManager,
   className,
-  reviewedNoteIds,
   audioData,
   audioChannels = 2,
   durationSeconds,
@@ -243,7 +240,6 @@ export default function HighwayEditor({
 
   useHighwaySync({
     rendererHandleRef,
-    noteRendererRef,
     rendererVersion,
     chartDoc: renderDoc,
     durationSeconds,
@@ -259,7 +255,6 @@ export default function HighwayEditor({
     hoverLane,
     hoverTick,
     loopRegion: state.loopRegion,
-    reviewedNoteIds,
   });
 
   // ---------------------------------------------------------------------------

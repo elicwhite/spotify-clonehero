@@ -180,7 +180,6 @@ export const setupRenderer = (
         animatedTextureManager,
         sceneOverlays,
         reconciler,
-        noteRenderer,
       } = await trackPromise;
 
       await startRender(
@@ -190,7 +189,6 @@ export const setupRenderer = (
         animatedTextureManager,
         sceneOverlays,
         reconciler,
-        noteRenderer,
       );
     },
 
@@ -539,7 +537,6 @@ export const setupRenderer = (
     animatedTextureManager: AnimatedTextureManager,
     sceneOverlays: SceneOverlays | null,
     reconciler: SceneReconciler,
-    noteRenderer: NoteRenderer,
   ) {
     if (destroyed) return;
     renderer.setAnimationLoop(animation);
@@ -569,22 +566,7 @@ export const setupRenderer = (
       }
 
       // Update note positions via the reconciler (windowing + repositioning)
-      const prevActiveCount = reconciler.getActiveGroups().size;
       reconciler.updateWindow(elapsedTime);
-      // Mark overlays dirty when notes enter/leave the window
-      if (reconciler.getActiveGroups().size !== prevActiveCount) {
-        noteRenderer.markOverlaysDirty();
-      }
-
-      // Update note overlays only when overlay state changed (selection, hover, etc.)
-      if (noteRenderer.consumeOverlaysDirty()) {
-        for (const [key, group] of reconciler.getActiveGroups()) {
-          const el = reconciler.getElement(key);
-          if (el && el.kind === 'note') {
-            noteRenderer.updateOverlays(group, key);
-          }
-        }
-      }
 
       // Scroll waveform and grid surfaces (always, so they stay in sync when paused)
       if (waveformSurface && highwayMode === 'waveform') {

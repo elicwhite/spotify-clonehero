@@ -106,13 +106,6 @@ export interface ChartEditorProps {
   /** Preselects the export dialog's package format (e.g. to match an
    * existing chart package's original format). */
   defaultExportFormat?: 'zip' | 'sng' | undefined;
-  /** Callback when notes are modified (e.g. for marking reviewed). */
-  onNotesModified?: ((noteIds: string[]) => void) | undefined;
-
-  // -- Optional review overlay (passed through to HighwayEditor) --
-
-  /** Set of note IDs that have been reviewed by the user. */
-  reviewedNoteIds?: Set<string> | undefined;
 }
 
 /**
@@ -159,8 +152,6 @@ export default function ChartEditor({
   showStemChoice,
   getExtraAssets,
   defaultExportFormat,
-  onNotesModified,
-  reviewedNoteIds,
 }: ChartEditorProps) {
   const {state, dispatch} = useChartEditorContext();
   const [metadataOpen, setMetadataOpen] = useState(false);
@@ -283,7 +274,6 @@ export default function ChartEditor({
         {/* Left sidebar */}
         <LeftSidebar
           audioManager={audioManager}
-          onNotesModified={onNotesModified}
           leftPanelChildren={leftPanelChildren}
         />
 
@@ -318,7 +308,6 @@ export default function ChartEditor({
             chart={chart}
             audioManager={audioManager}
             className="h-full w-full"
-            reviewedNoteIds={reviewedNoteIds}
             audioData={highwayAudioData ?? audioData}
             audioChannels={audioChannels}
             durationSeconds={durationSeconds}

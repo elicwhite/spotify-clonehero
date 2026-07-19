@@ -73,7 +73,6 @@ const SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
 interface LeftSidebarProps {
   audioManager: AudioManager;
-  onNotesModified?: ((noteIds: string[]) => void) | undefined;
   leftPanelChildren?: ReactNode | undefined;
 }
 
@@ -83,7 +82,6 @@ interface LeftSidebarProps {
 
 export default function LeftSidebar({
   audioManager,
-  onNotesModified,
   leftPanelChildren,
 }: LeftSidebarProps) {
   const {state, dispatch, capabilities} = useChartEditorContext();
@@ -428,9 +426,7 @@ export default function LeftSidebar({
           )}
 
           {/* Note inspector — only useful when notes are selectable. */}
-          {capabilities.selectable.has('note') && (
-            <NoteInspector onNotesModified={onNotesModified} />
-          )}
+          {capabilities.selectable.has('note') && <NoteInspector />}
 
           {/* Page-specific panels */}
           {leftPanelChildren}
