@@ -25,20 +25,40 @@ export interface ChartPackageMetadata {
   charter: string;
 }
 
-/** A named audio source to include in the package. */
+/** A named audio source to include in the package. Callers normalize audio to
+ * Opus before assembly (see {@link file://./transcode-audio.ts}), so these are
+ * typically `drums.opus` / `song.opus`, but assembly appends the bytes
+ * verbatim under whatever name it is given. */
 export interface PackageAudioSource {
-  /** File name in the output folder (e.g. `drums.wav`, `song.wav`). */
+  /** File name in the output folder (e.g. `drums.opus`, `song.opus`). */
   fileName: string;
-  /** WAV-encoded audio bytes. */
+  /** Encoded audio bytes. */
   data: ArrayBuffer | Uint8Array;
 }
 
 /** The project's chart file verbatim — `notes.chart` (text) or `notes.mid`
  * (binary), whichever format the source chart used. `readChart` detects
- * format from `fileName`, so passing either is symmetric. */
+ * format from `fileName`, so passing either is symmetric. The name is
+ * canonicalized to `notes.chart` / `notes.mid` before parsing, so a
+ * variant-named input (e.g. autosave's `notes.edited.chart`) is fine. */
 export interface ChartPackageFile {
   fileName: string;
   data: Uint8Array;
+}
+
+/** True for a chart file (`.chart` / `.mid` / `.midi`) or `song.ini` — the
+ * files this module regenerates authoritatively. Used both to canonicalize
+ * the incoming chart name and to reject any passthrough that would shadow the
+ * assembled chart (e.g. a stray `notes.edited.chart` in `extraAssets`). */
+function isChartOrIniFileName(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower === 'song.ini' || /\.(chart|mid|midi)$/.test(lower);
+}
+
+/** Canonical chart file name for a (possibly variant-named) input: `.mid` /
+ * `.midi` map to `notes.mid` (binary), everything else to `notes.chart`. */
+function canonicalChartFileName(fileName: string): string {
+  return /\.(mid|midi)$/i.test(fileName) ? 'notes.mid' : 'notes.chart';
 }
 
 export interface AssembleChartFilesOptions {
@@ -83,7 +103,7 @@ export function assembleChartFiles({
   audioSources = [],
   extraAssets = [],
 }: AssembleChartFilesOptions): FileEntry[] {
-  const inputFile: ChartPackageFile =
+  const rawInputFile: ChartPackageFile =
     chartFile ??
     (chartText !== undefined
       ? {fileName: 'notes.chart', data: new TextEncoder().encode(chartText)}
@@ -92,6 +112,15 @@ export function assembleChartFiles({
             'assembleChartFiles requires either chartText or chartFile',
           );
         })());
+  // Canonicalize the chart file name before parsing. Callers (e.g. the
+  // editor's autosave) may hand us a variant name like `notes.edited.chart`;
+  // parsing and re-emitting under that name would ship a chart file Clone Hero
+  // won't recognize. `readChart` detects format from the extension, so the
+  // canonical `notes.chart` / `notes.mid` round-trips identically.
+  const inputFile: ChartPackageFile = {
+    fileName: canonicalChartFileName(rawInputFile.fileName),
+    data: rawInputFile.data,
+  };
   const chartDoc = readChart([inputFile]);
   const existing = chartDoc.parsedChart.metadata;
   chartDoc.parsedChart.metadata = {
@@ -126,6 +155,10 @@ export function assembleChartFiles({
 
   const taken = new Set(entries.map(e => e.fileName.toLowerCase()));
   for (const asset of extraAssets) {
+    // The assembled chart + song.ini are authoritative. Reject any passthrough
+    // that is itself a chart/ini file (e.g. a stray `notes.edited.chart`),
+    // even under a name that wouldn't collide with the canonical output.
+    if (isChartOrIniFileName(asset.fileName)) continue;
     if (taken.has(asset.fileName.toLowerCase())) continue;
     entries.push(asset);
     taken.add(asset.fileName.toLowerCase());

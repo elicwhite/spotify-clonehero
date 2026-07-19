@@ -29,6 +29,7 @@ import {
   exportAsSng,
   assembleChartFiles,
   chartPackageFileName,
+  transcodeAudioFilesToOpus,
 } from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
 
@@ -38,11 +39,13 @@ import SongMetadataFields from './SongMetadataFields';
 // Types
 // ---------------------------------------------------------------------------
 
-/** A named audio source for export packaging. */
+/** A named audio source for export packaging. Any format the browser can
+ * decode is accepted; the dialog transcodes non-Opus audio to `.opus` before
+ * assembly (see {@link transcodeAudioFilesToOpus}). */
 export interface AudioSource {
-  /** File name in the output package (e.g. 'drums.wav', 'song.wav'). */
+  /** File name in the output package (e.g. 'drums.opus', 'song.wav'). */
   fileName: string;
-  /** Raw audio data (WAV-encoded). */
+  /** Encoded audio file bytes (wav/mp3/ogg/opus/…). */
   data: ArrayBuffer;
 }
 
@@ -200,6 +203,15 @@ export default function ExportDialog({
           console.warn('Failed to get extra assets:', err);
         }
       }
+      // 3a. Normalize all audio to Opus before assembly. Some pages provide
+      //     already-encoded `.opus` (stem path), others provide wav/mp3/ogg
+      //     (original-file path, drum-edit) or carry secondary audio in the
+      //     passthrough assets — transcode any non-Opus audio and rename it to
+      //     `.opus`; non-audio assets pass through untouched. Assembly itself
+      //     stays pure/sync; this async step is the seam.
+      const opusAudioSources = await transcodeAudioFilesToOpus(audioFiles);
+      const opusExtraAssets = await transcodeAudioFilesToOpus(extraAssets);
+
       const cleanMetadata = {
         name: metadata.name.trim() || 'Untitled',
         artist: metadata.artist.trim(),
@@ -209,8 +221,8 @@ export default function ExportDialog({
         ...(chartFile ? {chartFile} : {}),
         ...(chartText !== undefined ? {chartText} : {}),
         metadata: cleanMetadata,
-        audioSources: audioFiles,
-        extraAssets,
+        audioSources: opusAudioSources,
+        extraAssets: opusExtraAssets,
       });
 
       // 4. Package as ZIP or SNG

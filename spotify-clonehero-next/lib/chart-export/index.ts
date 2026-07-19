@@ -6,3 +6,5 @@ export type {
   PackageAudioSource,
   AssembleChartFilesOptions,
 } from './assemble';
+export {transcodeAudioFilesToOpus} from './transcode-audio';
+export type {TranscodeEntry} from './transcode-audio';
