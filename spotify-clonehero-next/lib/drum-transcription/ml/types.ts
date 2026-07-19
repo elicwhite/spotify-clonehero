@@ -143,6 +143,34 @@ export interface RawDrumEvent {
 }
 
 /**
+ * Persisted decoded-onset retention file (`decoded-onsets.json`), written by
+ * the pipeline runner alongside `confidence.json` at every transcription
+ * site. Retains the pre-snap decoded onset times (`RawDrumEvent` data) so
+ * tempo-map structural corrections can RE-PREDICT from the source onsets
+ * instead of the already-snapped note ms-times (plan 0061 §3a). Absence of
+ * the file means the project was never transcribed by this app.
+ */
+export interface DecodedOnsetsFile {
+  /** Schema version; bump on any shape change so a load-time check can
+   * detect and discard an incompatible/stale file rather than
+   * misinterpreting it. */
+  version: 1;
+  /** Which flow produced these onsets — 'audio' (buildChartDocument,
+   * fresh predicted synctrack) or 'chart' (buildChartDocumentFromExistingChart,
+   * onto the user's own synctrack). Both flows call the ML transcriber and
+   * produce real onsets; only a never-transcribed project (hand-authored
+   * from empty, or an imported chart whose drum track was never
+   * (re-)transcribed by this app) has none. */
+  flow: 'audio' | 'chart';
+  onsets: Array<{
+    timeSeconds: number;
+    drumClass: DrumClassName;
+    midiPitch: number;
+    confidence: number;
+  }>;
+}
+
+/**
  * A drum event with chart note mapping applied, ready for tick quantization.
  * This is the output of the class mapping stage.
  */

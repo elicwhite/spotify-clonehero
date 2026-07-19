@@ -36,6 +36,7 @@ describe('computeChartElements', () => {
       partName: 'vocals',
       capabilities: DRUM_EDIT_CAPABILITIES,
       markerDrag: null,
+      noteDrag: null,
       timedTempos,
       resolution,
     });
@@ -57,6 +58,7 @@ describe('computeChartElements', () => {
       activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
       partName: 'vocals',
       capabilities: DRUM_EDIT_CAPABILITIES,
+      noteDrag: null,
       timedTempos,
       resolution,
     };
@@ -95,6 +97,7 @@ describe('computeChartElements', () => {
       activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
       partName: 'vocals',
       capabilities: DRUM_EDIT_CAPABILITIES,
+      noteDrag: null,
       timedTempos,
       resolution,
     };
@@ -136,6 +139,7 @@ describe('computeChartElements', () => {
       partName: 'vocals',
       capabilities: noLanesCaps,
       markerDrag: null,
+      noteDrag: null,
       timedTempos,
       resolution,
     });
@@ -154,6 +158,7 @@ describe('computeChartElements', () => {
       partName: 'vocals',
       capabilities: DRUM_EDIT_CAPABILITIES,
       markerDrag: null,
+      noteDrag: null,
       timedTempos,
       resolution,
     });
@@ -177,6 +182,7 @@ describe('computeChartElements', () => {
       partName: 'vocals',
       capabilities: PREVIEW_CAPABILITIES,
       markerDrag: null,
+      noteDrag: null,
       timedTempos,
       resolution,
     });
@@ -197,6 +203,7 @@ describe('computeChartElements', () => {
       partName: 'vocals',
       capabilities: DRUM_EDIT_CAPABILITIES,
       markerDrag: null,
+      noteDrag: null,
       timedTempos,
       resolution,
     });
@@ -215,11 +222,93 @@ describe('computeChartElements', () => {
         currentTick: 2400,
       },
       timedTempos: [],
+      noteDrag: null,
       resolution,
     }).find(e => e.key === draggedKey);
 
     expect(dragged).toBeDefined();
     expect(dragged!.msTime).toBe(baselineMs);
     expect(Number.isFinite(dragged!.msTime)).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Note drag preview
+  // -------------------------------------------------------------------------
+
+  describe('note drag preview', () => {
+    const baseInputs = () => ({
+      chart: makeFixtureDoc().parsedChart,
+      activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
+      partName: 'vocals',
+      capabilities: DRUM_EDIT_CAPABILITIES,
+      markerDrag: null,
+      timedTempos,
+      resolution,
+    });
+
+    it('repositions dragged notes by tickDelta without changing keys', () => {
+      const inputs = baseInputs();
+      const before = computeChartElements({...inputs, noteDrag: null});
+      const during = computeChartElements({
+        ...inputs,
+        // 480 ticks at 120 BPM / res 480 = +500ms
+        noteDrag: {tickDelta: 480, laneDelta: 0, ids: new Set(['480:redDrum'])},
+      });
+
+      expect(during.map(e => e.key)).toEqual(before.map(e => e.key));
+      // Preview time comes from the tempo map: tick 480+480=960 at 120 BPM
+      // → 1000ms (absolute, independent of the msTime stored on the note).
+      const dragged = during.find(e => e.key === 'note:480:redDrum')!;
+      expect(dragged.msTime).toBeCloseTo(1000, 5);
+
+      // Non-dragged notes keep their msTime.
+      const other = during.find(e => e.key === 'note:960:yellowDrum')!;
+      const otherBefore = before.find(e => e.key === 'note:960:yellowDrum')!;
+      expect(other.msTime).toBe(otherBefore.msTime);
+    });
+
+    it('shifts a dragged pad across lanes with laneDelta', () => {
+      const inputs = baseInputs();
+      const before = computeChartElements({...inputs, noteDrag: null});
+      const during = computeChartElements({
+        ...inputs,
+        noteDrag: {tickDelta: 0, laneDelta: 1, ids: new Set(['480:redDrum'])},
+      });
+
+      const dragged = during.find(e => e.key === 'note:480:redDrum')!;
+      const original = before.find(e => e.key === 'note:480:redDrum')!;
+      const draggedData = dragged.data as {lane: number; xPosition: number};
+      const originalData = original.data as {lane: number; xPosition: number};
+      expect(draggedData.lane).toBe(originalData.lane + 1);
+      expect(draggedData.xPosition).not.toBe(originalData.xPosition);
+    });
+
+    it('does not lane-shift a dragged kick', () => {
+      const inputs = baseInputs();
+      const during = computeChartElements({
+        ...inputs,
+        noteDrag: {tickDelta: 480, laneDelta: 2, ids: new Set(['0:kick'])},
+      });
+
+      const dragged = during.find(e => e.key === 'note:0:kick')!;
+      const data = dragged.data as {isKick: boolean; lane: number};
+      expect(data.isKick).toBe(true);
+      expect(data.lane).toBe(-1);
+      // Tick preview still applies: 480 ticks → 500ms downstream of tick 0.
+      expect(dragged.msTime).toBeCloseTo(500, 5);
+    });
+
+    it('skips the preview when timedTempos is empty', () => {
+      const inputs = {...baseInputs(), timedTempos: []};
+      const before = computeChartElements({...inputs, noteDrag: null});
+      const during = computeChartElements({
+        ...inputs,
+        noteDrag: {tickDelta: 480, laneDelta: 0, ids: new Set(['480:redDrum'])},
+      });
+
+      const dragged = during.find(e => e.key === 'note:480:redDrum')!;
+      const original = before.find(e => e.key === 'note:480:redDrum')!;
+      expect(dragged.msTime).toBe(original.msTime);
+    });
   });
 });

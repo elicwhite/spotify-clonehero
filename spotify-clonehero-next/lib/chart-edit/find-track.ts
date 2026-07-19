@@ -23,9 +23,9 @@ export interface TrackKey {
  * Resolve a `(instrument, difficulty)` pair to its `ParsedTrackData` slice
  * inside a `ParsedChart`. Returns null when no matching track exists.
  *
- * Use this when you only have a parsed chart in hand (e.g. during the
- * round-trip in `useEditCommands` after `parseChartFile`). When you have
- * a `ChartDocument`, prefer `findTrack`.
+ * Use this when you only have a `ParsedChart` in hand (e.g. `useEditCommands`
+ * re-resolving the active track after `command.execute(doc)` to feed
+ * `chartToElements`). When you have a `ChartDocument`, prefer `findTrack`.
  */
 export function findTrackInParsedChart(
   parsedChart: Pick<ParsedChart, 'trackData'>,

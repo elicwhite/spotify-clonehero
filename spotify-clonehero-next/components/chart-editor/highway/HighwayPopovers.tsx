@@ -25,6 +25,7 @@ import {
   AddSectionCommand,
   RenameSectionCommand,
   type EditCommand,
+  type TempoGlueMode,
 } from '../commands';
 
 export type HighwayPopoverState =
@@ -44,6 +45,13 @@ export interface HighwayPopoversProps {
   popover: HighwayPopoverState | null;
   onClose: () => void;
   executeCommand: (cmd: EditCommand) => void;
+  /**
+   * Note-anchoring mode read at dispatch for the BPM popover's class-(a) tempo
+   * edit (0062 §9 / plan 0061 §3a) — the SAME context glue mode the piano-roll
+   * timeline's marker drag reads, so a BPM retype resolves its note op
+   * identically from either view.
+   */
+  tempoGlueMode: TempoGlueMode;
 }
 
 interface FormCommonProps {
@@ -59,14 +67,15 @@ function BpmForm({
   x,
   y,
   initialBpm,
+  tempoGlueMode,
   onClose,
   executeCommand,
-}: FormCommonProps & {initialBpm: number}) {
+}: FormCommonProps & {initialBpm: number; tempoGlueMode: TempoGlueMode}) {
   const [bpmInput, setBpmInput] = useState(String(initialBpm));
   const handleSubmit = () => {
     const bpm = parseFloat(bpmInput);
     if (isNaN(bpm) || bpm <= 0) return;
-    executeCommand(new AddBPMCommand(tick, bpm));
+    executeCommand(new AddBPMCommand(tick, bpm, tempoGlueMode));
     onClose();
   };
   return (
@@ -278,6 +287,7 @@ export default function HighwayPopovers({
   popover,
   onClose,
   executeCommand,
+  tempoGlueMode,
 }: HighwayPopoversProps) {
   if (!popover) return null;
   switch (popover.kind) {
@@ -288,6 +298,7 @@ export default function HighwayPopovers({
           x={popover.x}
           y={popover.y}
           initialBpm={popover.initialBpm}
+          tempoGlueMode={tempoGlueMode}
           onClose={onClose}
           executeCommand={executeCommand}
         />

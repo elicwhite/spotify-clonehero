@@ -111,6 +111,10 @@ export const setupRenderer = (
     resizeObserver.observe(sizingRef.current);
   }
 
+  // The canvas is inline by default; the baseline gap below it overflows the
+  // container by a few pixels, which can spawn a scrollbar and put the
+  // ResizeObserver into a shrink/grow feedback loop.
+  renderer.domElement.style.display = 'block';
   ref.current?.children.item(0)?.remove();
   ref.current?.appendChild(renderer.domElement);
 

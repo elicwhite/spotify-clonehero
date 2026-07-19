@@ -5,10 +5,10 @@
  * the caller's job; this test passes already-converted bounds.
  */
 
-import {selectNotesInRange} from '../highway/selectInRange';
+import {selectNotesInRange} from '../marquee';
 import type {DrumNote} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
-import {noteId} from '../commands';
+import {noteId} from '../../commands';
 
 /** 120 BPM, resolution 480: 1 beat = 500ms, 1 tick ≈ 1.0417ms. */
 const TIMED_TEMPOS: TimedTempo[] = [{tick: 0, beatsPerMinute: 120, msTime: 0}];

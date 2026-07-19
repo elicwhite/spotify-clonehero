@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+import {deriveBeatGrid} from '@/lib/chart-edit/bar-derivation';
+
 // ---------------------------------------------------------------------------
 // GridOverlay -- renders beat lines as thin plane meshes
 // ---------------------------------------------------------------------------
@@ -242,45 +244,23 @@ export class GridOverlay {
 /**
  * Pre-compute all beat positions (in ms) for the entire song.
  *
- * Walks each time-signature region independently, anchored at the TS
- * event's tick: the beat unit is `resolution * 4 / denominator` ticks
- * (e.g. a sixteenth note for x/16 signatures), and a measure line falls
- * every `numerator` beats. When a region's length isn't a whole number
- * of beats (a 17/16 bar is 4.25 quarter notes), the next region
- * re-anchors at its own tick so the grid stays aligned with the notes.
+ * The beat/bar lattice (denominator-scaled beat units, downbeat placement,
+ * TS-region re-anchoring, implicit-4/4 default) comes from the shared
+ * derivation module (`lib/chart-edit/bar-derivation`, plan 0061 §3b) — this
+ * function only maps those ticks onto the tempo map for rendering.
  */
 export function computeBeatGrid(config: GridOverlayConfig): BeatEntry[] {
   const {tempos, timeSignatures, resolution, durationMs} = config;
   if (tempos.length === 0) return [];
 
   const timedTempos = buildTimedTempos(tempos, resolution);
-
-  // Sorted TS regions; charts start in 4/4 if the first TS is missing or late
-  const sortedTS = [...timeSignatures].sort((a, b) => a.tick - b.tick);
-  if (sortedTS.length === 0 || sortedTS[0].tick > 0) {
-    sortedTS.unshift({tick: 0, numerator: 4, denominator: 4});
-  }
-
   const durationTicks = msToTick(durationMs, timedTempos, resolution);
+
   const beats: BeatEntry[] = [];
-
-  for (let tsIdx = 0; tsIdx < sortedTS.length; tsIdx++) {
-    const ts = sortedTS[tsIdx];
-    const regionEndTick =
-      tsIdx + 1 < sortedTS.length ? sortedTS[tsIdx + 1].tick : Infinity;
-
-    const beatTicks = (resolution * 4) / ts.denominator;
-    if (!(beatTicks > 0) || !(ts.numerator > 0)) continue;
-
-    for (
-      let tick = ts.tick, beatInMeasure = 0;
-      tick < regionEndTick && tick <= durationTicks;
-      tick += beatTicks, beatInMeasure = (beatInMeasure + 1) % ts.numerator
-    ) {
-      const ms = tickToMs(tick, timedTempos, resolution);
-      if (ms > durationMs + 1000) break;
-      beats.push({tick, msTime: ms, isMeasure: beatInMeasure === 0});
-    }
+  for (const beat of deriveBeatGrid(timeSignatures, resolution, durationTicks)) {
+    const ms = tickToMs(beat.tick, timedTempos, resolution);
+    if (ms > durationMs + 1000) break;
+    beats.push({tick: beat.tick, msTime: ms, isMeasure: beat.isDownbeat});
   }
 
   return beats;

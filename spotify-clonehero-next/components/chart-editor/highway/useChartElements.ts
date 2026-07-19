@@ -40,7 +40,10 @@ import type {EntityKind} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {tickToMs} from '@/lib/drum-transcription/timing';
 import {findTrackInParsedChart} from '@/lib/chart-edit';
+import {noteTypes} from '@eliwhite/scan-chart';
 import {chartToElements} from '@/lib/preview/highway/chartToElements';
+import type {NoteElementData} from '@/lib/preview/highway/NoteRenderer';
+import {calculateNoteXOffset} from '@/lib/preview/highway/types';
 import {
   markerDragReconcilerKey,
   reconcilerKeyFor,
@@ -55,6 +58,26 @@ export interface MarkerDragHint {
   originalTick: number;
   currentTick: number;
 }
+
+/**
+ * Live multi-note drag preview. `ids` are the selected notes' entity ids
+ * (`tick:type`); their elements are repositioned by `tickDelta` (and shifted
+ * across pad lanes by `laneDelta`) so the notes visibly follow the cursor,
+ * snapping with it, before the move commits on release.
+ */
+export interface NoteDragHint {
+  tickDelta: number;
+  laneDelta: number;
+  ids: ReadonlySet<string>;
+}
+
+/** Highway pad lane index (0-3) → scan-chart note type, for lane preview. */
+const HIGHWAY_LANE_TO_NOTE_TYPE = [
+  noteTypes.redDrum,
+  noteTypes.yellowDrum,
+  noteTypes.blueDrum,
+  noteTypes.greenDrum,
+];
 
 export interface UseChartElementsInputs {
   reconcilerRef: RefObject<SceneReconciler | null>;
@@ -73,6 +96,7 @@ export interface UseChartElementsInputs {
   /** Single hovered entity from the editor reducer (or null). */
   hovered: {kind: EntityKind; id: string} | null;
   markerDrag: MarkerDragHint | null;
+  noteDrag: NoteDragHint | null;
   timedTempos: TimedTempo[];
   resolution: number;
 }
@@ -88,6 +112,7 @@ export interface ComputeChartElementsInputs {
   partName: string;
   capabilities: EditorCapabilities;
   markerDrag: MarkerDragHint | null;
+  noteDrag: NoteDragHint | null;
   timedTempos: TimedTempo[];
   resolution: number;
 }
@@ -101,9 +126,11 @@ export interface ComputeChartElementsInputs {
  * reconciler's `dataEqual` ignores `msTime`, so this becomes a
  * reposition-only update — no recycle, no key churn.
  *
- * Lane-axis (note) drags don't appear here: notes are committed through
- * the command pipeline before the next push, so the reconciler always
- * sees their final position.
+ * Note drags work the same way for the tick axis: each selected note's
+ * element gets an `msTime` recomputed from its tick plus the drag's
+ * `tickDelta`. A non-zero `laneDelta` additionally rewrites the element's
+ * lane / xPosition / note type (a data change, so the reconciler recycles
+ * the sprite into the previewed lane's visual).
  */
 export function computeChartElements(
   inputs: ComputeChartElementsInputs,
@@ -114,6 +141,7 @@ export function computeChartElements(
     partName,
     capabilities,
     markerDrag,
+    noteDrag,
     timedTempos,
     resolution,
   } = inputs;
@@ -135,11 +163,46 @@ export function computeChartElements(
       ? tickToMs(markerDrag.currentTick, timedTempos, resolution)
       : null;
 
+  const noteDragKeys =
+    noteDrag && timedTempos.length > 0
+      ? new Set(Array.from(noteDrag.ids, id => reconcilerKeyFor('note', id)))
+      : null;
+
   return elements
     .filter(e => capabilities.showDrumLanes || e.kind !== 'note')
     .map(e => {
       if (dragKey === e.key && dragMs !== null) {
         return {...e, msTime: dragMs};
+      }
+      if (noteDragKeys && e.kind === 'note' && noteDragKeys.has(e.key)) {
+        const data = e.data as NoteElementData;
+        const tick = data.note.tick ?? 0;
+        const msTime = tickToMs(
+          Math.max(0, tick + noteDrag!.tickDelta),
+          timedTempos,
+          resolution,
+        );
+        // Kick stays on its own axis; pads shift lanes with the preview.
+        if (noteDrag!.laneDelta === 0 || data.isKick || data.lane < 0) {
+          return {...e, msTime};
+        }
+        const newLane = Math.max(
+          0,
+          Math.min(
+            HIGHWAY_LANE_TO_NOTE_TYPE.length - 1,
+            data.lane + noteDrag!.laneDelta,
+          ),
+        );
+        return {
+          ...e,
+          msTime,
+          data: {
+            ...data,
+            lane: newLane,
+            xPosition: calculateNoteXOffset('drums', newLane),
+            note: {...data.note, type: HIGHWAY_LANE_TO_NOTE_TYPE[newLane]},
+          } satisfies NoteElementData,
+        };
       }
       return e;
     });
@@ -161,6 +224,7 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
     selection,
     hovered,
     markerDrag,
+    noteDrag,
     timedTempos,
     resolution,
   } = inputs;
@@ -180,6 +244,7 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
         partName,
         capabilities,
         markerDrag,
+        noteDrag,
         timedTempos,
         resolution,
       }),
@@ -192,6 +257,7 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
     partName,
     capabilities,
     markerDrag,
+    noteDrag,
     timedTempos,
     resolution,
   ]);

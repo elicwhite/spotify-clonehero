@@ -11,6 +11,7 @@ const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
 import {
   chartEditorReducer,
   initialState,
+  selectRenderDoc,
   type ChartEditorState,
 } from '../ChartEditorContext';
 import type {EditCommand} from '../commands';
@@ -345,6 +346,123 @@ describe('chartEditorReducer', () => {
         scope: initialState.activeScope,
       });
       expect(next).toBe(initialState);
+    });
+  });
+
+  describe('tempo glue mode (0062 §9)', () => {
+    it('defaults to audio-glued', () => {
+      expect(initialState.tempoGlueMode).toBe('audio');
+    });
+
+    it('SET_TEMPO_GLUE_MODE flips the mode', () => {
+      const next = chartEditorReducer(initialState, {
+        type: 'SET_TEMPO_GLUE_MODE',
+        mode: 'grid',
+      });
+      expect(next.tempoGlueMode).toBe('grid');
+    });
+
+    it('resets to audio-glued on chart (re)load — never persisted', () => {
+      const glued = chartEditorReducer(initialState, {
+        type: 'SET_TEMPO_GLUE_MODE',
+        mode: 'grid',
+      });
+      const loaded = chartEditorReducer(glued, {
+        type: 'SET_CHART_DOC',
+        chartDoc: makeFixtureDoc(),
+      });
+      expect(loaded.tempoGlueMode).toBe('audio');
+    });
+  });
+
+  describe('pendingTempoCandidate invalidation (0061 §7)', () => {
+    const candidate = () => ({
+      op: 'keep-ms' as const,
+      doc: makeFixtureDoc(),
+    });
+
+    function seedWithCandidate(): ChartEditorState {
+      const withDoc = chartEditorReducer(initialState, {
+        type: 'SET_CHART_DOC',
+        chartDoc: makeFixtureDoc(),
+      });
+      return chartEditorReducer(withDoc, {
+        type: 'SET_PENDING_TEMPO_CANDIDATE',
+        candidate: candidate(),
+      });
+    }
+
+    it('holds a candidate set via SET_PENDING_TEMPO_CANDIDATE', () => {
+      const seeded = seedWithCandidate();
+      expect(seeded.pendingTempoCandidate?.op).toBe('keep-ms');
+    });
+
+    it('a command dispatch clears the in-flight candidate', () => {
+      const seeded = seedWithCandidate();
+      const doc = seeded.chartDoc!;
+      const next = chartEditorReducer(
+        seeded,
+        executeAction(
+          new AddNoteCommand(
+            {tick: 240, type: 'kick', length: 0, flags: {}},
+            DRUMS_KEY,
+          ),
+          doc,
+        ),
+      );
+      expect(next.pendingTempoCandidate).toBeNull();
+    });
+
+    it('undo clears the in-flight candidate', () => {
+      const seeded = seedWithCandidate();
+      const doc = seeded.chartDoc!;
+      const afterCmd = chartEditorReducer(
+        {...seeded, pendingTempoCandidate: null},
+        executeAction(
+          new AddNoteCommand(
+            {tick: 240, type: 'kick', length: 0, flags: {}},
+            DRUMS_KEY,
+          ),
+          doc,
+        ),
+      );
+      const withCandidate = chartEditorReducer(afterCmd, {
+        type: 'SET_PENDING_TEMPO_CANDIDATE',
+        candidate: candidate(),
+      });
+      const undone = chartEditorReducer(withCandidate, {
+        type: 'UNDO',
+        chartDoc: doc,
+      });
+      expect(undone.pendingTempoCandidate).toBeNull();
+    });
+
+    it('a chart reload clears the in-flight candidate', () => {
+      const seeded = seedWithCandidate();
+      const reloaded = chartEditorReducer(seeded, {
+        type: 'SET_CHART_DOC',
+        chartDoc: makeFixtureDoc(),
+      });
+      expect(reloaded.pendingTempoCandidate).toBeNull();
+    });
+
+    it('selectRenderDoc draws the candidate doc while one is staged, else chartDoc', () => {
+      const committed = chartEditorReducer(initialState, {
+        type: 'SET_CHART_DOC',
+        chartDoc: makeFixtureDoc(),
+      });
+      // No candidate → the committed doc is what both views render.
+      expect(selectRenderDoc(committed)).toBe(committed.chartDoc);
+
+      const cand = candidate();
+      const previewing = chartEditorReducer(committed, {
+        type: 'SET_PENDING_TEMPO_CANDIDATE',
+        candidate: cand,
+      });
+      // Candidate staged → both views render the candidate doc, not the
+      // committed one.
+      expect(selectRenderDoc(previewing)).toBe(cand.doc);
+      expect(selectRenderDoc(previewing)).not.toBe(previewing.chartDoc);
     });
   });
 });

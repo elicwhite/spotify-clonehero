@@ -48,6 +48,17 @@ export interface SwapSynctrackOptions {
    * {@link DEFAULT_SNAP_TOLERANCE_MS}.
    */
   snapToleranceMs?: number;
+  /**
+   * How chart sections (`sections`) are re-ticked (plan 0061 §3 class (a),
+   * step 3).
+   *  - `'preserve'` (default): exact audio-time re-tick, identical to every
+   *    other non-note event — keeps the /tempo prediction path byte-identical.
+   *  - `'snap-whole-note'`: snap each section to the nearest whole-note
+   *    gridline (`resolution * 4` ticks) to its old audio position, per
+   *    Decision 4 ("sections snap to the grid"). Used only by the
+   *    audio-anchored hand-edit remap.
+   */
+  sectionPolicy?: "preserve" | "snap-whole-note";
 }
 
 function reTickEvent<T extends { tick: number; msTime: number }>(
@@ -86,6 +97,7 @@ export function swapSynctrack(
 
   const quantize = options.quantizeNotes ?? false;
   const snapToleranceMs = options.snapToleranceMs ?? DEFAULT_SNAP_TOLERANCE_MS;
+  const sectionPolicy = options.sectionPolicy ?? "preserve";
 
   // Exact (un-quantized) re-tick: preserves every note's audio time to the
   // nearest tick. Used for the quantizeNotes=false path (unchanged) and as
@@ -236,6 +248,21 @@ export function swapSynctrack(
     e: T,
   ) => reTickLengthEvent(e, segs, resolution);
 
+  // Section re-tick: 'preserve' matches every other non-note event (exact
+  // audio-time re-tick); 'snap-whole-note' rounds to the nearest whole-note
+  // gridline (resolution*4 ticks) to the section's old audio position.
+  const wholeNoteTicks = resolution * 4;
+  const rtSection = <T extends { tick: number; msTime: number }>(e: T): T => {
+    if (sectionPolicy !== "snap-whole-note")
+      return reTickEvent(e, segs, resolution);
+    const frac = msToTick(e.msTime, segs, resolution);
+    const snapped = Math.max(
+      0,
+      Math.round(frac / wholeNoteTicks) * wholeNoteTicks,
+    );
+    return { ...e, tick: snapped };
+  };
+
   const newTrackData = chart.trackData.map((td) => {
     const anyTd = td as any;
     return {
@@ -286,7 +313,7 @@ export function swapSynctrack(
     tempos: newTempos,
     timeSignatures: newTs,
     endEvents: chart.endEvents.map(rtE),
-    sections: chart.sections.map(rtE),
+    sections: chart.sections.map(rtSection),
     unrecognizedEventsTrackTextEvents:
       chart.unrecognizedEventsTrackTextEvents.map(rtE),
     trackData: newTrackData,

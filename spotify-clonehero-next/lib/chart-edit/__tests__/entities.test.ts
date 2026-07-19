@@ -9,6 +9,7 @@ import {
   cloneDocFor,
   createEmptyChart,
   entityHandlers,
+  getDrumNotes,
   listLyricTicks,
   listPhraseEndTicks,
   listPhraseStartTicks,
@@ -241,6 +242,68 @@ describe('entityHandlers dispatch', () => {
     expect(newId).toBe(noteId({tick: 720, type: 'yellowDrum'}));
     // Original untouched
     expect(doc.parsedChart.trackData[0].noteEventGroups[0][0].tick).toBe(480);
+  });
+
+  it('note handler lane shifts never cross the kick/pad boundary', () => {
+    const doc = chartWithDrumTrack();
+    addDrumNote(doc.parsedChart.trackData[0], {tick: 0, type: 'kick'});
+    addDrumNote(doc.parsedChart.trackData[0], {tick: 480, type: 'redDrum'});
+    const ctx = {
+      trackKey: {instrument: 'drums', difficulty: 'expert'},
+    } as const;
+
+    // Kick ignores lane deltas entirely (it isn't on the lane axis).
+    const kickCloned = cloneDocFor('note', doc);
+    const kickId = entityHandlers.note.move(
+      kickCloned,
+      noteId({tick: 0, type: 'kick'}),
+      0,
+      2,
+      ctx,
+    );
+    expect(kickId).toBe(noteId({tick: 0, type: 'kick'}));
+
+    // A pad shifted past the first pad lane clamps there instead of
+    // converting to kick.
+    const padCloned = cloneDocFor('note', doc);
+    const padId = entityHandlers.note.move(
+      padCloned,
+      noteId({tick: 480, type: 'redDrum'}),
+      0,
+      -1,
+      ctx,
+    );
+    expect(padId).toBe(noteId({tick: 480, type: 'redDrum'}));
+  });
+
+  it('dragging a cymbal onto Red destroys the cymbal flag (lane legality)', () => {
+    // §6 / invariant 4: red can't hold a cymbal, so moving a yellow cymbal
+    // down to the red lane must convert it to a tom (flag gone), enforced by
+    // the mutator the handler calls — not by the gesture layer.
+    const doc = chartWithDrumTrack();
+    addDrumNote(doc.parsedChart.trackData[0], {
+      tick: 480,
+      type: 'yellowDrum',
+      flags: {cymbal: true},
+    });
+    const ctx = {
+      trackKey: {instrument: 'drums', difficulty: 'expert'},
+    } as const;
+
+    const cloned = cloneDocFor('note', doc);
+    const newId = entityHandlers.note.move(
+      cloned,
+      noteId({tick: 480, type: 'yellowDrum'}),
+      0,
+      -1, // yellow (lane 2) → red (lane 1)
+      ctx,
+    );
+    expect(newId).toBe(noteId({tick: 480, type: 'redDrum'}));
+    const moved = getDrumNotes(cloned.parsedChart.trackData[0]).find(
+      n => n.type === 'redDrum',
+    );
+    expect(moved).toBeDefined();
+    expect(moved!.flags.cymbal).toBeFalsy();
   });
 
   it('section handler returns the new id when the tick changes', () => {

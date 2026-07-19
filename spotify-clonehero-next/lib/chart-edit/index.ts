@@ -85,6 +85,53 @@ export {
 // Named section (globalEvent) helpers
 export {addSection, removeSection} from './helpers/sections';
 
+// Timing primitives (plan 0061 §1/§2) — in-memory msTime/msLength recompute
+// and format-quantized BPM, the push-model backing for the mutators above
+export {
+  retimeChart,
+  makeChartTiming,
+  applyEventTiming,
+  quantizeBpm,
+  type ChartTiming,
+} from './retime';
+
+// Audio-anchored tempo remap (plan 0061 §3 class (a)) — KEEP-MS primitive
+// plus the sparse-marker BPM math and collision post-pass both glue ops share
+export {
+  synctrackFromChart,
+  nudgeNoteCollisions,
+  remapKeepMs,
+  applyMarkerMoveBpms,
+  MIN_SEGMENT_MS,
+  type RemapKeepMsOptions,
+} from './tempo-remap';
+
+// Denominator-aware bar/beat derivation (plan 0061 §3b) — the one shared
+// implementation of timeSignatures ⇄ downbeats/bars for every view
+export {
+  beatUnitTicks,
+  audioExtendedEndTick,
+  deriveBeatGrid,
+  deriveDownbeatFlags,
+  deriveTimeSignatures,
+  normalizeTimeSignatures,
+  type TimeSignatureInput,
+  type DerivedTimeSignature,
+  type DownbeatEntry,
+  type DownbeatFlags,
+  type BeatGridEntry,
+} from './bar-derivation';
+
+// Downbeat-flag store operations (plan 0061 §3b/§6; 0062 §8) — per-beat
+// mark/unmark and the whole-song phase-rotation tap gesture. No note retiming.
+export {
+  chartEndTick,
+  snapTickToNearestBeat,
+  markDownbeat,
+  unmarkDownbeat,
+  rephaseDownbeats,
+} from './downbeat-ops';
+
 // Lyric helpers (vocal part lyrics)
 export {
   DEFAULT_VOCALS_PART,
@@ -124,11 +171,16 @@ export {
   type TrackKey,
 } from './find-track';
 
+// Shared grid-snapping (one implementation for both interaction views)
+export {snapTickToGrid} from './snapping';
+
 // Per-instrument display schemas (lane data, flag bindings, default keys)
 export {
   drums4LaneSchema,
   drums5LaneSchema,
   drumSchemaFor,
+  CYMBAL_LEGAL_DRUM_TYPES,
+  isCymbalLegalDrumType,
   bassSchema,
   guitarSchema,
   keysSchema,

@@ -1,7 +1,12 @@
 'use client';
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {useChartEditorContext, selectActiveTrack} from './ChartEditorContext';
+import {
+  useChartEditorContext,
+  selectActiveTrack,
+  selectRenderDoc,
+  getSelectedIds,
+} from './ChartEditorContext';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {
   buildTimedTempos,
@@ -116,7 +121,18 @@ export default function HighwayEditor({
   const [popover, setPopover] = useState<HighwayPopoverState | null>(null);
   const closePopover = useCallback(() => setPopover(null), []);
 
-  // Compute timed tempos for coordinate mapping
+  // While a tempo gesture is uncommitted, BOTH views render from the candidate
+  // doc, not the committed one (0061 §7 — the one preview channel). This covers
+  // the persistent class-(b) structural preview (accept/reject bar up, no
+  // gesture in flight) as well as a class-(a) marker drag in flight. The
+  // reducer clears the candidate on any command/undo/redo/reload, so the
+  // highway never shows stale geometry once the gesture ends. Note EDITING
+  // still targets the committed doc and is gated while a candidate is pending
+  // (see `editingLocked` below) so a click can't hit a candidate-only note.
+  const renderDoc = selectRenderDoc(state);
+
+  // Committed timed tempos for interaction/cursor coordinate mapping (edits
+  // target the committed doc).
   const timedTempos = useMemo(() => {
     if (!state.chartDoc) return [];
     return buildTimedTempos(
@@ -125,7 +141,22 @@ export default function HighwayEditor({
     );
   }, [state.chartDoc]);
 
+  // Rendered timed tempos — from the candidate doc when previewing, so the
+  // moving grid and re-ticked notes draw the preview.
+  const renderTimedTempos = useMemo(() => {
+    if (!renderDoc) return [];
+    return buildTimedTempos(
+      renderDoc.parsedChart.tempos,
+      renderDoc.parsedChart.resolution,
+    );
+  }, [renderDoc]);
+
   const resolution = state.chartDoc?.parsedChart.resolution ?? 480;
+
+  // A pending candidate is a read-only preview contract: note editing is gated
+  // in both views while it's up, so a gesture can't target a note that exists
+  // only in the candidate (or the wrong committed note under a moved grid).
+  const editingLocked = state.pendingTempoCandidate !== null;
 
   // Active-track notes for hit-testing. When the active scope isn't a
   // notes track (e.g. add-lyrics with `{kind: 'vocals'}`) there are no
@@ -182,6 +213,7 @@ export default function HighwayEditor({
     hoverTick,
     hoveredHitType,
     isDragging,
+    noteDrag,
     dragStart,
     dragCurrent,
   } = useHighwayMouseInteraction({
@@ -200,6 +232,7 @@ export default function HighwayEditor({
     executeCommand,
     dispatch,
     onOpenPopover: setPopover,
+    editingLocked,
   });
 
   // ---------------------------------------------------------------------------
@@ -212,9 +245,9 @@ export default function HighwayEditor({
     rendererHandleRef,
     noteRendererRef,
     rendererVersion,
-    chartDoc: state.chartDoc,
+    chartDoc: renderDoc,
     durationSeconds,
-    timedTempos,
+    timedTempos: renderTimedTempos,
     resolution,
     partName: activePartName,
     audioData,
@@ -291,20 +324,34 @@ export default function HighwayEditor({
     dispatch,
   ]);
 
+  // Live note-drag hint for the reconciler: the selected notes' elements
+  // follow the anchored drag deltas so the drag previews in place.
+  const noteDragHint = useMemo(() => {
+    if (!noteDrag?.active) return null;
+    const ids = getSelectedIds(state, 'note');
+    if (ids.size === 0) return null;
+    return {
+      tickDelta: noteDrag.tickDelta,
+      laneDelta: noteDrag.laneDelta,
+      ids,
+    };
+  }, [noteDrag, state]);
+
   // Push the full chart's elements (notes + markers) to the reconciler.
   // Hover and selection are pushed through separate effects in the same
   // hook so mouse and drag can't race each other into the renderer.
   useChartElements({
     reconcilerRef,
     rendererVersion,
-    chart: state.chartDoc?.parsedChart ?? null,
+    chart: renderDoc?.parsedChart ?? null,
     activeScope: state.activeScope,
     partName: activePartName,
     capabilities,
     selection: state.selection,
     hovered: state.hovered,
     markerDrag,
-    timedTempos,
+    noteDrag: noteDragHint,
+    timedTempos: renderTimedTempos,
     resolution,
   });
 
@@ -347,9 +394,9 @@ export default function HighwayEditor({
   // ---------------------------------------------------------------------------
 
   const cursorStyle = useMemo(() => {
-    // While dragging a marker, keep the grab cursor so the user knows the
-    // marker is following.
-    if (markerDrag) return 'grabbing';
+    // While dragging a marker or notes, keep the grab cursor so the user
+    // knows the entity is following.
+    if (markerDrag || noteDrag?.active) return 'grabbing';
     // When hovering over a note, show pointer in cursor/erase mode
     if (hoveredHitType === 'note') {
       if (state.activeTool === 'cursor' || state.activeTool === 'erase') {
@@ -384,7 +431,7 @@ export default function HighwayEditor({
       default:
         return 'default';
     }
-  }, [state.activeTool, hoveredHitType, capabilities, markerDrag]);
+  }, [state.activeTool, hoveredHitType, capabilities, markerDrag, noteDrag]);
 
   return (
     <div
@@ -439,6 +486,7 @@ export default function HighwayEditor({
         popover={popover}
         onClose={closePopover}
         executeCommand={executeCommand}
+        tempoGlueMode={state.tempoGlueMode}
       />
     </div>
   );

@@ -241,6 +241,41 @@ describe('swapSynctrack', () => {
     expect(ticks).toEqual([480, 960]);
   });
 
+  test('sectionPolicy defaults to preserve — byte-identical to no option', () => {
+    const chart = makeChart();
+    const withDefault = swapSynctrack(chart, sync);
+    const withPreserve = swapSynctrack(chart, sync, {sectionPolicy: 'preserve'});
+    expect(withPreserve.sections).toEqual(withDefault.sections);
+  });
+
+  test('sectionPolicy snap-whole-note snaps sections to resolution*4 gridlines', () => {
+    const chart = makeChart();
+    // Section at 960*msPerTick(100bpm) = 1200ms; preserve re-ticks it exactly.
+    const preserved = swapSynctrack(chart, sync).sections[0].tick;
+    expect(preserved).toBe(1056); // 960 + 96 (from the existing re-tick test)
+
+    const snapped = swapSynctrack(chart, sync, {
+      sectionPolicy: 'snap-whole-note',
+    }).sections[0];
+    const wholeNote = RES * 4; // 1920
+    expect(snapped.tick % wholeNote).toBe(0);
+    // 1056 rounds to the nearest whole note (1920) — 1056 is closer to 1920
+    // than to 0 only if >= 960; 1056 > 960 so it snaps up to 1920.
+    expect(snapped.tick).toBe(1920);
+  });
+
+  test('sectionPolicy does not affect notes or other events', () => {
+    const chart = makeChart();
+    const preserve = swapSynctrack(chart, sync, {sectionPolicy: 'preserve'});
+    const snap = swapSynctrack(chart, sync, {sectionPolicy: 'snap-whole-note'});
+    expect(snap.trackData[0].noteEventGroups).toEqual(
+      preserve.trackData[0].noteEventGroups,
+    );
+    expect(snap.trackData[0].starPowerSections).toEqual(
+      preserve.trackData[0].starPowerSections,
+    );
+  });
+
   test('clamps pre-origin events to tick 0', () => {
     const lateSync: Synctrack = {
       origin_ms: 5000,

@@ -421,7 +421,10 @@ the dependency direction.
   from an arbitrary ms gap (e.g. a dragged marker, `Δbeats / Δms`) is
   almost never representable, and storing it raw would make every
   downstream event's ms drift on write→parse, breaking §5's round-trip
-  test and 0062 §7's "neighbors never move" invariant. Therefore: any
+  test and 0062 §7's local-drag invariant (neighbour-ms residue bounded by
+  one quantization step and non-accumulating — a quantized BPM being the
+  source of truth, exact bit-identity is unattainable, so the guarantee is
+  a bounded, non-drifting residue, not zero movement). Therefore: any
   mutator that writes or derives a BPM **quantizes it to the document's
   format-representable value at edit time** and recomputes all ms
   (marker, notes, everything downstream) from the *quantized* value. The

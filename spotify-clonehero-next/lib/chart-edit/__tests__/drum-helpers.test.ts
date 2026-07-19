@@ -64,6 +64,23 @@ describe('drum notes', () => {
     expect(note.flags & noteFlags.cymbal).toBeTruthy();
   });
 
+  it('lane legality: a cymbal flag on Red is dropped by the mutator', () => {
+    // §6 / invariant 4: kick and red can never hold a cymbal. Enforced below
+    // the views so no gesture can construct an illegal red cymbal.
+    const track = makeTrack();
+    addDrumNote(track, {tick: 0, type: 'redDrum', flags: {cymbal: true}});
+    const note = track.noteEventGroups[0][0];
+    expect(note.flags & noteFlags.cymbal).toBeFalsy();
+    expect(getDrumNotes(track)[0].flags.cymbal).toBeFalsy();
+  });
+
+  it('lane legality: a cymbal flag on Kick is dropped by the mutator', () => {
+    const track = makeTrack();
+    addDrumNote(track, {tick: 0, type: 'kick', flags: {cymbal: true}});
+    const note = track.noteEventGroups[0][0];
+    expect(note.flags & noteFlags.cymbal).toBeFalsy();
+  });
+
   it('addDrumNote with doubleKick sets doubleKick flag on kick note', () => {
     const track = makeTrack();
     addDrumNote(track, {tick: 0, type: 'kick', flags: {doubleKick: true}});

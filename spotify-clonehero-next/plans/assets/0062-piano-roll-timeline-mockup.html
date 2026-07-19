@@ -1,0 +1,809 @@
+<title>Piano Roll Timeline — Mockups</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --ink: #1a2029;
+    --ink-soft: #5b6472;
+    --panel-edge: #d7dbe2;
+    --accent: #ff4a57;
+    --chip-bg: #e8eaef;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e1116; --ink: #e8ebf0; --ink-soft: #99a3b2; --panel-edge: #262d38; --chip-bg: #1a2029; }
+  }
+  :root[data-theme="dark"] { --bg: #0e1116; --ink: #e8ebf0; --ink-soft: #99a3b2; --panel-edge: #262d38; --chip-bg: #1a2029; }
+  :root[data-theme="light"] { --bg: #f5f6f8; --ink: #1a2029; --ink-soft: #5b6472; --panel-edge: #d7dbe2; --chip-bg: #e8eaef; }
+
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 0; padding: 28px clamp(16px, 4vw, 48px) 48px;
+  }
+  header { max-width: 78ch; margin-bottom: 20px; }
+  h1 { font-size: 22px; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 6px; text-wrap: balance; }
+  header p { color: var(--ink-soft); margin: 0 0 6px; }
+
+  .transport {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    margin: 18px 0 22px;
+  }
+  .transport button {
+    font: 600 14px system-ui, sans-serif; color: var(--ink);
+    background: var(--chip-bg); border: 1px solid var(--panel-edge);
+    border-radius: 6px; padding: 7px 16px; cursor: pointer;
+  }
+  .transport button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .transport button[data-on="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .readout { font: 500 13px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+
+  .variant { margin-bottom: 34px; }
+  .variant-label { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .variant-label b { font-size: 15px; font-weight: 650; }
+  .variant-label span { color: var(--ink-soft); font-size: 13.5px; }
+  .panel-wrap {
+    position: relative;
+    border: 1px solid var(--panel-edge); border-radius: 8px; overflow: hidden;
+    background: #12151c; /* editor chrome is dark in both themes — matches the app */
+  }
+  canvas { display: block; width: 100%; cursor: default; }
+
+  .ctx-menu {
+    position: fixed; z-index: 10; min-width: 190px;
+    background: #1b212c; border: 1px solid #333d4d; border-radius: 7px;
+    padding: 4px; box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+    font: 500 13px system-ui, sans-serif; color: #dde3ec;
+  }
+  .ctx-menu button {
+    display: block; width: 100%; text-align: left;
+    background: none; border: 0; color: inherit; font: inherit;
+    padding: 7px 12px; border-radius: 5px; cursor: pointer;
+  }
+  .ctx-menu button:hover, .ctx-menu button:focus-visible { background: #2a3342; outline: none; }
+  .ctx-menu .sep { height: 1px; background: #2a3342; margin: 4px 6px; }
+
+  .legend {
+    display: flex; gap: 18px 22px; flex-wrap: wrap; margin-top: 4px;
+    color: var(--ink-soft); font-size: 13px;
+  }
+  .legend kbd {
+    font: 600 11.5px ui-monospace, Menlo, monospace;
+    background: var(--chip-bg); border: 1px solid var(--panel-edge);
+    border-radius: 4px; padding: 1px 6px; color: var(--ink);
+  }
+</style>
+
+<header>
+  <h1>Piano-roll timeline — tempo markers &amp; context menus</h1>
+  <p>The x-axis is real time: the waveform never moves, the grid does. Tempo markers (◆) exist only where the tempo changes; drag one to refit the grid to the audio — the BPM of the segments on either side recalculates and its neighbors stay put. Right-click the tempo lane to add a marker at the nearest beat or toggle a downbeat; right-click a marker to delete it. Right-click notes to switch tom/cymbal or delete.</p>
+  <p>The <b>Notes</b> toggle picks what notes do when the grid moves: glued to <b>audio</b> (ticks recompute, notes stay on the recording — the transcription default) or glued to <b>grid</b> (notes ride their gridlines).</p>
+</header>
+
+<div class="transport">
+  <button id="playBtn">▶ Play</button>
+  <button id="followBtn" data-on="true">Follow</button>
+  <button id="glueBtn">Notes: glued to audio</button>
+  <label class="readout" style="display:flex;align-items:center;gap:6px">playhead at
+    <select id="anchorSel" style="font:inherit;color:inherit;background:var(--chip-bg);border:1px solid var(--panel-edge);border-radius:5px;padding:3px 6px">
+      <option value="0.2">20%</option>
+      <option value="0.35">35%</option>
+      <option value="0.5" selected>50%</option>
+      <option value="0.65">65%</option>
+    </select>
+  </label>
+  <span class="readout" id="posReadout">1.1 · 0:00.00</span>
+  <span class="readout" id="zoomReadout">zoom 100%</span>
+</div>
+
+<div class="variant">
+  <div class="variant-label"><b>Piano-roll timeline</b><span>BPM labels appear only at tempo markers</span></div>
+  <div class="panel-wrap"><canvas id="roll" height="244"></canvas></div>
+</div>
+
+<div class="legend">
+  <span><kbd>scroll</kbd> zoom at cursor</span>
+  <span><kbd>shift + scroll</kbd> / swipe — pan</span>
+  <span><kbd>click / drag ruler or waveform</kbd> scrub</span>
+  <span><kbd>drag ◆</kbd> refit tempo</span>
+  <span><kbd>right-click tempo lane / marker / note</kbd> context menu</span>
+  <span><kbd>drag note</kbd> move (snap 1/16)</span>
+  <span><kbd>drag empty</kbd> box-select · <kbd>shift</kbd> add · <kbd>drag selection</kbd> move in time</span>
+  <span><kbd>space</kbd> play / pause</span>
+</div>
+
+<script>
+'use strict';
+// ---------------------------------------------------------------- data model
+const RES = 192;                 // ticks per quarter/beat
+const NUM_BEATS = 48 * 4;        // 48 4/4 bars
+const TOTAL_TICKS = NUM_BEATS * RES;
+
+// Tempo model: sparse markers {tick, ms}, tick fixed to a beat, sorted by tick.
+// BPM of the segment between markers k and k+1 is derived from the gap.
+// tailBpm continues after the last marker. Dragging marker k changes only the
+// BPM of the segments adjacent to it — neighbor markers never move.
+const markers = [
+  { tick: 0, ms: 0 },
+  { tick: 16 * 4 * RES, ms: 0 },
+  { tick: 32 * 4 * RES, ms: 0 },
+  { tick: 40 * 4 * RES, ms: 0 },
+];
+let tailBpm = 96;
+{ // initialize marker times from the intended segment BPMs
+  const bpms = [128, 132.5, 128];
+  for (let k = 1; k < markers.length; k++) {
+    markers[k].ms = markers[k-1].ms + (markers[k].tick - markers[k-1].tick) / RES * 60000 / bpms[k-1];
+  }
+}
+function segmentBpm(k) { // BPM of the segment starting at marker k
+  if (k >= markers.length - 1) return tailBpm;
+  return (markers[k+1].tick - markers[k].tick) / RES * 60000 / (markers[k+1].ms - markers[k].ms);
+}
+function tickToMs(t) {
+  let k = 0;
+  while (k + 1 < markers.length && markers[k+1].tick <= t) k++;
+  if (k === markers.length - 1) return markers[k].ms + (t - markers[k].tick) / RES * 60000 / tailBpm;
+  const a = markers[k], b = markers[k+1];
+  return a.ms + (t - a.tick) / (b.tick - a.tick) * (b.ms - a.ms);
+}
+function msToTick(ms) {
+  let k = 0;
+  while (k + 1 < markers.length && markers[k+1].ms <= ms) k++;
+  if (k === markers.length - 1) return markers[k].tick + (ms - markers[k].ms) / 60000 * tailBpm * RES;
+  const a = markers[k], b = markers[k+1];
+  return a.tick + (ms - a.ms) / (b.ms - a.ms) * (b.tick - a.tick);
+}
+function totalMs() { return tickToMs(TOTAL_TICKS); }
+
+// cached real-time position of every beat, refreshed after tempo edits;
+// grid drawing reads this
+const beatMs = new Float64Array(NUM_BEATS + 1);
+function refreshBeatCache() { for (let i = 0; i <= NUM_BEATS; i++) beatMs[i] = tickToMs(i * RES); }
+refreshBeatCache();
+
+// downbeat flags per beat; bars and time signatures derive from these
+const downbeat = new Uint8Array(NUM_BEATS + 1);
+for (let i = 0; i <= NUM_BEATS; i += 4) downbeat[i] = 1;
+function computeBars() {
+  const idx = [];
+  for (let i = 0; i <= NUM_BEATS; i++) if (downbeat[i]) idx.push(i);
+  const out = [];
+  for (let b = 0; b < idx.length; b++) {
+    const next = b + 1 < idx.length ? idx[b + 1] : NUM_BEATS;
+    out.push({ beat: idx[b], bar: b + 1, beatsInBar: next - idx[b] });
+  }
+  return out;
+}
+let bars = computeBars();
+
+const sections = [
+  { tick: 0, name: 'Intro' },
+  { tick: 4 * 4 * RES, name: 'Verse 1' },
+  { tick: 16 * 4 * RES, name: 'Chorus' },
+  { tick: 24 * 4 * RES, name: 'Verse 2' },
+  { tick: 32 * 4 * RES, name: 'Chorus 2' },
+  { tick: 40 * 4 * RES, name: 'Outro' },
+];
+
+// lanes: 0 kick, 1 red, 2 yellow, 3 blue, 4 green. Kick and red can't be cymbals.
+const LANES = [
+  { name: 'Kick',   color: '#f2994a' },
+  { name: 'Red',    color: '#e5484d' },
+  { name: 'Yellow', color: '#f5c742' },
+  { name: 'Blue',   color: '#4a9ef2' },
+  { name: 'Green',  color: '#5cc262' },
+];
+const CYMBAL_OK = [false, false, true, true, true];
+
+let seed = 7;
+function rnd() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+
+// notes: {tick, lane, cymbal}
+const notes = [];
+for (let m = 0; m < 48; m++) {
+  const bar = m * 4 * RES;
+  const inIntro = m < 4, inOutro = m >= 44;
+  const fill = (m % 8 === 7);
+  for (let e = 0; e < 8; e++) {
+    const t = bar + e * (RES / 2);
+    if (!inIntro || e % 2 === 0) notes.push({ tick: t, lane: 2, cymbal: !fill });
+    if (fill && e >= 4) {
+      notes.push({ tick: t, lane: e < 6 ? 3 : 4, cymbal: false });
+      if (rnd() > 0.5) notes.push({ tick: t + RES/4, lane: 3, cymbal: false });
+    }
+  }
+  notes.push({ tick: bar, lane: 0 });
+  notes.push({ tick: bar + 2 * RES, lane: 0 });
+  if (rnd() > 0.45) notes.push({ tick: bar + 2.5 * RES, lane: 0 });
+  if (rnd() > 0.7) notes.push({ tick: bar + 3.5 * RES, lane: 0 });
+  if (!inIntro) { notes.push({ tick: bar + RES, lane: 1 }); notes.push({ tick: bar + 3 * RES, lane: 1 }); }
+  if (sections.some(s => s.tick === bar) || inOutro && m % 2 === 0) notes.push({ tick: bar, lane: 4, cymbal: true });
+}
+notes.sort((a, b) => a.tick - b.tick);
+
+// procedural drum-stem amplitude, 5ms bins — fixed once; the "recording"
+const AMP_BIN = 5;
+const amp = new Float32Array(Math.ceil(totalMs() / AMP_BIN) + 2);
+for (const n of notes) {
+  const ms = tickToMs(n.tick);
+  const strength = n.lane === 0 ? 1.0 : n.lane === 1 ? 0.9 : n.cymbal ? 0.45 : 0.7;
+  const decay = n.lane === 2 && n.cymbal ? 120 : n.cymbal ? 400 : 90;
+  const start = Math.floor(ms / AMP_BIN);
+  for (let i = 0; i < Math.ceil(decay * 3 / AMP_BIN); i++) {
+    const idx = start + i; if (idx >= amp.length) break;
+    amp[idx] = Math.min(1, amp[idx] + strength * Math.exp(-(i * AMP_BIN) / decay));
+  }
+}
+for (let i = 0; i < amp.length; i++) amp[i] = Math.min(1, amp[i] * (0.75 + 0.25 * Math.sin(i * 0.37) * Math.sin(i * 0.11)) + 0.02);
+
+// ---------------------------------------------------------------- view (time-based x axis)
+const BASE_PPMS = 0.075; // px per ms at "100%"
+const view = {
+  pxPerMs: BASE_PPMS,
+  leftMs: 0,
+  playheadMs: 0,
+  playing: false,
+  follow: true,
+  followAnchor: 0.5, // viewport fraction where the playhead pins while following
+  glueNotesToAudio: true,
+  listeners: [],
+  notify() { for (const fn of this.listeners) fn(); },
+};
+const MIN_PPMS = BASE_PPMS / 16, MAX_PPMS = BASE_PPMS * 15;
+const SNAP_TICKS = RES / 4; // 1/16 grid — the real editor uses state.gridDivision
+const MIN_SEG_MS = 200;
+
+// ---------------------------------------------------------------- renderer
+const C = {
+  chrome: '#12151c', laneBg: '#171b24', laneAlt: '#151923',
+  rulerBg: '#0d1017', rulerInk: '#8b94a5', tempoBg: '#10141c',
+  gridBar: '#59677c', gridBeat: '#3a4557', gridSub: '#2a3342',
+  waveRow: '#4a6288', playhead: '#ff4a57',
+  sectionFlag: '#c9a34a', tempoNode: '#7ab8ff', tempoInk: '#a8c8ea',
+  laneLabel: '#6b7484', ghost: '#f5c742',
+};
+const RULER_H = 24, TEMPO_H = 26, WAVE_ROW_H = 40;
+
+class PianoRoll {
+  constructor(canvas, opts) {
+    this.cv = canvas; this.ctx = canvas.getContext('2d');
+    this.cssH = opts.height;
+    canvas.style.height = this.cssH + 'px';
+    this._resize(); new ResizeObserver(() => { this._resize(); this.draw(); }).observe(canvas);
+    this.selection = new Set();
+    this.drag = null; // {kind:'scrub'|'note'|'marquee'|'marker', ...}
+    canvas.addEventListener('wheel', e => this._wheel(e), { passive: false });
+    canvas.addEventListener('pointerdown', e => this._down(e));
+    canvas.addEventListener('pointermove', e => this._move(e));
+    canvas.addEventListener('pointerup', e => this._up(e));
+    canvas.addEventListener('contextmenu', e => this._contextMenu(e));
+    canvas.addEventListener('pointerleave', () => { if (!this.drag) { this.hoverNote = null; this.hoverMarker = -1; this.draw(); } });
+    view.listeners.push(() => this.draw());
+  }
+  _resize() {
+    const dpr = window.devicePixelRatio || 1;
+    this.w = this.cv.clientWidth; this.h = this.cssH;
+    this.cv.width = this.w * dpr; this.cv.height = this.h * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.laneTop = RULER_H + TEMPO_H;
+    this.laneBottom = this.h - WAVE_ROW_H;
+    this.laneH = (this.laneBottom - this.laneTop) / 5;
+  }
+  xToMs(x) { return view.leftMs + x / view.pxPerMs; }
+  msToX(ms) { return (ms - view.leftMs) * view.pxPerMs; }
+  tickToX(t) { return this.msToX(tickToMs(t)); }
+
+  // ------------------------------------------------------------ interaction
+  _wheel(e) {
+    e.preventDefault();
+    const pan = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
+    if (pan) {
+      const d = (e.shiftKey ? (e.deltaY || e.deltaX) : e.deltaX) / view.pxPerMs;
+      view.leftMs = clampLeft(view.leftMs + d, this.w);
+      if (view.playing) { view.follow = false; syncFollowBtn(); }
+    } else {
+      const anchor = this.xToMs(e.offsetX);
+      view.pxPerMs = Math.min(MAX_PPMS, Math.max(MIN_PPMS, view.pxPerMs * Math.exp(-e.deltaY * 0.0022)));
+      view.leftMs = clampLeft(anchor - e.offsetX / view.pxPerMs, this.w);
+      zoomReadout.textContent = 'zoom ' + Math.round(view.pxPerMs / BASE_PPMS * 100) + '%';
+    }
+    view.notify();
+  }
+
+  _seekZone(y) { return y <= RULER_H || y >= this.laneBottom; }
+  _tempoZone(y) { return y > RULER_H && y <= RULER_H + TEMPO_H; }
+  _yToLane(y) { return Math.floor((y - this.laneTop) / this.laneH); }
+  _noteGlyphW() {
+    const nh = Math.min(this.laneH - 6, 13);
+    const centerTick = msToTick(view.leftMs + this.w / 2 / view.pxPerMs);
+    const msPerTick = (tickToMs(centerTick + RES) - tickToMs(centerTick)) / RES;
+    return Math.max(1.5, Math.min(nh, (RES / 4) * msPerTick * view.pxPerMs * 0.72));
+  }
+  _hitNote(x, y) {
+    const lane = this._yToLane(y);
+    if (lane < 0 || lane > 4) return null;
+    const tol = Math.max(this._noteGlyphW() / 2 + 2, 5);
+    let best = null, bestDist = Infinity;
+    for (const n of notes) {
+      if (n.lane !== lane) continue;
+      const d = Math.abs(this.tickToX(n.tick) - x);
+      if (d <= tol && d < bestDist) { best = n; bestDist = d; }
+    }
+    return best;
+  }
+  _hitMarker(x) { // generous 10px radius
+    let best = -1, bestDist = 10;
+    for (let k = 0; k < markers.length; k++) {
+      const d = Math.abs(this.msToX(markers[k].ms) - x);
+      if (d < bestDist) { best = k; bestDist = d; }
+    }
+    return best;
+  }
+  _nearestBeat(x) {
+    const t = Math.max(0, Math.min(TOTAL_TICKS, msToTick(this.xToMs(x))));
+    return Math.round(t / RES);
+  }
+  _snapTick(tick) { return Math.round(tick / SNAP_TICKS) * SNAP_TICKS; }
+  _seekTo(x) {
+    view.playheadMs = Math.max(0, Math.min(totalMs(), this.xToMs(x)));
+  }
+  _captureNoteMs() { return view.glueNotesToAudio ? notes.map(n => tickToMs(n.tick)) : null; }
+  _applyGlue(noteMs) {
+    refreshBeatCache();
+    if (noteMs) {
+      for (let i = 0; i < notes.length; i++) notes[i].tick = Math.max(0, Math.min(TOTAL_TICKS, msToTick(noteMs[i])));
+      notes.sort((a, b) => a.tick - b.tick);
+    }
+  }
+
+  _down(e) {
+    hideMenu();
+    if (e.button !== 0) return; // drags, scrubs, and selection all require left click
+    this.cv.setPointerCapture(e.pointerId);
+    if (this._seekZone(e.offsetY)) {
+      this.drag = { kind: 'scrub' };
+      this._seekTo(e.offsetX); view.notify();
+      return;
+    }
+    if (this._tempoZone(e.offsetY)) {
+      const k = this._hitMarker(e.offsetX);
+      if (k > 0) { // marker 0 anchors the song start
+        this.drag = { kind: 'marker', idx: k, origMs: markers[k].ms, noteMs: this._captureNoteMs() };
+      }
+      this.draw();
+      return;
+    }
+    const lane = this._yToLane(e.offsetY);
+    if (lane < 0 || lane > 4) return;
+    const hit = this._hitNote(e.offsetX, e.offsetY);
+    if (hit) {
+      if (!this.selection.has(hit)) {
+        if (e.shiftKey) this.selection.add(hit);
+        else { this.selection.clear(); this.selection.add(hit); }
+      }
+      this.drag = {
+        kind: 'note',
+        anchorTick: this._snapTick(msToTick(this.xToMs(e.offsetX))),
+        anchorLane: lane,
+        moved: false,
+        laneLocked: this.selection.size > 1, // multi-selections move in time only
+        orig: new Map([...this.selection].map(n => [n, { tick: n.tick, lane: n.lane, cymbal: n.cymbal }])),
+      };
+    } else {
+      if (!e.shiftKey) this.selection.clear();
+      this.drag = { kind: 'marquee', x0: e.offsetX, y0: e.offsetY, x1: e.offsetX, y1: e.offsetY, base: new Set(this.selection) };
+    }
+    this.draw();
+  }
+
+  _move(e) {
+    if (!this.drag) {
+      this.hoverNote = this._seekZone(e.offsetY) || this._tempoZone(e.offsetY) ? null : this._hitNote(e.offsetX, e.offsetY);
+      this.hoverMarker = this._tempoZone(e.offsetY) ? this._hitMarker(e.offsetX) : -1;
+      this.cv.style.cursor = this._seekZone(e.offsetY) ? 'pointer'
+        : this.hoverMarker >= 0 ? 'ew-resize'
+        : this.hoverNote ? 'grab' : 'default';
+      this.draw();
+      return;
+    }
+    const d = this.drag;
+    if (d.kind === 'scrub') { this._seekTo(e.offsetX); view.notify(); return; }
+    if (d.kind === 'marker') {
+      const k = d.idx;
+      const lo = markers[k-1].ms + MIN_SEG_MS;
+      const hi = k + 1 < markers.length ? markers[k+1].ms - MIN_SEG_MS : totalMs() + 60000;
+      markers[k].ms = Math.max(lo, Math.min(hi, this.xToMs(e.offsetX)));
+      this._applyGlue(d.noteMs); // local edit: adjacent segment BPMs change, neighbors stay
+      this.cv.style.cursor = 'ew-resize';
+      this.draw();
+      return;
+    }
+    if (d.kind === 'note') {
+      const tickDelta = this._snapTick(msToTick(this.xToMs(e.offsetX))) - d.anchorTick;
+      const laneDelta = d.laneLocked ? 0 : Math.max(0, Math.min(4, this._yToLane(e.offsetY))) - d.anchorLane;
+      if (tickDelta !== 0 || laneDelta !== 0) d.moved = true;
+      for (const [n, o] of d.orig) {
+        n.tick = Math.max(0, Math.min(TOTAL_TICKS, o.tick + tickDelta));
+        n.lane = Math.max(0, Math.min(4, o.lane + laneDelta));
+        n.cymbal = o.cymbal && CYMBAL_OK[n.lane]; // kick/red lanes can't hold cymbals
+      }
+      notes.sort((a, b) => a.tick - b.tick);
+      this.cv.style.cursor = 'grabbing';
+      this.draw();
+      return;
+    }
+    // marquee: live-select notes inside the box
+    d.x1 = e.offsetX; d.y1 = e.offsetY;
+    const tA = msToTick(this.xToMs(Math.min(d.x0, d.x1))), tB = msToTick(this.xToMs(Math.max(d.x0, d.x1)));
+    const laneA = this._yToLane(Math.min(d.y0, d.y1)), laneB = this._yToLane(Math.max(d.y0, d.y1));
+    this.selection = new Set(d.base);
+    for (const n of notes) {
+      if (n.tick < tA) continue; if (n.tick > tB) break;
+      if (n.lane >= laneA && n.lane <= laneB) this.selection.add(n);
+    }
+    this.draw();
+  }
+
+  _up(e) {
+    if (!this.drag) return;
+    if (this.drag.kind === 'note' && !this.drag.moved && !e.shiftKey) {
+      const hit = this._hitNote(e.offsetX, e.offsetY);
+      if (hit) { this.selection.clear(); this.selection.add(hit); }
+    }
+    this.drag = null;
+    this.cv.style.cursor = 'default';
+    this.draw();
+  }
+
+  _contextMenu(e) {
+    e.preventDefault();
+    if (this._tempoZone(e.offsetY)) {
+      const k = this._hitMarker(e.offsetX);
+      if (k >= 0) {
+        showMenu(e.clientX, e.clientY, [
+          { label: `Delete tempo marker (${segmentBpm(k).toFixed(1)} BPM)`, disabled: k === 0, action: () => {
+            const noteMs = this._captureNoteMs();
+            markers.splice(k, 1);
+            this._applyGlue(noteMs);
+            this.draw();
+          }},
+        ]);
+      } else {
+        const beat = this._nearestBeat(e.offsetX);
+        const tick = beat * RES;
+        const items = [
+          { label: 'Add tempo marker here', disabled: markers.some(m => m.tick === tick), action: () => {
+            // inserted on the current tempo line: mapping is unchanged until dragged
+            const m = { tick, ms: tickToMs(tick) };
+            markers.push(m); markers.sort((a, b) => a.tick - b.tick);
+            this.draw();
+          }},
+          { label: downbeat[beat] ? 'Remove downbeat' : 'Mark as downbeat', disabled: beat === 0 || beat >= NUM_BEATS, action: () => {
+            downbeat[beat] = downbeat[beat] ? 0 : 1;
+            bars = computeBars();
+            this.draw();
+          }},
+        ];
+        showMenu(e.clientX, e.clientY, items);
+      }
+      return;
+    }
+    const note = this._seekZone(e.offsetY) ? null : this._hitNote(e.offsetX, e.offsetY);
+    if (note) {
+      // operate on the whole selection if the note is part of it
+      const targets = this.selection.has(note) ? [...this.selection] : [note];
+      if (!this.selection.has(note)) { this.selection.clear(); this.selection.add(note); this.draw(); }
+      const items = [];
+      const switchable = targets.filter(n => CYMBAL_OK[n.lane]);
+      if (switchable.length) {
+        const allCymbals = switchable.every(n => n.cymbal);
+        items.push({ label: allCymbals ? 'Switch to tom' : 'Switch to cymbal', action: () => {
+          for (const n of switchable) n.cymbal = !allCymbals;
+          this.draw();
+        }});
+      }
+      items.push({ sep: true });
+      items.push({ label: targets.length > 1 ? `Delete ${targets.length} notes` : 'Delete note', action: () => {
+        for (const n of targets) notes.splice(notes.indexOf(n), 1);
+        this.selection.clear();
+        this.draw();
+      }});
+      showMenu(e.clientX, e.clientY, items);
+    }
+  }
+
+  // ------------------------------------------------------------ drawing
+  draw() {
+    const { ctx, w, h } = this;
+    ctx.fillStyle = C.chrome; ctx.fillRect(0, 0, w, h);
+    for (let l = 0; l < 5; l++) {
+      ctx.fillStyle = l % 2 ? C.laneAlt : C.laneBg;
+      ctx.fillRect(0, this.laneTop + l * this.laneH, w, this.laneH);
+    }
+    this._drawGrid();
+    this._drawNotes();
+    this._drawTempoLane();
+    this._drawRuler();
+    ctx.fillStyle = C.rulerBg; ctx.fillRect(0, this.laneBottom, w, WAVE_ROW_H);
+    ctx.strokeStyle = C.gridBeat; ctx.beginPath(); ctx.moveTo(0, this.laneBottom + 0.5); ctx.lineTo(w, this.laneBottom + 0.5); ctx.stroke();
+    this._drawWave(this.laneBottom + 3, this.h - 3);
+    this._drawLaneLabels();
+    this._drawPlayhead();
+    if (this.drag && this.drag.kind === 'marker') { // dashed ghost at the marker's original position
+      const x = this.msToX(this.drag.origMs);
+      ctx.strokeStyle = C.ghost; ctx.setLineDash([4, 4]); ctx.globalAlpha = 0.6;
+      ctx.beginPath(); ctx.moveTo(x, RULER_H); ctx.lineTo(x, this.laneBottom); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
+    if (this.drag && this.drag.kind === 'marquee') {
+      const d = this.drag;
+      const x = Math.min(d.x0, d.x1), y = Math.min(d.y0, d.y1);
+      const bw = Math.abs(d.x1 - d.x0), bh = Math.abs(d.y1 - d.y0);
+      ctx.fillStyle = 'rgba(122,184,255,0.12)'; ctx.fillRect(x, y, bw, bh);
+      ctx.strokeStyle = 'rgba(122,184,255,0.7)'; ctx.strokeRect(x + 0.5, y + 0.5, bw, bh);
+    }
+  }
+
+  _visibleBeatRange() {
+    const msA = view.leftMs - 50, msB = view.leftMs + this.w / view.pxPerMs + 50;
+    let a = Math.max(0, Math.floor(msToTick(Math.max(0, msA)) / RES));
+    let b = Math.min(NUM_BEATS, Math.ceil(msToTick(Math.min(totalMs(), msB)) / RES));
+    return [a, b];
+  }
+
+  _drawGrid() {
+    const { ctx } = this;
+    const [a, b] = this._visibleBeatRange();
+    const avgBeatPx = this.w / Math.max(1, b - a);
+    ctx.lineWidth = 1;
+    for (let i = a; i <= b; i++) {
+      const x = Math.round(this.msToX(beatMs[i])) + 0.5;
+      if (downbeat[i]) {
+        ctx.strokeStyle = C.gridBar;
+        ctx.beginPath(); ctx.moveTo(x, RULER_H); ctx.lineTo(x, this.laneBottom); ctx.stroke();
+        ctx.strokeStyle = C.gridSub;
+        ctx.beginPath(); ctx.moveTo(x, this.laneBottom); ctx.lineTo(x, this.h); ctx.stroke();
+      } else if (avgBeatPx > 10) {
+        ctx.strokeStyle = C.gridBeat;
+        ctx.beginPath(); ctx.moveTo(x, this.laneTop); ctx.lineTo(x, this.laneBottom); ctx.stroke();
+      }
+      if (i < b && avgBeatPx > 46) {
+        const per = avgBeatPx > 110 ? 4 : 2;
+        ctx.strokeStyle = C.gridSub;
+        for (let s2 = 1; s2 < per; s2++) {
+          const sx = Math.round(this.msToX(beatMs[i] + (beatMs[i + 1] - beatMs[i]) * s2 / per)) + 0.5;
+          ctx.beginPath(); ctx.moveTo(sx, this.laneTop); ctx.lineTo(sx, this.laneBottom); ctx.stroke();
+        }
+      }
+    }
+  }
+
+  _drawWave(top, bottom) {
+    const { ctx, w } = this;
+    const mid = (top + bottom) / 2, half = (bottom - top) / 2;
+    ctx.globalAlpha = 0.9; ctx.fillStyle = C.waveRow;
+    ctx.beginPath(); ctx.moveTo(0, mid);
+    for (let x = 0; x <= w; x += 2) {
+      const ms = this.xToMs(x);
+      const a = (ms < 0 || ms > totalMs()) ? 0 : (amp[Math.floor(ms / AMP_BIN)] || 0);
+      ctx.lineTo(x, mid - a * half * 0.92);
+    }
+    for (let x = w; x >= 0; x -= 2) {
+      const ms = this.xToMs(x);
+      const a = (ms < 0 || ms > totalMs()) ? 0 : (amp[Math.floor(ms / AMP_BIN)] || 0);
+      ctx.lineTo(x, mid + a * half * 0.92);
+    }
+    ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+  }
+
+  _drawNotes() {
+    const { ctx, w } = this;
+    const t0 = msToTick(Math.max(0, view.leftMs)) - RES, t1 = msToTick(Math.min(totalMs(), this.xToMs(w))) + RES;
+    const nh = Math.min(this.laneH - 6, 13);
+    const nw = this._noteGlyphW(); // glyphs squish horizontally as you zoom out
+    for (const n of notes) {
+      if (n.tick < t0) continue; if (n.tick > t1) break;
+      const x = this.tickToX(n.tick);
+      const cy = this.laneTop + n.lane * this.laneH + this.laneH / 2;
+      const selected = this.selection.has(n), hovered = this.hoverNote === n;
+      if (selected || hovered) {
+        ctx.fillStyle = selected ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.35)';
+        const hw = Math.max(nw, nh) / 2 + 2.5;
+        roundRect(ctx, x - hw, cy - nh / 2 - 2.5, hw * 2, nh + 5, 3); ctx.fill();
+      }
+      ctx.fillStyle = LANES[n.lane].color;
+      if (n.cymbal) {
+        ctx.beginPath();
+        ctx.moveTo(x, cy - nh * 0.62);
+        ctx.lineTo(x + nw * 0.6, cy + nh * 0.5);
+        ctx.lineTo(x - nw * 0.6, cy + nh * 0.5);
+        ctx.closePath(); ctx.fill();
+      } else {
+        roundRect(ctx, x - nw / 2, cy - nh / 2, nw, nh, Math.min(2.5, nw / 3)); ctx.fill();
+      }
+    }
+  }
+
+  _drawTempoLane() {
+    const { ctx, w } = this;
+    ctx.fillStyle = C.tempoBg; ctx.fillRect(0, RULER_H, w, TEMPO_H);
+    ctx.strokeStyle = C.gridBeat;
+    ctx.beginPath(); ctx.moveTo(0, RULER_H + TEMPO_H + 0.5); ctx.lineTo(w, RULER_H + TEMPO_H + 0.5); ctx.stroke();
+    const cy = RULER_H + TEMPO_H * 0.62;
+    ctx.font = '600 9.5px ui-monospace, Menlo, monospace';
+    for (let k = 0; k < markers.length; k++) {
+      const x = this.msToX(markers[k].ms);
+      if (x < -60 || x > w + 20) continue;
+      const hot = this.hoverMarker === k || (this.drag && this.drag.kind === 'marker' && this.drag.idx === k);
+      if (hot) {
+        ctx.fillStyle = 'rgba(122,184,255,0.25)';
+        ctx.beginPath(); ctx.arc(x, cy, 9, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = hot ? '#b3d6ff' : C.tempoNode;
+      ctx.beginPath();
+      ctx.moveTo(x, cy - 5.5); ctx.lineTo(x + 5, cy); ctx.lineTo(x, cy + 5.5); ctx.lineTo(x - 5, cy);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = C.tempoInk;
+      ctx.fillText(segmentBpm(k).toFixed(1), x + 8, cy + 3.5);
+    }
+    // time-signature chips where the derived meter changes
+    ctx.font = '700 9.5px system-ui, sans-serif';
+    let prevMeter = -1;
+    for (const bar of bars) {
+      const meter = bar.beatsInBar;
+      if (meter !== prevMeter) {
+        const x = this.msToX(beatMs[bar.beat]);
+        if (x > -50 && x < w + 10) {
+          const label = meter + '/4';
+          const tw = ctx.measureText(label).width;
+          ctx.fillStyle = 'rgba(122,184,255,0.16)';
+          roundRect(ctx, x + 3, RULER_H + 2, tw + 8, 12, 3); ctx.fill();
+          ctx.fillStyle = C.tempoInk;
+          ctx.fillText(label, x + 7, RULER_H + 11.5);
+        }
+        prevMeter = meter;
+      }
+    }
+  }
+
+  _drawRuler() {
+    const { ctx, w } = this;
+    ctx.fillStyle = C.rulerBg; ctx.fillRect(0, 0, w, RULER_H);
+    ctx.strokeStyle = C.gridBeat;
+    ctx.beginPath(); ctx.moveTo(0, RULER_H + 0.5); ctx.lineTo(w, RULER_H + 0.5); ctx.stroke();
+    const avgBarPx = w / Math.max(1, (this.xToMs(w) - view.leftMs) / (totalMs() / bars.length));
+    const labelEvery = avgBarPx > 44 ? 1 : avgBarPx > 22 ? 2 : avgBarPx > 11 ? 4 : 8;
+    ctx.font = '500 10px ui-monospace, Menlo, monospace';
+    for (const bar of bars) {
+      const x = this.msToX(beatMs[bar.beat]);
+      if (x < -40 || x > w + 40) continue;
+      ctx.strokeStyle = C.gridBar;
+      ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, RULER_H - 7); ctx.lineTo(Math.round(x) + 0.5, RULER_H); ctx.stroke();
+      if ((bar.bar - 1) % labelEvery === 0) { ctx.fillStyle = C.rulerInk; ctx.fillText(String(bar.bar), x + 3, RULER_H - 9); }
+    }
+    ctx.font = '600 10px system-ui, sans-serif';
+    for (const s of sections) {
+      const x = this.tickToX(s.tick);
+      if (x > w + 10) continue;
+      const tw = ctx.measureText(s.name).width;
+      if (x + tw + 14 < 0) continue;
+      ctx.fillStyle = C.sectionFlag;
+      ctx.fillRect(x, 2, 2, RULER_H - 4);
+      ctx.globalAlpha = 0.18; ctx.fillRect(x + 2, 2, tw + 10, 12); ctx.globalAlpha = 1;
+      ctx.fillStyle = C.sectionFlag; ctx.fillText(s.name, x + 6, 11.5);
+    }
+  }
+
+  _drawLaneLabels() {
+    const { ctx } = this;
+    ctx.font = '600 9.5px system-ui, sans-serif';
+    for (let l = 0; l < 5; l++) {
+      const y = this.laneTop + l * this.laneH;
+      ctx.fillStyle = 'rgba(13,16,23,0.72)';
+      ctx.fillRect(0, y + 2, 44, 13);
+      ctx.fillStyle = C.laneLabel;
+      ctx.fillText(LANES[l].name.toUpperCase(), 5, y + 12);
+    }
+  }
+
+  _drawPlayhead() {
+    const { ctx } = this;
+    const x = this.msToX(view.playheadMs);
+    if (x < -2 || x > this.w + 2) return;
+    ctx.strokeStyle = C.playhead; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, this.h); ctx.stroke();
+    ctx.fillStyle = C.playhead;
+    ctx.beginPath(); ctx.moveTo(x - 5, 0); ctx.lineTo(x + 5, 0); ctx.lineTo(x, 7); ctx.closePath(); ctx.fill();
+    ctx.lineWidth = 1;
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function clampLeft(left, w) {
+  const visible = w / view.pxPerMs;
+  return Math.max(-visible * 0.05, Math.min(totalMs() - visible * 0.5, left));
+}
+
+// ---------------------------------------------------------------- context menu
+let menuEl = null;
+function hideMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } }
+function showMenu(cx, cyPos, items) {
+  hideMenu();
+  menuEl = document.createElement('div');
+  menuEl.className = 'ctx-menu';
+  for (const item of items) {
+    if (item.sep) { const s = document.createElement('div'); s.className = 'sep'; menuEl.appendChild(s); continue; }
+    const b = document.createElement('button');
+    b.textContent = item.label;
+    if (item.disabled) { b.disabled = true; b.style.opacity = 0.45; b.style.cursor = 'default'; }
+    else b.addEventListener('click', () => { hideMenu(); item.action(); });
+    menuEl.appendChild(b);
+  }
+  document.body.appendChild(menuEl);
+  const r = menuEl.getBoundingClientRect();
+  menuEl.style.left = Math.min(cx, window.innerWidth - r.width - 8) + 'px';
+  menuEl.style.top = Math.min(cyPos, window.innerHeight - r.height - 8) + 'px';
+}
+document.addEventListener('pointerdown', e => { if (menuEl && !menuEl.contains(e.target)) hideMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hideMenu(); });
+
+// ---------------------------------------------------------------- transport
+const roll = new PianoRoll(document.getElementById('roll'), { height: 244 });
+
+const playBtn = document.getElementById('playBtn');
+const followBtn = document.getElementById('followBtn');
+const glueBtn = document.getElementById('glueBtn');
+const posReadout = document.getElementById('posReadout');
+const zoomReadout = document.getElementById('zoomReadout');
+
+function syncFollowBtn() { followBtn.dataset.on = String(view.follow); }
+followBtn.addEventListener('click', () => { view.follow = !view.follow; syncFollowBtn(); });
+document.getElementById('anchorSel').addEventListener('change', e => {
+  view.followAnchor = parseFloat(e.target.value);
+});
+glueBtn.addEventListener('click', () => {
+  view.glueNotesToAudio = !view.glueNotesToAudio;
+  glueBtn.textContent = view.glueNotesToAudio ? 'Notes: glued to audio' : 'Notes: glued to grid';
+});
+function togglePlay() {
+  view.playing = !view.playing;
+  playBtn.textContent = view.playing ? '❚❚ Pause' : '▶ Play';
+  if (view.playing) { view.follow = true; syncFollowBtn(); last = performance.now(); requestAnimationFrame(tick); }
+}
+playBtn.addEventListener('click', togglePlay);
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); togglePlay(); }
+});
+
+let last = 0;
+function tick(now) {
+  if (!view.playing) return;
+  view.playheadMs = Math.min(totalMs(), view.playheadMs + (now - last)); last = now;
+  if (view.playheadMs >= totalMs()) view.playheadMs = 0;
+  if (view.follow) {
+    // Catch-up follow: the playhead travels freely until it reaches the anchor
+    // position, then the view scrolls to pin it there. Never jump on play —
+    // only snap the view if the playhead is entirely off-screen.
+    const visible = roll.w / view.pxPerMs;
+    const anchorMs = view.leftMs + visible * view.followAnchor;
+    const offscreen = view.playheadMs < view.leftMs || view.playheadMs > view.leftMs + visible;
+    if (view.playheadMs > anchorMs || offscreen) {
+      view.leftMs = clampLeft(view.playheadMs - visible * view.followAnchor, roll.w);
+    }
+  }
+  const t = msToTick(view.playheadMs);
+  const beat = Math.floor(t / RES);
+  let barNum = 1, beatInBar = 1;
+  for (const bar of bars) { if (bar.beat <= beat) { barNum = bar.bar; beatInBar = beat - bar.beat + 1; } else break; }
+  const s = view.playheadMs / 1000;
+  posReadout.textContent = barNum + '.' + beatInBar + ' · ' + Math.floor(s / 60) + ':' + (s % 60).toFixed(2).padStart(5, '0');
+  view.notify();
+  requestAnimationFrame(tick);
+}
+view.notify();
+</script>

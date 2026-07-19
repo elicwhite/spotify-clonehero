@@ -12,6 +12,8 @@
  */
 
 import type {ChartDocument, NormalizedVocalPart} from '../types';
+import {applyEventTiming, makeChartTiming} from '../retime';
+import {tickToMs} from '@/lib/drum-transcription/timing';
 
 /** Default vocal part — matches the part used by add-lyrics. */
 export const DEFAULT_VOCALS_PART = 'vocals';
@@ -105,9 +107,18 @@ export function moveLyric(
   if (!lyric) return oldTick;
   lyric.tick = clampedTick;
 
+  // Recompute derived timing from the tempo map so the moved lyric (and its
+  // paired note) carry correct ms without a serialize→reparse round trip
+  // (plan 0061 §2). A lyric event has no length, so only its msTime moves.
+  const timing = makeChartTiming(doc.parsedChart);
+  lyric.msTime = tickToMs(clampedTick, timing.timedTempos, timing.resolution);
+
   // Keep the paired placeholder note in sync if one exists at the old tick.
   const note = phrase.notes.find(n => n.tick === oldTick);
-  if (note) note.tick = clampedTick;
+  if (note) {
+    note.tick = clampedTick;
+    applyEventTiming(note, timing);
+  }
 
   // Sort within phrase so consumers see lyrics in tick order.
   phrase.lyrics.sort((a, b) => a.tick - b.tick);

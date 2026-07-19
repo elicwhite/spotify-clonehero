@@ -42,6 +42,10 @@ const customJestConfig = {
     '!lib/**/*.d.ts',
     '!lib/**/__tests__/**',
   ],
+  // Never scan sibling agent worktrees under `.claude/worktrees/` — they hold
+  // in-flight copies of the repo with their own (possibly failing) suites.
+  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/.claude/'],
+  coveragePathIgnorePatterns: ['/node_modules/', '/.claude/'],
   // ESM-only deps must be transformed through SWC like our own code.
   transformIgnorePatterns: buildTransformIgnorePatterns(),
 };
@@ -53,5 +57,13 @@ const baseConfig = createJestConfig(customJestConfig);
 module.exports = async () => {
   const config = await baseConfig();
   config.transformIgnorePatterns = buildTransformIgnorePatterns();
+  // next/jest prepends its own defaults; make sure sibling `.claude` worktrees
+  // stay ignored after that merge.
+  if (!config.testPathIgnorePatterns?.includes('/.claude/')) {
+    config.testPathIgnorePatterns = [
+      ...(config.testPathIgnorePatterns ?? []),
+      '/.claude/',
+    ];
+  }
   return config;
 };

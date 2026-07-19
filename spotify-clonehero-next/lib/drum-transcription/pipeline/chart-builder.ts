@@ -130,6 +130,60 @@ function addNotesToDrumsTrack(track: DrumsTrack, notes: DrumNote[]): void {
   }
 }
 
+/** Result of {@link buildDrumsTrackFromOnsets}. */
+export interface BuiltDrumsTrack {
+  track: DrumsTrack;
+  /** The audio-flow phase-align decision (a no-op result for flow==='chart'). */
+  phaseAlign: PhaseAlignResult;
+}
+
+/**
+ * The onset -> tick -> snapGroupToGrid snap stage plus ExpertDrums-track
+ * assembly, factored out of {@link buildChartDocument} so it is the ONE
+ * implementation of the audio/chart-flow note snap.
+ *
+ * Reused verbatim by the class-(b) RE-PREDICT tempo remap (plan 0061 §3),
+ * which re-runs this exact snap from retained decoded onsets against a
+ * re-warped lattice — never from the notes' stored msTime, which carries the
+ * old (wrong) lattice's quantization baked in.
+ *
+ * Snaps each onset against `tempos` (the tick-domain tempo list actually
+ * written to the chart) with the shared quantizer + abstain band, dedups
+ * same-(tick,type) collisions, and assembles a fresh track. For flow==='audio'
+ * it first computes the per-song phase-align shift (a model-predicted grid can
+ * carry a global phase bias); flow==='chart' trusts the grid and never
+ * phase-aligns. Note msTime/msLength are left as addDrumNote's placeholders —
+ * the caller retimes.
+ */
+export function buildDrumsTrackFromOnsets(
+  events: RawDrumEvent[],
+  tempos: TempoLike[],
+  resolution: number,
+  flow: OnsetFlow,
+  phaseAlignConfig: PhaseAlignGateConfig = DEFAULT_PHASE_ALIGN_CONFIG,
+): BuiltDrumsTrack {
+  const phaseAlign: PhaseAlignResult =
+    flow === 'audio'
+      ? computePhaseAlignShiftMs(
+          events.map(e => e.timeSeconds * 1000 + SYSTEMATIC_ONSET_MS_AUDIO_FLOW),
+          buildTimedTempos(tempos, resolution),
+          resolution,
+          phaseAlignConfig,
+        )
+      : {shiftMs: 0, applied: false, bestScore: 0, noshiftScore: 0};
+
+  const notes = dedupSnappedNotes(
+    events,
+    tempos,
+    resolution,
+    flow,
+    phaseAlign.shiftMs,
+  );
+  const track = createEmptyDrumsTrack();
+  addNotesToDrumsTrack(track, notes);
+  return {track, phaseAlign};
+}
+
 /**
  * Build a ChartDocument from raw drum events.
  *
@@ -202,55 +256,31 @@ export function buildChartDocument(
   }));
   const timedTempos = buildTimedTempos(tempos, RESOLUTION);
 
-  // PHASE-ALIGN (audio-flow only): a per-song global time shift that
-  // maximizes onset alignment to strong metrical grid positions, applied
-  // BEFORE tick snapping below. Only fires under a decisive 3-condition
-  // gate (see phase-align.ts / phase-align-config.ts) — most songs are
-  // untouched (shiftMs stays 0). The search scores onsets at the same
-  // SYSTEMATIC_ONSET_MS_AUDIO_FLOW-corrected positions chart placement
-  // uses, mirroring the ported probe's search input.
-  const phaseAlignResult = computePhaseAlignShiftMs(
-    events.map(e => e.timeSeconds * 1000 + SYSTEMATIC_ONSET_MS_AUDIO_FLOW),
-    timedTempos,
-    RESOLUTION,
-    phaseAlignConfig,
-  );
-  if (outPhaseAlign) outPhaseAlign.result = phaseAlignResult;
-
-  // Snap each onset tick to the musical grid (16ths / 16th-triplets) with
-  // the SAME quantizer /tempo uses (swapSynctrack), including its abstain
-  // band: an onset whose nearest grid line is more than
-  // DEFAULT_SNAP_TOLERANCE_MS away (at the local tempo) is left at its raw
-  // rounded tick rather than force-snapped, since force-snapping genuine
-  // off-grid onsets makes the chart worse. Without any snapping, msToTick
-  // lands notes on arbitrary ticks (e.g. 1913 instead of 1920) and they read
-  // as off-grid in the editor. The confidence keys built by
-  // buildConfidenceData use these SAME snapped ticks so the editor's
-  // confidence panel matches every note.
-  //
-  // Snapping can collapse two nearby onsets onto the same (tick, noteType) —
-  // including cross-class collisions like HT (yellow tom) + HH (yellow
-  // cymbal) — which would write an invalid doubled note. Dedup keeps the
-  // higher-confidence event (its flags win); ties prefer the cymbal.
-  const drumNotes = dedupSnappedNotes(
+  // Snap each onset to the musical grid (16ths / 16th-triplets) with the
+  // shared quantizer + abstain band and assemble the ExpertDrums track. The
+  // whole onset->tick->snap stage — including the audio-flow PHASE-ALIGN
+  // shift (a per-song global time shift maximizing onset alignment to strong
+  // metrical positions; only fires under a decisive gate) — lives in the
+  // reusable {@link buildDrumsTrackFromOnsets} so the class-(b) RE-PREDICT
+  // tempo remap re-runs the identical snap. The confidence keys built by
+  // buildConfidenceData use these SAME snapped ticks (via the shared
+  // snapOnsetTick) so the editor's confidence panel matches every note.
+  const {track, phaseAlign} = buildDrumsTrackFromOnsets(
     events,
     tempos,
     RESOLUTION,
     'audio',
-    phaseAlignResult.shiftMs,
+    phaseAlignConfig,
   );
-
-  // Add an ExpertDrums track
-  const track = createEmptyDrumsTrack();
+  if (outPhaseAlign) outPhaseAlign.result = phaseAlign;
   parsedChart.trackData = [track];
-  addNotesToDrumsTrack(track, drumNotes);
 
   // Calculate end tick (slightly after last note or based on duration),
   // using the real tempo map to convert the audio duration.
   // Snapping can nudge a note past its neighbor, so take the max tick rather
   // than assuming the last array element is latest.
-  const lastNoteTick =
-    drumNotes.length > 0 ? Math.max(...drumNotes.map(n => n.tick)) : 0;
+  const drumTicks = track.noteEventGroups.flat().map(n => n.tick);
+  const lastNoteTick = drumTicks.length > 0 ? Math.max(...drumTicks) : 0;
   const durationTicks = msToTick(
     durationSeconds * 1000,
     timedTempos,
@@ -383,15 +413,18 @@ export function buildChartDocumentFromExistingChart(
   const resolution = parsedChart.resolution || RESOLUTION;
 
   // Quantize raw events against the EXISTING chart's own tempo list (the
-  // provided grid), not a predicted synctrack.
+  // provided grid), not a predicted synctrack. Same snap stage as the
+  // audio-flow builder, via the shared {@link buildDrumsTrackFromOnsets}.
   const tempos: TempoLike[] = parsedChart.tempos.map(t => ({
     tick: t.tick,
     beatsPerMinute: t.beatsPerMinute,
   }));
-  const drumNotes = dedupSnappedNotes(events, tempos, resolution, 'chart');
-
-  const drumsTrack = createEmptyDrumsTrack();
-  addNotesToDrumsTrack(drumsTrack, drumNotes);
+  const {track: drumsTrack} = buildDrumsTrackFromOnsets(
+    events,
+    tempos,
+    resolution,
+    'chart',
+  );
 
   // Add-or-replace: if the existing chart already had an Expert Drums track,
   // replace it in place; otherwise append the new track.
@@ -407,8 +440,8 @@ export function buildChartDocumentFromExistingChart(
   // Extend the end event if the new drum notes (or the transcribed audio's
   // duration) run past the chart's current end — never shorten it.
   const timedTempos = buildTimedTempos(tempos, resolution);
-  const lastNoteTick =
-    drumNotes.length > 0 ? Math.max(...drumNotes.map(n => n.tick)) : 0;
+  const drumTicks = drumsTrack.noteEventGroups.flat().map(n => n.tick);
+  const lastNoteTick = drumTicks.length > 0 ? Math.max(...drumTicks) : 0;
   const durationTicks = msToTick(
     durationSeconds * 1000,
     timedTempos,

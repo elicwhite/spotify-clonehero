@@ -18,7 +18,13 @@
 
 import type {DrumType, Instrument, ParsedTrackData} from '../types';
 import type {InstrumentSchema} from './types';
-import {drumSchemaFor, drums4LaneSchema, drums5LaneSchema} from './drums';
+import {
+  drumSchemaFor,
+  drums4LaneSchema,
+  drums5LaneSchema,
+  CYMBAL_LEGAL_DRUM_TYPES,
+  isCymbalLegalDrumType,
+} from './drums';
 import {bassSchema, guitarSchema, keysSchema, rhythmSchema} from './guitar';
 
 export type {
@@ -27,7 +33,13 @@ export type {
   FlagBinding,
   NoteFlagName,
 } from './types';
-export {drumSchemaFor, drums4LaneSchema, drums5LaneSchema};
+export {
+  drumSchemaFor,
+  drums4LaneSchema,
+  drums5LaneSchema,
+  CYMBAL_LEGAL_DRUM_TYPES,
+  isCymbalLegalDrumType,
+};
 export {bassSchema, guitarSchema, keysSchema, rhythmSchema};
 
 /**

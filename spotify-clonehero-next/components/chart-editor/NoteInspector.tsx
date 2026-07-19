@@ -12,6 +12,7 @@ import {trackKeyFromScope} from './scope';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {
   ToggleFlagCommand,
+  ToggleKickCommand,
   DeleteNotesCommand,
   noteId,
   type FlagName,
@@ -99,6 +100,30 @@ export default function NoteInspector({
     ['yellowDrum', 'blueDrum', 'greenDrum'].includes(n.type),
   );
 
+  // Kick conversion works like the tom/cymbal toggle: pads convert to kick;
+  // an all-kick selection converts back to snare. (Dragging can't cross the
+  // kick/pad boundary — this button is the only mouse path.)
+  const allKick = selectedNotes.every(n => n.type === 'kick');
+  const handleToggleKick = () => {
+    const ids = selectedNotes.map(n => noteId(n));
+    executeCommand(new ToggleKickCommand(ids, trackKey));
+    onNotesModified?.(ids);
+    // Note ids encode the type, so conversion renames them. Re-select the
+    // converted notes under their new ids (collision-skipped notes keep
+    // their old id and naturally stay selected either way).
+    const targetType = allKick ? 'redDrum' : 'kick';
+    dispatch({
+      type: 'SET_SELECTION',
+      kind: 'note',
+      ids: new Set(
+        selectedNotes.map(n => {
+          const newType = !allKick && n.type === 'kick' ? n.type : targetType;
+          return noteId({tick: n.tick, type: newType});
+        }),
+      ),
+    });
+  };
+
   return (
     <div
       className={cn(
@@ -164,6 +189,14 @@ export default function NoteInspector({
       <div className="space-y-1">
         <span className="text-xs text-muted-foreground">Flags</span>
         <div className="flex gap-1">
+          <Button
+            variant={allKick ? 'secondary' : 'outline'}
+            size="sm"
+            className={cn('h-7 px-2 text-xs', allKick && 'ring-1 ring-primary')}
+            onClick={handleToggleKick}
+            title={allKick ? 'Convert kick to snare' : 'Convert to kick'}>
+            Kick
+          </Button>
           {flagStates.map(({key, allTrue, indeterminate}) => {
             // Hide cymbal button if not applicable
             if (key === 'cymbal' && !hasCymbalApplicable) return null;

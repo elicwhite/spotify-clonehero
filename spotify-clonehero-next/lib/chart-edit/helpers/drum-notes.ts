@@ -13,6 +13,8 @@ import type {
   NoteEvent,
 } from '../types';
 import {noteFlags, drumNoteTypeMap, noteTypeToDrumNote} from '../types';
+import {applyEventTiming, type ChartTiming} from '../retime';
+import {isCymbalLegalDrumType} from '../instruments/drums';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -22,6 +24,14 @@ import {noteFlags, drumNoteTypeMap, noteTypeToDrumNote} from '../types';
  * Add a drum note with optional flags to a track.
  *
  * Inserts a NoteEvent into the appropriate group at the given tick.
+ *
+ * When `timing` is supplied (build it once per mutation via
+ * `makeChartTiming(doc.parsedChart)`), the note's `msTime`/`msLength` are
+ * computed from the tempo table at insertion time so the chart's derived
+ * timing is correct without a serialize→reparse round trip (plan 0061 §2's
+ * push model). A track holds no tempos of its own, so callers that have the
+ * whole chart must pass `timing`; callers still round-tripping the doc may
+ * omit it (the values are recomputed on the next parse).
  */
 export function addDrumNote(
   track: ParsedTrackData,
@@ -31,6 +41,7 @@ export function addDrumNote(
     length?: number;
     flags?: DrumNoteFlags;
   },
+  timing?: ChartTiming,
 ): void {
   const {tick, type, length = 0, flags: drumFlags = {}} = note;
   const noteType = drumNoteTypeMap[type];
@@ -44,6 +55,7 @@ export function addDrumNote(
     type: noteType,
     flags: flagBits,
   };
+  if (timing) applyEventTiming(newNote, timing);
 
   // Find existing group at this tick
   const group = track.noteEventGroups.find(
@@ -193,12 +205,16 @@ function drumFlagsToNoteFlags(
 ): number {
   let bits = 0;
 
-  if (flags.cymbal) {
+  // Lane legality (§6, invariant 4): kick and red can never hold a cymbal.
+  // Enforced here in the mutator — the single choke point every view funnels
+  // through — so no gesture (highway drag, piano-roll drag, context menu) can
+  // construct an illegal red/kick cymbal. Dragging a cymbal onto an illegal
+  // lane drops the flag entirely (the tom bit only applies to cymbal-legal
+  // lanes too).
+  const cymbalLegal = isCymbalLegalDrumType(type);
+  if (flags.cymbal && cymbalLegal) {
     bits |= noteFlags.cymbal;
-  } else if (
-    flags.cymbal === false &&
-    (type === 'yellowDrum' || type === 'blueDrum' || type === 'greenDrum')
-  ) {
+  } else if (flags.cymbal === false && cymbalLegal) {
     bits |= noteFlags.tom;
   }
 

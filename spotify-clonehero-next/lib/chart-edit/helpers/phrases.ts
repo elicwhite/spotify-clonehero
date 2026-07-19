@@ -16,6 +16,7 @@
 
 import type {ChartDocument, NormalizedVocalPart} from '../types';
 import {DEFAULT_VOCALS_PART} from './lyrics';
+import {applyEventTiming, makeChartTiming} from '../retime';
 
 /** Minimum length (in ticks) a phrase can be reduced to via drag. */
 const MIN_PHRASE_LENGTH = 1;
@@ -114,6 +115,7 @@ export function movePhraseStart(
 
   phrase.tick = clamped;
   phrase.length = endTick - clamped;
+  applyEventTiming(phrase, makeChartTiming(doc.parsedChart));
   phrases.sort((a, b) => a.tick - b.tick);
   return clamped;
 }
@@ -146,5 +148,6 @@ export function movePhraseEnd(
   if (clamped === oldEndTick) return oldEndTick;
 
   phrase.length = clamped - phrase.tick;
+  applyEventTiming(phrase, makeChartTiming(doc.parsedChart));
   return clamped;
 }

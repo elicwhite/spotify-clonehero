@@ -11,6 +11,7 @@ export {
   type ChartEditorState,
   type ChartEditorAction,
   type ChartEditorContextValue,
+  type PendingTempoCandidate,
   type ToolMode,
 } from './ChartEditorContext';
 
@@ -46,10 +47,9 @@ export {default as HighwayEditor} from './HighwayEditor';
 export {default as DrumHighwayPreview} from './DrumHighwayPreview';
 export type {HighwayRendererHandle} from './DrumHighwayPreview';
 export {default as TransportControls} from './TransportControls';
-export {default as WaveformDisplay} from './WaveformDisplay';
 export {default as EditToolbar} from './EditToolbar';
 export {default as LeftSidebar} from './LeftSidebar';
-export {default as TimelineMinimap} from './TimelineMinimap';
+export {default as PianoRollTimeline} from './piano-roll/PianoRollTimeline';
 export {default as LoopControls} from './LoopControls';
 export {default as NoteInspector} from './NoteInspector';
 export {default as ExportDialog} from './ExportDialog';
@@ -61,8 +61,17 @@ export {
   DeleteNotesCommand,
   MoveEntitiesCommand,
   ToggleFlagCommand,
+  ToggleKickCommand,
   AddBPMCommand,
   AddTimeSignatureCommand,
+  MoveTempoMarkerCommand,
+  AddTempoMarkerCommand,
+  DeleteTempoMarkerCommand,
+  MarkDownbeatCommand,
+  UnmarkDownbeatCommand,
+  RephaseDownbeatsCommand,
+  RepredictTempoCommand,
+  CommitTempoCandidateCommand,
   BatchCommand,
   noteId,
   typeToLane,
@@ -71,6 +80,7 @@ export {
   defaultFlagsForType,
   type EditCommand,
   type FlagName,
+  type TempoGlueMode,
 } from './commands';
 
 // Hooks

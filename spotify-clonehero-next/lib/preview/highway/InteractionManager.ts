@@ -4,7 +4,7 @@ import {NoteRenderer, type NoteElementData} from './NoteRenderer';
 import {MarkerRenderer, type MarkerElementData} from './MarkerRenderer';
 import {type HitResult} from './types';
 import {parseMarkerKey} from './markerKeys';
-import {drums4LaneSchema} from '@/lib/chart-edit';
+import {drums4LaneSchema, snapTickToGrid} from '@/lib/chart-edit';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -615,11 +615,7 @@ export class InteractionManager {
   }
 
   private msToTickSnapped(ms: number, gridDivision: number): number {
-    const raw = this.msToTickRaw(ms);
-    if (gridDivision === 0) return Math.max(0, raw);
-    const gridSize = Math.round(this.resolution / gridDivision);
-    if (gridSize <= 0) return Math.max(0, raw);
-    return Math.max(0, Math.round(raw / gridSize) * gridSize);
+    return snapTickToGrid(this.msToTickRaw(ms), this.resolution, gridDivision);
   }
 
   // -----------------------------------------------------------------------

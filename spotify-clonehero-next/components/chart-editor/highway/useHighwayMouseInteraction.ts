@@ -2,8 +2,11 @@
 
 /**
  * Owns every mouse interaction on the highway: pointer down/move/up/leave,
- * hover state, drag thresholds, box-select math (delegated to
- * `selectInRange`), tool-mode dispatch, and popover-open requests.
+ * hover state, tool-mode dispatch, and popover-open requests. Edit semantics
+ * shared with the piano-roll timeline — grid/delta snapping, drag thresholds,
+ * lane-locked multi-drag, and marquee range-selection — live in the shared
+ * `../editing/` modules (`gestures`, `marquee`) and `lib/chart-edit`'s
+ * `snapTickToGrid`; this hook only resolves screen coordinates and calls them.
  *
  * The hook is *pure-ish* w.r.t. its inputs: it holds local state for
  * hover/drag, but every action flows out via `onOpenPopover`,
@@ -24,7 +27,7 @@ import {
   type RefObject,
 } from 'react';
 import type {HitResult, InteractionManager} from '@/lib/preview/highway';
-import type {DrumNote} from '@/lib/chart-edit';
+import type {DrumNote, DrumNoteType} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {lyricId, phraseEndId, phraseStartId} from '@/lib/chart-edit';
 import {
@@ -32,7 +35,9 @@ import {
   DeleteNotesCommand,
   MoveEntitiesCommand,
   laneToType,
+  typeToLane,
   defaultFlagsForType,
+  LAST_PAD_LANE,
   type EditCommand,
 } from '../commands';
 import {entityContextFromScope, trackKeyFromScope} from '../scope';
@@ -44,9 +49,29 @@ import {
 import type {EditorCapabilities} from '../capabilities';
 import {AFFORDANCES} from '../affordances';
 import type {EntityKind} from '@/lib/chart-edit';
-import {selectNotesInRange} from './selectInRange';
+import {selectNotesInRange} from '../editing/marquee';
+import {computeNoteDragDelta, exceedsDragThreshold} from '../editing/gestures';
 import type {HighwayPopoverState} from './HighwayPopovers';
 import type {MarkerDragState, MarkerKind} from './useMarkerDrag';
+
+/**
+ * Live state of a multi-note drag. Deltas are anchored on the grabbed note:
+ * `tickDelta` is the grid-snapped tick under the cursor minus the grabbed
+ * note's tick, so on release the grabbed note lands exactly on the tick the
+ * cursor indicator shows. `laneDelta` moves among pad lanes only — kick is
+ * not on the lane axis (grabbing a kick pins laneDelta to 0, and pad drags
+ * ignore the kick strip in the highway center).
+ */
+export interface NoteDragState {
+  /** Tick of the grabbed note when the drag began. */
+  anchorTick: number;
+  /** Editor lane (0=kick, 1-4=pads) of the grabbed note. */
+  anchorLane: number;
+  tickDelta: number;
+  laneDelta: number;
+  /** True once the pointer has moved past the drag threshold. */
+  active: boolean;
+}
 
 export type HoveredHitType =
   | 'note'
@@ -74,6 +99,16 @@ export interface UseHighwayMouseInteractionInputs {
   dispatch: (action: ChartEditorAction) => void;
   /** Called from the BPM / TimeSig / Section / Section-rename tools. */
   onOpenPopover: (popover: HighwayPopoverState) => void;
+  /**
+   * When true, an uncommitted tempo candidate is being previewed (0061 §7):
+   * the highway renders the candidate doc while commands still target the
+   * committed doc, so a click could hit a candidate-only note. Editing gestures
+   * (select/place/erase/drag/popover) are suppressed for the read-only
+   * accept/reject preview contract (plan 0062 finding — "read-only +
+   * accept/reject"); scrub (wheel) stays live since it's handled outside this
+   * hook.
+   */
+  editingLocked?: boolean | undefined;
 }
 
 export interface UseHighwayMouseInteractionOutputs {
@@ -88,6 +123,8 @@ export interface UseHighwayMouseInteractionOutputs {
   hoverTick: number | null;
   hoveredHitType: HoveredHitType;
   isDragging: boolean;
+  /** Live note-drag deltas for the renderer preview (null outside a drag). */
+  noteDrag: NoteDragState | null;
   dragStart: {x: number; y: number} | null;
   dragCurrent: {x: number; y: number} | null;
 }
@@ -181,12 +218,14 @@ export function useHighwayMouseInteraction(
     executeCommand,
     dispatch,
     onOpenPopover,
+    editingLocked = false,
   } = inputs;
 
   const [hoverLane, setHoverLane] = useState<number | null>(null);
   const [hoverTick, setHoverTick] = useState<number | null>(null);
   const [hoveredHitType, setHoveredHitType] = useState<HoveredHitType>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [noteDrag, setNoteDrag] = useState<NoteDragState | null>(null);
   const [isErasing, setIsErasing] = useState(false);
   const [dragStart, setDragStart] = useState<{x: number; y: number} | null>(
     null,
@@ -268,6 +307,9 @@ export function useHighwayMouseInteraction(
   const onMouseDown = useCallback(
     (e: ReactMouseEvent<HTMLDivElement>) => {
       e.preventDefault();
+      // Read-only while a tempo candidate is previewed: no select/place/erase/
+      // drag/popover can start (the accept/reject bar is the only affordance).
+      if (editingLocked) return;
       const coords = getElementCoords(e);
       const hit = hitTestAt(coords.x, coords.y);
       const lane =
@@ -362,6 +404,19 @@ export function useHighwayMouseInteraction(
               });
               if (entity.kind === 'note') {
                 setIsDragging(true);
+                // Anchor the drag on the grabbed note's own tick + lane so
+                // release lands it exactly on the snapped cursor tick, even
+                // when the note started off-grid.
+                const type = entity.id.slice(
+                  entity.id.indexOf(':') + 1,
+                ) as DrumNoteType;
+                setNoteDrag({
+                  anchorTick: entity.tick,
+                  anchorLane: typeToLane(type),
+                  tickDelta: 0,
+                  laneDelta: 0,
+                  active: false,
+                });
               } else {
                 beginMarkerDrag(entity.kind as MarkerKind, entity.tick);
               }
@@ -470,6 +525,7 @@ export function useHighwayMouseInteraction(
       beginMarkerDrag,
       capabilities,
       dispatch,
+      editingLocked,
       executeCommand,
       getElementCoords,
       hitTestAt,
@@ -521,6 +577,39 @@ export function useHighwayMouseInteraction(
         setDragCurrent(coords);
       }
 
+      // Note drag: update the live preview deltas once past the threshold.
+      // The tick delta comes from the grid-snapped cursor tick relative to
+      // the grabbed note, so the preview (and the eventual commit) snaps to
+      // the current grid subdivision. Lane deltas move among pads only; the
+      // kick strip in the highway center is not a lane target.
+      if (isDragging && noteDrag && dragStart) {
+        const dx = coords.x - dragStart.x;
+        const dy = coords.y - dragStart.y;
+        if (noteDrag.active || exceedsDragThreshold(dx, dy)) {
+          const snappedTick = screenToTick(coords.x, coords.y);
+          const {tickDelta, laneDelta} = computeNoteDragDelta({
+            anchorTick: noteDrag.anchorTick,
+            anchorLane: noteDrag.anchorLane,
+            snappedCursorTick: snappedTick,
+            cursorLane: screenToLane(coords.x, coords.y),
+            selectionSize: getSelectedIds(state, 'note').size,
+            prevLaneDelta: noteDrag.laneDelta,
+            minPadLane: 1,
+            maxPadLane: LAST_PAD_LANE,
+          });
+          if (
+            !noteDrag.active ||
+            tickDelta !== noteDrag.tickDelta ||
+            laneDelta !== noteDrag.laneDelta
+          ) {
+            setNoteDrag({...noteDrag, tickDelta, laneDelta, active: true});
+          }
+          // The cursor indicator shows the exact tick the grabbed note will
+          // land on, even when the pointer is over another note.
+          setHoverTick(snappedTick);
+        }
+      }
+
       // Marker drag: update the live preview tick. The hook clamps to whatever
       // bounds the underlying handler enforces on commit (lyrics stay inside
       // their phrase, phrase-start can't cross the previous phrase's end, etc.).
@@ -549,10 +638,10 @@ export function useHighwayMouseInteraction(
       isDragging,
       isErasing,
       markerDrag,
+      noteDrag,
       screenToLane,
       screenToTick,
-      state.activeScope,
-      state.activeTool,
+      state,
       updateMarkerDrag,
     ],
   );
@@ -564,28 +653,22 @@ export function useHighwayMouseInteraction(
       const noteSelection = getSelectedIds(state, 'note');
       if (state.activeTool === 'cursor' && dragStart && dragCurrent) {
         if (isDragging && noteSelection.size > 0) {
-          // Complete drag-move.
-          const dx = coords.x - dragStart.x;
-          const dy = coords.y - dragStart.y;
-          // Only apply if moved more than a small threshold.
-          if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-            const laneDelta =
-              screenToLane(coords.x, coords.y) -
-              screenToLane(dragStart.x, dragStart.y);
-            const startTick = screenToTick(dragStart.x, dragStart.y);
-            const endTick = screenToTick(coords.x, coords.y);
-            const tickDelta = endTick - startTick;
-            if (laneDelta !== 0 || tickDelta !== 0) {
-              executeCommand(
-                new MoveEntitiesCommand(
-                  'note',
-                  Array.from(noteSelection),
-                  tickDelta,
-                  laneDelta,
-                  entityContextFromScope(state.activeScope),
-                ),
-              );
-            }
+          // Complete drag-move using the same anchored deltas the live
+          // preview showed, so the grabbed note lands exactly where the
+          // cursor indicator said it would.
+          if (
+            noteDrag?.active &&
+            (noteDrag.tickDelta !== 0 || noteDrag.laneDelta !== 0)
+          ) {
+            executeCommand(
+              new MoveEntitiesCommand(
+                'note',
+                Array.from(noteSelection),
+                noteDrag.tickDelta,
+                noteDrag.laneDelta,
+                entityContextFromScope(state.activeScope),
+              ),
+            );
           }
         } else {
           // Complete box selection.
@@ -595,7 +678,7 @@ export function useHighwayMouseInteraction(
           const y2 = Math.max(dragStart.y, coords.y);
 
           // Only do box select if dragged more than a small threshold.
-          if (Math.abs(x2 - x1) > 5 || Math.abs(y2 - y1) > 5) {
+          if (exceedsDragThreshold(x2 - x1, y2 - y1)) {
             // y2 is lower on screen = earlier time; y1 is higher = later.
             const lane1 = screenToLane(x1, y1);
             const lane2 = screenToLane(x2, y2);
@@ -629,10 +712,11 @@ export function useHighwayMouseInteraction(
       if (markerDrag && dragStart) {
         const dx = coords.x - dragStart.x;
         const dy = coords.y - dragStart.y;
-        commitMarkerDrag(Math.abs(dx) > 5 || Math.abs(dy) > 5);
+        commitMarkerDrag(exceedsDragThreshold(dx, dy));
       }
 
       setIsDragging(false);
+      setNoteDrag(null);
       setDragStart(null);
       setDragCurrent(null);
       setIsErasing(false);
@@ -647,10 +731,10 @@ export function useHighwayMouseInteraction(
       getElementCoords,
       isDragging,
       markerDrag,
+      noteDrag,
       resolution,
       screenToLane,
       screenToMs,
-      screenToTick,
       state,
       timedTempos,
     ],
@@ -681,6 +765,7 @@ export function useHighwayMouseInteraction(
       hoverTick,
       hoveredHitType,
       isDragging,
+      noteDrag,
       dragStart,
       dragCurrent,
     }),
@@ -693,6 +778,7 @@ export function useHighwayMouseInteraction(
       hoverTick,
       hoveredHitType,
       isDragging,
+      noteDrag,
       dragStart,
       dragCurrent,
     ],

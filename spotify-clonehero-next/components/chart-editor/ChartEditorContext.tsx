@@ -13,11 +13,12 @@ import type {AudioManager} from '@/lib/preview/audioManager';
 import type {
   ChartDocument,
   DrumNote,
+  DownbeatFlags,
   EntityKind,
   ParsedTrackData,
 } from '@/lib/chart-edit';
-import {findTrack} from '@/lib/chart-edit';
-import type {EditCommand} from './commands';
+import {chartEndTick, deriveDownbeatFlags, findTrack} from '@/lib/chart-edit';
+import type {EditCommand, TempoGlueMode} from './commands';
 import type {EditorCapabilities} from './capabilities';
 import {DRUM_EDIT_CAPABILITIES} from './capabilities';
 import type {HighwayMode} from '@/lib/preview/highway';
@@ -41,6 +42,23 @@ export type ToolMode =
 /** Maximum number of undo entries before oldest are discarded. */
 const UNDO_STACK_CAP = 200;
 
+/**
+ * A tempo-map edit's uncommitted result, rendered as a preview overlay (plan
+ * 0061 §7 "Panel hosting contract"). This is the ONE preview channel for all
+ * tempo gestures — a class-(a) marker drag in flight (0062 §7) and the §7
+ * half/double control both flow through it. When non-null, both the highway
+ * and the piano-roll timeline render from `doc` instead of `state.chartDoc`.
+ * It is invalidated (cleared) before any command dispatch / undo / redo /
+ * chart reload proceeds, since it's derived from a `chartDoc` about to change.
+ */
+export interface PendingTempoCandidate {
+  /** Which op produced the candidate. Phase 62-3 only produces the class-(a)
+   *  marker-drag ops; 're-predict'/'resnap' arrive with plan 0061 §7. */
+  op: 're-predict' | 'resnap' | 'keep-ms' | 'keep-ticks';
+  /** The full candidate ChartDocument produced by the op — NOT yet committed. */
+  doc: ChartDocument;
+}
+
 export interface ChartEditorState {
   /**
    * Editable chart document — source of truth for both editing and
@@ -50,6 +68,35 @@ export interface ChartEditorState {
    * use {@link selectActiveTrack} to resolve the scoped track.
    */
   chartDoc: ChartDocument | null;
+
+  /**
+   * Downbeat-flag store (plan 0061 §3b) — the canonical source of truth for
+   * bar structure. Derived from `chartDoc.parsedChart.timeSignatures` on every
+   * doc change (load, command, undo, redo) via the denominator-aware
+   * derivation module, so it can never disagree with the persisted chart. Bar
+   * lines, bar numbering, the bar.beat readout, and the TS chips all render
+   * from this; the mark/unmark and phase-rotation commands mutate it and
+   * re-derive `timeSignatures` in one command. Always holds a tick-0 entry.
+   */
+  downbeatFlags: DownbeatFlags;
+
+  /**
+   * Note-anchoring mode for class-(a) tempo hand-edits (0062 §9). It is edit
+   * semantics — it selects which op a tempo-marker command runs (`'audio'` →
+   * KEEP-MS, `'grid'` → KEEP-TICKS) — so it lives on the store, not on the
+   * panel: any view that dispatches a tempo command must resolve it
+   * identically, and the command reads it at dispatch. **Not persisted** — it
+   * resets to `'audio'` on every chart load (a mode saved from a prior session
+   * would silently move transcribed notes off the audio).
+   */
+  tempoGlueMode: TempoGlueMode;
+
+  /**
+   * In-flight tempo-gesture preview (0061 §7). Null when no tempo gesture is
+   * uncommitted; while a marker drag is live it holds the candidate doc both
+   * views render from. See {@link PendingTempoCandidate}.
+   */
+  pendingTempoCandidate: PendingTempoCandidate | null;
 
   /**
    * What the editor is currently editing. Defaults to
@@ -178,6 +225,12 @@ export type ChartEditorAction =
   | {type: 'SET_HIGHWAY_MODE'; mode: HighwayMode}
   // -- Sheet music pane --
   | {type: 'SET_SHOW_SHEET_MUSIC'; show: boolean}
+  // -- Tempo editing (0062 §7/§9) --
+  | {type: 'SET_TEMPO_GLUE_MODE'; mode: TempoGlueMode}
+  | {
+      type: 'SET_PENDING_TEMPO_CANDIDATE';
+      candidate: PendingTempoCandidate | null;
+    }
   // -- Scope --
   | {type: 'SET_ACTIVE_SCOPE'; scope: EditorScope};
 
@@ -200,6 +253,9 @@ export interface ChartEditorContextValue {
 /** @internal — exported for unit tests. */
 export const initialState: ChartEditorState = {
   chartDoc: null,
+  downbeatFlags: {downbeats: [{tick: 0, denominator: 4}]},
+  tempoGlueMode: 'audio',
+  pendingTempoCandidate: null,
   activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
   isPlaying: false,
   currentTimeMs: 0,
@@ -235,6 +291,22 @@ export const initialState: ChartEditorState = {
 // Reducer
 // ---------------------------------------------------------------------------
 
+/**
+ * Recompute the downbeat-flag store from a doc's `timeSignatures` (0061 §3b
+ * load direction). Called on every doc change so the store is always a pure
+ * function of the chart — the "one store, incapable of desync" invariant.
+ * A null doc (nothing loaded) keeps the tick-0 default.
+ */
+function computeDownbeatFlags(doc: ChartDocument | null): DownbeatFlags {
+  if (!doc) return {downbeats: [{tick: 0, denominator: 4}]};
+  const chart = doc.parsedChart;
+  return deriveDownbeatFlags(
+    chart.timeSignatures,
+    chart.resolution,
+    chartEndTick(chart),
+  );
+}
+
 /** @internal — exported for unit tests in `__tests__/reducer.test.ts`. */
 export function chartEditorReducer(
   state: ChartEditorState,
@@ -242,7 +314,15 @@ export function chartEditorReducer(
 ): ChartEditorState {
   switch (action.type) {
     case 'SET_CHART_DOC':
-      return {...state, chartDoc: action.chartDoc};
+      return {
+        ...state,
+        chartDoc: action.chartDoc,
+        downbeatFlags: computeDownbeatFlags(action.chartDoc),
+        // A chart (re)load resets the glue toggle to audio-glued (0062 §9,
+        // deliberately not persisted) and drops any in-flight tempo preview.
+        tempoGlueMode: 'audio',
+        pendingTempoCandidate: null,
+      };
     case 'SET_PLAYING':
       if (state.isPlaying === action.isPlaying) return state;
       return {...state, isPlaying: action.isPlaying};
@@ -301,6 +381,11 @@ export function chartEditorReducer(
       return {
         ...state,
         chartDoc: action.chartDoc,
+        downbeatFlags: computeDownbeatFlags(action.chartDoc),
+        // An edit invalidates any in-flight tempo preview (0061 §7): the
+        // candidate was derived from the pre-edit doc and rendering or
+        // committing it now would desync the views from the undo stack.
+        pendingTempoCandidate: null,
         dirty: true,
         undoStack: newUndoStack,
         undoDocStack: newUndoDocStack,
@@ -322,6 +407,8 @@ export function chartEditorReducer(
       return {
         ...state,
         chartDoc: action.chartDoc,
+        downbeatFlags: computeDownbeatFlags(action.chartDoc),
+        pendingTempoCandidate: null,
         dirty: isDirty,
         undoStack: state.undoStack.slice(0, -1),
         undoDocStack: state.undoDocStack.slice(0, -1),
@@ -341,6 +428,8 @@ export function chartEditorReducer(
       return {
         ...state,
         chartDoc: action.chartDoc,
+        downbeatFlags: computeDownbeatFlags(action.chartDoc),
+        pendingTempoCandidate: null,
         dirty: isDirty,
         undoStack: [...state.undoStack, redoneCommand],
         undoDocStack: [...state.undoDocStack, state.chartDoc],
@@ -396,6 +485,14 @@ export function chartEditorReducer(
     case 'SET_SHOW_SHEET_MUSIC':
       if (state.showSheetMusic === action.show) return state;
       return {...state, showSheetMusic: action.show};
+
+    case 'SET_TEMPO_GLUE_MODE':
+      if (state.tempoGlueMode === action.mode) return state;
+      return {...state, tempoGlueMode: action.mode};
+
+    case 'SET_PENDING_TEMPO_CANDIDATE':
+      if (state.pendingTempoCandidate === action.candidate) return state;
+      return {...state, pendingTempoCandidate: action.candidate};
 
     case 'SET_ACTIVE_SCOPE':
       if (state.activeScope === action.scope) return state;
@@ -499,6 +596,18 @@ export function getFirstSelectedId(
 // ---------------------------------------------------------------------------
 // Scope selectors
 // ---------------------------------------------------------------------------
+
+/**
+ * The chart document both views RENDER from (plan 0061 §7 — the one preview
+ * channel). When a tempo gesture is uncommitted, `pendingTempoCandidate.doc`
+ * is drawn in BOTH the highway and the piano-roll timeline; otherwise the
+ * committed `chartDoc` is. Editing still targets the committed `chartDoc` — this
+ * selector only chooses what is drawn, and both views call it so they can never
+ * disagree about which doc is on screen.
+ */
+export function selectRenderDoc(state: ChartEditorState): ChartDocument | null {
+  return state.pendingTempoCandidate?.doc ?? state.chartDoc;
+}
 
 /**
  * Resolve the `ParsedTrackData` slice referenced by `state.activeScope`.

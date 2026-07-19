@@ -1,13 +1,7 @@
 'use client';
 
 import {useCallback} from 'react';
-import {
-  defaultIniChartModifiers,
-  parseChartFile,
-  writeChartFolder,
-} from '@eliwhite/scan-chart';
 import {useChartEditorContext} from '../ChartEditorContext';
-import type {ChartDocument} from '@/lib/chart-edit';
 import {DEFAULT_VOCALS_PART, findTrackInParsedChart} from '@/lib/chart-edit';
 import type {EditCommand} from '../commands';
 import type {EditorScope} from '../scope';
@@ -25,49 +19,20 @@ function activeVocalPartName(scope: EditorScope): string {
 }
 
 /**
- * Round-trip a ChartDocument through the writer + parser so derived fields
- * (HOPOs, chord flags, section timing, etc.) are recomputed after an edit,
- * and return a new ChartDocument carrying the re-parsed chart. Preserves
- * whichever format (`.chart` or `.mid`) the document already has —
- * writeChartFolder/parseChartFile both handle either symmetrically, so an
- * edit must not silently convert a `.mid`-sourced chart-flow document to
- * `.chart` (it previously did, unconditionally: every edit reset format to
- * 'chart', so the FIRST edit on a MIDI-sourced project would flip its
- * persisted chart file out from under the pipeline/storage layer that
- * wrote notes.mid).
- *
- * Modifiers come from the parsed chart's `iniChartModifiers` when present.
- * Falls back to scan-chart's exported defaults otherwise.
- */
-function rebuildChartDocument(doc: ChartDocument): ChartDocument {
-  const format = doc.parsedChart.format;
-  const files = writeChartFolder({
-    parsedChart: doc.parsedChart,
-    assets: doc.assets,
-  });
-  const chartFileName = format === 'chart' ? 'notes.chart' : 'notes.mid';
-  const chartFile = files.find(f => f.fileName === chartFileName)!;
-  const modifiers =
-    doc.parsedChart.iniChartModifiers ?? defaultIniChartModifiers;
-  const parsed = parseChartFile(chartFile.data, format, modifiers);
-  return {
-    parsedChart: {
-      ...parsed,
-      chartBytes: chartFile.data,
-      format,
-      iniChartModifiers: modifiers,
-    },
-    assets: doc.assets,
-  };
-}
-
-/**
  * Hook that provides a function to execute an EditCommand.
  *
- * All commands use the full rebuild path: command modifies ChartDocument,
- * then writeChart -> parseChartFile -> trackToElements -> reconciler.setElements().
- * The reconciler's internal diffing ensures only changed elements are patched
- * in the Three.js scene.
+ * Commands are pure in-memory clone+mutate (`command.execute(doc)`) — per
+ * plan 0061's push model, every `lib/chart-edit` mutator computes its own
+ * derived timing (msTime/msLength, tempo remap, etc.) at mutation time, so
+ * there is no write→parse round trip here. The resulting `ChartDocument`'s
+ * `parsedChart.chartBytes` is stale after the first edit — it reflects the
+ * bytes as originally loaded, not the current in-memory state — and is
+ * only ever read by `readChart`'s load-time `iniChartModifiers` override
+ * reparse, not by anything on this edit path.
+ *
+ * trackToElements -> reconciler.setElements() still runs on every command;
+ * the reconciler's internal diffing ensures only changed elements are
+ * patched in the Three.js scene.
  */
 export function useExecuteCommand() {
   const {state, dispatch, reconcilerRef} = useChartEditorContext();
@@ -77,7 +42,7 @@ export function useExecuteCommand() {
       const doc = state.chartDoc;
       if (!doc) return;
 
-      const newDoc = rebuildChartDocument(command.execute(doc));
+      const newDoc = command.execute(doc);
 
       // Update the reconciler with new elements (if available).
       // The reconciler diffs internally and only patches what changed.
@@ -108,7 +73,9 @@ export function useExecuteCommand() {
 /**
  * Hook that provides undo and redo functions.
  *
- * All undo/redo operations use the full rebuild path with the reconciler.
+ * Undo/redo replay the `ChartDocument` snapshots pushed onto
+ * undoDocStack/redoDocStack at EXECUTE_COMMAND time and push the result
+ * straight to the reconciler — no re-parsing.
  */
 export function useUndoRedo() {
   const {state, dispatch, reconcilerRef} = useChartEditorContext();
@@ -116,8 +83,10 @@ export function useUndoRedo() {
   const undo = useCallback(() => {
     if (state.undoStack.length === 0 || state.undoDocStack.length === 0) return;
 
-    // Snapshots in undoDocStack are stored in derived form (rebuilt at
-    // EXECUTE_COMMAND time), so we can use them directly without re-parsing.
+    // Snapshots in undoDocStack are the PRE-command ChartDocuments: the
+    // reducer pushes the doc that was current *before* each command applied
+    // (EXECUTE_COMMAND stores `prevDoc`). Undo restores the top one directly,
+    // no re-parsing.
     const prevDoc = state.undoDocStack[state.undoDocStack.length - 1];
 
     const reconciler = reconcilerRef.current;

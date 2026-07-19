@@ -57,6 +57,7 @@ import {
   DEFAULT_BPM,
   type StoredSynctrack,
 } from './chart-builder';
+import {buildDecodedOnsetsFile, DECODED_ONSETS_FILE} from './decoded-onsets';
 import type {PhaseAlignResult} from './phase-align';
 import {loadPhaseAlignConfig} from '../ml/phase-align-config';
 import type {TranscriptionResult} from '../ml/types';
@@ -519,6 +520,14 @@ export async function runPipeline(
       phaseAlignOut.result?.shiftMs ?? 0,
     );
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
+    // Retain the pre-snap decoded onsets alongside confidence.json (plan
+    // 0061 §3a) — also before the chart file, for the same crash-safety
+    // reason.
+    await writeProjectJSON(
+      projectId,
+      DECODED_ONSETS_FILE,
+      buildDecodedOnsetsFile(result.events, 'audio'),
+    );
     await writeProjectBinary(projectId, chartFile.fileName, chartFile.data);
   }
 
@@ -683,6 +692,13 @@ export async function runPipelineFromChart(
     'chart',
   );
   await writeProjectJSON(projectId, 'confidence.json', confidenceData);
+  // Retain the pre-snap decoded onsets alongside confidence.json (plan 0061
+  // §3a). The chart flow transcribes real onsets too — flow: 'chart'.
+  await writeProjectJSON(
+    projectId,
+    DECODED_ONSETS_FILE,
+    buildDecodedOnsetsFile(result.events, 'chart'),
+  );
   await writeProjectBinary(projectId, chartFile.fileName, chartFile.data);
 
   await updateProject(projectId, {stage: 'editing', gridSource: 'provided'});
@@ -820,6 +836,15 @@ export async function resumePipeline(
       phaseAlignOut.result?.shiftMs ?? 0,
     );
     await writeProjectJSON(projectId, 'confidence.json', confidenceData);
+    // Retain the pre-snap decoded onsets alongside confidence.json (plan
+    // 0061 §3a) — a resumed project's own transcription must leave the same
+    // artifact as runPipeline's, or a genuinely transcribed project would
+    // silently degrade to the no-onsets RESNAP fallback.
+    await writeProjectJSON(
+      projectId,
+      DECODED_ONSETS_FILE,
+      buildDecodedOnsetsFile(result.events, 'audio'),
+    );
     await writeProjectBinary(projectId, chartFile.fileName, chartFile.data);
   }
 
@@ -849,6 +874,7 @@ export async function resumePipeline(
 export const REGENERATED_ARTIFACT_FILES: readonly string[] = [
   SYNCTRACK_FILE,
   'confidence.json',
+  DECODED_ONSETS_FILE,
   'review-progress.json',
   CHART_FILE_BASENAMES.chart,
   CHART_FILE_BASENAMES.mid,

@@ -10,6 +10,7 @@ import {
   DeleteNotesCommand,
   MoveEntitiesCommand,
   ToggleFlagCommand,
+  ToggleKickCommand,
   AddBPMCommand,
   AddTimeSignatureCommand,
   AddSectionCommand,
@@ -177,15 +178,20 @@ describe('lane helpers', () => {
     expect(laneToType(100)).toBe('greenDrum');
   });
 
-  it('shiftLane moves a type by delta', () => {
-    expect(shiftLane('kick', 1)).toBe('redDrum');
+  it('shiftLane moves a pad type by delta', () => {
     expect(shiftLane('redDrum', 2)).toBe('blueDrum');
     expect(shiftLane('greenDrum', -1)).toBe('blueDrum');
   });
 
-  it('shiftLane clamps at boundaries', () => {
-    expect(shiftLane('kick', -1)).toBe('kick');
+  it('shiftLane clamps pads at the pad-lane boundaries', () => {
+    expect(shiftLane('redDrum', -1)).toBe('redDrum');
     expect(shiftLane('greenDrum', 1)).toBe('greenDrum');
+  });
+
+  it('shiftLane never crosses the kick/pad boundary', () => {
+    expect(shiftLane('kick', 1)).toBe('kick');
+    expect(shiftLane('kick', -1)).toBe('kick');
+    expect(shiftLane('redDrum', -3)).toBe('redDrum');
   });
 
   it('defaultFlagsForType returns cymbal for yellow/blue/green', () => {
@@ -346,6 +352,26 @@ describe('MoveEntitiesCommand: notes', () => {
     expect(restored[0].tick).toBe(480);
     expect(restored[0].type).toBe('redDrum');
   });
+
+  it('lane delta never converts kick to a pad', () => {
+    const doc = makeDoc([{tick: 480, type: 'kick'}]);
+    const cmd = new MoveEntitiesCommand('note', ['480:kick'], 0, 2, {
+      trackKey: DRUMS_KEY,
+    });
+
+    const result = cmd.execute(doc);
+    expect(getExpertNotes(result)[0].type).toBe('kick');
+  });
+
+  it('lane delta never converts a pad to kick', () => {
+    const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
+    const cmd = new MoveEntitiesCommand('note', ['480:redDrum'], 0, -1, {
+      trackKey: DRUMS_KEY,
+    });
+
+    const result = cmd.execute(doc);
+    expect(getExpertNotes(result)[0].type).toBe('redDrum');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -402,13 +428,82 @@ describe('ToggleFlagCommand', () => {
 });
 
 // ---------------------------------------------------------------------------
+// ToggleKickCommand
+// ---------------------------------------------------------------------------
+
+describe('ToggleKickCommand', () => {
+  it('converts a pad note to kick, dropping the cymbal flag', () => {
+    const doc = makeDoc([
+      {tick: 480, type: 'yellowDrum', flags: {cymbal: true, accent: true}},
+    ]);
+    const cmd = new ToggleKickCommand(['480:yellowDrum'], DRUMS_KEY);
+
+    const result = cmd.execute(doc);
+    const notes = getExpertNotes(result);
+    expect(notes).toHaveLength(1);
+    expect(notes[0].type).toBe('kick');
+    expect(notes[0].flags.cymbal).toBeFalsy();
+    expect(notes[0].flags.accent).toBe(true);
+  });
+
+  it('converts an all-kick selection back to snare', () => {
+    const doc = makeDoc([
+      {tick: 0, type: 'kick'},
+      {tick: 480, type: 'kick'},
+    ]);
+    const cmd = new ToggleKickCommand(['0:kick', '480:kick'], DRUMS_KEY);
+
+    const result = cmd.execute(doc);
+    expect(getExpertNotes(result).map(n => n.type)).toEqual([
+      'redDrum',
+      'redDrum',
+    ]);
+  });
+
+  it('mixed selection converts pads to kick and leaves kicks alone', () => {
+    const doc = makeDoc([
+      {tick: 0, type: 'kick'},
+      {tick: 0, type: 'redDrum'},
+      {tick: 480, type: 'greenDrum'},
+    ]);
+    const cmd = new ToggleKickCommand(
+      ['0:kick', '0:redDrum', '480:greenDrum'],
+      DRUMS_KEY,
+    );
+
+    const result = cmd.execute(doc);
+    const notes = getExpertNotes(result);
+    // The red at tick 0 collides with the existing kick and is skipped.
+    expect(notes.map(n => `${n.tick}:${n.type}`).sort()).toEqual([
+      '0:kick',
+      '0:redDrum',
+      '480:kick',
+    ]);
+  });
+
+  it('undo restores the original notes and flags', () => {
+    const doc = makeDoc([
+      {tick: 480, type: 'yellowDrum', flags: {cymbal: true}},
+    ]);
+    const cmd = new ToggleKickCommand(['480:yellowDrum'], DRUMS_KEY);
+
+    const after = cmd.execute(doc);
+    const reverted = cmd.undo(after);
+    const notes = getExpertNotes(reverted);
+    expect(notes).toHaveLength(1);
+    expect(notes[0].type).toBe('yellowDrum');
+    expect(notes[0].flags.cymbal).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // AddBPMCommand
 // ---------------------------------------------------------------------------
 
 describe('AddBPMCommand', () => {
   it('adds a new BPM marker', () => {
     const doc = makeDoc();
-    const cmd = new AddBPMCommand(480, 140);
+    const cmd = new AddBPMCommand(480, 140, 'grid');
 
     const result = cmd.execute(doc);
     expect(result.parsedChart.tempos).toHaveLength(2);
@@ -420,7 +515,7 @@ describe('AddBPMCommand', () => {
 
   it('updates existing BPM marker at the same tick', () => {
     const doc = makeDoc();
-    const cmd = new AddBPMCommand(0, 140);
+    const cmd = new AddBPMCommand(0, 140, 'grid');
 
     const result = cmd.execute(doc);
     expect(result.parsedChart.tempos).toHaveLength(1);
@@ -434,7 +529,7 @@ describe('AddBPMCommand', () => {
         {tick: 960, beatsPerMinute: 150},
       ],
     });
-    const cmd = new AddBPMCommand(480, 130);
+    const cmd = new AddBPMCommand(480, 130, 'grid');
 
     const result = cmd.execute(doc);
     expect(result.parsedChart.tempos).toHaveLength(3);
@@ -445,7 +540,7 @@ describe('AddBPMCommand', () => {
 
   it('undo removes the added marker', () => {
     const doc = makeDoc();
-    const cmd = new AddBPMCommand(480, 140);
+    const cmd = new AddBPMCommand(480, 140, 'grid');
 
     const after = cmd.execute(doc);
     const reverted = cmd.undo(after);
@@ -455,7 +550,7 @@ describe('AddBPMCommand', () => {
 
   it('undo does not remove the marker at tick 0', () => {
     const doc = makeDoc();
-    const cmd = new AddBPMCommand(0, 140);
+    const cmd = new AddBPMCommand(0, 140, 'grid');
 
     const after = cmd.execute(doc);
     const reverted = cmd.undo(after);

@@ -48,8 +48,8 @@ const SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 /**
  * Unified playback transport controls for the drum transcription editor.
  *
- * All controls drive AudioManager directly. The highway renderer and
- * WaveformDisplay follow automatically since they read from AudioManager
+ * All controls drive AudioManager directly. The highway renderer and the
+ * piano-roll timeline follow automatically since they read from AudioManager
  * in their animation loops.
  *
  * Features:

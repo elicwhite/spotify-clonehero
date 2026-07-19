@@ -1,15 +1,16 @@
 /**
- * Box-select math for the highway editor.
+ * Shared marquee (box-select) math for the chart editor's interaction layers
+ * (plan 0062 "Two views, one store", invariant 3).
  *
- * Given a screen-space drag rectangle, decide which note ids fall inside
- * it. Pure function — no React, no DOM, no renderer access. Lives outside
- * `HighwayEditor.tsx` so it can be unit-tested directly without a Three.js
- * scene.
+ * Given a drag rectangle already converted to (ms × lane) bounds, decide
+ * which note ids fall inside it. Pure function — no React, no DOM, no
+ * renderer access. Both the highway box-select and the piano-roll marquee
+ * call this one implementation, so a lasso on either surface selects the same
+ * notes.
  *
- * The screen-to-world conversion (screenToMs / screenToLane) is the
- * caller's job — they own the renderer. This module takes the already-
- * converted bounds (`msMin`, `msMax`, `laneMin`, `laneMax`) and a flat
- * list of notes plus the chart's tempo map.
+ * The screen→world conversion (screenToMs / screenToLane) is the caller's job
+ * — each view owns its own coordinate transform. This module takes the
+ * already-converted bounds and a flat note list plus the chart's tempo map.
  */
 
 import type {DrumNote} from '@/lib/chart-edit';

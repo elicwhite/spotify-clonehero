@@ -188,21 +188,21 @@ describe('command inversion', () => {
   });
 
   describe('AddBPMCommand', () => {
-    it('execute then undo removes the added tempo', () => {
+    it('execute then undo restores the pre-edit snapshot', () => {
       const before = makeFixtureDoc();
-      const cmd = new AddBPMCommand(960, 100);
+      const cmd = new AddBPMCommand(960, 100, 'grid');
       const after = cmd.execute(before);
       expectDocsEqual(cmd.undo(after), before);
     });
 
-    it('adding at tick 0 is a no-op on undo (replaces the default)', () => {
+    it('undo restores the pre-edit snapshot even at tick 0', () => {
       const before = makeFixtureDoc();
-      const cmd = new AddBPMCommand(0, 200);
-      const after = cmd.execute(before);
-      // Undo at tick 0 returns the doc unchanged (special case: don't
-      // remove the seed tempo).
-      const restored = cmd.undo(after);
-      expect(restored).toBe(after);
+      const cmd = new AddBPMCommand(0, 200, 'grid');
+      cmd.execute(before);
+      // A class-(a) tempo remap is not invertible in closed form, so undo
+      // restores the captured pre-edit doc (plan 0061 Risks) — including when
+      // the edit replaced the tick-0 seed tempo.
+      expect(cmd.undo(makeFixtureDoc())).toBe(before);
     });
   });
 

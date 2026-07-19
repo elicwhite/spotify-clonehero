@@ -5,18 +5,17 @@ import {Pencil} from 'lucide-react';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
+import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
 import type {AudioSource, AssetFile} from './ExportDialog';
 
 import HighwayEditor from './HighwayEditor';
 import TransportControls from './TransportControls';
-import WaveformDisplay from './WaveformDisplay';
 import ExportDialog from './ExportDialog';
 import SongMetadataDialog from './SongMetadataDialog';
 import LeftSidebar from './LeftSidebar';
-import TimelineMinimap from './TimelineMinimap';
+import PianoRollTimeline from './piano-roll/PianoRollTimeline';
 import EditorMCPTools from './EditorMCPTools';
 import {useChartEditorContext} from './ChartEditorContext';
-import {buildTimedTempos, tickToMs} from '@/lib/drum-transcription/timing';
 import SheetMusic from '@/app/sheet-music/[slug]/SheetMusic';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
@@ -35,10 +34,23 @@ export interface ChartEditorProps {
   audioManager: AudioManager;
   /** Raw PCM audio data (Float32 interleaved) for waveform display. */
   audioData?: Float32Array | undefined;
+  /**
+   * PCM used for the highway's waveform surface (e.g. an isolated drum
+   * stem). Falls back to `audioData` when omitted; must share its channel
+   * count and duration.
+   */
+  highwayAudioData?: Float32Array | undefined;
   /** Number of audio channels (1 or 2). */
   audioChannels?: number | undefined;
   /** Total song duration in seconds. */
   durationSeconds: number;
+  /**
+   * The project's retained decoded onsets (plan 0061 §3a), passed through to
+   * the piano-roll timeline's half/double + tap-tempo control (0061 §7). Omit
+   * (or pass null) on a never-transcribed project — the control then falls back
+   * to RESNAP with a disclosure. Loaded from OPFS by the host page.
+   */
+  decodedOnsets?: DecodedOnsetsFile | null | undefined;
   /** Chart sections for section jumping in transport. */
   sections?: Section[] | undefined;
   /** Song name for display. */
@@ -107,30 +119,32 @@ export interface ChartEditorProps {
  * Composable chart editor shell with a Moonscraper-inspired layout.
  *
  * Layout:
- * ┌──────────┬──────────────────────────────┬──────────┐
- * │ Left     │                              │ Timeline │
- * │ Sidebar  │         Highway              │ Minimap  │
- * │          │         (3D, fills space)     │          │
- * │ Settings │                              │ Sections │
- * │ ──────── │                              │ labels   │
- * │ Tools    │                              │ with     │
- * │ ──────── │                              │ dots     │
- * │ Note     │                              │          │
- * │ Inspector│                              │ Position │
- * │ ──────── │                              │ handle   │
- * │ [page    │                              │          │
- * │  panels] │                              │ % + time │
- * ├──────────┴──────────────────────────────┴──────────┤
- * │  ◀◀  ▶  ▶▶  ──●────── 1:23 / 4:56    [speed] ... │
- * └───────────────────────────────────────────────────-┘
+ * ┌──────────┬───────────────────────────────────────┐
+ * │ Left     │                                       │
+ * │ Sidebar  │              Highway                  │
+ * │          │           (3D, fills space)           │
+ * │ Settings │                                       │
+ * │ ──────── │                                       │
+ * │ Tools    │                                       │
+ * │ ──────── │                                       │
+ * │ Note     │                                       │
+ * │ Inspector│                                       │
+ * │ ──────── ├───────────────────────────────────────┤
+ * │ [page    │  Piano-roll timeline (ruler / tempo   │
+ * │  panels] │  lane / note lanes / waveform row)    │
+ * ├──────────┴───────────────────────────────────────┤
+ * │  ◀◀  ▶  ▶▶  ──●────── 1:23 / 4:56    [speed] ...  │
+ * └───────────────────────────────────────────────────┘
  */
 export default function ChartEditor({
   metadata,
   chart,
   audioManager,
   audioData,
+  highwayAudioData,
   audioChannels = 2,
   durationSeconds,
+  decodedOnsets,
   sections,
   songName,
   artistName,
@@ -173,30 +187,6 @@ export default function ChartEditor({
   );
 
   const showSheetMusic = state.showSheetMusic && sheetMusicTrack !== null;
-
-  // Compute section positions in ms for the timeline minimap
-  const timelineSections = useMemo(() => {
-    if (!state.chartDoc || !sections || sections.length === 0) {
-      // Fall back to sections prop which already has msTime
-      return (sections ?? []).map(s => ({name: s.name, timeMs: s.msTime}));
-    }
-
-    // If chartDoc has sections with tick data, compute ms from tempo map
-    const chartSections = state.chartDoc.parsedChart.sections;
-    if (chartSections && chartSections.length > 0) {
-      const timedTempos = buildTimedTempos(
-        state.chartDoc.parsedChart.tempos,
-        state.chartDoc.parsedChart.resolution,
-      );
-      const resolution = state.chartDoc.parsedChart.resolution;
-      return chartSections.map(s => ({
-        name: s.name,
-        timeMs: tickToMs(s.tick, timedTempos, resolution),
-      }));
-    }
-
-    return (sections ?? []).map(s => ({name: s.name, timeMs: s.msTime}));
-  }, [state.chartDoc, sections]);
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-black">
@@ -329,36 +319,33 @@ export default function ChartEditor({
             audioManager={audioManager}
             className="h-full w-full"
             reviewedNoteIds={reviewedNoteIds}
-            audioData={audioData}
+            audioData={highwayAudioData ?? audioData}
             audioChannels={audioChannels}
             durationSeconds={durationSeconds}
           />
         </div>
-
-        {/* Right sidebar: Timeline minimap */}
-        <TimelineMinimap
-          audioManager={audioManager}
-          durationMs={durationSeconds * 1000}
-          sections={timelineSections}
-        />
       </div>
 
-      {/* Bottom bar: transport + waveform */}
-      <div className="shrink-0 border-t bg-background px-4 py-2.5">
-        <TransportControls
+      {/* Bottom bar: transport + piano-roll timeline panel. The panel replaces
+       *  both the old waveform strip and the right-side minimap; section
+       *  navigation lives in the transport (skip buttons) and the panel's
+       *  click-to-seek ruler flags. */}
+      <div className="shrink-0 border-t bg-background">
+        <div className="px-4 py-2.5">
+          <TransportControls
+            audioManager={audioManager}
+            durationSeconds={durationSeconds}
+            sections={sections}
+          />
+        </div>
+        <PianoRollTimeline
           audioManager={audioManager}
           durationSeconds={durationSeconds}
-          sections={sections}>
-          {audioData && (
-            <WaveformDisplay
-              audioData={audioData}
-              channels={audioChannels}
-              audioManager={audioManager}
-              durationSeconds={durationSeconds}
-              className="flex-1 min-w-0"
-            />
-          )}
-        </TransportControls>
+          audioData={highwayAudioData ?? audioData}
+          audioChannels={audioChannels}
+          decodedOnsets={decodedOnsets}
+          className="border-t"
+        />
       </div>
     </div>
   );

@@ -1,3 +1,5 @@
+import {deriveBeatGrid} from '@/lib/chart-edit/bar-derivation';
+
 import {computeBeatGrid, GridOverlayConfig} from '../GridOverlay';
 
 const RESOLUTION = 192;
@@ -131,5 +133,28 @@ describe('computeBeatGrid', () => {
 
   test('no tempos yields empty grid', () => {
     expect(computeBeatGrid(makeConfig({tempos: []}))).toEqual([]);
+  });
+
+  test('bar/beat lattice matches the shared derivation module exactly', () => {
+    // "One derivation for every derived fact" (plan 0062): the highway's
+    // ticks and measure flags are the shared module's output, not a
+    // parallel computation.
+    const config = makeConfig({
+      timeSignatures: [
+        {tick: 0, numerator: 4, denominator: 4},
+        {tick: 1536, numerator: 6, denominator: 8},
+        {tick: 1536 + 2 * 576, numerator: 7, denominator: 8},
+      ],
+      durationMs: 10_000,
+    });
+    const beats = computeBeatGrid(config);
+    const derived = deriveBeatGrid(
+      config.timeSignatures,
+      RESOLUTION,
+      Math.round(config.durationMs / (500 / RESOLUTION)),
+    );
+    expect(beats.map(b => ({tick: b.tick, isDownbeat: b.isMeasure}))).toEqual(
+      derived.map(b => ({tick: b.tick, isDownbeat: b.isDownbeat})),
+    );
   });
 });

@@ -36,6 +36,8 @@ import {
   type AudioStorageMeta,
 } from '@/lib/drum-transcription/storage/opfs';
 import {SYNCTRACK_FILE} from '@/lib/drum-transcription/pipeline/runner';
+import {loadDecodedOnsets} from '@/lib/drum-transcription/pipeline/decoded-onsets';
+import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
 import {loadDrumStem} from '@/lib/drum-transcription/ml/roformer-separation';
 import type {StoredSynctrack} from '@/lib/drum-transcription/pipeline/chart-builder';
 import {computeSongConfidence} from '@/lib/drum-transcription/confidence-gauge';
@@ -101,6 +103,9 @@ function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
   const [projectMeta, setProjectMeta] = useState<ProjectMetadata | null>(null);
   const [audioMeta, setAudioMeta] = useState<AudioStorageMeta | null>(null);
   const [audioPcm, setAudioPcm] = useState<Float32Array | null>(null);
+  // Separated drum stem PCM — the highway's waveform surface shows this
+  // instead of the full mix when separation has run.
+  const [drumStemPcm, setDrumStemPcm] = useState<Float32Array | null>(null);
   const [audioChannels, setAudioChannels] = useState(2);
   const [durationSeconds, setDurationSeconds] = useState(0);
   // Mirrors audioManagerRef (shared via context for event-handler reads)
@@ -114,6 +119,12 @@ function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
   const [predictedTempoBpms, setPredictedTempoBpms] = useState<
     number[] | null
   >(null);
+  // Retained decoded onsets (plan 0061 §3a) for the piano-roll's half/double +
+  // tap-tempo RE-PREDICT op. null when this project was never transcribed by
+  // this app (the control then falls back to RESNAP with a disclosure).
+  const [decodedOnsets, setDecodedOnsets] = useState<DecodedOnsetsFile | null>(
+    null,
+  );
   // Original package format (chart-flow feature), for preselecting the
   // export dialog's format. null for audio-only projects.
   const [packageSourceFormat, setPackageSourceFormat] = useState<
@@ -370,6 +381,18 @@ function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
           console.warn('Failed to load confidence data:', err);
         }
 
+        // 6a. Load retained decoded onsets (plan 0061 §3a). Present for any
+        // project the ML transcriber ran on; null for a never-transcribed
+        // (hand-authored/imported) chart, which makes the piano-roll's
+        // half/double control fall back to RESNAP with a disclosure.
+        try {
+          const onsets = await loadDecodedOnsets(projectId);
+          if (cancelled) return;
+          setDecodedOnsets(onsets);
+        } catch (err) {
+          console.warn('Failed to load decoded onsets:', err);
+        }
+
         // 6b. Load the predicted tempo map's BPM values for the F63
         // confidence gauge (chart-flow projects have no synctrack.json —
         // their grid came from the user's own chart, not a prediction).
@@ -454,6 +477,8 @@ function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
         setLoadingStep('Loading stems...');
         try {
           const stemPcm = await loadDrumStem(projectId);
+          if (cancelled) return;
+          setDrumStemPcm(stemPcm);
           const stemWav = encodeWavBlob(
             stemPcm,
             aMeta.sampleRate,
@@ -714,8 +739,10 @@ function EditorAppInner({projectId, onRegenerate}: EditorAppProps) {
       chart={chart}
       audioManager={audioManager}
       audioData={audioPcm ?? undefined}
+      highwayAudioData={drumStemPcm ?? undefined}
       audioChannels={audioChannels}
       durationSeconds={durationSeconds}
+      decodedOnsets={decodedOnsets}
       sections={chart.sections}
       songName={chart.metadata.name || projectMeta?.name || 'Untitled'}
       artistName={chart.metadata.artist || undefined}
