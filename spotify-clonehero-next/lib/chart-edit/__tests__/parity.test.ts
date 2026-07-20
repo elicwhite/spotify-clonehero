@@ -58,6 +58,7 @@ import {
 } from '../index';
 import {tickToMs} from '@/lib/drum-transcription/timing';
 import {emptyTrackData} from './test-utils';
+import {noteTypes} from '@eliwhite/scan-chart';
 
 // ---------------------------------------------------------------------------
 // Round-trip plumbing
@@ -200,17 +201,29 @@ function baselineDoc(): ChartDocument {
 
   // A chord (kick + red at tick 0), a cymbal, flagged notes, a sustain, and
   // notes in every tempo region.
-  addDrumNote(track, {tick: 0, type: 'kick'});
-  addDrumNote(track, {tick: 0, type: 'redDrum'});
-  addDrumNote(track, {tick: 480, type: 'yellowDrum', flags: {cymbal: true}});
-  addDrumNote(track, {tick: 960, type: 'blueDrum', flags: {ghost: true}});
+  addDrumNote(track, {tick: 0, type: noteTypes.kick});
+  addDrumNote(track, {tick: 0, type: noteTypes.redDrum});
+  addDrumNote(track, {
+    tick: 480,
+    type: noteTypes.yellowDrum,
+    flags: noteFlags.cymbal,
+  });
+  addDrumNote(track, {
+    tick: 960,
+    type: noteTypes.blueDrum,
+    flags: noteFlags.ghost,
+  });
   addDrumNote(track, {
     tick: 2400,
-    type: 'greenDrum',
+    type: noteTypes.greenDrum,
     length: 240,
-    flags: {accent: true},
+    flags: noteFlags.accent,
   });
-  addDrumNote(track, {tick: 4000, type: 'kick', flags: {doubleKick: true}});
+  addDrumNote(track, {
+    tick: 4000,
+    type: noteTypes.kick,
+    flags: noteFlags.doubleKick,
+  });
   addStarPower(track, 0, 1920);
   addSoloSection(track, 2400, 480);
   addActivationLane(track, 3000, 240);
@@ -259,7 +272,7 @@ describe('parity harness — drum notes', () => {
     const track = drumTrack(doc);
     addDrumNote(
       track,
-      {tick: 2160, type: 'yellowDrum', flags: {cymbal: false}},
+      {tick: 2160, type: noteTypes.yellowDrum, flags: noteFlags.tom},
       makeChartTiming(doc.parsedChart),
     );
     assertParity(doc);
@@ -270,7 +283,7 @@ describe('parity harness — drum notes', () => {
     const track = drumTrack(doc);
     addDrumNote(
       track,
-      {tick: 4320, type: 'blueDrum', flags: {cymbal: true}},
+      {tick: 4320, type: noteTypes.blueDrum, flags: noteFlags.cymbal},
       makeChartTiming(doc.parsedChart),
     );
     assertParity(doc);
@@ -287,7 +300,12 @@ describe('parity harness — drum notes', () => {
     // Sustain that starts before and ends after the tick-3840 tempo change.
     addDrumNote(
       track,
-      {tick: 3600, type: 'greenDrum', length: 600, flags: {cymbal: true}},
+      {
+        tick: 3600,
+        type: noteTypes.greenDrum,
+        length: 600,
+        flags: noteFlags.cymbal,
+      },
       makeChartTiming(doc.parsedChart),
     );
     assertParity(doc);
@@ -298,7 +316,7 @@ describe('parity harness — drum notes', () => {
     const track = drumTrack(doc);
     addDrumNote(
       track,
-      {tick: 480, type: 'blueDrum'},
+      {tick: 480, type: noteTypes.blueDrum},
       makeChartTiming(doc.parsedChart),
     );
     assertParity(doc);
@@ -307,14 +325,14 @@ describe('parity harness — drum notes', () => {
   it('removeDrumNote leaves the surviving chord note timed correctly', () => {
     const doc = baselineDoc();
     const track = drumTrack(doc);
-    removeDrumNote(track, 0, 'redDrum');
+    removeDrumNote(track, 0, noteTypes.redDrum);
     assertParity(doc);
   });
 
   it('setDrumNoteFlags does not disturb timing', () => {
     const doc = baselineDoc();
     const track = drumTrack(doc);
-    setDrumNoteFlags(track, 960, 'blueDrum', {accent: true});
+    setDrumNoteFlags(track, 960, noteTypes.blueDrum, noteFlags.accent);
     assertParity(doc);
   });
 });
@@ -445,7 +463,7 @@ describe('parity harness — entity moves', () => {
     // Move the tick-960 blue note into the 140bpm region.
     entityHandlers.note.move(
       cloned,
-      noteId({tick: 960, type: 'blueDrum'}),
+      noteId({tick: 960, type: noteTypes.blueDrum}),
       1200,
       0,
       drumCtx,

@@ -29,12 +29,12 @@ import {
 import type {
   ChartDocument,
   DrumNote,
-  DrumNoteType,
   ParsedChart,
   ParsedTrackData,
   TrackKey,
 } from '@/lib/chart-edit';
 import {createEmptyChart, addDrumNote, getDrumNotes} from '@/lib/chart-edit';
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 
 const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
 
@@ -45,7 +45,7 @@ const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
 function makeDoc(
   notes: Array<{
     tick: number;
-    type: DrumNoteType;
+    type: DrumNote['type'];
     flags?: DrumNote['flags'];
     length?: number;
   }> = [],
@@ -75,7 +75,7 @@ function makeDoc(
       tick: n.tick,
       type: n.type,
       length: n.length ?? 0,
-      flags: n.flags ?? {},
+      flags: n.flags ?? 0,
     });
   }
 
@@ -149,8 +149,8 @@ function withChart(
 
 describe('noteId', () => {
   it('creates a composite key from tick and type', () => {
-    expect(noteId({tick: 480, type: 'redDrum'})).toBe('480:redDrum');
-    expect(noteId({tick: 0, type: 'kick'})).toBe('0:kick');
+    expect(noteId({tick: 480, type: noteTypes.redDrum})).toBe('480:redDrum');
+    expect(noteId({tick: 0, type: noteTypes.kick})).toBe('0:kick');
   });
 });
 
@@ -160,52 +160,52 @@ describe('noteId', () => {
 
 describe('lane helpers', () => {
   it('typeToLane maps drum types to lane indices', () => {
-    expect(typeToLane('redDrum')).toBe(0);
-    expect(typeToLane('yellowDrum')).toBe(1);
-    expect(typeToLane('blueDrum')).toBe(2);
-    expect(typeToLane('greenDrum')).toBe(3);
-    expect(typeToLane('kick')).toBe(4);
+    expect(typeToLane(noteTypes.redDrum)).toBe(0);
+    expect(typeToLane(noteTypes.yellowDrum)).toBe(1);
+    expect(typeToLane(noteTypes.blueDrum)).toBe(2);
+    expect(typeToLane(noteTypes.greenDrum)).toBe(3);
+    expect(typeToLane(noteTypes.kick)).toBe(4);
   });
 
   it('laneToType maps lane indices to drum types', () => {
-    expect(laneToType(0)).toBe('redDrum');
-    expect(laneToType(1)).toBe('yellowDrum');
-    expect(laneToType(2)).toBe('blueDrum');
-    expect(laneToType(3)).toBe('greenDrum');
-    expect(laneToType(4)).toBe('kick');
+    expect(laneToType(0)).toBe(noteTypes.redDrum);
+    expect(laneToType(1)).toBe(noteTypes.yellowDrum);
+    expect(laneToType(2)).toBe(noteTypes.blueDrum);
+    expect(laneToType(3)).toBe(noteTypes.greenDrum);
+    expect(laneToType(4)).toBe(noteTypes.kick);
   });
 
   it('laneToType clamps out-of-range values', () => {
-    expect(laneToType(-1)).toBe('redDrum');
-    expect(laneToType(5)).toBe('kick');
-    expect(laneToType(100)).toBe('kick');
+    expect(laneToType(-1)).toBe(noteTypes.redDrum);
+    expect(laneToType(5)).toBe(noteTypes.kick);
+    expect(laneToType(100)).toBe(noteTypes.kick);
   });
 
   it('shiftLane moves a pad type by delta', () => {
-    expect(shiftLane('redDrum', 2)).toBe('blueDrum');
-    expect(shiftLane('greenDrum', -1)).toBe('blueDrum');
+    expect(shiftLane(noteTypes.redDrum, 2)).toBe(noteTypes.blueDrum);
+    expect(shiftLane(noteTypes.greenDrum, -1)).toBe(noteTypes.blueDrum);
   });
 
   it('shiftLane clamps pads at the pad-lane boundaries', () => {
-    expect(shiftLane('redDrum', -1)).toBe('redDrum');
-    expect(shiftLane('greenDrum', 1)).toBe('greenDrum');
+    expect(shiftLane(noteTypes.redDrum, -1)).toBe(noteTypes.redDrum);
+    expect(shiftLane(noteTypes.greenDrum, 1)).toBe(noteTypes.greenDrum);
   });
 
   it('shiftLane never crosses the kick/pad boundary', () => {
-    expect(shiftLane('kick', 1)).toBe('kick');
-    expect(shiftLane('kick', -1)).toBe('kick');
-    expect(shiftLane('redDrum', -3)).toBe('redDrum');
+    expect(shiftLane(noteTypes.kick, 1)).toBe(noteTypes.kick);
+    expect(shiftLane(noteTypes.kick, -1)).toBe(noteTypes.kick);
+    expect(shiftLane(noteTypes.redDrum, -3)).toBe(noteTypes.redDrum);
   });
 
   it('defaultFlagsForType returns cymbal for yellow/blue/green', () => {
-    expect(defaultFlagsForType('yellowDrum')).toEqual({cymbal: true});
-    expect(defaultFlagsForType('blueDrum')).toEqual({cymbal: true});
-    expect(defaultFlagsForType('greenDrum')).toEqual({cymbal: true});
+    expect(defaultFlagsForType(noteTypes.yellowDrum)).toEqual(noteFlags.cymbal);
+    expect(defaultFlagsForType(noteTypes.blueDrum)).toEqual(noteFlags.cymbal);
+    expect(defaultFlagsForType(noteTypes.greenDrum)).toEqual(noteFlags.cymbal);
   });
 
   it('defaultFlagsForType returns empty for kick and red', () => {
-    expect(defaultFlagsForType('kick')).toEqual({});
-    expect(defaultFlagsForType('redDrum')).toEqual({});
+    expect(defaultFlagsForType(noteTypes.kick)).toEqual(0);
+    expect(defaultFlagsForType(noteTypes.redDrum)).toEqual(0);
   });
 });
 
@@ -216,26 +216,31 @@ describe('lane helpers', () => {
 describe('AddNoteCommand', () => {
   it('adds a note to an empty track', () => {
     const doc = makeDoc();
-    const note: DrumNote = {tick: 480, type: 'redDrum', length: 0, flags: {}};
+    const note: DrumNote = {
+      tick: 480,
+      type: noteTypes.redDrum,
+      length: 0,
+      flags: 0,
+    };
     const cmd = new AddNoteCommand(toSchemaNote(note), DRUMS_KEY);
 
     const result = cmd.execute(doc);
     const notes = getExpertNotes(result);
     expect(notes).toHaveLength(1);
     expect(notes[0].tick).toBe(480);
-    expect(notes[0].type).toBe('redDrum');
+    expect(notes[0].type).toBe(noteTypes.redDrum);
   });
 
   it('maintains sort order when inserting', () => {
     const doc = makeDoc([
-      {tick: 0, type: 'kick'},
-      {tick: 960, type: 'redDrum'},
+      {tick: 0, type: noteTypes.kick},
+      {tick: 960, type: noteTypes.redDrum},
     ]);
     const note: DrumNote = {
       tick: 480,
-      type: 'yellowDrum',
+      type: noteTypes.yellowDrum,
       length: 0,
-      flags: {cymbal: true},
+      flags: noteFlags.cymbal,
     };
     const cmd = new AddNoteCommand(toSchemaNote(note), DRUMS_KEY);
 
@@ -248,8 +253,13 @@ describe('AddNoteCommand', () => {
   });
 
   it('does not add a duplicate', () => {
-    const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
-    const note: DrumNote = {tick: 480, type: 'redDrum', length: 0, flags: {}};
+    const doc = makeDoc([{tick: 480, type: noteTypes.redDrum}]);
+    const note: DrumNote = {
+      tick: 480,
+      type: noteTypes.redDrum,
+      length: 0,
+      flags: 0,
+    };
     const cmd = new AddNoteCommand(toSchemaNote(note), DRUMS_KEY);
 
     const result = cmd.execute(doc);
@@ -258,7 +268,12 @@ describe('AddNoteCommand', () => {
 
   it('does not mutate the original document', () => {
     const doc = makeDoc();
-    const note: DrumNote = {tick: 480, type: 'redDrum', length: 0, flags: {}};
+    const note: DrumNote = {
+      tick: 480,
+      type: noteTypes.redDrum,
+      length: 0,
+      flags: 0,
+    };
     const cmd = new AddNoteCommand(toSchemaNote(note), DRUMS_KEY);
 
     cmd.execute(doc);
@@ -273,22 +288,25 @@ describe('AddNoteCommand', () => {
 describe('DeleteNotesCommand', () => {
   it('removes notes by ID', () => {
     const doc = makeDoc([
-      {tick: 0, type: 'kick'},
-      {tick: 480, type: 'redDrum'},
-      {tick: 960, type: 'yellowDrum', flags: {cymbal: true}},
+      {tick: 0, type: noteTypes.kick},
+      {tick: 480, type: noteTypes.redDrum},
+      {tick: 960, type: noteTypes.yellowDrum, flags: noteFlags.cymbal},
     ]);
     const cmd = new DeleteNotesCommand(new Set(['480:redDrum']), DRUMS_KEY);
 
     const result = cmd.execute(doc);
     const remaining = getExpertNotes(result);
     expect(remaining).toHaveLength(2);
-    expect(remaining.map(n => n.type)).toEqual(['kick', 'yellowDrum']);
+    expect(remaining.map(n => n.type)).toEqual([
+      noteTypes.kick,
+      noteTypes.yellowDrum,
+    ]);
   });
 
   it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const doc = makeDoc([
-      {tick: 0, type: 'kick'},
-      {tick: 480, type: 'redDrum', flags: {accent: true}},
+      {tick: 0, type: noteTypes.kick},
+      {tick: 480, type: noteTypes.redDrum, flags: noteFlags.accent},
     ]);
     const cmd = new DeleteNotesCommand(new Set(['480:redDrum']), DRUMS_KEY);
 
@@ -304,7 +322,7 @@ describe('DeleteNotesCommand', () => {
 
 describe('MoveEntitiesCommand: notes', () => {
   it('moves notes by tick and lane delta', () => {
-    const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
+    const doc = makeDoc([{tick: 480, type: noteTypes.redDrum}]);
     const cmd = new MoveEntitiesCommand('note', ['480:redDrum'], 240, 1, {
       trackKey: DRUMS_KEY,
     });
@@ -313,11 +331,11 @@ describe('MoveEntitiesCommand: notes', () => {
     const moved = getExpertNotes(result);
     expect(moved).toHaveLength(1);
     expect(moved[0].tick).toBe(720);
-    expect(moved[0].type).toBe('yellowDrum');
+    expect(moved[0].type).toBe(noteTypes.yellowDrum);
   });
 
   it('clamps tick to 0', () => {
-    const doc = makeDoc([{tick: 100, type: 'kick'}]);
+    const doc = makeDoc([{tick: 100, type: noteTypes.kick}]);
     const cmd = new MoveEntitiesCommand('note', ['100:kick'], -200, 0, {
       trackKey: DRUMS_KEY,
     });
@@ -327,7 +345,7 @@ describe('MoveEntitiesCommand: notes', () => {
   });
 
   it('execute leaves the input doc untouched (valid undo snapshot)', () => {
-    const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
+    const doc = makeDoc([{tick: 480, type: noteTypes.redDrum}]);
     const cmd = new MoveEntitiesCommand('note', ['480:redDrum'], 240, 1, {
       trackKey: DRUMS_KEY,
     });
@@ -336,27 +354,27 @@ describe('MoveEntitiesCommand: notes', () => {
     expect(after).not.toBe(doc);
     const untouched = getExpertNotes(doc);
     expect(untouched[0].tick).toBe(480);
-    expect(untouched[0].type).toBe('redDrum');
+    expect(untouched[0].type).toBe(noteTypes.redDrum);
   });
 
   it('lane delta never converts kick to a pad', () => {
-    const doc = makeDoc([{tick: 480, type: 'kick'}]);
+    const doc = makeDoc([{tick: 480, type: noteTypes.kick}]);
     const cmd = new MoveEntitiesCommand('note', ['480:kick'], 0, 2, {
       trackKey: DRUMS_KEY,
     });
 
     const result = cmd.execute(doc);
-    expect(getExpertNotes(result)[0].type).toBe('kick');
+    expect(getExpertNotes(result)[0].type).toBe(noteTypes.kick);
   });
 
   it('lane delta never converts a pad to kick', () => {
-    const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
+    const doc = makeDoc([{tick: 480, type: noteTypes.redDrum}]);
     const cmd = new MoveEntitiesCommand('note', ['480:redDrum'], 0, -1, {
       trackKey: DRUMS_KEY,
     });
 
     const result = cmd.execute(doc);
-    expect(getExpertNotes(result)[0].type).toBe('redDrum');
+    expect(getExpertNotes(result)[0].type).toBe(noteTypes.redDrum);
   });
 });
 
@@ -366,39 +384,39 @@ describe('MoveEntitiesCommand: notes', () => {
 
 describe('ToggleFlagCommand', () => {
   it('toggles cymbal flag on', () => {
-    const doc = makeDoc([{tick: 480, type: 'yellowDrum'}]);
+    const doc = makeDoc([{tick: 480, type: noteTypes.yellowDrum}]);
     const cmd = new ToggleFlagCommand(['480:yellowDrum'], 'cymbal', DRUMS_KEY);
 
     const result = cmd.execute(doc);
-    expect(getExpertNotes(result)[0].flags.cymbal).toBe(true);
+    expect(!!(getExpertNotes(result)[0].flags & noteFlags.cymbal)).toBe(true);
   });
 
   it('toggles cymbal flag off', () => {
     const doc = makeDoc([
-      {tick: 480, type: 'yellowDrum', flags: {cymbal: true}},
+      {tick: 480, type: noteTypes.yellowDrum, flags: noteFlags.cymbal},
     ]);
     const cmd = new ToggleFlagCommand(['480:yellowDrum'], 'cymbal', DRUMS_KEY);
 
     const result = cmd.execute(doc);
     // getDrumNotes returns undefined (not false) when no cymbal marker is present
-    expect(getExpertNotes(result)[0].flags.cymbal).toBeFalsy();
+    expect(!!(getExpertNotes(result)[0].flags & noteFlags.cymbal)).toBeFalsy();
   });
 
   it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const doc = makeDoc([
-      {tick: 480, type: 'yellowDrum', flags: {cymbal: true}},
+      {tick: 480, type: noteTypes.yellowDrum, flags: noteFlags.cymbal},
     ]);
     const cmd = new ToggleFlagCommand(['480:yellowDrum'], 'cymbal', DRUMS_KEY);
 
     const after = cmd.execute(doc);
     expect(after).not.toBe(doc);
-    expect(getExpertNotes(doc)[0].flags.cymbal).toBe(true);
+    expect(!!(getExpertNotes(doc)[0].flags & noteFlags.cymbal)).toBe(true);
   });
 
   it('toggles accent on multiple notes', () => {
     const doc = makeDoc([
-      {tick: 0, type: 'redDrum'},
-      {tick: 480, type: 'redDrum'},
+      {tick: 0, type: noteTypes.redDrum},
+      {tick: 480, type: noteTypes.redDrum},
     ]);
     const cmd = new ToggleFlagCommand(
       ['0:redDrum', '480:redDrum'],
@@ -408,8 +426,8 @@ describe('ToggleFlagCommand', () => {
 
     const result = cmd.execute(doc);
     const edited = getExpertNotes(result);
-    expect(edited[0].flags.accent).toBe(true);
-    expect(edited[1].flags.accent).toBe(true);
+    expect(!!(edited[0].flags & noteFlags.accent)).toBe(true);
+    expect(!!(edited[1].flags & noteFlags.accent)).toBe(true);
   });
 });
 
@@ -420,37 +438,41 @@ describe('ToggleFlagCommand', () => {
 describe('ToggleKickCommand', () => {
   it('converts a pad note to kick, dropping the cymbal flag', () => {
     const doc = makeDoc([
-      {tick: 480, type: 'yellowDrum', flags: {cymbal: true, accent: true}},
+      {
+        tick: 480,
+        type: noteTypes.yellowDrum,
+        flags: noteFlags.cymbal | noteFlags.accent,
+      },
     ]);
     const cmd = new ToggleKickCommand(['480:yellowDrum'], DRUMS_KEY);
 
     const result = cmd.execute(doc);
     const notes = getExpertNotes(result);
     expect(notes).toHaveLength(1);
-    expect(notes[0].type).toBe('kick');
-    expect(notes[0].flags.cymbal).toBeFalsy();
-    expect(notes[0].flags.accent).toBe(true);
+    expect(notes[0].type).toBe(noteTypes.kick);
+    expect(!!(notes[0].flags & noteFlags.cymbal)).toBeFalsy();
+    expect(!!(notes[0].flags & noteFlags.accent)).toBe(true);
   });
 
   it('converts an all-kick selection back to snare', () => {
     const doc = makeDoc([
-      {tick: 0, type: 'kick'},
-      {tick: 480, type: 'kick'},
+      {tick: 0, type: noteTypes.kick},
+      {tick: 480, type: noteTypes.kick},
     ]);
     const cmd = new ToggleKickCommand(['0:kick', '480:kick'], DRUMS_KEY);
 
     const result = cmd.execute(doc);
     expect(getExpertNotes(result).map(n => n.type)).toEqual([
-      'redDrum',
-      'redDrum',
+      noteTypes.redDrum,
+      noteTypes.redDrum,
     ]);
   });
 
   it('mixed selection converts pads to kick and leaves kicks alone', () => {
     const doc = makeDoc([
-      {tick: 0, type: 'kick'},
-      {tick: 0, type: 'redDrum'},
-      {tick: 480, type: 'greenDrum'},
+      {tick: 0, type: noteTypes.kick},
+      {tick: 0, type: noteTypes.redDrum},
+      {tick: 480, type: noteTypes.greenDrum},
     ]);
     const cmd = new ToggleKickCommand(
       ['0:kick', '0:redDrum', '480:greenDrum'],
@@ -460,16 +482,18 @@ describe('ToggleKickCommand', () => {
     const result = cmd.execute(doc);
     const notes = getExpertNotes(result);
     // The red at tick 0 collides with the existing kick and is skipped.
-    expect(notes.map(n => `${n.tick}:${n.type}`).sort()).toEqual([
-      '0:kick',
-      '0:redDrum',
-      '480:kick',
-    ]);
+    expect(notes.map(n => `${n.tick}:${n.type}`).sort()).toEqual(
+      [
+        `0:${noteTypes.kick}`,
+        `0:${noteTypes.redDrum}`,
+        `480:${noteTypes.kick}`,
+      ].sort(),
+    );
   });
 
   it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const doc = makeDoc([
-      {tick: 480, type: 'yellowDrum', flags: {cymbal: true}},
+      {tick: 480, type: noteTypes.yellowDrum, flags: noteFlags.cymbal},
     ]);
     const cmd = new ToggleKickCommand(['480:yellowDrum'], DRUMS_KEY);
 
@@ -477,8 +501,8 @@ describe('ToggleKickCommand', () => {
     expect(after).not.toBe(doc);
     const notes = getExpertNotes(doc);
     expect(notes).toHaveLength(1);
-    expect(notes[0].type).toBe('yellowDrum');
-    expect(notes[0].flags.cymbal).toBe(true);
+    expect(notes[0].type).toBe(noteTypes.yellowDrum);
+    expect(!!(notes[0].flags & noteFlags.cymbal)).toBe(true);
   });
 });
 
@@ -581,17 +605,20 @@ describe('BatchCommand', () => {
   it('executes all commands in order', () => {
     const doc = makeDoc();
     const cmd = new BatchCommand([
-      new AddNoteCommand(toSchemaNote({tick: 0, type: 'kick', length: 0, flags: {}}),
+      new AddNoteCommand(
+        toSchemaNote({tick: 0, type: noteTypes.kick, length: 0, flags: 0}),
         DRUMS_KEY,
       ),
-      new AddNoteCommand(toSchemaNote({tick: 480, type: 'redDrum', length: 0, flags: {}}),
+      new AddNoteCommand(
+        toSchemaNote({tick: 480, type: noteTypes.redDrum, length: 0, flags: 0}),
         DRUMS_KEY,
       ),
-      new AddNoteCommand(toSchemaNote({
+      new AddNoteCommand(
+        toSchemaNote({
           tick: 960,
-          type: 'yellowDrum',
+          type: noteTypes.yellowDrum,
           length: 0,
-          flags: {cymbal: true},
+          flags: noteFlags.cymbal,
         }),
         DRUMS_KEY,
       ),
@@ -604,10 +631,12 @@ describe('BatchCommand', () => {
   it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const doc = makeDoc();
     const cmd = new BatchCommand([
-      new AddNoteCommand(toSchemaNote({tick: 0, type: 'kick', length: 0, flags: {}}),
+      new AddNoteCommand(
+        toSchemaNote({tick: 0, type: noteTypes.kick, length: 0, flags: 0}),
         DRUMS_KEY,
       ),
-      new AddNoteCommand(toSchemaNote({tick: 480, type: 'redDrum', length: 0, flags: {}}),
+      new AddNoteCommand(
+        toSchemaNote({tick: 480, type: noteTypes.redDrum, length: 0, flags: 0}),
         DRUMS_KEY,
       ),
     ]);
@@ -618,9 +647,10 @@ describe('BatchCommand', () => {
   });
 
   it('can combine different command types', () => {
-    const doc = makeDoc([{tick: 0, type: 'kick'}]);
+    const doc = makeDoc([{tick: 0, type: noteTypes.kick}]);
     const cmd = new BatchCommand([
-      new AddNoteCommand(toSchemaNote({tick: 480, type: 'redDrum', length: 0, flags: {}}),
+      new AddNoteCommand(
+        toSchemaNote({tick: 480, type: noteTypes.redDrum, length: 0, flags: 0}),
         DRUMS_KEY,
       ),
       new DeleteNotesCommand(new Set(['0:kick']), DRUMS_KEY),
@@ -629,7 +659,7 @@ describe('BatchCommand', () => {
     const result = cmd.execute(doc);
     const notes = getExpertNotes(result);
     expect(notes).toHaveLength(1);
-    expect(notes[0].type).toBe('redDrum');
+    expect(notes[0].type).toBe(noteTypes.redDrum);
   });
 });
 
@@ -873,7 +903,8 @@ describe('MoveEntitiesCommand: lyric', () => {
     expect(phrase.lyrics[0].tick).toBe(360);
     expect(phrase.notes[0].tick).toBe(360);
 
-    const original = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
+    const original =
+      doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(original.lyrics[0].tick).toBe(240);
     expect(original.notes[0].tick).toBe(240);
   });
@@ -903,7 +934,8 @@ describe('MoveEntitiesCommand: phrase markers', () => {
     expect(moved.tick).toBe(120);
     expect(moved.length).toBe(360);
 
-    const original = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
+    const original =
+      doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(original.tick).toBe(0);
     expect(original.length).toBe(480);
   });
@@ -919,7 +951,8 @@ describe('MoveEntitiesCommand: phrase markers', () => {
     expect(moved.tick).toBe(0);
     expect(moved.length).toBe(720);
 
-    const original = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
+    const original =
+      doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(original.length).toBe(480);
   });
 });

@@ -33,6 +33,7 @@ import {
 } from './fixtures';
 import {getDrumNotes} from '@/lib/chart-edit';
 import type {ChartDocument, TrackKey} from '@/lib/chart-edit';
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 
 const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
 
@@ -53,11 +54,12 @@ describe('command execute + snapshot-restore', () => {
     it('adds the note and leaves the input doc untouched', () => {
       const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
-      const cmd = new AddNoteCommand(toSchemaNote({
+      const cmd = new AddNoteCommand(
+        toSchemaNote({
           tick: 240,
-          type: 'redDrum',
+          type: noteTypes.redDrum,
           length: 0,
-          flags: {},
+          flags: 0,
         }),
         DRUMS_KEY,
       );
@@ -65,7 +67,7 @@ describe('command execute + snapshot-restore', () => {
       expect(after).not.toBe(before);
       expect(
         getDrumNotes(after.parsedChart.trackData[0]).some(
-          n => n.tick === 240 && n.type === 'redDrum',
+          n => n.tick === 240 && n.type === noteTypes.redDrum,
         ),
       ).toBe(true);
       expectInputUntouched(before, pristine);
@@ -79,7 +81,8 @@ describe('command execute + snapshot-restore', () => {
       const before = makeFixtureDoc();
       // 720 ticks at 120 BPM / res 480 = 750ms; the tick is empty in the
       // fixture so the added event is unambiguous.
-      const cmd = new AddNoteCommand(toSchemaNote({tick: 720, type: 'redDrum', length: 0, flags: {}}),
+      const cmd = new AddNoteCommand(
+        toSchemaNote({tick: 720, type: noteTypes.redDrum, length: 0, flags: 0}),
         DRUMS_KEY,
       );
       const after = cmd.execute(before);
@@ -98,8 +101,8 @@ describe('command execute + snapshot-restore', () => {
       const before = makeFixtureDoc();
       const cmd = new DeleteNotesCommand(
         new Set([
-          noteId({tick: 480, type: 'redDrum'}),
-          noteId({tick: 1440, type: 'blueDrum'}),
+          noteId({tick: 480, type: noteTypes.redDrum}),
+          noteId({tick: 1440, type: noteTypes.blueDrum}),
         ]),
         DRUMS_KEY,
       );
@@ -113,7 +116,7 @@ describe('command execute + snapshot-restore', () => {
     it('deleting a non-existent note is a no-op (round-trip safe)', () => {
       const before = makeFixtureDoc();
       const cmd = new DeleteNotesCommand(
-        new Set([noteId({tick: 99999, type: 'kick'})]),
+        new Set([noteId({tick: 99999, type: noteTypes.kick})]),
         DRUMS_KEY,
       );
       const after = cmd.execute(before);
@@ -125,25 +128,25 @@ describe('command execute + snapshot-restore', () => {
     it('toggles cymbal on and leaves the input doc untouched', () => {
       const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
-      const yellowId = noteId({tick: 960, type: 'yellowDrum'});
+      const yellowId = noteId({tick: 960, type: noteTypes.yellowDrum});
       const cmd = new ToggleFlagCommand([yellowId], 'cymbal', DRUMS_KEY);
       const after = cmd.execute(before);
       const yellow = getDrumNotes(after.parsedChart.trackData[0]).find(
         n => n.tick === 960,
       )!;
-      expect(yellow.flags.cymbal).toBe(false);
+      expect(!!(yellow.flags & noteFlags.cymbal)).toBe(false);
       expectInputUntouched(before, pristine);
     });
 
     it('toggling accent on from no-flag state', () => {
       const before = makeFixtureDoc();
-      const redId = noteId({tick: 480, type: 'redDrum'});
+      const redId = noteId({tick: 480, type: noteTypes.redDrum});
       const cmd = new ToggleFlagCommand([redId], 'accent', DRUMS_KEY);
       const after = cmd.execute(before);
       const red = getDrumNotes(after.parsedChart.trackData[0]).find(
         n => n.tick === 480,
       )!;
-      expect(red.flags.accent).toBe(true);
+      expect(!!(red.flags & noteFlags.accent)).toBe(true);
     });
   });
 
@@ -153,7 +156,7 @@ describe('command execute + snapshot-restore', () => {
       const before = makeFixtureDoc();
       const cmd = new MoveEntitiesCommand(
         'note',
-        [noteId({tick: 480, type: 'redDrum'})],
+        [noteId({tick: 480, type: noteTypes.redDrum})],
         240,
         1,
         {trackKey: DRUMS_KEY},
@@ -161,7 +164,7 @@ describe('command execute + snapshot-restore', () => {
       const after = cmd.execute(before);
       expect(
         getDrumNotes(after.parsedChart.trackData[0]).some(
-          n => n.tick === 480 && n.type === 'redDrum',
+          n => n.tick === 480 && n.type === noteTypes.redDrum,
         ),
       ).toBe(false);
       expectInputUntouched(before, pristine);
@@ -171,17 +174,22 @@ describe('command execute + snapshot-restore', () => {
       const before = makeFixtureDoc();
       const cmd = new MoveEntitiesCommand(
         'note',
-        [noteId({tick: 0, type: 'kick'}), noteId({tick: 480, type: 'redDrum'})],
+        [
+          noteId({tick: 0, type: noteTypes.kick}),
+          noteId({tick: 480, type: noteTypes.redDrum}),
+        ],
         240,
         0,
         {trackKey: DRUMS_KEY},
       );
       const after = cmd.execute(before);
       const notes = getDrumNotes(after.parsedChart.trackData[0]);
-      expect(notes.some(n => n.tick === 240 && n.type === 'kick')).toBe(true);
-      expect(notes.some(n => n.tick === 720 && n.type === 'redDrum')).toBe(
+      expect(notes.some(n => n.tick === 240 && n.type === noteTypes.kick)).toBe(
         true,
       );
+      expect(
+        notes.some(n => n.tick === 720 && n.type === noteTypes.redDrum),
+      ).toBe(true);
     });
   });
 
@@ -191,9 +199,7 @@ describe('command execute + snapshot-restore', () => {
       const before = makeFixtureDoc();
       const cmd = new MoveEntitiesCommand('section', ['1920'], -480, 0);
       const after = cmd.execute(before);
-      expect(after.parsedChart.sections.some(s => s.tick === 1440)).toBe(
-        true,
-      );
+      expect(after.parsedChart.sections.some(s => s.tick === 1440)).toBe(true);
       expectInputUntouched(before, pristine);
     });
   });
@@ -205,8 +211,8 @@ describe('command execute + snapshot-restore', () => {
         partName: 'vocals',
       });
       const after = cmd.execute(before);
-      const lyrics = after.parsedChart.vocalTracks!.parts['vocals'].notePhrases
-        .flatMap(p => p.lyrics)
+      const lyrics = after.parsedChart
+        .vocalTracks!.parts['vocals'].notePhrases.flatMap(p => p.lyrics)
         .map(l => l.tick);
       expect(lyrics).toContain(360);
     });
@@ -217,12 +223,12 @@ describe('command execute + snapshot-restore', () => {
         partName: 'harm1',
       });
       const after = cmd.execute(before);
-      const harm1Lyrics = after.parsedChart.vocalTracks!.parts['harm1'].notePhrases
-        .flatMap(p => p.lyrics)
+      const harm1Lyrics = after.parsedChart
+        .vocalTracks!.parts['harm1'].notePhrases.flatMap(p => p.lyrics)
         .map(l => l.tick);
       expect(harm1Lyrics).toContain(180);
-      const vocalsLyrics = after.parsedChart.vocalTracks!.parts['vocals'].notePhrases
-        .flatMap(p => p.lyrics)
+      const vocalsLyrics = after.parsedChart
+        .vocalTracks!.parts['vocals'].notePhrases.flatMap(p => p.lyrics)
         .map(l => l.tick);
       expect(vocalsLyrics).toEqual([240]);
     });
@@ -236,8 +242,10 @@ describe('command execute + snapshot-restore', () => {
         partName: 'vocals',
       });
       const after = cmd.execute(before);
-      const starts = after.parsedChart.vocalTracks!.parts['vocals'].notePhrases
-        .filter(p => p.lyrics.length > 0)
+      const starts = after.parsedChart
+        .vocalTracks!.parts[
+          'vocals'
+        ].notePhrases.filter(p => p.lyrics.length > 0)
         .map(p => p.tick);
       expect(starts).toContain(60);
     });
@@ -305,9 +313,7 @@ describe('command execute + snapshot-restore', () => {
       const before = makeFixtureDoc();
       const cmd = new DeleteSectionCommand(1920, 'Verse');
       const after = cmd.execute(before);
-      expect(after.parsedChart.sections.some(s => s.tick === 1920)).toBe(
-        false,
-      );
+      expect(after.parsedChart.sections.some(s => s.tick === 1920)).toBe(false);
       expectInputUntouched(before, pristine);
     });
   });
@@ -318,9 +324,9 @@ describe('command execute + snapshot-restore', () => {
       const before = makeFixtureDoc();
       const cmd = new RenameSectionCommand(0, 'Intro', 'Opening');
       const after = cmd.execute(before);
-      expect(
-        after.parsedChart.sections.find(s => s.tick === 0)?.name,
-      ).toBe('Opening');
+      expect(after.parsedChart.sections.find(s => s.tick === 0)?.name).toBe(
+        'Opening',
+      );
       expectInputUntouched(before, pristine);
     });
   });
@@ -352,35 +358,40 @@ describe('command execute + snapshot-restore', () => {
       const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
       const batch = new BatchCommand([
-        new AddNoteCommand(toSchemaNote({tick: 60, type: 'kick', length: 0, flags: {}}),
+        new AddNoteCommand(
+          toSchemaNote({tick: 60, type: noteTypes.kick, length: 0, flags: 0}),
           DRUMS_KEY,
         ),
-        new AddNoteCommand(toSchemaNote({
+        new AddNoteCommand(
+          toSchemaNote({
             tick: 120,
-            type: 'redDrum',
+            type: noteTypes.redDrum,
             length: 0,
-            flags: {},
+            flags: 0,
           }),
           DRUMS_KEY,
         ),
-        new AddNoteCommand(toSchemaNote({
+        new AddNoteCommand(
+          toSchemaNote({
             tick: 180,
-            type: 'yellowDrum',
+            type: noteTypes.yellowDrum,
             length: 0,
-            flags: {},
+            flags: 0,
           }),
           DRUMS_KEY,
         ),
       ]);
       const after = batch.execute(before);
       const notes = getDrumNotes(after.parsedChart.trackData[0]);
-      expect(notes.some(n => n.tick === 60 && n.type === 'kick')).toBe(true);
-      expect(notes.some(n => n.tick === 120 && n.type === 'redDrum')).toBe(
+      expect(notes.some(n => n.tick === 60 && n.type === noteTypes.kick)).toBe(
         true,
       );
-      expect(notes.some(n => n.tick === 180 && n.type === 'yellowDrum')).toBe(
-        true,
-      );
+      expect(
+        notes.some(n => n.tick === 120 && n.type === noteTypes.redDrum),
+      ).toBe(true);
+      expect(
+        notes.some(n => n.tick === 180 && n.type === noteTypes.yellowDrum),
+      ).toBe(true);
       expectInputUntouched(before, pristine);
     });
   });

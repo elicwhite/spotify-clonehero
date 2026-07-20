@@ -62,7 +62,8 @@ import {computePhaseAlignShiftMs, type PhaseAlignResult} from './phase-align';
  * model-predicted grid, which carries its own bias).
  */
 export type OnsetFlow = 'chart' | 'audio';
-import type {DrumNote, DrumNoteFlags, TimedTempo} from '../chart-types';
+import {noteFlags} from '@eliwhite/scan-chart';
+import type {DrumNote, TimedTempo} from '../chart-types';
 
 /** Default resolution (ticks per quarter note). */
 export const RESOLUTION = 480;
@@ -117,12 +118,7 @@ function addNotesToDrumsTrack(track: DrumsTrack, notes: DrumNote[]): void {
       tick: note.tick,
       type: note.type,
       length: note.length,
-      flags: {
-        cymbal: note.flags.cymbal,
-        doubleKick: note.flags.doubleKick,
-        accent: note.flags.accent,
-        ghost: note.flags.ghost,
-      },
+      flags: note.flags,
     });
   }
 }
@@ -564,8 +560,7 @@ function dedupSnappedNotes(
         !existing.isCymbal);
     if (!wins) continue;
 
-    const flags: DrumNoteFlags = {};
-    if (mapping.isCymbal) flags.cymbal = true;
+    const flags = mapping.isCymbal ? noteFlags.cymbal : 0;
     byKey.set(key, {
       note: {tick, type: mapping.noteType, length: 0, flags},
       confidence: event.confidence,

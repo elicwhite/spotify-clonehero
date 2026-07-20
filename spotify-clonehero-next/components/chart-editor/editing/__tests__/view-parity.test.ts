@@ -31,6 +31,7 @@ import {selectNotesInRange} from '../marquee';
 import type {DrumNote} from '@/lib/chart-edit';
 import {getDrumNotes, findTrack} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 
 const TRACK_KEY = {instrument: 'drums', difficulty: 'expert'} as const;
 const CTX = entityContextFromScope(DEFAULT_DRUMS_EXPERT_SCOPE);
@@ -114,8 +115,8 @@ describe('view parity: note drag → MoveEntitiesCommand', () => {
     const result = applied(cmd);
     const notes = getDrumNotes(findTrack(result, TRACK_KEY)!.track);
     // Both moved +240 ticks, neither changed lane.
-    expect(notes.find(n => n.type === 'redDrum')!.tick).toBe(720);
-    expect(notes.find(n => n.type === 'blueDrum')!.tick).toBe(1680);
+    expect(notes.find(n => n.type === noteTypes.redDrum)!.tick).toBe(720);
+    expect(notes.find(n => n.type === noteTypes.blueDrum)!.tick).toBe(1680);
   });
 
   it('dragging a cymbal onto Red drops the flag (legality below the view)', () => {
@@ -142,10 +143,10 @@ describe('view parity: note drag → MoveEntitiesCommand', () => {
       CTX,
     ).execute(makeFixtureDoc());
     const red = getDrumNotes(findTrack(result, TRACK_KEY)!.track).find(
-      n => n.type === 'redDrum' && n.tick === 960,
+      n => n.type === noteTypes.redDrum && n.tick === 960,
     );
     expect(red).toBeDefined();
-    expect(red!.flags.cymbal).toBeFalsy();
+    expect(!!(red!.flags & noteFlags.cymbal)).toBeFalsy();
   });
 });
 
@@ -156,10 +157,12 @@ describe('view parity: click-to-add → AddNoteCommand', () => {
     const lane = 1;
     const tick = 240;
     const type = laneToType(lane);
-    const highwayCmd = new AddNoteCommand(toSchemaNote({tick, type, length: 0, flags: defaultFlagsForType(type)}),
+    const highwayCmd = new AddNoteCommand(
+      toSchemaNote({tick, type, length: 0, flags: defaultFlagsForType(type)}),
       TRACK_KEY,
     );
-    const pianoCmd = new AddNoteCommand(toSchemaNote({tick, type, length: 0, flags: defaultFlagsForType(type)}),
+    const pianoCmd = new AddNoteCommand(
+      toSchemaNote({tick, type, length: 0, flags: defaultFlagsForType(type)}),
       TRACK_KEY,
     );
     expectDocsEqual(applied(pianoCmd), applied(highwayCmd));
@@ -180,7 +183,7 @@ describe('view parity: marquee → selectNotesInRange', () => {
         tick: n.tick,
         type: laneToType(typeToLane(n.type)),
         length: 0,
-        flags: {},
+        flags: 0,
       })),
       bounds,
       TIMED_TEMPOS,

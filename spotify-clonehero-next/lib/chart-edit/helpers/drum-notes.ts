@@ -1,19 +1,26 @@
 /**
  * Drum note helper functions.
  *
- * Translates between friendly DrumNote types and NoteEvent groups in a
- * ParsedTrackData object. The lane/flag mutation itself is the
- * schema-driven engine in `../entities/notes.ts` (plan 0037 Task 4),
- * applied here with `drums4LaneSchema` and DrumNoteType↔NoteType
- * translation at the boundary — this file is the drum-only friendly facade
- * over that generic engine, not a second implementation of it.
+ * Thin `drums4LaneSchema`-bound wrappers over the schema-driven engine in
+ * `../entities/notes.ts` (plan 0037 Task 4). Notes are scan-chart
+ * `NoteEvent`s directly: `type` is a raw `NoteType`, `flags` a raw bitmask.
+ * There is no drum-only string-type/flags-object translation layer (plan
+ * 0037 Task 5) — friendly labels come from `InstrumentSchema.lanes[].label`
+ * (`../instruments/drums.ts`).
  */
 
-import type {ParsedTrackData, DrumNoteType, DrumNoteFlags, DrumNote} from '../types';
-import {noteFlags, drumNoteTypeMap, noteTypeToDrumNote} from '../types';
+import type {NoteType} from '@eliwhite/scan-chart';
+import type {ParsedTrackData, DrumNote} from '../types';
+import {noteFlags} from '../types';
 import {type ChartTiming} from '../retime';
-import {drums4LaneSchema, isCymbalLegalDrumType} from '../instruments/drums';
-import {addNote, removeNote, listNotes, setNoteFlags} from '../entities/notes';
+import {drums4LaneSchema, isCymbalLegalNoteType} from '../instruments/drums';
+import {
+  addNote,
+  removeNote,
+  listNotes,
+  setNoteFlags,
+  legalizeFlagBits,
+} from '../entities/notes';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -36,20 +43,20 @@ export function addDrumNote(
   track: ParsedTrackData,
   note: {
     tick: number;
-    type: DrumNoteType;
+    type: NoteType;
     length?: number;
-    flags?: DrumNoteFlags;
+    flags?: number;
   },
   timing?: ChartTiming,
 ): void {
-  const {tick, type, length = 0, flags: drumFlags = {}} = note;
+  const {tick, type, length = 0, flags = 0} = note;
   addNote(
     track,
     {
       tick,
-      type: drumNoteTypeMap[type],
+      type,
       length,
-      flags: drumFlagsToNoteFlags(drumFlags, type),
+      flags: legalizeDrumFlagBits(flags, type),
     },
     drums4LaneSchema,
     timing,
@@ -62,35 +69,23 @@ export function addDrumNote(
 export function removeDrumNote(
   track: ParsedTrackData,
   tick: number,
-  type: DrumNoteType,
+  type: NoteType,
 ): void {
-  removeNote(track, tick, drumNoteTypeMap[type], drums4LaneSchema);
+  removeNote(track, tick, type, drums4LaneSchema);
 }
 
 /**
- * Read all drum notes from a track, resolving NoteEvent flags to DrumNoteFlags.
+ * Read all drum notes from a track.
  *
  * Returns DrumNote[] sorted by tick.
  */
 export function getDrumNotes(track: ParsedTrackData): DrumNote[] {
-  const notes: DrumNote[] = [];
-
-  for (const note of listNotes(track, drums4LaneSchema)) {
-    const drumType = noteTypeToDrumNote[note.type];
-    if (drumType === undefined) continue;
-
-    const flags: DrumNoteFlags = {};
-    if (note.flags & noteFlags.cymbal) flags.cymbal = true;
-    else if (note.flags & noteFlags.tom) flags.cymbal = false;
-    if (note.flags & noteFlags.doubleKick) flags.doubleKick = true;
-    if (note.flags & noteFlags.accent) flags.accent = true;
-    if (note.flags & noteFlags.ghost) flags.ghost = true;
-    if (note.flags & noteFlags.flam) flags.flam = true;
-
-    notes.push({tick: note.tick, length: note.length, type: drumType, flags});
-  }
-
-  return notes;
+  return listNotes(track, drums4LaneSchema).map(note => ({
+    tick: note.tick,
+    length: note.length,
+    type: note.type,
+    flags: note.flags,
+  }));
 }
 
 /**
@@ -101,19 +96,21 @@ export function getDrumNotes(track: ParsedTrackData): DrumNote[] {
 export function setDrumNoteFlags(
   track: ParsedTrackData,
   tick: number,
-  type: DrumNoteType,
-  flags: DrumNoteFlags,
+  type: NoteType,
+  flags: number,
 ): void {
   try {
     setNoteFlags(
       track,
       tick,
-      drumNoteTypeMap[type],
-      drumFlagsToNoteFlags(flags, type),
+      type,
+      legalizeDrumFlagBits(flags, type),
       drums4LaneSchema,
     );
   } catch {
-    throw new Error(`No ${type} note found at tick ${tick}`);
+    const label =
+      drums4LaneSchema.lanes.find(l => l.noteType === type)?.label ?? type;
+    throw new Error(`No ${label} note found at tick ${tick}`);
   }
 }
 
@@ -121,34 +118,18 @@ export function setDrumNoteFlags(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/** Convert friendly `DrumNoteFlags` to a scan-chart flag bitmask for `type`,
- *  enforcing lane legality (kick/red can never carry `cymbal`). Exported for
- *  `components/chart-editor/commands.ts`'s `toSchemaNote` — the boundary
- *  where DrumNote-shaped callers (clipboard paste, MCP tools) construct the
- *  schema-generic `AddNoteCommand` input. */
-export function drumFlagsToNoteFlags(
-  flags: DrumNoteFlags,
-  type: DrumNoteType,
-): number {
-  let bits = 0;
-
-  // Lane legality (§6, invariant 4): kick and red can never hold a cymbal.
-  // Enforced here in the mutator — the single choke point every view funnels
-  // through — so no gesture (highway drag, piano-roll drag, context menu) can
-  // construct an illegal red/kick cymbal. Dragging a cymbal onto an illegal
-  // lane drops the flag entirely (the tom bit only applies to cymbal-legal
-  // lanes too).
-  const cymbalLegal = isCymbalLegalDrumType(type);
-  if (flags.cymbal && cymbalLegal) {
-    bits |= noteFlags.cymbal;
-  } else if (flags.cymbal === false && cymbalLegal) {
-    bits |= noteFlags.tom;
+/**
+ * Legalize a flag bitmask for `type`: the schema's generic
+ * `legalizeFlagBits`, plus drum lane legality (§6, invariant 4: kick/red
+ * can never carry `cymbal`/`tom`) — the single choke point every view
+ * funnels through so no gesture (highway drag, piano-roll drag, context
+ * menu) can construct an illegal red/kick cymbal.
+ */
+function legalizeDrumFlagBits(bits: number, type: NoteType): number {
+  let result = legalizeFlagBits(drums4LaneSchema, type, bits);
+  if (!isCymbalLegalNoteType(type)) {
+    result &= ~noteFlags.cymbal;
+    result &= ~noteFlags.tom;
   }
-
-  if (flags.doubleKick) bits |= noteFlags.doubleKick;
-  if (flags.accent) bits |= noteFlags.accent;
-  if (flags.ghost) bits |= noteFlags.ghost;
-  if (flags.flam) bits |= noteFlags.flam;
-
-  return bits;
+  return result;
 }

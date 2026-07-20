@@ -32,6 +32,7 @@ import {
   drumTypes,
   noteId,
 } from '@/lib/chart-edit';
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 
 // `timeSeconds` here is the CHART-INTENDED position (where the note should land).
 // This file only exercises buildChartDocument (the audio-flow builder), so the
@@ -88,10 +89,10 @@ describe('buildChartDocument with a multi-tempo synctrack', () => {
     const notes = getDrumNotes(chart.trackData[0]);
     const byTick = new Map(notes.map(n => [n.tick, n]));
     // 1.0s @120 -> 960; 5.0s -> 3840 + 1s@160 (1280) = 5120; 5.75s -> 6080.
-    expect(byTick.get(960)?.type).toBe('kick');
-    expect(byTick.get(5120)?.type).toBe('redDrum');
-    expect(byTick.get(6080)?.type).toBe('yellowDrum');
-    expect(byTick.get(6080)?.flags.cymbal).toBe(true);
+    expect(byTick.get(960)?.type).toBe(noteTypes.kick);
+    expect(byTick.get(5120)?.type).toBe(noteTypes.redDrum);
+    expect(byTick.get(6080)?.type).toBe(noteTypes.yellowDrum);
+    expect(!!((byTick.get(6080)?.flags ?? 0) & noteFlags.cymbal)).toBe(true);
 
     // Generic consistency: every note tick equals msToTick over the tempo
     // map actually written into the chart — including the systematic onset
@@ -175,7 +176,7 @@ describe('buildChartDocument with a lead-in origin', () => {
     const notes = getDrumNotes(chart.trackData[0]);
     expect(notes).toHaveLength(1);
     expect(notes[0].tick).toBe(6000);
-    expect(notes[0].type).toBe('redDrum');
+    expect(notes[0].type).toBe(noteTypes.redDrum);
   });
 });
 
@@ -213,13 +214,15 @@ describe('grid snapping of transcribed onsets', () => {
     const doc = buildChartDocument(events, 'Snap Flat', 4, null);
     const notes = getDrumNotes(doc.parsedChart.trackData[0]);
     const byKey = new Map(notes.map(n => [`${n.tick}-${n.type}`, n]));
-    expect(byKey.has('360-redDrum')).toBe(true); // 16th (within tolerance)
-    expect(byKey.has('160-yellowDrum')).toBe(true); // triplet (HH cymbal)
-    expect(byKey.get('160-yellowDrum')?.flags.cymbal).toBe(true);
+    expect(byKey.has(`360-${noteTypes.redDrum}`)).toBe(true); // 16th (within tolerance)
+    expect(byKey.has(`160-${noteTypes.yellowDrum}`)).toBe(true); // triplet (HH cymbal)
+    expect(
+      !!((byKey.get(`160-${noteTypes.yellowDrum}`)?.flags ?? 0) & noteFlags.cymbal),
+    ).toBe(true);
     // The far-off-grid kick abstains: it keeps its raw rounded tick (200),
     // NOT the nearest grid line (240).
-    expect(byKey.has('200-kick')).toBe(true);
-    expect(byKey.has('240-kick')).toBe(false);
+    expect(byKey.has(`200-${noteTypes.kick}`)).toBe(true);
+    expect(byKey.has(`240-${noteTypes.kick}`)).toBe(false);
     // The snapped onsets leave no raw residue behind.
     const ticks = notes.map(n => n.tick);
     expect(ticks).not.toContain(355);
@@ -277,11 +280,13 @@ describe('single grid function keeps chords whole (per-lane carve-out dropped)',
     const doc = buildChartDocument(events, 'Chord Align', 4, null);
     const notes = getDrumNotes(doc.parsedChart.trackData[0]);
     const byType = new Map(notes.map(n => [n.type, n]));
-    expect(byType.get('redDrum')?.tick).toBe(80); // snare: candidate -> 80
+    expect(byType.get(noteTypes.redDrum)?.tick).toBe(80); // snare: candidate -> 80
     // Ride: candidate -> 80 too (was uniform 100 under the dropped carve-out),
     // so it stays aligned with the snare in the same chord.
-    expect(byType.get('blueDrum')?.tick).toBe(80);
-    expect(byType.get('blueDrum')?.flags.cymbal).toBe(true);
+    expect(byType.get(noteTypes.blueDrum)?.tick).toBe(80);
+    expect(
+      !!((byType.get(noteTypes.blueDrum)?.flags ?? 0) & noteFlags.cymbal),
+    ).toBe(true);
   });
 
   it('candidate-snaps hihat', () => {
@@ -289,7 +294,7 @@ describe('single grid function keeps chords whole (per-lane carve-out dropped)',
     const notes = getDrumNotes(doc.parsedChart.trackData[0]);
     expect(notes).toHaveLength(1);
     expect(notes[0].tick).toBe(80);
-    expect(notes[0].flags.cymbal).toBe(true);
+    expect(!!(notes[0].flags & noteFlags.cymbal)).toBe(true);
   });
 
   it('keeps a same-pad tom+cymbal chord as ONE gem (dedup regression guard)', () => {
@@ -300,11 +305,11 @@ describe('single grid function keeps chords whole (per-lane carve-out dropped)',
     const events = [ev(0.1, 'FT', 0.8), ev(0.1, 'CR', 0.9)];
     const doc = buildChartDocument(events, 'Tom+Cymbal', 4, null);
     const green = getDrumNotes(doc.parsedChart.trackData[0]).filter(
-      n => n.type === 'greenDrum',
+      n => n.type === noteTypes.greenDrum,
     );
     expect(green).toHaveLength(1); // ONE gem, not two split across ticks
     expect(green[0].tick).toBe(80);
-    expect(green[0].flags.cymbal).toBe(true); // crash (higher conf) wins -> cymbal
+    expect(!!(green[0].flags & noteFlags.cymbal)).toBe(true); // crash (higher conf) wins -> cymbal
   });
 
   it('keys confidence data by the snapped ticks', () => {
@@ -333,7 +338,7 @@ describe('dedup of onsets colliding on the same snapped tick', () => {
     const doc = buildChartDocument(events, 'Same Class Collision', 4, null);
     const notes = getDrumNotes(doc.parsedChart.trackData[0]);
     expect(notes).toHaveLength(1);
-    expect(notes[0]).toMatchObject({tick: 240, type: 'redDrum'});
+    expect(notes[0]).toMatchObject({tick: 240, type: noteTypes.redDrum});
   });
 
   it('keeps the higher-confidence event on a cross-class collision (cymbal wins)', () => {
@@ -343,8 +348,8 @@ describe('dedup of onsets colliding on the same snapped tick', () => {
     const doc = buildChartDocument(events, 'Cymbal Wins', 4, null);
     const notes = getDrumNotes(doc.parsedChart.trackData[0]);
     expect(notes).toHaveLength(1);
-    expect(notes[0]).toMatchObject({tick: 960, type: 'yellowDrum'});
-    expect(notes[0].flags.cymbal).toBe(true);
+    expect(notes[0]).toMatchObject({tick: 960, type: noteTypes.yellowDrum});
+    expect(!!(notes[0].flags & noteFlags.cymbal)).toBe(true);
   });
 
   it('keeps the tom (no cymbal flag) when the tom has higher confidence', () => {
@@ -353,8 +358,8 @@ describe('dedup of onsets colliding on the same snapped tick', () => {
     const doc = buildChartDocument(events, 'Tom Wins', 4, null);
     const notes = getDrumNotes(doc.parsedChart.trackData[0]);
     expect(notes).toHaveLength(1);
-    expect(notes[0]).toMatchObject({tick: 960, type: 'yellowDrum'});
-    expect(notes[0].flags.cymbal).not.toBe(true);
+    expect(notes[0]).toMatchObject({tick: 960, type: noteTypes.yellowDrum});
+    expect(!!(notes[0].flags & noteFlags.cymbal)).not.toBe(true);
   });
 
   it('prefers the cymbal on a confidence tie', () => {
@@ -363,8 +368,8 @@ describe('dedup of onsets colliding on the same snapped tick', () => {
     const doc = buildChartDocument(events, 'Tie Prefers Cymbal', 4, null);
     const notes = getDrumNotes(doc.parsedChart.trackData[0]);
     expect(notes).toHaveLength(1);
-    expect(notes[0]).toMatchObject({tick: 960, type: 'yellowDrum'});
-    expect(notes[0].flags.cymbal).toBe(true);
+    expect(notes[0]).toMatchObject({tick: 960, type: noteTypes.yellowDrum});
+    expect(!!(notes[0].flags & noteFlags.cymbal)).toBe(true);
   });
 
   it('yields one confidence key at the max confidence for a collision, matching a real note', () => {
@@ -410,12 +415,12 @@ describe('cymbal round-trip through writeChartFolder/readChart', () => {
     const byTick = new Map(notes.map(n => [n.tick, n]));
 
     const cymbal = byTick.get(960); // HH at 1.0s @120
-    expect(cymbal?.type).toBe('yellowDrum');
-    expect(cymbal?.flags.cymbal).toBe(true);
+    expect(cymbal?.type).toBe(noteTypes.yellowDrum);
+    expect(!!((cymbal?.flags ?? 0) & noteFlags.cymbal)).toBe(true);
 
     const tom = byTick.get(1920); // HT at 2.0s
-    expect(tom?.type).toBe('yellowDrum');
-    expect(tom?.flags.cymbal).not.toBe(true);
+    expect(tom?.type).toBe(noteTypes.yellowDrum);
+    expect(!!((tom?.flags ?? 0) & noteFlags.cymbal)).not.toBe(true);
   });
 });
 

@@ -14,17 +14,16 @@ import {
   noteId,
   type FlagName,
 } from './commands';
-import type {DrumNoteType} from '@/lib/chart-edit';
 import {getDrumNotes, drums4LaneSchema} from '@/lib/chart-edit';
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
+import type {NoteType} from '@eliwhite/scan-chart';
 
-const DRUM_TYPE_LABELS: Record<DrumNoteType, string> = {
-  kick: 'Kick',
-  redDrum: 'Snare',
-  yellowDrum: 'Hi-Hat / Hi-Tom',
-  blueDrum: 'Ride / Mid-Tom',
-  greenDrum: 'Crash / Floor-Tom',
-  fiveGreenDrum: '5-Lane Green',
-};
+/** Friendly label for a drum `NoteType`, from `InstrumentSchema.lanes[].label`. */
+function drumTypeLabel(type: NoteType): string {
+  return (
+    drums4LaneSchema.lanes.find(l => l.noteType === type)?.label ?? String(type)
+  );
+}
 
 // Flag items shown in the inspector are derived from the drum schema.
 // Only flags with a keyboard shortcut surface here; flags without one
@@ -64,8 +63,8 @@ export default function NoteInspector({className}: NoteInspectorProps) {
 
   // Determine aggregate flag state for the selection
   const flagStates = FLAG_ITEMS.map(({key}) => {
-    const allTrue = selectedNotes.every(n => n.flags[key]);
-    const someTrue = selectedNotes.some(n => n.flags[key]);
+    const allTrue = selectedNotes.every(n => n.flags & noteFlags[key]);
+    const someTrue = selectedNotes.some(n => n.flags & noteFlags[key]);
     return {key, allTrue, someTrue, indeterminate: someTrue && !allTrue};
   });
 
@@ -87,26 +86,33 @@ export default function NoteInspector({className}: NoteInspectorProps) {
 
   // Check if cymbal is applicable (only for yellow/blue/green)
   const hasCymbalApplicable = selectedNotes.some(n =>
-    ['yellowDrum', 'blueDrum', 'greenDrum'].includes(n.type),
+    (
+      [
+        noteTypes.yellowDrum,
+        noteTypes.blueDrum,
+        noteTypes.greenDrum,
+      ] as NoteType[]
+    ).includes(n.type),
   );
 
   // Kick conversion works like the tom/cymbal toggle: pads convert to kick;
   // an all-kick selection converts back to snare. (Dragging can't cross the
   // kick/pad boundary — this button is the only mouse path.)
-  const allKick = selectedNotes.every(n => n.type === 'kick');
+  const allKick = selectedNotes.every(n => n.type === noteTypes.kick);
   const handleToggleKick = () => {
     const ids = selectedNotes.map(n => noteId(n));
     executeCommand(new ToggleKickCommand(ids, trackKey));
     // Note ids encode the type, so conversion renames them. Re-select the
     // converted notes under their new ids (collision-skipped notes keep
     // their old id and naturally stay selected either way).
-    const targetType = allKick ? 'redDrum' : 'kick';
+    const targetType = allKick ? noteTypes.redDrum : noteTypes.kick;
     dispatch({
       type: 'SET_SELECTION',
       kind: 'note',
       ids: new Set(
         selectedNotes.map(n => {
-          const newType = !allKick && n.type === 'kick' ? n.type : targetType;
+          const newType =
+            !allKick && n.type === noteTypes.kick ? n.type : targetType;
           return noteId({tick: n.tick, type: newType});
         }),
       ),
@@ -138,7 +144,7 @@ export default function NoteInspector({className}: NoteInspectorProps) {
       {isSingle && (
         <div className="space-y-1">
           <span className="text-xs text-muted-foreground">Type</span>
-          <p className="font-medium">{DRUM_TYPE_LABELS[firstNote.type]}</p>
+          <p className="font-medium">{drumTypeLabel(firstNote.type)}</p>
         </div>
       )}
 
@@ -161,13 +167,13 @@ export default function NoteInspector({className}: NoteInspectorProps) {
                   acc[n.type] = (acc[n.type] || 0) + 1;
                   return acc;
                 },
-                {} as Record<string, number>,
+                {} as Record<number, number>,
               ),
             ).map(([type, count]) => (
               <span
                 key={type}
                 className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                {DRUM_TYPE_LABELS[type as DrumNoteType]} x{count}
+                {drumTypeLabel(Number(type) as NoteType)} x{count}
               </span>
             ))}
           </div>

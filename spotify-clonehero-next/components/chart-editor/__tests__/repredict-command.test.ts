@@ -20,6 +20,7 @@ import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import type {Synctrack} from '@/lib/tempo-map/types';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
 import {RepredictTempoCommand} from '../commands';
+import {noteTypes} from '@eliwhite/scan-chart';
 
 const RES = 480;
 
@@ -39,8 +40,8 @@ function makeDoc(): ChartDocument {
   parsedChart.trackData.push(track);
   const doc: ChartDocument = {parsedChart, assets: []};
   const timing = makeChartTiming(parsedChart);
-  addDrumNote(track, {tick: 100, type: 'kick'}, timing);
-  addDrumNote(track, {tick: 620, type: 'kick'}, timing);
+  addDrumNote(track, {tick: 100, type: noteTypes.kick}, timing);
+  addDrumNote(track, {tick: 620, type: noteTypes.kick}, timing);
   return doc;
 }
 
@@ -61,7 +62,7 @@ function kickTicks(doc: ChartDocument): number[] {
     difficulty: 'expert',
   });
   return getDrumNotes(track!.track)
-    .filter(n => n.type === 'kick')
+    .filter(n => n.type === noteTypes.kick)
     .map(n => n.tick)
     .sort((a, b) => a - b);
 }

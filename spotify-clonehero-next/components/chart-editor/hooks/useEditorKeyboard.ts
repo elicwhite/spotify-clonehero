@@ -24,7 +24,8 @@ import {
   toSchemaNote,
   type FlagName,
 } from '../commands';
-import type {DrumNote, DrumNoteType} from '@/lib/chart-edit';
+import type {DrumNote} from '@/lib/chart-edit';
+import type {NoteType} from '@eliwhite/scan-chart';
 import {getDrumNotes, drums4LaneSchema} from '@/lib/chart-edit';
 import {
   buildTimedTempos,
@@ -210,7 +211,6 @@ export function useEditorKeyboard(onSave?: () => void) {
       const normalized: DrumNote[] = selected.map(n => ({
         ...n,
         tick: n.tick - minTick,
-        flags: {...n.flags},
       }));
       dispatch({type: 'SET_CLIPBOARD', notes: normalized});
     },
@@ -236,7 +236,6 @@ export function useEditorKeyboard(onSave?: () => void) {
       const normalized: DrumNote[] = selected.map(n => ({
         ...n,
         tick: n.tick - minTick,
-        flags: {...n.flags},
       }));
       dispatch({type: 'SET_CLIPBOARD', notes: normalized});
 
@@ -268,7 +267,7 @@ export function useEditorKeyboard(onSave?: () => void) {
       const commands = state.clipboard.map(
         n =>
           new AddNoteCommand(
-            toSchemaNote({...n, tick: n.tick + cursorTick, flags: {...n.flags}}),
+            toSchemaNote({...n, tick: n.tick + cursorTick}),
             trackKey,
           ),
       );
@@ -474,7 +473,7 @@ export function useEditorKeyboard(onSave?: () => void) {
         if (!state.chartDoc) return;
         const trackKey = trackKeyFromScope(state.activeScope);
         if (!trackKey) return;
-        const type: DrumNoteType = laneToType(lane);
+        const type: NoteType = laneToType(lane);
         const tick = state.cursorTick;
 
         const track = getActiveTrack();

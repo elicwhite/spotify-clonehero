@@ -22,8 +22,8 @@ import {
   drumSchemaFor,
   drums4LaneSchema,
   drums5LaneSchema,
-  CYMBAL_LEGAL_DRUM_TYPES,
-  isCymbalLegalDrumType,
+  CYMBAL_LEGAL_NOTE_TYPES,
+  isCymbalLegalNoteType,
 } from './drums';
 import {bassSchema, guitarSchema, keysSchema, rhythmSchema} from './guitar';
 
@@ -37,8 +37,8 @@ export {
   drumSchemaFor,
   drums4LaneSchema,
   drums5LaneSchema,
-  CYMBAL_LEGAL_DRUM_TYPES,
-  isCymbalLegalDrumType,
+  CYMBAL_LEGAL_NOTE_TYPES,
+  isCymbalLegalNoteType,
 };
 export {bassSchema, guitarSchema, keysSchema, rhythmSchema};
 

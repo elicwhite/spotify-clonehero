@@ -18,10 +18,8 @@
  * keyboard shortcut and a button in `NoteInspector`.
  */
 
-import type {DrumType} from '@eliwhite/scan-chart';
+import type {DrumType, NoteType} from '@eliwhite/scan-chart';
 import {drumTypes, noteTypes} from '@eliwhite/scan-chart';
-import type {DrumNoteType} from '../types';
-import {noteTypeToDrumNote} from '../types';
 import type {InstrumentSchema, LaneDefinition} from './types';
 
 // World-space X coordinates for the drum highway. Mirrors the formula in
@@ -146,26 +144,21 @@ export const drums5LaneSchema: InstrumentSchema = {
 };
 
 /**
- * Drum note types (friendly `DrumNoteType` strings) that may legally carry a
- * cymbal flag. Kick and Red never can (§6 lane legality) — this is the single
- * source of truth for that rule, derived from the schema's `cymbal` flag
- * binding so adding/renaming a cymbal-legal lane is a schema-only change.
- * Enforced below the views in the `lib/chart-edit` mutators (see
+ * Drum `NoteType`s that may legally carry a cymbal flag. Kick and Red never
+ * can (§6 lane legality) — this is the single source of truth for that
+ * rule, taken directly from the schema's `cymbal` flag binding so
+ * adding/renaming a cymbal-legal lane is a schema-only change. Enforced
+ * below the views in the `lib/chart-edit` mutators (see
  * `helpers/drum-notes.ts`) so no view can construct a red/kick cymbal, and
  * consumed read-only by the piano-roll / highway glyph pickers.
  */
-export const CYMBAL_LEGAL_DRUM_TYPES: ReadonlySet<DrumNoteType> = new Set(
-  (
-    drums4LaneSchema.flagBindings.find(b => b.flag === 'cymbal')?.appliesTo ??
-    []
-  )
-    .map(nt => noteTypeToDrumNote[nt])
-    .filter((t): t is DrumNoteType => t !== undefined),
+export const CYMBAL_LEGAL_NOTE_TYPES: ReadonlySet<NoteType> = new Set(
+  drums4LaneSchema.flagBindings.find(b => b.flag === 'cymbal')?.appliesTo ?? [],
 );
 
-/** True when a friendly drum note type may carry the cymbal flag. */
-export function isCymbalLegalDrumType(type: DrumNoteType): boolean {
-  return CYMBAL_LEGAL_DRUM_TYPES.has(type);
+/** True when a drum `NoteType` may carry the cymbal flag. */
+export function isCymbalLegalNoteType(type: NoteType): boolean {
+  return CYMBAL_LEGAL_NOTE_TYPES.has(type);
 }
 
 /**

@@ -5,6 +5,7 @@
  * The returned document may differ from the input (auto-corrections applied).
  */
 
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {getDrumNotes} from '@/lib/chart-edit';
 import type {ValidationResult} from './chart-types';
@@ -226,7 +227,7 @@ export function validateChart(doc: ChartDocument): ValidationResult {
 
     // Warn: cymbal on red
     for (const note of drumNotes) {
-      if (note.type === 'redDrum' && note.flags.cymbal) {
+      if (note.type === noteTypes.redDrum && note.flags & noteFlags.cymbal) {
         warnings.push(
           `Cymbal flag on red drum at tick ${note.tick}; red has no cymbal marker (flag will be ignored)`,
         );
@@ -236,7 +237,7 @@ export function validateChart(doc: ChartDocument): ValidationResult {
     // Warn: double kick on non-Expert
     if (track.difficulty !== 'expert') {
       for (const note of drumNotes) {
-        if (note.type === 'kick' && note.flags.doubleKick) {
+        if (note.type === noteTypes.kick && note.flags & noteFlags.doubleKick) {
           warnings.push(
             `Double kick on ${track.difficulty} difficulty at tick ${note.tick}; should only appear on Expert`,
           );

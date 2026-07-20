@@ -13,8 +13,6 @@ export type {
   ParsedTrackData,
   NoteEvent,
   DrumNote,
-  DrumNoteType,
-  DrumNoteFlags,
   EventType,
   Instrument,
   Difficulty,

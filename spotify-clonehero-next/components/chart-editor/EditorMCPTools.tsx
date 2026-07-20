@@ -13,10 +13,26 @@ import {
   toSchemaNote,
   type FlagName,
 } from './commands';
-import {getDrumNotes} from '@/lib/chart-edit';
-import type {DrumNoteType} from '@/lib/chart-edit';
+import {getDrumNotes, drums4LaneSchema} from '@/lib/chart-edit';
 import {buildTimedTempos, tickToMs} from '@/lib/drum-transcription/timing';
 import {typeToLane} from './commands';
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
+import type {NoteType} from '@eliwhite/scan-chart';
+
+/** Friendly label for a drum `NoteType`, from `InstrumentSchema.lanes[].label`
+ *  (e.g. "Kick", "Red") — the MCP tool surface's note-type representation. */
+function typeToLabel(type: NoteType): string {
+  return (
+    drums4LaneSchema.lanes.find(l => l.noteType === type)?.label ?? String(type)
+  );
+}
+
+/** Reverse of {@link typeToLabel}, case-insensitive. */
+function labelToType(label: string): NoteType | undefined {
+  return drums4LaneSchema.lanes.find(
+    l => l.label.toLowerCase() === label.toLowerCase(),
+  )?.noteType;
+}
 
 /**
  * Registers WebMCP tools for the chart editor via navigator.modelContext.
@@ -103,11 +119,11 @@ export default function EditorMCPTools() {
               .map(n => ({
                 id: noteId(n),
                 tick: n.tick,
-                type: n.type,
+                type: typeToLabel(n.type),
                 flags: {
-                  cymbal: !!n.flags.cymbal,
-                  accent: !!n.flags.accent,
-                  ghost: !!n.flags.ghost,
+                  cymbal: !!(n.flags & noteFlags.cymbal),
+                  accent: !!(n.flags & noteFlags.accent),
+                  ghost: !!(n.flags & noteFlags.ghost),
                 },
               }));
           }
@@ -229,12 +245,12 @@ export default function EditorMCPTools() {
             .map(n => ({
               id: noteId(n),
               tick: n.tick,
-              type: n.type,
+              type: typeToLabel(n.type),
               lane: typeToLane(n.type),
               flags: {
-                cymbal: !!n.flags.cymbal,
-                accent: !!n.flags.accent,
-                ghost: !!n.flags.ghost,
+                cymbal: !!(n.flags & noteFlags.cymbal),
+                accent: !!(n.flags & noteFlags.accent),
+                ghost: !!(n.flags & noteFlags.ghost),
               },
             }));
           return {
@@ -257,7 +273,15 @@ export default function EditorMCPTools() {
           required: ['tick', 'type'],
         },
         execute: async args => {
-          const id = `${args['tick']}:${args['type']}`;
+          const type = labelToType(args['type'] as string);
+          if (type === undefined) {
+            return {
+              content: [
+                {type: 'text', text: `Unknown note type: ${args['type']}`},
+              ],
+            };
+          }
+          const id = `${args['tick']}:${type}`;
           const add = (args['addToSelection'] as boolean) ?? false;
           const newIds = add
             ? new Set(getSelectedIds(stateRef.current, 'note'))
@@ -356,21 +380,38 @@ export default function EditorMCPTools() {
           const trackKey = trackKeyFromScope(stateRef.current.activeScope);
           if (!trackKey)
             return {content: [{type: 'text', text: 'Not editing a track'}]};
-          const type = args['type'] as DrumNoteType;
+          const type = labelToType(args['type'] as string);
+          if (type === undefined) {
+            return {
+              content: [
+                {type: 'text', text: `Unknown note type: ${args['type']}`},
+              ],
+            };
+          }
           const tick = args['tick'] as number;
           const cymbalDefault =
-            type === 'yellowDrum' ||
-            type === 'blueDrum' ||
-            type === 'greenDrum';
+            type === noteTypes.yellowDrum ||
+            type === noteTypes.blueDrum ||
+            type === noteTypes.greenDrum;
           const cymbal = (args['cymbal'] as boolean) ?? cymbalDefault;
           executeCommandRef.current(
             new AddNoteCommand(
-              toSchemaNote({tick, type, length: 0, flags: {cymbal}}),
+              toSchemaNote({
+                tick,
+                type,
+                length: 0,
+                flags: cymbal ? noteFlags.cymbal : 0,
+              }),
               trackKey,
             ),
           );
           return {
-            content: [{type: 'text', text: `Added ${type} at tick ${tick}`}],
+            content: [
+              {
+                type: 'text',
+                text: `Added ${typeToLabel(type)} at tick ${tick}`,
+              },
+            ],
           };
         },
       });

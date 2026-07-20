@@ -36,6 +36,7 @@ import {
   OP_DISAGREEMENT_CHECK_ENABLED,
   BATCH_REPREDICT_ENABLED,
 } from './repredict';
+import {noteTypes} from '@eliwhite/scan-chart';
 
 const RES = 480;
 
@@ -63,8 +64,8 @@ function makeDoc(): ChartDocument {
   const doc: ChartDocument = {parsedChart, assets: []};
 
   const timing = makeChartTiming(parsedChart);
-  addDrumNote(track, {tick: 100, type: 'kick'}, timing);
-  addDrumNote(track, {tick: 620, type: 'kick'}, timing);
+  addDrumNote(track, {tick: 100, type: noteTypes.kick}, timing);
+  addDrumNote(track, {tick: 620, type: noteTypes.kick}, timing);
   addSection(doc, 1920, 'Verse');
   return doc;
 }
@@ -90,7 +91,7 @@ function kickTicks(doc: ChartDocument): number[] {
     difficulty: 'expert',
   });
   return getDrumNotes(track!.track)
-    .filter(n => n.type === 'kick')
+    .filter(n => n.type === noteTypes.kick)
     .map(n => n.tick)
     .sort((a, b) => a - b);
 }

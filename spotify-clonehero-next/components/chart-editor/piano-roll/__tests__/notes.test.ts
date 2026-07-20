@@ -5,6 +5,7 @@ import {
   PIANO_ROLL_LANES,
   extractPianoRollNotes,
 } from '../notes';
+import {noteTypes} from '@eliwhite/scan-chart';
 
 describe('extractPianoRollNotes', () => {
   const drums = makeFixtureDoc().parsedChart.trackData[0];
@@ -31,10 +32,10 @@ describe('extractPianoRollNotes', () => {
   test('ids match the shared selection id (tick:type)', () => {
     const notes = extractPianoRollNotes(drums);
     expect(notes.find(n => n.lane === 4)!.id).toBe(
-      noteId({tick: 0, type: 'kick'}),
+      noteId({tick: 0, type: noteTypes.kick}),
     );
     expect(notes.find(n => n.lane === 1)!.id).toBe(
-      noteId({tick: 960, type: 'yellowDrum'}),
+      noteId({tick: 960, type: noteTypes.yellowDrum}),
     );
   });
 

@@ -72,49 +72,16 @@ export type ParsedTrackData = ParsedChart['trackData'][number];
 // Drum Helper Types
 // ---------------------------------------------------------------------------
 
-export type DrumNoteType =
-  | 'kick'
-  | 'redDrum'
-  | 'yellowDrum'
-  | 'blueDrum'
-  | 'greenDrum'
-  | 'fiveGreenDrum';
-
-export interface DrumNoteFlags {
-  cymbal?: boolean | undefined;
-  doubleKick?: boolean | undefined;
-  accent?: boolean | undefined;
-  ghost?: boolean | undefined;
-  flam?: boolean | undefined;
-}
-
-/** Friendly view of a drum note, returned by getDrumNotes(). */
+/**
+ * Friendly view of a drum note, returned by getDrumNotes(). `type` is the
+ * scan-chart `NoteType` directly (no drum-only string-alias layer); `flags`
+ * is the scan-chart flag bitmask. Friendly labels/legality come from
+ * `InstrumentSchema.lanes[].label` / `flagBindings` (`lib/chart-edit/instruments/drums.ts`),
+ * not from a parallel type.
+ */
 export interface DrumNote {
   tick: number;
   length: number;
-  type: DrumNoteType;
-  flags: DrumNoteFlags;
+  type: NoteType;
+  flags: number;
 }
-
-// ---------------------------------------------------------------------------
-// DrumNoteType ↔ NoteType Mapping
-// ---------------------------------------------------------------------------
-
-/** Map DrumNoteType → NoteType for the note itself. */
-export const drumNoteTypeMap: Record<DrumNoteType, NoteType> = {
-  kick: noteTypes.kick,
-  redDrum: noteTypes.redDrum,
-  yellowDrum: noteTypes.yellowDrum,
-  blueDrum: noteTypes.blueDrum,
-  greenDrum: noteTypes.greenDrum,
-  fiveGreenDrum: noteTypes.greenDrum, // 5-lane green maps to same NoteType
-};
-
-/** Reverse: NoteType → DrumNoteType (only for base note types). */
-export const noteTypeToDrumNote: Partial<Record<NoteType, DrumNoteType>> = {
-  [noteTypes.kick]: 'kick',
-  [noteTypes.redDrum]: 'redDrum',
-  [noteTypes.yellowDrum]: 'yellowDrum',
-  [noteTypes.blueDrum]: 'blueDrum',
-  [noteTypes.greenDrum]: 'greenDrum',
-};

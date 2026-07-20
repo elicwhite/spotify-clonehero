@@ -4,7 +4,7 @@
  * Verifies:
  * - 9-class -> note number mapping
  * - 9-class -> cymbal marker mapping
- * - 9-class -> DrumNoteType mapping
+ * - 9-class -> NoteType mapping
  * - RawDrumEvent[] -> DrumNote[] conversion (with tick quantization)
  * - RawDrumEvent[] -> EditorDrumEvent[] conversion
  */
@@ -13,11 +13,12 @@ import {
   getChartMapping,
   drumClassToNoteNumber,
   drumClassToCymbalMarker,
-  drumClassToDrumNoteType,
+  drumClassToNoteType,
   rawEventsToDrumNotes,
   rawEventsToEditorEvents,
 } from '../ml/class-mapping';
 import type {RawDrumEvent, DrumClassName} from '../ml/types';
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 
 // ---------------------------------------------------------------------------
 // drumClassToNoteNumber
@@ -92,25 +93,25 @@ describe('drumClassToCymbalMarker', () => {
 });
 
 // ---------------------------------------------------------------------------
-// drumClassToDrumNoteType
+// drumClassToNoteType
 // ---------------------------------------------------------------------------
 
-describe('drumClassToDrumNoteType', () => {
-  const expected: Record<DrumClassName, string> = {
-    BD: 'kick',
-    SD: 'redDrum',
-    HT: 'yellowDrum',
-    MT: 'blueDrum',
-    FT: 'greenDrum',
-    HH: 'yellowDrum',
-    CR: 'greenDrum',
-    CR2: 'blueDrum',
-    RD: 'blueDrum',
+describe('drumClassToNoteType', () => {
+  const expected: Record<DrumClassName, number> = {
+    BD: noteTypes.kick,
+    SD: noteTypes.redDrum,
+    HT: noteTypes.yellowDrum,
+    MT: noteTypes.blueDrum,
+    FT: noteTypes.greenDrum,
+    HH: noteTypes.yellowDrum,
+    CR: noteTypes.greenDrum,
+    CR2: noteTypes.blueDrum,
+    RD: noteTypes.blueDrum,
   };
 
   for (const [cls, type] of Object.entries(expected)) {
     it(`maps ${cls} to ${type}`, () => {
-      expect(drumClassToDrumNoteType(cls as DrumClassName)).toBe(type);
+      expect(drumClassToNoteType(cls as DrumClassName)).toBe(type);
     });
   }
 });
@@ -136,7 +137,7 @@ describe('getChartMapping', () => {
     for (const cls of classes) {
       const mapping = getChartMapping(cls);
       expect(mapping).toBeDefined();
-      expect(typeof mapping.noteType).toBe('string');
+      expect(typeof mapping.noteType).toBe('number');
       expect(typeof mapping.noteNumber).toBe('number');
       expect(typeof mapping.isCymbal).toBe('boolean');
     }
@@ -192,9 +193,9 @@ describe('rawEventsToDrumNotes', () => {
     const notes = rawEventsToDrumNotes(events, tempos, resolution);
 
     expect(notes.length).toBe(3);
-    expect(notes[0].type).toBe('kick');
-    expect(notes[1].type).toBe('redDrum');
-    expect(notes[2].type).toBe('yellowDrum');
+    expect(notes[0].type).toBe(noteTypes.kick);
+    expect(notes[1].type).toBe(noteTypes.redDrum);
+    expect(notes[2].type).toBe(noteTypes.yellowDrum);
   });
 
   it('computes correct tick positions at 120 BPM', () => {
@@ -222,11 +223,11 @@ describe('rawEventsToDrumNotes', () => {
 
     const notes = rawEventsToDrumNotes(events, tempos, resolution);
 
-    expect(notes[0].flags.cymbal).toBe(true); // HH
-    expect(notes[1].flags.cymbal).toBe(true); // CR
-    expect(notes[2].flags.cymbal).toBeUndefined(); // HT (tom pad)
-    expect(notes[3].flags.cymbal).toBe(true); // RD
-    expect(notes[4].flags.cymbal).toBe(true); // CR2
+    expect(!!(notes[0].flags & noteFlags.cymbal)).toBe(true); // HH
+    expect(!!(notes[1].flags & noteFlags.cymbal)).toBe(true); // CR
+    expect(!!(notes[2].flags & noteFlags.cymbal)).toBe(false); // HT (tom pad)
+    expect(!!(notes[3].flags & noteFlags.cymbal)).toBe(true); // RD
+    expect(!!(notes[4].flags & noteFlags.cymbal)).toBe(true); // CR2
   });
 
   it('all notes have length 0 (non-sustained drums)', () => {

@@ -24,6 +24,7 @@ import {swapSynctrack} from '@/lib/tempo-map/swap-synctrack';
 import {buildSyncLayout} from '@/lib/tempo-map/synctrack-ticks';
 import {buildTimedTempos, tickToMs} from '@/lib/drum-transcription/timing';
 import type {Synctrack} from '@/lib/tempo-map/types';
+import {noteTypes} from '@eliwhite/scan-chart';
 
 const SR = 44100;
 
@@ -38,7 +39,11 @@ function makeDoc(resolution: number, bpm = 120): ChartDocument {
 
 function addNoteAtTick(doc: ChartDocument, tick: number) {
   const timing = makeChartTiming(doc.parsedChart);
-  addDrumNote(doc.parsedChart.trackData[0], {tick, type: 'redDrum'}, timing);
+  addDrumNote(
+    doc.parsedChart.trackData[0],
+    {tick, type: noteTypes.redDrum},
+    timing,
+  );
   retimeChart(doc.parsedChart);
 }
 

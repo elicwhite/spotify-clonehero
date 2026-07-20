@@ -28,6 +28,7 @@ import {
   quantizeBpm,
 } from '../index';
 import {emptyTrackData} from './test-utils';
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 
 const RES = 480;
 const MODIFIERS = {...defaultIniChartModifiers, pro_drums: true};
@@ -49,14 +50,14 @@ function makeDoc(): ChartDocument {
   const doc: ChartDocument = {parsedChart, assets: []};
 
   const timing = makeChartTiming(parsedChart);
-  addDrumNote(track, {tick: 480, type: 'redDrum'}, timing);
+  addDrumNote(track, {tick: 480, type: noteTypes.redDrum}, timing);
   addDrumNote(
     track,
-    {tick: 960, type: 'yellowDrum', flags: {cymbal: true}},
+    {tick: 960, type: noteTypes.yellowDrum, flags: noteFlags.cymbal},
     timing,
   );
-  addDrumNote(track, {tick: 1440, type: 'blueDrum'}, timing);
-  addDrumNote(track, {tick: 1920, type: 'greenDrum'}, timing);
+  addDrumNote(track, {tick: 1440, type: noteTypes.blueDrum}, timing);
+  addDrumNote(track, {tick: 1920, type: noteTypes.greenDrum}, timing);
 
   addSection(doc, 720, 'Verse');
 
@@ -391,8 +392,8 @@ describe('remapKeepMs', () => {
     // Two reds a few ticks apart that quantize into the same 16th slot.
     track.noteEventGroups = [];
     const timing = makeChartTiming(doc.parsedChart);
-    addDrumNote(track, {tick: 480, type: 'redDrum'}, timing);
-    addDrumNote(track, {tick: 486, type: 'redDrum'}, timing);
+    addDrumNote(track, {tick: 480, type: noteTypes.redDrum}, timing);
+    addDrumNote(track, {tick: 486, type: noteTypes.redDrum}, timing);
     const out = remapTo90(doc);
     const flat = flatNotes(out);
     // Count preserved, and the two same-pad notes are not on the same tick.

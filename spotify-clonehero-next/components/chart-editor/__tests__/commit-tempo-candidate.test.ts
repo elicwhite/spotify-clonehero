@@ -29,6 +29,7 @@ import {
   initialState,
   type ChartEditorState,
 } from '@/lib/chart-editor-core';
+import {noteTypes} from '@eliwhite/scan-chart';
 
 const RES = 480;
 
@@ -42,8 +43,8 @@ function makeDoc(): ChartDocument {
   parsedChart.trackData.push(track);
   const doc: ChartDocument = {parsedChart, assets: []};
   const timing = makeChartTiming(parsedChart);
-  addDrumNote(track, {tick: 100, type: 'kick'}, timing);
-  addDrumNote(track, {tick: 620, type: 'kick'}, timing);
+  addDrumNote(track, {tick: 100, type: noteTypes.kick}, timing);
+  addDrumNote(track, {tick: 620, type: noteTypes.kick}, timing);
   return doc;
 }
 
@@ -78,7 +79,6 @@ describe('CommitTempoCandidateCommand', () => {
     // Even if handed a different doc, it still commits the captured candidate.
     expect(cmd.execute(makeDoc())).toBe(candidate);
   });
-
 });
 
 describe('preview → accept (plan 0061 §7)', () => {

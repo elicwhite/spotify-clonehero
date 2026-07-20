@@ -24,6 +24,7 @@ import {
   retimeChart,
   type ChartDocument,
 } from '@/lib/chart-edit';
+import {noteTypes} from '@eliwhite/scan-chart';
 
 const RES = 480;
 
@@ -35,7 +36,7 @@ function barsDoc(beats: number): ChartDocument {
   const doc: ChartDocument = {parsedChart: parsed, assets: []};
   const drums = doc.parsedChart.trackData[0];
   for (let i = 0; i <= beats; i++) {
-    addDrumNote(drums, {tick: i * RES, type: 'redDrum'});
+    addDrumNote(drums, {tick: i * RES, type: noteTypes.redDrum});
   }
   retimeChart(doc.parsedChart);
   return doc;

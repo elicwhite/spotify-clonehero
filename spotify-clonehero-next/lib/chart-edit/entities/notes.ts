@@ -6,12 +6,11 @@
  * `DeleteNotesCommand`, `ToggleFlagCommand`, `ToggleKickCommand`) and the
  * `'note'` `EntityKindHandler` (`entities/index.ts`) both drive. Everything
  * here is parameterized by an `InstrumentSchema` and operates directly on
- * scan-chart `NoteEvent`s (raw `NoteType` + flag bitmask) — no dependency on
- * the drum-only `DrumNoteType`/`DrumNoteFlags` facade, so the same functions
- * work for `guitarSchema` or any other five-fret/drum schema.
+ * scan-chart `NoteEvent`s (raw `NoteType` + flag bitmask), so the same
+ * functions work for `guitarSchema` or any other five-fret/drum schema.
  *
- * `lib/chart-edit/helpers/drum-notes.ts` keeps translating to/from the
- * friendly `DrumNote` shape for existing drum consumers.
+ * `lib/chart-edit/helpers/drum-notes.ts` is a thin `drums4LaneSchema`-bound
+ * convenience layer over these functions for drum consumers.
  */
 
 import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
@@ -21,9 +20,8 @@ import {applyEventTiming, makeChartTiming, type ChartTiming} from '../retime';
 import type {InstrumentSchema, NoteFlagName} from '../instruments/types';
 
 /** Reverse map of scan-chart's `noteTypes` (value → key name), built once.
- *  Note ids encode this name (e.g. `"480:redDrum"`) — the same format the
- *  drum-only `DrumNoteType` strings already used, since scan-chart's key
- *  names are the friendly names. */
+ *  Note ids encode this name (e.g. `"480:redDrum"`) — scan-chart's own key
+ *  names double as friendly names. */
 const NOTE_TYPE_NAMES: Record<number, string> = Object.fromEntries(
   Object.entries(noteTypes).map(([name, value]) => [value, name]),
 );

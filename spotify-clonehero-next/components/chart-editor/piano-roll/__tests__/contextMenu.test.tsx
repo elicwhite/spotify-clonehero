@@ -25,7 +25,7 @@ import {
   ChartEditorProvider,
   useChartEditorContext,
 } from '../../ChartEditorContext';
-import {createEmptyChart} from '@eliwhite/scan-chart';
+import {createEmptyChart, noteTypes} from '@eliwhite/scan-chart';
 import {addDrumNote, addSection, retimeChart} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
@@ -46,10 +46,10 @@ function makeAllDownbeatsDoc(): ChartDocument {
   parsed.trackData.push(emptyTrackData('drums', 'expert'));
   const doc: ChartDocument = {parsedChart: parsed, assets: []};
   const drums = doc.parsedChart.trackData[0];
-  addDrumNote(drums, {tick: 0, type: 'kick'});
+  addDrumNote(drums, {tick: 0, type: noteTypes.kick});
   // Reach the end of the 10s view (tick 9600 @120 BPM = 10000 ms) so every
   // beat the pointer can land on is in-span for the downbeat-flag derivation.
-  addDrumNote(drums, {tick: 9600, type: 'greenDrum'});
+  addDrumNote(drums, {tick: 9600, type: noteTypes.greenDrum});
   addSection(doc, 0, 'Intro');
   return doc;
 }

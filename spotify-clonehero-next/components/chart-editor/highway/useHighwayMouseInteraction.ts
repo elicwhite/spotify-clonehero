@@ -27,9 +27,15 @@ import {
   type RefObject,
 } from 'react';
 import type {HitResult, InteractionManager} from '@/lib/preview/highway';
-import type {DrumNote, DrumNoteType} from '@/lib/chart-edit';
+import type {DrumNote} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
-import {lyricId, phraseEndId, phraseStartId} from '@/lib/chart-edit';
+import {
+  lyricId,
+  phraseEndId,
+  phraseStartId,
+  parseSchemaNoteId,
+  drums4LaneSchema,
+} from '@/lib/chart-edit';
 import {
   AddNoteCommand,
   DeleteNotesCommand,
@@ -409,12 +415,10 @@ export function useHighwayMouseInteraction(
                 // Anchor the drag on the grabbed note's own tick + lane so
                 // release lands it exactly on the snapped cursor tick, even
                 // when the note started off-grid.
-                const type = entity.id.slice(
-                  entity.id.indexOf(':') + 1,
-                ) as DrumNoteType;
+                const parsedId = parseSchemaNoteId(entity.id, drums4LaneSchema);
                 setNoteDrag({
                   anchorTick: entity.tick,
-                  anchorLane: typeToLane(type),
+                  anchorLane: parsedId ? typeToLane(parsedId.type) : 0,
                   tickDelta: 0,
                   laneDelta: 0,
                   active: false,

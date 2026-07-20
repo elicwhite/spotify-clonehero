@@ -23,6 +23,7 @@ import {computeChartElements} from '../useChartElements';
 import {AddNoteCommand, toSchemaNote} from '../../commands';
 import {markerDragReconcilerKey} from '@/lib/preview/highway/reconcilerKey';
 import type {TrackKey} from '@/lib/chart-edit';
+import {noteTypes} from '@eliwhite/scan-chart';
 
 describe('computeChartElements', () => {
   // Resolution=480, 120 BPM in the fixture: 480 ticks = 500ms. Matches
@@ -134,7 +135,8 @@ describe('computeChartElements', () => {
   // piano roll shows it correctly.
   it('surfaces a freshly added note with a tempo-map msTime', () => {
     const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
-    const doc = new AddNoteCommand(toSchemaNote({tick: 720, type: 'redDrum', length: 0, flags: {}}),
+    const doc = new AddNoteCommand(
+      toSchemaNote({tick: 720, type: noteTypes.redDrum, length: 0, flags: 0}),
       DRUMS_KEY,
     ).execute(makeFixtureDoc());
 

@@ -707,9 +707,10 @@ export default function PianoRollTimeline({
       name: s.name,
     }));
 
-    const {chips: lyricChips, bands: lyricBands} = capabilities.showPianoRollNotes
-      ? buildLyricsRowScene(parsed.vocalTracks, timedTempos, resolution)
-      : {chips: [], bands: []};
+    const {chips: lyricChips, bands: lyricBands} =
+      capabilities.showPianoRollNotes
+        ? buildLyricsRowScene(parsed.vocalTracks, timedTempos, resolution)
+        : {chips: [], bands: []};
 
     const withMs = (list: {ms: number}[]) =>
       list.reduce((m, x) => Math.max(m, x.ms), 0);
@@ -736,7 +737,12 @@ export default function PianoRollTimeline({
       lyricBands,
       lyricsVisible: lyricChips.length > 0,
     };
-  }, [tempoCache, effectiveDoc, state.activeScope, capabilities.showPianoRollNotes]);
+  }, [
+    tempoCache,
+    effectiveDoc,
+    state.activeScope,
+    capabilities.showPianoRollNotes,
+  ]);
 
   useEffect(() => {
     sceneRef.current = scene;
@@ -1762,7 +1768,7 @@ export default function PianoRollTimeline({
                 tick: n.tick,
                 type: laneToType(n.lane),
                 length: 0,
-                flags: {},
+                flags: 0,
               })),
               bounds,
               scene.timedTempos,

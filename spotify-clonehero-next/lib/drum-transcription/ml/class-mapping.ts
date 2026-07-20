@@ -4,7 +4,7 @@
  * The CRNN outputs 9 instrument classes. This module maps them to the 5-lane
  * chart note types and cymbal markers used in .chart files (pro drums):
  *
- *   | CRNN Class | Chart Note | Cymbal Marker | DrumNoteType  |
+ *   | CRNN Class | Chart Note | Cymbal Marker | NoteType      |
  *   |------------|-----------|---------------|---------------|
  *   | BD (kick)  | 0 (kick)  | --            | kick          |
  *   | SD (snare) | 1 (red)   | --            | redDrum       |
@@ -16,16 +16,13 @@
  *   | CR2 (crash2)| 3 (blue) | 67            | blueDrum      |
  *   | RD (ride)  | 3 (blue)  | 67            | blueDrum      |
  *
- * Uses chart-edit types (DrumNote, DrumNoteType, DrumNoteFlags) via
+ * Uses chart-edit types (DrumNote, scan-chart's NoteType/noteFlags) via
  * chart-types, and timing utilities (msToTick, buildTimedTempos) from timing.
  */
 
-import type {
-  DrumNote,
-  DrumNoteType,
-  DrumNoteFlags,
-  TimedTempo,
-} from '../chart-types';
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
+import type {NoteType} from '@eliwhite/scan-chart';
+import type {DrumNote, TimedTempo} from '../chart-types';
 import {buildTimedTempos, msToTick} from '../timing';
 import type {RawDrumEvent, DrumClassName} from './types';
 
@@ -56,8 +53,8 @@ import type {RawDrumEvent, DrumClassName} from './types';
 export type SnapMode = 'candidate';
 
 interface ChartNoteMapping {
-  /** DrumNoteType for the chart. */
-  noteType: DrumNoteType;
+  /** NoteType for the chart. */
+  noteType: NoteType;
   /** .chart note number (0-4). */
   noteNumber: number;
   /** Pro drums cymbal marker (66, 67, 68) or null. */
@@ -71,42 +68,42 @@ interface ChartNoteMapping {
 /** Map from CRNN class name to chart note properties. */
 const CLASS_TO_CHART: Record<DrumClassName, ChartNoteMapping> = {
   BD: {
-    noteType: 'kick',
+    noteType: noteTypes.kick,
     noteNumber: 0,
     cymbalMarker: null,
     isCymbal: false,
     snapMode: 'candidate',
   },
   SD: {
-    noteType: 'redDrum',
+    noteType: noteTypes.redDrum,
     noteNumber: 1,
     cymbalMarker: null,
     isCymbal: false,
     snapMode: 'candidate',
   },
   HT: {
-    noteType: 'yellowDrum',
+    noteType: noteTypes.yellowDrum,
     noteNumber: 2,
     cymbalMarker: null,
     isCymbal: false,
     snapMode: 'candidate',
   },
   MT: {
-    noteType: 'blueDrum',
+    noteType: noteTypes.blueDrum,
     noteNumber: 3,
     cymbalMarker: null,
     isCymbal: false,
     snapMode: 'candidate',
   },
   FT: {
-    noteType: 'greenDrum',
+    noteType: noteTypes.greenDrum,
     noteNumber: 4,
     cymbalMarker: null,
     isCymbal: false,
     snapMode: 'candidate',
   },
   HH: {
-    noteType: 'yellowDrum',
+    noteType: noteTypes.yellowDrum,
     noteNumber: 2,
     cymbalMarker: 66,
     isCymbal: true,
@@ -115,21 +112,21 @@ const CLASS_TO_CHART: Record<DrumClassName, ChartNoteMapping> = {
   // crash/crash-2/ride: candidate like every other lane — see SnapMode (the
   // uniform carve-out was dropped; a per-lane split rendered chords apart).
   CR: {
-    noteType: 'greenDrum',
+    noteType: noteTypes.greenDrum,
     noteNumber: 4,
     cymbalMarker: 68,
     isCymbal: true,
     snapMode: 'candidate',
   },
   CR2: {
-    noteType: 'blueDrum',
+    noteType: noteTypes.blueDrum,
     noteNumber: 3,
     cymbalMarker: 67,
     isCymbal: true,
     snapMode: 'candidate',
   },
   RD: {
-    noteType: 'blueDrum',
+    noteType: noteTypes.blueDrum,
     noteNumber: 3,
     cymbalMarker: 67,
     isCymbal: true,
@@ -161,11 +158,9 @@ export function drumClassToCymbalMarker(
 }
 
 /**
- * Get the DrumNoteType for a drum class.
+ * Get the NoteType for a drum class.
  */
-export function drumClassToDrumNoteType(
-  drumClass: DrumClassName,
-): DrumNoteType {
+export function drumClassToNoteType(drumClass: DrumClassName): NoteType {
   return CLASS_TO_CHART[drumClass].noteType;
 }
 
@@ -195,16 +190,11 @@ export function rawEventsToDrumNotes(
     const msTime = event.timeSeconds * 1000;
     const tick = msToTick(msTime, timedTempos, resolution);
 
-    const flags: DrumNoteFlags = {};
-    if (mapping.isCymbal) {
-      flags.cymbal = true;
-    }
-
     return {
       tick,
       type: mapping.noteType,
       length: 0, // Drums are always non-sustained
-      flags,
+      flags: mapping.isCymbal ? noteFlags.cymbal : 0,
     };
   });
 
@@ -220,19 +210,19 @@ export function rawEventsToDrumNotes(
 /**
  * Order for sorting notes at the same tick.
  */
-function noteTypeOrder(type: DrumNoteType): number {
+function noteTypeOrder(type: NoteType): number {
   switch (type) {
-    case 'kick':
+    case noteTypes.kick:
       return 0;
-    case 'redDrum':
+    case noteTypes.redDrum:
       return 1;
-    case 'yellowDrum':
+    case noteTypes.yellowDrum:
       return 2;
-    case 'blueDrum':
+    case noteTypes.blueDrum:
       return 3;
-    case 'greenDrum':
+    case noteTypes.greenDrum:
       return 4;
-    case 'fiveGreenDrum':
+    default:
       return 5;
   }
 }

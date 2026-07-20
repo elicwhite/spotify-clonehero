@@ -37,8 +37,6 @@ export type {
   DrumType,
   VocalTrackData,
   DrumNote,
-  DrumNoteType,
-  DrumNoteFlags,
 } from './types';
 
 // Constants
@@ -50,8 +48,6 @@ export {
   noteFlags,
   lyricFlags,
   drumTypes,
-  drumNoteTypeMap,
-  noteTypeToDrumNote,
 } from './types';
 
 // Drum helpers
@@ -60,7 +56,6 @@ export {
   removeDrumNote,
   getDrumNotes,
   setDrumNoteFlags,
-  drumFlagsToNoteFlags,
 } from './helpers/drum-notes';
 
 // Drum section helpers (star power, activation lanes, solos, flex lanes)
@@ -226,8 +221,8 @@ export {
   drums4LaneSchema,
   drums5LaneSchema,
   drumSchemaFor,
-  CYMBAL_LEGAL_DRUM_TYPES,
-  isCymbalLegalDrumType,
+  CYMBAL_LEGAL_NOTE_TYPES,
+  isCymbalLegalNoteType,
   bassSchema,
   guitarSchema,
   keysSchema,

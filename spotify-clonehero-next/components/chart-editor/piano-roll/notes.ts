@@ -9,6 +9,7 @@
 
 import {getDrumNotes, noteId, type ParsedTrackData} from '@/lib/chart-edit';
 import {typeToLane} from '../commands';
+import {noteFlags} from '@eliwhite/scan-chart';
 
 /** A note projected onto the 5-lane piano roll. */
 export interface PianoRollNote {
@@ -63,7 +64,7 @@ export function extractPianoRollNotes(
     out.push({
       tick: note.tick,
       lane,
-      cymbal: note.flags.cymbal === true && LANE_CYMBAL_OK[lane],
+      cymbal: !!(note.flags & noteFlags.cymbal) && LANE_CYMBAL_OK[lane],
       id: noteId(note),
     });
   }

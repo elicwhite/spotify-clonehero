@@ -18,6 +18,7 @@ import type {
 } from '@/lib/chart-edit';
 import {addDrumNote, addSection, addTempo} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 
 /**
  * A deterministic doc with one expert drum track, two sections, two
@@ -34,11 +35,15 @@ export function makeFixtureDoc(): ChartDocument {
   const doc: ChartDocument = {parsedChart: parsed, assets: []};
 
   const drums = doc.parsedChart.trackData[0];
-  addDrumNote(drums, {tick: 0, type: 'kick'});
-  addDrumNote(drums, {tick: 480, type: 'redDrum'});
-  addDrumNote(drums, {tick: 960, type: 'yellowDrum', flags: {cymbal: true}});
-  addDrumNote(drums, {tick: 1440, type: 'blueDrum'});
-  addDrumNote(drums, {tick: 1920, type: 'greenDrum'});
+  addDrumNote(drums, {tick: 0, type: noteTypes.kick});
+  addDrumNote(drums, {tick: 480, type: noteTypes.redDrum});
+  addDrumNote(drums, {
+    tick: 960,
+    type: noteTypes.yellowDrum,
+    flags: noteFlags.cymbal,
+  });
+  addDrumNote(drums, {tick: 1440, type: noteTypes.blueDrum});
+  addDrumNote(drums, {tick: 1920, type: noteTypes.greenDrum});
 
   addSection(doc, 0, 'Intro');
   addSection(doc, 1920, 'Verse');
@@ -116,7 +121,7 @@ export function normalizeDoc(doc: ChartDocument): unknown {
       })),
       vocalTracks: {
         parts: Object.fromEntries(
-          Object.entries(doc.parsedChart.vocalTracks?.parts ?? {}).map(
+          Object.entries(doc.parsedChart.vocalTracks?.parts ?? 0).map(
             ([name, part]) => [name, normalizeVocalPart(part)],
           ),
         ),

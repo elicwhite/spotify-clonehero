@@ -20,8 +20,8 @@
  * (sections, tempos, time signatures) ignore the context entirely.
  */
 
-import type {ChartDocument, DrumNoteType, ParsedTrackData} from '../types';
-import {drumNoteTypeMap} from '../types';
+import type {NoteType} from '@eliwhite/scan-chart';
+import type {ChartDocument, ParsedTrackData} from '../types';
 import {
   findTrackInParsedChart,
   findTrackOnly,
@@ -156,8 +156,8 @@ export interface EntityKindHandler {
 // (`./notes.ts`, plan 0037 Task 4) — only the schema choice here is pinned.
 // ---------------------------------------------------------------------------
 
-export function noteId(note: {tick: number; type: DrumNoteType}): string {
-  return schemaNoteId(note.tick, drumNoteTypeMap[note.type]);
+export function noteId(note: {tick: number; type: NoteType}): string {
+  return schemaNoteId(note.tick, note.type);
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +168,9 @@ const noteHandler: EntityKindHandler = {
   listIds(doc, ctx) {
     const track = resolveTrack(doc, ctx);
     if (!track) return [];
-    return listNotes(track, drums4LaneSchema).map(n => schemaNoteId(n.tick, n.type));
+    return listNotes(track, drums4LaneSchema).map(n =>
+      schemaNoteId(n.tick, n.type),
+    );
   },
   locate(doc, id, ctx) {
     const parsed = parseSchemaNoteId(id, drums4LaneSchema);
@@ -179,7 +181,10 @@ const noteHandler: EntityKindHandler = {
       n => n.tick === parsed.tick && n.type === parsed.type,
     );
     if (!found) return null;
-    return {tick: found.tick, lane: schemaTypeToLane(drums4LaneSchema, found.type)};
+    return {
+      tick: found.tick,
+      lane: schemaTypeToLane(drums4LaneSchema, found.type),
+    };
   },
   move(doc, id, tickDelta, laneDelta, ctx) {
     const parsed = parseSchemaNoteId(id, drums4LaneSchema);
