@@ -3,11 +3,8 @@
 import {useMemo} from 'react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
-import {
-  useChartEditorContext,
-  getSelectedIds,
-  selectActiveTrack,
-} from './ChartEditorContext';
+import {useChartEditorContext} from './ChartEditorContext';
+import {getSelectedIds, selectActiveTrack} from '@/lib/chart-editor-core';
 import {trackKeyFromScope} from './scope';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {

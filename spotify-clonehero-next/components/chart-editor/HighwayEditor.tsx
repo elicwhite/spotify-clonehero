@@ -1,12 +1,12 @@
 'use client';
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useChartEditorContext} from './ChartEditorContext';
 import {
-  useChartEditorContext,
   selectActiveTrack,
   selectRenderDoc,
   getSelectedIds,
-} from './ChartEditorContext';
+} from '@/lib/chart-editor-core';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {
   buildTimedTempos,

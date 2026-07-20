@@ -18,7 +18,7 @@ import type {HighwayRendererHandle} from '../DrumHighwayPreview';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import type {HighwayMode} from '@/lib/preview/highway';
-import type {ToolMode} from '../ChartEditorContext';
+import type {ToolMode} from '@/lib/chart-editor-core';
 
 export interface HighwaySyncInputs {
   rendererHandleRef: RefObject<HighwayRendererHandle | null>;

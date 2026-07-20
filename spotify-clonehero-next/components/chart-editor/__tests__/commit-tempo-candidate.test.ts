@@ -28,7 +28,7 @@ import {
   chartEditorReducer,
   initialState,
   type ChartEditorState,
-} from '../ChartEditorContext';
+} from '@/lib/chart-editor-core';
 
 const RES = 480;
 

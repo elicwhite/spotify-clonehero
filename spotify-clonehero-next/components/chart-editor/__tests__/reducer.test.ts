@@ -13,7 +13,7 @@ import {
   initialState,
   selectRenderDoc,
   type ChartEditorState,
-} from '../ChartEditorContext';
+} from '@/lib/chart-editor-core';
 import type {EditCommand} from '../commands';
 import {AddNoteCommand} from '../commands';
 import {DEFAULT_DRUMS_EXPERT_SCOPE, DEFAULT_VOCALS_SCOPE} from '../scope';

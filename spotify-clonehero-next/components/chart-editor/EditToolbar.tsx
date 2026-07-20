@@ -25,7 +25,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {formatForDisplay} from '@tanstack/react-hotkeys';
-import {useChartEditorContext, type ToolMode} from './ChartEditorContext';
+import {useChartEditorContext} from './ChartEditorContext';
+import type {ToolMode} from '@/lib/chart-editor-core';
 import {useUndoRedo} from './hooks/useEditCommands';
 import {cn} from '@/lib/utils';
 

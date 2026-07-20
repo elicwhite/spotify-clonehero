@@ -1,11 +1,8 @@
 'use client';
 
 import {useEffect, useRef} from 'react';
-import {
-  useChartEditorContext,
-  getSelectedIds,
-  selectActiveTrack,
-} from './ChartEditorContext';
+import {useChartEditorContext} from './ChartEditorContext';
+import {getSelectedIds, selectActiveTrack} from '@/lib/chart-editor-core';
 import {trackKeyFromScope} from './scope';
 import {useExecuteCommand, useUndoRedo} from './hooks/useEditCommands';
 import {

@@ -29,7 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {useChartEditorContext, type ToolMode} from './ChartEditorContext';
+import {useChartEditorContext} from './ChartEditorContext';
+import type {ToolMode} from '@/lib/chart-editor-core';
 import {useUndoRedo} from './hooks/useEditCommands';
 import NoteInspector from './NoteInspector';
 import LoopControls from './LoopControls';

@@ -3,13 +3,13 @@
 import {useCallback} from 'react';
 import {useHotkey} from '@tanstack/react-hotkeys';
 import type {Hotkey} from '@tanstack/react-hotkeys';
+import {useChartEditorContext} from '../ChartEditorContext';
 import {
-  useChartEditorContext,
   getSelectedIds,
   getFirstSelectedId,
   selectActiveTrack,
   type ToolMode,
-} from '../ChartEditorContext';
+} from '@/lib/chart-editor-core';
 import {trackKeyFromScope} from '../scope';
 import {useExecuteCommand, useUndoRedo} from './useEditCommands';
 import {

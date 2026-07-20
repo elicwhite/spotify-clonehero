@@ -46,7 +46,7 @@ import {
   getSelectedIds,
   type ChartEditorAction,
   type ChartEditorState,
-} from '../ChartEditorContext';
+} from '@/lib/chart-editor-core';
 import type {EditorCapabilities} from '../capabilities';
 import {AFFORDANCES} from '../affordances';
 import type {EntityKind} from '@/lib/chart-edit';

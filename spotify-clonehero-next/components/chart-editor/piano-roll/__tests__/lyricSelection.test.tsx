@@ -21,9 +21,8 @@ import PianoRollTimeline from '../PianoRollTimeline';
 import {
   ChartEditorProvider,
   useChartEditorContext,
-  getSelectedIds,
-  type ChartEditorState,
 } from '../../ChartEditorContext';
+import {getSelectedIds, type ChartEditorState} from '@/lib/chart-editor-core';
 import {retimeChart} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {makeFixtureDoc} from '../../__tests__/fixtures';

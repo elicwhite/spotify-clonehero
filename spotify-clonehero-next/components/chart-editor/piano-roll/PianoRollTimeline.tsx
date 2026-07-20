@@ -90,8 +90,8 @@ import {
   shiftOnsets,
 } from '@/lib/drum-transcription/pipeline/repredict';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
-import {useChartEditorContext, selectRenderDoc} from '../ChartEditorContext';
-import {getSelectedIds} from '../ChartEditorContext';
+import {useChartEditorContext} from '../ChartEditorContext';
+import {getSelectedIds, selectRenderDoc} from '@/lib/chart-editor-core';
 import {
   entityContextFromScope,
   isTrackScope,

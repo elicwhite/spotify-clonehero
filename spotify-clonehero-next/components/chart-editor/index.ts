@@ -1,9 +1,10 @@
 // Barrel export for components/chart-editor
 
 // Context
+export {ChartEditorProvider, useChartEditorContext} from './ChartEditorContext';
+
+// Headless editor core (reducer, history, selection — @/lib/chart-editor-core)
 export {
-  ChartEditorProvider,
-  useChartEditorContext,
   getSelectedIds,
   getFirstSelectedId,
   isAnythingSelected,
@@ -13,7 +14,7 @@ export {
   type ChartEditorContextValue,
   type PendingTempoCandidate,
   type ToolMode,
-} from './ChartEditorContext';
+} from '@/lib/chart-editor-core';
 
 // Editor scope (replaces hardcoded expert-drums lookups)
 export {

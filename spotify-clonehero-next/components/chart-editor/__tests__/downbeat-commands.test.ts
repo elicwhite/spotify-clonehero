@@ -14,7 +14,7 @@ import {
   UnmarkDownbeatCommand,
   RephaseDownbeatsCommand,
 } from '../commands';
-import {chartEditorReducer, initialState} from '../ChartEditorContext';
+import {chartEditorReducer, initialState} from '@/lib/chart-editor-core';
 import {expectDocsEqual} from './fixtures';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import {
