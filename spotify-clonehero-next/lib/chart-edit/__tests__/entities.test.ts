@@ -13,11 +13,13 @@ import {
   listLyricTicks,
   listPhraseEndTicks,
   listPhraseStartTicks,
+  guitarSchema,
   moveLyric,
   movePhraseEnd,
   movePhraseStart,
   noteId,
 } from '../index';
+import {addNote} from '../entities/notes';
 import {emptyTrackData} from './test-utils';
 import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 
@@ -35,6 +37,12 @@ function emptyChart(): ChartDocument {
 function chartWithDrumTrack(): ChartDocument {
   const doc = emptyChart();
   doc.parsedChart.trackData.push(emptyTrackData('drums', 'expert'));
+  return doc;
+}
+
+function chartWithGuitarTrack(): ChartDocument {
+  const doc = emptyChart();
+  doc.parsedChart.trackData.push(emptyTrackData('guitar', 'expert'));
   return doc;
 }
 
@@ -311,6 +319,98 @@ describe('entityHandlers dispatch', () => {
     );
     expect(moved).toBeDefined();
     expect(!!(moved!.flags & noteFlags.cymbal)).toBeFalsy();
+  });
+
+  it('note handler resolves the guitar schema from trackKey (plan 0067): green moves by tick and lane', () => {
+    const doc = chartWithGuitarTrack();
+    addNote(
+      doc.parsedChart.trackData[0],
+      {tick: 480, type: noteTypes.green},
+      guitarSchema,
+    );
+    const ctx = {
+      trackKey: {instrument: 'guitar', difficulty: 'expert'},
+    } as const;
+
+    const cloned = cloneDocFor('note', doc, ctx);
+    const newId = entityHandlers.note.move(
+      cloned,
+      noteId({tick: 480, type: noteTypes.green}),
+      240,
+      1,
+      ctx,
+    );
+    // Guitar lane order is open,green,red,yellow,blue,orange — green (lane 1)
+    // shifted +1 lands on red.
+    expect(newId).toBe(noteId({tick: 720, type: noteTypes.red}));
+    // Original untouched.
+    expect(doc.parsedChart.trackData[0].noteEventGroups[0][0].tick).toBe(480);
+  });
+
+  it('note handler resolves the guitar schema from trackKey (plan 0067): orange moves by tick and lane', () => {
+    const doc = chartWithGuitarTrack();
+    addNote(
+      doc.parsedChart.trackData[0],
+      {tick: 960, type: noteTypes.orange},
+      guitarSchema,
+    );
+    const ctx = {
+      trackKey: {instrument: 'guitar', difficulty: 'expert'},
+    } as const;
+
+    const cloned = cloneDocFor('note', doc, ctx);
+    const newId = entityHandlers.note.move(
+      cloned,
+      noteId({tick: 960, type: noteTypes.orange}),
+      -240,
+      -1,
+      ctx,
+    );
+    expect(newId).toBe(noteId({tick: 720, type: noteTypes.blue}));
+  });
+
+  it('note handler resolves the guitar schema from trackKey (plan 0067): open moves by tick and lane', () => {
+    const doc = chartWithGuitarTrack();
+    addNote(
+      doc.parsedChart.trackData[0],
+      {tick: 0, type: noteTypes.open},
+      guitarSchema,
+    );
+    const ctx = {
+      trackKey: {instrument: 'guitar', difficulty: 'expert'},
+    } as const;
+
+    const cloned = cloneDocFor('note', doc, ctx);
+    // Tick-only move (guitar has no laneShiftExcludes yet, so exercise the
+    // tick axis, which is unambiguous regardless of that future change).
+    const newId = entityHandlers.note.move(
+      cloned,
+      noteId({tick: 0, type: noteTypes.open}),
+      480,
+      0,
+      ctx,
+    );
+    expect(newId).toBe(noteId({tick: 480, type: noteTypes.open}));
+  });
+
+  it('note handler on a guitar track under a drums4LaneSchema-only id is a no-op (cross-schema id never matches)', () => {
+    // Before plan 0067, resolving the schema for a guitar trackKey still
+    // pinned drums4LaneSchema, so a drum-named id like "480:redDrum" would
+    // have parsed and (wrongly) matched. Confirms guitar note ids only
+    // parse under the guitar schema, not the drum schema.
+    const doc = chartWithGuitarTrack();
+    addNote(
+      doc.parsedChart.trackData[0],
+      {tick: 480, type: noteTypes.red},
+      guitarSchema,
+    );
+    const ctx = {
+      trackKey: {instrument: 'guitar', difficulty: 'expert'},
+    } as const;
+    const cloned = cloneDocFor('note', doc, ctx);
+    const drumStyleId = noteId({tick: 480, type: noteTypes.redDrum});
+    const newId = entityHandlers.note.move(cloned, drumStyleId, 240, 0, ctx);
+    expect(newId).toBe(drumStyleId);
   });
 
   it('section handler returns the new id when the tick changes', () => {

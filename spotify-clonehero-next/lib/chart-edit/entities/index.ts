@@ -45,6 +45,7 @@ import {
   phraseStartId,
 } from '../helpers/phrases';
 import {drums4LaneSchema} from '../instruments/drums';
+import {schemaForTrack, type InstrumentSchema} from '../instruments';
 import {
   schemaNoteId,
   parseSchemaNoteId,
@@ -125,6 +126,25 @@ function resolveTrack(
   return findTrackOnly(doc, ctx.trackKey);
 }
 
+/**
+ * Resolve both the target track and its `InstrumentSchema` for note
+ * handlers. Schema is chosen from the track's instrument (honoring
+ * `doc.parsedChart.drumType` for drum tracks) rather than a fixed schema —
+ * see `schemaForTrack`. Returns null for either when `ctx.trackKey` is
+ * missing or the track can't be found, matching the existing null-track
+ * no-op behavior.
+ */
+function resolveTrackAndSchema(
+  doc: ChartDocument,
+  ctx?: EntityContext,
+): {track: ParsedTrackData | null; schema: InstrumentSchema} {
+  const track = resolveTrack(doc, ctx);
+  const schema = track
+    ? (schemaForTrack(track, doc.parsedChart.drumType) ?? drums4LaneSchema)
+    : drums4LaneSchema;
+  return {track, schema};
+}
+
 function resolvePartName(ctx?: EntityContext): string {
   return ctx?.partName ?? DEFAULT_VOCALS_PART;
 }
@@ -160,11 +180,14 @@ export interface EntityKindHandler {
 // ---------------------------------------------------------------------------
 // Note ID helpers (re-exported for the command layer)
 //
-// The active drum schema is always `drums4LaneSchema` here — no consumer
-// wires up 5-lane drums or a non-drum note track yet (see
-// `lib/chart-edit/instruments/drums.ts`'s `drumSchemaFor` note), so this
-// handler is drums4LaneSchema-scoped. The lane/flag math itself is generic
-// (`./notes.ts`, plan 0037 Task 4) — only the schema choice here is pinned.
+// The lane/flag math is generic (`./notes.ts`, plan 0037 Task 4); the
+// schema itself is resolved per-call from `ctx.trackKey` + `drumType` via
+// `resolveTrackAndSchema` (plan 0067), so `noteHandler` works for any
+// instrument's track, not just 4-lane drums. When `ctx.trackKey` is
+// missing (or doesn't resolve), the handlers fall back to
+// `drums4LaneSchema` purely to have a non-null schema to parse ids
+// against — the missing/unresolved track still makes every method a
+// no-op, so the fallback schema choice has no observable effect.
 // ---------------------------------------------------------------------------
 
 export function noteId(note: {tick: number; type: NoteType}): string {
@@ -177,30 +200,28 @@ export function noteId(note: {tick: number; type: NoteType}): string {
 
 const noteHandler: EntityKindHandler = {
   listIds(doc, ctx) {
-    const track = resolveTrack(doc, ctx);
+    const {track, schema} = resolveTrackAndSchema(doc, ctx);
     if (!track) return [];
-    return listNotes(track, drums4LaneSchema).map(n =>
-      schemaNoteId(n.tick, n.type),
-    );
+    return listNotes(track, schema).map(n => schemaNoteId(n.tick, n.type));
   },
   locate(doc, id, ctx) {
-    const parsed = parseSchemaNoteId(id, drums4LaneSchema);
+    const {track, schema} = resolveTrackAndSchema(doc, ctx);
+    const parsed = parseSchemaNoteId(id, schema);
     if (!parsed) return null;
-    const track = resolveTrack(doc, ctx);
     if (!track) return null;
-    const found = listNotes(track, drums4LaneSchema).find(
+    const found = listNotes(track, schema).find(
       n => n.tick === parsed.tick && n.type === parsed.type,
     );
     if (!found) return null;
     return {
       tick: found.tick,
-      lane: schemaTypeToLane(drums4LaneSchema, found.type),
+      lane: schemaTypeToLane(schema, found.type),
     };
   },
   move(doc, id, tickDelta, laneDelta, ctx) {
-    const parsed = parseSchemaNoteId(id, drums4LaneSchema);
+    const {track, schema} = resolveTrackAndSchema(doc, ctx);
+    const parsed = parseSchemaNoteId(id, schema);
     if (!parsed) return id;
-    const track = resolveTrack(doc, ctx);
     if (!track) return id;
 
     const moved = moveNote(
@@ -210,7 +231,7 @@ const noteHandler: EntityKindHandler = {
       parsed.type,
       tickDelta,
       laneDelta,
-      drums4LaneSchema,
+      schema,
     );
     return moved ? schemaNoteId(moved.tick, moved.type) : id;
   },
