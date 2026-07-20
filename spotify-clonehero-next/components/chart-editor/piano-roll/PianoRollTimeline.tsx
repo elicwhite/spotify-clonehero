@@ -82,6 +82,10 @@ import {
   DEFAULT_VOCALS_PART,
   getAudioAnchor,
   schemaForTrack,
+  padLaneRange,
+  typeToLane as schemaTypeToLane,
+  laneToType as schemaLaneToType,
+  drums4LaneSchema,
 } from '@/lib/chart-edit';
 import type {ChartDocument, InstrumentSchema} from '@/lib/chart-edit';
 import type {Synctrack} from '@/lib/tempo-map/types';
@@ -117,7 +121,6 @@ import {
   SetLyricTextCommand,
   AddPhraseCommand,
   DeletePhraseCommand,
-  laneToType,
   FIRST_PAD_LANE,
   LAST_PAD_LANE,
   KICK_LANE,
@@ -383,6 +386,9 @@ interface ChartScene {
    *  into this array. Empty when `showPianoRollNotes` is off or there's no
    *  active track. */
   lanes: PianoRollLane[];
+  /** Active scope's instrument schema — drives lane semantics for note
+   *  mutation (add/drag/marquee). Null when there's no active track. */
+  schema: InstrumentSchema | null;
   totalMs: number;
   durationMs: number;
   /** Audio-extended beat-grid span (shared with the downbeat commands). */
@@ -739,6 +745,7 @@ export default function PianoRollTimeline({
       sections,
       notes,
       lanes,
+      schema,
       totalMs,
       durationMs,
       endTick,
@@ -1523,10 +1530,14 @@ export default function PianoRollTimeline({
         if (hit) {
           // Toggle: a note already here is removed.
           executeCommand(new DeleteNotesCommand(new Set([hit.id]), trackKey));
-        } else {
+        } else if (scene.schema) {
           // Same shared prospective-note computation the ghost preview and the
           // highway use, so all three predict the identical note.
-          const prospective = prospectiveNoteAt(lane, snappedTickAt(x));
+          const prospective = prospectiveNoteAt(
+            lane,
+            snappedTickAt(x),
+            scene.schema,
+          );
           executeCommand(
             new AddNoteCommand(
               {
@@ -1536,6 +1547,7 @@ export default function PianoRollTimeline({
                 flags: prospective.flags,
               },
               trackKey,
+              scene.schema,
             ),
           );
         }
@@ -1741,6 +1753,16 @@ export default function PianoRollTimeline({
         const dx = start ? x - start.x : 0;
         const dy = start ? y - start.y : 0;
         if (drag.active || exceedsDragThreshold(dx, dy)) {
+          const {min: minPadLane, max: maxPadLane} = scene.schema
+            ? padLaneRange(scene.schema)
+            : {min: FIRST_PAD_LANE, max: LAST_PAD_LANE};
+          const excludedLane =
+            scene.schema && scene.schema.laneShiftExcludes?.length
+              ? schemaTypeToLane(
+                  scene.schema,
+                  scene.schema.laneShiftExcludes[0],
+                )
+              : KICK_LANE;
           const {tickDelta, laneDelta} = computeNoteDragDelta({
             anchorTick: drag.anchorTick,
             anchorLane: drag.anchorLane,
@@ -1748,9 +1770,9 @@ export default function PianoRollTimeline({
             cursorLane: laneAtY(y, laneGeometry()),
             selectionSize: getSelectedIds(editStateRef.current, 'note').size,
             prevLaneDelta: drag.laneDelta,
-            minPadLane: FIRST_PAD_LANE,
-            maxPadLane: LAST_PAD_LANE,
-            excludedLane: KICK_LANE,
+            minPadLane,
+            maxPadLane,
+            excludedLane,
           });
           if (
             !drag.active ||
@@ -1787,7 +1809,10 @@ export default function PianoRollTimeline({
           ? selectNotesInRange(
               scene.notes.map(n => ({
                 tick: n.tick,
-                type: laneToType(n.lane),
+                type: schemaLaneToType(
+                  scene.schema ?? drums4LaneSchema,
+                  n.lane,
+                ),
                 length: 0,
                 flags: 0,
               })),
@@ -1916,7 +1941,9 @@ export default function PianoRollTimeline({
       if (placing && !hovered) {
         const lane = laneAtY(y, laneGeometry());
         setGhost(
-          lane === null ? null : prospectiveNoteAt(lane, snappedTickAt(x)),
+          lane === null || !scene.schema
+            ? null
+            : prospectiveNoteAt(lane, snappedTickAt(x), scene.schema),
         );
       } else {
         setGhost(null);
@@ -2953,11 +2980,14 @@ function drawNotes(
     let cymbal = note.cymbal;
     if (dragActive && selected) {
       tick = Math.max(0, note.tick + drag.tickDelta);
-      const isPad = note.lane >= FIRST_PAD_LANE && note.lane <= LAST_PAD_LANE;
+      const {min: minPadLane, max: maxPadLane} = scene.schema
+        ? padLaneRange(scene.schema)
+        : {min: FIRST_PAD_LANE, max: LAST_PAD_LANE};
+      const isPad = note.lane >= minPadLane && note.lane <= maxPadLane;
       if (drag.laneDelta !== 0 && isPad) {
         lane = Math.max(
-          FIRST_PAD_LANE,
-          Math.min(LAST_PAD_LANE, note.lane + drag.laneDelta),
+          minPadLane,
+          Math.min(maxPadLane, note.lane + drag.laneDelta),
         );
       }
       // Would-be drop on an illegal lane renders as a tom (§6 affordance).

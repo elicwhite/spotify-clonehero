@@ -9,8 +9,22 @@ import {
   exceedsDragThreshold,
   DRAG_THRESHOLD_PX,
 } from '../gestures';
+import {guitarSchema, padLaneRange, typeToLane} from '@/lib/chart-edit';
 
 const PADS = {minPadLane: 0, maxPadLane: 3, excludedLane: 4};
+
+// Guitar's pad range/excluded lane (open, plan 0067 point 4) — used to
+// verify the piano-roll drag math generalizes off the drum schema.
+const {min: GUITAR_MIN_PAD, max: GUITAR_MAX_PAD} = padLaneRange(guitarSchema);
+const GUITAR_OPEN_LANE = typeToLane(
+  guitarSchema,
+  guitarSchema.lanes[0].noteType,
+);
+const GUITAR_PADS = {
+  minPadLane: GUITAR_MIN_PAD,
+  maxPadLane: GUITAR_MAX_PAD,
+  excludedLane: GUITAR_OPEN_LANE,
+};
 
 describe('exceedsDragThreshold', () => {
   it('is false at/under the threshold and true past it', () => {
@@ -104,5 +118,33 @@ describe('computeNoteDragDelta', () => {
       ...PADS,
     });
     expect(laneDelta).toBe(2);
+  });
+
+  describe('guitarSchema pad range (plan 0067 point 4)', () => {
+    it('clamps at the guitar pad-lane boundaries', () => {
+      const {laneDelta} = computeNoteDragDelta({
+        anchorTick: 0,
+        anchorLane: 3, // yellow
+        snappedCursorTick: 0,
+        cursorLane: 99, // out of range → clamps to maxPadLane (orange, 5)
+        selectionSize: 1,
+        prevLaneDelta: 0,
+        ...GUITAR_PADS,
+      });
+      expect(laneDelta).toBe(2); // 5 - 3
+    });
+
+    it('open behaves like kick: an open anchor never changes lane', () => {
+      const {laneDelta} = computeNoteDragDelta({
+        anchorTick: 0,
+        anchorLane: GUITAR_OPEN_LANE,
+        snappedCursorTick: 0,
+        cursorLane: GUITAR_MAX_PAD,
+        selectionSize: 1,
+        prevLaneDelta: 0,
+        ...GUITAR_PADS,
+      });
+      expect(laneDelta).toBe(0);
+    });
   });
 });
