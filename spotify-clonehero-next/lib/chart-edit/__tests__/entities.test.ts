@@ -381,8 +381,8 @@ describe('entityHandlers dispatch', () => {
     } as const;
 
     const cloned = cloneDocFor('note', doc, ctx);
-    // Tick-only move (guitar has no laneShiftExcludes yet, so exercise the
-    // tick axis, which is unambiguous regardless of that future change).
+    // Tick-only move (open is lane-shift-excluded; lane delta 0 exercises
+    // the tick axis without touching the excluded lane).
     const newId = entityHandlers.note.move(
       cloned,
       noteId({tick: 0, type: noteTypes.open}),

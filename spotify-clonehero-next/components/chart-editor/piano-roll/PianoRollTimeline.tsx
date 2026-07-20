@@ -1750,7 +1750,7 @@ export default function PianoRollTimeline({
             prevLaneDelta: drag.laneDelta,
             minPadLane: FIRST_PAD_LANE,
             maxPadLane: LAST_PAD_LANE,
-            kickLane: KICK_LANE,
+            excludedLane: KICK_LANE,
           });
           if (
             !drag.active ||

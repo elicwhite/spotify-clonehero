@@ -151,7 +151,7 @@ export const selectMoveTool: EditorTool = {
           prevLaneDelta: noteDrag.laneDelta,
           minPadLane: FIRST_PAD_LANE,
           maxPadLane: LAST_PAD_LANE,
-          kickLane: KICK_LANE,
+          excludedLane: KICK_LANE,
         });
         if (
           !noteDrag.active ||

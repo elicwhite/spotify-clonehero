@@ -57,7 +57,7 @@ describe('view parity: note drag → MoveEntitiesCommand', () => {
       prevLaneDelta: 0,
       minPadLane: 0,
       maxPadLane: 3,
-      kickLane: KICK_LANE,
+      excludedLane: KICK_LANE,
     };
     const ids = ['480:redDrum'];
 
@@ -98,7 +98,7 @@ describe('view parity: note drag → MoveEntitiesCommand', () => {
       prevLaneDelta: 0,
       minPadLane: 0,
       maxPadLane: 3,
-      kickLane: KICK_LANE,
+      excludedLane: KICK_LANE,
     };
     const ids = ['480:redDrum', '1440:blueDrum'];
     const delta = computeNoteDragDelta(gesture);
@@ -132,7 +132,7 @@ describe('view parity: note drag → MoveEntitiesCommand', () => {
       prevLaneDelta: 0,
       minPadLane: 0,
       maxPadLane: 3,
-      kickLane: KICK_LANE,
+      excludedLane: KICK_LANE,
     });
     expect(delta.laneDelta).toBe(-1);
     const result = new MoveEntitiesCommand(

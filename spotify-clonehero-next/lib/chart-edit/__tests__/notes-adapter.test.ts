@@ -248,15 +248,30 @@ describe('drums4LaneSchema-specific note adapter behavior', () => {
 });
 
 // ---------------------------------------------------------------------------
-// guitarSchema-specific: no lane-shift exclusions, no tri-state flags
+// guitarSchema-specific: open is lane-shift-excluded (kick analogy), no
+// tri-state flags
 // ---------------------------------------------------------------------------
 
 describe('guitarSchema-specific note adapter behavior', () => {
   const schema = guitarSchema;
 
-  it('every lane participates in the shift axis (no kick-like exclusion)', () => {
-    expect(shiftLane(schema, noteTypes.open, 1)).toBe(noteTypes.green);
-    expect(shiftLane(schema, noteTypes.green, -1)).toBe(noteTypes.open);
+  it('open refuses lane-shift like drums kick', () => {
+    expect(shiftLane(schema, noteTypes.open, 1)).toBe(noteTypes.open);
+    expect(shiftLane(schema, noteTypes.open, -3)).toBe(noteTypes.open);
+  });
+
+  it('padLaneRange excludes open (green..orange only)', () => {
+    const {min, max} = padLaneRange(schema);
+    expect(min).toBe(
+      schema.lanes.find(l => l.noteType === noteTypes.green)!.index,
+    );
+    expect(max).toBe(
+      schema.lanes.find(l => l.noteType === noteTypes.orange)!.index,
+    );
+  });
+
+  it('pad lanes clamp at the non-excluded boundary, never sliding into open', () => {
+    expect(shiftLane(schema, noteTypes.green, -1)).toBe(noteTypes.green); // clamps, doesn't become open
     expect(shiftLane(schema, noteTypes.orange, 1)).toBe(noteTypes.orange); // clamps
   });
 

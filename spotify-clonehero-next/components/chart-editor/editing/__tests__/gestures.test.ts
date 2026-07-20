@@ -10,7 +10,7 @@ import {
   DRAG_THRESHOLD_PX,
 } from '../gestures';
 
-const PADS = {minPadLane: 0, maxPadLane: 3, kickLane: 4};
+const PADS = {minPadLane: 0, maxPadLane: 3, excludedLane: 4};
 
 describe('exceedsDragThreshold', () => {
   it('is false at/under the threshold and true past it', () => {

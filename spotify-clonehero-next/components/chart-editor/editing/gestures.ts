@@ -44,13 +44,15 @@ export interface NoteDragInput {
   /** Highest pad lane index, for clamping a resolved pad cursor lane. */
   maxPadLane: number;
   /**
-   * Kick's editor lane — excluded from the lane-change axis regardless of
-   * where in the schema's lane order it sits (unlike `minPadLane`/
-   * `maxPadLane`, this is an exact exclusion, not a range: a `cursorLane`
-   * beyond the pad range but not equal to `kickLane` still clamps into
-   * range, e.g. a drag that overshoots past the last pad).
+   * The schema's lane-shift-excluded lane (drums' kick, five-fret's open),
+   * if any — excluded from the lane-change axis regardless of where in the
+   * schema's lane order it sits (unlike `minPadLane`/`maxPadLane`, this is
+   * an exact exclusion, not a range: a `cursorLane` beyond the pad range
+   * but not equal to `excludedLane` still clamps into range, e.g. a drag
+   * that overshoots past the last pad). Undefined for schemas where every
+   * lane participates in the shift axis.
    */
-  kickLane: number;
+  excludedLane?: number;
 }
 
 export interface NoteDragDelta {
@@ -68,8 +70,9 @@ export interface NoteDragDelta {
  *   note's tick, so the grabbed note lands exactly on the grid while every
  *   other selected note keeps its relative (possibly off-grid) offset.
  * - **Lane change is single-note only:** a multi-note selection
- *   (`selectionSize > 1`) locks lanes — the drag moves in time only. A kick
- *   anchor never changes lane either (kick spans the full width).
+ *   (`selectionSize > 1`) locks lanes — the drag moves in time only. An
+ *   excluded-lane anchor (kick, open) never changes lane either (it spans
+ *   the full width).
  * - Pad lanes clamp to `[minPadLane, maxPadLane]`.
  */
 export function computeNoteDragDelta(input: NoteDragInput): NoteDragDelta {
@@ -79,9 +82,9 @@ export function computeNoteDragDelta(input: NoteDragInput): NoteDragDelta {
   const cursorLane = input.cursorLane;
   if (
     !laneLocked &&
-    input.anchorLane !== input.kickLane &&
+    input.anchorLane !== input.excludedLane &&
     cursorLane !== null &&
-    cursorLane !== input.kickLane
+    cursorLane !== input.excludedLane
   ) {
     const clamped = Math.max(
       input.minPadLane,

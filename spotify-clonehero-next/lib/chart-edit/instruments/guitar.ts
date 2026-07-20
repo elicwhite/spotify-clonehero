@@ -78,6 +78,7 @@ function fiveFretSchema(instrument: Instrument): InstrumentSchema {
       {flag: 'hopo', label: 'HOPO', defaultKey: 'h'},
       {flag: 'tap', label: 'Tap', defaultKey: 't'},
     ],
+    laneShiftExcludes: [noteTypes.open],
     supportsSustain: true,
     highwayWidth: 1,
     hitboxTexturePath: '/assets/preview/assets/isolated.png',
