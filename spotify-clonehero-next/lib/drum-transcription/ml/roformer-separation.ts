@@ -3,9 +3,9 @@
  *
  * Runs the shared bs-roformer-sw 6-stem separator
  * (lib/tempo-map/stem-separation.ts) and keeps only the drum stem, stored to
- * the fingerprint-keyed OPFS stem cache (storage/stem-cache.ts) as
- * interleaved stereo 44.1 kHz PCM. Keying by input fingerprint (audio bytes
- * + separator identity) rather than by project makes separation resumable
+ * the fingerprint-keyed OPFS stem cache (lib/audio-pipeline/stem-cache.ts)
+ * as planar stereo 44.1 kHz PCM. Keying by input fingerprint (audio bytes +
+ * separator identity) rather than by project makes separation resumable
  * across tab closes AND reusable across projects created from the same
  * upload.
  *
@@ -21,13 +21,14 @@ import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import type {SeparationWorkerMessage} from './separation-worker';
 import {
   computeStemFingerprint,
-  storeCachedStem,
-  loadCachedStem,
-  hasCachedStem,
-  storeCachedStemOpus,
-  loadCachedStemOpus,
-  hasCachedStemOpus,
-} from '../storage/stem-cache';
+  ROFORMER_SEPARATOR_ID,
+  storeStem,
+  loadStem,
+  hasStem,
+  storeStemOpus,
+  loadStemOpus,
+  hasStemOpus,
+} from '@/lib/audio-pipeline/stem-cache';
 import {
   getProject,
   updateProject,
@@ -35,12 +36,6 @@ import {
   readOriginalAudio,
   loadFullMixPcm,
 } from '../storage/opfs';
-
-// Identity string only — the model itself is loaded inside
-// ml/separation-worker.ts (same URL, so the OPFS model-cache download is
-// shared with lib/tempo-map/pipeline-worker.ts).
-const ROFORMER_MODEL_URL =
-  'https://huggingface.co/elicwhite/bs-roformer-sw-6stem-onnx/resolve/main/bs_roformer_sw_6stem_fp16.onnx';
 
 const NUM_CHANNELS = 2;
 
@@ -57,13 +52,6 @@ export type DrumSeparationProgressCallback = (
 // ---------------------------------------------------------------------------
 // Fingerprint-keyed stem storage
 // ---------------------------------------------------------------------------
-
-/**
- * Identity of this separation configuration, hashed into the stem-cache
- * fingerprint. Includes the model URL plus the output shape, so a model bump
- * (or output-format change) invalidates cached stems.
- */
-export const DRUM_SEPARATOR_ID = `${ROFORMER_MODEL_URL}|drums|stereo|44100`;
 
 const DRUMS_STEM = 'drums';
 const VOCALS_STEM = 'vocals';
@@ -92,7 +80,10 @@ export async function ensureProjectStemFingerprint(
     const opus = await readSongOpus(projectId);
     bytes = opus ?? ((await loadFullMixPcm(projectId)).buffer as ArrayBuffer);
   }
-  const fingerprint = await computeStemFingerprint(bytes, DRUM_SEPARATOR_ID);
+  const fingerprint = await computeStemFingerprint(
+    bytes,
+    ROFORMER_SEPARATOR_ID,
+  );
   await updateProject(projectId, {stemFingerprint: fingerprint});
   return fingerprint;
 }
@@ -125,10 +116,20 @@ async function loadLegacyDrumStem(projectId: string): Promise<Float32Array> {
 export async function loadDrumStem(projectId: string): Promise<Float32Array> {
   try {
     const fingerprint = await ensureProjectStemFingerprint(projectId);
-    return await loadCachedStem(fingerprint, DRUMS_STEM);
+    const stem = await loadStem(fingerprint, DRUMS_STEM);
+    if (stem) {
+      const n = Math.min(stem.left.length, stem.right.length);
+      const interleaved = new Float32Array(n * NUM_CHANNELS);
+      for (let i = 0; i < n; i++) {
+        interleaved[i * 2] = stem.left[i];
+        interleaved[i * 2 + 1] = stem.right[i];
+      }
+      return interleaved;
+    }
   } catch {
-    return loadLegacyDrumStem(projectId);
+    // Fingerprint unavailable (e.g. no stored audio yet): legacy fallback below.
   }
+  return loadLegacyDrumStem(projectId);
 }
 
 /** Whether a separated drum stem is available for this project (in the
@@ -136,7 +137,7 @@ export async function loadDrumStem(projectId: string): Promise<Float32Array> {
 export async function hasDrumStem(projectId: string): Promise<boolean> {
   try {
     const fingerprint = await ensureProjectStemFingerprint(projectId);
-    if (await hasCachedStem(fingerprint, DRUMS_STEM)) return true;
+    if (await hasStem(fingerprint, DRUMS_STEM)) return true;
   } catch {
     // Fingerprint unavailable (e.g. no stored audio yet): legacy check below.
   }
@@ -161,14 +162,16 @@ export async function hasDrumStem(projectId: string): Promise<boolean> {
  */
 export async function loadVocalsStem(projectId: string): Promise<Uint8Array> {
   const fingerprint = await ensureProjectStemFingerprint(projectId);
-  return loadCachedStemOpus(fingerprint, VOCALS_STEM);
+  const vocals = await loadStemOpus(fingerprint, VOCALS_STEM);
+  if (!vocals) throw new Error('No vocals stem in cache');
+  return vocals;
 }
 
 /** Whether a separated vocals stem is available for this project. */
 export async function hasVocalsStem(projectId: string): Promise<boolean> {
   try {
     const fingerprint = await ensureProjectStemFingerprint(projectId);
-    return await hasCachedStemOpus(fingerprint, VOCALS_STEM);
+    return await hasStemOpus(fingerprint, VOCALS_STEM);
   } catch {
     return false;
   }
@@ -267,7 +270,8 @@ export async function separateDrums(
   const {drumsLeft, drumsRight, vocalsLeft, vocalsRight} =
     await runSeparationInWorker(left, right, onProgress);
 
-  // ---- 3. Interleave and store to the fingerprint-keyed stem cache ----
+  // ---- 3. Store to the fingerprint-keyed stem cache, and interleave the
+  // drum stem for the caller ----
   // Drums stay raw PCM (may be reprocessed by the CRNN later); vocals are
   // Opus-encoded (only ever consumed for lyric alignment, not re-analyzed).
   // Opus encoding uses OfflineAudioContext, which is main-thread-only.
@@ -281,13 +285,16 @@ export async function separateDrums(
     interleavedVocals[i * 2 + 1] = vocalsRight[i];
   }
   const fingerprint = await ensureProjectStemFingerprint(projectId);
-  await storeCachedStem(fingerprint, DRUMS_STEM, interleavedStem);
+  await storeStem(fingerprint, DRUMS_STEM, {
+    left: drumsLeft,
+    right: drumsRight,
+  });
   const vocalsOpus = await encodePcmToOpus(
     interleavedVocals,
     44100,
     NUM_CHANNELS,
   );
-  await storeCachedStemOpus(fingerprint, VOCALS_STEM, vocalsOpus);
+  await storeStemOpus(fingerprint, VOCALS_STEM, vocalsOpus);
 
   onProgress?.({step: 'done', percent: 1});
   return interleavedStem;

@@ -23,15 +23,17 @@ const computeStemFingerprint = jest.fn(
     return `fp(${Array.from(b).join(',')})|${separatorId}`;
   },
 );
-jest.mock('../../storage/stem-cache', () => ({
+jest.mock('../../../audio-pipeline/stem-cache', () => ({
   computeStemFingerprint: (...args: unknown[]) =>
     (computeStemFingerprint as any)(...args),
-  storeCachedStem: jest.fn(),
-  loadCachedStem: jest.fn(),
-  hasCachedStem: jest.fn(),
-  storeCachedStemOpus: jest.fn(),
-  loadCachedStemOpus: jest.fn(),
-  hasCachedStemOpus: jest.fn(),
+  ROFORMER_SEPARATOR_ID:
+    'https://huggingface.co/elicwhite/bs-roformer-sw-6stem-onnx/resolve/main/bs_roformer_sw_6stem_fp16.onnx|drums|stereo|44100|overlap0.25|fp16|libsoxr',
+  storeStem: jest.fn(),
+  loadStem: jest.fn(),
+  hasStem: jest.fn(),
+  storeStemOpus: jest.fn(),
+  loadStemOpus: jest.fn(),
+  hasStemOpus: jest.fn(),
 }));
 
 const getProject = jest.fn();
@@ -49,10 +51,8 @@ jest.mock('../../storage/opfs', () => ({
   loadFullMixPcm: (...args: unknown[]) => (loadFullMixPcm as any)(...args),
 }));
 
-import {
-  ensureProjectStemFingerprint,
-  DRUM_SEPARATOR_ID,
-} from '../roformer-separation';
+import {ensureProjectStemFingerprint} from '../roformer-separation';
+import {ROFORMER_SEPARATOR_ID} from '../../../audio-pipeline/stem-cache';
 
 describe('ensureProjectStemFingerprint', () => {
   beforeEach(() => {
@@ -75,9 +75,9 @@ describe('ensureProjectStemFingerprint', () => {
     const fp = await ensureProjectStemFingerprint('p1');
     expect(computeStemFingerprint).toHaveBeenCalledWith(
       expect.any(ArrayBuffer),
-      DRUM_SEPARATOR_ID,
+      ROFORMER_SEPARATOR_ID,
     );
-    expect(fp).toBe(`fp(1,2,3)|${DRUM_SEPARATOR_ID}`);
+    expect(fp).toBe(`fp(1,2,3)|${ROFORMER_SEPARATOR_ID}`);
     expect(readSongOpus).not.toHaveBeenCalled();
     expect(loadFullMixPcm).not.toHaveBeenCalled();
     expect(updateProject).toHaveBeenCalledWith('p1', {stemFingerprint: fp});
@@ -87,7 +87,7 @@ describe('ensureProjectStemFingerprint', () => {
     readOriginalAudio.mockResolvedValue(null);
     readSongOpus.mockResolvedValue(new Uint8Array([4, 5]).buffer);
     const fp = await ensureProjectStemFingerprint('p1');
-    expect(fp).toBe(`fp(4,5)|${DRUM_SEPARATOR_ID}`);
+    expect(fp).toBe(`fp(4,5)|${ROFORMER_SEPARATOR_ID}`);
     expect(loadFullMixPcm).not.toHaveBeenCalled();
   });
 
@@ -97,6 +97,6 @@ describe('ensureProjectStemFingerprint', () => {
     loadFullMixPcm.mockResolvedValue(new Float32Array([1, 2]));
     const fp = await ensureProjectStemFingerprint('p1');
     expect(loadFullMixPcm).toHaveBeenCalledWith('p1');
-    expect(fp).toContain(`|${DRUM_SEPARATOR_ID}`);
+    expect(fp).toContain(`|${ROFORMER_SEPARATOR_ID}`);
   });
 });

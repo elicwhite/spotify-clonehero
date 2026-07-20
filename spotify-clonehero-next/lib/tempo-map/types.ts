@@ -82,8 +82,8 @@ export interface PipelineRunRequest {
   left: Float32Array;
   right: Float32Array;
   sampleRate: number;
-  /** sha-256 hex of the source bytes, for the OPFS drum-stem cache. */
-  sourceHash: string | null;
+  /** Fingerprint of the source bytes, for the OPFS drum-stem cache. */
+  fingerprint: string | null;
   /**
    * Optional pre-separated drum stem, planar stereo at 44.1 kHz. When
    * provided and its length matches the 44.1k input, the worker skips

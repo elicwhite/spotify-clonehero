@@ -4,18 +4,15 @@
  * WASM/GPU memory.
  */
 
+import {
+  computeStemFingerprint,
+  ROFORMER_SEPARATOR_ID,
+} from '@/lib/audio-pipeline/stem-cache';
 import type {
   PipelineProgress,
   PipelineResult,
   PipelineWorkerMessage,
 } from './types';
-
-async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', bytes);
-  return Array.from(new Uint8Array(buf))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
 
 export interface TempoPipelineOptions {
   /** Raw source bytes; hashed for the OPFS drum-stem cache. */
@@ -55,8 +52,8 @@ export async function runTempoPipelineFromPcm(
   input: {left: Float32Array; right: Float32Array; sampleRate: number},
   options: TempoPipelineOptions = {},
 ): Promise<PipelineResult> {
-  const sourceHash = options.sourceBytes
-    ? await sha256Hex(options.sourceBytes)
+  const fingerprint = options.sourceBytes
+    ? await computeStemFingerprint(options.sourceBytes, ROFORMER_SEPARATOR_ID)
     : null;
 
   const {left, right, sampleRate} = input;
@@ -104,7 +101,7 @@ export async function runTempoPipelineFromPcm(
         left,
         right,
         sampleRate,
-        sourceHash,
+        fingerprint,
         drumStemStereo,
       },
       transfer,

@@ -28,11 +28,11 @@ import {runBeatThisOnnx} from './beat-this-onnx';
 import {runPostprocessor} from './beat-this-pp';
 import {computeDrumOnsetOffsetMs} from './drum-onset';
 import {
-  encodeStemCacheBytes,
-  decodeStemCacheBytes,
+  loadStem,
+  storeStem,
   stereoStemToMono,
   type StereoStem,
-} from './stem-cache-format';
+} from '@/lib/audio-pipeline/stem-cache';
 import {beatsToSynctrack, PL_LSQ_TOL_MS_DEFAULT} from './converter';
 import {computeMeterStats} from './meter-confidence';
 import {
@@ -63,12 +63,6 @@ const BEAT_THIS_MIN_BYTES = 70_000_000; // real size ~83 MB
 
 const SEPARATION_SAMPLE_RATE = 44100;
 
-// Bump when the separation pipeline changes in ways that affect output
-// (model swap, overlap, mixing, channel reduction) or the cache file
-// format changes (see stem-cache-format.ts).
-const STEM_CACHE_VERSION = 'v3_drums_stereo_gz_44k1_overlap0.25_fp16_libsoxr';
-const STEM_CACHE_DIR = 'tempo-map-stem-cache';
-
 function post(msg: PipelineWorkerMessage, transfer?: Transferable[]) {
   (self as unknown as Worker).postMessage(msg, {transfer: transfer ?? []});
 }
@@ -92,59 +86,6 @@ function downloadProgressAdapter(stage: PipelineProgress['stage']) {
       progress({stage, detail: msg});
     }
   };
-}
-
-// --- OPFS drum-stem cache ------------------------------------------------
-
-async function getStemCacheDir() {
-  const root = await navigator.storage.getDirectory();
-  return root.getDirectoryHandle(STEM_CACHE_DIR, {create: true});
-}
-
-function stemCacheKey(sourceHash: string, sampleCount: number) {
-  return `${sourceHash.slice(0, 32)}__${STEM_CACHE_VERSION}__N${sampleCount}.f32.gz`;
-}
-
-async function loadStemFromCache(
-  key: string,
-  sampleCount: number,
-): Promise<StereoStem | null> {
-  try {
-    const dir = await getStemCacheDir();
-    const fh = await dir.getFileHandle(key);
-    const file = await fh.getFile();
-    return await decodeStemCacheBytes(
-      new Uint8Array(await file.arrayBuffer()),
-      sampleCount,
-    );
-  } catch {
-    return null;
-  }
-}
-
-async function saveStemToCache(key: string, stem: StereoStem) {
-  try {
-    const dir = await getStemCacheDir();
-    const bytes = await encodeStemCacheBytes(stem);
-    const fh = await dir.getFileHandle(key, {create: true});
-    const w = await fh.createWritable();
-    await w.write(bytes);
-    await w.close();
-  } catch {
-    // Cache write failures are non-fatal.
-  }
-  // Stale entries from older cache versions (e.g. the v1 mono format) can
-  // never hit again — reclaim their OPFS space, best-effort.
-  try {
-    const dir = await getStemCacheDir();
-    for await (const name of dir.keys()) {
-      if (!name.includes(`__${STEM_CACHE_VERSION}__`)) {
-        await dir.removeEntry(name);
-      }
-    }
-  } catch {
-    // Pruning failures are non-fatal.
-  }
 }
 
 // --- pipeline ------------------------------------------------------------
@@ -174,7 +115,6 @@ async function run(req: PipelineRunRequest) {
   // pipeline/tempo-track.ts) consumes the stereo stem from the result, so
   // every source — caller, cache, fresh separation — must surface it.
   let drumStemStereo: StereoStem | null = null;
-  const cacheKey = req.sourceHash ? stemCacheKey(req.sourceHash, N) : null;
   if (
     req.drumStemStereo &&
     Math.min(
@@ -191,10 +131,11 @@ async function run(req: PipelineRunRequest) {
       percent: 1,
       detail: 'Reused drums from transcription',
     });
-    if (cacheKey) await saveStemToCache(cacheKey, drumStemStereo);
+    if (req.fingerprint)
+      await storeStem(req.fingerprint, 'drums', drumStemStereo);
   }
-  if (!drumStemStereo && cacheKey) {
-    const cached = await loadStemFromCache(cacheKey, N);
+  if (!drumStemStereo && req.fingerprint) {
+    const cached = await loadStem(req.fingerprint, 'drums');
     if (cached) {
       drumStemStereo = cached;
       progress({
@@ -244,7 +185,8 @@ async function run(req: PipelineRunRequest) {
     } finally {
       await roformerSession.release();
     }
-    if (cacheKey) await saveStemToCache(cacheKey, drumStemStereo);
+    if (req.fingerprint)
+      await storeStem(req.fingerprint, 'drums', drumStemStereo);
   }
 
   const drumStem = stereoStemToMono(drumStemStereo);
