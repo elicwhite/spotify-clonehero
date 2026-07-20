@@ -685,7 +685,7 @@ function TrackEditEditor({
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col">
+    <div className="flex-1 min-h-0 w-full flex flex-col">
       <ChartEditor
         metadata={cloneHeroMetadata}
         chart={chart}
