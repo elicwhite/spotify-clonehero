@@ -101,11 +101,13 @@ describe('RephaseDownbeatsCommand', () => {
     expect(ticks).not.toContain(1920); // old downbeat re-flagged away
   });
 
-  it('undo restores the pre-edit doc exactly', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const before = barsDoc(16);
+    const pristine = barsDoc(16);
     const cmd = new RephaseDownbeatsCommand(2400);
     const after = cmd.execute(before);
-    expectDocsEqual(cmd.undo(after), before);
+    expect(after).not.toBe(before);
+    expectDocsEqual(before, pristine);
   });
 });
 
@@ -163,11 +165,13 @@ describe('MarkDownbeatCommand', () => {
     ).toContain(tailBeat);
   });
 
-  it('undo restores the pre-edit doc exactly', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const before = barsDoc(8);
+    const pristine = barsDoc(8);
     const cmd = new MarkDownbeatCommand(2880);
     const after = cmd.execute(before);
-    expectDocsEqual(cmd.undo(after), before);
+    expect(after).not.toBe(before);
+    expectDocsEqual(before, pristine);
   });
 });
 

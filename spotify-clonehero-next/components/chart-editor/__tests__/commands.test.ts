@@ -1,11 +1,15 @@
 /**
- * Command inversion tests.
+ * Command execute + snapshot-restore tests.
  *
- * Asserts every command's `execute(doc) → undo(executedDoc)` recovers
- * the input doc. Equality is structural (via `expectDocsEqual`) —
- * `msTime` / `msLength` and File-blob assets are stripped before compare
- * since they don't survive the writer/parser round-trip exactly
- * bit-for-bit.
+ * Undo is snapshot replay, not command inversion (`ChartEditorContext.tsx`
+ * pushes the pre-command doc onto `undoDocStack` and `useUndoRedo`
+ * reinstalls it directly — commands have no `undo()` method). So each test
+ * here asserts two things: `execute()` produces the expected structural
+ * change, and `execute()` never mutates its input doc — which is exactly
+ * what makes that input doc a valid snapshot to restore to. Equality is
+ * structural (via `expectDocsEqual`) — `msTime` / `msLength` and File-blob
+ * assets are stripped before compare since they don't survive the
+ * writer/parser round-trip exactly bit-for-bit.
  */
 
 import {
@@ -26,13 +30,27 @@ import {
   makeFixtureDoc,
   makeMultiPartVocalsDoc,
 } from './fixtures';
-import type {TrackKey} from '@/lib/chart-edit';
+import {getDrumNotes} from '@/lib/chart-edit';
+import type {ChartDocument, TrackKey} from '@/lib/chart-edit';
 
 const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
 
-describe('command inversion', () => {
+/**
+ * Asserts `execute()` leaves `before` structurally identical to a pristine
+ * doc built the same way — i.e. `before` is still a valid pre-edit snapshot
+ * for the reducer's `undoDocStack` to restore.
+ */
+function expectInputUntouched(
+  before: ChartDocument,
+  pristine: ChartDocument,
+): void {
+  expectDocsEqual(before, pristine);
+}
+
+describe('command execute + snapshot-restore', () => {
   describe('AddNoteCommand', () => {
-    it('execute then undo restores the original doc', () => {
+    it('adds the note and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
       const cmd = new AddNoteCommand(
         {
@@ -45,33 +63,12 @@ describe('command inversion', () => {
       );
       const after = cmd.execute(before);
       expect(after).not.toBe(before);
-      expectDocsEqual(cmd.undo(after), before);
-    });
-
-    it('does not mutate the input doc', () => {
-      const before = makeFixtureDoc();
-      const cmd = new AddNoteCommand(
-        {
-          tick: 240,
-          type: 'kick',
-          length: 0,
-          flags: {},
-        },
-        DRUMS_KEY,
-      );
-      const snap = JSON.parse(
-        JSON.stringify(
-          before.parsedChart.trackData[0].noteEventGroups.flat().map(n => ({
-            tick: n.tick,
-            type: n.type,
-          })),
+      expect(
+        getDrumNotes(after.parsedChart.trackData[0]).some(
+          n => n.tick === 240 && n.type === 'redDrum',
         ),
-      );
-      cmd.execute(before);
-      const post = before.parsedChart.trackData[0].noteEventGroups
-        .flat()
-        .map(n => ({tick: n.tick, type: n.type}));
-      expect(post).toEqual(snap);
+      ).toBe(true);
+      expectInputUntouched(before, pristine);
     });
 
     // Regression: a note added at a non-zero tick must carry a tempo-map
@@ -97,7 +94,8 @@ describe('command inversion', () => {
   });
 
   describe('DeleteNotesCommand', () => {
-    it('execute then undo restores the deleted notes', () => {
+    it('removes the notes and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
       const cmd = new DeleteNotesCommand(
         new Set([
@@ -107,7 +105,10 @@ describe('command inversion', () => {
         DRUMS_KEY,
       );
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      const remaining = getDrumNotes(after.parsedChart.trackData[0]);
+      expect(remaining.some(n => n.tick === 480)).toBe(false);
+      expect(remaining.some(n => n.tick === 1440)).toBe(false);
+      expectInputUntouched(before, pristine);
     });
 
     it('deleting a non-existent note is a no-op (round-trip safe)', () => {
@@ -118,148 +119,210 @@ describe('command inversion', () => {
       );
       const after = cmd.execute(before);
       expectDocsEqual(after, before);
-      expectDocsEqual(cmd.undo(after), before);
     });
   });
 
   describe('ToggleFlagCommand', () => {
-    it('toggling cymbal twice returns to the original state', () => {
+    it('toggles cymbal on and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
       const yellowId = noteId({tick: 960, type: 'yellowDrum'});
       const cmd = new ToggleFlagCommand([yellowId], 'cymbal', DRUMS_KEY);
       const after = cmd.execute(before);
-      const restored = cmd.undo(after);
-      expectDocsEqual(restored, before);
+      const yellow = getDrumNotes(after.parsedChart.trackData[0]).find(
+        n => n.tick === 960,
+      )!;
+      expect(yellow.flags.cymbal).toBe(false);
+      expectInputUntouched(before, pristine);
     });
 
-    it('execute then undo when starting from no cymbal', () => {
+    it('toggling accent on from no-flag state', () => {
       const before = makeFixtureDoc();
       const redId = noteId({tick: 480, type: 'redDrum'});
       const cmd = new ToggleFlagCommand([redId], 'accent', DRUMS_KEY);
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      const red = getDrumNotes(after.parsedChart.trackData[0]).find(
+        n => n.tick === 480,
+      )!;
+      expect(red.flags.accent).toBe(true);
     });
   });
 
   describe('MoveEntitiesCommand (notes)', () => {
-    it('execute then undo restores tick + lane', () => {
+    it('moves tick + lane and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
       const cmd = new MoveEntitiesCommand(
         'note',
         [noteId({tick: 480, type: 'redDrum'})],
         240,
         1,
+        {trackKey: DRUMS_KEY},
       );
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      expect(
+        getDrumNotes(after.parsedChart.trackData[0]).some(
+          n => n.tick === 480 && n.type === 'redDrum',
+        ),
+      ).toBe(false);
+      expectInputUntouched(before, pristine);
     });
 
-    it('moving multiple notes by the same delta round-trips', () => {
+    it('moving multiple notes by the same delta', () => {
       const before = makeFixtureDoc();
       const cmd = new MoveEntitiesCommand(
         'note',
         [noteId({tick: 0, type: 'kick'}), noteId({tick: 480, type: 'redDrum'})],
         240,
         0,
+        {trackKey: DRUMS_KEY},
       );
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      const notes = getDrumNotes(after.parsedChart.trackData[0]);
+      expect(notes.some(n => n.tick === 240 && n.type === 'kick')).toBe(true);
+      expect(notes.some(n => n.tick === 720 && n.type === 'redDrum')).toBe(
+        true,
+      );
     });
   });
 
   describe('MoveEntitiesCommand (sections)', () => {
-    it('execute then undo restores the section', () => {
+    it('moves the section and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
       const cmd = new MoveEntitiesCommand('section', ['1920'], -480, 0);
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      expect(after.parsedChart.sections.some(s => s.tick === 1440)).toBe(
+        true,
+      );
+      expectInputUntouched(before, pristine);
     });
   });
 
   describe('MoveEntitiesCommand (lyrics in vocals scope)', () => {
-    it('round-trips a lyric move within the active vocal part', () => {
+    it('moves a lyric within the active vocal part', () => {
       const before = makeFixtureDoc();
       const cmd = new MoveEntitiesCommand('lyric', ['vocals:240'], 120, 0, {
         partName: 'vocals',
       });
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      const lyrics = after.parsedChart.vocalTracks!.parts['vocals'].notePhrases
+        .flatMap(p => p.lyrics)
+        .map(l => l.tick);
+      expect(lyrics).toContain(360);
     });
 
-    it('round-trips a lyric move in harm1 without disturbing vocals', () => {
+    it('moves a lyric in harm1 without disturbing vocals', () => {
       const before = makeMultiPartVocalsDoc();
       const cmd = new MoveEntitiesCommand('lyric', ['harm1:120'], 60, 0, {
         partName: 'harm1',
       });
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      const harm1Lyrics = after.parsedChart.vocalTracks!.parts['harm1'].notePhrases
+        .flatMap(p => p.lyrics)
+        .map(l => l.tick);
+      expect(harm1Lyrics).toContain(180);
+      const vocalsLyrics = after.parsedChart.vocalTracks!.parts['vocals'].notePhrases
+        .flatMap(p => p.lyrics)
+        .map(l => l.tick);
+      expect(vocalsLyrics).toEqual([240]);
     });
   });
 
   describe('MoveEntitiesCommand (phrase-start)', () => {
-    it('round-trips a phrase-start move', () => {
+    it('moves a phrase-start', () => {
       const before = makeFixtureDoc();
-      // The fixture phrase starts at 0; bump to 60 then undo.
+      // The fixture phrase starts at 0; bump to 60.
       const cmd = new MoveEntitiesCommand('phrase-start', ['vocals:0'], 60, 0, {
         partName: 'vocals',
       });
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      const starts = after.parsedChart.vocalTracks!.parts['vocals'].notePhrases
+        .filter(p => p.lyrics.length > 0)
+        .map(p => p.tick);
+      expect(starts).toContain(60);
     });
   });
 
   describe('AddBPMCommand', () => {
-    it('execute then undo restores the pre-edit snapshot', () => {
+    it('adds/replaces a BPM marker and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
       const cmd = new AddBPMCommand(960, 100, 'grid');
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      expect(
+        after.parsedChart.tempos.some(
+          t => t.tick === 960 && t.beatsPerMinute === 100,
+        ),
+      ).toBe(true);
+      expectInputUntouched(before, pristine);
     });
 
-    it('undo restores the pre-edit snapshot even at tick 0', () => {
+    it('replaces the tick-0 seed tempo', () => {
       const before = makeFixtureDoc();
       const cmd = new AddBPMCommand(0, 200, 'grid');
-      cmd.execute(before);
-      // A class-(a) tempo remap is not invertible in closed form, so undo
-      // restores the captured pre-edit doc (plan 0061 Risks) — including when
-      // the edit replaced the tick-0 seed tempo.
-      expect(cmd.undo(makeFixtureDoc())).toBe(before);
+      const after = cmd.execute(before);
+      expect(
+        after.parsedChart.tempos.some(
+          t => t.tick === 0 && t.beatsPerMinute === 200,
+        ),
+      ).toBe(true);
     });
   });
 
   describe('AddTimeSignatureCommand', () => {
-    it('execute then undo removes the added time signature', () => {
+    it('adds the time signature and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
       const cmd = new AddTimeSignatureCommand(960, 3, 4);
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      expect(
+        after.parsedChart.timeSignatures.some(
+          ts => ts.tick === 960 && ts.numerator === 3 && ts.denominator === 4,
+        ),
+      ).toBe(true);
+      expectInputUntouched(before, pristine);
     });
   });
 
   describe('AddSectionCommand', () => {
-    it('execute then undo removes the section', () => {
+    it('adds the section and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
       const cmd = new AddSectionCommand(2880, 'Chorus');
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      expect(
+        after.parsedChart.sections.some(
+          s => s.tick === 2880 && s.name === 'Chorus',
+        ),
+      ).toBe(true);
+      expectInputUntouched(before, pristine);
     });
   });
 
   describe('DeleteSectionCommand', () => {
-    it('execute then undo restores the deleted section', () => {
+    it('removes the section and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
       const cmd = new DeleteSectionCommand(1920, 'Verse');
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      expect(after.parsedChart.sections.some(s => s.tick === 1920)).toBe(
+        false,
+      );
+      expectInputUntouched(before, pristine);
     });
   });
 
   describe('RenameSectionCommand', () => {
-    it('execute then undo restores the original name', () => {
+    it('renames the section and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
       const cmd = new RenameSectionCommand(0, 'Intro', 'Opening');
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      expect(
+        after.parsedChart.sections.find(s => s.tick === 0)?.name,
+      ).toBe('Opening');
+      expectInputUntouched(before, pristine);
     });
   });
 
@@ -274,10 +337,6 @@ describe('command inversion', () => {
           inner();
           return doc;
         },
-        undo: (doc: typeof before) => {
-          order.push(`${label}:undo`);
-          return doc;
-        },
       });
       const batch = new BatchCommand([
         wrap('A', () => {}),
@@ -288,28 +347,8 @@ describe('command inversion', () => {
       expect(order).toEqual(['A:execute', 'B:execute', 'C:execute']);
     });
 
-    it('runs sub-commands in reverse order on undo', () => {
-      const before = makeFixtureDoc();
-      const order: string[] = [];
-      const wrap = (label: string) => ({
-        description: label,
-        execute: (doc: typeof before) => {
-          order.push(`${label}:execute`);
-          return doc;
-        },
-        undo: (doc: typeof before) => {
-          order.push(`${label}:undo`);
-          return doc;
-        },
-      });
-      const batch = new BatchCommand([wrap('A'), wrap('B'), wrap('C')]);
-      batch.execute(before);
-      order.length = 0;
-      batch.undo(before);
-      expect(order).toEqual(['C:undo', 'B:undo', 'A:undo']);
-    });
-
-    it('round-trips a real edit batch (add three notes)', () => {
+    it('round-trips a real edit batch (add three notes), input untouched', () => {
+      const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
       const batch = new BatchCommand([
         new AddNoteCommand(
@@ -336,7 +375,15 @@ describe('command inversion', () => {
         ),
       ]);
       const after = batch.execute(before);
-      expectDocsEqual(batch.undo(after), before);
+      const notes = getDrumNotes(after.parsedChart.trackData[0]);
+      expect(notes.some(n => n.tick === 60 && n.type === 'kick')).toBe(true);
+      expect(notes.some(n => n.tick === 120 && n.type === 'redDrum')).toBe(
+        true,
+      );
+      expect(notes.some(n => n.tick === 180 && n.type === 'yellowDrum')).toBe(
+        true,
+      );
+      expectInputUntouched(before, pristine);
     });
   });
 });

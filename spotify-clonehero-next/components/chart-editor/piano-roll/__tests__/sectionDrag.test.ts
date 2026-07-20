@@ -43,9 +43,9 @@ describe('section drag: command parity with the highway', () => {
       0,
     );
 
-    // Round-trips through undo back to the exact original layout.
-    const restored = cmd.undo(moved);
-    expect(normalizeDoc(restored)).toEqual(normalizeDoc(doc));
+    // execute() must leave its input doc untouched — that's what makes it a
+    // valid snapshot for the reducer's `undoDocStack` to restore.
+    expect(normalizeDoc(doc)).toEqual(normalizeDoc(makeFixtureDoc()));
   });
 
   it('a no-op drag (grid-snap lands back on the original tick) is a zero delta', () => {

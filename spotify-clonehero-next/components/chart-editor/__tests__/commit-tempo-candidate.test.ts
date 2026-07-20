@@ -79,13 +79,6 @@ describe('CommitTempoCandidateCommand', () => {
     expect(cmd.execute(makeDoc())).toBe(candidate);
   });
 
-  test('undo restores the pre-commit document', () => {
-    const base = makeDoc();
-    const candidate = buildCandidate(base);
-    const cmd = new CommitTempoCandidateCommand(candidate);
-    const out = cmd.execute(base);
-    expect(cmd.undo(out)).toBe(base);
-  });
 });
 
 describe('preview → accept (plan 0061 §7)', () => {

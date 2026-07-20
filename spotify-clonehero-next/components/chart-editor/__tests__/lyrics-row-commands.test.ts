@@ -26,13 +26,14 @@ describe('AddLyricCommand', () => {
     expect(phrase.lyrics.find(l => l.tick === 480)?.text).toBe('mid');
   });
 
-  it('execute then undo restores the original doc', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
+    const pristine = makeFixtureDoc();
     const before = makeFixtureDoc();
     const cmd = new AddLyricCommand(480, 'mid');
     const after = cmd.execute(before);
-    const undone = cmd.undo(after);
 
-    expectDocsEqual(undone, before);
+    expect(after).not.toBe(before);
+    expectDocsEqual(before, pristine);
   });
 
   it('is a no-op outside any phrase', () => {
@@ -54,30 +55,31 @@ describe('DeleteLyricCommand', () => {
     expect(phrase.lyrics.map(l => l.tick)).toEqual([720]);
   });
 
-  it('execute then undo restores the original doc', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
+    const pristine = makeFixtureDoc();
     const before = makeFixtureDoc();
     const cmd = new DeleteLyricCommand(240);
     const after = cmd.execute(before);
-    const undone = cmd.undo(after);
 
-    expectDocsEqual(undone, before);
+    expect(after).not.toBe(before);
+    expectDocsEqual(before, pristine);
   });
 
-  it('deletes the phrase too when its last lyric is removed, and undo restores it', () => {
+  it('deletes the phrase too when its last lyric is removed, each step leaving its input untouched', () => {
     const before = makeFixtureDoc();
+    const pristineBefore = makeFixtureDoc();
     const del1 = new DeleteLyricCommand(240);
     const afterDel1 = del1.execute(before);
+    expectDocsEqual(before, pristineBefore);
+
+    const pristineAfterDel1 = del1.execute(makeFixtureDoc());
     const del2 = new DeleteLyricCommand(720);
     const afterDel2 = del2.execute(afterDel1);
 
     expect(
       afterDel2.parsedChart.vocalTracks.parts['vocals'].notePhrases,
     ).toHaveLength(0);
-
-    const restored1 = del2.undo(afterDel2);
-    expectDocsEqual(restored1, afterDel1);
-    const restored2 = del1.undo(restored1);
-    expectDocsEqual(restored2, before);
+    expectDocsEqual(afterDel1, pristineAfterDel1);
   });
 
   it('is a no-op when no lyric exists at tick', () => {
@@ -98,13 +100,14 @@ describe('SetLyricTextCommand', () => {
     expect(phrase.lyrics.find(l => l.tick === 240)?.text).toBe('changed');
   });
 
-  it('execute then undo restores the original text', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
+    const pristine = makeFixtureDoc();
     const before = makeFixtureDoc();
     const cmd = new SetLyricTextCommand(240, 'changed');
     const after = cmd.execute(before);
-    const undone = cmd.undo(after);
 
-    expectDocsEqual(undone, before);
+    expect(after).not.toBe(before);
+    expectDocsEqual(before, pristine);
   });
 
   it('is a no-op when no lyric exists at tick', () => {
@@ -126,13 +129,14 @@ describe('AddPhraseCommand', () => {
     expect(phrases[1]).toMatchObject({tick: 2000, lyrics: [], notes: []});
   });
 
-  it('execute then undo restores the original doc', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
+    const pristine = makeFixtureDoc();
     const before = makeFixtureDoc();
     const cmd = new AddPhraseCommand(2000);
     const after = cmd.execute(before);
-    const undone = cmd.undo(after);
 
-    expectDocsEqual(undone, before);
+    expect(after).not.toBe(before);
+    expectDocsEqual(before, pristine);
   });
 
   it('is a no-op when the tick is already inside a phrase', () => {
@@ -154,13 +158,14 @@ describe('DeletePhraseCommand', () => {
     ).toHaveLength(0);
   });
 
-  it('execute then undo restores the original doc', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
+    const pristine = makeFixtureDoc();
     const before = makeFixtureDoc();
     const cmd = new DeletePhraseCommand(0);
     const after = cmd.execute(before);
-    const undone = cmd.undo(after);
 
-    expectDocsEqual(undone, before);
+    expect(after).not.toBe(before);
+    expectDocsEqual(before, pristine);
   });
 
   it('is a no-op when no phrase starts at tick', () => {

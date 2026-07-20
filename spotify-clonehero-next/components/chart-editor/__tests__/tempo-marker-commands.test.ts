@@ -5,8 +5,10 @@
  *  - `'grid'`  → KEEP-TICKS: notes keep their ticks, ride the moving grid.
  *  - `'audio'` → KEEP-MS: notes keep their wall-clock time, re-tick.
  *
- * Add-on-line is mapping-neutral (no note moves under either mode). Undo of a
- * remap is a whole-doc snapshot restore (remaps aren't closed-form invertible).
+ * Add-on-line is mapping-neutral (no note moves under either mode). Undo is
+ * snapshot replay (`undoDocStack`), not command inversion — a remap isn't
+ * closed-form invertible, so each `execute()` must leave its input doc
+ * untouched to remain a valid snapshot.
  */
 
 import {
@@ -15,7 +17,7 @@ import {
   AddTempoMarkerCommand,
   DeleteTempoMarkerCommand,
 } from '../commands';
-import {expectDocsEqual, makeFixtureDoc} from './fixtures';
+import {makeFixtureDoc} from './fixtures';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {retimeChart} from '@/lib/chart-edit';
 
@@ -76,12 +78,14 @@ describe('AddBPMCommand (glue-aware class-(a) hand-edit, plan 0061 §3a)', () =>
     expect(bpm).toBe(Math.round(128.7654321 * 1e3) / 1e3);
   });
 
-  it('undo restores the pre-edit doc (both glue modes)', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     for (const glue of ['grid', 'audio'] as const) {
       const before = fixture();
+      const beforeNotes = drumNotes(before);
       const cmd = new AddBPMCommand(0, 90, glue);
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      expect(after).not.toBe(before);
+      expect(drumNotes(before)).toEqual(beforeNotes);
     }
   });
 });
@@ -132,12 +136,14 @@ describe('MoveTempoMarkerCommand', () => {
     expect(cmd.execute(before)).toBe(before);
   });
 
-  it('undo restores the pre-edit doc (both glue modes)', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     for (const glue of ['grid', 'audio'] as const) {
       const before = fixture();
+      const beforeNotes = drumNotes(before);
       const cmd = new MoveTempoMarkerCommand(1920, 2300, glue);
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      expect(after).not.toBe(before);
+      expect(drumNotes(before)).toEqual(beforeNotes);
     }
   });
 });
@@ -164,11 +170,13 @@ describe('AddTempoMarkerCommand', () => {
     expect(cmd.execute(before)).toBe(before);
   });
 
-  it('undo restores the pre-edit doc', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const before = fixture();
+    const beforeNotes = drumNotes(before);
     const cmd = new AddTempoMarkerCommand(960);
     const after = cmd.execute(before);
-    expectDocsEqual(cmd.undo(after), before);
+    expect(after).not.toBe(before);
+    expect(drumNotes(before)).toEqual(beforeNotes);
   });
 });
 
@@ -204,12 +212,14 @@ describe('DeleteTempoMarkerCommand', () => {
     expect(cmd.execute(before)).toBe(before);
   });
 
-  it('undo restores the pre-edit doc (both glue modes)', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     for (const glue of ['grid', 'audio'] as const) {
       const before = fixture();
+      const beforeNotes = drumNotes(before);
       const cmd = new DeleteTempoMarkerCommand(1920, glue);
       const after = cmd.execute(before);
-      expectDocsEqual(cmd.undo(after), before);
+      expect(after).not.toBe(before);
+      expect(drumNotes(before)).toEqual(beforeNotes);
     }
   });
 });

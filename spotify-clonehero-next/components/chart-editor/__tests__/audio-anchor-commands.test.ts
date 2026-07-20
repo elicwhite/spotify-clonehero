@@ -78,16 +78,15 @@ describe('AddBPMCommand — audio anchor glue parity', () => {
     expect(anchor.ms).toBeCloseTo(tickToMsUnder(after, 960), 6);
   });
 
-  it('undo restores the exact prior anchor', () => {
+  it('execute leaves the input doc (and its anchor) untouched — valid undo snapshot', () => {
     const before = fixture();
     const anchored = setAudioAnchor(before, {tick: 960, ms: 1000});
 
     for (const glue of ['grid', 'audio'] as const) {
       const cmd = new AddBPMCommand(0, 90, glue);
       const after = cmd.execute(anchored);
-      const undone = cmd.undo(after);
-      expect(getAudioAnchor(undone)).toEqual({tick: 960, ms: 1000});
-      expect(undone).toBe(anchored); // whole-doc snapshot restore
+      expect(after).not.toBe(anchored);
+      expect(getAudioAnchor(anchored)).toEqual({tick: 960, ms: 1000});
     }
   });
 
@@ -139,14 +138,16 @@ describe('ReplaceLyricsCommand — audio-relative syllable shift (addendum §7)'
     expect(lyric.tick).toBe(msToTickUnder(before, 500));
   });
 
-  it('redo (re-execute after undo) does not double-shift', () => {
+  it('redo (re-execute against the restored snapshot) does not double-shift', () => {
     const before = fixture();
     const anchored = setAudioAnchor(before, {tick: 0, ms: 1000});
 
     const cmd = new ReplaceLyricsCommand([syl('hi', 500)]);
     const once = cmd.execute(anchored);
-    const undone = cmd.undo(once);
-    const twice = cmd.execute(undone);
+    // Undo is snapshot replay: redo re-executes against the SAME pre-command
+    // doc (`anchored`), not the previous output — `anchored` is untouched by
+    // the first execute(), so this is exactly what the reducer's redo does.
+    const twice = cmd.execute(anchored);
 
     const lyricOnce =
       once.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0].lyrics[0];

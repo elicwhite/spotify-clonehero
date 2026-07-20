@@ -4,7 +4,7 @@
 
 import {createEmptyChart} from '@eliwhite/scan-chart';
 import {ReplaceLyricsCommand, hasExistingLyrics} from '../commands';
-import {expectDocsEqual, makeEmptyDrumDoc, makeFixtureDoc} from './fixtures';
+import {makeEmptyDrumDoc, makeFixtureDoc} from './fixtures';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
 
 function syl(
@@ -39,21 +39,6 @@ describe('ReplaceLyricsCommand', () => {
     expect(vocals.staticLyricPhrases).toEqual([]);
   });
 
-  it('execute then undo restores the original vocalTracks exactly', () => {
-    const before = makeFixtureDoc();
-    const syllables = [
-      syl('hello', 500, false, true),
-      syl('world', 1500, false, true),
-    ];
-
-    const cmd = new ReplaceLyricsCommand(syllables);
-    const after = cmd.execute(before);
-    const undone = cmd.undo(after);
-
-    expectDocsEqual(undone, before);
-    expect(undone.parsedChart.vocalTracks).toBe(before.parsedChart.vocalTracks);
-  });
-
   it('does not mutate the input doc', () => {
     const before = makeFixtureDoc();
     const originalVocals = before.parsedChart.vocalTracks;
@@ -62,7 +47,7 @@ describe('ReplaceLyricsCommand', () => {
     expect(before.parsedChart.vocalTracks).toBe(originalVocals);
   });
 
-  it('round-trips on a doc with no prior vocals part', () => {
+  it('adds a vocals part to a doc with no prior vocals part', () => {
     const before = makeEmptyDrumDoc();
     const cmd = new ReplaceLyricsCommand([syl('solo', 0, false, true)]);
     const after = cmd.execute(before);
@@ -70,9 +55,7 @@ describe('ReplaceLyricsCommand', () => {
     expect(
       after.parsedChart.vocalTracks.parts['vocals'].notePhrases,
     ).toHaveLength(1);
-
-    const undone = cmd.undo(after);
-    expectDocsEqual(undone, before);
+    expect(before.parsedChart.vocalTracks?.parts['vocals']).toBeUndefined();
   });
 });
 

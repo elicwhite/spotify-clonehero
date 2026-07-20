@@ -2,8 +2,10 @@
  * RepredictTempoCommand tests (plan 0061 §3 class (b) / §7).
  *
  * The command wraps `repredictTempo`: it commits a RE-PREDICT candidate when
- * decoded onsets are available and a RESNAP fallback (with the disclosure flag)
- * when they are not, and undo restores the pre-edit snapshot.
+ * decoded onsets are available and a RESNAP fallback (with the disclosure
+ * flag) when they are not. Undo is snapshot replay (`undoDocStack`), not
+ * command inversion — `execute()` must leave its input doc untouched so that
+ * doc remains a valid snapshot to restore to.
  */
 
 import {
@@ -82,12 +84,11 @@ describe('RepredictTempoCommand', () => {
     expect(kickTicks(out)).toHaveLength(2);
   });
 
-  test('undo restores the exact pre-edit document', () => {
+  test('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const doc = makeDoc();
     const cmd = new RepredictTempoCommand(SYNC_120, ONSETS);
     const out = cmd.execute(doc);
-    const restored = cmd.undo(out);
-    expect(restored).toBe(doc);
-    expect(kickTicks(restored)).toEqual([100, 620]);
+    expect(out).not.toBe(doc);
+    expect(kickTicks(doc)).toEqual([100, 620]);
   });
 });

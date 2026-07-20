@@ -22,7 +22,11 @@
 
 import type {ChartDocument, DrumNoteType, ParsedTrackData} from '../types';
 import {noteTypeToDrumNote} from '../types';
-import {findTrackOnly, type TrackKey} from '../find-track';
+import {
+  findTrackInParsedChart,
+  findTrackOnly,
+  type TrackKey,
+} from '../find-track';
 import {addDrumNote, removeDrumNote, getDrumNotes} from '../helpers/drum-notes';
 import {makeChartTiming} from '../retime';
 import {addSection, removeSection} from '../helpers/sections';
@@ -373,23 +377,37 @@ export const entityHandlers: Record<EntityKind, EntityKindHandler> = {
  * Different kinds touch different fields of `parsedChart`; each branch
  * clones only what its handler will mutate. Anything not listed is shared
  * by reference with the input doc.
+ *
+ * For `'note'`, cloning is scoped to `ctx.trackKey`'s track — the other
+ * tracks' `noteEventGroups` are shared by reference — so per-edit cost is
+ * O(one track), not O(all tracks × difficulties). Falls back to cloning
+ * every track when no `trackKey` is given (defensive; note handlers require
+ * one to do anything, so callers always pass it).
  */
 export function cloneDocFor(
   kind: EntityKind,
   doc: ChartDocument,
+  ctx?: EntityContext,
 ): ChartDocument {
   switch (kind) {
-    case 'note':
+    case 'note': {
+      const targetIndex = ctx?.trackKey
+        ? (findTrackInParsedChart(doc.parsedChart, ctx.trackKey)?.index ?? -1)
+        : -1;
       return {
         ...doc,
         parsedChart: {
           ...doc.parsedChart,
-          trackData: doc.parsedChart.trackData.map(t => ({
-            ...t,
-            noteEventGroups: t.noteEventGroups.map(g => g.map(n => ({...n}))),
-          })),
+          trackData: doc.parsedChart.trackData.map((t, i) => {
+            if (targetIndex !== -1 && i !== targetIndex) return t;
+            return {
+              ...t,
+              noteEventGroups: t.noteEventGroups.map(g => g.map(n => ({...n}))),
+            };
+          }),
         },
       };
+    }
     case 'section':
       return {
         ...doc,

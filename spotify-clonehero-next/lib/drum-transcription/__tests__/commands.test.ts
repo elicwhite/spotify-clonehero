@@ -1,8 +1,10 @@
 /**
  * Tests for the EditCommand pattern (0007a).
  *
- * Verifies that each command correctly transforms a ChartDocument
- * and that undo reverses the transformation.
+ * Verifies that each command correctly transforms a `ChartDocument`. Undo is
+ * snapshot replay (`undoDocStack` in the reducer), not command inversion, so
+ * these tests assert `execute()` never mutates its input doc — that's what
+ * makes the input a valid snapshot for the reducer to restore.
  */
 
 import {
@@ -253,18 +255,6 @@ describe('AddNoteCommand', () => {
     expect(getExpertNotes(result)).toHaveLength(1);
   });
 
-  it('undo removes the added note', () => {
-    const doc = makeDoc();
-    const note: DrumNote = {tick: 480, type: 'redDrum', length: 0, flags: {}};
-    const cmd = new AddNoteCommand(note, DRUMS_KEY);
-
-    const after = cmd.execute(doc);
-    expect(getExpertNotes(after)).toHaveLength(1);
-
-    const reverted = cmd.undo(after);
-    expect(getExpertNotes(reverted)).toHaveLength(0);
-  });
-
   it('does not mutate the original document', () => {
     const doc = makeDoc();
     const note: DrumNote = {tick: 480, type: 'redDrum', length: 0, flags: {}};
@@ -294,7 +284,7 @@ describe('DeleteNotesCommand', () => {
     expect(remaining.map(n => n.type)).toEqual(['kick', 'yellowDrum']);
   });
 
-  it('undo restores deleted notes', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const doc = makeDoc([
       {tick: 0, type: 'kick'},
       {tick: 480, type: 'redDrum', flags: {accent: true}},
@@ -303,12 +293,7 @@ describe('DeleteNotesCommand', () => {
 
     const after = cmd.execute(doc);
     expect(getExpertNotes(after)).toHaveLength(1);
-
-    const reverted = cmd.undo(after);
-    const restored = getExpertNotes(reverted);
-    expect(restored).toHaveLength(2);
-    expect(restored[1].type).toBe('redDrum');
-    expect(restored[1].flags.accent).toBe(true);
+    expect(getExpertNotes(doc)).toHaveLength(2);
   });
 });
 
@@ -340,17 +325,17 @@ describe('MoveEntitiesCommand: notes', () => {
     expect(getExpertNotes(result)[0].tick).toBe(0);
   });
 
-  it('undo reverses the move', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
     const cmd = new MoveEntitiesCommand('note', ['480:redDrum'], 240, 1, {
       trackKey: DRUMS_KEY,
     });
 
     const after = cmd.execute(doc);
-    const reverted = cmd.undo(after);
-    const restored = getExpertNotes(reverted);
-    expect(restored[0].tick).toBe(480);
-    expect(restored[0].type).toBe('redDrum');
+    expect(after).not.toBe(doc);
+    const untouched = getExpertNotes(doc);
+    expect(untouched[0].tick).toBe(480);
+    expect(untouched[0].type).toBe('redDrum');
   });
 
   it('lane delta never converts kick to a pad', () => {
@@ -398,15 +383,15 @@ describe('ToggleFlagCommand', () => {
     expect(getExpertNotes(result)[0].flags.cymbal).toBeFalsy();
   });
 
-  it('undo restores original flag state', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const doc = makeDoc([
       {tick: 480, type: 'yellowDrum', flags: {cymbal: true}},
     ]);
     const cmd = new ToggleFlagCommand(['480:yellowDrum'], 'cymbal', DRUMS_KEY);
 
     const after = cmd.execute(doc);
-    const reverted = cmd.undo(after);
-    expect(getExpertNotes(reverted)[0].flags.cymbal).toBe(true);
+    expect(after).not.toBe(doc);
+    expect(getExpertNotes(doc)[0].flags.cymbal).toBe(true);
   });
 
   it('toggles accent on multiple notes', () => {
@@ -481,15 +466,15 @@ describe('ToggleKickCommand', () => {
     ]);
   });
 
-  it('undo restores the original notes and flags', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const doc = makeDoc([
       {tick: 480, type: 'yellowDrum', flags: {cymbal: true}},
     ]);
     const cmd = new ToggleKickCommand(['480:yellowDrum'], DRUMS_KEY);
 
     const after = cmd.execute(doc);
-    const reverted = cmd.undo(after);
-    const notes = getExpertNotes(reverted);
+    expect(after).not.toBe(doc);
+    const notes = getExpertNotes(doc);
     expect(notes).toHaveLength(1);
     expect(notes[0].type).toBe('yellowDrum');
     expect(notes[0].flags.cymbal).toBe(true);
@@ -538,23 +523,14 @@ describe('AddBPMCommand', () => {
     expect(result.parsedChart.tempos[2].tick).toBe(960);
   });
 
-  it('undo removes the added marker', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const doc = makeDoc();
     const cmd = new AddBPMCommand(480, 140, 'grid');
 
     const after = cmd.execute(doc);
-    const reverted = cmd.undo(after);
-    expect(reverted.parsedChart.tempos).toHaveLength(1);
-    expect(reverted.parsedChart.tempos[0].tick).toBe(0);
-  });
-
-  it('undo does not remove the marker at tick 0', () => {
-    const doc = makeDoc();
-    const cmd = new AddBPMCommand(0, 140, 'grid');
-
-    const after = cmd.execute(doc);
-    const reverted = cmd.undo(after);
-    expect(reverted.parsedChart.tempos).toHaveLength(1);
+    expect(after).not.toBe(doc);
+    expect(doc.parsedChart.tempos).toHaveLength(1);
+    expect(doc.parsedChart.tempos[0].tick).toBe(0);
   });
 });
 
@@ -586,13 +562,13 @@ describe('AddTimeSignatureCommand', () => {
     expect(result.parsedChart.timeSignatures[0].denominator).toBe(8);
   });
 
-  it('undo removes the added time signature', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const doc = makeDoc();
     const cmd = new AddTimeSignatureCommand(480, 3, 4);
 
     const after = cmd.execute(doc);
-    const reverted = cmd.undo(after);
-    expect(reverted.parsedChart.timeSignatures).toHaveLength(1);
+    expect(after).not.toBe(doc);
+    expect(doc.parsedChart.timeSignatures).toHaveLength(1);
   });
 });
 
@@ -627,7 +603,7 @@ describe('BatchCommand', () => {
     expect(getExpertNotes(result)).toHaveLength(3);
   });
 
-  it('undo reverses all commands in reverse order', () => {
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const doc = makeDoc();
     const cmd = new BatchCommand([
       new AddNoteCommand(
@@ -641,8 +617,8 @@ describe('BatchCommand', () => {
     ]);
 
     const after = cmd.execute(doc);
-    const reverted = cmd.undo(after);
-    expect(getExpertNotes(reverted)).toHaveLength(0);
+    expect(after).not.toBe(doc);
+    expect(getExpertNotes(doc)).toHaveLength(0);
   });
 
   it('can combine different command types', () => {
@@ -706,22 +682,12 @@ describe('AddSectionCommand', () => {
     expect(result.parsedChart.sections[0].name).toBe('new name');
   });
 
-  it('undo removes the added section', () => {
+  it('does not mutate the original document', () => {
     const doc = makeDoc();
     const cmd = new AddSectionCommand(480, 'verse 1');
 
     const after = cmd.execute(doc);
     expect(after.parsedChart.sections).toHaveLength(1);
-
-    const reverted = cmd.undo(after);
-    expect(reverted.parsedChart.sections).toHaveLength(0);
-  });
-
-  it('does not mutate the original document', () => {
-    const doc = makeDoc();
-    const cmd = new AddSectionCommand(480, 'verse 1');
-
-    cmd.execute(doc);
     expect(doc.parsedChart.sections).toHaveLength(0);
   });
 
@@ -754,7 +720,7 @@ describe('DeleteSectionCommand', () => {
     ]);
   });
 
-  it('undo restores the deleted section', () => {
+  it('does not mutate the original document', () => {
     const doc = withChart(makeDoc(), {
       sections: [
         {tick: 0, name: 'intro'},
@@ -765,21 +731,11 @@ describe('DeleteSectionCommand', () => {
 
     const after = cmd.execute(doc);
     expect(after.parsedChart.sections).toHaveLength(1);
-
-    const reverted = cmd.undo(after);
-    expect(reverted.parsedChart.sections).toHaveLength(2);
-    expect(reverted.parsedChart.sections[1]).toMatchObject({
+    expect(doc.parsedChart.sections).toHaveLength(2);
+    expect(doc.parsedChart.sections[1]).toMatchObject({
       tick: 480,
       name: 'verse',
     });
-  });
-
-  it('does not mutate the original document', () => {
-    const doc = withChart(makeDoc(), {sections: [{tick: 480, name: 'verse'}]});
-    const cmd = new DeleteSectionCommand(480, 'verse');
-
-    cmd.execute(doc);
-    expect(doc.parsedChart.sections).toHaveLength(1);
   });
 
   it('has a descriptive description', () => {
@@ -802,20 +758,12 @@ describe('RenameSectionCommand', () => {
     expect(result.parsedChart.sections[0].name).toBe('verse 1');
   });
 
-  it('undo restores the original name', () => {
-    const doc = withChart(makeDoc(), {sections: [{tick: 480, name: 'verse'}]});
-    const cmd = new RenameSectionCommand(480, 'verse', 'verse 1');
-
-    const after = cmd.execute(doc);
-    const reverted = cmd.undo(after);
-    expect(reverted.parsedChart.sections[0].name).toBe('verse');
-  });
-
   it('does not mutate the original document', () => {
     const doc = withChart(makeDoc(), {sections: [{tick: 480, name: 'verse'}]});
     const cmd = new RenameSectionCommand(480, 'verse', 'verse 1');
 
-    cmd.execute(doc);
+    const after = cmd.execute(doc);
+    expect(after.parsedChart.sections[0].name).toBe('verse 1');
     expect(doc.parsedChart.sections[0].name).toBe('verse');
   });
 
@@ -849,7 +797,7 @@ describe('MoveEntitiesCommand: sections', () => {
     );
   });
 
-  it('undo moves the section back', () => {
+  it('does not mutate the original document', () => {
     const doc = withChart(makeDoc(), {
       sections: [
         {tick: 0, name: 'intro'},
@@ -859,20 +807,14 @@ describe('MoveEntitiesCommand: sections', () => {
     const cmd = new MoveEntitiesCommand('section', ['480'], 240, 0);
 
     const after = cmd.execute(doc);
-    const reverted = cmd.undo(after);
-    expect(reverted.parsedChart.sections).toHaveLength(2);
-    expect(reverted.parsedChart.sections[1]).toMatchObject({
+    expect(after.parsedChart.sections.find(s => s.tick === 720)?.name).toBe(
+      'verse',
+    );
+    expect(doc.parsedChart.sections).toHaveLength(2);
+    expect(doc.parsedChart.sections[1]).toMatchObject({
       tick: 480,
       name: 'verse',
     });
-  });
-
-  it('does not mutate the original document', () => {
-    const doc = withChart(makeDoc(), {sections: [{tick: 480, name: 'verse'}]});
-    const cmd = new MoveEntitiesCommand('section', ['480'], 240, 0);
-
-    cmd.execute(doc);
-    expect(doc.parsedChart.sections[0].tick).toBe(480);
   });
 
   it('has a descriptive description', () => {
@@ -924,7 +866,7 @@ function makeVocalDoc(): ChartDocument {
 }
 
 describe('MoveEntitiesCommand: lyric', () => {
-  it('moves a lyric within its phrase and undo restores it', () => {
+  it('moves a lyric within its phrase, leaving the input doc untouched', () => {
     const doc = makeVocalDoc();
     const cmd = new MoveEntitiesCommand('lyric', ['vocals:240'], 120, 0, {
       partName: 'vocals',
@@ -936,9 +878,7 @@ describe('MoveEntitiesCommand: lyric', () => {
     expect(phrase.lyrics[0].tick).toBe(360);
     expect(phrase.notes[0].tick).toBe(360);
 
-    const reverted = cmd.undo(after);
-    const original =
-      reverted.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
+    const original = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(original.lyrics[0].tick).toBe(240);
     expect(original.notes[0].tick).toBe(240);
   });
@@ -957,7 +897,7 @@ describe('MoveEntitiesCommand: lyric', () => {
 });
 
 describe('MoveEntitiesCommand: phrase markers', () => {
-  it('phrase-start drag adjusts length only; undo restores the original tick', () => {
+  it('phrase-start drag adjusts length only, leaving the input doc untouched', () => {
     const doc = makeVocalDoc();
     const cmd = new MoveEntitiesCommand('phrase-start', ['vocals:0'], 120, 0, {
       partName: 'vocals',
@@ -968,14 +908,12 @@ describe('MoveEntitiesCommand: phrase markers', () => {
     expect(moved.tick).toBe(120);
     expect(moved.length).toBe(360);
 
-    const reverted = cmd.undo(after);
-    const original =
-      reverted.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
+    const original = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(original.tick).toBe(0);
     expect(original.length).toBe(480);
   });
 
-  it('phrase-end drag adjusts length only; undo restores the original end tick', () => {
+  it('phrase-end drag adjusts length only, leaving the input doc untouched', () => {
     const doc = makeVocalDoc();
     const cmd = new MoveEntitiesCommand('phrase-end', ['vocals:480'], 240, 0, {
       partName: 'vocals',
@@ -986,9 +924,7 @@ describe('MoveEntitiesCommand: phrase markers', () => {
     expect(moved.tick).toBe(0);
     expect(moved.length).toBe(720);
 
-    const reverted = cmd.undo(after);
-    const original =
-      reverted.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
+    const original = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
     expect(original.length).toBe(480);
   });
 });

@@ -1,11 +1,15 @@
 /**
  * Command pattern for chart editing.
  *
- * All mutations to the chart go through commands, enabling undo/redo
- * (stack management is in 0007b; infrastructure is here).
+ * All mutations to the chart go through commands. Undo/redo is snapshot
+ * replay: the reducer pushes the pre-command `ChartDocument` onto
+ * `undoDocStack` at dispatch time and `useUndoRedo` reinstalls docs directly
+ * (`hooks/useEditCommands.ts`) — commands only ever need `execute()`.
  *
- * Commands are immutable -- execute() and undo() return new state rather
- * than mutating in place. This works naturally with React's reducer pattern.
+ * Commands are immutable -- execute() returns new state rather than
+ * mutating in place. This works naturally with React's reducer pattern, and
+ * lets a command double as a pure doc→doc preview function (e.g. the
+ * piano-roll's tempo drag preview).
  *
  * Internally we use chart-edit's in-place helpers on shallow-cloned data
  * so that the original document is never mutated.
@@ -20,7 +24,6 @@ import type {
   DrumNoteFlags,
   EntityContext,
   EntityKind,
-  NormalizedVocalPhrase,
   NormalizedVocalTrack,
   TrackKey,
 } from '@/lib/chart-edit';
@@ -30,7 +33,6 @@ import {
   getDrumNotes,
   setDrumNoteFlags,
   addTimeSignature,
-  removeTimeSignature,
   addSection,
   removeSection,
   entityHandlers,
@@ -57,17 +59,14 @@ import {
   DEFAULT_VOCALS_PART,
   addLyric,
   deleteLyric,
-  restoreLyric,
   setLyricText,
   addPhrase,
   deletePhrase,
-  insertPhrase,
   getAudioAnchor,
   setAudioAnchor,
   refreshAnchorKeepMs,
   refreshAnchorKeepTick,
   type DownbeatFlags,
-  type RemovedLyric,
 } from '@/lib/chart-edit';
 
 /**
@@ -110,15 +109,25 @@ function cloneTrack(track: ParsedTrackData): ParsedTrackData {
   };
 }
 
-/** Clone a doc with a freshly-cloned trackData array. */
-function cloneDocWithTracks(doc: ChartDocument): ChartDocument {
+/**
+ * Clone a doc for a note edit scoped to `trackKey`'s track: only that
+ * track's `noteEventGroups` are deep-cloned (O(one track)); every other
+ * track is shared by reference with the input doc. `tempos`/`timeSignatures`
+ * are untouched by note edits, so they're shared too (kept as the same
+ * reference deliberately — see `PianoRollTimeline.tsx`'s tempo-cache memo).
+ */
+function cloneDocWithTracks(
+  doc: ChartDocument,
+  trackKey: TrackKey,
+): ChartDocument {
+  const targetIndex = findTargetIndex(doc, trackKey);
   return {
     ...doc,
     parsedChart: {
       ...doc.parsedChart,
-      trackData: doc.parsedChart.trackData.map(t => cloneTrack(t)),
-      tempos: doc.parsedChart.tempos.map(t => ({...t})),
-      timeSignatures: doc.parsedChart.timeSignatures.map(ts => ({...ts})),
+      trackData: doc.parsedChart.trackData.map((t, i) =>
+        i === targetIndex ? cloneTrack(t) : t,
+      ),
     },
   };
 }
@@ -153,7 +162,6 @@ export const noteId = entityNoteId;
 
 export interface EditCommand {
   execute(doc: ChartDocument): ChartDocument;
-  undo(doc: ChartDocument): ChartDocument;
   readonly description: string;
 }
 
@@ -175,7 +183,7 @@ export class AddNoteCommand implements EditCommand {
     const idx = findTargetIndex(doc, this.trackKey);
     if (idx === -1) return doc;
 
-    const newDoc = cloneDocWithTracks(doc);
+    const newDoc = cloneDocWithTracks(doc, this.trackKey);
     const track = newDoc.parsedChart.trackData[idx];
 
     // Check for duplicates via getDrumNotes
@@ -200,16 +208,6 @@ export class AddNoteCommand implements EditCommand {
     );
     return newDoc;
   }
-
-  undo(doc: ChartDocument): ChartDocument {
-    const idx = findTargetIndex(doc, this.trackKey);
-    if (idx === -1) return doc;
-
-    const newDoc = cloneDocWithTracks(doc);
-    const track = newDoc.parsedChart.trackData[idx];
-    removeDrumNote(track, this.note.tick, this.note.type);
-    return newDoc;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -218,7 +216,6 @@ export class AddNoteCommand implements EditCommand {
 
 export class DeleteNotesCommand implements EditCommand {
   readonly description: string;
-  private deletedNotes: DrumNote[] = [];
 
   constructor(
     private noteIds: Set<string>,
@@ -231,41 +228,15 @@ export class DeleteNotesCommand implements EditCommand {
     const idx = findTargetIndex(doc, this.trackKey);
     if (idx === -1) return doc;
 
-    const newDoc = cloneDocWithTracks(doc);
+    const newDoc = cloneDocWithTracks(doc, this.trackKey);
     const track = newDoc.parsedChart.trackData[idx];
 
     // Get current notes to find which ones match the IDs
     const currentNotes = getDrumNotes(track);
-    this.deletedNotes = [];
-
     for (const note of currentNotes) {
       if (this.noteIds.has(noteId(note))) {
-        this.deletedNotes.push({...note, flags: {...note.flags}});
         removeDrumNote(track, note.tick, note.type);
       }
-    }
-    return newDoc;
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    const idx = findTargetIndex(doc, this.trackKey);
-    if (idx === -1) return doc;
-
-    const newDoc = cloneDocWithTracks(doc);
-    const track = newDoc.parsedChart.trackData[idx];
-
-    const timing = makeChartTiming(newDoc.parsedChart);
-    for (const note of this.deletedNotes) {
-      addDrumNote(
-        track,
-        {
-          tick: note.tick,
-          type: note.type,
-          length: note.length,
-          flags: {...note.flags},
-        },
-        timing,
-      );
     }
     return newDoc;
   }
@@ -285,8 +256,6 @@ const KIND_LABELS: Record<EntityKind, string> = {
 
 export class MoveEntitiesCommand implements EditCommand {
   readonly description: string;
-  /** Ids of entities after the move (computed during execute, used by undo). */
-  private movedIds: string[] = [];
   private readonly ctx: EntityContext;
 
   constructor(
@@ -307,23 +276,10 @@ export class MoveEntitiesCommand implements EditCommand {
 
   execute(doc: ChartDocument): ChartDocument {
     const handler = entityHandlers[this.kind];
-    const newDoc = cloneDocFor(this.kind, doc);
+    const newDoc = cloneDocFor(this.kind, doc, this.ctx);
     const laneDelta = handler.supportsLaneDelta ? this.laneDelta : 0;
-    this.movedIds = this.ids.map(id =>
-      handler.move(newDoc, id, this.tickDelta, laneDelta, this.ctx),
-    );
-    return newDoc;
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    const handler = entityHandlers[this.kind];
-    const newDoc = cloneDocFor(this.kind, doc);
-    const laneDelta = handler.supportsLaneDelta ? -this.laneDelta : 0;
-    // Reverse the deltas using the moved ids captured during execute().
-    // We re-walk in input order; result ids land back on the original
-    // ids modulo any clamping the handler applied on either pass.
-    for (const movedId of this.movedIds) {
-      handler.move(newDoc, movedId, -this.tickDelta, laneDelta, this.ctx);
+    for (const id of this.ids) {
+      handler.move(newDoc, id, this.tickDelta, laneDelta, this.ctx);
     }
     return newDoc;
   }
@@ -347,18 +303,10 @@ export class ToggleFlagCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    return this.toggle(doc);
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    return this.toggle(doc);
-  }
-
-  private toggle(doc: ChartDocument): ChartDocument {
     const idx = findTargetIndex(doc, this.trackKey);
     if (idx === -1) return doc;
 
-    const newDoc = cloneDocWithTracks(doc);
+    const newDoc = cloneDocWithTracks(doc, this.trackKey);
     const track = newDoc.parsedChart.trackData[idx];
 
     const idSet = new Set(this.noteIds);
@@ -391,10 +339,6 @@ export class ToggleFlagCommand implements EditCommand {
  */
 export class ToggleKickCommand implements EditCommand {
   readonly description: string;
-  /** Notes as they were before execute(), for undo. */
-  private originals: DrumNote[] = [];
-  /** Notes as they exist after execute(), for undo removal. */
-  private converted: DrumNote[] = [];
 
   constructor(
     private noteIds: string[],
@@ -408,7 +352,7 @@ export class ToggleKickCommand implements EditCommand {
     const idx = findTargetIndex(doc, this.trackKey);
     if (idx === -1) return doc;
 
-    const newDoc = cloneDocWithTracks(doc);
+    const newDoc = cloneDocWithTracks(doc, this.trackKey);
     const track = newDoc.parsedChart.trackData[idx];
 
     const idSet = new Set(this.noteIds);
@@ -417,8 +361,7 @@ export class ToggleKickCommand implements EditCommand {
     if (selected.length === 0) return doc;
 
     const toKick = !selected.every(n => n.type === 'kick');
-    this.originals = [];
-    this.converted = [];
+    let convertedAny = false;
 
     // Kick↔pad conversion keeps each note's tick, but the DrumNote read carries
     // no msTime, so the remove+re-add must recompute timing or the converted
@@ -435,7 +378,6 @@ export class ToggleKickCommand implements EditCommand {
       const flags: DrumNoteFlags = {...note.flags};
       if (targetType === 'kick') delete flags.cymbal;
 
-      this.originals.push({...note, flags: {...note.flags}});
       removeDrumNote(track, note.tick, note.type);
       const newNote: DrumNote = {
         tick: note.tick,
@@ -444,27 +386,10 @@ export class ToggleKickCommand implements EditCommand {
         flags,
       };
       addDrumNote(track, newNote, timing);
-      this.converted.push({...newNote, flags: {...flags}});
+      convertedAny = true;
     }
 
-    return this.originals.length > 0 ? newDoc : doc;
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    const idx = findTargetIndex(doc, this.trackKey);
-    if (idx === -1) return doc;
-
-    const newDoc = cloneDocWithTracks(doc);
-    const track = newDoc.parsedChart.trackData[idx];
-
-    const timing = makeChartTiming(newDoc.parsedChart);
-    for (const note of this.converted) {
-      removeDrumNote(track, note.tick, note.type);
-    }
-    for (const note of this.originals) {
-      addDrumNote(track, {...note, flags: {...note.flags}}, timing);
-    }
-    return newDoc;
+    return convertedAny ? newDoc : doc;
   }
 }
 
@@ -481,13 +406,13 @@ export class ToggleKickCommand implements EditCommand {
  * grid (notes keep ticks and ride the moving grid via `retimeChart`). The BPM
  * is format-quantized at edit time (plan 0061 §2).
  *
- * Undo restores the pre-edit snapshot — a KEEP-MS remap quantizes/nudges notes
- * and is not invertible in closed form, so whole-doc restore is the safe
- * inverse (plan 0061 Risks), matching the other tempo commands.
+ * Undo restores the pre-edit snapshot (`undoDocStack`) — a KEEP-MS remap
+ * quantizes/nudges notes and is not invertible in closed form, so whole-doc
+ * restore is the safe inverse (plan 0061 Risks), matching the other tempo
+ * commands.
  */
 export class AddBPMCommand implements EditCommand {
   readonly description: string;
-  private prevDoc: ChartDocument | null = null;
 
   constructor(
     private tick: number,
@@ -498,7 +423,6 @@ export class AddBPMCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    this.prevDoc = doc;
     const cloned = cloneDocForRetime(doc);
     const chart = cloned.parsedChart;
     const quantized = quantizeBpm(this.bpm, chart.format ?? 'chart');
@@ -518,10 +442,6 @@ export class AddBPMCommand implements EditCommand {
     // The audio anchor is audio-relative too: keep its ms, recompute its tick.
     return refreshAnchorKeepMs(remapKeepMs(cloned, synctrackFromChart(chart)));
   }
-
-  undo(doc: ChartDocument): ChartDocument {
-    return this.prevDoc ?? doc;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -540,15 +460,8 @@ export class AddTimeSignatureCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    const newDoc = cloneDocWithTracks(doc);
+    const newDoc = cloneDocWithTimeSignatures(doc);
     addTimeSignature(newDoc, this.tick, this.numerator, this.denominator);
-    return newDoc;
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    if (this.tick === 0) return doc;
-    const newDoc = cloneDocWithTracks(doc);
-    removeTimeSignature(newDoc, this.tick);
     return newDoc;
   }
 }
@@ -571,11 +484,20 @@ export type TempoGlueMode = 'audio' | 'grid';
 /**
  * Deep-clone the arrays `retimeChart` mutates in place, so the KEEP-TICKS
  * path never touches the caller's original doc (KEEP-MS is already safe — it
- * builds a fresh chart via `swapSynctrack`). Notes are cloned by
- * `cloneDocWithTracks`; this adds the section/vocal/end arrays.
+ * builds a fresh chart via `swapSynctrack`). Unlike note-edit commands
+ * (scoped to one track via `cloneDocWithTracks`), a tempo retime touches
+ * *every* track's notes, so every track is cloned here.
  */
 function cloneDocForRetime(doc: ChartDocument): ChartDocument {
-  const cloned = cloneDocWithTracks(doc);
+  const cloned: ChartDocument = {
+    ...doc,
+    parsedChart: {
+      ...doc.parsedChart,
+      trackData: doc.parsedChart.trackData.map(t => cloneTrack(t)),
+      tempos: doc.parsedChart.tempos.map(t => ({...t})),
+      timeSignatures: doc.parsedChart.timeSignatures.map(ts => ({...ts})),
+    },
+  };
   const c = cloned.parsedChart;
   c.sections = c.sections.map(s => ({...s}));
   c.endEvents = c.endEvents.map(e => ({...e}));
@@ -617,7 +539,6 @@ function cloneDocForRetime(doc: ChartDocument): ChartDocument {
  */
 export class MoveTempoMarkerCommand implements EditCommand {
   readonly description: string;
-  private prevDoc: ChartDocument | null = null;
 
   constructor(
     private markerTick: number,
@@ -632,7 +553,6 @@ export class MoveTempoMarkerCommand implements EditCommand {
     if (!doc.parsedChart.tempos.some(t => t.tick === this.markerTick))
       return doc;
 
-    this.prevDoc = doc;
     const cloned = cloneDocForRetime(doc);
     const format = cloned.parsedChart.format ?? 'chart';
     applyMarkerMoveBpms(
@@ -653,9 +573,6 @@ export class MoveTempoMarkerCommand implements EditCommand {
     );
   }
 
-  undo(doc: ChartDocument): ChartDocument {
-    return this.prevDoc ?? doc;
-  }
 }
 
 /**
@@ -667,7 +584,6 @@ export class MoveTempoMarkerCommand implements EditCommand {
  */
 export class AddTempoMarkerCommand implements EditCommand {
   readonly description: string;
-  private prevDoc: ChartDocument | null = null;
 
   constructor(private tick: number) {
     this.description = `Add tempo marker at tick ${tick}`;
@@ -677,7 +593,6 @@ export class AddTempoMarkerCommand implements EditCommand {
     const tempos = doc.parsedChart.tempos;
     if (tempos.some(t => t.tick === this.tick)) return doc;
 
-    this.prevDoc = doc;
     const cloned = cloneDocForRetime(doc);
     const sorted = [...cloned.parsedChart.tempos].sort(
       (a, b) => a.tick - b.tick,
@@ -701,9 +616,6 @@ export class AddTempoMarkerCommand implements EditCommand {
     return refreshAnchorKeepTick(cloned);
   }
 
-  undo(doc: ChartDocument): ChartDocument {
-    return this.prevDoc ?? doc;
-  }
 }
 
 /**
@@ -714,7 +626,6 @@ export class AddTempoMarkerCommand implements EditCommand {
  */
 export class DeleteTempoMarkerCommand implements EditCommand {
   readonly description: string;
-  private prevDoc: ChartDocument | null = null;
 
   constructor(
     private tick: number,
@@ -727,7 +638,6 @@ export class DeleteTempoMarkerCommand implements EditCommand {
     if (this.tick === 0) return doc;
     if (!doc.parsedChart.tempos.some(t => t.tick === this.tick)) return doc;
 
-    this.prevDoc = doc;
     const cloned = cloneDocForRetime(doc);
     cloned.parsedChart.tempos = cloned.parsedChart.tempos.filter(
       t => t.tick !== this.tick,
@@ -742,9 +652,6 @@ export class DeleteTempoMarkerCommand implements EditCommand {
     );
   }
 
-  undo(doc: ChartDocument): ChartDocument {
-    return this.prevDoc ?? doc;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -773,7 +680,6 @@ export class DeleteTempoMarkerCommand implements EditCommand {
  */
 export class RepredictTempoCommand implements EditCommand {
   readonly description = 'Structural tempo correction (re-predict)';
-  private prevDoc: ChartDocument | null = null;
   /** Set after execute: whether the op fell back to RESNAP (no decoded
    * onsets). The UI reads this to surface the disclosure (plan 0061 §3a). */
   usedResnapFallback = false;
@@ -784,7 +690,6 @@ export class RepredictTempoCommand implements EditCommand {
   ) {}
 
   execute(doc: ChartDocument): ChartDocument {
-    this.prevDoc = doc;
     const anchor = getAudioAnchor(doc);
     // `this.onsets` is original-audio-relative (0064 addendum §7); shift onto
     // the padded timeline before re-deriving notes from it. Shifts a copy —
@@ -803,9 +708,6 @@ export class RepredictTempoCommand implements EditCommand {
     return refreshAnchorKeepMs(setAudioAnchor(result.doc, anchor));
   }
 
-  undo(doc: ChartDocument): ChartDocument {
-    return this.prevDoc ?? doc;
-  }
 }
 
 /**
@@ -826,12 +728,10 @@ export class RepredictTempoCommand implements EditCommand {
  */
 export class CommitTempoCandidateCommand implements EditCommand {
   readonly description = 'Commit tempo correction';
-  private prevDoc: ChartDocument | null = null;
 
   constructor(private candidate: ChartDocument) {}
 
   execute(doc: ChartDocument): ChartDocument {
-    this.prevDoc = doc;
     const anchor = getAudioAnchor(doc);
     // No leading-silence anchor active: commit the captured candidate
     // byte-identical (object identity — "no re-run, no drift" is a tested
@@ -845,9 +745,6 @@ export class CommitTempoCandidateCommand implements EditCommand {
     return refreshAnchorKeepMs(setAudioAnchor(this.candidate, anchor));
   }
 
-  undo(doc: ChartDocument): ChartDocument {
-    return this.prevDoc ?? doc;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -920,7 +817,6 @@ function applyDownbeatFlags(
  */
 export class MarkDownbeatCommand implements EditCommand {
   readonly description: string;
-  private prevDoc: ChartDocument | null = null;
 
   /** `spanEndTick` is the piano-roll's audio-extended beat span (see
    *  {@link downbeatSpanEndTick}); omit it for callers with no audio view. */
@@ -950,13 +846,9 @@ export class MarkDownbeatCommand implements EditCommand {
     const newFlags = markDownbeat(flags, beatTick);
     if (!newFlags) return doc;
 
-    this.prevDoc = doc;
     return applyDownbeatFlags(doc, newFlags);
   }
 
-  undo(doc: ChartDocument): ChartDocument {
-    return this.prevDoc ?? doc;
-  }
 }
 
 /**
@@ -965,7 +857,6 @@ export class MarkDownbeatCommand implements EditCommand {
  */
 export class UnmarkDownbeatCommand implements EditCommand {
   readonly description: string;
-  private prevDoc: ChartDocument | null = null;
 
   /** `spanEndTick` is the piano-roll's audio-extended beat span (see
    *  {@link downbeatSpanEndTick}); omit it for callers with no audio view. */
@@ -987,13 +878,9 @@ export class UnmarkDownbeatCommand implements EditCommand {
     const newFlags = unmarkDownbeat(flags, this.tick);
     if (!newFlags) return doc;
 
-    this.prevDoc = doc;
     return applyDownbeatFlags(doc, newFlags);
   }
 
-  undo(doc: ChartDocument): ChartDocument {
-    return this.prevDoc ?? doc;
-  }
 }
 
 /**
@@ -1005,7 +892,6 @@ export class UnmarkDownbeatCommand implements EditCommand {
  */
 export class RephaseDownbeatsCommand implements EditCommand {
   readonly description: string;
-  private prevDoc: ChartDocument | null = null;
 
   /** `spanEndTick` is the piano-roll's audio-extended beat span (see
    *  {@link downbeatSpanEndTick}); omit it for callers with no audio view. */
@@ -1026,13 +912,9 @@ export class RephaseDownbeatsCommand implements EditCommand {
     );
     if (!newFlags) return doc;
 
-    this.prevDoc = doc;
     return applyDownbeatFlags(doc, newFlags);
   }
 
-  undo(doc: ChartDocument): ChartDocument {
-    return this.prevDoc ?? doc;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1061,14 +943,6 @@ export class BatchCommand implements EditCommand {
     }
     return result;
   }
-
-  undo(doc: ChartDocument): ChartDocument {
-    let result = doc;
-    for (let i = this.commands.length - 1; i >= 0; i--) {
-      result = this.commands[i].undo(result);
-    }
-    return result;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1088,12 +962,6 @@ export class AddSectionCommand implements EditCommand {
   execute(doc: ChartDocument): ChartDocument {
     const newDoc = cloneDocWithSections(doc);
     addSection(newDoc, this.tick, this.name);
-    return newDoc;
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    const newDoc = cloneDocWithSections(doc);
-    removeSection(newDoc, this.tick);
     return newDoc;
   }
 }
@@ -1117,12 +985,6 @@ export class DeleteSectionCommand implements EditCommand {
     removeSection(newDoc, this.tick);
     return newDoc;
   }
-
-  undo(doc: ChartDocument): ChartDocument {
-    const newDoc = cloneDocWithSections(doc);
-    addSection(newDoc, this.tick, this.name);
-    return newDoc;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1144,13 +1006,6 @@ export class RenameSectionCommand implements EditCommand {
     const newDoc = cloneDocWithSections(doc);
     const section = newDoc.parsedChart.sections.find(s => s.tick === this.tick);
     if (section) section.name = this.newName;
-    return newDoc;
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    const newDoc = cloneDocWithSections(doc);
-    const section = newDoc.parsedChart.sections.find(s => s.tick === this.tick);
-    if (section) section.name = this.oldName;
     return newDoc;
   }
 }
@@ -1252,23 +1107,20 @@ export function hasExistingLyrics(
 
 /**
  * Replace the chart's `vocals` part with freshly-aligned lyrics (Add Lyrics
- * dialog, plan 0063 Part C). Execute applies {@link applyAlignedLyricsToDoc};
- * undo restores the `vocalTracks` exactly as they were before this command
- * ran (a snapshot, since the aligned syllables don't invert in closed form).
+ * dialog, plan 0063 Part C). Undo restores the pre-edit snapshot
+ * (`undoDocStack`) — the aligned syllables don't invert in closed form.
  */
 export class ReplaceLyricsCommand implements EditCommand {
   readonly description = 'Add lyrics';
-  private prevVocalTracks!: NormalizedVocalTrack;
 
   constructor(private syllables: AlignedSyllable[]) {}
 
   execute(doc: ChartDocument): ChartDocument {
-    this.prevVocalTracks = doc.parsedChart.vocalTracks;
     // The aligner ran against the ORIGINAL (unpadded) audio, so its syllable
     // times are original-audio-relative (0064 addendum §7). When leading
     // silence is active, shift onto a copy — never `this.syllables` itself,
-    // since undo/redo must be able to re-run this against a doc whose
-    // anchor has since changed.
+    // since redo must be able to re-run this against a doc whose anchor has
+    // since changed.
     const anchor = getAudioAnchor(doc);
     const syllables = anchor
       ? this.syllables.map(s => ({
@@ -1278,16 +1130,6 @@ export class ReplaceLyricsCommand implements EditCommand {
         }))
       : this.syllables;
     return applyAlignedLyricsToDoc(doc, syllables);
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    return {
-      ...doc,
-      parsedChart: {
-        ...doc.parsedChart,
-        vocalTracks: this.prevVocalTracks,
-      },
-    };
   }
 }
 
@@ -1304,7 +1146,6 @@ export class ReplaceLyricsCommand implements EditCommand {
  *  already exists there. */
 export class AddLyricCommand implements EditCommand {
   readonly description = 'Add lyric';
-  private createdId: string | null = null;
 
   constructor(
     private tick: number,
@@ -1314,15 +1155,8 @@ export class AddLyricCommand implements EditCommand {
 
   execute(doc: ChartDocument): ChartDocument {
     const newDoc = cloneDocFor('lyric', doc);
-    this.createdId = addLyric(newDoc, this.tick, this.text, this.partName);
-    return this.createdId ? newDoc : doc;
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    if (!this.createdId) return doc;
-    const newDoc = cloneDocFor('lyric', doc);
-    deleteLyric(newDoc, this.tick, this.partName);
-    return newDoc;
+    const createdId = addLyric(newDoc, this.tick, this.text, this.partName);
+    return createdId ? newDoc : doc;
   }
 }
 
@@ -1330,7 +1164,6 @@ export class AddLyricCommand implements EditCommand {
  *  if that empties it (see `deleteLyric`). No-op if no lyric exists there. */
 export class DeleteLyricCommand implements EditCommand {
   readonly description = 'Delete lyric';
-  private removed: RemovedLyric | null = null;
 
   constructor(
     private tick: number,
@@ -1339,15 +1172,8 @@ export class DeleteLyricCommand implements EditCommand {
 
   execute(doc: ChartDocument): ChartDocument {
     const newDoc = cloneDocFor('lyric', doc);
-    this.removed = deleteLyric(newDoc, this.tick, this.partName);
-    return this.removed ? newDoc : doc;
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    if (!this.removed) return doc;
-    const newDoc = cloneDocFor('lyric', doc);
-    restoreLyric(newDoc, this.removed, this.tick, this.partName);
-    return newDoc;
+    const removed = deleteLyric(newDoc, this.tick, this.partName);
+    return removed ? newDoc : doc;
   }
 }
 
@@ -1355,7 +1181,6 @@ export class DeleteLyricCommand implements EditCommand {
  *  "Edit lyric…" inline editor). No-op if no lyric exists there. */
 export class SetLyricTextCommand implements EditCommand {
   readonly description = 'Edit lyric text';
-  private prevText: string | null = null;
 
   constructor(
     private tick: number,
@@ -1373,17 +1198,9 @@ export class SetLyricTextCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    this.prevText = this.currentText(doc);
-    if (this.prevText === null) return doc;
+    if (this.currentText(doc) === null) return doc;
     const newDoc = cloneDocFor('lyric', doc);
     setLyricText(newDoc, this.tick, this.text, this.partName);
-    return newDoc;
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    if (this.prevText === null) return doc;
-    const newDoc = cloneDocFor('lyric', doc);
-    setLyricText(newDoc, this.tick, this.prevText, this.partName);
     return newDoc;
   }
 }
@@ -1393,7 +1210,6 @@ export class SetLyricTextCommand implements EditCommand {
  *  `addPhrase`). No-op if there's no room. */
 export class AddPhraseCommand implements EditCommand {
   readonly description = 'Add phrase';
-  private createdTick: number | null = null;
 
   constructor(
     private tick: number,
@@ -1402,15 +1218,8 @@ export class AddPhraseCommand implements EditCommand {
 
   execute(doc: ChartDocument): ChartDocument {
     const newDoc = cloneDocFor('lyric', doc);
-    this.createdTick = addPhrase(newDoc, this.tick, this.partName);
-    return this.createdTick !== null ? newDoc : doc;
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    if (this.createdTick === null) return doc;
-    const newDoc = cloneDocFor('lyric', doc);
-    deletePhrase(newDoc, this.createdTick, this.partName);
-    return newDoc;
+    const createdTick = addPhrase(newDoc, this.tick, this.partName);
+    return createdTick !== null ? newDoc : doc;
   }
 }
 
@@ -1419,7 +1228,6 @@ export class AddPhraseCommand implements EditCommand {
  *  there. */
 export class DeletePhraseCommand implements EditCommand {
   readonly description = 'Delete phrase';
-  private removed: NormalizedVocalPhrase | null = null;
 
   constructor(
     private tick: number,
@@ -1428,14 +1236,7 @@ export class DeletePhraseCommand implements EditCommand {
 
   execute(doc: ChartDocument): ChartDocument {
     const newDoc = cloneDocFor('lyric', doc);
-    this.removed = deletePhrase(newDoc, this.tick, this.partName);
-    return this.removed ? newDoc : doc;
-  }
-
-  undo(doc: ChartDocument): ChartDocument {
-    if (!this.removed) return doc;
-    const newDoc = cloneDocFor('lyric', doc);
-    insertPhrase(newDoc, this.removed, this.partName);
-    return newDoc;
+    const removed = deletePhrase(newDoc, this.tick, this.partName);
+    return removed ? newDoc : doc;
   }
 }
