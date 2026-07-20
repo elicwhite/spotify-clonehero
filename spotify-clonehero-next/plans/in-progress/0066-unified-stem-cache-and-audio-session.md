@@ -20,7 +20,7 @@ design below is superseded where it conflicts with this.
    reproducibility regardless of keying.
 
 2. **The two pages fingerprint DIFFERENT byte streams.** `/tempo` hashes the
-   original uploaded file; `/drum-transcription` hashes its *re-encoded*
+   original uploaded file; `/drum-transcription` hashes its _re-encoded_
    `song.opus` (`encodePcmToOpus`, opus-at-rest from 0063) — so a file-bytes
    key can never collide for realistic uploads (mp3/wav/sng, or any
    re-encoded opus). The original claim "same raw file bytes" held only for
@@ -50,6 +50,7 @@ separation-worker already surfaced vocals, so no worker-payload change was
 needed.
 
 **Browser validation:**
+
 - ✅ Cross-page cache sharing confirmed (2026-07-20) — separating a file on one
   page is reused by another (no second model download + re-separation).
 - ⏳ Still pending: all three pages end-to-end; `/tempo` +
@@ -90,7 +91,7 @@ facts:
   `drum-transcription/stem-cache/{fingerprint}/drums.pcm` — raw interleaved
   stereo Float32 @ 44.1kHz, uncompressed. `EditorApp` uses
   `usePaddedAudio({..., secondaryPcm: drumStemPcm, secondaryFileName:
-  'drums.wav'})` and passes the padded stem to `ChartEditor` as
+'drums.wav'})` and passes the padded stem to `ChartEditor` as
   `highwayAudioData`.
 - **`/tempo`** (`app/tempo/TempoClient.tsx`) runs
   `lib/drum-transcription/pipeline/tempo-track.ts:runTempoTrack`, whose doc
@@ -109,7 +110,7 @@ facts:
   change is needed, only plumbing the value through.
 - **The two stem caches turn out to use the identical identity primitive**:
   drum-transcription's fingerprint is `SHA-256(rawFileBytes || 0x00 ||
-  separatorId)` (`stem-cache.ts:computeStemFingerprint`); the tempo-map
+separatorId)` (`stem-cache.ts:computeStemFingerprint`); the tempo-map
   worker's `sourceHash` is `sha256Hex(sourceBytes)` on the exact same raw
   file bytes (`pipeline-client.ts:57-58`) — model/version identity is
   encoded separately in each (`DRUM_SEPARATOR_ID` vs
@@ -140,7 +141,7 @@ facts:
   chart already ships a bundled `vocals` audio file (`AddLyricsClient.tsx`
   lines 186-188 detect it, lines 387-411 skip Demucs and just resample the
   bundled file). `AddLyricsDialog.tsx` (used from `EditorApp`, i.e. the
-  *editor's* in-session "Add Lyrics" flow, a different code path from the
+  _editor's_ in-session "Add Lyrics" flow, a different code path from the
   standalone `/add-lyrics` page) already reuses the roformer vocals stem
   drum-transcription separated and cached — it hardcodes OPFS project calls
   inline and isn't reusable by another page as-is, but nothing today needs
@@ -153,7 +154,7 @@ and then reviewed adversarially. The reviewer's objections held up against
 the evidence and are adopted:
 
 - **No pluggable `StemSeparator` interface.** With Phase 3, BS-Roformer
-  becomes the *only* separator in production use (Demucs is fully retired,
+  becomes the _only_ separator in production use (Demucs is fully retired,
   not run in parallel) — so there still isn't a call site that needs to pick
   between separators at runtime. An interface with one production
   implementer is a wrapper, not an abstraction. Revisit only if a genuinely
@@ -162,7 +163,7 @@ the evidence and are adopted:
   passing one drum stem, `/drum-transcription` passing one drum stem — are
   both already served by the hook's existing `secondaryPcm`/
   `secondaryFileName` shape. `/add-lyrics` (Phase 3) doesn't touch
-  `usePaddedAudio` at all — its vocals PCM isn't a *playback* source, it's
+  `usePaddedAudio` at all — its vocals PCM isn't a _playback_ source, it's
   the aligner's input, same non-AudioManager role vocals PCM already plays
   in the editor's Add Lyrics flow today (`lyricsWaveData`, not a track).
   Widening to an arbitrary `Record<string, PCM>` still has no concrete
@@ -170,7 +171,7 @@ the evidence and are adopted:
   stems simultaneously, generalize then.
 - **No persistence-adapter injection for the stem cache.** `/tempo` and
   `/add-lyrics` don't persist a project today; both only need the
-  *content-addressed* cache (Phase 2), which has no project/OPFS-project
+  _content-addressed_ cache (Phase 2), which has no project/OPFS-project
   coupling to begin with — the whole point of fingerprint keys is that no
   caller-specific persistence adapter is needed. Revisit only if a
   non-OPFS-browser storage backend (e.g. server-side) is ever in scope.
@@ -179,12 +180,12 @@ the evidence and are adopted:
   than routing through `AddLyricsDialog.tsx`, which stays
   drum-transcription-editor-specific with its one caller. The existing
   `getChartFile`/`getAudioSources` callback pattern on `ChartEditor`'s
-  `ExportDialog` remains the precedent to copy if a second *dialog* caller
+  `ExportDialog` remains the precedent to copy if a second _dialog_ caller
   ever appears.
 
 What's left — fixing the concrete bug, unifying the stem cache, and moving
 `/add-lyrics` onto the shared separator — is kept in scope because all three
-are backed by *already-measured* duplication/breakage or an explicit,
+are backed by _already-measured_ duplication/breakage or an explicit,
 current ask, not projected future need.
 
 ## Goal
@@ -272,6 +273,7 @@ scope for this plan — not urgent, OPFS quota isn't currently a monitored
 constraint anywhere else in this codebase either).
 
 Update both call sites to the new module:
+
 - `lib/drum-transcription/ml/roformer-separation.ts`: `loadDrumStem`/
   `hasDrumStem`/`separateDrums`'s cache-store call switch to
   `lib/audio-pipeline/stem-cache.ts`. `loadVocalsStem`/`hasVocalsStem`
@@ -282,7 +284,7 @@ Update both call sites to the new module:
   worker-local stale-version prune (`STEM_CACHE_VERSION` sweep) since it
   become dead code once the version string folds into
   `DRUM_SEPARATOR_ID`/the fingerprint itself — a version bump now yields a
-  *different* fingerprint that naturally never collides with the old one,
+  _different_ fingerprint that naturally never collides with the old one,
   same as the fingerprint cache already relies on.
 - Delete `lib/drum-transcription/storage/stem-cache.ts` and
   `lib/tempo-map/stem-cache-format.ts` once both call sites are migrated
@@ -302,7 +304,7 @@ non-Demucs-specific helpers `demucs-client.ts` exports —
 `resampleTo16kMono`/`mixStemsToAudioBuffer` — are already separator-agnostic
 and already used against roformer output today
 (`components/chart-editor/AddLyricsDialog.tsx` calls `resampleTo16kMono` on
-the roformer vocals stem for the *editor's* Add Lyrics flow). So the
+the roformer vocals stem for the _editor's_ Add Lyrics flow). So the
 resample step from "roformer's 44.1kHz stereo vocals" to "16kHz mono" is
 proven, not new.
 
@@ -323,13 +325,14 @@ directly.
 cache): `separateStems(audioBytes: Uint8Array, opts: {vocals?: boolean;
 drums?: boolean}): Promise<{drums?: StereoStem; vocals?: StereoStem}>`.
 Behavior:
+
 1. Compute the fingerprint (`computeStemFingerprint(audioBytes,
-   ROFORMER_SEPARATOR_ID)`, the same function/id Phase 2 already
+ROFORMER_SEPARATOR_ID)`, the same function/id Phase 2 already
    canonicalized).
 2. For each requested stem, check the unified cache first
    (`loadStem(fingerprint, stemName)`); only run the worker for stems that
    miss.
-3. Runs the *same* `separation-worker.ts` (extend its return payload to
+3. Runs the _same_ `separation-worker.ts` (extend its return payload to
    include vocals PCM when `includeVocals` was requested — same fix shape as
    Phase 1: the data is already computed inside `separateDrumStem`, just not
    surfaced past the worker boundary today).
@@ -425,7 +428,7 @@ ship regardless.
    case (separate via `/drum-transcription`, then run `/tempo` on the same
    file, confirm no re-separation).
 6. Delete the two superseded cache modules (`lib/drum-transcription/storage/
-   stem-cache.ts`, `lib/tempo-map/stem-cache-format.ts`) + port their tests.
+stem-cache.ts`, `lib/tempo-map/stem-cache-format.ts`) + port their tests.
 7. Phase 3: extend `separation-worker.ts`'s return payload to surface vocals
    PCM; build `lib/audio-pipeline/separateStems`; make
    `roformer-separation.ts:separateDrums` a thin wrapper around it.

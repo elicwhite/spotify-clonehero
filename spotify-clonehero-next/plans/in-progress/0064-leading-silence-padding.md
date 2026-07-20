@@ -61,7 +61,7 @@ Steps:
    `originMs ≤ 0` (origin at/before the current audio start — the formula
    handles negative `originMs` with no special case).
 
-3. **Exact padding.** 
+3. **Exact padding.**
 
    `P_ms = N * barMs - originMs`
 
@@ -70,7 +70,7 @@ Steps:
 
 4. **Sample quantization.** Silence must be whole samples:
 
-   `P_samples = round(P_ms * sr / 1000)`,  `P'_ms = P_samples * 1000 / sr`
+   `P_samples = round(P_ms * sr / 1000)`, `P'_ms = P_samples * 1000 / sr`
 
    The residual `|P'_ms - P_ms| ≤ 0.5 sample` (≈ 0.011 ms at 44.1 kHz,
    0.010 ms at 48 kHz). Do NOT try to null it: it flows into
