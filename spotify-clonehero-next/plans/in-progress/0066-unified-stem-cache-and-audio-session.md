@@ -49,13 +49,14 @@ stem-cache,separate-stems,lyrics-audio}.ts`. Demucs fully removed
 separation-worker already surfaced vocals, so no worker-payload change was
 needed.
 
-**STILL PENDING — browser validation** (deferred to a joint review; can't run
-on this machine, CDP sandbox-blocked): all three pages end-to-end; the
-cross-page cache-hit scenario (separate on one page, confirm no re-download +
-re-separation on another — `list_network_requests`/OPFS inspection); `/tempo`
-+ `/drum-transcription` no tempo/note drift; and the `/add-lyrics` quality
-spot-check vs the old Demucs path (the plan's Risk-section stop-ship gate).
-Not moved to `plans/completed/` until this passes.
+**Browser validation:**
+- ✅ Cross-page cache sharing confirmed (2026-07-20) — separating a file on one
+  page is reused by another (no second model download + re-separation).
+- ⏳ Still pending: all three pages end-to-end; `/tempo` +
+  `/drum-transcription` no tempo/note drift; and the `/add-lyrics` quality
+  spot-check vs the old Demucs path (the plan's Risk-section stop-ship gate).
+
+Not moved to `plans/completed/` until the remaining checks pass.
 
 ## Context
 
