@@ -1,5 +1,43 @@
 # 0066 — Unify stem separation/caching; fix /tempo's missing drum-stem waveform; move /add-lyrics onto BS-Roformer
 
+## Addendum (2026-07-20) — approved deviations during implementation
+
+Two premises in the original investigation turned out to be false once the
+code was traced during implementation. Both were surfaced and the repo owner
+chose the correction; this addendum is the authoritative record. Phase 2's
+design below is superseded where it conflicts with this.
+
+1. **The two pages do NOT feed identical PCM to the separator.** `/tempo`
+   resamples native→44.1k with **libsoxr** (`lib/tempo-map/resampler-soxr.ts`,
+   used in `pipeline-worker.ts`); `/drum-transcription`'s `decodeAudio`
+   decoded at the hardware `AudioContext` rate and resampled via **Web Audio
+   `OfflineAudioContext`** (lossier, different). So the separated stems are
+   not byte-identical across pages. **Decision: unify the resampler first
+   (Phase 2a).** `/drum-transcription`'s decode now mirrors `/tempo`'s exact
+   recipe — forced-native-rate decode (`decodeNativeRate`) + `resampleSoxr`
+   per channel — via a shared `lib/audio-pipeline/decode-audio.ts`
+   (`decodeAndResampleTo44k`). Required for cache-hit byte-exact
+   reproducibility regardless of keying.
+
+2. **The two pages fingerprint DIFFERENT byte streams.** `/tempo` hashes the
+   original uploaded file; `/drum-transcription` hashes its *re-encoded*
+   `song.opus` (`encodePcmToOpus`, opus-at-rest from 0063) — so a file-bytes
+   key can never collide for realistic uploads (mp3/wav/sng, or any
+   re-encoded opus). The original claim "same raw file bytes" held only for
+   legacy `original.<ext>` projects. **Decision (owner): both pages store the
+   original uploaded audio file verbatim and fingerprint THOSE bytes;
+   conversion to Opus happens only at export, not at rest.** This reverts
+   0063's opus-at-rest choice for `/drum-transcription` and **overrides the
+   original non-goal "no change to `/drum-transcription`'s persisted project
+   format."** Existing `song.opus` projects must keep working (back-compat
+   read path); only new projects store the original. Tracked as Phase 2c.
+
+Revised Phase 2 shape: **2a** resampler unification (shared decode module) →
+**2b** unified cache module `lib/audio-pipeline/stem-cache.ts` keyed by
+`computeStemFingerprint(originalUploadBytes, ROFORMER_SEPARATOR_ID)` →
+**2c** `/drum-transcription` stores the original upload verbatim + fingerprints
+it, Opus only at export, with back-compat for existing opus-at-rest projects.
+
 ## Context
 
 `/tempo`'s piano-roll and highway waveforms currently show the full mix, not
