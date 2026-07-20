@@ -70,9 +70,10 @@ interface HighwayPreviewProps {
    */
   showLanes?: boolean;
   /**
-   * Instrument + difficulty to render. Defaults to drums/expert for
-   * backwards compatibility with callers that don't pass a scope-derived
-   * track (e.g. add-lyrics, which has no notes track).
+   * Instrument + difficulty to render. `undefined` for scopes with no
+   * notes track (vocals/global — add-lyrics): the highway then renders
+   * just the neutral floor + markers, with no instrument track resolved
+   * at all (no lanes, no note textures loaded).
    */
   trackKey?: TrackKey | undefined;
   /** Called when the renderer is ready (or destroyed). */
@@ -100,65 +101,45 @@ const HighwayPreview = memo(function HighwayPreview({
   audioManager,
   className,
   showLanes = true,
-  trackKey = {instrument: 'drums', difficulty: 'expert'},
+  trackKey,
   onRendererReady,
 }: HighwayPreviewProps) {
   const sizingRef = useRef<HTMLDivElement>(null!);
   const canvasRef = useRef<HTMLDivElement>(null!);
   const rendererRef = useRef<ReturnType<typeof setupRenderer> | null>(null);
 
-  // Memoize so the reference is stable when chart hasn't changed.
-  // When the chart has no matching track, fall back to a synthetic empty
-  // track (with the same instrument/difficulty) so the renderer pipeline
-  // (which expects a track to resolve textures/schema from its
-  // `instrument`) still runs; the highway then renders as a neutral floor
-  // with the beat grid and markers but no lanes (see effectiveShowLanes).
+  // `null` when the page has no notes track for this scope (no trackKey —
+  // vocals/global) or the chart doesn't contain the requested track. The
+  // renderer then skips lanes, hitbox, and note-texture loading entirely
+  // and draws only the neutral floor + markers.
   const activeTrack = useMemo(() => {
-    const found = chart.trackData.find(
-      t =>
-        t.instrument === trackKey.instrument &&
-        t.difficulty === trackKey.difficulty,
+    if (!trackKey) return null;
+    return (
+      chart.trackData.find(
+        t =>
+          t.instrument === trackKey.instrument &&
+          t.difficulty === trackKey.difficulty,
+      ) ?? null
     );
-    if (found) return found;
-    return {
-      instrument: trackKey.instrument,
-      difficulty: trackKey.difficulty,
-      starPowerSections: [],
-      rejectedStarPowerSections: [],
-      soloSections: [],
-      flexLanes: [],
-      drumFreestyleSections: [],
-      trackEvents: [],
-      textEvents: [],
-      versusPhrases: [],
-      animations: [],
-      unrecognizedMidiEvents: [],
-      noteEventGroups: [],
-    } as unknown as ParsedChart['trackData'][number];
-  }, [chart, trackKey.instrument, trackKey.difficulty]);
+  }, [chart, trackKey]);
 
   // Lanes only make sense when the chart actually has the active track;
   // otherwise render the neutral floor even when the capability profile
   // asks for lanes.
-  const hasActiveTrack = chart.trackData.some(
-    t =>
-      t.instrument === trackKey.instrument &&
-      t.difficulty === trackKey.difficulty,
-  );
-  const effectiveShowLanes = showLanes && hasActiveTrack;
+  const effectiveShowLanes = showLanes && activeTrack != null;
 
   // Use refs to capture the latest track + lanes flag for the initial
   // prepTrack()/setupRenderer() call. The renderer lifecycle only depends
   // on metadata and audioManager. Data updates (chart edits) flow through
   // the SceneReconciler, not renderer recreation.
-  const drumTrackRef = useRef(activeTrack);
-  drumTrackRef.current = activeTrack;
+  const activeTrackRef = useRef(activeTrack);
+  activeTrackRef.current = activeTrack;
   const showLanesRef = useRef(effectiveShowLanes);
   showLanesRef.current = effectiveShowLanes;
 
   useEffect(() => {
-    const track = drumTrackRef.current;
-    if (!canvasRef.current || !track) return;
+    const track = activeTrackRef.current;
+    if (!canvasRef.current) return;
 
     // Destroy previous renderer if any
     rendererRef.current?.destroy();
@@ -205,8 +186,8 @@ const HighwayPreview = memo(function HighwayPreview({
     metadata,
     audioManager,
     onRendererReady,
-    trackKey.instrument,
-    trackKey.difficulty,
+    trackKey?.instrument,
+    trackKey?.difficulty,
   ]);
 
   return (

@@ -4,7 +4,7 @@
  */
 
 import {noteTypes} from '@eliwhite/scan-chart';
-import {buildProjectionFor} from '../projection';
+import {buildProjectionFor, buildVocalsProjection} from '../projection';
 import {chartToElements} from '../chartToElements';
 import {trackToElements} from '../trackToElements';
 import type {Track} from '../types';
@@ -142,4 +142,79 @@ describe('buildProjectionFor', () => {
 
     expect(projection.overlays).toEqual([]);
   });
+});
+
+describe('buildVocalsProjection', () => {
+  it('returns the empty projection when doc is null', () => {
+    expect(buildVocalsProjection(null, 'vocals')).toEqual({
+      lanes: [],
+      elements: [],
+      markers: [],
+      overlays: [],
+      timing: {tempos: [], timeSignatures: []},
+    });
+  });
+
+  it('has no lanes and no note elements', () => {
+    const track = makeTrack([[note(noteTypes.redDrum, 480, 250)]]);
+    const doc = makeDoc(track);
+
+    const projection = buildVocalsProjection(doc, 'vocals');
+
+    expect(projection.lanes).toEqual([]);
+    expect(projection.elements).toEqual([]);
+  });
+
+  it('matches buildProjectionFor for an equivalent vocals scope', () => {
+    const track = makeTrack([]);
+    const doc = makeDoc(track);
+
+    const viaHelper = buildVocalsProjection(doc, 'harm1');
+    const viaGeneral = buildProjectionFor(
+      {kind: 'vocals', part: 'harm1'},
+      doc,
+      null,
+    );
+
+    expect(viaHelper).toEqual(viaGeneral);
+  });
+
+  it('scopes markers to the requested vocal part', () => {
+    const track = makeTrack([]);
+    const doc: ChartDocument = {
+      parsedChart: {
+        ...doc_base(track),
+        vocalTracks: {
+          parts: {
+            vocals: {
+              notePhrases: [
+                {
+                  tick: 0,
+                  msTime: 0,
+                  msLength: 1000,
+                  lyrics: [{tick: 0, msTime: 0, text: 'hi'}],
+                },
+              ],
+            },
+            harm1: {notePhrases: []},
+          },
+        },
+      },
+    } as unknown as ChartDocument;
+
+    const vocalsProjection = buildVocalsProjection(doc, 'vocals');
+    const harm1Projection = buildVocalsProjection(doc, 'harm1');
+
+    expect(vocalsProjection.markers.some(m => m.kind === 'lyric')).toBe(true);
+    expect(harm1Projection.markers.some(m => m.kind === 'lyric')).toBe(false);
+  });
+
+  function doc_base(track: Track) {
+    return {
+      trackData: [track],
+      sections: [],
+      tempos: [{tick: 0, msTime: 0, beatsPerMinute: 120}],
+      timeSignatures: [{tick: 0, msTime: 0, numerator: 4, denominator: 4}],
+    };
+  }
 });

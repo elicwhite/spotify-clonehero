@@ -157,7 +157,12 @@ export const setupRenderer = (
   let classicHighwayMesh: THREE.Mesh | null = null;
 
   const methods = {
-    prepTrack(track: Track) {
+    /**
+     * `track` is `null` for scopes with no notes track (vocals/global —
+     * add-lyrics). Lanes, hitbox, and note textures are all skipped in
+     * that case; only the neutral floor + markers render.
+     */
+    prepTrack(track: Track | null) {
       const scene = new THREE.Scene();
       // Black fog fades far-end fragments toward black against the black
       // canvas background, matching Clone Hero / YARG's gradient fade-in
@@ -394,11 +399,14 @@ export const setupRenderer = (
 
   return methods;
 
-  async function prepTrack(scene: THREE.Scene, track: Track) {
+  async function prepTrack(scene: THREE.Scene, track: Track | null) {
     const {highwayTexture} = await initPromise;
-    const schema = schemaForTrack(track, chart.drumType);
+    const schema = track ? schemaForTrack(track, chart.drumType) : null;
+    // Lanes require both the capability flag and an actual notes track —
+    // there's nothing to draw lanes for on a vocals/global scope.
+    const lanesActive = showDrumLanes && track != null;
 
-    if (!showDrumLanes) {
+    if (!lanesActive) {
       // Lanes-off mode: neutral floor, no hitbox, no drum geometry.
       const emptyHighway = createEmptyHighway();
       scene.add(emptyHighway);
@@ -417,12 +425,16 @@ export const setupRenderer = (
 
     const animatedTextureManager = new AnimatedTextureManager();
 
-    // Load textures (shared between NotesManager and NoteRenderer)
-    const {getTextureForNote} = await loadNoteTextures(
-      textureLoader,
-      track.instrument,
-      animatedTextureManager,
-    );
+    // Load textures (shared between NotesManager and NoteRenderer). Skipped
+    // entirely when there's no track (vocals/global scope) — no notes will
+    // ever be rendered, so there's no instrument to load textures for.
+    const {getTextureForNote} = track
+      ? await loadNoteTextures(
+          textureLoader,
+          track.instrument,
+          animatedTextureManager,
+        )
+      : {getTextureForNote: () => new THREE.SpriteMaterial()};
 
     // Create NoteRenderer for the reconciler
     const noteRenderer = new NoteRenderer(
@@ -478,12 +490,13 @@ export const setupRenderer = (
       highwaySpeed,
     );
 
-    // Convert track to elements and set on the reconciler. With
-    // `showDrumLanes` off (e.g. add-lyrics), seed the reconciler empty —
-    // HighwayEditor will populate markers from the full ParsedChart and
-    // skip notes when that capability is off, so drawing notes here would
-    // briefly flash drum geometry on a lanes-off page.
-    const elements = showDrumLanes ? trackToElements(track) : [];
+    // Convert track to elements and set on the reconciler. With lanes
+    // inactive (no track, or `showDrumLanes` off — e.g. add-lyrics), seed
+    // the reconciler empty — HighwayEditor will populate markers from the
+    // full ParsedChart and skip notes when that capability is off, so
+    // drawing notes here would briefly flash drum geometry on a lanes-off
+    // page.
+    const elements = lanesActive && track ? trackToElements(track) : [];
     reconciler.setElements(elements);
 
     // SceneOverlays + InteractionManager are created for any track — they

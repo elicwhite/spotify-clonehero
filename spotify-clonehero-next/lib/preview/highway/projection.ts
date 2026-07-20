@@ -118,6 +118,31 @@ const EMPTY_PROJECTION: EditorProjection = {
 };
 
 /**
+ * `EditorProjection` for a vocals scope. Same shape as the general
+ * projection — `lanes`/`elements` are always empty since vocals have no
+ * lane geometry or note track — but named so call sites reading the plan's
+ * projection-kind vocabulary (`VocalsProjection` vs `DrumsProjection` vs
+ * `FiveFretProjection`) can spot the vocals case explicitly.
+ */
+export type VocalsProjection = EditorProjection;
+
+/**
+ * Builds the `VocalsProjection` for one vocal part: lyric + phrase markers
+ * only, no lane geometry and no note elements. This is the renderer
+ * contract vocals-only pages (add-lyrics) build their highway from,
+ * replacing the older approach of handing the renderer a synthetic empty
+ * `drums`/`expert` track just to give `prepTrack` an `instrument` to
+ * resolve a schema/textures from — the renderer now accepts `track: null`
+ * directly (see `HighwayPreview`/`setupRenderer`).
+ */
+export function buildVocalsProjection(
+  doc: ChartDocument | null,
+  partName: string,
+): VocalsProjection {
+  return buildProjectionFor({kind: 'vocals', part: partName}, doc, null);
+}
+
+/**
  * Builds the `EditorProjection` for `scope` against `doc`.
  *
  * `schema` is the active instrument's `InstrumentSchema` — pass `null` for
