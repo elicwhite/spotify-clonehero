@@ -330,7 +330,8 @@ export function moveNote(
   const note = findNote(track, tick, type);
   if (!note) return null;
 
-  const newType = laneDelta !== 0 ? shiftLane(schema, note.type, laneDelta) : note.type;
+  const newType =
+    laneDelta !== 0 ? shiftLane(schema, note.type, laneDelta) : note.type;
   const newTick = Math.max(0, note.tick + tickDelta);
   if (newTick === note.tick && newType === note.type) return {tick, type};
 

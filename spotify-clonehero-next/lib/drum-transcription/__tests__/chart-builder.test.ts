@@ -217,7 +217,10 @@ describe('grid snapping of transcribed onsets', () => {
     expect(byKey.has(`360-${noteTypes.redDrum}`)).toBe(true); // 16th (within tolerance)
     expect(byKey.has(`160-${noteTypes.yellowDrum}`)).toBe(true); // triplet (HH cymbal)
     expect(
-      !!((byKey.get(`160-${noteTypes.yellowDrum}`)?.flags ?? 0) & noteFlags.cymbal),
+      !!(
+        (byKey.get(`160-${noteTypes.yellowDrum}`)?.flags ?? 0) &
+        noteFlags.cymbal
+      ),
     ).toBe(true);
     // The far-off-grid kick abstains: it keeps its raw rounded tick (200),
     // NOT the nearest grid line (240).

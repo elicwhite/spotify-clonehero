@@ -158,7 +158,12 @@ export const selectMoveTool: EditorTool = {
           tickDelta !== noteDrag.tickDelta ||
           laneDelta !== noteDrag.laneDelta
         ) {
-          ctx.drag.setNoteDrag({...noteDrag, tickDelta, laneDelta, active: true});
+          ctx.drag.setNoteDrag({
+            ...noteDrag,
+            tickDelta,
+            laneDelta,
+            active: true,
+          });
         }
         ctx.drag.setHoverTick(snappedTick);
       }
@@ -205,7 +210,12 @@ export const boxSelectTool: EditorTool = {
   id: 'box-select',
 
   onPointerDown(ctx: ToolContext, evt: PointerHitInfo): void {
-    for (const k of ['section', 'lyric', 'phrase-start', 'phrase-end'] as const) {
+    for (const k of [
+      'section',
+      'lyric',
+      'phrase-start',
+      'phrase-end',
+    ] as const) {
       if (getSelectedIds(ctx.state, k).size > 0) {
         ctx.dispatch({type: 'SET_SELECTION', kind: k, ids: new Set()});
       }
@@ -294,7 +304,11 @@ export const eraseTool: EditorTool = {
 
   onPointerDown(ctx: ToolContext, evt: PointerHitInfo): void {
     const {entity} = evt;
-    if (entity && AFFORDANCES[entity.kind].deletable && entity.kind === 'note') {
+    if (
+      entity &&
+      AFFORDANCES[entity.kind].deletable &&
+      entity.kind === 'note'
+    ) {
       const trackKey = trackKeyFromScope(ctx.state.activeScope);
       if (trackKey) {
         ctx.executeCommand(
@@ -362,7 +376,12 @@ export const sectionTool: EditorTool = {
   id: 'section',
 
   onPointerDown(ctx: ToolContext, evt: PointerHitInfo): void {
-    ctx.onOpenPopover({kind: 'section', tick: evt.tick, x: evt.coords.x, y: evt.coords.y});
+    ctx.onOpenPopover({
+      kind: 'section',
+      tick: evt.tick,
+      x: evt.coords.x,
+      y: evt.coords.y,
+    });
   },
 };
 
@@ -380,7 +399,11 @@ export const lyricsTimingTool: EditorTool = {
   onPointerDown(ctx: ToolContext, evt: PointerHitInfo): void {
     const {entity} = evt;
     if (!entity) return;
-    if (entity.kind !== 'lyric' && entity.kind !== 'phrase-start' && entity.kind !== 'phrase-end') {
+    if (
+      entity.kind !== 'lyric' &&
+      entity.kind !== 'phrase-start' &&
+      entity.kind !== 'phrase-end'
+    ) {
       return;
     }
     if (!ctx.capabilities.selectable.has(entity.kind)) return;

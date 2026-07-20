@@ -211,7 +211,8 @@ export function useEditorKeyboard(onSave?: () => void) {
       const track = getActiveTrack();
       const trackKey = trackKeyFromScope(state.activeScope);
       if (!track || !trackKey) return;
-      const schema = schemaForInstrument(trackKey.instrument) ?? drums4LaneSchema;
+      const schema =
+        schemaForInstrument(trackKey.instrument) ?? drums4LaneSchema;
       const selected = listNotes(track, schema).filter(n =>
         getSelectedIds(state, 'note').has(noteId(n)),
       );
@@ -239,7 +240,8 @@ export function useEditorKeyboard(onSave?: () => void) {
       const track = getActiveTrack();
       const trackKey = trackKeyFromScope(state.activeScope);
       if (!track || !trackKey) return;
-      const schema = schemaForInstrument(trackKey.instrument) ?? drums4LaneSchema;
+      const schema =
+        schemaForInstrument(trackKey.instrument) ?? drums4LaneSchema;
       const selected = listNotes(track, schema).filter(n =>
         getSelectedIds(state, 'note').has(noteId(n)),
       );
@@ -274,8 +276,7 @@ export function useEditorKeyboard(onSave?: () => void) {
     'Mod+V',
     () => {
       const clipboard = state.clipboard;
-      if (!clipboard || clipboard.notes.length === 0 || !state.chartDoc)
-        return;
+      if (!clipboard || clipboard.notes.length === 0 || !state.chartDoc) return;
       const cursorTick = state.cursorTick;
 
       const trackKey = trackKeyFromScope(state.activeScope);

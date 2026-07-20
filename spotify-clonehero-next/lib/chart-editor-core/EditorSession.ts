@@ -49,7 +49,7 @@ export class EditorSession {
       if (process.env.NODE_ENV !== 'production') {
         console.warn(
           `EditorSession: rejected "${action.command.description}" — ` +
-            'command declares entity kinds/operations outside this page\'s ' +
+            "command declares entity kinds/operations outside this page's " +
             'EditorCapabilities preset.',
         );
       }

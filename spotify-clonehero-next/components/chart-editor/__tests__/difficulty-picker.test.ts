@@ -1,10 +1,7 @@
 import {computeAvailableDifficulties} from '../DifficultyPicker';
 import type {ParsedTrackData} from '@/lib/chart-edit';
 
-function track(
-  instrument: string,
-  difficulty: string,
-): ParsedTrackData {
+function track(instrument: string, difficulty: string): ParsedTrackData {
   return {instrument, difficulty} as unknown as ParsedTrackData;
 }
 

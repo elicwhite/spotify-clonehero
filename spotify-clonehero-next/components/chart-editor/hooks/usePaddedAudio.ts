@@ -126,8 +126,9 @@ export function usePaddedAudio({
   const {audioManagerRef, setAudioManager: publishAudioManager} =
     useAudioServiceContext();
   const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
-  const [paddedFullMixPcm, setPaddedFullMixPcm] =
-    useState<Float32Array | null>(null);
+  const [paddedFullMixPcm, setPaddedFullMixPcm] = useState<Float32Array | null>(
+    null,
+  );
   const [paddedSecondaryPcm, setPaddedSecondaryPcm] =
     useState<Float32Array | null>(null);
   const [durationSeconds, setDurationSeconds] = useState(0);

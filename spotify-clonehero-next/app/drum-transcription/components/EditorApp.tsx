@@ -215,7 +215,10 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
         const pad =
           padSamples ??
           (state.chartDoc && audioMeta
-            ? anchorPadSamples(getAudioAnchor(state.chartDoc), audioMeta.sampleRate)
+            ? anchorPadSamples(
+                getAudioAnchor(state.chartDoc),
+                audioMeta.sampleRate,
+              )
             : 0);
         setVocalsStemPcm(padPcmStart(pcm, pad, 2));
       } catch (err) {

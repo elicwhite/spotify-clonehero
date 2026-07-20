@@ -764,7 +764,8 @@ function TempoEditor({
       }
 
       if (audioMeta.sampleRate === STEM_SAMPLE_RATE) {
-        if (!cancelled) setDrumStemInterleaved(interleave(stem.left, stem.right));
+        if (!cancelled)
+          setDrumStemInterleaved(interleave(stem.left, stem.right));
         return;
       }
 

@@ -23,7 +23,10 @@ import {
   tempoMarkerTool,
   timeSignatureMarkerTool,
 } from '../tools';
-import {resolveCursorContinuation, resolveToolForPointerDown} from '../registry';
+import {
+  resolveCursorContinuation,
+  resolveToolForPointerDown,
+} from '../registry';
 import type {NoteDragState, PointerHitInfo, ToolContext} from '../types';
 import type {HighwayPopoverState} from '../../highway/HighwayPopovers';
 import type {MarkerDragState, MarkerKind} from '../../highway/useMarkerDrag';
@@ -97,7 +100,11 @@ function makeContext(
       const doc = session.getState().chartDoc;
       if (!doc) return;
       const newDoc = cmd.execute(doc);
-      session.dispatch({type: 'EXECUTE_COMMAND', command: cmd, chartDoc: newDoc});
+      session.dispatch({
+        type: 'EXECUTE_COMMAND',
+        command: cmd,
+        chartDoc: newDoc,
+      });
     },
     onOpenPopover: (popover: HighwayPopoverState) => {
       popovers.push(popover);
@@ -214,9 +221,10 @@ describe('selectMoveTool', () => {
 
     selectMoveTool.onPointerUp?.(ctx, evt());
 
-    const movedNote = ctx.state.chartDoc?.parsedChart.trackData[0].noteEventGroups
-      .flat()
-      .find(n => n.type === noteTypes.redDrum);
+    const movedNote =
+      ctx.state.chartDoc?.parsedChart.trackData[0].noteEventGroups
+        .flat()
+        .find(n => n.type === noteTypes.redDrum);
     expect(movedNote?.tick).toBe(720);
   });
 
@@ -284,8 +292,8 @@ describe('placeNoteTool', () => {
     const session = makeSession();
     const ctx = makeContext(session);
     placeNoteTool.onPointerDown(ctx, evt({lane: 1, tick: 240}));
-    const notes = ctx.state.chartDoc!.parsedChart.trackData[0].noteEventGroups
-      .flat()
+    const notes = ctx.state
+      .chartDoc!.parsedChart.trackData[0].noteEventGroups.flat()
       .map(n => n.tick);
     expect(notes).toContain(240);
   });
@@ -295,10 +303,18 @@ describe('placeNoteTool', () => {
     const ctx = makeContext(session);
     placeNoteTool.onPointerDown(
       ctx,
-      evt({hit: {type: 'note', noteId: RED_ID, note: {} as never, lane: 1, tick: 480}}),
+      evt({
+        hit: {
+          type: 'note',
+          noteId: RED_ID,
+          note: {} as never,
+          lane: 1,
+          tick: 480,
+        },
+      }),
     );
-    const notes = ctx.state.chartDoc!.parsedChart.trackData[0].noteEventGroups
-      .flat()
+    const notes = ctx.state
+      .chartDoc!.parsedChart.trackData[0].noteEventGroups.flat()
       .map(n => n.tick);
     expect(notes).not.toContain(480);
   });
@@ -329,8 +345,8 @@ describe('eraseTool', () => {
       ctx,
       evt({entity: {kind: 'note', id: RED_ID, tick: 480}}),
     );
-    const notes = ctx.state.chartDoc!.parsedChart.trackData[0].noteEventGroups
-      .flat()
+    const notes = ctx.state
+      .chartDoc!.parsedChart.trackData[0].noteEventGroups.flat()
       .map(n => n.tick);
     expect(notes).not.toContain(480);
     expect(setIsErasing).toHaveBeenCalledWith(true);
@@ -357,10 +373,18 @@ describe('eraseTool', () => {
     });
     eraseTool.onPointerMove?.(
       ctx,
-      evt({hit: {type: 'note', noteId: YELLOW_ID, note: {} as never, lane: 2, tick: 960}}),
+      evt({
+        hit: {
+          type: 'note',
+          noteId: YELLOW_ID,
+          note: {} as never,
+          lane: 2,
+          tick: 960,
+        },
+      }),
     );
-    const notes = ctx.state.chartDoc!.parsedChart.trackData[0].noteEventGroups
-      .flat()
+    const notes = ctx.state
+      .chartDoc!.parsedChart.trackData[0].noteEventGroups.flat()
       .map(n => n.tick);
     expect(notes).not.toContain(960);
   });
@@ -370,10 +394,18 @@ describe('eraseTool', () => {
     const ctx = makeContext(session);
     eraseTool.onPointerMove?.(
       ctx,
-      evt({hit: {type: 'note', noteId: YELLOW_ID, note: {} as never, lane: 2, tick: 960}}),
+      evt({
+        hit: {
+          type: 'note',
+          noteId: YELLOW_ID,
+          note: {} as never,
+          lane: 2,
+          tick: 960,
+        },
+      }),
     );
-    const notes = ctx.state.chartDoc!.parsedChart.trackData[0].noteEventGroups
-      .flat()
+    const notes = ctx.state
+      .chartDoc!.parsedChart.trackData[0].noteEventGroups.flat()
       .map(n => n.tick);
     expect(notes).toContain(960);
   });
@@ -454,20 +486,24 @@ describe('registry', () => {
   });
 
   it('resolveToolForPointerDown picks boxSelectTool for an empty hit', () => {
-    const tool = resolveToolForPointerDown('cursor', evt(), DRUM_EDIT_CAPABILITIES);
+    const tool = resolveToolForPointerDown(
+      'cursor',
+      evt(),
+      DRUM_EDIT_CAPABILITIES,
+    );
     expect(tool).toBe(boxSelectTool);
   });
 
   it('resolveToolForPointerDown maps non-cursor modes to their single tool', () => {
-    expect(resolveToolForPointerDown('place', evt(), DRUM_EDIT_CAPABILITIES)).toBe(
-      placeNoteTool,
-    );
-    expect(resolveToolForPointerDown('erase', evt(), DRUM_EDIT_CAPABILITIES)).toBe(
-      eraseTool,
-    );
-    expect(resolveToolForPointerDown('bpm', evt(), DRUM_EDIT_CAPABILITIES)).toBe(
-      tempoMarkerTool,
-    );
+    expect(
+      resolveToolForPointerDown('place', evt(), DRUM_EDIT_CAPABILITIES),
+    ).toBe(placeNoteTool);
+    expect(
+      resolveToolForPointerDown('erase', evt(), DRUM_EDIT_CAPABILITIES),
+    ).toBe(eraseTool);
+    expect(
+      resolveToolForPointerDown('bpm', evt(), DRUM_EDIT_CAPABILITIES),
+    ).toBe(tempoMarkerTool);
     expect(
       resolveToolForPointerDown('timesig', evt(), DRUM_EDIT_CAPABILITIES),
     ).toBe(timeSignatureMarkerTool);

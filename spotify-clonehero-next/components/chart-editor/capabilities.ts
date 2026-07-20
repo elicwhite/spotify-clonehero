@@ -21,7 +21,11 @@
  * that omit the prop fall back to drum-edit for backward compatibility.
  */
 
-import type {CommandEntityKind, CommandOperation, EntityKind} from '@/lib/chart-edit';
+import type {
+  CommandEntityKind,
+  CommandOperation,
+  EntityKind,
+} from '@/lib/chart-edit';
 
 export interface EditorCapabilities {
   /**

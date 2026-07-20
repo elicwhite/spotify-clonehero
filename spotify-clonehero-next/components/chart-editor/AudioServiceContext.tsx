@@ -75,7 +75,9 @@ export function AudioServiceProvider({children}: {children: ReactNode}) {
 function useAudioService(): AudioService {
   const service = useContext(AudioServiceContext);
   if (!service) {
-    throw new Error('useAudioService must be used within an AudioServiceProvider');
+    throw new Error(
+      'useAudioService must be used within an AudioServiceProvider',
+    );
   }
   return service;
 }

@@ -66,9 +66,9 @@ describe('createOpfsProjectStore', () => {
 
     // updatedAt bumped on save.
     const updated = await store.getProject(meta.id);
-    expect(
-      new Date(updated.updatedAt).getTime(),
-    ).toBeGreaterThanOrEqual(new Date(meta.updatedAt).getTime());
+    expect(new Date(updated.updatedAt).getTime()).toBeGreaterThanOrEqual(
+      new Date(meta.updatedAt).getTime(),
+    );
   });
 
   it('isolates projects between namespaces', async () => {

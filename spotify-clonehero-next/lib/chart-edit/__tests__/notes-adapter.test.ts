@@ -102,12 +102,19 @@ describe.each([
   });
 
   it('toggleFlagBits on a binding with no appliesTo is a plain XOR', () => {
-    const binding = schema.flagBindings.find(b => !b.appliesTo && !b.complementFlag);
+    const binding = schema.flagBindings.find(
+      b => !b.appliesTo && !b.complementFlag,
+    );
     if (!binding) return; // schema has no unrestricted plain-toggle flag
     const bit = noteFlags[binding.flag];
     const toggled = toggleFlagBits(schema, laneA.noteType, 0, binding.flag);
     expect(toggled & bit).toBeTruthy();
-    const toggledBack = toggleFlagBits(schema, laneA.noteType, toggled, binding.flag);
+    const toggledBack = toggleFlagBits(
+      schema,
+      laneA.noteType,
+      toggled,
+      binding.flag,
+    );
     expect(toggledBack & bit).toBeFalsy();
   });
 });
@@ -120,9 +127,15 @@ describe('drums4LaneSchema-specific note adapter behavior', () => {
   const schema: InstrumentSchema = drums4LaneSchema;
 
   it('defaultFlagBits sets cymbal on yellow/blue/green, not kick/red', () => {
-    expect(defaultFlagBits(schema, noteTypes.yellowDrum) & noteFlags.cymbal).toBeTruthy();
-    expect(defaultFlagBits(schema, noteTypes.blueDrum) & noteFlags.cymbal).toBeTruthy();
-    expect(defaultFlagBits(schema, noteTypes.greenDrum) & noteFlags.cymbal).toBeTruthy();
+    expect(
+      defaultFlagBits(schema, noteTypes.yellowDrum) & noteFlags.cymbal,
+    ).toBeTruthy();
+    expect(
+      defaultFlagBits(schema, noteTypes.blueDrum) & noteFlags.cymbal,
+    ).toBeTruthy();
+    expect(
+      defaultFlagBits(schema, noteTypes.greenDrum) & noteFlags.cymbal,
+    ).toBeTruthy();
     expect(defaultFlagBits(schema, noteTypes.kick)).toBe(0);
     expect(defaultFlagBits(schema, noteTypes.redDrum)).toBe(0);
   });
@@ -145,15 +158,23 @@ describe('drums4LaneSchema-specific note adapter behavior', () => {
   });
 
   it('legalizeFlagBits strips cymbal/tom when the target type is illegal', () => {
-    expect(legalizeFlagBits(schema, noteTypes.redDrum, noteFlags.cymbal)).toBe(0);
+    expect(legalizeFlagBits(schema, noteTypes.redDrum, noteFlags.cymbal)).toBe(
+      0,
+    );
     expect(legalizeFlagBits(schema, noteTypes.redDrum, noteFlags.tom)).toBe(0);
   });
 
   it('addNote legalizes flags at insert time', () => {
     const t = track();
     // A caller passing an illegal cymbal bit on red gets it stripped.
-    addNote(t, {tick: 0, type: noteTypes.redDrum, flags: noteFlags.cymbal}, schema);
-    expect(findNote(t, 0, noteTypes.redDrum)!.flags & noteFlags.cymbal).toBeFalsy();
+    addNote(
+      t,
+      {tick: 0, type: noteTypes.redDrum, flags: noteFlags.cymbal},
+      schema,
+    );
+    expect(
+      findNote(t, 0, noteTypes.redDrum)!.flags & noteFlags.cymbal,
+    ).toBeFalsy();
   });
 
   it('setNoteFlags overwrites a note flag bitmask directly', () => {
@@ -171,15 +192,25 @@ describe('drums4LaneSchema-specific note adapter behavior', () => {
   it('flam (groupShared) syncs onto every note added to the tick group', () => {
     const t = track();
     addNote(t, {tick: 0, type: noteTypes.kick}, schema);
-    addNote(t, {tick: 0, type: noteTypes.redDrum, flags: noteFlags.flam}, schema);
+    addNote(
+      t,
+      {tick: 0, type: noteTypes.redDrum, flags: noteFlags.flam},
+      schema,
+    );
     expect(findNote(t, 0, noteTypes.kick)!.flags & noteFlags.flam).toBeTruthy();
-    expect(findNote(t, 0, noteTypes.redDrum)!.flags & noteFlags.flam).toBeTruthy();
+    expect(
+      findNote(t, 0, noteTypes.redDrum)!.flags & noteFlags.flam,
+    ).toBeTruthy();
   });
 
   it('flam clears from the group once every member is explicitly un-flammed', () => {
     const t = track();
     addNote(t, {tick: 0, type: noteTypes.kick}, schema);
-    addNote(t, {tick: 0, type: noteTypes.redDrum, flags: noteFlags.flam}, schema);
+    addNote(
+      t,
+      {tick: 0, type: noteTypes.redDrum, flags: noteFlags.flam},
+      schema,
+    );
     // Both notes carry the synced bit; explicitly clearing it on both is what
     // it takes to clear the group (matches `setNoteFlags`' "last one to want
     // it wins" contract — removing a note that merely inherited the bit from
@@ -187,7 +218,9 @@ describe('drums4LaneSchema-specific note adapter behavior', () => {
     setNoteFlags(t, 0, noteTypes.kick, 0, schema);
     setNoteFlags(t, 0, noteTypes.redDrum, 0, schema);
     expect(findNote(t, 0, noteTypes.kick)!.flags & noteFlags.flam).toBeFalsy();
-    expect(findNote(t, 0, noteTypes.redDrum)!.flags & noteFlags.flam).toBeFalsy();
+    expect(
+      findNote(t, 0, noteTypes.redDrum)!.flags & noteFlags.flam,
+    ).toBeFalsy();
   });
 
   it('kick is excluded from the lane-shift axis; pads clamp instead of sliding into it', () => {
@@ -199,12 +232,18 @@ describe('drums4LaneSchema-specific note adapter behavior', () => {
 
   it('moveNote drops the cymbal flag when a lane shift lands on an illegal lane', () => {
     const t = track();
-    addNote(t, {tick: 480, type: noteTypes.yellowDrum, flags: noteFlags.cymbal}, schema);
+    addNote(
+      t,
+      {tick: 480, type: noteTypes.yellowDrum, flags: noteFlags.cymbal},
+      schema,
+    );
     const chart = createEmptyChart({bpm: 120, resolution: 480});
     // yellow (lane 1) -> red (lane 0)
     const moved = moveNote(chart, t, 480, noteTypes.yellowDrum, 0, -1, schema);
     expect(moved).toEqual({tick: 480, type: noteTypes.redDrum});
-    expect(findNote(t, 480, noteTypes.redDrum)!.flags & noteFlags.cymbal).toBeFalsy();
+    expect(
+      findNote(t, 480, noteTypes.redDrum)!.flags & noteFlags.cymbal,
+    ).toBeFalsy();
   });
 });
 

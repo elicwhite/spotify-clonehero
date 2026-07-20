@@ -47,7 +47,10 @@ import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {ChartEditorProvider, useChartEditorContext} from './ChartEditorContext';
-import {AudioServiceProvider, useAudioServiceContext} from './AudioServiceContext';
+import {
+  AudioServiceProvider,
+  useAudioServiceContext,
+} from './AudioServiceContext';
 import type {EditorScope} from './scope';
 import ChartEditor from './ChartEditor';
 import type {AudioSource} from './ExportDialog';
@@ -247,7 +250,14 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
         setPageState('load');
       }
     },
-    [router, store, route, iniChartModifiersOverride, findTrack, noTrackMessage],
+    [
+      router,
+      store,
+      route,
+      iniChartModifiersOverride,
+      findTrack,
+      noTrackMessage,
+    ],
   );
 
   // Handle opening an existing project

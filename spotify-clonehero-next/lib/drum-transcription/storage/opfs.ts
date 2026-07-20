@@ -623,7 +623,12 @@ export async function storeAudioOpus(
   await opusWritable.write(opusBytes as Uint8Array<ArrayBuffer>);
   await opusWritable.close();
 
-  await writeAudioStorageMeta(projectId, audioDir, audioMeta, samplesPerChannel);
+  await writeAudioStorageMeta(
+    projectId,
+    audioDir,
+    audioMeta,
+    samplesPerChannel,
+  );
 }
 
 /**
@@ -650,10 +655,19 @@ export async function storeAudioOriginal(
   audioMeta: AudioMetadata,
   samplesPerChannel: number,
 ): Promise<void> {
-  await storeOriginalAudio(projectId, originalBytes, audioMeta.originalFileName);
+  await storeOriginalAudio(
+    projectId,
+    originalBytes,
+    audioMeta.originalFileName,
+  );
 
   const audioDir = await getAudioDir(projectId, {create: true});
-  await writeAudioStorageMeta(projectId, audioDir, audioMeta, samplesPerChannel);
+  await writeAudioStorageMeta(
+    projectId,
+    audioDir,
+    audioMeta,
+    samplesPerChannel,
+  );
 }
 
 /**

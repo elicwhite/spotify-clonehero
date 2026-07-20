@@ -4,7 +4,11 @@ import {useEffect, useRef} from 'react';
 import {useChartEditorContext} from './ChartEditorContext';
 import {useAudioServiceContext} from './AudioServiceContext';
 import {getSelectedIds, selectActiveTrack} from '@/lib/chart-editor-core';
-import {describeScope, entityContextFromScope, trackKeyFromScope} from './scope';
+import {
+  describeScope,
+  entityContextFromScope,
+  trackKeyFromScope,
+} from './scope';
 import type {EntityRef} from '@/lib/chart-edit';
 import {useExecuteCommand, useUndoRedo} from './hooks/useEditCommands';
 import {

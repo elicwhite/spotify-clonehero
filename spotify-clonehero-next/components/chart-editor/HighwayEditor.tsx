@@ -439,9 +439,7 @@ export default function HighwayEditor({
         className="h-full w-full"
         showLanes={capabilities.showDrumLanes}
         trackKey={
-          isTrackScope(state.activeScope)
-            ? state.activeScope.track
-            : undefined
+          isTrackScope(state.activeScope) ? state.activeScope.track : undefined
         }
         onRendererReady={handleRendererReady}
       />

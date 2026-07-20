@@ -18,8 +18,9 @@ const CONFIG: TrackEditPageConfig = {
   // Guitar has no pro-drums-style modifier that needs forcing on — use
   // scan-chart's defaults.
   findTrack: trackData =>
-    trackData.find(t => t.instrument === 'guitar' && t.difficulty === 'expert') ??
-    trackData.find(t => t.instrument === 'guitar'),
+    trackData.find(
+      t => t.instrument === 'guitar' && t.difficulty === 'expert',
+    ) ?? trackData.find(t => t.instrument === 'guitar'),
   noTrackMessage: 'No Guitar track found in chart.',
   headerExtra: <DifficultyPicker />,
 };

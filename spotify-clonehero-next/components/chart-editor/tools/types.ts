@@ -23,7 +23,10 @@
 
 import type {DrumNote, EntityKind} from '@/lib/chart-edit';
 import type {EditCommand} from '../commands';
-import type {ChartEditorAction, ChartEditorState} from '@/lib/chart-editor-core';
+import type {
+  ChartEditorAction,
+  ChartEditorState,
+} from '@/lib/chart-editor-core';
 import type {EditorCapabilities} from '../capabilities';
 import type {HitResult} from '@/lib/preview/highway';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';

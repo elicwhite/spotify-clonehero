@@ -12,7 +12,6 @@ import {
 } from '../index';
 import {emptyTrackData} from './test-utils';
 import {
-  LEAD_MIN_MS,
   planLeadingSilence,
   applyLeadingSilence,
   getAudioAnchor,

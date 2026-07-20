@@ -144,10 +144,14 @@ describe('Opus-at-rest audio storage', () => {
         ]),
       );
       expect(paths).not.toEqual(
-        expect.arrayContaining([`/drum-transcription/${meta.id}/audio/song.opus`]),
+        expect.arrayContaining([
+          `/drum-transcription/${meta.id}/audio/song.opus`,
+        ]),
       );
       expect(paths).not.toEqual(
-        expect.arrayContaining([`/drum-transcription/${meta.id}/audio/full.pcm`]),
+        expect.arrayContaining([
+          `/drum-transcription/${meta.id}/audio/full.pcm`,
+        ]),
       );
     });
 
@@ -170,7 +174,9 @@ describe('Opus-at-rest audio storage', () => {
 
       const readBack = await opfs.readOriginalAudio(meta.id);
       expect(readBack).not.toBeNull();
-      expect(new Uint8Array(readBack!.data)).toEqual(new Uint8Array(originalBytes));
+      expect(new Uint8Array(readBack!.data)).toEqual(
+        new Uint8Array(originalBytes),
+      );
       expect(readBack!.extension).toBe('mp3');
     });
   });

@@ -1,4 +1,8 @@
-import type {ChartDocument, EntityKind, ParsedTrackData} from '@/lib/chart-edit';
+import type {
+  ChartDocument,
+  EntityKind,
+  ParsedTrackData,
+} from '@/lib/chart-edit';
 import {findTrack} from '@/lib/chart-edit';
 import {isTrackScope} from '@/components/chart-editor/scope';
 import type {ChartEditorState} from './state';

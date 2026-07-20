@@ -9,10 +9,10 @@ import {installFakeOPFS} from './fake-opfs';
 import * as opfs from '../opfs';
 
 describe('ProjectMetadata.audioAnchor', () => {
-  let fake: ReturnType<typeof installFakeOPFS>;
+  let _fake: ReturnType<typeof installFakeOPFS>;
 
   beforeEach(() => {
-    fake = installFakeOPFS();
+    _fake = installFakeOPFS();
   });
 
   it('is absent on a freshly created project', async () => {

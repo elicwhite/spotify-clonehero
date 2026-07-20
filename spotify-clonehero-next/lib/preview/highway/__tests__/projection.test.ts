@@ -23,7 +23,13 @@ function note(
   flags = 0,
   msLength = 0,
 ): Track['noteEventGroups'][0][0] {
-  return {type, tick, msTime, flags, msLength} as Track['noteEventGroups'][0][0];
+  return {
+    type,
+    tick,
+    msTime,
+    flags,
+    msLength,
+  } as Track['noteEventGroups'][0][0];
 }
 
 function makeTrack(
