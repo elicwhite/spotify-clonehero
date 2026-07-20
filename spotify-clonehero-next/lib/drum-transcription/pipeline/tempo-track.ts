@@ -66,6 +66,10 @@ export interface TempoTrackResult {
   sections: LinkSegSections | null;
   meterStats: MeterStats | null;
   drumOnsetOffsetMs: number | null;
+  /** The separated drum stem the CRNN transcribed, for callers that want to
+   * display/play it (e.g. /tempo's piano-roll and highway waveforms). Planar
+   * `{left, right}` at 44.1 kHz; null if separation failed to produce audio. */
+  drumStemStereo: {left: Float32Array; right: Float32Array} | null;
 }
 
 export interface TempoTrackFromPcmInput {
@@ -149,6 +153,7 @@ export async function runTempoTrackFromPcm(
     sections: tempoResult.sections,
     meterStats: tempoResult.meterStats,
     drumOnsetOffsetMs: tempoResult.drumOnsetOffsetMs,
+    drumStemStereo: stereoStem,
   };
 }
 

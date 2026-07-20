@@ -560,10 +560,41 @@ export async function storeAudio(
 }
 
 /**
- * Stores audio as Opus at rest — the current storage format. Writes only
- * `audio/song.opus` and `audio/meta.json` (no `full.pcm`, no
- * `original.<ext>`); the project's audio is decoded back to PCM in memory on
- * open ({@link loadFullMixPcm}) rather than kept as a second copy on disk.
+ * Writes `audio/meta.json` and updates the project's duration. Shared by
+ * every audio storage format ({@link storeAudioOpus},
+ * {@link storeAudioOriginal}) — the metadata shape doesn't depend on how the
+ * audio bytes themselves are stored.
+ */
+async function writeAudioStorageMeta(
+  projectId: string,
+  audioDir: FileSystemDirectoryHandle,
+  audioMeta: AudioMetadata,
+  samplesPerChannel: number,
+): Promise<void> {
+  const storageMeta: AudioStorageMeta = {
+    sampleRate: 44100,
+    channels: 2,
+    samples: samplesPerChannel,
+    durationMs: audioMeta.durationMs,
+    audioMetadata: audioMeta,
+  };
+
+  const metaHandle = await audioDir.getFileHandle(AUDIO_META_FILE, {
+    create: true,
+  });
+  await writeFile(metaHandle, JSON.stringify(storageMeta));
+
+  await updateProject(projectId, {
+    durationSeconds: audioMeta.durationMs / 1000,
+  });
+}
+
+/**
+ * Stores audio as Opus at rest — the legacy storage format for projects
+ * created before original-audio-at-rest. Writes only `audio/song.opus` and
+ * `audio/meta.json` (no `full.pcm`, no `original.<ext>`); the project's
+ * audio is decoded back to PCM in memory on open ({@link loadFullMixPcm})
+ * rather than kept as a second copy on disk.
  *
  * Writes to:
  *   drum-transcription/{projectId}/audio/song.opus
@@ -592,22 +623,37 @@ export async function storeAudioOpus(
   await opusWritable.write(opusBytes as Uint8Array<ArrayBuffer>);
   await opusWritable.close();
 
-  const storageMeta: AudioStorageMeta = {
-    sampleRate: 44100,
-    channels: 2,
-    samples: samplesPerChannel,
-    durationMs: audioMeta.durationMs,
-    audioMetadata: audioMeta,
-  };
+  await writeAudioStorageMeta(projectId, audioDir, audioMeta, samplesPerChannel);
+}
 
-  const metaHandle = await audioDir.getFileHandle(AUDIO_META_FILE, {
-    create: true,
-  });
-  await writeFile(metaHandle, JSON.stringify(storageMeta));
+/**
+ * Stores the user's original uploaded audio file verbatim, plus
+ * `audio/meta.json` — the current storage format. No Opus re-encode happens
+ * at rest; conversion to Opus, if needed, happens only at export time. The
+ * fingerprint used to key the shared stem cache is computed over these same
+ * verbatim bytes.
+ *
+ * Writes to:
+ *   drum-transcription/{projectId}/audio/original.<ext>
+ *   drum-transcription/{projectId}/audio/meta.json
+ *
+ * Also updates the project metadata with the audio duration.
+ *
+ * @param projectId - The project ID returned by createProject()
+ * @param originalBytes - The uploaded file's bytes, unmodified
+ * @param audioMeta - Metadata about the audio (from createAudioMetadata)
+ * @param samplesPerChannel - Number of samples per channel in the decoded PCM
+ */
+export async function storeAudioOriginal(
+  projectId: string,
+  originalBytes: ArrayBuffer,
+  audioMeta: AudioMetadata,
+  samplesPerChannel: number,
+): Promise<void> {
+  await storeOriginalAudio(projectId, originalBytes, audioMeta.originalFileName);
 
-  await updateProject(projectId, {
-    durationSeconds: audioMeta.durationMs / 1000,
-  });
+  const audioDir = await getAudioDir(projectId, {create: true});
+  await writeAudioStorageMeta(projectId, audioDir, audioMeta, samplesPerChannel);
 }
 
 /**
@@ -642,8 +688,8 @@ export async function hasSongOpus(projectId: string): Promise<boolean> {
  * Stores the user's original uploaded audio file, byte-for-byte, so it can be
  * exported unmodified. The extension is taken from `originalFileName`.
  *
- * Legacy write path — current projects use {@link storeAudioOpus} instead and
- * never call this.
+ * Called by {@link storeAudioOriginal}, which also writes `meta.json`; use
+ * that instead unless only the raw file (no metadata) needs to be written.
  *
  * Writes to: drum-transcription/{projectId}/audio/original.<ext>
  */
@@ -710,11 +756,12 @@ export async function readOriginalAudio(
  * (44.1 kHz) — for the separation/tempo/transcription pipeline, and for the
  * editor's waveform + AudioManager source.
  *
- * Generation-aware: legacy projects read the stored `full.pcm` directly;
- * current (Opus-at-rest) projects decode `song.opus` to PCM in memory (the
- * only place that PCM exists — it is never written back to disk).
- * Demucs expects channels-first [2, N] format — the caller is responsible
- * for reshaping the interleaved [N*2] data.
+ * Generation-aware, tried in order: legacy projects read the stored
+ * `full.pcm` directly; opus-at-rest projects decode `song.opus` to PCM in
+ * memory; current (original-at-rest) projects decode the stored
+ * `original.<ext>` to PCM. Whichever source is used, the decoded PCM is
+ * never written back to disk. Demucs expects channels-first [2, N] format —
+ * the caller is responsible for reshaping the interleaved [N*2] data.
  *
  * @throws {Error} If no audio has been stored for this project.
  */
@@ -725,11 +772,21 @@ export async function loadFullMixPcm(projectId: string): Promise<Float32Array> {
     const file = await pcmHandle.getFile();
     return new Float32Array(await file.arrayBuffer());
   } catch {
-    // Not a legacy project — decode the stored Opus instead.
+    // Not a legacy project — try the stored Opus next.
   }
-  const opusHandle = await audioDir.getFileHandle(AUDIO_OPUS_FILE);
-  const file = await opusHandle.getFile();
-  const audioBuffer = await decodeAudio(await file.arrayBuffer());
+  try {
+    const opusHandle = await audioDir.getFileHandle(AUDIO_OPUS_FILE);
+    const file = await opusHandle.getFile();
+    const audioBuffer = await decodeAudio(await file.arrayBuffer());
+    return interleaveAudioBuffer(audioBuffer);
+  } catch {
+    // Not an opus-at-rest project — fall back to the stored original.
+  }
+  const original = await readOriginalAudio(projectId);
+  if (!original) {
+    throw new Error(`No audio stored for project ${projectId}`);
+  }
+  const audioBuffer = await decodeAudio(original.data);
   return interleaveAudioBuffer(audioBuffer);
 }
 

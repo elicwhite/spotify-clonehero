@@ -6,7 +6,7 @@
  * ml/separation-worker.ts (no real Worker/module-URL environment needed).
  */
 
-import {runSeparationInWorker} from '../roformer-separation';
+import {runSeparationInWorker} from '@/lib/audio-pipeline/separate-stems';
 import type {SeparationWorkerMessage} from '../separation-worker';
 
 /** A controllable fake worker responding to the separation-worker.ts protocol. */

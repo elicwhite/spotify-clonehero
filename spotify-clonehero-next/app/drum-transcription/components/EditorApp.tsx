@@ -493,20 +493,21 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
   // Provide audio sources for export.
   //
   // Stems live in the fingerprint-keyed stem cache; the full mix is
-  // `audio/song.opus` (current projects) or `audio/full.pcm` (legacy).
+  // `audio/original.<ext>` (current projects), `audio/song.opus`
+  // (opus-at-rest projects), or `audio/full.pcm` (legacy).
   //
   // `includeStems` (from the export dialog) selects between:
   //   true  → separated drums.opus + accompaniment song.opus, Opus-encoded
   //           from the stem PCM via WebCodecs.
-  //   false → the user's original uploaded file, byte-for-byte, as song.<ext>
-  //           (song.opus verbatim for current projects).
+  //   false → the user's original uploaded file, byte-for-byte, as
+  //           song.<ext> (or song.opus verbatim for opus-at-rest projects).
   //
   // When the chart carries an `audioAnchor` (leading silence applied, 0064
   // addendum §6), every returned source is padded so the exported audio
   // matches the chart's shifted note timing — the verbatim/passthrough
   // shortcuts above are only valid when there's no anchor. The stored audio
-  // at rest (song.opus, stem cache) is never modified; padding happens on a
-  // decoded copy at export time.
+  // at rest is never modified; padding happens on a decoded copy at export
+  // time.
   const getAudioSources = useCallback(
     async ({includeStems}: {includeStems: boolean}): Promise<AudioSource[]> => {
       const sources: AudioSource[] = [];
@@ -521,7 +522,8 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
 
       // Current projects store the full mix pre-encoded as Opus — reuse it
       // verbatim rather than decoding + re-encoding. Only valid when there's
-      // no anchor (verbatim bytes can't reflect a pad).
+      // no anchor (verbatim bytes can't reflect a pad). Used by the
+      // includeStems accompaniment branch below.
       const songOpus = padSamples > 0 ? null : await readSongOpus(projectId);
 
       const readFullMixPcm = async (): Promise<Float32Array | null> => {
@@ -537,10 +539,6 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
       // bytes are no longer the original file, so the verbatim name doesn't
       // apply).
       if (!includeStems) {
-        if (songOpus) {
-          sources.push({fileName: 'song.opus', data: songOpus});
-          return sources;
-        }
         if (padSamples > 0) {
           let pcm = await readFullMixPcm();
           if (!pcm) {
@@ -560,13 +558,21 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
           }
           return sources;
         }
+        // Current (original-at-rest) projects: emit the verbatim upload
+        // byte-for-byte, no re-encode.
         const original = await readOriginalAudio(projectId);
         if (original) {
           const ext = original.extension || 'mp3';
           sources.push({fileName: `song.${ext}`, data: original.data});
           return sources;
         }
-        // Older projects have no stored original: fall back to Opus full mix.
+        // Opus-at-rest projects: reuse the stored Opus verbatim rather than
+        // decoding + re-encoding.
+        if (songOpus) {
+          sources.push({fileName: 'song.opus', data: songOpus});
+          return sources;
+        }
+        // Legacy projects have neither: fall back to Opus-encoding full.pcm.
         const fullPcm = await readFullMixPcm();
         if (fullPcm) {
           const opus = await toOpus(fullPcm);

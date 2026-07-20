@@ -115,6 +115,9 @@ interface ResultState {
   synctrack: Synctrack;
   /** Meter regularity from the pipeline (null = too short to measure). */
   meterStats: MeterStats | null;
+  /** Separated drum stem the pipeline transcribed, for the piano-roll and
+   * highway waveforms. Planar `{left, right}`; null if separation failed. */
+  drumStemStereo: {left: Float32Array; right: Float32Array} | null;
   /** 'sng' downloads as .sng, everything else as .zip. */
   sourceFormat: SourceFormat | null;
 }
@@ -408,6 +411,7 @@ export default function TempoClient() {
           newChart,
           synctrack: sync,
           meterStats: pipelineResult.meterStats,
+          drumStemStereo: pipelineResult.drumStemStereo,
           sourceFormat,
         });
         setPhase('results');
@@ -716,15 +720,94 @@ function TempoEditor({
     };
   }, [result.audioFiles]);
 
+  // The pipeline's separator always runs at 44.1 kHz (SEPARATION_SAMPLE_RATE
+  // in lib/tempo-map/pipeline-worker.ts) and the stem is never resampled
+  // back to the source rate. `audioMeta.sampleRate` (from mergeAudioFiles)
+  // is commonly 48 kHz for opus/ogg chart audio, so the stem must be
+  // resampled to match before `usePaddedAudio` WAV-encodes and pads it at
+  // `audioMeta.sampleRate` — otherwise it plays at the wrong speed and its
+  // leading-silence padding (computed in that rate) misaligns the waveform.
+  const STEM_SAMPLE_RATE = 44100;
+
+  // Planar drum stem -> interleaved stereo at `audioMeta.sampleRate`, the
+  // format usePaddedAudio/AudioManager expects. Resampling is async
+  // (OfflineAudioContext), so this is an effect rather than a memo. Web
+  // Audio's built-in resampler is fine here — this stem is only for the
+  // waveform/playback UI, not fed back into Beat This!/CRNN, so the
+  // soxr-vs-WebAudio precision concern that applies to the pipeline's own
+  // resampling doesn't apply.
+  const [drumStemInterleaved, setDrumStemInterleaved] =
+    useState<Float32Array | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const interleave = (left: Float32Array, right: Float32Array) => {
+      const n = Math.min(left.length, right.length);
+      const out = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        out[i * 2] = left[i];
+        out[i * 2 + 1] = right[i];
+      }
+      return out;
+    };
+
+    // All state writes happen inside this async closure (never synchronously
+    // in the effect body) so the eslint set-state-in-effect rule is satisfied;
+    // the sync paths just resolve a microtask later, which is harmless here.
+    (async () => {
+      const stem = result.drumStemStereo;
+      if (!stem || !audioMeta) {
+        if (!cancelled) setDrumStemInterleaved(null);
+        return;
+      }
+
+      if (audioMeta.sampleRate === STEM_SAMPLE_RATE) {
+        if (!cancelled) setDrumStemInterleaved(interleave(stem.left, stem.right));
+        return;
+      }
+
+      const {left, right} = stem;
+      const n = Math.min(left.length, right.length);
+      const source = new AudioBuffer({
+        numberOfChannels: 2,
+        length: n,
+        sampleRate: STEM_SAMPLE_RATE,
+      });
+      source.copyToChannel(left.slice(0, n), 0);
+      source.copyToChannel(right.slice(0, n), 1);
+
+      const targetRate = audioMeta.sampleRate;
+      const offlineCtx = new OfflineAudioContext(
+        2,
+        Math.ceil((n * targetRate) / STEM_SAMPLE_RATE),
+        targetRate,
+      );
+      const bufferSource = offlineCtx.createBufferSource();
+      bufferSource.buffer = source;
+      bufferSource.connect(offlineCtx.destination);
+      bufferSource.start(0);
+      const rendered = await offlineCtx.startRendering();
+      if (cancelled) return;
+      setDrumStemInterleaved(
+        interleave(rendered.getChannelData(0), rendered.getChannelData(1)),
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [result.drumStemStereo, audioMeta]);
+
   const {
     audioManager,
     fullMixPcm: audioPcm,
+    secondaryPcm: drumStemPcm,
     durationSeconds,
     rebuilding: audioRebuilding,
   } = usePaddedAudio({
     chartDoc: state.chartDoc,
     audioMeta,
     fullMixPcm,
+    secondaryPcm: drumStemInterleaved,
     onSongEnded: () => dispatch({type: 'SET_PLAYING', isPlaying: false}),
   });
 
@@ -814,6 +897,7 @@ function TempoEditor({
         chart={chart}
         audioManager={audioManager}
         audioData={audioPcm ?? undefined}
+        highwayAudioData={drumStemPcm ?? undefined}
         audioChannels={audioMeta?.channels ?? 2}
         durationSeconds={durationSeconds}
         sections={chart.sections}

@@ -71,6 +71,9 @@ jest.mock('../storage/opfs', () => {
     storeAudioOpus: jest.fn(async (id: string) => {
       files.set(key(id, 'audio.pcm'), new Uint8Array(0));
     }),
+    storeAudioOriginal: jest.fn(async (id: string) => {
+      files.set(key(id, 'audio.pcm'), new Uint8Array(0));
+    }),
     hasStoredAudio: jest.fn(async (id: string) =>
       files.has(key(id, 'audio.pcm')),
     ),
@@ -131,14 +134,6 @@ jest.mock('../audio/decoder', () => ({
     numberOfChannels: 2,
   })),
   interleaveAudioBuffer: jest.fn(() => new Float32Array(1024)),
-}));
-
-// The upload path Opus-encodes the decoded PCM for storage; jsdom has no
-// WebCodecs, so this is stubbed like the other audio IO above.
-jest.mock('../../audio/opus-encoder', () => ({
-  encodePcmToOpus: jest.fn(
-    async () => new Uint8Array([0x4f, 0x67, 0x67, 0x53]),
-  ),
 }));
 
 jest.mock('./crnn-audio-prep', () => ({
@@ -276,6 +271,24 @@ describe('runner write sites', () => {
     // Written alongside confidence.json, before the chart file exists check
     // could pass without it.
     expect(storedJson(projectId, 'confidence.json')).toBeDefined();
+  });
+
+  it('runPipeline stores the verbatim original upload, not an Opus re-encode', async () => {
+    const projectId = await runPipeline(
+      new ArrayBuffer(16),
+      'song.mp3',
+      noProgress,
+      fakeTranscriber(),
+    );
+
+    expect(opfs.storeAudioOriginal).toHaveBeenCalledTimes(1);
+    expect(opfs.storeAudioOriginal).toHaveBeenCalledWith(
+      projectId,
+      expect.any(ArrayBuffer),
+      expect.objectContaining({originalFileName: 'song.mp3'}),
+      expect.any(Number),
+    );
+    expect(opfs.storeAudioOpus).not.toHaveBeenCalled();
   });
 
   it('runPipelineFromChart persists decoded onsets with flow chart', async () => {

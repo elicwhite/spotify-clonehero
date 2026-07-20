@@ -1,6 +1,7 @@
 /**
- * Opus-at-rest storage tests (plan 0063 Part A): both storage generations —
- * current (`song.opus`) and legacy (`full.pcm` + `original.<ext>`) — and the
+ * Audio-at-rest storage tests: all three storage generations — current
+ * (`original.<ext>`, plan 0066 Phase 2c), opus-at-rest (`song.opus`, plan
+ * 0063 Part A), and legacy (`full.pcm` + `original.<ext>`) — and the
  * generation-aware read path that picks between them.
  */
 
@@ -104,7 +105,7 @@ describe('Opus-at-rest audio storage', () => {
       expect(decodeAudio).not.toHaveBeenCalled();
     });
 
-    it('current project: decodes song.opus in memory', async () => {
+    it('opus-at-rest project: decodes song.opus in memory', async () => {
       const meta = await opfs.createProject('current');
       const opusBytes = new Uint8Array([1, 2, 3]);
       await opfs.storeAudioOpus(meta.id, opusBytes, AUDIO_META, 44100);
@@ -113,6 +114,64 @@ describe('Opus-at-rest audio storage', () => {
       expect(decodeAudio).toHaveBeenCalledTimes(1);
       expect(interleaveAudioBuffer).toHaveBeenCalledTimes(1);
       expect(loaded).toEqual(new Float32Array([0.1, 0.2, 0.3, 0.4]));
+    });
+
+    it('current (original-at-rest) project: decodes the stored original in memory', async () => {
+      const meta = await opfs.createProject('current');
+      const originalBytes = new Uint8Array([9, 9, 9]).buffer;
+      await opfs.storeAudioOriginal(meta.id, originalBytes, AUDIO_META, 44100);
+
+      const loaded = await opfs.loadFullMixPcm(meta.id);
+      expect(decodeAudio).toHaveBeenCalledTimes(1);
+      expect(decodeAudio).toHaveBeenCalledWith(originalBytes);
+      expect(interleaveAudioBuffer).toHaveBeenCalledTimes(1);
+      expect(loaded).toEqual(new Float32Array([0.1, 0.2, 0.3, 0.4]));
+    });
+  });
+
+  describe('storeAudioOriginal', () => {
+    it('writes original.<ext> + meta.json (no song.opus, no full.pcm)', async () => {
+      const meta = await opfs.createProject('song');
+      const originalBytes = new Uint8Array([1, 2, 3, 4]).buffer;
+
+      await opfs.storeAudioOriginal(meta.id, originalBytes, AUDIO_META, 44100);
+
+      const paths = [...fake.store.keys()];
+      expect(paths).toEqual(
+        expect.arrayContaining([
+          `/drum-transcription/${meta.id}/audio/original.mp3`,
+          `/drum-transcription/${meta.id}/audio/meta.json`,
+        ]),
+      );
+      expect(paths).not.toEqual(
+        expect.arrayContaining([`/drum-transcription/${meta.id}/audio/song.opus`]),
+      );
+      expect(paths).not.toEqual(
+        expect.arrayContaining([`/drum-transcription/${meta.id}/audio/full.pcm`]),
+      );
+    });
+
+    it('updates project duration', async () => {
+      const meta = await opfs.createProject('song');
+      await opfs.storeAudioOriginal(
+        meta.id,
+        new Uint8Array([1]).buffer,
+        AUDIO_META,
+        44100,
+      );
+      const updated = await opfs.getProject(meta.id);
+      expect(updated.durationSeconds).toBe(1);
+    });
+
+    it('readOriginalAudio round-trips the stored bytes', async () => {
+      const meta = await opfs.createProject('song');
+      const originalBytes = new Uint8Array([9, 8, 7, 6, 5]).buffer;
+      await opfs.storeAudioOriginal(meta.id, originalBytes, AUDIO_META, 44100);
+
+      const readBack = await opfs.readOriginalAudio(meta.id);
+      expect(readBack).not.toBeNull();
+      expect(new Uint8Array(readBack!.data)).toEqual(new Uint8Array(originalBytes));
+      expect(readBack!.extension).toBe('mp3');
     });
   });
 
