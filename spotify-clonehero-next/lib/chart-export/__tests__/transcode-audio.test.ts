@@ -107,6 +107,48 @@ describe('transcodeAudioFilesToOpus', () => {
     expect(Array.from(out[0].data)).toEqual([9, 9, 9]);
   });
 
+  test('survives a decoder that detaches its input buffer (decodeAudioData semantics)', async () => {
+    // The real `decodeAudioData` DETACHES the ArrayBuffer it is given. The
+    // orchestrator must therefore hand the decoder a copy, never the
+    // source's own buffer — regression test for the padded-export crash
+    // ("Cannot perform Construct on a detached ArrayBuffer") and its silent
+    // sibling (a Uint8Array source passing through as an empty view).
+    const received: ArrayBuffer[] = [];
+    const io: TranscodeIO = {
+      decode: async bytes => {
+        received.push(bytes);
+        // Detach exactly like decodeAudioData does.
+        structuredClone(bytes, {transfer: [bytes]});
+        return {
+          pcm: new Float32Array([0.1, 0.2]),
+          sampleRate: 44100,
+          channels: 2,
+        };
+      },
+      encode: async () => new Uint8Array([0x4f]),
+    };
+
+    const abSource = new Uint8Array([7, 8, 9]).buffer;
+    const u8Source = new Uint8Array([4, 5, 6]);
+    const {files: out, durationMs} = await transcodeAudioFilesToOpus(
+      [
+        {fileName: 'song.opus', data: abSource},
+        {fileName: 'drums.opus', data: u8Source},
+      ],
+      io,
+    );
+
+    // The decoder never received the sources' own buffers…
+    expect(received[0]).not.toBe(abSource);
+    expect(received[1]).not.toBe(u8Source.buffer);
+    // …so the source buffers are still intact and the output bytes real.
+    expect(abSource.byteLength).toBe(3);
+    expect(u8Source.byteLength).toBe(3);
+    expect(Array.from(out[0].data)).toEqual([7, 8, 9]);
+    expect(Array.from(out[1].data)).toEqual([4, 5, 6]);
+    expect(durationMs).toBeCloseTo((1 / 44100) * 1000, 6);
+  });
+
   test('passes non-audio assets through untouched', async () => {
     const io = mockIO();
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);

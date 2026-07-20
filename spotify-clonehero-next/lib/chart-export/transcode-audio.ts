@@ -103,15 +103,19 @@ function pcmDurationMs(
   return (pcm.length / channels / sampleRate) * 1000;
 }
 
-function toArrayBuffer(data: ArrayBuffer | Uint8Array): ArrayBuffer {
+/**
+ * Copy `data` into a fresh standalone ArrayBuffer for the decoder.
+ * `decodeAudioData` DETACHES the ArrayBuffer it is given, so the decoder
+ * must never receive a buffer the caller still holds — handing it
+ * `file.data`'s own buffer detaches the very bytes the passthrough branch
+ * then writes to the output (a thrown TypeError for ArrayBuffer inputs, a
+ * silently empty file for Uint8Array views).
+ */
+function copyToArrayBuffer(data: ArrayBuffer | Uint8Array): ArrayBuffer {
   if (data instanceof Uint8Array) {
-    // Slice to a standalone ArrayBuffer (the view may be a window into a
-    // larger buffer, which decodeAudioData would choke on).
-    return data.byteOffset === 0 && data.byteLength === data.buffer.byteLength
-      ? (data.buffer as ArrayBuffer)
-      : (data.slice().buffer as ArrayBuffer);
+    return data.slice().buffer as ArrayBuffer;
   }
-  return data;
+  return data.slice(0);
 }
 
 /** The real browser decode/encode path: Web Audio decode → interleave →
@@ -162,7 +166,7 @@ export async function transcodeAudioFilesToOpus(
     }
     if (needsOpusTranscode(file.fileName)) {
       const {pcm, sampleRate, channels} = await io.decode(
-        toArrayBuffer(file.data),
+        copyToArrayBuffer(file.data),
       );
       const opus = await io.encode(pcm, sampleRate, channels);
       out.push({fileName: toOpusFileName(file.fileName), data: opus});
@@ -174,11 +178,14 @@ export async function transcodeAudioFilesToOpus(
       // Already Opus — no re-encode needed, but still decode once to learn
       // its duration (the common case: separated stems are pre-encoded to
       // Opus before assembly, so skipping this would leave song_length unset
-      // for most exports).
+      // for most exports). Snapshot the output bytes BEFORE decoding: the
+      // decoder gets a copy, but ordering here guards against any future
+      // regression re-introducing a shared buffer.
+      const bytes = toUint8(file.data);
       const {pcm, sampleRate, channels} = await io.decode(
-        toArrayBuffer(file.data),
+        copyToArrayBuffer(file.data),
       );
-      out.push({fileName: file.fileName, data: toUint8(file.data)});
+      out.push({fileName: file.fileName, data: bytes});
       durationMs = Math.max(
         durationMs ?? 0,
         pcmDurationMs(pcm, sampleRate, channels),
