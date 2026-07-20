@@ -126,4 +126,4 @@
 
 ## Status (2026-07-20)
 
-All 6 tasks implemented via workflow wf_9d5544d1-687 (sonnet implement → fable review → commit per task), commits fcf3eec…3f6fcef + cleanup 1b1739d. typecheck/lint/full Jest suite green. Browser validation pending (extension not connected; sandbox dev server cannot read .env).
+All 6 tasks implemented via workflow wf_9d5544d1-687 (sonnet implement → fable review → commit per task), commits fcf3eec…3f6fcef + cleanup 1b1739d. typecheck/lint/full Jest suite green. Browser validation completed 2026-07-20: guitar-edit (chart load, 6-lane highway+piano roll, difficulty picker), drum-edit (visuals unchanged, place-note + undo via new tool registry/dispatch), preview (read-only caps), sheet-music incl. fullscreen scroll, add-lyrics/tempo/drum-transcription load screens — zero console errors. Three fixes found+committed: getServerSnapshot SSR, schema-driven piano-roll lanes, editor shell layout scroll.

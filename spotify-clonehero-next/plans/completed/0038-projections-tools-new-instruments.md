@@ -157,4 +157,4 @@ presets choose the tool set per page.
 
 ## Status (2026-07-20)
 
-Tasks 1-8 implemented via workflow wf_9d5544d1-687, commits 88af39b…e9e5282 + cleanup 1b1739d. typecheck/lint/full Jest suite green. Task 9 (browser validation across drum-edit, drum-transcription, add-lyrics, tempo, preview, guitar-edit) pending — needs a user-started dev server + connected Chrome extension.
+Tasks 1-8 implemented via workflow wf_9d5544d1-687, commits 88af39b…e9e5282 + cleanup 1b1739d. typecheck/lint/full Jest suite green. Task 9 browser validation completed 2026-07-20 (see 0037 status note for details and the three follow-up fixes).
