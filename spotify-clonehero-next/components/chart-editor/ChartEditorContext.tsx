@@ -41,7 +41,11 @@ export function ChartEditorProvider({
     () => new EditorSession({activeScope}, capabilities),
   );
 
-  const state = useSyncExternalStore(session.subscribe, session.getState);
+  const state = useSyncExternalStore(
+    session.subscribe,
+    session.getState,
+    session.getState,
+  );
 
   const reconcilerRef = useRef<
     import('@/lib/preview/highway/SceneReconciler').SceneReconciler | null
