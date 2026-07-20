@@ -132,6 +132,27 @@ so the trap can't recur.
 9. **Delete the wrapper block** (`commands.ts:1183-1220`) once callers are
    migrated. No re-export shims.
 
+## Forward-compatibility notes (from the chart-preview review, 2026-07-20)
+
+`~/projects/chart-preview` (Geomitron's actively-maintained preview lib)
+renders 6-fret GHL and richer drum modifiers; plan 0068 tracks feature
+parity. Shape 0067's APIs so 0068 doesn't have to rework them:
+
+- **`InteractionManager`/`SceneOverlays` schema injection (point 8) must
+  carry geometry wholesale**, not assume 5/6 evenly-spaced lanes: 6-fret has
+  3 visual slots shared by black/white lanes and a narrower highway
+  (chart-preview: 0.7 vs drums 0.9 vs five-fret 1.0). Put `highwayWidth` on
+  `InstrumentSchema` when adding `worldXOffset` to the five-fret lanes, and
+  derive both from the schema in one place.
+- **Don't make `parseSchemaNoteId`/selection assume every rendered note is a
+  real chart note.** chart-preview synthesizes barre-chord note types
+  (custom ids 99991-3) in a pre-render pass; 0068 will want an equivalent
+  render-side normalization (disco flip does the same for drums). Mutation
+  ids should stay real-note-only; renderer elements may be derived.
+- The existing `variant` lane disambiguator (5-lane drums) is the intended
+  mechanism for 6-fret's black/white-share-a-slot problem — nothing in 0067
+  should collapse lanes by index alone.
+
 ## Tests
 
 - noteHandler regression: guitar notes (green, orange, open) move by tick
