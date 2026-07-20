@@ -37,9 +37,10 @@ import {exportAsZip, exportAsSng} from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
 import {
-  runDemucsInWorker,
+  resampleStereoTo16kMono,
   mixStemsToAudioBuffer,
-} from '@/lib/lyrics-align/demucs-client';
+} from '@/lib/audio-pipeline/lyrics-audio';
+import {separateStems} from '@/lib/audio-pipeline/separate-stems';
 import {applyAlignedLyricsToDoc} from '@/lib/lyrics-align/apply-lyrics';
 import {
   detectFormat,
@@ -397,7 +398,7 @@ function LyricsAlignInner() {
         });
 
         const {resampleTo16kMono} = await import(
-          '@/lib/lyrics-align/demucs-client'
+          '@/lib/audio-pipeline/lyrics-audio'
         );
         vocals16k = await resampleTo16kMono(
           chart.vocalsFile.data,
@@ -440,21 +441,23 @@ function LyricsAlignInner() {
 
         updateAlignStep('separate', {
           status: 'active',
-          detail: 'Starting Demucs worker...',
+          detail: 'Separating vocals...',
           startTime: Date.now(),
         });
 
-        vocals16k = await runDemucsInWorker(audioBuffer, p =>
+        const songBytes = new Uint8Array(arrayBuffer);
+        const {vocals} = await separateStems(songBytes, {vocals: true}, p =>
           updateAlignStep('separate', {
-            detail: p.message,
+            detail: p.step,
             progress: p.percent,
             etaSeconds: p.etaSeconds,
           }),
         );
+        vocals16k = await resampleStereoTo16kMono(vocals!);
 
         updateAlignStep('separate', {
           status: 'done',
-          detail: `${(vocals16k.length / 16000).toFixed(1)}s mono 16kHz — worker terminated`,
+          detail: `${(vocals16k.length / 16000).toFixed(1)}s mono 16kHz`,
           endTime: Date.now(),
         });
       }
@@ -518,16 +521,28 @@ function LyricsAlignInner() {
         const mixedBuffer = await mixStemsToAudioBuffer(stemInputs);
 
         updateAlignStep('separate2', {
-          detail: 'Starting Demucs worker...',
+          detail: 'Separating vocals...',
         });
 
-        const vocals16k_2 = await runDemucsInWorker(mixedBuffer, p =>
-          updateAlignStep('separate2', {
-            detail: p.message,
-            progress: p.percent,
-            etaSeconds: p.etaSeconds,
-          }),
+        const {interleaveAudioBuffer} = await import(
+          '@/lib/drum-transcription/audio/decoder'
         );
+        const {encodeWavBlob} = await import('@/lib/audio/wav-encoder');
+        const mixedPcm = interleaveAudioBuffer(mixedBuffer);
+        const mixedWavBlob = encodeWavBlob(mixedPcm, mixedBuffer.sampleRate, 2);
+        const mixedWavBytes = new Uint8Array(await mixedWavBlob.arrayBuffer());
+
+        const {vocals: vocals2} = await separateStems(
+          mixedWavBytes,
+          {vocals: true},
+          p =>
+            updateAlignStep('separate2', {
+              detail: p.step,
+              progress: p.percent,
+              etaSeconds: p.etaSeconds,
+            }),
+        );
+        const vocals16k_2 = await resampleStereoTo16kMono(vocals2!);
         updateAlignStep('separate2', {
           status: 'done',
           detail: `${(vocals16k_2.length / 16000).toFixed(1)}s mono 16kHz — re-separated`,

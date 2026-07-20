@@ -40,8 +40,8 @@ import {
   separateDrums,
   hasDrumStem,
   loadDrumStem,
-  type DrumSeparationProgress,
 } from '../ml/roformer-separation';
+import type {DrumSeparationProgress} from '@/lib/audio-pipeline/separate-stems';
 import {planarStereoToCrnnInput, CRNN_SAMPLE_RATE} from './crnn-audio-prep';
 import {runTempoPipelineFromPcm} from '@/lib/tempo-map/pipeline-client';
 import type {

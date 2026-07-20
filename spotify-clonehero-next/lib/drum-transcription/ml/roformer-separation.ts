@@ -1,24 +1,27 @@
 /**
  * BS-Roformer drum-stem separation for the drum transcription pipeline.
  *
- * Runs the shared bs-roformer-sw 6-stem separator
- * (lib/tempo-map/stem-separation.ts) and keeps only the drum stem, stored to
- * the fingerprint-keyed OPFS stem cache (lib/audio-pipeline/stem-cache.ts)
- * as planar stereo 44.1 kHz PCM. Keying by input fingerprint (audio bytes +
- * separator identity) rather than by project makes separation resumable
- * across tab closes AND reusable across projects created from the same
- * upload.
+ * Delegates the actual separation + caching to the project-agnostic
+ * `lib/audio-pipeline/separate-stems.ts`, which runs the shared
+ * bs-roformer-sw 6-stem separator (lib/tempo-map/stem-separation.ts) and
+ * stores results in the fingerprint-keyed OPFS stem cache
+ * (lib/audio-pipeline/stem-cache.ts). Keying by input fingerprint (audio
+ * bytes + separator identity) rather than by project makes separation
+ * resumable across tab closes AND reusable across projects created from the
+ * same upload — and across other pages (`/tempo`, `/add-lyrics`) that share
+ * the same cache.
  *
- * The actual ONNX inference runs off the main thread in
- * ml/separation-worker.ts (mirrors lib/tempo-map/pipeline-worker.ts /
- * pipeline-client.ts) — `separateDrums` below is a thin client: deinterleave,
- * run the worker, then interleave + store the results. Opus-encoding the
- * vocals stem stays on the main thread because it uses OfflineAudioContext,
- * which isn't available in workers.
+ * `separateDrums` below is a thin wrapper: resolve the project's original
+ * audio bytes, delegate to `separateStems`, then do OPFS-project
+ * bookkeeping (fingerprint persistence).
  */
 
 import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
-import type {SeparationWorkerMessage} from './separation-worker';
+import {
+  runSeparationInWorker,
+  separateStems,
+  type DrumSeparationProgressCallback,
+} from '@/lib/audio-pipeline/separate-stems';
 import {
   computeStemFingerprint,
   ROFORMER_SEPARATOR_ID,
@@ -38,16 +41,6 @@ import {
 } from '../storage/opfs';
 
 const NUM_CHANNELS = 2;
-
-export interface DrumSeparationProgress {
-  step: 'loading-model' | 'processing' | 'storing' | 'done';
-  percent: number; // 0-1
-  etaSeconds?: number | undefined;
-}
-
-export type DrumSeparationProgressCallback = (
-  p: DrumSeparationProgress,
-) => void;
 
 // ---------------------------------------------------------------------------
 // Fingerprint-keyed stem storage
@@ -178,74 +171,20 @@ export async function hasVocalsStem(projectId: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
-// Separation worker client
-// ---------------------------------------------------------------------------
-
-interface SeparationWorkerResult {
-  drumsLeft: Float32Array;
-  drumsRight: Float32Array;
-  vocalsLeft: Float32Array;
-  vocalsRight: Float32Array;
-}
-
-function defaultCreateSeparationWorker(): Worker {
-  return new Worker(new URL('./separation-worker.ts', import.meta.url), {
-    type: 'module',
-  });
-}
-
-/**
- * Spawns ml/separation-worker.ts, runs one separation, and terminates it
- * (one-shot, like lib/lyrics-align/demucs-client.ts) to reclaim WASM/GPU
- * memory. `left`/`right` are transferred to the worker (detached for the
- * caller).
- *
- * `createWorker` is an injectable factory (defaults to the real
- * separation-worker.ts) so tests can substitute a fake Worker without a real
- * Worker/module-URL environment — exported for that reason; not part of the
- * public API surface used outside this module and its tests.
- */
-export function runSeparationInWorker(
-  left: Float32Array,
-  right: Float32Array,
-  onProgress?: DrumSeparationProgressCallback,
-  createWorker: () => Worker = defaultCreateSeparationWorker,
-): Promise<SeparationWorkerResult> {
-  return new Promise((resolve, reject) => {
-    const worker = createWorker();
-
-    worker.onmessage = (e: MessageEvent) => {
-      const msg = e.data as SeparationWorkerMessage;
-      if (msg.type === 'progress') {
-        onProgress?.({
-          step: msg.step,
-          percent: msg.percent,
-          etaSeconds: msg.etaSeconds,
-        });
-      } else if (msg.type === 'result') {
-        worker.terminate();
-        const {drumsLeft, drumsRight, vocalsLeft, vocalsRight} = msg;
-        resolve({drumsLeft, drumsRight, vocalsLeft, vocalsRight});
-      } else if (msg.type === 'error') {
-        worker.terminate();
-        reject(new Error(msg.message));
-      }
-    };
-    worker.onerror = e => {
-      worker.terminate();
-      reject(new Error(e.message || 'Separation worker error'));
-    };
-
-    worker.postMessage({type: 'run', left, right}, [left.buffer, right.buffer]);
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
 /**
  * Separates the drum stem from a song and stores it to OPFS.
+ *
+ * Thin wrapper around `separateStems`: for current projects (which store the
+ * original upload verbatim), delegates to it directly against those bytes —
+ * the fingerprint `separateStems` computes matches
+ * `ensureProjectStemFingerprint`'s exactly (both hash `readOriginalAudio`
+ * first), so the stem it stores is found under the project's fingerprint.
+ * Legacy projects with no stored original (only `full.pcm`/`song.opus`) fall
+ * back to separating the passed-in PCM directly, same as before this
+ * refactor.
  *
  * @param projectId        - OPFS project ID.
  * @param interleavedAudio - Interleaved stereo Float32 PCM at 44.1 kHz.
@@ -257,7 +196,27 @@ export async function separateDrums(
   interleavedAudio: Float32Array,
   onProgress?: DrumSeparationProgressCallback,
 ): Promise<Float32Array> {
-  // ---- 1. Deinterleave to planar L/R ----
+  const original = await readOriginalAudio(projectId);
+
+  if (original) {
+    const {drums} = await separateStems(
+      new Uint8Array(original.data),
+      {drums: true, vocals: true},
+      onProgress,
+    );
+    await ensureProjectStemFingerprint(projectId);
+    const stem = drums!;
+    const n = Math.min(stem.left.length, stem.right.length);
+    const interleavedStem = new Float32Array(n * NUM_CHANNELS);
+    for (let i = 0; i < n; i++) {
+      interleavedStem[i * 2] = stem.left[i];
+      interleavedStem[i * 2 + 1] = stem.right[i];
+    }
+    return interleavedStem;
+  }
+
+  // ---- Legacy fallback: no stored original — separate the passed-in PCM
+  // directly (the pre-Phase-3 path). ----
   const numSamples = Math.floor(interleavedAudio.length / NUM_CHANNELS);
   const left = new Float32Array(numSamples);
   const right = new Float32Array(numSamples);
@@ -266,15 +225,9 @@ export async function separateDrums(
     right[i] = interleavedAudio[i * 2 + 1];
   }
 
-  // ---- 2. Model load + separation, off the main thread ----
   const {drumsLeft, drumsRight, vocalsLeft, vocalsRight} =
     await runSeparationInWorker(left, right, onProgress);
 
-  // ---- 3. Store to the fingerprint-keyed stem cache, and interleave the
-  // drum stem for the caller ----
-  // Drums stay raw PCM (may be reprocessed by the CRNN later); vocals are
-  // Opus-encoded (only ever consumed for lyric alignment, not re-analyzed).
-  // Opus encoding uses OfflineAudioContext, which is main-thread-only.
   onProgress?.({step: 'storing', percent: 0});
   const interleavedStem = new Float32Array(numSamples * NUM_CHANNELS);
   const interleavedVocals = new Float32Array(numSamples * NUM_CHANNELS);

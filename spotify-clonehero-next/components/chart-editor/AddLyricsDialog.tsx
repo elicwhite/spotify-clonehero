@@ -166,7 +166,7 @@ export default function AddLyricsDialog({
       updateStep('load', {status: 'active', detail: 'Decoding vocals stem...'});
       const vocalsOpus = await loadVocalsStem(projectId);
       const {resampleTo16kMono} = await import(
-        '@/lib/lyrics-align/demucs-client'
+        '@/lib/audio-pipeline/lyrics-audio'
       );
       const vocals16k = await resampleTo16kMono(vocalsOpus, 'audio/opus');
       updateStep('load', {
