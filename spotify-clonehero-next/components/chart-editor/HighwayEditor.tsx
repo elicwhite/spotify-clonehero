@@ -28,6 +28,7 @@ import HighwayPopovers, {
 import {parseChartFile} from '@eliwhite/scan-chart';
 type ParsedChart = ReturnType<typeof parseChartFile>;
 import {cn} from '@/lib/utils';
+import {isTrackScope} from './scope';
 
 interface HighwayEditorProps {
   metadata: ChartResponseEncore;
@@ -438,6 +439,11 @@ export default function HighwayEditor({
         audioManager={audioManager}
         className="h-full w-full"
         showLanes={capabilities.showDrumLanes}
+        trackKey={
+          isTrackScope(state.activeScope)
+            ? state.activeScope.track
+            : undefined
+        }
         onRendererReady={handleRendererReady}
       />
 

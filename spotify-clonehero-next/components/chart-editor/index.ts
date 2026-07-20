@@ -19,6 +19,7 @@ export {
 // Editor scope (replaces hardcoded expert-drums lookups)
 export {
   DEFAULT_DRUMS_EXPERT_SCOPE,
+  DEFAULT_GUITAR_EXPERT_SCOPE,
   DEFAULT_VOCALS_SCOPE,
   describeScope,
   entityContextFromScope,
@@ -43,6 +44,10 @@ export {
 export {default as ChartEditor} from './ChartEditor';
 export type {ChartEditorProps} from './ChartEditor';
 
+// Full-page shell for single-instrument chart-edit pages (/drum-edit, /guitar-edit)
+export {default as TrackEditPage} from './TrackEditPage';
+export type {TrackEditPageConfig} from './TrackEditPage';
+
 // Sub-components (for advanced composition)
 export {default as HighwayEditor} from './HighwayEditor';
 export {default as HighwayPreview} from './HighwayPreview';
@@ -53,6 +58,7 @@ export {default as LeftSidebar} from './LeftSidebar';
 export {default as PianoRollTimeline} from './piano-roll/PianoRollTimeline';
 export {default as LoopControls} from './LoopControls';
 export {default as NoteInspector} from './NoteInspector';
+export {default as DifficultyPicker} from './DifficultyPicker';
 export {default as ExportDialog} from './ExportDialog';
 export type {AudioSource} from './ExportDialog';
 

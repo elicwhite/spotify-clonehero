@@ -38,6 +38,11 @@ export const DEFAULT_DRUMS_EXPERT_SCOPE: EditorScope = {
   track: {instrument: 'drums', difficulty: 'expert'},
 };
 
+export const DEFAULT_GUITAR_EXPERT_SCOPE: EditorScope = {
+  kind: 'track',
+  track: {instrument: 'guitar', difficulty: 'expert'},
+};
+
 export const DEFAULT_VOCALS_SCOPE: EditorScope = {
   kind: 'vocals',
   part: 'vocals',

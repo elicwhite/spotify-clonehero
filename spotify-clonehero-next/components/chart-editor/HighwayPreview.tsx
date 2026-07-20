@@ -14,6 +14,7 @@ import type {GridOverlayConfig} from '@/lib/preview/highway/GridOverlay';
 import {AudioManager} from '@/lib/preview/audioManager';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {parseChartFile} from '@eliwhite/scan-chart';
+import type {TrackKey} from './scope';
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
 /** The subset of the renderer API that the editor needs. */
@@ -68,6 +69,12 @@ interface HighwayPreviewProps {
    * cursor without drawing meaningless drum geometry.
    */
   showLanes?: boolean;
+  /**
+   * Instrument + difficulty to render. Defaults to drums/expert for
+   * backwards compatibility with callers that don't pass a scope-derived
+   * track (e.g. add-lyrics, which has no notes track).
+   */
+  trackKey?: TrackKey | undefined;
   /** Called when the renderer is ready (or destroyed). */
   onRendererReady?: (handle: HighwayRendererHandle | null) => void;
 }
@@ -93,6 +100,7 @@ const HighwayPreview = memo(function HighwayPreview({
   audioManager,
   className,
   showLanes = true,
+  trackKey = {instrument: 'drums', difficulty: 'expert'},
   onRendererReady,
 }: HighwayPreviewProps) {
   const sizingRef = useRef<HTMLDivElement>(null!);
@@ -100,19 +108,21 @@ const HighwayPreview = memo(function HighwayPreview({
   const rendererRef = useRef<ReturnType<typeof setupRenderer> | null>(null);
 
   // Memoize so the reference is stable when chart hasn't changed.
-  // When the chart has no expert drum track, fall back to a synthetic
-  // empty drum track so the renderer pipeline (which expects an
-  // `instrument: 'drums'` track for texture loading) still runs; the
-  // highway then renders as a neutral floor with the beat grid and
-  // markers but no drum lanes (see effectiveShowDrumLanes).
-  const drumTrack = useMemo(() => {
+  // When the chart has no matching track, fall back to a synthetic empty
+  // track (with the same instrument/difficulty) so the renderer pipeline
+  // (which expects a track to resolve textures/schema from its
+  // `instrument`) still runs; the highway then renders as a neutral floor
+  // with the beat grid and markers but no lanes (see effectiveShowLanes).
+  const activeTrack = useMemo(() => {
     const found = chart.trackData.find(
-      t => t.instrument === 'drums' && t.difficulty === 'expert',
+      t =>
+        t.instrument === trackKey.instrument &&
+        t.difficulty === trackKey.difficulty,
     );
     if (found) return found;
     return {
-      instrument: 'drums',
-      difficulty: 'expert',
+      instrument: trackKey.instrument,
+      difficulty: trackKey.difficulty,
       starPowerSections: [],
       rejectedStarPowerSections: [],
       soloSections: [],
@@ -125,22 +135,24 @@ const HighwayPreview = memo(function HighwayPreview({
       unrecognizedMidiEvents: [],
       noteEventGroups: [],
     } as unknown as ParsedChart['trackData'][number];
-  }, [chart]);
+  }, [chart, trackKey.instrument, trackKey.difficulty]);
 
-  // Lanes only make sense when the chart actually has a drum track;
+  // Lanes only make sense when the chart actually has the active track;
   // otherwise render the neutral floor even when the capability profile
   // asks for lanes.
-  const hasDrumTrack = chart.trackData.some(
-    t => t.instrument === 'drums' && t.difficulty === 'expert',
+  const hasActiveTrack = chart.trackData.some(
+    t =>
+      t.instrument === trackKey.instrument &&
+      t.difficulty === trackKey.difficulty,
   );
-  const effectiveShowLanes = showLanes && hasDrumTrack;
+  const effectiveShowLanes = showLanes && hasActiveTrack;
 
   // Use refs to capture the latest track + lanes flag for the initial
   // prepTrack()/setupRenderer() call. The renderer lifecycle only depends
   // on metadata and audioManager. Data updates (chart edits) flow through
   // the SceneReconciler, not renderer recreation.
-  const drumTrackRef = useRef(drumTrack);
-  drumTrackRef.current = drumTrack;
+  const drumTrackRef = useRef(activeTrack);
+  drumTrackRef.current = activeTrack;
   const showLanesRef = useRef(effectiveShowLanes);
   showLanesRef.current = effectiveShowLanes;
 
@@ -189,7 +201,13 @@ const HighwayPreview = memo(function HighwayPreview({
     // Only recreate the renderer when the instrument/audio changes.
     // Chart data updates flow through the SceneReconciler (not renderer recreation).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [metadata, audioManager, onRendererReady]);
+  }, [
+    metadata,
+    audioManager,
+    onRendererReady,
+    trackKey.instrument,
+    trackKey.difficulty,
+  ]);
 
   return (
     <div

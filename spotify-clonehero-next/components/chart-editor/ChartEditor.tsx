@@ -88,6 +88,12 @@ export interface ChartEditorProps {
    * should set this to true to avoid duplicated headings.
    */
   hideHeader?: boolean | undefined;
+  /**
+   * Extra content rendered in the top bar between the song info and the
+   * Export button (e.g. guitar-edit's difficulty picker). Ignored when
+   * `hideHeader` is set.
+   */
+  headerExtra?: ReactNode | undefined;
   /** Content rendered in the left sidebar panel (page-specific). */
   leftPanelChildren?: ReactNode | undefined;
   /** Callback to provide chart text for export. */
@@ -156,6 +162,7 @@ export default function ChartEditor({
   onMetadataChange,
   dirty,
   hideHeader,
+  headerExtra,
   leftPanelChildren,
   getChartText,
   getChartFile,
@@ -248,6 +255,9 @@ export default function ChartEditor({
                 </p>
               )}
             </div>
+          )}
+          {headerExtra && (
+            <div className="shrink-0 ml-4 flex items-center">{headerExtra}</div>
           )}
           {(getChartText || getChartFile) && (
             <div className="shrink-0 ml-4">

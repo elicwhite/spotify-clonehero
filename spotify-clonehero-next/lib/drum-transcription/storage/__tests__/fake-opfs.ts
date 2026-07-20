@@ -102,6 +102,33 @@ class FakeDirectoryHandle {
       this.store.delete(path);
     }
   }
+  /**
+   * Async-iterates immediate children (files and subdirectories), mirroring
+   * `FileSystemDirectoryHandle.entries()`. Subdirectories are inferred from
+   * stored file paths since the fake only tracks files, not empty dirs.
+   */
+  async *entries(): AsyncGenerator<
+    [string, FakeFileHandle | FakeDirectoryHandle]
+  > {
+    const prefix = `${this.prefix}/`;
+    const seen = new Set<string>();
+    for (const key of this.store.keys()) {
+      if (!key.startsWith(prefix)) continue;
+      const rest = key.slice(prefix.length);
+      const slash = rest.indexOf('/');
+      const segment = slash === -1 ? rest : rest.slice(0, slash);
+      if (seen.has(segment)) continue;
+      seen.add(segment);
+      if (slash === -1) {
+        yield [segment, new FakeFileHandle(key, this.store)];
+      } else {
+        yield [
+          segment,
+          new FakeDirectoryHandle(`${this.prefix}/${segment}`, this.store),
+        ];
+      }
+    }
+  }
 }
 
 /**
