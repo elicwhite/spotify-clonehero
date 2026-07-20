@@ -8,6 +8,7 @@ import {useAudioServiceContext} from '../AudioServiceContext';
 import {
   getSelectedIds,
   getFirstSelectedId,
+  selectActiveSchema,
   selectActiveTrack,
   type ToolMode,
 } from '@/lib/chart-editor-core';
@@ -29,10 +30,12 @@ import {
 } from '../commands';
 import type {NoteType} from '@eliwhite/scan-chart';
 import {
+  findTrack,
   getDrumNotes,
   drums4LaneSchema,
   listNotes,
   schemaForInstrument,
+  schemaForTrack,
 } from '@/lib/chart-edit';
 import {
   buildTimedTempos,
@@ -281,11 +284,18 @@ export function useEditorKeyboard(onSave?: () => void) {
 
       const trackKey = trackKeyFromScope(state.activeScope);
       if (!trackKey) return;
-      const targetSchema =
-        schemaForInstrument(trackKey.instrument) ?? drums4LaneSchema;
+      const targetSchema = selectActiveSchema(state) ?? drums4LaneSchema;
+      // Source track is resolved via drumType from the same chartDoc — the
+      // clipboard doesn't store its own drumType, but drumType is a
+      // chart-level (not track-level) property, so the active doc's value
+      // applies to the source scope too.
       const sourceTrackKey = trackKeyFromScope(clipboard.sourceScope);
-      const sourceSchema = sourceTrackKey
-        ? (schemaForInstrument(sourceTrackKey.instrument) ?? targetSchema)
+      const sourceTrack = sourceTrackKey
+        ? findTrack(state.chartDoc, sourceTrackKey)?.track
+        : null;
+      const sourceSchema = sourceTrack
+        ? (schemaForTrack(sourceTrack, state.chartDoc.parsedChart.drumType) ??
+          targetSchema)
         : targetSchema;
 
       // Translate each note through the target track's schema (lane-by-lane

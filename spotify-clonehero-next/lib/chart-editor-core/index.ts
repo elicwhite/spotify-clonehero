@@ -5,6 +5,7 @@ export {
   getFirstSelectedId,
   getSelectedIds,
   isAnythingSelected,
+  selectActiveSchema,
   selectActiveTrack,
   selectRenderDoc,
 } from './selectors';

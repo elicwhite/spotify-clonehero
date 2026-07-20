@@ -4,6 +4,8 @@ import type {
   ParsedTrackData,
 } from '@/lib/chart-edit';
 import {findTrack} from '@/lib/chart-edit';
+import type {InstrumentSchema} from '@/lib/chart-edit/instruments';
+import {schemaForTrack} from '@/lib/chart-edit/instruments';
 import {isTrackScope} from '@/components/chart-editor/scope';
 import type {ChartEditorState} from './state';
 
@@ -70,4 +72,18 @@ export function selectActiveTrack(
   if (!doc) return null;
   if (!isTrackScope(state.activeScope)) return null;
   return findTrack(doc, state.activeScope.track)?.track ?? null;
+}
+
+/**
+ * Resolve the `InstrumentSchema` for `state.activeScope`, honoring the
+ * chart's `drumType` (4-lane vs 5-lane) via `schemaForTrack`. Returns null
+ * for non-track scopes (`vocals`/`global`) or when the active track is
+ * missing. Schemas are module singletons, so this needs no memoization.
+ */
+export function selectActiveSchema(
+  state: ChartEditorState,
+): InstrumentSchema | null {
+  const track = selectActiveTrack(state);
+  if (!track) return null;
+  return schemaForTrack(track, state.chartDoc?.parsedChart.drumType);
 }

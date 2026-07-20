@@ -10,8 +10,9 @@ import {
   type ReactNode,
 } from 'react';
 import {HotkeysProvider} from '@tanstack/react-hotkeys';
-import {EditorSession} from '@/lib/chart-editor-core';
+import {EditorSession, selectActiveSchema} from '@/lib/chart-editor-core';
 import type {ChartEditorContextValue} from '@/lib/chart-editor-core';
+import type {InstrumentSchema} from '@/lib/chart-edit/instruments';
 import type {EditorCapabilities} from './capabilities';
 import {DRUM_EDIT_CAPABILITIES} from './capabilities';
 import type {EditorScope} from './scope';
@@ -82,4 +83,15 @@ export function useChartEditorContext(): ChartEditorContextValue {
     );
   }
   return ctx;
+}
+
+/**
+ * The `InstrumentSchema` for the current `activeScope`, honoring the
+ * chart's `drumType`. Null for non-track scopes (`vocals`/`global`) or
+ * before a chart is loaded. Schemas are module singletons — no
+ * memoization needed, `selectActiveSchema` runs on every render.
+ */
+export function useActiveSchema(): InstrumentSchema | null {
+  const {state} = useChartEditorContext();
+  return selectActiveSchema(state);
 }
