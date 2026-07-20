@@ -106,6 +106,22 @@ export {
   type RemapKeepMsOptions,
 } from './tempo-remap';
 
+// Leading-silence padding (plan 0064) — audio anchor accessors, refresh
+// helpers used by tempo commands, and the plan/apply pair the editor button
+// drives
+export {
+  getAudioAnchor,
+  setAudioAnchor,
+  refreshAnchorKeepMs,
+  refreshAnchorKeepTick,
+  planLeadingSilence,
+  applyLeadingSilence,
+  LEAD_MIN_MS,
+  COLLAPSE_BPM_MIN,
+  type AudioAnchor,
+  type LeadingSilencePlan,
+} from './leading-silence';
+
 // Denominator-aware bar/beat derivation (plan 0061 §3b) — the one shared
 // implementation of timeSignatures ⇄ downbeats/bars for every view
 export {

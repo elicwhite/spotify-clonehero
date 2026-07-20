@@ -51,6 +51,30 @@ import {buildDrumsTrackFromOnsets, type TempoLike} from './chart-builder';
  * with `RawDrumEvent`, which is what the snap stage consumes. */
 export type DecodedOnset = DecodedOnsetsFile['onsets'][number];
 
+/**
+ * Shift every onset's `timeSeconds` by `ms` (0064 addendum §7). Decoded
+ * onsets are recorded against the ORIGINAL (unpadded) audio; when a chart
+ * has leading-silence padding active (a non-null `audioAnchor`), any
+ * consumer that re-derives ticks from onsets — `repredictTempo`'s RE-PREDICT
+ * op chief among them — must feed it onsets shifted onto the padded
+ * timeline, or the fresh notes land `anchor.ms` early. Returns a new
+ * `DecodedOnsetsFile`; the input is not mutated (repeated preview/redo runs
+ * must be able to re-shift from the original file).
+ */
+export function shiftOnsets(
+  onsets: DecodedOnsetsFile,
+  ms: number,
+): DecodedOnsetsFile {
+  if (ms === 0) return onsets;
+  return {
+    ...onsets,
+    onsets: onsets.onsets.map(o => ({
+      ...o,
+      timeSeconds: o.timeSeconds + ms / 1000,
+    })),
+  };
+}
+
 /** Which note-handling op actually produced a committed candidate. */
 export type RepredictOp = 're-predict' | 'resnap';
 

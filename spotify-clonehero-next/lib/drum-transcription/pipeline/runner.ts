@@ -952,7 +952,10 @@ export async function regenerateProject(
   for (const fileName of REGENERATED_ARTIFACT_FILES) {
     await deleteProjectFile(projectId, fileName);
   }
-  await updateProject(projectId, {stage: 'transcribing'});
+  // The regenerated chart is audio-relative from scratch — any leading-
+  // silence anchor from the discarded chart no longer applies (0064
+  // addendum §1: "regenerate clears it").
+  await updateProject(projectId, {stage: 'transcribing', audioAnchor: null});
 
   return resumePipeline(projectId, onProgress, transcriber);
 }

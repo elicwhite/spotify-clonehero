@@ -62,6 +62,10 @@ import {
   addPhrase,
   deletePhrase,
   insertPhrase,
+  getAudioAnchor,
+  setAudioAnchor,
+  refreshAnchorKeepMs,
+  refreshAnchorKeepTick,
   type DownbeatFlags,
   type RemovedLyric,
 } from '@/lib/chart-edit';
@@ -84,7 +88,10 @@ function downbeatSpanEndTick(
 }
 import type {Synctrack} from '@/lib/tempo-map/types';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
-import {repredictTempo} from '@/lib/drum-transcription/pipeline/repredict';
+import {
+  repredictTempo,
+  shiftOnsets,
+} from '@/lib/drum-transcription/pipeline/repredict';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
 import {applyAlignedLyricsToDoc} from '@/lib/lyrics-align/apply-lyrics';
 
@@ -501,13 +508,15 @@ export class AddBPMCommand implements EditCommand {
     chart.tempos.sort((a, b) => a.tick - b.tick);
 
     if (this.glue === 'grid') {
-      // KEEP-TICKS: notes keep ticks, ride the moving grid.
+      // KEEP-TICKS: notes keep ticks, ride the moving grid. The audio anchor
+      // rides the grid the same way: keep its tick, recompute its ms.
       retimeChart(chart);
-      return cloned;
+      return refreshAnchorKeepTick(cloned);
     }
     // KEEP-MS: the cloned notes still carry their pre-edit msTime (nothing has
     // retimed them), so swapSynctrack re-ticks them onto the corrected grid.
-    return remapKeepMs(cloned, synctrackFromChart(chart));
+    // The audio anchor is audio-relative too: keep its ms, recompute its tick.
+    return refreshAnchorKeepMs(remapKeepMs(cloned, synctrackFromChart(chart)));
   }
 
   undo(doc: ChartDocument): ChartDocument {
@@ -635,11 +644,13 @@ export class MoveTempoMarkerCommand implements EditCommand {
 
     if (this.glue === 'grid') {
       retimeChart(cloned.parsedChart);
-      return cloned;
+      return refreshAnchorKeepTick(cloned);
     }
     // KEEP-MS: the cloned notes still carry their pre-edit msTime (nothing has
     // retimed them), so swapSynctrack re-ticks them onto the corrected grid.
-    return remapKeepMs(cloned, synctrackFromChart(cloned.parsedChart));
+    return refreshAnchorKeepMs(
+      remapKeepMs(cloned, synctrackFromChart(cloned.parsedChart)),
+    );
   }
 
   undo(doc: ChartDocument): ChartDocument {
@@ -684,7 +695,10 @@ export class AddTempoMarkerCommand implements EditCommand {
     });
     cloned.parsedChart.tempos.sort((a, b) => a.tick - b.tick);
     retimeChart(cloned.parsedChart);
-    return cloned;
+    // Mapping-neutral (the inserted marker's BPM already governed this tick,
+    // so no note's ms changes) — refresh keeps the anchor's tick/ms pair
+    // consistent with every other retime path even though ms is unchanged.
+    return refreshAnchorKeepTick(cloned);
   }
 
   undo(doc: ChartDocument): ChartDocument {
@@ -721,9 +735,11 @@ export class DeleteTempoMarkerCommand implements EditCommand {
 
     if (this.glue === 'grid') {
       retimeChart(cloned.parsedChart);
-      return cloned;
+      return refreshAnchorKeepTick(cloned);
     }
-    return remapKeepMs(cloned, synctrackFromChart(cloned.parsedChart));
+    return refreshAnchorKeepMs(
+      remapKeepMs(cloned, synctrackFromChart(cloned.parsedChart)),
+    );
   }
 
   undo(doc: ChartDocument): ChartDocument {
@@ -769,9 +785,22 @@ export class RepredictTempoCommand implements EditCommand {
 
   execute(doc: ChartDocument): ChartDocument {
     this.prevDoc = doc;
-    const result = repredictTempo(doc, this.correctedSync, this.onsets);
+    const anchor = getAudioAnchor(doc);
+    // `this.onsets` is original-audio-relative (0064 addendum §7); shift onto
+    // the padded timeline before re-deriving notes from it. Shifts a copy —
+    // `this.onsets` itself is untouched so a later run (different anchor)
+    // re-shifts from the source, not a stale shifted copy.
+    const onsets =
+      anchor && this.onsets ? shiftOnsets(this.onsets, anchor.ms) : this.onsets;
+    const result = repredictTempo(doc, this.correctedSync, onsets);
     this.usedResnapFallback = result.usedResnapFallback;
-    return result.doc;
+    if (!anchor) return result.doc;
+    // repredictTempo re-derives note ticks wholesale, but audio positions are
+    // the invariant it's re-deriving them from — the anchor keeps its ms and
+    // gets a fresh tick under the corrected map. Re-attach from `doc`
+    // defensively (both of repredictTempo's return paths spread `...doc`, so
+    // the anchor already carries over, but this doesn't rely on that).
+    return refreshAnchorKeepMs(setAudioAnchor(result.doc, anchor));
   }
 
   undo(doc: ChartDocument): ChartDocument {
@@ -803,7 +832,17 @@ export class CommitTempoCandidateCommand implements EditCommand {
 
   execute(doc: ChartDocument): ChartDocument {
     this.prevDoc = doc;
-    return this.candidate;
+    const anchor = getAudioAnchor(doc);
+    // No leading-silence anchor active: commit the captured candidate
+    // byte-identical (object identity — "no re-run, no drift" is a tested
+    // contract of this command; see commit-tempo-candidate.test.ts).
+    if (!anchor) return this.candidate;
+    // The candidate was captured from a preview computed against `doc` at
+    // preview time (`previewStructural`/`previewOctave` in the piano roll),
+    // which may carry a stale or absent anchor — re-derive it from the LIVE
+    // `doc` being committed against (audio position is the invariant; only
+    // the tick needs a fresh map).
+    return refreshAnchorKeepMs(setAudioAnchor(this.candidate, anchor));
   }
 
   undo(doc: ChartDocument): ChartDocument {
@@ -1225,7 +1264,20 @@ export class ReplaceLyricsCommand implements EditCommand {
 
   execute(doc: ChartDocument): ChartDocument {
     this.prevVocalTracks = doc.parsedChart.vocalTracks;
-    return applyAlignedLyricsToDoc(doc, this.syllables);
+    // The aligner ran against the ORIGINAL (unpadded) audio, so its syllable
+    // times are original-audio-relative (0064 addendum §7). When leading
+    // silence is active, shift onto a copy — never `this.syllables` itself,
+    // since undo/redo must be able to re-run this against a doc whose
+    // anchor has since changed.
+    const anchor = getAudioAnchor(doc);
+    const syllables = anchor
+      ? this.syllables.map(s => ({
+          ...s,
+          startMs: s.startMs + anchor.ms,
+          endMs: s.endMs + anchor.ms,
+        }))
+      : this.syllables;
+    return applyAlignedLyricsToDoc(doc, syllables);
   }
 
   undo(doc: ChartDocument): ChartDocument {

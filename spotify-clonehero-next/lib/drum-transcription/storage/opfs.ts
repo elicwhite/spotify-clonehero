@@ -104,6 +104,17 @@ export interface ProjectMetadata {
    * field existed; treat as `'predicted'`.
    */
   gridSource?: GridSource | undefined;
+  /**
+   * Chart-time position of original (unpadded) audio sample 0 (0064 addendum
+   * §1) — mirrors the in-memory `ChartDocument`'s `audioAnchor`
+   * (`lib/chart-edit/leading-silence.ts`). Presence (non-null) means
+   * leading-silence padding is active: the stored audio (`song.opus`) is
+   * still the original, un-padded file, and the chart's notes were shifted
+   * forward by `audioAnchor.ms`. `undefined`/`null` ⇒ no padding, current
+   * behavior. Cleared (set to `null`) whenever the chart is rebuilt from
+   * audio wholesale (`regenerateProject`), since a fresh chart has no anchor.
+   */
+  audioAnchor?: {tick: number; ms: number} | null | undefined;
 }
 
 export type GridSource = 'provided' | 'predicted';
@@ -264,7 +275,12 @@ export async function updateProject(
   updates: Partial<
     Pick<
       ProjectMetadata,
-      'name' | 'durationSeconds' | 'stage' | 'gridSource' | 'stemFingerprint'
+      | 'name'
+      | 'durationSeconds'
+      | 'stage'
+      | 'gridSource'
+      | 'stemFingerprint'
+      | 'audioAnchor'
     >
   >,
 ): Promise<ProjectMetadata> {
