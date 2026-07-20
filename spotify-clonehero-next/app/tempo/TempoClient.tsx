@@ -37,6 +37,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {Switch} from '@/components/ui/switch';
 import {calculateTimeRemaining} from '@/lib/ui-utils';
 import {
@@ -91,7 +101,13 @@ interface ResultState {
   audioFiles: Files;
   /** Present in chart mode only. */
   originalChart: ParsedChart | null;
-  /** Chart-mode inputs for re-deriving the new chart when toggling snap. */
+  /**
+   * Non-chart passthrough assets (audio, album art, song.ini, …) to attach
+   * to the chart doc ResultsView builds — the original chart's assets in
+   * chart mode, or a synthesized `song.<ext>` audio asset in audio mode.
+   * Used both for re-deriving the new chart when toggling snap and as the
+   * live `ChartDocument.assets` the editor (and export) work from.
+   */
   chartAssets: ScanFile[];
   modifiers: typeof defaultIniChartModifiers;
   /** Audio-mode precomputed chart (no notes, nothing to snap). */
@@ -99,8 +115,6 @@ interface ResultState {
   synctrack: Synctrack;
   /** Meter regularity from the pipeline (null = too short to measure). */
   meterStats: MeterStats | null;
-  /** writeChartFolder output for the download button (audio mode). */
-  exportFiles: ScanFile[];
   /** 'sng' downloads as .sng, everything else as .zip. */
   sourceFormat: SourceFormat | null;
 }
@@ -365,7 +379,6 @@ export default function TempoClient() {
         // Chart mode derives the new chart inside ResultsView (so the
         // snap-to-grid toggle can re-derive it); audio mode is fixed here.
         let newChart: ParsedChart;
-        let exportFiles: ScanFile[] = [];
         let modifiers = {...PRO_DRUMS_MODIFIERS};
         if (originalChart) {
           modifiers = {...originalChart.iniChartModifiers, pro_drums: true};
@@ -380,11 +393,8 @@ export default function TempoClient() {
             fileName: `song.${audioFiles[0].fileName.split('.').pop()}`,
             data: audioFiles[0].data,
           };
-          ({chart: newChart, files: exportFiles} = writeAndReparse(
-            built,
-            [audioAsset],
-            modifiers,
-          ));
+          chartAssets = [audioAsset];
+          ({chart: newChart} = writeAndReparse(built, chartAssets, modifiers));
         }
 
         finishAll();
@@ -398,7 +408,6 @@ export default function TempoClient() {
           newChart,
           synctrack: sync,
           meterStats: pipelineResult.meterStats,
-          exportFiles,
           sourceFormat,
         });
         setPhase('results');
@@ -562,19 +571,19 @@ function ResultsView({
   // the validated-correct quantizer (see autoresearch-subdiv).
   const derived = useMemo(() => {
     if (!result.originalChart) {
-      return {newChart: result.newChart, exportFiles: result.exportFiles};
+      return {newChart: result.newChart};
     }
     const swapped = swapSynctrack(
       result.originalChart,
       result.synctrack,
       snapNotes ? {quantizeNotes: true} : {},
     );
-    const {chart, files} = writeAndReparse(
+    const {chart} = writeAndReparse(
       swapped,
       result.chartAssets,
       result.modifiers,
     );
-    return {newChart: chart, exportFiles: files};
+    return {newChart: chart};
   }, [result, snapNotes]);
 
   const currentChart =
@@ -582,9 +591,9 @@ function ResultsView({
       ? result.originalChart
       : derived.newChart;
 
-  // The doc the shared editor loads into `ChartEditorContext`. Downloads
-  // always export the retempoed (`derived`) chart — the variant toggle only
-  // changes what's shown, matching the pre-shared-editor behavior.
+  // The doc the shared editor loads into `ChartEditorContext`. Switching
+  // variant/snap re-derives this and re-dispatches it into the editor —
+  // `TempoEditor` guards that against discarding in-progress edits.
   const chartDoc = useMemo<ChartDocument>(
     () => ({parsedChart: currentChart, assets: result.chartAssets}),
     [currentChart, result.chartAssets],
@@ -618,7 +627,6 @@ function ResultsView({
         <TempoEditor
           result={result}
           chartDoc={chartDoc}
-          exportFiles={derived.exportFiles}
           hasOriginal={hasOriginal}
           variant={variant}
           setVariant={setVariant}
@@ -642,7 +650,6 @@ function ResultsView({
 function TempoEditor({
   result,
   chartDoc,
-  exportFiles,
   hasOriginal,
   variant,
   setVariant,
@@ -654,7 +661,6 @@ function TempoEditor({
 }: {
   result: ResultState;
   chartDoc: ChartDocument;
-  exportFiles: ScanFile[];
   hasOriginal: boolean;
   variant: Variant;
   setVariant: (v: Variant) => void;
@@ -669,6 +675,25 @@ function TempoEditor({
   useEffect(() => {
     dispatch({type: 'SET_CHART_DOC', chartDoc});
   }, [chartDoc, dispatch]);
+
+  // The variant/snap toggles re-derive `chartDoc` and re-dispatch it above,
+  // which replaces whatever the user has edited in the session. Route
+  // changes through a confirmation once the doc is dirty rather than
+  // silently discarding edits (mirrors EditorApp's Regenerate confirm).
+  const [pendingChange, setPendingChange] = useState<{
+    label: string;
+    apply: () => void;
+  } | null>(null);
+  const requestChange = useCallback(
+    (label: string, apply: () => void) => {
+      if (state.dirty) {
+        setPendingChange({label, apply});
+      } else {
+        apply();
+      }
+    },
+    [state.dirty],
+  );
 
   // Decode the source audio into raw PCM (ORIGINAL, unpadded) — the same
   // audio for both variants. `usePaddedAudio` pads it to match the chart's
@@ -713,12 +738,24 @@ function TempoEditor({
     return buildMetadata(result.name, songLength);
   }, [chartDoc, result.name]);
 
-  // Downloads always bundle the retempoed chart (`exportFiles`), whichever
-  // variant is currently on screen — matching the pre-shared-editor
-  // behavior. Non-chart files (audio, album art, …) ride along verbatim as
-  // passthrough assets, so no separate `getAudioSources` is needed.
+  // Serialize the LIVE `state.chartDoc` at export time (same
+  // `writeChartFolder` path EditorApp's autosave uses) — not the
+  // precomputed `chartDoc` prop — so in-editor tempo/TS/section edits and
+  // leading-silence changes are actually in the download. `assets` (audio,
+  // album art, ini, …) rides along on the doc through every command's
+  // `cloneDocFor` (which spreads `...doc`), so it's still correct here.
+  // `doc.parsedChart.format` (inherited from the source chart) decides
+  // whether `writeChartFolder` emits `notes.chart` or `notes.mid` — no
+  // separate audio-source callback is needed since the asset travels with
+  // the doc either way.
+  const writeCurrentChartFiles = useCallback((): ScanFile[] => {
+    if (!state.chartDoc) throw new Error('Chart not loaded yet');
+    return writeChartFolder(state.chartDoc);
+  }, [state.chartDoc]);
+
   const getChartFile = useCallback(async () => {
-    const chartFileOut = exportFiles.find(
+    const files = writeCurrentChartFiles();
+    const chartFileOut = files.find(
       f => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
     );
     if (!chartFileOut) throw new Error('Failed to build the chart file');
@@ -726,13 +763,13 @@ function TempoEditor({
       fileName: chartFileOut.fileName,
       data: chartFileOut.data,
     };
-  }, [exportFiles]);
+  }, [writeCurrentChartFiles]);
 
   const getExtraAssets = useCallback(async (): Promise<AssetFile[]> => {
-    return exportFiles.filter(
+    return writeCurrentChartFiles().filter(
       f => f.fileName !== 'notes.chart' && f.fileName !== 'notes.mid',
     );
-  }, [exportFiles]);
+  }, [writeCurrentChartFiles]);
 
   const chart = state.chartDoc?.parsedChart ?? null;
   if (!chart || !audioManager) {
@@ -744,75 +781,122 @@ function TempoEditor({
   }
 
   return (
-    <ChartEditor
-      metadata={cloneHeroMetadata}
-      chart={chart}
-      audioManager={audioManager}
-      audioData={audioPcm ?? undefined}
-      audioChannels={audioMeta?.channels ?? 2}
-      durationSeconds={durationSeconds}
-      sections={chart.sections}
-      songName={`${result.name} (retempo)`}
-      dirty={state.dirty}
-      getChartFile={getChartFile}
-      getExtraAssets={getExtraAssets}
-      defaultExportFormat={
-        result.sourceFormat === 'sng'
-          ? 'sng'
-          : result.sourceFormat
-            ? 'zip'
-            : undefined
-      }
-      leftPanelChildren={
-        <>
-          {hasOriginal && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={variant === 'original' ? 'default' : 'outline'}
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => setVariant('original')}>
-                  Original
-                </Button>
-                <Button
-                  variant={variant === 'new' ? 'default' : 'outline'}
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => setVariant('new')}>
-                  New tempo map
-                </Button>
+    <>
+      <AlertDialog
+        open={pendingChange !== null}
+        onOpenChange={open => {
+          if (!open) setPendingChange(null);
+        }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard your edits?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingChange?.label} replaces the chart with a freshly derived
+              one. Any tempo, time-signature, section, or leading-silence edits
+              you&apos;ve made in this session will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                pendingChange?.apply();
+                setPendingChange(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Discard edits
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <ChartEditor
+        metadata={cloneHeroMetadata}
+        chart={chart}
+        audioManager={audioManager}
+        audioData={audioPcm ?? undefined}
+        audioChannels={audioMeta?.channels ?? 2}
+        durationSeconds={durationSeconds}
+        sections={chart.sections}
+        songName={`${result.name} (retempo)`}
+        dirty={state.dirty}
+        getChartFile={getChartFile}
+        getExtraAssets={getExtraAssets}
+        defaultExportFormat={
+          result.sourceFormat === 'sng'
+            ? 'sng'
+            : result.sourceFormat
+              ? 'zip'
+              : undefined
+        }
+        leftPanelChildren={
+          <>
+            {hasOriginal && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={variant === 'original' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() =>
+                      requestChange('Switch to the original chart', () =>
+                        setVariant('original'),
+                      )
+                    }>
+                    Original
+                  </Button>
+                  <Button
+                    variant={variant === 'new' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() =>
+                      requestChange('Switch to the new tempo map', () =>
+                        setVariant('new'),
+                      )
+                    }>
+                    New tempo map
+                  </Button>
+                </div>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <Switch
+                    checked={snapNotes}
+                    onCheckedChange={checked =>
+                      requestChange(
+                        checked
+                          ? 'Turn on snap-to-grid'
+                          : 'Turn off snap-to-grid',
+                        () => setSnapNotes(checked),
+                      )
+                    }
+                  />
+                  Snap notes to grid
+                </label>
               </div>
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-                <Switch checked={snapNotes} onCheckedChange={setSnapNotes} />
-                Snap notes to grid
-              </label>
-            </div>
-          )}
-          {meterStats && (
+            )}
+            {meterStats && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={onShowMeterInfo}>
+                Meter info
+              </Button>
+            )}
+            {audioMeta && (
+              <LeadingSilenceButton
+                sampleRate={audioMeta.sampleRate}
+                disabled={audioRebuilding}
+              />
+            )}
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               className="w-full"
-              onClick={onShowMeterInfo}>
-              Meter info
+              onClick={onBack}>
+              Start over
             </Button>
-          )}
-          {audioMeta && (
-            <LeadingSilenceButton
-              sampleRate={audioMeta.sampleRate}
-              disabled={audioRebuilding}
-            />
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full"
-            onClick={onBack}>
-            Start over
-          </Button>
-        </>
-      }
-    />
+          </>
+        }
+      />
+    </>
   );
 }
