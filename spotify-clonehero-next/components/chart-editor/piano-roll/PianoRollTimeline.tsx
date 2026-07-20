@@ -595,6 +595,10 @@ export default function PianoRollTimeline({
   /** Latest state pieces the pointer handlers read without re-subscribing. */
   const editStateRef = useRef(state);
   editStateRef.current = state;
+  /** Latest `capabilities.showPianoRollNotes`, read by `draw()`/`panelGeometry()`
+   *  (both empty-dep `useCallback`s) so they never need to be redefined. */
+  const showPianoRollNotesRef = useRef(capabilities.showPianoRollNotes);
+  showPianoRollNotesRef.current = capabilities.showPianoRollNotes;
   /** Latest `previewOctave` (defined below, after `executeCommand`/`dispatch`
    *  are in scope) — the tempo-lane context menu (built earlier in the file)
    *  reads through this ref rather than depending on the function directly,
@@ -686,9 +690,14 @@ export default function PianoRollTimeline({
       endTick,
     } = tempoCache;
 
-    const activeTrack = isTrackScope(state.activeScope)
-      ? (findTrackInParsedChart(parsed, state.activeScope.track)?.track ?? null)
-      : null;
+    // `showPianoRollNotes: false` (e.g. /tempo) hides note lanes and the
+    // lyrics row entirely — the piano roll shows only the tempo grid,
+    // ruler, and sections.
+    const activeTrack =
+      capabilities.showPianoRollNotes && isTrackScope(state.activeScope)
+        ? (findTrackInParsedChart(parsed, state.activeScope.track)?.track ??
+          null)
+        : null;
     const notes = extractPianoRollNotes(activeTrack);
     const maxNoteTick = notes.length ? notes[notes.length - 1].tick : 0;
 
@@ -698,11 +707,9 @@ export default function PianoRollTimeline({
       name: s.name,
     }));
 
-    const {chips: lyricChips, bands: lyricBands} = buildLyricsRowScene(
-      parsed.vocalTracks,
-      timedTempos,
-      resolution,
-    );
+    const {chips: lyricChips, bands: lyricBands} = capabilities.showPianoRollNotes
+      ? buildLyricsRowScene(parsed.vocalTracks, timedTempos, resolution)
+      : {chips: [], bands: []};
 
     const withMs = (list: {ms: number}[]) =>
       list.reduce((m, x) => Math.max(m, x.ms), 0);
@@ -729,7 +736,7 @@ export default function PianoRollTimeline({
       lyricBands,
       lyricsVisible: lyricChips.length > 0,
     };
-  }, [tempoCache, effectiveDoc, state.activeScope]);
+  }, [tempoCache, effectiveDoc, state.activeScope, capabilities.showPianoRollNotes]);
 
   useEffect(() => {
     sceneRef.current = scene;
@@ -833,6 +840,7 @@ export default function PianoRollTimeline({
     // waveform. Lyrics sit directly under the ruler — they're ms-locked and
     // never move under a tempo edit, so they read as a caption track above
     // the tempo/note grid rather than mixed into it.
+    const showNotes = showPianoRollNotesRef.current;
     const lyricsTop = RULER_H;
     const lyricsH = lyricsRowHeight(scene);
     const tempoTop = lyricsTop + lyricsH;
@@ -843,25 +851,29 @@ export default function PianoRollTimeline({
     // chrome + lane tints
     ctx.fillStyle = COLORS.chrome;
     ctx.fillRect(0, 0, w, h);
-    for (let l = 0; l < LANE_COUNT; l++) {
-      ctx.fillStyle = l % 2 ? COLORS.laneAlt : COLORS.laneBg;
-      ctx.fillRect(0, laneTop + l * laneH, w, laneH);
+    if (showNotes) {
+      for (let l = 0; l < LANE_COUNT; l++) {
+        ctx.fillStyle = l % 2 ? COLORS.laneAlt : COLORS.laneBg;
+        ctx.fillRect(0, laneTop + l * laneH, w, laneH);
+      }
     }
 
     if (scene) {
       drawGrid(ctx, w, h, laneTop, laneBottom, view, scene);
-      drawNotes(
-        ctx,
-        w,
-        laneTop,
-        laneH,
-        view,
-        scene,
-        selection,
-        hoverIdRef.current,
-        noteDragRef.current,
-        ghostRef.current,
-      );
+      if (showNotes) {
+        drawNotes(
+          ctx,
+          w,
+          laneTop,
+          laneH,
+          view,
+          scene,
+          selection,
+          hoverIdRef.current,
+          noteDragRef.current,
+          ghostRef.current,
+        );
+      }
       drawTempoLane(
         ctx,
         w,
@@ -932,7 +944,7 @@ export default function PianoRollTimeline({
       drawWave(ctx, w, laneBottom + 3, h - 3, view, ampRef.current);
     }
 
-    drawLaneLabels(ctx, laneTop, laneH);
+    if (showNotes) drawLaneLabels(ctx, laneTop, laneH);
 
     // marquee box-select rectangle
     const marquee = marqueeRef.current;

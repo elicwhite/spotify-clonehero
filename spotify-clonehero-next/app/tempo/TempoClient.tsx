@@ -11,20 +11,13 @@
  */
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {
-  AudioWaveform,
-  Download,
-  FolderSearch,
-  Music,
-  Pause,
-  Play,
-} from 'lucide-react';
-import {toast} from 'sonner';
+import {FolderSearch, Music} from 'lucide-react';
 
 import {
   defaultIniChartModifiers,
   parseChartFile,
   writeChartFolder,
+  type ChartDocument,
   type File as ScanFile,
   type ParsedChart,
 } from '@eliwhite/scan-chart';
@@ -44,20 +37,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
-import {cn} from '@/lib/utils';
 import {calculateTimeRemaining} from '@/lib/ui-utils';
 import {
   findAudioFiles,
   type Files,
 } from '@/lib/preview/chorus-chart-processing';
-import {AudioManager} from '@/lib/preview/audioManager';
-import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
+import {interleaveAudioBuffer} from '@/lib/drum-transcription/audio/decoder';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {readChart} from '@/lib/chart-edit';
-import {exportAsZip, exportAsSng} from '@/lib/chart-export';
-import {downloadBlob} from '@/lib/download';
 import {isWebGPUAvailable} from '@/lib/drum-transcription/ml/onnx-runtime';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {
@@ -79,8 +67,16 @@ import {
   type MeterStats,
 } from '@/lib/tempo-map/meter-confidence';
 
-import SheetMusic from '@/app/sheet-music/[slug]/SheetMusic';
-import CloneHeroRenderer from '@/app/sheet-music/[slug]/CloneHeroRenderer';
+import ChartEditor from '@/components/chart-editor/ChartEditor';
+import type {AssetFile} from '@/components/chart-editor/ExportDialog';
+import {
+  ChartEditorProvider,
+  useChartEditorContext,
+} from '@/components/chart-editor/ChartEditorContext';
+import {TEMPO_CAPABILITIES} from '@/components/chart-editor/capabilities';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
+import {usePaddedAudio} from '@/components/chart-editor/hooks/usePaddedAudio';
+import LeadingSilenceButton from '@/app/drum-transcription/components/LeadingSilenceButton';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -173,43 +169,6 @@ function buildMetadata(
     file: '',
     song_length: songLengthMs,
   } as ChartResponseEncore;
-}
-
-interface TempoTsEntry {
-  tick: number;
-  msTime: number;
-  kind: 'tempo' | 'ts';
-  label: string;
-}
-
-function buildEventList(chart: ParsedChart): TempoTsEntry[] {
-  const entries: TempoTsEntry[] = [];
-  for (const t of chart.tempos) {
-    entries.push({
-      tick: t.tick,
-      msTime: t.msTime,
-      kind: 'tempo',
-      label: `${t.beatsPerMinute.toFixed(2)} BPM`,
-    });
-  }
-  for (const ts of chart.timeSignatures) {
-    entries.push({
-      tick: ts.tick,
-      msTime: ts.msTime,
-      kind: 'ts',
-      label: `${ts.numerator}/${ts.denominator}`,
-    });
-  }
-  entries.sort((a, b) => a.tick - b.tick || (a.kind === 'ts' ? -1 : 1));
-  return entries;
-}
-
-function formatTimeMs(ms: number): string {
-  if (!isFinite(ms)) return '0:00';
-  const total = Math.max(0, ms);
-  const mins = Math.floor(total / 60000);
-  const secs = Math.floor((total % 60000) / 1000);
-  return `${mins}:${String(secs).padStart(2, '0')}`;
 }
 
 function basename(fileName: string): string {
@@ -585,10 +544,6 @@ function ResultsView({
   setVariant: (v: Variant) => void;
   onBack: () => void;
 }) {
-  const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
-  const audioManagerRef = useRef<AudioManager | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
   const [snapNotes, setSnapNotes] = useState(true);
 
   const irregularMeter =
@@ -622,223 +577,21 @@ function ResultsView({
     return {newChart: chart, exportFiles: files};
   }, [result, snapNotes]);
 
-  const handleDownload = useCallback(() => {
-    const base = `${result.name} (retempo)`;
-    if (result.sourceFormat === 'sng') {
-      const sngBytes = exportAsSng(derived.exportFiles);
-      downloadBlob(
-        new Blob([sngBytes as Uint8Array<ArrayBuffer>], {
-          type: 'application/octet-stream',
-        }),
-        `${base}.sng`,
-      );
-    } else {
-      downloadBlob(exportAsZip(derived.exportFiles), `${base}.zip`);
-    }
-    toast.success('Chart downloaded');
-  }, [result, derived]);
-
   const currentChart =
     variant === 'original' && result.originalChart
       ? result.originalChart
       : derived.newChart;
 
-  // ---------- audio manager (same audio for both variants) ----------
-  useEffect(() => {
-    let cancelled = false;
-    const manager = new AudioManager(result.audioFiles, () =>
-      setIsPlaying(false),
-    );
-    manager.ready.then(() => {
-      if (cancelled) {
-        manager.destroy();
-        return;
-      }
-      const delayMs = getChartDelayMs(result.newChart.metadata);
-      manager.setChartDelay(delayMs / 1000);
-      audioManagerRef.current = manager;
-      setAudioManager(manager);
-    });
-    return () => {
-      cancelled = true;
-      manager.destroy();
-      if (audioManagerRef.current === manager) {
-        audioManagerRef.current = null;
-        setAudioManager(null);
-      }
-    };
-  }, [result]);
-
-  useEffect(() => {
-    if (!isPlaying) return;
-    let raf = 0;
-    const tick = () => {
-      if (audioManagerRef.current) {
-        setCurrentTime(audioManagerRef.current.currentTime);
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [isPlaying]);
-
-  const currentTrack = useMemo(() => {
-    // Drums only — the renderers interpret notes as drum pads, so falling
-    // back to a guitar/other track crashes interpretDrumNote (e.g. a
-    // guitar-only .sng). Prefer the highest charted drums difficulty; with
-    // no drums track at all, synthesize an empty one (the same shape
-    // build-chart.ts uses for standalone audio) so the Clone Hero view
-    // still renders the tempo highway.
-    const drums = currentChart.trackData.filter(t => t.instrument === 'drums');
-    if (drums.length === 0) {
-      return {
-        instrument: 'drums',
-        difficulty: 'expert',
-        starPowerSections: [],
-        rejectedStarPowerSections: [],
-        soloSections: [],
-        flexLanes: [],
-        drumFreestyleSections: [],
-        textEvents: [],
-        versusPhrases: [],
-        animations: [],
-        noteEventGroups: [],
-      } as unknown as ParsedChart['trackData'][number];
-    }
-    const order = ['expert', 'hard', 'medium', 'easy'];
-    return [...drums].sort(
-      (a, b) => order.indexOf(a.difficulty) - order.indexOf(b.difficulty),
-    )[0];
-  }, [currentChart]);
-
-  // SheetMusic's VexFlow parser requires at least one note; a standalone-audio
-  // chart is just a tempo map with an empty drums track.
-  const hasNotes = (currentTrack?.noteEventGroups.length ?? 0) > 0;
-
-  const metadata = useMemo(() => {
-    const songLength = Math.max(
-      result.newChart.metadata.song_length ?? 0,
-      ...currentChart.trackData
-        .flatMap(t => t.noteEventGroups.flat())
-        .map(n => n.msTime + (n.msLength || 0)),
-    );
-    return buildMetadata(result.name, songLength);
-  }, [result, currentChart]);
-
-  const eventList = useMemo(() => buildEventList(currentChart), [currentChart]);
-
-  const lyrics = useMemo(
-    () =>
-      currentChart.vocalTracks.parts['vocals']?.notePhrases.flatMap(
-        p => p.lyrics,
-      ) ?? [],
-    [currentChart],
+  // The doc the shared editor loads into `ChartEditorContext`. Downloads
+  // always export the retempoed (`derived`) chart — the variant toggle only
+  // changes what's shown, matching the pre-shared-editor behavior.
+  const chartDoc = useMemo<ChartDocument>(
+    () => ({parsedChart: currentChart, assets: result.chartAssets}),
+    [currentChart, result.chartAssets],
   );
-
-  const seekToEntry = useCallback(
-    (entry: TempoTsEntry) => {
-      const am = audioManagerRef.current;
-      if (!am) return;
-      const sec = Math.max(0, entry.msTime / 1000);
-      if (isPlaying) {
-        am.playChartTime(sec);
-      } else {
-        am.seekToChartTime(sec);
-      }
-      setCurrentTime(am.currentTime);
-    },
-    [isPlaying],
-  );
-
-  const handlePlay = () => {
-    const am = audioManagerRef.current;
-    if (!am) return;
-    if (isPlaying) {
-      am.pause();
-      setIsPlaying(false);
-    } else if (!am.isInitialized) {
-      am.play({time: 0});
-      setIsPlaying(true);
-    } else {
-      am.resume();
-      setIsPlaying(true);
-    }
-  };
 
   return (
-    <main className="h-screen w-screen flex flex-col bg-background">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b bg-card">
-        <AudioWaveform className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="text-sm font-medium truncate max-w-md">
-          {result.name}
-        </span>
-
-        {hasOriginal && (
-          <div className="flex items-center gap-2 ml-4">
-            <Button
-              variant={variant === 'original' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setVariant('original')}>
-              Original
-            </Button>
-            <Button
-              variant={variant === 'new' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setVariant('new')}>
-              New tempo map
-            </Button>
-            <label className="flex items-center gap-1.5 ml-2 text-xs text-muted-foreground cursor-pointer">
-              <Switch checked={snapNotes} onCheckedChange={setSnapNotes} />
-              Snap notes to grid
-            </label>
-          </div>
-        )}
-
-        <div className="ml-auto flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={handleDownload}>
-            <Download className="h-4 w-4 mr-1" />
-            Download .{result.sourceFormat === 'sng' ? 'sng' : 'zip'}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onBack}>
-            Start over
-          </Button>
-          <Button
-            size="icon"
-            variant="secondary"
-            className="rounded-full"
-            disabled={!audioManager}
-            onClick={handlePlay}>
-            {isPlaying ? (
-              <Pause className="h-5 w-5" />
-            ) : (
-              <Play className="h-5 w-5" />
-            )}
-          </Button>
-          <span className="text-xs font-mono text-muted-foreground">
-            {formatTimeMs(currentTime * 1000)}
-          </span>
-        </div>
-      </div>
-
-      {/* Seek bar */}
-      {audioManager && (
-        <div className="px-4 py-2 border-b">
-          <Slider
-            value={[currentTime]}
-            min={0}
-            max={audioManager.duration || 1}
-            step={0.01}
-            onValueChange={vals => {
-              const t = vals[0];
-              setCurrentTime(t);
-              audioManager.play({time: t});
-              setIsPlaying(true);
-            }}
-          />
-        </div>
-      )}
-
+    <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden">
       {irregularMeter && result.meterStats && (
         <Dialog open={showMeterModal} onOpenChange={setShowMeterModal}>
           <DialogContent className="sm:max-w-md">
@@ -859,85 +612,207 @@ function ResultsView({
           </DialogContent>
         </Dialog>
       )}
+      <ChartEditorProvider
+        capabilities={TEMPO_CAPABILITIES}
+        activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
+        <TempoEditor
+          result={result}
+          chartDoc={chartDoc}
+          exportFiles={derived.exportFiles}
+          hasOriginal={hasOriginal}
+          variant={variant}
+          setVariant={setVariant}
+          snapNotes={snapNotes}
+          setSnapNotes={setSnapNotes}
+          onBack={onBack}
+          meterStats={result.meterStats}
+          onShowMeterInfo={() => setShowMeterModal(true)}
+        />
+      </ChartEditorProvider>
+    </div>
+  );
+}
 
-      <div className="flex-1 min-h-0 flex">
-        {/* Left: tempo / time-signature list */}
-        <aside className="w-72 border-r flex flex-col overflow-hidden">
-          <div className="px-3 py-2 border-b text-sm font-medium bg-muted/30">
-            Tempo & Time Signature ({eventList.length})
-          </div>
-          <div className="flex-1 overflow-y-auto text-sm">
-            {eventList.map((e, idx) => (
-              <button
-                key={`${e.tick}-${e.kind}-${idx}`}
-                onClick={() => seekToEntry(e)}
-                className={cn(
-                  'w-full text-left px-3 py-1.5 border-b hover:bg-accent flex items-center gap-2 cursor-pointer',
-                  e.kind === 'tempo'
-                    ? 'text-purple-700 dark:text-purple-300'
-                    : 'text-red-700 dark:text-red-300',
-                )}>
-                <span className="font-mono text-xs w-12 text-muted-foreground shrink-0">
-                  {formatTimeMs(e.msTime)}
-                </span>
-                <span className="font-mono text-xs w-16 text-muted-foreground shrink-0">
-                  t{e.tick}
-                </span>
-                <span className="text-xs uppercase tracking-wide w-12 shrink-0">
-                  {e.kind === 'tempo' ? 'BPM' : 'TS'}
-                </span>
-                <span className="font-medium truncate">{e.label}</span>
-              </button>
-            ))}
-            {eventList.length === 0 && (
-              <div className="px-3 py-3 text-muted-foreground text-xs">
-                No tempo or time-signature events.
-              </div>
-            )}
-          </div>
-        </aside>
+/**
+ * Renders the shared `ChartEditor` shell for the current variant/snap
+ * selection — a child of `ChartEditorProvider` so it can dispatch the chart
+ * doc and read `state.chartDoc` back. Owns the padded-AudioManager (single
+ * full-mix source, no stems) via `usePaddedAudio`.
+ */
+function TempoEditor({
+  result,
+  chartDoc,
+  exportFiles,
+  hasOriginal,
+  variant,
+  setVariant,
+  snapNotes,
+  setSnapNotes,
+  onBack,
+  meterStats,
+  onShowMeterInfo,
+}: {
+  result: ResultState;
+  chartDoc: ChartDocument;
+  exportFiles: ScanFile[];
+  hasOriginal: boolean;
+  variant: Variant;
+  setVariant: (v: Variant) => void;
+  snapNotes: boolean;
+  setSnapNotes: (v: boolean) => void;
+  onBack: () => void;
+  meterStats: MeterStats | null;
+  onShowMeterInfo: () => void;
+}) {
+  const {state, dispatch} = useChartEditorContext();
 
-        {/* Right: sheet music + clone hero */}
-        <section className="flex-1 min-w-0 flex">
-          <>
-            {hasNotes && (
-              <div className="flex-1 min-w-0 flex p-2">
-                <SheetMusic
-                  chart={currentChart}
-                  track={currentTrack}
-                  showBarNumbers={true}
-                  enableColors={true}
-                  showLyrics={true}
-                  lyrics={lyrics}
-                  zoom={1}
-                  onSelectMeasure={time => {
-                    const am = audioManagerRef.current;
-                    if (!am) return;
-                    am.playChartTime(time);
-                    setIsPlaying(true);
-                  }}
-                  triggerRerender={`${variant}-${snapNotes}-${result.name}`}
-                  practiceModeConfig={null}
-                  onPracticeMeasureSelect={() => {}}
-                  selectionIndex={null}
-                  getChartTimeSec={() => audioManagerRef.current?.chartTime}
-                />
-              </div>
-            )}
-            {audioManager && (
-              <div className="flex-1 min-w-0 flex p-2">
-                <CloneHeroRenderer
-                  key={`${variant}-${snapNotes}`}
-                  metadata={metadata}
-                  chart={currentChart}
-                  track={currentTrack}
-                  audioManager={audioManager}
-                />
-              </div>
-            )}
-          </>
-        </section>
+  useEffect(() => {
+    dispatch({type: 'SET_CHART_DOC', chartDoc});
+  }, [chartDoc, dispatch]);
+
+  // Decode the source audio into raw PCM (ORIGINAL, unpadded) — the same
+  // audio for both variants. `usePaddedAudio` pads it to match the chart's
+  // leading silence (if any) and owns the AudioManager.
+  const [fullMixPcm, setFullMixPcm] = useState<Float32Array | null>(null);
+  const [audioMeta, setAudioMeta] = useState<{
+    sampleRate: number;
+    channels: number;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    mergeAudioFiles(result.audioFiles).then(buffer => {
+      if (cancelled) return;
+      // interleaveAudioBuffer always emits 2 channels.
+      setAudioMeta({sampleRate: buffer.sampleRate, channels: 2});
+      setFullMixPcm(interleaveAudioBuffer(buffer));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [result.audioFiles]);
+
+  const {
+    audioManager,
+    fullMixPcm: audioPcm,
+    durationSeconds,
+    rebuilding: audioRebuilding,
+  } = usePaddedAudio({
+    chartDoc: state.chartDoc,
+    audioMeta,
+    fullMixPcm,
+    onSongEnded: () => dispatch({type: 'SET_PLAYING', isPlaying: false}),
+  });
+
+  const cloneHeroMetadata = useMemo(() => {
+    const songLength = Math.max(
+      chartDoc.parsedChart.metadata.song_length ?? 0,
+      ...chartDoc.parsedChart.trackData
+        .flatMap(t => t.noteEventGroups.flat())
+        .map(n => n.msTime + (n.msLength || 0)),
+    );
+    return buildMetadata(result.name, songLength);
+  }, [chartDoc, result.name]);
+
+  // Downloads always bundle the retempoed chart (`exportFiles`), whichever
+  // variant is currently on screen — matching the pre-shared-editor
+  // behavior. Non-chart files (audio, album art, …) ride along verbatim as
+  // passthrough assets, so no separate `getAudioSources` is needed.
+  const getChartFile = useCallback(async () => {
+    const chartFileOut = exportFiles.find(
+      f => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
+    );
+    if (!chartFileOut) throw new Error('Failed to build the chart file');
+    return {
+      fileName: chartFileOut.fileName,
+      data: chartFileOut.data,
+    };
+  }, [exportFiles]);
+
+  const getExtraAssets = useCallback(async (): Promise<AssetFile[]> => {
+    return exportFiles.filter(
+      f => f.fileName !== 'notes.chart' && f.fileName !== 'notes.mid',
+    );
+  }, [exportFiles]);
+
+  const chart = state.chartDoc?.parsedChart ?? null;
+  if (!chart || !audioManager) {
+    return (
+      <div className="flex flex-col items-center justify-center flex-1 gap-4">
+        <p className="text-sm text-muted-foreground">Preparing editor...</p>
       </div>
-    </main>
+    );
+  }
+
+  return (
+    <ChartEditor
+      metadata={cloneHeroMetadata}
+      chart={chart}
+      audioManager={audioManager}
+      audioData={audioPcm ?? undefined}
+      audioChannels={audioMeta?.channels ?? 2}
+      durationSeconds={durationSeconds}
+      sections={chart.sections}
+      songName={`${result.name} (retempo)`}
+      dirty={state.dirty}
+      getChartFile={getChartFile}
+      getExtraAssets={getExtraAssets}
+      defaultExportFormat={
+        result.sourceFormat === 'sng'
+          ? 'sng'
+          : result.sourceFormat
+            ? 'zip'
+            : undefined
+      }
+      leftPanelChildren={
+        <>
+          {hasOriginal && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={variant === 'original' ? 'default' : 'outline'}
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setVariant('original')}>
+                  Original
+                </Button>
+                <Button
+                  variant={variant === 'new' ? 'default' : 'outline'}
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setVariant('new')}>
+                  New tempo map
+                </Button>
+              </div>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <Switch checked={snapNotes} onCheckedChange={setSnapNotes} />
+                Snap notes to grid
+              </label>
+            </div>
+          )}
+          {meterStats && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={onShowMeterInfo}>
+              Meter info
+            </Button>
+          )}
+          {audioMeta && (
+            <LeadingSilenceButton
+              sampleRate={audioMeta.sampleRate}
+              disabled={audioRebuilding}
+            />
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full"
+            onClick={onBack}>
+            Start over
+          </Button>
+        </>
+      }
+    />
   );
 }

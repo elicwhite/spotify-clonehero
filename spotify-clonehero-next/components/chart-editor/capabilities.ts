@@ -13,6 +13,9 @@
  *    interactive on the highway and all editing chrome is hidden; only
  *    playback-related sidebar controls (loop, speed, zoom, highway mode)
  *    remain.
+ *  - {@link TEMPO_CAPABILITIES}: `/tempo`'s tempo-mapping editor — tempo,
+ *    time-signature, and section markers are editable; notes and lyrics are
+ *    neither editable nor rendered in the piano roll.
  *
  * Pages mount `<ChartEditor capabilities={...}>` to pick a profile. Pages
  * that omit the prop fall back to drum-edit for backward compatibility.
@@ -67,6 +70,13 @@ export interface EditorCapabilities {
    * (grid snapping, undo/redo history). Read-only pages hide them.
    */
   showEditingControls: boolean;
+  /**
+   * Show the piano roll's note lanes and lyrics row. `/tempo` sets this
+   * false — it only edits tempo/time-signature/section entities, which the
+   * piano roll's tempo lane and ruler render and drag regardless of this
+   * flag (they aren't gated through the `EntityKind` sets above).
+   */
+  showPianoRollNotes: boolean;
 }
 
 export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
@@ -106,6 +116,7 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
   showSheetMusicToggle: false,
   showVocalPartPicker: true,
   showEditingControls: true,
+  showPianoRollNotes: true,
 };
 
 export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
@@ -119,6 +130,7 @@ export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
   showSheetMusicToggle: false,
   showVocalPartPicker: false,
   showEditingControls: true,
+  showPianoRollNotes: true,
 };
 
 export const PREVIEW_CAPABILITIES: EditorCapabilities = {
@@ -132,4 +144,30 @@ export const PREVIEW_CAPABILITIES: EditorCapabilities = {
   showSheetMusicToggle: true,
   showVocalPartPicker: true,
   showEditingControls: false,
+  showPianoRollNotes: true,
+};
+
+/**
+ * {@link TEMPO_CAPABILITIES}: `/tempo`'s tempo-mapping editor. Tempo, time-
+ * signature, and section markers are editable via the piano roll's tempo
+ * lane and ruler (not gated by the `EntityKind` sets — those govern notes
+ * and lyrics only); nothing else is. The piano roll hides its note lanes
+ * and lyrics row entirely (`showPianoRollNotes: false`) since the page is
+ * about the tempo grid, not the drum chart.
+ */
+export const TEMPO_CAPABILITIES: EditorCapabilities = {
+  hoverable: new Set(),
+  selectable: new Set(),
+  draggable: new Set(),
+  showNotePlacementTools: false,
+  showDrumLanes: true,
+  showToolPalette: false,
+  showHighwayModeToggle: true,
+  // The sheet-music pane requires at least one charted note; /tempo's
+  // audio-only mode has an empty placeholder drums track, so the toggle
+  // stays hidden rather than risk it on a chart with nothing to notate.
+  showSheetMusicToggle: false,
+  showVocalPartPicker: false,
+  showEditingControls: true,
+  showPianoRollNotes: false,
 };
