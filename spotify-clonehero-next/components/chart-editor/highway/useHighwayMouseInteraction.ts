@@ -27,7 +27,7 @@ import {
   type RefObject,
 } from 'react';
 import type {HitResult, InteractionManager} from '@/lib/preview/highway';
-import type {DrumNote, EntityKind} from '@/lib/chart-edit';
+import type {EntityKind, NoteEvent} from '@/lib/chart-edit';
 import {lyricId, phraseEndId, phraseStartId} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import type {EditCommand} from '../commands';
@@ -35,6 +35,7 @@ import type {
   ChartEditorAction,
   ChartEditorState,
 } from '@/lib/chart-editor-core';
+import {selectActiveSchema} from '@/lib/chart-editor-core';
 import type {EditorCapabilities} from '../capabilities';
 import type {HighwayPopoverState} from './HighwayPopovers';
 import type {MarkerDragState, MarkerKind} from './useMarkerDrag';
@@ -78,7 +79,7 @@ export interface UseHighwayMouseInteractionInputs {
   state: ChartEditorState;
   capabilities: EditorCapabilities;
   activePartName: string;
-  activeNotes: DrumNote[];
+  activeNotes: NoteEvent[];
   timedTempos: TimedTempo[];
   resolution: number;
   markerDrag: MarkerDragState | null;
@@ -300,6 +301,7 @@ export function useHighwayMouseInteraction(
       state,
       capabilities,
       activePartName,
+      schema: selectActiveSchema(state),
       activeNotes,
       timedTempos,
       resolution,

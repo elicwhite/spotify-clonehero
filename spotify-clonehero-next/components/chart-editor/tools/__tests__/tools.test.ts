@@ -8,6 +8,7 @@
  */
 
 import {noteTypes} from '@eliwhite/scan-chart';
+import {drums4LaneSchema} from '@/lib/chart-edit';
 import {EditorSession} from '@/lib/chart-editor-core';
 import {DRUM_EDIT_CAPABILITIES} from '../../capabilities';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../../scope';
@@ -92,6 +93,7 @@ function makeContext(
     },
     capabilities: DRUM_EDIT_CAPABILITIES,
     activePartName: 'vocals',
+    schema: drums4LaneSchema,
     activeNotes: [],
     timedTempos: [{tick: 0, beatsPerMinute: 120, msTime: 0}],
     resolution: RESOLUTION,

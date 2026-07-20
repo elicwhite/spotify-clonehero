@@ -5,6 +5,7 @@ import {useChartEditorContext} from './ChartEditorContext';
 import {useAudioServiceContext, useAudioManager} from './AudioServiceContext';
 import {
   selectActiveTrack,
+  selectActiveSchema,
   selectRenderDoc,
   getSelectedIds,
 } from '@/lib/chart-editor-core';
@@ -14,7 +15,7 @@ import {
   msToTick,
   snapToGrid,
 } from '@/lib/drum-transcription/timing';
-import {DEFAULT_VOCALS_PART, getDrumNotes} from '@/lib/chart-edit';
+import {DEFAULT_VOCALS_PART, listNotes} from '@/lib/chart-edit';
 import HighwayPreview, {type HighwayRendererHandle} from './HighwayPreview';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
@@ -159,7 +160,8 @@ export default function HighwayEditor({
   // notes to hit-test.
   const activeNotes = useMemo(() => {
     const track = selectActiveTrack(state);
-    return track ? getDrumNotes(track) : [];
+    const schema = selectActiveSchema(state);
+    return track && schema ? listNotes(track, schema) : [];
   }, [state]);
 
   // Active vocal part name. `vocals` is the default and the only part most

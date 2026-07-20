@@ -20,13 +20,12 @@ import {
   phraseEndId,
   phraseStartId,
   parseSchemaNoteId,
-  drums4LaneSchema,
+  typeToLane as schemaTypeToLane,
 } from '@/lib/chart-edit';
 import {
   AddNoteCommand,
   DeleteNotesCommand,
   MoveEntitiesCommand,
-  typeToLane,
   FIRST_PAD_LANE,
   LAST_PAD_LANE,
   KICK_LANE,
@@ -118,10 +117,15 @@ export const selectMoveTool: EditorTool = {
       });
       if (entity.kind === 'note') {
         ctx.drag.setIsDragging(true);
-        const parsedId = parseSchemaNoteId(entity.id, drums4LaneSchema);
+        const parsedId = ctx.schema
+          ? parseSchemaNoteId(entity.id, ctx.schema)
+          : null;
         ctx.drag.setNoteDrag({
           anchorTick: entity.tick,
-          anchorLane: parsedId ? typeToLane(parsedId.type) : 0,
+          anchorLane:
+            parsedId && ctx.schema
+              ? schemaTypeToLane(ctx.schema, parsedId.type)
+              : 0,
           tickDelta: 0,
           laneDelta: 0,
           active: false,
@@ -271,7 +275,7 @@ export const placeNoteTool: EditorTool = {
 
   onPointerDown(ctx: ToolContext, evt: PointerHitInfo): void {
     const trackKey = trackKeyFromScope(ctx.state.activeScope);
-    if (!trackKey) return;
+    if (!trackKey || !ctx.schema) return;
     if (evt.hit?.type === 'note') {
       ctx.executeCommand(
         new DeleteNotesCommand(new Set([evt.hit.noteId]), trackKey),
@@ -281,7 +285,7 @@ export const placeNoteTool: EditorTool = {
     // The prospective note (lane → type → flags) is computed by the shared
     // unit both views use, so the highway and the piano-roll ghost predict —
     // and add — the identical note.
-    const prospective = prospectiveNoteAt(evt.lane, evt.tick);
+    const prospective = prospectiveNoteAt(evt.lane, evt.tick, ctx.schema);
     ctx.executeCommand(
       new AddNoteCommand(
         {
@@ -291,6 +295,7 @@ export const placeNoteTool: EditorTool = {
           flags: prospective.flags,
         },
         trackKey,
+        ctx.schema,
       ),
     );
   },

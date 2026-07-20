@@ -21,7 +21,7 @@
  * step once `ChartEditorContext` itself is backed by `EditorSession`.
  */
 
-import type {DrumNote, EntityKind} from '@/lib/chart-edit';
+import type {EntityKind, InstrumentSchema, NoteEvent} from '@/lib/chart-edit';
 import type {EditCommand} from '../commands';
 import type {
   ChartEditorAction,
@@ -78,7 +78,13 @@ export interface ToolContext {
   state: ChartEditorState;
   capabilities: EditorCapabilities;
   activePartName: string;
-  activeNotes: DrumNote[];
+  /** The active scope's `InstrumentSchema` (`selectActiveSchema`), or null
+   *  for non-track scopes (`vocals`/`global`). Tools resolve lane/type math
+   *  through this instead of a hardcoded `drums4LaneSchema`. */
+  schema: InstrumentSchema | null;
+  /** Notes in the active track whose type is one of `schema`'s lanes
+   *  (`listNotes(track, schema)`) — schema-generic, not drum-only. */
+  activeNotes: NoteEvent[];
   timedTempos: TimedTempo[];
   resolution: number;
   dispatch: (action: ChartEditorAction) => void;
