@@ -83,6 +83,7 @@ import {
   ChartEditorProvider,
   useChartEditorContext,
 } from '@/components/chart-editor/ChartEditorContext';
+import {AudioServiceProvider} from '@/components/chart-editor/AudioServiceContext';
 import {TEMPO_CAPABILITIES} from '@/components/chart-editor/capabilities';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
 import {usePaddedAudio} from '@/components/chart-editor/hooks/usePaddedAudio';
@@ -625,22 +626,24 @@ function ResultsView({
           </DialogContent>
         </Dialog>
       )}
-      <ChartEditorProvider
-        capabilities={TEMPO_CAPABILITIES}
-        activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
-        <TempoEditor
-          result={result}
-          chartDoc={chartDoc}
-          hasOriginal={hasOriginal}
-          variant={variant}
-          setVariant={setVariant}
-          snapNotes={snapNotes}
-          setSnapNotes={setSnapNotes}
-          onBack={onBack}
-          meterStats={result.meterStats}
-          onShowMeterInfo={() => setShowMeterModal(true)}
-        />
-      </ChartEditorProvider>
+      <AudioServiceProvider>
+        <ChartEditorProvider
+          capabilities={TEMPO_CAPABILITIES}
+          activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
+          <TempoEditor
+            result={result}
+            chartDoc={chartDoc}
+            hasOriginal={hasOriginal}
+            variant={variant}
+            setVariant={setVariant}
+            snapNotes={snapNotes}
+            setSnapNotes={setSnapNotes}
+            onBack={onBack}
+            meterStats={result.meterStats}
+            onShowMeterInfo={() => setShowMeterModal(true)}
+          />
+        </ChartEditorProvider>
+      </AudioServiceProvider>
     </div>
   );
 }

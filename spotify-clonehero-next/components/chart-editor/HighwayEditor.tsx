@@ -2,6 +2,7 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useChartEditorContext} from './ChartEditorContext';
+import {useAudioServiceContext, useAudioManager} from './AudioServiceContext';
 import {
   selectActiveTrack,
   selectRenderDoc,
@@ -62,14 +63,13 @@ export default function HighwayEditor({
   audioChannels = 2,
   durationSeconds,
 }: HighwayEditorProps) {
-  const {
-    state,
-    dispatch,
-    audioManagerRef,
-    reconcilerRef,
-    noteRendererRef,
-    capabilities,
-  } = useChartEditorContext();
+  const {state, dispatch, reconcilerRef, noteRendererRef, capabilities} =
+    useChartEditorContext();
+  const {audioManagerRef} = useAudioServiceContext();
+  // Subscribes to AudioManager instance changes (created/rebuilt/destroyed)
+  // so the cursor-sync effect below resubscribes instead of closing over a
+  // possibly-stale ref.
+  const activeAudioManager = useAudioManager();
   const {executeCommand} = useExecuteCommand();
 
   const interactionRef = useRef<HTMLDivElement>(null);
@@ -364,7 +364,7 @@ export default function HighwayEditor({
 
     if (!state.isPlaying && wasPlaying && state.chartDoc) {
       // Just stopped: update cursor to current audio position
-      const currentMs = (audioManagerRef.current?.currentTime ?? 0) * 1000;
+      const currentMs = (activeAudioManager?.currentTime ?? 0) * 1000;
       const cursorTick = msToTick(currentMs, timedTempos, resolution);
       const snapped =
         state.gridDivision === 0
@@ -372,8 +372,6 @@ export default function HighwayEditor({
           : Math.max(0, snapToGrid(cursorTick, resolution, state.gridDivision));
       dispatch({type: 'SET_CURSOR_TICK', tick: snapped});
     }
-    // audioManagerRef is a stable ref from context, not a dependency
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     state.isPlaying,
     state.chartDoc,
@@ -381,6 +379,7 @@ export default function HighwayEditor({
     timedTempos,
     resolution,
     dispatch,
+    activeAudioManager,
   ]);
 
   // ---------------------------------------------------------------------------

@@ -16,6 +16,8 @@ import {
   PREVIEW_CAPABILITIES,
   DEFAULT_DRUMS_EXPERT_SCOPE,
   useChartEditorContext,
+  AudioServiceProvider,
+  useAudioServiceContext,
 } from '@/components/chart-editor';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
 
@@ -33,16 +35,19 @@ export interface PreviewChart {
  */
 export default function PreviewViewer({chart}: {chart: PreviewChart}) {
   return (
-    <ChartEditorProvider
-      capabilities={PREVIEW_CAPABILITIES}
-      activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
-      <PreviewViewerInner chart={chart} />
-    </ChartEditorProvider>
+    <AudioServiceProvider>
+      <ChartEditorProvider
+        capabilities={PREVIEW_CAPABILITIES}
+        activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
+        <PreviewViewerInner chart={chart} />
+      </ChartEditorProvider>
+    </AudioServiceProvider>
   );
 }
 
 function PreviewViewerInner({chart}: {chart: PreviewChart}) {
-  const {state, dispatch, audioManagerRef} = useChartEditorContext();
+  const {state, dispatch} = useChartEditorContext();
+  const {setAudioManager: publishAudioManager} = useAudioServiceContext();
   const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
   const [audioData, setAudioData] = useState<Float32Array | null>(null);
   const [audioChannels, setAudioChannels] = useState(2);
@@ -51,6 +56,7 @@ function PreviewViewerInner({chart}: {chart: PreviewChart}) {
 
   useEffect(() => {
     let cancelled = false;
+    let createdAudioManager: AudioManager | null = null;
 
     async function load() {
       try {
@@ -65,7 +71,8 @@ function PreviewViewerInner({chart}: {chart: PreviewChart}) {
         am.setChartDelay(
           getChartDelayMs(chart.chartDoc.parsedChart.metadata) / 1000,
         );
-        audioManagerRef.current = am;
+        createdAudioManager = am;
+        publishAudioManager(am);
         setAudioManager(am);
         setDurationSeconds(am.duration);
         dispatch({type: 'SET_CHART_DOC', chartDoc: chart.chartDoc});
@@ -123,11 +130,11 @@ function PreviewViewerInner({chart}: {chart: PreviewChart}) {
 
     return () => {
       cancelled = true;
-      audioManagerRef.current?.destroy();
-      audioManagerRef.current = null;
+      createdAudioManager?.destroy();
+      publishAudioManager(null);
       setAudioManager(null);
     };
-    // audioManagerRef/dispatch are stable context values
+    // publishAudioManager/dispatch are stable values
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chart]);
 

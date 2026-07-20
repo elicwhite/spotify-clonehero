@@ -57,6 +57,8 @@ import {
   DEFAULT_VOCALS_SCOPE,
   useChartEditorContext,
   ADD_LYRICS_CAPABILITIES,
+  AudioServiceProvider,
+  useAudioServiceContext,
 } from '@/components/chart-editor';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
 import {MoveEntitiesCommand} from '@/components/chart-editor/commands';
@@ -246,11 +248,13 @@ interface EditorData {
 
 export default function AddLyricsClient() {
   return (
-    <ChartEditorProvider
-      capabilities={ADD_LYRICS_CAPABILITIES}
-      activeScope={DEFAULT_VOCALS_SCOPE}>
-      <LyricsAlignInner />
-    </ChartEditorProvider>
+    <AudioServiceProvider>
+      <ChartEditorProvider
+        capabilities={ADD_LYRICS_CAPABILITIES}
+        activeScope={DEFAULT_VOCALS_SCOPE}>
+        <LyricsAlignInner />
+      </ChartEditorProvider>
+    </AudioServiceProvider>
   );
 }
 
@@ -262,7 +266,8 @@ const LYRIC_MOVE_KINDS: ReadonlySet<string> = new Set([
 ]);
 
 function LyricsAlignInner() {
-  const {state, dispatch, audioManagerRef} = useChartEditorContext();
+  const {state, dispatch} = useChartEditorContext();
+  const {setAudioManager: publishAudioManager} = useAudioServiceContext();
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
   const [chart, setChart] = useState<LoadedChart | null>(null);
@@ -700,7 +705,7 @@ function LyricsAlignInner() {
 
         const durationSeconds = audioManager.duration;
 
-        audioManagerRef.current = audioManager;
+        publishAudioManager(audioManager);
         dispatch({type: 'SET_CHART_DOC', chartDoc: nextDoc});
 
         setEditorData({
@@ -747,7 +752,7 @@ function LyricsAlignInner() {
     editorData,
     vocalsWaveform,
     dispatch,
-    audioManagerRef,
+    publishAudioManager,
   ]);
 
   const cloneHeroMetadata = useMemo<ChartResponseEncore | null>(() => {
@@ -804,7 +809,7 @@ function LyricsAlignInner() {
               if (editorData) {
                 editorData.audioManager.destroy();
               }
-              audioManagerRef.current = null;
+              publishAudioManager(null);
               setEditorData(null);
               setAlignedLines([]);
               setAlignedSyllables([]);

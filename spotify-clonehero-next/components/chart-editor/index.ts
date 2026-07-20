@@ -3,6 +3,14 @@
 // Context
 export {ChartEditorProvider, useChartEditorContext} from './ChartEditorContext';
 
+// Audio service (sibling to ChartEditorContext — owns the AudioManager instance)
+export {
+  AudioServiceProvider,
+  useAudioServiceContext,
+  useAudioManager,
+  type AudioServiceContextValue,
+} from './AudioServiceContext';
+
 // Headless editor core (reducer, history, selection — @/lib/chart-editor-core)
 export {
   getSelectedIds,

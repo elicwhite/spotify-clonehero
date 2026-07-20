@@ -2,6 +2,7 @@
 
 import {useEffect, useRef} from 'react';
 import {useChartEditorContext} from './ChartEditorContext';
+import {useAudioServiceContext} from './AudioServiceContext';
 import {getSelectedIds, selectActiveTrack} from '@/lib/chart-editor-core';
 import {describeScope, entityContextFromScope, trackKeyFromScope} from './scope';
 import type {EntityRef} from '@/lib/chart-edit';
@@ -37,7 +38,7 @@ function labelToType(label: string): NoteType | undefined {
 
 /**
  * Registers WebMCP tools for the chart editor via navigator.modelContext.
- * Must be rendered inside a ChartEditorProvider.
+ * Must be rendered inside a ChartEditorProvider and an AudioServiceProvider.
  *
  * Tools are callable via navigator.modelContextTesting.executeTool() or
  * by any connected AI agent (Claude, etc.) through the WebMCP protocol.
@@ -46,8 +47,8 @@ function labelToType(label: string): NoteType | undefined {
  * drum editing (e.g. add-lyrics) don't expose `editor_add_note` etc.
  */
 export default function EditorMCPTools() {
-  const {state, dispatch, audioManagerRef, capabilities} =
-    useChartEditorContext();
+  const {state, dispatch, capabilities} = useChartEditorContext();
+  const {audioManagerRef} = useAudioServiceContext();
   const {executeCommand} = useExecuteCommand();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
 

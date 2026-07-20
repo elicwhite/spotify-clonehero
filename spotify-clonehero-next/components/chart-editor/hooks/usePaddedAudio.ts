@@ -22,7 +22,7 @@ import {padPcmStart} from '@/lib/drum-transcription/audio/pad-pcm';
 import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {getAudioAnchor} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
-import {useChartEditorContext} from '../ChartEditorContext';
+import {useAudioServiceContext} from '../AudioServiceContext';
 
 export interface PaddedAudioMeta {
   sampleRate: number;
@@ -123,7 +123,8 @@ export function usePaddedAudio({
   secondaryFileName = 'drums.wav',
   onSongEnded,
 }: UsePaddedAudioParams): UsePaddedAudioResult {
-  const {audioManagerRef} = useChartEditorContext();
+  const {audioManagerRef, setAudioManager: publishAudioManager} =
+    useAudioServiceContext();
   const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
   const [paddedFullMixPcm, setPaddedFullMixPcm] =
     useState<Float32Array | null>(null);
@@ -172,7 +173,7 @@ export function usePaddedAudio({
           return;
         }
 
-        audioManagerRef.current = built.audioManager;
+        publishAudioManager(built.audioManager);
         setAudioManager(built.audioManager);
         setPaddedFullMixPcm(built.paddedFullMixPcm);
         setPaddedSecondaryPcm(built.paddedSecondaryPcm);
@@ -202,16 +203,25 @@ export function usePaddedAudio({
     // no-op unless the anchor actually changed, so this never causes an
     // extra rebuild.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartDoc, audioMeta, fullMixPcm, secondaryPcm, onSongEnded, audioManagerRef]);
+  }, [
+    chartDoc,
+    audioMeta,
+    fullMixPcm,
+    secondaryPcm,
+    onSongEnded,
+    audioManagerRef,
+    publishAudioManager,
+  ]);
 
-  // Tear down the current AudioManager on unmount.
+  // Tear down the current AudioManager on unmount. Intentionally reads the
+  // live ref at cleanup time (not a snapshot from mount) so it destroys
+  // whatever AudioManager is current, even after later rebuilds.
   useEffect(() => {
     return () => {
       audioManagerRef.current?.destroy();
-      audioManagerRef.current = null;
+      publishAudioManager(null);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [audioManagerRef, publishAudioManager]);
 
   return {
     audioManager,

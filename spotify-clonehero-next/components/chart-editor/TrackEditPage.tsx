@@ -47,6 +47,7 @@ import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {ChartEditorProvider, useChartEditorContext} from './ChartEditorContext';
+import {AudioServiceProvider, useAudioServiceContext} from './AudioServiceContext';
 import type {EditorScope} from './scope';
 import ChartEditor from './ChartEditor';
 import type {AudioSource} from './ExportDialog';
@@ -98,16 +99,18 @@ export interface TrackEditPageConfig {
 
 export default function TrackEditPage(config: TrackEditPageConfig) {
   return (
-    <ChartEditorProvider activeScope={config.defaultScope}>
-      <Suspense
-        fallback={
-          <div className="flex items-center justify-center h-screen">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        }>
-        <TrackEditInner config={config} />
-      </Suspense>
-    </ChartEditorProvider>
+    <AudioServiceProvider>
+      <ChartEditorProvider activeScope={config.defaultScope}>
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center h-screen">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          }>
+          <TrackEditInner config={config} />
+        </Suspense>
+      </ChartEditorProvider>
+    </AudioServiceProvider>
   );
 }
 
@@ -434,7 +437,8 @@ function TrackEditEditor({
 }: TrackEditEditorProps) {
   const {iniChartModifiersOverride, findTrack, noTrackMessage, headerExtra} =
     config;
-  const {state, dispatch, audioManagerRef} = useChartEditorContext();
+  const {state, dispatch} = useChartEditorContext();
+  const {setAudioManager: publishAudioManager} = useAudioServiceContext();
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
   const [loadingStep, setLoadingStep] = useState('Loading project...');
   const [errorMessage, setErrorMessage] = useState('');
@@ -442,9 +446,9 @@ function TrackEditEditor({
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [audioData, setAudioData] = useState<Float32Array | null>(null);
   const [audioChannels, setAudioChannels] = useState(2);
-  // Mirrors audioManagerRef (shared via context for event-handler reads)
-  // into render-visible state so the CloneHeroRenderer prop is passed
-  // without reading ref.current during render.
+  // Mirrors audioManagerRef (shared via AudioServiceProvider for
+  // event-handler reads) into render-visible state so the CloneHeroRenderer
+  // prop is passed without reading ref.current during render.
   const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
 
   // Auto-save: write edited chart to OPFS
@@ -465,6 +469,7 @@ function TrackEditEditor({
   // Load project data from OPFS
   useEffect(() => {
     let cancelled = false;
+    let createdAudioManager: AudioManager | null = null;
 
     async function loadProject() {
       try {
@@ -545,7 +550,8 @@ function TrackEditEditor({
         audioManager.setChartDelay(
           getChartDelayMs(chartDoc.parsedChart.metadata) / 1000,
         );
-        audioManagerRef.current = audioManager;
+        createdAudioManager = audioManager;
+        publishAudioManager(audioManager);
         setAudioManager(audioManager);
 
         // 8. Decode first audio file to raw PCM for waveform display
@@ -593,8 +599,8 @@ function TrackEditEditor({
 
     return () => {
       cancelled = true;
-      audioManagerRef.current?.destroy();
-      audioManagerRef.current = null;
+      createdAudioManager?.destroy();
+      publishAudioManager(null);
       setAudioManager(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

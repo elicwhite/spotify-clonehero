@@ -10,7 +10,6 @@ import {
   type ReactNode,
 } from 'react';
 import {HotkeysProvider} from '@tanstack/react-hotkeys';
-import type {AudioManager} from '@/lib/preview/audioManager';
 import {EditorSession} from '@/lib/chart-editor-core';
 import type {ChartEditorContextValue} from '@/lib/chart-editor-core';
 import type {EditorCapabilities} from './capabilities';
@@ -44,7 +43,6 @@ export function ChartEditorProvider({
 
   const state = useSyncExternalStore(session.subscribe, session.getState);
 
-  const audioManagerRef = useRef<AudioManager | null>(null);
   const reconcilerRef = useRef<
     import('@/lib/preview/highway/SceneReconciler').SceneReconciler | null
   >(null);
@@ -56,7 +54,6 @@ export function ChartEditorProvider({
     () => ({
       state,
       dispatch: session.dispatch,
-      audioManagerRef,
       reconcilerRef,
       noteRendererRef,
       capabilities,

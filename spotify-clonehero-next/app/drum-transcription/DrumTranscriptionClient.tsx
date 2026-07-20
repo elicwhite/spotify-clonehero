@@ -48,6 +48,7 @@ import {
 } from './components/pipelineToSteps';
 import EditorApp from './components/EditorApp';
 import {ChartEditorProvider} from '@/components/chart-editor/ChartEditorContext';
+import {AudioServiceProvider} from '@/components/chart-editor/AudioServiceContext';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
 import {
   listProjects,
@@ -732,9 +733,11 @@ function DrumTranscriptionInner() {
             Back to Projects
           </Button>
         </div>
-        <ChartEditorProvider activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
-          <EditorApp projectId={projectId} onRegenerate={handleRegenerate} />
-        </ChartEditorProvider>
+        <AudioServiceProvider>
+          <ChartEditorProvider activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
+            <EditorApp projectId={projectId} onRegenerate={handleRegenerate} />
+          </ChartEditorProvider>
+        </AudioServiceProvider>
       </div>
     );
   }

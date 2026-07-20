@@ -1,5 +1,4 @@
-import type {Dispatch, RefObject, MutableRefObject} from 'react';
-import type {AudioManager} from '@/lib/preview/audioManager';
+import type {Dispatch, MutableRefObject} from 'react';
 import type {ChartDocument, DownbeatFlags, EntityKind} from '@/lib/chart-edit';
 import type {
   EditCommand,
@@ -230,7 +229,6 @@ export type ChartEditorAction =
 export interface ChartEditorContextValue {
   state: ChartEditorState;
   dispatch: Dispatch<ChartEditorAction>;
-  audioManagerRef: RefObject<AudioManager | null>;
   /** Shared ref to the SceneReconciler for declarative element updates. */
   reconcilerRef: MutableRefObject<SceneReconciler | null>;
   /** Shared ref to the NoteRenderer for overlay state management. */

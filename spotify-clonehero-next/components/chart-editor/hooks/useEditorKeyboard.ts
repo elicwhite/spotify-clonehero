@@ -4,6 +4,7 @@ import {useCallback} from 'react';
 import {useHotkey} from '@tanstack/react-hotkeys';
 import type {Hotkey} from '@tanstack/react-hotkeys';
 import {useChartEditorContext} from '../ChartEditorContext';
+import {useAudioServiceContext} from '../AudioServiceContext';
 import {
   getSelectedIds,
   getFirstSelectedId,
@@ -108,7 +109,8 @@ const FLAG_SHORTCUT_MAP: Record<string, FlagName> = Object.fromEntries(
  * @param onSave - Callback for Mod+S save
  */
 export function useEditorKeyboard(onSave?: () => void) {
-  const {state, dispatch, audioManagerRef} = useChartEditorContext();
+  const {state, dispatch} = useChartEditorContext();
+  const {audioManagerRef} = useAudioServiceContext();
   const {executeCommand} = useExecuteCommand();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
 
