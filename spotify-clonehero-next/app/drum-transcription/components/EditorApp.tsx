@@ -16,8 +16,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-import {AudioManager} from '@/lib/preview/audioManager';
-import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import {
   getProject,
   readProjectBinary,
@@ -46,7 +44,6 @@ import {
   interleaveAudioBuffer,
 } from '@/lib/drum-transcription/audio/decoder';
 import {padPcmStart} from '@/lib/drum-transcription/audio/pad-pcm';
-import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import {
   readChart,
@@ -54,11 +51,14 @@ import {
   getAudioAnchor,
   setAudioAnchor,
 } from '@/lib/chart-edit';
-import type {ChartDocument} from '@/lib/chart-edit';
 import {useHotkey} from '@tanstack/react-hotkeys';
 import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
 import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboard';
 import {useAutoSave} from '@/components/chart-editor/hooks/useAutoSave';
+import {
+  usePaddedAudio,
+  anchorPadSamples,
+} from '@/components/chart-editor/hooks/usePaddedAudio';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
 import type {AudioSource} from '@/components/chart-editor/ExportDialog';
 import AddLyricsDialog from '@/components/chart-editor/AddLyricsDialog';
@@ -80,91 +80,23 @@ interface EditorAppProps {
 }
 
 /**
- * Build (or rebuild) an AudioManager from ORIGINAL (unpadded) PCM buffers and
- * a pad-sample count (0064 addendum §5). Pads the full mix + drum stem PCM,
- * WAV-encodes them, and constructs a fresh AudioManager. Used both at project
- * load and whenever the chart's `audioAnchor` changes at runtime.
- */
-async function buildPaddedAudioManager(
-  padSamples: number,
-  aMeta: AudioStorageMeta,
-  fullMixPcm: Float32Array,
-  drumStemPcm: Float32Array | null,
-  chartDoc: ChartDocument,
-  onSongEnded: () => void,
-): Promise<{
-  audioManager: AudioManager;
-  paddedFullMixPcm: Float32Array;
-  paddedDrumStemPcm: Float32Array | null;
-}> {
-  const paddedFullMixPcm = padPcmStart(fullMixPcm, padSamples, aMeta.channels);
-  const fullMixWav = encodeWavBlob(
-    paddedFullMixPcm,
-    aMeta.sampleRate,
-    aMeta.channels,
-  );
-  const fullMixArray = new Uint8Array(await fullMixWav.arrayBuffer());
-  const audioFiles: {fileName: string; data: Uint8Array}[] = [
-    {fileName: 'song.wav', data: fullMixArray},
-  ];
-
-  let paddedDrumStemPcm: Float32Array | null = null;
-  if (drumStemPcm) {
-    paddedDrumStemPcm = padPcmStart(drumStemPcm, padSamples, aMeta.channels);
-    const stemWav = encodeWavBlob(
-      paddedDrumStemPcm,
-      aMeta.sampleRate,
-      aMeta.channels,
-    );
-    const stemArray = new Uint8Array(await stemWav.arrayBuffer());
-    audioFiles.push({fileName: 'drums.wav', data: stemArray});
-  }
-
-  const audioManager = new AudioManager(audioFiles, onSongEnded);
-  await audioManager.ready;
-  audioManager.setChartDelay(
-    getChartDelayMs(chartDoc.parsedChart.metadata) / 1000,
-  );
-
-  return {audioManager, paddedFullMixPcm, paddedDrumStemPcm};
-}
-
-/** Sample-quantized pad amount for `anchor`, or 0 when there is none. */
-function anchorPadSamples(
-  anchor: {ms: number} | null,
-  sampleRate: number,
-): number {
-  if (!anchor || anchor.ms <= 0) return 0;
-  return Math.round((anchor.ms * sampleRate) / 1000);
-}
-
-/**
  * Top-level editor layout for drum-transcription.
  *
  * Loads chart + audio from OPFS, creates AudioManager, and renders the
  * shared ChartEditor shell. Passes StemVolumeControls as leftPanelChildren.
  */
 export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
-  const {state, dispatch, audioManagerRef} = useChartEditorContext();
+  const {state, dispatch} = useChartEditorContext();
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
   const [, setLoadingStep] = useState<string>('Loading project metadata...');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [projectMeta, setProjectMeta] = useState<ProjectMetadata | null>(null);
   const [audioMeta, setAudioMeta] = useState<AudioStorageMeta | null>(null);
-  const [audioPcm, setAudioPcm] = useState<Float32Array | null>(null);
-  // Separated drum stem PCM — the highway's waveform surface shows this
-  // instead of the full mix when separation has run.
-  const [drumStemPcm, setDrumStemPcm] = useState<Float32Array | null>(null);
   // Separated vocals stem PCM (plan 0063 Round 2 §5) — background waveform
   // in the piano-roll's lyrics row. null when no vocals stem is cached yet
   // (legacy projects, or projects that haven't run Add Lyrics/separation).
   const [vocalsStemPcm, setVocalsStemPcm] = useState<Float32Array | null>(null);
   const [audioChannels, setAudioChannels] = useState(2);
-  const [durationSeconds, setDurationSeconds] = useState(0);
-  // Mirrors audioManagerRef (shared via context for event-handler reads)
-  // into render-visible state so ChartEditor and StemVolumeControls
-  // receive a stable prop without reading ref.current during render.
-  const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
   // Retained decoded onsets (plan 0061 §3a) for the piano-roll's half/double
   // RE-PREDICT op. null when this project was never transcribed by this app
   // (the control then falls back to RESNAP with a disclosure).
@@ -181,22 +113,19 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
   // review progress after the pipeline has deleted them.
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
-  // True while the AudioManager is being rebuilt after the chart's
-  // `audioAnchor` changed (leading-silence apply/undo/redo, or a grid-glue
-  // tempo edit near the start) — 0064 addendum §5/§3.
-  const [audioRebuilding, setAudioRebuilding] = useState(false);
 
-  // ORIGINAL (unpadded) decoded PCM, retained across the session so the
-  // anchor-change effect can re-pad from source rather than compounding
-  // padding on top of a previously-padded buffer.
-  const originalFullMixPcmRef = useRef<Float32Array | null>(null);
-  const originalDrumStemPcmRef = useRef<Float32Array | null>(null);
+  // ORIGINAL (unpadded) full-mix + drum-stem PCM, retained across the
+  // session — passed to `usePaddedAudio`, which re-pads from source on
+  // every `audioAnchor` change rather than compounding padding on top of a
+  // previously-padded buffer. State (not refs): `usePaddedAudio` reads
+  // these during render, and refs can't be read there.
+  const [originalFullMixPcm, setOriginalFullMixPcm] =
+    useState<Float32Array | null>(null);
+  const [originalDrumStemPcm, setOriginalDrumStemPcm] =
+    useState<Float32Array | null>(null);
+  // ORIGINAL (unpadded) vocals-stem PCM — only ever read from effects/
+  // callbacks (never during render), so a ref is fine.
   const originalVocalsStemPcmRef = useRef<Float32Array | null>(null);
-  // Pad-sample count the CURRENT audioManager/audioPcm/drumStemPcm state was
-  // built with — compared against the doc's live anchor to detect drift.
-  const padSamplesRef = useRef(0);
-  // Guards overlapping anchor-change rebuilds (rapid undo/redo).
-  const rebuildTokenRef = useRef(0);
 
   // Build the save function for auto-save
   const saveFn = useCallback(async () => {
@@ -265,9 +194,9 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
   // anchor. Called at project load AND again after the Add Lyrics dialog
   // runs separation, so a stem produced mid-session shows up without a
   // reload. No-op when no vocals stem is cached (legacy projects that
-  // haven't separated yet). `padSamples` defaults to the currently-built
-  // audio's pad amount (`padSamplesRef.current`) so a mid-session refresh
-  // (post Add-Lyrics) stays consistent with the live AudioManager.
+  // haven't separated yet). `padSamples` defaults to the chart's current
+  // `audioAnchor` pad amount so a mid-session refresh (post Add-Lyrics)
+  // stays consistent with the live AudioManager.
   const refreshVocalsStem = useCallback(
     async (padSamples?: number) => {
       try {
@@ -283,14 +212,38 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
         // that, not the source AudioBuffer's (possibly mono) channel count.
         const pcm = interleaveAudioBuffer(decoded);
         originalVocalsStemPcmRef.current = pcm;
-        const pad = padSamples ?? padSamplesRef.current;
+        const pad =
+          padSamples ??
+          (state.chartDoc && audioMeta
+            ? anchorPadSamples(getAudioAnchor(state.chartDoc), audioMeta.sampleRate)
+            : 0);
         setVocalsStemPcm(padPcmStart(pcm, pad, 2));
       } catch (err) {
         console.warn('Failed to load vocals stem for waveform:', err);
       }
     },
-    [projectId],
+    [projectId, state.chartDoc, audioMeta],
   );
+
+  // Re-pad the vocals-stem waveform whenever the chart's `audioAnchor`
+  // changes (leading-silence apply/undo/redo, or a grid-glue tempo edit near
+  // the start) — mirrors `usePaddedAudio`'s rebuild trigger, gated on the
+  // numeric pad amount so a note-only edit never re-copies the PCM.
+  const vocalsPadSamplesRef = useRef(0);
+  useEffect(() => {
+    if (!state.chartDoc || !audioMeta || !originalVocalsStemPcmRef.current) {
+      return;
+    }
+    const nextPadSamples = anchorPadSamples(
+      getAudioAnchor(state.chartDoc),
+      audioMeta.sampleRate,
+    );
+    if (nextPadSamples === vocalsPadSamplesRef.current) return;
+    vocalsPadSamplesRef.current = nextPadSamples;
+    setVocalsStemPcm(
+      padPcmStart(originalVocalsStemPcmRef.current, nextPadSamples, 2),
+    );
+  }, [state.chartDoc, audioMeta]);
 
   // Load data from OPFS
   useEffect(() => {
@@ -376,31 +329,30 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
         setAudioMeta(aMeta);
 
         const padSamples = anchorPadSamples(persistedAnchor, aMeta.sampleRate);
-        padSamplesRef.current = padSamples;
-        setDurationSeconds(
-          (aMeta.durationMs + (persistedAnchor?.ms ?? 0)) / 1000,
-        );
+        vocalsPadSamplesRef.current = padSamples;
 
         // 9. Load the full mix as PCM for waveform visualization (decodes
         // song.opus in memory for current projects; reads full.pcm directly
         // for legacy ones). This is the ORIGINAL (unpadded) audio — the
         // stored audio at rest is never touched (0064 addendum §5).
+        // `usePaddedAudio` (below) builds the padded AudioManager from this
+        // once the chart doc is dispatched.
         const pcmData = await loadFullMixPcm(projectId);
         if (cancelled) return;
-        originalFullMixPcmRef.current = pcmData;
+        setOriginalFullMixPcm(pcmData);
         setAudioChannels(aMeta.channels);
 
         // Load the separated drum stem (fingerprint cache, with legacy
         // per-project fallback) if separation has run.
         setLoadingStep('Loading stems...');
-        let originalDrumStemPcm: Float32Array | null = null;
+        let loadedDrumStemPcm: Float32Array | null = null;
         try {
-          originalDrumStemPcm = await loadDrumStem(projectId);
+          loadedDrumStemPcm = await loadDrumStem(projectId);
           if (cancelled) return;
         } catch {
           // Stem not available, skip
         }
-        originalDrumStemPcmRef.current = originalDrumStemPcm;
+        setOriginalDrumStemPcm(loadedDrumStemPcm);
 
         // Load the separated vocals stem (Round 2 §5), for the piano-roll
         // lyrics row's background waveform only — not registered with
@@ -409,33 +361,9 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
         await refreshVocalsStem(padSamples);
         if (cancelled) return;
 
-        // 10. Create AudioManager from the (padded) audio files.
-        setLoadingStep('Preparing audio...');
-        const {
-          audioManager: newAudioManager,
-          paddedFullMixPcm,
-          paddedDrumStemPcm,
-        } = await buildPaddedAudioManager(
-          padSamples,
-          aMeta,
-          pcmData,
-          originalDrumStemPcm,
-          chartDoc,
-          () => dispatch({type: 'SET_PLAYING', isPlaying: false}),
-        );
-        if (cancelled) {
-          newAudioManager.destroy();
-          return;
-        }
-
-        setAudioPcm(paddedFullMixPcm);
-        if (paddedDrumStemPcm) setDrumStemPcm(paddedDrumStemPcm);
-
-        audioManagerRef.current = newAudioManager;
-        setAudioManager(newAudioManager);
-
-        // 11. Update editor state. ChartDoc carries the parsed chart;
+        // 10. Update editor state. ChartDoc carries the parsed chart;
         // consumers derive the active track via selectActiveTrack().
+        // `usePaddedAudio` builds the AudioManager once this lands.
         dispatch({type: 'SET_CHART_DOC', chartDoc});
         setLoadingState('ready');
       } catch (err) {
@@ -453,93 +381,27 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
 
     return () => {
       cancelled = true;
-      audioManagerRef.current?.destroy();
-      audioManagerRef.current = null;
-      setAudioManager(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  // Rebuild the AudioManager (and padded waveform PCM) whenever the chart's
-  // `audioAnchor` changes at runtime — the leading-silence button's apply,
-  // its undo/redo, or a grid-glue tempo edit near the start (0064 addendum
-  // §3/§5). Compares against `padSamplesRef.current` (the pad amount the
-  // CURRENT AudioManager was built with) so this only fires on an actual
-  // change, never on unrelated chart edits.
-  useEffect(() => {
-    if (loadingState !== 'ready') return;
-    if (!state.chartDoc || !audioMeta) return;
-    if (!originalFullMixPcmRef.current) return;
-
-    const anchor = getAudioAnchor(state.chartDoc);
-    const nextPadSamples = anchorPadSamples(anchor, audioMeta.sampleRate);
-    if (nextPadSamples === padSamplesRef.current) return;
-
-    let cancelled = false;
-    const token = ++rebuildTokenRef.current;
-    const chartDocForRebuild = state.chartDoc;
-    const aMeta = audioMeta;
-
-    (async () => {
-      setAudioRebuilding(true);
-      try {
-        const oldManager = audioManagerRef.current;
-        const wasPlaying = oldManager?.isPlaying ?? false;
-        const chartTimePos = oldManager?.chartTime ?? 0;
-        if (oldManager) await oldManager.pause();
-
-        const {
-          audioManager: newManager,
-          paddedFullMixPcm,
-          paddedDrumStemPcm,
-        } = await buildPaddedAudioManager(
-          nextPadSamples,
-          aMeta,
-          originalFullMixPcmRef.current!,
-          originalDrumStemPcmRef.current,
-          chartDocForRebuild,
-          () => dispatch({type: 'SET_PLAYING', isPlaying: false}),
-        );
-
-        if (cancelled || token !== rebuildTokenRef.current) {
-          newManager.destroy();
-          return;
-        }
-
-        audioManagerRef.current = newManager;
-        setAudioManager(newManager);
-        setAudioPcm(paddedFullMixPcm);
-        if (paddedDrumStemPcm) setDrumStemPcm(paddedDrumStemPcm);
-        if (originalVocalsStemPcmRef.current) {
-          // Vocals PCM is always TARGET_CHANNELS (2) interleaved (see
-          // refreshVocalsStem) regardless of the full-mix channel count.
-          setVocalsStemPcm(
-            padPcmStart(originalVocalsStemPcmRef.current, nextPadSamples, 2),
-          );
-        }
-        setDurationSeconds(newManager.duration);
-        padSamplesRef.current = nextPadSamples;
-
-        await newManager.seekToChartTime(chartTimePos);
-        if (wasPlaying) await newManager.resume();
-
-        oldManager?.destroy();
-      } catch (err) {
-        console.error(
-          'Failed to rebuild audio after leading-silence change:',
-          err,
-        );
-        toast.error('Failed to update audio for the leading-silence change');
-      } finally {
-        if (!cancelled) setAudioRebuilding(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.chartDoc, audioMeta, loadingState]);
+  // Padded-AudioManager lifecycle (initial build + rebuild on `audioAnchor`
+  // changes) — 0064 addendum §5/§3, extracted into a shared hook so every
+  // chart-editor host page gets the same leading-silence-aware audio.
+  const {
+    audioManager,
+    fullMixPcm: audioPcm,
+    secondaryPcm: drumStemPcm,
+    durationSeconds,
+    rebuilding: audioRebuilding,
+  } = usePaddedAudio({
+    chartDoc: state.chartDoc,
+    audioMeta,
+    fullMixPcm: originalFullMixPcm,
+    secondaryPcm: originalDrumStemPcm,
+    secondaryFileName: 'drums.wav',
+    onSongEnded: () => dispatch({type: 'SET_PLAYING', isPlaying: false}),
+  });
 
   // Build a minimal metadata object for CloneHeroRenderer.
   const cloneHeroMetadata = useMemo(
