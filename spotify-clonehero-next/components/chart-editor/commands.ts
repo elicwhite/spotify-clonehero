@@ -15,6 +15,8 @@
  * so that the original document is never mutated.
  */
 
+import type {NoteType} from '@eliwhite/scan-chart';
+import {noteFlags} from '@eliwhite/scan-chart';
 import type {
   ChartDocument,
   ParsedChart,
@@ -28,21 +30,23 @@ import type {
   CommandOperation,
   NormalizedVocalTrack,
   TrackKey,
+  InstrumentSchema,
+  NoteFlagName,
 } from '@/lib/chart-edit';
 import {
-  addDrumNote,
-  removeDrumNote,
-  getDrumNotes,
-  setDrumNoteFlags,
   addTimeSignature,
   addSection,
   removeSection,
   entityHandlers,
   cloneDocFor,
   findTrack,
-  noteId as entityNoteId,
   drums4LaneSchema,
+  drumNoteTypeMap,
   noteTypeToDrumNote,
+  getDrumNotes,
+  addDrumNote,
+  removeDrumNote,
+  drumFlagsToNoteFlags,
   retimeChart,
   quantizeBpm,
   synctrackFromChart,
@@ -68,6 +72,17 @@ import {
   setAudioAnchor,
   refreshAnchorKeepMs,
   refreshAnchorKeepTick,
+  schemaNoteId,
+  typeToLane as schemaTypeToLane,
+  laneToType as schemaLaneToType,
+  shiftLane as schemaShiftLane,
+  padLaneRange,
+  defaultFlagBits,
+  toggleFlagBits,
+  listNotes,
+  addNote as addSchemaNote,
+  removeNote as removeSchemaNote,
+  setNoteFlags,
   type DownbeatFlags,
 } from '@/lib/chart-edit';
 
@@ -155,8 +170,11 @@ function findTargetIndex(doc: ChartDocument, key: TrackKey): number {
 // Note ID helper
 // ---------------------------------------------------------------------------
 
-/** Composite key for a note: `${tick}:${type}`. Unique per chart. */
-export const noteId = entityNoteId;
+/** Composite key for a note: `${tick}:${type}`. Unique per chart. Friendly
+ *  DrumNoteType wrapper over the schema-generic `schemaNoteId`. */
+export function noteId(note: {tick: number; type: DrumNoteType}): string {
+  return schemaNoteId(note.tick, drumNoteTypeMap[note.type]);
+}
 
 // ---------------------------------------------------------------------------
 // EditCommand interface
@@ -218,16 +236,45 @@ const ENTITY_KIND_TO_COMMAND_KIND: Record<
 // AddNoteCommand
 // ---------------------------------------------------------------------------
 
+/** A note to add, in scan-chart's own terms: raw `NoteType` and a flag
+ *  bitmask rather than the drum-only `DrumNote`/`DrumNoteFlags` facade —
+ *  works for any `InstrumentSchema`'s lanes. */
+export interface SchemaNote {
+  tick: number;
+  type: NoteType;
+  length?: number;
+  flags?: number;
+}
+
+/** Convert a friendly `DrumNote`-shaped note (DrumNoteType + DrumNoteFlags)
+ *  into the `SchemaNote` `AddNoteCommand` expects, using `drums4LaneSchema`'s
+ *  legality rules. The boundary DrumNote-typed callers (clipboard paste, MCP
+ *  tools) cross to build a schema-generic command input. */
+export function toSchemaNote(note: {
+  tick: number;
+  type: DrumNoteType;
+  length?: number;
+  flags?: DrumNoteFlags;
+}): SchemaNote {
+  return {
+    tick: note.tick,
+    type: drumNoteTypeMap[note.type],
+    length: note.length ?? 0,
+    flags: drumFlagsToNoteFlags(note.flags ?? {}, note.type),
+  };
+}
+
 export class AddNoteCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds = KIND.note;
   readonly operations = OP.add;
 
   constructor(
-    private note: DrumNote,
+    private note: SchemaNote,
     private readonly trackKey: TrackKey,
+    private readonly schema: InstrumentSchema = drums4LaneSchema,
   ) {
-    this.description = `Add ${note.type} at tick ${note.tick}`;
+    this.description = `Add note at tick ${note.tick}`;
   }
 
   execute(doc: ChartDocument): ChartDocument {
@@ -237,8 +284,7 @@ export class AddNoteCommand implements EditCommand {
     const newDoc = cloneDocWithTracks(doc, this.trackKey);
     const track = newDoc.parsedChart.trackData[idx];
 
-    // Check for duplicates via getDrumNotes
-    const existing = getDrumNotes(track).find(
+    const existing = listNotes(track, this.schema).find(
       n => n.tick === this.note.tick && n.type === this.note.type,
     );
     if (existing) return doc; // already exists, return unchanged
@@ -247,14 +293,15 @@ export class AddNoteCommand implements EditCommand {
     // from the chart's tempos at insertion time. Without this the note lands
     // at msTime 0 and the highway (which windows by msTime) never renders it,
     // even though the piano roll — which re-derives ms from tick — shows it.
-    addDrumNote(
+    addSchemaNote(
       track,
       {
         tick: this.note.tick,
         type: this.note.type,
-        length: this.note.length,
-        flags: {...this.note.flags},
+        length: this.note.length ?? 0,
+        flags: this.note.flags ?? 0,
       },
+      this.schema,
       makeChartTiming(newDoc.parsedChart),
     );
     return newDoc;
@@ -273,6 +320,7 @@ export class DeleteNotesCommand implements EditCommand {
   constructor(
     private noteIds: Set<string>,
     private readonly trackKey: TrackKey,
+    private readonly schema: InstrumentSchema = drums4LaneSchema,
   ) {
     this.description = `Delete ${noteIds.size} note(s)`;
   }
@@ -284,11 +332,9 @@ export class DeleteNotesCommand implements EditCommand {
     const newDoc = cloneDocWithTracks(doc, this.trackKey);
     const track = newDoc.parsedChart.trackData[idx];
 
-    // Get current notes to find which ones match the IDs
-    const currentNotes = getDrumNotes(track);
-    for (const note of currentNotes) {
-      if (this.noteIds.has(noteId(note))) {
-        removeDrumNote(track, note.tick, note.type);
+    for (const note of listNotes(track, this.schema)) {
+      if (this.noteIds.has(schemaNoteId(note.tick, note.type))) {
+        removeSchemaNote(track, note.tick, note.type, this.schema);
       }
     }
     return newDoc;
@@ -345,6 +391,8 @@ export class MoveEntitiesCommand implements EditCommand {
 // ToggleFlagCommand
 // ---------------------------------------------------------------------------
 
+/** Legacy alias — the flag names `ToggleFlagCommand` was originally
+ *  restricted to. Schema-generic callers can pass any `NoteFlagName`. */
 export type FlagName = 'cymbal' | 'accent' | 'ghost';
 
 export class ToggleFlagCommand implements EditCommand {
@@ -354,8 +402,9 @@ export class ToggleFlagCommand implements EditCommand {
 
   constructor(
     private noteIds: string[],
-    private flag: FlagName,
+    private flag: NoteFlagName,
     private readonly trackKey: TrackKey,
+    private readonly schema: InstrumentSchema = drums4LaneSchema,
   ) {
     this.description = `Toggle ${flag} on ${noteIds.length} note(s)`;
   }
@@ -368,13 +417,10 @@ export class ToggleFlagCommand implements EditCommand {
     const track = newDoc.parsedChart.trackData[idx];
 
     const idSet = new Set(this.noteIds);
-    const currentNotes = getDrumNotes(track);
-
-    for (const note of currentNotes) {
-      if (!idSet.has(noteId(note))) continue;
-      const flags: DrumNoteFlags = {...note.flags};
-      flags[this.flag] = !flags[this.flag];
-      setDrumNoteFlags(track, note.tick, note.type, flags);
+    for (const note of listNotes(track, this.schema)) {
+      if (!idSet.has(schemaNoteId(note.tick, note.type))) continue;
+      const bits = toggleFlagBits(this.schema, note.type, note.flags, this.flag);
+      setNoteFlags(track, note.tick, note.type, bits, this.schema);
     }
 
     return newDoc;
@@ -1117,34 +1163,16 @@ export class RenameSectionCommand implements EditCommand {
 }
 
 // ---------------------------------------------------------------------------
-// Lane helpers — driven by `drums4LaneSchema` so adding/renaming a lane is
-// a schema-only change.
+// Lane helpers — DrumNoteType-friendly wrappers over the schema-generic
+// lane/flag engine in `lib/chart-edit/entities/notes.ts` (plan 0037 Task 4),
+// pinned to `drums4LaneSchema`. Callers that need a different schema (e.g.
+// `guitarSchema`) use the generic `typeToLane`/`laneToType`/`shiftLane`/
+// `defaultFlagBits` exports from `@/lib/chart-edit` directly.
 // ---------------------------------------------------------------------------
-
-const LANE_ORDER: DrumNoteType[] = drums4LaneSchema.lanes.map(l => {
-  const name = noteTypeToDrumNote[l.noteType];
-  if (!name) {
-    throw new Error(
-      `drums4LaneSchema lane ${l.index} has unknown noteType ${l.noteType}`,
-    );
-  }
-  return name;
-});
-
-/** scan-chart `NoteType`s that get a `cymbal` flag by default in 4-lane
- *  drums. Sourced from the schema's flag bindings rather than re-listed. */
-const CYMBAL_DEFAULT_TYPES = new Set<DrumNoteType>(
-  (
-    drums4LaneSchema.flagBindings.find(b => b.flag === 'cymbal')?.appliesTo ??
-    []
-  )
-    .map(nt => noteTypeToDrumNote[nt])
-    .filter((t): t is DrumNoteType => !!t),
-);
 
 /** Map a DrumNoteType to a lane index (0-4). */
 export function typeToLane(type: DrumNoteType): number {
-  return LANE_ORDER.indexOf(type);
+  return schemaTypeToLane(drums4LaneSchema, drumNoteTypeMap[type]);
 }
 
 /** Editor lane kick occupies. Kick isn't part of the pad-lane axis (it
@@ -1152,20 +1180,20 @@ export function typeToLane(type: DrumNoteType): number {
  *  range below — derived from the schema, not assumed to be a fixed index. */
 export const KICK_LANE = typeToLane('kick');
 
-/** Every lane except kick's, in schema order. */
-const PAD_LANE_INDICES = LANE_ORDER.map((_, i) => i).filter(
-  i => i !== KICK_LANE,
-);
-
+const {min: FIRST_PAD_LANE_, max: LAST_PAD_LANE_} = padLaneRange(drums4LaneSchema);
 /** First pad lane index — everything outside `[FIRST_PAD_LANE,
  *  LAST_PAD_LANE]` is kick. */
-export const FIRST_PAD_LANE = Math.min(...PAD_LANE_INDICES);
+export const FIRST_PAD_LANE = FIRST_PAD_LANE_;
 /** Highest pad lane index. */
-export const LAST_PAD_LANE = Math.max(...PAD_LANE_INDICES);
+export const LAST_PAD_LANE = LAST_PAD_LANE_;
 
 /** Map a lane index (0-4) to a DrumNoteType. */
 export function laneToType(lane: number): DrumNoteType {
-  return LANE_ORDER[Math.max(0, Math.min(LANE_ORDER.length - 1, lane))];
+  const type = noteTypeToDrumNote[schemaLaneToType(drums4LaneSchema, lane)];
+  if (!type) {
+    throw new Error(`drums4LaneSchema lane ${lane} has no DrumNoteType`);
+  }
+  return type;
 }
 
 /**
@@ -1175,19 +1203,16 @@ export function laneToType(lane: number): DrumNoteType {
  * `ToggleKickCommand`.
  */
 export function shiftLane(type: DrumNoteType, delta: number): DrumNoteType {
-  const currentLane = typeToLane(type);
-  if (currentLane < FIRST_PAD_LANE || currentLane > LAST_PAD_LANE) return type;
-  const newLane = Math.max(
-    FIRST_PAD_LANE,
-    Math.min(LAST_PAD_LANE, currentLane + delta),
-  );
-  return laneToType(newLane);
+  const shifted = schemaShiftLane(drums4LaneSchema, drumNoteTypeMap[type], delta);
+  const drumType = noteTypeToDrumNote[shifted];
+  return drumType ?? type;
 }
 
 /** Default flags for a new note in a given lane. Cymbal-by-default lanes
  *  come from the schema's `cymbal.appliesTo` binding. */
 export function defaultFlagsForType(type: DrumNoteType): DrumNoteFlags {
-  return CYMBAL_DEFAULT_TYPES.has(type) ? {cymbal: true} : {};
+  const bits = defaultFlagBits(drums4LaneSchema, drumNoteTypeMap[type]);
+  return bits & noteFlags.cymbal ? {cymbal: true} : {};
 }
 
 // ---------------------------------------------------------------------------

@@ -19,6 +19,7 @@ import {
 } from '@/components/chart-editor/capabilities';
 import {
   AddNoteCommand,
+  toSchemaNote,
   AddSectionCommand,
   AddLyricCommand,
   MoveTempoMarkerCommand,
@@ -29,8 +30,7 @@ import {makeFixtureDoc} from '@/components/chart-editor/__tests__/fixtures';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
 
 const noteCmd = () =>
-  new AddNoteCommand(
-    {tick: 240, type: 'kick', length: 0, flags: {}},
+  new AddNoteCommand(toSchemaNote({tick: 240, type: 'kick', length: 0, flags: {}}),
     {instrument: 'drums', difficulty: 'expert'},
   );
 const sectionCmd = () => new AddSectionCommand(2400, 'Bridge');

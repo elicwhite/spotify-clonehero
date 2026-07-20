@@ -1,20 +1,19 @@
 /**
  * Drum note helper functions.
  *
- * Translates between friendly DrumNote types and NoteEvent groups
- * in a ParsedTrackData object. All mutations are in-place.
+ * Translates between friendly DrumNote types and NoteEvent groups in a
+ * ParsedTrackData object. The lane/flag mutation itself is the
+ * schema-driven engine in `../entities/notes.ts` (plan 0037 Task 4),
+ * applied here with `drums4LaneSchema` and DrumNoteType↔NoteType
+ * translation at the boundary — this file is the drum-only friendly facade
+ * over that generic engine, not a second implementation of it.
  */
 
-import type {
-  ParsedTrackData,
-  DrumNoteType,
-  DrumNoteFlags,
-  DrumNote,
-  NoteEvent,
-} from '../types';
+import type {ParsedTrackData, DrumNoteType, DrumNoteFlags, DrumNote} from '../types';
 import {noteFlags, drumNoteTypeMap, noteTypeToDrumNote} from '../types';
-import {applyEventTiming, type ChartTiming} from '../retime';
-import {isCymbalLegalDrumType} from '../instruments/drums';
+import {type ChartTiming} from '../retime';
+import {drums4LaneSchema, isCymbalLegalDrumType} from '../instruments/drums';
+import {addNote, removeNote, listNotes, setNoteFlags} from '../entities/notes';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -44,40 +43,17 @@ export function addDrumNote(
   timing?: ChartTiming,
 ): void {
   const {tick, type, length = 0, flags: drumFlags = {}} = note;
-  const noteType = drumNoteTypeMap[type];
-  const flagBits = drumFlagsToNoteFlags(drumFlags, type);
-
-  const newNote: NoteEvent = {
-    tick,
-    msTime: 0,
-    length,
-    msLength: 0,
-    type: noteType,
-    flags: flagBits,
-  };
-  if (timing) applyEventTiming(newNote, timing);
-
-  // Find existing group at this tick
-  const group = track.noteEventGroups.find(
-    g => g.length > 0 && g[0].tick === tick,
+  addNote(
+    track,
+    {
+      tick,
+      type: drumNoteTypeMap[type],
+      length,
+      flags: drumFlagsToNoteFlags(drumFlags, type),
+    },
+    drums4LaneSchema,
+    timing,
   );
-  if (group) {
-    group.push(newNote);
-    // If flam flag is set, apply it to all notes in group
-    if (drumFlags.flam) {
-      for (const n of group) {
-        n.flags |= noteFlags.flam;
-      }
-    }
-  } else {
-    track.noteEventGroups.push([newNote]);
-    // Keep groups sorted by tick
-    track.noteEventGroups.sort((a, b) => {
-      const tickA = a.length > 0 ? a[0].tick : 0;
-      const tickB = b.length > 0 ? b[0].tick : 0;
-      return tickA - tickB;
-    });
-  }
 }
 
 /**
@@ -88,29 +64,7 @@ export function removeDrumNote(
   tick: number,
   type: DrumNoteType,
 ): void {
-  const noteType = drumNoteTypeMap[type];
-
-  for (let i = 0; i < track.noteEventGroups.length; i++) {
-    const group = track.noteEventGroups[i];
-    if (group.length === 0 || group[0].tick !== tick) continue;
-
-    // Remove the matching note from the group
-    const filtered = group.filter(n => n.type !== noteType);
-
-    if (filtered.length === 0) {
-      // Remove the entire group
-      track.noteEventGroups.splice(i, 1);
-    } else {
-      // If no remaining notes have flam, clear flam from all
-      if (!filtered.some(n => n.flags & noteFlags.flam)) {
-        for (const n of filtered) {
-          n.flags &= ~noteFlags.flam;
-        }
-      }
-      track.noteEventGroups[i] = filtered;
-    }
-    return;
-  }
+  removeNote(track, tick, drumNoteTypeMap[type], drums4LaneSchema);
 }
 
 /**
@@ -121,31 +75,21 @@ export function removeDrumNote(
 export function getDrumNotes(track: ParsedTrackData): DrumNote[] {
   const notes: DrumNote[] = [];
 
-  for (const group of track.noteEventGroups) {
-    for (const note of group) {
-      const drumType = noteTypeToDrumNote[note.type];
-      if (drumType === undefined) continue;
+  for (const note of listNotes(track, drums4LaneSchema)) {
+    const drumType = noteTypeToDrumNote[note.type];
+    if (drumType === undefined) continue;
 
-      const flags: DrumNoteFlags = {};
+    const flags: DrumNoteFlags = {};
+    if (note.flags & noteFlags.cymbal) flags.cymbal = true;
+    else if (note.flags & noteFlags.tom) flags.cymbal = false;
+    if (note.flags & noteFlags.doubleKick) flags.doubleKick = true;
+    if (note.flags & noteFlags.accent) flags.accent = true;
+    if (note.flags & noteFlags.ghost) flags.ghost = true;
+    if (note.flags & noteFlags.flam) flags.flam = true;
 
-      if (note.flags & noteFlags.cymbal) flags.cymbal = true;
-      else if (note.flags & noteFlags.tom) flags.cymbal = false;
-
-      if (note.flags & noteFlags.doubleKick) flags.doubleKick = true;
-      if (note.flags & noteFlags.accent) flags.accent = true;
-      if (note.flags & noteFlags.ghost) flags.ghost = true;
-      if (note.flags & noteFlags.flam) flags.flam = true;
-
-      notes.push({
-        tick: note.tick,
-        length: note.length,
-        type: drumType,
-        flags,
-      });
-    }
+    notes.push({tick: note.tick, length: note.length, type: drumType, flags});
   }
 
-  notes.sort((a, b) => a.tick - b.tick);
   return notes;
 }
 
@@ -160,46 +104,29 @@ export function setDrumNoteFlags(
   type: DrumNoteType,
   flags: DrumNoteFlags,
 ): void {
-  const noteType = drumNoteTypeMap[type];
-
-  for (const group of track.noteEventGroups) {
-    if (group.length === 0 || group[0].tick !== tick) continue;
-
-    const note = group.find(n => n.type === noteType);
-    if (!note) {
-      throw new Error(`No ${type} note found at tick ${tick}`);
-    }
-
-    // Rebuild flags bitmask
-    note.flags = drumFlagsToNoteFlags(flags, type);
-
-    // Handle flam (shared across all notes at tick)
-    if (flags.flam === true) {
-      for (const n of group) {
-        n.flags |= noteFlags.flam;
-      }
-    } else if (flags.flam === false) {
-      // Only remove flam if this was the last note requesting it
-      const othersHaveFlam = group.some(
-        n => n !== note && n.flags & noteFlags.flam,
-      );
-      if (!othersHaveFlam) {
-        for (const n of group) {
-          n.flags &= ~noteFlags.flam;
-        }
-      }
-    }
-    return;
+  try {
+    setNoteFlags(
+      track,
+      tick,
+      drumNoteTypeMap[type],
+      drumFlagsToNoteFlags(flags, type),
+      drums4LaneSchema,
+    );
+  } catch {
+    throw new Error(`No ${type} note found at tick ${tick}`);
   }
-
-  throw new Error(`No ${type} note found at tick ${tick}`);
 }
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function drumFlagsToNoteFlags(
+/** Convert friendly `DrumNoteFlags` to a scan-chart flag bitmask for `type`,
+ *  enforcing lane legality (kick/red can never carry `cymbal`). Exported for
+ *  `components/chart-editor/commands.ts`'s `toSchemaNote` — the boundary
+ *  where DrumNote-shaped callers (clipboard paste, MCP tools) construct the
+ *  schema-generic `AddNoteCommand` input. */
+export function drumFlagsToNoteFlags(
   flags: DrumNoteFlags,
   type: DrumNoteType,
 ): number {

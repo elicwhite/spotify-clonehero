@@ -60,6 +60,7 @@ export {
   removeDrumNote,
   getDrumNotes,
   setDrumNoteFlags,
+  drumFlagsToNoteFlags,
 } from './helpers/drum-notes';
 
 // Drum section helpers (star power, activation lanes, solos, flex lanes)
@@ -188,6 +189,26 @@ export {
   type EntityKindHandler,
   type EntityContext,
 } from './entities';
+
+// Schema-driven note adapter (plan 0037 Task 4) — lane/flag math and
+// NoteEvent read/write generalized over any InstrumentSchema.
+export {
+  schemaNoteId,
+  parseSchemaNoteId,
+  typeToLane,
+  laneToType,
+  shiftLane,
+  padLaneRange,
+  defaultFlagBits,
+  toggleFlagBits,
+  legalizeFlagBits,
+  listNotes,
+  findNote,
+  addNote,
+  removeNote,
+  setNoteFlags,
+  moveNote,
+} from './entities/notes';
 
 // Generic active-track lookup (replaces findExpertDrumsTrack across the editor)
 export {

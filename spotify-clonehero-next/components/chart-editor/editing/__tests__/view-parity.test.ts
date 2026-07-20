@@ -23,6 +23,7 @@ import {
   laneToType,
   typeToLane,
   KICK_LANE,
+  toSchemaNote,
   type EditCommand,
 } from '../../commands';
 import {computeNoteDragDelta} from '../gestures';
@@ -155,12 +156,10 @@ describe('view parity: click-to-add → AddNoteCommand', () => {
     const lane = 1;
     const tick = 240;
     const type = laneToType(lane);
-    const highwayCmd = new AddNoteCommand(
-      {tick, type, length: 0, flags: defaultFlagsForType(type)},
+    const highwayCmd = new AddNoteCommand(toSchemaNote({tick, type, length: 0, flags: defaultFlagsForType(type)}),
       TRACK_KEY,
     );
-    const pianoCmd = new AddNoteCommand(
-      {tick, type, length: 0, flags: defaultFlagsForType(type)},
+    const pianoCmd = new AddNoteCommand(toSchemaNote({tick, type, length: 0, flags: defaultFlagsForType(type)}),
       TRACK_KEY,
     );
     expectDocsEqual(applied(pianoCmd), applied(highwayCmd));

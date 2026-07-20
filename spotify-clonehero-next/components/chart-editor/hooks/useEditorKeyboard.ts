@@ -21,6 +21,7 @@ import {
   noteId,
   laneToType,
   defaultFlagsForType,
+  toSchemaNote,
   type FlagName,
 } from '../commands';
 import type {DrumNote, DrumNoteType} from '@/lib/chart-edit';
@@ -267,11 +268,7 @@ export function useEditorKeyboard(onSave?: () => void) {
       const commands = state.clipboard.map(
         n =>
           new AddNoteCommand(
-            {
-              ...n,
-              tick: n.tick + cursorTick,
-              flags: {...n.flags},
-            },
+            toSchemaNote({...n, tick: n.tick + cursorTick, flags: {...n.flags}}),
             trackKey,
           ),
       );
@@ -489,13 +486,17 @@ export function useEditorKeyboard(onSave?: () => void) {
             const id = noteId(existing);
             executeCommand(new DeleteNotesCommand(new Set([id]), trackKey));
           } else {
-            const newNote: DrumNote = {
-              tick,
-              type,
-              length: 0,
-              flags: defaultFlagsForType(type),
-            };
-            executeCommand(new AddNoteCommand(newNote, trackKey));
+            executeCommand(
+              new AddNoteCommand(
+                toSchemaNote({
+                  tick,
+                  type,
+                  length: 0,
+                  flags: defaultFlagsForType(type),
+                }),
+                trackKey,
+              ),
+            );
           }
         }
       },

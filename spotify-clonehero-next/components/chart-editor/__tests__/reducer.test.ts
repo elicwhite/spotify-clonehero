@@ -15,7 +15,7 @@ import {
   type ChartEditorState,
 } from '@/lib/chart-editor-core';
 import type {EditCommand} from '../commands';
-import {AddNoteCommand} from '../commands';
+import {AddNoteCommand, toSchemaNote} from '../commands';
 import {DEFAULT_DRUMS_EXPERT_SCOPE, DEFAULT_VOCALS_SCOPE} from '../scope';
 import {makeFixtureDoc} from './fixtures';
 
@@ -111,13 +111,12 @@ describe('chartEditorReducer', () => {
       const doc = makeFixtureDoc();
       const seeded = {...initialState, chartDoc: doc};
 
-      const cmd = new AddNoteCommand(
-        {
+      const cmd = new AddNoteCommand(toSchemaNote({
           tick: 240,
           type: 'kick',
           length: 0,
           flags: {},
-        },
+        }),
         DRUMS_KEY,
       );
       const next = chartEditorReducer(seeded, executeAction(cmd, doc));
@@ -136,25 +135,23 @@ describe('chartEditorReducer', () => {
         ...initialState,
         chartDoc: doc,
         redoStack: [
-          new AddNoteCommand(
-            {
+          new AddNoteCommand(toSchemaNote({
               tick: 0,
               type: 'kick',
               length: 0,
               flags: {},
-            },
+            }),
             DRUMS_KEY,
           ),
         ],
         redoDocStack: [doc],
       };
-      const cmd = new AddNoteCommand(
-        {
+      const cmd = new AddNoteCommand(toSchemaNote({
           tick: 60,
           type: 'redDrum',
           length: 0,
           flags: {},
-        },
+        }),
         DRUMS_KEY,
       );
       const next = chartEditorReducer(seeded, executeAction(cmd, doc));
@@ -167,13 +164,12 @@ describe('chartEditorReducer', () => {
       let state: ChartEditorState = {...initialState, chartDoc: doc};
 
       for (let i = 0; i < 205; i++) {
-        const cmd = new AddNoteCommand(
-          {
+        const cmd = new AddNoteCommand(toSchemaNote({
             tick: i + 1,
             type: 'kick',
             length: 0,
             flags: {},
-          },
+          }),
           DRUMS_KEY,
         );
         const action = executeAction(cmd, state.chartDoc!);
@@ -186,13 +182,12 @@ describe('chartEditorReducer', () => {
     });
 
     it('returns state unchanged when chartDoc is null', () => {
-      const cmd = new AddNoteCommand(
-        {
+      const cmd = new AddNoteCommand(toSchemaNote({
           tick: 0,
           type: 'kick',
           length: 0,
           flags: {},
-        },
+        }),
         DRUMS_KEY,
       );
       const next = chartEditorReducer(initialState, {
@@ -208,13 +203,12 @@ describe('chartEditorReducer', () => {
     it('UNDO pops the most recent command and pushes it onto redo', () => {
       const doc = makeFixtureDoc();
       const seeded = {...initialState, chartDoc: doc};
-      const cmd = new AddNoteCommand(
-        {
+      const cmd = new AddNoteCommand(toSchemaNote({
           tick: 240,
           type: 'kick',
           length: 0,
           flags: {},
-        },
+        }),
         DRUMS_KEY,
       );
       const afterExec = chartEditorReducer(seeded, executeAction(cmd, doc));
@@ -234,13 +228,12 @@ describe('chartEditorReducer', () => {
     it('REDO replays the topmost redo command', () => {
       const doc = makeFixtureDoc();
       const seeded = {...initialState, chartDoc: doc};
-      const cmd = new AddNoteCommand(
-        {
+      const cmd = new AddNoteCommand(toSchemaNote({
           tick: 240,
           type: 'kick',
           length: 0,
           flags: {},
-        },
+        }),
         DRUMS_KEY,
       );
       const exec = chartEditorReducer(seeded, executeAction(cmd, doc));
@@ -283,13 +276,12 @@ describe('chartEditorReducer', () => {
     it('snapshots the current undo depth and clears dirty', () => {
       const doc = makeFixtureDoc();
       const seeded = {...initialState, chartDoc: doc};
-      const cmd = new AddNoteCommand(
-        {
+      const cmd = new AddNoteCommand(toSchemaNote({
           tick: 0,
           type: 'kick',
           length: 0,
           flags: {},
-        },
+        }),
         DRUMS_KEY,
       );
       const exec = chartEditorReducer(seeded, executeAction(cmd, doc));
@@ -305,13 +297,12 @@ describe('chartEditorReducer', () => {
       // Mark-saved at depth 0.
       state = chartEditorReducer(state, {type: 'MARK_SAVED'});
       // Edit -> dirty.
-      const cmd = new AddNoteCommand(
-        {
+      const cmd = new AddNoteCommand(toSchemaNote({
           tick: 0,
           type: 'kick',
           length: 0,
           flags: {},
-        },
+        }),
         DRUMS_KEY,
       );
       state = chartEditorReducer(state, executeAction(cmd, doc));
@@ -403,8 +394,7 @@ describe('chartEditorReducer', () => {
       const next = chartEditorReducer(
         seeded,
         executeAction(
-          new AddNoteCommand(
-            {tick: 240, type: 'kick', length: 0, flags: {}},
+          new AddNoteCommand(toSchemaNote({tick: 240, type: 'kick', length: 0, flags: {}}),
             DRUMS_KEY,
           ),
           doc,
@@ -419,8 +409,7 @@ describe('chartEditorReducer', () => {
       const afterCmd = chartEditorReducer(
         {...seeded, pendingTempoCandidate: null},
         executeAction(
-          new AddNoteCommand(
-            {tick: 240, type: 'kick', length: 0, flags: {}},
+          new AddNoteCommand(toSchemaNote({tick: 240, type: 'kick', length: 0, flags: {}}),
             DRUMS_KEY,
           ),
           doc,

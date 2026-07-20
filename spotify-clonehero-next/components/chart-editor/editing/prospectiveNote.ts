@@ -18,39 +18,51 @@
  * Pure: no React, no DOM.
  */
 
-import type {DrumNoteType, DrumNoteFlags} from '@/lib/chart-edit';
-import {laneToType, defaultFlagsForType} from '../commands';
+import type {NoteType} from '@eliwhite/scan-chart';
+import {noteFlags} from '@eliwhite/scan-chart';
+import {
+  drums4LaneSchema,
+  laneToType as schemaLaneToType,
+  defaultFlagBits,
+  type InstrumentSchema,
+} from '@/lib/chart-edit';
 
 /** The note the add-note tool would place at a hovered lane + snapped tick. */
 export interface ProspectiveNote {
   /** Grid-snapped tick the note would land on. */
   tick: number;
-  /** Editor lane index (0=red, 1=yellow, 2=blue, 3=green, 4=kick). */
+  /** Editor lane index (0=red, 1=yellow, 2=blue, 3=green, 4=kick for the
+   *  default drum schema). */
   lane: number;
-  /** scan-chart drum type the lane maps to. */
-  type: DrumNoteType;
-  /** Default flags for a fresh note of this type (legality already enforced). */
-  flags: DrumNoteFlags;
-  /** True when the note would be a cymbal (triangle glyph); never on kick/red. */
+  /** scan-chart NoteType the lane maps to, per `schema`. */
+  type: NoteType;
+  /** Default flag bitmask for a fresh note of this type (legality already
+   *  enforced by `schema`'s flag bindings). */
+  flags: number;
+  /** True when the note would be a cymbal (triangle glyph); never on kick/red
+   *  in the default drum schema. */
   cymbal: boolean;
 }
 
 /**
- * Resolve the note the add-note tool would place on `lane` at `snappedTick`.
- * Both the highway placement path and the piano-roll ghost/placement path call
- * this so they predict — and add — the identical note.
+ * Resolve the note the add-note tool would place on `lane` at `snappedTick`,
+ * for `schema` (defaults to `drums4LaneSchema` — the only schema wired into
+ * the editor UI today). Both the highway placement path and the piano-roll
+ * ghost/placement path call this so they predict — and add — the identical
+ * note.
  */
 export function prospectiveNoteAt(
   lane: number,
   snappedTick: number,
+  schema: InstrumentSchema = drums4LaneSchema,
 ): ProspectiveNote {
-  const type = laneToType(lane);
-  const flags = defaultFlagsForType(type);
+  const type = schemaLaneToType(schema, lane);
+  const flags = defaultFlagBits(schema, type);
   return {
     tick: snappedTick,
     lane,
     type,
     flags,
-    cymbal: flags.cymbal === true,
+    cymbal: (flags & noteFlags.cymbal) !== 0,
   };
 }

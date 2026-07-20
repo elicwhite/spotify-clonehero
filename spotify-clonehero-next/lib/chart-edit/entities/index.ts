@@ -21,14 +21,12 @@
  */
 
 import type {ChartDocument, DrumNoteType, ParsedTrackData} from '../types';
-import {noteTypeToDrumNote} from '../types';
+import {drumNoteTypeMap} from '../types';
 import {
   findTrackInParsedChart,
   findTrackOnly,
   type TrackKey,
 } from '../find-track';
-import {addDrumNote, removeDrumNote, getDrumNotes} from '../helpers/drum-notes';
-import {makeChartTiming} from '../retime';
 import {addSection, removeSection} from '../helpers/sections';
 import {
   DEFAULT_VOCALS_PART,
@@ -47,6 +45,13 @@ import {
   phraseStartId,
 } from '../helpers/phrases';
 import {drums4LaneSchema} from '../instruments/drums';
+import {
+  schemaNoteId,
+  parseSchemaNoteId,
+  typeToLane as schemaTypeToLane,
+  moveNote,
+  listNotes,
+} from './notes';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -143,65 +148,16 @@ export interface EntityKindHandler {
 
 // ---------------------------------------------------------------------------
 // Note ID helpers (re-exported for the command layer)
+//
+// The active drum schema is always `drums4LaneSchema` here — no consumer
+// wires up 5-lane drums or a non-drum note track yet (see
+// `lib/chart-edit/instruments/drums.ts`'s `drumSchemaFor` note), so this
+// handler is drums4LaneSchema-scoped. The lane/flag math itself is generic
+// (`./notes.ts`, plan 0037 Task 4) — only the schema choice here is pinned.
 // ---------------------------------------------------------------------------
 
-// Lane order for the default 4-lane drum kit, derived from
-// `drums4LaneSchema` via the scan-chart NoteType → DrumNoteType reverse map.
-const LANE_ORDER: DrumNoteType[] = drums4LaneSchema.lanes.map(l => {
-  const name = noteTypeToDrumNote[l.noteType];
-  if (!name) {
-    throw new Error(
-      `drums4LaneSchema lane ${l.index} has unknown noteType ${l.noteType}`,
-    );
-  }
-  return name;
-});
-
 export function noteId(note: {tick: number; type: DrumNoteType}): string {
-  return `${note.tick}:${note.type}`;
-}
-
-function parseNoteId(id: string): {tick: number; type: DrumNoteType} | null {
-  const colon = id.indexOf(':');
-  if (colon === -1) return null;
-  const tick = Number.parseInt(id.slice(0, colon), 10);
-  const type = id.slice(colon + 1) as DrumNoteType;
-  if (!Number.isFinite(tick)) return null;
-  if (!LANE_ORDER.includes(type) && type !== 'fiveGreenDrum') return null;
-  return {tick, type};
-}
-
-function typeToLane(type: DrumNoteType): number {
-  return LANE_ORDER.indexOf(type);
-}
-
-function laneToType(lane: number): DrumNoteType {
-  return LANE_ORDER[Math.max(0, Math.min(LANE_ORDER.length - 1, lane))];
-}
-
-/** Editor lane kick occupies (derived, not assumed to be a fixed index —
- *  see `components/chart-editor/commands.ts`'s mirrored constant). */
-const KICK_LANE = typeToLane('kick');
-const PAD_LANE_INDICES = LANE_ORDER.map((_, i) => i).filter(
-  i => i !== KICK_LANE,
-);
-const FIRST_PAD_LANE = Math.min(...PAD_LANE_INDICES);
-const LAST_PAD_LANE = Math.max(...PAD_LANE_INDICES);
-
-/**
- * Kick renders across the full highway width rather than in a pad lane, so
- * lane moves only shuffle pads: kick never changes type and pads clamp at
- * the pad-lane boundaries instead of converting to kick. Pad ↔ kick
- * conversion is an explicit action (note inspector), not a lane shift.
- */
-function shiftLane(type: DrumNoteType, delta: number): DrumNoteType {
-  const currentLane = typeToLane(type);
-  if (currentLane < FIRST_PAD_LANE || currentLane > LAST_PAD_LANE) return type;
-  const newLane = Math.max(
-    FIRST_PAD_LANE,
-    Math.min(LAST_PAD_LANE, currentLane + delta),
-  );
-  return laneToType(newLane);
+  return schemaNoteId(note.tick, drumNoteTypeMap[note.type]);
 }
 
 // ---------------------------------------------------------------------------
@@ -212,46 +168,35 @@ const noteHandler: EntityKindHandler = {
   listIds(doc, ctx) {
     const track = resolveTrack(doc, ctx);
     if (!track) return [];
-    return getDrumNotes(track).map(noteId);
+    return listNotes(track, drums4LaneSchema).map(n => schemaNoteId(n.tick, n.type));
   },
   locate(doc, id, ctx) {
-    const parsed = parseNoteId(id);
+    const parsed = parseSchemaNoteId(id, drums4LaneSchema);
     if (!parsed) return null;
     const track = resolveTrack(doc, ctx);
     if (!track) return null;
-    const found = getDrumNotes(track).find(
+    const found = listNotes(track, drums4LaneSchema).find(
       n => n.tick === parsed.tick && n.type === parsed.type,
     );
     if (!found) return null;
-    return {tick: found.tick, lane: typeToLane(found.type)};
+    return {tick: found.tick, lane: schemaTypeToLane(drums4LaneSchema, found.type)};
   },
   move(doc, id, tickDelta, laneDelta, ctx) {
-    const parsed = parseNoteId(id);
+    const parsed = parseSchemaNoteId(id, drums4LaneSchema);
     if (!parsed) return id;
     const track = resolveTrack(doc, ctx);
     if (!track) return id;
 
-    const note = getDrumNotes(track).find(
-      n => n.tick === parsed.tick && n.type === parsed.type,
-    );
-    if (!note) return id;
-
-    const newType = shiftLane(note.type, laneDelta);
-    const newTick = Math.max(0, note.tick + tickDelta);
-    if (newTick === note.tick && newType === note.type) return id;
-
-    removeDrumNote(track, note.tick, note.type);
-    addDrumNote(
+    const moved = moveNote(
+      doc.parsedChart,
       track,
-      {
-        tick: newTick,
-        type: newType,
-        length: note.length,
-        flags: {...note.flags},
-      },
-      makeChartTiming(doc.parsedChart),
+      parsed.tick,
+      parsed.type,
+      tickDelta,
+      laneDelta,
+      drums4LaneSchema,
     );
-    return noteId({tick: newTick, type: newType});
+    return moved ? schemaNoteId(moved.tick, moved.type) : id;
   },
   supportsLaneDelta: true,
 };

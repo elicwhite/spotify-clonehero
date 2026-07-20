@@ -10,6 +10,7 @@ import {
   AddNoteCommand,
   DeleteNotesCommand,
   ToggleFlagCommand,
+  toSchemaNote,
   type FlagName,
 } from './commands';
 import {getDrumNotes} from '@/lib/chart-edit';
@@ -364,7 +365,7 @@ export default function EditorMCPTools() {
           const cymbal = (args['cymbal'] as boolean) ?? cymbalDefault;
           executeCommandRef.current(
             new AddNoteCommand(
-              {tick, type, length: 0, flags: {cymbal}},
+              toSchemaNote({tick, type, length: 0, flags: {cymbal}}),
               trackKey,
             ),
           );

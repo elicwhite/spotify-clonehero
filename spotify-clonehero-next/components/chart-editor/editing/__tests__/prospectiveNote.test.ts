@@ -5,16 +5,18 @@
  * disagreed, the ghost would predict a different note than the click places.
  */
 
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
+import {guitarSchema} from '@/lib/chart-edit';
 import {prospectiveNoteAt} from '../prospectiveNote';
 
 describe('prospectiveNoteAt', () => {
   // Editor lanes: 0 red, 1 yellow, 2 blue, 3 green, 4 kick.
   it('maps each lane to its drum type', () => {
-    expect(prospectiveNoteAt(0, 0).type).toBe('redDrum');
-    expect(prospectiveNoteAt(1, 0).type).toBe('yellowDrum');
-    expect(prospectiveNoteAt(2, 0).type).toBe('blueDrum');
-    expect(prospectiveNoteAt(3, 0).type).toBe('greenDrum');
-    expect(prospectiveNoteAt(4, 0).type).toBe('kick');
+    expect(prospectiveNoteAt(0, 0).type).toBe(noteTypes.redDrum);
+    expect(prospectiveNoteAt(1, 0).type).toBe(noteTypes.yellowDrum);
+    expect(prospectiveNoteAt(2, 0).type).toBe(noteTypes.blueDrum);
+    expect(prospectiveNoteAt(3, 0).type).toBe(noteTypes.greenDrum);
+    expect(prospectiveNoteAt(4, 0).type).toBe(noteTypes.kick);
   });
 
   it('passes the already-snapped tick through unchanged', () => {
@@ -26,7 +28,7 @@ describe('prospectiveNoteAt', () => {
     for (const lane of [1, 2, 3]) {
       const p = prospectiveNoteAt(lane, 480);
       expect(p.cymbal).toBe(true);
-      expect(p.flags.cymbal).toBe(true);
+      expect(p.flags & noteFlags.cymbal).toBeTruthy();
     }
   });
 
@@ -34,11 +36,21 @@ describe('prospectiveNoteAt', () => {
     for (const lane of [4, 0]) {
       const p = prospectiveNoteAt(lane, 480);
       expect(p.cymbal).toBe(false);
-      expect(p.flags.cymbal).toBeUndefined();
+      expect(p.flags & noteFlags.cymbal).toBeFalsy();
     }
   });
 
   it('reports the queried lane back on the result', () => {
     expect(prospectiveNoteAt(3, 240).lane).toBe(3);
+  });
+
+  // Parity: the schema parameter generalizes cleanly to a non-drum
+  // InstrumentSchema (plan 0037 Task 4) — no cymbal-default lane, no
+  // kick-like excluded lane.
+  it('resolves lanes for guitarSchema (open/green/red/yellow/blue/orange)', () => {
+    expect(prospectiveNoteAt(0, 0, guitarSchema).type).toBe(noteTypes.open);
+    expect(prospectiveNoteAt(1, 0, guitarSchema).type).toBe(noteTypes.green);
+    expect(prospectiveNoteAt(5, 0, guitarSchema).type).toBe(noteTypes.orange);
+    expect(prospectiveNoteAt(1, 0, guitarSchema).cymbal).toBe(false);
   });
 });

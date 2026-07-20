@@ -9,6 +9,7 @@
 
 import {
   AddNoteCommand,
+  toSchemaNote,
   DeleteNotesCommand,
   MoveEntitiesCommand,
   ToggleFlagCommand,
@@ -216,7 +217,7 @@ describe('AddNoteCommand', () => {
   it('adds a note to an empty track', () => {
     const doc = makeDoc();
     const note: DrumNote = {tick: 480, type: 'redDrum', length: 0, flags: {}};
-    const cmd = new AddNoteCommand(note, DRUMS_KEY);
+    const cmd = new AddNoteCommand(toSchemaNote(note), DRUMS_KEY);
 
     const result = cmd.execute(doc);
     const notes = getExpertNotes(result);
@@ -236,7 +237,7 @@ describe('AddNoteCommand', () => {
       length: 0,
       flags: {cymbal: true},
     };
-    const cmd = new AddNoteCommand(note, DRUMS_KEY);
+    const cmd = new AddNoteCommand(toSchemaNote(note), DRUMS_KEY);
 
     const result = cmd.execute(doc);
     const notes = getExpertNotes(result);
@@ -249,7 +250,7 @@ describe('AddNoteCommand', () => {
   it('does not add a duplicate', () => {
     const doc = makeDoc([{tick: 480, type: 'redDrum'}]);
     const note: DrumNote = {tick: 480, type: 'redDrum', length: 0, flags: {}};
-    const cmd = new AddNoteCommand(note, DRUMS_KEY);
+    const cmd = new AddNoteCommand(toSchemaNote(note), DRUMS_KEY);
 
     const result = cmd.execute(doc);
     expect(getExpertNotes(result)).toHaveLength(1);
@@ -258,7 +259,7 @@ describe('AddNoteCommand', () => {
   it('does not mutate the original document', () => {
     const doc = makeDoc();
     const note: DrumNote = {tick: 480, type: 'redDrum', length: 0, flags: {}};
-    const cmd = new AddNoteCommand(note, DRUMS_KEY);
+    const cmd = new AddNoteCommand(toSchemaNote(note), DRUMS_KEY);
 
     cmd.execute(doc);
     expect(getExpertNotes(doc)).toHaveLength(0);
@@ -580,21 +581,18 @@ describe('BatchCommand', () => {
   it('executes all commands in order', () => {
     const doc = makeDoc();
     const cmd = new BatchCommand([
-      new AddNoteCommand(
-        {tick: 0, type: 'kick', length: 0, flags: {}},
+      new AddNoteCommand(toSchemaNote({tick: 0, type: 'kick', length: 0, flags: {}}),
         DRUMS_KEY,
       ),
-      new AddNoteCommand(
-        {tick: 480, type: 'redDrum', length: 0, flags: {}},
+      new AddNoteCommand(toSchemaNote({tick: 480, type: 'redDrum', length: 0, flags: {}}),
         DRUMS_KEY,
       ),
-      new AddNoteCommand(
-        {
+      new AddNoteCommand(toSchemaNote({
           tick: 960,
           type: 'yellowDrum',
           length: 0,
           flags: {cymbal: true},
-        },
+        }),
         DRUMS_KEY,
       ),
     ]);
@@ -606,12 +604,10 @@ describe('BatchCommand', () => {
   it('execute leaves the input doc untouched (valid undo snapshot)', () => {
     const doc = makeDoc();
     const cmd = new BatchCommand([
-      new AddNoteCommand(
-        {tick: 0, type: 'kick', length: 0, flags: {}},
+      new AddNoteCommand(toSchemaNote({tick: 0, type: 'kick', length: 0, flags: {}}),
         DRUMS_KEY,
       ),
-      new AddNoteCommand(
-        {tick: 480, type: 'redDrum', length: 0, flags: {}},
+      new AddNoteCommand(toSchemaNote({tick: 480, type: 'redDrum', length: 0, flags: {}}),
         DRUMS_KEY,
       ),
     ]);
@@ -624,8 +620,7 @@ describe('BatchCommand', () => {
   it('can combine different command types', () => {
     const doc = makeDoc([{tick: 0, type: 'kick'}]);
     const cmd = new BatchCommand([
-      new AddNoteCommand(
-        {tick: 480, type: 'redDrum', length: 0, flags: {}},
+      new AddNoteCommand(toSchemaNote({tick: 480, type: 'redDrum', length: 0, flags: {}}),
         DRUMS_KEY,
       ),
       new DeleteNotesCommand(new Set(['0:kick']), DRUMS_KEY),

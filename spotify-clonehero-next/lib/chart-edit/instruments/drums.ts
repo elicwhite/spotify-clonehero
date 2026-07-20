@@ -99,25 +99,28 @@ const GREEN_5LANE: LaneDefinition = {
 /**
  * Schema for 4-lane drums (red/yellow/blue/green + kick last).
  */
+const DRUM_FLAG_BINDINGS: InstrumentSchema['flagBindings'] = [
+  {
+    flag: 'cymbal',
+    label: 'Cymbal',
+    defaultKey: 'q',
+    appliesTo: [noteTypes.yellowDrum, noteTypes.blueDrum, noteTypes.greenDrum],
+    defaultOn: true,
+    complementFlag: 'tom',
+  },
+  {flag: 'accent', label: 'Accent', defaultKey: 'a'},
+  {flag: 'ghost', label: 'Ghost', defaultKey: 's'},
+  {flag: 'flam', label: 'Flam', groupShared: true},
+  {flag: 'doubleKick', label: 'Double Kick', appliesTo: [noteTypes.kick]},
+];
+
 export const drums4LaneSchema: InstrumentSchema = {
   instrument: 'drums',
   lanes: [RED, YELLOW, BLUE, GREEN_4LANE, KICK],
-  flagBindings: [
-    {
-      flag: 'cymbal',
-      label: 'Cymbal',
-      defaultKey: 'q',
-      appliesTo: [
-        noteTypes.yellowDrum,
-        noteTypes.blueDrum,
-        noteTypes.greenDrum,
-      ],
-    },
-    {flag: 'accent', label: 'Accent', defaultKey: 'a'},
-    {flag: 'ghost', label: 'Ghost', defaultKey: 's'},
-    {flag: 'flam', label: 'Flam'},
-    {flag: 'doubleKick', label: 'Double Kick', appliesTo: [noteTypes.kick]},
-  ],
+  flagBindings: DRUM_FLAG_BINDINGS,
+  // Kick spans the full highway rather than sitting in a pad lane, so it
+  // never participates in lane-shift moves (arrow keys, note drag).
+  laneShiftExcludes: [noteTypes.kick],
 };
 
 /**
@@ -139,6 +142,7 @@ export const drums5LaneSchema: InstrumentSchema = {
     KICK,
   ],
   flagBindings: drums4LaneSchema.flagBindings,
+  laneShiftExcludes: [noteTypes.kick],
 };
 
 /**

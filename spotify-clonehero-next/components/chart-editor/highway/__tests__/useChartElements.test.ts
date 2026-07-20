@@ -20,7 +20,7 @@ import {makeFixtureDoc} from '../../__tests__/fixtures';
 import {DRUM_EDIT_CAPABILITIES, PREVIEW_CAPABILITIES} from '../../capabilities';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../../scope';
 import {computeChartElements} from '../useChartElements';
-import {AddNoteCommand} from '../../commands';
+import {AddNoteCommand, toSchemaNote} from '../../commands';
 import {markerDragReconcilerKey} from '@/lib/preview/highway/reconcilerKey';
 import type {TrackKey} from '@/lib/chart-edit';
 
@@ -134,8 +134,7 @@ describe('computeChartElements', () => {
   // piano roll shows it correctly.
   it('surfaces a freshly added note with a tempo-map msTime', () => {
     const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
-    const doc = new AddNoteCommand(
-      {tick: 720, type: 'redDrum', length: 0, flags: {}},
+    const doc = new AddNoteCommand(toSchemaNote({tick: 720, type: 'redDrum', length: 0, flags: {}}),
       DRUMS_KEY,
     ).execute(makeFixtureDoc());
 

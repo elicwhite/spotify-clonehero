@@ -58,8 +58,23 @@ export interface FlagBinding {
   label: string;
   /** Toggle hotkey while a note is selected (e.g. "Q"). Optional. */
   defaultKey?: string;
-  /** Restrict this flag to specific NoteTypes. Omit for "all lanes". */
+  /** Restrict this flag to specific NoteTypes. Omit for "all lanes". Also
+   *  the legality gate the schema-driven note adapter enforces: toggling
+   *  or defaulting this flag on a NoteType outside `appliesTo` is a no-op. */
   appliesTo?: NoteType[];
+  /** When true, a freshly-added note of an `appliesTo` NoteType carries
+   *  this flag set by default (e.g. drums' cymbal-by-default lanes). */
+  defaultOn?: boolean;
+  /** The complementary flag name this one toggles against, for tri-state
+   *  flags (unset / this-flag / complement-flag) rather than a plain
+   *  on/off bit — e.g. drums' `cymbal` toggles against `tom` so "not a
+   *  cymbal" is stored distinctly from "cymbal-ness unset". */
+  complementFlag?: NoteFlagName;
+  /** When true, this flag is shared across every note in the same tick's
+   *  group rather than per-note (e.g. drums' `flam`, which marks a whole
+   *  chord). The note adapter syncs the bit across the group on add/
+   *  remove/set. */
+  groupShared?: boolean;
 }
 
 export interface InstrumentSchema {
@@ -69,4 +84,13 @@ export interface InstrumentSchema {
   lanes: LaneDefinition[];
   /** All flags the editor exposes for this instrument. */
   flagBindings: FlagBinding[];
+  /**
+   * NoteTypes excluded from the lane-shift axis (e.g. drums' kick, which
+   * spans the full highway rather than occupying a pad lane). Notes of
+   * these types never change type when shifted by a lane delta; other
+   * lanes clamp at the boundaries of the remaining (non-excluded) lanes
+   * instead of sliding into an excluded lane. Omit when every lane
+   * participates in the shift axis (e.g. five-fret).
+   */
+  laneShiftExcludes?: NoteType[];
 }

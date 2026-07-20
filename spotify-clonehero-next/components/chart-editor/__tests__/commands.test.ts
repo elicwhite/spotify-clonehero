@@ -15,6 +15,7 @@
 import {
   AddBPMCommand,
   AddNoteCommand,
+  toSchemaNote,
   AddSectionCommand,
   AddTimeSignatureCommand,
   BatchCommand,
@@ -52,13 +53,12 @@ describe('command execute + snapshot-restore', () => {
     it('adds the note and leaves the input doc untouched', () => {
       const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
-      const cmd = new AddNoteCommand(
-        {
+      const cmd = new AddNoteCommand(toSchemaNote({
           tick: 240,
           type: 'redDrum',
           length: 0,
           flags: {},
-        },
+        }),
         DRUMS_KEY,
       );
       const after = cmd.execute(before);
@@ -79,8 +79,7 @@ describe('command execute + snapshot-restore', () => {
       const before = makeFixtureDoc();
       // 720 ticks at 120 BPM / res 480 = 750ms; the tick is empty in the
       // fixture so the added event is unambiguous.
-      const cmd = new AddNoteCommand(
-        {tick: 720, type: 'redDrum', length: 0, flags: {}},
+      const cmd = new AddNoteCommand(toSchemaNote({tick: 720, type: 'redDrum', length: 0, flags: {}}),
         DRUMS_KEY,
       );
       const after = cmd.execute(before);
@@ -353,26 +352,23 @@ describe('command execute + snapshot-restore', () => {
       const pristine = makeFixtureDoc();
       const before = makeFixtureDoc();
       const batch = new BatchCommand([
-        new AddNoteCommand(
-          {tick: 60, type: 'kick', length: 0, flags: {}},
+        new AddNoteCommand(toSchemaNote({tick: 60, type: 'kick', length: 0, flags: {}}),
           DRUMS_KEY,
         ),
-        new AddNoteCommand(
-          {
+        new AddNoteCommand(toSchemaNote({
             tick: 120,
             type: 'redDrum',
             length: 0,
             flags: {},
-          },
+          }),
           DRUMS_KEY,
         ),
-        new AddNoteCommand(
-          {
+        new AddNoteCommand(toSchemaNote({
             tick: 180,
             type: 'yellowDrum',
             length: 0,
             flags: {},
-          },
+          }),
           DRUMS_KEY,
         ),
       ]);
