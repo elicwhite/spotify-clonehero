@@ -1,4 +1,8 @@
-# Plan 0068: Highway feature parity with chart-preview (6-fret, drum dynamics, texture bake)
+# Plan 0068: Highway feature parity with chart-preview (drum dynamics, SP skins, texture bake)
+
+> **Descoped 2026-07-20:** six-fret/GHL support dropped by decision — only
+> five-fret and drums are targets. GHL findings kept below for the record;
+> all 6-fret work is out of scope.
 
 > **Source review 2026-07-20:** `~/projects/chart-preview` (Geomitron's
 > `chart-preview@1.3.0`, THREE.js, actively maintained — last commits
@@ -35,21 +39,17 @@
 ## Design
 
 1. **Schema extensions** (`lib/chart-edit/instruments/`):
-   - `sixFretSchema` family: lanes open/black1-3/white1-3 with the existing
-     `variant` disambiguator for slot-sharing; `highwayWidth` on
-     `InstrumentSchema` (five-fret 1.0, drums 0.9, six-fret 0.7);
-     `sustainWidthMultiplier` on `LaneDefinition` (open = 5×).
+   - `highwayWidth` on `InstrumentSchema` (five-fret 1.0, drums 0.9);
+     `sustainWidthMultiplier` on `LaneDefinition` (five-fret open = 5×).
    - **`normalizeForRender?(track, chart)` hook on the schema** — the home
-     for barre synthesis, disco flip, and any future chart-adjust. Runs in
+     for disco flip and any future chart-adjust. Runs in
      `trackToElements` on a derived copy; **mutation/selection ids remain
-     real-note-only** (0067 contract). Synthetic elements (barre) carry a
-     `derivedFrom: EntityRef[]` so hover/select can resolve to real notes.
+     real-note-only** (0067 contract).
 2. **Texture matrix as the enumeration contract:** adopt chart-preview's
    `(noteType|lane, flags-incl-SP) → material` map shape in
    `TextureManager`, keeping our local naming. Full products:
    five-fret `lane × {strum,hopo,tap} × {sp}`; drums
-   `color × {tom,cymbal} × {,ghost,accent} × {sp}` + kick`{,sp}`; six-fret
-   `{open,black,white,barre} × {strum,hopo,tap} × {sp}`.
+   `color × {tom,cymbal} × {,ghost,accent} × {sp}` + kick`{,sp}`.
 3. **Renderer:** `NotesManager`/`NoteRenderer` read scale/center/width from
    the schema lane (kick/open stop being type-conditionals);
    sustain tails use `sustainWidthMultiplier`; strikeline + highway width
@@ -68,7 +68,7 @@ superset in the wrong format: chart-preview loads flat per-variant files
 `TextureManager` loads local `strum{N}.webp`-style files.
 
 - **Bake step required:** a script (offline, checked into `scripts/`) that
-  composites GHL layers, slices sprite strips, and emits flat per-variant
+  slices sprite strips, composites layers where needed, and emits flat per-variant
   webp files in *our* naming convention into `public/assets/preview/`.
   Drums mapping: `Standard`→base, `Accents`→`-accent`, `StarNote`/`sp
   shine`→`-sp` (no ghost source found — likely a tint; decide at bake
@@ -79,31 +79,25 @@ superset in the wrong format: chart-preview loads flat per-variant files
 
 ## Tasks
 
-1. Schema: `highwayWidth`, `sustainWidthMultiplier`, `sixFretSchema`
-   family, `normalizeForRender` hook (empty for existing schemas).
+1. Schema: `highwayWidth`, `sustainWidthMultiplier`,
+   `normalizeForRender` hook (empty for existing schemas).
 2. Texture bake script + baked five-fret/drums variant sets (SP + dynamics
    skins for existing instruments first — no new instrument needed).
 3. TextureManager matrix keyed by (lane, flags+SP); wire SP + ghost/accent
    skins into the existing drum/five-fret paths.
 4. Disco flip via `normalizeForRender` on the drum schemas.
-5. Six-fret: bake GHL assets, schema geometry (`worldXOffset`, 3-slot
-   layout), render path incl. barre synthesis + open sustain width.
-6. `/ghl-edit`? No — six-fret ships render-only (preview + sheet-music
-   pipelines); editing waits for demand and for 0067's id-format caveats.
 
 ## Tests
 
-- `normalizeForRender`: barre synthesis (chord in lane-group → one barre
-  element with `derivedFrom`), disco flip (red↔yellow, tom↔cymbal,
+- `normalizeForRender`: disco flip (red↔yellow, tom↔cymbal,
   discoNoflip stripped) — port chart-preview's semantics as fixtures.
 - Texture matrix enumeration: every (schema, lane, legal-flag combo)
   resolves to a material; missing-asset fails loudly at load, not blank.
-- Six-fret trackToElements: lane/slot mapping, barre replacement, open
-  sustain width.
 - Existing drum/five-fret rendering unchanged with the matrix in place.
 
 ## Out of scope
 
+- **Six-fret / GHL entirely** (schemas, barre synthesis, assets, rendering) — descoped by decision; the chart-preview findings above are the reference if it ever returns.
 - Vocals highway, keys-specific visuals, pro/real instruments.
 - Solo/flex-lane/freestyle rendering (unrendered in chart-preview too).
 - Animated WebP note textures (chart-preview's `ImageDecoder` pipeline) —
