@@ -27,39 +27,24 @@ import {
   type RefObject,
 } from 'react';
 import type {HitResult, InteractionManager} from '@/lib/preview/highway';
-import type {DrumNote} from '@/lib/chart-edit';
+import type {DrumNote, EntityKind} from '@/lib/chart-edit';
+import {lyricId, phraseEndId, phraseStartId} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
-import {
-  lyricId,
-  phraseEndId,
-  phraseStartId,
-  parseSchemaNoteId,
-  drums4LaneSchema,
-} from '@/lib/chart-edit';
-import {
-  AddNoteCommand,
-  DeleteNotesCommand,
-  MoveEntitiesCommand,
-  typeToLane,
-  FIRST_PAD_LANE,
-  LAST_PAD_LANE,
-  KICK_LANE,
-  type EditCommand,
-} from '../commands';
-import {prospectiveNoteAt} from '../editing/prospectiveNote';
-import {entityContextFromScope, trackKeyFromScope} from '../scope';
-import {
-  getSelectedIds,
-  type ChartEditorAction,
-  type ChartEditorState,
-} from '@/lib/chart-editor-core';
+import type {EditCommand} from '../commands';
+import type {ChartEditorAction, ChartEditorState} from '@/lib/chart-editor-core';
 import type {EditorCapabilities} from '../capabilities';
-import {AFFORDANCES} from '../affordances';
-import type {EntityKind} from '@/lib/chart-edit';
-import {selectNotesInRange} from '../editing/marquee';
-import {computeNoteDragDelta, exceedsDragThreshold} from '../editing/gestures';
 import type {HighwayPopoverState} from './HighwayPopovers';
 import type {MarkerDragState, MarkerKind} from './useMarkerDrag';
+import {
+  TOOL_REGISTRY,
+  resolveCursorContinuation,
+  resolveToolForPointerDown,
+} from '../tools/registry';
+import type {
+  NoteDragState as ToolNoteDragState,
+  PointerHitInfo,
+  ToolContext,
+} from '../tools/types';
 
 /**
  * Live state of a multi-note drag. Deltas are anchored on the grabbed note:
@@ -68,18 +53,12 @@ import type {MarkerDragState, MarkerKind} from './useMarkerDrag';
  * cursor indicator shows. `laneDelta` moves among pad lanes only — kick is
  * not on the lane axis (grabbing a kick pins laneDelta to 0, and pad drags
  * ignore the kick strip in the highway center).
+ *
+ * Defined on `EditorTool`'s `ToolContext` (`../tools/types`) since
+ * `selectMoveTool` owns note-drag deltas now; re-exported here so existing
+ * consumers of this hook's output type are unaffected.
  */
-export interface NoteDragState {
-  /** Tick of the grabbed note when the drag began. */
-  anchorTick: number;
-  /** Editor lane of the grabbed note (see `typeToLane`/`FIRST_PAD_LANE`/
-   *  `LAST_PAD_LANE` in `../commands` for the current lane numbering). */
-  anchorLane: number;
-  tickDelta: number;
-  laneDelta: number;
-  /** True once the pointer has moved past the drag threshold. */
-  active: boolean;
-}
+export type NoteDragState = ToolNoteDragState;
 
 export type HoveredHitType =
   | 'note'
@@ -309,6 +288,71 @@ export function useHighwayMouseInteraction(
   );
 
   // -----------------------------------------------------------------------
+  // Tool context — built fresh per pointer event and handed to whichever
+  // `EditorTool`(s) `../tools/registry` resolves for `state.activeTool`.
+  // -----------------------------------------------------------------------
+
+  const buildToolContext = useCallback((): ToolContext => {
+    return {
+      state,
+      capabilities,
+      activePartName,
+      activeNotes,
+      timedTempos,
+      resolution,
+      dispatch,
+      executeCommand,
+      onOpenPopover,
+      screenToLane,
+      screenToMs,
+      screenToTick,
+      markerDrag,
+      beginMarkerDrag,
+      updateMarkerDrag,
+      commitMarkerDrag,
+      drag: {
+        isDragging,
+        setIsDragging,
+        noteDrag,
+        setNoteDrag,
+        isErasing,
+        setIsErasing,
+        dragStart,
+        setDragStart,
+        dragCurrent,
+        setDragCurrent,
+        setHoverTick,
+        lastClick: lastClickRef.current,
+        setLastClick: value => {
+          lastClickRef.current = value;
+        },
+      },
+    };
+  }, [
+    activeNotes,
+    activePartName,
+    beginMarkerDrag,
+    capabilities,
+    commitMarkerDrag,
+    dispatch,
+    dragCurrent,
+    dragStart,
+    executeCommand,
+    isDragging,
+    isErasing,
+    markerDrag,
+    noteDrag,
+    onOpenPopover,
+    resolution,
+    screenToLane,
+    screenToMs,
+    screenToTick,
+    state,
+    timedTempos,
+    updateMarkerDrag,
+  ]);
+
+  // -----------------------------------------------------------------------
   // Mouse handlers
   // -----------------------------------------------------------------------
 
@@ -325,224 +369,28 @@ export function useHighwayMouseInteraction(
       const tick = hitTick(hit) ?? screenToTick(coords.x, coords.y);
 
       const entity = hitToEntityRef(hit, activePartName);
-      const aff = entity ? AFFORDANCES[entity.kind] : null;
 
-      switch (state.activeTool) {
-        case 'cursor': {
-          // Inline-edit on double-click for kinds that declare it. Today
-          // only sections wire up an inline editor (rename popover); other
-          // inlineEditable kinds (lyric) edit through the side panel and
-          // can grow into this slot.
-          if (
-            entity &&
-            aff?.inlineEditable &&
-            capabilities.selectable.has(entity.kind)
-          ) {
-            const now = Date.now();
-            const last = lastClickRef.current;
-            if (last && last.tick === entity.tick && now - last.time < 400) {
-              lastClickRef.current = null;
-              if (entity.kind === 'section') {
-                const currentName = hit?.type === 'section' ? hit.name : '';
-                onOpenPopover({
-                  kind: 'section-rename',
-                  tick: entity.tick,
-                  x: coords.x,
-                  y: coords.y,
-                  initialSectionName: currentName,
-                  currentSectionName: currentName,
-                });
-                dispatch({
-                  type: 'SET_SELECTION',
-                  kind: 'section',
-                  ids: new Set([entity.id]),
-                });
-                break;
-              }
-            }
-            lastClickRef.current = {tick: entity.tick, time: now};
-          }
-
-          // Selectable hit: replace or toggle selection. Notes do shift-aware
-          // multi-select; markers replace (single-marker selection only).
-          if (
-            entity &&
-            aff?.selectable &&
-            capabilities.selectable.has(entity.kind)
-          ) {
-            if (entity.kind === 'note') {
-              const noteSelection = getSelectedIds(state, 'note');
-              if (e.shiftKey) {
-                const newIds = new Set(noteSelection);
-                if (newIds.has(entity.id)) {
-                  newIds.delete(entity.id);
-                } else {
-                  newIds.add(entity.id);
-                }
-                dispatch({type: 'SET_SELECTION', kind: 'note', ids: newIds});
-              } else if (!noteSelection.has(entity.id)) {
-                dispatch({
-                  type: 'SET_SELECTION',
-                  kind: 'note',
-                  ids: new Set([entity.id]),
-                });
-              }
-            } else {
-              dispatch({
-                type: 'SET_SELECTION',
-                kind: entity.kind,
-                ids: new Set([entity.id]),
-              });
-              // Clear note selection so the editor doesn't carry stale notes.
-              if (getSelectedIds(state, 'note').size > 0) {
-                dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
-              }
-            }
-
-            // Drag init: gated on the page's draggable capability. Notes
-            // start a multi-note drag; markers start a single-entity drag
-            // through the existing `useMarkerDrag` handler. Both pin hover
-            // to the dragged entity so the highlight stays put even if the
-            // mousedown landed without a prior mousemove (focus-shift,
-            // touch tap-and-drag).
-            if (capabilities.draggable.has(entity.kind)) {
-              dispatch({
-                type: 'SET_HOVER',
-                hovered: {kind: entity.kind, id: entity.id},
-              });
-              if (entity.kind === 'note') {
-                setIsDragging(true);
-                // Anchor the drag on the grabbed note's own tick + lane so
-                // release lands it exactly on the snapped cursor tick, even
-                // when the note started off-grid.
-                const parsedId = parseSchemaNoteId(entity.id, drums4LaneSchema);
-                setNoteDrag({
-                  anchorTick: entity.tick,
-                  anchorLane: parsedId ? typeToLane(parsedId.type) : 0,
-                  tickDelta: 0,
-                  laneDelta: 0,
-                  active: false,
-                });
-              } else {
-                beginMarkerDrag(entity.kind as MarkerKind, entity.tick);
-              }
-            }
-            setDragStart(coords);
-            setDragCurrent(coords);
-            break;
-          }
-
-          // No selectable entity under the cursor. Clear marker selections
-          // so the panel doesn't show stale state, then handle the empty-
-          // highway case for notes (drum-edit only).
-          for (const k of [
-            'section',
-            'lyric',
-            'phrase-start',
-            'phrase-end',
-          ] as const) {
-            if (getSelectedIds(state, k).size > 0) {
-              dispatch({type: 'SET_SELECTION', kind: k, ids: new Set()});
-            }
-          }
-          if (capabilities.selectable.has('note')) {
-            if (!e.shiftKey) {
-              dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
-            }
-            setDragStart(coords);
-            setDragCurrent(coords);
-          }
-          break;
-        }
-        case 'place': {
-          const trackKey = trackKeyFromScope(state.activeScope);
-          if (!trackKey) break;
-          // Toggle: if a note exists at this position, remove it.
-          if (hit?.type === 'note') {
-            executeCommand(
-              new DeleteNotesCommand(new Set([hit.noteId]), trackKey),
-            );
-          } else {
-            // The prospective note (lane → type → flags) is computed by the
-            // shared unit both views use, so the highway and the piano-roll
-            // ghost predict — and add — the identical note.
-            const prospective = prospectiveNoteAt(lane, tick);
-            executeCommand(
-              new AddNoteCommand(
-                {
-                  tick: prospective.tick,
-                  type: prospective.type,
-                  length: 0,
-                  flags: prospective.flags,
-                },
-                trackKey,
-              ),
-            );
-          }
-          break;
-        }
-        case 'erase': {
-          // Erase tool: delete the entity if its kind declares deletable.
-          // Today only notes have a wired delete command; other deletable
-          // kinds (sections, lyrics, phrases) no-op until their handler
-          // lands in plan 0034.
-          if (entity && aff?.deletable) {
-            if (entity.kind === 'note') {
-              const trackKey = trackKeyFromScope(state.activeScope);
-              if (trackKey) {
-                executeCommand(
-                  new DeleteNotesCommand(new Set([entity.id]), trackKey),
-                );
-              }
-            }
-          }
-          setIsErasing(true);
-          break;
-        }
-        case 'bpm': {
-          // Pre-fill with the current BPM at this position.
-          let initialBpm = 120;
-          if (timedTempos.length > 0) {
-            let idx = 0;
-            for (let i = 1; i < timedTempos.length; i++) {
-              if (timedTempos[i].tick <= tick) idx = i;
-              else break;
-            }
-            initialBpm = timedTempos[idx].beatsPerMinute;
-          }
-          onOpenPopover({
-            kind: 'bpm',
-            tick,
-            x: coords.x,
-            y: coords.y,
-            initialBpm,
-          });
-          break;
-        }
-        case 'timesig': {
-          onOpenPopover({kind: 'timesig', tick, x: coords.x, y: coords.y});
-          break;
-        }
-        case 'section': {
-          onOpenPopover({kind: 'section', tick, x: coords.x, y: coords.y});
-          break;
-        }
-      }
+      const evt: PointerHitInfo = {
+        coords,
+        shiftKey: e.shiftKey,
+        hit,
+        lane,
+        tick,
+        entity,
+      };
+      const tool = resolveToolForPointerDown(state.activeTool, evt, capabilities);
+      tool?.onPointerDown(buildToolContext(), evt);
     },
     [
       activePartName,
-      beginMarkerDrag,
+      buildToolContext,
       capabilities,
-      dispatch,
       editingLocked,
-      executeCommand,
       getElementCoords,
       hitTestAt,
-      onOpenPopover,
       screenToLane,
       screenToTick,
-      state,
-      timedTempos,
+      state.activeTool,
     ],
   );
 
@@ -586,73 +434,41 @@ export function useHighwayMouseInteraction(
         setDragCurrent(coords);
       }
 
-      // Note drag: update the live preview deltas once past the threshold.
-      // The tick delta comes from the grid-snapped cursor tick relative to
-      // the grabbed note, so the preview (and the eventual commit) snaps to
-      // the current grid subdivision. Lane deltas move among pads only; the
-      // kick strip in the highway center is not a lane target.
-      if (isDragging && noteDrag && dragStart) {
-        const dx = coords.x - dragStart.x;
-        const dy = coords.y - dragStart.y;
-        if (noteDrag.active || exceedsDragThreshold(dx, dy)) {
-          const snappedTick = screenToTick(coords.x, coords.y);
-          const {tickDelta, laneDelta} = computeNoteDragDelta({
-            anchorTick: noteDrag.anchorTick,
-            anchorLane: noteDrag.anchorLane,
-            snappedCursorTick: snappedTick,
-            cursorLane: screenToLane(coords.x, coords.y),
-            selectionSize: getSelectedIds(state, 'note').size,
-            prevLaneDelta: noteDrag.laneDelta,
-            minPadLane: FIRST_PAD_LANE,
-            maxPadLane: LAST_PAD_LANE,
-            kickLane: KICK_LANE,
-          });
-          if (
-            !noteDrag.active ||
-            tickDelta !== noteDrag.tickDelta ||
-            laneDelta !== noteDrag.laneDelta
-          ) {
-            setNoteDrag({...noteDrag, tickDelta, laneDelta, active: true});
-          }
-          // The cursor indicator shows the exact tick the grabbed note will
-          // land on, even when the pointer is over another note.
-          setHoverTick(snappedTick);
-        }
-      }
-
-      // Marker drag: update the live preview tick. The hook clamps to whatever
-      // bounds the underlying handler enforces on commit (lyrics stay inside
-      // their phrase, phrase-start can't cross the previous phrase's end, etc.).
-      if (markerDrag && dragStart) {
-        updateMarkerDrag(screenToTick(coords.x, coords.y));
-      }
-
-      // Erase mode: paint-erase while dragging.
-      if (isErasing && state.activeTool === 'erase') {
-        const trackKey = trackKeyFromScope(state.activeScope);
-        if (trackKey && hit?.type === 'note') {
-          executeCommand(
-            new DeleteNotesCommand(new Set([hit.noteId]), trackKey),
-          );
+      // Tool-specific move continuation: note-drag/marker-drag preview
+      // (`selectMoveTool`) and paint-erase (`eraseTool`). `'cursor'` mode
+      // routes to whichever tool started the in-flight gesture — see
+      // `resolveCursorContinuation`.
+      const evt: PointerHitInfo = {
+        coords,
+        shiftKey: e.shiftKey,
+        hit,
+        lane:
+          hit && 'lane' in hit ? hit.lane : screenToLane(coords.x, coords.y),
+        tick: hitTick(hit) ?? screenToTick(coords.x, coords.y),
+        entity: hitToEntityRef(hit, activePartName),
+      };
+      const ctx = buildToolContext();
+      if (state.activeTool === 'cursor') {
+        resolveCursorContinuation(ctx).onPointerMove?.(ctx, evt);
+      } else {
+        for (const tool of TOOL_REGISTRY[state.activeTool]) {
+          tool.onPointerMove?.(ctx, evt);
         }
       }
     },
     [
       activePartName,
-      capabilities,
+      buildToolContext,
+      capabilities.hoverable,
       dispatch,
       dragStart,
-      executeCommand,
       getElementCoords,
       hitTestAt,
       isDragging,
-      isErasing,
       markerDrag,
-      noteDrag,
       screenToLane,
       screenToTick,
-      state,
-      updateMarkerDrag,
+      state.activeTool,
     ],
   );
 
@@ -660,69 +476,27 @@ export function useHighwayMouseInteraction(
     (e: ReactMouseEvent<HTMLDivElement>) => {
       const coords = getElementCoords(e);
 
-      const noteSelection = getSelectedIds(state, 'note');
-      if (state.activeTool === 'cursor' && dragStart && dragCurrent) {
-        if (isDragging && noteSelection.size > 0) {
-          // Complete drag-move using the same anchored deltas the live
-          // preview showed, so the grabbed note lands exactly where the
-          // cursor indicator said it would.
-          if (
-            noteDrag?.active &&
-            (noteDrag.tickDelta !== 0 || noteDrag.laneDelta !== 0)
-          ) {
-            executeCommand(
-              new MoveEntitiesCommand(
-                'note',
-                Array.from(noteSelection),
-                noteDrag.tickDelta,
-                noteDrag.laneDelta,
-                entityContextFromScope(state.activeScope),
-              ),
-            );
-          }
+      // Tool-specific up completion: drag-move-commit or box-select-commit
+      // (`'cursor'` mode, routed to whichever tool owns the in-flight
+      // gesture) and marker-drag commit (any tool, since a marker drag can
+      // be released while the pointer has moved off the highway plane).
+      if (dragStart && dragCurrent) {
+        const evt: PointerHitInfo = {
+          coords,
+          shiftKey: e.shiftKey,
+          hit: null,
+          lane: screenToLane(coords.x, coords.y),
+          tick: screenToTick(coords.x, coords.y),
+          entity: null,
+        };
+        const ctx = buildToolContext();
+        if (state.activeTool === 'cursor') {
+          resolveCursorContinuation(ctx).onPointerUp?.(ctx, evt);
         } else {
-          // Complete box selection.
-          const x1 = Math.min(dragStart.x, coords.x);
-          const x2 = Math.max(dragStart.x, coords.x);
-          const y1 = Math.min(dragStart.y, coords.y);
-          const y2 = Math.max(dragStart.y, coords.y);
-
-          // Only do box select if dragged more than a small threshold.
-          if (exceedsDragThreshold(x2 - x1, y2 - y1)) {
-            // y2 is lower on screen = earlier time; y1 is higher = later.
-            const lane1 = screenToLane(x1, y1);
-            const lane2 = screenToLane(x2, y2);
-            const selected = selectNotesInRange(
-              activeNotes,
-              {
-                msMin: screenToMs(x1, y2),
-                msMax: screenToMs(x2, y1),
-                laneMin: Math.min(lane1, lane2),
-                laneMax: Math.max(lane1, lane2),
-              },
-              timedTempos,
-              resolution,
-            );
-
-            if (e.shiftKey) {
-              // Add to existing selection.
-              const merged = new Set(noteSelection);
-              selected.forEach(id => merged.add(id));
-              dispatch({type: 'SET_SELECTION', kind: 'note', ids: merged});
-            } else {
-              dispatch({type: 'SET_SELECTION', kind: 'note', ids: selected});
-            }
+          for (const tool of TOOL_REGISTRY[state.activeTool]) {
+            tool.onPointerUp?.(ctx, evt);
           }
         }
-      }
-
-      // Complete single-entity marker drag (sections, lyrics, phrases). The
-      // hook owns the actual command + selection update; we just pass the
-      // moved-past-threshold bit derived from pixel delta.
-      if (markerDrag && dragStart) {
-        const dx = coords.x - dragStart.x;
-        const dy = coords.y - dragStart.y;
-        commitMarkerDrag(exceedsDragThreshold(dx, dy));
       }
 
       setIsDragging(false);
@@ -732,21 +506,13 @@ export function useHighwayMouseInteraction(
       setIsErasing(false);
     },
     [
-      activeNotes,
-      commitMarkerDrag,
-      dispatch,
+      buildToolContext,
       dragCurrent,
       dragStart,
-      executeCommand,
       getElementCoords,
-      isDragging,
-      markerDrag,
-      noteDrag,
-      resolution,
       screenToLane,
-      screenToMs,
-      state,
-      timedTempos,
+      screenToTick,
+      state.activeTool,
     ],
   );
 
