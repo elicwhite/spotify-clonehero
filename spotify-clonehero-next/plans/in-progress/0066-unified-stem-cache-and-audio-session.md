@@ -38,6 +38,25 @@ Revised Phase 2 shape: **2a** resampler unification (shared decode module) →
 **2c** `/drum-transcription` stores the original upload verbatim + fingerprints
 it, Opus only at export, with back-compat for existing opus-at-rest projects.
 
+### Implementation status (2026-07-20)
+
+All code phases landed on branch `plan-0066-unified-stem-cache` (7 commits:
+Phase 1 + fixup, 2a, 2b, 2c, cache migration, Phase 3). `pnpm typecheck`
+(tsgo), `pnpm typecheck:tsc`, `pnpm test` (1827 passing), and `pnpm lint` (no
+new errors) all pass. New modules: `lib/audio-pipeline/{decode-audio,
+stem-cache,separate-stems,lyrics-audio}.ts`. Demucs fully removed
+(`demucs-client.ts`/`demucs-worker.ts` deleted). Phase 3 found the
+separation-worker already surfaced vocals, so no worker-payload change was
+needed.
+
+**STILL PENDING — browser validation** (deferred to a joint review; can't run
+on this machine, CDP sandbox-blocked): all three pages end-to-end; the
+cross-page cache-hit scenario (separate on one page, confirm no re-download +
+re-separation on another — `list_network_requests`/OPFS inspection); `/tempo`
++ `/drum-transcription` no tempo/note drift; and the `/add-lyrics` quality
+spot-check vs the old Demucs path (the plan's Risk-section stop-ship gate).
+Not moved to `plans/completed/` until this passes.
+
 ## Context
 
 `/tempo`'s piano-roll and highway waveforms currently show the full mix, not
