@@ -10,18 +10,15 @@
  * resumability if the user closes the tab mid-pipeline.
  */
 
-import {decodeAudio, interleaveAudioBuffer} from '../audio/decoder';
+import {decodeAudio} from '../audio/decoder';
 import {
   createAudioMetadata,
   TARGET_SAMPLE_RATE,
-  TARGET_CHANNELS,
   type AudioMetadata,
 } from '../audio/types';
-import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
-import {isOpusFileName} from '@/lib/chart-export/transcode-audio';
 import {
   createProject,
-  storeAudioOpus,
+  storeAudioOriginal,
   updateProject,
   loadFullMixPcm,
   hasStoredAudio,
@@ -105,31 +102,22 @@ export interface PipelineProgress {
 export type PipelineProgressCallback = (progress: PipelineProgress) => void;
 
 // ---------------------------------------------------------------------------
-// Upload storage (Opus at rest)
+// Upload storage (original audio at rest)
 // ---------------------------------------------------------------------------
 
 /**
- * Stores a freshly uploaded, decoded audio file as Opus at rest
- * ({@link storeAudioOpus}) — the only audio storage new uploads use, replacing
- * the old raw-PCM (`full.pcm`) + verbatim-original storage. Already-`.opus`
- * uploads are stored byte-for-byte; anything else is Opus-encoded from the
- * decoded PCM.
+ * Stores a freshly uploaded audio file verbatim ({@link storeAudioOriginal})
+ * — the only audio storage new uploads use. Fingerprinting for the shared
+ * stem cache hashes these same bytes; conversion to Opus, if needed, happens
+ * only at export.
  */
-async function storeUploadedAudioAsOpus(
+async function storeUploadedAudioOriginal(
   projectId: string,
   sourceBytes: ArrayBuffer,
-  interleavedPcm: Float32Array,
   metadata: AudioMetadata,
   samplesPerChannel: number,
 ): Promise<void> {
-  const opusBytes = isOpusFileName(metadata.originalFileName)
-    ? new Uint8Array(sourceBytes)
-    : await encodePcmToOpus(
-        interleavedPcm,
-        TARGET_SAMPLE_RATE,
-        TARGET_CHANNELS,
-      );
-  await storeAudioOpus(projectId, opusBytes, metadata, samplesPerChannel);
+  await storeAudioOriginal(projectId, sourceBytes, metadata, samplesPerChannel);
 }
 
 // ---------------------------------------------------------------------------
@@ -430,11 +418,9 @@ export async function runPipeline(
   projectMeta = await createProject(metadata.name);
   projectId = projectMeta.id;
 
-  const interleavedPcm = interleaveAudioBuffer(audioBuffer);
-  await storeUploadedAudioAsOpus(
+  await storeUploadedAudioOriginal(
     projectId,
     sourceBytes,
-    interleavedPcm,
     metadata,
     audioBuffer.length,
   );
@@ -641,11 +627,9 @@ export async function runPipelineFromChart(
   const projectMeta = await createProject(projectName);
   const projectId = projectMeta.id;
 
-  const interleavedPcm = interleaveAudioBuffer(audioBuffer);
-  await storeUploadedAudioAsOpus(
+  await storeUploadedAudioOriginal(
     projectId,
     sourceBytes,
-    interleavedPcm,
     metadata,
     audioBuffer.length,
   );

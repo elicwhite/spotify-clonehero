@@ -1,8 +1,9 @@
 /**
- * Fingerprint-basis priority tests (plan 0063 Part A/B):
- * ensureProjectStemFingerprint must hash the stored Opus-at-rest bytes for
- * current projects, falling back to the legacy original-upload bytes, then
- * decoded full-mix PCM, for older projects.
+ * Fingerprint-basis priority tests (plan 0066 Phase 2c):
+ * ensureProjectStemFingerprint must hash the stored verbatim original-upload
+ * bytes for current projects (matching what `/tempo` hashes for the same
+ * file), falling back to the legacy Opus-at-rest bytes, then decoded
+ * full-mix PCM, for older projects.
  */
 
 jest.mock('onnxruntime-web', () => ({}));
@@ -63,36 +64,36 @@ describe('ensureProjectStemFingerprint', () => {
     getProject.mockResolvedValue({id: 'p1', stemFingerprint: 'already-set'});
     const fp = await ensureProjectStemFingerprint('p1');
     expect(fp).toBe('already-set');
-    expect(readSongOpus).not.toHaveBeenCalled();
+    expect(readOriginalAudio).not.toHaveBeenCalled();
   });
 
-  it('current project: hashes the stored song.opus bytes', async () => {
-    readSongOpus.mockResolvedValue(new Uint8Array([1, 2, 3]).buffer);
+  it('current project: hashes the stored verbatim original bytes', async () => {
+    readOriginalAudio.mockResolvedValue({
+      data: new Uint8Array([1, 2, 3]).buffer,
+      extension: 'mp3',
+    });
     const fp = await ensureProjectStemFingerprint('p1');
     expect(computeStemFingerprint).toHaveBeenCalledWith(
       expect.any(ArrayBuffer),
       DRUM_SEPARATOR_ID,
     );
     expect(fp).toBe(`fp(1,2,3)|${DRUM_SEPARATOR_ID}`);
-    expect(readOriginalAudio).not.toHaveBeenCalled();
+    expect(readSongOpus).not.toHaveBeenCalled();
     expect(loadFullMixPcm).not.toHaveBeenCalled();
     expect(updateProject).toHaveBeenCalledWith('p1', {stemFingerprint: fp});
   });
 
-  it('legacy project (no song.opus): falls back to the stored original upload', async () => {
-    readSongOpus.mockResolvedValue(null);
-    readOriginalAudio.mockResolvedValue({
-      data: new Uint8Array([4, 5]).buffer,
-      extension: 'mp3',
-    });
+  it('opus-at-rest project (no stored original): falls back to song.opus bytes', async () => {
+    readOriginalAudio.mockResolvedValue(null);
+    readSongOpus.mockResolvedValue(new Uint8Array([4, 5]).buffer);
     const fp = await ensureProjectStemFingerprint('p1');
     expect(fp).toBe(`fp(4,5)|${DRUM_SEPARATOR_ID}`);
     expect(loadFullMixPcm).not.toHaveBeenCalled();
   });
 
-  it('oldest projects (neither song.opus nor original): falls back to decoded full-mix PCM', async () => {
-    readSongOpus.mockResolvedValue(null);
+  it('oldest projects (neither original nor song.opus): falls back to decoded full-mix PCM', async () => {
     readOriginalAudio.mockResolvedValue(null);
+    readSongOpus.mockResolvedValue(null);
     loadFullMixPcm.mockResolvedValue(new Float32Array([1, 2]));
     const fp = await ensureProjectStemFingerprint('p1');
     expect(loadFullMixPcm).toHaveBeenCalledWith('p1');

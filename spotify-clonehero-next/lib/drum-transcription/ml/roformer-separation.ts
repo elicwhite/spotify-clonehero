@@ -72,10 +72,11 @@ const VOCALS_STEM = 'vocals';
  * Returns the project's stem-cache fingerprint, computing and persisting it
  * to project metadata on first use.
  *
- * Hashes the stored Opus-at-rest bytes for current projects (matches the
- * fingerprint computed at upload time). Falls back to the stored original
- * upload bytes, then the decoded full-mix PCM bytes, for legacy projects
- * created before Opus-at-rest storage.
+ * Hashes the stored verbatim original upload bytes for current projects —
+ * matches what `/tempo` hashes for the same file, so the two pages can share
+ * a stem cache. Falls back to the stored Opus-at-rest bytes, then the
+ * decoded full-mix PCM bytes, for projects created before original-at-rest
+ * storage.
  */
 export async function ensureProjectStemFingerprint(
   projectId: string,
@@ -83,15 +84,13 @@ export async function ensureProjectStemFingerprint(
   const meta = await getProject(projectId);
   if (meta.stemFingerprint) return meta.stemFingerprint;
 
-  const opus = await readSongOpus(projectId);
+  const original = await readOriginalAudio(projectId);
   let bytes: ArrayBuffer;
-  if (opus) {
-    bytes = opus;
+  if (original) {
+    bytes = original.data;
   } else {
-    const original = await readOriginalAudio(projectId);
-    bytes = original
-      ? original.data
-      : ((await loadFullMixPcm(projectId)).buffer as ArrayBuffer);
+    const opus = await readSongOpus(projectId);
+    bytes = opus ?? ((await loadFullMixPcm(projectId)).buffer as ArrayBuffer);
   }
   const fingerprint = await computeStemFingerprint(bytes, DRUM_SEPARATOR_ID);
   await updateProject(projectId, {stemFingerprint: fingerprint});
