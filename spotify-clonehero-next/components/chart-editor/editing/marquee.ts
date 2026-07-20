@@ -71,3 +71,21 @@ export function selectNotesInRange(
   }
   return selected;
 }
+
+/**
+ * Return the ids of lyric chips whose ms position falls inside
+ * `[msMin, msMax]`. The lyrics row is a single row (no lane concept), so
+ * membership is ms-only — the caller decides whether the marquee's vertical
+ * span reaches the lyrics row at all before calling this.
+ */
+export function selectLyricsInRange(
+  chips: readonly {id: string; ms: number}[],
+  msMin: number,
+  msMax: number,
+): Set<string> {
+  const selected = new Set<string>();
+  for (const chip of chips) {
+    if (chip.ms >= msMin && chip.ms <= msMax) selected.add(chip.id);
+  }
+  return selected;
+}

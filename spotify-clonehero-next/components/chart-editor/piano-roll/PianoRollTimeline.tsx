@@ -80,11 +80,15 @@ import {
   phraseStartId,
   phraseEndId,
   DEFAULT_VOCALS_PART,
+  getAudioAnchor,
 } from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {Synctrack} from '@/lib/tempo-map/types';
 import {octaveRescaleSync} from '@/lib/tempo-map/structural-correction';
-import {repredictTempo} from '@/lib/drum-transcription/pipeline/repredict';
+import {
+  repredictTempo,
+  shiftOnsets,
+} from '@/lib/drum-transcription/pipeline/repredict';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
 import {useChartEditorContext, selectRenderDoc} from '../ChartEditorContext';
 import {getSelectedIds} from '../ChartEditorContext';
@@ -97,6 +101,7 @@ import {useExecuteCommand} from '../hooks/useEditCommands';
 import {
   AddNoteCommand,
   AddTempoMarkerCommand,
+  BatchCommand,
   DeleteNotesCommand,
   DeleteTempoMarkerCommand,
   MarkDownbeatCommand,
@@ -115,9 +120,10 @@ import {
   FIRST_PAD_LANE,
   LAST_PAD_LANE,
   KICK_LANE,
+  type EditCommand,
 } from '../commands';
 import {computeNoteDragDelta, exceedsDragThreshold} from '../editing/gestures';
-import {selectNotesInRange} from '../editing/marquee';
+import {selectNotesInRange, selectLyricsInRange} from '../editing/marquee';
 import {
   prospectiveNoteAt,
   type ProspectiveNote,
@@ -146,6 +152,7 @@ import {
 } from './hitTest';
 import {
   buildLyricsRowScene,
+  lyricChipPreviewTick,
   type LyricChip,
   type LyricBand,
 } from './lyricsScene';
@@ -576,6 +583,10 @@ export default function PianoRollTimeline({
   const phraseEdgeDragRef = useRef<PhraseEdgeDrag | null>(null);
   /** Selection captured at marquee start, for shift-add merging. */
   const marqueeBaseRef = useRef<ReadonlySet<string>>(new Set());
+  /** Selection captured at marquee start for the lyrics row (mirrors
+   *  `marqueeBaseRef`, kept separate since notes and lyrics are independent
+   *  entries in `state.selection`). */
+  const marqueeLyricBaseRef = useRef<ReadonlySet<string>>(new Set());
   const marqueeShiftRef = useRef(false);
   /** Panel-height resize drag: the height + pointer y at gesture start. */
   const resizeDragRef = useRef<{startHeight: number; startY: number} | null>(
@@ -871,6 +882,9 @@ export default function PianoRollTimeline({
         const ghostTick = drag?.moved
           ? drag.originalTick
           : (hoveredChip?.tick ?? null);
+        const noteDrag = noteDragRef.current;
+        const noteDragTickDelta =
+          noteDrag?.active === true ? noteDrag.tickDelta : null;
         drawLyricsRow(
           ctx,
           w,
@@ -885,6 +899,7 @@ export default function PianoRollTimeline({
           lyricChipWidthsRef.current,
           showVocalsWaveRef.current ? vocalsAmpRef.current : null,
           phraseEdgeDragRef.current,
+          noteDragTickDelta,
         );
       }
       drawRuler(ctx, w, view, scene, laneBottom, sectionDragRef.current);
@@ -1225,6 +1240,26 @@ export default function PianoRollTimeline({
     [dispatch],
   );
 
+  // Lyric selection (shift-aware), mirroring `selectNote` so a lyric chip
+  // participates in multi-select the same way a note does: shift toggles
+  // membership; a plain click on an already-selected chip preserves the rest
+  // of the selection (so it can be dragged as a group).
+  const selectLyric = useCallback(
+    (id: string, shift: boolean) => {
+      const st = editStateRef.current;
+      const current = getSelectedIds(st, 'lyric');
+      if (shift) {
+        const next = new Set(current);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: next});
+      } else if (!current.has(id)) {
+        dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: new Set([id])});
+      }
+    },
+    [dispatch],
+  );
+
   const handleWheel = useCallback(
     (e: React.WheelEvent<HTMLCanvasElement>) => {
       e.preventDefault();
@@ -1338,11 +1373,7 @@ export default function PianoRollTimeline({
             phraseMaxTick: hit.phraseMaxTick,
             moved: false,
           };
-          dispatch({
-            type: 'SET_SELECTION',
-            kind: 'lyric',
-            ids: new Set([hit.id]),
-          });
+          selectLyric(hit.id, e.shiftKey);
           dirtyRef.current = true;
           drawRef.current(Math.max(0, audioManager.chartTime * 1000));
           return;
@@ -1374,6 +1405,34 @@ export default function PianoRollTimeline({
           canvas.style.cursor = 'ew-resize';
           dirtyRef.current = true;
           drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+          return;
+        }
+
+        // Empty lyrics-row space (no chip, no phrase edge): begin a marquee
+        // the same way empty note-lane space does, below — the rectangle can
+        // now be STARTED from either row, not just dragged into the lyrics
+        // row from a note-lane start. Cursor tool only, mirroring the
+        // note-lane fallback's tool gate.
+        if (
+          editStateRef.current.activeTool === 'cursor' &&
+          capabilities.selectable.has('lyric')
+        ) {
+          const marqueeSt = editStateRef.current;
+          canvas.setPointerCapture(e.pointerId);
+          if (!e.shiftKey) {
+            dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
+            dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: new Set()});
+          }
+          pointerModeRef.current = 'marquee';
+          pointerStartRef.current = {x, y};
+          marqueeRef.current = {x0: x, y0: y, x1: x, y1: y};
+          marqueeBaseRef.current = e.shiftKey
+            ? new Set(getSelectedIds(marqueeSt, 'note'))
+            : new Set();
+          marqueeLyricBaseRef.current = e.shiftKey
+            ? new Set(getSelectedIds(marqueeSt, 'lyric'))
+            : new Set();
+          marqueeShiftRef.current = e.shiftKey;
         }
         return;
       }
@@ -1473,14 +1532,20 @@ export default function PianoRollTimeline({
         return;
       }
 
-      // Empty space: begin a marquee (plain click on empty clears selection).
+      // Empty space: begin a marquee (plain click on empty clears selection,
+      // notes and lyrics alike — the marquee can pick both back up as it's
+      // dragged over the note lanes and up into the lyrics row).
       if (!e.shiftKey) {
         dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
+        dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: new Set()});
       }
       pointerModeRef.current = 'marquee';
       marqueeRef.current = {x0: x, y0: y, x1: x, y1: y};
       marqueeBaseRef.current = e.shiftKey
         ? new Set(getSelectedIds(st, 'note'))
+        : new Set();
+      marqueeLyricBaseRef.current = e.shiftKey
+        ? new Set(getSelectedIds(st, 'lyric'))
         : new Set();
       marqueeShiftRef.current = e.shiftKey;
     },
@@ -1494,6 +1559,7 @@ export default function PianoRollTimeline({
       pickAt,
       seekTo,
       seekZone,
+      selectLyric,
       selectNote,
       snappedTickAt,
     ],
@@ -1668,20 +1734,50 @@ export default function PianoRollTimeline({
           viewRef.current,
           laneGeometry(),
         );
-        const inBox = selectNotesInRange(
-          scene.notes.map(n => ({
-            tick: n.tick,
-            type: laneToType(n.lane),
-            length: 0,
-            flags: {},
-          })),
-          bounds,
-          scene.timedTempos,
-          scene.resolution,
-        );
+        const my0 = Math.min(marqueeRef.current.y0, marqueeRef.current.y1);
+        const my1 = Math.max(marqueeRef.current.y0, marqueeRef.current.y1);
+
+        // `marqueeBounds`' lane math always clamps to a valid lane index
+        // (0..LANE_COUNT-1), even when the rectangle never gets near the
+        // note lanes — a horizontal-only drag inside the lyrics row would
+        // otherwise resolve to lane 0 (red) and spuriously sweep up red
+        // notes whose ms range happens to overlap. Only select notes when
+        // the rectangle's y-range actually reaches the note-lane band.
+        const reachesNoteLanes = my0 < g.laneBottom && my1 > g.laneTop;
+        const inBox = reachesNoteLanes
+          ? selectNotesInRange(
+              scene.notes.map(n => ({
+                tick: n.tick,
+                type: laneToType(n.lane),
+                length: 0,
+                flags: {},
+              })),
+              bounds,
+              scene.timedTempos,
+              scene.resolution,
+            )
+          : new Set<string>();
         const merged = new Set(marqueeBaseRef.current);
         inBox.forEach(id => merged.add(id));
         dispatch({type: 'SET_SELECTION', kind: 'note', ids: merged});
+
+        // The marquee also picks up lyrics, but only when its rectangle
+        // actually reaches the lyrics row — the tempo lane sits between the
+        // lyrics row and the note lanes, and it never participates (there's
+        // no tempo-marquee selection at all). A drag confined to the note
+        // lanes must not select lyrics just because a note's ms range
+        // overlaps a lyric's.
+        if (scene.lyricsVisible && capabilities.selectable.has('lyric')) {
+          const reachesLyricsRow =
+            my0 < g.lyricsTop + g.lyricsH && my1 > g.lyricsTop;
+          const lyricsInBox = reachesLyricsRow
+            ? selectLyricsInRange(scene.lyricChips, bounds.msMin, bounds.msMax)
+            : new Set<string>();
+          const mergedLyrics = new Set(marqueeLyricBaseRef.current);
+          lyricsInBox.forEach(id => mergedLyrics.add(id));
+          dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: mergedLyrics});
+        }
+
         dirtyRef.current = true;
         drawRef.current(Math.max(0, audioManager.chartTime * 1000));
         return;
@@ -1824,8 +1920,16 @@ export default function PianoRollTimeline({
         if (drag.active && (drag.tickDelta !== 0 || drag.laneDelta !== 0)) {
           const st = editStateRef.current;
           const ids = Array.from(getSelectedIds(st, 'note'));
+          // A mixed note+lyric selection (built via shift-click or marquee)
+          // moves together: lyrics ride along at the notes' grid-snapped
+          // tickDelta (no lane delta — lyrics don't have lanes), each
+          // independently clamped to its own phrase by `moveLyric` inside
+          // the lyric handler. Both moves land in one `BatchCommand` so
+          // undo/redo treats the group drag as a single edit.
+          const lyricIds = Array.from(getSelectedIds(st, 'lyric'));
+          const cmds: EditCommand[] = [];
           if (ids.length > 0) {
-            executeCommand(
+            cmds.push(
               new MoveEntitiesCommand(
                 'note',
                 ids,
@@ -1834,6 +1938,16 @@ export default function PianoRollTimeline({
                 entityContextFromScope(st.activeScope),
               ),
             );
+          }
+          if (lyricIds.length > 0) {
+            cmds.push(
+              new MoveEntitiesCommand('lyric', lyricIds, drag.tickDelta, 0),
+            );
+          }
+          if (cmds.length === 1) {
+            executeCommand(cmds[0]);
+          } else if (cmds.length > 1) {
+            executeCommand(new BatchCommand(cmds));
           }
         }
       }
@@ -1890,23 +2004,54 @@ export default function PianoRollTimeline({
 
       // Commit a lyric-chip drag (plan 0063 Part D §2): the same
       // `MoveEntitiesCommand('lyric', ...)` the highway's marker drag issues,
-      // but the delta comes from the continuous (unsnapped) drag preview.
+      // but the delta comes from the continuous (unsnapped) drag preview. When
+      // the drag started on a lyric that's part of a bigger selection (other
+      // lyrics via shift-click/marquee, and/or notes), everything selected
+      // rides along at the SAME tickDelta — each lyric independently clamped
+      // to its own phrase by `moveLyric`, matching single-chip drag semantics.
       if (mode === 'lyric' && lyricDragRef.current) {
         const drag = lyricDragRef.current;
         if (drag.moved && drag.currentTick !== drag.originalTick) {
-          executeCommand(
-            new MoveEntitiesCommand(
-              'lyric',
-              [drag.chipId],
-              drag.currentTick - drag.originalTick,
-              0,
-            ),
-          );
-          dispatch({
-            type: 'SET_SELECTION',
-            kind: 'lyric',
-            ids: new Set([lyricId(drag.currentTick, DEFAULT_VOCALS_PART)]),
-          });
+          const tickDelta = drag.currentTick - drag.originalTick;
+          const st = editStateRef.current;
+          const scene = sceneRef.current;
+          const lyricIds = Array.from(getSelectedIds(st, 'lyric'));
+          const noteIds = Array.from(getSelectedIds(st, 'note'));
+          const cmds: EditCommand[] = [];
+          if (lyricIds.length > 0) {
+            cmds.push(new MoveEntitiesCommand('lyric', lyricIds, tickDelta, 0));
+          }
+          if (noteIds.length > 0) {
+            cmds.push(
+              new MoveEntitiesCommand(
+                'note',
+                noteIds,
+                tickDelta,
+                0,
+                entityContextFromScope(st.activeScope),
+              ),
+            );
+          }
+          if (cmds.length === 1) {
+            executeCommand(cmds[0]);
+          } else if (cmds.length > 1) {
+            executeCommand(new BatchCommand(cmds));
+          }
+
+          // Re-derive each moved lyric's post-clamp id from its own phrase
+          // bounds (the same clamp `moveLyric` applies) so the selection
+          // stays pinned to the moved chips instead of going stale.
+          const nextLyricIds = new Set<string>();
+          for (const id of lyricIds) {
+            const chip = scene?.lyricChips.find(c => c.id === id);
+            if (!chip) continue;
+            const clamped = Math.max(
+              chip.phraseMinTick,
+              Math.min(chip.phraseMaxTick, chip.tick + tickDelta),
+            );
+            nextLyricIds.add(lyricId(clamped, DEFAULT_VOCALS_PART));
+          }
+          dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: nextLyricIds});
         }
       }
 
@@ -2412,7 +2557,16 @@ export default function PianoRollTimeline({
     (correctedSync: Synctrack) => {
       const base = editStateRef.current.chartDoc;
       if (!base) return;
-      const result = repredictTempo(base, correctedSync, decodedOnsets ?? null);
+      // Decoded onsets are recorded against the ORIGINAL (unpadded) audio;
+      // when leading-silence padding is active, shift them onto the padded
+      // timeline before RE-PREDICT re-derives notes from them (0064
+      // addendum §7), or the fresh notes land `anchor.ms` early.
+      const anchor = getAudioAnchor(base);
+      const onsets =
+        anchor && decodedOnsets
+          ? shiftOnsets(decodedOnsets, anchor.ms)
+          : (decodedOnsets ?? null);
+      const result = repredictTempo(base, correctedSync, onsets);
       dispatch({
         type: 'SET_PENDING_TEMPO_CANDIDATE',
         candidate: {op: result.op, doc: result.doc},
@@ -2552,32 +2706,6 @@ export default function PianoRollTimeline({
               Reject
             </button>
           </div>
-        )}
-        {/* Waveform-source chip (§11): shows the current source in the
-            waveform row's corner; click to open the same picker as the
-            waveform-row right-click. */}
-        {selectedSourceId && waveSources.length > 1 && (
-          <button
-            type="button"
-            aria-label="Waveform source"
-            title="Choose which audio the waveform shows"
-            className="absolute bottom-1 right-2 z-40 rounded border border-border bg-popover/80 px-1.5 py-0.5 text-[10px] text-popover-foreground/90 shadow-sm hover:bg-accent hover:text-accent-foreground"
-            onClick={e => {
-              const container = containerRef.current;
-              if (!container) return;
-              const rect = container.getBoundingClientRect();
-              const items = buildSourceMenu();
-              const px = e.clientX - rect.left;
-              const py = e.clientY - rect.top;
-              setMenu({
-                x: Math.max(4, px - 150),
-                y: Math.max(4, py - items.length * 30 - 6),
-                items,
-              });
-            }}>
-            {waveSources.find(s => s.id === selectedSourceId)?.label ??
-              selectedSourceId}
-          </button>
         )}
         {menu && (
           <div
@@ -2921,6 +3049,12 @@ function drawLyricsRow(
   widthsOut: Map<string, number>,
   vocalsWave: AmpPyramid | null,
   phraseEdgeDrag: PhraseEdgeDrag | null,
+  /** Tick delta from an active NOTE-anchored drag (mode 'drag'), so
+   *  co-selected lyrics preview moving together with the notes rather than
+   *  only snapping into place when the note drag commits. Null when no
+   *  note drag is active; ignored when `drag` (a lyric-anchored drag) is
+   *  active — that one already carries its own per-chip deltas below. */
+  noteDragTickDelta: number | null,
 ): void {
   widthsOut.clear();
 
@@ -3028,10 +3162,20 @@ function drawLyricsRow(
 
   ctx.font = '600 9.5px system-ui, sans-serif';
   for (const chip of scene.lyricChips) {
-    const dragging = drag?.chipId === chip.id;
-    const ms = dragging
-      ? tickToMs(drag!.currentTick, scene.timedTempos, scene.resolution)
-      : chip.ms;
+    // The drag's own chip tracks the pointer directly; every OTHER selected
+    // chip previews riding along at the same tick delta (a lyric-anchored
+    // drag's, or a note-anchored drag's when notes+lyrics are dragged
+    // together), clamped to its own phrase — mirroring the group-move
+    // commit in `endPointer` — so a group drag visibly moves together
+    // instead of only the grabbed chip animating and the rest snapping into
+    // place on release. See `lyricChipPreviewTick`.
+    const previewTick = lyricChipPreviewTick(
+      chip,
+      selection.has(chip.id),
+      drag,
+      noteDragTickDelta,
+    );
+    const ms = tickToMs(previewTick, scene.timedTempos, scene.resolution);
     const x = msToX(ms, view);
     const tw = ctx.measureText(chip.text).width;
     widthsOut.set(chip.id, tw);

@@ -230,17 +230,15 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
   // Change 4: right-clicking the waveform row opens the source picker.
   it('opens the waveform-source picker on a waveform-row right-click', async () => {
     const canvas = await mountPanel();
-    // The corner chip shows the default source before the menu is opened.
-    expect(screen.getByLabelText('Waveform source')).toHaveTextContent('Drums');
 
     // Waveform row is the bottom 40px of the 200px canvas (y >= 160).
     act(() => {
       fireAt(canvas, 'contextmenu', {x: 300, y: 182, button: 2});
     });
-    // The mix (a non-selected source) appears only in the opened menu.
+    // The mix (a non-selected source) appears in the opened menu.
     expect(screen.getByText('Song (full mix)')).toBeInTheDocument();
-    // 'Drums' now appears twice: the chip and the checked menu row.
-    expect(screen.getAllByText('Drums')).toHaveLength(2);
+    // 'Drums' is the currently-selected source, shown as the checked row.
+    expect(screen.getAllByText('Drums')).toHaveLength(1);
   });
 
   it('disables the rephase item at an already bar-aligned beat', async () => {

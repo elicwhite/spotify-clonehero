@@ -20,8 +20,6 @@ export interface PianoRollView {
 
 /** Pixels per ms at "100%" zoom — the readout's reference scale. */
 export const BASE_PX_PER_MS = 0.075;
-/** Zoom-out multiple from base (roughly 16× out per §3). */
-export const ZOOM_OUT_FACTOR = 16;
 /** Zoom-in multiple from base (roughly 15× in per §3). */
 export const ZOOM_IN_FACTOR = 15;
 /** Wheel-to-zoom exponential rate (matches the mockup's feel). */
@@ -38,16 +36,18 @@ function clamp(value: number, lo: number, hi: number): number {
 }
 
 /**
- * Px-per-ms bounds. The minimum is capped at the fit-to-width scale so the
- * whole song is always reachable when zoomed out (§3's "the zoom range always
- * permits full-song visibility"), even for songs longer than the fixed
- * base/16 floor would otherwise allow.
+ * Px-per-ms bounds. The minimum is exactly the fit-to-width scale, so the
+ * user can never zoom out further than the whole song filling the viewport
+ * width (§3's "the zoom range always permits full-song visibility" — and
+ * never past it). `min` is also clamped to `max` for the degenerate case of
+ * a very short song / narrow viewport where `fit` would otherwise exceed it.
  */
 export function zoomBounds(viewportWidth: number, totalMs: number): ZoomBounds {
   const fit = totalMs > 0 ? viewportWidth / totalMs : BASE_PX_PER_MS;
+  const max = BASE_PX_PER_MS * ZOOM_IN_FACTOR;
   return {
-    min: Math.min(BASE_PX_PER_MS / ZOOM_OUT_FACTOR, fit),
-    max: BASE_PX_PER_MS * ZOOM_IN_FACTOR,
+    min: Math.min(fit, max),
+    max,
   };
 }
 

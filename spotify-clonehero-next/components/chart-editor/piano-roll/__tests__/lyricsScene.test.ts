@@ -4,7 +4,12 @@
  * display text.
  */
 
-import {buildLyricsRowScene, cleanLyricChipText} from '../lyricsScene';
+import {
+  buildLyricsRowScene,
+  cleanLyricChipText,
+  lyricChipPreviewTick,
+  type LyricChip,
+} from '../lyricsScene';
 import type {NormalizedVocalTrack} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 
@@ -141,5 +146,62 @@ describe('buildLyricsRowScene', () => {
     ]);
     const scene = buildLyricsRowScene(vt, TIMED_TEMPOS, RES);
     expect(scene.chips[0].id).toBe('vocals:240');
+  });
+});
+
+describe('lyricChipPreviewTick: group-drag live preview', () => {
+  // A single phrase 0..960, two chips at 240 and 720 — mirrors the
+  // piano-roll's own fixture (makeFixtureDoc) layout used by the component
+  // tests that exercise this through real pointer events.
+  const chipA: LyricChip = {
+    id: 'vocals:240',
+    tick: 240,
+    ms: 250,
+    text: 'a',
+    phraseMinTick: 0,
+    phraseMaxTick: 960,
+  };
+  const chipB: LyricChip = {
+    id: 'vocals:720',
+    tick: 720,
+    ms: 750,
+    text: 'b',
+    phraseMinTick: 0,
+    phraseMaxTick: 960,
+  };
+
+  it('with no drag active, every chip previews at its resting tick', () => {
+    expect(lyricChipPreviewTick(chipA, true, null, null)).toBe(240);
+    expect(lyricChipPreviewTick(chipB, false, null, null)).toBe(720);
+  });
+
+  it('the drag anchor previews at its own live tick regardless of selection', () => {
+    const drag = {chipId: chipA.id, originalTick: 240, currentTick: 300};
+    expect(lyricChipPreviewTick(chipA, true, drag, null)).toBe(300);
+    // Even if it weren't selected, the anchor still tracks the pointer.
+    expect(lyricChipPreviewTick(chipA, false, drag, null)).toBe(300);
+  });
+
+  it('a co-selected chip rides along at the SAME tick delta as the anchor (the bug: it used to sit still)', () => {
+    const drag = {chipId: chipA.id, originalTick: 240, currentTick: 300}; // +60
+    expect(lyricChipPreviewTick(chipB, true, drag, null)).toBe(780);
+  });
+
+  it('an UNselected chip never moves during a drag, even with the same drag active', () => {
+    const drag = {chipId: chipA.id, originalTick: 240, currentTick: 300};
+    expect(lyricChipPreviewTick(chipB, false, drag, null)).toBe(720);
+  });
+
+  it('a co-selected chip clamps to its own phrase bound independently of the anchor', () => {
+    // +1000 would push chipB (720) to 1720, past its phrase's 960 bound.
+    const drag = {chipId: chipA.id, originalTick: 240, currentTick: 1240};
+    expect(lyricChipPreviewTick(chipB, true, drag, null)).toBe(960);
+  });
+
+  it('a note-anchored drag (no lyric anchor) moves every selected chip by the raw tick delta', () => {
+    expect(lyricChipPreviewTick(chipA, true, null, 60)).toBe(300);
+    expect(lyricChipPreviewTick(chipB, true, null, 60)).toBe(780);
+    // Unselected chips are untouched by a note-anchored drag too.
+    expect(lyricChipPreviewTick(chipB, false, null, 60)).toBe(720);
   });
 });

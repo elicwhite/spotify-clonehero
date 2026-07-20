@@ -101,6 +101,25 @@ describe('viewMath: zoomBounds / fitToWidth', () => {
     expect(zoomPercent(BASE_PX_PER_MS)).toBe(100);
     expect(zoomPercent(BASE_PX_PER_MS * 2)).toBe(200);
   });
+
+  test('short song: min is exactly the fit-to-width scale', () => {
+    const width = 800;
+    const totalMs = 5000; // a few seconds; fit is far above the old base/16 floor
+    const bounds = zoomBounds(width, totalMs);
+    expect(bounds.min).toBeCloseTo(width / totalMs, 9);
+  });
+
+  test('totalMs = 0 falls back to BASE_PX_PER_MS', () => {
+    const bounds = zoomBounds(800, 0);
+    expect(bounds.min).toBe(BASE_PX_PER_MS);
+  });
+
+  test('min never exceeds max, even for a degenerate short song', () => {
+    // Very short song / narrow viewport: fit would exceed max unclamped.
+    const bounds = zoomBounds(50, 10);
+    expect(bounds.min).toBeLessThanOrEqual(bounds.max);
+    expect(bounds.min).toBe(bounds.max);
+  });
 });
 
 describe('viewMath: clampLeftMs / panByPx', () => {

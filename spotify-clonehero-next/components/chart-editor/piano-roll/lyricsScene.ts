@@ -103,3 +103,50 @@ export function buildLyricsRowScene(
   chips.sort((a, b) => a.tick - b.tick);
   return {chips, bands};
 }
+
+/** The chip a lyric-anchored drag is grabbing, plus its live (unsnapped)
+ *  tick — the same shape `PianoRollTimeline`'s `LyricDrag` carries. */
+export interface LyricDragPreview {
+  chipId: string;
+  originalTick: number;
+  currentTick: number;
+}
+
+/**
+ * The tick a chip should render at during a live drag — its own live
+ * position if it's the drag's anchor, or the SAME tick delta as the anchor
+ * (or a note-anchored drag's `tickDelta`) if it's just riding along as a
+ * selected group member, clamped to its own phrase like a solo drag would
+ * be. Returns the chip's resting tick when no drag reaches it.
+ *
+ * One function drives both drag shapes a chip can ride along with:
+ *  - A lyric-anchored drag (`drag` non-null): every OTHER selected chip
+ *    previews at `drag`'s (originalTick → currentTick) delta.
+ *  - A note-anchored drag (`noteDragTickDelta` non-null, `drag` null): every
+ *    selected chip previews at that raw tick delta — there's no lyric
+ *    anchor of its own, the notes are driving.
+ *
+ * Without this, only the literal chip under the pointer (or none, for a
+ * note-anchored drag) would preview moving; the rest of a multi-select
+ * would sit still and only snap to their final position once the drag
+ * commits.
+ */
+export function lyricChipPreviewTick(
+  chip: Pick<LyricChip, 'id' | 'tick' | 'phraseMinTick' | 'phraseMaxTick'>,
+  selected: boolean,
+  drag: LyricDragPreview | null,
+  noteDragTickDelta: number | null,
+): number {
+  if (drag && drag.chipId === chip.id) return drag.currentTick;
+
+  const dragActive = drag !== null || noteDragTickDelta !== null;
+  if (!dragActive || !selected) return chip.tick;
+
+  const delta = drag
+    ? drag.currentTick - drag.originalTick
+    : (noteDragTickDelta ?? 0);
+  return Math.max(
+    chip.phraseMinTick,
+    Math.min(chip.phraseMaxTick, chip.tick + delta),
+  );
+}
