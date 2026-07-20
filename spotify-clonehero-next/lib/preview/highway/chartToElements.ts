@@ -38,6 +38,24 @@ export function chartToElements(
     elements.push(...trackToElements(track));
   }
 
+  elements.push(...buildMarkerElements(parsedChart, vocalPartName));
+
+  return elements;
+}
+
+/**
+ * Builds the chart-wide + vocal-part marker elements (sections, lyrics,
+ * vocal phrases, BPM changes, time signatures) for a `ParsedChart`,
+ * stacking markers that land on the same tick/side. Shared by
+ * `chartToElements` (notes + markers combined) and `buildProjectionFor`
+ * (markers kept separate from note elements).
+ */
+export function buildMarkerElements(
+  parsedChart: ParsedChart,
+  vocalPartName: string = 'vocals',
+): ChartElement[] {
+  const elements: ChartElement[] = [];
+
   // Sections
   for (const section of parsedChart.sections) {
     elements.push({
@@ -108,11 +126,10 @@ export function chartToElements(
   // Group by tick+side, then assign increasing stackIndex within each group.
   const LEFT_KINDS = new Set(['lyric', 'phrase-start', 'phrase-end', 'bpm']);
   const RIGHT_KINDS = new Set(['section', 'ts']);
-  const markerElements = elements.filter(e => e.kind !== 'note');
 
   // Group markers by msTime rounded to 1ms (close enough to overlap visually)
   const groups = new Map<string, ChartElement[]>();
-  for (const el of markerElements) {
+  for (const el of elements) {
     const side = LEFT_KINDS.has(el.kind)
       ? 'L'
       : RIGHT_KINDS.has(el.kind)
