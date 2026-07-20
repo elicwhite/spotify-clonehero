@@ -7,7 +7,6 @@ import {ArrowLeft, Search as SearchIcon} from 'lucide-react';
 import {Input} from '@/components/ui/input';
 import {Button} from '@/components/ui/button';
 import Link from 'next/link';
-import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import debounce from 'debounce';
 import LocalChartLoader, {
@@ -297,11 +296,9 @@ export default function Search({
                       key={song.md5}
                       className="flex items-stretch bg-card rounded-lg border border-border hover:bg-accent transition-colors cursor-pointer overflow-hidden">
                       <div className="flex-shrink-0">
-                        <Image
+                        <img
                           src={`https://files.enchor.us/${song.albumArtMd5}.jpg`}
                           alt={`${song.name} album art`}
-                          width={160}
-                          height={160}
                           className="h-full w-[96px] sm:w-[120px] lg:w-[160px] object-cover"
                         />
                       </div>
