@@ -14,9 +14,7 @@ import {
   snapToGrid,
 } from '@/lib/drum-transcription/timing';
 import {DEFAULT_VOCALS_PART, getDrumNotes} from '@/lib/chart-edit';
-import DrumHighwayPreview, {
-  type HighwayRendererHandle,
-} from './DrumHighwayPreview';
+import HighwayPreview, {type HighwayRendererHandle} from './HighwayPreview';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {InteractionManager} from '@/lib/preview/highway';
@@ -45,7 +43,7 @@ interface HighwayEditorProps {
 }
 
 /**
- * Wraps DrumHighwayPreview with a transparent interaction layer.
+ * Wraps HighwayPreview with a transparent interaction layer.
  *
  * Mouse events are captured by a transparent <div>, then delegated to
  * InteractionManager for hit-testing (raycasting against note sprites,
@@ -434,12 +432,12 @@ export default function HighwayEditor({
       className={cn('relative', className)}
       style={{cursor: cursorStyle}}>
       {/* The actual 3D highway renderer */}
-      <DrumHighwayPreview
+      <HighwayPreview
         metadata={metadata}
         chart={chart}
         audioManager={audioManager}
         className="h-full w-full"
-        showDrumLanes={capabilities.showDrumLanes}
+        showLanes={capabilities.showDrumLanes}
         onRendererReady={handleRendererReady}
       />
 

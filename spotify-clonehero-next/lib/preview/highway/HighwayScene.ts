@@ -61,20 +61,15 @@ export async function getHighwayTexture(textureLoader: THREE.TextureLoader) {
  */
 const HIGHWAY_FLOOR_RENDER_ORDER = 0;
 
-export function createHighway(highwayTexture: THREE.Texture) {
+/**
+ * Creates the classic highway floor plane. `width` comes from the active
+ * track's `InstrumentSchema.highwayWidth` (drums render narrower than
+ * five-fret instruments).
+ */
+export function createHighway(highwayTexture: THREE.Texture, width: number) {
   const mat = new THREE.MeshBasicMaterial({map: highwayTexture});
 
-  const geometry = new THREE.PlaneGeometry(1, 2);
-  const plane = new THREE.Mesh(geometry, mat);
-  plane.position.y = -0.1;
-  plane.renderOrder = HIGHWAY_FLOOR_RENDER_ORDER;
-  return plane;
-}
-
-export function createDrumHighway(highwayTexture: THREE.Texture) {
-  const mat = new THREE.MeshBasicMaterial({map: highwayTexture});
-
-  const geometry = new THREE.PlaneGeometry(0.9, 2);
+  const geometry = new THREE.PlaneGeometry(width, 2);
   const plane = new THREE.Mesh(geometry, mat);
   plane.position.y = -0.1;
   plane.renderOrder = HIGHWAY_FLOOR_RENDER_ORDER;
@@ -95,45 +90,15 @@ export function createEmptyHighway() {
   return plane;
 }
 
-export async function loadAndCreateHitBox(textureLoader: THREE.TextureLoader) {
-  const texture = await loadTexture(
-    textureLoader,
-    '/assets/preview/assets/isolated.png',
-  );
-
-  const material = new THREE.SpriteMaterial({
-    map: texture,
-    sizeAttenuation: true,
-    transparent: true,
-  });
-
-  const aspectRatio = texture.image.width / texture.image.height;
-
-  material.depthTest = false;
-  material.transparent = true;
-
-  const scale = 0.19;
-  const sprite = new THREE.Sprite(material);
-  if (aspectRatio > 1) {
-    // Texture is wider than it is tall
-    sprite.scale.set(aspectRatio * scale, 1 * scale, 1);
-  } else {
-    // Texture is taller than it is wide or square
-    sprite.scale.set(1 * scale, (1 / aspectRatio) * scale, 1);
-  }
-  sprite.position.y = -1;
-  sprite.renderOrder = 3;
-
-  return sprite;
-}
-
-export async function loadAndCreateDrumHitBox(
+/**
+ * Loads the strikeline hitbox sprite. `texturePath` comes from the active
+ * track's `InstrumentSchema.hitboxTexturePath`.
+ */
+export async function loadAndCreateHitBox(
   textureLoader: THREE.TextureLoader,
+  texturePath: string,
 ) {
-  const texture = await loadTexture(
-    textureLoader,
-    '/assets/preview/assets/isolated-drums.png',
-  );
+  const texture = await loadTexture(textureLoader, texturePath);
 
   const material = new THREE.SpriteMaterial({
     map: texture,

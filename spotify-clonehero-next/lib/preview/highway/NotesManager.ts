@@ -1,14 +1,13 @@
 import * as THREE from 'three';
-import {Instrument, noteTypes} from '@eliwhite/scan-chart';
-import {interpretDrumNote} from '../../drum-mapping/noteToInstrument';
+import {Instrument} from '@eliwhite/scan-chart';
+import {schemaForInstrument} from '../../chart-edit/instruments';
 import {EventSequence} from './EventSequence';
 import {AnimatedTextureManager, loadNoteTextures} from './TextureManager';
+import {resolveNoteGeometry} from './notePlacement';
 import {
   SCALE,
   HIGHWAY_DURATION_MS,
   GUITAR_LANE_COLORS,
-  PAD_TO_HIGHWAY_LANE,
-  calculateNoteXOffset,
   type Note,
   type Track,
   type PreparedNote,
@@ -122,7 +121,8 @@ export class NotesManager {
     );
     this.getTextureForNote = getTextureForNote;
 
-    const isDrums = this.instrument === 'drums';
+    const supportsSustain =
+      schemaForInstrument(this.instrument)?.supportsSustain ?? false;
     const starPowerSections = track.starPowerSections;
 
     // Build a sorted list of star power section start times for binary search
@@ -154,77 +154,19 @@ export class NotesManager {
       const starPower = inStarPowerSection(time);
 
       for (const note of group) {
-        if (isDrums) {
-          const interpreted = interpretDrumNote(note);
+        const geometry = resolveNoteGeometry(this.instrument, note);
+        if (!geometry) continue;
 
-          if (interpreted.isKick) {
-            prepared.push({
-              note,
-              msTime: note.msTime,
-              msLength: 0, // Drums don't have sustains
-              xPosition: 0, // kick has no lane X offset -- centered via sprite center
-              inStarPower: starPower,
-              isKick: true,
-              isOpen: false,
-              lane: -1,
-            });
-          } else {
-            const lane = PAD_TO_HIGHWAY_LANE[interpreted.pad] ?? -1;
-
-            if (lane !== -1) {
-              prepared.push({
-                note,
-                msTime: note.msTime,
-                msLength: 0, // Drums don't have sustains
-                xPosition: calculateNoteXOffset(this.instrument, lane),
-                inStarPower: starPower,
-                isKick: false,
-                isOpen: false,
-                lane,
-              });
-            }
-          }
-        } else {
-          // Guitar / bass
-          if (note.type === noteTypes.open) {
-            prepared.push({
-              note,
-              msTime: note.msTime,
-              msLength: note.msLength,
-              xPosition: 0,
-              inStarPower: starPower,
-              isKick: false,
-              isOpen: true,
-              lane: -1,
-            });
-          } else {
-            const lane =
-              note.type === noteTypes.green
-                ? 0
-                : note.type === noteTypes.red
-                  ? 1
-                  : note.type === noteTypes.yellow
-                    ? 2
-                    : note.type === noteTypes.blue
-                      ? 3
-                      : note.type === noteTypes.orange
-                        ? 4
-                        : -1;
-
-            if (lane !== -1) {
-              prepared.push({
-                note,
-                msTime: note.msTime,
-                msLength: note.msLength,
-                xPosition: calculateNoteXOffset(this.instrument, lane),
-                inStarPower: starPower,
-                isKick: false,
-                isOpen: false,
-                lane,
-              });
-            }
-          }
-        }
+        prepared.push({
+          note,
+          msTime: note.msTime,
+          msLength: supportsSustain ? note.msLength : 0,
+          xPosition: geometry.xPosition,
+          inStarPower: starPower,
+          isKick: geometry.isKick,
+          isOpen: geometry.isOpen,
+          lane: geometry.lane,
+        });
       }
     }
 

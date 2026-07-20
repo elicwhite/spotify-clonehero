@@ -1,5 +1,4 @@
 import {Difficulty, Instrument} from '@eliwhite/scan-chart';
-import {type DrumPad} from '../../drum-mapping/noteToInstrument';
 import type {ParsedChart} from '../chorus-chart-processing';
 
 export type Track = ParsedChart['trackData'][0];
@@ -18,14 +17,6 @@ export const SCALE = 0.105;
 export const NOTE_SPAN_WIDTH = 0.95;
 /** How far ahead (in ms) to render notes beyond the strikeline. */
 export const HIGHWAY_DURATION_MS = 1500;
-
-/** DrumPad -> highway lane index (0-3). Kick is handled separately. */
-export const PAD_TO_HIGHWAY_LANE: Partial<Record<DrumPad, number>> = {
-  red: 0,
-  yellow: 1,
-  blue: 2,
-  green: 3,
-};
 
 export const NOTE_COLORS = {
   green: '#01B11A',

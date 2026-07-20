@@ -143,4 +143,48 @@ describe('trackToElements', () => {
     const msTimes = elements.map(e => e.msTime);
     expect(msTimes).toEqual([...msTimes].sort((a, b) => a - b));
   });
+
+  describe('five-fret (guitar)', () => {
+    it('converts an open note to a full-width element with sustain length', () => {
+      const track = makeTrack([[note(noteTypes.open, 0, 0, 0, 240)]], {
+        instrument: 'guitar',
+      });
+      const elements = trackToElements(track);
+
+      expect(elements).toHaveLength(1);
+      expect(elements[0].key).toBe('note:0:open');
+      const data = elements[0].data as NoteElementData;
+      expect(data.isOpen).toBe(true);
+      expect(data.isKick).toBe(false);
+      expect(data.lane).toBe(-1);
+      // Five-fret schema declares supportsSustain: true.
+      expect(data.msLength).toBe(240);
+    });
+
+    it('converts fretted notes to their pad lanes, ordered green/red/yellow/blue/orange', () => {
+      const track = makeTrack(
+        [
+          [note(noteTypes.green, 0, 0)],
+          [note(noteTypes.red, 480, 500)],
+          [note(noteTypes.yellow, 960, 1000)],
+          [note(noteTypes.blue, 1440, 1500)],
+          [note(noteTypes.orange, 1920, 2000)],
+        ],
+        {instrument: 'guitar'},
+      );
+      const elements = trackToElements(track);
+
+      expect(elements).toHaveLength(5);
+      const lanes = elements.map(e => (e.data as NoteElementData).lane);
+      expect(lanes).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it('drops sustain length for an instrument whose schema has no supportsSustain (drums)', () => {
+      const track = makeTrack([[note(noteTypes.redDrum, 0, 0, 0, 240)]]);
+      const elements = trackToElements(track);
+
+      const data = elements[0].data as NoteElementData;
+      expect(data.msLength).toBe(0);
+    });
+  });
 });

@@ -45,8 +45,8 @@ export type {ChartEditorProps} from './ChartEditor';
 
 // Sub-components (for advanced composition)
 export {default as HighwayEditor} from './HighwayEditor';
-export {default as DrumHighwayPreview} from './DrumHighwayPreview';
-export type {HighwayRendererHandle} from './DrumHighwayPreview';
+export {default as HighwayPreview} from './HighwayPreview';
+export type {HighwayRendererHandle} from './HighwayPreview';
 export {default as TransportControls} from './TransportControls';
 export {default as EditToolbar} from './EditToolbar';
 export {default as LeftSidebar} from './LeftSidebar';

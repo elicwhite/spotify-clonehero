@@ -49,6 +49,14 @@ export interface LaneDefinition {
    * because some lanes (vocals, dance) have no highway position.
    */
   worldXOffset?: number;
+  /**
+   * True for a lane that renders as a single full-width sprite centered on
+   * the highway rather than a pad lane (drums' kick, five-fret's open
+   * note). Renderer geometry (`lib/preview/highway/notePlacement.ts`) uses
+   * this instead of an `instrument === 'drums'` check to decide between
+   * "kick/open" full-width placement and pad-lane placement.
+   */
+  fullWidth?: boolean;
 }
 
 export interface FlagBinding {
@@ -93,4 +101,14 @@ export interface InstrumentSchema {
    * participates in the shift axis (e.g. five-fret).
    */
   laneShiftExcludes?: NoteType[];
+  /**
+   * True when notes on this track carry a sustain length rendered as a
+   * highway tail (five-fret). Drum hits have no sustain, so drum schemas
+   * omit this.
+   */
+  supportsSustain?: boolean;
+  /** World-space width of the highway floor plane for this instrument. */
+  highwayWidth: number;
+  /** Strikeline hitbox sprite texture path for this instrument. */
+  hitboxTexturePath: string;
 }

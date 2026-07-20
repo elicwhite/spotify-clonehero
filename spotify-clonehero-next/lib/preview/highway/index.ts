@@ -6,14 +6,13 @@ import {AudioManager} from '../audioManager';
 import {
   getHighwayTexture,
   createHighway,
-  createDrumHighway,
   createEmptyHighway,
   loadAndCreateHitBox,
-  loadAndCreateDrumHitBox,
   createWaveformSurface,
   createGridOverlay,
   type HighwayMode,
 } from './HighwayScene';
+import {schemaForTrack} from '../../chart-edit/instruments';
 import type {WaveformSurface} from './WaveformSurface';
 import type {WaveformSurfaceConfig} from './WaveformSurface';
 import type {GridOverlay} from './GridOverlay';
@@ -36,7 +35,6 @@ export {
   type PreparedNote,
   SCALE,
   NOTE_SPAN_WIDTH,
-  PAD_TO_HIGHWAY_LANE,
   calculateNoteXOffset,
 } from './types';
 export {NotesManager, type NotesDiff} from './NotesManager';
@@ -403,14 +401,17 @@ export const setupRenderer = (
       const emptyHighway = createEmptyHighway();
       scene.add(emptyHighway);
       classicHighwayMesh = emptyHighway;
-    } else if (track.instrument === 'drums') {
-      const drumHighway = createDrumHighway(highwayTexture);
-      scene.add(drumHighway);
-      classicHighwayMesh = drumHighway;
-      scene.add(await loadAndCreateDrumHitBox(textureLoader));
     } else {
-      scene.add(createHighway(highwayTexture));
-      scene.add(await loadAndCreateHitBox(textureLoader));
+      const schema = schemaForTrack(track, chart.drumType);
+      const highway = createHighway(highwayTexture, schema?.highwayWidth ?? 1);
+      scene.add(highway);
+      classicHighwayMesh = highway;
+      scene.add(
+        await loadAndCreateHitBox(
+          textureLoader,
+          schema?.hitboxTexturePath ?? '/assets/preview/assets/isolated.png',
+        ),
+      );
     }
 
     const animatedTextureManager = new AnimatedTextureManager();

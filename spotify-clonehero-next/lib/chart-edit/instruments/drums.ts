@@ -46,6 +46,7 @@ const KICK: LaneDefinition = {
   color: '#f8b272',
   defaultKey: '1',
   worldXOffset: KICK_X,
+  fullWidth: true,
 };
 
 const RED: LaneDefinition = {
@@ -119,6 +120,8 @@ export const drums4LaneSchema: InstrumentSchema = {
   // Kick spans the full highway rather than sitting in a pad lane, so it
   // never participates in lane-shift moves (arrow keys, note drag).
   laneShiftExcludes: [noteTypes.kick],
+  highwayWidth: 0.9,
+  hitboxTexturePath: '/assets/preview/assets/isolated-drums.png',
 };
 
 /**
@@ -141,6 +144,8 @@ export const drums5LaneSchema: InstrumentSchema = {
   ],
   flagBindings: drums4LaneSchema.flagBindings,
   laneShiftExcludes: [noteTypes.kick],
+  highwayWidth: 0.9,
+  hitboxTexturePath: '/assets/preview/assets/isolated-drums.png',
 };
 
 /**

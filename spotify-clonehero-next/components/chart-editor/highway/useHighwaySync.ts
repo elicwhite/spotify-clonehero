@@ -14,7 +14,7 @@
  */
 
 import {useEffect, type RefObject} from 'react';
-import type {HighwayRendererHandle} from '../DrumHighwayPreview';
+import type {HighwayRendererHandle} from '../HighwayPreview';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import type {HighwayMode} from '@/lib/preview/highway';

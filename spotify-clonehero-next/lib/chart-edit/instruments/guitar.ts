@@ -20,6 +20,7 @@ const OPEN: LaneDefinition = {
   noteType: noteTypes.open,
   label: 'Open',
   color: '#a266ff',
+  fullWidth: true,
 };
 
 const GREEN: LaneDefinition = {
@@ -71,6 +72,9 @@ function fiveFretSchema(instrument: Instrument): InstrumentSchema {
       {flag: 'hopo', label: 'HOPO', defaultKey: 'h'},
       {flag: 'tap', label: 'Tap', defaultKey: 't'},
     ],
+    supportsSustain: true,
+    highwayWidth: 1,
+    hitboxTexturePath: '/assets/preview/assets/isolated.png',
   };
 }
 

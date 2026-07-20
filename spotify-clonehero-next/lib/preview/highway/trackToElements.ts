@@ -1,29 +1,17 @@
 import {noteTypes} from '@eliwhite/scan-chart';
-import {interpretDrumNote} from '../../drum-mapping/noteToInstrument';
+import {schemaForInstrument} from '../../chart-edit/instruments';
 import type {ChartElement} from './SceneReconciler';
 import type {NoteElementData} from './NoteRenderer';
-import {PAD_TO_HIGHWAY_LANE, calculateNoteXOffset, type Track} from './types';
+import {resolveNoteGeometry} from './notePlacement';
+import type {Track} from './types';
 
 // ---------------------------------------------------------------------------
-// Drum pad type names for key generation
+// NoteType -> name, for element key generation (e.g. 'note:480:redDrum')
 // ---------------------------------------------------------------------------
 
-const DRUM_NOTE_TYPE_NAMES: Record<number, string> = {
-  [noteTypes.kick]: 'kick',
-  [noteTypes.redDrum]: 'redDrum',
-  [noteTypes.yellowDrum]: 'yellowDrum',
-  [noteTypes.blueDrum]: 'blueDrum',
-  [noteTypes.greenDrum]: 'greenDrum',
-};
-
-const GUITAR_NOTE_TYPE_NAMES: Record<number, string> = {
-  [noteTypes.open]: 'open',
-  [noteTypes.green]: 'green',
-  [noteTypes.red]: 'red',
-  [noteTypes.yellow]: 'yellow',
-  [noteTypes.blue]: 'blue',
-  [noteTypes.orange]: 'orange',
-};
+const NOTE_TYPE_NAMES: Record<number, string> = Object.fromEntries(
+  Object.entries(noteTypes).map(([name, value]) => [value, name]),
+);
 
 // ---------------------------------------------------------------------------
 // trackToElements
@@ -67,7 +55,8 @@ function dataShallowEqual(a: NoteElementData, b: NoteElementData): boolean {
  * dataEqual() short-circuit on `a.data === b.data`.
  */
 export function trackToElements(track: Track): ChartElement[] {
-  const isDrums = track.instrument === 'drums';
+  const schema = schemaForInstrument(track.instrument);
+  const supportsSustain = schema?.supportsSustain ?? false;
   const starPowerSections = track.starPowerSections;
 
   // Build sorted SP sections for binary search
@@ -113,86 +102,23 @@ export function trackToElements(track: Track): ChartElement[] {
 
     for (const note of group) {
       const tick = note.tick ?? 0;
+      const typeName = NOTE_TYPE_NAMES[note.type];
+      if (!typeName) continue;
 
-      if (isDrums) {
-        const interpreted = interpretDrumNote(note);
-        const typeName = DRUM_NOTE_TYPE_NAMES[note.type];
-        if (!typeName) continue;
+      const geometry = resolveNoteGeometry(track.instrument, note);
+      if (!geometry) continue;
 
-        if (interpreted.isKick) {
-          const key = `note:${tick}:${typeName}`;
-          const data = cachedData(key, {
-            note,
-            xPosition: 0,
-            inStarPower: starPower,
-            isKick: true,
-            isOpen: false,
-            lane: -1,
-            msLength: 0,
-          });
-          elements.push({key, kind: 'note', msTime: note.msTime, data});
-        } else {
-          const lane = PAD_TO_HIGHWAY_LANE[interpreted.pad] ?? -1;
-          if (lane !== -1) {
-            const key = `note:${tick}:${typeName}`;
-            const data = cachedData(key, {
-              note,
-              xPosition: calculateNoteXOffset(track.instrument, lane),
-              inStarPower: starPower,
-              isKick: false,
-              isOpen: false,
-              lane,
-              msLength: 0,
-            });
-            elements.push({key, kind: 'note', msTime: note.msTime, data});
-          }
-        }
-      } else {
-        // Guitar / bass
-        const typeName = GUITAR_NOTE_TYPE_NAMES[note.type];
-        if (!typeName) continue;
-
-        if (note.type === noteTypes.open) {
-          const key = `note:${tick}:${typeName}`;
-          const data = cachedData(key, {
-            note,
-            xPosition: 0,
-            inStarPower: starPower,
-            isKick: false,
-            isOpen: true,
-            lane: -1,
-            msLength: note.msLength,
-          });
-          elements.push({key, kind: 'note', msTime: note.msTime, data});
-        } else {
-          const lane =
-            note.type === noteTypes.green
-              ? 0
-              : note.type === noteTypes.red
-                ? 1
-                : note.type === noteTypes.yellow
-                  ? 2
-                  : note.type === noteTypes.blue
-                    ? 3
-                    : note.type === noteTypes.orange
-                      ? 4
-                      : -1;
-
-          if (lane !== -1) {
-            const key = `note:${tick}:${typeName}`;
-            const data = cachedData(key, {
-              note,
-              xPosition: calculateNoteXOffset(track.instrument, lane),
-              inStarPower: starPower,
-              isKick: false,
-              isOpen: false,
-              lane,
-              msLength: note.msLength,
-            });
-            elements.push({key, kind: 'note', msTime: note.msTime, data});
-          }
-        }
-      }
+      const key = `note:${tick}:${typeName}`;
+      const data = cachedData(key, {
+        note,
+        xPosition: geometry.xPosition,
+        inStarPower: starPower,
+        isKick: geometry.isKick,
+        isOpen: geometry.isOpen,
+        lane: geometry.lane,
+        msLength: supportsSustain ? note.msLength : 0,
+      });
+      elements.push({key, kind: 'note', msTime: note.msTime, data});
     }
   }
 
