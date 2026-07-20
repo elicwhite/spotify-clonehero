@@ -1,11 +1,6 @@
 import * as THREE from 'three';
 import type {ElementRenderer} from './SceneReconciler';
-import {
-  SCALE,
-  GUITAR_LANE_COLORS,
-  HIGHWAY_DURATION_MS,
-  type Note,
-} from './types';
+import {SCALE, HIGHWAY_DURATION_MS, type Note} from './types';
 
 // ---------------------------------------------------------------------------
 // NoteElementData -- the data payload for note elements
@@ -64,6 +59,10 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     opts: {inStarPower: boolean},
   ) => THREE.SpriteMaterial;
   private clippingPlanes: THREE.Plane[];
+  /** Sustain tail color per pad lane index, sourced from the active
+   *  `InstrumentSchema`'s `lanes[].color` (five-fret only -- drums don't
+   *  support sustain, so this stays empty for drum tracks). */
+  private laneColors: string[];
 
   // Instance-level overlay materials (not module-level singletons).
   // Using instance fields ensures clippingPlanes reference stays valid
@@ -89,9 +88,11 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
       opts: {inStarPower: boolean},
     ) => THREE.SpriteMaterial,
     clippingPlanes: THREE.Plane[],
+    laneColors: string[] = [],
   ) {
     this.getTextureForNote = getTextureForNote;
     this.clippingPlanes = clippingPlanes;
+    this.laneColors = laneColors;
   }
 
   // -----------------------------------------------------------------------
@@ -353,8 +354,8 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
   private createSustain(group: THREE.Group, data: NoteElementData): THREE.Mesh {
     const sustainWorldHeight = 2 * (data.msLength / HIGHWAY_DURATION_MS);
     const color =
-      data.lane >= 0 && data.lane < GUITAR_LANE_COLORS.length
-        ? GUITAR_LANE_COLORS[data.lane]
+      data.lane >= 0 && data.lane < this.laneColors.length
+        ? this.laneColors[data.lane]
         : '#FFFFFF';
     const sustainWidth = data.isOpen ? SCALE * 5 : SCALE * 0.3;
 

@@ -49,6 +49,16 @@ function padLanes(schema: InstrumentSchema): LaneDefinition[] {
 }
 
 /**
+ * Pad lane colors in display order, e.g. for `NoteRenderer`'s sustain-tail
+ * color lookup (`data.lane` indexes into this array the same way it indexes
+ * into `padLanes`). Sourced from `InstrumentSchema.lanes[].color` so five-fret
+ * sustain colors aren't duplicated as a separate hardcoded constant.
+ */
+export function padLaneColors(schema: InstrumentSchema): string[] {
+  return padLanes(schema).map(lane => lane.color);
+}
+
+/**
  * Resolves a note's highway geometry (lane index, full-width flag, X
  * position) from the `InstrumentSchema` for its track's instrument.
  *

@@ -24,6 +24,7 @@ import {SceneReconciler} from './SceneReconciler';
 import {NoteRenderer} from './NoteRenderer';
 import {MarkerRenderer} from './MarkerRenderer';
 import {trackToElements} from './trackToElements';
+import {padLaneColors} from './notePlacement';
 import {LyricsOverlay} from './LyricsOverlay';
 import type {Track} from './types';
 
@@ -395,6 +396,7 @@ export const setupRenderer = (
 
   async function prepTrack(scene: THREE.Scene, track: Track) {
     const {highwayTexture} = await initPromise;
+    const schema = schemaForTrack(track, chart.drumType);
 
     if (!showDrumLanes) {
       // Lanes-off mode: neutral floor, no hitbox, no drum geometry.
@@ -402,7 +404,6 @@ export const setupRenderer = (
       scene.add(emptyHighway);
       classicHighwayMesh = emptyHighway;
     } else {
-      const schema = schemaForTrack(track, chart.drumType);
       const highway = createHighway(highwayTexture, schema?.highwayWidth ?? 1);
       scene.add(highway);
       classicHighwayMesh = highway;
@@ -427,6 +428,7 @@ export const setupRenderer = (
     const noteRenderer = new NoteRenderer(
       getTextureForNote,
       noteClippingPlanes,
+      schema ? padLaneColors(schema) : [],
     );
 
     // Create marker renderers for all marker types

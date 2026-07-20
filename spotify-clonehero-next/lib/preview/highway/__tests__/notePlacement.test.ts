@@ -4,8 +4,9 @@
  */
 
 import {noteTypes, noteFlags, type NoteType} from '@eliwhite/scan-chart';
-import {resolveNoteGeometry} from '../notePlacement';
+import {resolveNoteGeometry, padLaneColors} from '../notePlacement';
 import {calculateNoteXOffset} from '../types';
+import {guitarSchema, drums4LaneSchema} from '../../../chart-edit/instruments';
 
 describe('resolveNoteGeometry', () => {
   describe('drums', () => {
@@ -123,5 +124,33 @@ describe('resolveNoteGeometry', () => {
       });
       expect(geometry).toBeNull();
     });
+  });
+});
+
+describe('padLaneColors', () => {
+  it('returns pad lane colors in display order, sourced from the schema', () => {
+    const colors = padLaneColors(guitarSchema);
+    const padLanes = guitarSchema.lanes
+      .filter(lane => !lane.fullWidth)
+      .sort((a, b) => a.index - b.index);
+    expect(colors).toEqual(padLanes.map(lane => lane.color));
+    // Indexes line up with resolveNoteGeometry's `lane` output.
+    const greenGeometry = resolveNoteGeometry('guitar', {
+      type: noteTypes.green,
+      flags: 0,
+    });
+    expect(colors[greenGeometry!.lane]).toBe(
+      guitarSchema.lanes.find(l => l.noteType === noteTypes.green)!.color,
+    );
+  });
+
+  it('excludes full-width lanes (e.g. open/kick)', () => {
+    const colors = padLaneColors(guitarSchema);
+    expect(colors).toHaveLength(5); // green/red/yellow/blue/orange, not open
+  });
+
+  it('works for the drum schema too', () => {
+    const colors = padLaneColors(drums4LaneSchema);
+    expect(colors).toHaveLength(4); // red/yellow/blue/green, not kick
   });
 });
