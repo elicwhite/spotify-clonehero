@@ -158,7 +158,7 @@ export function chartEditorReducer(
       };
 
     case 'SET_CLIPBOARD':
-      return {...state, clipboard: action.notes};
+      return {...state, clipboard: action.clipboard};
 
     case 'SET_TRACK_VOLUME': {
       return {
@@ -208,7 +208,17 @@ export function chartEditorReducer(
 
     case 'SET_ACTIVE_SCOPE':
       if (state.activeScope === action.scope) return state;
-      return {...state, activeScope: action.scope};
+      // Selection ids are scope-blind (e.g. a note's key is
+      // `"${tick}:${type}"` with no track encoded), so a stale selection
+      // from the previous scope can't be safely reinterpreted against the
+      // new one — retargeting a command at the old ids would silently
+      // edit the wrong track. Clear rather than guess (plan 0037 Task 6).
+      return {
+        ...state,
+        activeScope: action.scope,
+        selection: new Map(),
+        hovered: null,
+      };
 
     default:
       return state;

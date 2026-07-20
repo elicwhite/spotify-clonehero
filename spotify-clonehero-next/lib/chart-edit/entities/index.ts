@@ -81,12 +81,6 @@ export type CommandEntityKind = EntityKind | 'tempo' | 'timesig';
 /** Operation class an `EditCommand` performs, for capability gating. */
 export type CommandOperation = 'add' | 'delete' | 'update' | 'move';
 
-export interface EntityRef {
-  kind: EntityKind;
-  /** Stable id within `kind`. Format is kind-specific but opaque to consumers. */
-  id: string;
-}
-
 /**
  * Active scope hints for kinds that need to know "which slice of the
  * chart" they're operating on. Sections + tempos + time signatures are
@@ -104,6 +98,23 @@ export interface EntityContext {
    * `'vocals'` when omitted.
    */
   partName?: string;
+}
+
+/**
+ * Structured reference to a single selectable entity (plan 0037 Task 6).
+ * `key` is the same opaque per-kind id `entityHandlers`/selection stores
+ * always used (format is kind-specific, e.g. `"${tick}:${noteTypeName}"`
+ * for notes); `scope` records which track/vocal-part it was resolved
+ * against, since notes' and star-power's `key` alone doesn't encode that —
+ * two different tracks can both have a note keyed `"480:redDrum"`. Selection
+ * ids in `ChartEditorState.selection` stay plain opaque strings (untyped
+ * `key`s); `EntityRef` is how the MCP surface and cross-scope operations
+ * (clipboard paste) pair a `key` with the scope it's valid in.
+ */
+export interface EntityRef {
+  kind: EntityKind;
+  scope: EntityContext;
+  key: string;
 }
 
 function resolveTrack(

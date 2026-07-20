@@ -22,11 +22,17 @@ import {
   laneToType,
   defaultFlagsForType,
   toSchemaNote,
+  translateSchemaNote,
   type FlagName,
+  type SchemaNote,
 } from '../commands';
-import type {DrumNote} from '@/lib/chart-edit';
 import type {NoteType} from '@eliwhite/scan-chart';
-import {getDrumNotes, drums4LaneSchema} from '@/lib/chart-edit';
+import {
+  getDrumNotes,
+  drums4LaneSchema,
+  listNotes,
+  schemaForInstrument,
+} from '@/lib/chart-edit';
 import {
   buildTimedTempos,
   tickToMs,
@@ -201,18 +207,22 @@ export function useEditorKeyboard(onSave?: () => void) {
     () => {
       if (getSelectedIds(state, 'note').size === 0) return;
       const track = getActiveTrack();
-      if (!track) return;
-      const selected = getDrumNotes(track).filter(n =>
+      const trackKey = trackKeyFromScope(state.activeScope);
+      if (!track || !trackKey) return;
+      const schema = schemaForInstrument(trackKey.instrument) ?? drums4LaneSchema;
+      const selected = listNotes(track, schema).filter(n =>
         getSelectedIds(state, 'note').has(noteId(n)),
       );
       if (selected.length === 0) return;
 
       const minTick = Math.min(...selected.map(n => n.tick));
-      const normalized: DrumNote[] = selected.map(n => ({
-        ...n,
-        tick: n.tick - minTick,
-      }));
-      dispatch({type: 'SET_CLIPBOARD', notes: normalized});
+      const notes: SchemaNote[] = selected.map(n =>
+        toSchemaNote({...n, tick: n.tick - minTick}),
+      );
+      dispatch({
+        type: 'SET_CLIPBOARD',
+        clipboard: {notes, sourceScope: state.activeScope},
+      });
     },
     {enabled: getSelectedIds(state, 'note').size > 0},
   );
@@ -225,23 +235,25 @@ export function useEditorKeyboard(onSave?: () => void) {
     () => {
       if (getSelectedIds(state, 'note').size === 0) return;
       const track = getActiveTrack();
-      if (!track) return;
-      const selected = getDrumNotes(track).filter(n =>
+      const trackKey = trackKeyFromScope(state.activeScope);
+      if (!track || !trackKey) return;
+      const schema = schemaForInstrument(trackKey.instrument) ?? drums4LaneSchema;
+      const selected = listNotes(track, schema).filter(n =>
         getSelectedIds(state, 'note').has(noteId(n)),
       );
       if (selected.length === 0) return;
 
       // Copy
       const minTick = Math.min(...selected.map(n => n.tick));
-      const normalized: DrumNote[] = selected.map(n => ({
-        ...n,
-        tick: n.tick - minTick,
-      }));
-      dispatch({type: 'SET_CLIPBOARD', notes: normalized});
+      const notes: SchemaNote[] = selected.map(n =>
+        toSchemaNote({...n, tick: n.tick - minTick}),
+      );
+      dispatch({
+        type: 'SET_CLIPBOARD',
+        clipboard: {notes, sourceScope: state.activeScope},
+      });
 
       // Delete
-      const trackKey = trackKeyFromScope(state.activeScope);
-      if (!trackKey) return;
       executeCommand(
         new DeleteNotesCommand(
           new Set(getSelectedIds(state, 'note')),
@@ -259,17 +271,37 @@ export function useEditorKeyboard(onSave?: () => void) {
   useHotkey(
     'Mod+V',
     () => {
-      if (state.clipboard.length === 0 || !state.chartDoc) return;
+      const clipboard = state.clipboard;
+      if (!clipboard || clipboard.notes.length === 0 || !state.chartDoc)
+        return;
       const cursorTick = state.cursorTick;
 
       const trackKey = trackKeyFromScope(state.activeScope);
       if (!trackKey) return;
-      const commands = state.clipboard.map(
-        n =>
-          new AddNoteCommand(
-            toSchemaNote({...n, tick: n.tick + cursorTick}),
-            trackKey,
+      const targetSchema =
+        schemaForInstrument(trackKey.instrument) ?? drums4LaneSchema;
+      const sourceTrackKey = trackKeyFromScope(clipboard.sourceScope);
+      const sourceSchema = sourceTrackKey
+        ? (schemaForInstrument(sourceTrackKey.instrument) ?? targetSchema)
+        : targetSchema;
+
+      // Translate each note through the target track's schema (lane-by-lane
+      // via translateSchemaNote) so pasting across instruments/difficulties
+      // with different lane layouts lands on the right lane rather than
+      // reusing the source's raw NoteType. Notes with no counterpart lane
+      // in the target schema are dropped.
+      const translated = clipboard.notes
+        .map(n =>
+          translateSchemaNote(
+            {...n, tick: n.tick + cursorTick},
+            sourceSchema,
+            targetSchema,
           ),
+        )
+        .filter((n): n is SchemaNote => n !== null);
+
+      const commands = translated.map(
+        n => new AddNoteCommand(n, trackKey, targetSchema),
       );
 
       if (commands.length > 0) {
@@ -277,13 +309,11 @@ export function useEditorKeyboard(onSave?: () => void) {
           new BatchCommand(commands, `Paste ${commands.length} note(s)`),
         );
 
-        const newIds = new Set(
-          state.clipboard.map(n => noteId({...n, tick: n.tick + cursorTick})),
-        );
+        const newIds = new Set(translated.map(n => noteId(n)));
         dispatch({type: 'SET_SELECTION', kind: 'note', ids: newIds});
       }
     },
-    {enabled: state.clipboard.length > 0 && state.chartDoc !== null},
+    {enabled: state.clipboard !== null && state.chartDoc !== null},
   );
 
   // -----------------------------------------------------------------------

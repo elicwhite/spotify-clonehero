@@ -256,6 +256,27 @@ export function toSchemaNote(note: {
   };
 }
 
+/**
+ * Translate a `SchemaNote` copied under `sourceSchema` into `targetSchema`'s
+ * terms, by lane index (plan 0037 Task 6 — cross-difficulty/instrument
+ * clipboard paste). `note.type` is looked up in the source schema's lanes to
+ * find its lane index, then re-resolved against the same lane index in the
+ * target schema. Returns `null` when the source lane has no counterpart in
+ * the target schema (e.g. pasting a 5-lane-only green cymbal note into a
+ * 4-lane drum track) — callers should drop untranslatable notes rather than
+ * silently mis-map them to an unrelated lane.
+ */
+export function translateSchemaNote(
+  note: SchemaNote,
+  sourceSchema: InstrumentSchema,
+  targetSchema: InstrumentSchema,
+): SchemaNote | null {
+  if (sourceSchema === targetSchema) return note;
+  const lane = schemaTypeToLane(sourceSchema, note.type);
+  if (lane === -1 || lane >= targetSchema.lanes.length) return null;
+  return {...note, type: schemaLaneToType(targetSchema, lane)};
+}
+
 export class AddNoteCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds = KIND.note;

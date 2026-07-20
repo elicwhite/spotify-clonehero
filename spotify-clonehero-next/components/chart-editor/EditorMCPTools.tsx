@@ -3,7 +3,8 @@
 import {useEffect, useRef} from 'react';
 import {useChartEditorContext} from './ChartEditorContext';
 import {getSelectedIds, selectActiveTrack} from '@/lib/chart-editor-core';
-import {trackKeyFromScope} from './scope';
+import {describeScope, entityContextFromScope, trackKeyFromScope} from './scope';
+import type {EntityRef} from '@/lib/chart-edit';
 import {useExecuteCommand, useUndoRedo} from './hooks/useEditCommands';
 import {
   noteId,
@@ -104,16 +105,22 @@ export default function EditorMCPTools() {
       execute: async () => {
         const s = stateRef.current;
         const am = audioManagerRef.current;
+        // EntityRef (plan 0037 Task 6): `ref.scope` pairs each note's
+        // opaque `id`/`key` with the track it was resolved against, so an
+        // MCP client can tell "note 480:redDrum in drums/expert" apart from
+        // the identically-keyed note in drums/hard.
         let selectedNotes: Array<{
           id: string;
           tick: number;
           type: string;
           flags: Record<string, boolean>;
+          ref: EntityRef;
         }> = [];
         const selectedIds = getSelectedIds(s, 'note');
         if (s.chartDoc && selectedIds.size > 0) {
           const track = selectActiveTrack(s);
           if (track) {
+            const scope = entityContextFromScope(s.activeScope);
             selectedNotes = getDrumNotes(track)
               .filter(n => selectedIds.has(noteId(n)))
               .map(n => ({
@@ -125,6 +132,7 @@ export default function EditorMCPTools() {
                   accent: !!(n.flags & noteFlags.accent),
                   ghost: !!(n.flags & noteFlags.ghost),
                 },
+                ref: {kind: 'note', scope, key: noteId(n)},
               }));
           }
         }
@@ -143,15 +151,16 @@ export default function EditorMCPTools() {
                   dirty: s.dirty,
                   currentTimeMs: am ? am.currentTime * 1000 : 0,
                   durationMs: am ? am.duration * 1000 : 0,
+                  // Active editing scope (plan 0037 Task 6) — reports
+                  // whatever track/vocal-part/global the editor is actually
+                  // scoped to, rather than a hardcoded drums/expert.
+                  activeScope: s.activeScope,
+                  activeScopeLabel: describeScope(s.activeScope),
                   selectedNoteCount: selectedIds.size,
                   selectedNotes,
                   totalNotes: s.chartDoc
                     ? (() => {
-                        const t = s.chartDoc!.parsedChart.trackData.find(
-                          tr =>
-                            tr.instrument === 'drums' &&
-                            tr.difficulty === 'expert',
-                        );
+                        const t = selectActiveTrack(s);
                         return t ? getDrumNotes(t).length : 0;
                       })()
                     : 0,

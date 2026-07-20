@@ -1,13 +1,9 @@
 import type {Dispatch, RefObject, MutableRefObject} from 'react';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type {
-  ChartDocument,
-  DrumNote,
-  DownbeatFlags,
-  EntityKind,
-} from '@/lib/chart-edit';
+import type {ChartDocument, DownbeatFlags, EntityKind} from '@/lib/chart-edit';
 import type {
   EditCommand,
+  SchemaNote,
   TempoGlueMode,
 } from '@/components/chart-editor/commands';
 import type {EditorCapabilities} from '@/components/chart-editor/capabilities';
@@ -137,8 +133,16 @@ export interface ChartEditorState {
   undoDocStack: ChartDocument[];
   /** Copy of chart doc snapshots for redo. */
   redoDocStack: ChartDocument[];
-  /** Clipboard for copy/paste operations. */
-  clipboard: DrumNote[];
+  /**
+   * Clipboard for copy/paste operations (plan 0037 Task 6). Schema-typed
+   * (`SchemaNote` — raw scan-chart `NoteType` + flag bitmask, not the
+   * drums-only `DrumNote` facade) and tagged with the scope it was copied
+   * from, so paste can translate lane-by-lane into the *target* scope's
+   * `InstrumentSchema` (`translateSchemaNote`) instead of assuming the
+   * source and destination tracks share a schema. Null when nothing has
+   * been copied yet.
+   */
+  clipboard: {notes: SchemaNote[]; sourceScope: EditorScope} | null;
   /** Depth of undo stack when the last save occurred. */
   savedUndoDepth: number;
 
@@ -197,7 +201,10 @@ export type ChartEditorAction =
   | {type: 'REDO'; chartDoc: ChartDocument}
   | {type: 'MARK_SAVED'}
   // -- Clipboard --
-  | {type: 'SET_CLIPBOARD'; notes: DrumNote[]}
+  | {
+      type: 'SET_CLIPBOARD';
+      clipboard: {notes: SchemaNote[]; sourceScope: EditorScope} | null;
+    }
   // -- Audio mixing --
   | {type: 'SET_TRACK_VOLUME'; track: string; volume: number}
   | {type: 'SET_SOLO_TRACK'; track: string | null}
@@ -253,7 +260,7 @@ export const initialState: ChartEditorState = {
   redoStack: [],
   undoDocStack: [],
   redoDocStack: [],
-  clipboard: [],
+  clipboard: null,
   savedUndoDepth: 0,
   // Audio mixing
   trackVolumes: {},

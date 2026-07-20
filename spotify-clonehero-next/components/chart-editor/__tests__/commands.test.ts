@@ -16,6 +16,7 @@ import {
   AddBPMCommand,
   AddNoteCommand,
   toSchemaNote,
+  translateSchemaNote,
   AddSectionCommand,
   AddTimeSignatureCommand,
   BatchCommand,
@@ -31,7 +32,8 @@ import {
   makeFixtureDoc,
   makeMultiPartVocalsDoc,
 } from './fixtures';
-import {getDrumNotes} from '@/lib/chart-edit';
+import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
+import {getDrumNotes, drums4LaneSchema, guitarSchema} from '@/lib/chart-edit';
 import type {ChartDocument, TrackKey} from '@/lib/chart-edit';
 import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 
@@ -393,6 +395,91 @@ describe('command execute + snapshot-restore', () => {
         notes.some(n => n.tick === 180 && n.type === noteTypes.yellowDrum),
       ).toBe(true);
       expectInputUntouched(before, pristine);
+    });
+  });
+
+  // Plan 0037 Task 6: scope-aware, schema-typed clipboard — notes are
+  // translated lane-by-lane between the copy source's and paste target's
+  // `InstrumentSchema` rather than assuming they match.
+  describe('translateSchemaNote', () => {
+    it('passes the note through unchanged when source and target schemas match', () => {
+      const note = toSchemaNote({
+        tick: 240,
+        type: noteTypes.redDrum,
+        length: 0,
+        flags: noteFlags.accent,
+      });
+      expect(
+        translateSchemaNote(note, drums4LaneSchema, drums4LaneSchema),
+      ).toEqual(note);
+    });
+
+    it('remaps by lane index across differently-shaped schemas', () => {
+      // drums4LaneSchema lane 0 = red; guitarSchema lane 0 = open.
+      const note = toSchemaNote({
+        tick: 240,
+        type: noteTypes.redDrum,
+        length: 0,
+        flags: 0,
+      });
+      const translated = translateSchemaNote(
+        note,
+        drums4LaneSchema,
+        guitarSchema,
+      );
+      expect(translated).toEqual({...note, type: noteTypes.open});
+    });
+
+    it('drops a note whose source lane has no counterpart in the target schema', () => {
+      // guitarSchema lane 5 = orange; drums4LaneSchema only has 5 lanes
+      // (indices 0-4), so nothing occupies lane 5.
+      const note = toSchemaNote({
+        tick: 240,
+        type: noteTypes.orange,
+        length: 0,
+        flags: 0,
+      });
+      expect(
+        translateSchemaNote(note, guitarSchema, drums4LaneSchema),
+      ).toBeNull();
+    });
+  });
+
+  describe('cross-difficulty paste (AddNoteCommand with a translated note)', () => {
+    it('lands the pasted note in the target track, leaving the source track untouched', () => {
+      const HARD_KEY: TrackKey = {instrument: 'drums', difficulty: 'hard'};
+      const before = makeFixtureDoc();
+      before.parsedChart.trackData.push(emptyTrackData('drums', 'hard'));
+
+      const sourceNote = getDrumNotes(before.parsedChart.trackData[0]).find(
+        n => n.tick === 0 && n.type === noteTypes.kick,
+      )!;
+      expect(sourceNote).toBeDefined();
+
+      // Same-schema translate (drums expert -> drums hard) is a passthrough;
+      // paste dispatches AddNoteCommand against the target track's key.
+      const pasted = translateSchemaNote(
+        toSchemaNote(sourceNote),
+        drums4LaneSchema,
+        drums4LaneSchema,
+      )!;
+      const cmd = new AddNoteCommand(pasted, HARD_KEY);
+      const after = cmd.execute(before);
+
+      const hardTrack = after.parsedChart.trackData.find(
+        t => t.instrument === 'drums' && t.difficulty === 'hard',
+      )!;
+      expect(
+        getDrumNotes(hardTrack).some(
+          n => n.tick === 0 && n.type === noteTypes.kick,
+        ),
+      ).toBe(true);
+
+      // The expert (source) track keeps exactly its original notes — the
+      // paste only added to hard.
+      const expertBefore = getDrumNotes(before.parsedChart.trackData[0]);
+      const expertAfter = getDrumNotes(after.parsedChart.trackData[0]);
+      expect(expertAfter).toEqual(expertBefore);
     });
   });
 });

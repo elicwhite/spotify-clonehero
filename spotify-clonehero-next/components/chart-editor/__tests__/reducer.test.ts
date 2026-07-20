@@ -327,7 +327,7 @@ describe('chartEditorReducer', () => {
   });
 
   describe('SET_ACTIVE_SCOPE', () => {
-    it('switches scopes and preserves selection state', () => {
+    it('switches scopes and clears the (scope-blind) selection', () => {
       const seeded = chartEditorReducer(initialState, {
         type: 'SET_SELECTION',
         kind: 'note',
@@ -338,7 +338,8 @@ describe('chartEditorReducer', () => {
         scope: DEFAULT_VOCALS_SCOPE,
       });
       expect(next.activeScope).toEqual(DEFAULT_VOCALS_SCOPE);
-      expect(next.selection.get('note')).toEqual(new Set(['0:kick']));
+      expect(next.selection.size).toBe(0);
+      expect(next.hovered).toBeNull();
     });
 
     it('returns the same state when the scope reference is unchanged', () => {
