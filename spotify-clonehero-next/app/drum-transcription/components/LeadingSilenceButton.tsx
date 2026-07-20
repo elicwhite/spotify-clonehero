@@ -23,6 +23,8 @@ import {
   applyLeadingSilence,
   type ChartDocument,
   type LeadingSilencePlan,
+  type CommandEntityKind,
+  type CommandOperation,
 } from '@/lib/chart-edit';
 
 /**
@@ -33,8 +35,23 @@ import {
  * matching the other tempo/anchor-affecting commands in commands.ts (the
  * ms-domain shift + resync isn't invertible in closed form).
  */
+/** Shifts every event's ms-domain position, so its intent spans every
+ *  entity kind — capability gates should treat it like a whole-doc edit,
+ *  not a targeted one. */
+const LEADING_SILENCE_KINDS = new Set<CommandEntityKind>([
+  'note',
+  'section',
+  'lyric',
+  'phrase-start',
+  'phrase-end',
+  'tempo',
+  'timesig',
+]);
+
 class AddLeadingSilenceCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = LEADING_SILENCE_KINDS;
+  readonly operations = new Set<CommandOperation>(['move']);
   private prevDoc: ChartDocument | null = null;
 
   constructor(private plan: LeadingSilencePlan) {

@@ -1,5 +1,6 @@
 export {EditorSession} from './EditorSession';
 export {chartEditorReducer} from './reducer';
+export {isCommandAllowed} from './capabilityGate';
 export {
   getFirstSelectedId,
   getSelectedIds,

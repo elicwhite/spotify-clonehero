@@ -59,6 +59,23 @@ export type EntityKind =
   | 'phrase-start'
   | 'phrase-end';
 
+/**
+ * Kind space for `EditCommand` capability gating (plan 0037 Task 3). A
+ * superset of `EntityKind`: `'tempo'`/`'timesig'` are edited only through
+ * dedicated commands (`MoveTempoMarkerCommand`, `AddTimeSignatureCommand`,
+ * the downbeat commands, …), never through the per-kind
+ * `EntityKindHandler` surface (`entityHandlers`, selection, hover, drag) —
+ * so they aren't `EntityKind`s, but dispatch gating still needs to key on
+ * them. A command declares the kind(s) it *intends* to edit here, which is
+ * not always the kind(s) it happens to touch: a tempo-marker move that
+ * KEEP-MS-remaps every note's tick declares `'tempo'`, not `'note'`, since
+ * the note ticks are a side effect of the tempo edit, not the edit itself.
+ */
+export type CommandEntityKind = EntityKind | 'tempo' | 'timesig';
+
+/** Operation class an `EditCommand` performs, for capability gating. */
+export type CommandOperation = 'add' | 'delete' | 'update' | 'move';
+
 export interface EntityRef {
   kind: EntityKind;
   /** Stable id within `kind`. Format is kind-specific but opaque to consumers. */

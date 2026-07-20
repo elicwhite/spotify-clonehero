@@ -182,6 +182,8 @@ export {
   cloneDocFor,
   noteId,
   type EntityKind,
+  type CommandEntityKind,
+  type CommandOperation,
   type EntityRef,
   type EntityKindHandler,
   type EntityContext,

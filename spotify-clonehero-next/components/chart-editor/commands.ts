@@ -24,6 +24,8 @@ import type {
   DrumNoteFlags,
   EntityContext,
   EntityKind,
+  CommandEntityKind,
+  CommandOperation,
   NormalizedVocalTrack,
   TrackKey,
 } from '@/lib/chart-edit';
@@ -163,7 +165,54 @@ export const noteId = entityNoteId;
 export interface EditCommand {
   execute(doc: ChartDocument): ChartDocument;
   readonly description: string;
+  /**
+   * Entity kind(s) this command *intends* to edit (plan 0037 Task 3) — the
+   * capability gate `EditorSession.dispatch` checks against
+   * `EditorCapabilities.editableEntities`. Intent, not incidental effect: a
+   * tempo-marker move that KEEP-MS-remaps every note's tick declares
+   * `{'tempo'}`, not `{'tempo', 'note'}` — the note retiming is a side
+   * effect of the tempo edit, not a separate note edit the caller asked for.
+   */
+  readonly entityKinds: ReadonlySet<CommandEntityKind>;
+  /**
+   * Operation class(es) this command performs, checked against
+   * `EditorCapabilities.allowedOperations`. A set (not a single value) so
+   * `BatchCommand` can report the union of its members' operations without
+   * losing information.
+   */
+  readonly operations: ReadonlySet<CommandOperation>;
 }
+
+/** Freeze-once singleton sets for the common single-kind/single-op cases,
+ *  so command construction doesn't allocate a new Set per instance. */
+const KIND = {
+  note: new Set<CommandEntityKind>(['note']),
+  section: new Set<CommandEntityKind>(['section']),
+  lyric: new Set<CommandEntityKind>(['lyric']),
+  phrase: new Set<CommandEntityKind>(['phrase-start', 'phrase-end']),
+  tempo: new Set<CommandEntityKind>(['tempo']),
+  timesig: new Set<CommandEntityKind>(['timesig']),
+} as const;
+
+const OP = {
+  add: new Set<CommandOperation>(['add']),
+  delete: new Set<CommandOperation>(['delete']),
+  update: new Set<CommandOperation>(['update']),
+  move: new Set<CommandOperation>(['move']),
+} as const;
+
+/** `EntityKind` → its singleton `entityKinds` set, for
+ *  `MoveEntitiesCommand` (parameterized by kind at construction). */
+const ENTITY_KIND_TO_COMMAND_KIND: Record<
+  EntityKind,
+  ReadonlySet<CommandEntityKind>
+> = {
+  note: KIND.note,
+  section: KIND.section,
+  lyric: KIND.lyric,
+  'phrase-start': KIND.phrase,
+  'phrase-end': KIND.phrase,
+};
 
 // ---------------------------------------------------------------------------
 // AddNoteCommand
@@ -171,6 +220,8 @@ export interface EditCommand {
 
 export class AddNoteCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = KIND.note;
+  readonly operations = OP.add;
 
   constructor(
     private note: DrumNote,
@@ -216,6 +267,8 @@ export class AddNoteCommand implements EditCommand {
 
 export class DeleteNotesCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = KIND.note;
+  readonly operations = OP.delete;
 
   constructor(
     private noteIds: Set<string>,
@@ -256,6 +309,8 @@ const KIND_LABELS: Record<EntityKind, string> = {
 
 export class MoveEntitiesCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds: ReadonlySet<CommandEntityKind>;
+  readonly operations = OP.move;
   private readonly ctx: EntityContext;
 
   constructor(
@@ -270,6 +325,7 @@ export class MoveEntitiesCommand implements EditCommand {
     ctx?: EntityContext,
   ) {
     this.ctx = ctx ?? {};
+    this.entityKinds = ENTITY_KIND_TO_COMMAND_KIND[kind];
     const noun = KIND_LABELS[kind];
     this.description = `Move ${ids.length} ${noun}${ids.length === 1 ? '' : 's'}`;
   }
@@ -293,6 +349,8 @@ export type FlagName = 'cymbal' | 'accent' | 'ghost';
 
 export class ToggleFlagCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = KIND.note;
+  readonly operations = OP.update;
 
   constructor(
     private noteIds: string[],
@@ -339,6 +397,8 @@ export class ToggleFlagCommand implements EditCommand {
  */
 export class ToggleKickCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = KIND.note;
+  readonly operations = OP.update;
 
   constructor(
     private noteIds: string[],
@@ -413,6 +473,8 @@ export class ToggleKickCommand implements EditCommand {
  */
 export class AddBPMCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = KIND.tempo;
+  readonly operations = OP.add;
 
   constructor(
     private tick: number,
@@ -450,6 +512,8 @@ export class AddBPMCommand implements EditCommand {
 
 export class AddTimeSignatureCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = KIND.timesig;
+  readonly operations = OP.add;
 
   constructor(
     private tick: number,
@@ -539,6 +603,13 @@ function cloneDocForRetime(doc: ChartDocument): ChartDocument {
  */
 export class MoveTempoMarkerCommand implements EditCommand {
   readonly description: string;
+  // Intent kind is 'tempo' even under KEEP-MS glue, where every note's tick
+  // is remapped as a side effect of the marker move — the note retiming
+  // isn't a separate note edit the caller asked for (see `EditCommand`'s
+  // `entityKinds` doc). The TEMPO capability preset relies on this: it
+  // grants 'tempo' but not 'note', and this move must still be allowed.
+  readonly entityKinds = KIND.tempo;
+  readonly operations = OP.move;
 
   constructor(
     private markerTick: number,
@@ -584,6 +655,8 @@ export class MoveTempoMarkerCommand implements EditCommand {
  */
 export class AddTempoMarkerCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = KIND.tempo;
+  readonly operations = OP.add;
 
   constructor(private tick: number) {
     this.description = `Add tempo marker at tick ${tick}`;
@@ -626,6 +699,10 @@ export class AddTempoMarkerCommand implements EditCommand {
  */
 export class DeleteTempoMarkerCommand implements EditCommand {
   readonly description: string;
+  // See `MoveTempoMarkerCommand` — KEEP-MS's note re-tick is an intent side
+  // effect, not a declared note edit.
+  readonly entityKinds = KIND.tempo;
+  readonly operations = OP.delete;
 
   constructor(
     private tick: number,
@@ -680,6 +757,8 @@ export class DeleteTempoMarkerCommand implements EditCommand {
  */
 export class RepredictTempoCommand implements EditCommand {
   readonly description = 'Structural tempo correction (re-predict)';
+  readonly entityKinds = KIND.tempo;
+  readonly operations = OP.update;
   /** Set after execute: whether the op fell back to RESNAP (no decoded
    * onsets). The UI reads this to surface the disclosure (plan 0061 §3a). */
   usedResnapFallback = false;
@@ -728,6 +807,8 @@ export class RepredictTempoCommand implements EditCommand {
  */
 export class CommitTempoCandidateCommand implements EditCommand {
   readonly description = 'Commit tempo correction';
+  readonly entityKinds = KIND.tempo;
+  readonly operations = OP.update;
 
   constructor(private candidate: ChartDocument) {}
 
@@ -817,6 +898,8 @@ function applyDownbeatFlags(
  */
 export class MarkDownbeatCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = KIND.timesig;
+  readonly operations = OP.update;
 
   /** `spanEndTick` is the piano-roll's audio-extended beat span (see
    *  {@link downbeatSpanEndTick}); omit it for callers with no audio view. */
@@ -857,6 +940,8 @@ export class MarkDownbeatCommand implements EditCommand {
  */
 export class UnmarkDownbeatCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = KIND.timesig;
+  readonly operations = OP.update;
 
   /** `spanEndTick` is the piano-roll's audio-extended beat span (see
    *  {@link downbeatSpanEndTick}); omit it for callers with no audio view. */
@@ -892,6 +977,8 @@ export class UnmarkDownbeatCommand implements EditCommand {
  */
 export class RephaseDownbeatsCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = KIND.timesig;
+  readonly operations = OP.update;
 
   /** `spanEndTick` is the piano-roll's audio-extended beat span (see
    *  {@link downbeatSpanEndTick}); omit it for callers with no audio view. */
@@ -923,12 +1010,25 @@ export class RephaseDownbeatsCommand implements EditCommand {
 
 export class BatchCommand implements EditCommand {
   readonly description: string;
+  /** Union of every member command's `entityKinds` — a batch is allowed
+   *  only if the capability gate allows *every* kind any member touches. */
+  readonly entityKinds: ReadonlySet<CommandEntityKind>;
+  /** Union of every member command's `operations`, same rationale. */
+  readonly operations: ReadonlySet<CommandOperation>;
 
   constructor(
     private commands: EditCommand[],
     description?: string,
   ) {
     this.description = description ?? `Batch: ${commands.length} command(s)`;
+    const kinds = new Set<CommandEntityKind>();
+    const ops = new Set<CommandOperation>();
+    for (const cmd of commands) {
+      for (const kind of cmd.entityKinds) kinds.add(kind);
+      for (const op of cmd.operations) ops.add(op);
+    }
+    this.entityKinds = kinds;
+    this.operations = ops;
   }
 
   /** Read-only access to the sub-commands (for incremental edit detection). */
@@ -951,6 +1051,8 @@ export class BatchCommand implements EditCommand {
 
 export class AddSectionCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = KIND.section;
+  readonly operations = OP.add;
 
   constructor(
     private tick: number,
@@ -972,6 +1074,8 @@ export class AddSectionCommand implements EditCommand {
 
 export class DeleteSectionCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = KIND.section;
+  readonly operations = OP.delete;
 
   constructor(
     private tick: number,
@@ -993,6 +1097,8 @@ export class DeleteSectionCommand implements EditCommand {
 
 export class RenameSectionCommand implements EditCommand {
   readonly description: string;
+  readonly entityKinds = KIND.section;
+  readonly operations = OP.update;
 
   constructor(
     private tick: number,
@@ -1112,6 +1218,8 @@ export function hasExistingLyrics(
  */
 export class ReplaceLyricsCommand implements EditCommand {
   readonly description = 'Add lyrics';
+  readonly entityKinds = KIND.lyric;
+  readonly operations = OP.update;
 
   constructor(private syllables: AlignedSyllable[]) {}
 
@@ -1146,6 +1254,8 @@ export class ReplaceLyricsCommand implements EditCommand {
  *  already exists there. */
 export class AddLyricCommand implements EditCommand {
   readonly description = 'Add lyric';
+  readonly entityKinds = KIND.lyric;
+  readonly operations = OP.add;
 
   constructor(
     private tick: number,
@@ -1164,6 +1274,8 @@ export class AddLyricCommand implements EditCommand {
  *  if that empties it (see `deleteLyric`). No-op if no lyric exists there. */
 export class DeleteLyricCommand implements EditCommand {
   readonly description = 'Delete lyric';
+  readonly entityKinds = KIND.lyric;
+  readonly operations = OP.delete;
 
   constructor(
     private tick: number,
@@ -1181,6 +1293,8 @@ export class DeleteLyricCommand implements EditCommand {
  *  "Edit lyric…" inline editor). No-op if no lyric exists there. */
 export class SetLyricTextCommand implements EditCommand {
   readonly description = 'Edit lyric text';
+  readonly entityKinds = KIND.lyric;
+  readonly operations = OP.update;
 
   constructor(
     private tick: number,
@@ -1210,6 +1324,8 @@ export class SetLyricTextCommand implements EditCommand {
  *  `addPhrase`). No-op if there's no room. */
 export class AddPhraseCommand implements EditCommand {
   readonly description = 'Add phrase';
+  readonly entityKinds = KIND.phrase;
+  readonly operations = OP.add;
 
   constructor(
     private tick: number,
@@ -1228,6 +1344,8 @@ export class AddPhraseCommand implements EditCommand {
  *  there. */
 export class DeletePhraseCommand implements EditCommand {
   readonly description = 'Delete phrase';
+  readonly entityKinds = KIND.phrase;
+  readonly operations = OP.delete;
 
   constructor(
     private tick: number,

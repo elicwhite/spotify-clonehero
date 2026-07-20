@@ -332,6 +332,8 @@ describe('command execute + snapshot-restore', () => {
       const order: string[] = [];
       const wrap = (label: string, inner: () => void) => ({
         description: label,
+        entityKinds: new Set<never>(),
+        operations: new Set<never>(),
         execute: (doc: typeof before) => {
           order.push(`${label}:execute`);
           inner();

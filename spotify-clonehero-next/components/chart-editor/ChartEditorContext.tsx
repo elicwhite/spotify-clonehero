@@ -38,7 +38,9 @@ export function ChartEditorProvider({
   // subscribes to via useSyncExternalStore. `activeScope`/`capabilities` are
   // provider props read once at mount (existing behavior: neither was ever
   // re-derived from a prop change).
-  const [session] = useState(() => new EditorSession({activeScope}));
+  const [session] = useState(
+    () => new EditorSession({activeScope}, capabilities),
+  );
 
   const state = useSyncExternalStore(session.subscribe, session.getState);
 

@@ -21,9 +21,26 @@
  * that omit the prop fall back to drum-edit for backward compatibility.
  */
 
-import type {EntityKind} from '@/lib/chart-edit';
+import type {CommandEntityKind, CommandOperation, EntityKind} from '@/lib/chart-edit';
 
 export interface EditorCapabilities {
+  /**
+   * Entity kinds `EditorSession.dispatch` allows an `EditCommand` to declare
+   * as its edit intent (plan 0037 Task 3) — the dispatch-path gate, checked
+   * against `command.entityKinds`. A superset of `EntityKind`: also covers
+   * `'tempo'`/`'timesig'`, which aren't hoverable/selectable/draggable UI
+   * entities but are still edited by commands (tempo markers, time
+   * signatures). This is the enforcement layer; `hoverable`/`selectable`/
+   * `draggable` below remain the UI-affordance layer.
+   */
+  editableEntities: ReadonlySet<CommandEntityKind>;
+  /**
+   * Operation classes `EditorSession.dispatch` allows, checked against
+   * `command.operations`. A command is rejected unless every kind in
+   * `entityKinds` is in `editableEntities` AND every op in `operations` is
+   * in `allowedOperations`.
+   */
+  allowedOperations: ReadonlySet<CommandOperation>;
   /** Entity kinds that respond to hover (cursor change, hit feedback). */
   hoverable: ReadonlySet<EntityKind>;
   /** Entity kinds that can be added to the selection. */
@@ -79,7 +96,28 @@ export interface EditorCapabilities {
   showPianoRollNotes: boolean;
 }
 
+/** Every operation class — the common case for presets with no dispatch
+ *  restriction beyond which entity kinds are editable. */
+const ALL_OPERATIONS = new Set<CommandOperation>([
+  'add',
+  'delete',
+  'update',
+  'move',
+]);
+
 export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
+  // Full editing: notes, sections, lyrics/phrases, and the tempo/timesig
+  // markers reachable from the Tools palette's bpm/timesig buttons.
+  editableEntities: new Set<CommandEntityKind>([
+    'note',
+    'section',
+    'lyric',
+    'phrase-start',
+    'phrase-end',
+    'tempo',
+    'timesig',
+  ]),
+  allowedOperations: ALL_OPERATIONS,
   // 'lyric' joined this preset in plan 0063 Part D: the drum-transcription
   // editor gained an Add Lyrics flow (Part C) that writes into the same
   // `vocalTracks` the piano-roll lyrics row and the highway's marker drag
@@ -120,6 +158,12 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
 };
 
 export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
+  editableEntities: new Set<CommandEntityKind>([
+    'lyric',
+    'phrase-start',
+    'phrase-end',
+  ]),
+  allowedOperations: ALL_OPERATIONS,
   hoverable: new Set(['lyric', 'phrase-start', 'phrase-end']),
   selectable: new Set(['lyric', 'phrase-start', 'phrase-end']),
   draggable: new Set(['lyric', 'phrase-start', 'phrase-end']),
@@ -134,6 +178,8 @@ export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
 };
 
 export const PREVIEW_CAPABILITIES: EditorCapabilities = {
+  editableEntities: new Set(),
+  allowedOperations: new Set(),
   hoverable: new Set(),
   selectable: new Set(),
   draggable: new Set(),
@@ -150,12 +196,17 @@ export const PREVIEW_CAPABILITIES: EditorCapabilities = {
 /**
  * {@link TEMPO_CAPABILITIES}: `/tempo`'s tempo-mapping editor. Tempo, time-
  * signature, and section markers are editable via the piano roll's tempo
- * lane and ruler (not gated by the `EntityKind` sets — those govern notes
- * and lyrics only); nothing else is. The piano roll hides its note lanes
- * and lyrics row entirely (`showPianoRollNotes: false`) since the page is
- * about the tempo grid, not the drum chart.
+ * lane and ruler (not gated by the `hoverable`/`selectable`/`draggable`
+ * `EntityKind` sets — those govern notes and lyrics only); nothing else is.
+ * The piano roll hides its note lanes and lyrics row entirely
+ * (`showPianoRollNotes: false`) since the page is about the tempo grid, not
+ * the drum chart. `editableEntities` deliberately omits `'note'`: a tempo
+ * marker move's KEEP-MS note re-tick is gated by the moving command's
+ * `'tempo'` intent kind, not by a `'note'` grant (see `MoveTempoMarkerCommand`).
  */
 export const TEMPO_CAPABILITIES: EditorCapabilities = {
+  editableEntities: new Set<CommandEntityKind>(['tempo', 'timesig', 'section']),
+  allowedOperations: ALL_OPERATIONS,
   hoverable: new Set(),
   selectable: new Set(),
   draggable: new Set(),
