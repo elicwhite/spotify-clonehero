@@ -39,9 +39,9 @@ type ParsedChart = ReturnType<typeof parseChartFile>;
 import type {EntityKind} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {tickToMs} from '@/lib/drum-transcription/timing';
-import {findTrackInParsedChart} from '@/lib/chart-edit';
 import {noteTypes} from '@eliwhite/scan-chart';
-import {chartToElements} from '@/lib/preview/highway/chartToElements';
+import type {ChartDocument} from '@/lib/chart-edit';
+import {buildProjectionFor} from '@/lib/preview/highway/projection';
 import type {NoteElementData} from '@/lib/preview/highway/NoteRenderer';
 import {calculateNoteXOffset} from '@/lib/preview/highway/types';
 import {
@@ -50,7 +50,6 @@ import {
 } from '@/lib/preview/highway/reconcilerKey';
 import type {EditorCapabilities} from '../capabilities';
 import type {EditorScope} from '../scope';
-import {trackKeyFromScope} from '../scope';
 import type {MarkerKind} from './useMarkerDrag';
 
 export interface MarkerDragHint {
@@ -121,6 +120,12 @@ export interface ComputeChartElementsInputs {
  * Pure: derive the `ChartElement[]` to push to the reconciler from the
  * current chart + capabilities + marker-drag hint. No React, no refs.
  *
+ * Notes + markers come from `buildProjectionFor(activeScope, doc, null)`
+ * (`lib/preview/highway/projection.ts`) — the same `EditorProjection`
+ * builder the piano-roll uses. `schema` is passed `null` because neither
+ * `trackToElements` nor `buildMarkerElements` reads lane geometry today;
+ * this call site only needs `projection.elements` + `projection.markers`.
+ *
  * Drag handling: when a marker is being dragged, its element is rewritten
  * with a live `msTime` derived from `markerDrag.currentTick`. The
  * reconciler's `dataEqual` ignores `msTime`, so this becomes a
@@ -145,11 +150,12 @@ export function computeChartElements(
     timedTempos,
     resolution,
   } = inputs;
-  const trackKey = trackKeyFromScope(activeScope);
-  const track = trackKey
-    ? (findTrackInParsedChart(chart, trackKey)?.track ?? null)
-    : null;
-  const elements = chartToElements(chart, track, partName);
+  // `computeChartElements` still takes the narrower `ParsedChart` shape
+  // (see the type comment above); `buildProjectionFor` only reads
+  // `doc.parsedChart`, so a minimal wrapper is enough to reuse it here.
+  const doc = {parsedChart: chart} as unknown as ChartDocument;
+  const projection = buildProjectionFor(activeScope, doc, null);
+  const elements = [...projection.elements, ...projection.markers];
 
   const dragKey = markerDrag
     ? markerDragReconcilerKey(
