@@ -56,18 +56,18 @@ export interface HighwayRendererHandle {
   getHighwayMode(): HighwayMode;
 }
 
-interface DrumHighwayPreviewProps {
+interface HighwayPreviewProps {
   metadata: ChartResponseEncore;
   chart: ParsedChart;
   audioManager: AudioManager;
   className?: string;
   /**
-   * When false, render a neutral floor with no drum lanes / hitbox / notes.
-   * Defaults to true. Pages that don't have a drum track (add-lyrics) set
-   * this to false so the highway still renders markers + cursor without
-   * drawing meaningless drum geometry.
+   * When false, render a neutral floor with no instrument lanes / hitbox /
+   * notes. Defaults to true. Pages that don't have a drum track
+   * (add-lyrics) set this to false so the highway still renders markers +
+   * cursor without drawing meaningless drum geometry.
    */
-  showDrumLanes?: boolean;
+  showLanes?: boolean;
   /** Called when the renderer is ready (or destroyed). */
   onRendererReady?: (handle: HighwayRendererHandle | null) => void;
 }
@@ -85,16 +85,16 @@ interface DrumHighwayPreviewProps {
  *
  * Automatically finds and renders the Expert Drums track. If no drum
  * track is found, renders the neutral floor (beat grid + markers) with
- * no drum lanes.
+ * no lanes.
  */
-const DrumHighwayPreview = memo(function DrumHighwayPreview({
+const HighwayPreview = memo(function HighwayPreview({
   metadata,
   chart,
   audioManager,
   className,
-  showDrumLanes = true,
+  showLanes = true,
   onRendererReady,
-}: DrumHighwayPreviewProps) {
+}: HighwayPreviewProps) {
   const sizingRef = useRef<HTMLDivElement>(null!);
   const canvasRef = useRef<HTMLDivElement>(null!);
   const rendererRef = useRef<ReturnType<typeof setupRenderer> | null>(null);
@@ -127,13 +127,13 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
     } as unknown as ParsedChart['trackData'][number];
   }, [chart]);
 
-  // Drum lanes only make sense when the chart actually has a drum track;
+  // Lanes only make sense when the chart actually has a drum track;
   // otherwise render the neutral floor even when the capability profile
   // asks for lanes.
   const hasDrumTrack = chart.trackData.some(
     t => t.instrument === 'drums' && t.difficulty === 'expert',
   );
-  const effectiveShowDrumLanes = showDrumLanes && hasDrumTrack;
+  const effectiveShowLanes = showLanes && hasDrumTrack;
 
   // Use refs to capture the latest track + lanes flag for the initial
   // prepTrack()/setupRenderer() call. The renderer lifecycle only depends
@@ -141,8 +141,8 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
   // the SceneReconciler, not renderer recreation.
   const drumTrackRef = useRef(drumTrack);
   drumTrackRef.current = drumTrack;
-  const showDrumLanesRef = useRef(effectiveShowDrumLanes);
-  showDrumLanesRef.current = effectiveShowDrumLanes;
+  const showLanesRef = useRef(effectiveShowLanes);
+  showLanesRef.current = effectiveShowLanes;
 
   useEffect(() => {
     const track = drumTrackRef.current;
@@ -157,7 +157,7 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
       sizingRef,
       canvasRef,
       audioManager,
-      {showDrumLanes: showDrumLanesRef.current},
+      {showDrumLanes: showLanesRef.current},
     );
     rendererRef.current = renderer;
     renderer.prepTrack(track);
@@ -200,4 +200,4 @@ const DrumHighwayPreview = memo(function DrumHighwayPreview({
   );
 });
 
-export default DrumHighwayPreview;
+export default HighwayPreview;
