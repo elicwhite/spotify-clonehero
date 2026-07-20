@@ -20,6 +20,7 @@ const OPEN: LaneDefinition = {
   noteType: noteTypes.open,
   label: 'Open',
   color: '#a266ff',
+  pianoRollColor: '#9b59b6',
   fullWidth: true,
 };
 
@@ -28,6 +29,7 @@ const GREEN: LaneDefinition = {
   noteType: noteTypes.green,
   label: 'Green',
   color: '#01b11a',
+  pianoRollColor: '#5cc262',
   defaultKey: '1',
 };
 
@@ -36,6 +38,7 @@ const RED: LaneDefinition = {
   noteType: noteTypes.red,
   label: 'Red',
   color: '#dd2214',
+  pianoRollColor: '#e5484d',
   defaultKey: '2',
 };
 
@@ -44,6 +47,7 @@ const YELLOW: LaneDefinition = {
   noteType: noteTypes.yellow,
   label: 'Yellow',
   color: '#deeb52',
+  pianoRollColor: '#f5c742',
   defaultKey: '3',
 };
 
@@ -52,6 +56,7 @@ const BLUE: LaneDefinition = {
   noteType: noteTypes.blue,
   label: 'Blue',
   color: '#006caf',
+  pianoRollColor: '#4a9ef2',
   defaultKey: '4',
 };
 
@@ -60,6 +65,7 @@ const ORANGE: LaneDefinition = {
   noteType: noteTypes.orange,
   label: 'Orange',
   color: '#f8b272',
+  pianoRollColor: '#f2994a',
   defaultKey: '5',
 };
 

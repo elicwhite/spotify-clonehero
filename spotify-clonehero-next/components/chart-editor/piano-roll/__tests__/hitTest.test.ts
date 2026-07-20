@@ -26,7 +26,7 @@ import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 const VIEW: PianoRollView = {leftMs: 0, pxPerMs: 0.1}; // 1000ms → 100px
 // 5 rows: [50,70) Red, [70,90) Yellow, [90,110) Blue, [110,130) Green,
 // [130,150) Kick.
-const GEO = {laneTop: 50, laneH: 20};
+const GEO = {laneTop: 50, laneH: 20, laneCount: 5};
 const TIMED_TEMPOS: TimedTempo[] = [{tick: 0, beatsPerMinute: 120, msTime: 0}];
 const RES = 480; // 480 ticks = 500ms @ 120 BPM → x = 50px
 

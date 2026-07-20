@@ -33,6 +33,12 @@ export interface LaneDefinition {
   label: string;
   /** Hex color string used by the renderer + UI badges. */
   color: string;
+  /**
+   * Hex color string for the piano-roll timeline's lane header/note fill.
+   * The piano roll uses a softer, distinct palette from the highway's
+   * `color`; falls back to `color` when unset.
+   */
+  pianoRollColor?: string;
   /** Place-mode hotkey ("1", "2", ...). Optional — schemas without
    *  place-mode bindings (e.g. some rhythm games) leave this undefined. */
   defaultKey?: string;

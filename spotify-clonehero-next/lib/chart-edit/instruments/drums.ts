@@ -44,6 +44,7 @@ const KICK: LaneDefinition = {
   noteType: noteTypes.kick,
   label: 'Kick',
   color: '#f8b272',
+  pianoRollColor: '#f2994a',
   defaultKey: '1',
   worldXOffset: KICK_X,
   fullWidth: true,
@@ -54,6 +55,7 @@ const RED: LaneDefinition = {
   noteType: noteTypes.redDrum,
   label: 'Red',
   color: '#dd2214',
+  pianoRollColor: '#e5484d',
   defaultKey: '2',
   worldXOffset: STRIP_X(0),
 };
@@ -63,6 +65,7 @@ const YELLOW: LaneDefinition = {
   noteType: noteTypes.yellowDrum,
   label: 'Yellow',
   color: '#deeb52',
+  pianoRollColor: '#f5c742',
   defaultKey: '3',
   worldXOffset: STRIP_X(1),
 };
@@ -72,6 +75,7 @@ const BLUE: LaneDefinition = {
   noteType: noteTypes.blueDrum,
   label: 'Blue',
   color: '#006caf',
+  pianoRollColor: '#4a9ef2',
   defaultKey: '4',
   worldXOffset: STRIP_X(2),
 };
@@ -81,6 +85,7 @@ const GREEN_4LANE: LaneDefinition = {
   noteType: noteTypes.greenDrum,
   label: 'Green',
   color: '#01b11a',
+  pianoRollColor: '#5cc262',
   defaultKey: '5',
   worldXOffset: STRIP_X(3),
 };
@@ -90,6 +95,7 @@ const GREEN_5LANE: LaneDefinition = {
   noteType: noteTypes.greenDrum,
   label: 'Green',
   color: '#01b11a',
+  pianoRollColor: '#5cc262',
   defaultKey: '6',
   variant: '5-lane',
   worldXOffset: STRIP_X(4),

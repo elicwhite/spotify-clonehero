@@ -81,8 +81,9 @@ import {
   phraseEndId,
   DEFAULT_VOCALS_PART,
   getAudioAnchor,
+  schemaForTrack,
 } from '@/lib/chart-edit';
-import type {ChartDocument} from '@/lib/chart-edit';
+import type {ChartDocument, InstrumentSchema} from '@/lib/chart-edit';
 import type {Synctrack} from '@/lib/tempo-map/types';
 import {octaveRescaleSync} from '@/lib/tempo-map/structural-correction';
 import {
@@ -131,9 +132,8 @@ import {
 import {clampMarkerMs, hitTempoMarker, nearestBeatTick} from './tempoHitTest';
 import {
   extractPianoRollNotes,
-  LANE_COUNT,
-  LANE_CYMBAL_OK,
-  PIANO_ROLL_LANES,
+  lanesForSchema,
+  type PianoRollLane,
   type PianoRollNote,
 } from './notes';
 import {buildBeatGrid, barBeatAtTick, type GridBeat} from './scene';
@@ -379,6 +379,10 @@ interface ChartScene {
   timeSignatures: TsChip[];
   sections: SectionFlag[];
   notes: PianoRollNote[];
+  /** Active scope's schema lanes, top→bottom — `PianoRollNote.lane` indexes
+   *  into this array. Empty when `showPianoRollNotes` is off or there's no
+   *  active track. */
+  lanes: PianoRollLane[];
   totalMs: number;
   durationMs: number;
   /** Audio-extended beat-grid span (shared with the downbeat commands). */
@@ -698,7 +702,11 @@ export default function PianoRollTimeline({
         ? (findTrackInParsedChart(parsed, state.activeScope.track)?.track ??
           null)
         : null;
-    const notes = extractPianoRollNotes(activeTrack);
+    const schema: InstrumentSchema | null = activeTrack
+      ? schemaForTrack(activeTrack, parsed.drumType)
+      : null;
+    const lanes = schema ? lanesForSchema(schema) : [];
+    const notes = extractPianoRollNotes(activeTrack, schema);
     const maxNoteTick = notes.length ? notes[notes.length - 1].tick : 0;
 
     const sections: SectionFlag[] = parsed.sections.map(s => ({
@@ -730,6 +738,7 @@ export default function PianoRollTimeline({
       timeSignatures,
       sections,
       notes,
+      lanes,
       totalMs,
       durationMs,
       endTick,
@@ -852,13 +861,14 @@ export default function PianoRollTimeline({
     const tempoTop = lyricsTop + lyricsH;
     const laneTop = tempoTop + TEMPO_H;
     const laneBottom = h - WAVE_ROW_H;
-    const laneH = (laneBottom - laneTop) / LANE_COUNT;
+    const laneCount = Math.max(1, scene?.lanes.length ?? 1);
+    const laneH = (laneBottom - laneTop) / laneCount;
 
     // chrome + lane tints
     ctx.fillStyle = COLORS.chrome;
     ctx.fillRect(0, 0, w, h);
     if (showNotes) {
-      for (let l = 0; l < LANE_COUNT; l++) {
+      for (let l = 0; l < laneCount; l++) {
         ctx.fillStyle = l % 2 ? COLORS.laneAlt : COLORS.laneBg;
         ctx.fillRect(0, laneTop + l * laneH, w, laneH);
       }
@@ -950,7 +960,7 @@ export default function PianoRollTimeline({
       drawWave(ctx, w, laneBottom + 3, h - 3, view, ampRef.current);
     }
 
-    if (showNotes) drawLaneLabels(ctx, laneTop, laneH);
+    if (showNotes && scene) drawLaneLabels(ctx, laneTop, laneH, scene.lanes);
 
     // marquee box-select rectangle
     const marquee = marqueeRef.current;
@@ -1178,13 +1188,24 @@ export default function PianoRollTimeline({
     const tempoTop = lyricsTop + lyricsH;
     const laneTop = tempoTop + TEMPO_H;
     const laneBottom = h - WAVE_ROW_H;
-    const laneH = (laneBottom - laneTop) / LANE_COUNT;
-    return {w, h, laneTop, laneBottom, laneH, lyricsTop, lyricsH, tempoTop};
+    const laneCount = Math.max(1, sceneRef.current?.lanes.length ?? 1);
+    const laneH = (laneBottom - laneTop) / laneCount;
+    return {
+      w,
+      h,
+      laneTop,
+      laneBottom,
+      laneH,
+      laneCount,
+      lyricsTop,
+      lyricsH,
+      tempoTop,
+    };
   }, []);
 
   const laneGeometry = useCallback((): LaneGeometry => {
     const g = panelGeometry();
-    return {laneTop: g.laneTop, laneH: g.laneH};
+    return {laneTop: g.laneTop, laneH: g.laneH, laneCount: g.laneCount};
   }, [panelGeometry]);
 
   const pickAt = useCallback(
@@ -1756,7 +1777,7 @@ export default function PianoRollTimeline({
         const my1 = Math.max(marqueeRef.current.y0, marqueeRef.current.y1);
 
         // `marqueeBounds`' lane math always clamps to a valid lane index
-        // (0..LANE_COUNT-1), even when the rectangle never gets near the
+        // (0..laneCount-1), even when the rectangle never gets near the
         // note lanes — a horizontal-only drag inside the lyrics row would
         // otherwise resolve to lane 0 (red) and spuriously sweep up red
         // notes whose ms range happens to overlap. Only select notes when
@@ -2230,7 +2251,7 @@ export default function PianoRollTimeline({
       const targets = targetIds
         .map(id => byId.get(id))
         .filter((n): n is PianoRollNote => n !== undefined);
-      const legalTargets = targets.filter(n => LANE_CYMBAL_OK[n.lane]);
+      const legalTargets = targets.filter(n => scene.lanes[n.lane]?.cymbalOk);
       const cymbalApplicable = legalTargets.length > 0;
       const commonCymbal =
         cymbalApplicable && legalTargets.every(n => n.cymbal);
@@ -2940,7 +2961,7 @@ function drawNotes(
         );
       }
       // Would-be drop on an illegal lane renders as a tom (§6 affordance).
-      cymbal = cymbal && LANE_CYMBAL_OK[lane];
+      cymbal = cymbal && !!scene.lanes[lane]?.cymbalOk;
     }
     const ms = tickToMs(tick, scene.timedTempos, scene.resolution);
     if (ms < msA - 50 && !(dragActive && selected)) continue;
@@ -2962,7 +2983,7 @@ function drawNotes(
       roundRect(ctx, x - halfW, cy - nh / 2 - 2.5, halfW * 2, nh + 5, 3);
       ctx.fill();
     }
-    ctx.fillStyle = PIANO_ROLL_LANES[lane].color;
+    ctx.fillStyle = scene.lanes[lane]?.color ?? COLORS.laneLabel;
     paintGlyph(x, cy, cymbal);
   }
 
@@ -2974,7 +2995,7 @@ function drawNotes(
     const gcy = laneTop + ghost.lane * laneH + laneH / 2;
     if (gx >= -halfW && gx <= w + halfW) {
       ctx.globalAlpha = 0.5;
-      ctx.fillStyle = PIANO_ROLL_LANES[ghost.lane].color;
+      ctx.fillStyle = scene.lanes[ghost.lane]?.color ?? COLORS.laneLabel;
       paintGlyph(gx, gcy, ghost.cymbal);
       ctx.globalAlpha = 1;
     }
@@ -3339,14 +3360,15 @@ function drawLaneLabels(
   ctx: CanvasRenderingContext2D,
   laneTop: number,
   laneH: number,
+  lanes: PianoRollLane[],
 ): void {
   ctx.font = '600 9.5px system-ui, sans-serif';
-  for (let l = 0; l < LANE_COUNT; l++) {
+  for (let l = 0; l < lanes.length; l++) {
     const y = laneTop + l * laneH;
     ctx.fillStyle = 'rgba(13,16,23,0.72)';
     ctx.fillRect(0, y + 2, 44, 13);
     ctx.fillStyle = COLORS.laneLabel;
-    ctx.fillText(PIANO_ROLL_LANES[l].name.toUpperCase(), 5, y + 12);
+    ctx.fillText(lanes[l].name.toUpperCase(), 5, y + 12);
   }
 }
 

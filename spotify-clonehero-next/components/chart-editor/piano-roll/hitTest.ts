@@ -15,7 +15,7 @@
 import {tickToMs, msToTick} from '@/lib/drum-transcription/timing';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {msToX, xToMs, type PianoRollView} from './viewMath';
-import {LANE_COUNT, type PianoRollNote} from './notes';
+import type {PianoRollNote} from './notes';
 import type {LyricBand, LyricChip} from './lyricsScene';
 
 /** Vertical layout of the note-lane band inside the panel canvas. */
@@ -24,18 +24,20 @@ export interface LaneGeometry {
   laneTop: number;
   /** Height (px) of one lane row. */
   laneH: number;
+  /** Number of note lanes (the active scope's schema lane count). */
+  laneCount: number;
 }
 
 /**
- * Editor lane row (0..LANE_COUNT-1) under a y pixel, or null when the point
+ * Editor lane row (0..laneCount-1) under a y pixel, or null when the point
  * is outside the note-lane band (ruler / tempo lane / waveform row). The
- * panel's display row *is* the data lane (`note.lane`, `PIANO_ROLL_LANES`
+ * panel's display row *is* the data lane (`note.lane`, `lanesForSchema`
  * order) — no separate row↔lane mapping.
  */
 export function laneAtY(y: number, geo: LaneGeometry): number | null {
   if (geo.laneH <= 0) return null;
   const idx = Math.floor((y - geo.laneTop) / geo.laneH);
-  if (idx < 0 || idx >= LANE_COUNT) return null;
+  if (idx < 0 || idx >= geo.laneCount) return null;
   return idx;
 }
 
@@ -110,7 +112,7 @@ export function marqueeBounds(
   const yMax = Math.max(rect.y0, rect.y1);
   const laneFor = (y: number): number => {
     const raw = Math.floor((y - geo.laneTop) / geo.laneH);
-    return Math.max(0, Math.min(LANE_COUNT - 1, raw));
+    return Math.max(0, Math.min(geo.laneCount - 1, raw));
   };
   return {
     msMin: xToMs(xMin, view),
