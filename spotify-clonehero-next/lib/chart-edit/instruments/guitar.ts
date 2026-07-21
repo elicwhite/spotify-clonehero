@@ -36,6 +36,7 @@ const OPEN: LaneDefinition = {
   pianoRollColor: '#9b59b6',
   worldXOffset: OPEN_X,
   fullWidth: true,
+  sustainWidthMultiplier: 5,
 };
 
 const GREEN: LaneDefinition = {

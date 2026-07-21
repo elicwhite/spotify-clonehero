@@ -19,8 +19,13 @@
  * read them so the schema is the single source of truth for geometry.
  */
 
-import type {Instrument, NoteType} from '@eliwhite/scan-chart';
+import type {Instrument, NoteType, ParsedChart} from '@eliwhite/scan-chart';
 import {noteFlags} from '@eliwhite/scan-chart';
+
+/** A single track's data within a `ParsedChart`, as consumed by the highway
+ *  renderer (`lib/preview/highway/types.ts`'s `Track`). Schemas depend only
+ *  on the shape, not on the highway module, to avoid a layering cycle. */
+export type SchemaTrack = ParsedChart['trackData'][0];
 
 export type NoteFlagName = keyof typeof noteFlags;
 
@@ -63,6 +68,13 @@ export interface LaneDefinition {
    * "kick/open" full-width placement and pad-lane placement.
    */
   fullWidth?: boolean;
+  /**
+   * Multiplier applied to the base sustain-tail width for notes on this
+   * lane (base width is the renderer's standard gem-sustain width). Five
+   * -fret's open lane renders a full-width tail (5×) since the note itself
+   * spans the highway; other lanes omit this and get the base width.
+   */
+  sustainWidthMultiplier?: number;
 }
 
 export interface FlagBinding {
@@ -117,4 +129,13 @@ export interface InstrumentSchema {
   highwayWidth: number;
   /** Strikeline hitbox sprite texture path for this instrument. */
   hitboxTexturePath: string;
+  /**
+   * Optional chart-adjust hook run in `trackToElements` on a derived copy
+   * of the track before it's turned into render elements (e.g. drum disco
+   * flip: red↔yellow, tom↔cymbal). Must not mutate `track` or `chart` —
+   * return a new track. Real-note/mutation ids stay tied to the
+   * *unadjusted* track; this hook only affects what gets rendered.
+   * Omitted (or absent) schemas render the track unchanged.
+   */
+  normalizeForRender?: (track: SchemaTrack, chart: ParsedChart) => SchemaTrack;
 }
