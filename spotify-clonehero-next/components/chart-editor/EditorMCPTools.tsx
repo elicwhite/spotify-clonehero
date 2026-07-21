@@ -23,25 +23,30 @@ import {
   toSchemaNote,
   type FlagName,
 } from './commands';
-import {getDrumNotes, drums4LaneSchema} from '@/lib/chart-edit';
+import {
+  listNotes,
+  typeToLane,
+  drums4LaneSchema,
+  type InstrumentSchema,
+} from '@/lib/chart-edit';
 import {buildTimedTempos, tickToMs} from '@/lib/drum-transcription/timing';
-import {typeToLane} from './commands';
 import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 import type {NoteType} from '@eliwhite/scan-chart';
 
-/** Friendly label for a drum `NoteType`, from `InstrumentSchema.lanes[].label`
- *  (e.g. "Kick", "Red") — the MCP tool surface's note-type representation. */
-function typeToLabel(type: NoteType): string {
-  return (
-    drums4LaneSchema.lanes.find(l => l.noteType === type)?.label ?? String(type)
-  );
+/** Friendly label for a `NoteType`, from `schema.lanes[].label` (e.g.
+ *  "Kick", "Red", "Green") — the MCP tool surface's note-type
+ *  representation. */
+function typeToLabel(schema: InstrumentSchema, type: NoteType): string {
+  return schema.lanes.find(l => l.noteType === type)?.label ?? String(type);
 }
 
 /** Reverse of {@link typeToLabel}, case-insensitive. */
-function labelToType(label: string): NoteType | undefined {
-  return drums4LaneSchema.lanes.find(
-    l => l.label.toLowerCase() === label.toLowerCase(),
-  )?.noteType;
+function labelToType(
+  schema: InstrumentSchema,
+  label: string,
+): NoteType | undefined {
+  return schema.lanes.find(l => l.label.toLowerCase() === label.toLowerCase())
+    ?.noteType;
 }
 
 /**
@@ -128,14 +133,15 @@ export default function EditorMCPTools() {
         const selectedIds = getSelectedIds(s, 'note');
         if (s.chartDoc && selectedIds.size > 0) {
           const track = selectActiveTrack(s);
-          if (track) {
+          const schema = selectActiveSchema(s);
+          if (track && schema) {
             const scope = entityContextFromScope(s.activeScope);
-            selectedNotes = getDrumNotes(track)
+            selectedNotes = listNotes(track, schema)
               .filter(n => selectedIds.has(noteId(n)))
               .map(n => ({
                 id: noteId(n),
                 tick: n.tick,
-                type: typeToLabel(n.type),
+                type: typeToLabel(schema, n.type),
                 flags: {
                   cymbal: !!(n.flags & noteFlags.cymbal),
                   accent: !!(n.flags & noteFlags.accent),
@@ -170,7 +176,8 @@ export default function EditorMCPTools() {
                   totalNotes: s.chartDoc
                     ? (() => {
                         const t = selectActiveTrack(s);
-                        return t ? getDrumNotes(t).length : 0;
+                        const sch = selectActiveSchema(s);
+                        return t && sch ? listNotes(t, sch).length : 0;
                       })()
                     : 0,
                   sectionCount: s.chartDoc?.parsedChart.sections.length ?? 0,
@@ -245,7 +252,8 @@ export default function EditorMCPTools() {
           if (!s.chartDoc)
             return {content: [{type: 'text', text: 'No chart loaded'}]};
           const track = selectActiveTrack(s);
-          if (!track)
+          const schema = selectActiveSchema(s);
+          if (!track || !schema)
             return {
               content: [
                 {
@@ -257,14 +265,14 @@ export default function EditorMCPTools() {
           const startTick = (args['startTick'] as number) ?? 0;
           const endTick = (args['endTick'] as number) ?? startTick + 1920;
           const limit = (args['limit'] as number) ?? 50;
-          const notes = getDrumNotes(track)
+          const notes = listNotes(track, schema)
             .filter(n => n.tick >= startTick && n.tick <= endTick)
             .slice(0, limit)
             .map(n => ({
               id: noteId(n),
               tick: n.tick,
-              type: typeToLabel(n.type),
-              lane: typeToLane(n.type),
+              type: typeToLabel(schema, n.type),
+              lane: typeToLane(schema, n.type),
               flags: {
                 cymbal: !!(n.flags & noteFlags.cymbal),
                 accent: !!(n.flags & noteFlags.accent),
@@ -291,7 +299,9 @@ export default function EditorMCPTools() {
           required: ['tick', 'type'],
         },
         execute: async args => {
-          const type = labelToType(args['type'] as string);
+          const schema =
+            selectActiveSchema(stateRef.current) ?? drums4LaneSchema;
+          const type = labelToType(schema, args['type'] as string);
           if (type === undefined) {
             return {
               content: [
@@ -399,7 +409,9 @@ export default function EditorMCPTools() {
           const trackKey = trackKeyFromScope(stateRef.current.activeScope);
           if (!trackKey)
             return {content: [{type: 'text', text: 'Not editing a track'}]};
-          const type = labelToType(args['type'] as string);
+          const schema =
+            selectActiveSchema(stateRef.current) ?? drums4LaneSchema;
+          const type = labelToType(schema, args['type'] as string);
           if (type === undefined) {
             return {
               content: [
@@ -428,7 +440,7 @@ export default function EditorMCPTools() {
             content: [
               {
                 type: 'text',
-                text: `Added ${typeToLabel(type)} at tick ${tick}`,
+                text: `Added ${typeToLabel(schema, type)} at tick ${tick}`,
               },
             ],
           };
