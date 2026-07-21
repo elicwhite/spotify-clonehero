@@ -15,8 +15,23 @@ import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContex
 import type {AudioManager} from '@/lib/preview/audioManager';
 import {cn} from '@/lib/utils';
 
-/** Standard stem names the pipeline may produce. */
-const STEM_NAMES = ['drums', 'bass', 'other', 'vocals', 'song'] as const;
+/** Standard stem names the pipeline may produce, plus the synthesized
+ *  metronome click stem. */
+const STEM_NAMES = [
+  'drums',
+  'bass',
+  'other',
+  'vocals',
+  'song',
+  'click',
+] as const;
+
+/** Default volume for a stem that has no explicit entry in
+ *  `state.trackVolumes` yet. Every real stem defaults to full volume; the
+ *  synthesized click stem defaults to silent until the user raises it. */
+function defaultVolumeFor(stem: string): number {
+  return stem === 'click' ? 0 : 1.0;
+}
 
 interface StemVolumeControlsProps {
   audioManager: AudioManager;
@@ -53,7 +68,7 @@ export default function StemVolumeControls({
   // Apply volume changes to AudioManager whenever state changes
   useEffect(() => {
     for (const stem of availableStems) {
-      let volume = state.trackVolumes[stem] ?? 1.0;
+      let volume = state.trackVolumes[stem] ?? defaultVolumeFor(stem);
 
       // Apply solo logic: if a track is soloed, all others are silent
       if (state.soloTrack !== null && state.soloTrack !== stem) {
@@ -112,7 +127,7 @@ export default function StemVolumeControls({
   const getEffectiveVolume = (stem: string): number => {
     if (state.mutedTracks.has(stem)) return 0;
     if (state.soloTrack !== null && state.soloTrack !== stem) return 0;
-    return state.trackVolumes[stem] ?? 1.0;
+    return state.trackVolumes[stem] ?? defaultVolumeFor(stem);
   };
 
   return (
@@ -140,7 +155,7 @@ export default function StemVolumeControls({
         {!isCollapsed && (
           <div className="px-3 pb-3 space-y-2">
             {availableStems.map(stem => {
-              const volume = state.trackVolumes[stem] ?? 1.0;
+              const volume = state.trackVolumes[stem] ?? defaultVolumeFor(stem);
               const isMuted = state.mutedTracks.has(stem);
               const isSoloed = state.soloTrack === stem;
               const effectiveVol = getEffectiveVolume(stem);

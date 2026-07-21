@@ -1,4 +1,9 @@
 import {Measure} from './convertToVexflow';
+import {
+  generateClickSample,
+  mixSamples,
+  float32ToWav,
+} from '@/lib/preview/clickTrack';
 
 export interface ClickOptions {
   clickDuration: number; // Duration (in seconds) of each click sound
@@ -25,69 +30,6 @@ const clickOptions: ClickOptions = {
   strongTone: 1000, // strong beat frequency (Hz)
   subdivisionTone: 700, // subdivision frequency (Hz
 };
-
-/**
- * Generates a click sample using an oscillator.
- * @param frequency Frequency in Hz for the click.
- * @param durationSec Duration of the click in seconds.
- * @param sampleRate Sample rate to use.
- * @param volume Volume (gain) for the click.
- * @returns A Promise that resolves to a Float32Array of the PCM data.
- */
-async function generateClickSample(
-  frequency: number,
-  durationSec: number,
-  sampleRate: number,
-  volume: number,
-): Promise<Float32Array> {
-  const offlineCtx = new (window.OfflineAudioContext ||
-    window['webkitOfflineAudioContext'])(
-    1,
-    sampleRate * durationSec,
-    sampleRate,
-  );
-
-  // Create an oscillator and gain node to shape the click.
-  const oscillator = offlineCtx.createOscillator();
-  oscillator.frequency.value = frequency;
-
-  const gainNode = offlineCtx.createGain();
-  gainNode.gain.setValueAtTime(0, 0);
-  // A quick attack:
-  gainNode.gain.linearRampToValueAtTime(volume, 0.005);
-  // And a quick release:
-  gainNode.gain.setValueAtTime(volume, durationSec - 0.005);
-  gainNode.gain.linearRampToValueAtTime(0, durationSec);
-
-  oscillator.connect(gainNode);
-  gainNode.connect(offlineCtx.destination);
-
-  oscillator.start(0);
-  oscillator.stop(durationSec);
-
-  // Render and extract the PCM data.
-  const audioBuffer = await offlineCtx.startRendering();
-  return audioBuffer.getChannelData(0).slice();
-}
-
-/**
- * Mixes a source sample into a target buffer at the given offset.
- * @param target The target Float32Array (your main track).
- * @param source The click sample to mix in.
- * @param offset The starting sample index in the target.
- */
-function mixSamples(
-  target: Float32Array,
-  source: Float32Array,
-  offset: number,
-): void {
-  for (let i = 0; i < source.length; i++) {
-    const targetIndex = offset + i;
-    if (targetIndex < target.length) {
-      target[targetIndex] += source[i];
-    }
-  }
-}
 
 /**
  * Generates an array of click events based on the provided measures.
@@ -236,68 +178,4 @@ export async function generateClickTrackFromMeasures(
   console.log('Took ' + (after - before) + 'ms to render');
   // return renderedBuffer;
   return buffer;
-}
-
-/**
- * Converts a mono Float32Array of PCM samples into a 16-bit PCM WAV file
- * stored in a Uint8Array.
- */
-function float32ToWav(samples: Float32Array, sampleRate: number): Uint8Array {
-  const numChannels = 1;
-  const bitsPerSample = 16;
-  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
-  const blockAlign = (numChannels * bitsPerSample) / 8;
-  const dataSize = samples.length * blockAlign;
-  const headerSize = 44;
-  const totalSize = headerSize + dataSize;
-
-  const buffer = new ArrayBuffer(totalSize);
-  const view = new DataView(buffer);
-  let offset = 0;
-
-  function writeString(s: string) {
-    for (let i = 0; i < s.length; i++) {
-      view.setUint8(offset++, s.charCodeAt(i));
-    }
-  }
-
-  function writeUint32(value: number) {
-    view.setUint32(offset, value, true);
-    offset += 4;
-  }
-
-  function writeUint16(value: number) {
-    view.setUint16(offset, value, true);
-    offset += 2;
-  }
-
-  // RIFF header.
-  writeString('RIFF');
-  writeUint32(totalSize - 8);
-  writeString('WAVE');
-
-  // "fmt " subchunk.
-  writeString('fmt ');
-  writeUint32(16); // PCM chunk size
-  writeUint16(1); // Audio format: PCM
-  writeUint16(numChannels);
-  writeUint32(sampleRate);
-  writeUint32(byteRate);
-  writeUint16(blockAlign);
-  writeUint16(bitsPerSample);
-
-  // "data" subchunk.
-  writeString('data');
-  writeUint32(dataSize);
-
-  // Write PCM samples (convert from Float32 to Int16).
-  for (let i = 0; i < samples.length; i++) {
-    let s = samples[i];
-    s = Math.max(-1, Math.min(1, s));
-    const int16 = s < 0 ? s * 0x8000 : s * 0x7fff;
-    view.setInt16(offset, int16, true);
-    offset += 2;
-  }
-
-  return new Uint8Array(buffer);
 }

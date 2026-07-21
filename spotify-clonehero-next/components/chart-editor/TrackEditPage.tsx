@@ -45,6 +45,7 @@ import {readChart, writeChartFolder} from '@/lib/chart-edit';
 import type {ChartDocument, ParsedTrackData} from '@/lib/chart-edit';
 import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
+import {generateBeatClickTrackWav} from '@/lib/preview/clickTrack';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {ChartEditorProvider, useChartEditorContext} from './ChartEditorContext';
 import {
@@ -53,6 +54,7 @@ import {
 } from './AudioServiceContext';
 import type {EditorScope} from './scope';
 import ChartEditor from './ChartEditor';
+import ClickVolumeControl from './ClickVolumeControl';
 import type {AudioSource} from './ExportDialog';
 import {useEditorKeyboard} from './hooks/useEditorKeyboard';
 import {useAutoSave} from './hooks/useAutoSave';
@@ -549,28 +551,17 @@ function TrackEditEditor({
           throw new Error('No audio files found in project storage');
         }
 
-        // 7. Create AudioManager
-        setLoadingStep('Preparing audio playback...');
-        const audioManager = new AudioManager(audioFiles, () => {
-          dispatch({type: 'SET_PLAYING', isPlaying: false});
-        });
-        await audioManager.ready;
-        if (cancelled) return;
-
-        audioManager.setChartDelay(
-          getChartDelayMs(chartDoc.parsedChart.metadata) / 1000,
-        );
-        createdAudioManager = audioManager;
-        publishAudioManager(audioManager);
-        setAudioManager(audioManager);
-
-        // 8. Decode first audio file to raw PCM for waveform display
+        // 7. Decode first audio file to raw PCM for waveform display. Also
+        // gives us the song duration, needed below to size the synthesized
+        // click track before AudioManager is constructed.
+        let waveformDurationSec = 0;
         try {
           const waveformCtx = new AudioContext({sampleRate: 44100});
           const firstAudio = audioFiles[0];
           const buf = firstAudio.data.slice(0).buffer;
           const decoded = await waveformCtx.decodeAudioData(buf as ArrayBuffer);
           const channels = decoded.numberOfChannels;
+          waveformDurationSec = decoded.duration;
           // Interleave channels into a single Float32Array
           const length = decoded.length;
           const interleaved = new Float32Array(length * channels);
@@ -589,7 +580,46 @@ function TrackEditEditor({
         }
         if (cancelled) return;
 
-        // 9. Update editor state. ChartDoc carries the parsed chart;
+        // 8. Synthesize the metronome click stem from the chart's tempo map
+        // and time signatures, and register it as its own "click" audio
+        // file so AudioManager gives it the same playback-speed/seek sync
+        // as every other track. Volume defaults to silent (0) below.
+        const chartDelayMs = getChartDelayMs(chartDoc.parsedChart.metadata);
+        if (waveformDurationSec > 0) {
+          try {
+            const clickWav = await generateBeatClickTrackWav(
+              chartDoc.parsedChart,
+              waveformDurationSec * 1000,
+              chartDelayMs,
+            );
+            audioFiles.push({fileName: 'click.wav', data: clickWav});
+          } catch (err) {
+            // Click track is a nice-to-have — don't fail the whole load if
+            // synthesis fails for some reason.
+            console.warn('Could not generate click track:', err);
+          }
+        }
+        if (cancelled) return;
+
+        // 9. Create AudioManager
+        setLoadingStep('Preparing audio playback...');
+        const audioManager = new AudioManager(audioFiles, () => {
+          dispatch({type: 'SET_PLAYING', isPlaying: false});
+        });
+        await audioManager.ready;
+        if (cancelled) return;
+
+        audioManager.setChartDelay(chartDelayMs / 1000);
+        try {
+          audioManager.setVolume('click', 0);
+        } catch {
+          // Click track failed to generate above — no such stem to silence.
+        }
+        createdAudioManager = audioManager;
+        publishAudioManager(audioManager);
+        setAudioManager(audioManager);
+
+        // 10. Update editor state. ChartDoc carries the parsed chart;
         // consumers derive the active track via selectActiveTrack().
         dispatch({type: 'SET_CHART_DOC', chartDoc});
         setLoadingState('ready');
@@ -701,6 +731,7 @@ function TrackEditEditor({
         getChartText={getChartText}
         getAudioSources={getAudioSources}
         headerExtra={headerExtra}
+        leftPanelChildren={<ClickVolumeControl audioManager={audioManager} />}
       />
     </div>
   );

@@ -18,6 +18,7 @@ import {useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
+import {generateBeatClickTrackWav} from '@/lib/preview/clickTrack';
 import {padPcmStart} from '@/lib/drum-transcription/audio/pad-pcm';
 import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {getAudioAnchor} from '@/lib/chart-edit';
@@ -79,11 +80,25 @@ export async function buildPaddedAudioManager(
     audioFiles.push({fileName: secondaryFileName, data: stemArray});
   }
 
+  // Synthesized metronome click, registered as its own "click" stem so it
+  // gets the same playback-speed/seek sync as every other track. Volume is
+  // silent (0) until the user raises it in the stem-volumes UI — the WAV
+  // itself carries fixed relative loudness for accented vs. unaccented
+  // beats; real-time loudness is controlled entirely via setVolume.
+  const chartDelayMs = getChartDelayMs(chartDoc.parsedChart.metadata);
+  const durationMs =
+    (paddedFullMixPcm.length / meta.channels / meta.sampleRate) * 1000;
+  const clickWav = await generateBeatClickTrackWav(
+    chartDoc.parsedChart,
+    durationMs,
+    chartDelayMs,
+  );
+  audioFiles.push({fileName: 'click.wav', data: clickWav});
+
   const audioManager = new AudioManager(audioFiles, onSongEnded);
   await audioManager.ready;
-  audioManager.setChartDelay(
-    getChartDelayMs(chartDoc.parsedChart.metadata) / 1000,
-  );
+  audioManager.setChartDelay(chartDelayMs / 1000);
+  audioManager.setVolume('click', 0);
 
   return {audioManager, paddedFullMixPcm, paddedSecondaryPcm};
 }
