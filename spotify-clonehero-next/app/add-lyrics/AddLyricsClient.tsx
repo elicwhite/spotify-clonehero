@@ -36,11 +36,8 @@ import {
 import {exportAsZip, exportAsSng} from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
-import {
-  resampleStereoTo16kMono,
-  mixStemsToAudioBuffer,
-} from '@/lib/audio-pipeline/lyrics-audio';
-import {separateStems} from '@/lib/audio-pipeline/separate-stems';
+import {mixStemsToAudioBuffer} from '@/lib/audio-pipeline/lyrics-audio';
+import {runDemucsInWorker} from '@/lib/lyrics-align/demucs-client';
 import {applyAlignedLyricsToDoc} from '@/lib/lyrics-align/apply-lyrics';
 import {
   detectFormat,
@@ -446,29 +443,21 @@ function LyricsAlignInner() {
 
         updateAlignStep('separate', {
           status: 'active',
-          detail: 'Separating vocals...',
+          detail: 'Starting Demucs worker...',
           startTime: Date.now(),
         });
 
-        // `decodeAudioData` above detaches `arrayBuffer`, so reconstructing
-        // a Uint8Array from it would throw on a detached buffer. Feed the
-        // separator the original encoded bytes instead — it decodes again
-        // internally, so raw bytes are exactly what it wants.
-        const {vocals} = await separateStems(
-          songFile.data as Uint8Array,
-          {vocals: true},
-          p =>
-            updateAlignStep('separate', {
-              detail: p.step,
-              progress: p.percent,
-              etaSeconds: p.etaSeconds,
-            }),
+        vocals16k = await runDemucsInWorker(audioBuffer, p =>
+          updateAlignStep('separate', {
+            detail: p.message,
+            progress: p.percent,
+            etaSeconds: p.etaSeconds,
+          }),
         );
-        vocals16k = await resampleStereoTo16kMono(vocals!);
 
         updateAlignStep('separate', {
           status: 'done',
-          detail: `${(vocals16k.length / 16000).toFixed(1)}s mono 16kHz`,
+          detail: `${(vocals16k.length / 16000).toFixed(1)}s mono 16kHz — worker terminated`,
           endTime: Date.now(),
         });
       }
@@ -532,28 +521,16 @@ function LyricsAlignInner() {
         const mixedBuffer = await mixStemsToAudioBuffer(stemInputs);
 
         updateAlignStep('separate2', {
-          detail: 'Separating vocals...',
+          detail: 'Starting Demucs worker...',
         });
 
-        const {interleaveAudioBuffer} = await import(
-          '@/lib/drum-transcription/audio/decoder'
+        const vocals16k_2 = await runDemucsInWorker(mixedBuffer, p =>
+          updateAlignStep('separate2', {
+            detail: p.message,
+            progress: p.percent,
+            etaSeconds: p.etaSeconds,
+          }),
         );
-        const {encodeWavBlob} = await import('@/lib/audio/wav-encoder');
-        const mixedPcm = interleaveAudioBuffer(mixedBuffer);
-        const mixedWavBlob = encodeWavBlob(mixedPcm, mixedBuffer.sampleRate, 2);
-        const mixedWavBytes = new Uint8Array(await mixedWavBlob.arrayBuffer());
-
-        const {vocals: vocals2} = await separateStems(
-          mixedWavBytes,
-          {vocals: true},
-          p =>
-            updateAlignStep('separate2', {
-              detail: p.step,
-              progress: p.percent,
-              etaSeconds: p.etaSeconds,
-            }),
-        );
-        const vocals16k_2 = await resampleStereoTo16kMono(vocals2!);
         updateAlignStep('separate2', {
           status: 'done',
           detail: `${(vocals16k_2.length / 16000).toFixed(1)}s mono 16kHz — re-separated`,

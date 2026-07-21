@@ -1,5 +1,34 @@
 # 0066 — Unify stem separation/caching; fix /tempo's missing drum-stem waveform; move /add-lyrics onto BS-Roformer
 
+## Addendum 2 (2026-07-21) — Phase 3 reverted by plan 0070
+
+**Phase 3 is no longer in effect.** `/add-lyrics` is back on Demucs; see
+`plans/in-progress/0070-add-lyrics-back-to-demucs.md`. This plan's own
+stop-ship gate fired — on latency rather than the quality risk it anticipated:
+
+> If quality visibly regresses, that's a stop-ship signal for Phase 3
+> specifically — Phases 1-2 don't depend on it and should ship regardless.
+
+Unification worked, but the shared path is shaped around
+`/drum-transcription`'s needs (a lossless stereo 44.1 kHz drum stem for a
+stereo CRNN), and `/add-lyrics` needs only 16 kHz mono vocals. It was paying
+for a bigger model, more inference steps, a drum-stem iSTFT and an ~85 MB
+cache write it never reads, a double decode, and — in tier-2 — an ~85 MB WAV
+encode purely to manufacture bytes to fingerprint. 0070 has the full cost
+breakdown.
+
+**Still in effect: Phases 1, 2a, 2b, 2c.** `/tempo` shows the real drum stem;
+`lib/audio-pipeline/{decode-audio,stem-cache,separate-stems}.ts` remain the
+canonical shared modules for `/tempo` and `/drum-transcription`, which still
+share one separator and one cache. The editor's in-session Add Lyrics flow
+(`AddLyricsDialog.tsx`) also still uses the roformer vocals stem — it reads one
+the drum pipeline already cached, at zero marginal cost.
+
+Goal 3 and the two "Done when" bullets below that assert `/add-lyrics` runs
+BS-Roformer and that Demucs is fully removed are superseded; they are struck
+through in place rather than deleted, so the record of what was tried stays
+readable.
+
 ## Addendum (2026-07-20) — approved deviations during implementation
 
 Two premises in the original investigation turned out to be false once the
@@ -194,9 +223,10 @@ current ask, not projected future need.
    stem, the same way `/drum-transcription`'s do.
 2. There is one canonical stem cache all pipelines read and write, so
    separating the same file once (from any page) satisfies the others.
-3. `/add-lyrics` separates vocals via BS-Roformer instead of Demucs, through
+3. ~~`/add-lyrics` separates vocals via BS-Roformer instead of Demucs, through
    the same cache — running `/add-lyrics` on a file already processed by
-   `/tempo` or `/drum-transcription` cache-hits, and vice versa.
+   `/tempo` or `/drum-transcription` cache-hits, and vice versa.~~
+   **Reverted by plan 0070 — see Addendum 2.**
 4. Neither existing pipeline regresses: no behavior change to what gets
    separated for drums/tempo, no loss of the byte-exact reproducibility
    guarantee 0059/0060 built for CRNN/Beat This!, no change to
@@ -443,18 +473,17 @@ stem-cache.ts`, `lib/tempo-map/stem-cache-format.ts`) + port their tests.
 ## Done when
 
 - `/tempo` shows the real drum-stem waveform in the piano roll and highway.
-- Separating a song via `/tempo`, `/drum-transcription`, or `/add-lyrics`
-  produces a cache hit if any of the other two pages later processes the
-  same file.
-- `/add-lyrics` runs entirely on BS-Roformer; Demucs is fully removed from
-  the codebase (no dead `demucs-worker.ts`/model download left behind).
+- Separating a song via `/tempo` or `/drum-transcription` produces a cache hit
+  if the other page later processes the same file.
+  (~~or `/add-lyrics`~~ — reverted by 0070.)
+- ~~`/add-lyrics` runs entirely on BS-Roformer; Demucs is fully removed from
+  the codebase (no dead `demucs-worker.ts`/model download left behind).~~
+  **Reverted by plan 0070 — `/add-lyrics` runs Demucs; see Addendum 2.**
 - `pnpm typecheck`, `pnpm test`, `pnpm lint` pass.
 - Browser-validated: `/tempo` and `/drum-transcription` both still transcribe
   correctly (no drift in tempo grid or note output — the
   `tempo-track-equivalence.test.ts` invariant this whole feature depends on
   must keep passing); the cross-page cache-hit scenario is confirmed with
   `list_network_requests`/OPFS inspection showing no second model download +
-  separation pass across ALL THREE pages pairwise; `/add-lyrics` produces
-  reasonable alignment on the quality spot-check songs, bundled-vocals skip
-  path still works, and tier-2 fallback still triggers and improves
-  low-confidence results.
+  separation pass — now between `/tempo` and `/drum-transcription` only, not
+  all three pages (0070). `/add-lyrics`'s own validation moves to 0070.

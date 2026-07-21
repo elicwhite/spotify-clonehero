@@ -823,10 +823,6 @@ function DrumTranscriptionInner() {
           Everything runs locally in your browser. No audio is uploaded to any
           server.
         </p>
-        <p>
-          Powered by Demucs (stem separation) and ADTOF (drum transcription) via
-          ONNX + WebGPU.
-        </p>
       </div>
 
       {/* Delete confirmation dialog */}

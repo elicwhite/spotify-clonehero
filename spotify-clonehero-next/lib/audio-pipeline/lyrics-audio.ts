@@ -35,37 +35,6 @@ export async function resampleTo16kMono(
 }
 
 /**
- * Resample a planar stereo stem to 16kHz mono. Downmixes stereo→mono and
- * resamples in one OfflineAudioContext render.
- */
-export async function resampleStereoTo16kMono(
-  stem: {left: Float32Array; right: Float32Array},
-  inputRate = 44100,
-): Promise<Float32Array> {
-  const numSamples = Math.min(stem.left.length, stem.right.length);
-  const buffer = new AudioBuffer({
-    numberOfChannels: 2,
-    length: numSamples,
-    sampleRate: inputRate,
-  });
-  buffer.copyToChannel(new Float32Array(stem.left.subarray(0, numSamples)), 0);
-  buffer.copyToChannel(new Float32Array(stem.right.subarray(0, numSamples)), 1);
-
-  const offlineCtx = new OfflineAudioContext(
-    1,
-    Math.ceil((numSamples * 16000) / inputRate),
-    16000,
-  );
-  const source = offlineCtx.createBufferSource();
-  source.buffer = buffer;
-  source.connect(offlineCtx.destination);
-  source.start(0);
-
-  const rendered = await offlineCtx.startRendering();
-  return rendered.getChannelData(0);
-}
-
-/**
  * Sum a list of audio stems into a single 44.1kHz stereo AudioBuffer suitable
  * for re-separation. Used when a chart's bundled vocal stem produced a
  * low-confidence alignment and we want to fall back to AI separation against

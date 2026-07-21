@@ -8,7 +8,7 @@
  * estimate during the active step).
  *
  * ETA strategy: prefer source-provided when the worker computes it
- * (Demucs already does, via EMA); otherwise fall back to
+ * (the separation worker already does, via EMA); otherwise fall back to
  * `elapsedSec * (1 - p) / p` smoothed with a single-pole low-pass.
  *
  * `StepTimer` is mutable on purpose: it lives in a useRef across
@@ -113,8 +113,8 @@ export function pipelineProgressToSteps(
         timing.startedAt = now;
         timer.set(cfg.key, timing);
       }
-      // Prefer worker-provided ETA when present (Demucs computes one
-      // from segment-duration EMA). Fall back to elapsed * (1-p)/p
+      // Prefer worker-provided ETA when present (the separation worker
+      // computes one from segment-duration EMA). Fall back to elapsed * (1-p)/p
       // smoothed when only `progress` is available.
       if (progress.etaSeconds !== undefined) {
         etaSeconds = progress.etaSeconds;
