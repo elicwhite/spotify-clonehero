@@ -521,7 +521,7 @@ async function loadCymbalTextures(
 
 /**
  * Five-fret lane note types in visual-slot order (matches the `{kind}{N}`
- * asset naming baked by `scripts/bake-preview-textures.ts`).
+ * naming of the animated WebP variants in `public/assets/preview/assets2/`).
  */
 const FIVE_FRET_LANES: readonly [number, string][] = [
   [noteTypes.green, '0'],

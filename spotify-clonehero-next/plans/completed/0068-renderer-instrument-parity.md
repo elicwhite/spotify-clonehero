@@ -107,3 +107,7 @@ shine`→`-sp` (no ghost source found — likely a tint; decide at bake
 ## Status (2026-07-20)
 
 Tasks 1-4 implemented via workflow wf_bb984f13-2e6 (six-fret task removed after descope). Texture bake script emits 82 webp variants (~464KB, committed) from ~/Downloads/Textures; SP/ghost/accent skins render via the (lane, flags+SP) matrix — visible on /guitar-edit. Browser-validated; typecheck/lint/tests green.
+
+### Correction (2026-07-20, post-completion)
+
+Task 2 was built on a false premise: `public/assets/preview/assets2/` already contained the complete 88-file **16-frame animated** WebP variant catalog (drums tom/cymbal × accent/ghost × sp, five-fret strum/hopo/tap × sp, open), and the task-3 texture matrix loads from there. The bake script emitted 82 redundant **static** duplicates (plus 5 illegal red-cymbal variants) that nothing loaded. Bake script + baked/ output removed; TextureManager comment corrected. The renderer animates via its existing ImageDecoder-based AnimatedTexture.
