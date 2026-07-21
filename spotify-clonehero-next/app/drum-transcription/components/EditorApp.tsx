@@ -48,6 +48,7 @@ import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import {
   readChart,
   writeChartFolder,
+  writeChartFileAs,
   getAudioAnchor,
   setAudioAnchor,
 } from '@/lib/chart-edit';
@@ -60,7 +61,10 @@ import {
   anchorPadSamples,
 } from '@/components/chart-editor/hooks/usePaddedAudio';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
-import type {AudioSource} from '@/components/chart-editor/ExportDialog';
+import type {
+  AudioSource,
+  ChartFileFormat,
+} from '@/components/chart-editor/ExportDialog';
 import AddLyricsDialog from '@/components/chart-editor/AddLyricsDialog';
 import StemVolumeControls from './StemVolumeControls';
 import LeadingSilenceButton from './LeadingSilenceButton';
@@ -480,18 +484,28 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
     [projectId, state.chartDoc, dispatch],
   );
 
-  // Provide the chart file for export, in whichever format this project's
-  // chart uses (notes.chart text or notes.mid binary) — format-agnostic, so
-  // a .mid-sourced chart-flow project exports without corruption.
-  const getChartFile = useCallback(async (): Promise<{
-    fileName: string;
-    data: Uint8Array;
-  }> => {
-    const fileName = await findProjectChartFile(projectId);
-    if (!fileName) throw new Error('Project has no persisted chart file');
-    const buf = await readProjectBinary(projectId, fileName);
-    return {fileName, data: new Uint8Array(buf)};
-  }, [projectId]);
+  // Provide the chart file for export in the requested format, serialized
+  // from the live in-memory chart doc via writeChartFileAs. Autosave is
+  // debounced, so the persisted OPFS bytes can lag the doc while dirty —
+  // reading them here (even on a same-format request) risks silently
+  // dropping the user's latest edits. Only falls back to the persisted
+  // bytes when there's no in-memory doc to serialize from.
+  const getChartFile = useCallback(
+    async ({
+      format,
+    }: {
+      format: ChartFileFormat;
+    }): Promise<{fileName: string; data: Uint8Array}> => {
+      if (state.chartDoc) {
+        return writeChartFileAs(state.chartDoc, format);
+      }
+      const fileName = await findProjectChartFile(projectId);
+      if (!fileName) throw new Error('Project has no persisted chart file');
+      const buf = await readProjectBinary(projectId, fileName);
+      return {fileName, data: new Uint8Array(buf)};
+    },
+    [projectId, state.chartDoc],
+  );
 
   // Provide audio sources for export.
   //
@@ -683,6 +697,8 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
       onMetadataChange={handleMetadataChange}
       dirty={state.dirty}
       getChartFile={getChartFile}
+      sourceChartFormat={packageSourceFormat ? chart.format : undefined}
+      chartFormatSelectable
       getAudioSources={getAudioSources}
       showStemChoice
       getExtraAssets={getExtraAssets}

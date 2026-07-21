@@ -6,7 +6,7 @@ import {parseChartFile} from '@eliwhite/scan-chart';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
-import type {AudioSource, AssetFile} from './ExportDialog';
+import type {AudioSource, AssetFile, ChartFileFormat} from './ExportDialog';
 
 import HighwayEditor from './HighwayEditor';
 import TransportControls from './TransportControls';
@@ -101,7 +101,9 @@ export interface ChartEditorProps {
   /** Format-agnostic alternative to `getChartText` — see ExportDialog's
    * `getChartFile` doc. Needed by pages whose chart may be `.mid`. */
   getChartFile?:
-    | (() => Promise<{fileName: string; data: Uint8Array}>)
+    | ((options: {
+        format: ChartFileFormat;
+      }) => Promise<{fileName: string; data: Uint8Array}>)
     | undefined;
   /** Callback to provide audio sources for export. */
   getAudioSources?:
@@ -121,6 +123,12 @@ export interface ChartEditorProps {
   /** Preselects the export dialog's package format (e.g. to match an
    * existing chart package's original format). */
   defaultExportFormat?: 'zip' | 'sng' | undefined;
+  /** The format an imported source chart used — see ExportDialog's
+   * `sourceChartFormat` doc. */
+  sourceChartFormat?: ChartFileFormat | undefined;
+  /** Shows the chart-file select without an imported source format to warn
+   * against — see ExportDialog's `chartFormatSelectable` doc. */
+  chartFormatSelectable?: boolean | undefined;
 }
 
 /**
@@ -170,6 +178,8 @@ export default function ChartEditor({
   showStemChoice,
   getExtraAssets,
   defaultExportFormat,
+  sourceChartFormat,
+  chartFormatSelectable,
 }: ChartEditorProps) {
   const {state, dispatch} = useChartEditorContext();
   const [metadataOpen, setMetadataOpen] = useState(false);
@@ -271,6 +281,8 @@ export default function ChartEditor({
                 showStemChoice={showStemChoice}
                 getExtraAssets={getExtraAssets}
                 defaultFormat={defaultExportFormat}
+                sourceChartFormat={sourceChartFormat}
+                chartFormatSelectable={chartFormatSelectable}
               />
             </div>
           )}

@@ -17,6 +17,10 @@ import type {ChartDocument, File} from '@eliwhite/scan-chart';
 
 // Re-export the scan-chart surface consumers depend on
 export {createEmptyChart, writeChartFolder};
+
+// Chart file format conversion (.chart <-> .mid) for export
+export {writeChartFileAs} from './write-chart-file-as';
+export type {WrittenChartFile} from './write-chart-file-as';
 export type {
   ChartDocument,
   File,

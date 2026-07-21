@@ -118,6 +118,12 @@ describe('EditorSession.dispatch capability gate', () => {
       notified = true;
     });
 
+    // The gate deliberately rejects this dispatch, which makes
+    // EditorSession.dispatch emit a real console.warn — expected here, but
+    // silence it so it doesn't show up as noise in CI/deploy logs, and
+    // assert on it instead so the rejection itself stays under test.
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
     const cmd = noteCmd();
     const newDoc = cmd.execute(before.chartDoc!);
     session.dispatch({type: 'EXECUTE_COMMAND', command: cmd, chartDoc: newDoc});
@@ -125,6 +131,9 @@ describe('EditorSession.dispatch capability gate', () => {
     expect(session.getState()).toBe(before);
     expect(session.getState().undoStack).toHaveLength(0);
     expect(notified).toBe(false);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('rejected'));
+    warnSpy.mockRestore();
   });
 
   it('applies an allowed command normally', () => {

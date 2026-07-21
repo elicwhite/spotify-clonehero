@@ -1,7 +1,7 @@
 'use client';
 
 import {useState, useCallback} from 'react';
-import {Download, Loader2} from 'lucide-react';
+import {AlertTriangle, Download, Loader2} from 'lucide-react';
 import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
@@ -49,6 +49,11 @@ export interface AudioSource {
   data: ArrayBuffer;
 }
 
+/** The chart file format inside the package — `.chart` (text) or `.mid`
+ * (binary). Distinct from `PackageFormat`, which is the outer zip/sng
+ * container. */
+export type ChartFileFormat = 'chart' | 'mid';
+
 interface ExportDialogProps {
   /** Default song name, pre-filled into the export form. */
   songName: string;
@@ -72,7 +77,9 @@ interface ExportDialogProps {
    * over `getChartText` when both are supplied.
    */
   getChartFile?:
-    | (() => Promise<{fileName: string; data: Uint8Array}>)
+    | ((options: {
+        format: ChartFileFormat;
+      }) => Promise<{fileName: string; data: Uint8Array}>)
     | undefined;
   /**
    * Provides audio sources to include in the package.
@@ -104,6 +111,24 @@ interface ExportDialogProps {
    * 'zip' when omitted.
    */
   defaultFormat?: PackageFormat | undefined;
+  /**
+   * The format an *existing* chart the project was imported from actually
+   * used (`ParsedChart.format`). Seeds the "Chart file" select's default and
+   * drives the lossy-conversion warning when the user's selection differs
+   * from it. Leave undefined for projects with no imported source chart
+   * (e.g. built from scratch by this app's own transcription pipeline) —
+   * there both `.chart` and `.mid` are equally faithful targets, so no
+   * warning should ever show.
+   */
+  sourceChartFormat?: ChartFileFormat | undefined;
+  /**
+   * Shows the "Chart file" select (defaulting to `.chart`) even when
+   * `sourceChartFormat` is undefined — for projects that can convert but
+   * have no "original" format to warn about deviating from. The select
+   * renders whenever either this or `sourceChartFormat` is set. Pages that
+   * can't convert at all (e.g. /tempo, /add-lyrics) leave both unset.
+   */
+  chartFormatSelectable?: boolean | undefined;
 }
 
 /** A passthrough asset file for package assembly (see {@link getExtraAssets}). */
@@ -137,12 +162,17 @@ export default function ExportDialog({
   showStemChoice = false,
   getExtraAssets,
   defaultFormat = 'zip',
+  sourceChartFormat,
+  chartFormatSelectable = false,
 }: ExportDialogProps) {
   const [open, setOpen] = useState(false);
   const [packageFormat, setPackageFormat] =
     useState<PackageFormat>(defaultFormat);
   const [includeStems, setIncludeStems] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const [chartFileFormat, setChartFileFormat] = useState<ChartFileFormat>(
+    sourceChartFormat ?? 'chart',
+  );
 
   // Editable metadata, (re)seeded from the props each time the dialog opens.
   const [metadata, setMetadata] = useState({
@@ -159,10 +189,11 @@ export default function ExportDialog({
           artist: artistName ?? '',
           charter: charterName ?? '',
         });
+        setChartFileFormat(sourceChartFormat ?? 'chart');
       }
       setOpen(next);
     },
-    [songName, artistName, charterName],
+    [songName, artistName, charterName, sourceChartFormat],
   );
 
   const handleExport = useCallback(async () => {
@@ -173,7 +204,9 @@ export default function ExportDialog({
       if (!getChartFile && !getChartText) {
         throw new Error('ExportDialog requires getChartFile or getChartText');
       }
-      const chartFile = getChartFile ? await getChartFile() : undefined;
+      const chartFile = getChartFile
+        ? await getChartFile({format: chartFileFormat})
+        : undefined;
       const chartText =
         chartFile || !getChartText ? undefined : await getChartText();
 
@@ -266,6 +299,7 @@ export default function ExportDialog({
   }, [
     metadata,
     packageFormat,
+    chartFileFormat,
     includeStems,
     getChartText,
     getChartFile,
@@ -299,10 +333,10 @@ export default function ExportDialog({
             idPrefix="export"
           />
 
-          {/* Package format selector */}
+          {/* Package format selector (outer container: zip/sng) */}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="package-format" className="text-right">
-              Format
+              Package
             </Label>
             <Select
               value={packageFormat}
@@ -316,6 +350,47 @@ export default function ExportDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Chart file format selector (notes.chart vs notes.mid) — only
+              shown when the page can actually convert between them. The
+              lossy-conversion warning only applies when there's a known
+              imported source format to deviate from. */}
+          {(sourceChartFormat || chartFormatSelectable) && (
+            <div className="grid grid-cols-4 items-start gap-4">
+              <Label htmlFor="chart-file-format" className="text-right pt-2">
+                Chart file
+              </Label>
+              <div className="col-span-3 space-y-1">
+                <Select
+                  value={chartFileFormat}
+                  onValueChange={v => setChartFileFormat(v as ChartFileFormat)}>
+                  <SelectTrigger id="chart-file-format">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="chart">.chart (text)</SelectItem>
+                    <SelectItem value="mid">.mid (MIDI)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {sourceChartFormat && chartFileFormat !== sourceChartFormat && (
+                  <p className="flex items-start gap-1 text-xs text-amber-600 dark:text-amber-500">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    {sourceChartFormat === 'chart' ? (
+                      <span>
+                        This chart was made as .chart. Converting to .mid can be
+                        lossy — some .chart-only data may not survive.
+                      </span>
+                    ) : (
+                      <span>
+                        This chart was made as .mid. Converting to .chart can be
+                        lossy — some .mid-only data may not survive.
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Stems vs. original audio */}
           {getAudioSources && showStemChoice && (
