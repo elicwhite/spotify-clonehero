@@ -15,12 +15,26 @@ import type {Instrument} from '@eliwhite/scan-chart';
 import {noteTypes} from '@eliwhite/scan-chart';
 import type {InstrumentSchema, LaneDefinition} from './types';
 
+// World-space X coordinates for the five-fret highway. Mirrors the formula
+// in `lib/preview/highway/types.ts:calculateNoteXOffset('guitar', i)`,
+// where `i` is the pad-lane index (open excluded, matching
+// `notePlacement.ts`'s `padLanes(schema)` order). Kept as data on the
+// schema so InteractionManager + place-mode logic can resolve "lane →
+// world X" without recomputing geometry. Update both when the renderer's
+// lane spacing changes.
+//   leftOffset = 0.035, NOTE_SPAN_WIDTH = 0.95, SCALE = 0.105
+//   fretX(i) = 0.035 + -(0.95 / 2) + 0.105 + ((0.95 - 0.105) / 5) * i
+//            = -0.335 + 0.169 * i
+const FRET_X = (i: number): number => -0.335 + 0.169 * i;
+const OPEN_X = 0; // open centers on the highway, like kick
+
 const OPEN: LaneDefinition = {
   index: 0,
   noteType: noteTypes.open,
   label: 'Open',
   color: '#a266ff',
   pianoRollColor: '#9b59b6',
+  worldXOffset: OPEN_X,
   fullWidth: true,
 };
 
@@ -31,6 +45,7 @@ const GREEN: LaneDefinition = {
   color: '#01b11a',
   pianoRollColor: '#5cc262',
   defaultKey: '1',
+  worldXOffset: FRET_X(0),
 };
 
 const RED: LaneDefinition = {
@@ -40,6 +55,7 @@ const RED: LaneDefinition = {
   color: '#dd2214',
   pianoRollColor: '#e5484d',
   defaultKey: '2',
+  worldXOffset: FRET_X(1),
 };
 
 const YELLOW: LaneDefinition = {
@@ -49,6 +65,7 @@ const YELLOW: LaneDefinition = {
   color: '#deeb52',
   pianoRollColor: '#f5c742',
   defaultKey: '3',
+  worldXOffset: FRET_X(2),
 };
 
 const BLUE: LaneDefinition = {
@@ -58,6 +75,7 @@ const BLUE: LaneDefinition = {
   color: '#006caf',
   pianoRollColor: '#4a9ef2',
   defaultKey: '4',
+  worldXOffset: FRET_X(3),
 };
 
 const ORANGE: LaneDefinition = {
@@ -67,6 +85,7 @@ const ORANGE: LaneDefinition = {
   color: '#f8b272',
   pianoRollColor: '#f2994a',
   defaultKey: '5',
+  worldXOffset: FRET_X(4),
 };
 
 function fiveFretSchema(instrument: Instrument): InstrumentSchema {

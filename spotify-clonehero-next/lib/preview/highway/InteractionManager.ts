@@ -1,42 +1,11 @@
 import * as THREE from 'three';
-import {noteTypes} from '@eliwhite/scan-chart';
 import type {SceneReconciler} from './SceneReconciler';
 import {NoteRenderer, type NoteElementData} from './NoteRenderer';
 import {MarkerRenderer, type MarkerElementData} from './MarkerRenderer';
 import {type HitResult} from './types';
 import {parseMarkerKey} from './markerKeys';
-import {drums4LaneSchema, snapTickToGrid} from '@/lib/chart-edit';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const HIGHWAY_HALF_WIDTH = 0.45;
-
-/**
- * Editor lane → world X position. Sourced from `drums4LaneSchema` so the
- * schema is the single source of truth for lane geometry. The renderer's
- * `calculateNoteXOffset` is what the schema's `worldXOffset` mirrors.
- */
-const LANE_X_POSITIONS: number[] = drums4LaneSchema.lanes.map(l => {
-  if (l.worldXOffset === undefined) {
-    throw new Error(
-      `drums4LaneSchema lane ${l.index} (${l.label}) is missing worldXOffset`,
-    );
-  }
-  return l.worldXOffset;
-});
-
-/**
- * Editor lane kick occupies. Kick renders in the highway's center (world X
- * 0) rather than in a schema lane slot visually, but `worldXToLane` still
- * resolves clicks there to *some* array index — this is the one the schema
- * currently assigns it, derived (not assumed to be a fixed number) so a
- * future reorder of `drums4LaneSchema.lanes` can't silently desync this.
- */
-const KICK_LANE = drums4LaneSchema.lanes.findIndex(
-  l => l.noteType === noteTypes.kick,
-);
+import {snapTickToGrid} from '@/lib/chart-edit';
+import type {InstrumentSchema} from '@/lib/chart-edit/instruments/types';
 
 // ---------------------------------------------------------------------------
 // InteractionManager
@@ -53,6 +22,28 @@ export class InteractionManager {
   private camera: THREE.PerspectiveCamera;
   private reconciler: SceneReconciler;
   private highwaySpeed: number;
+  private schema: InstrumentSchema;
+
+  /**
+   * Editor lane → world X position, carried wholesale from the schema
+   * (array order matches `schema.lanes` order, which is also the "editor
+   * lane" numbering `typeToLane`/`laneToType` use). The renderer's
+   * `calculateNoteXOffset` is what each lane's `worldXOffset` mirrors.
+   */
+  private laneXPositions: number[];
+
+  /**
+   * Editor lane the schema's full-width note (kick for drums, open for
+   * five-fret) occupies. Full-width notes render in the highway's center
+   * (world X 0) rather than in a pad-lane slot, but `worldXToLane` still
+   * resolves clicks there to *some* array index — this is the one the
+   * schema assigns it, derived (not assumed to be a fixed number) so a
+   * schema lane reorder can't silently desync this.
+   */
+  private fullWidthLane: number;
+
+  /** Half the highway's visual width, from `schema.highwayWidth`. */
+  private highwayHalfWidth: number;
 
   private raycaster = new THREE.Raycaster();
   /** Reusable vector to avoid per-frame allocations. */
@@ -96,11 +87,23 @@ export class InteractionManager {
     reconciler: SceneReconciler,
     highwaySpeed: number,
     getElapsedMs: () => number,
+    schema: InstrumentSchema,
   ) {
     this.camera = camera;
     this.reconciler = reconciler;
     this.highwaySpeed = highwaySpeed;
     this.getElapsedMs = getElapsedMs;
+    this.schema = schema;
+    this.laneXPositions = schema.lanes.map(l => {
+      if (l.worldXOffset === undefined) {
+        throw new Error(
+          `${schema.instrument} schema lane ${l.index} (${l.label}) is missing worldXOffset`,
+        );
+      }
+      return l.worldXOffset;
+    });
+    this.fullWidthLane = schema.lanes.findIndex(l => l.fullWidth);
+    this.highwayHalfWidth = schema.highwayWidth / 2;
   }
 
   // -----------------------------------------------------------------------
@@ -235,7 +238,7 @@ export class InteractionManager {
     // `data.lane` is the pad-color index (0=red..3=green), which the schema
     // now assigns the identical editor lane numbers to; kick alone needs
     // translating to its (schema-derived) editor lane.
-    const lane = data.isKick ? KICK_LANE : data.lane;
+    const lane = data.isKick || data.isOpen ? this.fullWidthLane : data.lane;
 
     return {
       type: 'note',
@@ -384,7 +387,7 @@ export class InteractionManager {
     if (!hit) return null;
 
     // Check if intersection is within highway bounds
-    if (Math.abs(hit.x) > HIGHWAY_HALF_WIDTH) return null;
+    if (Math.abs(hit.x) > this.highwayHalfWidth) return null;
 
     const lane = this.worldXToLane(hit.x);
     const ms = this.worldYToMs(hit.y);
@@ -396,7 +399,7 @@ export class InteractionManager {
     // click wasn't on a specific pad lane. Pad notes have higher
     // specificity; if the raycast missed a pad sprite, the user
     // probably intended to click empty highway, not a kick.
-    if (lane === KICK_LANE) {
+    if (lane === this.fullWidthLane) {
       const kickHit = this.hitTestKickAtTick(tick, ms);
       if (kickHit) return kickHit;
     }
@@ -446,7 +449,7 @@ export class InteractionManager {
           isOpen: data.isOpen,
           lane: data.lane,
         },
-        lane: KICK_LANE,
+        lane: this.fullWidthLane,
         tick: data.note.tick ?? 0,
       };
     }
@@ -575,8 +578,8 @@ export class InteractionManager {
   private worldXToLane(worldX: number): number {
     let bestLane = 0;
     let bestDist = Infinity;
-    for (let i = 0; i < LANE_X_POSITIONS.length; i++) {
-      const dist = Math.abs(worldX - LANE_X_POSITIONS[i]);
+    for (let i = 0; i < this.laneXPositions.length; i++) {
+      const dist = Math.abs(worldX - this.laneXPositions[i]);
       if (dist < bestDist) {
         bestDist = dist;
         bestLane = i;

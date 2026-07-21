@@ -12,7 +12,7 @@ import {
   createGridOverlay,
   type HighwayMode,
 } from './HighwayScene';
-import {schemaForTrack} from '../../chart-edit/instruments';
+import {schemaForTrack, drums4LaneSchema} from '../../chart-edit/instruments';
 import type {WaveformSurface} from './WaveformSurface';
 import type {WaveformSurfaceConfig} from './WaveformSurface';
 import type {GridOverlay} from './GridOverlay';
@@ -502,11 +502,16 @@ export const setupRenderer = (
     // SceneOverlays + InteractionManager are created for any track — they
     // power the cursor / ghost / hit-testing surface for both drum-edit
     // and lanes-off (lyrics) modes. Drum-specific render paths inside them
-    // simply have nothing to draw when no drum notes are present.
+    // simply have nothing to draw when no drum notes are present. With no
+    // track (vocals/global scope), geometry falls back to the 4-lane drum
+    // schema — lanesActive is false there so nothing actually renders using
+    // it, but the classes still need *some* valid lane geometry to construct.
+    const overlaySchema = schema ?? drums4LaneSchema;
     const sceneOverlays = new SceneOverlays(
       scene,
       highwaySpeed,
       noteClippingPlanes,
+      overlaySchema,
     );
 
     const getElapsedMs = () => {
@@ -519,6 +524,7 @@ export const setupRenderer = (
       reconciler,
       highwaySpeed,
       getElapsedMs,
+      overlaySchema,
     );
 
     // Create lyrics overlay if chart has lyrics

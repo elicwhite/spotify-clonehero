@@ -1,33 +1,10 @@
 import * as THREE from 'three';
 import {SCALE} from './types';
-import {drums4LaneSchema} from '@/lib/chart-edit';
+import type {InstrumentSchema} from '@/lib/chart-edit/instruments/types';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const HIGHWAY_HALF_WIDTH = 0.45;
-
-/** Number of editor lanes (kick + 4 pad lanes). */
-const NUM_LANES = drums4LaneSchema.lanes.length;
-
-/** 3D X positions for each editor lane, sourced from the drum schema's
- *  `worldXOffset`. InteractionManager reads the same field. */
-const LANE_X_POSITIONS: number[] = drums4LaneSchema.lanes.map(l => {
-  if (l.worldXOffset === undefined) {
-    throw new Error(
-      `drums4LaneSchema lane ${l.index} (${l.label}) is missing worldXOffset`,
-    );
-  }
-  return l.worldXOffset;
-});
-
-/** Lane colors for ghost notes (THREE.js color number). Derived from the
- *  schema's hex strings so adding/recoloring a lane is a schema-only
- *  change. */
-const LANE_COLORS_HEX: number[] = drums4LaneSchema.lanes.map(l =>
-  Number.parseInt(l.color.replace(/^#/, ''), 16),
-);
 
 // Cursor line color
 const CURSOR_LINE_COLOR = 0x00ff80;
@@ -160,14 +137,40 @@ export class SceneOverlays {
   }[] = [];
   private resolution = 480;
 
+  /** Number of editor lanes, from the schema. */
+  private numLanes: number;
+  /** 3D X positions for each editor lane, carried wholesale from the
+   *  schema's `worldXOffset`. InteractionManager reads the same field. */
+  private laneXPositions: number[];
+  /** Lane colors for ghost notes (THREE.js color number), derived from
+   *  the schema's hex strings so adding/recoloring a lane is a
+   *  schema-only change. */
+  private laneColorsHex: number[];
+  /** Half the highway's visual width, from `schema.highwayWidth`. */
+  private highwayHalfWidth: number;
+
   constructor(
     scene: THREE.Scene,
     highwaySpeed: number,
     clippingPlanes: THREE.Plane[],
+    schema: InstrumentSchema,
   ) {
     this.scene = scene;
     this.highwaySpeed = highwaySpeed;
     this.clippingPlanes = clippingPlanes;
+    this.numLanes = schema.lanes.length;
+    this.laneXPositions = schema.lanes.map(l => {
+      if (l.worldXOffset === undefined) {
+        throw new Error(
+          `${schema.instrument} schema lane ${l.index} (${l.label}) is missing worldXOffset`,
+        );
+      }
+      return l.worldXOffset;
+    });
+    this.laneColorsHex = schema.lanes.map(l =>
+      Number.parseInt(l.color.replace(/^#/, ''), 16),
+    );
+    this.highwayHalfWidth = schema.highwayWidth / 2;
 
     // Add container groups to scene
     this.scene.add(this.ghostNoteGroup);
@@ -281,8 +284,8 @@ export class SceneOverlays {
     // Create cursor line if needed
     if (!this.cursorLine) {
       const geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(-HIGHWAY_HALF_WIDTH, 0, 0),
-        new THREE.Vector3(HIGHWAY_HALF_WIDTH, 0, 0),
+        new THREE.Vector3(-this.highwayHalfWidth, 0, 0),
+        new THREE.Vector3(this.highwayHalfWidth, 0, 0),
       ]);
       this.cursorLineMaterial = new THREE.LineBasicMaterial({
         color: CURSOR_LINE_COLOR,
@@ -325,7 +328,7 @@ export class SceneOverlays {
     }
 
     if (this.cursorTickLabel) {
-      this.cursorTickLabel.position.set(HIGHWAY_HALF_WIDTH + 0.1, worldY, 0);
+      this.cursorTickLabel.position.set(this.highwayHalfWidth + 0.1, worldY, 0);
       this.cursorTickLabel.visible = true;
     }
   }
@@ -357,12 +360,12 @@ export class SceneOverlays {
     if (ghostWorldY < -1.2 || ghostWorldY > 1.1) return;
 
     // Show ghost note outlines at the hover tick for all lanes
-    for (let lane = 0; lane < NUM_LANES; lane++) {
+    for (let lane = 0; lane < this.numLanes; lane++) {
       // Ensure we have enough ghost note meshes
       while (this.ghostNoteMeshes.length <= lane) {
         const geometry = new THREE.PlaneGeometry(SCALE * 1.2, SCALE * 0.5);
         const material = new THREE.MeshBasicMaterial({
-          color: LANE_COLORS_HEX[this.ghostNoteMeshes.length],
+          color: this.laneColorsHex[this.ghostNoteMeshes.length],
           transparent: true,
           opacity: 0.25,
           depthTest: false,
@@ -376,7 +379,7 @@ export class SceneOverlays {
       }
 
       const mesh = this.ghostNoteMeshes[lane];
-      mesh.position.set(LANE_X_POSITIONS[lane], ghostWorldY, 0.001);
+      mesh.position.set(this.laneXPositions[lane], ghostWorldY, 0.001);
       mesh.visible = true;
     }
 
@@ -398,11 +401,11 @@ export class SceneOverlays {
       }
 
       (this.hoverGhostMesh.material as THREE.MeshBasicMaterial).color.set(
-        LANE_COLORS_HEX[state.hoverLane],
+        this.laneColorsHex[state.hoverLane],
       );
       (this.hoverGhostMesh.material as THREE.MeshBasicMaterial).opacity = 0.5;
       this.hoverGhostMesh.position.set(
-        LANE_X_POSITIONS[state.hoverLane],
+        this.laneXPositions[state.hoverLane],
         ghostWorldY,
         0.001,
       );
@@ -420,17 +423,17 @@ export class SceneOverlays {
       return;
     }
 
-    const laneX = LANE_X_POSITIONS[state.hoverLane];
-    const sortedLaneXs = LANE_X_POSITIONS.slice().sort((a, b) => a - b);
+    const laneX = this.laneXPositions[state.hoverLane];
+    const sortedLaneXs = this.laneXPositions.slice().sort((a, b) => a - b);
     const sortedIdx = sortedLaneXs.indexOf(laneX);
 
     const leftBoundX =
       sortedIdx === 0
-        ? -HIGHWAY_HALF_WIDTH
+        ? -this.highwayHalfWidth
         : (sortedLaneXs[sortedIdx - 1] + laneX) / 2;
     const rightBoundX =
       sortedIdx === sortedLaneXs.length - 1
-        ? HIGHWAY_HALF_WIDTH
+        ? this.highwayHalfWidth
         : (laneX + sortedLaneXs[sortedIdx + 1]) / 2;
 
     const width = rightBoundX - leftBoundX;
@@ -497,8 +500,8 @@ export class SceneOverlays {
     // Create or update line
     if (!this.crosshairLine) {
       const geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(-HIGHWAY_HALF_WIDTH, 0, 0),
-        new THREE.Vector3(HIGHWAY_HALF_WIDTH, 0, 0),
+        new THREE.Vector3(-this.highwayHalfWidth, 0, 0),
+        new THREE.Vector3(this.highwayHalfWidth, 0, 0),
       ]);
       this.crosshairLineMaterial = new THREE.LineBasicMaterial({
         color: lineColor,
@@ -549,7 +552,7 @@ export class SceneOverlays {
 
     if (this.crosshairLabel) {
       this.crosshairLabel.position.set(
-        -HIGHWAY_HALF_WIDTH + 0.12,
+        -this.highwayHalfWidth + 0.12,
         worldY + 0.015,
         0,
       );
@@ -581,7 +584,7 @@ export class SceneOverlays {
     }
 
     // Update positions
-    const width = HIGHWAY_HALF_WIDTH * 2;
+    const width = this.highwayHalfWidth * 2;
 
     // Start line
     this.loopStartLine!.position.y = startWorldY;
@@ -605,14 +608,18 @@ export class SceneOverlays {
     // Labels
     if (this.loopStartLabel) {
       this.loopStartLabel.position.set(
-        -HIGHWAY_HALF_WIDTH - 0.03,
+        -this.highwayHalfWidth - 0.03,
         startWorldY,
         0,
       );
       this.loopStartLabel.visible = startWorldY >= -1.2 && startWorldY <= 1.1;
     }
     if (this.loopEndLabel) {
-      this.loopEndLabel.position.set(-HIGHWAY_HALF_WIDTH - 0.03, endWorldY, 0);
+      this.loopEndLabel.position.set(
+        -this.highwayHalfWidth - 0.03,
+        endWorldY,
+        0,
+      );
       this.loopEndLabel.visible = endWorldY >= -1.2 && endWorldY <= 1.1;
     }
   }
@@ -622,8 +629,8 @@ export class SceneOverlays {
 
     // Start line
     const startGeom = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(-HIGHWAY_HALF_WIDTH, 0, 0),
-      new THREE.Vector3(HIGHWAY_HALF_WIDTH, 0, 0),
+      new THREE.Vector3(-this.highwayHalfWidth, 0, 0),
+      new THREE.Vector3(this.highwayHalfWidth, 0, 0),
     ]);
     const startMat = new THREE.LineBasicMaterial({
       color: loopColor,
@@ -638,8 +645,8 @@ export class SceneOverlays {
 
     // End line
     const endGeom = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(-HIGHWAY_HALF_WIDTH, 0, 0),
-      new THREE.Vector3(HIGHWAY_HALF_WIDTH, 0, 0),
+      new THREE.Vector3(-this.highwayHalfWidth, 0, 0),
+      new THREE.Vector3(this.highwayHalfWidth, 0, 0),
     ]);
     const endMat = new THREE.LineBasicMaterial({
       color: loopColor,
@@ -653,7 +660,7 @@ export class SceneOverlays {
     this.loopGroup.add(this.loopEndLine);
 
     // Tint
-    const tintGeom = new THREE.PlaneGeometry(HIGHWAY_HALF_WIDTH * 2, 1);
+    const tintGeom = new THREE.PlaneGeometry(this.highwayHalfWidth * 2, 1);
     const tintMat = new THREE.MeshBasicMaterial({
       color: loopColor,
       transparent: true,
