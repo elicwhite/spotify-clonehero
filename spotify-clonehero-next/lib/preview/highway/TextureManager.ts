@@ -356,9 +356,12 @@ async function loadDrumTextureWithFallback(
     const texture = await textureLoader.loadAsync(variantUrl);
     texture.colorSpace = THREE.SRGBColorSpace;
     return texture;
-  } catch {
-    console.warn(
-      `Failed to load drum texture variant ${variantUrl}, using fallback`,
+  } catch (error) {
+    // Missing variant assets must fail loudly (not render blank) even
+    // though we fall back to the base texture visually.
+    console.error(
+      `Missing texture variant ${variantUrl}, falling back to base texture`,
+      error,
     );
     if (fallbackTexture) return fallbackTexture;
     return createPlaceholderTexture();
@@ -516,70 +519,113 @@ async function loadCymbalTextures(
   return result;
 }
 
-async function loadStrumNoteTextures(
+/**
+ * Five-fret lane note types in visual-slot order (matches the `{kind}{N}`
+ * asset naming baked by `scripts/bake-preview-textures.ts`).
+ */
+const FIVE_FRET_LANES: readonly [number, string][] = [
+  [noteTypes.green, '0'],
+  [noteTypes.red, '1'],
+  [noteTypes.yellow, '2'],
+  [noteTypes.blue, '3'],
+  [noteTypes.orange, '4'],
+];
+
+/** Result type for five-fret texture loaders: noteType -> flags -> SpriteMaterial */
+type FiveFretTextureMap = Map<number, Map<number, THREE.SpriteMaterial>>;
+
+/**
+ * Loads strum/hopo/tap textures for the five-fret colored lanes, keyed by
+ * (noteType, modifierFlag | SP_FLAG). Base (non-SP) textures are loaded
+ * first as a fallback for missing SP variants.
+ */
+async function loadFiveFretColoredLaneTextures(
   textureLoader: THREE.TextureLoader,
   animatedTextureManager?: AnimatedTextureManager,
-) {
-  const noteTextures = [];
+): Promise<FiveFretTextureMap> {
+  const modifiers: [number, string, string][] = [
+    [noteFlags.strum, 'strum', 'webp'],
+    [noteFlags.hopo, 'hopo', 'webp'],
+    [noteFlags.tap, 'tap', 'png'],
+  ];
+  const spFlags: [number, string][] = [
+    [noteFlags.none, ''],
+    [SP_FLAG, '-sp'],
+  ];
 
-  for await (const num of [0, 1, 2, 3, 4]) {
-    const texture = await loadTexture(
-      textureLoader,
-      `/assets/preview/assets2/strum${num}.webp`,
-      animatedTextureManager,
-    );
-    noteTextures.push(
-      new THREE.SpriteMaterial({
-        map: texture,
+  const result: FiveFretTextureMap = new Map();
+
+  // First pass: load normal (no SP) textures for fallback.
+  const normalTextures = new Map<string, THREE.Texture>();
+  await Promise.all(
+    FIVE_FRET_LANES.flatMap(([noteType, index]) =>
+      modifiers.map(async ([, kind, ext]) => {
+        const url = `/assets/preview/assets2/${kind}${index}.${ext}`;
+        const texture = await loadTexture(
+          textureLoader,
+          url,
+          animatedTextureManager,
+        );
+        normalTextures.set(`${noteType}:${kind}`, texture);
       }),
-    );
+    ),
+  );
+
+  // Second pass: load SP variants, falling back to the normal texture.
+  const promises: Promise<void>[] = [];
+  for (const [noteType, index] of FIVE_FRET_LANES) {
+    const flagMap = new Map<number, THREE.SpriteMaterial>();
+    result.set(noteType, flagMap);
+
+    for (const [modifierFlag, kind] of modifiers) {
+      const fallback = normalTextures.get(`${noteType}:${kind}`)!;
+      flagMap.set(modifierFlag, new THREE.SpriteMaterial({map: fallback}));
+
+      for (const [spFlagKey, spFlagName] of spFlags) {
+        if (spFlagKey === noteFlags.none) continue; // already set above
+        const url = `/assets/preview/assets2/${kind}${spFlagName}${index}.webp`;
+        promises.push(
+          loadDrumTextureWithFallback(
+            textureLoader,
+            url,
+            fallback,
+            animatedTextureManager,
+          ).then(texture => {
+            flagMap.set(
+              modifierFlag | spFlagKey,
+              new THREE.SpriteMaterial({map: texture}),
+            );
+          }),
+        );
+      }
+    }
   }
 
-  return noteTextures;
+  await Promise.all(promises);
+  return result;
 }
 
-async function loadStrumHopoNoteTextures(
+/** Loads the open-note textures (normal + SP variant). */
+async function loadOpenNoteTextures(
   textureLoader: THREE.TextureLoader,
   animatedTextureManager?: AnimatedTextureManager,
-) {
-  const hopoNoteTextures = [];
+): Promise<Map<number, THREE.SpriteMaterial>> {
+  const normalTexture = await loadTexture(
+    textureLoader,
+    `/assets/preview/assets2/strum5.webp`,
+    animatedTextureManager,
+  );
+  const spTexture = await loadDrumTextureWithFallback(
+    textureLoader,
+    `/assets/preview/assets2/open-sp.webp`,
+    normalTexture,
+    animatedTextureManager,
+  );
 
-  for await (const num of [0, 1, 2, 3, 4]) {
-    const texture = await loadTexture(
-      textureLoader,
-      `/assets/preview/assets2/hopo${num}.webp`,
-      animatedTextureManager,
-    );
-    hopoNoteTextures.push(
-      new THREE.SpriteMaterial({
-        map: texture,
-      }),
-    );
-  }
-
-  return hopoNoteTextures;
-}
-
-async function loadStrumTapNoteTextures(
-  textureLoader: THREE.TextureLoader,
-  animatedTextureManager?: AnimatedTextureManager,
-) {
-  const hopoNoteTextures = [];
-
-  for await (const num of [0, 1, 2, 3, 4]) {
-    const texture = await loadTexture(
-      textureLoader,
-      `/assets/preview/assets2/tap${num}.png`,
-      animatedTextureManager,
-    );
-    hopoNoteTextures.push(
-      new THREE.SpriteMaterial({
-        map: texture,
-      }),
-    );
-  }
-
-  return hopoNoteTextures;
+  const result = new Map<number, THREE.SpriteMaterial>();
+  result.set(noteFlags.none, new THREE.SpriteMaterial({map: normalTexture}));
+  result.set(SP_FLAG, new THREE.SpriteMaterial({map: spTexture}));
+  return result;
 }
 
 /**
@@ -630,10 +676,8 @@ export async function loadNoteTextures(
 ) {
   const isDrums = instrument == 'drums';
 
-  let strumTextures: THREE.SpriteMaterial[];
-  let strumTexturesHopo: THREE.SpriteMaterial[];
-  let strumTexturesTap: THREE.SpriteMaterial[];
-  let openMaterial: THREE.SpriteMaterial;
+  let fiveFretTextures: FiveFretTextureMap;
+  let openTextures: Map<number, THREE.SpriteMaterial>;
 
   let tomTextures: DrumTextureMap;
   let cymbalTextures: DrumTextureMap;
@@ -646,25 +690,10 @@ export async function loadNoteTextures(
       loadKickTextures(textureLoader, animatedTextureManager),
     ]);
   } else {
-    strumTextures = await loadStrumNoteTextures(
-      textureLoader,
-      animatedTextureManager,
-    );
-    strumTexturesHopo = await loadStrumHopoNoteTextures(
-      textureLoader,
-      animatedTextureManager,
-    );
-    strumTexturesTap = await loadStrumTapNoteTextures(
-      textureLoader,
-      animatedTextureManager,
-    );
-    openMaterial = new THREE.SpriteMaterial({
-      map: await loadTexture(
-        textureLoader,
-        `/assets/preview/assets2/strum5.webp`,
-        animatedTextureManager,
-      ),
-    });
+    [fiveFretTextures, openTextures] = await Promise.all([
+      loadFiveFretColoredLaneTextures(textureLoader, animatedTextureManager),
+      loadOpenNoteTextures(textureLoader, animatedTextureManager),
+    ]);
   }
 
   return {
@@ -710,28 +739,25 @@ export async function loadNoteTextures(
           flagMap.get(typeFlag)!
         );
       } else {
-        const textures =
-          note.flags & noteFlags.tap
-            ? strumTexturesTap!
-            : note.flags & noteFlags.hopo
-              ? strumTexturesHopo!
-              : strumTextures!;
-        switch (note.type) {
-          case noteTypes.open:
-            return openMaterial!;
-          case noteTypes.green:
-            return textures[0];
-          case noteTypes.red:
-            return textures[1];
-          case noteTypes.yellow:
-            return textures[2];
-          case noteTypes.blue:
-            return textures[3];
-          case noteTypes.orange:
-            return textures[4];
-          default:
-            throw new Error('Invalid sprite requested');
+        const spFlag = inStarPower ? SP_FLAG : 0;
+
+        if (note.type === noteTypes.open) {
+          return openTextures.get(spFlag) ?? openTextures.get(noteFlags.none)!;
         }
+
+        const modifierFlag =
+          note.flags & noteFlags.tap
+            ? noteFlags.tap
+            : note.flags & noteFlags.hopo
+              ? noteFlags.hopo
+              : noteFlags.strum;
+
+        const flagMap = fiveFretTextures.get(note.type);
+        if (!flagMap) {
+          throw new Error(`Invalid sprite requested: ${note.type}`);
+        }
+
+        return flagMap.get(modifierFlag | spFlag) ?? flagMap.get(modifierFlag)!;
       }
     },
   };
