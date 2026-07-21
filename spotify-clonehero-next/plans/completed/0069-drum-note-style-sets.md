@@ -330,3 +330,7 @@ compression fields, or just match file-size-per-frame-count ballpark).
   for this plan to be considered done.
 - Red cymbal variants (`accent`/`ghost`/`sp`) — pro-drums has no red
   cymbal; `TextureManager` never requests them; do not generate.
+
+## Status (2026-07-21)
+
+Complete. Round set: sourced authentically from static.enchor.us (24 files, 786ad23) — no tinting. Square set: base/sp are the untouched shipped files; accents baked as shipped-base-frame + untinted SqTmAc overlay; ghosts baked via per-layer gray→RGB curve fit from the aligned round ghost pair (source alpha>200 mask + shipped-alpha guard) — all parity gates pass without --force (round-accent recompose 2.5-2.8 ≤4; round-ghost recompose 6.7-7.1 ≤18) (b897a66). SP variants byte-identical across styles (asserted, not regenerated). Ghosts stay single-frame static, matching the shipped/CDN convention (the spec's animated-ghost idea was dropped — no authentic animation source exists). Renderer: tomStyle option, default square. Key insight from contrarian review: shipped accents were never tinted — they are base frames + untinted overlay; only the ghost gem needed color fitting.
