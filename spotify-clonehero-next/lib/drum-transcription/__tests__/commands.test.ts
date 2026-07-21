@@ -21,10 +21,6 @@ import {
   RenameSectionCommand,
   BatchCommand,
   noteId,
-  typeToLane,
-  laneToType,
-  shiftLane,
-  defaultFlagsForType,
 } from '@/components/chart-editor/commands';
 import type {
   ChartDocument,
@@ -154,60 +150,9 @@ describe('noteId', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Lane helpers
-// ---------------------------------------------------------------------------
-
-describe('lane helpers', () => {
-  it('typeToLane maps drum types to lane indices', () => {
-    expect(typeToLane(noteTypes.redDrum)).toBe(0);
-    expect(typeToLane(noteTypes.yellowDrum)).toBe(1);
-    expect(typeToLane(noteTypes.blueDrum)).toBe(2);
-    expect(typeToLane(noteTypes.greenDrum)).toBe(3);
-    expect(typeToLane(noteTypes.kick)).toBe(4);
-  });
-
-  it('laneToType maps lane indices to drum types', () => {
-    expect(laneToType(0)).toBe(noteTypes.redDrum);
-    expect(laneToType(1)).toBe(noteTypes.yellowDrum);
-    expect(laneToType(2)).toBe(noteTypes.blueDrum);
-    expect(laneToType(3)).toBe(noteTypes.greenDrum);
-    expect(laneToType(4)).toBe(noteTypes.kick);
-  });
-
-  it('laneToType clamps out-of-range values', () => {
-    expect(laneToType(-1)).toBe(noteTypes.redDrum);
-    expect(laneToType(5)).toBe(noteTypes.kick);
-    expect(laneToType(100)).toBe(noteTypes.kick);
-  });
-
-  it('shiftLane moves a pad type by delta', () => {
-    expect(shiftLane(noteTypes.redDrum, 2)).toBe(noteTypes.blueDrum);
-    expect(shiftLane(noteTypes.greenDrum, -1)).toBe(noteTypes.blueDrum);
-  });
-
-  it('shiftLane clamps pads at the pad-lane boundaries', () => {
-    expect(shiftLane(noteTypes.redDrum, -1)).toBe(noteTypes.redDrum);
-    expect(shiftLane(noteTypes.greenDrum, 1)).toBe(noteTypes.greenDrum);
-  });
-
-  it('shiftLane never crosses the kick/pad boundary', () => {
-    expect(shiftLane(noteTypes.kick, 1)).toBe(noteTypes.kick);
-    expect(shiftLane(noteTypes.kick, -1)).toBe(noteTypes.kick);
-    expect(shiftLane(noteTypes.redDrum, -3)).toBe(noteTypes.redDrum);
-  });
-
-  it('defaultFlagsForType returns cymbal for yellow/blue/green', () => {
-    expect(defaultFlagsForType(noteTypes.yellowDrum)).toEqual(noteFlags.cymbal);
-    expect(defaultFlagsForType(noteTypes.blueDrum)).toEqual(noteFlags.cymbal);
-    expect(defaultFlagsForType(noteTypes.greenDrum)).toEqual(noteFlags.cymbal);
-  });
-
-  it('defaultFlagsForType returns empty for kick and red', () => {
-    expect(defaultFlagsForType(noteTypes.kick)).toEqual(0);
-    expect(defaultFlagsForType(noteTypes.redDrum)).toEqual(0);
-  });
-});
+// Lane helpers (typeToLane/laneToType/shiftLane/defaultFlagBits) are
+// schema-generic — see `lib/chart-edit/__tests__/notes-adapter.test.ts` for
+// their coverage against `drums4LaneSchema` and `guitarSchema`.
 
 // ---------------------------------------------------------------------------
 // AddNoteCommand

@@ -19,19 +19,24 @@ import {DEFAULT_DRUMS_EXPERT_SCOPE, entityContextFromScope} from '../../scope';
 import {
   AddNoteCommand,
   MoveEntitiesCommand,
-  defaultFlagsForType,
-  laneToType,
-  typeToLane,
-  KICK_LANE,
   toSchemaNote,
   type EditCommand,
 } from '../../commands';
 import {computeNoteDragDelta} from '../gestures';
 import {selectNotesInRange} from '../marquee';
 import type {DrumNote} from '@/lib/chart-edit';
-import {getDrumNotes, findTrack} from '@/lib/chart-edit';
+import {
+  getDrumNotes,
+  findTrack,
+  defaultFlagBits,
+  laneToType,
+  typeToLane,
+  drums4LaneSchema,
+} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
+
+const KICK_LANE = typeToLane(drums4LaneSchema, noteTypes.kick);
 
 const TRACK_KEY = {instrument: 'drums', difficulty: 'expert'} as const;
 const CTX = entityContextFromScope(DEFAULT_DRUMS_EXPERT_SCOPE);
@@ -156,13 +161,23 @@ describe('view parity: click-to-add → AddNoteCommand', () => {
     // flags for that type. Yellow lane (1) → cymbal-by-default.
     const lane = 1;
     const tick = 240;
-    const type = laneToType(lane);
+    const type = laneToType(drums4LaneSchema, lane);
     const highwayCmd = new AddNoteCommand(
-      toSchemaNote({tick, type, length: 0, flags: defaultFlagsForType(type)}),
+      toSchemaNote({
+        tick,
+        type,
+        length: 0,
+        flags: defaultFlagBits(drums4LaneSchema, type),
+      }),
       TRACK_KEY,
     );
     const pianoCmd = new AddNoteCommand(
-      toSchemaNote({tick, type, length: 0, flags: defaultFlagsForType(type)}),
+      toSchemaNote({
+        tick,
+        type,
+        length: 0,
+        flags: defaultFlagBits(drums4LaneSchema, type),
+      }),
       TRACK_KEY,
     );
     expectDocsEqual(applied(pianoCmd), applied(highwayCmd));
@@ -177,17 +192,27 @@ describe('view parity: marquee → selectNotesInRange', () => {
     // Piano roll builds DrumNote-shaped rows from PianoRollNotes; the highway
     // passes DrumNotes directly. Same bounds → same set.
     const bounds = {msMin: 400, msMax: 1100, laneMin: 1, laneMax: 2};
-    const highwaySet = selectNotesInRange(notes, bounds, TIMED_TEMPOS, RES);
+    const highwaySet = selectNotesInRange(
+      notes,
+      bounds,
+      TIMED_TEMPOS,
+      RES,
+      drums4LaneSchema,
+    );
     const pianoSet = selectNotesInRange(
       notes.map(n => ({
         tick: n.tick,
-        type: laneToType(typeToLane(n.type)),
+        type: laneToType(
+          drums4LaneSchema,
+          typeToLane(drums4LaneSchema, n.type),
+        ),
         length: 0,
         flags: 0,
       })),
       bounds,
       TIMED_TEMPOS,
       RES,
+      drums4LaneSchema,
     );
     expect(pianoSet).toEqual(highwaySet);
   });

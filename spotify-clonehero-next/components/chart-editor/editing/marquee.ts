@@ -13,9 +13,10 @@
  * already-converted bounds and a flat note list plus the chart's tempo map.
  */
 
-import type {DrumNote} from '@/lib/chart-edit';
+import type {DrumNote, InstrumentSchema} from '@/lib/chart-edit';
+import {typeToLane, drums4LaneSchema} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
-import {noteId, typeToLane} from '../commands';
+import {noteId} from '../commands';
 
 export interface BoxSelectBounds {
   msMin: number;
@@ -58,10 +59,11 @@ export function selectNotesInRange(
   bounds: BoxSelectBounds,
   timedTempos: TimedTempo[],
   resolution: number,
+  schema: InstrumentSchema = drums4LaneSchema,
 ): Set<string> {
   const selected = new Set<string>();
   for (const note of notes) {
-    const lane = typeToLane(note.type);
+    const lane = typeToLane(schema, note.type);
     if (lane < bounds.laneMin || lane > bounds.laneMax) continue;
 
     const noteMs = tickToMsLinear(note.tick, timedTempos, resolution);

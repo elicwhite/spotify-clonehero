@@ -21,14 +21,13 @@ import {
   phraseStartId,
   parseSchemaNoteId,
   typeToLane as schemaTypeToLane,
+  padLaneRange,
+  drums4LaneSchema,
 } from '@/lib/chart-edit';
 import {
   AddNoteCommand,
   DeleteNotesCommand,
   MoveEntitiesCommand,
-  FIRST_PAD_LANE,
-  LAST_PAD_LANE,
-  KICK_LANE,
 } from '../commands';
 import {prospectiveNoteAt} from '../editing/prospectiveNote';
 import {entityContextFromScope, trackKeyFromScope} from '../scope';
@@ -146,6 +145,11 @@ export const selectMoveTool: EditorTool = {
       const dy = coords.y - ctx.drag.dragStart.y;
       if (noteDrag.active || exceedsDragThreshold(dx, dy)) {
         const snappedTick = ctx.screenToTick(coords.x, coords.y);
+        const dragSchema = ctx.schema ?? drums4LaneSchema;
+        const {min: minPadLane, max: maxPadLane} = padLaneRange(dragSchema);
+        const excludedLane = dragSchema.laneShiftExcludes?.length
+          ? schemaTypeToLane(dragSchema, dragSchema.laneShiftExcludes[0])
+          : undefined;
         const {tickDelta, laneDelta} = computeNoteDragDelta({
           anchorTick: noteDrag.anchorTick,
           anchorLane: noteDrag.anchorLane,
@@ -153,9 +157,9 @@ export const selectMoveTool: EditorTool = {
           cursorLane: ctx.screenToLane(coords.x, coords.y),
           selectionSize: getSelectedIds(ctx.state, 'note').size,
           prevLaneDelta: noteDrag.laneDelta,
-          minPadLane: FIRST_PAD_LANE,
-          maxPadLane: LAST_PAD_LANE,
-          excludedLane: KICK_LANE,
+          minPadLane,
+          maxPadLane,
+          ...(excludedLane !== undefined ? {excludedLane} : {}),
         });
         if (
           !noteDrag.active ||
@@ -257,6 +261,7 @@ export const boxSelectTool: EditorTool = {
       },
       ctx.timedTempos,
       ctx.resolution,
+      ctx.schema ?? drums4LaneSchema,
     );
 
     if (evt.shiftKey) {

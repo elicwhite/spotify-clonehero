@@ -121,9 +121,6 @@ import {
   SetLyricTextCommand,
   AddPhraseCommand,
   DeletePhraseCommand,
-  FIRST_PAD_LANE,
-  LAST_PAD_LANE,
-  KICK_LANE,
   type EditCommand,
 } from '../commands';
 import {computeNoteDragDelta, exceedsDragThreshold} from '../editing/gestures';
@@ -1753,16 +1750,11 @@ export default function PianoRollTimeline({
         const dx = start ? x - start.x : 0;
         const dy = start ? y - start.y : 0;
         if (drag.active || exceedsDragThreshold(dx, dy)) {
-          const {min: minPadLane, max: maxPadLane} = scene.schema
-            ? padLaneRange(scene.schema)
-            : {min: FIRST_PAD_LANE, max: LAST_PAD_LANE};
-          const excludedLane =
-            scene.schema && scene.schema.laneShiftExcludes?.length
-              ? schemaTypeToLane(
-                  scene.schema,
-                  scene.schema.laneShiftExcludes[0],
-                )
-              : KICK_LANE;
+          const dragSchema = scene.schema ?? drums4LaneSchema;
+          const {min: minPadLane, max: maxPadLane} = padLaneRange(dragSchema);
+          const excludedLane = dragSchema.laneShiftExcludes?.length
+            ? schemaTypeToLane(dragSchema, dragSchema.laneShiftExcludes[0])
+            : undefined;
           const {tickDelta, laneDelta} = computeNoteDragDelta({
             anchorTick: drag.anchorTick,
             anchorLane: drag.anchorLane,
@@ -1772,7 +1764,7 @@ export default function PianoRollTimeline({
             prevLaneDelta: drag.laneDelta,
             minPadLane,
             maxPadLane,
-            excludedLane,
+            ...(excludedLane !== undefined ? {excludedLane} : {}),
           });
           if (
             !drag.active ||
@@ -1819,6 +1811,7 @@ export default function PianoRollTimeline({
               bounds,
               scene.timedTempos,
               scene.resolution,
+              scene.schema ?? drums4LaneSchema,
             )
           : new Set<string>();
         const merged = new Set(marqueeBaseRef.current);
@@ -2985,9 +2978,9 @@ function drawNotes(
     let cymbal = note.cymbal;
     if (dragActive && selected) {
       tick = Math.max(0, note.tick + drag.tickDelta);
-      const {min: minPadLane, max: maxPadLane} = scene.schema
-        ? padLaneRange(scene.schema)
-        : {min: FIRST_PAD_LANE, max: LAST_PAD_LANE};
+      const {min: minPadLane, max: maxPadLane} = padLaneRange(
+        scene.schema ?? drums4LaneSchema,
+      );
       const isPad = note.lane >= minPadLane && note.lane <= maxPadLane;
       if (drag.laneDelta !== 0 && isPad) {
         lane = Math.max(

@@ -70,9 +70,6 @@ import {
   schemaNoteId,
   typeToLane as schemaTypeToLane,
   laneToType as schemaLaneToType,
-  shiftLane as schemaShiftLane,
-  padLaneRange,
-  defaultFlagBits,
   toggleFlagBits,
   listNotes,
   addNote as addSchemaNote,
@@ -1169,53 +1166,6 @@ export class RenameSectionCommand implements EditCommand {
     if (section) section.name = this.newName;
     return newDoc;
   }
-}
-
-// ---------------------------------------------------------------------------
-// Lane helpers — `drums4LaneSchema`-bound wrappers over the schema-generic
-// lane/flag engine in `lib/chart-edit/entities/notes.ts` (plan 0037 Task 4).
-// Callers that need a different schema (e.g. `guitarSchema`) use the generic
-// `typeToLane`/`laneToType`/`shiftLane`/`defaultFlagBits` exports from
-// `@/lib/chart-edit` directly.
-// ---------------------------------------------------------------------------
-
-/** Map a NoteType to a drum lane index (0-4). */
-export function typeToLane(type: NoteType): number {
-  return schemaTypeToLane(drums4LaneSchema, type);
-}
-
-/** Editor lane kick occupies. Kick isn't part of the pad-lane axis (it
- *  spans the full highway), so this lane is always excluded from the pad
- *  range below — derived from the schema, not assumed to be a fixed index. */
-export const KICK_LANE = typeToLane(noteTypes.kick);
-
-const {min: FIRST_PAD_LANE_, max: LAST_PAD_LANE_} =
-  padLaneRange(drums4LaneSchema);
-/** First pad lane index — everything outside `[FIRST_PAD_LANE,
- *  LAST_PAD_LANE]` is kick. */
-export const FIRST_PAD_LANE = FIRST_PAD_LANE_;
-/** Highest pad lane index. */
-export const LAST_PAD_LANE = LAST_PAD_LANE_;
-
-/** Map a lane index (0-4) to a NoteType. */
-export function laneToType(lane: number): NoteType {
-  return schemaLaneToType(drums4LaneSchema, lane);
-}
-
-/**
- * Shift a note type by a lane delta among the pad lanes. Kick isn't part of
- * the lane axis (it spans the full highway), so kick never shifts and pads
- * clamp at the pad-lane boundaries. Pad ↔ kick conversion goes through
- * `ToggleKickCommand`.
- */
-export function shiftLane(type: NoteType, delta: number): NoteType {
-  return schemaShiftLane(drums4LaneSchema, type, delta);
-}
-
-/** Default flag bitmask for a new note in a given lane. Cymbal-by-default
- *  lanes come from the schema's `cymbal.appliesTo` binding. */
-export function defaultFlagsForType(type: NoteType): number {
-  return defaultFlagBits(drums4LaneSchema, type);
 }
 
 // ---------------------------------------------------------------------------

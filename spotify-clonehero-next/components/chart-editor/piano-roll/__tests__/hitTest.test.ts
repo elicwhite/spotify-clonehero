@@ -4,7 +4,7 @@
  *
  * Display order (top→bottom) is Red, Yellow, Blue, Green, Kick — the same
  * order as the editor lane indices (0 red, 1 yellow, 2 blue, 3 green, 4
- * kick; see `typeToLane`/`laneToType` in `../../commands`), so the display
+ * kick; see `typeToLane`/`laneToType` in `@/lib/chart-edit`), so the display
  * row *is* the data lane.
  */
 
