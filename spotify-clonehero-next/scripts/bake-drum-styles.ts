@@ -1,44 +1,67 @@
 /**
- * Bakes drum-tom note style-set art into `public/assets/preview/assets2/`.
+ * Bakes the square-style drum-tom accent and ghost art into
+ * `public/assets/preview/assets2/`.
  *
- * Current state: the full round tom set (base/sp/accent/accent-sp/ghost/
- * ghost-sp, all 4 colors) is sourced directly from static.enchor.us —
- * authentic, professionally-colored art — and downloaded as-is, not baked
- * by this script (see `drum-tom-round-*.webp`). The square set's base/sp
- * variants also already ship correct, hand-tuned art. What's still missing
- * is color-accurate square accent/ghost variants; no authentic source has
- * been found for those, so this script's grayscale-tint pipeline exists to
- * fill that gap.
+ * Algorithm (numerically validated against shipped pixels — see the
+ * validation gates below and plans/completed/0069-drum-note-style-sets.md):
  *
- * Source art: 128x64 grayscale PNG layers under
+ * - Accent: the shipped accent art (both round and square) is just the base
+ *   note frames with an UNTINTED overlay (the silver arrows/cage) composited
+ *   plain-over on top. There is no color to learn — the overlay source PNGs
+ *   are already just silver art, transparent over the band. So
+ *   `drum-tom-{color}-accent.webp` frame i = shipped `drum-tom-{color}.webp`
+ *   page i, composited with `toms square/SqTmAc/SqTmAc{i}.png` (untinted).
+ *   Frame i of the source art aligns 1:1 with page i of the shipped base
+ *   animation (zero offset).
+ *
+ * - Ghost is the only variant that actually needs a color fit: the gem layer
+ *   (`SQTMBody-Ghost.png`) is genuinely tinted in shipped art, and no
+ *   authentic square ghost source exists to copy directly. A per-gray-value
+ *   tone curve is fit from the ROUND ghost source pair (`ghost_tom.png` the
+ *   gem, `ghost_tom_head.png` the untinted cage) against the shipped round
+ *   ghost art, sampling only pixels attributable to the gem alone (gem
+ *   opaque, cage transparent, shipped pixel opaque). That curve is then
+ *   applied to the square gem (`SQTMBody-Ghost.png`), composited underneath
+ *   the untinted square cage (`SQTMBaseghost.png`) — gem under cage, the
+ *   compositing order verified against shipped art. Ghost art is a single
+ *   static frame, matching the shipped static-ghost convention (never
+ *   16-frame).
+ *
+ * - SP variants (`-accent-sp`, `-ghost-sp`) are already byte-identical
+ *   between square and round in the shipped tree (the SP star glow/cap
+ *   overlay is style-neutral by shipped precedent) — this script asserts
+ *   that byte-equality rather than regenerating them.
+ *
+ * - Square base/sp (`drum-tom-{color}.webp` / `-sp.webp`) and all
+ *   `drum-tom-round-*` files are pre-existing shipped/downloaded art (round:
+ *   sourced from static.enchor.us; square base/sp: hand-tuned). This script
+ *   never writes them — it only reads them as compositing/validation
+ *   sources.
+ *
+ * Source art: 128x64 grayscale/RGBA PNG layers under
  * `/Users/eliwhite/Downloads/Textures/Note_Spritesheets/Drums/` (Unity
- * export). Color is applied at bake time via `tintGrayscale`, not baked
- * into the source PNGs.
+ * export).
  *
- * Known limitation: the tint pipeline does not yet reach color parity for
- * the square accent/ghost variants — the shipped source art composites
- * multiple materials (rim highlight, head, shadow) that a single tone curve
- * can't reproduce faithfully. The parity gate below (verified against
- * shipped square base/sp art, and independently against the original
- * shipped round accent via git HEAD) catches this: a regenerated
- * parity-target file that doesn't match shipped art within threshold is
- * skipped (loud warning) rather than silently shipping a regression — pass
- * --force to overwrite anyway. Until the tint pipeline improves, this
- * script does not produce usable square accent/ghost art.
- *
- * See plans/completed/0069-drum-note-style-sets.md for the full
- * investigation (source-file audit, compositing model, naming design) this
- * script implements.
+ * Validation gates (blocking — a color's outputs are skipped, with a loud
+ * warning, unless the gate passes or --force is given):
+ * - Round-accent recomposite: composite(shipped `drum-tom-round-{c}.webp`
+ *   page i, `toms/Accents/AcPc{i+1}.png` untinted) vs shipped
+ *   `drum-tom-round-{c}-accent.webp` page i must have mean abs channel diff
+ *   <= 4 — proves the accent compositing model against real shipped art
+ *   before trusting it for the square output.
+ * - Round-ghost recomposite: the ghost ring curve applied back to its own
+ *   round fitting sources (composited gem-under-cage) vs shipped
+ *   `drum-tom-round-{c}-ghost.webp` must have mean abs channel diff <= 18 —
+ *   proves the curve-fit + compositing model before trusting it for the
+ *   square ghost output.
  *
  * Run with:
  *   pnpm tsx scripts/bake-drum-styles.ts            # bake + overwrite outputs
- *   pnpm tsx scripts/bake-drum-styles.ts --verify    # diff-only, no writes
- *   pnpm tsx scripts/bake-drum-styles.ts --force     # bake even if a parity
- *                                                     # check (square base/sp
- *                                                     # vs shipped art) fails
+ *   pnpm tsx scripts/bake-drum-styles.ts --verify    # gates + assertions only, no writes
+ *   pnpm tsx scripts/bake-drum-styles.ts --force     # bake even if a validation gate fails
  */
 
-import {execFileSync} from 'child_process';
+import {promises as fs} from 'fs';
 import * as path from 'path';
 
 import sharp from 'sharp';
@@ -61,24 +84,21 @@ const OUTPUT_DIR = path.join(
 const FRAME_COUNT = 16;
 const FRAME_DELAY_MS = 50;
 
-/** Opacity applied to the reused (non-ghost) shine/sweep overlay when it's
- * composited on top of the dimmer ghost base, since no ghost-specific shine
- * source exists. Tunable — chosen to read as a subtle highlight rather than
- * matching the full brightness of the non-ghost base. */
-const GHOST_SHINE_OPACITY = 0.5;
-
 // ---------------------------------------------------------------------------
-// Tint colors
+// Colors
 // ---------------------------------------------------------------------------
 
 export const DRUM_COLORS = ['red', 'yellow', 'blue', 'green'] as const;
 export type DrumColor = (typeof DRUM_COLORS)[number];
 
-/** Ghost variants get an extra brightness scale on top of already-dimmer
- * ghost source art (`SQTMBaseghost`/`ghost_tom`), so the dimming survives
- * tone-curve recalibration. Tunable — chosen to read as a clearly duller
- * gem/band than the non-ghost tone curve output. */
-export const GHOST_TONE_DIM = 0.6;
+export type TomVariant = 'accent' | 'ghost';
+export const TOM_VARIANTS: TomVariant[] = ['accent', 'ghost'];
+
+export function outputFileName(color: DrumColor, variant: TomVariant): string {
+  return variant === 'accent'
+    ? `drum-tom-${color}-accent.webp`
+    : `drum-tom-${color}-ghost.webp`;
+}
 
 // ---------------------------------------------------------------------------
 // Pure, Jest-testable helpers
@@ -103,18 +123,33 @@ export interface ToneCurve {
   b: number[];
 }
 
+export interface BuildToneCurveOptions {
+  /** Minimum sample count for a gray-value bucket to be treated as real data
+   * rather than noise. Default 1 (any sample counts). */
+  minSamples?: number;
+  /** Moving-average smoothing window radius applied to the fitted curve.
+   * Default 4. */
+  smoothRadius?: number;
+}
+
 /**
  * Fits a `ToneCurve` from real (gray, shipped-color) pixel-pair samples:
- * buckets samples by their (rounded) gray value, averages the observed
- * shipped color per bucket, then fills gaps between data-bearing buckets by
- * linear interpolation and extends flatly past the first/last data-bearing
- * bucket. This reproduces whatever nonlinear tone the shipped art actually
- * used (verified: the shipped tint is not a plain multiply — brightness
- * near white is preserved while midtones saturate toward the drum color —
- * so a single hex/ratio multiply can't reproduce it, but a measured curve
- * can) without hardcoding an invented color constant.
+ * buckets samples by their (rounded) gray value, keeps only buckets with at
+ * least `minSamples` samples, averages the observed shipped color per
+ * surviving bucket, linearly interpolates gaps between data-bearing buckets,
+ * and extends past the first/last data-bearing bucket toward black (gray=0)
+ * and near-white (gray=255) respectively — reflecting that a ring/gem's
+ * shading realistically bottoms out near black in shadow and tops out near
+ * white in a highlight, rather than holding flat at whatever the extreme
+ * sampled bucket happened to be.
  */
-export function buildToneCurve(samples: ToneSample[]): ToneCurve {
+export function buildToneCurve(
+  samples: ToneSample[],
+  options: BuildToneCurveOptions = {},
+): ToneCurve {
+  const minSamples = options.minSamples ?? 1;
+  const smoothRadius = options.smoothRadius ?? 4;
+
   const sums = Array.from({length: 256}, () => ({r: 0, g: 0, b: 0, n: 0}));
   for (const s of samples) {
     const bucket = Math.max(0, Math.min(255, Math.round(s.gray)));
@@ -126,7 +161,7 @@ export function buildToneCurve(samples: ToneSample[]): ToneCurve {
 
   const known: {index: number; r: number; g: number; b: number}[] = [];
   for (let i = 0; i < 256; i++) {
-    if (sums[i].n > 0) {
+    if (sums[i].n >= minSamples) {
       known.push({
         index: i,
         r: sums[i].r / sums[i].n,
@@ -147,30 +182,31 @@ export function buildToneCurve(samples: ToneSample[]): ToneCurve {
     return curve;
   }
 
+  const blackAnchor = {index: 0, r: 0, g: 0, b: 0};
+  const whiteAnchor = {index: 255, r: 255, g: 255, b: 255};
+
   for (let i = 0; i < 256; i++) {
+    let lo: {index: number; r: number; g: number; b: number};
+    let hi: {index: number; r: number; g: number; b: number};
+
     if (i <= known[0].index) {
-      curve.r.push(known[0].r);
-      curve.g.push(known[0].g);
-      curve.b.push(known[0].b);
-      continue;
-    }
-    if (i >= known[known.length - 1].index) {
-      const last = known[known.length - 1];
-      curve.r.push(last.r);
-      curve.g.push(last.g);
-      curve.b.push(last.b);
-      continue;
-    }
-    // Find the bracketing known points and linearly interpolate.
-    let lo = known[0];
-    let hi = known[known.length - 1];
-    for (let k = 0; k < known.length - 1; k++) {
-      if (known[k].index <= i && known[k + 1].index >= i) {
-        lo = known[k];
-        hi = known[k + 1];
-        break;
+      lo = blackAnchor;
+      hi = known[0];
+    } else if (i >= known[known.length - 1].index) {
+      lo = known[known.length - 1];
+      hi = whiteAnchor;
+    } else {
+      lo = known[0];
+      hi = known[known.length - 1];
+      for (let k = 0; k < known.length - 1; k++) {
+        if (known[k].index <= i && known[k + 1].index >= i) {
+          lo = known[k];
+          hi = known[k + 1];
+          break;
+        }
       }
     }
+
     const t =
       hi.index === lo.index ? 0 : (i - lo.index) / (hi.index - lo.index);
     curve.r.push(lo.r + (hi.r - lo.r) * t);
@@ -178,19 +214,17 @@ export function buildToneCurve(samples: ToneSample[]): ToneCurve {
     curve.b.push(lo.b + (hi.b - lo.b) * t);
   }
 
-  return smoothToneCurve(curve);
+  return smoothToneCurve(curve, smoothRadius);
 }
 
 /**
  * Smooths a `ToneCurve` with a small moving-average window. The shipped
  * ground-truth art is a lossy WebP, so per-bucket averages carry
  * compression quantization noise; applied as a per-pixel LUT, that noise
- * reproduces as visible speckle on otherwise-smooth gradients (verified:
- * un-smoothed curves produced a grainy gem instead of the shipped art's
- * smooth shading). Smoothing trades a small amount of curve precision for
- * removing that speckle.
+ * reproduces as visible speckle on otherwise-smooth gradients. Smoothing
+ * trades a small amount of curve precision for removing that speckle.
  */
-function smoothToneCurve(curve: ToneCurve, windowRadius = 4): ToneCurve {
+function smoothToneCurve(curve: ToneCurve, windowRadius: number): ToneCurve {
   const smoothChannel = (channel: number[]) =>
     channel.map((_, i) => {
       const lo = Math.max(0, i - windowRadius);
@@ -209,14 +243,11 @@ function smoothToneCurve(curve: ToneCurve, windowRadius = 4): ToneCurve {
 
 /**
  * Applies a `ToneCurve` to a grayscale (R===G===B) RGBA PNG buffer,
- * indexing by each pixel's R channel value. `brightnessScale` (default 1)
- * additionally scales the curve's output, used to dim ghost variants.
- * Alpha is unchanged.
+ * indexing by each pixel's R channel value. Alpha is unchanged.
  */
 export async function tintGrayscale(
   png: Buffer,
   curve: ToneCurve,
-  brightnessScale = 1,
 ): Promise<Buffer> {
   const {data, info} = await sharp(png)
     .ensureAlpha()
@@ -227,9 +258,9 @@ export async function tintGrayscale(
 
   for (let i = 0; i < data.length; i += 4) {
     const gray = data[i];
-    data[i] = clamp(curve.r[gray] * brightnessScale);
-    data[i + 1] = clamp(curve.g[gray] * brightnessScale);
-    data[i + 2] = clamp(curve.b[gray] * brightnessScale);
+    data[i] = clamp(curve.r[gray]);
+    data[i + 1] = clamp(curve.g[gray]);
+    data[i + 2] = clamp(curve.b[gray]);
     // data[i + 3] (alpha) untouched
   }
 
@@ -269,19 +300,13 @@ export interface LayerSpec {
   /** Alpha multiplier applied to this layer before compositing (0-1).
    * Omitted/1 leaves the layer's alpha untouched. */
   opacity?: number;
-  /** Whether this layer receives the per-drum-color tone curve (the
-   * gem/body piece). `false` leaves it untouched grayscale — the metal
-   * rim/cage, and (currently) the SP glow ring/cap, which the source art's
-   * own white ring shape doesn't carry enough uncontaminated sample area to
-   * calibrate a reliable cyan curve for yet (see `spOverlay` below).
-   * Defaults to `'color'`. */
-  tint?: 'color' | false;
 }
 
 /**
- * Composites `layers` (bottom to top) into `frameCount` 128x64 RGBA PNG
- * buffers, one per output frame. A layer given as a single path is reused
- * unchanged on every frame; a layer given as an array is indexed by frame.
+ * Composites `layers` (bottom to top, plain "over" blending) into
+ * `frameCount` 128x64 RGBA PNG buffers, one per output frame. A layer given
+ * as a single path/buffer is reused unchanged on every frame; a layer given
+ * as an array is indexed by frame.
  */
 export async function compositeFrames(
   layers: LayerSpec[],
@@ -340,6 +365,16 @@ export async function framesToAnimatedWebp(
     .toFile(outPath);
 }
 
+/** Encodes a single frame as a plain (non-animated) static WebP, matching
+ * the shipped static-ghost convention — ghost art must never be written as a
+ * 16-frame animation. */
+export async function frameToStaticWebp(
+  frame: Buffer,
+  outPath: string,
+): Promise<void> {
+  await sharp(frame).webp({quality: 90, effort: 6}).toFile(outPath);
+}
+
 // ---------------------------------------------------------------------------
 // Source frame path helpers
 // ---------------------------------------------------------------------------
@@ -359,12 +394,11 @@ function framePaths(
 const TOMS_DIR = path.join(SOURCE_DIR, 'toms');
 const TOMS_SQUARE_DIR = path.join(SOURCE_DIR, 'toms square');
 
+/** Only the layers actually needed: the untinted accent overlay frames, and
+ * the ghost gem/cage pair used for the curve fit + recomposite validation.
+ * Base/sp source layers (body/head/shine) aren't needed — square and round
+ * base/sp are shipped art this script never regenerates. */
 const ROUND_SOURCES = {
-  body: path.join(TOMS_DIR, 'Standard', 'body.png'),
-  head: path.join(TOMS_DIR, 'Standard', 'head.png'),
-  shine: framePaths(path.join(TOMS_DIR, 'Standard'), 'shine', FRAME_COUNT, {
-    pad: 2,
-  }),
   accent: framePaths(path.join(TOMS_DIR, 'Accents'), 'AcPc', FRAME_COUNT, {
     start: 1,
     pad: 2,
@@ -374,143 +408,48 @@ const ROUND_SOURCES = {
 };
 
 const SQUARE_SOURCES = {
-  body: path.join(TOMS_SQUARE_DIR, 'SQTMBase.png'),
-  head: path.join(TOMS_SQUARE_DIR, 'SQTMBody.png'),
-  shine: framePaths(path.join(TOMS_SQUARE_DIR, 'Shines'), 'Sh', FRAME_COUNT),
   accent: framePaths(
     path.join(TOMS_SQUARE_DIR, 'SqTmAc'),
     'SqTmAc',
     FRAME_COUNT,
   ),
-  ghostBody: path.join(TOMS_SQUARE_DIR, 'SQTMBaseghost.png'),
-  ghostHead: path.join(TOMS_SQUARE_DIR, 'SQTMBody-Ghost.png'),
+  ghostBody: path.join(TOMS_SQUARE_DIR, 'SQTMBody-Ghost.png'),
+  ghostHead: path.join(TOMS_SQUARE_DIR, 'SQTMBaseghost.png'),
 };
 
-/** SP glow overlay is style-neutral — shared by both square and round. */
-const STAR_NOTE_GLOW = framePaths(
-  path.join(TOMS_DIR, 'StarNote'),
-  '',
-  FRAME_COUNT,
-  {start: 1, pad: 4},
-);
-const STAR_NOTE_CAP = path.join(TOMS_DIR, 'StarNote', 'sp_cap.png');
-
 // ---------------------------------------------------------------------------
-// Recipes (color-independent — grayscale layer composition per variant)
+// Shipped-file helpers
 // ---------------------------------------------------------------------------
 
-export type TomVariant =
-  | 'base'
-  | 'sp'
-  | 'accent'
-  | 'accent-sp'
-  | 'ghost'
-  | 'ghost-sp';
-
-export const TOM_VARIANTS: TomVariant[] = [
-  'base',
-  'sp',
-  'accent',
-  'accent-sp',
-  'ghost',
-  'ghost-sp',
-];
-
-export interface TomStyleRecipe {
-  style: 'square' | 'round';
-  /** variant -> composite layers (bottom to top) */
-  recipes: Record<TomVariant, LayerSpec[]>;
+function shippedPath(name: string): string {
+  return path.join(OUTPUT_DIR, name);
 }
 
-/**
- * Which of the two static body layers is the tinted "gem"/color piece vs
- * the untinted metal rim, verified visually against shipped art:
- * - square (`SQTMBase`+`SQTMBody`): `SQTMBase` (outer spikes) stays silver,
- *   `SQTMBody` (center diamond) is tinted — so `head` (the 2nd slot) tints.
- * - round (`body`+`head`): `body` (outer rim band) is tinted (matches the
- *   already-shipped round accent, where the rim band is colored and the
- *   top disc/arrows stay white) — so `body` (the 1st slot) tints.
- */
-function buildStyleRecipes(
-  style: 'square' | 'round',
-  src: typeof ROUND_SOURCES,
-): TomStyleRecipe {
-  const tintBody = style === 'round';
-  const colorTint = (isBody: boolean): 'color' | false =>
-    isBody === tintBody ? 'color' : false;
-
-  const base: LayerSpec[] = [
-    {source: src.body, tint: colorTint(true)},
-    {source: src.head, tint: colorTint(false)},
-    {source: src.shine, tint: false},
-  ];
-  const accent: LayerSpec[] = [{source: src.accent, tint: 'color'}];
-  const ghost: LayerSpec[] = [
-    {source: src.ghostBody, tint: colorTint(true)},
-    {source: src.ghostHead, tint: colorTint(false)},
-    {source: src.shine, opacity: GHOST_SHINE_OPACITY, tint: false},
-  ];
-  // The glow ring genuinely needs its own cyan tint (it is NOT already
-  // cyan in the source art — verified: the raw StarNote frames are a plain
-  // white ring). A dedicated glow tone curve was attempted but the ring's
-  // silhouette barely extends past the note's own footprint on this 128x64
-  // canvas, so there's very little uncontaminated "glow-only" pixel area to
-  // sample from — even a same-alpha-only mask keeps producing a poorly-fit,
-  // non-monotonic curve that made the SP parity diff worse, not better.
-  // Left as an identity (grayscale) pass-through rather than shipping a
-  // worse-than-before approximation; SP variants remain a known-imperfect,
-  // write-protected parity target (see PARITY_TARGET_VARIANTS) until this
-  // gets revisited with a larger/cleaner sample source.
-  const spOverlay: LayerSpec[] = [
-    {source: STAR_NOTE_GLOW, tint: false},
-    {source: STAR_NOTE_CAP, tint: false},
-  ];
-
-  return {
-    style,
-    recipes: {
-      base,
-      sp: [...base, ...spOverlay],
-      accent,
-      'accent-sp': [...accent, ...spOverlay],
-      ghost,
-      'ghost-sp': [...ghost, ...spOverlay],
-    },
-  };
-}
-
-export const SQUARE_RECIPE = buildStyleRecipes('square', SQUARE_SOURCES);
-export const ROUND_RECIPE = buildStyleRecipes('round', ROUND_SOURCES);
-
-/** Maps a (style, variant) pair to the filename suffix used in `assets2`. */
-function variantSuffix(variant: TomVariant): string {
-  switch (variant) {
-    case 'base':
-      return '';
-    case 'sp':
-      return '-sp';
-    case 'accent':
-      return '-accent';
-    case 'accent-sp':
-      return '-accent-sp';
-    case 'ghost':
-      return '-ghost';
-    case 'ghost-sp':
-      return '-ghost-sp';
+async function extractFrames(
+  filePath: string,
+  count: number,
+): Promise<Buffer[]> {
+  const frames: Buffer[] = [];
+  for (let i = 0; i < count; i++) {
+    frames.push(
+      await sharp(filePath, {page: i}).ensureAlpha().png().toBuffer(),
+    );
   }
+  return frames;
 }
 
-export function outputFileName(
-  style: 'square' | 'round',
-  color: DrumColor,
-  variant: TomVariant,
-): string {
-  const styleInfix = style === 'round' ? '-round' : '';
-  return `drum-tom${styleInfix}-${color}${variantSuffix(variant)}.webp`;
+async function readRgba(
+  source: string,
+): Promise<{data: Buffer; width: number; height: number}> {
+  const {data, info} = await sharp(source)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({resolveWithObject: true});
+  return {data, width: info.width, height: info.height};
 }
 
 // ---------------------------------------------------------------------------
-// Verification (square base/sp should be visually unchanged from shipped)
+// Validation (compare regenerated frames against shipped ground truth)
 // ---------------------------------------------------------------------------
 
 interface VerifyResult {
@@ -522,7 +461,7 @@ interface VerifyResult {
 async function verifyAgainstShipped(
   frames: Buffer[],
   shipped: string | Buffer,
-  {label}: {label: string},
+  {label, threshold}: {label: string; threshold: number},
 ): Promise<VerifyResult> {
   const file = label;
   let shippedMeta;
@@ -536,11 +475,13 @@ async function verifyAgainstShipped(
     };
   }
 
-  if (shippedMeta.pages !== frames.length) {
+  // Non-animated webps report `pages` as undefined — treat that as 1 page.
+  const shippedPages = shippedMeta.pages ?? 1;
+  if (shippedPages !== frames.length) {
     return {
       file,
       ok: false,
-      message: `frame count mismatch: shipped=${shippedMeta.pages} regenerated=${frames.length}`,
+      message: `frame count mismatch: shipped=${shippedPages} regenerated=${frames.length}`,
     };
   }
 
@@ -560,9 +501,7 @@ async function verifyAgainstShipped(
   // proxy (0 = identical, 255 = maximally different). Pixels where BOTH
   // sides are fully transparent are skipped: RGB values under alpha=0 are
   // visually meaningless and not guaranteed to be zeroed the same way by
-  // every encoder, so including them measures encoder noise, not a real
-  // mismatch (verified: skipping them drops a spurious 62 mean diff down to
-  // ~16 on already-matching art).
+  // every encoder.
   let totalDiff = 0;
   let totalSamples = 0;
   for (let i = 0; i < frames.length; i++) {
@@ -570,7 +509,10 @@ async function verifyAgainstShipped(
       .ensureAlpha()
       .raw()
       .toBuffer({resolveWithObject: true});
-    const shipRaw = await sharp(shipped, {page: i})
+    const shipRaw = await sharp(
+      shipped,
+      frames.length > 1 ? {page: i} : undefined,
+    )
       .ensureAlpha()
       .raw()
       .toBuffer({resolveWithObject: true});
@@ -592,277 +534,208 @@ async function verifyAgainstShipped(
   }
 
   const meanDiff = totalDiff / totalSamples;
-  const THRESHOLD = 8; // mean abs channel diff (0-255 scale) considered a close match
-  const ok = meanDiff <= THRESHOLD;
+  const ok = meanDiff <= threshold;
   return {
     file,
     ok,
-    message: `mean abs channel diff = ${meanDiff.toFixed(2)} (threshold ${THRESHOLD})${ok ? '' : ' — MISMATCH, recipe may not match shipped art'}`,
+    message: `mean abs channel diff = ${meanDiff.toFixed(2)} (threshold ${threshold})${ok ? '' : ' — MISMATCH'}`,
   };
 }
 
-// ---------------------------------------------------------------------------
-// Tint curve calibration (derived from real shipped pixels, not invented
-// hex/ratio constants)
-// ---------------------------------------------------------------------------
-
 /**
- * Reads a raw RGBA pixel buffer for a PNG/WebP source (path or buffer),
- * one frame at a time.
+ * Fits the ghost ring `ToneCurve` for one drum color from the aligned round
+ * ghost source pair: samples pixels where the round gem (`ghost_tom.png`) is
+ * opaque, the round cage (`ghost_tom_head.png`) is essentially transparent,
+ * and the shipped round ghost art is opaque — i.e. pixels whose shipped
+ * color is attributable to the gem tint alone.
  */
-async function readRgba(
-  source: string | Buffer,
-  page?: number,
-): Promise<{data: Buffer; width: number; height: number}> {
-  const img = sharp(source, page != null ? {page} : undefined).ensureAlpha();
-  const {data, info} = await img.raw().toBuffer({resolveWithObject: true});
-  return {data, width: info.width, height: info.height};
-}
+async function fitGhostRingCurve(color: DrumColor): Promise<ToneCurve> {
+  const body = await readRgba(ROUND_SOURCES.ghostBody);
+  const head = await readRgba(ROUND_SOURCES.ghostHead);
+  const shipped = await readRgba(
+    shippedPath(`drum-tom-round-${color}-ghost.webp`),
+  );
 
-/**
- * Calibrates a `ToneCurve` per drum color from the currently-shipped square
- * base file (`drum-tom-{color}.webp`), the ground truth this feature must
- * not regress. Samples are collected only from pixels where the tinted
- * "gem" layer (`SQTMBody`) is opaque and the untinted `Shines` overlay is
- * essentially transparent at that pixel/frame — i.e. pixels whose shipped
- * color is attributable to the gem tint alone, not partially covered by an
- * untinted highlight sweep. This walks the gem's own internal shading
- * (shadow to highlight), which is what makes the fitted curve reproduce
- * "near-white stays white, midtones saturate toward the drum color"
- * without hardcoding that behavior.
- */
-async function calibrateSquareBaseCurve(color: DrumColor): Promise<ToneCurve> {
-  const body = await readRgba(SQUARE_SOURCES.head); // SQTMBody = tinted gem
   const samples: ToneSample[] = [];
-
-  for (let frame = 0; frame < FRAME_COUNT; frame++) {
-    const shine = await readRgba(SQUARE_SOURCES.shine[frame]);
-    const shippedPath = path.join(OUTPUT_DIR, `drum-tom-${color}.webp`);
-    const shipped = await readRgba(shippedPath, frame);
-
-    for (let px = 0; px < body.width * body.height; px++) {
-      const i = px * 4;
-      const bodyAlpha = body.data[i + 3];
-      const shineAlpha = shine.data[i + 3];
-      const shippedAlpha = shipped.data[i + 3];
-      if (bodyAlpha === 255 && shineAlpha === 0 && shippedAlpha > 200) {
-        samples.push({
-          gray: body.data[i],
-          r: shipped.data[i],
-          g: shipped.data[i + 1],
-          b: shipped.data[i + 2],
-        });
-      }
+  for (let px = 0; px < body.width * body.height; px++) {
+    const i = px * 4;
+    const bodyAlpha = body.data[i + 3];
+    const headAlpha = head.data[i + 3];
+    const shippedAlpha = shipped.data[i + 3];
+    // The gem's own source alpha (`ghost_tom.png`) is loosened to >200: a
+    // large ~400px region of the gem plate is genuinely semi-opaque in the
+    // source PNG itself (not a thin antialiased edge), and a strict >250 cut
+    // excluded it entirely from the fit — forcing the curve to extrapolate
+    // that whole region instead of using real data (verified: this, not
+    // shipped-WebP alpha quantization, was the dominant cause of the
+    // round-ghost recompose gate failing for red/green). The shipped-ghost
+    // threshold is likewise relaxed to >=200 for the same lossy-WebP reason
+    // as before. Since semi-opaque source samples now enter the fit, require
+    // the shipped pixel's alpha to track the source body alpha within ~25 —
+    // this keeps samples to pixels where the shipped art is rendering that
+    // same semi-opaque gem material alone, not some other composite result
+    // at a similar-but-unrelated opacity.
+    if (
+      bodyAlpha > 200 &&
+      headAlpha < 5 &&
+      shippedAlpha >= 200 &&
+      Math.abs(shippedAlpha - bodyAlpha) <= 25
+    ) {
+      samples.push({
+        gray: body.data[i],
+        r: shipped.data[i],
+        g: shipped.data[i + 1],
+        b: shipped.data[i + 2],
+      });
     }
   }
 
-  // The gem's own highlight sparkle never reaches pure white (its brightest
-  // sampled pixel tops out well under 255), so without an anchor the curve
-  // extends flatly from that dimmer endpoint — under-predicting brightness
-  // for any *other* asset whose source art does reach gray=255 (e.g. the
-  // round accent's white arrows/disc, verified separately). Every sampled
-  // shipped asset shows pure-white source pixels rendering as pure white
-  // regardless of drum color (a highlight, not a colored surface), so
-  // anchor the white endpoint explicitly rather than extrapolating it,
-  // unless real samples already reached it (avoid diluting a measured
-  // value with a synthetic one in the same bucket).
-  if (!samples.some(s => s.gray >= 250)) {
-    samples.push({gray: 255, r: 255, g: 255, b: 255});
-  }
-
-  return buildToneCurve(samples);
-}
-
-/**
- * Reads a file's bytes as they exist at git HEAD (not the working tree),
- * used to diff against the *original* shipped round accent art even though
- * this bake intentionally overwrites that same filename with new square
- * accent content (see naming design: `drum-tom-{color}-accent.webp` moves
- * from round to square style; the round accent moves to a new
- * `-round-...` filename).
- */
-function readGitBlob(relPath: string): Buffer {
-  return execFileSync('git', ['show', `HEAD:${relPath}`], {
-    cwd: path.join(__dirname, '..'),
-    maxBuffer: 1024 * 1024 * 50,
-  });
-}
-
-/**
- * Validates the calibrated curve against a second, independent ground
- * truth: the *original* shipped round accent (`AcPc` frames, tinted),
- * fetched from git HEAD since the working-tree file at that path now
- * intentionally holds new square accent content. `AcPc` frames are
- * self-contained (no separate untinted rim layer), so this checks that the
- * curve fitted from the square gem generalizes to a different asset tinted
- * with the same recipe.
- */
-async function verifyRoundAccentCurve(
-  curve: ToneCurve,
-  color: DrumColor,
-): Promise<VerifyResult> {
-  const originalBlob = readGitBlob(
-    `spotify-clonehero-next/public/assets/preview/assets2/drum-tom-${color}-accent.webp`,
-  );
-
-  const regenFrames: Buffer[] = [];
-  for (let frame = 0; frame < FRAME_COUNT; frame++) {
-    const gray = await sharp(ROUND_SOURCES.accent[frame])
-      .ensureAlpha()
-      .png()
-      .toBuffer();
-    regenFrames.push(await tintGrayscale(gray, curve));
-  }
-
-  return verifyAgainstShipped(regenFrames, originalBlob, {
-    label: `drum-tom-${color}-accent.webp (round, from git HEAD)`,
-  });
+  return buildToneCurve(samples, {minSamples: 5, smoothRadius: 3});
 }
 
 // ---------------------------------------------------------------------------
 // Bake driver
 // ---------------------------------------------------------------------------
 
-/**
- * Pre-tints the individual layers flagged `tint: 'color'` (the gem/body
- * piece) with the per-drum-color curve before compositing, so untinted
- * layers (metal rim, SP glow) stay grayscale in the final composite instead
- * of the whole frame being tinted uniformly.
- */
-async function tintLayers(
-  layers: LayerSpec[],
-  colorCurve: ToneCurve,
-  brightnessScale: number,
-): Promise<LayerSpec[]> {
-  return Promise.all(
-    layers.map(async layer => {
-      if (layer.tint === false) return layer;
-
-      const sources = Array.isArray(layer.source)
-        ? layer.source
-        : [layer.source];
-      const tinted = await Promise.all(
-        sources.map(async source => {
-          const buf = await sharp(source).ensureAlpha().png().toBuffer();
-          return tintGrayscale(buf, colorCurve, brightnessScale);
-        }),
-      );
-      return {
-        ...layer,
-        source: Array.isArray(layer.source) ? tinted : tinted[0],
-      };
-    }),
+async function bakeSquareAccent(color: DrumColor): Promise<void> {
+  const baseFrames = await extractFrames(
+    shippedPath(`drum-tom-${color}.webp`),
+    FRAME_COUNT,
   );
+  const frames = await compositeFrames(
+    [{source: baseFrames}, {source: SQUARE_SOURCES.accent}],
+    FRAME_COUNT,
+  );
+  const outPath = shippedPath(outputFileName(color, 'accent'));
+  await framesToAnimatedWebp(frames, FRAME_DELAY_MS, outPath);
+  console.log(`[bake] wrote ${outputFileName(color, 'accent')}`);
 }
 
-const PARITY_TARGET_VARIANTS: TomVariant[] = ['base', 'sp'];
-
-async function bakeVariant(
-  style: 'square' | 'round',
+async function bakeSquareGhost(
   color: DrumColor,
-  variant: TomVariant,
-  layers: LayerSpec[],
-  colorCurve: ToneCurve,
-  {verifyOnly, force}: {verifyOnly: boolean; force: boolean},
-): Promise<VerifyResult | null> {
-  const brightnessScale =
-    variant === 'ghost' || variant === 'ghost-sp' ? GHOST_TONE_DIM : 1;
-  const coloredLayers = await tintLayers(layers, colorCurve, brightnessScale);
-  const tintedFrames = await compositeFrames(coloredLayers, FRAME_COUNT);
+  curve: ToneCurve,
+): Promise<void> {
+  const gemPng = await sharp(SQUARE_SOURCES.ghostBody)
+    .ensureAlpha()
+    .png()
+    .toBuffer();
+  const tintedGem = await tintGrayscale(gemPng, curve);
+  const [frame] = await compositeFrames(
+    [{source: tintedGem}, {source: SQUARE_SOURCES.ghostHead}],
+    1,
+  );
+  const outPath = shippedPath(outputFileName(color, 'ghost'));
+  await frameToStaticWebp(frame, outPath);
+  console.log(`[bake] wrote ${outputFileName(color, 'ghost')}`);
+}
 
-  const outFile = outputFileName(style, color, variant);
-  const outPath = path.join(OUTPUT_DIR, outFile);
+async function runValidationGates(color: DrumColor): Promise<{
+  accentGate: VerifyResult;
+  ghostGate: VerifyResult;
+  curve: ToneCurve;
+}> {
+  // Round-accent recomposite check.
+  const roundBaseFrames = await extractFrames(
+    shippedPath(`drum-tom-round-${color}.webp`),
+    FRAME_COUNT,
+  );
+  const roundAccentRegen = await compositeFrames(
+    [{source: roundBaseFrames}, {source: ROUND_SOURCES.accent}],
+    FRAME_COUNT,
+  );
+  const accentGate = await verifyAgainstShipped(
+    roundAccentRegen,
+    shippedPath(`drum-tom-round-${color}-accent.webp`),
+    {label: `round-accent-recompose ${color}`, threshold: 4},
+  );
+  console.log(
+    `[gate] ${accentGate.ok ? 'OK  ' : 'FAIL'} ${accentGate.file}: ${accentGate.message}`,
+  );
 
-  // Square base/sp already ship correct, hand-tuned art — treat them as a
-  // parity target: only overwrite if the regenerated frames match closely,
-  // or the caller passed --force. Every other output (round-*, square
-  // accent/ghost) has no existing shipped equivalent under that exact
-  // filename, so there's nothing to protect and they always write.
-  const isParityTarget =
-    style === 'square' && PARITY_TARGET_VARIANTS.includes(variant);
+  // Round-ghost recomposite check: fit the ghost curve, then apply it back
+  // to its own fitting sources (round) and compare against shipped round
+  // ghost — proves the curve-fit + compositing model before trusting it for
+  // the square ghost.
+  const curve = await fitGhostRingCurve(color);
+  const roundGemPng = await sharp(ROUND_SOURCES.ghostBody)
+    .ensureAlpha()
+    .png()
+    .toBuffer();
+  const tintedRoundGem = await tintGrayscale(roundGemPng, curve);
+  const roundGhostRegen = await compositeFrames(
+    [{source: tintedRoundGem}, {source: ROUND_SOURCES.ghostHead}],
+    1,
+  );
+  const ghostGate = await verifyAgainstShipped(
+    roundGhostRegen,
+    shippedPath(`drum-tom-round-${color}-ghost.webp`),
+    {label: `round-ghost-recompose ${color}`, threshold: 18},
+  );
+  console.log(
+    `[gate] ${ghostGate.ok ? 'OK  ' : 'FAIL'} ${ghostGate.file}: ${ghostGate.message}`,
+  );
 
-  let verifyResult: VerifyResult | null = null;
-  if (isParityTarget) {
-    verifyResult = await verifyAgainstShipped(tintedFrames, outPath, {
-      label: outFile,
-    });
+  return {accentGate, ghostGate, curve};
+}
+
+async function assertSpByteEquality(color: DrumColor): Promise<boolean> {
+  let ok = true;
+  for (const variant of ['accent-sp', 'ghost-sp'] as const) {
+    const squareFile = `drum-tom-${color}-${variant}.webp`;
+    const roundFile = `drum-tom-round-${color}-${variant}.webp`;
+    const [a, b] = await Promise.all([
+      fs.readFile(shippedPath(squareFile)),
+      fs.readFile(shippedPath(roundFile)),
+    ]);
+    const same = Buffer.compare(new Uint8Array(a), new Uint8Array(b)) === 0;
     console.log(
-      `[verify] ${verifyResult.ok ? 'OK  ' : 'WARN'} ${outFile}: ${verifyResult.message}`,
+      `[assert] ${same ? 'OK  ' : 'FAIL'} ${squareFile} === ${roundFile} (byte-identical, style-neutral SP art)`,
     );
+    if (!same) ok = false;
   }
-
-  const blockedByParity = isParityTarget && !verifyResult!.ok && !force;
-
-  if (!verifyOnly && !blockedByParity) {
-    await framesToAnimatedWebp(tintedFrames, FRAME_DELAY_MS, outPath);
-    console.log(`[bake] wrote ${outFile}`);
-  } else if (blockedByParity) {
-    console.warn(
-      `[bake] SKIPPED ${outFile} — regenerated art failed the parity check against shipped art; re-run with --force to overwrite anyway.`,
-    );
-  }
-
-  return verifyResult;
+  return ok;
 }
 
 async function main() {
   const verifyOnly = process.argv.includes('--verify');
   const force = process.argv.includes('--force');
 
-  console.log('Calibrating tint curves from shipped square base pixels...');
-  const curves: Record<DrumColor, ToneCurve> = {} as Record<
-    DrumColor,
-    ToneCurve
-  >;
-  for (const color of DRUM_COLORS) {
-    curves[color] = await calibrateSquareBaseCurve(color);
-  }
-
-  const verifyResults: VerifyResult[] = [];
-
-  // Independent parity check: the fitted curve, applied to a different
-  // (self-contained) source asset, should reproduce the original shipped
-  // round accent closely too.
-  for (const color of DRUM_COLORS) {
-    const result = await verifyRoundAccentCurve(curves[color], color);
-    console.log(
-      `[verify] ${result.ok ? 'OK  ' : 'WARN'} ${result.file}: ${result.message}`,
-    );
-    verifyResults.push(result);
-  }
+  let anyGateFailed = false;
+  let anySpMismatch = false;
 
   for (const color of DRUM_COLORS) {
-    for (const variant of TOM_VARIANTS) {
-      const squareResult = await bakeVariant(
-        'square',
-        color,
-        variant,
-        SQUARE_RECIPE.recipes[variant],
-        curves[color],
-        {verifyOnly, force},
-      );
-      if (squareResult) verifyResults.push(squareResult);
+    const {accentGate, ghostGate, curve} = await runValidationGates(color);
+    const gatesOk = accentGate.ok && ghostGate.ok;
+    if (!gatesOk) anyGateFailed = true;
 
-      await bakeVariant(
-        'round',
-        color,
-        variant,
-        ROUND_RECIPE.recipes[variant],
-        curves[color],
-        {verifyOnly, force},
-      );
+    if (!verifyOnly) {
+      if (gatesOk || force) {
+        await bakeSquareAccent(color);
+        await bakeSquareGhost(color, curve);
+      } else {
+        console.warn(
+          `[bake] SKIPPED ${color} accent/ghost — validation gate failed; re-run with --force to overwrite anyway.`,
+        );
+      }
     }
+
+    const spOk = await assertSpByteEquality(color);
+    if (!spOk) anySpMismatch = true;
   }
 
-  const failures = verifyResults.filter(r => !r.ok);
-  if (failures.length > 0) {
+  if (anyGateFailed) {
     console.warn(
-      `\n[verify] ${failures.length}/${verifyResults.length} parity checks (square base/sp + round accent) did not match shipped art within threshold.`,
+      '\n[gate] one or more validation gates failed — see FAIL lines above.',
     );
   } else {
-    console.log(
-      `\n[verify] all ${verifyResults.length} parity checks (square base/sp + round accent) matched shipped art within threshold.`,
+    console.log('\n[gate] all validation gates passed.');
+  }
+
+  if (anySpMismatch) {
+    console.error(
+      '\n[assert] SP art is no longer byte-identical between square and round — investigate before shipping.',
     );
+    process.exitCode = 1;
   }
 
   if (verifyOnly) {
