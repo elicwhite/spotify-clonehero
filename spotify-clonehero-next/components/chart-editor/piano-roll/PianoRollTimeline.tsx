@@ -2293,7 +2293,12 @@ export default function PianoRollTimeline({
             );
             if (trackKey) {
               executeCommand(
-                new ToggleFlagCommand(targetIds, 'cymbal', trackKey),
+                new ToggleFlagCommand(
+                  targetIds,
+                  'cymbal',
+                  trackKey,
+                  scene.schema ?? drums4LaneSchema,
+                ),
               );
             }
           },

@@ -33,7 +33,13 @@ import {
   makeMultiPartVocalsDoc,
 } from './fixtures';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
-import {getDrumNotes, drums4LaneSchema, guitarSchema} from '@/lib/chart-edit';
+import {
+  getDrumNotes,
+  drums4LaneSchema,
+  guitarSchema,
+  listNotes,
+  addNote,
+} from '@/lib/chart-edit';
 import type {ChartDocument, TrackKey} from '@/lib/chart-edit';
 import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 
@@ -149,6 +155,30 @@ describe('command execute + snapshot-restore', () => {
         n => n.tick === 480,
       )!;
       expect(!!(red.flags & noteFlags.accent)).toBe(true);
+    });
+
+    // Plan 0067 §5: ToggleFlagCommand takes the schema explicitly, so
+    // non-drum flags (HOPO/tap/strum) work when a guitar schema is passed.
+    it('toggles HOPO on a guitar note when passed guitarSchema', () => {
+      const GUITAR_KEY: TrackKey = {instrument: 'guitar', difficulty: 'expert'};
+      const before = makeFixtureDoc();
+      before.parsedChart.trackData.push(emptyTrackData('guitar', 'expert'));
+      const guitar = before.parsedChart.trackData[1];
+      addNote(guitar, {tick: 240, type: noteTypes.green}, guitarSchema);
+
+      const greenId = noteId({tick: 240, type: noteTypes.green});
+      const cmd = new ToggleFlagCommand(
+        [greenId],
+        'hopo',
+        GUITAR_KEY,
+        guitarSchema,
+      );
+      const after = cmd.execute(before);
+      const guitarAfter = after.parsedChart.trackData[1];
+      const green = listNotes(guitarAfter, guitarSchema).find(
+        n => n.tick === 240,
+      )!;
+      expect(!!(green.flags & noteFlags.hopo)).toBe(true);
     });
   });
 

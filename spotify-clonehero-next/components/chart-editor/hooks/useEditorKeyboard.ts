@@ -21,21 +21,25 @@ import {
   BatchCommand,
   ToggleFlagCommand,
   noteId,
-  laneToType,
-  defaultFlagsForType,
   toSchemaNote,
   translateSchemaNote,
-  type FlagName,
   type SchemaNote,
 } from '../commands';
-import type {NoteType} from '@eliwhite/scan-chart';
 import {
   findTrack,
-  getDrumNotes,
   drums4LaneSchema,
+  drums5LaneSchema,
+  guitarSchema,
+  bassSchema,
+  rhythmSchema,
+  keysSchema,
   listNotes,
+  defaultFlagBits,
+  laneToType,
   schemaForInstrument,
   schemaForTrack,
+  type InstrumentSchema,
+  type NoteFlagName,
 } from '@/lib/chart-edit';
 import {
   buildTimedTempos,
@@ -74,24 +78,42 @@ const TOOL_SHORTCUT_MAP: Record<string, ToolMode> = {
 };
 
 /**
- * Lane key mapping for keys mode (Place tool): derived from
- * `drums4LaneSchema.lanes[i].defaultKey` so the schema is the single source
- * of truth. (1=kick, 2=red, 3=yellow, 4=blue, 5=green by default.)
+ * Every schema an editor page can be actively scoped to. Lane-key and
+ * flag-key hotkeys are registered once per key in the union of these
+ * schemas' `defaultKey` fields (a fixed set, so hook order/count stays
+ * stable across renders) and resolve the *active* schema's binding for
+ * that key at keypress time — a lane/flag without a `defaultKey` in the
+ * active schema simply no-ops for that key.
  */
-const LANE_KEY_MAP: Record<string, number> = Object.fromEntries(
-  drums4LaneSchema.lanes
-    .filter(l => l.defaultKey !== undefined)
-    .map(l => [l.defaultKey!, l.index]),
+const ALL_SCHEMAS: readonly InstrumentSchema[] = [
+  drums4LaneSchema,
+  drums5LaneSchema,
+  guitarSchema,
+  bassSchema,
+  rhythmSchema,
+  keysSchema,
+];
+
+/** Union of lane `defaultKey`s across every schema (place-mode keys). */
+const LANE_KEYS: readonly string[] = Array.from(
+  new Set(
+    ALL_SCHEMAS.flatMap(schema =>
+      schema.lanes
+        .filter(l => l.defaultKey !== undefined)
+        .map(l => l.defaultKey!),
+    ),
+  ),
 );
 
-/**
- * Flag shortcuts: derived from `drums4LaneSchema.flagBindings[i].defaultKey`
- * (Q=cymbal, A=accent, S=ghost by default).
- */
-const FLAG_SHORTCUT_MAP: Record<string, FlagName> = Object.fromEntries(
-  drums4LaneSchema.flagBindings
-    .filter(b => b.defaultKey !== undefined)
-    .map(b => [b.defaultKey!, b.flag as FlagName]),
+/** Union of flag-binding `defaultKey`s across every schema. */
+const FLAG_KEYS: readonly string[] = Array.from(
+  new Set(
+    ALL_SCHEMAS.flatMap(schema =>
+      schema.flagBindings
+        .filter(b => b.defaultKey !== undefined)
+        .map(b => b.defaultKey!),
+    ),
+  ),
 );
 
 /**
@@ -121,6 +143,15 @@ export function useEditorKeyboard(onSave?: () => void) {
   // pinned to a non-track scope (e.g. add-lyrics with `{kind: 'vocals'}`)
   // there's no notes track to operate on.
   const getActiveTrack = useCallback(() => selectActiveTrack(state), [state]);
+
+  // Active-scope schema, for lane/flag keyboard shortcuts and note
+  // add/select. Falls back to `drums4LaneSchema` for non-track scopes so
+  // callers that unconditionally need a schema (e.g. select-all with no
+  // track) still get sane lane math for an empty result.
+  const getActiveSchema = useCallback(
+    () => selectActiveSchema(state) ?? drums4LaneSchema,
+    [state],
+  );
 
   // Helper: sync cursor tick from current audio position.
   // After playback or timeline clicks, the audio position may have moved
@@ -346,7 +377,8 @@ export function useEditorKeyboard(onSave?: () => void) {
   useHotkey('Mod+A', () => {
     const track = getActiveTrack();
     if (track) {
-      const allIds = new Set(getDrumNotes(track).map(n => noteId(n)));
+      const schema = getActiveSchema();
+      const allIds = new Set(listNotes(track, schema).map(n => noteId(n)));
       dispatch({type: 'SET_SELECTION', kind: 'note', ids: allIds});
     }
   });
@@ -506,9 +538,12 @@ export function useEditorKeyboard(onSave?: () => void) {
   }
 
   // -----------------------------------------------------------------------
-  // Lane keys (1-5) in Place mode — place/toggle note at cursor
+  // Lane keys in Place mode — place/toggle note at cursor. Registered once
+  // per key in `LANE_KEYS` (the union across every schema, so hook order
+  // is stable); each handler resolves the *active* schema's lane for that
+  // key and no-ops if the active schema has no lane bound to it.
   // -----------------------------------------------------------------------
-  for (const [key, lane] of Object.entries(LANE_KEY_MAP)) {
+  for (const key of LANE_KEYS) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useHotkey(
       key as Hotkey,
@@ -516,12 +551,15 @@ export function useEditorKeyboard(onSave?: () => void) {
         if (!state.chartDoc) return;
         const trackKey = trackKeyFromScope(state.activeScope);
         if (!trackKey) return;
-        const type: NoteType = laneToType(lane);
+        const schema = getActiveSchema();
+        const lane = schema.lanes.find(l => l.defaultKey === key);
+        if (!lane) return;
+        const type = laneToType(schema, lane.index);
         const tick = state.cursorTick;
 
         const track = getActiveTrack();
         if (track) {
-          const existing = getDrumNotes(track).find(
+          const existing = listNotes(track, schema).find(
             n => n.tick === tick && n.type === type,
           );
           if (existing) {
@@ -534,9 +572,10 @@ export function useEditorKeyboard(onSave?: () => void) {
                   tick,
                   type,
                   length: 0,
-                  flags: defaultFlagsForType(type),
+                  flags: defaultFlagBits(schema, type),
                 }),
                 trackKey,
+                schema,
               ),
             );
           }
@@ -561,21 +600,29 @@ export function useEditorKeyboard(onSave?: () => void) {
   }
 
   // -----------------------------------------------------------------------
-  // Flag toggles (Q, A, S) — apply to selected notes
+  // Flag toggles — apply to selected notes. Registered once per key in
+  // `FLAG_KEYS` (the union across every schema); each handler resolves the
+  // active schema's flag binding for that key and no-ops if the active
+  // schema has none bound to it.
   // -----------------------------------------------------------------------
-  for (const [key, flag] of Object.entries(FLAG_SHORTCUT_MAP)) {
+  for (const key of FLAG_KEYS) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useHotkey(
       key.toUpperCase() as Hotkey,
       () => {
         const trackKey = trackKeyFromScope(state.activeScope);
         if (!trackKey) return;
+        const schema = getActiveSchema();
+        const binding = schema.flagBindings.find(b => b.defaultKey === key);
+        if (!binding) return;
+        const flag: NoteFlagName = binding.flag;
         if (getSelectedIds(state, 'note').size > 0 && state.chartDoc) {
           executeCommand(
             new ToggleFlagCommand(
               Array.from(getSelectedIds(state, 'note')),
               flag,
               trackKey,
+              schema,
             ),
           );
         }

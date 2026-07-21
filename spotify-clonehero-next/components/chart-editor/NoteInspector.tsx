@@ -4,7 +4,11 @@ import {useMemo} from 'react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
 import {useChartEditorContext} from './ChartEditorContext';
-import {getSelectedIds, selectActiveTrack} from '@/lib/chart-editor-core';
+import {
+  getSelectedIds,
+  selectActiveTrack,
+  selectActiveSchema,
+} from '@/lib/chart-editor-core';
 import {trackKeyFromScope} from './scope';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {
@@ -12,30 +16,36 @@ import {
   ToggleKickCommand,
   DeleteNotesCommand,
   noteId,
-  type FlagName,
 } from './commands';
-import {getDrumNotes, drums4LaneSchema} from '@/lib/chart-edit';
+import {
+  drums4LaneSchema,
+  listNotes,
+  type NoteFlagName,
+  type InstrumentSchema,
+} from '@/lib/chart-edit';
 import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 import type {NoteType} from '@eliwhite/scan-chart';
 
-/** Friendly label for a drum `NoteType`, from `InstrumentSchema.lanes[].label`. */
-function drumTypeLabel(type: NoteType): string {
-  return (
-    drums4LaneSchema.lanes.find(l => l.noteType === type)?.label ?? String(type)
-  );
+/** Friendly label for a `NoteType`, from `schema.lanes[].label`. */
+function typeLabel(schema: InstrumentSchema, type: NoteType): string {
+  return schema.lanes.find(l => l.noteType === type)?.label ?? String(type);
 }
 
-// Flag items shown in the inspector are derived from the drum schema.
-// Only flags with a keyboard shortcut surface here; flags without one
-// (e.g. flam, doubleKick) live on the schema but aren't bound to a UI button.
-const FLAG_ITEMS: {key: FlagName; label: string; shortcut: string}[] =
-  drums4LaneSchema.flagBindings
+/** Flag items shown in the inspector, derived from `schema.flagBindings`.
+ *  Only flags with a keyboard shortcut surface here; flags without one
+ *  (e.g. drums' flam, doubleKick) live on the schema but aren't bound to a
+ *  UI button. */
+function flagItemsForSchema(
+  schema: InstrumentSchema,
+): {key: NoteFlagName; label: string; shortcut: string}[] {
+  return schema.flagBindings
     .filter(b => b.defaultKey !== undefined)
     .map(b => ({
-      key: b.flag as FlagName,
+      key: b.flag,
       label: b.label,
       shortcut: b.defaultKey!.toUpperCase(),
     }));
+}
 
 interface NoteInspectorProps {
   className?: string | undefined;
@@ -49,11 +59,16 @@ export default function NoteInspector({className}: NoteInspectorProps) {
   const {state, dispatch} = useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
 
+  const schema = selectActiveSchema(state) ?? drums4LaneSchema;
+  const flagItems = flagItemsForSchema(schema);
+  const hasKickLane = schema.lanes.some(l => l.noteType === noteTypes.kick);
+
   const selectedNotes = useMemo(() => {
     const track = selectActiveTrack(state);
     if (!track) return [];
+    const activeSchema = selectActiveSchema(state) ?? drums4LaneSchema;
     const selected = getSelectedIds(state, 'note');
-    return getDrumNotes(track).filter(n => selected.has(noteId(n)));
+    return listNotes(track, activeSchema).filter(n => selected.has(noteId(n)));
   }, [state]);
 
   if (selectedNotes.length === 0) return null;
@@ -62,7 +77,7 @@ export default function NoteInspector({className}: NoteInspectorProps) {
   const firstNote = selectedNotes[0];
 
   // Determine aggregate flag state for the selection
-  const flagStates = FLAG_ITEMS.map(({key}) => {
+  const flagStates = flagItems.map(({key}) => {
     const allTrue = selectedNotes.every(n => n.flags & noteFlags[key]);
     const someTrue = selectedNotes.some(n => n.flags & noteFlags[key]);
     return {key, allTrue, someTrue, indeterminate: someTrue && !allTrue};
@@ -73,9 +88,9 @@ export default function NoteInspector({className}: NoteInspectorProps) {
   const trackKey = trackKeyFromScope(state.activeScope);
   if (!trackKey) return null;
 
-  const handleToggleFlag = (flag: FlagName) => {
+  const handleToggleFlag = (flag: NoteFlagName) => {
     const ids = selectedNotes.map(n => noteId(n));
-    executeCommand(new ToggleFlagCommand(ids, flag, trackKey));
+    executeCommand(new ToggleFlagCommand(ids, flag, trackKey, schema));
   };
 
   const handleDelete = () => {
@@ -84,20 +99,10 @@ export default function NoteInspector({className}: NoteInspectorProps) {
     dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
   };
 
-  // Check if cymbal is applicable (only for yellow/blue/green)
-  const hasCymbalApplicable = selectedNotes.some(n =>
-    (
-      [
-        noteTypes.yellowDrum,
-        noteTypes.blueDrum,
-        noteTypes.greenDrum,
-      ] as NoteType[]
-    ).includes(n.type),
-  );
-
   // Kick conversion works like the tom/cymbal toggle: pads convert to kick;
   // an all-kick selection converts back to snare. (Dragging can't cross the
-  // kick/pad boundary — this button is the only mouse path.)
+  // kick/pad boundary — this button is the only mouse path.) Drum-only:
+  // gated on `hasKickLane` above, since kick has no non-drum equivalent.
   const allKick = selectedNotes.every(n => n.type === noteTypes.kick);
   const handleToggleKick = () => {
     const ids = selectedNotes.map(n => noteId(n));
@@ -144,7 +149,7 @@ export default function NoteInspector({className}: NoteInspectorProps) {
       {isSingle && (
         <div className="space-y-1">
           <span className="text-xs text-muted-foreground">Type</span>
-          <p className="font-medium">{drumTypeLabel(firstNote.type)}</p>
+          <p className="font-medium">{typeLabel(schema, firstNote.type)}</p>
         </div>
       )}
 
@@ -173,7 +178,7 @@ export default function NoteInspector({className}: NoteInspectorProps) {
               <span
                 key={type}
                 className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                {drumTypeLabel(Number(type) as NoteType)} x{count}
+                {typeLabel(schema, Number(type) as NoteType)} x{count}
               </span>
             ))}
           </div>
@@ -184,19 +189,29 @@ export default function NoteInspector({className}: NoteInspectorProps) {
       <div className="space-y-1">
         <span className="text-xs text-muted-foreground">Flags</span>
         <div className="flex gap-1">
-          <Button
-            variant={allKick ? 'secondary' : 'outline'}
-            size="sm"
-            className={cn('h-7 px-2 text-xs', allKick && 'ring-1 ring-primary')}
-            onClick={handleToggleKick}
-            title={allKick ? 'Convert kick to snare' : 'Convert to kick'}>
-            Kick
-          </Button>
+          {hasKickLane && (
+            <Button
+              variant={allKick ? 'secondary' : 'outline'}
+              size="sm"
+              className={cn(
+                'h-7 px-2 text-xs',
+                allKick && 'ring-1 ring-primary',
+              )}
+              onClick={handleToggleKick}
+              title={allKick ? 'Convert kick to snare' : 'Convert to kick'}>
+              Kick
+            </Button>
+          )}
           {flagStates.map(({key, allTrue, indeterminate}) => {
-            // Hide cymbal button if not applicable
-            if (key === 'cymbal' && !hasCymbalApplicable) return null;
+            // Hide a flag button when none of the selected notes' types
+            // are legal for it (e.g. cymbal on an all-red/kick selection).
+            const flagItem = flagItems.find(f => f.key === key)!;
+            const binding = schema.flagBindings.find(b => b.flag === key);
+            const applicable =
+              !binding?.appliesTo ||
+              selectedNotes.some(n => binding.appliesTo!.includes(n.type));
+            if (!applicable) return null;
 
-            const flagItem = FLAG_ITEMS.find(f => f.key === key)!;
             return (
               <Button
                 key={key}

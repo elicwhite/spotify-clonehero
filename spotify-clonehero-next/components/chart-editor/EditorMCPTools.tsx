@@ -3,7 +3,11 @@
 import {useEffect, useRef} from 'react';
 import {useChartEditorContext} from './ChartEditorContext';
 import {useAudioServiceContext} from './AudioServiceContext';
-import {getSelectedIds, selectActiveTrack} from '@/lib/chart-editor-core';
+import {
+  getSelectedIds,
+  selectActiveTrack,
+  selectActiveSchema,
+} from '@/lib/chart-editor-core';
 import {
   describeScope,
   entityContextFromScope,
@@ -363,8 +367,9 @@ export default function EditorMCPTools() {
           const selected = getSelectedIds(s, 'note');
           if (selected.size === 0)
             return {content: [{type: 'text', text: 'No notes selected'}]};
+          const schema = selectActiveSchema(s) ?? drums4LaneSchema;
           executeCommandRef.current(
-            new ToggleFlagCommand(Array.from(selected), flag, trackKey),
+            new ToggleFlagCommand(Array.from(selected), flag, trackKey, schema),
           );
           return {
             content: [
