@@ -7,7 +7,7 @@
 > **Source review 2026-07-20:** `~/projects/chart-preview` (Geomitron's
 > `chart-preview@1.3.0`, THREE.js, actively maintained — last commits
 > 2026-02) renders instrument features our highway lacks. Its architecture
-> is *behind* ours (no reconciler, no interaction layer, no schema —
+> is _behind_ ours (no reconciler, no interaction layer, no schema —
 > hardcoded `InstrumentType` branches: lane math `ChartPreview.ts:1653-1707`,
 > texture matrix `:1369-1510`), so we borrow feature semantics and data,
 > not structure.
@@ -61,7 +61,7 @@
 
 The folder is **Unity authoring source** (paired `.meta` files,
 `fiveFretAtlas.spriteAtlas`, sprite strips like
-`spr_star_notes_strip4.png`, and GHL notes as *layered components* —
+`spr_star_notes_strip4.png`, and GHL notes as _layered components_ —
 body/ring/cuttout/glow — `Note_Spritesheets/GHL/`, 50 files). It is a
 superset in the wrong format: chart-preview loads flat per-variant files
 (`preview-6fret-white-hopo-sp.webp`) from `static.enchor.us`; our
@@ -69,9 +69,9 @@ superset in the wrong format: chart-preview loads flat per-variant files
 
 - **Bake step required:** a script (offline, checked into `scripts/`) that
   slices sprite strips, composites layers where needed, and emits flat per-variant
-  webp files in *our* naming convention into `public/assets/preview/`.
+  webp files in _our_ naming convention into `public/assets/preview/`.
   Drums mapping: `Standard`→base, `Accents`→`-accent`, `StarNote`/`sp
-  shine`→`-sp` (no ghost source found — likely a tint; decide at bake
+shine`→`-sp` (no ghost source found — likely a tint; decide at bake
   time). HUD/rockmeter/menu art in the folder is out of scope.
 - Licensing/footprint gate before shipping: see the earlier texture
   decision (grayscale bank, footprint concern) — bake locally first,
@@ -103,3 +103,7 @@ superset in the wrong format: chart-preview loads flat per-variant files
 - Animated WebP note textures (chart-preview's `ImageDecoder` pipeline) —
   static variants first.
 - GHL editing UI.
+
+## Status (2026-07-20)
+
+Tasks 1-4 implemented via workflow wf_bb984f13-2e6 (six-fret task removed after descope). Texture bake script emits 82 webp variants (~464KB, committed) from ~/Downloads/Textures; SP/ghost/accent skins render via the (lane, flags+SP) matrix — visible on /guitar-edit. Browser-validated; typecheck/lint/tests green.

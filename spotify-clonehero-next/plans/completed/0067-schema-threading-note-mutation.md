@@ -1,7 +1,7 @@
 # Plan 0067: Thread the active InstrumentSchema through all note-mutation paths
 
 > **Origin:** follow-up gap from plans 0037/0038 (found during 0038 browser
-> validation). Note *rendering* is schema-driven everywhere; note *mutation*
+> validation). Note _rendering_ is schema-driven everywhere; note _mutation_
 > is still pinned to `drums4LaneSchema` at every entry point.
 > **Revised 2026-07-20** after contrarian review: corrected the failure-mode
 > analysis, added four missed mutation surfaces, the highway-geometry
@@ -58,7 +58,7 @@ paste passes a schema (`useEditorKeyboard.ts:284-308`), cut uses
    PianoRollTimeline, and EditorMCPTools — all migrating — so it is
    deletable. The separate `helpers/drum-notes.ts` layer stays:
    `lib/drum-transcription/chart-types.ts:27` and `validate.ts:226` are
-   legitimate drum-domain consumers; only *editor* uses of `getDrumNotes`
+   legitimate drum-domain consumers; only _editor_ uses of `getDrumNotes`
    migrate to `listNotes(track, schema)`.
 
 ### Blocker discovered in review: highway geometry
@@ -121,7 +121,7 @@ so the trap can't recur.
    drum scope.
 6. **Keyboard:** place-mode + select-all via generic
    `laneToType(schema)`/`defaultFlagBits(schema)`/`listNotes(track,
-   schema)`; schema passed to `AddNoteCommand`.
+schema)`; schema passed to `AddNoteCommand`.
 7. **`EditorMCPTools` migrates** off `getDrumNotes`/drum label maps to the
    active schema (labels from `schema.lanes[].label`).
 8. **Highway geometry:** add `worldXOffset` to the five-fret lanes (values
@@ -175,3 +175,7 @@ parity. Shape 0067's APIs so 0068 doesn't have to rework them:
   dual-`greenDrum` id ambiguity — the `tick:typeName` id format can't
   distinguish variant lanes; revisit if/when 5-lane ships.
 - GHLive schema, vocal pitch editing.
+
+## Status (2026-07-20)
+
+All 9 tasks implemented via workflow wf_bb984f13-2e6 (sonnet implement → fable review → commit per task). Browser-validated on /guitar-edit: note place + undo on highway, note drag + undo in piano roll (previously silent no-ops), drum-edit unchanged, zero console errors. typecheck/lint/1945 Jest tests green.
