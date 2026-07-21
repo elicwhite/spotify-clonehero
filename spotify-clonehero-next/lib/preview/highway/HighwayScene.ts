@@ -77,16 +77,29 @@ export function createHighway(highwayTexture: THREE.Texture, width: number) {
 }
 
 /**
- * A neutral floor mesh used when a chart has no drum track (or when the
- * editor's capabilities suppress drum lanes — e.g. add-lyrics). No lane
- * stripes, no hitbox; markers + cursor still draw on top of it.
+ * Highway width used when there's no active notes track to take
+ * `InstrumentSchema.highwayWidth` from (vocals/global scopes — add-lyrics).
+ * Matches the drum width so the grid overlay (0.9) and waveform surface
+ * (0.84) line up the same way they do on a drum track.
  */
-export function createEmptyHighway() {
-  const mat = new THREE.MeshBasicMaterial({color: 0x111111});
-  const geometry = new THREE.PlaneGeometry(0.9, 2);
+export const LANES_OFF_HIGHWAY_WIDTH = 0.9;
+
+/**
+ * The strikeline for scopes with no hitbox sprite (vocals/global). Notes
+ * place "now" at worldY = -1; without the instrument's hitbox art there's
+ * nothing else marking that line, so draw a thin bright bar there.
+ */
+export function createPlainStrikeline(width: number) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.85,
+    depthTest: false,
+  });
+  const geometry = new THREE.PlaneGeometry(width, 0.012);
   const plane = new THREE.Mesh(geometry, mat);
-  plane.position.y = -0.1;
-  plane.renderOrder = HIGHWAY_FLOOR_RENDER_ORDER;
+  plane.position.y = -1;
+  plane.renderOrder = 2;
   return plane;
 }
 

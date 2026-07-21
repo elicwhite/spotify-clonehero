@@ -6,7 +6,8 @@ import {AudioManager} from '../audioManager';
 import {
   getHighwayTexture,
   createHighway,
-  createEmptyHighway,
+  createPlainStrikeline,
+  LANES_OFF_HIGHWAY_WIDTH,
   loadAndCreateHitBox,
   createWaveformSurface,
   createGridOverlay,
@@ -412,10 +413,13 @@ export const setupRenderer = (
     const lanesActive = showDrumLanes && track != null;
 
     if (!lanesActive) {
-      // Lanes-off mode: neutral floor, no hitbox, no drum geometry.
-      const emptyHighway = createEmptyHighway();
-      scene.add(emptyHighway);
-      classicHighwayMesh = emptyHighway;
+      // Lanes-off mode: the same textured highway floor, but no instrument
+      // hitbox and no drum geometry. A plain bar marks the strikeline in
+      // the hitbox's place.
+      const highway = createHighway(highwayTexture, LANES_OFF_HIGHWAY_WIDTH);
+      scene.add(highway);
+      classicHighwayMesh = highway;
+      scene.add(createPlainStrikeline(LANES_OFF_HIGHWAY_WIDTH));
     } else {
       const highway = createHighway(highwayTexture, schema?.highwayWidth ?? 1);
       scene.add(highway);
