@@ -450,13 +450,19 @@ function LyricsAlignInner() {
           startTime: Date.now(),
         });
 
-        const songBytes = new Uint8Array(arrayBuffer);
-        const {vocals} = await separateStems(songBytes, {vocals: true}, p =>
-          updateAlignStep('separate', {
-            detail: p.step,
-            progress: p.percent,
-            etaSeconds: p.etaSeconds,
-          }),
+        // `decodeAudioData` above detaches `arrayBuffer`, so reconstructing
+        // a Uint8Array from it would throw on a detached buffer. Feed the
+        // separator the original encoded bytes instead — it decodes again
+        // internally, so raw bytes are exactly what it wants.
+        const {vocals} = await separateStems(
+          songFile.data as Uint8Array,
+          {vocals: true},
+          p =>
+            updateAlignStep('separate', {
+              detail: p.step,
+              progress: p.percent,
+              etaSeconds: p.etaSeconds,
+            }),
         );
         vocals16k = await resampleStereoTo16kMono(vocals!);
 
