@@ -162,7 +162,9 @@ export function buildProjectionFor(
   if (!doc) return EMPTY_PROJECTION;
 
   const track = resolveScopeTrack(doc, scope);
-  const elements = track ? trackToElements(track as unknown as Track) : [];
+  const elements = track
+    ? trackToElements(track as unknown as Track, doc.parsedChart)
+    : [];
 
   const vocalPartName = scope.kind === 'vocals' ? scope.part : 'vocals';
   const markers = buildMarkerElements(doc.parsedChart, vocalPartName);

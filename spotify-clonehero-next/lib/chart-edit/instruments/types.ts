@@ -137,5 +137,5 @@ export interface InstrumentSchema {
    * *unadjusted* track; this hook only affects what gets rendered.
    * Omitted (or absent) schemas render the track unchanged.
    */
-  normalizeForRender?: (track: SchemaTrack, chart: ParsedChart) => SchemaTrack;
+  normalizeForRender?: (track: SchemaTrack, chart?: ParsedChart) => SchemaTrack;
 }

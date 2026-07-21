@@ -35,7 +35,7 @@ export function chartToElements(
 
   // Notes (existing converter) — skipped when no track is being edited.
   if (track) {
-    elements.push(...trackToElements(track));
+    elements.push(...trackToElements(track, parsedChart));
   }
 
   elements.push(...buildMarkerElements(parsedChart, vocalPartName));

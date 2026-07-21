@@ -19,8 +19,8 @@
  */
 
 import type {DrumType, NoteType} from '@eliwhite/scan-chart';
-import {drumTypes, noteTypes} from '@eliwhite/scan-chart';
-import type {InstrumentSchema, LaneDefinition} from './types';
+import {drumTypes, noteFlags, noteTypes} from '@eliwhite/scan-chart';
+import type {InstrumentSchema, LaneDefinition, SchemaTrack} from './types';
 
 // World-space X coordinates for the drum highway. Mirrors the formula in
 // `lib/preview/highway/types.ts:calculateNoteXOffset('drums', i)`. Kept as
@@ -102,6 +102,55 @@ const GREEN_5LANE: LaneDefinition = {
 };
 
 /**
+ * Disco-flip chart-adjust, ported from chart-preview's `adjustParsedChart`
+ * (`~/projects/chart-preview/src/ChartPreview.ts:1626-1647`). scan-chart
+ * resolves the .chart file's "disco flip" event ranges into a per-note
+ * `disco`/`discoNoflip` flag at parse time, so this only needs to look at
+ * flags on each note, not the event ranges themselves.
+ *
+ * Within a disco-flip range: red <-> yellow swap type, and their tom/cymbal
+ * flags swap with them (red becomes a cymbal-hit yellow, yellow becomes a
+ * tom-hit red) so the rendered gem and its texture match what would sound
+ * on a real kit. `discoNoflip` (marks a note as exempt from an enclosing
+ * disco-flip range) is stripped either way since it has no render effect
+ * once the flip decision is made. Notes are copied, never mutated in
+ * place — `normalizeForRender` must return a derived track.
+ */
+function applyDiscoFlip(track: SchemaTrack): SchemaTrack {
+  const hasDisco = track.noteEventGroups.some(group =>
+    group.some(note => note.flags & (noteFlags.disco | noteFlags.discoNoflip)),
+  );
+  if (!hasDisco) return track;
+
+  return {
+    ...track,
+    noteEventGroups: track.noteEventGroups.map(group =>
+      group.map(note => {
+        if (!(note.flags & (noteFlags.disco | noteFlags.discoNoflip))) {
+          return note;
+        }
+
+        let flags = note.flags & ~noteFlags.discoNoflip;
+        let type = note.type;
+
+        if (flags & noteFlags.disco) {
+          flags &= ~noteFlags.disco;
+          if (type === noteTypes.redDrum) {
+            type = noteTypes.yellowDrum;
+            flags = (flags & ~noteFlags.tom) | noteFlags.cymbal;
+          } else if (type === noteTypes.yellowDrum) {
+            type = noteTypes.redDrum;
+            flags = (flags & ~noteFlags.cymbal) | noteFlags.tom;
+          }
+        }
+
+        return {...note, type, flags};
+      }),
+    ),
+  };
+}
+
+/**
  * Schema for 4-lane drums (red/yellow/blue/green + kick last).
  */
 const DRUM_FLAG_BINDINGS: InstrumentSchema['flagBindings'] = [
@@ -128,6 +177,7 @@ export const drums4LaneSchema: InstrumentSchema = {
   laneShiftExcludes: [noteTypes.kick],
   highwayWidth: 0.9,
   hitboxTexturePath: '/assets/preview/assets/isolated-drums.png',
+  normalizeForRender: applyDiscoFlip,
 };
 
 /**
@@ -152,6 +202,7 @@ export const drums5LaneSchema: InstrumentSchema = {
   laneShiftExcludes: [noteTypes.kick],
   highwayWidth: 0.9,
   hitboxTexturePath: '/assets/preview/assets/isolated-drums.png',
+  normalizeForRender: applyDiscoFlip,
 };
 
 /**

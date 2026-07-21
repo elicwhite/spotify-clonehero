@@ -1,4 +1,5 @@
 import {noteTypes} from '@eliwhite/scan-chart';
+import type {ParsedChart} from '../chorus-chart-processing';
 import {schemaForInstrument} from '../../chart-edit/instruments';
 import type {ChartElement} from './SceneReconciler';
 import type {NoteElementData} from './NoteRenderer';
@@ -53,11 +54,28 @@ function dataShallowEqual(a: NoteElementData, b: NoteElementData): boolean {
  * NoteElementData objects are memoized per note identity (tick + type + flags + msTime)
  * so unchanged notes return the same object reference, letting the reconciler's
  * dataEqual() short-circuit on `a.data === b.data`.
+ *
+ * When the track's schema declares `normalizeForRender` (e.g. drums' disco
+ * flip), it runs here on a derived copy to source geometry/texture. Element
+ * keys (and therefore mutation/selection ids derived from them elsewhere)
+ * are always built from the *real*, unadjusted note at the same
+ * group/note-index position -- normalizeForRender must not change group or
+ * note array shape/order, only per-note type/flags, so real and rendered
+ * notes stay aligned by index.
  */
-export function trackToElements(track: Track): ChartElement[] {
+export function trackToElements(
+  track: Track,
+  chart?: ParsedChart,
+): ChartElement[] {
   const schema = schemaForInstrument(track.instrument);
   const supportsSustain = schema?.supportsSustain ?? false;
-  const starPowerSections = track.starPowerSections;
+  const renderTrack = schema?.normalizeForRender
+    ? (schema.normalizeForRender(
+        track,
+        chart as unknown as import('@eliwhite/scan-chart').ParsedChart,
+      ) as Track)
+    : track;
+  const starPowerSections = renderTrack.starPowerSections;
 
   // Build sorted SP sections for binary search
   const spStarts = starPowerSections.map(s => s.msTime);
@@ -96,16 +114,25 @@ export function trackToElements(track: Track): ChartElement[] {
 
   const elements: ChartElement[] = [];
 
-  for (const group of track.noteEventGroups) {
-    const time = group[0].msTime;
+  // `normalizeForRender` preserves noteEventGroups/notes shape (same length,
+  // same order) and only ever adjusts type/flags -- so the real track's
+  // groups line up 1:1 with the render track's. Element keys/ids are
+  // derived from the *real* note (per 0067's real-note-id contract);
+  // geometry/texture come from the (possibly disco-flipped) render note.
+  for (let g = 0; g < renderTrack.noteEventGroups.length; g++) {
+    const renderGroup = renderTrack.noteEventGroups[g];
+    const realGroup = track.noteEventGroups[g];
+    const time = renderGroup[0].msTime;
     const starPower = inStarPowerSection(time);
 
-    for (const note of group) {
-      const tick = note.tick ?? 0;
-      const typeName = NOTE_TYPE_NAMES[note.type];
+    for (let i = 0; i < renderGroup.length; i++) {
+      const note = renderGroup[i];
+      const realNote = realGroup[i];
+      const tick = realNote.tick ?? 0;
+      const typeName = NOTE_TYPE_NAMES[realNote.type];
       if (!typeName) continue;
 
-      const geometry = resolveNoteGeometry(track.instrument, note);
+      const geometry = resolveNoteGeometry(renderTrack.instrument, note);
       if (!geometry) continue;
 
       const key = `note:${tick}:${typeName}`;

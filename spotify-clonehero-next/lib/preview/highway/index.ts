@@ -496,7 +496,7 @@ export const setupRenderer = (
     // full ParsedChart and skip notes when that capability is off, so
     // drawing notes here would briefly flash drum geometry on a lanes-off
     // page.
-    const elements = lanesActive && track ? trackToElements(track) : [];
+    const elements = lanesActive && track ? trackToElements(track, chart) : [];
     reconciler.setElements(elements);
 
     // SceneOverlays + InteractionManager are created for any track — they

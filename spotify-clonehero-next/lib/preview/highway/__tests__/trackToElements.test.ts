@@ -187,4 +187,43 @@ describe('trackToElements', () => {
       expect(data.msLength).toBe(0);
     });
   });
+
+  describe('disco flip (normalizeForRender real-note-id contract)', () => {
+    it('keys a disco-flipped red note by its real (unflipped) type, not the rendered yellow', () => {
+      const track = makeTrack([
+        [note(noteTypes.redDrum, 480, 500, noteFlags.disco)],
+      ]);
+      const elements = trackToElements(track);
+
+      expect(elements).toHaveLength(1);
+      // Real note is red -- the element key/id must reflect that, even
+      // though the rendered gem is a flipped yellow+cymbal.
+      expect(elements[0].key).toBe('note:480:redDrum');
+
+      const data = elements[0].data as NoteElementData;
+      expect(data.note.type).toBe(noteTypes.yellowDrum);
+      expect(data.note.flags & noteFlags.cymbal).toBeTruthy();
+    });
+
+    it('keys a disco-flipped yellow note by its real (unflipped) type, not the rendered red', () => {
+      const track = makeTrack([
+        [
+          note(
+            noteTypes.yellowDrum,
+            480,
+            500,
+            noteFlags.disco | noteFlags.cymbal,
+          ),
+        ],
+      ]);
+      const elements = trackToElements(track);
+
+      expect(elements).toHaveLength(1);
+      expect(elements[0].key).toBe('note:480:yellowDrum');
+
+      const data = elements[0].data as NoteElementData;
+      expect(data.note.type).toBe(noteTypes.redDrum);
+      expect(data.note.flags & noteFlags.tom).toBeTruthy();
+    });
+  });
 });
