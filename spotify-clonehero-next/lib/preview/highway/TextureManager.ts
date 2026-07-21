@@ -374,7 +374,9 @@ type DrumTextureMap = Map<number, Map<number, THREE.SpriteMaterial>>;
 async function loadTomTextures(
   textureLoader: THREE.TextureLoader,
   animatedTextureManager?: AnimatedTextureManager,
+  style: 'square' | 'round' = 'square',
 ): Promise<DrumTextureMap> {
+  const styleInfix = style === 'round' ? '-round' : '';
   const tomNoteTypes = [
     noteTypes.redDrum,
     noteTypes.yellowDrum,
@@ -398,7 +400,7 @@ async function loadTomTextures(
   await Promise.all(
     tomNoteTypes.map(async noteType => {
       const colorName = noteTypeToPad(noteType)!;
-      const url = `${DRUM_TEXTURE_PATH}drum-tom-${colorName}.webp`;
+      const url = `${DRUM_TEXTURE_PATH}drum-tom${styleInfix}-${colorName}.webp`;
       const texture = await loadTexture(
         textureLoader,
         url,
@@ -419,9 +421,7 @@ async function loadTomTextures(
       for (const [spFlagKey, spFlagName] of spFlags) {
         const combinedFlags = spFlagKey | dynamicFlagKey | noteFlags.tom;
         const variantSuffix = `${dynamicFlagName}${spFlagName}`;
-        const url = variantSuffix
-          ? `${DRUM_TEXTURE_PATH}drum-tom-${colorName}${variantSuffix}.webp`
-          : `${DRUM_TEXTURE_PATH}drum-tom-${colorName}.webp`;
+        const url = `${DRUM_TEXTURE_PATH}drum-tom${styleInfix}-${colorName}${variantSuffix}.webp`;
         const fallback = normalTextures.get(noteType)!;
 
         promises.push(
@@ -673,6 +673,7 @@ export async function loadNoteTextures(
   textureLoader: THREE.TextureLoader,
   instrument: Instrument,
   animatedTextureManager?: AnimatedTextureManager,
+  tomStyle: 'square' | 'round' = 'square',
 ) {
   const isDrums = instrument == 'drums';
 
@@ -685,7 +686,7 @@ export async function loadNoteTextures(
 
   if (isDrums) {
     [tomTextures, cymbalTextures, kickTextures] = await Promise.all([
-      loadTomTextures(textureLoader, animatedTextureManager),
+      loadTomTextures(textureLoader, animatedTextureManager, tomStyle),
       loadCymbalTextures(textureLoader, animatedTextureManager),
       loadKickTextures(textureLoader, animatedTextureManager),
     ]);

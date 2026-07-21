@@ -9,7 +9,10 @@ import type {Note} from '../types';
  * jsdom, so `loadNoteTextures` always routes through `loadAsync` here.
  */
 class StubTextureLoader {
-  async loadAsync(_url: string): Promise<THREE.Texture> {
+  requestedUrls: string[] = [];
+
+  async loadAsync(url: string): Promise<THREE.Texture> {
+    this.requestedUrls.push(url);
     return new THREE.Texture();
   }
 }
@@ -106,5 +109,45 @@ describe('loadNoteTextures texture matrix', () => {
       });
       expect(material).toBeInstanceOf(THREE.SpriteMaterial);
     }
+  });
+
+  it('requests square (unstyled) tom URLs by default', async () => {
+    const loader = new StubTextureLoader();
+    await loadNoteTextures(loader as unknown as THREE.TextureLoader, 'drums');
+
+    expect(
+      loader.requestedUrls.some(url => url.includes('drum-tom-red.webp')),
+    ).toBe(true);
+    expect(
+      loader.requestedUrls.some(url =>
+        url.includes('drum-tom-red-ghost-sp.webp'),
+      ),
+    ).toBe(true);
+    expect(loader.requestedUrls.some(url => url.includes('-round-'))).toBe(
+      false,
+    );
+  });
+
+  it('requests round-styled tom URLs when tomStyle is "round"', async () => {
+    const loader = new StubTextureLoader();
+    await loadNoteTextures(
+      loader as unknown as THREE.TextureLoader,
+      'drums',
+      undefined,
+      'round',
+    );
+
+    expect(
+      loader.requestedUrls.some(url => url.includes('drum-tom-round-red.webp')),
+    ).toBe(true);
+    expect(
+      loader.requestedUrls.some(url =>
+        url.includes('drum-tom-round-red-ghost-sp.webp'),
+      ),
+    ).toBe(true);
+    // Cymbals must be unaffected by the tom style parameter.
+    expect(
+      loader.requestedUrls.some(url => url.includes('drum-cymbal-round')),
+    ).toBe(false);
   });
 });

@@ -58,6 +58,10 @@ export interface RendererConfig {
   /** When false, render a neutral floor + skip the drum hitbox + skip drum
    *  note rendering. Defaults to true (drum-edit). */
   showDrumLanes?: boolean;
+  /** Which drum-tom art style to render: square (angular gem, default) or
+   *  round (circular head). Cymbals and kick have only one style.
+   *  TODO: surface as a user preference. */
+  tomStyle?: 'square' | 'round';
 }
 
 export const setupRenderer = (
@@ -69,6 +73,7 @@ export const setupRenderer = (
   config: RendererConfig = {},
 ) => {
   const showDrumLanes = config.showDrumLanes ?? true;
+  const tomStyle = config.tomStyle ?? 'square';
   const highwaySpeed = 1.5;
 
   const camera = new THREE.PerspectiveCamera(90, 1 / 1, 0.01, 10);
@@ -433,6 +438,7 @@ export const setupRenderer = (
           textureLoader,
           track.instrument,
           animatedTextureManager,
+          tomStyle,
         )
       : {getTextureForNote: () => new THREE.SpriteMaterial()};
 
