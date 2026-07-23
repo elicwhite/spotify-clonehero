@@ -1,0 +1,1372 @@
+{
+  "tempos": [
+    {
+      "ms": 0,
+      "bpm": 120.0
+    }
+  ],
+  "timeSignatures": [
+    {
+      "ms": 0,
+      "numerator": 4,
+      "denominator": 4
+    }
+  ],
+  "sections": [
+    {
+      "ms": 0,
+      "name": "main"
+    }
+  ],
+  "era": "RB4",
+  "difficulties": {
+    "expert": {
+      "notes": [
+        [
+          0.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          1000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          1250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          1500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          1750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          2000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          2250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          2500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          2750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          3000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          3250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          3500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          3750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          4000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          4250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          4500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          4750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          5000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          5250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          5500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          5750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          6000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          6250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          6500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          6750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          7000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          7250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          7500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          7750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          8000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          8250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          8500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          8750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          9000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          9250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          9500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          9750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          10000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          10250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          10500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          10750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          11000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          11250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          11500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          11750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          12000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          12250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          12500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          12750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          13000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          13250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          13500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          13750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          14000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          14250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          14500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          14750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          15000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          15250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          15500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          15750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          16000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          16250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          16500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          16750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          17000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          17250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          17500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          17750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          18000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          18250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          18500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          18750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          19000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          19250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          19500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          19750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          20000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          20250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          20500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          20750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          21000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          21250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          21500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          21750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          22000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          22250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          22500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          22750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          23000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          23250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          23500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          23750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          24000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          24250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          24500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          24750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          25000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          25250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          25500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          25750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          26000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          26250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          26500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          26750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          27000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          27250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          27500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          27750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          28000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          28250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          28500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          28750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          29000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          29250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          29500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          29750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          30000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          30250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          30500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          30750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          31000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          31250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          31500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          31750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          32000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          32250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          32500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          32750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          33000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          33250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          33500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          33750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          34000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          34250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          34500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          34750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          35000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          35250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          35500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          35750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          36000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          36250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          36500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          36750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          37000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          37250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          37500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          37750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          38000.0,
+          [
+            {
+              "instrument": "hihat"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          38250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          38500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          38750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          39000.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          39250.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          39500.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          39750.0,
+          [
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ]
+      ]
+    },
+    "hard": null,
+    "medium": null,
+    "easy": null
+  },
+  "_edge_case": "no_backbone"
+}

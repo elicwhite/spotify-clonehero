@@ -1,0 +1,537 @@
+{
+  "tempos": [
+    {
+      "ms": 0,
+      "bpm": 120.0
+    }
+  ],
+  "timeSignatures": [
+    {
+      "ms": 0,
+      "numerator": 4,
+      "denominator": 4
+    },
+    {
+      "ms": 16000.0,
+      "numerator": 3,
+      "denominator": 4
+    }
+  ],
+  "sections": [
+    {
+      "ms": 0,
+      "name": "verse"
+    },
+    {
+      "ms": 16000.0,
+      "name": "breakdown"
+    }
+  ],
+  "era": "RB4",
+  "difficulties": {
+    "expert": {
+      "notes": [
+        [
+          0.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          500.0,
+          [
+            {
+              "instrument": "snare"
+            },
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          1000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          1500.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          2000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          2500.0,
+          [
+            {
+              "instrument": "snare"
+            },
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          3000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          3500.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          4000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          4500.0,
+          [
+            {
+              "instrument": "snare"
+            },
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          5000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          5500.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          6000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          6500.0,
+          [
+            {
+              "instrument": "snare"
+            },
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          7000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          7500.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          8000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          8500.0,
+          [
+            {
+              "instrument": "snare"
+            },
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          9000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          9500.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          10000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          10500.0,
+          [
+            {
+              "instrument": "snare"
+            },
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          11000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          11500.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          12000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          12500.0,
+          [
+            {
+              "instrument": "snare"
+            },
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          13000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          13500.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          14000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          14500.0,
+          [
+            {
+              "instrument": "snare"
+            },
+            {
+              "instrument": "hihat"
+            }
+          ]
+        ],
+        [
+          15000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          15500.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          16000.0,
+          [
+            {
+              "instrument": "kick"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          16500.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          17000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          17500.0,
+          [
+            {
+              "instrument": "kick"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          18000.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          18500.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          19000.0,
+          [
+            {
+              "instrument": "kick"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          19500.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          20000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          20500.0,
+          [
+            {
+              "instrument": "kick"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          21000.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          21500.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          22000.0,
+          [
+            {
+              "instrument": "kick"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          22500.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          23000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          23500.0,
+          [
+            {
+              "instrument": "kick"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          24000.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          24500.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          25000.0,
+          [
+            {
+              "instrument": "kick"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          25500.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          26000.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ],
+        [
+          26500.0,
+          [
+            {
+              "instrument": "kick"
+            },
+            {
+              "instrument": "crash"
+            }
+          ]
+        ],
+        [
+          27000.0,
+          [
+            {
+              "instrument": "snare"
+            }
+          ]
+        ],
+        [
+          27500.0,
+          [
+            {
+              "instrument": "kick"
+            }
+          ]
+        ]
+      ]
+    },
+    "hard": null,
+    "medium": null,
+    "easy": null
+  },
+  "_edge_case": "midsong_ts_change"
+}

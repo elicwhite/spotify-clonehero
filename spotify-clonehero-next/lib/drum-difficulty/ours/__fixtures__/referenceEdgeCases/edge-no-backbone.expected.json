@@ -1,0 +1,1848 @@
+{
+  "hard": [
+    {
+      "ms": 0.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 1000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 1250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 1500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 1750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 2000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 2250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 2500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 2750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 3000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 3250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 3500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 3750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 4000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 4250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 4500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 4750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 5000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 5250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 5500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 5750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 6000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 6250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 6500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 6750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 7000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 7250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 7500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 7750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 8000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 8250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 8500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 8750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 9000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 9250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 9500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 9750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 10000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 10250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 10500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 10750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 11000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 11250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 11500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 11750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 12000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 12250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 12500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 12750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 13000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 13250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 13500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 13750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 14000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 14250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 14500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 14750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 15000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 15250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 15500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 15750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 16000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 16250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 16500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 16750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 17000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 17250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 17500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 17750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 18000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 18250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 18500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 18750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 19000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 19250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 19500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 19750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 20000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 20250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 20500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 20750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 21000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 21250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 21500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 21750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 22000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 22250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 22500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 22750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 23000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 23250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 23500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 23750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 24000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 24250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 24500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 24750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 25000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 25250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 25500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 25750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 26000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 26250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 26500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 26750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 27000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 27250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 27500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 27750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 28000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 28250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 28500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 28750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 29000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 29250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 29500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 29750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 30000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 30250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 30500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 30750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 31000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 31250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 31500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 31750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 32000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 32250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 32500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 32750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 33000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 33250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 33500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 33750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 34000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 34250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 34500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 34750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 35000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 35250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 35500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 35750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 36000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 36250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 36500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 36750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 37000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 37250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 37500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 37750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 38000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 38250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 38500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 38750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 39000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 39250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 39500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 39750.0,
+      "lane": "hihat"
+    }
+  ],
+  "medium": [
+    {
+      "ms": 0.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 1000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 1250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 1500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 1750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 2000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 2250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 2500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 2750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 3000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 3250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 3500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 3750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 4000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 4250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 4500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 4750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 5000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 5250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 5500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 5750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 6000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 6250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 6500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 6750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 7000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 7250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 7500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 7750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 8000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 8250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 8500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 8750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 9000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 9250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 9500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 9750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 10000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 10250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 10500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 10750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 11000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 11250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 11500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 11750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 12000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 12250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 12500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 12750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 13000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 13250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 13500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 13750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 14000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 14250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 14500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 14750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 15000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 15250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 15500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 15750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 16000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 16250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 16500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 16750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 17000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 17250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 17500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 17750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 18000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 18250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 18500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 18750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 19000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 19250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 19500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 19750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 20000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 20250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 20500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 20750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 21000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 21250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 21500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 21750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 22000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 22250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 22500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 22750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 23000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 23250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 23500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 23750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 24000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 24250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 24500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 24750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 25000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 25250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 25500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 25750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 26000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 26250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 26500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 26750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 27000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 27250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 27500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 27750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 28000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 28250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 28500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 28750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 29000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 29250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 29500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 29750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 30000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 30250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 30500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 30750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 31000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 31250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 31500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 31750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 32000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 32250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 32500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 32750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 33000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 33250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 33500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 33750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 34000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 34250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 34500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 34750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 35000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 35250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 35500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 35750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 36000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 36250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 36500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 36750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 37000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 37250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 37500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 37750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 38000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 38250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 38500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 38750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 39000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 39250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 39500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 39750.0,
+      "lane": "hihat"
+    }
+  ],
+  "easy": [
+    {
+      "ms": 0.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 1000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 1250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 1500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 1750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 2000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 2500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 2750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 3000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 3250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 3500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 3750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 4000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 4500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 4750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 5000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 5250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 5500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 5750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 6000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 6500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 6750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 7000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 7250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 7500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 7750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 8000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 8500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 8750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 9000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 9250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 9500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 9750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 10000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 10500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 10750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 11000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 11250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 11500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 11750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 12000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 12500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 12750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 13000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 13250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 13500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 13750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 14000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 14500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 14750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 15000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 15250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 15500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 15750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 16000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 16500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 16750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 17000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 17250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 17500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 17750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 18000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 18500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 18750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 19000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 19250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 19500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 19750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 20000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 20500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 20750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 21000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 21250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 21500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 21750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 22000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 22500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 22750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 23000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 23250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 23500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 23750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 24000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 24500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 24750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 25000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 25250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 25500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 25750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 26000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 26500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 26750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 27000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 27250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 27500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 27750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 28000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 28500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 28750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 29000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 29250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 29500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 29750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 30000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 30500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 30750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 31000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 31250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 31500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 31750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 32000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 32500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 32750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 33000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 33250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 33500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 33750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 34000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 34500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 34750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 35000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 35250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 35500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 35750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 36000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 36500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 36750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 37000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 37250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 37500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 37750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 38000.0,
+      "lane": "crash"
+    },
+    {
+      "ms": 38500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 38750.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 39000.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 39250.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 39500.0,
+      "lane": "hihat"
+    },
+    {
+      "ms": 39750.0,
+      "lane": "hihat"
+    }
+  ]
+}
