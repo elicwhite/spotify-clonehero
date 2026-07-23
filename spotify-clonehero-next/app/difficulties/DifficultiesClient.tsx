@@ -24,6 +24,7 @@ import {
   TIERS,
   type Tier,
 } from '@/lib/drum-difficulty/toRenderableTrack';
+import ExportChartDialog from './ExportChartDialog';
 import ReductionGrid, {type ReducerCell} from './ReductionGrid';
 import TransportBar from './components/TransportBar';
 
@@ -116,7 +117,7 @@ const OURS_LOADING_CELLS: Record<Tier, ReducerCell> = {
 type View =
   | {status: 'empty'}
   | {status: 'error'; message: string}
-  | {status: 'model'; model: ReductionModel; id: number};
+  | {status: 'model'; model: ReductionModel; loaded: LoadedFiles; id: number};
 
 export default function DifficultiesClient() {
   const [view, setView] = useState<View>({status: 'empty'});
@@ -154,7 +155,12 @@ export default function DifficultiesClient() {
         return;
       }
       idRef.current += 1;
-      setView({status: 'model', model: result.model, id: idRef.current});
+      setView({
+        status: 'model',
+        model: result.model,
+        loaded,
+        id: idRef.current,
+      });
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to read chart';
       toast.error(message);
@@ -228,6 +234,19 @@ export default function DifficultiesClient() {
   // models are already loaded by upload time, so this never actually re-mounts.
   const oursResolved = model != null && oursCells.hard.kind !== 'loading';
 
+  // Export always uses Ours (HOPCAT/Onyx are comparison-only, per plan) — only
+  // enabled once all three of its tiers rendered successfully.
+  const oursTracks: Record<Tier, Track> | null =
+    oursCells.hard.kind === 'highway' &&
+    oursCells.medium.kind === 'highway' &&
+    oursCells.easy.kind === 'highway'
+      ? {
+          hard: oursCells.hard.track,
+          medium: oursCells.medium.track,
+          easy: oursCells.easy.track,
+        }
+      : null;
+
   return (
     <main className="mx-auto max-w-[1400px] px-4 py-8">
       <header className="mb-6">
@@ -274,6 +293,9 @@ export default function DifficultiesClient() {
               <p className="flex-1 text-sm text-muted-foreground">
                 Loading audio…
               </p>
+            )}
+            {oursTracks && view.status === 'model' && (
+              <ExportChartDialog loaded={view.loaded} oursTracks={oursTracks} />
             )}
             <Button variant="outline" size="sm" onClick={reset}>
               <RotateCcw className="mr-2 h-4 w-4" />

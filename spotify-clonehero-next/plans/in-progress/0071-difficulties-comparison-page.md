@@ -4,7 +4,8 @@ Product page at `/difficulties`. User uploads a chart with an Expert drum
 track. The page runs three difficulty-reducers — **Ours** (a trained GBM),
 **HOPCAT** (C3toolbox port), **Onyx** (Reductions.hs port) — each producing
 Hard/Medium/Easy, and renders all of it as a synced grid of highway previews
-against one shared audio track. Comparison only in v1 — no export.
+against one shared audio track. Comparison only in v1 — export added
+post-launch (§11).
 
 Layout (confirmed against the mock):
 
@@ -1129,6 +1130,62 @@ agents; (8) integrates.
       `charter=Anonymous`): the 4th row renders with correct labels
       ("Harmonix · Hard/Medium/Easy"), real notes, black backgrounds, and
       stays in lock-step with the other three rows through playback.
+
+11. **Export the reduced chart (2026-07-22) — DONE.** Eli: "Add an export
+    button to our difficulties page to download the updated chart that has
+    the new drum difficulties added to it." Always exports **Ours**' output
+    only — confirmed with Eli: "It will only ever export our model's
+    version. The others are just for comparison." UI is a minimal dialog
+    (package format only, no metadata fields) per Eli: "They should be able
+    to select zip or sng, but that's it" — deliberately NOT the chart
+    editor's full `ExportDialog` (metadata fields, stems toggle,
+    chart-format picker), which has no prop to hide the metadata section.
+    - `lib/drum-difficulty/exportChart.ts` exports `mergeOursTiersIntoChart`,
+      a pure function taking a `chartDoc` and Ours' three tracks. It
+      replaces any existing non-Expert drums track (e.g. a Harmonix-charted
+      upload's own authored Hard/Medium/Easy) with Ours', leaving Expert and
+      every other instrument/difficulty untouched. Relies on
+      `oursNotesToTrack`'s output already being a structurally complete
+      scan-chart track (verified field-for-field against
+      `@eliwhite/scan-chart`'s real `trackData`/`NoteEvent` types) — no new
+      note-event conversion needed, just a cast at the injection point.
+    - `lib/chart-export/assemble.ts`: added a `chartDoc?: ChartDocument`
+      option to `assembleChartFiles`, mutually exclusive with
+      `chartText`/`chartFile` — bypasses the internal parse entirely. Needed
+      because the existing `chartFile` path parses ONLY the chart file (no
+      `song.ini`), so caller-set fields like `delay`/`genre`/`year` would
+      silently reset; passing an already-`readChart`-produced `chartDoc`
+      (with the real ini-merged metadata) avoids that. Also shallow-clones
+      `parsedChart` before stamping metadata so a caller-supplied `chartDoc`
+      is never mutated. `chartDoc.assets` (audio, album art, …) flow through
+      `writeChartFolder` automatically, so the export path doesn't need to
+      separately collect `audioSources`/`extraAssets`.
+    - `app/difficulties/ExportChartDialog.tsx` re-reads the ORIGINAL
+      uploaded files (`readChart(loaded.files, {pro_drums: true})`, same
+      override `computeReductions` uses) at export time rather than reusing
+      `model.parsedChart`. That field's static type is narrow (scan-chart's
+      raw parse result, missing `chartBytes`/`format`), so getting a real
+      `ChartDocument` back means re-deriving it, not casting. The original
+      `LoadedFiles` value is now kept in `DifficultiesClient`'s view state
+      (it previously wasn't persisted at all) so it's available at export
+      time.
+    - Tests: `lib/drum-difficulty/__tests__/exportChart.test.ts` (merge
+      logic: keeps Expert + other instruments, replaces old non-Expert
+      drums, doesn't mutate input) and
+      `lib/chart-export/__tests__/assemble-chartdoc-option.test.ts` (the new
+      `chartDoc` option: bypasses parse, preserves fields a chartFile-only
+      parse would lose, doesn't mutate, carries `assets` through, throws
+      when nothing is supplied). Full suite green (241 tests across
+      `lib/drum-difficulty` and `lib/chart-export`; 2157/2192 project-wide —
+      same pre-existing unrelated `better-sqlite3` failures as always),
+      typecheck and lint clean.
+    - Browser-verified end-to-end with `reduction-01-with-audio.zip`
+      (scratch-only, not committed): uploaded → Export → ZIP → downloaded
+      file re-parsed with scan-chart directly, confirmed real Expert/Hard/
+      Medium/Easy drums tracks with a sensible descending density curve
+      (1170/1075/1033/573 chord groups) and `song.ini`/`song.mp3` carried
+      through correctly. Repeated for the SNG format (dropdown switch,
+      re-download, no console errors either time).
 
 ## Acceptance
 

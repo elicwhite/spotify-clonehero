@@ -11,7 +11,11 @@
  * without going through the React export dialog.
  */
 
-import type {File as FileEntry, ParsedChart} from '@eliwhite/scan-chart';
+import type {
+  ChartDocument,
+  File as FileEntry,
+  ParsedChart,
+} from '@eliwhite/scan-chart';
 
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
 
@@ -63,15 +67,25 @@ function canonicalChartFileName(fileName: string): string {
 
 export interface AssembleChartFilesOptions {
   /**
-   * Valid `.chart` text. Mutually exclusive with `chartFile` — supply
-   * exactly one. Convenience for callers that only ever deal in `.chart`
-   * format; `chartFile` is the format-agnostic alternative (needed by the
-   * chart-flow feature, where the source chart may be `.mid`).
+   * Valid `.chart` text. Mutually exclusive with `chartFile`/`chartDoc` —
+   * supply exactly one. Convenience for callers that only ever deal in
+   * `.chart` format; `chartFile` is the format-agnostic alternative (needed
+   * by the chart-flow feature, where the source chart may be `.mid`).
    */
   chartText?: string;
   /** The format-agnostic alternative to `chartText` — see
    * {@link ChartPackageFile}. */
   chartFile?: ChartPackageFile;
+  /**
+   * An already-parsed (and possibly modified — e.g. with generated tracks
+   * merged into `trackData`) chart document, bypassing the internal parse
+   * entirely. Mutually exclusive with `chartText`/`chartFile`. Prefer this
+   * when the caller already holds a `ChartDocument` with the real,
+   * ini-merged metadata (delay, genre, year, …) — `chartText`/`chartFile`
+   * parse the chart file ALONE (no `song.ini`), so fields only `song.ini`
+   * carries would be lost.
+   */
+  chartDoc?: ChartDocument;
   /** Metadata to stamp into song.ini. */
   metadata: ChartPackageMetadata;
   /** Audio stems to bundle alongside the chart. */
@@ -124,30 +138,39 @@ function chartEndMs(parsedChart: ParsedChart): number {
 export function assembleChartFiles({
   chartText,
   chartFile,
+  chartDoc: suppliedChartDoc,
   metadata,
   audioSources = [],
   extraAssets = [],
   songLengthMs,
 }: AssembleChartFilesOptions): FileEntry[] {
-  const rawInputFile: ChartPackageFile =
-    chartFile ??
-    (chartText !== undefined
-      ? {fileName: 'notes.chart', data: new TextEncoder().encode(chartText)}
-      : (() => {
-          throw new Error(
-            'assembleChartFiles requires either chartText or chartFile',
-          );
-        })());
-  // Canonicalize the chart file name before parsing. Callers (e.g. the
-  // editor's autosave) may hand us a variant name like `notes.edited.chart`;
-  // parsing and re-emitting under that name would ship a chart file Clone Hero
-  // won't recognize. `readChart` detects format from the extension, so the
-  // canonical `notes.chart` / `notes.mid` round-trips identically.
-  const inputFile: ChartPackageFile = {
-    fileName: canonicalChartFileName(rawInputFile.fileName),
-    data: rawInputFile.data,
-  };
-  const chartDoc = readChart([inputFile]);
+  const chartDoc: ChartDocument =
+    suppliedChartDoc ??
+    (() => {
+      const rawInputFile: ChartPackageFile =
+        chartFile ??
+        (chartText !== undefined
+          ? {
+              fileName: 'notes.chart',
+              data: new TextEncoder().encode(chartText),
+            }
+          : (() => {
+              throw new Error(
+                'assembleChartFiles requires chartText, chartFile, or chartDoc',
+              );
+            })());
+      // Canonicalize the chart file name before parsing. Callers (e.g. the
+      // editor's autosave) may hand us a variant name like
+      // `notes.edited.chart`; parsing and re-emitting under that name would
+      // ship a chart file Clone Hero won't recognize. `readChart` detects
+      // format from the extension, so the canonical `notes.chart` /
+      // `notes.mid` round-trips identically.
+      const inputFile: ChartPackageFile = {
+        fileName: canonicalChartFileName(rawInputFile.fileName),
+        data: rawInputFile.data,
+      };
+      return readChart([inputFile]);
+    })();
   const existing = chartDoc.parsedChart.metadata;
   // Declare a drums difficulty so scan-chart / chart managers see a rated
   // chart. The chart file alone carries this; any diff_drums the pipeline
@@ -156,23 +179,32 @@ export function assembleChartFiles({
     existing.diff_drums != null && existing.diff_drums >= 0
       ? existing.diff_drums
       : 0;
-  chartDoc.parsedChart.metadata = {
-    ...existing,
-    name: metadata.name,
-    artist: metadata.artist,
-    charter: metadata.charter.trim() || 'MusicCharts.tools',
-    pro_drums: true,
-    diff_drums: diffDrums,
-    // Phase Shift "real drums" difficulty — kept equal to diff_drums since
-    // this pipeline doesn't distinguish a separate real-drums chart.
-    diff_drums_real: diffDrums,
-    song_length:
-      songLengthMs != null && songLengthMs > 0
-        ? Math.round(songLengthMs)
-        : chartEndMs(chartDoc.parsedChart),
+  // Shallow-clone rather than mutate `chartDoc.parsedChart` in place — a
+  // caller-supplied `chartDoc` (the `chartDoc` option) may be reused
+  // elsewhere and shouldn't be silently modified by this call.
+  const stampedParsedChart: ParsedChart = {
+    ...chartDoc.parsedChart,
+    metadata: {
+      ...existing,
+      name: metadata.name,
+      artist: metadata.artist,
+      charter: metadata.charter.trim() || 'MusicCharts.tools',
+      pro_drums: true,
+      diff_drums: diffDrums,
+      // Phase Shift "real drums" difficulty — kept equal to diff_drums since
+      // this pipeline doesn't distinguish a separate real-drums chart.
+      diff_drums_real: diffDrums,
+      song_length:
+        songLengthMs != null && songLengthMs > 0
+          ? Math.round(songLengthMs)
+          : chartEndMs(chartDoc.parsedChart),
+    },
   };
 
-  const entries: FileEntry[] = writeChartFolder(chartDoc).map(f => ({
+  const entries: FileEntry[] = writeChartFolder({
+    parsedChart: stampedParsedChart,
+    assets: chartDoc.assets,
+  }).map(f => ({
     fileName: f.fileName,
     data: f.data,
   }));
