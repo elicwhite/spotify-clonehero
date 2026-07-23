@@ -1,0 +1,68 @@
+{
+  "sklearn_version": "1.8.0",
+  "source_commit": "591ab4a",
+  "format": "packed-binary (see PRODUCT_INTEGRATION.md for the byte layout)",
+  "supersedes": "out/models/591ab4a/ (pure-JSON tree dump) -- SAME trees, verified lossless re-encoding",
+  "model_cache_key": "08b9f91735e6dcf7",
+  "feature_names_file": "../591ab4a/feature_names.json",
+  "tiers": [
+    "hard",
+    "medium",
+    "easy"
+  ],
+  "families": {
+    "cymbal": [
+      "hihat",
+      "open-hat",
+      "crash",
+      "ride"
+    ],
+    "tom": [
+      "high-tom",
+      "mid-tom",
+      "floor-tom"
+    ]
+  },
+  "survive_threshold": 0.5,
+  "family_nms_gaps_ms": {
+    "hard": null,
+    "medium": 180,
+    "easy": 250
+  },
+  "files": {
+    "survive": {
+      "hard": "survive_hard.bin",
+      "medium": "survive_medium.bin",
+      "easy": "survive_easy.bin"
+    },
+    "relane": {
+      "hard": {
+        "cymbal": "relane_cymbal_hard.bin",
+        "tom": "relane_tom_hard.bin"
+      },
+      "medium": {
+        "cymbal": "relane_cymbal_medium.bin",
+        "tom": "relane_tom_medium.bin"
+      },
+      "easy": {
+        "cymbal": "relane_cymbal_easy.bin",
+        "tom": "relane_tom_easy.bin"
+      }
+    }
+  },
+  "verification": {
+    "max_survive_abs_proba_diff": 7.412500860237703e-05,
+    "relane_argmax_mismatches": 0,
+    "verified_songs": [
+      "200-stab-wounds-masters-of-morbidity",
+      "30-seconds-to-mars-rescue-me",
+      "4-non-blondes-whats-up",
+      "5-seconds-of-summer-youngblood",
+      "Mark Ronson - Uptown Funk (feat. Bruno Mars) (Harmonix)",
+      "a-day-to-remember-mindreader",
+      "aerosmith-toys-in-the-attic",
+      "ajr-100-bad-days"
+    ],
+    "verified_rows": 11230
+  }
+}

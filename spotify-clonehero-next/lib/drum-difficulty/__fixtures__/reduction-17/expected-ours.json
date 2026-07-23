@@ -1,0 +1,1552 @@
+{
+  "hard": [
+    {
+      "tick": 19200,
+      "lane": "high-tom"
+    },
+    {
+      "tick": 19200,
+      "lane": "snare"
+    },
+    {
+      "tick": 19440,
+      "lane": "high-tom"
+    },
+    {
+      "tick": 19440,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 19680,
+      "lane": "snare"
+    },
+    {
+      "tick": 19800,
+      "lane": "snare"
+    },
+    {
+      "tick": 20040,
+      "lane": "snare"
+    },
+    {
+      "tick": 20160,
+      "lane": "crash"
+    },
+    {
+      "tick": 20160,
+      "lane": "kick"
+    },
+    {
+      "tick": 20400,
+      "lane": "snare"
+    },
+    {
+      "tick": 20520,
+      "lane": "snare"
+    },
+    {
+      "tick": 20640,
+      "lane": "snare"
+    },
+    {
+      "tick": 20760,
+      "lane": "high-tom"
+    },
+    {
+      "tick": 20880,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 21120,
+      "lane": "kick"
+    },
+    {
+      "tick": 21120,
+      "lane": "ride"
+    },
+    {
+      "tick": 21360,
+      "lane": "ride"
+    },
+    {
+      "tick": 21480,
+      "lane": "kick"
+    },
+    {
+      "tick": 21600,
+      "lane": "ride"
+    },
+    {
+      "tick": 21600,
+      "lane": "snare"
+    },
+    {
+      "tick": 21840,
+      "lane": "kick"
+    },
+    {
+      "tick": 21840,
+      "lane": "ride"
+    },
+    {
+      "tick": 22080,
+      "lane": "ride"
+    },
+    {
+      "tick": 22320,
+      "lane": "kick"
+    },
+    {
+      "tick": 22320,
+      "lane": "ride"
+    },
+    {
+      "tick": 22560,
+      "lane": "ride"
+    },
+    {
+      "tick": 22560,
+      "lane": "snare"
+    },
+    {
+      "tick": 22800,
+      "lane": "kick"
+    },
+    {
+      "tick": 22800,
+      "lane": "ride"
+    },
+    {
+      "tick": 23040,
+      "lane": "kick"
+    },
+    {
+      "tick": 23040,
+      "lane": "ride"
+    },
+    {
+      "tick": 23160,
+      "lane": "snare"
+    },
+    {
+      "tick": 23280,
+      "lane": "ride"
+    },
+    {
+      "tick": 23400,
+      "lane": "kick"
+    },
+    {
+      "tick": 23520,
+      "lane": "ride"
+    },
+    {
+      "tick": 23520,
+      "lane": "snare"
+    },
+    {
+      "tick": 23760,
+      "lane": "kick"
+    },
+    {
+      "tick": 23760,
+      "lane": "ride"
+    },
+    {
+      "tick": 24000,
+      "lane": "ride"
+    },
+    {
+      "tick": 24240,
+      "lane": "kick"
+    },
+    {
+      "tick": 24240,
+      "lane": "ride"
+    },
+    {
+      "tick": 24480,
+      "lane": "ride"
+    },
+    {
+      "tick": 24480,
+      "lane": "snare"
+    },
+    {
+      "tick": 24720,
+      "lane": "kick"
+    },
+    {
+      "tick": 24720,
+      "lane": "ride"
+    },
+    {
+      "tick": 24960,
+      "lane": "kick"
+    },
+    {
+      "tick": 24960,
+      "lane": "ride"
+    },
+    {
+      "tick": 25080,
+      "lane": "snare"
+    },
+    {
+      "tick": 25200,
+      "lane": "ride"
+    },
+    {
+      "tick": 25320,
+      "lane": "kick"
+    },
+    {
+      "tick": 25440,
+      "lane": "ride"
+    },
+    {
+      "tick": 25440,
+      "lane": "snare"
+    },
+    {
+      "tick": 25680,
+      "lane": "kick"
+    },
+    {
+      "tick": 25680,
+      "lane": "ride"
+    },
+    {
+      "tick": 25920,
+      "lane": "ride"
+    },
+    {
+      "tick": 26160,
+      "lane": "kick"
+    },
+    {
+      "tick": 26160,
+      "lane": "ride"
+    },
+    {
+      "tick": 26400,
+      "lane": "ride"
+    },
+    {
+      "tick": 26400,
+      "lane": "snare"
+    },
+    {
+      "tick": 26640,
+      "lane": "kick"
+    },
+    {
+      "tick": 26640,
+      "lane": "ride"
+    },
+    {
+      "tick": 26880,
+      "lane": "kick"
+    },
+    {
+      "tick": 26880,
+      "lane": "ride"
+    },
+    {
+      "tick": 27000,
+      "lane": "snare"
+    },
+    {
+      "tick": 27120,
+      "lane": "ride"
+    },
+    {
+      "tick": 27240,
+      "lane": "kick"
+    },
+    {
+      "tick": 27360,
+      "lane": "ride"
+    },
+    {
+      "tick": 27360,
+      "lane": "snare"
+    },
+    {
+      "tick": 27600,
+      "lane": "kick"
+    },
+    {
+      "tick": 27600,
+      "lane": "ride"
+    },
+    {
+      "tick": 27840,
+      "lane": "ride"
+    },
+    {
+      "tick": 28080,
+      "lane": "kick"
+    },
+    {
+      "tick": 28080,
+      "lane": "ride"
+    },
+    {
+      "tick": 28320,
+      "lane": "ride"
+    },
+    {
+      "tick": 28320,
+      "lane": "snare"
+    },
+    {
+      "tick": 28560,
+      "lane": "kick"
+    },
+    {
+      "tick": 28560,
+      "lane": "ride"
+    },
+    {
+      "tick": 28800,
+      "lane": "kick"
+    },
+    {
+      "tick": 28800,
+      "lane": "ride"
+    },
+    {
+      "tick": 28920,
+      "lane": "snare"
+    },
+    {
+      "tick": 29040,
+      "lane": "ride"
+    },
+    {
+      "tick": 29160,
+      "lane": "kick"
+    },
+    {
+      "tick": 29280,
+      "lane": "ride"
+    },
+    {
+      "tick": 29280,
+      "lane": "snare"
+    },
+    {
+      "tick": 29520,
+      "lane": "kick"
+    },
+    {
+      "tick": 29520,
+      "lane": "ride"
+    },
+    {
+      "tick": 29760,
+      "lane": "ride"
+    },
+    {
+      "tick": 30000,
+      "lane": "kick"
+    },
+    {
+      "tick": 30000,
+      "lane": "ride"
+    },
+    {
+      "tick": 30240,
+      "lane": "ride"
+    },
+    {
+      "tick": 30240,
+      "lane": "snare"
+    },
+    {
+      "tick": 30480,
+      "lane": "kick"
+    },
+    {
+      "tick": 30480,
+      "lane": "ride"
+    },
+    {
+      "tick": 30720,
+      "lane": "kick"
+    },
+    {
+      "tick": 30720,
+      "lane": "ride"
+    },
+    {
+      "tick": 30840,
+      "lane": "snare"
+    },
+    {
+      "tick": 30960,
+      "lane": "ride"
+    },
+    {
+      "tick": 31080,
+      "lane": "kick"
+    },
+    {
+      "tick": 31200,
+      "lane": "ride"
+    },
+    {
+      "tick": 31200,
+      "lane": "snare"
+    },
+    {
+      "tick": 31440,
+      "lane": "kick"
+    },
+    {
+      "tick": 31440,
+      "lane": "ride"
+    },
+    {
+      "tick": 31680,
+      "lane": "ride"
+    },
+    {
+      "tick": 31920,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 31920,
+      "lane": "snare"
+    },
+    {
+      "tick": 32040,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 32040,
+      "lane": "snare"
+    },
+    {
+      "tick": 32160,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 32160,
+      "lane": "snare"
+    },
+    {
+      "tick": 32280,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 32280,
+      "lane": "snare"
+    },
+    {
+      "tick": 32400,
+      "lane": "hihat"
+    },
+    {
+      "tick": 32400,
+      "lane": "snare"
+    },
+    {
+      "tick": 32640,
+      "lane": "crash"
+    },
+    {
+      "tick": 32640,
+      "lane": "kick"
+    },
+    {
+      "tick": 32880,
+      "lane": "crash"
+    },
+    {
+      "tick": 33000,
+      "lane": "kick"
+    },
+    {
+      "tick": 33120,
+      "lane": "crash"
+    },
+    {
+      "tick": 33120,
+      "lane": "snare"
+    },
+    {
+      "tick": 33360,
+      "lane": "crash"
+    },
+    {
+      "tick": 33360,
+      "lane": "kick"
+    },
+    {
+      "tick": 33600,
+      "lane": "crash"
+    },
+    {
+      "tick": 33840,
+      "lane": "crash"
+    },
+    {
+      "tick": 33840,
+      "lane": "kick"
+    },
+    {
+      "tick": 34080,
+      "lane": "crash"
+    },
+    {
+      "tick": 34080,
+      "lane": "snare"
+    },
+    {
+      "tick": 34320,
+      "lane": "crash"
+    },
+    {
+      "tick": 34320,
+      "lane": "kick"
+    },
+    {
+      "tick": 34560,
+      "lane": "crash"
+    },
+    {
+      "tick": 34560,
+      "lane": "kick"
+    },
+    {
+      "tick": 34680,
+      "lane": "snare"
+    },
+    {
+      "tick": 34800,
+      "lane": "crash"
+    },
+    {
+      "tick": 34920,
+      "lane": "kick"
+    },
+    {
+      "tick": 35040,
+      "lane": "crash"
+    },
+    {
+      "tick": 35040,
+      "lane": "snare"
+    },
+    {
+      "tick": 35280,
+      "lane": "crash"
+    },
+    {
+      "tick": 35280,
+      "lane": "kick"
+    },
+    {
+      "tick": 35520,
+      "lane": "crash"
+    },
+    {
+      "tick": 35760,
+      "lane": "crash"
+    },
+    {
+      "tick": 35760,
+      "lane": "kick"
+    },
+    {
+      "tick": 36000,
+      "lane": "crash"
+    },
+    {
+      "tick": 36000,
+      "lane": "snare"
+    },
+    {
+      "tick": 36240,
+      "lane": "crash"
+    },
+    {
+      "tick": 36240,
+      "lane": "kick"
+    },
+    {
+      "tick": 36420,
+      "lane": "snare"
+    },
+    {
+      "tick": 36480,
+      "lane": "crash"
+    },
+    {
+      "tick": 36480,
+      "lane": "kick"
+    },
+    {
+      "tick": 36720,
+      "lane": "crash"
+    },
+    {
+      "tick": 36840,
+      "lane": "kick"
+    },
+    {
+      "tick": 36960,
+      "lane": "crash"
+    },
+    {
+      "tick": 36960,
+      "lane": "snare"
+    },
+    {
+      "tick": 37200,
+      "lane": "crash"
+    },
+    {
+      "tick": 37200,
+      "lane": "kick"
+    },
+    {
+      "tick": 37440,
+      "lane": "crash"
+    },
+    {
+      "tick": 37680,
+      "lane": "crash"
+    },
+    {
+      "tick": 37680,
+      "lane": "kick"
+    },
+    {
+      "tick": 37920,
+      "lane": "crash"
+    },
+    {
+      "tick": 37920,
+      "lane": "snare"
+    },
+    {
+      "tick": 38160,
+      "lane": "crash"
+    },
+    {
+      "tick": 38160,
+      "lane": "kick"
+    },
+    {
+      "tick": 38340,
+      "lane": "snare"
+    },
+    {
+      "tick": 38400,
+      "lane": "crash"
+    },
+    {
+      "tick": 38400,
+      "lane": "kick"
+    }
+  ],
+  "medium": [
+    {
+      "tick": 19200,
+      "lane": "snare"
+    },
+    {
+      "tick": 19440,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 19680,
+      "lane": "snare"
+    },
+    {
+      "tick": 20040,
+      "lane": "snare"
+    },
+    {
+      "tick": 20160,
+      "lane": "crash"
+    },
+    {
+      "tick": 20400,
+      "lane": "snare"
+    },
+    {
+      "tick": 20520,
+      "lane": "snare"
+    },
+    {
+      "tick": 20640,
+      "lane": "snare"
+    },
+    {
+      "tick": 20760,
+      "lane": "high-tom"
+    },
+    {
+      "tick": 20880,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 21120,
+      "lane": "kick"
+    },
+    {
+      "tick": 21120,
+      "lane": "ride"
+    },
+    {
+      "tick": 21360,
+      "lane": "ride"
+    },
+    {
+      "tick": 21600,
+      "lane": "ride"
+    },
+    {
+      "tick": 21600,
+      "lane": "snare"
+    },
+    {
+      "tick": 21840,
+      "lane": "ride"
+    },
+    {
+      "tick": 22080,
+      "lane": "ride"
+    },
+    {
+      "tick": 22320,
+      "lane": "ride"
+    },
+    {
+      "tick": 22560,
+      "lane": "ride"
+    },
+    {
+      "tick": 22560,
+      "lane": "snare"
+    },
+    {
+      "tick": 22800,
+      "lane": "ride"
+    },
+    {
+      "tick": 23040,
+      "lane": "kick"
+    },
+    {
+      "tick": 23040,
+      "lane": "ride"
+    },
+    {
+      "tick": 23280,
+      "lane": "ride"
+    },
+    {
+      "tick": 23520,
+      "lane": "ride"
+    },
+    {
+      "tick": 23520,
+      "lane": "snare"
+    },
+    {
+      "tick": 23760,
+      "lane": "ride"
+    },
+    {
+      "tick": 24000,
+      "lane": "ride"
+    },
+    {
+      "tick": 24240,
+      "lane": "ride"
+    },
+    {
+      "tick": 24480,
+      "lane": "ride"
+    },
+    {
+      "tick": 24480,
+      "lane": "snare"
+    },
+    {
+      "tick": 24720,
+      "lane": "ride"
+    },
+    {
+      "tick": 24960,
+      "lane": "kick"
+    },
+    {
+      "tick": 24960,
+      "lane": "ride"
+    },
+    {
+      "tick": 25200,
+      "lane": "ride"
+    },
+    {
+      "tick": 25440,
+      "lane": "ride"
+    },
+    {
+      "tick": 25440,
+      "lane": "snare"
+    },
+    {
+      "tick": 25680,
+      "lane": "ride"
+    },
+    {
+      "tick": 25920,
+      "lane": "ride"
+    },
+    {
+      "tick": 26160,
+      "lane": "ride"
+    },
+    {
+      "tick": 26400,
+      "lane": "ride"
+    },
+    {
+      "tick": 26400,
+      "lane": "snare"
+    },
+    {
+      "tick": 26640,
+      "lane": "ride"
+    },
+    {
+      "tick": 26880,
+      "lane": "kick"
+    },
+    {
+      "tick": 26880,
+      "lane": "ride"
+    },
+    {
+      "tick": 27120,
+      "lane": "ride"
+    },
+    {
+      "tick": 27360,
+      "lane": "ride"
+    },
+    {
+      "tick": 27360,
+      "lane": "snare"
+    },
+    {
+      "tick": 27600,
+      "lane": "ride"
+    },
+    {
+      "tick": 27840,
+      "lane": "ride"
+    },
+    {
+      "tick": 28080,
+      "lane": "ride"
+    },
+    {
+      "tick": 28320,
+      "lane": "ride"
+    },
+    {
+      "tick": 28320,
+      "lane": "snare"
+    },
+    {
+      "tick": 28560,
+      "lane": "ride"
+    },
+    {
+      "tick": 28800,
+      "lane": "kick"
+    },
+    {
+      "tick": 28800,
+      "lane": "ride"
+    },
+    {
+      "tick": 29040,
+      "lane": "ride"
+    },
+    {
+      "tick": 29280,
+      "lane": "ride"
+    },
+    {
+      "tick": 29280,
+      "lane": "snare"
+    },
+    {
+      "tick": 29520,
+      "lane": "ride"
+    },
+    {
+      "tick": 29760,
+      "lane": "ride"
+    },
+    {
+      "tick": 30000,
+      "lane": "ride"
+    },
+    {
+      "tick": 30240,
+      "lane": "ride"
+    },
+    {
+      "tick": 30240,
+      "lane": "snare"
+    },
+    {
+      "tick": 30480,
+      "lane": "ride"
+    },
+    {
+      "tick": 30720,
+      "lane": "kick"
+    },
+    {
+      "tick": 30720,
+      "lane": "ride"
+    },
+    {
+      "tick": 30960,
+      "lane": "ride"
+    },
+    {
+      "tick": 31200,
+      "lane": "ride"
+    },
+    {
+      "tick": 31200,
+      "lane": "snare"
+    },
+    {
+      "tick": 31440,
+      "lane": "ride"
+    },
+    {
+      "tick": 31680,
+      "lane": "ride"
+    },
+    {
+      "tick": 31920,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 31920,
+      "lane": "snare"
+    },
+    {
+      "tick": 32040,
+      "lane": "snare"
+    },
+    {
+      "tick": 32160,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 32160,
+      "lane": "snare"
+    },
+    {
+      "tick": 32280,
+      "lane": "snare"
+    },
+    {
+      "tick": 32400,
+      "lane": "hihat"
+    },
+    {
+      "tick": 32400,
+      "lane": "snare"
+    },
+    {
+      "tick": 32640,
+      "lane": "crash"
+    },
+    {
+      "tick": 32640,
+      "lane": "kick"
+    },
+    {
+      "tick": 32880,
+      "lane": "crash"
+    },
+    {
+      "tick": 33120,
+      "lane": "crash"
+    },
+    {
+      "tick": 33120,
+      "lane": "snare"
+    },
+    {
+      "tick": 33360,
+      "lane": "crash"
+    },
+    {
+      "tick": 33600,
+      "lane": "crash"
+    },
+    {
+      "tick": 33840,
+      "lane": "crash"
+    },
+    {
+      "tick": 34080,
+      "lane": "crash"
+    },
+    {
+      "tick": 34080,
+      "lane": "snare"
+    },
+    {
+      "tick": 34320,
+      "lane": "crash"
+    },
+    {
+      "tick": 34560,
+      "lane": "crash"
+    },
+    {
+      "tick": 34560,
+      "lane": "kick"
+    },
+    {
+      "tick": 34800,
+      "lane": "crash"
+    },
+    {
+      "tick": 35040,
+      "lane": "crash"
+    },
+    {
+      "tick": 35040,
+      "lane": "snare"
+    },
+    {
+      "tick": 35280,
+      "lane": "crash"
+    },
+    {
+      "tick": 35520,
+      "lane": "crash"
+    },
+    {
+      "tick": 35760,
+      "lane": "crash"
+    },
+    {
+      "tick": 36000,
+      "lane": "crash"
+    },
+    {
+      "tick": 36000,
+      "lane": "snare"
+    },
+    {
+      "tick": 36240,
+      "lane": "crash"
+    },
+    {
+      "tick": 36480,
+      "lane": "crash"
+    },
+    {
+      "tick": 36480,
+      "lane": "kick"
+    },
+    {
+      "tick": 36720,
+      "lane": "crash"
+    },
+    {
+      "tick": 36960,
+      "lane": "crash"
+    },
+    {
+      "tick": 36960,
+      "lane": "snare"
+    },
+    {
+      "tick": 37200,
+      "lane": "crash"
+    },
+    {
+      "tick": 37440,
+      "lane": "crash"
+    },
+    {
+      "tick": 37680,
+      "lane": "crash"
+    },
+    {
+      "tick": 37920,
+      "lane": "crash"
+    },
+    {
+      "tick": 37920,
+      "lane": "snare"
+    },
+    {
+      "tick": 38160,
+      "lane": "crash"
+    },
+    {
+      "tick": 38400,
+      "lane": "crash"
+    },
+    {
+      "tick": 38400,
+      "lane": "kick"
+    }
+  ],
+  "easy": [
+    {
+      "tick": 19200,
+      "lane": "snare"
+    },
+    {
+      "tick": 19440,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 19680,
+      "lane": "snare"
+    },
+    {
+      "tick": 19800,
+      "lane": "snare"
+    },
+    {
+      "tick": 20040,
+      "lane": "snare"
+    },
+    {
+      "tick": 20160,
+      "lane": "crash"
+    },
+    {
+      "tick": 20400,
+      "lane": "snare"
+    },
+    {
+      "tick": 20520,
+      "lane": "snare"
+    },
+    {
+      "tick": 20640,
+      "lane": "snare"
+    },
+    {
+      "tick": 21120,
+      "lane": "ride"
+    },
+    {
+      "tick": 21360,
+      "lane": "ride"
+    },
+    {
+      "tick": 21600,
+      "lane": "ride"
+    },
+    {
+      "tick": 21600,
+      "lane": "snare"
+    },
+    {
+      "tick": 21840,
+      "lane": "ride"
+    },
+    {
+      "tick": 22080,
+      "lane": "ride"
+    },
+    {
+      "tick": 22320,
+      "lane": "ride"
+    },
+    {
+      "tick": 22560,
+      "lane": "ride"
+    },
+    {
+      "tick": 22560,
+      "lane": "snare"
+    },
+    {
+      "tick": 22800,
+      "lane": "ride"
+    },
+    {
+      "tick": 23040,
+      "lane": "ride"
+    },
+    {
+      "tick": 23280,
+      "lane": "ride"
+    },
+    {
+      "tick": 23520,
+      "lane": "ride"
+    },
+    {
+      "tick": 23520,
+      "lane": "snare"
+    },
+    {
+      "tick": 23760,
+      "lane": "ride"
+    },
+    {
+      "tick": 24000,
+      "lane": "ride"
+    },
+    {
+      "tick": 24240,
+      "lane": "ride"
+    },
+    {
+      "tick": 24480,
+      "lane": "ride"
+    },
+    {
+      "tick": 24480,
+      "lane": "snare"
+    },
+    {
+      "tick": 24720,
+      "lane": "ride"
+    },
+    {
+      "tick": 24960,
+      "lane": "ride"
+    },
+    {
+      "tick": 25200,
+      "lane": "ride"
+    },
+    {
+      "tick": 25440,
+      "lane": "ride"
+    },
+    {
+      "tick": 25440,
+      "lane": "snare"
+    },
+    {
+      "tick": 25680,
+      "lane": "ride"
+    },
+    {
+      "tick": 25920,
+      "lane": "ride"
+    },
+    {
+      "tick": 26160,
+      "lane": "ride"
+    },
+    {
+      "tick": 26400,
+      "lane": "ride"
+    },
+    {
+      "tick": 26400,
+      "lane": "snare"
+    },
+    {
+      "tick": 26640,
+      "lane": "ride"
+    },
+    {
+      "tick": 26880,
+      "lane": "ride"
+    },
+    {
+      "tick": 27120,
+      "lane": "ride"
+    },
+    {
+      "tick": 27360,
+      "lane": "ride"
+    },
+    {
+      "tick": 27360,
+      "lane": "snare"
+    },
+    {
+      "tick": 27600,
+      "lane": "ride"
+    },
+    {
+      "tick": 27840,
+      "lane": "ride"
+    },
+    {
+      "tick": 28080,
+      "lane": "ride"
+    },
+    {
+      "tick": 28320,
+      "lane": "ride"
+    },
+    {
+      "tick": 28320,
+      "lane": "snare"
+    },
+    {
+      "tick": 28560,
+      "lane": "ride"
+    },
+    {
+      "tick": 28800,
+      "lane": "ride"
+    },
+    {
+      "tick": 29040,
+      "lane": "ride"
+    },
+    {
+      "tick": 29280,
+      "lane": "ride"
+    },
+    {
+      "tick": 29280,
+      "lane": "snare"
+    },
+    {
+      "tick": 29520,
+      "lane": "ride"
+    },
+    {
+      "tick": 29760,
+      "lane": "ride"
+    },
+    {
+      "tick": 30000,
+      "lane": "ride"
+    },
+    {
+      "tick": 30240,
+      "lane": "ride"
+    },
+    {
+      "tick": 30240,
+      "lane": "snare"
+    },
+    {
+      "tick": 30480,
+      "lane": "ride"
+    },
+    {
+      "tick": 30720,
+      "lane": "ride"
+    },
+    {
+      "tick": 30960,
+      "lane": "ride"
+    },
+    {
+      "tick": 31200,
+      "lane": "ride"
+    },
+    {
+      "tick": 31200,
+      "lane": "snare"
+    },
+    {
+      "tick": 31440,
+      "lane": "ride"
+    },
+    {
+      "tick": 31680,
+      "lane": "ride"
+    },
+    {
+      "tick": 31920,
+      "lane": "floor-tom"
+    },
+    {
+      "tick": 31920,
+      "lane": "snare"
+    },
+    {
+      "tick": 32160,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 32160,
+      "lane": "snare"
+    },
+    {
+      "tick": 32400,
+      "lane": "hihat"
+    },
+    {
+      "tick": 32640,
+      "lane": "crash"
+    },
+    {
+      "tick": 32880,
+      "lane": "crash"
+    },
+    {
+      "tick": 33120,
+      "lane": "crash"
+    },
+    {
+      "tick": 33120,
+      "lane": "snare"
+    },
+    {
+      "tick": 33360,
+      "lane": "crash"
+    },
+    {
+      "tick": 33600,
+      "lane": "crash"
+    },
+    {
+      "tick": 33840,
+      "lane": "crash"
+    },
+    {
+      "tick": 34080,
+      "lane": "crash"
+    },
+    {
+      "tick": 34080,
+      "lane": "snare"
+    },
+    {
+      "tick": 34320,
+      "lane": "crash"
+    },
+    {
+      "tick": 34560,
+      "lane": "crash"
+    },
+    {
+      "tick": 34800,
+      "lane": "crash"
+    },
+    {
+      "tick": 35040,
+      "lane": "crash"
+    },
+    {
+      "tick": 35040,
+      "lane": "snare"
+    },
+    {
+      "tick": 35280,
+      "lane": "crash"
+    },
+    {
+      "tick": 35520,
+      "lane": "crash"
+    },
+    {
+      "tick": 35760,
+      "lane": "crash"
+    },
+    {
+      "tick": 36000,
+      "lane": "crash"
+    },
+    {
+      "tick": 36000,
+      "lane": "snare"
+    },
+    {
+      "tick": 36240,
+      "lane": "crash"
+    },
+    {
+      "tick": 36480,
+      "lane": "crash"
+    },
+    {
+      "tick": 36720,
+      "lane": "crash"
+    },
+    {
+      "tick": 36960,
+      "lane": "crash"
+    },
+    {
+      "tick": 36960,
+      "lane": "snare"
+    },
+    {
+      "tick": 37200,
+      "lane": "crash"
+    },
+    {
+      "tick": 37440,
+      "lane": "crash"
+    },
+    {
+      "tick": 37680,
+      "lane": "crash"
+    },
+    {
+      "tick": 37920,
+      "lane": "crash"
+    },
+    {
+      "tick": 37920,
+      "lane": "snare"
+    },
+    {
+      "tick": 38160,
+      "lane": "crash"
+    },
+    {
+      "tick": 38400,
+      "lane": "crash"
+    }
+  ],
+  "_meta": {
+    "generatedBy": "packed v5 591ab4a (survive + survive-pool + family-NMS + relane + relane-pool + chord-merge + consistency_metric.canonicalize), reading the SHIPPED public/models/drum-difficulty/v5/*.bin files directly",
+    "era": "RB4",
+    "survive_threshold": 0.5,
+    "family_nms_gaps_ms": {
+      "hard": null,
+      "medium": 180,
+      "easy": 250
+    },
+    "counts": {
+      "hard": {
+        "nExpert": 192,
+        "nPreCanon": 163,
+        "nKept": 163
+      },
+      "medium": {
+        "nExpert": 192,
+        "nPreCanon": 115,
+        "nKept": 115
+      },
+      "easy": {
+        "nExpert": 192,
+        "nPreCanon": 101,
+        "nKept": 101
+      }
+    },
+    "note": "Assert on (tick, lane) only -- v5 fixtures carry no per-note diagnostic fields (originalLane/family/relaned/confidence are not well-defined for canonicalize()'s donor-copied notes)."
+  }
+}

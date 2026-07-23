@@ -1,0 +1,2045 @@
+{
+ "hard": [
+  {
+   "tick": 55440,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 55680,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 55920,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 56160,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 56400,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 56640,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 56880,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 57120,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 57360,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 57600,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 57840,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 58080,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 58320,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 58560,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 58800,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 59040,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 59280,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 59520,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 59760,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 60000,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 60240,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 60480,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 60720,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 60960,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 61200,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 61440,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 61680,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 61920,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 62160,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 62400,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 62640,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 62880,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 63120,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 63360,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 63600,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 63840,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 64080,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 64320,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 64560,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 64800,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 65040,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 65280,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 65520,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 65760,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 65760,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 66000,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 66240,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 66480,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 66720,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 66720,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 66960,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 67200,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 67440,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 67680,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 67680,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 67920,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 68160,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 68400,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 68640,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 68880,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 69120,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 69360,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 69600,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 69600,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 69840,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 70080,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 70320,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 70560,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 70560,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 70800,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 71040,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 71280,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 71520,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 71520,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 71760,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 72000,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 72240,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 72480,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 72480,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 72720,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 72960,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 72960,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 73200,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 73440,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 73680,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 73920,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 73920,
+   "lane": "high-tom",
+   "kind": "pro",
+   "color": "yellow",
+   "protype": "tom"
+  },
+  {
+   "tick": 74160,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 74400,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 74640,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 74880,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 74880,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 75120,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 75360,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 75600,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 75840,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 75840,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 76080,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 76320,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 76560,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 76800,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 76800,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 77040,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 77280,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 77520,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 77760,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 77760,
+   "lane": "high-tom",
+   "kind": "pro",
+   "color": "yellow",
+   "protype": "tom"
+  },
+  {
+   "tick": 78000,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 78240,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 78480,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 78720,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 78720,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 79200,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 79680,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 79680,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 80160,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 80640,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 80640,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 81120,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 81600,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 81600,
+   "lane": "high-tom",
+   "kind": "pro",
+   "color": "yellow",
+   "protype": "tom"
+  },
+  {
+   "tick": 82080,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 82560,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 82560,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 82800,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 83040,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 83280,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 83520,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 83760,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 84048,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 84374,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 84716,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 85077,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  }
+ ],
+ "medium": [
+  {
+   "tick": 55680,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 56160,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 56640,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 57120,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 57600,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 58080,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 58560,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 59040,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 59520,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 60000,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 60480,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 60960,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 61440,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 61920,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 62400,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 62880,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 63360,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 63840,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 64320,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 64800,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 65280,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 65760,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 65760,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 66240,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 66720,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 66720,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 67200,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 67680,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 67680,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 68160,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 68640,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 69120,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 69600,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 69600,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 70080,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 70560,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 70560,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 71040,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 71520,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 71520,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 72000,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 72480,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 72480,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 72960,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 72960,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 73440,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 73920,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 73920,
+   "lane": "high-tom",
+   "kind": "pro",
+   "color": "yellow",
+   "protype": "tom"
+  },
+  {
+   "tick": 74400,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 74880,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 74880,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 75360,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 75840,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 75840,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 76320,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 76800,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 76800,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 77280,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 77760,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 77760,
+   "lane": "high-tom",
+   "kind": "pro",
+   "color": "yellow",
+   "protype": "tom"
+  },
+  {
+   "tick": 78240,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 78720,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 78720,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 79200,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 79680,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 79680,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 80160,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 80640,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 80640,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 81120,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 81600,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 81600,
+   "lane": "high-tom",
+   "kind": "pro",
+   "color": "yellow",
+   "protype": "tom"
+  },
+  {
+   "tick": 82080,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 82560,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 82560,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 83040,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 83520,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 84048,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 84716,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  }
+ ],
+ "easy": [
+  {
+   "tick": 55680,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 56160,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 56640,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 57120,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 57600,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 58080,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 58560,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 59040,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 59520,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 60000,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 60480,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 60960,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 61440,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 61920,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 62400,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 62880,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 63360,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 63840,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 64320,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 64800,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 65280,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 65760,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 65760,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 66240,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 66720,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 66720,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 67200,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 67680,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 67680,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 68160,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 68640,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 69120,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 69600,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 69600,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 70080,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 70560,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 70560,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 71040,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 71520,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 71520,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 72000,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 72480,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 72480,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 72960,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 72960,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 73440,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 73920,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 73920,
+   "lane": "high-tom",
+   "kind": "pro",
+   "color": "yellow",
+   "protype": "tom"
+  },
+  {
+   "tick": 74400,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 74880,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 74880,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 75360,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 75840,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 75840,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 76320,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 76800,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 76800,
+   "lane": "mid-tom",
+   "kind": "pro",
+   "color": "blue",
+   "protype": "tom"
+  },
+  {
+   "tick": 77280,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 77760,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 77760,
+   "lane": "high-tom",
+   "kind": "pro",
+   "color": "yellow",
+   "protype": "tom"
+  },
+  {
+   "tick": 78240,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 78720,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 78720,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 79200,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 79680,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 79680,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 80160,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 80640,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 80640,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 81120,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 81600,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 81600,
+   "lane": "high-tom",
+   "kind": "pro",
+   "color": "yellow",
+   "protype": "tom"
+  },
+  {
+   "tick": 82080,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 82560,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 82560,
+   "lane": "snare",
+   "kind": "red",
+   "color": "",
+   "protype": ""
+  },
+  {
+   "tick": 83040,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 83520,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 84048,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  },
+  {
+   "tick": 84716,
+   "lane": "crash",
+   "kind": "pro",
+   "color": "green",
+   "protype": "cymbal"
+  }
+ ]
+}

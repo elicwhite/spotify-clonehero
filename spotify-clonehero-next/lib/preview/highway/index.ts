@@ -5,10 +5,6 @@ import {ChartResponseEncore} from '../../chartSelection';
 import {AudioManager} from '../audioManager';
 import {
   getHighwayTexture,
-  createHighway,
-  createPlainStrikeline,
-  LANES_OFF_HIGHWAY_WIDTH,
-  loadAndCreateHitBox,
   createWaveformSurface,
   createGridOverlay,
   type HighwayMode,
@@ -24,9 +20,8 @@ import {InteractionManager} from './InteractionManager';
 import {SceneReconciler} from './SceneReconciler';
 import {NoteRenderer} from './NoteRenderer';
 import {MarkerRenderer} from './MarkerRenderer';
-import {trackToElements} from './trackToElements';
-import {padLaneColors} from './notePlacement';
 import {LyricsOverlay} from './LyricsOverlay';
+import {buildHighwayCell} from './cell';
 import type {Track} from './types';
 
 // Re-export public types, constants, and utilities
@@ -408,29 +403,6 @@ export const setupRenderer = (
   async function prepTrack(scene: THREE.Scene, track: Track | null) {
     const {highwayTexture} = await initPromise;
     const schema = track ? schemaForTrack(track, chart.drumType) : null;
-    // Lanes require both the capability flag and an actual notes track —
-    // there's nothing to draw lanes for on a vocals/global scope.
-    const lanesActive = showDrumLanes && track != null;
-
-    if (!lanesActive) {
-      // Lanes-off mode: the same textured highway floor, but no instrument
-      // hitbox and no drum geometry. A plain bar marks the strikeline in
-      // the hitbox's place.
-      const highway = createHighway(highwayTexture, LANES_OFF_HIGHWAY_WIDTH);
-      scene.add(highway);
-      classicHighwayMesh = highway;
-      scene.add(createPlainStrikeline(LANES_OFF_HIGHWAY_WIDTH));
-    } else {
-      const highway = createHighway(highwayTexture, schema?.highwayWidth ?? 1);
-      scene.add(highway);
-      classicHighwayMesh = highway;
-      scene.add(
-        await loadAndCreateHitBox(
-          textureLoader,
-          schema?.hitboxTexturePath ?? '/assets/preview/assets/isolated.png',
-        ),
-      );
-    }
 
     const animatedTextureManager = new AnimatedTextureManager();
 
@@ -446,68 +418,19 @@ export const setupRenderer = (
         )
       : {getTextureForNote: () => new THREE.SpriteMaterial()};
 
-    // Create NoteRenderer for the reconciler
-    const noteRenderer = new NoteRenderer(
-      getTextureForNote,
-      noteClippingPlanes,
-      schema ? padLaneColors(schema) : [],
-    );
-
-    // Create marker renderers for all marker types
-    const sectionRenderer = new MarkerRenderer(
-      markerClippingPlanes,
-      'right',
-      [0, 200, 40],
-    );
-    const lyricRenderer = new MarkerRenderer(
-      markerClippingPlanes,
-      'left',
-      [40, 120, 255],
-    );
-    const phraseStartRenderer = new MarkerRenderer(
-      markerClippingPlanes,
-      'left',
-      [40, 120, 255],
-    );
-    const phraseEndRenderer = new MarkerRenderer(
-      markerClippingPlanes,
-      'left',
-      [40, 120, 255],
-    );
-    const bpmRenderer = new MarkerRenderer(
-      markerClippingPlanes,
-      'left',
-      [180, 40, 255],
-    );
-    const tsRenderer = new MarkerRenderer(
-      markerClippingPlanes,
-      'right',
-      [255, 80, 60],
-    );
-
-    // Create SceneReconciler with all renderers
-    const reconciler = new SceneReconciler(
-      scene,
-      {
-        note: noteRenderer,
-        section: sectionRenderer,
-        lyric: lyricRenderer,
-        'phrase-start': phraseStartRenderer,
-        'phrase-end': phraseEndRenderer,
-        bpm: bpmRenderer,
-        ts: tsRenderer,
-      },
+    // Build the reusable scene core (floor, hitbox/strikeline, note + marker
+    // renderers, reconciler seeded with the track's notes). Shared verbatim
+    // with the multi-cell grid via cell.ts.
+    const {highway, reconciler, noteRenderer} = await buildHighwayCell(scene, {
+      chart,
+      track,
+      textureLoader,
+      textures: {highwayTexture, getTextureForNote, animatedTextureManager},
+      clippingPlanes: {note: noteClippingPlanes, marker: markerClippingPlanes},
       highwaySpeed,
-    );
-
-    // Convert track to elements and set on the reconciler. With lanes
-    // inactive (no track, or `showDrumLanes` off — e.g. add-lyrics), seed
-    // the reconciler empty — HighwayEditor will populate markers from the
-    // full ParsedChart and skip notes when that capability is off, so
-    // drawing notes here would briefly flash drum geometry on a lanes-off
-    // page.
-    const elements = lanesActive && track ? trackToElements(track, chart) : [];
-    reconciler.setElements(elements);
+      showDrumLanes,
+    });
+    classicHighwayMesh = highway;
 
     // SceneOverlays + InteractionManager are created for any track — they
     // power the cursor / ghost / hit-testing surface for both drum-edit

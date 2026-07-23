@@ -281,6 +281,16 @@ export function readChart(
     // matches the override from the start. parseChartFile returns the narrow
     // shape (no chartBytes/format/iniChartModifiers) so we re-stitch the wider
     // ParsedChart that consumers expect.
+    //
+    // `parseChartFile`'s own `metadata` only carries what the source FILE
+    // embeds (the .chart file's `[Song]` section; nothing at all for .mid —
+    // see scan-chart's `RawChartData.metadata` doc comment). It never sees
+    // song.ini. The first `parseChartAndIni(files)` call above already did
+    // the ini-wins overlay onto `parsedChart.metadata` — that's the metadata
+    // every consumer actually wants (charter, artist, delay, etc.), so it
+    // must be carried through here explicitly, not replaced by the reparse's
+    // narrower one.
+    const iniMergedMetadata = parsedChart.metadata;
     const mergedModifiers = {
       ...parsedChart.iniChartModifiers,
       ...iniChartModifiersOverride,
@@ -292,6 +302,7 @@ export function readChart(
     );
     parsedChart = {
       ...reparsed,
+      metadata: iniMergedMetadata,
       chartBytes: parsedChart.chartBytes,
       format: parsedChart.format,
       iniChartModifiers: mergedModifiers,

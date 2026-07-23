@@ -1,0 +1,1592 @@
+{
+  "hard": [
+    {
+      "tick": 55440,
+      "lane": "crash"
+    },
+    {
+      "tick": 55680,
+      "lane": "crash"
+    },
+    {
+      "tick": 55920,
+      "lane": "crash"
+    },
+    {
+      "tick": 56160,
+      "lane": "crash"
+    },
+    {
+      "tick": 56400,
+      "lane": "crash"
+    },
+    {
+      "tick": 56640,
+      "lane": "crash"
+    },
+    {
+      "tick": 56880,
+      "lane": "crash"
+    },
+    {
+      "tick": 57120,
+      "lane": "crash"
+    },
+    {
+      "tick": 57360,
+      "lane": "crash"
+    },
+    {
+      "tick": 57600,
+      "lane": "crash"
+    },
+    {
+      "tick": 57840,
+      "lane": "crash"
+    },
+    {
+      "tick": 58080,
+      "lane": "crash"
+    },
+    {
+      "tick": 58320,
+      "lane": "crash"
+    },
+    {
+      "tick": 58560,
+      "lane": "crash"
+    },
+    {
+      "tick": 58800,
+      "lane": "crash"
+    },
+    {
+      "tick": 59040,
+      "lane": "crash"
+    },
+    {
+      "tick": 59280,
+      "lane": "crash"
+    },
+    {
+      "tick": 59520,
+      "lane": "crash"
+    },
+    {
+      "tick": 59760,
+      "lane": "crash"
+    },
+    {
+      "tick": 60000,
+      "lane": "crash"
+    },
+    {
+      "tick": 60240,
+      "lane": "crash"
+    },
+    {
+      "tick": 60480,
+      "lane": "crash"
+    },
+    {
+      "tick": 60720,
+      "lane": "crash"
+    },
+    {
+      "tick": 60960,
+      "lane": "crash"
+    },
+    {
+      "tick": 61200,
+      "lane": "crash"
+    },
+    {
+      "tick": 61440,
+      "lane": "crash"
+    },
+    {
+      "tick": 61680,
+      "lane": "crash"
+    },
+    {
+      "tick": 61920,
+      "lane": "crash"
+    },
+    {
+      "tick": 62160,
+      "lane": "crash"
+    },
+    {
+      "tick": 62400,
+      "lane": "crash"
+    },
+    {
+      "tick": 62640,
+      "lane": "crash"
+    },
+    {
+      "tick": 62880,
+      "lane": "crash"
+    },
+    {
+      "tick": 63120,
+      "lane": "crash"
+    },
+    {
+      "tick": 63360,
+      "lane": "crash"
+    },
+    {
+      "tick": 63600,
+      "lane": "crash"
+    },
+    {
+      "tick": 63840,
+      "lane": "crash"
+    },
+    {
+      "tick": 64080,
+      "lane": "crash"
+    },
+    {
+      "tick": 64320,
+      "lane": "crash"
+    },
+    {
+      "tick": 64560,
+      "lane": "crash"
+    },
+    {
+      "tick": 64800,
+      "lane": "crash"
+    },
+    {
+      "tick": 65040,
+      "lane": "crash"
+    },
+    {
+      "tick": 65280,
+      "lane": "crash"
+    },
+    {
+      "tick": 65520,
+      "lane": "crash"
+    },
+    {
+      "tick": 65760,
+      "lane": "crash"
+    },
+    {
+      "tick": 65760,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 66000,
+      "lane": "crash"
+    },
+    {
+      "tick": 66240,
+      "lane": "crash"
+    },
+    {
+      "tick": 66480,
+      "lane": "crash"
+    },
+    {
+      "tick": 66720,
+      "lane": "crash"
+    },
+    {
+      "tick": 66720,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 66960,
+      "lane": "crash"
+    },
+    {
+      "tick": 67200,
+      "lane": "crash"
+    },
+    {
+      "tick": 67440,
+      "lane": "crash"
+    },
+    {
+      "tick": 67680,
+      "lane": "crash"
+    },
+    {
+      "tick": 67680,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 67920,
+      "lane": "crash"
+    },
+    {
+      "tick": 68160,
+      "lane": "crash"
+    },
+    {
+      "tick": 68400,
+      "lane": "crash"
+    },
+    {
+      "tick": 68640,
+      "lane": "crash"
+    },
+    {
+      "tick": 68880,
+      "lane": "crash"
+    },
+    {
+      "tick": 69120,
+      "lane": "crash"
+    },
+    {
+      "tick": 69360,
+      "lane": "crash"
+    },
+    {
+      "tick": 69600,
+      "lane": "crash"
+    },
+    {
+      "tick": 69600,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 69840,
+      "lane": "crash"
+    },
+    {
+      "tick": 70080,
+      "lane": "crash"
+    },
+    {
+      "tick": 70320,
+      "lane": "crash"
+    },
+    {
+      "tick": 70560,
+      "lane": "crash"
+    },
+    {
+      "tick": 70560,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 70800,
+      "lane": "crash"
+    },
+    {
+      "tick": 71040,
+      "lane": "crash"
+    },
+    {
+      "tick": 71280,
+      "lane": "crash"
+    },
+    {
+      "tick": 71520,
+      "lane": "crash"
+    },
+    {
+      "tick": 71520,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 71760,
+      "lane": "crash"
+    },
+    {
+      "tick": 72000,
+      "lane": "crash"
+    },
+    {
+      "tick": 72240,
+      "lane": "crash"
+    },
+    {
+      "tick": 72480,
+      "lane": "crash"
+    },
+    {
+      "tick": 72480,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 72720,
+      "lane": "crash"
+    },
+    {
+      "tick": 72960,
+      "lane": "crash"
+    },
+    {
+      "tick": 72960,
+      "lane": "snare"
+    },
+    {
+      "tick": 73200,
+      "lane": "crash"
+    },
+    {
+      "tick": 73440,
+      "lane": "crash"
+    },
+    {
+      "tick": 73680,
+      "lane": "crash"
+    },
+    {
+      "tick": 73920,
+      "lane": "crash"
+    },
+    {
+      "tick": 73920,
+      "lane": "high-tom"
+    },
+    {
+      "tick": 74160,
+      "lane": "crash"
+    },
+    {
+      "tick": 74400,
+      "lane": "crash"
+    },
+    {
+      "tick": 74640,
+      "lane": "crash"
+    },
+    {
+      "tick": 74880,
+      "lane": "crash"
+    },
+    {
+      "tick": 74880,
+      "lane": "snare"
+    },
+    {
+      "tick": 75120,
+      "lane": "crash"
+    },
+    {
+      "tick": 75360,
+      "lane": "crash"
+    },
+    {
+      "tick": 75600,
+      "lane": "crash"
+    },
+    {
+      "tick": 75840,
+      "lane": "crash"
+    },
+    {
+      "tick": 75840,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 76080,
+      "lane": "crash"
+    },
+    {
+      "tick": 76320,
+      "lane": "crash"
+    },
+    {
+      "tick": 76560,
+      "lane": "crash"
+    },
+    {
+      "tick": 76800,
+      "lane": "crash"
+    },
+    {
+      "tick": 76800,
+      "lane": "mid-tom"
+    },
+    {
+      "tick": 77040,
+      "lane": "crash"
+    },
+    {
+      "tick": 77280,
+      "lane": "crash"
+    },
+    {
+      "tick": 77520,
+      "lane": "crash"
+    },
+    {
+      "tick": 77760,
+      "lane": "crash"
+    },
+    {
+      "tick": 77760,
+      "lane": "high-tom"
+    },
+    {
+      "tick": 78000,
+      "lane": "crash"
+    },
+    {
+      "tick": 78240,
+      "lane": "crash"
+    },
+    {
+      "tick": 78480,
+      "lane": "crash"
+    },
+    {
+      "tick": 78720,
+      "lane": "crash"
+    },
+    {
+      "tick": 78720,
+      "lane": "snare"
+    },
+    {
+      "tick": 79200,
+      "lane": "crash"
+    },
+    {
+      "tick": 79680,
+      "lane": "crash"
+    },
+    {
+      "tick": 79680,
+      "lane": "snare"
+    },
+    {
+      "tick": 80160,
+      "lane": "crash"
+    },
+    {
+      "tick": 80640,
+      "lane": "crash"
+    },
+    {
+      "tick": 80640,
+      "lane": "snare"
+    },
+    {
+      "tick": 81120,
+      "lane": "crash"
+    },
+    {
+      "tick": 81600,
+      "lane": "crash"
+    },
+    {
+      "tick": 81600,
+      "lane": "high-tom"
+    },
+    {
+      "tick": 82080,
+      "lane": "crash"
+    },
+    {
+      "tick": 82560,
+      "lane": "crash"
+    },
+    {
+      "tick": 82560,
+      "lane": "snare"
+    },
+    {
+      "tick": 82800,
+      "lane": "crash"
+    },
+    {
+      "tick": 82920,
+      "lane": "crash"
+    },
+    {
+      "tick": 83040,
+      "lane": "crash"
+    },
+    {
+      "tick": 83160,
+      "lane": "crash"
+    },
+    {
+      "tick": 83280,
+      "lane": "crash"
+    },
+    {
+      "tick": 83400,
+      "lane": "crash"
+    },
+    {
+      "tick": 83520,
+      "lane": "crash"
+    },
+    {
+      "tick": 83640,
+      "lane": "crash"
+    },
+    {
+      "tick": 83760,
+      "lane": "crash"
+    },
+    {
+      "tick": 83904,
+      "lane": "crash"
+    },
+    {
+      "tick": 84048,
+      "lane": "crash"
+    },
+    {
+      "tick": 84207,
+      "lane": "crash"
+    },
+    {
+      "tick": 84374,
+      "lane": "crash"
+    },
+    {
+      "tick": 84542,
+      "lane": "crash"
+    },
+    {
+      "tick": 84716,
+      "lane": "crash"
+    },
+    {
+      "tick": 84897,
+      "lane": "crash"
+    },
+    {
+      "tick": 85077,
+      "lane": "crash"
+    },
+    {
+      "tick": 85245,
+      "lane": "crash"
+    }
+  ],
+  "medium": [
+    {
+      "tick": 55440,
+      "lane": "crash"
+    },
+    {
+      "tick": 55680,
+      "lane": "crash"
+    },
+    {
+      "tick": 55920,
+      "lane": "crash"
+    },
+    {
+      "tick": 56160,
+      "lane": "crash"
+    },
+    {
+      "tick": 56400,
+      "lane": "crash"
+    },
+    {
+      "tick": 56640,
+      "lane": "crash"
+    },
+    {
+      "tick": 56880,
+      "lane": "crash"
+    },
+    {
+      "tick": 57120,
+      "lane": "crash"
+    },
+    {
+      "tick": 57360,
+      "lane": "crash"
+    },
+    {
+      "tick": 57600,
+      "lane": "crash"
+    },
+    {
+      "tick": 57840,
+      "lane": "crash"
+    },
+    {
+      "tick": 58080,
+      "lane": "crash"
+    },
+    {
+      "tick": 58320,
+      "lane": "crash"
+    },
+    {
+      "tick": 58560,
+      "lane": "crash"
+    },
+    {
+      "tick": 58800,
+      "lane": "crash"
+    },
+    {
+      "tick": 59040,
+      "lane": "crash"
+    },
+    {
+      "tick": 59280,
+      "lane": "crash"
+    },
+    {
+      "tick": 59520,
+      "lane": "crash"
+    },
+    {
+      "tick": 59760,
+      "lane": "crash"
+    },
+    {
+      "tick": 60000,
+      "lane": "crash"
+    },
+    {
+      "tick": 60240,
+      "lane": "crash"
+    },
+    {
+      "tick": 60480,
+      "lane": "crash"
+    },
+    {
+      "tick": 60720,
+      "lane": "crash"
+    },
+    {
+      "tick": 60960,
+      "lane": "crash"
+    },
+    {
+      "tick": 61200,
+      "lane": "crash"
+    },
+    {
+      "tick": 61440,
+      "lane": "crash"
+    },
+    {
+      "tick": 61680,
+      "lane": "crash"
+    },
+    {
+      "tick": 61920,
+      "lane": "crash"
+    },
+    {
+      "tick": 62160,
+      "lane": "crash"
+    },
+    {
+      "tick": 62400,
+      "lane": "crash"
+    },
+    {
+      "tick": 62640,
+      "lane": "crash"
+    },
+    {
+      "tick": 62880,
+      "lane": "crash"
+    },
+    {
+      "tick": 63120,
+      "lane": "crash"
+    },
+    {
+      "tick": 63360,
+      "lane": "crash"
+    },
+    {
+      "tick": 63600,
+      "lane": "crash"
+    },
+    {
+      "tick": 63840,
+      "lane": "crash"
+    },
+    {
+      "tick": 64080,
+      "lane": "crash"
+    },
+    {
+      "tick": 64320,
+      "lane": "crash"
+    },
+    {
+      "tick": 64560,
+      "lane": "crash"
+    },
+    {
+      "tick": 64800,
+      "lane": "crash"
+    },
+    {
+      "tick": 65040,
+      "lane": "crash"
+    },
+    {
+      "tick": 65280,
+      "lane": "crash"
+    },
+    {
+      "tick": 65520,
+      "lane": "crash"
+    },
+    {
+      "tick": 65760,
+      "lane": "crash"
+    },
+    {
+      "tick": 66000,
+      "lane": "crash"
+    },
+    {
+      "tick": 66240,
+      "lane": "crash"
+    },
+    {
+      "tick": 66480,
+      "lane": "crash"
+    },
+    {
+      "tick": 66720,
+      "lane": "crash"
+    },
+    {
+      "tick": 66960,
+      "lane": "crash"
+    },
+    {
+      "tick": 67200,
+      "lane": "crash"
+    },
+    {
+      "tick": 67440,
+      "lane": "crash"
+    },
+    {
+      "tick": 67680,
+      "lane": "crash"
+    },
+    {
+      "tick": 67920,
+      "lane": "crash"
+    },
+    {
+      "tick": 68160,
+      "lane": "crash"
+    },
+    {
+      "tick": 68400,
+      "lane": "crash"
+    },
+    {
+      "tick": 68640,
+      "lane": "crash"
+    },
+    {
+      "tick": 68880,
+      "lane": "crash"
+    },
+    {
+      "tick": 69120,
+      "lane": "crash"
+    },
+    {
+      "tick": 69360,
+      "lane": "crash"
+    },
+    {
+      "tick": 69600,
+      "lane": "crash"
+    },
+    {
+      "tick": 69840,
+      "lane": "crash"
+    },
+    {
+      "tick": 70080,
+      "lane": "crash"
+    },
+    {
+      "tick": 70320,
+      "lane": "crash"
+    },
+    {
+      "tick": 70560,
+      "lane": "crash"
+    },
+    {
+      "tick": 70800,
+      "lane": "crash"
+    },
+    {
+      "tick": 71040,
+      "lane": "crash"
+    },
+    {
+      "tick": 71280,
+      "lane": "crash"
+    },
+    {
+      "tick": 71520,
+      "lane": "crash"
+    },
+    {
+      "tick": 71760,
+      "lane": "crash"
+    },
+    {
+      "tick": 72000,
+      "lane": "crash"
+    },
+    {
+      "tick": 72240,
+      "lane": "crash"
+    },
+    {
+      "tick": 72480,
+      "lane": "crash"
+    },
+    {
+      "tick": 72720,
+      "lane": "crash"
+    },
+    {
+      "tick": 72960,
+      "lane": "crash"
+    },
+    {
+      "tick": 72960,
+      "lane": "snare"
+    },
+    {
+      "tick": 73200,
+      "lane": "crash"
+    },
+    {
+      "tick": 73440,
+      "lane": "crash"
+    },
+    {
+      "tick": 73680,
+      "lane": "crash"
+    },
+    {
+      "tick": 73920,
+      "lane": "crash"
+    },
+    {
+      "tick": 74160,
+      "lane": "crash"
+    },
+    {
+      "tick": 74400,
+      "lane": "crash"
+    },
+    {
+      "tick": 74640,
+      "lane": "crash"
+    },
+    {
+      "tick": 74880,
+      "lane": "crash"
+    },
+    {
+      "tick": 74880,
+      "lane": "snare"
+    },
+    {
+      "tick": 75120,
+      "lane": "crash"
+    },
+    {
+      "tick": 75360,
+      "lane": "crash"
+    },
+    {
+      "tick": 75600,
+      "lane": "crash"
+    },
+    {
+      "tick": 75840,
+      "lane": "crash"
+    },
+    {
+      "tick": 76080,
+      "lane": "crash"
+    },
+    {
+      "tick": 76320,
+      "lane": "crash"
+    },
+    {
+      "tick": 76560,
+      "lane": "crash"
+    },
+    {
+      "tick": 76800,
+      "lane": "crash"
+    },
+    {
+      "tick": 77040,
+      "lane": "crash"
+    },
+    {
+      "tick": 77280,
+      "lane": "crash"
+    },
+    {
+      "tick": 77520,
+      "lane": "crash"
+    },
+    {
+      "tick": 77760,
+      "lane": "crash"
+    },
+    {
+      "tick": 78000,
+      "lane": "crash"
+    },
+    {
+      "tick": 78240,
+      "lane": "crash"
+    },
+    {
+      "tick": 78480,
+      "lane": "crash"
+    },
+    {
+      "tick": 78720,
+      "lane": "crash"
+    },
+    {
+      "tick": 78720,
+      "lane": "snare"
+    },
+    {
+      "tick": 79200,
+      "lane": "crash"
+    },
+    {
+      "tick": 79680,
+      "lane": "crash"
+    },
+    {
+      "tick": 79680,
+      "lane": "snare"
+    },
+    {
+      "tick": 80160,
+      "lane": "crash"
+    },
+    {
+      "tick": 80640,
+      "lane": "crash"
+    },
+    {
+      "tick": 80640,
+      "lane": "snare"
+    },
+    {
+      "tick": 81120,
+      "lane": "crash"
+    },
+    {
+      "tick": 81600,
+      "lane": "crash"
+    },
+    {
+      "tick": 82080,
+      "lane": "crash"
+    },
+    {
+      "tick": 82560,
+      "lane": "crash"
+    },
+    {
+      "tick": 82560,
+      "lane": "snare"
+    },
+    {
+      "tick": 83040,
+      "lane": "crash"
+    },
+    {
+      "tick": 83520,
+      "lane": "crash"
+    },
+    {
+      "tick": 83904,
+      "lane": "crash"
+    },
+    {
+      "tick": 84048,
+      "lane": "crash"
+    },
+    {
+      "tick": 84207,
+      "lane": "crash"
+    },
+    {
+      "tick": 84374,
+      "lane": "crash"
+    },
+    {
+      "tick": 84542,
+      "lane": "crash"
+    },
+    {
+      "tick": 84716,
+      "lane": "crash"
+    },
+    {
+      "tick": 84897,
+      "lane": "crash"
+    },
+    {
+      "tick": 85077,
+      "lane": "crash"
+    },
+    {
+      "tick": 85245,
+      "lane": "crash"
+    }
+  ],
+  "easy": [
+    {
+      "tick": 55440,
+      "lane": "crash"
+    },
+    {
+      "tick": 55680,
+      "lane": "crash"
+    },
+    {
+      "tick": 55920,
+      "lane": "crash"
+    },
+    {
+      "tick": 56160,
+      "lane": "crash"
+    },
+    {
+      "tick": 56400,
+      "lane": "crash"
+    },
+    {
+      "tick": 56640,
+      "lane": "crash"
+    },
+    {
+      "tick": 56880,
+      "lane": "crash"
+    },
+    {
+      "tick": 57120,
+      "lane": "crash"
+    },
+    {
+      "tick": 57360,
+      "lane": "crash"
+    },
+    {
+      "tick": 57600,
+      "lane": "crash"
+    },
+    {
+      "tick": 57840,
+      "lane": "crash"
+    },
+    {
+      "tick": 58080,
+      "lane": "crash"
+    },
+    {
+      "tick": 58320,
+      "lane": "crash"
+    },
+    {
+      "tick": 58560,
+      "lane": "crash"
+    },
+    {
+      "tick": 58800,
+      "lane": "crash"
+    },
+    {
+      "tick": 59040,
+      "lane": "crash"
+    },
+    {
+      "tick": 59280,
+      "lane": "crash"
+    },
+    {
+      "tick": 59520,
+      "lane": "crash"
+    },
+    {
+      "tick": 59760,
+      "lane": "crash"
+    },
+    {
+      "tick": 60000,
+      "lane": "crash"
+    },
+    {
+      "tick": 60240,
+      "lane": "crash"
+    },
+    {
+      "tick": 60480,
+      "lane": "crash"
+    },
+    {
+      "tick": 60720,
+      "lane": "crash"
+    },
+    {
+      "tick": 60960,
+      "lane": "crash"
+    },
+    {
+      "tick": 61200,
+      "lane": "crash"
+    },
+    {
+      "tick": 61440,
+      "lane": "crash"
+    },
+    {
+      "tick": 61680,
+      "lane": "crash"
+    },
+    {
+      "tick": 61920,
+      "lane": "crash"
+    },
+    {
+      "tick": 62160,
+      "lane": "crash"
+    },
+    {
+      "tick": 62400,
+      "lane": "crash"
+    },
+    {
+      "tick": 62640,
+      "lane": "crash"
+    },
+    {
+      "tick": 62880,
+      "lane": "crash"
+    },
+    {
+      "tick": 63120,
+      "lane": "crash"
+    },
+    {
+      "tick": 63360,
+      "lane": "crash"
+    },
+    {
+      "tick": 63600,
+      "lane": "crash"
+    },
+    {
+      "tick": 63840,
+      "lane": "crash"
+    },
+    {
+      "tick": 64080,
+      "lane": "crash"
+    },
+    {
+      "tick": 64320,
+      "lane": "crash"
+    },
+    {
+      "tick": 64560,
+      "lane": "crash"
+    },
+    {
+      "tick": 64800,
+      "lane": "crash"
+    },
+    {
+      "tick": 65040,
+      "lane": "crash"
+    },
+    {
+      "tick": 65280,
+      "lane": "crash"
+    },
+    {
+      "tick": 65520,
+      "lane": "crash"
+    },
+    {
+      "tick": 65760,
+      "lane": "crash"
+    },
+    {
+      "tick": 66000,
+      "lane": "crash"
+    },
+    {
+      "tick": 66240,
+      "lane": "crash"
+    },
+    {
+      "tick": 66480,
+      "lane": "crash"
+    },
+    {
+      "tick": 66720,
+      "lane": "crash"
+    },
+    {
+      "tick": 66960,
+      "lane": "crash"
+    },
+    {
+      "tick": 67200,
+      "lane": "crash"
+    },
+    {
+      "tick": 67440,
+      "lane": "crash"
+    },
+    {
+      "tick": 67680,
+      "lane": "crash"
+    },
+    {
+      "tick": 67920,
+      "lane": "crash"
+    },
+    {
+      "tick": 68160,
+      "lane": "crash"
+    },
+    {
+      "tick": 68400,
+      "lane": "crash"
+    },
+    {
+      "tick": 68640,
+      "lane": "crash"
+    },
+    {
+      "tick": 68880,
+      "lane": "crash"
+    },
+    {
+      "tick": 69120,
+      "lane": "crash"
+    },
+    {
+      "tick": 69360,
+      "lane": "crash"
+    },
+    {
+      "tick": 69600,
+      "lane": "crash"
+    },
+    {
+      "tick": 69840,
+      "lane": "crash"
+    },
+    {
+      "tick": 70080,
+      "lane": "crash"
+    },
+    {
+      "tick": 70320,
+      "lane": "crash"
+    },
+    {
+      "tick": 70560,
+      "lane": "crash"
+    },
+    {
+      "tick": 70800,
+      "lane": "crash"
+    },
+    {
+      "tick": 71040,
+      "lane": "crash"
+    },
+    {
+      "tick": 71280,
+      "lane": "crash"
+    },
+    {
+      "tick": 71520,
+      "lane": "crash"
+    },
+    {
+      "tick": 71760,
+      "lane": "crash"
+    },
+    {
+      "tick": 72000,
+      "lane": "crash"
+    },
+    {
+      "tick": 72240,
+      "lane": "crash"
+    },
+    {
+      "tick": 72480,
+      "lane": "crash"
+    },
+    {
+      "tick": 72720,
+      "lane": "crash"
+    },
+    {
+      "tick": 72960,
+      "lane": "crash"
+    },
+    {
+      "tick": 72960,
+      "lane": "snare"
+    },
+    {
+      "tick": 73200,
+      "lane": "crash"
+    },
+    {
+      "tick": 73440,
+      "lane": "crash"
+    },
+    {
+      "tick": 73680,
+      "lane": "crash"
+    },
+    {
+      "tick": 73920,
+      "lane": "crash"
+    },
+    {
+      "tick": 74160,
+      "lane": "crash"
+    },
+    {
+      "tick": 74400,
+      "lane": "crash"
+    },
+    {
+      "tick": 74640,
+      "lane": "crash"
+    },
+    {
+      "tick": 74880,
+      "lane": "crash"
+    },
+    {
+      "tick": 74880,
+      "lane": "snare"
+    },
+    {
+      "tick": 75120,
+      "lane": "crash"
+    },
+    {
+      "tick": 75360,
+      "lane": "crash"
+    },
+    {
+      "tick": 75600,
+      "lane": "crash"
+    },
+    {
+      "tick": 75840,
+      "lane": "crash"
+    },
+    {
+      "tick": 76080,
+      "lane": "crash"
+    },
+    {
+      "tick": 76320,
+      "lane": "crash"
+    },
+    {
+      "tick": 76560,
+      "lane": "crash"
+    },
+    {
+      "tick": 76800,
+      "lane": "crash"
+    },
+    {
+      "tick": 77040,
+      "lane": "crash"
+    },
+    {
+      "tick": 77280,
+      "lane": "crash"
+    },
+    {
+      "tick": 77520,
+      "lane": "crash"
+    },
+    {
+      "tick": 77760,
+      "lane": "crash"
+    },
+    {
+      "tick": 78000,
+      "lane": "crash"
+    },
+    {
+      "tick": 78240,
+      "lane": "crash"
+    },
+    {
+      "tick": 78480,
+      "lane": "crash"
+    },
+    {
+      "tick": 78720,
+      "lane": "crash"
+    },
+    {
+      "tick": 78720,
+      "lane": "snare"
+    },
+    {
+      "tick": 79200,
+      "lane": "crash"
+    },
+    {
+      "tick": 79680,
+      "lane": "crash"
+    },
+    {
+      "tick": 79680,
+      "lane": "snare"
+    },
+    {
+      "tick": 80160,
+      "lane": "crash"
+    },
+    {
+      "tick": 80640,
+      "lane": "crash"
+    },
+    {
+      "tick": 80640,
+      "lane": "snare"
+    },
+    {
+      "tick": 81120,
+      "lane": "crash"
+    },
+    {
+      "tick": 81600,
+      "lane": "crash"
+    },
+    {
+      "tick": 82080,
+      "lane": "crash"
+    },
+    {
+      "tick": 82560,
+      "lane": "crash"
+    },
+    {
+      "tick": 82560,
+      "lane": "snare"
+    },
+    {
+      "tick": 82800,
+      "lane": "crash"
+    },
+    {
+      "tick": 83040,
+      "lane": "crash"
+    },
+    {
+      "tick": 83520,
+      "lane": "crash"
+    },
+    {
+      "tick": 83904,
+      "lane": "crash"
+    },
+    {
+      "tick": 84048,
+      "lane": "crash"
+    },
+    {
+      "tick": 84207,
+      "lane": "crash"
+    },
+    {
+      "tick": 84374,
+      "lane": "crash"
+    },
+    {
+      "tick": 84542,
+      "lane": "crash"
+    },
+    {
+      "tick": 84716,
+      "lane": "crash"
+    },
+    {
+      "tick": 84897,
+      "lane": "crash"
+    },
+    {
+      "tick": 85077,
+      "lane": "crash"
+    },
+    {
+      "tick": 85245,
+      "lane": "crash"
+    }
+  ],
+  "_meta": {
+    "generatedBy": "packed v5 591ab4a (survive + survive-pool + family-NMS + relane + relane-pool + chord-merge + consistency_metric.canonicalize), reading the SHIPPED public/models/drum-difficulty/v5/*.bin files directly",
+    "era": "RB4",
+    "survive_threshold": 0.5,
+    "family_nms_gaps_ms": {
+      "hard": null,
+      "medium": 180,
+      "easy": 250
+    },
+    "counts": {
+      "hard": {
+        "nExpert": 159,
+        "nPreCanon": 142,
+        "nKept": 142
+      },
+      "medium": {
+        "nExpert": 159,
+        "nPreCanon": 123,
+        "nKept": 123
+      },
+      "easy": {
+        "nExpert": 159,
+        "nPreCanon": 124,
+        "nKept": 124
+      }
+    },
+    "note": "Assert on (tick, lane) only -- v5 fixtures carry no per-note diagnostic fields (originalLane/family/relaned/confidence are not well-defined for canonicalize()'s donor-copied notes)."
+  }
+}
