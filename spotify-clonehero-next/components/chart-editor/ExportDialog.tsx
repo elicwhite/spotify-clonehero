@@ -25,11 +25,11 @@ import {Label} from '@/components/ui/label';
 import {Switch} from '@/components/ui/switch';
 
 import {
-  exportAsZip,
-  exportAsSng,
   assembleChartFiles,
   chartPackageFileName,
+  packageChartFiles,
   transcodeAudioFilesToOpus,
+  type PackageFormat,
 } from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
 
@@ -136,8 +136,6 @@ export interface AssetFile {
   fileName: string;
   data: Uint8Array;
 }
-
-type PackageFormat = 'zip' | 'sng';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -265,20 +263,7 @@ export default function ExportDialog({
       });
 
       // 4. Package as ZIP or SNG
-      let blob: Blob;
-      let extension: string;
-
-      if (packageFormat === 'sng') {
-        // exportAsSng extracts song.ini into SNG header metadata automatically
-        const sngBytes = exportAsSng(fileEntries);
-        blob = new Blob([sngBytes as Uint8Array<ArrayBuffer>], {
-          type: 'application/octet-stream',
-        });
-        extension = 'sng';
-      } else {
-        blob = exportAsZip(fileEntries);
-        extension = 'zip';
-      }
+      const {blob, extension} = packageChartFiles(fileEntries, packageFormat);
 
       // 5. Trigger browser download, named `Artist - Song (Charter)`
       downloadBlob(blob, chartPackageFileName(cleanMetadata, extension));
