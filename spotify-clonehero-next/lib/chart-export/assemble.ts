@@ -65,7 +65,8 @@ function canonicalChartFileName(fileName: string): string {
   return /\.(mid|midi)$/i.test(fileName) ? 'notes.mid' : 'notes.chart';
 }
 
-export interface AssembleChartFilesOptions {
+/** Options common to both assembly modes — see {@link AssembleChartFilesOptions}. */
+interface ChartSourceOptions {
   /**
    * Valid `.chart` text. Mutually exclusive with `chartFile`/`chartDoc` —
    * supply exactly one. Convenience for callers that only ever deal in
@@ -86,18 +87,6 @@ export interface AssembleChartFilesOptions {
    * carries would be lost.
    */
   chartDoc?: ChartDocument;
-  /**
-   * Metadata to stamp into song.ini, for flows that MINT a chart (drum
-   * transcription, /difficulties): the caller's name/artist/charter replace
-   * whatever the document carried, the chart is declared `pro_drums` with a
-   * drums difficulty, and `song_length` is (re)computed.
-   *
-   * Omit for a ROUND-TRIP export — a flow that edits somebody else's chart
-   * and hands it back (/add-lyrics). The document's own metadata then ships
-   * untouched: a guitar-only chart must not come back advertising rated pro
-   * drums, and the original charter keeps their credit.
-   */
-  metadata?: ChartPackageMetadata;
   /** Audio stems to bundle alongside the chart. */
   audioSources?: PackageAudioSource[];
   /**
@@ -108,14 +97,44 @@ export interface AssembleChartFilesOptions {
    * entry is skipped, since those are already authoritative above.
    */
   extraAssets?: FileEntry[];
+}
+
+/**
+ * MINT mode: the caller is creating a chart (drum transcription,
+ * /difficulties). Its name/artist/charter replace whatever the document
+ * carried, the chart is declared `pro_drums` with a drums difficulty, and
+ * `song_length` is (re)computed.
+ */
+interface MintedChartOptions extends ChartSourceOptions {
+  metadata: ChartPackageMetadata;
   /**
    * Song length in milliseconds, stamped as `song.ini`'s `song_length`. Best
    * sourced from the actual (decoded) audio duration. Omitted, `undefined`,
-   * or non-positive falls back to the chart's own last event time. Ignored
-   * without `metadata` — a round-trip export rewrites nothing.
+   * or non-positive falls back to the chart's own last event time.
    */
   songLengthMs?: number;
 }
+
+/**
+ * ROUND-TRIP mode: the caller is editing somebody else's chart and handing it
+ * back (/add-lyrics). The document's own metadata ships untouched — a
+ * guitar-only chart must not come back advertising rated pro drums, and the
+ * original charter keeps their credit.
+ *
+ * `metadata` and `songLengthMs` are typed away rather than merely ignored, so
+ * a caller that means to stamp can't half-configure it and silently ship an
+ * unstamped chart.
+ */
+interface RoundTripChartOptions extends ChartSourceOptions {
+  metadata?: undefined;
+  songLengthMs?: undefined;
+}
+
+/** Assembly is either a mint or a round trip; the presence of `metadata`
+ *  picks the mode. See {@link MintedChartOptions} / {@link RoundTripChartOptions}. */
+export type AssembleChartFilesOptions =
+  | MintedChartOptions
+  | RoundTripChartOptions;
 
 /** The chart's own duration, in milliseconds: the latest point any note ends
  * or an end event fires, across every track. Used as the `song_length`

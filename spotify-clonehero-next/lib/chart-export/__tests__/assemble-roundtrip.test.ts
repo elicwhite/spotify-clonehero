@@ -88,6 +88,20 @@ describe('assembleChartFiles round-trip mode (no metadata)', () => {
     expect(names).toContain('album.png');
   });
 
+  test('rejects a half-configured stamp at compile time', () => {
+    // `songLengthMs` has nothing to stamp onto without `metadata`. The union
+    // makes that a type error rather than a silently dropped option — this
+    // assertion fails `pnpm typecheck` if the guarantee ever regresses.
+    const options = {
+      chartDoc: chartDoc({song_length: 999}),
+      songLengthMs: 12345,
+    };
+    // @ts-expect-error songLengthMs without metadata is not a valid mode
+    const entries = assembleChartFiles(options);
+
+    expect(songIniText(entries)).toContain('song_length = 999');
+  });
+
   test('supplying metadata still stamps identity and ratings', () => {
     const ini = songIniText(
       assembleChartFiles({
