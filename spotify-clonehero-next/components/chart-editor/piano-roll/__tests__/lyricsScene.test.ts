@@ -78,7 +78,7 @@ describe('cleanLyricChipText', () => {
 });
 
 describe('buildLyricsRowScene', () => {
-  it('builds one chip per lyric and one band per lyric-bearing phrase', () => {
+  it('builds one chip per lyric and one band per phrase', () => {
     const vt = vocalTracks([
       {
         tick: 0,
@@ -124,14 +124,14 @@ describe('buildLyricsRowScene', () => {
     expect(scene.chips[0].text).toBe('word');
   });
 
-  it('omits a phrase with no lyrics from the bands (no false line structure)', () => {
+  it('keeps an empty phrase in the bands so it remains editable', () => {
     const vt = vocalTracks([
       {tick: 0, length: 480, lyrics: []},
       {tick: 480, length: 480, lyrics: [{tick: 480, text: 'word'}]},
     ]);
     const scene = buildLyricsRowScene(vt, TIMED_TEMPOS, RES);
-    expect(scene.bands).toHaveLength(1);
-    expect(scene.bands[0].tick).toBe(480);
+    expect(scene.bands).toHaveLength(2);
+    expect(scene.bands.map(b => b.tick)).toEqual([0, 480]);
   });
 
   it('returns empty when the part is missing (row hidden)', () => {

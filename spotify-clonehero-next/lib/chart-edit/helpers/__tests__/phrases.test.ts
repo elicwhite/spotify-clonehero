@@ -16,11 +16,11 @@ function emptyPart(): NormalizedVocalPart {
   } as unknown as NormalizedVocalPart;
 }
 
-function makeDoc(): ChartDocument {
+function makeDoc(bpm = 120): ChartDocument {
   const parsedChart = createEmptyChart({
     format: 'chart',
     resolution: RES,
-    bpm: 120,
+    bpm,
   });
   parsedChart.vocalTracks.parts['vocals'] = emptyPart();
   return {parsedChart, assets: []};
@@ -40,6 +40,16 @@ describe('addPhrase', () => {
       lyrics: [],
       notes: [],
     });
+  });
+
+  test('defaults to two seconds at the local tempo', () => {
+    const doc = makeDoc(90);
+    const start = addPhrase(doc, 0);
+    const phrase = doc.parsedChart.vocalTracks.parts['vocals'].notePhrases[0];
+
+    expect(start).toBe(0);
+    expect(phrase.length).toBe(RES * 3);
+    expect(phrase.msLength).toBeCloseTo(2000, 5);
   });
 
   test('clamps length to fit before a following phrase', () => {

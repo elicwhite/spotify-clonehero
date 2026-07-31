@@ -65,8 +65,9 @@ export function cleanLyricChipText(raw: string): string {
 
 /**
  * Build the lyrics row's chips + phrase bands for `partName` (default
- * `'vocals'`). Empty when the part has no lyrics — the caller uses that to
- * decide whether the row renders at all.
+ * `'vocals'`). Phrase bands include empty phrases so a newly added phrase
+ * remains visible and its edges can be dragged before the first lyric is
+ * added. The result is empty when the part has no phrases.
  */
 export function buildLyricsRowScene(
   vocalTracks: NormalizedVocalTrack | undefined,
@@ -80,7 +81,6 @@ export function buildLyricsRowScene(
   if (!part) return {chips, bands};
 
   for (const phrase of part.notePhrases) {
-    if (phrase.lyrics.length === 0) continue;
     bands.push({
       tick: phrase.tick,
       tickEnd: phrase.tick + phrase.length,

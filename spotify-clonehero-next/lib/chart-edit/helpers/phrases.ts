@@ -21,14 +21,15 @@ import type {
 } from '../types';
 import {DEFAULT_VOCALS_PART} from './lyrics';
 import {applyEventTiming, makeChartTiming} from '../retime';
+import {msToTick, tickToMs} from '@/lib/drum-transcription/timing';
 
 /** Minimum length (in ticks) a phrase can be reduced to via drag. */
 const MIN_PHRASE_LENGTH = 1;
 
-/** Default length (in beats, i.e. `resolution` ticks each) for a phrase
- *  created via "Add phrase here" — roughly one 4/4 bar. Clamped against
- *  neighboring phrases so the new phrase never overlaps them. */
-const DEFAULT_PHRASE_LENGTH_BEATS = 4;
+/** Default length in real time for a phrase created via "Add phrase here".
+ *  Clamped against neighboring phrases so the new phrase never overlaps
+ *  them. */
+const DEFAULT_PHRASE_LENGTH_MS = 2000;
 
 /**
  * Pack `{partName, tick}` into a stable id for a phrase-start entity.
@@ -193,8 +194,15 @@ export function addPhrase(
     prevEnd,
     Math.min(target, nextStart - MIN_PHRASE_LENGTH),
   );
-  const resolution = doc.parsedChart.resolution;
-  const desiredLength = resolution * DEFAULT_PHRASE_LENGTH_BEATS;
+  const timing = makeChartTiming(doc.parsedChart);
+  const desiredEndTick = msToTick(
+    tickToMs(start, timing.timedTempos, timing.resolution) +
+      DEFAULT_PHRASE_LENGTH_MS,
+    timing.timedTempos,
+    timing.resolution,
+    'ceil',
+  );
+  const desiredLength = Math.max(MIN_PHRASE_LENGTH, desiredEndTick - start);
   const maxLength = Math.max(MIN_PHRASE_LENGTH, nextStart - start);
   const length = Math.max(
     MIN_PHRASE_LENGTH,

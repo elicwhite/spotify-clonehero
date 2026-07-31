@@ -391,15 +391,15 @@ interface ChartScene {
   /** Audio-extended beat-grid span (shared with the downbeat commands). */
   endTick: number;
   /** Lyrics row content (plan 0063 Part D) — the 'vocals' part's syllable
-   *  chips + phrase bands. Empty when the part has no lyrics. */
+   *  chips + phrase bands. Empty when the part has no phrases. */
   lyricChips: LyricChip[];
   lyricBands: LyricBand[];
-  /** True when the lyrics row should render (non-empty `lyricChips`). */
+  /** True when the lyrics row should render (the vocals part has phrases). */
   lyricsVisible: boolean;
 }
 
 /** Lyrics-row height for the current scene — 0 (row hidden) when the
- *  'vocals' part has no lyrics yet. Shared by `panelGeometry` and `draw` so
+ *  'vocals' part has no phrases yet. Shared by `panelGeometry` and `draw` so
  *  hit-testing and rendering can never disagree about the row's presence. */
 function lyricsRowHeight(scene: ChartScene | null): number {
   return scene?.lyricsVisible ? LYRICS_ROW_H : 0;
@@ -748,7 +748,7 @@ export default function PianoRollTimeline({
       endTick,
       lyricChips,
       lyricBands,
-      lyricsVisible: lyricChips.length > 0,
+      lyricsVisible: lyricBands.length > 0,
     };
   }, [
     tempoCache,
