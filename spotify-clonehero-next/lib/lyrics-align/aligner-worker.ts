@@ -86,7 +86,7 @@ for (let i = 0; i < VOCAB.length; i++) {
 // ---------------------------------------------------------------------------
 
 type OutboundMessage =
-  | {type: 'progress'; message: string}
+  | {type: 'progress'; message: string; percent?: number | undefined}
   | {type: 'initDone'}
   | {
       type: 'result';
@@ -107,8 +107,22 @@ function post(msg: OutboundMessage) {
   self.postMessage(msg);
 }
 
-function progress(message: string) {
-  post({type: 'progress', message});
+/** @param percent Optional 0..1 progress within the current activity. */
+function progress(message: string, percent?: number) {
+  post({type: 'progress', message, percent});
+}
+
+/** Adapts getCachedModel's progress callback into percent-bearing messages. */
+function downloadProgress(
+  msg: string,
+  info?: {loadedBytes: number; totalBytes: number},
+) {
+  progress(
+    msg,
+    info && info.totalBytes > 0
+      ? info.loadedBytes / info.totalBytes
+      : undefined,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +147,7 @@ async function handleInit() {
       modelBuffer = await getCachedModel(
         WAV2VEC2_FP16_URL,
         'wav2vec2-base-960h-fp16.onnx',
-        progress,
+        downloadProgress,
         150_000_000, // real size ~189 MB
       );
       useWebGPU = true;
@@ -151,7 +165,7 @@ async function handleInit() {
   modelBuffer = await getCachedModel(
     WAV2VEC2_QUANTIZED_URL,
     'wav2vec2-base-960h-quantized.onnx',
-    progress,
+    downloadProgress,
     80_000_000, // real size ~95 MB
   );
   progress('Model cached — will load when needed');
@@ -267,7 +281,10 @@ async function runChunked(
     const end = Math.min(start + CHUNK_SAMPLES, audio.length);
     if (end - start < MIN_TAIL_SAMPLES) break;
     const chunk = audio.slice(start, end);
-    progress(`CTC inference: chunk ${chunks.length + 1}/${estChunks}`);
+    progress(
+      `CTC inference: chunk ${chunks.length + 1}/${estChunks}`,
+      chunks.length / estChunks,
+    );
 
     // onnxruntime-web's WebGPU EP specializes the attention Reshape to the
     // first run's sequence length and fails on any later run with a

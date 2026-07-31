@@ -478,7 +478,7 @@ function LyricsAlignInner() {
 
       const {alignVocals} = await import('@/lib/lyrics-align/aligner');
 
-      let result = await alignVocals(vocals16k, lyrics, msg => {
+      let result = await alignVocals(vocals16k, lyrics, (msg, info) => {
         if (msg.startsWith('Syllabified:')) {
           updateAlignStep('syllabify', {
             status: 'done',
@@ -487,7 +487,16 @@ function LyricsAlignInner() {
             endTime: Date.now(),
           });
         } else if (msg.startsWith('Done:')) {
-          updateAlignStep('align', {status: 'done', endTime: Date.now()});
+          updateAlignStep('align', {
+            status: 'done',
+            detail: undefined,
+            progress: undefined,
+            endTime: Date.now(),
+          });
+        } else {
+          // Model download / session load / CTC chunk messages — surface
+          // them so a slow model download doesn't look like a hung aligner.
+          updateAlignStep('align', {detail: msg, progress: info?.percent});
         }
       });
 
@@ -543,12 +552,16 @@ function LyricsAlignInner() {
           status: 'active',
           startTime: Date.now(),
         });
-        const result2 = await alignVocals(vocals16k_2, lyrics, msg => {
+        const result2 = await alignVocals(vocals16k_2, lyrics, (msg, info) => {
           if (msg.startsWith('Done:')) {
             updateAlignStep('align2', {
               status: 'done',
+              detail: undefined,
+              progress: undefined,
               endTime: Date.now(),
             });
+          } else if (!msg.startsWith('Syllabified:')) {
+            updateAlignStep('align2', {detail: msg, progress: info?.percent});
           }
         });
 

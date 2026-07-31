@@ -176,11 +176,20 @@ export default function AddLyricsDialog({
 
       updateStep('align', {status: 'active'});
       const {alignVocals} = await import('@/lib/lyrics-align/aligner');
-      const result = await alignVocals(vocals16k, lyrics, msg => {
+      const result = await alignVocals(vocals16k, lyrics, (msg, info) => {
         if (msg.startsWith('Syllabified:')) {
           updateStep('syllabify', {status: 'done'});
         } else if (msg.startsWith('Done:')) {
-          updateStep('align', {status: 'done'});
+          updateStep('align', {
+            status: 'done',
+            detail: undefined,
+            progress: undefined,
+          });
+        } else {
+          // Everything else — model download, session load, CTC chunks —
+          // happens inside this step; surface it so a slow model download
+          // doesn't look like a hung aligner.
+          updateStep('align', {detail: msg, progress: info?.percent});
         }
       });
 

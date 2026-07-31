@@ -2,8 +2,24 @@
  * Cache ONNX models in the Origin Private File System (OPFS).
  * Downloads once, then loads from local storage on subsequent visits.
  *
+ * Downloads are resilient to flaky connections: a stream that delivers no
+ * bytes for STALL_TIMEOUT_MS is aborted and retried with an HTTP Range
+ * request resuming from the bytes already received, up to MAX_ATTEMPTS
+ * connections total.
+ *
  * Ported from ~/projects/vocal-alignment/browser-aligner/src/model-cache.ts
  */
+
+export interface ModelDownloadProgress {
+  loadedBytes: number;
+  /** 0 when the server didn't report a size. */
+  totalBytes: number;
+}
+
+export type ModelProgressFn = (
+  msg: string,
+  info?: ModelDownloadProgress,
+) => void;
 
 /**
  * Reject buffers that obviously aren't an ONNX model: too small, or an
@@ -69,11 +85,11 @@ function assertLooksLikeModel(buffer: ArrayBuffer, minBytes: number): void {
 export async function getCachedModel(
   url: string,
   cacheKey: string,
-  onProgress?: (msg: string) => void,
+  onProgress?: ModelProgressFn,
   minBytes: number = 1_000_000,
   label: string = 'model',
 ): Promise<ArrayBuffer> {
-  const log = onProgress ?? console.log;
+  const log: ModelProgressFn = onProgress ?? (msg => console.log(msg));
 
   // Try loading from OPFS cache
   try {
@@ -117,59 +133,178 @@ export async function getCachedModel(
 
 class ModelDownloadError extends Error {}
 
+/** Transient failure (network drop, stalled stream, 5xx) — the download
+ *  loop retries these with an HTTP Range resume. */
+class RetryableDownloadError extends Error {}
+
+/** Abort a download whose stream delivers no bytes for this long. */
+const STALL_TIMEOUT_MS = 30_000;
+/** Total connection attempts (first try + resumes) before giving up. */
+const MAX_ATTEMPTS = 4;
+
 async function downloadModel(
   url: string,
-  log: (msg: string) => void,
+  log: ModelProgressFn,
   minBytes: number,
   label: string,
 ): Promise<ArrayBuffer> {
   log(`Downloading ${label}...`);
-  let response: Response;
-  try {
-    response = await fetch(url);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    throw new ModelDownloadError(
-      "Couldn't reach the AI model server. Check your internet " +
-        `connection and reload to try again. (${msg})`,
-    );
-  }
-  if (!response.ok) {
-    throw new ModelDownloadError(
-      `Couldn't download the AI model (server responded ` +
-        `HTTP ${response.status}). It may be temporarily unavailable or ` +
-        `rate-limited — try again in a few minutes.`,
-    );
-  }
 
-  const contentLength = response.headers.get('content-length');
-  const totalBytes = contentLength ? parseInt(contentLength) : 0;
+  const chunks: Uint8Array[] = [];
+  let receivedBytes = 0;
+  let totalBytes = 0;
+  let lastLoggedMb = -1;
 
-  let buffer: ArrayBuffer;
-  if (!response.body) {
-    buffer = await response.arrayBuffer();
-  } else {
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let receivedBytes = 0;
-    while (true) {
-      const {done, value} = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      receivedBytes += value.length;
-      if (totalBytes > 0) {
-        const pct = Math.round((receivedBytes / totalBytes) * 100);
-        const mb = (receivedBytes / 1e6).toFixed(0);
-        const totalMb = (totalBytes / 1e6).toFixed(0);
-        log(`Downloading ${label} ${mb}/${totalMb} MB (${pct}%)`);
-      } else {
-        log(`Downloading ${label} ${(receivedBytes / 1e6).toFixed(0)} MB...`);
-      }
+  // One progress message per received MB — per-chunk messages flood the
+  // console and re-render progress UIs hundreds of times per second.
+  const reportProgress = () => {
+    const mb = Math.floor(receivedBytes / 1e6);
+    if (mb === lastLoggedMb) return;
+    lastLoggedMb = mb;
+    const info = {loadedBytes: receivedBytes, totalBytes};
+    if (totalBytes > 0) {
+      const pct = Math.round((receivedBytes / totalBytes) * 100);
+      const totalMb = (totalBytes / 1e6).toFixed(0);
+      log(`Downloading ${label} ${mb}/${totalMb} MB (${pct}%)`, info);
+    } else {
+      log(`Downloading ${label} ${mb} MB...`, info);
     }
+  };
 
-    // A stream that ends short of the advertised length is a truncated
-    // download — caching it would poison the origin.
-    if (totalBytes > 0 && receivedBytes !== totalBytes) {
+  const restart = () => {
+    chunks.length = 0;
+    receivedBytes = 0;
+    lastLoggedMb = -1;
+  };
+
+  /**
+   * One connection attempt. Streams into `chunks`, resuming from
+   * `receivedBytes` via an HTTP Range request. Returns true when the file
+   * is complete, false when the stream ended cleanly but short (the retry
+   * loop resumes). Throws RetryableDownloadError on network drops, stalls,
+   * and 5xx/429; ModelDownloadError on permanent HTTP failures.
+   */
+  const streamOnce = async (): Promise<boolean> => {
+    const controller = new AbortController();
+    let stallTimer: ReturnType<typeof setTimeout> | undefined;
+    const armWatchdog = () => {
+      clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => controller.abort(), STALL_TIMEOUT_MS);
+    };
+
+    try {
+      const headers: Record<string, string> = {};
+      if (receivedBytes > 0) headers['Range'] = `bytes=${receivedBytes}-`;
+
+      armWatchdog();
+      let response: Response;
+      try {
+        response = await fetch(url, {signal: controller.signal, headers});
+      } catch (e) {
+        throw new RetryableDownloadError(
+          controller.signal.aborted
+            ? 'connection stalled'
+            : e instanceof Error
+              ? e.message
+              : String(e),
+        );
+      }
+
+      if (response.status === 200 && receivedBytes > 0) {
+        // Server ignored the Range request and is sending the full file.
+        restart();
+      } else if (response.status === 206) {
+        // Content-Range: "bytes <start>-<end>/<total>"
+        const m = /\/(\d+)\s*$/.exec(
+          response.headers.get('content-range') ?? '',
+        );
+        if (m) totalBytes = parseInt(m[1]);
+      } else if (response.status === 416) {
+        // Our resume offset is no longer valid (file changed?) — start over.
+        restart();
+        throw new RetryableDownloadError('server rejected resume range');
+      }
+
+      if (!response.ok && response.status !== 206) {
+        if (response.status >= 500 || response.status === 429) {
+          throw new RetryableDownloadError(`HTTP ${response.status}`);
+        }
+        throw new ModelDownloadError(
+          `Couldn't download the AI model (server responded ` +
+            `HTTP ${response.status}). It may be temporarily unavailable or ` +
+            `rate-limited — try again in a few minutes.`,
+        );
+      }
+
+      if (totalBytes === 0) {
+        const contentLength = response.headers.get('content-length');
+        // On a 206 Content-Length is the remaining bytes, not the file size.
+        if (contentLength) totalBytes = receivedBytes + parseInt(contentLength);
+      }
+
+      if (!response.body) {
+        const buf = await response.arrayBuffer();
+        chunks.push(new Uint8Array(buf));
+        receivedBytes += buf.byteLength;
+        return true;
+      }
+
+      const reader = response.body.getReader();
+      while (true) {
+        armWatchdog();
+        let done: boolean;
+        let value: Uint8Array | undefined;
+        try {
+          ({done, value} = await reader.read());
+        } catch (e) {
+          throw new RetryableDownloadError(
+            controller.signal.aborted
+              ? 'download stalled'
+              : e instanceof Error
+                ? e.message
+                : String(e),
+          );
+        }
+        if (done) break;
+        chunks.push(value!);
+        receivedBytes += value!.length;
+        reportProgress();
+      }
+
+      // Stream ended cleanly — complete only if we got everything (or the
+      // server never reported a size).
+      return totalBytes === 0 || receivedBytes >= totalBytes;
+    } finally {
+      clearTimeout(stallTimer);
+    }
+  };
+
+  for (let attempt = 1; ; attempt++) {
+    let complete: boolean;
+    try {
+      complete = await streamOnce();
+    } catch (e) {
+      if (!(e instanceof RetryableDownloadError)) throw e;
+      if (attempt >= MAX_ATTEMPTS) {
+        throw new ModelDownloadError(
+          receivedBytes === 0
+            ? "Couldn't reach the AI model server. Check your internet " +
+              `connection and reload to try again. (${e.message})`
+            : `The AI model download kept stalling (got ` +
+              `${(receivedBytes / 1e6).toFixed(0)}` +
+              (totalBytes > 0 ? ` of ${(totalBytes / 1e6).toFixed(0)}` : '') +
+              ` MB). Check your connection and reload to retry.`,
+        );
+      }
+      log(
+        `Download interrupted at ${(receivedBytes / 1e6).toFixed(0)} MB — ` +
+          `resuming (attempt ${attempt + 1}/${MAX_ATTEMPTS})...`,
+      );
+      continue;
+    }
+    if (complete) break;
+    // Clean end-of-stream but short of the advertised size — resume.
+    if (attempt >= MAX_ATTEMPTS) {
       throw new ModelDownloadError(
         `The AI model download was cut off (got ` +
           `${(receivedBytes / 1e6).toFixed(0)} of ` +
@@ -177,14 +312,18 @@ async function downloadModel(
           `and reload to retry.`,
       );
     }
+    log(
+      `Download ended early at ${(receivedBytes / 1e6).toFixed(0)} MB — ` +
+        `resuming (attempt ${attempt + 1}/${MAX_ATTEMPTS})...`,
+    );
+  }
 
-    buffer = new ArrayBuffer(receivedBytes);
-    const view = new Uint8Array(buffer);
-    let offset = 0;
-    for (const chunk of chunks) {
-      view.set(chunk, offset);
-      offset += chunk.length;
-    }
+  const buffer = new ArrayBuffer(receivedBytes);
+  const view = new Uint8Array(buffer);
+  let offset = 0;
+  for (const chunk of chunks) {
+    view.set(chunk, offset);
+    offset += chunk.length;
   }
 
   try {

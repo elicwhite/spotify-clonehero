@@ -78,7 +78,13 @@ async function loadModel() {
   const buffer = await getCachedModel(
     DEMUCS_MODEL_URL,
     'htdemucs_fp32.onnx',
-    progress,
+    (msg, info) =>
+      progress(
+        msg,
+        info && info.totalBytes > 0
+          ? {percent: info.loadedBytes / info.totalBytes}
+          : undefined,
+      ),
     140_000_000, // real size ~169 MB (htdemucs_fp32)
     'audio separator',
   );
