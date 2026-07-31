@@ -96,6 +96,22 @@ describe('buildExportFiles', () => {
     expect(names).toContain('notes.chart');
     expect(names).toContain('song.ini');
   });
+
+  it('leaves the source chart metadata alone', () => {
+    // This page round-trips somebody else's chart, so unlike the flows that
+    // mint one (drum transcription, /difficulties) it must not stamp drum
+    // ratings or rewrite the charter credit onto a chart that never had them.
+    const doc = makeAlignedDoc();
+    doc.parsedChart.metadata.charter = 'Original Charter';
+
+    const iniFile = buildExportFiles(doc).find(f => f.fileName === 'song.ini');
+    if (!iniFile) throw new Error('no song.ini in export');
+    const ini = strFromU8(iniFile.data);
+
+    expect(ini).toContain('charter = Original Charter');
+    expect(ini).not.toMatch(/pro_drums/);
+    expect(ini).not.toMatch(/diff_drums/);
+  });
 });
 
 describe('buildChartExport', () => {

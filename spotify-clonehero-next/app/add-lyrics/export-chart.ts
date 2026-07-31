@@ -6,10 +6,17 @@
  * makes (lyric drags, phrase resizes, text changes) is dispatched onto it.
  * Serializing anything else — the doc as loaded, or a snapshot captured when
  * the editor was prepared — silently drops the user's manual timing fixes.
+ *
+ * Deliberately not built on `assembleChartFiles`: that helper exists for
+ * flows that MINT a chart (drum transcription, /difficulties), so it stamps
+ * `pro_drums`/`diff_drums` and rewrites name/artist/charter/song_length from
+ * caller-supplied metadata. This page round-trips somebody else's chart —
+ * a guitar-only chart must not come back advertising rated pro drums — so it
+ * writes the document as-is and reuses only the container step.
  */
 
 import {writeChartFolder, type ChartDocument} from '@/lib/chart-edit';
-import {exportAsZip, exportAsSng} from '@/lib/chart-export';
+import {packageChartFiles, type PackageFormat} from '@/lib/chart-export';
 import type {SourceFormat} from '@/components/chart-picker/chart-file-readers';
 import type {File as FileEntry} from '@eliwhite/scan-chart';
 
@@ -32,27 +39,30 @@ export function buildExportFiles(doc: ChartDocument): FileEntry[] {
   }));
 }
 
+/** The container a chart loaded from `sourceFormat` is handed back in. A
+ *  `.sng` round-trips as `.sng`; folders and `.zip` both leave as `.zip`. */
+function packageFormatFor(sourceFormat: SourceFormat): PackageFormat {
+  return sourceFormat === 'sng' ? 'sng' : 'zip';
+}
+
 /**
  * Package the chart document in the format it was loaded from, keeping the
- * original name. `.sng` sources round-trip as `.sng`; folders and `.zip`
- * sources both come back as `.zip`.
+ * original name.
+ *
+ * The name is the user's own file name rather than `chartPackageFileName`'s
+ * `Artist - Song (Charter)` convention: this is the file they handed us,
+ * coming back with lyrics in it, and renaming it would strip whatever
+ * organization their library already has.
  */
 export function buildChartExport(
   doc: ChartDocument,
   sourceFormat: SourceFormat,
   originalName: string,
 ): ChartExport {
-  const files = buildExportFiles(doc);
+  const {blob, extension} = packageChartFiles(
+    buildExportFiles(doc),
+    packageFormatFor(sourceFormat),
+  );
 
-  if (sourceFormat === 'sng') {
-    const sngBytes = exportAsSng(files);
-    return {
-      blob: new Blob([sngBytes as Uint8Array<ArrayBuffer>], {
-        type: 'application/octet-stream',
-      }),
-      fileName: `${originalName}.sng`,
-    };
-  }
-
-  return {blob: exportAsZip(files), fileName: `${originalName}.zip`};
+  return {blob, fileName: `${originalName}.${extension}`};
 }

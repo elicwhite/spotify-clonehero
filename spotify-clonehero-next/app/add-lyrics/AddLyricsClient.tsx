@@ -28,11 +28,7 @@ import {
   findAudioFiles,
   type Files,
 } from '@/lib/preview/chorus-chart-processing';
-import {
-  readChart,
-  writeChartFolder,
-  type ChartDocument,
-} from '@/lib/chart-edit';
+import {readChart, type ChartDocument} from '@/lib/chart-edit';
 import {downloadBlob} from '@/lib/download';
 import {buildChartExport} from './export-chart';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
@@ -234,8 +230,13 @@ async function decodeAudioForWaveform(
 // Page Component
 // ---------------------------------------------------------------------------
 
+/**
+ * The non-chart half of the editor view: the audio and waveform the
+ * ChartEditor needs alongside the document. The chart itself is read from
+ * the editor session (`state.chartDoc`) so it stays live as the user edits;
+ * nothing chart-shaped is snapshotted here.
+ */
 interface EditorData {
-  chart: ParsedChart;
   audioManager: AudioManager;
   audioData?: Float32Array | undefined;
   audioChannels: number;
@@ -673,7 +674,6 @@ function LyricsAlignInner() {
         dispatch({type: 'SET_CHART_DOC', chartDoc: nextDoc});
 
         setEditorData({
-          chart: nextDoc.parsedChart as ParsedChart,
           audioManager,
           audioData: waveform?.interleaved,
           audioChannels: waveform?.channels ?? 1,
@@ -734,17 +734,11 @@ function LyricsAlignInner() {
     } as ChartResponseEncore;
   }, [chart]);
 
-  const getChartText = useCallback(async (): Promise<string> => {
-    // Same live-document rule as handleDownload: serialize what the editor
-    // currently holds, not the doc the editor was seeded with.
-    const doc = state.chartDoc;
-    if (!doc) throw new Error('No chart prepared');
-    const files = writeChartFolder(doc);
-    const chartFile = files.find(f => f.fileName === 'notes.chart');
-    if (!chartFile)
-      throw new Error('writeChartFolder did not produce notes.chart');
-    return new TextDecoder().decode(chartFile.data);
-  }, [state.chartDoc]);
+  // The chart the editor renders, read live from the session so highway
+  // edits reach every consumer (sheet-music pane, section list) rather than
+  // only the parts the scene reconciler redraws.
+  const editorChart = (state.chartDoc?.parsedChart ??
+    null) as ParsedChart | null;
 
   if (showEditor && chart) {
     const md = chart.chartDoc.parsedChart.metadata;
@@ -831,19 +825,18 @@ function LyricsAlignInner() {
           </DialogContent>
         </Dialog>
         <div className="flex-1 min-h-0">
-          {editorData && cloneHeroMetadata ? (
+          {editorData && cloneHeroMetadata && editorChart ? (
             <ChartEditor
               metadata={cloneHeroMetadata}
-              chart={editorData.chart}
+              chart={editorChart}
               audioManager={editorData.audioManager}
               audioData={editorData.audioData}
               audioChannels={editorData.audioChannels}
               durationSeconds={editorData.durationSeconds}
-              sections={editorData.chart.sections}
+              sections={editorChart.sections}
               songName={songName}
               artistName={artistName}
               charterName={charterName}
-              getChartText={getChartText}
               hideHeader
             />
           ) : (
