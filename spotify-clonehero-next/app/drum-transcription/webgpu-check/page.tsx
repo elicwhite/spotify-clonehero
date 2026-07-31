@@ -132,8 +132,18 @@ async function runInference(
 
 export default function WebgpuResidualCheckPage() {
   const [ortReady, setOrtReady] = useState(false);
-  const [status, setStatus] = useState('Waiting for ONNX Runtime to load...');
+  const [status, setStatus] = useState<string | null>(null);
   const [result, setResult] = useState<{w0: number; avg: number} | null>(null);
+
+  /** The button's own disabled state is the readiness signal; this line only
+   * reports it in words. Keep the two driven by the same `ortReady` flag —
+   * a status string that latches on "waiting" while the button is live reads
+   * as a hung page. */
+  const statusLine =
+    status ??
+    (ortReady
+      ? 'ONNX Runtime loaded. Click to run.'
+      : 'Waiting for ONNX Runtime to load...');
 
   async function runCheck() {
     setResult(null);
@@ -215,7 +225,7 @@ export default function WebgpuResidualCheckPage() {
       <button onClick={runCheck} disabled={!ortReady}>
         Run residual check
       </button>
-      <p>{status}</p>
+      <p>{statusLine}</p>
       {result && (
         <ul>
           <li>window-0 raw logits max abs diff: {result.w0}</li>

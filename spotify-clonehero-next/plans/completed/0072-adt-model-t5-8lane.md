@@ -102,12 +102,28 @@ so running it would move ride energy into crash and then suppress ride.
 
 Product expectation: **0.3342 val-tuned**.
 
+## PARITY.md stage-2 gate — both terms measured
+
+**Term (a)**, `pnpm run test:onnx-parity` (onnxruntime-web wasm vs python
+onnxruntime, t5 fixture): window-0 raw logits max abs diff **1.26e-5**,
+overlap-averaged acts **1.7e-6**. Gate 1e-3.
+
+**Term (b)**, the one-time device-side webgpu-vs-wasm residual, measured
+2026-07-30 via `/drum-transcription/webgpu-check` — the first time this
+measurement has been taken on any checkpoint:
+
+- window-0 raw logits max abs diff: **9.36e-6**
+- overlap-averaged sigmoid activations max abs diff: **1.37e-6**
+- environment: Chrome 150, macOS (Darwin 25.5), Apple GPU (`metal-3`),
+  onnxruntime-web 1.24.3 via the CDN build the shipped path uses
+
+Both terms sit ~2 orders of magnitude inside the 1e-3 gate, so the webgpu
+path is numerically interchangeable with wasm for this model.
+
 ## Still open (not blocking, not this repo)
 
 - **PARITY.md pin/restamp** (`sync_fixtures.py --sync`) lives in drum-to-chart
   and can't be written from this sandbox.
-- **webgpu-vs-wasm device residual** (PARITY.md stage-2 term (b)) — still
-  unmeasured, as it was for t4. Term (a) (`pnpm run test:onnx-parity`) passes
-  against the t5 fixture: window-0 logits max abs diff 1.26e-5, averaged acts
-  1.7e-6, against a 1e-3 gate.
+- **PARITY.md `webgpu_band` block** needs the term (b) numbers below written
+  into it (drum-to-chart, not writable from here).
 - No t4/t5 coexistence flag. The swap is outright.
