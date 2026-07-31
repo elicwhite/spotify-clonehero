@@ -1,0 +1,4497 @@
+{
+  "artifactVersion": 1,
+  "snapshotId": "guitar-reduction-e101baa",
+  "status": "frozen-preview",
+  "artifactKind": "precomputed-preview-output",
+  "frozenAt": "2026-07-31",
+  "model": {
+    "sourceCommit": "e101baa",
+    "featureVariant": "neighbor_priority_easy_v1",
+    "targetVersion": "chart_edit_v1+direct_mask_v1+secondary_v2",
+    "featureVersion": "guitar-features-v2-secondary-ranges+neighbor_priority_easy_v1",
+    "maskDecoder": "expected_edit",
+    "maskDecoderDescription": "Choose the mask minimizing expected literal insert/delete/lane-move cost under the learned 32-class mask probabilities.",
+    "technique": "chord_shared",
+    "techniqueCleanup": "onyx_same_high",
+    "sustain": "two_stage",
+    "sustainConstraint": "onyx_gap",
+    "range": "learned",
+    "hyperparameters": {
+      "estimator": "HistGradientBoostingClassifier",
+      "iterations": 90,
+      "learningRate": 0.08,
+      "leafNodes": 31,
+      "minSamplesLeaf": 30,
+      "l2Regularization": 1
+    },
+    "runtimeModelEmbedded": false,
+    "exportNote": "This product artifact contains frozen output for a representative fixture, not a serialized live Python/scikit-learn estimator. Regenerate it with the checked-in export script when a portable estimator export is available."
+  },
+  "parser": {
+    "package": "@eliwhite/scan-chart",
+    "packageVersion": "8.1.0-eliwhite.6",
+    "sourceSchemaVersion": "scan-chart-guitar-v1",
+    "sourceScanChartVersion": "8.0.1",
+    "productContract": "parseChartFile"
+  },
+  "validation": {
+    "screenPromoted": true,
+    "seeds": [
+      {
+        "seed": 1729,
+        "pooledChartEditRate": 0.40395157
+      },
+      {
+        "seed": 2718,
+        "pooledChartEditRate": 0.40515458
+      }
+    ]
+  },
+  "provenance": {
+    "sourceWorkstream": "drum-to-chart/autoresearch-guitar-reduction",
+    "sourcePayload": "cache/candidate_payloads/expected_edit_mask_decoder-neighbor_priority_easy_v1-1729.json",
+    "sourcePayloadSha256": "63b9a5c349227968823ead82a52ea6253be7bf46aaafe04bc7ede0311dc8dc7b",
+    "confirmationPayload": "cache/candidate_payloads/expected_edit_mask_decoder-neighbor_priority_easy_v1-2718.json",
+    "confirmationPayloadSha256": "d48f3b78618c376eb713eb724983a8c8682e1a6663f377e52394cca7d313e951",
+    "expertFixture": "analysis/guitar_reduction_probe/out/scan_chart_rb4dlc/RB4-to-RB2-DISC :: 38 Special - Caught Up In You.json",
+    "expertFixtureSha256": "9a17b3e5133abfcd32bf22cde11875ca77c12c228bcd2db9440b577c95caa29c",
+    "exportScript": "scripts/export-guitar-reduction-preview.mjs"
+  },
+  "song": {
+    "songId": "RB4-to-RB2-DISC :: 38 Special - Caught Up In You",
+    "artist": "38 Special",
+    "title": "Caught Up In You",
+    "resolution": 480,
+    "tempoBpm": 126.42677887745663,
+    "window": {
+      "startTick": 0,
+      "endTick": 57600
+    }
+  },
+  "tiers": {
+    "expert": {
+      "notes": [
+        {
+          "tick": 3840,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 3840,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4080,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4080,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4320,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4320,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4560,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4560,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4800,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4800,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5040,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5040,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5280,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5280,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5520,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5760,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5760,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6000,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6000,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6240,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6240,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6480,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6480,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6720,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6960,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6960,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7200,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7200,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7440,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7680,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7680,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7920,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7920,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8160,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8160,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8400,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8400,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8640,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8880,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9120,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9120,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9360,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9600,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9600,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9840,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10080,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10080,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10320,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10320,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10560,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10560,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10800,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11040,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11040,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11280,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11520,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11520,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11760,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12000,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12000,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12240,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12240,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12480,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12720,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12720,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12960,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12960,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13200,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13200,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13440,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13440,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13680,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13680,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13920,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13920,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14160,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14160,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14400,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14400,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14640,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14640,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14880,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14880,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 15120,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 15120,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 15360,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 15600,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 15840,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 15840,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16080,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16320,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16320,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16560,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16560,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16800,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16800,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17040,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17040,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17280,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17520,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17520,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17760,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17760,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18000,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18240,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18240,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18480,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18480,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18720,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18720,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18960,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19080,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "hopo"
+        },
+        {
+          "tick": 19200,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19200,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19440,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19440,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19680,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19680,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19920,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19920,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 20160,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 20400,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 20400,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 20640,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 20640,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 20880,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 20880,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 21120,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 21360,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 21360,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 21600,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 21600,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 21840,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 21840,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22080,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22320,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22320,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22560,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22560,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22800,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22800,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 23040,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 23280,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 23520,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 23520,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 23760,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24000,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24000,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24240,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24240,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24480,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24480,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24720,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24720,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24960,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25200,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25200,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25440,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25440,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25680,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25920,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25920,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26160,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26160,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26400,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26400,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26640,
+          "lane": "green",
+          "length": 600,
+          "technique": "strum"
+        },
+        {
+          "tick": 26640,
+          "lane": "blue",
+          "length": 600,
+          "technique": "strum"
+        },
+        {
+          "tick": 27360,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27360,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27600,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27840,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27840,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 28080,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 28320,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 28320,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 28560,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 28560,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 28800,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29040,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29040,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29280,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29280,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29520,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29760,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29760,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 30000,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 30240,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 30480,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 30720,
+          "lane": "green",
+          "length": 360,
+          "technique": "strum"
+        },
+        {
+          "tick": 30720,
+          "lane": "blue",
+          "length": 360,
+          "technique": "strum"
+        },
+        {
+          "tick": 31200,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31200,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31440,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31680,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31680,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31920,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32160,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32160,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32400,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32400,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32640,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32880,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32880,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33120,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33120,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33360,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33600,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33600,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33840,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33840,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 34080,
+          "lane": "orange",
+          "length": 360,
+          "technique": "strum"
+        },
+        {
+          "tick": 34560,
+          "lane": "green",
+          "length": 600,
+          "technique": "strum"
+        },
+        {
+          "tick": 35280,
+          "lane": "red",
+          "length": 840,
+          "technique": "strum"
+        },
+        {
+          "tick": 36240,
+          "lane": "yellow",
+          "length": 840,
+          "technique": "strum"
+        },
+        {
+          "tick": 37200,
+          "lane": "blue",
+          "length": 840,
+          "technique": "strum"
+        },
+        {
+          "tick": 38160,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 38160,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 38280,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 38280,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 38400,
+          "lane": "red",
+          "length": 1560,
+          "technique": "strum"
+        },
+        {
+          "tick": 38400,
+          "lane": "orange",
+          "length": 1560,
+          "technique": "strum"
+        },
+        {
+          "tick": 40080,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 40320,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 40320,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 40560,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 40560,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 40800,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "hopo"
+        },
+        {
+          "tick": 40800,
+          "lane": "orange",
+          "length": 0,
+          "technique": "hopo"
+        },
+        {
+          "tick": 41040,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41040,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41280,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41280,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41520,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41520,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41760,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41760,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 42000,
+          "lane": "yellow",
+          "length": 360,
+          "technique": "strum"
+        },
+        {
+          "tick": 42480,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 42720,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 42960,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 43200,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 43440,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 43680,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 43920,
+          "lane": "red",
+          "length": 360,
+          "technique": "strum"
+        },
+        {
+          "tick": 44400,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 44640,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 44880,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 45120,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 45360,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 45600,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 45840,
+          "lane": "green",
+          "length": 360,
+          "technique": "strum"
+        },
+        {
+          "tick": 46320,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 46560,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 46800,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 47040,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 47280,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 47520,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 47760,
+          "lane": "yellow",
+          "length": 360,
+          "technique": "strum"
+        },
+        {
+          "tick": 48240,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 48480,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 48720,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 48840,
+          "lane": "orange",
+          "length": 0,
+          "technique": "hopo"
+        },
+        {
+          "tick": 48960,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 49200,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 49440,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 49680,
+          "lane": "yellow",
+          "length": 360,
+          "technique": "strum"
+        },
+        {
+          "tick": 50160,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 50400,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 50640,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 50880,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 51120,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 51360,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 51600,
+          "lane": "red",
+          "length": 360,
+          "technique": "strum"
+        },
+        {
+          "tick": 52080,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 52320,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 52560,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 52800,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 53040,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 53280,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 53520,
+          "lane": "green",
+          "length": 360,
+          "technique": "strum"
+        },
+        {
+          "tick": 54000,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 54240,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 54480,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 54720,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 54960,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 55200,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 55440,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 55520,
+          "lane": "yellow",
+          "length": 280,
+          "technique": "hopo"
+        },
+        {
+          "tick": 55920,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 56160,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 56400,
+          "lane": "blue",
+          "length": 0,
+          "technique": "hopo"
+        },
+        {
+          "tick": 56640,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 56880,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 57120,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 57360,
+          "lane": "yellow",
+          "length": 360,
+          "technique": "strum"
+        }
+      ],
+      "star_power": [
+        {
+          "tick": 17280,
+          "length": 1920
+        },
+        {
+          "tick": 34560,
+          "length": 1920
+        }
+      ],
+      "rejected_star_power": [],
+      "solo_sections": [],
+      "flex_lanes": []
+    },
+    "hard": {
+      "notes": [
+        {
+          "tick": 3840,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 3840,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4080,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4080,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4320,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4320,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4560,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4560,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4800,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4800,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5040,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5040,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5280,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5280,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5760,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5760,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6000,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6000,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6240,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6240,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6480,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6480,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6720,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6960,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6960,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7200,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7200,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7680,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7680,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7920,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7920,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8160,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8160,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8400,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8400,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8640,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8880,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9120,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9120,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9600,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9600,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9840,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10080,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10080,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10320,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10320,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10560,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10560,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10800,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11040,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11040,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11520,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11520,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11760,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12000,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12000,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12240,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12240,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12480,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12720,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12720,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12960,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12960,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13440,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13440,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13680,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13680,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13920,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13920,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14160,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14160,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14400,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14400,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14640,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14640,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14880,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14880,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 15360,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 15840,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 15840,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16320,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16320,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16560,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16560,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16800,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16800,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17280,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17520,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17520,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17760,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17760,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18240,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18240,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18480,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18480,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18720,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18720,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19200,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19200,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19440,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19440,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19680,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19680,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19920,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19920,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 20160,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 20400,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 20400,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 20640,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 20640,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 21360,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 21360,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 21600,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 21600,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 21840,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 21840,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22080,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22320,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22320,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22560,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22560,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 23040,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 23520,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 23520,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24000,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24000,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24240,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24240,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24480,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24480,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24960,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25200,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25200,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25440,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25440,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25920,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25920,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26160,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26160,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26400,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26400,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26640,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26640,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27360,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27360,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27600,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27840,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27840,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 28320,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 28320,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 28800,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29040,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29040,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29280,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29280,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29520,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29760,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29760,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 30000,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 30240,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 30480,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 30720,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 30720,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31200,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31200,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31680,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31680,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32160,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32160,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32640,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32880,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32880,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33120,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33120,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33360,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33600,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33600,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33840,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33840,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 34080,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 34560,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 35280,
+          "lane": "red",
+          "length": 766,
+          "technique": "strum"
+        },
+        {
+          "tick": 36240,
+          "lane": "yellow",
+          "length": 703,
+          "technique": "strum"
+        },
+        {
+          "tick": 37200,
+          "lane": "blue",
+          "length": 816,
+          "technique": "strum"
+        },
+        {
+          "tick": 38160,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 38160,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 38400,
+          "lane": "red",
+          "length": 1541,
+          "technique": "strum"
+        },
+        {
+          "tick": 38400,
+          "lane": "orange",
+          "length": 1396,
+          "technique": "strum"
+        },
+        {
+          "tick": 40080,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 40320,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 40320,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 40560,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 40560,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 40800,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 40800,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41040,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41040,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41280,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41280,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41520,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41520,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41760,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41760,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 42000,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 42480,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 42720,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 42960,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 43200,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 43440,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 43680,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 43920,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 44400,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 44640,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 44880,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 45120,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 45360,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 45600,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 45840,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 46320,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 46560,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 47040,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 47280,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 47520,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 47760,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 48240,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 48480,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 48960,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 49200,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 49440,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 49680,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 50160,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 50400,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 50640,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 50880,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 51120,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 51360,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 51600,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 52080,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 52320,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 52560,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 52800,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 53040,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 53280,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 53520,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 54000,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 54240,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 54720,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 54960,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 55200,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 55920,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 56160,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 56400,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 56640,
+          "lane": "orange",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 56880,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 57120,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 57360,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        }
+      ],
+      "star_power": [
+        {
+          "tick": 17280,
+          "length": 1920,
+          "is_double": false
+        },
+        {
+          "tick": 34560,
+          "length": 1920,
+          "is_double": false
+        }
+      ],
+      "rejected_star_power": [],
+      "solo_sections": [],
+      "flex_lanes": []
+    },
+    "medium": {
+      "notes": [
+        {
+          "tick": 3840,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 3840,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4320,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4320,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4800,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4800,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5280,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5280,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5760,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5760,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6240,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6240,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 6960,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7200,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7200,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7680,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7680,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8160,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 8160,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9120,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9120,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9600,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9600,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10080,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10080,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10560,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10560,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11040,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11040,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11520,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11520,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12000,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12000,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12720,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 12960,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13440,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13440,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13920,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13920,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14400,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14400,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14880,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14880,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 15360,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 15840,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 15840,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16320,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16320,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16800,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16800,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17760,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 17760,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18240,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18240,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18720,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18720,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19200,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19200,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19680,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19680,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 20400,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22560,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 22560,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 23040,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 23520,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 23520,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24000,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24000,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24480,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24480,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25440,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25440,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25920,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25920,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26640,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26640,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27360,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27360,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27840,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27840,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 28320,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 28320,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29280,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29760,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29760,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 30240,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 30720,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 30720,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31200,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31200,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31680,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31680,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32160,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 32160,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33120,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33120,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33600,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33600,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 34080,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 34560,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 35280,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 36240,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 37200,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 38400,
+          "lane": "red",
+          "length": 1435,
+          "technique": "strum"
+        },
+        {
+          "tick": 38400,
+          "lane": "blue",
+          "length": 1407,
+          "technique": "strum"
+        },
+        {
+          "tick": 40320,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 40320,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 40800,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41280,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41280,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 42000,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 42480,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 43200,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 43920,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 44400,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 45120,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 45840,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 46320,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 47040,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 47760,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 48240,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 48480,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 48960,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 49680,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 50160,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 50880,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 51600,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 52080,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 52800,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 53520,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 54000,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 54720,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 55200,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 55920,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 56640,
+          "lane": "blue",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 57360,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        }
+      ],
+      "star_power": [
+        {
+          "tick": 17280,
+          "length": 1920,
+          "is_double": false
+        },
+        {
+          "tick": 34560,
+          "length": 1920,
+          "is_double": false
+        }
+      ],
+      "rejected_star_power": [],
+      "solo_sections": [],
+      "flex_lanes": []
+    },
+    "easy": {
+      "notes": [
+        {
+          "tick": 3840,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 4800,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 5760,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 7680,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 9600,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 10560,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 11520,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 13440,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 14400,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 16320,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 18240,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 19200,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 24000,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 25920,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 26640,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 27840,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 29760,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 30720,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 31680,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 33600,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 34560,
+          "lane": "green",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 35280,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 36240,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 37200,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 38400,
+          "lane": "yellow",
+          "length": 1389,
+          "technique": "strum"
+        },
+        {
+          "tick": 40320,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 41280,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 43200,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 45120,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 47040,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 47760,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 48960,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 50880,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 52800,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 54720,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 56640,
+          "lane": "yellow",
+          "length": 0,
+          "technique": "strum"
+        },
+        {
+          "tick": 57360,
+          "lane": "red",
+          "length": 0,
+          "technique": "strum"
+        }
+      ],
+      "star_power": [
+        {
+          "tick": 17280,
+          "length": 1920,
+          "is_double": false
+        },
+        {
+          "tick": 34560,
+          "length": 1920,
+          "is_double": false
+        }
+      ],
+      "rejected_star_power": [],
+      "solo_sections": [],
+      "flex_lanes": []
+    }
+  }
+}

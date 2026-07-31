@@ -18,10 +18,14 @@
 
 import {makeFixtureDoc} from '../../__tests__/fixtures';
 import {DRUM_EDIT_CAPABILITIES, PREVIEW_CAPABILITIES} from '../../capabilities';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../../scope';
+import {
+  DEFAULT_DRUMS_EXPERT_SCOPE,
+  DEFAULT_GUITAR_EXPERT_SCOPE,
+} from '../../scope';
 import {computeChartElements} from '../useChartElements';
 import {AddNoteCommand, toSchemaNote} from '../../commands';
 import {markerDragReconcilerKey} from '@/lib/preview/highway/reconcilerKey';
+import type {NoteElementData} from '@/lib/preview/highway/NoteRenderer';
 import type {TrackKey} from '@/lib/chart-edit';
 import {noteTypes} from '@eliwhite/scan-chart';
 
@@ -313,6 +317,98 @@ describe('computeChartElements', () => {
       const originalData = original.data as {lane: number; xPosition: number};
       expect(draggedData.lane).toBe(originalData.lane + 1);
       expect(draggedData.xPosition).not.toBe(originalData.xPosition);
+    });
+
+    it('shifts five-fret pads by schema lane while preserving pad geometry', () => {
+      const doc = makeFixtureDoc();
+      const guitar = {
+        ...doc.parsedChart.trackData[0],
+        instrument: 'guitar' as const,
+        noteEventGroups: [
+          [
+            {
+              type: noteTypes.red,
+              tick: 480,
+              msTime: 500,
+              length: 0,
+              msLength: 0,
+              flags: 0,
+            },
+          ],
+        ],
+      };
+      const chart = {
+        ...doc.parsedChart,
+        trackData: [guitar],
+      };
+      const inputs = {
+        chart,
+        activeScope: DEFAULT_GUITAR_EXPERT_SCOPE,
+        partName: 'vocals',
+        capabilities: DRUM_EDIT_CAPABILITIES,
+        markerDrag: null,
+        timedTempos,
+        resolution,
+      };
+
+      const before = computeChartElements({...inputs, noteDrag: null});
+      const during = computeChartElements({
+        ...inputs,
+        noteDrag: {tickDelta: 0, laneDelta: 1, ids: new Set(['480:red'])},
+      });
+      const data = during.find(e => e.key === 'note:480:red')!
+        .data as NoteElementData;
+
+      expect(data.note.type).toBe(noteTypes.yellow);
+      expect(data.lane).toBe(2);
+      expect(data.editorLane).toBe(3);
+      expect(data.xPosition).not.toBe(
+        (before.find(e => e.key === 'note:480:red')!.data as NoteElementData)
+          .xPosition,
+      );
+    });
+
+    it('keeps an open note on the full-width axis during a lane drag', () => {
+      const doc = makeFixtureDoc();
+      const guitar = {
+        ...doc.parsedChart.trackData[0],
+        instrument: 'guitar' as const,
+        noteEventGroups: [
+          [
+            {
+              type: noteTypes.open,
+              tick: 480,
+              msTime: 500,
+              length: 240,
+              msLength: 240,
+              flags: 0,
+            },
+          ],
+        ],
+      };
+      const chart = {...doc.parsedChart, trackData: [guitar]};
+      const elements = computeChartElements({
+        chart,
+        activeScope: DEFAULT_GUITAR_EXPERT_SCOPE,
+        partName: 'vocals',
+        capabilities: DRUM_EDIT_CAPABILITIES,
+        markerDrag: null,
+        noteDrag: {
+          tickDelta: 0,
+          laneDelta: 2,
+          ids: new Set(['480:open']),
+        },
+        timedTempos,
+        resolution,
+      });
+      const data = elements.find(e => e.key === 'note:480:open')!
+        .data as NoteElementData;
+
+      expect(data.isOpen).toBe(true);
+      expect(data.note.type).toBe(noteTypes.open);
+      expect(data.lane).toBe(-1);
+      expect(data.editorLane).toBe(0);
+      expect(data.msLength).toBe(240);
     });
 
     it('does not lane-shift a dragged kick', () => {

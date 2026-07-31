@@ -6,6 +6,21 @@ import {
 } from '../../drum-mapping/noteToInstrument';
 import {DRUM_TEXTURE_PATH, SP_FLAG, type Note} from './types';
 
+/** Original Unity sustain art used by five-fret highway tails. The source
+ * strip contains six brightness/specular frames of the same grayscale sprite;
+ * frame 1 is the stable idle frame currently used by the renderer. */
+export interface HighwaySustainTextures {
+  fretted: THREE.Texture[];
+  open: THREE.Texture;
+}
+
+const HIGHWAY_SUSTAIN_FRETTED_URLS = Array.from(
+  {length: 6},
+  (_, frame) => `/assets/preview/assets2/highway-sustain-fretted-${frame}.webp`,
+);
+const HIGHWAY_SUSTAIN_OPEN_URL =
+  '/assets/preview/assets2/highway-sustain-open.webp';
+
 // ---------------------------------------------------------------------------
 // Animated WebP texture support (Chrome-only, graceful fallback)
 // ---------------------------------------------------------------------------
@@ -320,6 +335,28 @@ export async function loadTexture(
   }
 }
 
+/** Load the original Unity sustain sprites used by the five-fret highway.
+ * Missing assets still resolve to the normal placeholder texture through
+ * `loadTexture`, keeping the highway renderable while an asset is repaired. */
+export async function loadHighwaySustainTextures(
+  textureLoader: THREE.TextureLoader,
+  animatedTextureManager?: AnimatedTextureManager,
+): Promise<HighwaySustainTextures> {
+  const [fretted, open] = await Promise.all([
+    Promise.all(
+      HIGHWAY_SUSTAIN_FRETTED_URLS.map(url =>
+        loadTexture(textureLoader, url, animatedTextureManager),
+      ),
+    ),
+    loadTexture(
+      textureLoader,
+      HIGHWAY_SUSTAIN_OPEN_URL,
+      animatedTextureManager,
+    ),
+  ]);
+  return {fretted, open};
+}
+
 /**
  * Loads a drum texture variant from static.enchor.us.
  * Falls back to the normal (unflagged) texture on failure,
@@ -605,26 +642,58 @@ async function loadFiveFretColoredLaneTextures(
   return result;
 }
 
-/** Loads the open-note textures (normal + SP variant). */
+/**
+ * Loads open-note textures. Open taps use the HOPO open art: the asset set
+ * (and Clone Hero's visual convention) has no separate open-tap gem.
+ */
 async function loadOpenNoteTextures(
   textureLoader: THREE.TextureLoader,
   animatedTextureManager?: AnimatedTextureManager,
 ): Promise<Map<number, THREE.SpriteMaterial>> {
   const normalTexture = await loadTexture(
     textureLoader,
-    `/assets/preview/assets2/strum5.webp`,
+    `/assets/preview/assets2/open.webp`,
     animatedTextureManager,
   );
-  const spTexture = await loadDrumTextureWithFallback(
+  const hopoTexture = await loadTexture(
     textureLoader,
-    `/assets/preview/assets2/open-sp.webp`,
-    normalTexture,
+    `/assets/preview/assets2/open-hopo.webp`,
     animatedTextureManager,
   );
+  const [spTexture, hopoSpTexture] = await Promise.all([
+    loadDrumTextureWithFallback(
+      textureLoader,
+      `/assets/preview/assets2/open-sp.webp`,
+      normalTexture,
+      animatedTextureManager,
+    ),
+    loadDrumTextureWithFallback(
+      textureLoader,
+      `/assets/preview/assets2/open-hopo-sp.webp`,
+      hopoTexture,
+      animatedTextureManager,
+    ),
+  ]);
 
   const result = new Map<number, THREE.SpriteMaterial>();
-  result.set(noteFlags.none, new THREE.SpriteMaterial({map: normalTexture}));
-  result.set(SP_FLAG, new THREE.SpriteMaterial({map: spTexture}));
+  const normal = new THREE.SpriteMaterial({map: normalTexture});
+  const hopo = new THREE.SpriteMaterial({map: hopoTexture});
+  const sp = new THREE.SpriteMaterial({map: spTexture});
+  const hopoSp = new THREE.SpriteMaterial({map: hopoSpTexture});
+  // Bitwise flag composition turns the high-bit SP marker into a signed
+  // 32-bit key, so use the composed value for all SP map entries too.
+  const spKey = SP_FLAG | 0;
+
+  // Strum and unflagged opens share the base open artwork. Tap opens share
+  // the HOPO artwork because no separate open-tap asset exists.
+  result.set(noteFlags.none, normal);
+  result.set(noteFlags.strum, normal);
+  result.set(noteFlags.hopo, hopo);
+  result.set(noteFlags.tap, hopo);
+  result.set(spKey, sp);
+  result.set(noteFlags.strum | spKey, sp);
+  result.set(noteFlags.hopo | spKey, hopoSp);
+  result.set(noteFlags.tap | spKey, hopoSp);
   return result;
 }
 
@@ -743,7 +812,19 @@ export async function loadNoteTextures(
         const spFlag = inStarPower ? SP_FLAG : 0;
 
         if (note.type === noteTypes.open) {
-          return openTextures.get(spFlag) ?? openTextures.get(noteFlags.none)!;
+          const modifierFlag =
+            note.flags & noteFlags.tap
+              ? noteFlags.tap
+              : note.flags & noteFlags.hopo
+                ? noteFlags.hopo
+                : note.flags & noteFlags.strum
+                  ? noteFlags.strum
+                  : noteFlags.none;
+          return (
+            openTextures.get(modifierFlag | spFlag) ??
+            openTextures.get(modifierFlag) ??
+            openTextures.get(noteFlags.none)!
+          );
         }
 
         const modifierFlag =

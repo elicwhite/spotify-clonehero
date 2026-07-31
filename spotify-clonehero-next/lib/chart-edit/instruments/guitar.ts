@@ -2,9 +2,8 @@
  * Five-fret InstrumentSchema — guitar / bass / rhythm / keys.
  *
  * Open notes (lane 0) plus green/red/yellow/blue/orange (lanes 1-5).
- * Lane key bindings mirror common chart-editor conventions; no
- * five-fret editor consumes them yet, but the defaults are kept here
- * so the schema stays the source of truth when one ships.
+ * Lane key bindings mirror common chart-editor conventions and are consumed
+ * by the shared highway/piano-roll editor.
  *
  * Flag bindings cover scan-chart's HOPO / tap / strum-flag set. Sustain
  * editing isn't a flag in scan-chart (it's `length` on the NoteEvent),
@@ -34,6 +33,7 @@ const OPEN: LaneDefinition = {
   label: 'Open',
   color: '#a266ff',
   pianoRollColor: '#9b59b6',
+  defaultKey: '0',
   worldXOffset: OPEN_X,
   fullWidth: true,
   sustainWidthMultiplier: 5,

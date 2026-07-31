@@ -30,7 +30,7 @@ export class InteractionManager {
    * lane" numbering `typeToLane`/`laneToType` use). The renderer's
    * `calculateNoteXOffset` is what each lane's `worldXOffset` mirrors.
    */
-  private laneXPositions: number[];
+  private laneXPositions: Array<{lane: number; x: number}>;
 
   /**
    * Editor lane the schema's full-width note (kick for drums, open for
@@ -94,13 +94,16 @@ export class InteractionManager {
     this.highwaySpeed = highwaySpeed;
     this.getElapsedMs = getElapsedMs;
     this.schema = schema;
-    this.laneXPositions = schema.lanes.map(l => {
+    const nearestLaneCandidates = schema.lanes.filter(
+      lane => !lane.fullWidth || schema.instrument === 'drums',
+    );
+    this.laneXPositions = nearestLaneCandidates.map(l => {
       if (l.worldXOffset === undefined) {
         throw new Error(
           `${schema.instrument} schema lane ${l.index} (${l.label}) is missing worldXOffset`,
         );
       }
-      return l.worldXOffset;
+      return {lane: l.index, x: l.worldXOffset};
     });
     this.fullWidthLane = schema.lanes.findIndex(l => l.fullWidth);
     this.highwayHalfWidth = schema.highwayWidth / 2;
@@ -238,7 +241,10 @@ export class InteractionManager {
     // `data.lane` is the pad-color index (0=red..3=green), which the schema
     // now assigns the identical editor lane numbers to; kick alone needs
     // translating to its (schema-derived) editor lane.
-    const lane = data.isKick || data.isOpen ? this.fullWidthLane : data.lane;
+    const lane =
+      data.isKick || data.isOpen
+        ? this.fullWidthLane
+        : (data.editorLane ?? data.lane);
 
     return {
       type: 'note',
@@ -252,6 +258,7 @@ export class InteractionManager {
         isKick: data.isKick,
         isOpen: data.isOpen,
         lane: data.lane,
+        editorLane: data.editorLane ?? data.lane,
       },
       lane,
       tick,
@@ -400,8 +407,8 @@ export class InteractionManager {
     // specificity; if the raycast missed a pad sprite, the user
     // probably intended to click empty highway, not a kick.
     if (lane === this.fullWidthLane) {
-      const kickHit = this.hitTestKickAtTick(tick, ms);
-      if (kickHit) return kickHit;
+      const fullWidthHit = this.hitTestFullWidthAtTick(tick, ms);
+      if (fullWidthHit) return fullWidthHit;
     }
 
     return {
@@ -416,7 +423,7 @@ export class InteractionManager {
    * Check if there is a kick note at the given tick position.
    * Returns a note HitResult if found, null otherwise.
    */
-  private hitTestKickAtTick(tick: number, ms: number): HitResult {
+  private hitTestFullWidthAtTick(tick: number, ms: number): HitResult {
     const elements = this.reconciler.getElements();
     if (elements.length === 0) return null;
     // Tolerance: check notes within a small ms range around the click
@@ -434,8 +441,8 @@ export class InteractionManager {
       if (el.msTime > ms + tolerance) break;
       if (el.kind !== 'note') continue;
       const data = el.data as NoteElementData;
-      if (!data.isKick) continue;
-      const noteId = `${data.note.tick ?? 0}:kick`;
+      if (!data.isKick && !data.isOpen) continue;
+      const noteId = `${data.note.tick ?? 0}:${data.isKick ? 'kick' : 'open'}`;
       return {
         type: 'note',
         noteId,
@@ -448,6 +455,7 @@ export class InteractionManager {
           isKick: data.isKick,
           isOpen: data.isOpen,
           lane: data.lane,
+          editorLane: data.editorLane ?? data.lane,
         },
         lane: this.fullWidthLane,
         tick: data.note.tick ?? 0,
@@ -567,22 +575,23 @@ export class InteractionManager {
     const ndcX = (canvasX / canvasW) * 2 - 1;
     const ndcY = -(canvasY / canvasH) * 2 + 1;
 
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
-
-    const result = new THREE.Vector3();
-    return raycaster.ray.intersectPlane(this.highwayPlane, result);
+    this.ndcVec.set(ndcX, ndcY);
+    this.raycaster.setFromCamera(this.ndcVec, this.camera);
+    return this.raycaster.ray.intersectPlane(
+      this.highwayPlane,
+      this.intersectionPoint,
+    );
   }
 
   /** Find the closest lane index for a world X coordinate. */
   private worldXToLane(worldX: number): number {
-    let bestLane = 0;
+    let bestLane = this.fullWidthLane >= 0 ? this.fullWidthLane : 0;
     let bestDist = Infinity;
-    for (let i = 0; i < this.laneXPositions.length; i++) {
-      const dist = Math.abs(worldX - this.laneXPositions[i]);
+    for (const candidate of this.laneXPositions) {
+      const dist = Math.abs(worldX - candidate.x);
       if (dist < bestDist) {
         bestDist = dist;
-        bestLane = i;
+        bestLane = candidate.lane;
       }
     }
     return bestLane;

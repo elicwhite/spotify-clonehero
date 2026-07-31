@@ -25,6 +25,7 @@ import {
   addNote,
   removeNote,
   setNoteFlags,
+  setNoteLength,
   moveNote,
 } from '../entities/notes';
 import {emptyTrackData} from './test-utils';
@@ -189,6 +190,14 @@ describe('drums4LaneSchema-specific note adapter behavior', () => {
     expect(() => setNoteFlags(t, 0, noteTypes.kick, 0, schema)).toThrow();
   });
 
+  it('setNoteLength updates a guitar sustain without changing the note head', () => {
+    const t = emptyTrackData('guitar', 'expert');
+    addNote(t, {tick: 480, type: noteTypes.green, length: 120}, guitarSchema);
+    setNoteLength(t, 480, noteTypes.green, 960);
+    expect(findNote(t, 480, noteTypes.green)!.length).toBe(960);
+    expect(findNote(t, 480, noteTypes.green)!.tick).toBe(480);
+  });
+
   it('flam (groupShared) syncs onto every note added to the tick group', () => {
     const t = track();
     addNote(t, {tick: 0, type: noteTypes.kick}, schema);
@@ -281,11 +290,15 @@ describe('guitarSchema-specific note adapter behavior', () => {
     }
   });
 
-  it('toggleFlagBits on hopo/tap/strum is a plain, unrestricted bit flip', () => {
+  it('toggleFlagBits keeps hopo/tap/strum mutually exclusive', () => {
     let bits = 0;
     bits = toggleFlagBits(schema, noteTypes.green, bits, 'hopo');
     expect(bits & noteFlags.hopo).toBeTruthy();
-    bits = toggleFlagBits(schema, noteTypes.green, bits, 'hopo');
+    bits = toggleFlagBits(schema, noteTypes.green, bits, 'tap');
+    expect(bits & noteFlags.tap).toBeTruthy();
     expect(bits & noteFlags.hopo).toBeFalsy();
+    bits = toggleFlagBits(schema, noteTypes.green, bits, 'hopo');
+    expect(bits & noteFlags.hopo).toBeTruthy();
+    expect(bits & noteFlags.tap).toBeFalsy();
   });
 });

@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import type {ElementRenderer} from './SceneReconciler';
-import {SCALE, HIGHWAY_DURATION_MS, type Note} from './types';
+import {
+  createHighwaySustainGeometry,
+  FRETTED_SUSTAIN_WIDTH_MULTIPLIER,
+  highwaySustainWorldHeight,
+} from './sustainGeometry';
+import type {HighwaySustainTextures} from './TextureManager';
+import {OPEN_NOTE_ANCHOR_Y, SCALE, type Note} from './types';
 
 // ---------------------------------------------------------------------------
 // NoteElementData -- the data payload for note elements
@@ -19,6 +25,8 @@ export interface NoteElementData {
   isOpen: boolean;
   /** Lane index (for sustain colour lookup) -- -1 for kick/open. */
   lane: number;
+  /** Schema/editor lane index, including the full-width Open/Kick lane. */
+  editorLane?: number;
   /** Sustain length in ms. */
   msLength: number;
 }
@@ -63,6 +71,10 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
    *  `InstrumentSchema`'s `lanes[].color` (five-fret only -- drums don't
    *  support sustain, so this stays empty for drum tracks). */
   private laneColors: string[];
+  private fullWidthLaneColor: string;
+  private fullWidthSustainWidthMultiplier: number;
+  private highwaySpeed: number;
+  private sustainTextures: HighwaySustainTextures | null;
 
   // Instance-level overlay materials (not module-level singletons).
   // Using instance fields ensures clippingPlanes reference stays valid
@@ -89,10 +101,18 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     ) => THREE.SpriteMaterial,
     clippingPlanes: THREE.Plane[],
     laneColors: string[] = [],
+    fullWidthLaneColor = '#FFFFFF',
+    fullWidthSustainWidthMultiplier = 1,
+    highwaySpeed = 1.5,
+    sustainTextures: HighwaySustainTextures | null = null,
   ) {
     this.getTextureForNote = getTextureForNote;
     this.clippingPlanes = clippingPlanes;
     this.laneColors = laneColors;
+    this.fullWidthLaneColor = fullWidthLaneColor;
+    this.fullWidthSustainWidthMultiplier = fullWidthSustainWidthMultiplier;
+    this.highwaySpeed = highwaySpeed;
+    this.sustainTextures = sustainTextures;
   }
 
   // -----------------------------------------------------------------------
@@ -173,11 +193,14 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
       group.position.x = 0;
     } else if (data.isOpen) {
       const openScale = 0.11;
-      sprite.center.set(0.5, 0.5);
+      // open.webp has transparent padding below its visible bar. Align the
+      // bar itself with the kick/fret-note hit line, not the image bounds.
+      sprite.center.set(0.5, OPEN_NOTE_ANCHOR_Y);
       const aspectRatio =
         sprite.material.map!.image.width / sprite.material.map!.image.height;
       sprite.scale.set(openScale * aspectRatio, openScale, openScale);
-      sprite.renderOrder = 4;
+      // Full-width open bars sit behind all fret-note heads, like kicks.
+      sprite.renderOrder = 1;
       group.position.x = 0;
     } else {
       sprite.center.set(0.5, GEM_ANCHOR_Y);
@@ -215,8 +238,8 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
       },
     };
 
-    // Sustain tail (guitar only, non-kick, non-open with length > 0)
-    if (data.msLength > 0 && !data.isKick && data.lane >= 0) {
+    // Sustain tail (five-fret notes, including full-width Open notes)
+    if (data.msLength > 0 && !data.isKick && (data.isOpen || data.lane >= 0)) {
       this.createSustain(group, data);
     }
 
@@ -352,25 +375,38 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
   }
 
   private createSustain(group: THREE.Group, data: NoteElementData): THREE.Mesh {
-    const sustainWorldHeight = 2 * (data.msLength / HIGHWAY_DURATION_MS);
+    const sustainWorldHeight = highwaySustainWorldHeight(
+      data.msLength,
+      this.highwaySpeed,
+    );
     const color =
       data.lane >= 0 && data.lane < this.laneColors.length
         ? this.laneColors[data.lane]
-        : '#FFFFFF';
-    const sustainWidth = data.isOpen ? SCALE * 5 : SCALE * 0.3;
+        : this.fullWidthLaneColor;
+    const sustainWidth = data.isOpen
+      ? SCALE * this.fullWidthSustainWidthMultiplier
+      : SCALE * FRETTED_SUSTAIN_WIDTH_MULTIPLIER;
 
+    const texture = data.isOpen
+      ? this.sustainTextures?.open
+      : this.sustainTextures?.fretted[1];
     const mat = new THREE.MeshBasicMaterial({
       color,
+      map: texture,
       side: THREE.DoubleSide,
     });
     mat.clippingPlanes = this.clippingPlanes;
     mat.depthTest = false;
     mat.transparent = true;
 
-    const geometry = new THREE.PlaneGeometry(sustainWidth, sustainWorldHeight);
+    const geometry = createHighwaySustainGeometry(
+      sustainWidth,
+      sustainWorldHeight,
+      !data.isOpen,
+    );
     const plane = new THREE.Mesh(geometry, mat);
     plane.position.z = 0;
-    plane.position.y = 0.03 + data.msLength / HIGHWAY_DURATION_MS;
+    plane.position.y = 0.03 + sustainWorldHeight / 2;
     plane.renderOrder = 2;
     group.add(plane);
     return plane;

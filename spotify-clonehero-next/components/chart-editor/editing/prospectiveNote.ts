@@ -31,8 +31,7 @@ import {
 export interface ProspectiveNote {
   /** Grid-snapped tick the note would land on. */
   tick: number;
-  /** Editor lane index (0=red, 1=yellow, 2=blue, 3=green, 4=kick for the
-   *  default drum schema). */
+  /** Editor lane index from the active instrument schema. */
   lane: number;
   /** scan-chart NoteType the lane maps to, per `schema`. */
   type: NoteType;
@@ -46,8 +45,8 @@ export interface ProspectiveNote {
 
 /**
  * Resolve the note the add-note tool would place on `lane` at `snappedTick`,
- * for `schema` (defaults to `drums4LaneSchema` — the only schema wired into
- * the editor UI today). Both the highway placement path and the piano-roll
+ * for `schema` (defaults to `drums4LaneSchema`). Both the highway placement
+ * path and the piano-roll
  * ghost/placement path call this so they predict — and add — the identical
  * note.
  */

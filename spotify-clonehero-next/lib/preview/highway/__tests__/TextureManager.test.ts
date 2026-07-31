@@ -13,7 +13,9 @@ class StubTextureLoader {
 
   async loadAsync(url: string): Promise<THREE.Texture> {
     this.requestedUrls.push(url);
-    return new THREE.Texture();
+    const texture = new THREE.Texture();
+    texture.name = url;
+    return texture;
   }
 }
 
@@ -149,5 +151,38 @@ describe('loadNoteTextures texture matrix', () => {
     expect(
       loader.requestedUrls.some(url => url.includes('drum-cymbal-round')),
     ).toBe(false);
+  });
+
+  it('uses dedicated open HOPO art and aliases open taps to it', async () => {
+    const loader = new StubTextureLoader();
+    const {getTextureForNote} = await loadNoteTextures(
+      loader as unknown as THREE.TextureLoader,
+      'bass',
+    );
+
+    const open = (flags: number, inStarPower = false) =>
+      getTextureForNote(note(noteTypes.open, flags), {inStarPower});
+
+    expect((open(noteFlags.none).map as THREE.Texture).name).toContain(
+      '/open.webp',
+    );
+    expect((open(noteFlags.strum).map as THREE.Texture).name).toContain(
+      '/open.webp',
+    );
+    expect((open(noteFlags.hopo).map as THREE.Texture).name).toContain(
+      '/open-hopo.webp',
+    );
+    expect((open(noteFlags.tap).map as THREE.Texture).name).toContain(
+      '/open-hopo.webp',
+    );
+    expect((open(noteFlags.none, true).map as THREE.Texture).name).toContain(
+      '/open-sp.webp',
+    );
+    expect((open(noteFlags.hopo, true).map as THREE.Texture).name).toContain(
+      '/open-hopo-sp.webp',
+    );
+    expect(
+      loader.requestedUrls.some(url => url.endsWith('/open-hopo-sp.webp')),
+    ).toBe(true);
   });
 });

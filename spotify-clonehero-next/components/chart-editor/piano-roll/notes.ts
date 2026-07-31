@@ -19,6 +19,41 @@ import {
 } from '@/lib/chart-edit';
 import {noteFlags} from '@eliwhite/scan-chart';
 
+/** The guitar/bass-only articulation state shown by the piano roll. */
+export type FretTechnique = 'natural' | 'strum' | 'hopo' | 'tap';
+
+/** The sustain/articulation rendering branch is intentionally limited to
+ * guitar and bass. Rhythm/keys may share the five-fret schema, but their
+ * piano-roll behavior remains the existing generic path. */
+export function isGuitarBassSchema(schema: InstrumentSchema | null): boolean {
+  return schema?.instrument === 'guitar' || schema?.instrument === 'bass';
+}
+
+/** True while any visible part of a note span overlaps the piano-roll view.
+ * Guitar/bass sustains use the note end, not just the head, so a long tail
+ * remains paintable after its root has crossed the left edge. */
+export function noteIntersectsPianoRollWindow(
+  startMs: number,
+  endMs: number,
+  visibleStartMs: number,
+  visibleEndMs: number,
+  paddingMs = 50,
+): boolean {
+  return (
+    endMs >= visibleStartMs - paddingMs && startMs <= visibleEndMs + paddingMs
+  );
+}
+
+/** Resolve the persisted flag mask to one display state. Malformed charts
+ * can contain multiple technique bits; the explicit tap > HOPO > strum
+ * precedence matches the highway renderer and keeps the editor deterministic. */
+export function techniqueForFlags(flags: number): FretTechnique {
+  if (flags & noteFlags.tap) return 'tap';
+  if (flags & noteFlags.hopo) return 'hopo';
+  if (flags & noteFlags.strum) return 'strum';
+  return 'natural';
+}
+
 /** A note projected onto the piano roll's note lanes. */
 export interface PianoRollNote {
   /** Tick position (for tempo-map → ms conversion at render time). */
@@ -33,6 +68,11 @@ export interface PianoRollNote {
   cymbal: boolean;
   /** Shared selection id (`tick:type`) — matches `state.selection`. */
   id: string;
+  /** Guitar/bass flag mask. Omitted for drum notes to preserve the drum
+   *  projection's existing shape and behavior. */
+  flags?: number;
+  /** Guitar/bass sustain length in ticks. Omitted for drum notes. */
+  length?: number;
 }
 
 /** A piano-roll lane's display data, derived from an `InstrumentSchema`. */
@@ -89,6 +129,9 @@ export function extractPianoRollNotes(
       lane,
       cymbal: !!(note.flags & noteFlags.cymbal) && legalCymbal,
       id: schemaNoteId(note.tick, note.type),
+      ...(isGuitarBassSchema(schema)
+        ? {flags: note.flags, length: note.length}
+        : {}),
     });
   }
   out.sort((a, b) => a.tick - b.tick);

@@ -14,7 +14,11 @@ import type {WaveformSurface} from './WaveformSurface';
 import type {WaveformSurfaceConfig} from './WaveformSurface';
 import type {GridOverlay} from './GridOverlay';
 import type {GridOverlayConfig} from './GridOverlay';
-import {AnimatedTextureManager, loadNoteTextures} from './TextureManager';
+import {
+  AnimatedTextureManager,
+  loadHighwaySustainTextures,
+  loadNoteTextures,
+} from './TextureManager';
 import {SceneOverlays, type OverlayState} from './SceneOverlays';
 import {InteractionManager} from './InteractionManager';
 import {SceneReconciler} from './SceneReconciler';
@@ -417,6 +421,13 @@ export const setupRenderer = (
           tomStyle,
         )
       : {getTextureForNote: () => new THREE.SpriteMaterial()};
+    const sustainTextures =
+      track?.instrument === 'guitar' || track?.instrument === 'bass'
+        ? await loadHighwaySustainTextures(
+            textureLoader,
+            animatedTextureManager,
+          )
+        : null;
 
     // Build the reusable scene core (floor, hitbox/strikeline, note + marker
     // renderers, reconciler seeded with the track's notes). Shared verbatim
@@ -425,7 +436,12 @@ export const setupRenderer = (
       chart,
       track,
       textureLoader,
-      textures: {highwayTexture, getTextureForNote, animatedTextureManager},
+      textures: {
+        highwayTexture,
+        sustainTextures,
+        getTextureForNote,
+        animatedTextureManager,
+      },
       clippingPlanes: {note: noteClippingPlanes, marker: markerClippingPlanes},
       highwaySpeed,
       showDrumLanes,

@@ -9,12 +9,17 @@ import {
   loadAndCreateHitBox,
 } from './HighwayScene';
 import {schemaForTrack} from '../../chart-edit/instruments';
-import {AnimatedTextureManager, loadNoteTextures} from './TextureManager';
+import {
+  AnimatedTextureManager,
+  loadHighwaySustainTextures,
+  loadNoteTextures,
+  type HighwaySustainTextures,
+} from './TextureManager';
 import {SceneReconciler} from './SceneReconciler';
 import {NoteRenderer} from './NoteRenderer';
 import {MarkerRenderer} from './MarkerRenderer';
 import {trackToElements} from './trackToElements';
-import {padLaneColors} from './notePlacement';
+import {sustainStyleForSchema} from './notePlacement';
 import type {Note, Track} from './types';
 
 /**
@@ -61,6 +66,7 @@ export function createHighwayClippingPlanes(): HighwayClippingPlanes {
  */
 export interface CellTextures {
   highwayTexture: THREE.Texture;
+  sustainTextures: HighwaySustainTextures | null;
   getTextureForNote: (
     note: Note,
     opts: {inStarPower: boolean},
@@ -80,7 +86,12 @@ export async function loadCellTextures(
   tomStyle: 'square' | 'round' = 'square',
 ): Promise<CellTextures> {
   const animatedTextureManager = new AnimatedTextureManager();
-  const highwayTexture = await getHighwayTexture(textureLoader);
+  const [highwayTexture, sustainTextures] = await Promise.all([
+    getHighwayTexture(textureLoader),
+    instrument === 'guitar' || instrument === 'bass'
+      ? loadHighwaySustainTextures(textureLoader, animatedTextureManager)
+      : Promise.resolve(null),
+  ]);
   const {getTextureForNote} = instrument
     ? await loadNoteTextures(
         textureLoader,
@@ -89,7 +100,12 @@ export async function loadCellTextures(
         tomStyle,
       )
     : {getTextureForNote: () => new THREE.SpriteMaterial()};
-  return {highwayTexture, getTextureForNote, animatedTextureManager};
+  return {
+    highwayTexture,
+    sustainTextures,
+    getTextureForNote,
+    animatedTextureManager,
+  };
 }
 
 /** The per-marker-kind renderers a highway scene registers. */
@@ -157,10 +173,17 @@ export async function buildHighwayCell(
     );
   }
 
+  const sustainStyle = schema
+    ? sustainStyleForSchema(schema)
+    : {padColors: [], fullWidthColor: '#FFFFFF', fullWidthWidthMultiplier: 1};
   const noteRenderer = new NoteRenderer(
     textures.getTextureForNote,
     clippingPlanes.note,
-    schema ? padLaneColors(schema) : [],
+    sustainStyle.padColors,
+    sustainStyle.fullWidthColor,
+    sustainStyle.fullWidthWidthMultiplier,
+    highwaySpeed,
+    textures.sustainTextures,
   );
 
   const markerRenderers: CellMarkerRenderers = {

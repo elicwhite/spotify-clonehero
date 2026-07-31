@@ -15,6 +15,15 @@ export type Song = {};
 
 export const SCALE = 0.105;
 export const NOTE_SPAN_WIDTH = 0.95;
+/**
+ * Anchor for the visible portion of the full-width open-note texture.
+ *
+ * The open texture has transparent padding below its bar, so a centered
+ * sprite makes the bar sit below the kick/fret-note hit line. This normalized
+ * anchor compensates for that asset padding and matches the kick bar's
+ * visible center after each texture's scale is applied.
+ */
+export const OPEN_NOTE_ANCHOR_Y = 0.36;
 /** How far ahead (in ms) to render notes beyond the strikeline. */
 export const HIGHWAY_DURATION_MS = 1500;
 
@@ -61,6 +70,8 @@ export interface PreparedNote {
   isOpen: boolean;
   /** Lane index (for sustain colour lookup) -- -1 for kick/open */
   lane: number;
+  /** Schema/editor lane index; unlike `lane`, this includes Open/Kick lanes. */
+  editorLane: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -147,7 +147,10 @@ export function defaultFlagBits(
  * binding. A no-op (bits stay clear) when `flag`'s `appliesTo` excludes
  * `type` (lane legality, e.g. kick/red can never be a cymbal). Bindings
  * with `complementFlag` toggle tri-state (unset → flag → complement →
- * flag → …, matching drums' cymbal/tom pair); others toggle as a plain bit.
+ * flag → …, matching drums' cymbal/tom pair). Guitar/bass technique flags
+ * are mutually exclusive: toggling the active technique clears it to natural;
+ * toggling another technique replaces the current one. Other flags toggle as
+ * a plain bit.
  */
 export function toggleFlagBits(
   schema: InstrumentSchema,
@@ -159,6 +162,16 @@ export function toggleFlagBits(
   if (!binding) return currentBits;
   const legal = !binding.appliesTo || binding.appliesTo.includes(type);
   const bit = noteFlags[flag];
+
+  if (
+    (schema.instrument === 'guitar' || schema.instrument === 'bass') &&
+    (flag === 'strum' || flag === 'hopo' || flag === 'tap')
+  ) {
+    const techniqueMask = noteFlags.strum | noteFlags.hopo | noteFlags.tap;
+    return (currentBits & bit) !== 0
+      ? currentBits & ~techniqueMask
+      : (currentBits & ~techniqueMask) | bit;
+  }
 
   if (binding.complementFlag) {
     const complementBit = noteFlags[binding.complementFlag];
@@ -310,6 +323,22 @@ export function setNoteFlags(
       }
     }
   }
+}
+
+/** Update a note's sustain length and recompute its push-model timing. */
+export function setNoteLength(
+  track: ParsedTrackData,
+  tick: number,
+  type: NoteType,
+  length: number,
+  timing?: ChartTiming,
+): void {
+  const note = findNote(track, tick, type);
+  if (!note) {
+    throw new Error(`No note of type ${type} found at tick ${tick}`);
+  }
+  note.length = Math.max(0, length);
+  if (timing) applyEventTiming(note, timing);
 }
 
 /**

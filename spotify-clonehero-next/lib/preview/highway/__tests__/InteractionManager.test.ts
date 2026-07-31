@@ -78,7 +78,7 @@ describe('InteractionManager -- schema-driven lane geometry', () => {
     expect(lanesSeen).toEqual(new Set([0, 1, 2, 3, 4]));
   });
 
-  it('constructs with guitarSchema (no worldXOffset throw) and hit-tests all 6 lanes', () => {
+  it('constructs with guitarSchema (no worldXOffset throw) and hit-tests all 5 fret lanes', () => {
     const im = new InteractionManager(
       makeCamera(),
       makeReconciler(),
@@ -96,8 +96,8 @@ describe('InteractionManager -- schema-driven lane geometry', () => {
       if (hit && hit.type === 'highway') lanesSeen.add(hit.lane);
     }
 
-    // guitarSchema.lanes = [open, green, red, yellow, blue, orange] -- 6 lanes.
-    expect(lanesSeen).toEqual(new Set([0, 1, 2, 3, 4, 5]));
+    // Open is a full-width note, not an ordinary nearest-lane target.
+    expect(lanesSeen).toEqual(new Set([1, 2, 3, 4, 5]));
   });
 
   it('throws when a schema lane is missing worldXOffset', () => {

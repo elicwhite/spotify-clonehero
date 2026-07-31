@@ -16,7 +16,7 @@
  */
 
 import type {NoteType} from '@eliwhite/scan-chart';
-import {noteTypes} from '@eliwhite/scan-chart';
+import {noteFlags, noteTypes} from '@eliwhite/scan-chart';
 import type {
   ChartDocument,
   ParsedChart,
@@ -68,6 +68,7 @@ import {
   refreshAnchorKeepMs,
   refreshAnchorKeepTick,
   schemaNoteId,
+  schemaForInstrument,
   typeToLane as schemaTypeToLane,
   laneToType as schemaLaneToType,
   toggleFlagBits,
@@ -75,6 +76,7 @@ import {
   addNote as addSchemaNote,
   removeNote as removeSchemaNote,
   setNoteFlags,
+  setNoteLength,
   type DownbeatFlags,
 } from '@/lib/chart-edit';
 
@@ -330,7 +332,7 @@ export class DeleteNotesCommand implements EditCommand {
   constructor(
     private noteIds: Set<string>,
     private readonly trackKey: TrackKey,
-    private readonly schema: InstrumentSchema = drums4LaneSchema,
+    private readonly schema?: InstrumentSchema,
   ) {
     this.description = `Delete ${noteIds.size} note(s)`;
   }
@@ -339,12 +341,16 @@ export class DeleteNotesCommand implements EditCommand {
     const idx = findTargetIndex(doc, this.trackKey);
     if (idx === -1) return doc;
 
+    const schema =
+      this.schema ??
+      schemaForInstrument(this.trackKey.instrument) ??
+      drums4LaneSchema;
     const newDoc = cloneDocWithTracks(doc, this.trackKey);
     const track = newDoc.parsedChart.trackData[idx];
 
-    for (const note of listNotes(track, this.schema)) {
+    for (const note of listNotes(track, schema)) {
       if (this.noteIds.has(schemaNoteId(note.tick, note.type))) {
-        removeSchemaNote(track, note.tick, note.type, this.schema);
+        removeSchemaNote(track, note.tick, note.type, schema);
       }
     }
     return newDoc;
@@ -427,7 +433,36 @@ export class ToggleFlagCommand implements EditCommand {
     const track = newDoc.parsedChart.trackData[idx];
 
     const idSet = new Set(this.noteIds);
-    for (const note of listNotes(track, this.schema)) {
+    const notes = listNotes(track, this.schema);
+    const isTechnique =
+      this.schema.instrument === 'guitar' || this.schema.instrument === 'bass';
+    const techniqueMask = noteFlags.strum | noteFlags.hopo | noteFlags.tap;
+    if (
+      isTechnique &&
+      (this.flag === 'strum' || this.flag === 'hopo' || this.flag === 'tap')
+    ) {
+      // Articulation is a chord-level choice. Selecting one gem and applying
+      // H/T/S updates every gem at that tick, and never leaves contradictory
+      // technique bits behind.
+      const selectedTicks = new Set(
+        notes
+          .filter(n => idSet.has(schemaNoteId(n.tick, n.type)))
+          .map(n => n.tick),
+      );
+      const flagBit = noteFlags[this.flag];
+      for (const tick of selectedTicks) {
+        const chord = notes.filter(n => n.tick === tick);
+        const clear = chord.every(n => (n.flags & flagBit) !== 0);
+        for (const note of chord) {
+          const bits = clear
+            ? note.flags & ~techniqueMask
+            : (note.flags & ~techniqueMask) | flagBit;
+          setNoteFlags(track, note.tick, note.type, bits, this.schema);
+        }
+      }
+      return newDoc;
+    }
+    for (const note of notes) {
       if (!idSet.has(schemaNoteId(note.tick, note.type))) continue;
       const bits = toggleFlagBits(
         this.schema,
@@ -438,6 +473,98 @@ export class ToggleFlagCommand implements EditCommand {
       setNoteFlags(track, note.tick, note.type, bits, this.schema);
     }
 
+    return newDoc;
+  }
+}
+
+export type FretTechnique = 'natural' | 'strum' | 'hopo' | 'tap';
+
+/** Set one mutually-exclusive guitar/bass articulation across whole chords. */
+export class SetNoteTechniqueCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.note;
+  readonly operations = OP.update;
+
+  constructor(
+    private noteIds: string[],
+    private technique: FretTechnique,
+    private readonly trackKey: TrackKey,
+    private readonly schema: InstrumentSchema,
+  ) {
+    this.description = `Set ${technique} on ${noteIds.length} note(s)`;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    if (
+      this.schema.instrument !== 'guitar' &&
+      this.schema.instrument !== 'bass'
+    ) {
+      return doc;
+    }
+    const idx = findTargetIndex(doc, this.trackKey);
+    if (idx === -1) return doc;
+    const newDoc = cloneDocWithTracks(doc, this.trackKey);
+    const track = newDoc.parsedChart.trackData[idx];
+    const notes = listNotes(track, this.schema);
+    const ids = new Set(this.noteIds);
+    const ticks = new Set(
+      notes.filter(n => ids.has(schemaNoteId(n.tick, n.type))).map(n => n.tick),
+    );
+    const bit = this.technique === 'natural' ? 0 : noteFlags[this.technique];
+    const techniqueMask = noteFlags.strum | noteFlags.hopo | noteFlags.tap;
+    for (const note of notes) {
+      if (!ticks.has(note.tick)) continue;
+      setNoteFlags(
+        track,
+        note.tick,
+        note.type,
+        (note.flags & ~techniqueMask) | bit,
+        this.schema,
+      );
+    }
+    return newDoc;
+  }
+}
+
+/** Apply one sustain-length delta to selected guitar/bass notes. */
+export class ResizeNotesCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.note;
+  readonly operations = OP.update;
+
+  constructor(
+    private noteIds: string[],
+    private lengthDelta: number,
+    private readonly trackKey: TrackKey,
+    private readonly schema: InstrumentSchema,
+  ) {
+    this.description = `Resize ${noteIds.length} note(s)`;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    if (
+      (this.schema.instrument !== 'guitar' &&
+        this.schema.instrument !== 'bass') ||
+      this.lengthDelta === 0
+    ) {
+      return doc;
+    }
+    const idx = findTargetIndex(doc, this.trackKey);
+    if (idx === -1) return doc;
+    const newDoc = cloneDocWithTracks(doc, this.trackKey);
+    const track = newDoc.parsedChart.trackData[idx];
+    const ids = new Set(this.noteIds);
+    const timing = makeChartTiming(newDoc.parsedChart);
+    for (const note of listNotes(track, this.schema)) {
+      if (!ids.has(schemaNoteId(note.tick, note.type))) continue;
+      setNoteLength(
+        track,
+        note.tick,
+        note.type,
+        note.length + this.lengthDelta,
+        timing,
+      );
+    }
     return newDoc;
   }
 }

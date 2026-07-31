@@ -13,6 +13,8 @@ export interface ChartElement {
   kind: string;
   /** Time position in ms (for windowing). */
   msTime: number;
+  /** Optional end time for long-lived elements such as sustain notes. */
+  endMsTime?: number;
   /** Arbitrary data passed to the renderer. */
   data: unknown;
 }
@@ -64,6 +66,8 @@ export class SceneReconciler {
   private elements = new Map<string, ChartElement>();
   /** Sorted by msTime for efficient windowing. */
   private sortedElements: ChartElement[] = [];
+  /** Prefix maximum end time for finding long sustains behind the window. */
+  private maxEndMsPrefix: number[] = [];
   /** Active (visible) groups by key. */
   private activeGroups = new Map<string, THREE.Group>();
   /**
@@ -149,6 +153,12 @@ export class SceneReconciler {
     // 3. Update internal state
     this.elements = newMap;
     this.sortedElements = elements.slice().sort((a, b) => a.msTime - b.msTime);
+    this.maxEndMsPrefix = [];
+    let maxEndMs = -Infinity;
+    for (const el of this.sortedElements) {
+      maxEndMs = Math.max(maxEndMs, el.endMsTime ?? el.msTime);
+      this.maxEndMsPrefix.push(maxEndMs);
+    }
   }
 
   /**
@@ -165,9 +175,23 @@ export class SceneReconciler {
     const SCROLL_OFF_MARGIN_MS = 200;
 
     // Binary search for window start in sorted elements
-    const startIdx = this.binarySearchStart(
-      currentTimeMs - SCROLL_OFF_MARGIN_MS,
-    );
+    const windowStartMs = currentTimeMs - SCROLL_OFF_MARGIN_MS;
+    let startIdx = this.binarySearchStart(windowStartMs);
+
+    // A sustain remains visible after its note head passes the strikeline.
+    // Use the prefix maximum rather than stopping at the immediately prior
+    // head: an earlier long sustain can overlap even when a later short note
+    // does not.
+    if (startIdx > 0 && this.maxEndMsPrefix[startIdx - 1] >= windowStartMs) {
+      let lo = 0;
+      let hi = startIdx;
+      while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (this.maxEndMsPrefix[mid] >= windowStartMs) hi = mid;
+        else lo = mid + 1;
+      }
+      startIdx = lo;
+    }
 
     // Track which keys are in the window this frame (reuse set to avoid allocation)
     const inWindow = this.inWindowSet;
@@ -176,6 +200,7 @@ export class SceneReconciler {
     for (let i = startIdx; i < this.sortedElements.length; i++) {
       const el = this.sortedElements[i];
       if (el.msTime > windowEndMs) break;
+      if ((el.endMsTime ?? el.msTime) < windowStartMs) continue;
       inWindow.add(el.key);
 
       let group = this.activeGroups.get(el.key);
@@ -336,6 +361,7 @@ export class SceneReconciler {
     this.activeGroups.clear();
     this.elements.clear();
     this.sortedElements = [];
+    this.maxEndMsPrefix = [];
     this.selectedKeys.clear();
     this.hoveredKey = null;
   }

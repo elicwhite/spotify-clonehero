@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type {ParsedChart} from '../chorus-chart-processing';
-import {AudioManager} from '../audioManager';
 import {MarkerRenderer} from './MarkerRenderer';
 import type {NoteRenderer} from './NoteRenderer';
 import type {SceneReconciler} from './SceneReconciler';
@@ -34,8 +33,20 @@ export interface HighwayGridCell {
   track: Track | null;
   /** Audio source this cell reads its clock from. All cells in a synced grid
    *  share one instance; distinct instances are allowed but untested. */
-  audioManager: AudioManager;
+  audioManager: HighwayClock;
   config?: {showDrumLanes?: boolean; tomStyle?: 'square' | 'round'};
+}
+
+/**
+ * The highway only needs a small read-only clock surface. Keeping this
+ * structural lets static fixture previews use the same renderer as live audio
+ * pages without constructing an AudioContext just to draw a paused chart.
+ */
+export interface HighwayClock {
+  readonly isPlaying: boolean;
+  readonly isInitialized: boolean;
+  readonly delay: number;
+  readonly chartTime: number;
 }
 
 export interface HighwayGrid {
@@ -56,7 +67,7 @@ interface LiveCell {
   container: HTMLElement;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
-  audioManager: AudioManager;
+  audioManager: HighwayClock;
   /** Shared with sibling cells of the same texture key; offset.y is re-set
    *  immediately before this cell's own render each frame. */
   highwayTexture: THREE.Texture;
@@ -75,7 +86,7 @@ function makeCamera(): THREE.PerspectiveCamera {
 /** ms position the highway should show, mirroring setupRenderer's per-frame
  *  latency compensation: apply audio `delay` only while actively playing so a
  *  paused/seeked highway sits exactly on the seek position. */
-function cellElapsedMs(audioManager: AudioManager): number {
+function cellElapsedMs(audioManager: HighwayClock): number {
   const isPlaying = audioManager?.isPlaying && audioManager?.isInitialized;
   const syncMs = isPlaying ? (audioManager?.delay || 0) * 1000 : 0;
   const chartMs = (audioManager?.chartTime ?? 0) * 1000;

@@ -25,6 +25,8 @@ import {
   MoveEntitiesCommand,
   RenameSectionCommand,
   ToggleFlagCommand,
+  SetNoteTechniqueCommand,
+  ResizeNotesCommand,
   noteId,
 } from '../commands';
 import {
@@ -179,6 +181,61 @@ describe('command execute + snapshot-restore', () => {
         n => n.tick === 240,
       )!;
       expect(!!(green.flags & noteFlags.hopo)).toBe(true);
+    });
+
+    it('sets articulation across every gem in a guitar chord', () => {
+      const GUITAR_KEY: TrackKey = {instrument: 'guitar', difficulty: 'expert'};
+      const before = makeFixtureDoc();
+      before.parsedChart.trackData.push(emptyTrackData('guitar', 'expert'));
+      const guitar = before.parsedChart.trackData[1];
+      addNote(guitar, {tick: 240, type: noteTypes.green}, guitarSchema);
+      addNote(guitar, {tick: 240, type: noteTypes.red}, guitarSchema);
+
+      const after = new SetNoteTechniqueCommand(
+        [noteId({tick: 240, type: noteTypes.green})],
+        'tap',
+        GUITAR_KEY,
+        guitarSchema,
+      ).execute(before);
+      expect(
+        listNotes(after.parsedChart.trackData[1], guitarSchema).every(
+          n =>
+            (n.flags & noteFlags.tap) !== 0 &&
+            (n.flags & (noteFlags.hopo | noteFlags.strum)) === 0,
+        ),
+      ).toBe(true);
+    });
+
+    it('resizes selected guitar sustains and clamps through zero', () => {
+      const GUITAR_KEY: TrackKey = {instrument: 'guitar', difficulty: 'expert'};
+      const before = makeFixtureDoc();
+      before.parsedChart.trackData.push(emptyTrackData('guitar', 'expert'));
+      const guitar = before.parsedChart.trackData[1];
+      addNote(
+        guitar,
+        {tick: 240, type: noteTypes.green, length: 120},
+        guitarSchema,
+      );
+
+      const id = noteId({tick: 240, type: noteTypes.green});
+      const longer = new ResizeNotesCommand(
+        [id],
+        360,
+        GUITAR_KEY,
+        guitarSchema,
+      ).execute(before);
+      expect(
+        listNotes(longer.parsedChart.trackData[1], guitarSchema)[0].length,
+      ).toBe(480);
+      const shorter = new ResizeNotesCommand(
+        [id],
+        -1000,
+        GUITAR_KEY,
+        guitarSchema,
+      ).execute(before);
+      expect(
+        listNotes(shorter.parsedChart.trackData[1], guitarSchema)[0].length,
+      ).toBe(0);
     });
   });
 

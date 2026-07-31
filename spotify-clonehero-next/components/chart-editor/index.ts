@@ -28,6 +28,7 @@ export {
 export {
   DEFAULT_DRUMS_EXPERT_SCOPE,
   DEFAULT_GUITAR_EXPERT_SCOPE,
+  DEFAULT_BASS_EXPERT_SCOPE,
   DEFAULT_VOCALS_SCOPE,
   describeScope,
   entityContextFromScope,

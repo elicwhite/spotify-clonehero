@@ -21,6 +21,8 @@ export interface NoteGeometry {
   /** Pad lane index (0-based, schema order minus full-width lanes). -1 for
    *  a full-width note (drums' kick, five-fret's open). */
   lane: number;
+  /** Schema/editor lane index. Full-width lanes use their schema index too. */
+  editorLane: number;
   /** True for a drum kick note. */
   isKick: boolean;
   /** True for a five-fret open note. */
@@ -58,6 +60,22 @@ export function padLaneColors(schema: InstrumentSchema): string[] {
   return padLanes(schema).map(lane => lane.color);
 }
 
+/** Sustain styling for both ordinary fret lanes and full-width notes. */
+export interface SustainStyle {
+  padColors: string[];
+  fullWidthColor: string;
+  fullWidthWidthMultiplier: number;
+}
+
+export function sustainStyleForSchema(schema: InstrumentSchema): SustainStyle {
+  const fullWidth = schema.lanes.find(lane => lane.fullWidth);
+  return {
+    padColors: padLaneColors(schema),
+    fullWidthColor: fullWidth?.color ?? '#FFFFFF',
+    fullWidthWidthMultiplier: fullWidth?.sustainWidthMultiplier ?? 1,
+  };
+}
+
 /**
  * Resolves a note's highway geometry (lane index, full-width flag, X
  * position) from the `InstrumentSchema` for its track's instrument.
@@ -81,13 +99,21 @@ export function resolveNoteGeometry(
   if (instrument === 'drums') {
     const interpreted = interpretDrumNote(note);
     if (interpreted.isKick) {
-      return {lane: -1, isKick: true, isOpen: false, xPosition: 0};
+      const fullWidthLane = schema.lanes.find(lane => lane.fullWidth);
+      return {
+        lane: -1,
+        editorLane: fullWidthLane?.index ?? -1,
+        isKick: true,
+        isOpen: false,
+        xPosition: 0,
+      };
     }
     const noteType = DRUM_PAD_NOTE_TYPE[interpreted.pad];
     const lane = lanes.findIndex(l => l.noteType === noteType);
     if (lane === -1) return null;
     return {
       lane,
+      editorLane: lanes[lane].index,
       isKick: false,
       isOpen: false,
       xPosition: calculateNoteXOffset(instrument, lane),
@@ -95,12 +121,19 @@ export function resolveNoteGeometry(
   }
 
   if (fullWidthLane && note.type === fullWidthLane.noteType) {
-    return {lane: -1, isKick: false, isOpen: true, xPosition: 0};
+    return {
+      lane: -1,
+      editorLane: fullWidthLane.index,
+      isKick: false,
+      isOpen: true,
+      xPosition: 0,
+    };
   }
   const lane = lanes.findIndex(l => l.noteType === note.type);
   if (lane === -1) return null;
   return {
     lane,
+    editorLane: lanes[lane].index,
     isKick: false,
     isOpen: false,
     xPosition: calculateNoteXOffset(instrument, lane),

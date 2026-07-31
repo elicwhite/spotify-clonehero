@@ -34,6 +34,7 @@ function dataShallowEqual(a: NoteElementData, b: NoteElementData): boolean {
     a.isKick === b.isKick &&
     a.isOpen === b.isOpen &&
     a.lane === b.lane &&
+    a.editorLane === b.editorLane &&
     a.msLength === b.msLength &&
     a.note.type === b.note.type &&
     a.note.flags === b.note.flags &&
@@ -94,7 +95,9 @@ export function trackToElements(
         hi = mid - 1;
       }
     }
-    return idx >= 0 && time <= spEnds[idx];
+    // Chart phrases are half-open: the note at the exact phrase end belongs
+    // to the following section, not to the star-power phrase that just ended.
+    return idx >= 0 && time < spEnds[idx];
   }
 
   const newCache = new Map<string, NoteElementData>();
@@ -143,9 +146,16 @@ export function trackToElements(
         isKick: geometry.isKick,
         isOpen: geometry.isOpen,
         lane: geometry.lane,
+        editorLane: geometry.editorLane,
         msLength: supportsSustain ? note.msLength : 0,
       });
-      elements.push({key, kind: 'note', msTime: note.msTime, data});
+      elements.push({
+        key,
+        kind: 'note',
+        msTime: note.msTime,
+        endMsTime: note.msTime + (supportsSustain ? note.msLength : 0),
+        data,
+      });
     }
   }
 

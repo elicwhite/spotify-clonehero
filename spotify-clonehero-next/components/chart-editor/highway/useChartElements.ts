@@ -39,11 +39,10 @@ type ParsedChart = ReturnType<typeof parseChartFile>;
 import type {EntityKind} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {tickToMs} from '@/lib/drum-transcription/timing';
-import {noteTypes} from '@eliwhite/scan-chart';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {buildProjectionFor} from '@/lib/preview/highway/projection';
 import type {NoteElementData} from '@/lib/preview/highway/NoteRenderer';
-import {calculateNoteXOffset} from '@/lib/preview/highway/types';
+import {schemaForInstrument} from '@/lib/chart-edit/instruments';
 import {
   markerDragReconcilerKey,
   reconcilerKeyFor,
@@ -69,14 +68,6 @@ export interface NoteDragHint {
   laneDelta: number;
   ids: ReadonlySet<string>;
 }
-
-/** Highway pad lane index (0-3) → scan-chart note type, for lane preview. */
-const HIGHWAY_LANE_TO_NOTE_TYPE = [
-  noteTypes.redDrum,
-  noteTypes.yellowDrum,
-  noteTypes.blueDrum,
-  noteTypes.greenDrum,
-];
 
 export interface UseChartElementsInputs {
   reconcilerRef: RefObject<SceneReconciler | null>;
@@ -173,6 +164,14 @@ export function computeChartElements(
     noteDrag && timedTempos.length > 0
       ? new Set(Array.from(noteDrag.ids, id => reconcilerKeyFor('note', id)))
       : null;
+  const noteSchema =
+    activeScope.kind === 'track'
+      ? schemaForInstrument(activeScope.track.instrument)
+      : null;
+  const padLanes =
+    noteSchema?.lanes
+      .filter(lane => !lane.fullWidth)
+      .sort((a, b) => a.index - b.index) ?? [];
 
   return elements
     .filter(e => capabilities.showDrumLanes || e.kind !== 'note')
@@ -188,25 +187,38 @@ export function computeChartElements(
           timedTempos,
           resolution,
         );
-        // Kick stays on its own axis; pads shift lanes with the preview.
-        if (noteDrag!.laneDelta === 0 || data.isKick || data.lane < 0) {
+        // Full-width notes (Kick/Open) stay on their own axis; pads shift
+        // through the active instrument schema's editor lane indices.
+        if (
+          noteDrag!.laneDelta === 0 ||
+          data.isKick ||
+          data.isOpen ||
+          data.lane < 0 ||
+          !noteSchema
+        ) {
           return {...e, msTime};
         }
-        const newLane = Math.max(
-          0,
-          Math.min(
-            HIGHWAY_LANE_TO_NOTE_TYPE.length - 1,
-            data.lane + noteDrag!.laneDelta,
-          ),
+        const currentEditorLane = data.editorLane ?? data.lane;
+        const currentPadIndex = padLanes.findIndex(
+          lane => lane.index === currentEditorLane,
         );
+        if (currentPadIndex < 0 || padLanes.length === 0) {
+          return {...e, msTime};
+        }
+        const newPadIndex = Math.max(
+          0,
+          Math.min(padLanes.length - 1, currentPadIndex + noteDrag!.laneDelta),
+        );
+        const newLaneDefinition = padLanes[newPadIndex];
         return {
           ...e,
           msTime,
           data: {
             ...data,
-            lane: newLane,
-            xPosition: calculateNoteXOffset('drums', newLane),
-            note: {...data.note, type: HIGHWAY_LANE_TO_NOTE_TYPE[newLane]},
+            lane: newPadIndex,
+            editorLane: newLaneDefinition.index,
+            xPosition: newLaneDefinition.worldXOffset ?? data.xPosition,
+            note: {...data.note, type: newLaneDefinition.noteType},
           } satisfies NoteElementData,
         };
       }

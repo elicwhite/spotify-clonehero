@@ -17,6 +17,7 @@ describe('resolveNoteGeometry', () => {
       });
       expect(geometry).toEqual({
         lane: -1,
+        editorLane: 4,
         isKick: true,
         isOpen: false,
         xPosition: 0,
@@ -34,6 +35,7 @@ describe('resolveNoteGeometry', () => {
         const geometry = resolveNoteGeometry('drums', {type, flags: 0});
         expect(geometry).toEqual({
           lane,
+          editorLane: lane,
           isKick: false,
           isOpen: false,
           xPosition: calculateNoteXOffset('drums', lane),
@@ -66,6 +68,7 @@ describe('resolveNoteGeometry', () => {
       });
       expect(geometry).toEqual({
         lane: -1,
+        editorLane: 0,
         isKick: false,
         isOpen: true,
         xPosition: 0,
@@ -84,6 +87,7 @@ describe('resolveNoteGeometry', () => {
         const geometry = resolveNoteGeometry('guitar', {type, flags: 0});
         expect(geometry).toEqual({
           lane,
+          editorLane: lane + 1,
           isKick: false,
           isOpen: false,
           xPosition: calculateNoteXOffset('guitar', lane),
@@ -99,6 +103,7 @@ describe('resolveNoteGeometry', () => {
         });
         expect(geometry).toEqual({
           lane: 1,
+          editorLane: 2,
           isKick: false,
           isOpen: false,
           xPosition: calculateNoteXOffset(instrument, 1),

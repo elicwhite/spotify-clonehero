@@ -206,6 +206,7 @@ export {
   addNote,
   removeNote,
   setNoteFlags,
+  setNoteLength,
   moveNote,
 } from './entities/notes';
 

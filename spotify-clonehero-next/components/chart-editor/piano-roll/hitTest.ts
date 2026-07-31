@@ -50,6 +50,13 @@ export interface PickContext {
   hitHalfWidth: number;
 }
 
+export type PianoRollNotePart = 'head' | 'body' | 'end';
+
+export interface NotePartHit {
+  note: PianoRollNote;
+  part: PianoRollNotePart;
+}
+
 /**
  * The note nearest to `(x, y)` whose glyph the pointer is within, or null.
  * Only notes on the pointer's lane row are considered; among those, the one
@@ -75,6 +82,61 @@ export function pickNoteAt(
     if (dx <= ctx.hitHalfWidth && dx < bestDx) {
       best = note;
       bestDx = dx;
+    }
+  }
+  return best;
+}
+
+/** Pick a guitar/bass note head, sustain body, or right-edge resize handle.
+ * This is separate from `pickNoteAt` so the drum hit-test remains byte-for-
+ * byte conceptually unchanged: drums only ever use the note head path. */
+export function pickNotePartAt(
+  notes: readonly PianoRollNote[],
+  ctx: PickContext,
+  x: number,
+  y: number,
+  endHitRadius = 7,
+): NotePartHit | null {
+  const lane = laneAtY(y, ctx.geo);
+  if (lane === null) return null;
+  let best: NotePartHit | null = null;
+  let bestDistance = Infinity;
+  for (const note of notes) {
+    if (note.lane !== lane) continue;
+    const startX = msToX(
+      tickToMs(note.tick, ctx.timedTempos, ctx.resolution),
+      ctx.view,
+    );
+    const length = Math.max(0, note.length ?? 0);
+    const endX = msToX(
+      tickToMs(note.tick + length, ctx.timedTempos, ctx.resolution),
+      ctx.view,
+    );
+    const headDistance = Math.abs(startX - x);
+    if (headDistance <= ctx.hitHalfWidth && headDistance < bestDistance) {
+      best = {note, part: 'head'};
+      bestDistance = headDistance;
+      continue;
+    }
+    if (length <= 0) continue;
+    const endDistance = Math.abs(endX - x);
+    if (
+      endDistance <= endHitRadius &&
+      endDistance < bestDistance &&
+      x >= startX - ctx.hitHalfWidth
+    ) {
+      best = {note, part: 'end'};
+      bestDistance = endDistance;
+      continue;
+    }
+    const bodyLeft = Math.min(startX, endX) + ctx.hitHalfWidth;
+    const bodyRight = Math.max(startX, endX) + endHitRadius;
+    if (x >= bodyLeft && x <= bodyRight && x >= startX) {
+      const distance = Math.max(0, x - bodyLeft);
+      if (distance < bestDistance) {
+        best = {note, part: 'body'};
+        bestDistance = distance;
+      }
     }
   }
   return best;

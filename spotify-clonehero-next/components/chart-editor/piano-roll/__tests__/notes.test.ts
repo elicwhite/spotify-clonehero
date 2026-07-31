@@ -6,8 +6,12 @@ import {
   guitarSchema,
 } from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
-import {extractPianoRollNotes, lanesForSchema} from '../notes';
-import {noteTypes} from '@eliwhite/scan-chart';
+import {
+  extractPianoRollNotes,
+  lanesForSchema,
+  noteIntersectsPianoRollWindow,
+} from '../notes';
+import {noteFlags, noteTypes} from '@eliwhite/scan-chart';
 
 describe('extractPianoRollNotes (drums)', () => {
   const drums = makeFixtureDoc().parsedChart.trackData[0];
@@ -29,6 +33,13 @@ describe('extractPianoRollNotes (drums)', () => {
     expect(yellow.cymbal).toBe(true);
     const red = notes.find(n => n.lane === 0)!;
     expect(red.cymbal).toBe(false);
+  });
+
+  test('does not add fret-only fields to the drum projection', () => {
+    const notes = extractPianoRollNotes(drums, drums4LaneSchema);
+    expect(
+      notes.every(n => n.flags === undefined && n.length === undefined),
+    ).toBe(true);
   });
 
   test('ids match the shared selection id (tick:type)', () => {
@@ -81,8 +92,16 @@ describe('lanesForSchema (drums)', () => {
 describe('extractPianoRollNotes (guitar)', () => {
   function makeGuitarTrack() {
     const track = emptyTrackData('guitar', 'expert');
-    addNote(track, {tick: 0, type: noteTypes.open}, guitarSchema);
-    addNote(track, {tick: 480, type: noteTypes.green}, guitarSchema);
+    addNote(
+      track,
+      {tick: 0, type: noteTypes.open, length: 240, flags: noteFlags.tap},
+      guitarSchema,
+    );
+    addNote(
+      track,
+      {tick: 480, type: noteTypes.green, length: 120, flags: noteFlags.hopo},
+      guitarSchema,
+    );
     addNote(track, {tick: 960, type: noteTypes.red}, guitarSchema);
     addNote(track, {tick: 1440, type: noteTypes.orange}, guitarSchema);
     return track;
@@ -112,5 +131,22 @@ describe('extractPianoRollNotes (guitar)', () => {
   test('no lane has cymbal legality on a five-fret schema', () => {
     const lanes = lanesForSchema(guitarSchema);
     expect(lanes.every(l => l.cymbalOk === false)).toBe(true);
+  });
+
+  test('retains fret articulation flags and sustain length', () => {
+    const notes = extractPianoRollNotes(makeGuitarTrack(), guitarSchema);
+    expect(notes[0]).toMatchObject({
+      flags: noteFlags.tap,
+      length: 240,
+    });
+    expect(notes[1]).toMatchObject({
+      flags: noteFlags.hopo,
+      length: 120,
+    });
+  });
+
+  test('keeps a sustain visible after its head crosses the left edge', () => {
+    expect(noteIntersectsPianoRollWindow(-500, 250, 0, 100)).toBe(true);
+    expect(noteIntersectsPianoRollWindow(-500, -51, 0, 100)).toBe(false);
   });
 });

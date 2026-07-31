@@ -133,6 +133,15 @@ describe('trackToElements', () => {
     expect(data1.inStarPower).toBe(false);
   });
 
+  it('treats the star-power end as exclusive', () => {
+    const track = makeTrack([[note(noteTypes.green, 480, 500)]], {
+      instrument: 'guitar',
+      starPowerSections: [{tick: 0, msTime: 0, msLength: 500, length: 480}],
+    });
+    const data = trackToElements(track)[0].data as NoteElementData;
+    expect(data.inStarPower).toBe(false);
+  });
+
   it('produces elements sorted by msTime (from note event groups)', () => {
     const track = makeTrack([
       [note(noteTypes.redDrum, 0, 0)],

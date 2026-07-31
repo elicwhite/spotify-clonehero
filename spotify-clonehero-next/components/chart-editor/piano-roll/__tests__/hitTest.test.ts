@@ -12,6 +12,7 @@ import {
   laneAtY,
   marqueeBounds,
   pickNoteAt,
+  pickNotePartAt,
   pickLyricChipAt,
   pickPhraseEdgeAt,
   pickPhraseBandAt,
@@ -30,8 +31,13 @@ const GEO = {laneTop: 50, laneH: 20, laneCount: 5};
 const TIMED_TEMPOS: TimedTempo[] = [{tick: 0, beatsPerMinute: 120, msTime: 0}];
 const RES = 480; // 480 ticks = 500ms @ 120 BPM → x = 50px
 
-function note(tick: number, lane: number, id: string): PianoRollNote {
-  return {tick, lane, cymbal: false, id};
+function note(
+  tick: number,
+  lane: number,
+  id: string,
+  length = 0,
+): PianoRollNote {
+  return {tick, lane, cymbal: false, id, length};
 }
 
 describe('laneAtY', () => {
@@ -80,6 +86,29 @@ describe('pickNoteAt', () => {
     const crowded = [note(480, 0, 'a'), note(500, 0, 'b')]; // 500ms/520.8ms
     // tick 500 → ~520.8ms → x≈52px; pointer at 53 is closer to b.
     expect(pickNoteAt(crowded, ctx, 53, 60)?.id).toBe('b');
+  });
+});
+
+describe('pickNotePartAt (guitar/bass sustain geometry)', () => {
+  const ctx = {
+    view: VIEW,
+    geo: GEO,
+    timedTempos: TIMED_TEMPOS,
+    resolution: RES,
+    hitHalfWidth: 8,
+  };
+  const sustained = [note(480, 0, 'g', 480)]; // x=50 head, x=100 end
+
+  it('distinguishes head, body, and endpoint', () => {
+    expect(pickNotePartAt(sustained, ctx, 50, 60)?.part).toBe('head');
+    expect(pickNotePartAt(sustained, ctx, 75, 60)?.part).toBe('body');
+    expect(pickNotePartAt(sustained, ctx, 100, 60)?.part).toBe('end');
+  });
+
+  it('does not make a zero-length note resizable', () => {
+    expect(pickNotePartAt([note(480, 0, 'short')], ctx, 50, 60)?.part).toBe(
+      'head',
+    );
   });
 });
 

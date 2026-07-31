@@ -73,21 +73,26 @@ jest.mock('three', () => {
     Group: MockGroup,
     Object3D: MockObject3D,
     Mesh: MockMesh,
-    MeshBasicMaterial: jest
-      .fn()
-      .mockImplementation(
-        (
-          opts: {color?: any; opacity?: number; transparent?: boolean} = {},
-        ) => ({
-          color: {set: jest.fn()},
-          clippingPlanes: [],
-          depthTest: false,
-          transparent: opts.transparent ?? true,
-          opacity: opts.opacity ?? 0.35,
-          side: 2,
-          dispose: jest.fn(),
-        }),
-      ),
+    MeshBasicMaterial: jest.fn().mockImplementation(
+      (
+        opts: {
+          color?: any;
+          map?: any;
+          opacity?: number;
+          transparent?: boolean;
+        } = {},
+      ) => ({
+        color: {set: jest.fn()},
+        map: opts.map ?? null,
+        clippingPlanes: [],
+        depthTest: false,
+        transparent: opts.transparent ?? true,
+        opacity: opts.opacity ?? 0.35,
+        needsUpdate: false,
+        side: 2,
+        dispose: jest.fn(),
+      }),
+    ),
     PlaneGeometry: jest.fn().mockImplementation(() => ({dispose: jest.fn()})),
     RingGeometry: jest.fn().mockImplementation(() => ({dispose: jest.fn()})),
     CircleGeometry: jest.fn().mockImplementation(() => ({dispose: jest.fn()})),
@@ -97,6 +102,8 @@ jest.mock('three', () => {
 });
 
 import {NoteRenderer, type NoteElementData} from '../NoteRenderer';
+import {highwaySustainWorldHeight} from '../sustainGeometry';
+import {OPEN_NOTE_ANCHOR_Y} from '../types';
 import * as THREE from 'three';
 
 // ---------------------------------------------------------------------------
@@ -140,6 +147,10 @@ describe('NoteRenderer', () => {
     mockSpriteInstances.length = 0;
   });
 
+  it('maps sustain duration to highway distance without doubling it', () => {
+    expect(highwaySustainWorldHeight(500, 1.5)).toBeCloseTo(0.75);
+  });
+
   it('create() returns group with sprite child', () => {
     const renderer = createTestRenderer();
     const group = renderer.create(makeNoteData());
@@ -166,6 +177,61 @@ describe('NoteRenderer', () => {
 
     expect(sprite.renderOrder).toBe(4);
     expect(group.position.x).toBe(0.25);
+  });
+
+  it('create() open note -- kick-aligned and behind fret-note heads', () => {
+    const renderer = createTestRenderer();
+    const group = renderer.create(makeNoteData({isOpen: true, lane: -1}));
+    const sprite = group.children[0] as any;
+
+    expect(sprite.center.set).toHaveBeenCalledWith(0.5, OPEN_NOTE_ANCHOR_Y);
+    expect(sprite.renderOrder).toBe(1);
+    expect(group.position.x).toBe(0);
+  });
+
+  it('create() renders sustains for fretted and full-width open notes', () => {
+    const renderer = new NoteRenderer(
+      jest.fn().mockReturnValue(new (THREE.SpriteMaterial as any)()),
+      [],
+      ['#01b11a'],
+      '#a266ff',
+      5,
+      1.5,
+    );
+
+    const fret = renderer.create(
+      makeNoteData({lane: 0, msLength: 500, isOpen: false}),
+    );
+    const open = renderer.create(
+      makeNoteData({lane: -1, msLength: 500, isOpen: true}),
+    );
+
+    expect(fret.children).toHaveLength(2);
+    expect(open.children).toHaveLength(2);
+  });
+
+  it('create() uses the original highway sustain texture for each tail type', () => {
+    const frettedTextures = Array.from({length: 6}, (_, i) => ({frame: i}));
+    const openTexture = {kind: 'open'};
+    const renderer = new NoteRenderer(
+      jest.fn().mockReturnValue(new (THREE.SpriteMaterial as any)()),
+      [],
+      ['#01b11a'],
+      '#a266ff',
+      5,
+      1.5,
+      {fretted: frettedTextures as any, open: openTexture as any},
+    );
+
+    const fret = renderer.create(
+      makeNoteData({lane: 0, msLength: 500, isOpen: false}),
+    );
+    const open = renderer.create(
+      makeNoteData({lane: -1, msLength: 500, isOpen: true}),
+    );
+
+    expect((fret.children[1] as any).material.map).toBe(frettedTextures[1]);
+    expect((open.children[1] as any).material.map).toBe(openTexture);
   });
 
   it('create() cymbal vs tom -- different textures (getTextureForNote called with correct args)', () => {

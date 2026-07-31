@@ -7,8 +7,9 @@
  * strip and the right-side `TimelineMinimap`. Bands, top→bottom: time ruler
  * (bar numbers + section flags), lyrics row (syllable chips + phrase bands,
  * present only on charts with vocals), tempo lane (tempo markers + TS chips),
- * five note lanes (kick/red/yellow/blue/green), source-selectable waveform
- * row. The lyrics row sits directly under the ruler (plan 0063 Round 2 §4) —
+ * schema-driven note lanes (drums keep their kick/pad layout; guitar/bass
+ * show Open + five frets), source-selectable waveform row. The lyrics row sits
+ * directly under the ruler (plan 0063 Round 2 §4) —
  * lyrics are ms-locked and never move under a tempo edit, so they read
  * naturally as a "caption track" above the tempo/note grid rather than mixed
  * into it.
@@ -24,12 +25,12 @@
  *
  * Note editing (62-2): shared selection/hover, note drag (delta-snapped, lane
  * change single-note only, lane-locked multi-drag), left-drag marquee
- * box-select with shift semantics, click-to-add / erase parity with the
- * active tool, and a right-click note context menu (switch tom/cymbal,
- * delete). Every edit dispatches the SAME command the highway uses
- * (`MoveEntitiesCommand`, `AddNoteCommand`, ...) through the shared edit
- * semantics in `../editing/` — the two views cannot construct disagreeing
- * edits.
+ * box-select with shift semantics, click/drag placement, guitar/bass sustain
+ * tails with snapped endpoint resize, articulation context-menu controls, and
+ * erase parity with the active tool. Every edit dispatches the SAME command
+ * the highway uses (`MoveEntitiesCommand`, `AddNoteCommand`, ...) through the
+ * shared edit semantics in `../editing/` — the two views cannot construct
+ * disagreeing edits.
  *
  * Tempo/downbeat editing (62-3): sparse ◆ markers are draggable (generous hit
  * radius, hover glow, `ew-resize` cursor, dashed ghost line, marker 0
@@ -115,6 +116,8 @@ import {
   CommitTempoCandidateCommand,
   RephaseDownbeatsCommand,
   ToggleFlagCommand,
+  SetNoteTechniqueCommand,
+  ResizeNotesCommand,
   UnmarkDownbeatCommand,
   AddLyricCommand,
   DeleteLyricCommand,
@@ -132,7 +135,11 @@ import {
 import {clampMarkerMs, hitTempoMarker, nearestBeatTick} from './tempoHitTest';
 import {
   extractPianoRollNotes,
+  isGuitarBassSchema,
+  noteIntersectsPianoRollWindow,
+  techniqueForFlags,
   lanesForSchema,
+  type FretTechnique,
   type PianoRollLane,
   type PianoRollNote,
 } from './notes';
@@ -141,6 +148,7 @@ import {
   laneAtY,
   marqueeBounds,
   pickNoteAt,
+  pickNotePartAt,
   pickLyricChipAt,
   pickPhraseEdgeAt,
   pickPhraseBandAt,
@@ -149,6 +157,7 @@ import {
   LYRIC_CHIP_PAD_LEFT,
   LYRIC_CHIP_PAD_RIGHT,
   type LaneGeometry,
+  type NotePartHit,
 } from './hitTest';
 import {
   buildLyricsRowScene,
@@ -252,6 +261,24 @@ interface PanelNoteDrag {
   active: boolean;
 }
 
+/** Live guitar/bass sustain endpoint drag. A delta lets multi-selection
+ * resizing preserve each note's original length. */
+interface PanelNoteResize {
+  noteId: string;
+  originalLength: number;
+  currentLength: number;
+  active: boolean;
+}
+
+/** Live click-drag placement. The lane and head stay fixed; dragging right
+ * creates the sustain that the user can later fine-tune with its endpoint. */
+interface PanelPlaceNote {
+  lane: number;
+  startTick: number;
+  currentTick: number;
+  active: boolean;
+}
+
 /** In-flight marquee rectangle in canvas px. */
 interface PanelMarquee {
   x0: number;
@@ -263,6 +290,7 @@ interface PanelMarquee {
 type PointerMode =
   | 'idle'
   | 'scrub'
+  | 'place-drag'
   | 'drag'
   | 'marquee'
   | 'erase'
@@ -568,6 +596,8 @@ export default function PianoRollTimeline({
   const pointerModeRef = useRef<PointerMode>('idle');
   const pointerStartRef = useRef<{x: number; y: number} | null>(null);
   const noteDragRef = useRef<PanelNoteDrag | null>(null);
+  const noteResizeRef = useRef<PanelNoteResize | null>(null);
+  const placeNoteRef = useRef<PanelPlaceNote | null>(null);
   const marqueeRef = useRef<PanelMarquee | null>(null);
   /** Index of the tempo marker under the pointer (idle hover), or -1. */
   const hoverMarkerRef = useRef(-1);
@@ -710,7 +740,14 @@ export default function PianoRollTimeline({
       : null;
     const lanes = schema ? lanesForSchema(schema) : [];
     const notes = extractPianoRollNotes(activeTrack, schema);
-    const maxNoteTick = notes.length ? notes[notes.length - 1].tick : 0;
+    const maxNoteTick = notes.reduce(
+      (max, note) =>
+        Math.max(
+          max,
+          note.tick + (isGuitarBassSchema(schema) ? (note.length ?? 0) : 0),
+        ),
+      0,
+    );
 
     const sections: SectionFlag[] = parsed.sections.map(s => ({
       tick: s.tick,
@@ -730,7 +767,7 @@ export default function PianoRollTimeline({
       durationMs,
       lastBeatMs,
       withMs(sections),
-      notes.length ? tickToMs(maxNoteTick, timedTempos, resolution) : 0,
+      maxNoteTick > 0 ? tickToMs(maxNoteTick, timedTempos, resolution) : 0,
     );
 
     return {
@@ -891,6 +928,8 @@ export default function PianoRollTimeline({
           selection,
           hoverIdRef.current,
           noteDragRef.current,
+          noteResizeRef.current,
+          placeNoteRef.current,
           ghostRef.current,
         );
       }
@@ -1216,7 +1255,43 @@ export default function PianoRollTimeline({
     (x: number, y: number): PianoRollNote | null => {
       const scene = sceneRef.current;
       if (!scene) return null;
+      if (isGuitarBassSchema(scene.schema)) {
+        return (
+          pickNotePartAt(
+            scene.notes,
+            {
+              view: viewRef.current,
+              geo: laneGeometry(),
+              timedTempos: scene.timedTempos,
+              resolution: scene.resolution,
+              hitHalfWidth: NOTE_HIT_HALF_WIDTH,
+            },
+            x,
+            y,
+          )?.note ?? null
+        );
+      }
       return pickNoteAt(
+        scene.notes,
+        {
+          view: viewRef.current,
+          geo: laneGeometry(),
+          timedTempos: scene.timedTempos,
+          resolution: scene.resolution,
+          hitHalfWidth: NOTE_HIT_HALF_WIDTH,
+        },
+        x,
+        y,
+      );
+    },
+    [laneGeometry],
+  );
+
+  const pickPartAt = useCallback(
+    (x: number, y: number): NotePartHit | null => {
+      const scene = sceneRef.current;
+      if (!scene || !isGuitarBassSchema(scene.schema)) return null;
+      return pickNotePartAt(
         scene.notes,
         {
           view: viewRef.current,
@@ -1517,6 +1592,7 @@ export default function PianoRollTimeline({
       const st = editStateRef.current;
       const tool = st.activeTool;
       const trackKey = trackKeyFromScope(st.activeScope);
+      const partHit = tool === 'cursor' ? pickPartAt(x, y) : null;
       const hit = pickAt(x, y);
       pointerStartRef.current = {x, y};
 
@@ -1526,27 +1602,27 @@ export default function PianoRollTimeline({
         if (lane === null) return;
         if (hit) {
           // Toggle: a note already here is removed.
-          executeCommand(new DeleteNotesCommand(new Set([hit.id]), trackKey));
-        } else if (scene.schema) {
-          // Same shared prospective-note computation the ghost preview and the
-          // highway use, so all three predict the identical note.
-          const prospective = prospectiveNoteAt(
-            lane,
-            snappedTickAt(x),
-            scene.schema,
-          );
           executeCommand(
-            new AddNoteCommand(
-              {
-                tick: prospective.tick,
-                type: prospective.type,
-                length: 0,
-                flags: prospective.flags,
-              },
+            new DeleteNotesCommand(
+              new Set([hit.id]),
               trackKey,
-              scene.schema,
+              scene.schema ?? undefined,
             ),
           );
+        } else if (scene.schema) {
+          // A click creates a hit; a drag to the right creates the sustain.
+          // The note is committed on pointer-up so the same gesture works for
+          // both zero-length and sustained guitar/bass notes.
+          canvas.setPointerCapture(e.pointerId);
+          const startTick = snappedTickAt(x);
+          placeNoteRef.current = {
+            lane,
+            startTick,
+            currentTick: startTick,
+            active: false,
+          };
+          pointerModeRef.current = 'place-drag';
+          setGhost(prospectiveNoteAt(lane, startTick, scene.schema));
         }
         return;
       }
@@ -1555,7 +1631,13 @@ export default function PianoRollTimeline({
         pointerModeRef.current = 'erase';
         canvas.setPointerCapture(e.pointerId);
         if (hit && trackKey) {
-          executeCommand(new DeleteNotesCommand(new Set([hit.id]), trackKey));
+          executeCommand(
+            new DeleteNotesCommand(
+              new Set([hit.id]),
+              trackKey,
+              scene.schema ?? undefined,
+            ),
+          );
         }
         return;
       }
@@ -1563,6 +1645,23 @@ export default function PianoRollTimeline({
       // Cursor tool: select + drag, or marquee on empty space.
       if (!capabilities.selectable.has('note')) return;
       canvas.setPointerCapture(e.pointerId);
+
+      if (
+        partHit?.part === 'end' &&
+        trackKey &&
+        capabilities.draggable.has('note')
+      ) {
+        selectNote(partHit.note.id, e.shiftKey);
+        pointerModeRef.current = 'resize';
+        noteResizeRef.current = {
+          noteId: partHit.note.id,
+          originalLength: partHit.note.length ?? 0,
+          currentLength: partHit.note.length ?? 0,
+          active: false,
+        };
+        canvas.style.cursor = 'ew-resize';
+        return;
+      }
 
       if (hit) {
         selectNote(hit.id, e.shiftKey);
@@ -1605,10 +1704,12 @@ export default function PianoRollTimeline({
       laneGeometry,
       panelGeometry,
       pickAt,
+      pickPartAt,
       seekTo,
       seekZone,
       selectLyric,
       selectNote,
+      setGhost,
       snappedTickAt,
     ],
   );
@@ -1743,6 +1844,44 @@ export default function PianoRollTimeline({
         return;
       }
 
+      if (mode === 'place-drag' && placeNoteRef.current) {
+        const drag = placeNoteRef.current;
+        const start = pointerStartRef.current;
+        const dx = start ? x - start.x : 0;
+        const currentTick = snappedTickAt(x);
+        const moved = drag.active || exceedsDragThreshold(dx, 0);
+        if (currentTick !== drag.currentTick || moved !== drag.active) {
+          placeNoteRef.current = {...drag, currentTick, active: moved};
+          dirtyRef.current = true;
+          drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+        }
+        return;
+      }
+
+      // Live guitar/bass sustain resize: the endpoint follows the snapped
+      // grid, while the note head/lane remain fixed. Dragging left through the
+      // head simply previews a zero-length note.
+      if (mode === 'resize' && noteResizeRef.current) {
+        const drag = noteResizeRef.current;
+        const start = pointerStartRef.current;
+        const dx = start ? x - start.x : 0;
+        const anchor = scene.notes.find(n => n.id === drag.noteId);
+        if (anchor) {
+          const nextLength = Math.max(0, snappedTickAt(x) - anchor.tick);
+          const moved = drag.active || exceedsDragThreshold(dx, 0);
+          if (nextLength !== drag.currentLength || moved !== drag.active) {
+            noteResizeRef.current = {
+              ...drag,
+              currentLength: nextLength,
+              active: moved,
+            };
+            dirtyRef.current = true;
+            drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+          }
+        }
+        return;
+      }
+
       // Live note drag: delta-snapped, lane change single-note only.
       if (mode === 'drag' && noteDragRef.current) {
         const start = pointerStartRef.current;
@@ -1845,7 +1984,13 @@ export default function PianoRollTimeline({
         const trackKey = trackKeyFromScope(editStateRef.current.activeScope);
         const hit = pickAt(x, y);
         if (hit && trackKey) {
-          executeCommand(new DeleteNotesCommand(new Set([hit.id]), trackKey));
+          executeCommand(
+            new DeleteNotesCommand(
+              new Set([hit.id]),
+              trackKey,
+              scene.schema ?? undefined,
+            ),
+          );
         }
         return;
       }
@@ -1923,6 +2068,7 @@ export default function PianoRollTimeline({
         return;
       }
       clearMarkerHover();
+      const hoveredPart = pickPartAt(x, y);
       const hovered = pickAt(x, y);
       const st = editStateRef.current;
       // Add-mode ghost: over an empty lane (a click there would ADD; over an
@@ -1941,11 +2087,14 @@ export default function PianoRollTimeline({
       } else {
         setGhost(null);
       }
-      canvas.style.cursor = hovered
-        ? 'grab'
-        : placing
-          ? 'crosshair'
-          : 'default';
+      canvas.style.cursor =
+        hoveredPart?.part === 'end'
+          ? 'ew-resize'
+          : hovered
+            ? 'grab'
+            : placing
+              ? 'crosshair'
+              : 'default';
       const nextId = hovered ? hovered.id : null;
       if (nextId !== hoverIdRef.current || lyricHoverIdRef.current !== null) {
         dispatch({
@@ -1962,6 +2111,7 @@ export default function PianoRollTimeline({
       laneGeometry,
       panelGeometry,
       pickAt,
+      pickPartAt,
       seekTo,
       seekZone,
       setGhost,
@@ -1973,6 +2123,55 @@ export default function PianoRollTimeline({
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       const mode = pointerModeRef.current;
       const canvas = canvasRef.current;
+
+      if (mode === 'place-drag' && placeNoteRef.current) {
+        const drag = placeNoteRef.current;
+        const scene = sceneRef.current;
+        const trackKey = trackKeyFromScope(editStateRef.current.activeScope);
+        if (scene?.schema && trackKey) {
+          const prospective = prospectiveNoteAt(
+            drag.lane,
+            drag.startTick,
+            scene.schema,
+          );
+          executeCommand(
+            new AddNoteCommand(
+              {
+                tick: prospective.tick,
+                type: prospective.type,
+                length: drag.active
+                  ? Math.max(0, drag.currentTick - drag.startTick)
+                  : 0,
+                flags: prospective.flags,
+              },
+              trackKey,
+              scene.schema,
+            ),
+          );
+        }
+        placeNoteRef.current = null;
+        ghostRef.current = null;
+      }
+
+      if (mode === 'resize' && noteResizeRef.current) {
+        const drag = noteResizeRef.current;
+        const scene = sceneRef.current;
+        const trackKey = trackKeyFromScope(editStateRef.current.activeScope);
+        const delta = drag.currentLength - drag.originalLength;
+        if (drag.active && delta !== 0 && scene?.schema && trackKey) {
+          const ids = new Set(getSelectedIds(editStateRef.current, 'note'));
+          ids.add(drag.noteId);
+          executeCommand(
+            new ResizeNotesCommand(
+              Array.from(ids),
+              delta,
+              trackKey,
+              scene.schema,
+            ),
+          );
+        }
+        noteResizeRef.current = null;
+      }
 
       if (mode === 'drag' && noteDragRef.current) {
         const drag = noteDragRef.current;
@@ -2139,6 +2338,8 @@ export default function PianoRollTimeline({
       scrubbingRef.current = false;
       pointerModeRef.current = 'idle';
       noteDragRef.current = null;
+      noteResizeRef.current = null;
+      placeNoteRef.current = null;
       tempoDragRef.current = null;
       tempoBaseDocRef.current = null;
       sectionDragRef.current = null;
@@ -2159,6 +2360,7 @@ export default function PianoRollTimeline({
   // under it any more). A gesture in flight keeps its own state; only the
   // idle-hover ghost is cleared here.
   const handlePointerLeave = useCallback(() => {
+    if (pointerModeRef.current === 'place-drag') return;
     setGhost(null);
   }, [setGhost]);
 
@@ -2277,6 +2479,38 @@ export default function PianoRollTimeline({
         cymbalApplicable && legalTargets.every(n => n.cymbal);
 
       const items: MenuItem[] = [];
+      if (isGuitarBassSchema(scene.schema)) {
+        const techniques: FretTechnique[] = ['natural', 'strum', 'hopo', 'tap'];
+        for (const technique of techniques) {
+          const allMatch = targets.every(
+            n => techniqueForFlags(n.flags ?? 0) === technique,
+          );
+          items.push({
+            label:
+              technique === 'natural'
+                ? 'Natural (auto)'
+                : technique === 'hopo'
+                  ? 'HOPO'
+                  : technique[0].toUpperCase() + technique.slice(1),
+            checked: allMatch,
+            onSelect: () => {
+              const trackKey = trackKeyFromScope(
+                editStateRef.current.activeScope,
+              );
+              if (trackKey && scene.schema) {
+                executeCommand(
+                  new SetNoteTechniqueCommand(
+                    targetIds,
+                    technique,
+                    trackKey,
+                    scene.schema,
+                  ),
+                );
+              }
+            },
+          });
+        }
+      }
       if (cymbalApplicable) {
         items.push({
           label: commonCymbal ? 'Switch to tom' : 'Switch to cymbal',
@@ -2307,7 +2541,11 @@ export default function PianoRollTimeline({
           const trackKey = trackKeyFromScope(editStateRef.current.activeScope);
           if (trackKey) {
             executeCommand(
-              new DeleteNotesCommand(new Set(targetIds), trackKey),
+              new DeleteNotesCommand(
+                new Set(targetIds),
+                trackKey,
+                scene.schema ?? undefined,
+              ),
             );
           }
         },
@@ -2930,6 +3168,8 @@ function drawNotes(
   selection: ReadonlySet<string>,
   hoverId: string | null,
   drag: PanelNoteDrag | null,
+  resize: PanelNoteResize | null,
+  place: PanelPlaceNote | null,
   ghost: ProspectiveNote | null,
 ): void {
   const [msA, msB] = visibleMsRange(view, w);
@@ -2951,6 +3191,7 @@ function drawNotes(
     pxPerMs: view.pxPerMs,
     glyphHeight: nh,
   });
+  const guitarBass = isGuitarBassSchema(scene.schema);
 
   // One glyph painter (triangle for cymbals, rounded rect for kick/tom) so the
   // ghost preview is pixel-identical to a real note at the same size.
@@ -2968,14 +3209,104 @@ function drawNotes(
     }
   };
 
+  const paintFretGlyph = (
+    gx: number,
+    gcy: number,
+    technique: FretTechnique,
+    open: boolean,
+    color: string,
+  ): void => {
+    const glyphW = open ? Math.max(nw * 1.35, nh * 1.05) : nw;
+    if (technique === 'tap') {
+      ctx.beginPath();
+      ctx.moveTo(gx, gcy - nh * 0.68);
+      ctx.lineTo(gx + glyphW * 0.58, gcy);
+      ctx.lineTo(gx, gcy + nh * 0.68);
+      ctx.lineTo(gx - glyphW * 0.58, gcy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath();
+      ctx.arc(gx, gcy, Math.max(1.5, nh * 0.16), 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    if (technique === 'hopo') {
+      roundRect(
+        ctx,
+        gx - glyphW / 2,
+        gcy - nh / 2,
+        glyphW,
+        nh,
+        Math.min(3, glyphW / 3),
+      );
+      ctx.fillStyle = 'rgba(14,18,28,0.85)';
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1.25, nh * 0.14);
+      ctx.stroke();
+      return;
+    }
+    roundRect(
+      ctx,
+      gx - glyphW / 2,
+      gcy - nh / 2,
+      glyphW,
+      nh,
+      Math.min(3, glyphW / 3),
+    );
+    ctx.fill();
+    if (technique === 'strum') {
+      ctx.fillStyle = 'rgba(255,255,255,0.72)';
+      ctx.fillRect(
+        gx - Math.min(1, glyphW / 8),
+        gcy - nh * 0.34,
+        Math.min(2, glyphW / 4),
+        nh * 0.68,
+      );
+    }
+  };
+
+  const paintFretSustain = (
+    startX: number,
+    endX: number,
+    centerY: number,
+    color: string,
+  ): void => {
+    const sustainHeight = Math.max(6, nh * 0.76);
+    ctx.fillStyle = color;
+    roundRect(
+      ctx,
+      startX,
+      centerY - sustainHeight / 2,
+      Math.max(2, endX - startX),
+      sustainHeight,
+      Math.min(3, sustainHeight / 3),
+    );
+    ctx.fill();
+  };
+
   const dragActive = drag?.active === true;
   const halfW = Math.max(nw, nh) / 2 + 2.5;
+  const visibleNotes: Array<{
+    note: PianoRollNote;
+    lane: number;
+    cymbal: boolean;
+    length: number;
+    ms: number;
+    endMs: number;
+    x: number;
+    cy: number;
+    technique: FretTechnique;
+    selected: boolean;
+  }> = [];
   for (const note of scene.notes) {
     const selected = selection.has(note.id);
     // Drag preview: selected notes render at their would-be drop position.
     let lane = note.lane;
     let tick = note.tick;
     let cymbal = note.cymbal;
+    let length = guitarBass ? Math.max(0, note.length ?? 0) : 0;
     if (dragActive && selected) {
       tick = Math.max(0, note.tick + drag.tickDelta);
       const {min: minPadLane, max: maxPadLane} = padLaneRange(
@@ -2992,7 +3323,21 @@ function drawNotes(
       cymbal = cymbal && !!scene.lanes[lane]?.cymbalOk;
     }
     const ms = tickToMs(tick, scene.timedTempos, scene.resolution);
-    if (ms < msA - 50 && !(dragActive && selected)) continue;
+    if (resize?.active) {
+      const resizeDelta = resize.currentLength - resize.originalLength;
+      if (selected) length = Math.max(0, length + resizeDelta);
+    }
+    if (resize?.noteId === note.id && resize.active)
+      length = resize.currentLength;
+    const endMs = guitarBass
+      ? tickToMs(tick + length, scene.timedTempos, scene.resolution)
+      : ms;
+    if (
+      !noteIntersectsPianoRollWindow(ms, endMs, msA, msB) &&
+      !(dragActive && selected)
+    ) {
+      continue;
+    }
     if (ms > msB + 50 && !(dragActive && selected)) {
       // Notes are tick-sorted, so when nothing is dragging nothing later is
       // visible; during a drag a selected note may be shifted off-window so
@@ -3002,6 +3347,42 @@ function drawNotes(
     }
     const x = msToX(ms, view);
     const cy = laneTop + lane * laneH + laneH / 2;
+    const technique = techniqueForFlags(note.flags ?? 0);
+    visibleNotes.push({
+      note,
+      lane,
+      cymbal,
+      length,
+      ms,
+      endMs,
+      x,
+      cy,
+      technique,
+      selected,
+    });
+  }
+
+  // Paint every sustain before any note head. A long tail may overlap the
+  // head-time window of a later note, but it must never cover that note.
+  if (guitarBass) {
+    for (const rendered of visibleNotes) {
+      if (rendered.length <= 0) continue;
+      const endX = msToX(rendered.endMs, view);
+      const tailLeft = rendered.x + nw / 2;
+      ctx.globalAlpha = rendered.selected ? 0.9 : 0.78;
+      paintFretSustain(
+        tailLeft,
+        endX,
+        rendered.cy,
+        scene.lanes[rendered.lane]?.color ?? COLORS.laneLabel,
+      );
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Heads and their interaction affordances are painted after all tails.
+  for (const rendered of visibleNotes) {
+    const {note, lane, cymbal, x, cy, technique, selected} = rendered;
     if (selected) {
       ctx.fillStyle = 'rgba(255,255,255,0.92)';
       roundRect(ctx, x - halfW, cy - nh / 2 - 2.5, halfW * 2, nh + 5, 3);
@@ -3012,7 +3393,27 @@ function drawNotes(
       ctx.fill();
     }
     ctx.fillStyle = scene.lanes[lane]?.color ?? COLORS.laneLabel;
-    paintGlyph(x, cy, cymbal);
+    if (guitarBass) {
+      paintFretGlyph(
+        x,
+        cy,
+        technique,
+        lane === 0,
+        scene.lanes[lane]?.color ?? COLORS.laneLabel,
+      );
+    } else {
+      paintGlyph(x, cy, cymbal);
+    }
+
+    if (
+      rendered.length > 0 &&
+      (selected || note.id === hoverId || resize?.noteId === note.id)
+    ) {
+      const endX = msToX(rendered.endMs, view);
+      ctx.globalAlpha = 0.95;
+      ctx.fillRect(endX - 1, cy - nh * 0.42, 2, nh * 0.84);
+    }
+    ctx.globalAlpha = 1;
   }
 
   // Add-mode ghost: the note a click would place, drawn semi-transparent on
@@ -3022,9 +3423,41 @@ function drawNotes(
     const gx = msToX(gms, view);
     const gcy = laneTop + ghost.lane * laneH + laneH / 2;
     if (gx >= -halfW && gx <= w + halfW) {
+      if (guitarBass && place?.active) {
+        const length = Math.max(0, place.currentTick - place.startTick);
+        if (length > 0) {
+          const endX = msToX(
+            tickToMs(
+              place.startTick + length,
+              scene.timedTempos,
+              scene.resolution,
+            ),
+            view,
+          );
+          ctx.globalAlpha = 0.35;
+          paintFretSustain(
+            gx + nw / 2,
+            endX,
+            gcy,
+            scene.lanes[ghost.lane]?.color ?? COLORS.laneLabel,
+          );
+          ctx.globalAlpha = 1;
+        }
+      }
       ctx.globalAlpha = 0.5;
       ctx.fillStyle = scene.lanes[ghost.lane]?.color ?? COLORS.laneLabel;
-      paintGlyph(gx, gcy, ghost.cymbal);
+      if (guitarBass) {
+        const ghostTechnique = techniqueForFlags(ghost.flags);
+        paintFretGlyph(
+          gx,
+          gcy,
+          ghostTechnique,
+          ghost.lane === 0,
+          scene.lanes[ghost.lane]?.color ?? COLORS.laneLabel,
+        );
+      } else {
+        paintGlyph(gx, gcy, ghost.cymbal);
+      }
       ctx.globalAlpha = 1;
     }
   }

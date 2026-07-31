@@ -415,6 +415,25 @@ describe('SceneReconciler', () => {
       expect(reconciler.getActiveGroups().size).toBe(1);
     });
 
+    it('keeps an earlier long sustain active past a later short note', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
+
+      reconciler.setElements([
+        {...el('note:0:green', 0, {name: 'long'}), endMsTime: 2000},
+        {...el('note:480:red', 500, {name: 'short'}), endMsTime: 500},
+        {...el('note:960:yellow', 1000, {name: 'window'}), endMsTime: 1000},
+      ]);
+
+      // At 1000ms the window starts at 800ms. The 500ms note is gone, but
+      // the 0ms sustain still overlaps and must remain active.
+      reconciler.updateWindow(1000);
+
+      expect(reconciler.getActiveGroups().has('note:0:green')).toBe(true);
+      expect(reconciler.getActiveGroups().has('note:480:red')).toBe(false);
+    });
+
     it('empty elements list -- no crash, no groups', () => {
       const scene = new MockScene() as any;
       const renderer = createMockRenderer();

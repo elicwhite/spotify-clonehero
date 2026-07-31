@@ -1,17 +1,28 @@
 import * as THREE from 'three';
-import {Instrument} from '@eliwhite/scan-chart';
+import {Instrument, noteTypes} from '@eliwhite/scan-chart';
 import {schemaForInstrument} from '../../chart-edit/instruments';
 import {EventSequence} from './EventSequence';
-import {AnimatedTextureManager, loadNoteTextures} from './TextureManager';
+import {
+  AnimatedTextureManager,
+  loadHighwaySustainTextures,
+  loadNoteTextures,
+  type HighwaySustainTextures,
+} from './TextureManager';
+import {
+  createHighwaySustainGeometry,
+  FRETTED_SUSTAIN_WIDTH_MULTIPLIER,
+  highwaySustainWorldHeight,
+} from './sustainGeometry';
 import {resolveNoteGeometry} from './notePlacement';
 import {
   SCALE,
+  OPEN_NOTE_ANCHOR_Y,
   HIGHWAY_DURATION_MS,
-  GUITAR_LANE_COLORS,
   type Note,
   type Track,
   type PreparedNote,
 } from './types';
+import {sustainStyleForSchema} from './notePlacement';
 
 // ---------------------------------------------------------------------------
 // NotesDiff -- incremental update descriptor
@@ -43,9 +54,15 @@ export class NotesManager {
   private instrument: Instrument;
   private highwaySpeed: number;
   private clippingPlanes: THREE.Plane[];
+  private laneColors: string[] = [];
+  private fullWidthLaneColor = '#FFFFFF';
+  private fullWidthSustainWidthMultiplier = 1;
+  private sustainTextures: HighwaySustainTextures | null = null;
 
   /** Flattened, sorted array of all notes. */
   private preparedNotes: PreparedNote[] = [];
+  /** Prefix maximum end time for retaining long sustains in the window. */
+  private maxEndMsPrefix: number[] = [];
   /** Cursor for efficient windowed lookup. */
   private noteSequence!: EventSequence<PreparedNote>;
 
@@ -123,6 +140,17 @@ export class NotesManager {
 
     const supportsSustain =
       schemaForInstrument(this.instrument)?.supportsSustain ?? false;
+    this.sustainTextures = supportsSustain
+      ? await loadHighwaySustainTextures(textureLoader, animatedTextureManager)
+      : null;
+    const schema = schemaForInstrument(this.instrument);
+    if (schema) {
+      const sustainStyle = sustainStyleForSchema(schema);
+      this.laneColors = sustainStyle.padColors;
+      this.fullWidthLaneColor = sustainStyle.fullWidthColor;
+      this.fullWidthSustainWidthMultiplier =
+        sustainStyle.fullWidthWidthMultiplier;
+    }
     const starPowerSections = track.starPowerSections;
 
     // Build a sorted list of star power section start times for binary search
@@ -143,7 +171,7 @@ export class NotesManager {
           hi = mid - 1;
         }
       }
-      return idx >= 0 && time <= spEnds[idx];
+      return idx >= 0 && time < spEnds[idx];
     }
 
     // Flatten all note event groups into a single sorted array
@@ -166,6 +194,7 @@ export class NotesManager {
           isKick: geometry.isKick,
           isOpen: geometry.isOpen,
           lane: geometry.lane,
+          editorLane: geometry.editorLane,
         });
       }
     }
@@ -173,6 +202,7 @@ export class NotesManager {
     // Already sorted because noteEventGroups is sorted by time
     this.preparedNotes = prepared;
     this.noteSequence = new EventSequence(prepared);
+    this.rebuildEndTimeIndex();
   }
 
   // -----------------------------------------------------------------------
@@ -337,6 +367,7 @@ export class NotesManager {
 
     // 6. Rebuild EventSequence cursor (indices changed)
     this.noteSequence = new EventSequence(this.preparedNotes);
+    this.rebuildEndTimeIndex();
   }
 
   /** Read-only access to the current prepared notes array. */
@@ -350,8 +381,22 @@ export class NotesManager {
    */
   updateDisplayedNotes(currentTimeMs: number) {
     const renderEndTimeMs = currentTimeMs + HIGHWAY_DURATION_MS;
-    const noteStartIndex =
+    let noteStartIndex =
       this.noteSequence.getEarliestActiveEventIndex(currentTimeMs);
+    const windowStartMs = currentTimeMs - 200;
+    if (
+      noteStartIndex > 0 &&
+      this.maxEndMsPrefix[noteStartIndex - 1] >= windowStartMs
+    ) {
+      let lo = 0;
+      let hi = noteStartIndex;
+      while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (this.maxEndMsPrefix[mid] >= windowStartMs) hi = mid;
+        else lo = mid + 1;
+      }
+      noteStartIndex = lo;
+    }
 
     let maxNoteIndex = noteStartIndex - 1;
 
@@ -377,7 +422,8 @@ export class NotesManager {
           // Update geometry in case HIGHWAY_DURATION_MS or sizing changed
           // (for now it's constant, but the geometry was created with the
           // current value so this is a no-op repositioning)
-          sustainMesh.position.y = 0.03 + pn.msLength / HIGHWAY_DURATION_MS;
+          sustainMesh.position.y =
+            0.03 + ((pn.msLength / 1000) * this.highwaySpeed) / 2;
         }
 
         if (noteIndex > maxNoteIndex) {
@@ -417,11 +463,14 @@ export class NotesManager {
         noteGroup.position.x = 0;
       } else if (pn.isOpen) {
         const openScale = 0.11;
-        sprite.center.set(0.5, 0.5);
+        // open.webp has transparent padding below its visible bar. Align the
+        // bar itself with the kick/fret-note hit line, not the image bounds.
+        sprite.center.set(0.5, OPEN_NOTE_ANCHOR_Y);
         const aspectRatio =
           sprite.material.map!.image.width / sprite.material.map!.image.height;
         sprite.scale.set(openScale * aspectRatio, openScale, openScale);
-        sprite.renderOrder = 4;
+        // Full-width open bars sit behind all fret-note heads, like kicks.
+        sprite.renderOrder = 1;
         noteGroup.position.x = 0;
       } else {
         sprite.center.set(0.5, 0.5);
@@ -445,8 +494,8 @@ export class NotesManager {
       );
       noteGroup.position.z = 0;
 
-      // Sustain tail (guitar only, non-kick, non-open with length > 0)
-      if (pn.msLength > 0 && !pn.isKick && pn.lane >= 0) {
+      // Sustain tail (five-fret notes, including full-width Open notes)
+      if (pn.msLength > 0 && !pn.isKick && (pn.isOpen || pn.lane >= 0)) {
         const sustainMesh = this.ensureSustain(noteGroup, pn);
         sustainMesh.visible = true;
       } else {
@@ -465,21 +514,24 @@ export class NotesManager {
   // Note ID helper
   // -----------------------------------------------------------------------
 
+  private rebuildEndTimeIndex(): void {
+    this.maxEndMsPrefix = [];
+    let maxEndMs = -Infinity;
+    for (const note of this.preparedNotes) {
+      maxEndMs = Math.max(maxEndMs, note.msTime + note.msLength);
+      this.maxEndMsPrefix.push(maxEndMs);
+    }
+  }
+
   /**
    * Compute a note ID string from a PreparedNote, matching the format used
    * by the editor commands (`tick:type`).
    */
-  private static LANE_TO_DRUM_TYPE = [
-    'redDrum',
-    'yellowDrum',
-    'blueDrum',
-    'greenDrum',
-  ];
   private noteIdFromPrepared(pn: PreparedNote): string {
-    const drumType = pn.isKick
-      ? 'kick'
-      : (NotesManager.LANE_TO_DRUM_TYPE[pn.lane] ?? 'redDrum');
-    return `${pn.note.tick ?? 0}:${drumType}`;
+    const typeName = Object.entries(noteTypes).find(
+      ([, value]) => value === pn.note.type,
+    )?.[0];
+    return `${pn.note.tick ?? 0}:${typeName ?? pn.note.type}`;
   }
 
   // -----------------------------------------------------------------------
@@ -568,12 +620,17 @@ export class NotesManager {
    * Creates one if needed, or reconfigures the existing one.
    */
   private ensureSustain(group: THREE.Group, pn: PreparedNote): THREE.Mesh {
-    const sustainWorldHeight = 2 * (pn.msLength / HIGHWAY_DURATION_MS);
+    const sustainWorldHeight = highwaySustainWorldHeight(
+      pn.msLength,
+      this.highwaySpeed,
+    );
     const color =
-      pn.lane >= 0 && pn.lane < GUITAR_LANE_COLORS.length
-        ? GUITAR_LANE_COLORS[pn.lane]
-        : '#FFFFFF';
-    const sustainWidth = pn.isOpen ? SCALE * 5 : SCALE * 0.3;
+      pn.lane >= 0 && pn.lane < this.laneColors.length
+        ? this.laneColors[pn.lane]
+        : this.fullWidthLaneColor;
+    const sustainWidth = pn.isOpen
+      ? SCALE * this.fullWidthSustainWidthMultiplier
+      : SCALE * FRETTED_SUSTAIN_WIDTH_MULTIPLIER;
 
     if (group.children.length > 1 && group.children[1] instanceof THREE.Mesh) {
       const mesh = group.children[1] as THREE.Mesh<
@@ -582,25 +639,40 @@ export class NotesManager {
       >;
       // Reconfigure geometry (dispose old, create new)
       mesh.geometry.dispose();
-      mesh.geometry = new THREE.PlaneGeometry(sustainWidth, sustainWorldHeight);
+      mesh.geometry = createHighwaySustainGeometry(
+        sustainWidth,
+        sustainWorldHeight,
+        !pn.isOpen,
+      );
+      mesh.material.map = pn.isOpen
+        ? (this.sustainTextures?.open ?? null)
+        : (this.sustainTextures?.fretted[1] ?? null);
+      mesh.material.needsUpdate = true;
       (mesh.material as THREE.MeshBasicMaterial).color.set(color);
-      mesh.position.y = 0.03 + pn.msLength / HIGHWAY_DURATION_MS;
+      mesh.position.y = 0.03 + sustainWorldHeight / 2;
       mesh.visible = true;
       return mesh;
     }
 
     const mat = new THREE.MeshBasicMaterial({
       color,
+      map: pn.isOpen
+        ? this.sustainTextures?.open
+        : (this.sustainTextures?.fretted[1] ?? null),
       side: THREE.DoubleSide,
     });
     mat.clippingPlanes = this.clippingPlanes;
     mat.depthTest = false;
     mat.transparent = true;
 
-    const geometry = new THREE.PlaneGeometry(sustainWidth, sustainWorldHeight);
+    const geometry = createHighwaySustainGeometry(
+      sustainWidth,
+      sustainWorldHeight,
+      !pn.isOpen,
+    );
     const plane = new THREE.Mesh(geometry, mat);
     plane.position.z = 0;
-    plane.position.y = 0.03 + pn.msLength / HIGHWAY_DURATION_MS;
+    plane.position.y = 0.03 + sustainWorldHeight / 2;
     plane.renderOrder = 2;
     group.add(plane);
     return plane;

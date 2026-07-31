@@ -122,7 +122,7 @@ const FLAG_KEYS: readonly string[] = Array.from(
  *
  * Generic shortcuts (shared across all editor pages):
  * - Grid navigation (Up/Down/Left/Right arrows = grid step, Mod+arrows = measure)
- * - Lane keys (1-5 in Place mode = place/toggle note at cursor)
+ * - Lane keys (0-5 in Place mode = place/toggle note at cursor)
  * - Tool selection (Mod+1-6 always, 1-6 when not in Place mode)
  * - Note flags (Q, A, S)
  * - Grid snap (Shift+1 through Shift+6, Shift+0)
