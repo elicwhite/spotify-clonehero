@@ -112,20 +112,23 @@ describe('pickPeaksFromModelOutput', () => {
     expect(events[0].timeSeconds).toBeCloseTo(2.0, 6);
   });
 
-  it('skips lanes whose threshold exceeds 1.5 (crash-2 excluded)', () => {
-    expect(CRNN_THRESHOLDS[7]).toBeGreaterThan(1.5);
+  it('skips lanes whose threshold exceeds 1.5', () => {
+    // No t5 lane is structurally excluded, so the escape hatch is exercised
+    // with an explicit thresholds vector rather than the shipped one.
+    const thresholds = CRNN_THRESHOLDS.map((t, i) => (i === 7 ? 2.0 : t));
     const events = pickPeaksFromModelOutput(
-      makeOutput([{frame: 100, cls: 7, value: 0.99}]), // CR2
+      makeOutput([{frame: 100, cls: 7, value: 0.99}]), // RD
+      thresholds,
     );
     expect(events.length).toBe(0);
   });
 
   it('uses the provisional per-lane thresholds by default', () => {
-    // HH threshold 0.55 (System-C tuned): 0.5 peak silent, 0.6 fires.
+    // HH threshold 0.65 (Arm A s0 tuned): 0.6 peak silent, 0.7 fires.
     const events = pickPeaksFromModelOutput(
       makeOutput([
-        {frame: 100, cls: 5, value: 0.5},
-        {frame: 200, cls: 5, value: 0.6},
+        {frame: 100, cls: 5, value: 0.6},
+        {frame: 200, cls: 5, value: 0.7},
       ]),
     );
     expect(events.length).toBe(1);
@@ -138,15 +141,15 @@ describe('pickPeaksFromModelOutput', () => {
   });
 
   it('maps lanes to the correct MIDI pitches', () => {
-    const expectedPitches = [36, 38, 50, 47, 43, 42, 49, 57, 51];
+    const expectedPitches = [36, 38, 50, 47, 43, 42, 49, 51];
     const placements = [];
     for (let cls = 0; cls < NUM_DRUM_CLASSES; cls++) {
       placements.push({frame: 50 + cls * 50, cls, value: 0.99});
     }
     const events = pickPeaksFromModelOutput(makeOutput(placements, 1000));
 
-    // All lanes except CR2 (excluded) should fire once.
-    expect(events.length).toBe(NUM_DRUM_CLASSES - 1);
+    // Every lane fires once — t5 has no structurally-excluded lane.
+    expect(events.length).toBe(NUM_DRUM_CLASSES);
     for (const e of events) {
       const cls = Math.round(e.timeSeconds * 100 - 50) / 50;
       expect(e.midiPitch).toBe(expectedPitches[cls]);
@@ -174,7 +177,7 @@ describe('pickPeaksFromModelOutput', () => {
         makeOutput([
           {frame: 100, cls: 1, value: 0.9}, // SD, strongest
           {frame: 100, cls: 6, value: 0.75}, // CR
-          {frame: 100, cls: 8, value: 0.6}, // RD, weakest -> dropped
+          {frame: 100, cls: 7, value: 0.6}, // RD, weakest -> dropped
         ]),
       );
       expect(events.map(e => e.drumClass).sort()).toEqual(['CR', 'SD']);
@@ -188,7 +191,7 @@ describe('pickPeaksFromModelOutput', () => {
         makeOutput([
           {frame: 100, cls: 1, value: 0.894}, // SD
           {frame: 100, cls: 6, value: 0.704}, // CR
-          {frame: 100, cls: 8, value: 0.796}, // RD, narrowly beats CR
+          {frame: 100, cls: 7, value: 0.796}, // RD, narrowly beats CR
         ]),
       );
       expect(events.map(e => e.drumClass).sort()).toEqual(['RD', 'SD']);
@@ -211,7 +214,7 @@ describe('pickPeaksFromModelOutput', () => {
           {frame: 100, cls: 0, value: 0.9}, // BD
           {frame: 100, cls: 1, value: 0.9}, // SD
           {frame: 100, cls: 6, value: 0.75}, // CR
-          {frame: 100, cls: 8, value: 0.6}, // RD, weakest non-kick -> dropped
+          {frame: 100, cls: 7, value: 0.6}, // RD, weakest non-kick -> dropped
         ]),
       );
       expect(events.map(e => e.drumClass).sort()).toEqual(['BD', 'CR', 'SD']);
@@ -223,7 +226,7 @@ describe('pickPeaksFromModelOutput', () => {
         makeOutput([
           {frame: 100, cls: 1, value: 0.9}, // SD
           {frame: 105, cls: 6, value: 0.8}, // CR
-          {frame: 110, cls: 8, value: 0.7}, // RD
+          {frame: 110, cls: 7, value: 0.7}, // RD
         ]),
       );
       expect(events.map(e => e.drumClass).sort()).toEqual(['CR', 'RD', 'SD']);

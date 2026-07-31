@@ -1,17 +1,17 @@
 # Drum Transcription — Manual Test Plan (stereo 256-mel CRNN)
 
 Manual verification for the single-pass stereo CRNN pipeline
-(`crnn_stereo_256mel.onnx`, 48 kHz, stereo mel + mean-context).
+(`crnn_stereo_256mel_t5.onnx`, 48 kHz, stereo mel + mean-context).
 
 ## Prerequisites
 
 - Chrome (or another WebGPU-capable browser) — BS-Roformer separation runs on
   WebGPU.
-- Local dev: `public/models/crnn_stereo_256mel_t3.onnx` present (gitignored
+- Local dev: `public/models/crnn_stereo_256mel_t5.onnx` present (gitignored
   dev fallback — see Deploy below; the transcriber fetches the R2 URL, so for
   a purely local model swap point `CrnnTranscriber` at a local URL or ensure
   the R2 copy is uploaded).
-- `public/models/crnn_stereo_256mel.t3.thresholds.json` present (committed).
+- `public/models/crnn_stereo_256mel.t5.thresholds.json` present (committed).
 
 ## What to click
 
@@ -35,19 +35,15 @@ Manual verification for the single-pass stereo CRNN pipeline
   "pass 1 / pass 2" progress anymore; if you see two inference phases, the old
   worker is still wired in.
 - **Lane order** (model classes): kick, snare, high-tom, mid-tom, floor-tom,
-  hihat, crash, crash-2, ride.
-- **Crash-2 never fires** with the provisional thresholds (its threshold is
-  2.0, which disables the lane). Any crash-2/second-crash note in the output
-  chart is a bug.
-- **Tom re-order fires on the fixture song** (`public/drumsample.mp3`): the
-  per-song pitch-proxy tom re-ordering performs a real lane swap on this song.
-  Verify tom fills descend sensibly (high -> mid -> floor); if the toms look
-  pitch-inverted, the re-order block is broken or skipped.
+  hihat, crash, ride. The t5 head is 8 lanes — there is no crash-2 lane, and
+  ride sits at index 7.
+- **Tom lanes**: the per-song pitch-proxy tom re-order is OFF (matching the
+  shipped product pipeline), so tom identity comes straight from the model.
 - **Real tempo map**: the written `notes.chart` `[SyncTrack]` must contain
   the detected tempos from the tempo-map pipeline (multiple `B` events for a
   variable-tempo song), NOT a single flat `120` entry. Cymbal notes must
   carry pro-drums markers (`N 66/67/68` lines) — hihat=66 (yellow),
-  ride/crash-2=67 (blue), crash=68 (green). If every yellow/blue/green note
+  ride=67 (blue), crash=68 (green). If every yellow/blue/green note
   plays as a tom, the `drumType = fourLanePro` line in
   `pipeline/chart-builder.ts` regressed.
 - **Resumability**: reload the tab mid-pipeline, reopen the project — it must
@@ -60,24 +56,25 @@ Manual verification for the single-pass stereo CRNN pipeline
 
 - No `Using hardcoded provisional CRNN thresholds` warning (that means both
   thresholds URLs failed).
-- No 404 on `crnn_stereo_256mel.onnx` (would mean the R2 upload is missing).
+- No 404 on `crnn_stereo_256mel_t5.onnx` (would mean the R2 upload is missing).
 
 ## Deploy steps
 
-(Done 2026-07-03 — both files verified live on R2, ONNX sha256 matches the
-local export. Repeat only when the model or thresholds are retuned.)
+(t5 done 2026-07-30 — both files fetched from R2 into `public/models/`, so the
+upload is confirmed live. Repeat only when the model or thresholds are
+retuned.)
 
 1. Upload to R2 (`assets.musiccharts.tools/models/`):
-   - `public/models/crnn_stereo_256mel_t3.onnx` (~94 MB, gitignored — never
+   - `public/models/crnn_stereo_256mel_t5.onnx` (~94 MB, gitignored — never
      deploys with the app)
-   - `public/models/crnn_stereo_256mel.t3.thresholds.json` (production
+   - `public/models/crnn_stereo_256mel.t5.thresholds.json` (production
      fallback for the same-origin copy; keep in sync when thresholds are
      retuned)
 2. The URL constants in `lib/drum-transcription/ml/transcriber.ts` are derived
-   from a single `CRNN_MODEL_VERSION` tag (currently `t3`), so both the model
+   from a single `CRNN_MODEL_VERSION` tag (currently `t5`), so both the model
    and thresholds URLs stay name-matched when the version is bumped:
-   - model: `https://assets.musiccharts.tools/models/crnn_stereo_256mel_t3.onnx`
-   - thresholds: same-origin `/models/crnn_stereo_256mel.t3.thresholds.json`
+   - model: `https://assets.musiccharts.tools/models/crnn_stereo_256mel_t5.onnx`
+   - thresholds: same-origin `/models/crnn_stereo_256mel.t5.thresholds.json`
      (committed, deploys with the app), R2 as fallback, hardcoded array as
      last resort.
 3. The local `public/models/*.onnx` copy is the gitignored dev fallback only.

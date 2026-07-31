@@ -70,7 +70,7 @@ export const DEFAULT_MEL_CONFIG: MelSpectrogramConfig = {
 };
 
 // ---------------------------------------------------------------------------
-// CRNN Model Classes (9 instruments)
+// CRNN Model Classes (8 instruments)
 // ---------------------------------------------------------------------------
 
 /** A single drum class definition. */
@@ -81,7 +81,14 @@ export interface DrumClass {
   readonly description: string;
 }
 
-/** The CRNN model's 9 output classes, in model output order. */
+/**
+ * The CRNN model's 8 output classes, in model output order.
+ *
+ * The t5 (Arm A s0, v3 recipe) head is 8 lanes: crash-2 is gone and ride sits
+ * at index 7. crash-2 was a structurally-dead lane (0 ground-truth positives
+ * across the 22,190-chart corpus) that the 9-lane lineage suppressed with a
+ * "never fire" threshold, so no crash-2 note was ever produced.
+ */
 export const DRUM_CLASSES: readonly DrumClass[] = [
   {index: 0, midiPitch: 36, name: 'BD', description: 'Bass Drum (kick)'},
   {index: 1, midiPitch: 38, name: 'SD', description: 'Snare Drum'},
@@ -90,12 +97,11 @@ export const DRUM_CLASSES: readonly DrumClass[] = [
   {index: 4, midiPitch: 43, name: 'FT', description: 'Floor Tom'},
   {index: 5, midiPitch: 42, name: 'HH', description: 'Hi-Hat'},
   {index: 6, midiPitch: 49, name: 'CR', description: 'Crash Cymbal'},
-  {index: 7, midiPitch: 57, name: 'CR2', description: 'Crash Cymbal 2'},
-  {index: 8, midiPitch: 51, name: 'RD', description: 'Ride Cymbal'},
+  {index: 7, midiPitch: 51, name: 'RD', description: 'Ride Cymbal'},
 ] as const;
 
 /** Number of output classes from the CRNN model. */
-export const NUM_DRUM_CLASSES = 9;
+export const NUM_DRUM_CLASSES = 8;
 
 /** CRNN drum class name union type. */
 export type DrumClassName =
@@ -106,7 +112,6 @@ export type DrumClassName =
   | 'FT'
   | 'HH'
   | 'CR'
-  | 'CR2'
   | 'RD';
 
 // ---------------------------------------------------------------------------
@@ -115,11 +120,11 @@ export type DrumClassName =
 
 /** Raw output from the ONNX model before post-processing. */
 export interface ModelOutput {
-  /** Per-frame sigmoid predictions, shape [n_frames, 9], row-major. */
+  /** Per-frame sigmoid predictions, shape [n_frames, 8], row-major. */
   predictions: Float32Array;
   /** Number of time frames. */
   nFrames: number;
-  /** Number of output classes (9). */
+  /** Number of output classes (8). */
   nClasses: number;
 }
 
@@ -258,6 +263,9 @@ export const MODEL_FPS = 100;
  * the t4 optimum corpus-wide; shipping 33/39 would have been similarly wrong
  * in the other direction. Re-derive whenever the shipped model changes —
  * this constant is model-specific, not a fixed property of the pipeline.
+ *
+ * CONFIRMED unchanged for the t5 ship (2026-07-30): the 0/7 pair carries over
+ * to the Arm A s0 checkpoint — no retune was required by the ship decision.
  */
 export const SYSTEMATIC_ONSET_MS_CHART_FLOW = 0;
 
@@ -283,27 +291,25 @@ export const PEAK_NMS_FRAMES = 2;
 
 /**
  * Per-lane detection thresholds for the CRNN model, in model output order
- * (BD, SD, HT, MT, FT, HH, CR, CR2, RD). A peak is kept when its height is
+ * (BD, SD, HT, MT, FT, HH, CR, RD). A peak is kept when its height is
  * strictly greater than the lane threshold. Lanes with a threshold > 1.5 are
- * structurally excluded (never fire) — crash-2 = 2.0 matches the deployed
- * reference.
+ * structurally excluded (never fire) — no t5 lane uses that escape hatch, but
+ * the mechanism stays so a future thresholds file can disable a lane.
  *
- * System-C tuned array (PIPELINE_AUDIT.md, 2026-07-08): control model +
- * tom-reorder OFF, coordinate-ascent tuned on pack-VAL, from
- * analysis/product_eval/stageb_tuned_thresholds.json
- * ("C_control_2plane_reorder_off") in the research repo. Beats the prior t2
- * array on every family on pack-TEST.
+ * Arm A s0 tuned array (drum-to-chart docs/2026-07-30-ship-handoff-armA_s0.md):
+ * val-tuned coordinate descent (2 passes, step 0.05), byte-identical to
+ * public/models/crnn_stereo_256mel.t5.thresholds.json. Beat deployed t4 on
+ * val-tuned with significance (paired bootstrap) and improved every family.
  */
 export const CRNN_THRESHOLDS: readonly number[] = [
   0.5, // BD
   0.55, // SD
-  0.75, // HT
-  0.85, // MT
-  0.65, // FT
-  0.55, // HH
+  0.65, // HT
+  0.65, // MT
+  0.7, // FT
+  0.65, // HH
   0.7, // CR
-  2.0, // CR2 (excluded)
-  0.55, // RD
+  0.65, // RD
 ];
 
 /** Lanes whose threshold exceeds this value are skipped entirely. */

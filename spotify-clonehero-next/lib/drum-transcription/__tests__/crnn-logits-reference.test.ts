@@ -5,8 +5,8 @@
  * do NOT cover. mel-reference.test.ts diffs the mel port; postprocess-
  * reference.test.ts feeds python's raw activations into the JS post-block. But
  * neither ran the CRNN model in onnxruntime-web and diffed it against python
- * onnxruntime. This test does: it loads the SAME t4/diagJ .onnx the app
- * ships (public/models/crnn_stereo_256mel_t4.onnx) via onnxruntime-web, runs
+ * onnxruntime. This test does: it loads the SAME t5 .onnx the app
+ * ships (public/models/crnn_stereo_256mel_t5.onnx) via onnxruntime-web, runs
  * the identical windowing crnn-worker.ts runs (WINDOW_SIZE=500,
  * WINDOW_STRIDE=375, zero-pad final window, sigmoid + overlap-average) over
  * the python-computed fixture mel, and diffs against the python-onnxruntime
@@ -15,17 +15,17 @@
  * Feeding the shared python mel to both sides isolates the model (mel parity is
  * covered by mel-reference.test.ts).
  *
- * The 90 MB t4 .onnx is gitignored (never committed); this is the ONE
+ * The 90 MB t5 .onnx is gitignored (never committed); this is the ONE
  * checkpoint-specific parity gate, so a missing model FAILS LOUDLY here
  * (F36, PIPELINE_AUDIT.md — a silent skip let `pnpm test:onnx-parity` go
  * green without ever touching the shipped model). Set ALLOW_MISSING_MODEL=1
  * to explicitly skip with a loud warning (e.g. a CI lane that intentionally
  * doesn't have the model). Regenerate the fixture after any model change:
  *   drum-to-chart/.venv/bin/python3 scripts/dump_crnn_logits_reference.py \
- *     --onnx scripts/crnn_stereo_256mel_t4.onnx \
- *     --model-name crnn_stereo_256mel_t4.onnx \
- *     --out scripts/frontend_ref_fixtures/crnn-logits-reference-t4.json
- * then copy scripts/frontend_ref_fixtures/crnn-logits-reference-t4.json here.
+ *     --onnx scripts/crnn_stereo_256mel_t5.onnx \
+ *     --model-name crnn_stereo_256mel_t5.onnx \
+ *     --out scripts/frontend_ref_fixtures/crnn-logits-reference-t5.json
+ * then copy scripts/frontend_ref_fixtures/crnn-logits-reference-t5.json here.
  *
  * The onnxruntime-web wasm backend needs Node's --experimental-vm-modules to
  * load under jest's VM sandbox, so this suite only runs its assertions when
@@ -49,7 +49,7 @@ import {
 const FIXTURE_PATH = path.join(
   __dirname,
   'fixtures',
-  'crnn-logits-reference-t4.json',
+  'crnn-logits-reference-t5.json',
 );
 const MODEL_PATH = path.join(
   __dirname,
@@ -58,7 +58,7 @@ const MODEL_PATH = path.join(
   '..',
   'public',
   'models',
-  'crnn_stereo_256mel_t4.onnx',
+  'crnn_stereo_256mel_t5.onnx',
 );
 
 interface CrnnFixture {
@@ -70,8 +70,8 @@ interface CrnnFixture {
   model: string;
   melStereoB64: string; // [ch*256*T + m*T + t]
   contextB64: string; // (5120,)
-  window0LogitsB64: string; // [f*9 + c] raw logits, first window
-  avgActB64: string; // [t*9 + c] sigmoid, overlap-averaged
+  window0LogitsB64: string; // [f*8 + c] raw logits, first window
+  avgActB64: string; // [t*8 + c] sigmoid, overlap-averaged
 }
 
 function decodeF32(b64: string): Float32Array {
@@ -110,7 +110,7 @@ const shouldRun = enabled && haveModel;
 const describeIf = shouldRun || failLoud ? describe : describe.skip;
 
 describeIf(
-  'CRNN inference: onnxruntime-web(t4) vs python onnxruntime(t4)',
+  'CRNN inference: onnxruntime-web(t5) vs python onnxruntime(t5)',
   () => {
     if (failLoud) {
       it('FAILS LOUDLY: model missing and RUN_ONNX_PARITY=1 (F36)', () => {
@@ -118,7 +118,7 @@ describeIf(
           `[crnn-logits-reference] Model not found at ${MODEL_PATH} while ` +
             'RUN_ONNX_PARITY=1. This is the ONE checkpoint-specific parity ' +
             'gate (F36, PIPELINE_AUDIT.md) — it must fail loudly rather ' +
-            'than silently skip. Place the t4 .onnx there, or set ' +
+            'than silently skip. Place the t5 .onnx there, or set ' +
             'ALLOW_MISSING_MODEL=1 to explicitly skip with a warning.',
         );
       });
@@ -131,12 +131,12 @@ describeIf(
     const nMels = fixture.nMels;
     const melStereo = decodeF32(fixture.melStereoB64);
     const context = decodeF32(fixture.contextB64);
-    const refW0 = decodeF32(fixture.window0LogitsB64); // [f*9+c]
-    const refAvg = decodeF32(fixture.avgActB64); // [t*9+c]
+    const refW0 = decodeF32(fixture.window0LogitsB64); // [f*8+c]
+    const refAvg = decodeF32(fixture.avgActB64); // [t*8+c]
 
     let session: any;
-    let webW0: Float32Array | null = null; // first-window raw logits [f*9+c]
-    let webAvg: Float32Array | null = null; // averaged sigmoid [t*9+c]
+    let webW0: Float32Array | null = null; // first-window raw logits [f*8+c]
+    let webAvg: Float32Array | null = null; // averaged sigmoid [t*8+c]
 
     beforeAll(async () => {
       ort.env.wasm.numThreads = 1;
@@ -203,7 +203,7 @@ describeIf(
     }, 120000);
 
     it('fixture matches this model + window config', () => {
-      expect(fixture.model).toBe('crnn_stereo_256mel_t4.onnx');
+      expect(fixture.model).toBe('crnn_stereo_256mel_t5.onnx');
       expect(fixture.nInst).toBe(NUM_DRUM_CLASSES);
       expect(fixture.windowSize).toBe(WINDOW_SIZE);
       expect(fixture.windowStride).toBe(WINDOW_STRIDE);
@@ -219,7 +219,7 @@ describeIf(
         const d = Math.abs(webW0![i] - refW0[i]);
         if (d > maxDiff) {
           maxDiff = d;
-          at = `i=${i} (f=${Math.floor(i / 9)} c=${i % 9})`;
+          at = `i=${i} (f=${Math.floor(i / NUM_DRUM_CLASSES)} c=${i % NUM_DRUM_CLASSES})`;
         }
       }
 
@@ -235,7 +235,7 @@ describeIf(
         const d = Math.abs(webAvg![i] - refAvg[i]);
         if (d > maxDiff) {
           maxDiff = d;
-          at = `i=${i} (t=${Math.floor(i / 9)} c=${i % 9})`;
+          at = `i=${i} (t=${Math.floor(i / NUM_DRUM_CLASSES)} c=${i % NUM_DRUM_CLASSES})`;
         }
       }
 

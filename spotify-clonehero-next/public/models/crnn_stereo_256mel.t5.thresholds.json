@@ -1,0 +1,14 @@
+{
+  "thresholds": [0.5, 0.55, 0.65, 0.65, 0.7, 0.65, 0.7, 0.65],
+  "note": "Arm A s0 tuned array (2026-07-30 ship-selection rescore, docs/2026-07-30-ship-handoff-armA_s0.md): checkpoint checkpoints/8fe0672_phase1v3_armA/best_model.pt (v3 recipe, 8-lane head), val-tuned coordinate-descent (results/ship_selection_rescore_2026-07-30/armA_s0.json .tuned.thr, 2 passes, step 0.05, lo 0.1, hi 0.95), val_edit_rate_macro=0.33684861322957815 (gt-basis, n=542). Beat deployed t4 (diagJ) on val-tuned with significance (paired bootstrap, results/ship_selection_rescore_2026-07-30/paper/paired_ci.json). SCHEMA CHANGE vs t4: 8-wide, no crash-2 lane (deployed 9-wide DEPLOY_THR anchor was [0.55, 0.6, 0.8, 0.8, 0.8, 0.6, 0.7, 2.0, 0.7] with index 7 = crash-2 all-negative 'never fire'; v3 drops crash-2 entirely and ride slides from index 8 to index 7).",
+  "laneOrder": [
+    "kick",
+    "snare",
+    "high-tom",
+    "mid-tom",
+    "floor-tom",
+    "hihat",
+    "crash",
+    "ride"
+  ]
+}

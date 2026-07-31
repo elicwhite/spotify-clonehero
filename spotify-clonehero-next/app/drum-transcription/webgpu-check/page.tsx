@@ -6,9 +6,9 @@
  * ONE-TIME device-side measurement — term (a) is `pnpm test:onnx-parity`,
  * which only exercises wasm since webgpu can't run under jest's node VM).
  *
- * Runs the shipped t4 model, via the same CDN ORT build the app loads
+ * Runs the shipped t5 model, via the same CDN ORT build the app loads
  * (onnxruntime-web@1.24.3), over the SAME mel/context inputs used by that
- * jest gate (lib/drum-transcription/__tests__/fixtures/crnn-logits-reference-t4.json,
+ * jest gate (lib/drum-transcription/__tests__/fixtures/crnn-logits-reference-t5.json,
  * served dev-only by app/api/dev/crnn-fixture) — once with
  * executionProviders ['webgpu', 'wasm'] (the shipped preference: ORT picks
  * webgpu if the device supports it) and once forced ['wasm'] — then reports
@@ -27,12 +27,12 @@ import Script from 'next/script';
 const ORT_CDN_BASE =
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
 const ORT_CDN_URL = `${ORT_CDN_BASE}ort.min.js`;
-const MODEL_URL = '/models/crnn_stereo_256mel_t4.onnx';
+const MODEL_URL = '/models/crnn_stereo_256mel_t5.onnx';
 const FIXTURE_URL = '/api/dev/crnn-fixture';
 
 const WINDOW_SIZE = 500;
 const WINDOW_STRIDE = 375;
-const NUM_CLASSES = 9;
+const NUM_CLASSES = 8;
 const SONG_CONTEXT_DIM = 5120;
 
 interface CrnnFixture {
@@ -206,11 +206,11 @@ export default function WebgpuResidualCheckPage() {
       <h1>CRNN webgpu-vs-wasm residual check</h1>
       <p>
         Dev-only. PARITY.md stage-2 gate, term (b) — the one-time device-side
-        measurement. Runs the shipped t4 model over the committed jest parity
+        measurement. Runs the shipped t5 model over the committed jest parity
         fixture, once preferring webgpu (the shipped path) and once forced to
-        wasm, and reports the max abs diff between the two runs on
-        <em> this </em> browser/GPU/driver. Record the results (plus browser +
-        GPU + OS) into PARITY.md&apos;s <code>webgpu_band</code> block.
+        wasm, and reports the max abs diff between the two runs on <em>this</em>{' '}
+        browser/GPU/driver. Record the results (plus browser + GPU + OS) into
+        PARITY.md&apos;s <code>webgpu_band</code> block.
       </p>
       <button onClick={runCheck} disabled={!ortReady}>
         Run residual check

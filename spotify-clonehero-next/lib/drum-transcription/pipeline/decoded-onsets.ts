@@ -11,6 +11,7 @@
  */
 
 import type {DecodedOnsetsFile, RawDrumEvent} from '../ml/types';
+import {DRUM_CLASSES} from '../ml/types';
 import {projectFileExists, readProjectJSON} from '../storage/opfs';
 
 /** Filename for the persisted decoded onsets. Exported so the runner's
@@ -43,6 +44,14 @@ export function buildDecodedOnsetsFile(
   };
 }
 
+/** Class names the current model emits. An onset naming anything else was
+ * written by an older model lineage (the 9-lane head had a crash-2 class);
+ * such onsets are dropped on load rather than handed to the class->chart
+ * table, which has no entry for them. */
+const KNOWN_CLASSES: ReadonlySet<string> = new Set(
+  DRUM_CLASSES.map(c => c.name),
+);
+
 function isValidDecodedOnsetsFile(data: unknown): data is DecodedOnsetsFile {
   if (typeof data !== 'object' || data === null) return false;
   const d = data as Record<string, unknown>;
@@ -61,6 +70,9 @@ function isValidDecodedOnsetsFile(data: unknown): data is DecodedOnsetsFile {
  * hand-written drum track) and class-(b) tempo corrections must fall back
  * to RESNAP — and also when the file is unreadable or fails the version
  * check (an incompatible/stale schema is discarded, never misinterpreted).
+ *
+ * Onsets naming a class the current model doesn't emit are dropped — see
+ * {@link KNOWN_CLASSES}.
  */
 export async function loadDecodedOnsets(
   projectId: string,
@@ -74,5 +86,9 @@ export async function loadDecodedOnsets(
   } catch {
     return null;
   }
-  return isValidDecodedOnsetsFile(data) ? data : null;
+  if (!isValidDecodedOnsetsFile(data)) return null;
+  return {
+    ...data,
+    onsets: data.onsets.filter(o => KNOWN_CLASSES.has(o.drumClass)),
+  };
 }

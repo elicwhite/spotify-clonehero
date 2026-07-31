@@ -470,7 +470,7 @@ export function buildChartDocumentFromExistingChart(
  * The grid is lane-dependent (Phase B per-lane quantizer), though every lane's
  * `snapMode` is currently 'candidate' — snap to the nearest 16th / 16th-triplet
  * musical subdivision via {@link snapGroupToGrid} (the 'uniform' 1/24-beat
- * carve-out for crash/crash-2/ride was dropped 2026-07-04 and its
+ * carve-out for the cymbal lanes was dropped 2026-07-04 and its
  * implementation removed, drum-to-chart plan §4 step 5 R5-3 — see
  * {@link SnapMode}). If the snap would move the note more than `toleranceMs`
  * from its true audio position (at the local tempo, via {@link tickToMs}) the

@@ -1,6 +1,6 @@
 /**
  * Numeric validation of the post-processing block (per-frame lane
- * constraints; tom pitch re-order OFF, matching the t3/control ship decode
+ * constraints; tom pitch re-order OFF, matching the shipped product pipeline
  * — F50, PIPELINE_AUDIT.md) and reference peak picking against the research
  * repo's scripts/dump_frontend_reference.py output. The fixture holds raw
  * model activations (T, 9), the mono mel (T, 256), the deployed per-lane
@@ -25,7 +25,7 @@ interface PostprocessFixture {
   nMels: number;
   nInst: number;
   thresholds: number[];
-  rawActB64: string; // [t * 9 + c]
+  rawActB64: string; // [t * 8 + c]
   monoMelB64: string; // [t * 256 + m]
   onsets: {lane: number; frame: number}[];
 }
@@ -47,7 +47,7 @@ describe('postprocess + peak picking vs reference fixture', () => {
     expect(fixture.nMels).toBe(256);
     expect(rawAct.length).toBe(fixture.T * fixture.nInst);
     expect(monoMel.length).toBe(fixture.T * fixture.nMels);
-    expect(fixture.onsets.length).toBe(45);
+    expect(fixture.onsets.length).toBe(36);
   });
 
   it('does not mutate the input activations', () => {

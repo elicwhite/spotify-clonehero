@@ -1,7 +1,7 @@
 /**
  * Map CRNN model output classes to Clone Hero chart notes.
  *
- * The CRNN outputs 9 instrument classes. This module maps them to the 5-lane
+ * The CRNN outputs 8 instrument classes. This module maps them to the 5-lane
  * chart note types and cymbal markers used in .chart files (pro drums):
  *
  *   | CRNN Class | Chart Note | Cymbal Marker | NoteType      |
@@ -13,7 +13,6 @@
  *   | FT (floor-tom)| 4 (green)| --          | greenDrum     |
  *   | HH (hihat) | 2 (yellow)| 66            | yellowDrum    |
  *   | CR (crash) | 4 (green) | 68            | greenDrum     |
- *   | CR2 (crash2)| 3 (blue) | 67            | blueDrum      |
  *   | RD (ride)  | 3 (blue)  | 67            | blueDrum      |
  *
  * Uses chart-edit types (DrumNote, scan-chart's NoteType/noteFlags) via
@@ -37,7 +36,7 @@ import type {RawDrumEvent, DrumClassName} from './types';
  *     via the shared candidate scorer.
  *
  * ALL lanes use `candidate` (the deployed behavior). A per-lane `uniform`
- * carve-out (1/24-beat "naive" snap for crash/crash-2/ride) was trialled but
+ * carve-out (1/24-beat "naive" snap for the cymbal lanes) was trialled but
  * DROPPED 2026-07-04: (1) it was a WASH on the corrected shipping grid (val-B
  * edit-rate −0.0003, CI incl 0), and (2) because chart-builder snaps each note
  * independently, giving cymbals a different grid function SPLIT chords — a
@@ -109,19 +108,12 @@ const CLASS_TO_CHART: Record<DrumClassName, ChartNoteMapping> = {
     isCymbal: true,
     snapMode: 'candidate',
   },
-  // crash/crash-2/ride: candidate like every other lane — see SnapMode (the
-  // uniform carve-out was dropped; a per-lane split rendered chords apart).
+  // crash/ride: candidate like every other lane — see SnapMode (the uniform
+  // carve-out was dropped; a per-lane split rendered chords apart).
   CR: {
     noteType: noteTypes.greenDrum,
     noteNumber: 4,
     cymbalMarker: 68,
-    isCymbal: true,
-    snapMode: 'candidate',
-  },
-  CR2: {
-    noteType: noteTypes.blueDrum,
-    noteNumber: 3,
-    cymbalMarker: 67,
     isCymbal: true,
     snapMode: 'candidate',
   },

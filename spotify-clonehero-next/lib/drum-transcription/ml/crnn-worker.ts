@@ -88,7 +88,7 @@ function deinterleave(stereo: Float32Array): {
  *
  * @param melStereo - Stereo mel, layout [ch * nMels * T + m * T + t].
  * @param context - Song context vector (5120).
- * @returns Averaged sigmoid activations, layout [t * 9 + c].
+ * @returns Averaged sigmoid activations, layout [t * 8 + c].
  */
 async function windowedInference(
   session: any,
@@ -144,7 +144,7 @@ async function windowedInference(
 
     melTensor.dispose();
 
-    // Logits output: (1, 500, 9), row-major [f * 9 + c]
+    // Logits output: (1, 500, 8), row-major [f * 8 + c]
     const outputTensor = results.logits ?? results[Object.keys(results)[0]];
     const logits = outputTensor.data as Float32Array;
 

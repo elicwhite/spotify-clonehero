@@ -58,18 +58,17 @@ const MODEL_ASSET_BASE_URL = 'https://assets.musiccharts.tools/models';
  * thresholds-wiring note: previously the thresholds filename never carried a
  * version tag, so there was no way to tell from the filename alone whether a
  * hosted thresholds file was actually tuned for the checkpoint in use). */
-const CRNN_MODEL_VERSION = 't4';
+const CRNN_MODEL_VERSION = 't5';
 
-/** URL for the stereo 256-mel CRNN ONNX model — the t4/diagJ checkpoint
- * (results/v2_retrain/phase1/ckpt_diagJ, deploy-context lever; FLIGHT_PLAN.md,
- * 2026-07-11 — confirmed new baseline, clears the ship gate vs deployed t3 on
- * every family/quantile). Architecturally identical to the t3 export (23.67M
- * params, same mel+context -> 9-class-logits IO) — only the weights change.
+/** URL for the stereo 256-mel CRNN ONNX model — the t5 checkpoint (Arm A s0,
+ * v3 recipe; drum-to-chart docs/2026-07-30-ship-handoff-armA_s0.md — beat
+ * deployed t4 on val-tuned with significance and improved every family).
+ * Same mel+context inputs as the t4 export, but a SCHEMA CHANGE on the
+ * output: an 8-class head (crash-2 dropped, ride moved to index 7), which is
+ * why the decode lane tables in postprocess.ts/types.ts change with it.
  * Hosted on R2 (assets.musiccharts.tools); the local public/models/ copy is
- * gitignored and never deploys, so a same-origin URL 404s in production. The
- * t4 file MUST be uploaded to R2 under this key or model load 404s in prod.
- * In development, we load same-origin from public/models/ instead, since the
- * CDN won't have the t4 file until it's uploaded there. */
+ * gitignored and never deploys, so a same-origin URL 404s in production. In
+ * development we load same-origin from public/models/ instead. */
 const CRNN_MODEL_FILENAME = `crnn_stereo_256mel_${CRNN_MODEL_VERSION}.onnx`;
 const CRNN_MODEL_URL =
   process.env.NODE_ENV === 'development'
@@ -78,7 +77,7 @@ const CRNN_MODEL_URL =
 
 /** Per-lane peak-picking thresholds config, version-tagged to match
  * CRNN_MODEL_VERSION (filename convention: crnn_stereo_256mel.<version>.thresholds.json).
- * The same-origin copy (public/models/crnn_stereo_256mel.t3.thresholds.json)
+ * The same-origin copy (public/models/crnn_stereo_256mel.t5.thresholds.json)
  * IS committed (tiny JSON, not covered by the *.onnx gitignore) so it deploys
  * with the app; the R2 copy is the production fallback and should be kept in
  * sync when retuned. */
@@ -86,18 +85,17 @@ const CRNN_THRESHOLDS_FILENAME = `crnn_stereo_256mel.${CRNN_MODEL_VERSION}.thres
 const CRNN_THRESHOLDS_URL = `/models/${CRNN_THRESHOLDS_FILENAME}`;
 const CRNN_THRESHOLDS_URL_FALLBACK = `${MODEL_ASSET_BASE_URL}/${CRNN_THRESHOLDS_FILENAME}`;
 
-/** diagJ tuned per-lane thresholds (lane order: kick, snare, high-tom,
- * mid-tom, floor-tom, hihat, crash, crash-2, ride; FLIGHT_PLAN.md,
- * 2026-07-11 — deploy-context checkpoint + tom-reorder OFF, matches
- * crnn_stereo_256mel.t4.thresholds.json). A threshold > 1.5 disables the
- * lane entirely (crash-2 = 2.0 is intentional). Used when the thresholds
- * JSON cannot be fetched. */
+/** Arm A s0 tuned per-lane thresholds (lane order: kick, snare, high-tom,
+ * mid-tom, floor-tom, hihat, crash, ride; val-tuned coordinate descent, matches
+ * crnn_stereo_256mel.t5.thresholds.json). A threshold > 1.5 would disable the
+ * lane entirely; no t5 lane uses that. Used when the thresholds JSON cannot be
+ * fetched. */
 const PROVISIONAL_THRESHOLDS: number[] = [
-  0.55, 0.6, 0.8, 0.8, 0.8, 0.6, 0.7, 2.0, 0.7,
+  0.5, 0.55, 0.65, 0.65, 0.7, 0.65, 0.7, 0.65,
 ];
 
 /** Expected shape of the per-model thresholds JSON (see e.g.
- * public/models/crnn_stereo_256mel.t3.thresholds.json). `laneOrder` is
+ * public/models/crnn_stereo_256mel.t5.thresholds.json). `laneOrder` is
  * documentation of the lane<->index mapping (matches DRUM_CLASSES order);
  * it isn't remapped against DRUM_CLASSES at runtime, but its presence/length
  * is checked as a cheap sanity signal that the file is well-formed. */
@@ -160,9 +158,9 @@ async function loadThresholds(): Promise<number[]> {
  *   2. Song context vector: time-mean of the stereo mel (512 floats tiled
  *      10x -> 5120)
  *   3. Windowed inference (500-frame windows, stride 375, averaged overlaps)
- *      + sigmoid -> per-frame activations (T, 9)
- *   4. Post-processing: per-frame lane constraints (tom pitch re-order OFF
- *      for the t3/control lineage — F50, PIPELINE_AUDIT.md)
+ *      + sigmoid -> per-frame activations (T, 8)
+ *   4. Post-processing: per-frame lane constraints (tom pitch re-order OFF,
+ *      matching the shipped product pipeline — F50, PIPELINE_AUDIT.md)
  *   5. Peak picking per lane with the provided per-lane thresholds
  */
 export class CrnnTranscriber implements DrumTranscriber {
@@ -292,7 +290,7 @@ export class MockTranscriber implements DrumTranscriber {
   }
 
   /**
-   * Generate a realistic rock beat pattern with 9-class events.
+   * Generate a realistic rock beat pattern with 8-class events.
    *
    * Pattern (per bar, 4/4 time):
    *   Beat 1:   BD + HH

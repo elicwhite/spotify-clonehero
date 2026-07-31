@@ -11,32 +11,37 @@
  *      tom columns should be permuted so that higher-pitch toms map to
  *      higher lanes (HT > MT > FT in pitch).
  *   2. Per-frame lane constraints: suppress 3rd+ ranked toms and cymbals
- *      above 0.4 (*0.2), resolve conflicting lane pairs, and promote
- *      crash-2 into crash when crash is silent.
+ *      above 0.4 (*0.2) and resolve conflicting lane pairs.
  *
- * Lane order: [BD, SD, HT, MT, FT, HH, CR, CR2, RD].
+ * Lane order: [BD, SD, HT, MT, FT, HH, CR, RD] — the 8-lane t5 head. The
+ * lane sets below mirror the reference's 8-lane branches verbatim
+ * (train_ab.py make_predict_fn / hardneg_kill_gate.apply_deploy_post_block,
+ * which are required to stay identical to each other).
  */
 
 import {NUM_DRUM_CLASSES} from './types';
 
 /**
  * F50 — the tom pitch RE-ORDER (step 1 below) assumes the RELABELED-world
- * tom convention. The t3/control model (PIPELINE_AUDIT.md System C
- * promotion, 2026-07-08) is trained on original-charter tom convention and
- * gets its toms RE-SORTED into the wrong slots by this step — the ablation
- * measured every acoustic re-rank strategy (including this one) as net-
- * negative on the control. OFF for the t3 ship decode. Flip back to `true`
- * only if the deployed model lineage reverts to relabeled-convention
- * training.
+ * tom convention, and the ablation measured every acoustic re-rank strategy
+ * (including this one) as net-negative on an original-charter-convention
+ * model. OFF, matching the shipped product pipeline
+ * (product_pipeline/constants.py TOM_REORDER = False).
+ *
+ * The t5 ship (Arm A s0, 2026-07-30) confirmed the checkpoint under BOTH
+ * decode conditions — reorder ON and OFF — with the tuned threshold vector
+ * bit-identical across the two, so the exported thresholds are valid at this
+ * setting. Flip to `true` only if the deployed model lineage reverts to
+ * relabeled-convention training.
  */
 const TOM_REORDER = false;
 
 const TOM_LANES = [2, 3, 4];
-const CYMBAL_LANES = [5, 6, 7, 8];
+const CYMBAL_LANES = [5, 6, 7];
 /** Conflicting (a, b) lane pairs: HH/HT, RD/MT, CR/FT. */
 const LANE_CONFLICTS: readonly [number, number][] = [
   [5, 2],
-  [8, 3],
+  [7, 3],
   [6, 4],
 ];
 
@@ -65,7 +70,7 @@ function median(values: number[]): number {
 /**
  * Apply the reference post-processing block to raw activations.
  *
- * @param activations - Raw sigmoid activations, layout [t * 9 + c]. Not
+ * @param activations - Raw sigmoid activations, layout [t * 8 + c]. Not
  *   mutated; a processed copy is returned.
  * @param T - Number of time frames.
  * @param monoMel - Mono (L/R mean) log-mel, time-major layout [t * 256 + m].
@@ -191,12 +196,6 @@ export function applyPostprocess(
           act[row + a] = Math.fround(act[row + a] * F32_02);
         }
       }
-    }
-
-    // Crash-2 promotion: if crash-2 fires while crash is silent, move it.
-    if (act[row + 7] > F32_04 && act[row + 6] < F32_04) {
-      act[row + 6] = act[row + 7];
-      act[row + 7] = Math.fround(act[row + 7] * F32_02);
     }
   }
 

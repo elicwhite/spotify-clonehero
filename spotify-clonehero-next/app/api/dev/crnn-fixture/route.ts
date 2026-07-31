@@ -4,7 +4,7 @@ import path from 'path';
 
 /**
  * Dev-only debug endpoint: serves the committed CRNN parity fixture
- * (lib/drum-transcription/__tests__/fixtures/crnn-logits-reference-t4.json)
+ * (lib/drum-transcription/__tests__/fixtures/crnn-logits-reference-t5.json)
  * so the webgpu-vs-wasm residual check page
  * (app/drum-transcription/webgpu-check) can feed the SAME mel/context
  * inputs used by `pnpm test:onnx-parity` to a real browser session,
@@ -21,7 +21,7 @@ export async function GET() {
     'drum-transcription',
     '__tests__',
     'fixtures',
-    'crnn-logits-reference-t4.json',
+    'crnn-logits-reference-t5.json',
   );
   if (!fs.existsSync(fixturePath)) {
     return NextResponse.json(
