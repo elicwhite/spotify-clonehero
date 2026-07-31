@@ -16,7 +16,7 @@ import type {ChartDocument} from '@/lib/chart-edit';
 import {applyAlignedLyricsToDoc} from '@/lib/lyrics-align/apply-lyrics';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
 import {makeFixtureDoc} from '@/components/chart-editor/__tests__/fixtures';
-import {buildChartExport, buildExportFiles} from '../export-chart';
+import {buildChartExport} from '../export-chart';
 
 const SYLLABLES: AlignedSyllable[] = [
   {text: 'hel', startMs: 1000, endMs: 1250, joinNext: true, newLine: true},
@@ -37,10 +37,12 @@ function lyricTicks(doc: ChartDocument): number[] {
   );
 }
 
-function notesChartText(doc: ChartDocument): string {
-  const file = buildExportFiles(doc).find(f => f.fileName === 'notes.chart');
-  if (!file) throw new Error('no notes.chart in export');
-  return strFromU8(file.data);
+/** Read a file out of an exported .zip blob. */
+async function readFromZip(blob: Blob, fileName: string): Promise<string> {
+  const zip = unzipSync(new Uint8Array(await blob.arrayBuffer()));
+  const file = zip[fileName];
+  if (!file) throw new Error(`${fileName} missing from export`);
+  return strFromU8(file);
 }
 
 /**
@@ -73,8 +75,8 @@ function moveFirstLyric(tickDelta: number): {
   return {seeded, edited};
 }
 
-describe('buildExportFiles', () => {
-  it('serializes the editor doc, keeping edits made after alignment', () => {
+describe('buildChartExport', () => {
+  it('serializes the editor doc, keeping edits made after alignment', async () => {
     const {seeded, edited} = moveFirstLyric(120);
 
     const seededTicks = lyricTicks(seeded);
@@ -82,51 +84,42 @@ describe('buildExportFiles', () => {
     expect(editedTicks).not.toEqual(seededTicks);
     expect(editedTicks).toContain(seededTicks[0] + 120);
 
-    // Every lyric tick the editor holds shows up in the written chart, and
+    // Every lyric tick the editor holds shows up in the downloaded chart, and
     // the pre-edit tick is gone — i.e. the download reflects the drag.
-    const text = notesChartText(edited);
+    const {blob} = buildChartExport(edited, 'zip', 'Song');
+    const text = await readFromZip(blob, 'notes.chart');
     for (const tick of editedTicks) {
       expect(text).toMatch(new RegExp(`^\\s*${tick} = E `, 'm'));
     }
     expect(text).not.toMatch(new RegExp(`^\\s*${seededTicks[0]} = E `, 'm'));
   });
 
-  it('emits notes.chart plus song.ini', () => {
-    const names = buildExportFiles(makeAlignedDoc()).map(f => f.fileName);
-    expect(names).toContain('notes.chart');
-    expect(names).toContain('song.ini');
-  });
-
-  it('leaves the source chart metadata alone', () => {
+  it('leaves the source chart identity alone', async () => {
     // This page round-trips somebody else's chart, so unlike the flows that
     // mint one (drum transcription, /difficulties) it must not stamp drum
     // ratings or rewrite the charter credit onto a chart that never had them.
     const doc = makeAlignedDoc();
     doc.parsedChart.metadata.charter = 'Original Charter';
 
-    const iniFile = buildExportFiles(doc).find(f => f.fileName === 'song.ini');
-    if (!iniFile) throw new Error('no song.ini in export');
-    const ini = strFromU8(iniFile.data);
+    const {blob} = buildChartExport(doc, 'zip', 'Song');
+    const ini = await readFromZip(blob, 'song.ini');
 
     expect(ini).toContain('charter = Original Charter');
     expect(ini).not.toMatch(/pro_drums/);
     expect(ini).not.toMatch(/diff_drums/);
   });
-});
 
-describe('buildChartExport', () => {
   it('packages a zip source as .zip under the original name', async () => {
-    const {edited} = moveFirstLyric(240);
-    const {blob, fileName} = buildChartExport(edited, 'zip', 'My Song');
+    const {blob, fileName} = buildChartExport(
+      makeAlignedDoc(),
+      'zip',
+      'My Song',
+    );
 
     expect(fileName).toBe('My Song.zip');
-
     const zip = unzipSync(new Uint8Array(await blob.arrayBuffer()));
     expect(Object.keys(zip)).toContain('notes.chart');
-    const movedTick = lyricTicks(edited)[0];
-    expect(strFromU8(zip['notes.chart'])).toMatch(
-      new RegExp(`^\\s*${movedTick} = E `, 'm'),
-    );
+    expect(Object.keys(zip)).toContain('song.ini');
   });
 
   it('packages a folder source as .zip', () => {
