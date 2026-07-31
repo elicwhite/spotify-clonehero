@@ -4,8 +4,10 @@
  * forever (every lyric-aligning tool froze on a mid-stream wav2vec2
  * download stall), and permanent HTTP failures must fail fast.
  *
- * The test environment has no `navigator.storage`, so getCachedModel
- * falls through to the plain download path — exactly the code under test.
+ * `navigator` is stubbed out for the suite so getCachedModel always falls
+ * through to the plain download path — exactly the code under test. (Some
+ * runtimes provide a working OPFS; letting it cache would make every test
+ * after the first read from cache instead of downloading.)
  */
 
 import {getCachedModel} from '@/lib/lyrics-align/model-cache';
@@ -89,7 +91,29 @@ function bytesEqual(a: ArrayBuffer, b: Uint8Array): boolean {
 }
 
 const originalFetch = global.fetch;
+const originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(
+  globalThis,
+  'navigator',
+);
 let warnSpy: jest.SpyInstance;
+
+beforeAll(() => {
+  // No OPFS: force the download path even on runtimes that provide
+  // navigator.storage.getDirectory.
+  Object.defineProperty(globalThis, 'navigator', {
+    value: {},
+    configurable: true,
+    writable: true,
+  });
+});
+
+afterAll(() => {
+  if (originalNavigatorDescriptor) {
+    Object.defineProperty(globalThis, 'navigator', originalNavigatorDescriptor);
+  } else {
+    delete (globalThis as {navigator?: unknown}).navigator;
+  }
+});
 
 beforeEach(() => {
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
