@@ -65,7 +65,8 @@ function canonicalChartFileName(fileName: string): string {
   return /\.(mid|midi)$/i.test(fileName) ? 'notes.mid' : 'notes.chart';
 }
 
-export interface AssembleChartFilesOptions {
+/** Options common to both assembly modes — see {@link AssembleChartFilesOptions}. */
+interface ChartSourceOptions {
   /**
    * Valid `.chart` text. Mutually exclusive with `chartFile`/`chartDoc` —
    * supply exactly one. Convenience for callers that only ever deal in
@@ -86,8 +87,6 @@ export interface AssembleChartFilesOptions {
    * carries would be lost.
    */
   chartDoc?: ChartDocument;
-  /** Metadata to stamp into song.ini. */
-  metadata: ChartPackageMetadata;
   /** Audio stems to bundle alongside the chart. */
   audioSources?: PackageAudioSource[];
   /**
@@ -98,6 +97,16 @@ export interface AssembleChartFilesOptions {
    * entry is skipped, since those are already authoritative above.
    */
   extraAssets?: FileEntry[];
+}
+
+/**
+ * MINT mode: the caller is creating a chart (drum transcription,
+ * /difficulties). Its name/artist/charter replace whatever the document
+ * carried, the chart is declared `pro_drums` with a drums difficulty, and
+ * `song_length` is (re)computed.
+ */
+interface MintedChartOptions extends ChartSourceOptions {
+  metadata: ChartPackageMetadata;
   /**
    * Song length in milliseconds, stamped as `song.ini`'s `song_length`. Best
    * sourced from the actual (decoded) audio duration. Omitted, `undefined`,
@@ -105,6 +114,27 @@ export interface AssembleChartFilesOptions {
    */
   songLengthMs?: number;
 }
+
+/**
+ * ROUND-TRIP mode: the caller is editing somebody else's chart and handing it
+ * back (/add-lyrics). The document's own metadata ships untouched — a
+ * guitar-only chart must not come back advertising rated pro drums, and the
+ * original charter keeps their credit.
+ *
+ * `metadata` and `songLengthMs` are typed away rather than merely ignored, so
+ * a caller that means to stamp can't half-configure it and silently ship an
+ * unstamped chart.
+ */
+interface RoundTripChartOptions extends ChartSourceOptions {
+  metadata?: undefined;
+  songLengthMs?: undefined;
+}
+
+/** Assembly is either a mint or a round trip; the presence of `metadata`
+ *  picks the mode. See {@link MintedChartOptions} / {@link RoundTripChartOptions}. */
+export type AssembleChartFilesOptions =
+  | MintedChartOptions
+  | RoundTripChartOptions;
 
 /** The chart's own duration, in milliseconds: the latest point any note ends
  * or an end event fires, across every track. Used as the `song_length`
@@ -126,14 +156,57 @@ function chartEndMs(parsedChart: ParsedChart): number {
 }
 
 /**
+ * Apply a minting flow's identity + ratings to a chart's metadata, or hand
+ * the chart back untouched when no metadata was supplied (round-trip export).
+ */
+function stampMetadata(
+  parsedChart: ParsedChart,
+  metadata: ChartPackageMetadata | undefined,
+  songLengthMs: number | undefined,
+): ParsedChart {
+  if (!metadata) return parsedChart;
+
+  const existing = parsedChart.metadata;
+  // Declare a drums difficulty so scan-chart / chart managers see a rated
+  // chart. The chart file alone carries this; any diff_drums the pipeline
+  // set in song.ini separately is gone by here; default to 0 when absent.
+  const diffDrums =
+    existing.diff_drums != null && existing.diff_drums >= 0
+      ? existing.diff_drums
+      : 0;
+  // Shallow-clone rather than mutate `parsedChart` in place — a
+  // caller-supplied `chartDoc` (the `chartDoc` option) may be reused
+  // elsewhere and shouldn't be silently modified by this call.
+  return {
+    ...parsedChart,
+    metadata: {
+      ...existing,
+      name: metadata.name,
+      artist: metadata.artist,
+      charter: metadata.charter.trim() || 'MusicCharts.tools',
+      pro_drums: true,
+      diff_drums: diffDrums,
+      // Phase Shift "real drums" difficulty — kept equal to diff_drums since
+      // this pipeline doesn't distinguish a separate real-drums chart.
+      diff_drums_real: diffDrums,
+      song_length:
+        songLengthMs != null && songLengthMs > 0
+          ? Math.round(songLengthMs)
+          : chartEndMs(parsedChart),
+    },
+  };
+}
+
+/**
  * Assemble the flat file list for a chart package.
  *
  * Parses the chart (`chartText` as `.chart`, or `chartFile` in whichever
- * format it names), stamps the supplied metadata (name/artist/charter, plus
- * `pro_drums`), and runs it back through `writeChartFolder` so the chart file
- * and `song.ini` are regenerated consistently — in the SAME format it was
- * given (a `.mid`-sourced chart-flow project stays `.mid`; `writeChartFolder`
- * doesn't convert). Audio sources are appended verbatim.
+ * format it names), stamps `metadata` when the caller is minting a chart (see
+ * the option's doc for the two modes), and runs it back through
+ * `writeChartFolder` so the chart file and `song.ini` are regenerated
+ * consistently — in the SAME format it was given (a `.mid`-sourced chart-flow
+ * project stays `.mid`; `writeChartFolder` doesn't convert). Audio sources are
+ * appended verbatim.
  */
 export function assembleChartFiles({
   chartText,
@@ -171,35 +244,11 @@ export function assembleChartFiles({
       };
       return readChart([inputFile]);
     })();
-  const existing = chartDoc.parsedChart.metadata;
-  // Declare a drums difficulty so scan-chart / chart managers see a rated
-  // chart. The chart file alone carries this; any diff_drums the pipeline
-  // set in song.ini separately is gone by here; default to 0 when absent.
-  const diffDrums =
-    existing.diff_drums != null && existing.diff_drums >= 0
-      ? existing.diff_drums
-      : 0;
-  // Shallow-clone rather than mutate `chartDoc.parsedChart` in place — a
-  // caller-supplied `chartDoc` (the `chartDoc` option) may be reused
-  // elsewhere and shouldn't be silently modified by this call.
-  const stampedParsedChart: ParsedChart = {
-    ...chartDoc.parsedChart,
-    metadata: {
-      ...existing,
-      name: metadata.name,
-      artist: metadata.artist,
-      charter: metadata.charter.trim() || 'MusicCharts.tools',
-      pro_drums: true,
-      diff_drums: diffDrums,
-      // Phase Shift "real drums" difficulty — kept equal to diff_drums since
-      // this pipeline doesn't distinguish a separate real-drums chart.
-      diff_drums_real: diffDrums,
-      song_length:
-        songLengthMs != null && songLengthMs > 0
-          ? Math.round(songLengthMs)
-          : chartEndMs(chartDoc.parsedChart),
-    },
-  };
+  const stampedParsedChart: ParsedChart = stampMetadata(
+    chartDoc.parsedChart,
+    metadata,
+    songLengthMs,
+  );
 
   const entries: FileEntry[] = writeChartFolder({
     parsedChart: stampedParsedChart,

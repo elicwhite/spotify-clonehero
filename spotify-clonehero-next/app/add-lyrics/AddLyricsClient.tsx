@@ -28,13 +28,9 @@ import {
   findAudioFiles,
   type Files,
 } from '@/lib/preview/chorus-chart-processing';
-import {
-  readChart,
-  writeChartFolder,
-  type ChartDocument,
-} from '@/lib/chart-edit';
-import {exportAsZip, exportAsSng} from '@/lib/chart-export';
+import {readChart, type ChartDocument} from '@/lib/chart-edit';
 import {downloadBlob} from '@/lib/download';
+import {buildChartExport} from './export-chart';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
 import {mixStemsToAudioBuffer} from '@/lib/audio-pipeline/lyrics-audio';
 import {runDemucsInWorker} from '@/lib/lyrics-align/demucs-client';
@@ -234,9 +230,13 @@ async function decodeAudioForWaveform(
 // Page Component
 // ---------------------------------------------------------------------------
 
+/**
+ * The non-chart half of the editor view: the audio and waveform the
+ * ChartEditor needs alongside the document. The chart itself is read from
+ * the editor session (`state.chartDoc`) so it stays live as the user edits;
+ * nothing chart-shaped is snapshotted here.
+ */
 interface EditorData {
-  chart: ParsedChart;
-  chartDoc: ChartDocument;
   audioManager: AudioManager;
   audioData?: Float32Array | undefined;
   audioChannels: number;
@@ -591,39 +591,21 @@ function LyricsAlignInner() {
   }, [chart, lyrics, updateAlignStep, alignSteps]);
 
   const handleDownload = useCallback(() => {
-    if (!chart || alignedSyllables.length === 0) return;
+    // Export the editor's live document. It starts as the aligned doc and
+    // every highway edit (lyric drags, phrase resizes, text changes) is
+    // dispatched onto it, so it is the only doc that carries the user's
+    // manual fixes. Re-deriving from `chart.chartDoc` would discard them.
+    const doc = state.chartDoc;
+    if (!chart || !doc) return;
 
     try {
-      const doc = applyAlignedLyricsToDoc(chart.chartDoc, alignedSyllables);
+      const {blob, fileName} = buildChartExport(
+        doc,
+        chart.sourceFormat,
+        chart.originalName,
+      );
 
-      // Write chart back to files
-      const chartFiles = writeChartFolder(doc);
-
-      // writeChartFolder emits notes.{chart,mid} + song.ini + every asset
-      // from doc.assets (audio stems, album art, etc.) and skips any
-      // chart-like file in the asset list. That covers the full export —
-      // no need to merge in chart.rawFiles separately.
-      const exportFiles = chartFiles.map(f => ({
-        fileName: f.fileName,
-        data: f.data,
-      }));
-
-      // Package in original format, using the original filename
-      const ext = chart.sourceFormat === 'sng' ? '.sng' : '.zip';
-
-      let blob: Blob;
-      if (chart.sourceFormat === 'sng') {
-        const sngBytes = exportAsSng(exportFiles);
-        blob = new Blob([sngBytes as Uint8Array<ArrayBuffer>], {
-          type: 'application/octet-stream',
-        });
-      } else {
-        blob = exportAsZip(exportFiles);
-      }
-
-      const filename = chart.originalName + ext;
-
-      downloadBlob(blob, filename);
+      downloadBlob(blob, fileName);
 
       const manualMoveCount = state.undoStack.filter(
         cmd =>
@@ -639,7 +621,7 @@ function LyricsAlignInner() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Export failed');
     }
-  }, [chart, alignedSyllables, state.undoStack]);
+  }, [chart, state.chartDoc, state.undoStack]);
 
   const showEditor = status === 'done' && alignedLines.length > 0;
 
@@ -692,8 +674,6 @@ function LyricsAlignInner() {
         dispatch({type: 'SET_CHART_DOC', chartDoc: nextDoc});
 
         setEditorData({
-          chart: nextDoc.parsedChart as ParsedChart,
-          chartDoc: nextDoc,
           audioManager,
           audioData: waveform?.interleaved,
           audioChannels: waveform?.channels ?? 1,
@@ -754,14 +734,11 @@ function LyricsAlignInner() {
     } as ChartResponseEncore;
   }, [chart]);
 
-  const getChartText = useCallback(async (): Promise<string> => {
-    if (!editorData) throw new Error('No chart prepared');
-    const files = writeChartFolder(editorData.chartDoc);
-    const chartFile = files.find(f => f.fileName === 'notes.chart');
-    if (!chartFile)
-      throw new Error('writeChartFolder did not produce notes.chart');
-    return new TextDecoder().decode(chartFile.data);
-  }, [editorData]);
+  // The chart the editor renders, read live from the session so highway
+  // edits reach every consumer (sheet-music pane, section list) rather than
+  // only the parts the scene reconciler redraws.
+  const editorChart = (state.chartDoc?.parsedChart ??
+    null) as ParsedChart | null;
 
   if (showEditor && chart) {
     const md = chart.chartDoc.parsedChart.metadata;
@@ -802,7 +779,10 @@ function LyricsAlignInner() {
             }}>
             Re-enter lyrics
           </Button>
-          <Button size="sm" onClick={handleDownload}>
+          {/* Disabled until the editor is prepared: until then the session
+              doc is still the previous alignment's (or nothing at all), and
+              exporting it would hand back the wrong chart. */}
+          <Button size="sm" onClick={handleDownload} disabled={!editorData}>
             <Download className="h-4 w-4 mr-1" />
             Download .{chart.sourceFormat === 'sng' ? 'sng' : 'zip'}
           </Button>
@@ -845,19 +825,18 @@ function LyricsAlignInner() {
           </DialogContent>
         </Dialog>
         <div className="flex-1 min-h-0">
-          {editorData && cloneHeroMetadata ? (
+          {editorData && cloneHeroMetadata && editorChart ? (
             <ChartEditor
               metadata={cloneHeroMetadata}
-              chart={editorData.chart}
+              chart={editorChart}
               audioManager={editorData.audioManager}
               audioData={editorData.audioData}
               audioChannels={editorData.audioChannels}
               durationSeconds={editorData.durationSeconds}
-              sections={editorData.chart.sections}
+              sections={editorChart.sections}
               songName={songName}
               artistName={artistName}
               charterName={charterName}
-              getChartText={getChartText}
               hideHeader
             />
           ) : (

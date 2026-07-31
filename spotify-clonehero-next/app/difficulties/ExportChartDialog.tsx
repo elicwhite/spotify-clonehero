@@ -26,15 +26,13 @@ import {readChart} from '@/lib/chart-edit';
 import {
   assembleChartFiles,
   chartPackageFileName,
-  exportAsSng,
-  exportAsZip,
+  packageChartFiles,
+  type PackageFormat,
 } from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
 import {mergeOursTiersIntoChart} from '@/lib/drum-difficulty/exportChart';
 import type {Tier} from '@/lib/drum-difficulty/toRenderableTrack';
 import type {Track} from '@/lib/preview/highway/types';
-
-type PackageFormat = 'zip' | 'sng';
 
 export interface ExportChartDialogProps {
   /** The originally-uploaded files, re-read fresh at export time so the
@@ -81,18 +79,7 @@ export default function ExportChartDialog({
           : {}),
       });
 
-      let blob: Blob;
-      let extension: string;
-      if (packageFormat === 'sng') {
-        const sngBytes = exportAsSng(fileEntries);
-        blob = new Blob([sngBytes as Uint8Array<ArrayBuffer>], {
-          type: 'application/octet-stream',
-        });
-        extension = 'sng';
-      } else {
-        blob = exportAsZip(fileEntries);
-        extension = 'zip';
-      }
+      const {blob, extension} = packageChartFiles(fileEntries, packageFormat);
 
       downloadBlob(blob, chartPackageFileName(cleanMetadata, extension));
       toast.success('Chart exported with Ours’ Hard/Medium/Easy tracks');
