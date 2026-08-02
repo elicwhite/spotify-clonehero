@@ -5,8 +5,18 @@ import {
   FRETTED_SUSTAIN_WIDTH_MULTIPLIER,
   highwaySustainWorldHeight,
 } from './sustainGeometry';
-import type {HighwaySustainTextures} from './TextureManager';
-import {OPEN_NOTE_ANCHOR_Y, SCALE, type Note} from './types';
+import type {
+  HighwayFlameTextures,
+  HighwaySustainTextures,
+} from './TextureManager';
+import {
+  HIGHWAY_FLAME_DURATION_MS,
+  HIGHWAY_FLAME_FRAME_DURATION_MS,
+  HIGHWAY_OPEN_FLAME_DURATION_MS,
+  OPEN_NOTE_ANCHOR_Y,
+  SCALE,
+  type Note,
+} from './types';
 
 // ---------------------------------------------------------------------------
 // NoteElementData -- the data payload for note elements
@@ -37,7 +47,23 @@ export interface NoteElementData {
  * [1] = sustain tail mesh (optional, guitar only)
  * [2] = selection highlight mesh (optional)
  */
+const SELECTION_ROLE = 'selection-highlight';
+const FLAME_ROLE = 'playline-flame';
 const CHILD_SELECTION = 2;
+const FLAME_PIVOT_Y = 0.2;
+// The open guitar flame's white arch is the visual continuation of the fret's
+// raised top curve, not the center of the source image. The source has enough
+// transparent/flame detail below that curve that using .5 leaves the arch
+// visibly low against the hitline.
+const OPEN_FLAME_PIVOT_Y = 0.36;
+const FLAME_HEIGHT = SCALE * 2.2;
+// The source open flame is divided into five equal arches. Five times the
+// authored guitar lane spacing makes those arch centers land on the five
+// fret centers instead of stretching past the outer buttons.
+const OPEN_FLAME_WIDTH = 0.193 * 5;
+// `open_flame_drum.png` has four arches matching the four strip-lane drum
+// hitline. Kick is the drum track's full-width note, so use that span.
+const DRUM_OPEN_FLAME_WIDTH = 0.169 * 4;
 
 /** Height of the horizontal kick bar sprite (vertically centered on the beat line). */
 const KICK_SCALE = 0.045;
@@ -67,6 +93,8 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     opts: {inStarPower: boolean},
   ) => THREE.SpriteMaterial;
   private clippingPlanes: THREE.Plane[];
+  /** Main note heads and sustain tails stop at the playline. */
+  private noteSpriteClippingPlanes: THREE.Plane[];
   /** Sustain tail color per pad lane index, sourced from the active
    *  `InstrumentSchema`'s `lanes[].color` (five-fret only -- drums don't
    *  support sustain, so this stays empty for drum tracks). */
@@ -75,6 +103,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
   private fullWidthSustainWidthMultiplier: number;
   private highwaySpeed: number;
   private sustainTextures: HighwaySustainTextures | null;
+  private flameTextures: HighwayFlameTextures | null;
 
   // Instance-level overlay materials (not module-level singletons).
   // Using instance fields ensures clippingPlanes reference stays valid
@@ -105,6 +134,8 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     fullWidthSustainWidthMultiplier = 1,
     highwaySpeed = 1.5,
     sustainTextures: HighwaySustainTextures | null = null,
+    flameTextures: HighwayFlameTextures | null = null,
+    noteSpriteClippingPlanes: THREE.Plane[] = clippingPlanes,
   ) {
     this.getTextureForNote = getTextureForNote;
     this.clippingPlanes = clippingPlanes;
@@ -113,6 +144,8 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     this.fullWidthSustainWidthMultiplier = fullWidthSustainWidthMultiplier;
     this.highwaySpeed = highwaySpeed;
     this.sustainTextures = sustainTextures;
+    this.flameTextures = flameTextures;
+    this.noteSpriteClippingPlanes = noteSpriteClippingPlanes;
   }
 
   // -----------------------------------------------------------------------
@@ -176,8 +209,12 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
   // ElementRenderer interface
   // -----------------------------------------------------------------------
 
-  create(data: NoteElementData): THREE.Group {
+  create(data: NoteElementData, msTime = data.note.msTime): THREE.Group {
     const group = new THREE.Group();
+    // Scene-level groups use renderOrder as their sort bucket. Keep the full
+    // note/effect group above the source-backed fret hitline group so flames,
+    // sustains, and selection overlays are composited over the frets.
+    group.renderOrder = 4;
 
     const material = this.getTextureForNote(data.note, {
       inStarPower: data.inStarPower,
@@ -213,7 +250,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
 
     sprite.position.x = 0;
     sprite.position.z = 0;
-    sprite.material.clippingPlanes = this.clippingPlanes;
+    sprite.material.clippingPlanes = this.noteSpriteClippingPlanes;
     sprite.material.depthTest = false;
     sprite.material.transparent = true;
 
@@ -243,6 +280,8 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
       this.createSustain(group, data);
     }
 
+    this.createFlame(group, data, msTime);
+
     return group;
   }
 
@@ -253,10 +292,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     while (group.children.length > 1) {
       const child = group.children[group.children.length - 1];
       group.remove(child);
-      if (child instanceof THREE.Mesh) {
-        child.geometry?.dispose();
-        // Don't dispose shared materials (the highlight material).
-      }
+      this.disposeGeometryTree(child);
     }
     // Reset transient hover/selection flags so a re-used group doesn't
     // carry state into a different element.
@@ -293,6 +329,49 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
   }
 
   /**
+   * Animate the one-shot flame at the fixed playline. The note group itself
+   * keeps scrolling past the line, so the flame is counter-positioned to stay
+   * anchored at world Y=-1 while the note's time window keeps it alive long
+   * enough for all frames to play.
+   */
+  update(group: THREE.Group, currentTimeMs: number): void {
+    const flame = group.children.find(
+      child => child.userData?.['role'] === FLAME_ROLE,
+    );
+    if (!(flame instanceof THREE.Sprite)) return;
+
+    const userData = group.userData as {
+      flameMsTime?: number;
+      flameOpen?: boolean;
+    };
+    const flameMsTime = userData.flameMsTime;
+    if (flameMsTime == null) return;
+
+    const elapsed = currentTimeMs - flameMsTime;
+    const textures = userData.flameOpen
+      ? this.flameTextures?.open
+      : this.flameTextures?.hit;
+    const duration = userData.flameOpen
+      ? HIGHWAY_OPEN_FLAME_DURATION_MS
+      : HIGHWAY_FLAME_DURATION_MS;
+    if (!textures?.length || elapsed < 0 || elapsed >= duration) {
+      flame.visible = false;
+      return;
+    }
+
+    const frameIndex = Math.min(
+      Math.floor(elapsed / HIGHWAY_FLAME_FRAME_DURATION_MS),
+      textures.length - 1,
+    );
+    if (flame.material.map !== textures[frameIndex]) {
+      flame.material.map = textures[frameIndex];
+      flame.material.needsUpdate = true;
+    }
+    flame.position.y = -1 - group.position.y;
+    flame.visible = true;
+  }
+
+  /**
    * Composite the highlight mesh's material from hovered + selected. The
    * three states (hover-only, selected-only, both) bind to three shared
    * materials at the corresponding opacity (0.25 / 0.35 / 0.60). Mesh is
@@ -312,13 +391,11 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     const selected = !!u.selected;
     const material = this.getHighlightMaterial(hovered, selected);
 
-    let highlight: THREE.Mesh | null = null;
-    if (
-      group.children.length > CHILD_SELECTION &&
-      group.children[CHILD_SELECTION] instanceof THREE.Mesh
-    ) {
-      highlight = group.children[CHILD_SELECTION] as THREE.Mesh;
-    }
+    const highlightChild = group.children.find(
+      child => child.userData?.['role'] === SELECTION_ROLE,
+    );
+    let highlight =
+      highlightChild instanceof THREE.Mesh ? highlightChild : null;
 
     // No mesh yet, and we don't need one — skip allocation.
     if (!highlight && !material) return;
@@ -330,6 +407,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
         group.add(placeholder);
       }
       highlight = new THREE.Mesh(this.getHighlightGeometry(), material!);
+      highlight.userData['role'] = SELECTION_ROLE;
       highlight.renderOrder = 5;
       const dims = u.highlightDims ?? {w: SCALE * 2.2, h: SCALE * 1.8};
       highlight.scale.set(dims.w, dims.h, 1);
@@ -374,6 +452,16 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     return this.highlightGeometry;
   }
 
+  private disposeGeometryTree(object: THREE.Object3D): void {
+    if (object instanceof THREE.Mesh) {
+      object.geometry?.dispose();
+      // Don't dispose shared materials (the highlight material).
+    }
+    for (const child of object.children) {
+      this.disposeGeometryTree(child);
+    }
+  }
+
   private createSustain(group: THREE.Group, data: NoteElementData): THREE.Mesh {
     const sustainWorldHeight = highwaySustainWorldHeight(
       data.msLength,
@@ -395,7 +483,7 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
       map: texture,
       side: THREE.DoubleSide,
     });
-    mat.clippingPlanes = this.clippingPlanes;
+    mat.clippingPlanes = this.noteSpriteClippingPlanes;
     mat.depthTest = false;
     mat.transparent = true;
 
@@ -408,7 +496,56 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     plane.position.z = 0;
     plane.position.y = 0.03 + sustainWorldHeight / 2;
     plane.renderOrder = 2;
-    group.add(plane);
+
+    // The note group itself is sorted above the fret hitline so heads, flames,
+    // and selection overlays remain on top. Put the sustain in an overriding
+    // lower-order group so its tail passes underneath the fret buttons.
+    const sustainLayer = new THREE.Group();
+    sustainLayer.renderOrder = 2;
+    sustainLayer.add(plane);
+    group.add(sustainLayer);
     return plane;
+  }
+
+  private createFlame(
+    group: THREE.Group,
+    data: NoteElementData,
+    msTime: number,
+  ): void {
+    const fullWidth = data.isOpen || data.isKick;
+    const textures = fullWidth
+      ? this.flameTextures?.open
+      : this.flameTextures?.hit;
+    if (!textures?.length || (!fullWidth && data.lane < 0)) return;
+
+    const material = new THREE.SpriteMaterial({map: textures[0]});
+    material.clippingPlanes = this.clippingPlanes;
+    material.depthTest = false;
+    material.transparent = true;
+
+    const flame = new THREE.Sprite(material);
+    flame.userData['role'] = FLAME_ROLE;
+    if (fullWidth) {
+      // The open flame is one complete five-arch sprite, not an animation
+      // sheet. Preserve its source aspect ratio so each arch stays aligned
+      // with the fret hitline instead of stretching vertically.
+      // Kick flames use a separate four-lane source with its own existing
+      // placement. Guitar/bass open flames are anchored at the fret crest so
+      // the five white arches sit on the matching hitline curves.
+      flame.center.set(0.5, data.isKick ? 0.5 : OPEN_FLAME_PIVOT_Y);
+      const aspectRatio =
+        flame.material.map!.image.width / flame.material.map!.image.height;
+      const flameWidth = data.isKick ? DRUM_OPEN_FLAME_WIDTH : OPEN_FLAME_WIDTH;
+      flame.scale.set(flameWidth, flameWidth / aspectRatio, 1);
+    } else {
+      flame.center.set(0.5, FLAME_PIVOT_Y);
+      flame.scale.set(FLAME_HEIGHT, FLAME_HEIGHT, 1);
+    }
+    flame.position.z = 0;
+    flame.renderOrder = 6;
+    flame.visible = false;
+    group.userData['flameMsTime'] = msTime;
+    group.userData['flameOpen'] = fullWidth;
+    group.add(flame);
   }
 }

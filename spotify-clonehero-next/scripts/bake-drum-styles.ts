@@ -38,9 +38,8 @@
  *   never writes them — it only reads them as compositing/validation
  *   sources.
  *
- * Source art: 128x64 grayscale/RGBA PNG layers under
- * `/Users/eliwhite/Downloads/Textures/Note_Spritesheets/Drums/` (Unity
- * export).
+ * Source art: 128x64 grayscale/RGBA PNG layers under the supplied source
+ * directory (Unity export).
  *
  * Validation gates (blocking — a color's outputs are skipped, with a loud
  * warning, unless the gate passes or --force is given):
@@ -56,9 +55,9 @@
  *   square ghost output.
  *
  * Run with:
- *   pnpm tsx scripts/bake-drum-styles.ts            # bake + overwrite outputs
- *   pnpm tsx scripts/bake-drum-styles.ts --verify    # gates + assertions only, no writes
- *   pnpm tsx scripts/bake-drum-styles.ts --force     # bake even if a validation gate fails
+ *   pnpm tsx scripts/bake-drum-styles.ts <drum-textures-dir> [output-dir]            # bake + overwrite outputs
+ *   pnpm tsx scripts/bake-drum-styles.ts <drum-textures-dir> [output-dir] --verify    # gates + assertions only, no writes
+ *   pnpm tsx scripts/bake-drum-styles.ts <drum-textures-dir> [output-dir] --force     # bake even if a validation gate fails
  */
 
 import {promises as fs} from 'fs';
@@ -70,8 +69,6 @@ import sharp from 'sharp';
 // Paths
 // ---------------------------------------------------------------------------
 
-const SOURCE_DIR =
-  '/Users/eliwhite/Downloads/Textures/Note_Spritesheets/Drums/';
 const OUTPUT_DIR = path.join(
   __dirname,
   '..',
@@ -391,38 +388,62 @@ function framePaths(
   });
 }
 
-const TOMS_DIR = path.join(SOURCE_DIR, 'toms');
-const TOMS_SQUARE_DIR = path.join(SOURCE_DIR, 'toms square');
-
 /** Only the layers actually needed: the untinted accent overlay frames, and
  * the ghost gem/cage pair used for the curve fit + recomposite validation.
  * Base/sp source layers (body/head/shine) aren't needed — square and round
  * base/sp are shipped art this script never regenerates. */
-const ROUND_SOURCES = {
-  accent: framePaths(path.join(TOMS_DIR, 'Accents'), 'AcPc', FRAME_COUNT, {
-    start: 1,
-    pad: 2,
-  }),
-  ghostBody: path.join(SOURCE_DIR, 'ghost_tom.png'),
-  ghostHead: path.join(SOURCE_DIR, 'ghost_tom_head.png'),
-};
+interface DrumStyleSourcePaths {
+  round: {
+    accent: string[];
+    ghostBody: string;
+    ghostHead: string;
+  };
+  square: {
+    accent: string[];
+    ghostBody: string;
+    ghostHead: string;
+  };
+}
 
-const SQUARE_SOURCES = {
-  accent: framePaths(
-    path.join(TOMS_SQUARE_DIR, 'SqTmAc'),
-    'SqTmAc',
-    FRAME_COUNT,
-  ),
-  ghostBody: path.join(TOMS_SQUARE_DIR, 'SQTMBody-Ghost.png'),
-  ghostHead: path.join(TOMS_SQUARE_DIR, 'SQTMBaseghost.png'),
-};
+interface DrumStylePaths extends DrumStyleSourcePaths {
+  outputDir: string;
+}
+
+function createDrumStylePaths(
+  sourceDir: string,
+  outputDir = OUTPUT_DIR,
+): DrumStylePaths {
+  const tomsDir = path.join(sourceDir, 'toms');
+  const tomsSquareDir = path.join(sourceDir, 'toms square');
+
+  return {
+    outputDir,
+    round: {
+      accent: framePaths(path.join(tomsDir, 'Accents'), 'AcPc', FRAME_COUNT, {
+        start: 1,
+        pad: 2,
+      }),
+      ghostBody: path.join(sourceDir, 'ghost_tom.png'),
+      ghostHead: path.join(sourceDir, 'ghost_tom_head.png'),
+    },
+    square: {
+      accent: framePaths(
+        path.join(tomsSquareDir, 'SqTmAc'),
+        'SqTmAc',
+        FRAME_COUNT,
+      ),
+      ghostBody: path.join(tomsSquareDir, 'SQTMBody-Ghost.png'),
+      ghostHead: path.join(tomsSquareDir, 'SQTMBaseghost.png'),
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Shipped-file helpers
 // ---------------------------------------------------------------------------
 
-function shippedPath(name: string): string {
-  return path.join(OUTPUT_DIR, name);
+function shippedPath(paths: DrumStylePaths, name: string): string {
+  return path.join(paths.outputDir, name);
 }
 
 async function extractFrames(
@@ -549,11 +570,14 @@ async function verifyAgainstShipped(
  * and the shipped round ghost art is opaque — i.e. pixels whose shipped
  * color is attributable to the gem tint alone.
  */
-async function fitGhostRingCurve(color: DrumColor): Promise<ToneCurve> {
-  const body = await readRgba(ROUND_SOURCES.ghostBody);
-  const head = await readRgba(ROUND_SOURCES.ghostHead);
+async function fitGhostRingCurve(
+  paths: DrumStylePaths,
+  color: DrumColor,
+): Promise<ToneCurve> {
+  const body = await readRgba(paths.round.ghostBody);
+  const head = await readRgba(paths.round.ghostHead);
   const shipped = await readRgba(
-    shippedPath(`drum-tom-round-${color}-ghost.webp`),
+    shippedPath(paths, `drum-tom-round-${color}-ghost.webp`),
   );
 
   const samples: ToneSample[] = [];
@@ -597,55 +621,62 @@ async function fitGhostRingCurve(color: DrumColor): Promise<ToneCurve> {
 // Bake driver
 // ---------------------------------------------------------------------------
 
-async function bakeSquareAccent(color: DrumColor): Promise<void> {
+async function bakeSquareAccent(
+  paths: DrumStylePaths,
+  color: DrumColor,
+): Promise<void> {
   const baseFrames = await extractFrames(
-    shippedPath(`drum-tom-${color}.webp`),
+    shippedPath(paths, `drum-tom-${color}.webp`),
     FRAME_COUNT,
   );
   const frames = await compositeFrames(
-    [{source: baseFrames}, {source: SQUARE_SOURCES.accent}],
+    [{source: baseFrames}, {source: paths.square.accent}],
     FRAME_COUNT,
   );
-  const outPath = shippedPath(outputFileName(color, 'accent'));
+  const outPath = shippedPath(paths, outputFileName(color, 'accent'));
   await framesToAnimatedWebp(frames, FRAME_DELAY_MS, outPath);
   console.log(`[bake] wrote ${outputFileName(color, 'accent')}`);
 }
 
 async function bakeSquareGhost(
+  paths: DrumStylePaths,
   color: DrumColor,
   curve: ToneCurve,
 ): Promise<void> {
-  const gemPng = await sharp(SQUARE_SOURCES.ghostBody)
+  const gemPng = await sharp(paths.square.ghostBody)
     .ensureAlpha()
     .png()
     .toBuffer();
   const tintedGem = await tintGrayscale(gemPng, curve);
   const [frame] = await compositeFrames(
-    [{source: tintedGem}, {source: SQUARE_SOURCES.ghostHead}],
+    [{source: tintedGem}, {source: paths.square.ghostHead}],
     1,
   );
-  const outPath = shippedPath(outputFileName(color, 'ghost'));
+  const outPath = shippedPath(paths, outputFileName(color, 'ghost'));
   await frameToStaticWebp(frame, outPath);
   console.log(`[bake] wrote ${outputFileName(color, 'ghost')}`);
 }
 
-async function runValidationGates(color: DrumColor): Promise<{
+async function runValidationGates(
+  paths: DrumStylePaths,
+  color: DrumColor,
+): Promise<{
   accentGate: VerifyResult;
   ghostGate: VerifyResult;
   curve: ToneCurve;
 }> {
   // Round-accent recomposite check.
   const roundBaseFrames = await extractFrames(
-    shippedPath(`drum-tom-round-${color}.webp`),
+    shippedPath(paths, `drum-tom-round-${color}.webp`),
     FRAME_COUNT,
   );
   const roundAccentRegen = await compositeFrames(
-    [{source: roundBaseFrames}, {source: ROUND_SOURCES.accent}],
+    [{source: roundBaseFrames}, {source: paths.round.accent}],
     FRAME_COUNT,
   );
   const accentGate = await verifyAgainstShipped(
     roundAccentRegen,
-    shippedPath(`drum-tom-round-${color}-accent.webp`),
+    shippedPath(paths, `drum-tom-round-${color}-accent.webp`),
     {label: `round-accent-recompose ${color}`, threshold: 4},
   );
   console.log(
@@ -656,19 +687,19 @@ async function runValidationGates(color: DrumColor): Promise<{
   // to its own fitting sources (round) and compare against shipped round
   // ghost — proves the curve-fit + compositing model before trusting it for
   // the square ghost.
-  const curve = await fitGhostRingCurve(color);
-  const roundGemPng = await sharp(ROUND_SOURCES.ghostBody)
+  const curve = await fitGhostRingCurve(paths, color);
+  const roundGemPng = await sharp(paths.round.ghostBody)
     .ensureAlpha()
     .png()
     .toBuffer();
   const tintedRoundGem = await tintGrayscale(roundGemPng, curve);
   const roundGhostRegen = await compositeFrames(
-    [{source: tintedRoundGem}, {source: ROUND_SOURCES.ghostHead}],
+    [{source: tintedRoundGem}, {source: paths.round.ghostHead}],
     1,
   );
   const ghostGate = await verifyAgainstShipped(
     roundGhostRegen,
-    shippedPath(`drum-tom-round-${color}-ghost.webp`),
+    shippedPath(paths, `drum-tom-round-${color}-ghost.webp`),
     {label: `round-ghost-recompose ${color}`, threshold: 18},
   );
   console.log(
@@ -678,14 +709,17 @@ async function runValidationGates(color: DrumColor): Promise<{
   return {accentGate, ghostGate, curve};
 }
 
-async function assertSpByteEquality(color: DrumColor): Promise<boolean> {
+async function assertSpByteEquality(
+  paths: DrumStylePaths,
+  color: DrumColor,
+): Promise<boolean> {
   let ok = true;
   for (const variant of ['accent-sp', 'ghost-sp'] as const) {
     const squareFile = `drum-tom-${color}-${variant}.webp`;
     const roundFile = `drum-tom-round-${color}-${variant}.webp`;
     const [a, b] = await Promise.all([
-      fs.readFile(shippedPath(squareFile)),
-      fs.readFile(shippedPath(roundFile)),
+      fs.readFile(shippedPath(paths, squareFile)),
+      fs.readFile(shippedPath(paths, roundFile)),
     ]);
     const same = Buffer.compare(new Uint8Array(a), new Uint8Array(b)) === 0;
     console.log(
@@ -696,7 +730,8 @@ async function assertSpByteEquality(color: DrumColor): Promise<boolean> {
   return ok;
 }
 
-async function main() {
+async function main(sourceDir: string, outputDir = OUTPUT_DIR) {
+  const paths = createDrumStylePaths(sourceDir, outputDir);
   const verifyOnly = process.argv.includes('--verify');
   const force = process.argv.includes('--force');
 
@@ -704,14 +739,17 @@ async function main() {
   let anySpMismatch = false;
 
   for (const color of DRUM_COLORS) {
-    const {accentGate, ghostGate, curve} = await runValidationGates(color);
+    const {accentGate, ghostGate, curve} = await runValidationGates(
+      paths,
+      color,
+    );
     const gatesOk = accentGate.ok && ghostGate.ok;
     if (!gatesOk) anyGateFailed = true;
 
     if (!verifyOnly) {
       if (gatesOk || force) {
-        await bakeSquareAccent(color);
-        await bakeSquareGhost(color, curve);
+        await bakeSquareAccent(paths, color);
+        await bakeSquareGhost(paths, color, curve);
       } else {
         console.warn(
           `[bake] SKIPPED ${color} accent/ghost — validation gate failed; re-run with --force to overwrite anyway.`,
@@ -719,7 +757,7 @@ async function main() {
       }
     }
 
-    const spOk = await assertSpByteEquality(color);
+    const spOk = await assertSpByteEquality(paths, color);
     if (!spOk) anySpMismatch = true;
   }
 
@@ -744,10 +782,20 @@ async function main() {
 }
 
 // Guard so importing this module's pure helpers from Jest doesn't trigger a
-// real bake — only run when invoked directly (`pnpm tsx scripts/bake-drum-styles.ts`).
+// real bake — only run when invoked directly with a source directory.
 const isMainModule = process.argv[1]?.endsWith('bake-drum-styles.ts');
 if (isMainModule) {
-  main().catch(error => {
+  const positionalArgs = process.argv
+    .slice(2)
+    .filter(argument => !argument.startsWith('--'));
+  const sourceDir = positionalArgs[0];
+  if (!sourceDir) {
+    throw new Error(
+      'Usage: pnpm tsx scripts/bake-drum-styles.ts <drum-textures-dir> [output-dir] [--verify|--force]',
+    );
+  }
+
+  main(sourceDir, positionalArgs[1] ?? OUTPUT_DIR).catch(error => {
     console.error(error);
     process.exitCode = 1;
   });

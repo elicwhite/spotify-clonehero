@@ -129,6 +129,8 @@ export interface ChartEditorProps {
   /** Shows the chart-file select without an imported source format to warn
    * against — see ExportDialog's `chartFormatSelectable` doc. */
   chartFormatSelectable?: boolean | undefined;
+  /** Use the shared timeline with stacked, independently editable track rows. */
+  stackedPianoRoll?: boolean | undefined;
 }
 
 /**
@@ -180,6 +182,7 @@ export default function ChartEditor({
   defaultExportFormat,
   sourceChartFormat,
   chartFormatSelectable,
+  stackedPianoRoll = false,
 }: ChartEditorProps) {
   const {state, dispatch} = useChartEditorContext();
   const [metadataOpen, setMetadataOpen] = useState(false);
@@ -206,6 +209,13 @@ export default function ChartEditor({
   );
 
   const showSheetMusic = state.showSheetMusic && sheetMusicTrack !== null;
+  const hasMultipleStackedTracks = useMemo(
+    () =>
+      chart.trackData.filter(track =>
+        ['guitar', 'bass', 'drums'].includes(track.instrument),
+      ).length > 1,
+    [chart],
+  );
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-black">
@@ -368,6 +378,7 @@ export default function ChartEditor({
           lyricsWaveData={lyricsWaveData}
           lyricsWaveChannels={lyricsWaveChannels}
           decodedOnsets={decodedOnsets}
+          stackedPianoRoll={stackedPianoRoll && hasMultipleStackedTracks}
           className="border-t"
         />
       </div>

@@ -30,7 +30,11 @@ import {
   MoveEntitiesCommand,
 } from '../commands';
 import {prospectiveNoteAt} from '../editing/prospectiveNote';
-import {entityContextFromScope, trackKeyFromScope} from '../scope';
+import {
+  entityContextFromScope,
+  localNoteIdsForTrack,
+  trackKeyFromScope,
+} from '../scope';
 import {getSelectedIds} from '@/lib/chart-editor-core';
 import {AFFORDANCES} from '../affordances';
 import {selectNotesInRange} from '../editing/marquee';
@@ -82,20 +86,26 @@ export const selectMoveTool: EditorTool = {
     }
 
     if (entity.kind === 'note') {
-      const noteSelection = getSelectedIds(ctx.state, 'note');
+      const trackKey = trackKeyFromScope(ctx.state.activeScope);
+      const noteSelection = trackKey
+        ? new Set(
+            localNoteIdsForTrack(getSelectedIds(ctx.state, 'note'), trackKey),
+          )
+        : getSelectedIds(ctx.state, 'note');
+      const selectionId = entity.id;
       if (evt.shiftKey) {
         const newIds = new Set(noteSelection);
-        if (newIds.has(entity.id)) {
-          newIds.delete(entity.id);
+        if (newIds.has(selectionId)) {
+          newIds.delete(selectionId);
         } else {
-          newIds.add(entity.id);
+          newIds.add(selectionId);
         }
         ctx.dispatch({type: 'SET_SELECTION', kind: 'note', ids: newIds});
-      } else if (!noteSelection.has(entity.id)) {
+      } else if (!noteSelection.has(selectionId)) {
         ctx.dispatch({
           type: 'SET_SELECTION',
           kind: 'note',
-          ids: new Set([entity.id]),
+          ids: new Set([selectionId]),
         });
       }
     } else {
@@ -112,7 +122,10 @@ export const selectMoveTool: EditorTool = {
     if (ctx.capabilities.draggable.has(entity.kind)) {
       ctx.dispatch({
         type: 'SET_HOVER',
-        hovered: {kind: entity.kind, id: entity.id},
+        hovered: {
+          kind: entity.kind,
+          id: entity.id,
+        },
       });
       if (entity.kind === 'note') {
         ctx.drag.setIsDragging(true);
@@ -183,7 +196,12 @@ export const selectMoveTool: EditorTool = {
   },
 
   onPointerUp(ctx: ToolContext, evt: PointerHitInfo): void {
-    const noteSelection = getSelectedIds(ctx.state, 'note');
+    const trackKey = trackKeyFromScope(ctx.state.activeScope);
+    const noteSelection = trackKey
+      ? new Set(
+          localNoteIdsForTrack(getSelectedIds(ctx.state, 'note'), trackKey),
+        )
+      : new Set<string>();
     const noteDrag = ctx.drag.noteDrag;
     if (
       noteDrag?.active &&
@@ -264,7 +282,18 @@ export const boxSelectTool: EditorTool = {
       ctx.schema ?? drums4LaneSchema,
     );
 
-    if (evt.shiftKey) {
+    const trackKey = trackKeyFromScope(ctx.state.activeScope);
+    if (trackKey) {
+      const current = new Set(
+        localNoteIdsForTrack(getSelectedIds(ctx.state, 'note'), trackKey),
+      );
+      if (evt.shiftKey) {
+        selected.forEach(id => current.add(id));
+        ctx.dispatch({type: 'SET_SELECTION', kind: 'note', ids: current});
+      } else {
+        ctx.dispatch({type: 'SET_SELECTION', kind: 'note', ids: selected});
+      }
+    } else if (evt.shiftKey) {
       const merged = new Set(getSelectedIds(ctx.state, 'note'));
       selected.forEach(id => merged.add(id));
       ctx.dispatch({type: 'SET_SELECTION', kind: 'note', ids: merged});

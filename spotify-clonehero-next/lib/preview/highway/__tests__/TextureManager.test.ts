@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import {noteFlags, noteTypes} from '@eliwhite/scan-chart';
-import {loadNoteTextures} from '../TextureManager';
+import {
+  loadHighwayFlameTextures,
+  loadHighwayFretTextures,
+  loadNoteTextures,
+} from '../TextureManager';
 import type {Note} from '../types';
 
 /**
@@ -184,5 +188,47 @@ describe('loadNoteTextures texture matrix', () => {
     expect(
       loader.requestedUrls.some(url => url.endsWith('/open-hopo-sp.webp')),
     ).toBe(true);
+  });
+});
+
+describe('loadHighwayFlameTextures', () => {
+  it('loads the fretted and open playline animations as frame sets', async () => {
+    const loader = new StubTextureLoader();
+    const textures = await loadHighwayFlameTextures(
+      loader as unknown as THREE.TextureLoader,
+    );
+
+    // jsdom has no ImageDecoder, so each animated WebP falls back to its
+    // first frame while still exercising the production URL contract.
+    expect(textures.hit).toHaveLength(1);
+    expect(textures.open).toHaveLength(1);
+    expect(loader.requestedUrls).toEqual([
+      '/assets/preview/assets2/highway-hit-flame.webp',
+      '/assets/preview/assets2/highway-open-flame.webp',
+    ]);
+  });
+});
+
+describe('loadHighwayFretTextures', () => {
+  it('loads the supported seven-layer fret composition, including the pick arc', async () => {
+    const loader = new StubTextureLoader();
+    const textures = await loadHighwayFretTextures(
+      loader as unknown as THREE.TextureLoader,
+    );
+
+    expect(Object.keys(textures)).toEqual(['first', 'second', 'third']);
+    expect(Object.keys(textures.first)).toEqual([
+      'base',
+      'inner_color',
+      'cover',
+      'half_cover',
+      'head',
+      'head_light',
+      'pick',
+    ]);
+    expect(loader.requestedUrls).toHaveLength(21);
+    expect(loader.requestedUrls.every(url => url.includes('/frets/'))).toBe(
+      true,
+    );
   });
 });

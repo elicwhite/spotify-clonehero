@@ -73,6 +73,11 @@ describe('guitar schema', () => {
     ]);
   });
 
+  it('uses a wider highway than the four-lane drum layout', () => {
+    expect(guitarSchema.highwayWidth).toBe(1.1);
+    expect(drums4LaneSchema.highwayWidth).toBe(0.9);
+  });
+
   it('frets map to scan-chart five-fret NoteTypes', () => {
     expect(laneForNoteType(guitarSchema, noteTypes.green)?.label).toBe('Green');
     expect(laneForNoteType(guitarSchema, noteTypes.red)?.label).toBe('Red');

@@ -11,8 +11,12 @@ import {
 import {schemaForTrack} from '../../chart-edit/instruments';
 import {
   AnimatedTextureManager,
+  loadHighwayFlameTextures,
+  loadHighwayFretTextures,
   loadHighwaySustainTextures,
   loadNoteTextures,
+  type HighwayFlameTextures,
+  type HighwayFretTextures,
   type HighwaySustainTextures,
 } from './TextureManager';
 import {SceneReconciler} from './SceneReconciler';
@@ -46,6 +50,29 @@ export interface HighwayClippingPlanes {
   marker: THREE.Plane[];
 }
 
+/**
+ * The playline is at y=-1, but the classic highway floor continues another
+ * tenth of a world unit below it. Five-fret hit flames are allowed to enter
+ * that area, while main note heads and sustain tails get the original
+ * playline clip separately. Drums intentionally keep their existing y=-1 clip
+ * plane for every layer.
+ */
+const FIVE_FRET_NOTE_BOTTOM_CLIP_Y = -1.1;
+
+export function noteClippingPlanesForTrack(
+  track: Pick<Track, 'instrument'> | null,
+  clippingPlanes: HighwayClippingPlanes,
+): THREE.Plane[] {
+  if (track?.instrument !== 'guitar' && track?.instrument !== 'bass') {
+    return clippingPlanes.note;
+  }
+
+  return [
+    new THREE.Plane(new THREE.Vector3(0, 1, 0), -FIVE_FRET_NOTE_BOTTOM_CLIP_Y),
+    ...clippingPlanes.note.slice(1),
+  ];
+}
+
 export function createHighwayClippingPlanes(): HighwayClippingPlanes {
   const highwayBeginningPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1);
   const highwayEndPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0.9);
@@ -67,6 +94,8 @@ export function createHighwayClippingPlanes(): HighwayClippingPlanes {
 export interface CellTextures {
   highwayTexture: THREE.Texture;
   sustainTextures: HighwaySustainTextures | null;
+  flameTextures: HighwayFlameTextures | null;
+  fretTextures: HighwayFretTextures | null;
   getTextureForNote: (
     note: Note,
     opts: {inStarPower: boolean},
@@ -86,12 +115,23 @@ export async function loadCellTextures(
   tomStyle: 'square' | 'round' = 'square',
 ): Promise<CellTextures> {
   const animatedTextureManager = new AnimatedTextureManager();
-  const [highwayTexture, sustainTextures] = await Promise.all([
-    getHighwayTexture(textureLoader),
-    instrument === 'guitar' || instrument === 'bass'
-      ? loadHighwaySustainTextures(textureLoader, animatedTextureManager)
-      : Promise.resolve(null),
-  ]);
+  const [highwayTexture, sustainTextures, flameTextures, fretTextures] =
+    await Promise.all([
+      getHighwayTexture(textureLoader),
+      instrument === 'guitar' || instrument === 'bass'
+        ? loadHighwaySustainTextures(textureLoader, animatedTextureManager)
+        : Promise.resolve(null),
+      instrument === 'guitar' || instrument === 'bass' || instrument === 'drums'
+        ? loadHighwayFlameTextures(
+            textureLoader,
+            animatedTextureManager,
+            instrument === 'drums',
+          )
+        : Promise.resolve(null),
+      instrument === 'guitar' || instrument === 'bass' || instrument === 'drums'
+        ? loadHighwayFretTextures(textureLoader, animatedTextureManager)
+        : Promise.resolve(null),
+    ]);
   const {getTextureForNote} = instrument
     ? await loadNoteTextures(
         textureLoader,
@@ -103,6 +143,8 @@ export async function loadCellTextures(
   return {
     highwayTexture,
     sustainTextures,
+    flameTextures,
+    fretTextures,
     getTextureForNote,
     animatedTextureManager,
   };
@@ -152,9 +194,20 @@ export async function buildHighwayCell(
   const {chart, track, textureLoader, textures, clippingPlanes, highwaySpeed} =
     params;
   const schema = track ? schemaForTrack(track, chart.drumType) : null;
+  const noteClippingPlanes = noteClippingPlanesForTrack(track, clippingPlanes);
   // Lanes require both the capability flag and an actual notes track — there's
   // nothing to draw lanes for on a vocals/global scope.
   const lanesActive = params.showDrumLanes && track != null;
+  const fretLanes = schema?.lanes
+    .filter(lane => !lane.fullWidth)
+    .sort((a, b) => a.index - b.index);
+  const fretConfig =
+    fretLanes && (fretLanes.length === 4 || fretLanes.length === 5)
+      ? {
+          laneXs: fretLanes.map(lane => lane.worldXOffset ?? 0),
+          laneColors: fretLanes.map(lane => lane.color),
+        }
+      : null;
 
   let highway: THREE.Mesh;
   if (!lanesActive) {
@@ -169,6 +222,8 @@ export async function buildHighwayCell(
       await loadAndCreateHitBox(
         textureLoader,
         schema?.hitboxTexturePath ?? '/assets/preview/assets/isolated.png',
+        textures.fretTextures,
+        fretConfig,
       ),
     );
   }
@@ -178,12 +233,14 @@ export async function buildHighwayCell(
     : {padColors: [], fullWidthColor: '#FFFFFF', fullWidthWidthMultiplier: 1};
   const noteRenderer = new NoteRenderer(
     textures.getTextureForNote,
-    clippingPlanes.note,
+    noteClippingPlanes,
     sustainStyle.padColors,
     sustainStyle.fullWidthColor,
     sustainStyle.fullWidthWidthMultiplier,
     highwaySpeed,
     textures.sustainTextures,
+    textures.flameTextures,
+    clippingPlanes.note,
   );
 
   const markerRenderers: CellMarkerRenderers = {

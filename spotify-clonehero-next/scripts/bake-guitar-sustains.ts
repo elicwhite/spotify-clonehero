@@ -9,15 +9,13 @@
  * fret frames are kept in their original orientation.
  *
  * Run with:
- *   pnpm tsx scripts/bake-guitar-sustains.ts
+ *   pnpm tsx scripts/bake-guitar-sustains.ts <sustains-source-dir> [output-dir]
  */
 
 import {promises as fs} from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
 
-const SOURCE_DIR =
-  '/Users/eliwhite/Downloads/Textures/Note_Spritesheets/Guitar/Notes/Sustains';
 const OUTPUT_DIR = path.join(
   __dirname,
   '..',
@@ -34,7 +32,7 @@ const FRET_FRAME_TOP = 1;
 const FRET_FRAME_HEIGHT = 70;
 
 export async function bakeGuitarSustainTextures(
-  sourceDir = SOURCE_DIR,
+  sourceDir: string,
   outputDir = OUTPUT_DIR,
 ): Promise<string[]> {
   await fs.mkdir(outputDir, {recursive: true});
@@ -74,7 +72,14 @@ export async function bakeGuitarSustainTextures(
 }
 
 if (process.argv[1]?.endsWith('bake-guitar-sustains.ts')) {
-  bakeGuitarSustainTextures()
+  const sourceDir = process.argv[2];
+  if (!sourceDir) {
+    throw new Error(
+      'Usage: pnpm tsx scripts/bake-guitar-sustains.ts <sustains-source-dir> [output-dir]',
+    );
+  }
+
+  bakeGuitarSustainTextures(sourceDir, process.argv[3] ?? OUTPUT_DIR)
     .then(outputs => {
       for (const output of outputs) console.log(`baked ${output}`);
     })

@@ -1,11 +1,11 @@
 'use client';
 
 import {useEffect, useMemo, useRef, useState} from 'react';
-import {AlertTriangle, Loader2} from 'lucide-react';
+import {AlertTriangle} from 'lucide-react';
+import type {AudioManager} from '@/lib/preview/audioManager';
 import type {ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import {
   createHighwayGrid,
-  type HighwayClock,
   type HighwayGrid,
 } from '@/lib/preview/highway/multiCell';
 import type {Track} from '@/lib/preview/highway/types';
@@ -21,21 +21,14 @@ const LABELS: Record<GuitarDifficulty, string> = {
   easy: 'Easy',
 };
 
-const STATIC_CLOCK: HighwayClock = {
-  isPlaying: false,
-  isInitialized: true,
-  delay: 0,
-  // The representative fixture starts at ~3.8s. A paused clock keeps a
-  // useful phrase in view until live audio input is wired into this route.
-  chartTime: 4.2,
-};
-
 export default function GuitarDifficultyGrid({
   chart,
   tracks,
+  audioManager,
 }: {
   chart: ParsedChart;
   tracks: Record<GuitarDifficulty, Track>;
+  audioManager: AudioManager;
 }) {
   const canvasHostRef = useRef<HTMLDivElement>(null);
   const cellRefs = useRef<Map<GuitarDifficulty, HTMLDivElement>>(new Map());
@@ -62,8 +55,12 @@ export default function GuitarDifficultyGrid({
               container,
               chart,
               track,
-              audioManager: STATIC_CLOCK,
-              config: {showDrumLanes: false, tomStyle: 'square' as const},
+              audioManager,
+              // `showDrumLanes` is the legacy name for the shared lanes-on
+              // switch. Keep it enabled here so the guitar track (including
+              // its playline flames) is rendered; drum lanes remain untouched
+              // because this route only supplies guitar tracks.
+              config: {showDrumLanes: true, tomStyle: 'square' as const},
             },
           ]
         : [];
@@ -78,7 +75,7 @@ export default function GuitarDifficultyGrid({
       grid?.destroy();
       grid = null;
     };
-  }, [chart, cells]);
+  }, [audioManager, chart, cells]);
 
   const setCellRef =
     (difficulty: GuitarDifficulty) => (element: HTMLDivElement | null) => {
@@ -107,7 +104,7 @@ export default function GuitarDifficultyGrid({
         {cells.map(({difficulty, track}) => (
           <div
             key={difficulty}
-            className="relative min-w-0 overflow-hidden rounded-lg border border-border bg-black"
+            className="relative min-w-0 overflow-hidden rounded-lg border border-border bg-transparent"
             style={{height: 320}}>
             <div className="pointer-events-none absolute inset-x-0 top-0 z-[2] flex items-center justify-between bg-black/70 px-3 py-2 text-xs text-white">
               <span className="font-semibold">{LABELS[difficulty]}</span>
@@ -123,10 +120,8 @@ export default function GuitarDifficultyGrid({
           </div>
         ))}
       </div>
-      <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5" />
-        Paused fixture preview at 00:04.20 · live chart/audio input can replace
-        this data flow.
+      <p className="mt-2 text-xs text-muted-foreground">
+        All four views share the chart audio and transport position.
       </p>
     </section>
   );

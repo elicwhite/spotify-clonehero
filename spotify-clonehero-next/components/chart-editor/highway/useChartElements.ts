@@ -48,7 +48,12 @@ import {
   reconcilerKeyFor,
 } from '@/lib/preview/highway/reconcilerKey';
 import type {EditorCapabilities} from '../capabilities';
-import type {EditorScope} from '../scope';
+import {
+  isTrackScope,
+  localNoteIdForTrack,
+  localNoteIdsForTrack,
+  type EditorScope,
+} from '../scope';
 import type {MarkerKind} from './useMarkerDrag';
 
 export interface MarkerDragHint {
@@ -160,9 +165,15 @@ export function computeChartElements(
       ? tickToMs(markerDrag.currentTick, timedTempos, resolution)
       : null;
 
+  const noteDragIds =
+    noteDrag && isTrackScope(activeScope)
+      ? localNoteIdsForTrack(noteDrag.ids, activeScope.track)
+      : noteDrag
+        ? Array.from(noteDrag.ids)
+        : [];
   const noteDragKeys =
     noteDrag && timedTempos.length > 0
-      ? new Set(Array.from(noteDrag.ids, id => reconcilerKeyFor('note', id)))
+      ? new Set(noteDragIds.map(id => reconcilerKeyFor('note', id)))
       : null;
   const noteSchema =
     activeScope.kind === 'track'
@@ -286,11 +297,16 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
   useEffect(() => {
     const reconciler = reconcilerRef.current;
     if (!reconciler) return;
-    const key = hovered
-      ? reconcilerKeyFor(hovered.kind, hovered.id, partName)
-      : null;
+    const hoveredId =
+      hovered && hovered.kind === 'note' && isTrackScope(activeScope)
+        ? localNoteIdForTrack(hovered.id, activeScope.track)
+        : hovered?.id;
+    const key =
+      hovered && hoveredId
+        ? reconcilerKeyFor(hovered.kind, hoveredId, partName)
+        : null;
     reconciler.setHoveredKey(key);
-  }, [reconcilerRef, rendererVersion, hovered, partName]);
+  }, [activeScope, hovered, partName, reconcilerRef, rendererVersion]);
 
   // ---------------------------------------------------------------------
   // 3. Selection push. Translate per-kind selection ids to reconciler
@@ -300,11 +316,17 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
     const reconciler = reconcilerRef.current;
     if (!reconciler) return;
     const keys = new Set<string>();
+    const track = isTrackScope(activeScope) ? activeScope.track : null;
     for (const [kind, ids] of selection) {
       for (const id of ids) {
-        keys.add(reconcilerKeyFor(kind, id, partName));
+        if (kind === 'note' && track) {
+          const localId = localNoteIdForTrack(id, track);
+          if (localId) keys.add(reconcilerKeyFor(kind, localId, partName));
+        } else if (kind !== 'note') {
+          keys.add(reconcilerKeyFor(kind, id, partName));
+        }
       }
     }
     reconciler.setSelectedKeys(keys);
-  }, [reconcilerRef, rendererVersion, selection, partName]);
+  }, [activeScope, partName, reconcilerRef, rendererVersion, selection]);
 }

@@ -68,11 +68,13 @@ export {default as PianoRollTimeline} from './piano-roll/PianoRollTimeline';
 export {default as LoopControls} from './LoopControls';
 export {default as NoteInspector} from './NoteInspector';
 export {default as DifficultyPicker} from './DifficultyPicker';
+export {default as TrackScopePicker} from './TrackScopePicker';
 export {default as ExportDialog} from './ExportDialog';
 export type {AudioSource} from './ExportDialog';
 
 // Commands
 export {
+  AddTrackCommand,
   AddNoteCommand,
   DeleteNotesCommand,
   MoveEntitiesCommand,

@@ -12,7 +12,11 @@ import {
   selectActiveTrack,
   type ToolMode,
 } from '@/lib/chart-editor-core';
-import {trackKeyFromScope} from '../scope';
+import {
+  localNoteIdsForTrack,
+  trackKeyFromScope,
+  trackQualifiedNoteId,
+} from '../scope';
 import {useExecuteCommand, useUndoRedo} from './useEditCommands';
 import {
   AddNoteCommand,
@@ -115,6 +119,14 @@ const FLAG_KEYS: readonly string[] = Array.from(
     ),
   ),
 );
+
+function activeNoteIds(
+  state: Parameters<typeof getSelectedIds>[0],
+): Set<string> {
+  const trackKey = trackKeyFromScope(state.activeScope);
+  if (!trackKey) return new Set();
+  return new Set(localNoteIdsForTrack(getSelectedIds(state, 'note'), trackKey));
+}
 
 /**
  * Registers global keyboard shortcuts for the chart editor using
@@ -241,14 +253,15 @@ export function useEditorKeyboard(onSave?: () => void) {
   useHotkey(
     'Mod+C',
     () => {
-      if (getSelectedIds(state, 'note').size === 0) return;
+      const selectedIds = activeNoteIds(state);
+      if (selectedIds.size === 0) return;
       const track = getActiveTrack();
       const trackKey = trackKeyFromScope(state.activeScope);
       if (!track || !trackKey) return;
       const schema =
         schemaForInstrument(trackKey.instrument) ?? drums4LaneSchema;
       const selected = listNotes(track, schema).filter(n =>
-        getSelectedIds(state, 'note').has(noteId(n)),
+        selectedIds.has(noteId(n)),
       );
       if (selected.length === 0) return;
 
@@ -261,7 +274,7 @@ export function useEditorKeyboard(onSave?: () => void) {
         clipboard: {notes, sourceScope: state.activeScope},
       });
     },
-    {enabled: getSelectedIds(state, 'note').size > 0},
+    {enabled: activeNoteIds(state).size > 0},
   );
 
   // -----------------------------------------------------------------------
@@ -270,14 +283,15 @@ export function useEditorKeyboard(onSave?: () => void) {
   useHotkey(
     'Mod+X',
     () => {
-      if (getSelectedIds(state, 'note').size === 0) return;
+      const selectedIds = activeNoteIds(state);
+      if (selectedIds.size === 0) return;
       const track = getActiveTrack();
       const trackKey = trackKeyFromScope(state.activeScope);
       if (!track || !trackKey) return;
       const schema =
         schemaForInstrument(trackKey.instrument) ?? drums4LaneSchema;
       const selected = listNotes(track, schema).filter(n =>
-        getSelectedIds(state, 'note').has(noteId(n)),
+        selectedIds.has(noteId(n)),
       );
       if (selected.length === 0) return;
 
@@ -292,15 +306,10 @@ export function useEditorKeyboard(onSave?: () => void) {
       });
 
       // Delete
-      executeCommand(
-        new DeleteNotesCommand(
-          new Set(getSelectedIds(state, 'note')),
-          trackKey,
-        ),
-      );
+      executeCommand(new DeleteNotesCommand(selectedIds, trackKey));
       dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
     },
-    {enabled: getSelectedIds(state, 'note').size > 0},
+    {enabled: activeNoteIds(state).size > 0},
   );
 
   // -----------------------------------------------------------------------
@@ -353,7 +362,9 @@ export function useEditorKeyboard(onSave?: () => void) {
           new BatchCommand(commands, `Paste ${commands.length} note(s)`),
         );
 
-        const newIds = new Set(translated.map(n => noteId(n)));
+        const newIds = new Set(
+          translated.map(n => trackQualifiedNoteId(trackKey, noteId(n))),
+        );
         dispatch({type: 'SET_SELECTION', kind: 'note', ids: newIds});
       }
     },
@@ -378,7 +389,13 @@ export function useEditorKeyboard(onSave?: () => void) {
     const track = getActiveTrack();
     if (track) {
       const schema = getActiveSchema();
-      const allIds = new Set(listNotes(track, schema).map(n => noteId(n)));
+      const trackKey = trackKeyFromScope(state.activeScope);
+      if (!trackKey) return;
+      const allIds = new Set(
+        listNotes(track, schema).map(n =>
+          trackQualifiedNoteId(trackKey, noteId(n)),
+        ),
+      );
       dispatch({type: 'SET_SELECTION', kind: 'note', ids: allIds});
     }
   });
@@ -616,10 +633,11 @@ export function useEditorKeyboard(onSave?: () => void) {
         const binding = schema.flagBindings.find(b => b.defaultKey === key);
         if (!binding) return;
         const flag: NoteFlagName = binding.flag;
-        if (getSelectedIds(state, 'note').size > 0 && state.chartDoc) {
+        const selectedIds = activeNoteIds(state);
+        if (selectedIds.size > 0 && state.chartDoc) {
           executeCommand(
             new ToggleFlagCommand(
-              Array.from(getSelectedIds(state, 'note')),
+              Array.from(selectedIds),
               flag,
               trackKey,
               schema,
@@ -628,8 +646,7 @@ export function useEditorKeyboard(onSave?: () => void) {
         }
       },
       {
-        enabled:
-          getSelectedIds(state, 'note').size > 0 && state.chartDoc !== null,
+        enabled: activeNoteIds(state).size > 0 && state.chartDoc !== null,
         conflictBehavior: 'allow',
       },
     );
@@ -654,7 +671,7 @@ export function useEditorKeyboard(onSave?: () => void) {
       }
       return;
     }
-    const selectedNotes = getSelectedIds(state, 'note');
+    const selectedNotes = activeNoteIds(state);
     if (selectedNotes.size > 0) {
       const trackKey = trackKeyFromScope(state.activeScope);
       if (!trackKey) return;
@@ -667,13 +684,13 @@ export function useEditorKeyboard(onSave?: () => void) {
 
   useHotkey('Delete', handleDelete, {
     enabled:
-      getSelectedIds(state, 'note').size > 0 ||
+      activeNoteIds(state).size > 0 ||
       getFirstSelectedId(state, 'section') !== null,
   });
 
   useHotkey('Backspace', handleDelete, {
     enabled:
-      getSelectedIds(state, 'note').size > 0 ||
+      activeNoteIds(state).size > 0 ||
       getFirstSelectedId(state, 'section') !== null,
     conflictBehavior: 'allow',
   });

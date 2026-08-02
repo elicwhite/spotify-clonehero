@@ -21,10 +21,9 @@ import type {InstrumentSchema, LaneDefinition} from './types';
 // schema so InteractionManager + place-mode logic can resolve "lane →
 // world X" without recomputing geometry. Update both when the renderer's
 // lane spacing changes.
-//   leftOffset = 0.035, NOTE_SPAN_WIDTH = 0.95, SCALE = 0.105
-//   fretX(i) = 0.035 + -(0.95 / 2) + 0.105 + ((0.95 - 0.105) / 5) * i
-//            = -0.335 + 0.169 * i
-const FRET_X = (i: number): number => -0.335 + 0.169 * i;
+// These values mirror the five visible pad centers in the source-backed
+// layered fret hitline. Keep them in sync with highway/types.ts.
+const FRET_X = (i: number): number => -0.386 + 0.193 * i;
 const OPEN_X = 0; // open centers on the highway, like kick
 
 const OPEN: LaneDefinition = {
@@ -100,7 +99,10 @@ function fiveFretSchema(instrument: Instrument): InstrumentSchema {
     ],
     laneShiftExcludes: [noteTypes.open],
     supportsSustain: true,
-    highwayWidth: 1,
+    // Five-fret charts need a wider floor than the four-lane drum highway;
+    // the extra width keeps the source-backed fret hitline from crowding the
+    // outer lanes while preserving the GT spacing.
+    highwayWidth: 1.1,
     hitboxTexturePath: '/assets/preview/assets/isolated.png',
   };
 }

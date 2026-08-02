@@ -16,6 +16,8 @@ import type {GridOverlay} from './GridOverlay';
 import type {GridOverlayConfig} from './GridOverlay';
 import {
   AnimatedTextureManager,
+  loadHighwayFlameTextures,
+  loadHighwayFretTextures,
   loadHighwaySustainTextures,
   loadNoteTextures,
 } from './TextureManager';
@@ -428,6 +430,22 @@ export const setupRenderer = (
             animatedTextureManager,
           )
         : null;
+    const flameTextures =
+      track?.instrument === 'guitar' ||
+      track?.instrument === 'bass' ||
+      track?.instrument === 'drums'
+        ? await loadHighwayFlameTextures(
+            textureLoader,
+            animatedTextureManager,
+            track.instrument === 'drums',
+          )
+        : null;
+    const fretTextures =
+      track?.instrument === 'guitar' ||
+      track?.instrument === 'bass' ||
+      track?.instrument === 'drums'
+        ? await loadHighwayFretTextures(textureLoader, animatedTextureManager)
+        : null;
 
     // Build the reusable scene core (floor, hitbox/strikeline, note + marker
     // renderers, reconciler seeded with the track's notes). Shared verbatim
@@ -439,6 +457,8 @@ export const setupRenderer = (
       textures: {
         highwayTexture,
         sustainTextures,
+        flameTextures,
+        fretTextures,
         getTextureForNote,
         animatedTextureManager,
       },

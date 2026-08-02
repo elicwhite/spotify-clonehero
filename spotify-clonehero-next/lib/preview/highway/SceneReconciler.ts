@@ -41,6 +41,8 @@ export interface ElementRenderer<T = unknown> {
   setHovered?(group: THREE.Group, hovered: boolean): void;
   /** In-place selection transition. Renderer owns the visual. */
   setSelected?(group: THREE.Group, selected: boolean): void;
+  /** Per-frame animation update for active groups. */
+  update?(group: THREE.Group, currentTimeMs: number): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,11 +205,11 @@ export class SceneReconciler {
       if ((el.endMsTime ?? el.msTime) < windowStartMs) continue;
       inWindow.add(el.key);
 
+      const renderer = this.renderers[el.kind];
+      if (!renderer) continue;
       let group = this.activeGroups.get(el.key);
       if (!group) {
         // Enter window -- create group
-        const renderer = this.renderers[el.kind];
-        if (!renderer) continue;
         group = this.acquireGroup(el.kind, el, renderer);
         this.scene.add(group);
         this.activeGroups.set(el.key, group);
@@ -224,6 +226,7 @@ export class SceneReconciler {
 
       // Reposition
       group.position.y = this.noteYPosition(el.msTime, currentTimeMs);
+      renderer.update?.(group, currentTimeMs);
     }
 
     // Recycle groups that left the window

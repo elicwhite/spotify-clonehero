@@ -88,7 +88,7 @@ import {
   laneToType as schemaLaneToType,
   drums4LaneSchema,
 } from '@/lib/chart-edit';
-import type {ChartDocument, InstrumentSchema} from '@/lib/chart-edit';
+import type {ChartDocument, InstrumentSchema, TrackKey} from '@/lib/chart-edit';
 import type {Synctrack} from '@/lib/tempo-map/types';
 import {octaveRescaleSync} from '@/lib/tempo-map/structural-correction';
 import {
@@ -101,8 +101,12 @@ import {getSelectedIds, selectRenderDoc} from '@/lib/chart-editor-core';
 import {
   entityContextFromScope,
   isTrackScope,
+  localNoteIdsForTrack,
+  trackKeyId,
+  trackQualifiedNoteId,
   trackKeyFromScope,
 } from '../scope';
+import {availableTrackKeys} from '@/lib/chart-editor-core/trackInventory';
 import {useExecuteCommand} from '../hooks/useEditCommands';
 import {
   AddNoteCommand,
@@ -202,6 +206,10 @@ const TEMPO_H = 26;
  *  part has lyrics; see {@link lyricsRowHeight}. */
 const LYRICS_ROW_H = 22;
 const WAVE_ROW_H = 40;
+const STACKED_GUTTER_W = 112;
+const STACKED_ROW_HEADER_H = 22;
+const STACKED_LANE_H = 20;
+const STACKED_HIDDEN_ROW_H = STACKED_ROW_HEADER_H;
 
 const COLORS = {
   chrome: '#12151c',
@@ -254,6 +262,7 @@ function isStructuralPreview(state: {
 
 /** Live note-drag state (piano-roll side; deltas anchored on the grabbed note). */
 interface PanelNoteDrag {
+  trackKey: TrackKey;
   anchorTick: number;
   anchorLane: number;
   tickDelta: number;
@@ -264,6 +273,7 @@ interface PanelNoteDrag {
 /** Live guitar/bass sustain endpoint drag. A delta lets multi-selection
  * resizing preserve each note's original length. */
 interface PanelNoteResize {
+  trackKey: TrackKey;
   noteId: string;
   originalLength: number;
   currentLength: number;
@@ -273,6 +283,7 @@ interface PanelNoteResize {
 /** Live click-drag placement. The lane and head stay fixed; dragging right
  * creates the sustain that the user can later fine-tune with its endpoint. */
 interface PanelPlaceNote {
+  trackKey: TrackKey;
   lane: number;
   startTick: number;
   currentTick: number;
@@ -281,6 +292,7 @@ interface PanelPlaceNote {
 
 /** In-flight marquee rectangle in canvas px. */
 interface PanelMarquee {
+  trackKey: TrackKey;
   x0: number;
   y0: number;
   x1: number;
@@ -407,6 +419,8 @@ interface ChartScene {
   timeSignatures: TsChip[];
   sections: SectionFlag[];
   notes: PianoRollNote[];
+  rows: TrackRowScene[];
+  activeTrackKey: TrackKey | null;
   /** Active scope's schema lanes, top→bottom — `PianoRollNote.lane` indexes
    *  into this array. Empty when `showPianoRollNotes` is off or there's no
    *  active track. */
@@ -426,11 +440,106 @@ interface ChartScene {
   lyricsVisible: boolean;
 }
 
+interface TrackRowScene {
+  key: TrackKey;
+  schema: InstrumentSchema;
+  lanes: PianoRollLane[];
+  notes: PianoRollNote[];
+}
+
+interface TrackRowGeometry {
+  row: TrackRowScene;
+  top: number;
+  laneTop: number;
+  bottom: number;
+  laneH: number;
+  visible: boolean;
+}
+
+interface StackedNoteHit {
+  row: TrackRowGeometry;
+  scene: ChartScene;
+  note: PianoRollNote;
+  part: NotePartHit | null;
+}
+
 /** Lyrics-row height for the current scene — 0 (row hidden) when the
  *  'vocals' part has no phrases yet. Shared by `panelGeometry` and `draw` so
  *  hit-testing and rendering can never disagree about the row's presence. */
 function lyricsRowHeight(scene: ChartScene | null): number {
   return scene?.lyricsVisible ? LYRICS_ROW_H : 0;
+}
+
+function stackedRowGeometry(
+  scene: ChartScene,
+  laneTop: number,
+  visibleTrackKeys: ReadonlySet<string>,
+): {rows: TrackRowGeometry[]; height: number} {
+  let cursor = laneTop;
+  const rows = scene.rows.map(row => {
+    const visible = visibleTrackKeys.has(trackKeyId(row.key));
+    const rowHeight = visible
+      ? STACKED_ROW_HEADER_H + Math.max(1, row.lanes.length) * STACKED_LANE_H
+      : STACKED_HIDDEN_ROW_H;
+    const geometry: TrackRowGeometry = {
+      row,
+      top: cursor,
+      laneTop: cursor + (visible ? STACKED_ROW_HEADER_H : 0),
+      bottom: cursor + rowHeight,
+      laneH: STACKED_LANE_H,
+      visible,
+    };
+    cursor += rowHeight;
+    return geometry;
+  });
+  return {rows, height: cursor - laneTop};
+}
+
+function sceneForTrackRow(scene: ChartScene, row: TrackRowScene): ChartScene {
+  return {
+    ...scene,
+    notes: row.notes,
+    lanes: row.lanes,
+    schema: row.schema,
+    activeTrackKey: row.key,
+  };
+}
+
+function rowLabel(value: string): string {
+  return value.length > 0
+    ? value[0].toUpperCase() + value.slice(1).toLowerCase()
+    : value;
+}
+
+function copyCanvasRegion(
+  source: HTMLCanvasElement,
+  destination: HTMLCanvasElement,
+  sourceY: number,
+  height: number,
+): void {
+  const dpr = window.devicePixelRatio || 1;
+  const width = source.width / dpr;
+  if (width <= 0 || height <= 0) return;
+  const pixelHeight = Math.max(1, Math.round(height * dpr));
+  if (destination.width !== source.width) destination.width = source.width;
+  if (destination.height !== pixelHeight) destination.height = pixelHeight;
+  destination.style.width = `${width}px`;
+  destination.style.height = `${height}px`;
+  const ctx = destination.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(
+    source,
+    0,
+    Math.round(sourceY * dpr),
+    source.width,
+    Math.round(height * dpr),
+    0,
+    0,
+    width,
+    height,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -464,6 +573,8 @@ export interface PianoRollTimelineProps {
   lyricsWaveData?: Float32Array | undefined;
   /** Channel count for `lyricsWaveData`. */
   lyricsWaveChannels?: number | undefined;
+  /** Render all supported instrument/difficulty lanes in one shared canvas. */
+  stackedPianoRoll?: boolean | undefined;
   className?: string | undefined;
 }
 
@@ -476,6 +587,7 @@ export default function PianoRollTimeline({
   decodedOnsets,
   lyricsWaveData,
   lyricsWaveChannels = 2,
+  stackedPianoRoll = false,
   className,
 }: PianoRollTimelineProps) {
   const {state, dispatch, capabilities} = useChartEditorContext();
@@ -483,6 +595,10 @@ export default function PianoRollTimeline({
   const chartDoc = state.chartDoc;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stackedTopCanvasRef = useRef<HTMLCanvasElement>(null);
+  const stackedRowsCanvasRef = useRef<HTMLCanvasElement>(null);
+  const stackedWaveCanvasRef = useRef<HTMLCanvasElement>(null);
+  const stackedRowsScrollRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -570,6 +686,9 @@ export default function PianoRollTimeline({
     PianoRollView & {follow: boolean; initialized: boolean}
   >({leftMs: 0, pxPerMs: 0.075, follow: true, initialized: false});
   const sceneRef = useRef<ChartScene | null>(null);
+  const stackedPianoRollRef = useRef(stackedPianoRoll);
+  stackedPianoRollRef.current = stackedPianoRoll;
+  const contentHeightRef = useRef(0);
   const ampRef = useRef<AmpPyramid>({levels: [], durationMs: 0});
   /** Vocals-stem waveform mip-map for the lyrics row (Round 2 §5) — built
    *  from `lyricsWaveData`, empty when the prop is absent. */
@@ -730,21 +849,42 @@ export default function PianoRollTimeline({
     // `showPianoRollNotes: false` (e.g. /tempo) hides note lanes and the
     // lyrics row entirely — the piano roll shows only the tempo grid,
     // ruler, and sections.
-    const activeTrack =
+    const activeTrackKey =
       capabilities.showPianoRollNotes && isTrackScope(state.activeScope)
-        ? (findTrackInParsedChart(parsed, state.activeScope.track)?.track ??
-          null)
+        ? state.activeScope.track
         : null;
-    const schema: InstrumentSchema | null = activeTrack
-      ? schemaForTrack(activeTrack, parsed.drumType)
+    const rows: TrackRowScene[] = capabilities.showPianoRollNotes
+      ? availableTrackKeys(parsed.trackData).flatMap(key => {
+          const track = findTrackInParsedChart(parsed, key)?.track ?? null;
+          const schema = track ? schemaForTrack(track, parsed.drumType) : null;
+          if (!track || !schema) return [];
+          return [
+            {
+              key,
+              schema,
+              lanes: lanesForSchema(schema),
+              notes: extractPianoRollNotes(track, schema),
+            },
+          ];
+        })
+      : [];
+    const activeRow = activeTrackKey
+      ? (rows.find(row => trackKeyId(row.key) === trackKeyId(activeTrackKey)) ??
+        null)
       : null;
-    const lanes = schema ? lanesForSchema(schema) : [];
-    const notes = extractPianoRollNotes(activeTrack, schema);
-    const maxNoteTick = notes.reduce(
-      (max, note) =>
-        Math.max(
+    const schema: InstrumentSchema | null = activeRow?.schema ?? null;
+    const lanes = activeRow?.lanes ?? [];
+    const notes = activeRow?.notes ?? [];
+    const maxNoteTick = rows.reduce(
+      (max, row) =>
+        row.notes.reduce(
+          (rowMax, note) =>
+            Math.max(
+              rowMax,
+              note.tick +
+                (isGuitarBassSchema(row.schema) ? (note.length ?? 0) : 0),
+            ),
           max,
-          note.tick + (isGuitarBassSchema(schema) ? (note.length ?? 0) : 0),
         ),
       0,
     );
@@ -778,6 +918,8 @@ export default function PianoRollTimeline({
       timeSignatures,
       sections,
       notes,
+      rows,
+      activeTrackKey,
       lanes,
       schema,
       totalMs,
@@ -892,50 +1034,143 @@ export default function PianoRollTimeline({
     const view = viewRef.current;
     const scene = sceneRef.current;
     const selection = selectionRef.current;
-    // Row order top→bottom (Round 2 §4): ruler, lyrics, tempo, note lanes,
-    // waveform. Lyrics sit directly under the ruler — they're ms-locked and
-    // never move under a tempo edit, so they read as a caption track above
-    // the tempo/note grid rather than mixed into it.
+    // The original timeline remains the only renderer. In stacked mode only
+    // the note-lane band changes: the ruler, lyrics, tempo lane and waveform
+    // are still drawn once, with every row using the original drawNotes path.
     const showNotes = showPianoRollNotesRef.current;
+    const stacked =
+      showNotes && stackedPianoRollRef.current && (scene?.rows.length ?? 0) > 1;
+    const timelineW = stacked ? Math.max(1, w - STACKED_GUTTER_W) : w;
     const lyricsTop = RULER_H;
     const lyricsH = lyricsRowHeight(scene);
     const tempoTop = lyricsTop + lyricsH;
     const laneTop = tempoTop + TEMPO_H;
-    const laneBottom = h - WAVE_ROW_H;
+    const rowLayout =
+      stacked && scene
+        ? stackedRowGeometry(
+            scene,
+            laneTop,
+            editStateRef.current.visibleTrackKeys,
+          )
+        : null;
+    const laneBottom = rowLayout ? laneTop + rowLayout.height : h - WAVE_ROW_H;
     const laneCount = Math.max(1, scene?.lanes.length ?? 1);
     const laneH = (laneBottom - laneTop) / laneCount;
 
-    // chrome + lane tints
     ctx.fillStyle = COLORS.chrome;
     ctx.fillRect(0, 0, w, h);
+    ctx.save();
+    if (stacked) ctx.translate(STACKED_GUTTER_W, 0);
+
     if (showNotes) {
-      for (let l = 0; l < laneCount; l++) {
-        ctx.fillStyle = l % 2 ? COLORS.laneAlt : COLORS.laneBg;
-        ctx.fillRect(0, laneTop + l * laneH, w, laneH);
+      if (rowLayout && scene) {
+        for (const row of rowLayout.rows) {
+          if (!row.visible) continue;
+          for (let lane = 0; lane < row.row.lanes.length; lane++) {
+            ctx.fillStyle = lane % 2 ? COLORS.laneAlt : COLORS.laneBg;
+            ctx.fillRect(
+              0,
+              row.laneTop + lane * row.laneH,
+              timelineW,
+              row.laneH,
+            );
+          }
+          ctx.fillStyle = COLORS.tempoBg;
+          ctx.fillRect(0, row.top, timelineW, STACKED_ROW_HEADER_H);
+        }
+      } else {
+        for (let l = 0; l < laneCount; l++) {
+          ctx.fillStyle = l % 2 ? COLORS.laneAlt : COLORS.laneBg;
+          ctx.fillRect(0, laneTop + l * laneH, timelineW, laneH);
+        }
       }
     }
 
     if (scene) {
-      drawGrid(ctx, w, h, laneTop, laneBottom, view, scene);
+      drawGrid(ctx, timelineW, h, laneTop, laneBottom, view, scene);
       if (showNotes) {
-        drawNotes(
-          ctx,
-          w,
-          laneTop,
-          laneH,
-          view,
-          scene,
-          selection,
-          hoverIdRef.current,
-          noteDragRef.current,
-          noteResizeRef.current,
-          placeNoteRef.current,
-          ghostRef.current,
-        );
+        if (rowLayout) {
+          const hasQualifiedSelection = Array.from(selection).some(id =>
+            id.includes('|'),
+          );
+          const hasQualifiedHover = hoverIdRef.current?.includes('|') ?? false;
+          const activeKeyId = scene.activeTrackKey
+            ? trackKeyId(scene.activeTrackKey)
+            : null;
+          for (const row of rowLayout.rows) {
+            if (!row.visible) continue;
+            const rowScene = sceneForTrackRow(scene, row.row);
+            const rowSelection = hasQualifiedSelection
+              ? new Set(localNoteIdsForTrack(selection, row.row.key))
+              : trackKeyId(row.row.key) === activeKeyId
+                ? selection
+                : new Set<string>();
+            const rowHover =
+              hoverIdRef.current && hasQualifiedHover
+                ? (localNoteIdsForTrack([hoverIdRef.current], row.row.key)[0] ??
+                  null)
+                : trackKeyId(row.row.key) === activeKeyId
+                  ? hoverIdRef.current
+                  : null;
+            const rowDrag =
+              noteDragRef.current &&
+              trackKeyId(noteDragRef.current.trackKey) ===
+                trackKeyId(row.row.key)
+                ? noteDragRef.current
+                : null;
+            const rowResize =
+              noteResizeRef.current &&
+              trackKeyId(noteResizeRef.current.trackKey) ===
+                trackKeyId(row.row.key)
+                ? noteResizeRef.current
+                : null;
+            const rowPlace =
+              placeNoteRef.current &&
+              trackKeyId(placeNoteRef.current.trackKey) ===
+                trackKeyId(row.row.key)
+                ? placeNoteRef.current
+                : null;
+            const rowGhost = rowPlace ? ghostRef.current : null;
+            drawNotes(
+              ctx,
+              timelineW,
+              row.laneTop,
+              row.laneH,
+              view,
+              rowScene,
+              rowSelection,
+              rowHover,
+              rowDrag,
+              rowResize,
+              rowPlace,
+              rowGhost,
+            );
+            ctx.strokeStyle = COLORS.gridBeat;
+            ctx.beginPath();
+            ctx.moveTo(0, row.bottom + 0.5);
+            ctx.lineTo(timelineW, row.bottom + 0.5);
+            ctx.stroke();
+          }
+        } else {
+          drawNotes(
+            ctx,
+            timelineW,
+            laneTop,
+            laneH,
+            view,
+            scene,
+            selection,
+            hoverIdRef.current,
+            noteDragRef.current,
+            noteResizeRef.current,
+            placeNoteRef.current,
+            ghostRef.current,
+          );
+        }
       }
       drawTempoLane(
         ctx,
-        w,
+        timelineW,
         view,
         scene,
         hoverMarkerRef.current,
@@ -943,9 +1178,6 @@ export default function PianoRollTimeline({
         tempoTop,
       );
       if (scene.lyricsVisible) {
-        // Ghost line (hover OR drag, Round 2 §3b): while dragging, anchor
-        // at the drag's original tick; otherwise, at the hovered chip's
-        // tick (so the grab point is visible before a drag even starts).
         const drag = lyricDragRef.current;
         const hoveredChip = !drag
           ? scene.lyricChips.find(c => c.id === lyricHoverIdRef.current)
@@ -958,7 +1190,7 @@ export default function PianoRollTimeline({
           noteDrag?.active === true ? noteDrag.tickDelta : null;
         drawLyricsRow(
           ctx,
-          w,
+          timelineW,
           view,
           scene,
           lyricsTop,
@@ -973,9 +1205,15 @@ export default function PianoRollTimeline({
           noteDragTickDelta,
         );
       }
-      drawRuler(ctx, w, view, scene, laneBottom, sectionDragRef.current);
+      drawRuler(
+        ctx,
+        timelineW,
+        view,
+        scene,
+        laneBottom,
+        sectionDragRef.current,
+      );
 
-      // Dashed ghost line at a dragged marker's original position (§7).
       const tempoDrag = tempoDragRef.current;
       if (tempoDrag) {
         const gx = Math.round(msToX(tempoDrag.origMs, view)) + 0.5;
@@ -991,21 +1229,19 @@ export default function PianoRollTimeline({
       }
     }
 
-    // waveform row backdrop + top rule
     ctx.fillStyle = COLORS.rulerBg;
-    ctx.fillRect(0, laneBottom, w, WAVE_ROW_H);
+    ctx.fillRect(0, laneBottom, timelineW, WAVE_ROW_H);
     ctx.strokeStyle = COLORS.gridBeat;
     ctx.beginPath();
     ctx.moveTo(0, laneBottom + 0.5);
-    ctx.lineTo(w, laneBottom + 0.5);
+    ctx.lineTo(timelineW, laneBottom + 0.5);
     ctx.stroke();
-    if (scene) {
-      drawWave(ctx, w, laneBottom + 3, h - 3, view, ampRef.current);
-    }
+    if (scene)
+      drawWave(ctx, timelineW, laneBottom + 3, h - 3, view, ampRef.current);
 
-    if (showNotes && scene) drawLaneLabels(ctx, laneTop, laneH, scene.lanes);
+    if (showNotes && scene && !rowLayout)
+      drawLaneLabels(ctx, laneTop, laneH, scene.lanes);
 
-    // marquee box-select rectangle
     const marquee = marqueeRef.current;
     if (marquee) {
       const mx = Math.min(marquee.x0, marquee.x1);
@@ -1019,9 +1255,8 @@ export default function PianoRollTimeline({
       ctx.strokeRect(mx + 0.5, my + 0.5, mw, mh);
     }
 
-    // playhead
     const px = msToX(playheadMs, view);
-    if (px >= -2 && px <= w + 2) {
+    if (px >= -2 && px <= timelineW + 2) {
       ctx.strokeStyle = COLORS.playhead;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -1037,9 +1272,47 @@ export default function PianoRollTimeline({
       ctx.fill();
       ctx.lineWidth = 1;
     }
+    ctx.restore();
+
+    if (rowLayout && scene) {
+      drawStackedGutter(ctx, STACKED_GUTTER_W, rowLayout.rows, h);
+      const topCanvas = stackedTopCanvasRef.current;
+      const rowsCanvas = stackedRowsCanvasRef.current;
+      const waveCanvas = stackedWaveCanvasRef.current;
+      if (topCanvas && rowsCanvas && waveCanvas) {
+        copyCanvasRegion(canvas, topCanvas, 0, laneTop);
+        copyCanvasRegion(canvas, rowsCanvas, laneTop, laneBottom - laneTop);
+        copyCanvasRegion(canvas, waveCanvas, laneBottom, WAVE_ROW_H);
+      }
+    }
   }, []);
 
   drawRef.current = draw;
+
+  const contentHeightForScene = useCallback(
+    (currentScene: ChartScene | null) => {
+      const container = containerRef.current;
+      const viewportHeight =
+        container?.getBoundingClientRect().height ??
+        container?.clientHeight ??
+        1;
+      if (
+        !currentScene ||
+        !stackedPianoRollRef.current ||
+        currentScene.rows.length < 2
+      ) {
+        return viewportHeight;
+      }
+      const laneTop = RULER_H + lyricsRowHeight(currentScene) + TEMPO_H;
+      const {height} = stackedRowGeometry(
+        currentScene,
+        laneTop,
+        editStateRef.current.visibleTrackKeys,
+      );
+      return height + laneTop + WAVE_ROW_H;
+    },
+    [],
+  );
 
   // -- Sizing (DPR-aware, ResizeObserver-driven) -----------------------------
   useEffect(() => {
@@ -1050,12 +1323,36 @@ export default function PianoRollTimeline({
     const applySize = () => {
       const rect = container.getBoundingClientRect();
       const width = Math.max(1, rect.width);
-      const height = Math.max(1, rect.height);
+      const height = Math.max(1, contentHeightForScene(sceneRef.current));
+      contentHeightRef.current = height;
       const dpr = window.devicePixelRatio || 1;
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
+
+      const stacked =
+        stackedPianoRollRef.current && (sceneRef.current?.rows.length ?? 0) > 1;
+      if (stacked) {
+        const current = sceneRef.current;
+        const sharedHeight = RULER_H + lyricsRowHeight(current) + TEMPO_H;
+        const rowsHeight = Math.max(0, height - sharedHeight - WAVE_ROW_H);
+        for (const region of [
+          stackedTopCanvasRef.current,
+          stackedRowsCanvasRef.current,
+          stackedWaveCanvasRef.current,
+        ]) {
+          if (!region) continue;
+          region.width = Math.round(width * dpr);
+          region.style.width = `${width}px`;
+        }
+        if (stackedTopCanvasRef.current)
+          stackedTopCanvasRef.current.style.height = `${sharedHeight}px`;
+        if (stackedRowsCanvasRef.current)
+          stackedRowsCanvasRef.current.style.height = `${rowsHeight}px`;
+        if (stackedWaveCanvasRef.current)
+          stackedWaveCanvasRef.current.style.height = `${WAVE_ROW_H}px`;
+      }
 
       const scene = sceneRef.current;
       const view = viewRef.current;
@@ -1075,7 +1372,7 @@ export default function PianoRollTimeline({
     const ro = new ResizeObserver(applySize);
     ro.observe(container);
     return () => ro.disconnect();
-  }, [audioManager]);
+  }, [audioManager, contentHeightForScene, scene, state.visibleTrackKeys]);
 
   // Initialize the view once the scene lands (in case the container was sized
   // before the chart doc arrived).
@@ -1135,11 +1432,15 @@ export default function PianoRollTimeline({
         if (view.follow && scene && canvas && !scrubbingRef.current) {
           const dpr = window.devicePixelRatio || 1;
           const width = canvas.width / dpr;
+          const viewportWidth =
+            stackedPianoRollRef.current && scene.rows.length > 1
+              ? Math.max(1, width - STACKED_GUTTER_W)
+              : width;
           view.leftMs = followLeftMs({
             playheadMs,
             leftMs: view.leftMs,
             pxPerMs: view.pxPerMs,
-            viewportWidth: width,
+            viewportWidth,
             anchorFraction: followAnchorRef.current,
             totalMs: scene.totalMs,
           });
@@ -1194,7 +1495,11 @@ export default function PianoRollTimeline({
     const canvas = canvasRef.current;
     if (!canvas) return 1;
     const dpr = window.devicePixelRatio || 1;
-    return canvas.width / dpr;
+    const width = canvas.width / dpr;
+    return stackedPianoRollRef.current &&
+      (sceneRef.current?.rows.length ?? 0) > 1
+      ? Math.max(1, width - STACKED_GUTTER_W)
+      : width;
   }, []);
 
   const seekTo = useCallback(
@@ -1230,9 +1535,24 @@ export default function PianoRollTimeline({
     const lyricsH = lyricsRowHeight(sceneRef.current);
     const tempoTop = lyricsTop + lyricsH;
     const laneTop = tempoTop + TEMPO_H;
-    const laneBottom = h - WAVE_ROW_H;
-    const laneCount = Math.max(1, sceneRef.current?.lanes.length ?? 1);
-    const laneH = (laneBottom - laneTop) / laneCount;
+    const currentScene = sceneRef.current;
+    const stacked =
+      stackedPianoRollRef.current && (currentScene?.rows.length ?? 0) > 1;
+    const stackedRows =
+      stacked && currentScene
+        ? stackedRowGeometry(
+            currentScene,
+            laneTop,
+            editStateRef.current.visibleTrackKeys,
+          )
+        : null;
+    const laneBottom = stackedRows
+      ? laneTop + stackedRows.height
+      : h - WAVE_ROW_H;
+    const laneCount = Math.max(1, currentScene?.lanes.length ?? 1);
+    const laneH = stackedRows
+      ? (stackedRows.rows.find(row => row.visible)?.laneH ?? STACKED_LANE_H)
+      : (laneBottom - laneTop) / laneCount;
     return {
       w,
       h,
@@ -1243,6 +1563,8 @@ export default function PianoRollTimeline({
       lyricsTop,
       lyricsH,
       tempoTop,
+      rows: stackedRows?.rows ?? [],
+      stacked,
     };
   }, []);
 
@@ -1251,10 +1573,103 @@ export default function PianoRollTimeline({
     return {laneTop: g.laneTop, laneH: g.laneH, laneCount: g.laneCount};
   }, [panelGeometry]);
 
+  const pointFromEvent = useCallback(
+    (
+      event:
+        | React.MouseEvent<HTMLCanvasElement>
+        | React.PointerEvent<HTMLCanvasElement>,
+    ) => {
+      const region = event.currentTarget.dataset['pianoRollRegion'];
+      const geometry = panelGeometry();
+      const rawX = event.nativeEvent.offsetX;
+      let y = event.nativeEvent.offsetY;
+      if (region === 'rows') y += geometry.laneTop;
+      else if (region === 'waveform') y += geometry.laneBottom;
+      const stacked =
+        stackedPianoRollRef.current && (sceneRef.current?.rows.length ?? 0) > 1;
+      return {
+        x: stacked ? rawX - STACKED_GUTTER_W : rawX,
+        rawX,
+        y,
+      };
+    },
+    [panelGeometry],
+  );
+
+  const stackedRowAtY = useCallback(
+    (y: number): TrackRowGeometry | null => {
+      const g = panelGeometry();
+      if (!g.stacked) return null;
+      return (
+        g.rows.find(row => row.visible && y >= row.laneTop && y < row.bottom) ??
+        null
+      );
+    },
+    [panelGeometry],
+  );
+
+  const stackedRowForKey = useCallback(
+    (trackKey: TrackKey): TrackRowGeometry | null => {
+      const g = panelGeometry();
+      return (
+        g.rows.find(row => trackKeyId(row.row.key) === trackKeyId(trackKey)) ??
+        null
+      );
+    },
+    [panelGeometry],
+  );
+
+  const pickStackedAt = useCallback(
+    (x: number, y: number): StackedNoteHit | null => {
+      const scene = sceneRef.current;
+      const row = stackedRowAtY(y);
+      if (!scene || !row) return null;
+      const rowScene = sceneForTrackRow(scene, row.row);
+      const geo: LaneGeometry = {
+        laneTop: row.laneTop,
+        laneH: row.laneH,
+        laneCount: row.row.lanes.length,
+      };
+      const part = isGuitarBassSchema(rowScene.schema)
+        ? pickNotePartAt(
+            rowScene.notes,
+            {
+              view: viewRef.current,
+              geo,
+              timedTempos: scene.timedTempos,
+              resolution: scene.resolution,
+              hitHalfWidth: NOTE_HIT_HALF_WIDTH,
+            },
+            x,
+            y,
+          )
+        : null;
+      const note =
+        part?.note ??
+        pickNoteAt(
+          rowScene.notes,
+          {
+            view: viewRef.current,
+            geo,
+            timedTempos: scene.timedTempos,
+            resolution: scene.resolution,
+            hitHalfWidth: NOTE_HIT_HALF_WIDTH,
+          },
+          x,
+          y,
+        );
+      return note ? {row, scene: rowScene, note, part} : null;
+    },
+    [stackedRowAtY],
+  );
+
   const pickAt = useCallback(
     (x: number, y: number): PianoRollNote | null => {
       const scene = sceneRef.current;
       if (!scene) return null;
+      if (stackedPianoRollRef.current && scene.rows.length > 1) {
+        return pickStackedAt(x, y)?.note ?? null;
+      }
       if (isGuitarBassSchema(scene.schema)) {
         return (
           pickNotePartAt(
@@ -1284,13 +1699,17 @@ export default function PianoRollTimeline({
         y,
       );
     },
-    [laneGeometry],
+    [laneGeometry, pickStackedAt],
   );
 
   const pickPartAt = useCallback(
     (x: number, y: number): NotePartHit | null => {
       const scene = sceneRef.current;
-      if (!scene || !isGuitarBassSchema(scene.schema)) return null;
+      if (!scene) return null;
+      if (stackedPianoRollRef.current && scene.rows.length > 1) {
+        return pickStackedAt(x, y)?.part ?? null;
+      }
+      if (!isGuitarBassSchema(scene.schema)) return null;
       return pickNotePartAt(
         scene.notes,
         {
@@ -1304,7 +1723,7 @@ export default function PianoRollTimeline({
         y,
       );
     },
-    [laneGeometry],
+    [laneGeometry, pickStackedAt],
   );
 
   const snappedTickAt = useCallback((x: number): number => {
@@ -1343,16 +1762,24 @@ export default function PianoRollTimeline({
 
   // Shared note selection (shift-aware), mirroring the highway's cursor tool.
   const selectNote = useCallback(
-    (id: string, shift: boolean) => {
+    (id: string, shift: boolean, trackKey?: TrackKey) => {
       const st = editStateRef.current;
+      const qualifiedId =
+        stackedPianoRollRef.current && trackKey
+          ? trackQualifiedNoteId(trackKey, id)
+          : id;
       const current = getSelectedIds(st, 'note');
       if (shift) {
         const next = new Set(current);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
+        if (next.has(qualifiedId)) next.delete(qualifiedId);
+        else next.add(qualifiedId);
         dispatch({type: 'SET_SELECTION', kind: 'note', ids: next});
-      } else if (!current.has(id)) {
-        dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set([id])});
+      } else if (!current.has(qualifiedId)) {
+        dispatch({
+          type: 'SET_SELECTION',
+          kind: 'note',
+          ids: new Set([qualifiedId]),
+        });
       }
     },
     [dispatch],
@@ -1378,16 +1805,18 @@ export default function PianoRollTimeline({
     [dispatch],
   );
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent<HTMLCanvasElement>) => {
-      e.preventDefault();
+  const applyWheel = useCallback(
+    (rawX: number, deltaX: number, deltaY: number, shiftKey: boolean) => {
+      const stacked =
+        stackedPianoRollRef.current && (sceneRef.current?.rows.length ?? 0) > 1;
+      if (stacked && rawX < STACKED_GUTTER_W) return false;
       const scene = sceneRef.current;
-      if (!scene) return;
+      if (!scene) return true;
       const view = viewRef.current;
       const w = viewportWidth();
-      const pan = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      const pan = shiftKey || Math.abs(deltaX) > Math.abs(deltaY);
       if (pan) {
-        const deltaPx = e.shiftKey ? e.deltaY || e.deltaX : e.deltaX;
+        const deltaPx = shiftKey ? deltaY || deltaX : deltaX;
         const next = panByPx(view, deltaPx, w, scene.totalMs);
         view.leftMs = next.leftMs;
         if (audioManager.isPlaying) view.follow = false;
@@ -1395,8 +1824,8 @@ export default function PianoRollTimeline({
         const bounds = zoomBounds(w, scene.totalMs);
         const next = zoomAt(
           view,
-          e.nativeEvent.offsetX,
-          e.deltaY,
+          stacked ? rawX - STACKED_GUTTER_W : rawX,
+          deltaY,
           w,
           scene.totalMs,
           bounds,
@@ -1406,9 +1835,41 @@ export default function PianoRollTimeline({
       }
       dirtyRef.current = true;
       drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+      return true;
     },
     [audioManager, viewportWidth],
   );
+
+  const handleWheel = useCallback(
+    (e: React.WheelEvent<HTMLElement>) => {
+      const rawX = e.nativeEvent.offsetX;
+      if (applyWheel(rawX, e.deltaX, e.deltaY, e.shiftKey)) {
+        e.preventDefault();
+      }
+    },
+    [applyWheel],
+  );
+
+  useEffect(() => {
+    const viewport = stackedRowsScrollRef.current;
+    if (!viewport) return;
+
+    const onWheel = (event: WheelEvent) => {
+      const rect = viewport.getBoundingClientRect();
+      const rawX = event.clientX - rect.left;
+      if (!applyWheel(rawX, event.deltaX, event.deltaY, event.shiftKey)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    viewport.addEventListener('wheel', onWheel, {
+      capture: true,
+      passive: false,
+    });
+    return () =>
+      viewport.removeEventListener('wheel', onWheel, {
+        capture: true,
+      });
+  }, [applyWheel, stackedPianoRoll]);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -1420,12 +1881,16 @@ export default function PianoRollTimeline({
       // the following `contextmenu` event in Blink/WebKit and the menu never
       // opens (QA round-1 bug).
       if (e.button !== 0 || e.ctrlKey) return;
-      const canvas = canvasRef.current;
+      const canvas = e.currentTarget;
       const scene = sceneRef.current;
-      if (!canvas || !scene) return;
+      if (!scene) return;
       const g = panelGeometry();
-      const y = e.nativeEvent.offsetY;
-      const x = e.nativeEvent.offsetX;
+      const point = pointFromEvent(e);
+      const y = point.y;
+      const stacked =
+        stackedPianoRollRef.current && (scene.rows.length ?? 0) > 1;
+      if (stacked && point.rawX < STACKED_GUTTER_W) return;
+      const x = point.x;
 
       // Any new pointer interaction dismisses an open menu (§10).
       setMenu(null);
@@ -1440,7 +1905,12 @@ export default function PianoRollTimeline({
         canvas.setPointerCapture(e.pointerId);
         viewRef.current.follow = false;
         if (y <= RULER_H) {
-          const hit = hitSection(canvas, x, viewRef.current, scene);
+          const hit = hitSection(
+            canvasRef.current ?? canvas,
+            x,
+            viewRef.current,
+            scene,
+          );
           if (hit) {
             pointerModeRef.current = 'section';
             pointerStartRef.current = {x, y};
@@ -1543,7 +2013,15 @@ export default function PianoRollTimeline({
           }
           pointerModeRef.current = 'marquee';
           pointerStartRef.current = {x, y};
-          marqueeRef.current = {x0: x, y0: y, x1: x, y1: y};
+          marqueeRef.current = {
+            trackKey: trackKeyFromScope(editStateRef.current.activeScope) ??
+              scene.activeTrackKey ??
+              scene.rows[0]?.key ?? {instrument: 'drums', difficulty: 'expert'},
+            x0: x,
+            y0: y,
+            x1: x,
+            y1: y,
+          };
           marqueeBaseRef.current = e.shiftKey
             ? new Set(getSelectedIds(marqueeSt, 'note'))
             : new Set();
@@ -1591,38 +2069,50 @@ export default function PianoRollTimeline({
 
       const st = editStateRef.current;
       const tool = st.activeTool;
-      const trackKey = trackKeyFromScope(st.activeScope);
+      const row = stacked ? stackedRowAtY(y) : null;
+      if (stacked && !row) return;
+      const interactionScene = row ? sceneForTrackRow(scene, row.row) : scene;
+      const interactionTrackKey =
+        row?.row.key ?? trackKeyFromScope(st.activeScope);
+      const interactionLaneGeometry = row
+        ? {
+            laneTop: row.laneTop,
+            laneH: row.laneH,
+            laneCount: row.row.lanes.length,
+          }
+        : laneGeometry();
       const partHit = tool === 'cursor' ? pickPartAt(x, y) : null;
       const hit = pickAt(x, y);
       pointerStartRef.current = {x, y};
 
       if (tool === 'place') {
-        if (!trackKey) return;
-        const lane = laneAtY(y, laneGeometry());
+        if (!interactionTrackKey) return;
+        const lane = laneAtY(y, interactionLaneGeometry);
         if (lane === null) return;
         if (hit) {
           // Toggle: a note already here is removed.
           executeCommand(
             new DeleteNotesCommand(
               new Set([hit.id]),
-              trackKey,
-              scene.schema ?? undefined,
+              interactionTrackKey,
+              interactionScene.schema ?? undefined,
             ),
           );
-        } else if (scene.schema) {
+        } else if (interactionScene.schema) {
           // A click creates a hit; a drag to the right creates the sustain.
           // The note is committed on pointer-up so the same gesture works for
           // both zero-length and sustained guitar/bass notes.
           canvas.setPointerCapture(e.pointerId);
           const startTick = snappedTickAt(x);
           placeNoteRef.current = {
+            trackKey: interactionTrackKey,
             lane,
             startTick,
             currentTick: startTick,
             active: false,
           };
           pointerModeRef.current = 'place-drag';
-          setGhost(prospectiveNoteAt(lane, startTick, scene.schema));
+          setGhost(prospectiveNoteAt(lane, startTick, interactionScene.schema));
         }
         return;
       }
@@ -1630,12 +2120,12 @@ export default function PianoRollTimeline({
       if (tool === 'erase') {
         pointerModeRef.current = 'erase';
         canvas.setPointerCapture(e.pointerId);
-        if (hit && trackKey) {
+        if (hit && interactionTrackKey) {
           executeCommand(
             new DeleteNotesCommand(
               new Set([hit.id]),
-              trackKey,
-              scene.schema ?? undefined,
+              interactionTrackKey,
+              interactionScene.schema ?? undefined,
             ),
           );
         }
@@ -1648,12 +2138,13 @@ export default function PianoRollTimeline({
 
       if (
         partHit?.part === 'end' &&
-        trackKey &&
+        interactionTrackKey &&
         capabilities.draggable.has('note')
       ) {
-        selectNote(partHit.note.id, e.shiftKey);
+        selectNote(partHit.note.id, e.shiftKey, interactionTrackKey);
         pointerModeRef.current = 'resize';
         noteResizeRef.current = {
+          trackKey: interactionTrackKey,
           noteId: partHit.note.id,
           originalLength: partHit.note.length ?? 0,
           currentLength: partHit.note.length ?? 0,
@@ -1664,11 +2155,21 @@ export default function PianoRollTimeline({
       }
 
       if (hit) {
-        selectNote(hit.id, e.shiftKey);
-        dispatch({type: 'SET_HOVER', hovered: {kind: 'note', id: hit.id}});
+        selectNote(hit.id, e.shiftKey, interactionTrackKey);
+        dispatch({
+          type: 'SET_HOVER',
+          hovered: {
+            kind: 'note',
+            id:
+              stacked && interactionTrackKey
+                ? trackQualifiedNoteId(interactionTrackKey, hit.id)
+                : hit.id,
+          },
+        });
         if (capabilities.draggable.has('note')) {
           pointerModeRef.current = 'drag';
           noteDragRef.current = {
+            trackKey: interactionTrackKey!,
             anchorTick: hit.tick,
             anchorLane: hit.lane,
             tickDelta: 0,
@@ -1687,7 +2188,13 @@ export default function PianoRollTimeline({
         dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: new Set()});
       }
       pointerModeRef.current = 'marquee';
-      marqueeRef.current = {x0: x, y0: y, x1: x, y1: y};
+      marqueeRef.current = {
+        trackKey: interactionTrackKey!,
+        x0: x,
+        y0: y,
+        x1: x,
+        y1: y,
+      };
       marqueeBaseRef.current = e.shiftKey
         ? new Set(getSelectedIds(st, 'note'))
         : new Set();
@@ -1705,23 +2212,28 @@ export default function PianoRollTimeline({
       panelGeometry,
       pickAt,
       pickPartAt,
+      stackedRowAtY,
       seekTo,
       seekZone,
       selectLyric,
       selectNote,
       setGhost,
       snappedTickAt,
+      pointFromEvent,
     ],
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      const canvas = canvasRef.current;
+      const canvas = e.currentTarget;
       const scene = sceneRef.current;
-      if (!canvas || !scene) return;
+      if (!scene) return;
       const g = panelGeometry();
-      const y = e.nativeEvent.offsetY;
-      const x = e.nativeEvent.offsetX;
+      const point = pointFromEvent(e);
+      const y = point.y;
+      const stacked =
+        stackedPianoRollRef.current && (scene.rows.length ?? 0) > 1;
+      const x = point.x;
       const mode = pointerModeRef.current;
 
       if (mode === 'scrub') {
@@ -1865,7 +2377,9 @@ export default function PianoRollTimeline({
         const drag = noteResizeRef.current;
         const start = pointerStartRef.current;
         const dx = start ? x - start.x : 0;
-        const anchor = scene.notes.find(n => n.id === drag.noteId);
+        const row = stacked ? stackedRowForKey(drag.trackKey) : null;
+        const rowScene = row ? sceneForTrackRow(scene, row.row) : scene;
+        const anchor = rowScene.notes.find(n => n.id === drag.noteId);
         if (anchor) {
           const nextLength = Math.max(0, snappedTickAt(x) - anchor.tick);
           const moved = drag.active || exceedsDragThreshold(dx, 0);
@@ -1889,7 +2403,16 @@ export default function PianoRollTimeline({
         const dx = start ? x - start.x : 0;
         const dy = start ? y - start.y : 0;
         if (drag.active || exceedsDragThreshold(dx, dy)) {
-          const dragSchema = scene.schema ?? drums4LaneSchema;
+          const row = stacked ? stackedRowForKey(drag.trackKey) : null;
+          const dragScene = row ? sceneForTrackRow(scene, row.row) : scene;
+          const dragGeo = row
+            ? {
+                laneTop: row.laneTop,
+                laneH: row.laneH,
+                laneCount: row.row.lanes.length,
+              }
+            : laneGeometry();
+          const dragSchema = dragScene.schema ?? drums4LaneSchema;
           const {min: minPadLane, max: maxPadLane} = padLaneRange(dragSchema);
           const excludedLane = dragSchema.laneShiftExcludes?.length
             ? schemaTypeToLane(dragSchema, dragSchema.laneShiftExcludes[0])
@@ -1898,8 +2421,14 @@ export default function PianoRollTimeline({
             anchorTick: drag.anchorTick,
             anchorLane: drag.anchorLane,
             snappedCursorTick: snappedTickAt(x),
-            cursorLane: laneAtY(y, laneGeometry()),
-            selectionSize: getSelectedIds(editStateRef.current, 'note').size,
+            cursorLane:
+              row && (y < row.laneTop || y >= row.bottom)
+                ? null
+                : laneAtY(y, dragGeo),
+            selectionSize: localNoteIdsForTrack(
+              getSelectedIds(editStateRef.current, 'note'),
+              drag.trackKey,
+            ).length,
             prevLaneDelta: drag.laneDelta,
             minPadLane,
             maxPadLane,
@@ -1920,14 +2449,29 @@ export default function PianoRollTimeline({
 
       // Live marquee: select notes inside the box (shift merges).
       if (mode === 'marquee' && marqueeRef.current) {
-        marqueeRef.current = {...marqueeRef.current, x1: x, y1: y};
-        const bounds = marqueeBounds(
-          marqueeRef.current,
-          viewRef.current,
-          laneGeometry(),
-        );
-        const my0 = Math.min(marqueeRef.current.y0, marqueeRef.current.y1);
-        const my1 = Math.max(marqueeRef.current.y0, marqueeRef.current.y1);
+        const marquee = marqueeRef.current;
+        const row = stacked ? stackedRowForKey(marquee.trackKey) : null;
+        const constrainedY = row
+          ? Math.max(row.laneTop, Math.min(row.bottom, y))
+          : y;
+        marqueeRef.current = {...marquee, x1: x, y1: constrainedY};
+        const marqueeRect = row
+          ? {
+              ...marqueeRef.current,
+              y0: marquee.y0 - row.laneTop,
+              y1: constrainedY - row.laneTop,
+            }
+          : marqueeRef.current;
+        const marqueeGeo = row
+          ? {
+              laneTop: 0,
+              laneH: row.laneH,
+              laneCount: row.row.lanes.length,
+            }
+          : laneGeometry();
+        const bounds = marqueeBounds(marqueeRect, viewRef.current, marqueeGeo);
+        const my0 = Math.min(marqueeRect.y0, marqueeRect.y1);
+        const my1 = Math.max(marqueeRect.y0, marqueeRect.y1);
 
         // `marqueeBounds`' lane math always clamps to a valid lane index
         // (0..laneCount-1), even when the rectangle never gets near the
@@ -1935,13 +2479,15 @@ export default function PianoRollTimeline({
         // otherwise resolve to lane 0 (red) and spuriously sweep up red
         // notes whose ms range happens to overlap. Only select notes when
         // the rectangle's y-range actually reaches the note-lane band.
-        const reachesNoteLanes = my0 < g.laneBottom && my1 > g.laneTop;
+        const reachesNoteLanes = row
+          ? my0 < row.bottom - row.laneTop && my1 > 0
+          : my0 < g.laneBottom && my1 > g.laneTop;
         const inBox = reachesNoteLanes
           ? selectNotesInRange(
-              scene.notes.map(n => ({
+              (row ? row.row.notes : scene.notes).map(n => ({
                 tick: n.tick,
                 type: schemaLaneToType(
-                  scene.schema ?? drums4LaneSchema,
+                  row?.row.schema ?? scene.schema ?? drums4LaneSchema,
                   n.lane,
                 ),
                 length: 0,
@@ -1950,11 +2496,15 @@ export default function PianoRollTimeline({
               bounds,
               scene.timedTempos,
               scene.resolution,
-              scene.schema ?? drums4LaneSchema,
+              row?.row.schema ?? scene.schema ?? drums4LaneSchema,
             )
           : new Set<string>();
         const merged = new Set(marqueeBaseRef.current);
-        inBox.forEach(id => merged.add(id));
+        inBox.forEach(id =>
+          merged.add(
+            stacked && row ? trackQualifiedNoteId(row.row.key, id) : id,
+          ),
+        );
         dispatch({type: 'SET_SELECTION', kind: 'note', ids: merged});
 
         // The marquee also picks up lyrics, but only when its rectangle
@@ -1963,7 +2513,11 @@ export default function PianoRollTimeline({
         // no tempo-marquee selection at all). A drag confined to the note
         // lanes must not select lyrics just because a note's ms range
         // overlaps a lyric's.
-        if (scene.lyricsVisible && capabilities.selectable.has('lyric')) {
+        if (
+          !row &&
+          scene.lyricsVisible &&
+          capabilities.selectable.has('lyric')
+        ) {
           const reachesLyricsRow =
             my0 < g.lyricsTop + g.lyricsH && my1 > g.lyricsTop;
           const lyricsInBox = reachesLyricsRow
@@ -1981,14 +2535,17 @@ export default function PianoRollTimeline({
 
       // Paint-erase while dragging with the erase tool.
       if (mode === 'erase') {
-        const trackKey = trackKeyFromScope(editStateRef.current.activeScope);
         const hit = pickAt(x, y);
+        const row = stacked ? stackedRowAtY(y) : null;
+        const trackKey =
+          row?.row.key ?? trackKeyFromScope(editStateRef.current.activeScope);
+        const eraseScene = row ? sceneForTrackRow(scene, row.row) : scene;
         if (hit && trackKey) {
           executeCommand(
             new DeleteNotesCommand(
               new Set([hit.id]),
               trackKey,
-              scene.schema ?? undefined,
+              eraseScene.schema ?? undefined,
             ),
           );
         }
@@ -2008,7 +2565,8 @@ export default function PianoRollTimeline({
         // draggable (§6) — `grab` signals the latter; elsewhere in the
         // scrub zones it's a plain seek target.
         const overSection =
-          y <= RULER_H && hitSection(canvas, x, viewRef.current, scene);
+          y <= RULER_H &&
+          hitSection(canvasRef.current ?? canvas, x, viewRef.current, scene);
         canvas.style.cursor = overSection ? 'grab' : 'pointer';
         clearMarkerHover();
         setGhost(null);
@@ -2070,6 +2628,10 @@ export default function PianoRollTimeline({
       clearMarkerHover();
       const hoveredPart = pickPartAt(x, y);
       const hovered = pickAt(x, y);
+      const hoverRow = stacked ? stackedRowAtY(y) : null;
+      const hoverScene = hoverRow
+        ? sceneForTrackRow(scene, hoverRow.row)
+        : scene;
       const st = editStateRef.current;
       // Add-mode ghost: over an empty lane (a click there would ADD; over an
       // existing note a click TOGGLES it off, so no ghost). Uses the same
@@ -2078,11 +2640,18 @@ export default function PianoRollTimeline({
       // while a structural preview locks editing.
       const placing = st.activeTool === 'place' && !isStructuralPreview(st);
       if (placing && !hovered) {
-        const lane = laneAtY(y, laneGeometry());
+        const hoverGeo = hoverRow
+          ? {
+              laneTop: hoverRow.laneTop,
+              laneH: hoverRow.laneH,
+              laneCount: hoverRow.row.lanes.length,
+            }
+          : laneGeometry();
+        const lane = laneAtY(y, hoverGeo);
         setGhost(
-          lane === null || !scene.schema
+          lane === null || !hoverScene.schema
             ? null
-            : prospectiveNoteAt(lane, snappedTickAt(x), scene.schema),
+            : prospectiveNoteAt(lane, snappedTickAt(x), hoverScene.schema),
         );
       } else {
         setGhost(null);
@@ -2095,11 +2664,16 @@ export default function PianoRollTimeline({
             : placing
               ? 'crosshair'
               : 'default';
-      const nextId = hovered ? hovered.id : null;
+      const hoverTrackKey = hoverRow?.row.key;
+      const nextId = hovered
+        ? stacked && hoverTrackKey
+          ? trackQualifiedNoteId(hoverTrackKey, hovered.id)
+          : hovered.id
+        : null;
       if (nextId !== hoverIdRef.current || lyricHoverIdRef.current !== null) {
         dispatch({
           type: 'SET_HOVER',
-          hovered: hovered ? {kind: 'note', id: hovered.id} : null,
+          hovered: hovered ? {kind: 'note', id: nextId!} : null,
         });
       }
     },
@@ -2112,27 +2686,33 @@ export default function PianoRollTimeline({
       panelGeometry,
       pickAt,
       pickPartAt,
+      stackedRowForKey,
+      stackedRowAtY,
       seekTo,
       seekZone,
       setGhost,
       snappedTickAt,
+      pointFromEvent,
     ],
   );
 
   const endPointer = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       const mode = pointerModeRef.current;
-      const canvas = canvasRef.current;
+      const canvas = e.currentTarget;
 
       if (mode === 'place-drag' && placeNoteRef.current) {
         const drag = placeNoteRef.current;
         const scene = sceneRef.current;
-        const trackKey = trackKeyFromScope(editStateRef.current.activeScope);
-        if (scene?.schema && trackKey) {
+        const row = scene?.rows.find(
+          candidate => trackKeyId(candidate.key) === trackKeyId(drag.trackKey),
+        );
+        const placeScene = row && scene ? sceneForTrackRow(scene, row) : scene;
+        if (placeScene?.schema) {
           const prospective = prospectiveNoteAt(
             drag.lane,
             drag.startTick,
-            scene.schema,
+            placeScene.schema,
           );
           executeCommand(
             new AddNoteCommand(
@@ -2144,8 +2724,8 @@ export default function PianoRollTimeline({
                   : 0,
                 flags: prospective.flags,
               },
-              trackKey,
-              scene.schema,
+              drag.trackKey,
+              placeScene.schema,
             ),
           );
         }
@@ -2156,17 +2736,25 @@ export default function PianoRollTimeline({
       if (mode === 'resize' && noteResizeRef.current) {
         const drag = noteResizeRef.current;
         const scene = sceneRef.current;
-        const trackKey = trackKeyFromScope(editStateRef.current.activeScope);
         const delta = drag.currentLength - drag.originalLength;
-        if (drag.active && delta !== 0 && scene?.schema && trackKey) {
-          const ids = new Set(getSelectedIds(editStateRef.current, 'note'));
+        const row = scene?.rows.find(
+          candidate => trackKeyId(candidate.key) === trackKeyId(drag.trackKey),
+        );
+        const resizeScene = row && scene ? sceneForTrackRow(scene, row) : scene;
+        if (drag.active && delta !== 0 && resizeScene?.schema) {
+          const ids = new Set(
+            localNoteIdsForTrack(
+              getSelectedIds(editStateRef.current, 'note'),
+              drag.trackKey,
+            ),
+          );
           ids.add(drag.noteId);
           executeCommand(
             new ResizeNotesCommand(
               Array.from(ids),
               delta,
-              trackKey,
-              scene.schema,
+              drag.trackKey,
+              resizeScene.schema,
             ),
           );
         }
@@ -2177,7 +2765,10 @@ export default function PianoRollTimeline({
         const drag = noteDragRef.current;
         if (drag.active && (drag.tickDelta !== 0 || drag.laneDelta !== 0)) {
           const st = editStateRef.current;
-          const ids = Array.from(getSelectedIds(st, 'note'));
+          const ids = localNoteIdsForTrack(
+            getSelectedIds(st, 'note'),
+            drag.trackKey,
+          );
           // A mixed note+lyric selection (built via shift-click or marquee)
           // moves together: lyrics ride along at the notes' grid-snapped
           // tickDelta (no lane delta — lyrics don't have lanes), each
@@ -2193,7 +2784,7 @@ export default function PianoRollTimeline({
                 ids,
                 drag.tickDelta,
                 drag.laneDelta,
-                entityContextFromScope(st.activeScope),
+                {trackKey: drag.trackKey},
               ),
             );
           }
@@ -2365,6 +2956,33 @@ export default function PianoRollTimeline({
   }, [setGhost]);
 
   // -- Context menus (§7 / §8 / §10) -----------------------------------------
+  const openStackedViewMenu = useCallback(
+    (x: number, y: number) => {
+      const currentScene = sceneRef.current;
+      if (!currentScene) return;
+      setMenu({
+        x,
+        y,
+        items: currentScene.rows.map(row => {
+          const visible = editStateRef.current.visibleTrackKeys.has(
+            trackKeyId(row.key),
+          );
+          return {
+            label: `${row.key.instrument} · ${row.key.difficulty}`,
+            checked: visible,
+            onSelect: () =>
+              dispatch({
+                type: 'SET_TRACK_VISIBILITY',
+                track: row.key,
+                visible: !visible,
+              }),
+          };
+        }),
+      });
+    },
+    [dispatch],
+  );
+
   /** Build the tempo-lane menu (§7 delete-marker; §7/§8 add-marker + downbeat
    *  toggle; Round 2 §6's ×2/÷2 structural correction) at screen x. Returns
    *  [] when nothing actionable is under x. */
@@ -2459,15 +3077,30 @@ export default function PianoRollTimeline({
   /** Build the note context menu (§10): cymbal switch + delete, selection-
    *  aware. Selecting the clicked note first when it isn't already selected. */
   const buildNoteMenu = useCallback(
-    (scene: ChartScene, hit: PianoRollNote): MenuItem[] => {
+    (
+      scene: ChartScene,
+      hit: PianoRollNote,
+      trackKey?: TrackKey,
+    ): MenuItem[] => {
       const current = getSelectedIds(editStateRef.current, 'note');
+      const localCurrent = trackKey
+        ? localNoteIdsForTrack(current, trackKey)
+        : Array.from(current);
       let targetIds: string[];
-      if (current.has(hit.id)) {
-        targetIds = Array.from(current);
+      if (localCurrent.includes(hit.id)) {
+        targetIds = localCurrent;
       } else {
         targetIds = [hit.id];
-        dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set([hit.id])});
+        dispatch({
+          type: 'SET_SELECTION',
+          kind: 'note',
+          ids: new Set([
+            trackKey ? trackQualifiedNoteId(trackKey, hit.id) : hit.id,
+          ]),
+        });
       }
+      const commandTrackKey =
+        trackKey ?? trackKeyFromScope(editStateRef.current.activeScope);
 
       const byId = new Map(scene.notes.map(n => [n.id, n]));
       const targets = targetIds
@@ -2494,15 +3127,12 @@ export default function PianoRollTimeline({
                   : technique[0].toUpperCase() + technique.slice(1),
             checked: allMatch,
             onSelect: () => {
-              const trackKey = trackKeyFromScope(
-                editStateRef.current.activeScope,
-              );
-              if (trackKey && scene.schema) {
+              if (commandTrackKey && scene.schema) {
                 executeCommand(
                   new SetNoteTechniqueCommand(
                     targetIds,
                     technique,
-                    trackKey,
+                    commandTrackKey,
                     scene.schema,
                   ),
                 );
@@ -2515,15 +3145,12 @@ export default function PianoRollTimeline({
         items.push({
           label: commonCymbal ? 'Switch to tom' : 'Switch to cymbal',
           onSelect: () => {
-            const trackKey = trackKeyFromScope(
-              editStateRef.current.activeScope,
-            );
-            if (trackKey) {
+            if (commandTrackKey) {
               executeCommand(
                 new ToggleFlagCommand(
                   targetIds,
                   'cymbal',
-                  trackKey,
+                  commandTrackKey,
                   scene.schema ?? drums4LaneSchema,
                 ),
               );
@@ -2538,12 +3165,11 @@ export default function PianoRollTimeline({
             : 'Delete note',
         danger: true,
         onSelect: () => {
-          const trackKey = trackKeyFromScope(editStateRef.current.activeScope);
-          if (trackKey) {
+          if (commandTrackKey) {
             executeCommand(
               new DeleteNotesCommand(
                 new Set(targetIds),
-                trackKey,
+                commandTrackKey,
                 scene.schema ?? undefined,
               ),
             );
@@ -2688,13 +3314,24 @@ export default function PianoRollTimeline({
       const scene = sceneRef.current;
       if (!scene) return;
       const g = panelGeometry();
-      const y = e.nativeEvent.offsetY;
-      const x = e.nativeEvent.offsetX;
+      const point = pointFromEvent(e);
+      const y = point.y;
+      const containerTop =
+        containerRef.current?.getBoundingClientRect().top ?? 0;
+      const menuY = e.clientY - containerTop;
+      const stacked =
+        stackedPianoRollRef.current && (scene.rows.length ?? 0) > 1;
+      if (stacked && point.rawX < STACKED_GUTTER_W) {
+        openStackedViewMenu(point.rawX, menuY);
+        return;
+      }
+      const x = point.x;
+      const menuX = stacked ? point.rawX : x;
 
       // Lyrics row (Round 2 §2/§4/§5): directly under the ruler now.
       if (y > RULER_H && y < g.tempoTop) {
         const items = buildLyricsMenu(x, y, scene);
-        setMenu(items.length ? {x, y, items} : null);
+        setMenu(items.length ? {x: menuX, y: menuY, items} : null);
         return;
       }
 
@@ -2702,7 +3339,7 @@ export default function PianoRollTimeline({
       // add/delete markers, mark/unmark downbeats.
       if (y < g.laneTop) {
         const items = buildTempoMenu(x, scene);
-        setMenu(items.length ? {x, y, items} : null);
+        setMenu(items.length ? {x: menuX, y: menuY, items} : null);
         return;
       }
 
@@ -2711,8 +3348,8 @@ export default function PianoRollTimeline({
         const items = buildSourceMenu();
         // Open above the pointer so the list doesn't spill past the panel's
         // bottom edge.
-        const top = Math.max(4, y - items.length * 30 - 6);
-        setMenu(items.length ? {x, y: top, items} : null);
+        const top = Math.max(4, menuY - items.length * 30 - 6);
+        setMenu(items.length ? {x: menuX, y: top, items} : null);
         return;
       }
 
@@ -2725,6 +3362,7 @@ export default function PianoRollTimeline({
       // Note lane (§10). Suppressed while a class-(b) structural preview is up —
       // its items (delete / cymbal toggle) execute against the committed doc,
       // which the read-only preview contract forbids editing.
+      const row = stacked ? stackedRowAtY(y) : null;
       const hit = pickAt(x, y);
       if (
         !hit ||
@@ -2734,7 +3372,12 @@ export default function PianoRollTimeline({
         setMenu(null);
         return;
       }
-      setMenu({x, y, items: buildNoteMenu(scene, hit)});
+      const noteScene = row ? sceneForTrackRow(scene, row.row) : scene;
+      setMenu({
+        x: menuX,
+        y: menuY,
+        items: buildNoteMenu(noteScene, hit, row?.row.key),
+      });
     },
     [
       buildLyricsMenu,
@@ -2742,8 +3385,11 @@ export default function PianoRollTimeline({
       buildSourceMenu,
       buildTempoMenu,
       capabilities,
+      openStackedViewMenu,
       panelGeometry,
       pickAt,
+      stackedRowAtY,
+      pointFromEvent,
     ],
   );
 
@@ -2942,6 +3588,16 @@ export default function PianoRollTimeline({
     }
   }, []);
 
+  const stackedLayout = stackedPianoRoll && (scene?.rows.length ?? 0) > 1;
+  const stackedSharedHeight = RULER_H + lyricsRowHeight(scene) + TEMPO_H;
+  const stackedRowsHeight = stackedLayout
+    ? Math.max(
+        0,
+        stackedRowGeometry(scene!, stackedSharedHeight, state.visibleTrackKeys)
+          .height,
+      )
+    : 0;
+
   return (
     <div
       className={cn('relative flex w-full select-none flex-col', className)}
@@ -2962,18 +3618,72 @@ export default function PianoRollTimeline({
         onPointerUp={endResizeDrag}
         onPointerCancel={endResizeDrag}
       />
-      <div ref={containerRef} className="relative min-h-0 w-full flex-1">
-        <canvas
-          ref={canvasRef}
-          className="block h-full w-full"
-          onWheel={handleWheel}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={endPointer}
-          onPointerCancel={endPointer}
-          onPointerLeave={handlePointerLeave}
-          onContextMenu={handleContextMenu}
-        />
+      <div
+        ref={containerRef}
+        className={cn(
+          'relative min-h-0 w-full flex-1',
+          stackedLayout ? 'flex flex-col overflow-hidden' : 'overflow-hidden',
+        )}>
+        {stackedLayout ? (
+          <>
+            <canvas
+              ref={stackedTopCanvasRef}
+              data-piano-roll-region="top"
+              className="block w-full shrink-0"
+              style={{height: stackedSharedHeight}}
+              onWheel={handleWheel}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={endPointer}
+              onPointerCancel={endPointer}
+              onPointerLeave={handlePointerLeave}
+              onContextMenu={handleContextMenu}
+            />
+            <div
+              ref={stackedRowsScrollRef}
+              className="min-h-0 flex-1 overflow-auto"
+              onWheelCapture={handleWheel}>
+              <canvas
+                ref={stackedRowsCanvasRef}
+                data-piano-roll-region="rows"
+                className="block w-full"
+                style={{height: stackedRowsHeight}}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={endPointer}
+                onPointerCancel={endPointer}
+                onPointerLeave={handlePointerLeave}
+                onContextMenu={handleContextMenu}
+              />
+            </div>
+            <canvas
+              ref={stackedWaveCanvasRef}
+              data-piano-roll-region="waveform"
+              className="block w-full shrink-0"
+              style={{height: WAVE_ROW_H}}
+              onWheel={handleWheel}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={endPointer}
+              onPointerCancel={endPointer}
+              onPointerLeave={handlePointerLeave}
+              onContextMenu={handleContextMenu}
+            />
+            <canvas ref={canvasRef} className="hidden" aria-hidden="true" />
+          </>
+        ) : (
+          <canvas
+            ref={canvasRef}
+            className="block w-full"
+            onWheel={handleWheel}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={endPointer}
+            onPointerCancel={endPointer}
+            onPointerLeave={handlePointerLeave}
+            onContextMenu={handleContextMenu}
+          />
+        )}
         {/* Note anchoring under tempo edits ("glue", §9) is audio-glued
             (KEEP-MS) and no longer user-toggleable (QA round-1). `tempoGlueMode`
             still lives on `ChartEditorContext` (defaults to 'audio') and stays
@@ -3830,6 +4540,51 @@ function drawLaneLabels(
     ctx.fillRect(0, y + 2, 44, 13);
     ctx.fillStyle = COLORS.laneLabel;
     ctx.fillText(lanes[l].name.toUpperCase(), 5, y + 12);
+  }
+}
+
+function drawStackedGutter(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  rows: readonly TrackRowGeometry[],
+  height: number,
+): void {
+  ctx.fillStyle = COLORS.chrome;
+  ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = COLORS.gridBeat;
+  ctx.beginPath();
+  ctx.moveTo(width - 0.5, 0);
+  ctx.lineTo(width - 0.5, height);
+  ctx.stroke();
+
+  ctx.font = '600 10px system-ui, sans-serif';
+  for (const row of rows) {
+    const instrument = rowLabel(row.row.key.instrument);
+    const difficulty = rowLabel(row.row.key.difficulty);
+    ctx.fillStyle = row.visible ? COLORS.tempoBg : COLORS.rulerBg;
+    ctx.fillRect(0, row.top, width, row.bottom - row.top);
+    ctx.strokeStyle = COLORS.gridBeat;
+    ctx.beginPath();
+    ctx.moveTo(0, row.top + 0.5);
+    ctx.lineTo(width, row.top + 0.5);
+    ctx.stroke();
+
+    ctx.fillStyle = row.visible ? COLORS.rulerInk : COLORS.laneLabel;
+    ctx.fillText(`${instrument} · ${difficulty}`, 7, row.top + 15);
+    ctx.fillStyle = row.visible ? '#7ab8ff' : COLORS.laneLabel;
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText(row.visible ? '◉' : '○', width - 18, row.top + 15);
+    ctx.font = '600 9.5px system-ui, sans-serif';
+
+    if (!row.visible) continue;
+    for (let lane = 0; lane < row.row.lanes.length; lane++) {
+      const laneInfo = row.row.lanes[lane];
+      const y = row.laneTop + lane * row.laneH;
+      ctx.fillStyle = 'rgba(13,16,23,0.72)';
+      ctx.fillRect(4, y + 2, width - 8, Math.max(14, row.laneH - 4));
+      ctx.fillStyle = laneInfo.color || COLORS.laneLabel;
+      ctx.fillText(laneInfo.name.toUpperCase(), 9, y + 13.5);
+    }
   }
 }
 

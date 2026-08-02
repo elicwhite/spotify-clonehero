@@ -52,7 +52,7 @@ import {
   AudioServiceProvider,
   useAudioServiceContext,
 } from './AudioServiceContext';
-import type {EditorScope} from './scope';
+import {trackKeyId, type EditorScope} from './scope';
 import ChartEditor from './ChartEditor';
 import ClickVolumeControl from './ClickVolumeControl';
 import type {AudioSource} from './ExportDialog';
@@ -96,6 +96,10 @@ export interface TrackEditPageConfig {
   noTrackMessage: string;
   /** Extra control rendered in the ChartEditor header (e.g. a difficulty picker). */
   headerExtra?: ReactNode;
+  /** Extra controls rendered in the ChartEditor left sidebar. */
+  leftPanelChildren?: ReactNode;
+  /** Use the shared multi-track piano roll for this editor route. */
+  stackedPianoRoll?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -447,8 +451,14 @@ function TrackEditEditor({
   onBack,
   onReady,
 }: TrackEditEditorProps) {
-  const {iniChartModifiersOverride, findTrack, noTrackMessage, headerExtra} =
-    config;
+  const {
+    iniChartModifiersOverride,
+    findTrack,
+    noTrackMessage,
+    headerExtra,
+    leftPanelChildren,
+    stackedPianoRoll,
+  } = config;
   const {state, dispatch} = useChartEditorContext();
   const {setAudioManager: publishAudioManager} = useAudioServiceContext();
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
@@ -622,6 +632,18 @@ function TrackEditEditor({
         // 10. Update editor state. ChartDoc carries the parsed chart;
         // consumers derive the active track via selectActiveTrack().
         dispatch({type: 'SET_CHART_DOC', chartDoc});
+        // The unified editor starts with exactly the track chosen by the
+        // page's preference function in View mode. Other tracks remain
+        // available in the sidebar without duplicating the piano roll.
+        dispatch({
+          type: 'SET_VISIBLE_TRACKS',
+          tracks: new Set([
+            trackKeyId({
+              instrument: track.instrument,
+              difficulty: track.difficulty,
+            }),
+          ]),
+        });
         setLoadingState('ready');
         onReady();
       } catch (err) {
@@ -731,7 +753,13 @@ function TrackEditEditor({
         getChartText={getChartText}
         getAudioSources={getAudioSources}
         headerExtra={headerExtra}
-        leftPanelChildren={<ClickVolumeControl audioManager={audioManager} />}
+        leftPanelChildren={
+          <>
+            {leftPanelChildren}
+            <ClickVolumeControl audioManager={audioManager} />
+          </>
+        }
+        stackedPianoRoll={stackedPianoRoll}
       />
     </div>
   );

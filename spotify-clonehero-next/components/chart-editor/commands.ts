@@ -225,6 +225,76 @@ const ENTITY_KIND_TO_COMMAND_KIND: Record<
   'phrase-end': KIND.phrase,
 };
 
+const TRACK_INSTRUMENT_ORDER = ['guitar', 'bass', 'drums'] as const;
+const TRACK_DIFFICULTY_ORDER = ['expert', 'hard', 'medium', 'easy'] as const;
+
+function emptyTrackData(trackKey: TrackKey): ParsedTrackData {
+  return {
+    instrument: trackKey.instrument,
+    difficulty: trackKey.difficulty,
+    starPowerSections: [],
+    rejectedStarPowerSections: [],
+    soloSections: [],
+    flexLanes: [],
+    drumFreestyleSections: [],
+    trackEvents: [],
+    textEvents: [],
+    versusPhrases: [],
+    animations: [],
+    unrecognizedMidiEvents: [],
+    noteEventGroups: [],
+  } as ParsedTrackData;
+}
+
+function trackSortRank(track: TrackKey): number {
+  const instrument = TRACK_INSTRUMENT_ORDER.indexOf(
+    track.instrument as (typeof TRACK_INSTRUMENT_ORDER)[number],
+  );
+  const difficulty = TRACK_DIFFICULTY_ORDER.indexOf(
+    track.difficulty as (typeof TRACK_DIFFICULTY_ORDER)[number],
+  );
+  return (
+    (instrument === -1 ? TRACK_INSTRUMENT_ORDER.length : instrument) * 10 +
+    (difficulty === -1 ? TRACK_DIFFICULTY_ORDER.length : difficulty)
+  );
+}
+
+/** Add one empty supported instrument/difficulty track to a chart. */
+export class AddTrackCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.note;
+  readonly operations = OP.add;
+
+  constructor(private readonly trackKey: TrackKey) {
+    this.description = `Add ${trackKey.instrument} ${trackKey.difficulty} track`;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    if (findTrack(doc, this.trackKey)) return doc;
+
+    const newTrack = emptyTrackData(this.trackKey);
+    const trackData = [...doc.parsedChart.trackData];
+    const insertionIndex = trackData.findIndex(
+      track =>
+        trackSortRank(this.trackKey) <
+        trackSortRank({
+          instrument: track.instrument,
+          difficulty: track.difficulty,
+        }),
+    );
+    if (insertionIndex === -1) trackData.push(newTrack);
+    else trackData.splice(insertionIndex, 0, newTrack);
+
+    return {
+      ...doc,
+      parsedChart: {
+        ...doc.parsedChart,
+        trackData,
+      },
+    };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // AddNoteCommand
 // ---------------------------------------------------------------------------

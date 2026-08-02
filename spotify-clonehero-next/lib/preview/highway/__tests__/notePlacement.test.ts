@@ -61,6 +61,15 @@ describe('resolveNoteGeometry', () => {
   });
 
   describe('five-fret (guitar)', () => {
+    it('uses the visible five-pad hit-area centers for fretted notes', () => {
+      const centers = [0, 1, 2, 3, 4].map(lane =>
+        calculateNoteXOffset('guitar', lane),
+      );
+      [-0.386, -0.193, 0, 0.193, 0.386].forEach((expected, lane) =>
+        expect(centers[lane]).toBeCloseTo(expected, 6),
+      );
+    });
+
     it('resolves open notes as full-width with no lane', () => {
       const geometry = resolveNoteGeometry('guitar', {
         type: noteTypes.open,

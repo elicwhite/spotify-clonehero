@@ -7,9 +7,8 @@
  * ASCII grid renderings of sample fills so a human can sanity-check the output.
  *
  * Run with:
- *   npx tsx scripts/drum-fills-spotcheck.ts [songsDir] [--limit N] [--samples N]
+ *   npx tsx scripts/drum-fills-spotcheck.ts <songs-dir> [--limit N] [--samples N]
  *
- * Default songsDir: /Users/eliwhite/Clone Hero/Songs
  */
 
 import {promises as fs} from 'fs';
@@ -43,8 +42,6 @@ import type {
 } from '../lib/drum-fills/detection/types';
 import {GRID_DIVISIONS_PER_BAR} from '../lib/drum-fills/detection/types';
 
-const DEFAULT_SONGS_DIR = '/Users/eliwhite/Clone Hero/Songs';
-
 interface SongResult {
   name: string;
   fills: ClassifiedFill[];
@@ -53,13 +50,18 @@ interface SongResult {
 
 async function main() {
   const args = process.argv.slice(2);
-  let songsDir = DEFAULT_SONGS_DIR;
+  const songsDir = args.find(arg => !arg.startsWith('--'));
+  if (!songsDir) {
+    throw new Error(
+      'Usage: npx tsx scripts/drum-fills-spotcheck.ts <songs-dir> [--limit N] [--samples N]',
+    );
+  }
+
   let limit = Infinity;
   let sampleCount = 10;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--limit') limit = parseInt(args[++i], 10);
     else if (args[i] === '--samples') sampleCount = parseInt(args[++i], 10);
-    else if (!args[i].startsWith('--')) songsDir = args[i];
   }
 
   console.log(`Scanning ${songsDir} ...`);

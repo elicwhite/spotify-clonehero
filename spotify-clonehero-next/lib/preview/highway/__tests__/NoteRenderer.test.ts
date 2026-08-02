@@ -103,7 +103,11 @@ jest.mock('three', () => {
 
 import {NoteRenderer, type NoteElementData} from '../NoteRenderer';
 import {highwaySustainWorldHeight} from '../sustainGeometry';
-import {OPEN_NOTE_ANCHOR_Y} from '../types';
+import {
+  HIGHWAY_FLAME_DURATION_MS,
+  HIGHWAY_FLAME_FRAME_DURATION_MS,
+  OPEN_NOTE_ANCHOR_Y,
+} from '../types';
 import * as THREE from 'three';
 
 // ---------------------------------------------------------------------------
@@ -138,6 +142,10 @@ function makeNoteData(
   };
 }
 
+function getSustainMesh(group: THREE.Group): any {
+  return (group.children[1] as any).children[0];
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -155,6 +163,7 @@ describe('NoteRenderer', () => {
     const renderer = createTestRenderer();
     const group = renderer.create(makeNoteData());
     expect(group).toBeDefined();
+    expect(group.renderOrder).toBe(4);
     expect(group.children.length).toBeGreaterThanOrEqual(1);
     // First child should be a Sprite
     expect(group.children[0]).toBeDefined();
@@ -187,6 +196,29 @@ describe('NoteRenderer', () => {
     expect(sprite.center.set).toHaveBeenCalledWith(0.5, OPEN_NOTE_ANCHOR_Y);
     expect(sprite.renderOrder).toBe(1);
     expect(group.position.x).toBe(0);
+  });
+
+  it('anchors guitar open flame arches to the fret tops', () => {
+    const renderer = new NoteRenderer(
+      jest.fn().mockReturnValue(new (THREE.SpriteMaterial as any)()),
+      [],
+      [],
+      '#FFFFFF',
+      1,
+      1.5,
+      null,
+      {
+        hit: [],
+        open: [new (THREE.SpriteMaterial as any)().map],
+      } as any,
+    );
+
+    const group = renderer.create(makeNoteData({isOpen: true, lane: -1}));
+    const flame = group.children.find(
+      (child: any) => child.userData?.['role'] === 'playline-flame',
+    ) as any;
+
+    expect(flame.center.set).toHaveBeenCalledWith(0.5, 0.36);
   });
 
   it('create() renders sustains for fretted and full-width open notes', () => {
@@ -230,8 +262,76 @@ describe('NoteRenderer', () => {
       makeNoteData({lane: -1, msLength: 500, isOpen: true}),
     );
 
-    expect((fret.children[1] as any).material.map).toBe(frettedTextures[1]);
-    expect((open.children[1] as any).material.map).toBe(openTexture);
+    expect(getSustainMesh(fret).material.map).toBe(frettedTextures[1]);
+    expect(getSustainMesh(open).material.map).toBe(openTexture);
+  });
+
+  it('clips note heads and sustain tails at the playline while allowing flames below it', () => {
+    const tailClippingPlanes = [{name: 'floor-edge'}] as any;
+    const headClippingPlanes = [{name: 'playline'}] as any;
+    const flameTextures = {hit: [{}], open: []};
+    const renderer = new NoteRenderer(
+      jest.fn().mockReturnValue(new (THREE.SpriteMaterial as any)()),
+      tailClippingPlanes,
+      ['#01b11a'],
+      '#a266ff',
+      5,
+      1.5,
+      null,
+      flameTextures as any,
+      headClippingPlanes,
+    );
+
+    const group = renderer.create(
+      makeNoteData({lane: 0, msLength: 500, isOpen: false}),
+    );
+
+    expect((group.children[0] as any).material.clippingPlanes).toBe(
+      headClippingPlanes,
+    );
+    expect(getSustainMesh(group).material.clippingPlanes).toBe(
+      headClippingPlanes,
+    );
+    const flame = group.children.find(
+      (child: any) => child.userData?.['role'] === 'playline-flame',
+    );
+    expect((flame as any).material.clippingPlanes).toBe(tailClippingPlanes);
+  });
+
+  it('animates a five-fret flame at the playline after the note passes it', () => {
+    const flameTextures = {
+      hit: Array.from({length: 15}, (_, frame) => ({frame})),
+      open: Array.from({length: 8}, (_, frame) => ({frame})),
+    };
+    const renderer = new NoteRenderer(
+      jest.fn().mockReturnValue(new (THREE.SpriteMaterial as any)()),
+      [],
+      [],
+      '#FFFFFF',
+      1,
+      1.5,
+      null,
+      flameTextures as any,
+    );
+    const group = renderer.create(makeNoteData({lane: 0}), 1000);
+    const flame = group.children.find(
+      (child: any) => child.userData?.['role'] === 'playline-flame',
+    ) as any;
+
+    expect(flame).toBeDefined();
+    expect(flame.visible).toBe(false);
+
+    group.position.y = -1.3;
+    renderer.update(group, 1000);
+    expect(flame.visible).toBe(true);
+    expect(flame.material.map).toBe(flameTextures.hit[0]);
+    expect(flame.position.y).toBeCloseTo(0.3);
+
+    renderer.update(group, 1000 + HIGHWAY_FLAME_FRAME_DURATION_MS + 1);
+    expect(flame.material.map).toBe(flameTextures.hit[1]);
+
+    renderer.update(group, 1000 + HIGHWAY_FLAME_DURATION_MS + 1);
+    expect(flame.visible).toBe(false);
   });
 
   it('create() cymbal vs tom -- different textures (getTextureForNote called with correct args)', () => {

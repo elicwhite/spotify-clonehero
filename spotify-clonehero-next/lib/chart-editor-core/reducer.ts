@@ -2,6 +2,32 @@ import type {ChartDocument, DownbeatFlags} from '@/lib/chart-edit';
 import {chartEndTick, deriveDownbeatFlags} from '@/lib/chart-edit';
 import type {ChartEditorAction, ChartEditorState} from './state';
 import {UNDO_STACK_CAP} from './state';
+import {preferredTrackForChart, trackKeyId} from './trackInventory';
+
+function recoverTrackScope(
+  chartDoc: ChartDocument,
+  scope: ChartEditorState['activeScope'],
+): ChartEditorState['activeScope'] {
+  if (scope.kind !== 'track') return scope;
+  const currentId = trackKeyId(scope.track);
+  if (
+    chartDoc.parsedChart.trackData.some(
+      track => trackKeyId(track) === currentId,
+    )
+  ) {
+    return scope;
+  }
+  const fallback = preferredTrackForChart(chartDoc);
+  return fallback
+    ? {
+        kind: 'track',
+        track: {
+          instrument: fallback.instrument as typeof scope.track.instrument,
+          difficulty: fallback.difficulty as typeof scope.track.difficulty,
+        },
+      }
+    : scope;
+}
 
 /**
  * Recompute the downbeat-flag store from a doc's `timeSignatures` (0061 §3b
@@ -25,7 +51,8 @@ export function chartEditorReducer(
   action: ChartEditorAction,
 ): ChartEditorState {
   switch (action.type) {
-    case 'SET_CHART_DOC':
+    case 'SET_CHART_DOC': {
+      const preferred = preferredTrackForChart(action.chartDoc);
       return {
         ...state,
         chartDoc: action.chartDoc,
@@ -34,7 +61,15 @@ export function chartEditorReducer(
         // deliberately not persisted) and drops any in-flight tempo preview.
         tempoGlueMode: 'audio',
         pendingTempoCandidate: null,
+        activeScope: recoverTrackScope(action.chartDoc, state.activeScope),
+        // Start the unified editor with one visible row. Keeping this as an
+        // explicit set, rather than treating an empty set as an implicit
+        // fallback, lets the user hide the final visible row too.
+        visibleTrackKeys: preferred
+          ? new Set([trackKeyId(preferred)])
+          : new Set(),
       };
+    }
     case 'SET_PLAYING':
       if (state.isPlaying === action.isPlaying) return state;
       return {...state, isPlaying: action.isPlaying};
@@ -93,6 +128,7 @@ export function chartEditorReducer(
       return {
         ...state,
         chartDoc: action.chartDoc,
+        activeScope: recoverTrackScope(action.chartDoc, state.activeScope),
         downbeatFlags: computeDownbeatFlags(action.chartDoc),
         // An edit invalidates any in-flight tempo preview (0061 §7): the
         // candidate was derived from the pre-edit doc and rendering or
@@ -119,6 +155,7 @@ export function chartEditorReducer(
       return {
         ...state,
         chartDoc: action.chartDoc,
+        activeScope: recoverTrackScope(action.chartDoc, state.activeScope),
         downbeatFlags: computeDownbeatFlags(action.chartDoc),
         pendingTempoCandidate: null,
         dirty: isDirty,
@@ -140,6 +177,7 @@ export function chartEditorReducer(
       return {
         ...state,
         chartDoc: action.chartDoc,
+        activeScope: recoverTrackScope(action.chartDoc, state.activeScope),
         downbeatFlags: computeDownbeatFlags(action.chartDoc),
         pendingTempoCandidate: null,
         dirty: isDirty,
@@ -183,6 +221,17 @@ export function chartEditorReducer(
     case 'SET_MUTED_TRACKS':
       return {...state, mutedTracks: action.tracks};
 
+    case 'SET_TRACK_VISIBILITY': {
+      const visible = new Set(state.visibleTrackKeys);
+      const id = trackKeyId(action.track);
+      if (action.visible) visible.add(id);
+      else visible.delete(id);
+      return {...state, visibleTrackKeys: visible};
+    }
+
+    case 'SET_VISIBLE_TRACKS':
+      return {...state, visibleTrackKeys: action.tracks};
+
     case 'SET_CURSOR_TICK':
       if (state.cursorTick === action.tick) return state;
       return {...state, cursorTick: Math.max(0, action.tick)};
@@ -208,11 +257,9 @@ export function chartEditorReducer(
 
     case 'SET_ACTIVE_SCOPE':
       if (state.activeScope === action.scope) return state;
-      // Selection ids are scope-blind (e.g. a note's key is
-      // `"${tick}:${type}"` with no track encoded), so a stale selection
-      // from the previous scope can't be safely reinterpreted against the
-      // new one — retargeting a command at the old ids would silently
-      // edit the wrong track. Clear rather than guess (plan 0037 Task 6).
+      // Clear selection when a row becomes active. Track-qualified note ids
+      // prevent cross-row collisions, but a scope switch still should not
+      // silently carry a selection into a different editing surface.
       return {
         ...state,
         activeScope: action.scope,

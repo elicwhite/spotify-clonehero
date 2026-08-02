@@ -9,7 +9,7 @@ import {
   selectActiveTrack,
   selectActiveSchema,
 } from '@/lib/chart-editor-core';
-import {trackKeyFromScope} from './scope';
+import {trackKeyFromScope, trackQualifiedNoteId} from './scope';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {
   ToggleFlagCommand,
@@ -68,7 +68,15 @@ export default function NoteInspector({className}: NoteInspectorProps) {
     if (!track) return [];
     const activeSchema = selectActiveSchema(state) ?? drums4LaneSchema;
     const selected = getSelectedIds(state, 'note');
-    return listNotes(track, activeSchema).filter(n => selected.has(noteId(n)));
+    return listNotes(track, activeSchema).filter(
+      n =>
+        selected.has(
+          trackQualifiedNoteId(
+            trackKeyFromScope(state.activeScope)!,
+            noteId(n),
+          ),
+        ) || selected.has(noteId(n)),
+    );
   }, [state]);
 
   if (selectedNotes.length === 0) return null;
@@ -118,7 +126,10 @@ export default function NoteInspector({className}: NoteInspectorProps) {
         selectedNotes.map(n => {
           const newType =
             !allKick && n.type === noteTypes.kick ? n.type : targetType;
-          return noteId({tick: n.tick, type: newType});
+          return trackQualifiedNoteId(
+            trackKey,
+            noteId({tick: n.tick, type: newType}),
+          );
         }),
       ),
     });

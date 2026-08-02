@@ -15,6 +15,14 @@ export type Song = {};
 
 export const SCALE = 0.105;
 export const NOTE_SPAN_WIDTH = 0.95;
+
+/**
+ * Visible five-fret pad centers in the source-backed fret hitline. The
+ * downloaded fret sprites use a wider spacing than the old isolated hitbox;
+ * sharing these centers keeps approaching notes aligned with the layered pads.
+ */
+const FIVE_FRET_PAD_X_START = -0.386;
+const FIVE_FRET_PAD_X_STEP = 0.193;
 /**
  * Anchor for the visible portion of the full-width open-note texture.
  *
@@ -26,6 +34,16 @@ export const NOTE_SPAN_WIDTH = 0.95;
 export const OPEN_NOTE_ANCHOR_Y = 0.36;
 /** How far ahead (in ms) to render notes beyond the strikeline. */
 export const HIGHWAY_DURATION_MS = 1500;
+
+/** The source flame sheets are presented at the highway's 60 fps cadence. */
+export const HIGHWAY_FLAME_FRAME_DURATION_MS = 1000 / 60;
+
+/** How long the fifteen-frame fretted hit flame remains active. */
+export const HIGHWAY_FLAME_DURATION_MS = HIGHWAY_FLAME_FRAME_DURATION_MS * 15;
+
+/** How long the static open-note flame overlay remains active. */
+export const HIGHWAY_OPEN_FLAME_DURATION_MS =
+  HIGHWAY_FLAME_FRAME_DURATION_MS * 8;
 
 export const NOTE_COLORS = {
   green: '#01B11A',
@@ -116,7 +134,11 @@ export type HitResult =
   | null;
 
 export function calculateNoteXOffset(instrument: Instrument, lane: number) {
-  const leftOffset = instrument == 'drums' ? 0.135 : 0.035;
+  if (instrument !== 'drums') {
+    return FIVE_FRET_PAD_X_START + FIVE_FRET_PAD_X_STEP * lane;
+  }
+
+  const leftOffset = 0.135;
 
   return (
     leftOffset +

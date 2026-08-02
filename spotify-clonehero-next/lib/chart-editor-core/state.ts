@@ -10,6 +10,7 @@ import type {HighwayMode} from '@/lib/preview/highway';
 import type {SceneReconciler} from '@/lib/preview/highway/SceneReconciler';
 import type {NoteRenderer} from '@/lib/preview/highway/NoteRenderer';
 import type {EditorScope} from '@/components/chart-editor/scope';
+import type {TrackKey} from '@/lib/chart-edit';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
 
 export type ToolMode =
@@ -154,6 +155,9 @@ export interface ChartEditorState {
   /** Set of track names that are muted. */
   mutedTracks: Set<string>;
 
+  /** Track rows explicitly shown in the stacked piano roll. */
+  visibleTrackKeys: Set<string>;
+
   // -- Cursor --
 
   /** Current cursor position in ticks (editing position, independent of playback). */
@@ -209,6 +213,8 @@ export type ChartEditorAction =
   | {type: 'SET_SOLO_TRACK'; track: string | null}
   | {type: 'TOGGLE_MUTE_TRACK'; track: string}
   | {type: 'SET_MUTED_TRACKS'; tracks: Set<string>}
+  | {type: 'SET_TRACK_VISIBILITY'; track: TrackKey; visible: boolean}
+  | {type: 'SET_VISIBLE_TRACKS'; tracks: Set<string>}
   // -- Cursor --
   | {type: 'SET_CURSOR_TICK'; tick: number}
   // -- Loop --
@@ -264,6 +270,7 @@ export const initialState: ChartEditorState = {
   trackVolumes: {},
   soloTrack: null,
   mutedTracks: new Set(),
+  visibleTrackKeys: new Set(),
   // Cursor
   cursorTick: 0,
   // Loop

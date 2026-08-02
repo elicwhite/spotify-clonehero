@@ -25,8 +25,57 @@ import type {
 } from '@/lib/chart-edit';
 import {findTrack} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
+import {trackKeyId as inventoryTrackKeyId} from '@/lib/chart-editor-core/trackInventory';
 
 export type {TrackKey};
+
+/** Stable id for a track row and for track-qualified note selections. */
+export const trackKeyId = inventoryTrackKeyId;
+
+/**
+ * Shared selection ids include their owning track. Commands convert these
+ * back to local `tick:type` ids at the command boundary.
+ */
+export function trackQualifiedNoteId(track: TrackKey, localId: string): string {
+  return `${trackKeyId(track)}|${localId}`;
+}
+
+export function parseTrackQualifiedNoteId(
+  id: string,
+): {track: TrackKey; localId: string} | null {
+  const separator = id.indexOf('|');
+  if (separator <= 0 || separator === id.length - 1) return null;
+  const trackPart = id.slice(0, separator);
+  const localId = id.slice(separator + 1);
+  const colon = trackPart.indexOf(':');
+  if (colon <= 0 || colon === trackPart.length - 1) return null;
+  return {
+    track: {
+      instrument: trackPart.slice(0, colon) as Instrument,
+      difficulty: trackPart.slice(colon + 1) as Difficulty,
+    },
+    localId,
+  };
+}
+
+/** Convert a shared selection id into the local id expected by commands. */
+export function localNoteIdForTrack(
+  id: string,
+  track: TrackKey,
+): string | null {
+  const parsed = parseTrackQualifiedNoteId(id);
+  if (!parsed) return id;
+  return trackKeyId(parsed.track) === trackKeyId(track) ? parsed.localId : null;
+}
+
+export function localNoteIdsForTrack(
+  ids: Iterable<string>,
+  track: TrackKey,
+): string[] {
+  return Array.from(ids)
+    .map(id => localNoteIdForTrack(id, track))
+    .filter((id): id is string => id !== null);
+}
 
 export type EditorScope =
   | {kind: 'global'}

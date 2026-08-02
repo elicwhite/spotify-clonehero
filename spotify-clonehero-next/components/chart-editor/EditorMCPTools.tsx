@@ -11,7 +11,9 @@ import {
 import {
   describeScope,
   entityContextFromScope,
+  localNoteIdsForTrack,
   trackKeyFromScope,
+  trackQualifiedNoteId,
 } from './scope';
 import type {EntityRef} from '@/lib/chart-edit';
 import {useExecuteCommand, useUndoRedo} from './hooks/useEditCommands';
@@ -131,13 +133,17 @@ export default function EditorMCPTools() {
           ref: EntityRef;
         }> = [];
         const selectedIds = getSelectedIds(s, 'note');
+        const trackKey = trackKeyFromScope(s.activeScope);
+        const localSelectedIds = trackKey
+          ? new Set(localNoteIdsForTrack(selectedIds, trackKey))
+          : new Set<string>();
         if (s.chartDoc && selectedIds.size > 0) {
           const track = selectActiveTrack(s);
           const schema = selectActiveSchema(s);
           if (track && schema) {
             const scope = entityContextFromScope(s.activeScope);
             selectedNotes = listNotes(track, schema)
-              .filter(n => selectedIds.has(noteId(n)))
+              .filter(n => localSelectedIds.has(noteId(n)))
               .map(n => ({
                 id: noteId(n),
                 tick: n.tick,
@@ -310,11 +316,15 @@ export default function EditorMCPTools() {
             };
           }
           const id = `${args['tick']}:${type}`;
+          const trackKey = trackKeyFromScope(stateRef.current.activeScope);
+          const selectionId = trackKey
+            ? trackQualifiedNoteId(trackKey, id)
+            : id;
           const add = (args['addToSelection'] as boolean) ?? false;
           const newIds = add
             ? new Set(getSelectedIds(stateRef.current, 'note'))
             : new Set<string>();
-          newIds.add(id);
+          newIds.add(selectionId);
           dispatchRef.current({
             type: 'SET_SELECTION',
             kind: 'note',
@@ -322,7 +332,10 @@ export default function EditorMCPTools() {
           });
           return {
             content: [
-              {type: 'text', text: `Selected: ${id} (total: ${newIds.size})`},
+              {
+                type: 'text',
+                text: `Selected: ${selectionId} (total: ${newIds.size})`,
+              },
             ],
           };
         },
@@ -342,7 +355,10 @@ export default function EditorMCPTools() {
           if (selected.size === 0)
             return {content: [{type: 'text', text: 'No notes selected'}]};
           executeCommandRef.current(
-            new DeleteNotesCommand(selected as Set<string>, trackKey),
+            new DeleteNotesCommand(
+              new Set(localNoteIdsForTrack(selected, trackKey)),
+              trackKey,
+            ),
           );
           dispatchRef.current({
             type: 'SET_SELECTION',
@@ -379,7 +395,12 @@ export default function EditorMCPTools() {
             return {content: [{type: 'text', text: 'No notes selected'}]};
           const schema = selectActiveSchema(s) ?? drums4LaneSchema;
           executeCommandRef.current(
-            new ToggleFlagCommand(Array.from(selected), flag, trackKey, schema),
+            new ToggleFlagCommand(
+              localNoteIdsForTrack(selected, trackKey),
+              flag,
+              trackKey,
+              schema,
+            ),
           );
           return {
             content: [

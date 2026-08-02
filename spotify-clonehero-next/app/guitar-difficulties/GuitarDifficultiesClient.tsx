@@ -1,78 +1,155 @@
 'use client';
 
-import {useCallback, useEffect, useState} from 'react';
-import {AlertTriangle, Loader2, RotateCcw} from 'lucide-react';
+import {useCallback, useEffect, useRef, useState} from 'react';
+import {AlertTriangle, RotateCcw} from 'lucide-react';
+import {toast} from 'sonner';
+import LocalChartLoader, {
+  type LocalChart,
+} from '@/components/chart-picker/LocalChartLoader';
+import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {Button} from '@/components/ui/button';
-import GuitarDifficultyGrid from './GuitarDifficultyGrid';
+import {AudioManager} from '@/lib/preview/audioManager';
+import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
+import {reduceGuitarDifficulties} from '@/lib/guitar-difficulty/reduce';
 import {
-  loadGuitarReductionSnapshot,
-  type ParsedGuitarReductionSnapshot,
+  GUITAR_DIFFICULTIES,
+  type GuitarDifficulty,
 } from '@/lib/guitar-difficulty/snapshot';
+import type {Track} from '@/lib/preview/highway/types';
+import ExportChartDialog from './ExportChartDialog';
+import GuitarDifficultyGrid from './GuitarDifficultyGrid';
+import TransportBar from '@/app/difficulties/components/TransportBar';
 
 type View =
-  | {status: 'loading'}
-  | {status: 'ready'; preview: ParsedGuitarReductionSnapshot}
   | {status: 'empty'}
-  | {status: 'error'; message: string};
+  | {
+      status: 'loading';
+      localChart: LocalChart;
+      id: number;
+      message: string;
+    }
+  | {status: 'error'; message: string}
+  | {
+      status: 'ready';
+      loaded: LoadedFiles;
+      localChart: LocalChart;
+      tracks: Record<GuitarDifficulty, Track>;
+      id: number;
+    };
 
-function countNotes(
-  preview: ParsedGuitarReductionSnapshot,
-  difficulty: keyof ParsedGuitarReductionSnapshot['tracks'],
-) {
-  return preview.tracks[difficulty].noteEventGroups.reduce(
-    (sum, group) => sum + group.length,
-    0,
-  );
+function findExpertGuitarTrack(chart: LocalChart['chart']): Track | undefined {
+  return chart.trackData.find(
+    track => track.instrument === 'guitar' && track.difficulty === 'expert',
+  ) as Track | undefined;
+}
+
+function countNotes(track: Track): number {
+  return track.noteEventGroups.reduce((sum, group) => sum + group.length, 0);
 }
 
 export default function GuitarDifficultiesClient() {
-  const [view, setView] = useState<View>({status: 'loading'});
+  const [view, setView] = useState<View>({status: 'empty'});
+  const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
+  const idRef = useRef(0);
 
-  const load = useCallback(() => {
-    const controller = new AbortController();
-    loadGuitarReductionSnapshot(controller.signal).then(
-      preview => {
-        const hasNotes = Object.values(preview.tracks).some(
-          track => track.noteEventGroups.length > 0,
-        );
-        setView(hasNotes ? {status: 'ready', preview} : {status: 'empty'});
-      },
-      error => {
-        if (error instanceof DOMException && error.name === 'AbortError')
-          return;
+  const onLoaded = useCallback(async (localChart: LocalChart) => {
+    const id = ++idRef.current;
+    try {
+      const expertTrack = findExpertGuitarTrack(localChart.chart);
+      if (!expertTrack) {
         setView({
           status: 'error',
-          message: error instanceof Error ? error.message : String(error),
+          message: 'This chart does not contain an Expert guitar track.',
         });
-      },
-    );
-    return () => controller.abort();
+        return;
+      }
+      if (expertTrack.noteEventGroups.length === 0) {
+        setView({
+          status: 'error',
+          message: 'The Expert guitar track does not contain any notes.',
+        });
+        return;
+      }
+
+      setView({
+        status: 'loading',
+        localChart,
+        id,
+        message: 'Loading guitar reduction model…',
+      });
+      const tracks = await reduceGuitarDifficulties(
+        localChart.chart,
+        expertTrack,
+        ({message}) => {
+          setView(current =>
+            current.status === 'loading' && current.id === id
+              ? {...current, message}
+              : current,
+          );
+        },
+      );
+      if (idRef.current !== id) return;
+      setView({
+        status: 'ready',
+        loaded: localChart.loaded,
+        localChart,
+        tracks,
+        id,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(message);
+      setView({status: 'error', message});
+    }
   }, []);
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    const readyView = view.status === 'ready' ? view : null;
+    if (!readyView) return;
+
+    let cancelled = false;
+    const manager = new AudioManager(readyView.localChart.audioFiles, () => {});
+    manager.ready.then(() => {
+      if (cancelled) {
+        manager.destroy();
+        return;
+      }
+      manager.setChartDelay(
+        getChartDelayMs(readyView.localChart.chart.metadata) / 1000,
+      );
+      setAudioManager(manager);
+    });
+
+    return () => {
+      cancelled = true;
+      manager.destroy();
+      setAudioManager(null);
+    };
+  }, [view]);
+
+  function reset() {
+    idRef.current += 1;
+    setView({status: 'empty'});
+  }
 
   return (
     <main className="mx-auto max-w-[1500px] px-4 py-8">
       <header className="mb-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold">Guitar Difficulty Preview</h1>
-          <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">
-            Frozen preview snapshot
-          </span>
-        </div>
+        <h1 className="text-2xl font-semibold">Guitar Difficulty Comparison</h1>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-          Compare Expert against model-reduced Hard, Medium, and Easy five-fret
-          guitar charts side by side. This prototype uses a representative song
-          fixture and the pinned e101baa model output.
+          Select a chart to compare Expert against reduced Hard, Medium, and
+          Easy five-fret guitar reductions side by side, synchronized to the
+          chart&apos;s audio.
         </p>
       </header>
 
-      {view.status === 'loading' && (
-        <div className="flex min-h-64 items-center justify-center rounded-lg border border-border bg-muted/30">
-          <div className="text-center text-sm text-muted-foreground">
-            <Loader2 className="mx-auto h-6 w-6 animate-spin" />
-            <p className="mt-2">Loading the frozen guitar snapshot…</p>
-          </div>
+      {view.status === 'empty' && (
+        <div className="mx-auto max-w-xl">
+          <LocalChartLoader
+            onLoaded={onLoaded}
+            id="guitar-difficulties-picker"
+            requireDrums={false}
+          />
         </div>
       )}
 
@@ -82,26 +159,24 @@ export default function GuitarDifficultiesClient() {
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
             <div className="text-sm">
               <p className="font-medium text-destructive">
-                Can&apos;t load the guitar preview
+                Can&apos;t reduce this chart
               </p>
               <p className="mt-1 text-muted-foreground">{view.message}</p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setView({status: 'loading'});
-              load();
-            }}>
+          <Button variant="outline" onClick={reset}>
             <RotateCcw className="mr-2 h-4 w-4" />
-            Retry snapshot
+            Try another chart
           </Button>
         </div>
       )}
 
-      {view.status === 'empty' && (
-        <div className="rounded-lg border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-          This frozen snapshot does not contain a renderable guitar fixture.
+      {view.status === 'loading' && (
+        <div className="mx-auto max-w-xl rounded-lg border border-border bg-muted/20 p-6">
+          <p className="text-sm font-medium">
+            Reducing {view.localChart.metadata.name}
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">{view.message}</p>
         </div>
       )}
 
@@ -111,137 +186,53 @@ export default function GuitarDifficultiesClient() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-base font-semibold">
-                  {view.preview.snapshot.song.artist} —{' '}
-                  {view.preview.snapshot.song.title}
+                  {view.localChart.metadata.artist} —{' '}
+                  {view.localChart.metadata.name}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Representative{' '}
-                  {view.preview.snapshot.song.window.endTick -
-                    view.preview.snapshot.song.window.startTick}{' '}
-                  tick fixture · parsed with{' '}
-                  {view.preview.snapshot.parser.package}@
-                  {view.preview.snapshot.parser.packageVersion}
+                  {view.localChart.metadata.charter} ·{' '}
+                  {view.localChart.chart.resolution} ticks per beat
                 </p>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setView({status: 'loading'});
-                  load();
-                }}>
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Reload snapshot
-              </Button>
+              <div className="flex gap-2">
+                <ExportChartDialog loaded={view.loaded} tracks={view.tracks} />
+                <Button variant="outline" size="sm" onClick={reset}>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  New chart
+                </Button>
+              </div>
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-4">
-              {(['expert', 'hard', 'medium', 'easy'] as const).map(
-                difficulty => (
-                  <div
-                    key={difficulty}
-                    className="rounded-md border border-border/70 bg-background/60 px-3 py-2">
-                    <p className="text-xs text-muted-foreground">
-                      {difficulty[0].toUpperCase() + difficulty.slice(1)}
-                    </p>
-                    <p className="mt-1 font-mono text-lg">
-                      {countNotes(view.preview, difficulty)}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      parsed guitar notes
-                    </p>
-                  </div>
-                ),
-              )}
+              {GUITAR_DIFFICULTIES.map(difficulty => (
+                <div
+                  key={difficulty}
+                  className="rounded-md border border-border/70 bg-background/60 px-3 py-2">
+                  <p className="text-xs capitalize text-muted-foreground">
+                    {difficulty}
+                  </p>
+                  <p className="mt-1 font-mono text-lg">
+                    {countNotes(view.tracks[difficulty])}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">notes</p>
+                </div>
+              ))}
             </div>
           </section>
 
-          <GuitarDifficultyGrid
-            chart={view.preview.chart}
-            tracks={view.preview.tracks}
-          />
+          {audioManager ? (
+            <TransportBar audioManager={audioManager} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Loading audio…</p>
+          )}
 
-          <details className="rounded-lg border border-border bg-muted/10 p-4 text-xs">
-            <summary className="cursor-pointer font-medium">
-              Snapshot provenance and model configuration
-            </summary>
-            <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <dt className="text-muted-foreground">Snapshot</dt>
-                <dd className="font-mono">
-                  {view.preview.snapshot.snapshotId}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Source commit</dt>
-                <dd className="font-mono">
-                  {view.preview.snapshot.model.sourceCommit}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Frozen at</dt>
-                <dd>{view.preview.snapshot.frozenAt}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Feature variant</dt>
-                <dd className="font-mono">
-                  {view.preview.snapshot.model.featureVariant}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Mask decoder</dt>
-                <dd>{view.preview.snapshot.model.maskDecoder}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Techniques</dt>
-                <dd>
-                  {view.preview.snapshot.model.technique} ·{' '}
-                  {view.preview.snapshot.model.techniqueCleanup}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Sustain</dt>
-                <dd>
-                  {view.preview.snapshot.model.sustain} ·{' '}
-                  {view.preview.snapshot.model.sustainConstraint}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Range</dt>
-                <dd>{view.preview.snapshot.model.range}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">HGB</dt>
-                <dd>
-                  iter {view.preview.snapshot.model.hyperparameters.iterations}{' '}
-                  · lr{' '}
-                  {view.preview.snapshot.model.hyperparameters.learningRate} ·
-                  leaf {view.preview.snapshot.model.hyperparameters.leafNodes} ·
-                  minleaf{' '}
-                  {view.preview.snapshot.model.hyperparameters.minSamplesLeaf} ·
-                  l2{' '}
-                  {view.preview.snapshot.model.hyperparameters.l2Regularization}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Validation</dt>
-                <dd>
-                  {view.preview.snapshot.validation.seeds
-                    .map(
-                      seed =>
-                        `${seed.seed}: ${seed.pooledChartEditRate.toFixed(8)}`,
-                    )
-                    .join(' · ')}
-                </dd>
-              </div>
-            </dl>
-            <p className="mt-3 text-muted-foreground">
-              The checked-in artifact is precomputed model output for this
-              representative fixture; it does not embed a live
-              Python/scikit-learn model. The export script and source hashes are
-              recorded in the artifact for reproducibility while the model
-              evolves.
-            </p>
-          </details>
+          {audioManager && (
+            <GuitarDifficultyGrid
+              key={view.id}
+              chart={view.localChart.chart}
+              tracks={view.tracks}
+              audioManager={audioManager}
+            />
+          )}
         </div>
       )}
     </main>

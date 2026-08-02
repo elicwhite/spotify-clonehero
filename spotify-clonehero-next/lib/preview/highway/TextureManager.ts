@@ -14,12 +14,52 @@ export interface HighwaySustainTextures {
   open: THREE.Texture;
 }
 
+/** One-shot flame frames used by the instrument highways at the playline. */
+export interface HighwayFlameTextures {
+  /** Frames from `highway-hit-flame.webp`, for pad/fretted notes. */
+  hit: THREE.Texture[];
+  /** One complete full-width hitline texture for open/kick notes. */
+  open: THREE.Texture[];
+}
+
+export type HighwayFretStyle = 'first' | 'second' | 'third';
+export type HighwayFretLayer =
+  | 'base'
+  | 'inner_color'
+  | 'cover'
+  | 'half_cover'
+  | 'head'
+  | 'head_light'
+  | 'pick';
+
+export type HighwayFretTextures = Record<
+  HighwayFretStyle,
+  Record<HighwayFretLayer, THREE.Texture>
+>;
+
 const HIGHWAY_SUSTAIN_FRETTED_URLS = Array.from(
   {length: 6},
   (_, frame) => `/assets/preview/assets2/highway-sustain-fretted-${frame}.webp`,
 );
 const HIGHWAY_SUSTAIN_OPEN_URL =
   '/assets/preview/assets2/highway-sustain-open.webp';
+
+const HIGHWAY_HIT_FLAME_URL = '/assets/preview/assets2/highway-hit-flame.webp';
+const HIGHWAY_OPEN_FLAME_URL =
+  '/assets/preview/assets2/highway-open-flame.webp';
+const HIGHWAY_OPEN_FLAME_DRUM_URL =
+  '/assets/preview/assets2/highway-open-flame-drum.webp';
+
+const HIGHWAY_FRET_STYLES: HighwayFretStyle[] = ['first', 'second', 'third'];
+const HIGHWAY_FRET_LAYERS: HighwayFretLayer[] = [
+  'base',
+  'inner_color',
+  'cover',
+  'half_cover',
+  'head',
+  'head_light',
+  'pick',
+];
 
 // ---------------------------------------------------------------------------
 // Animated WebP texture support (Chrome-only, graceful fallback)
@@ -228,11 +268,21 @@ export class AnimatedTexture {
 /** Collection of animated textures that need to be ticked each frame */
 export class AnimatedTextureManager {
   private animatedTextures: AnimatedTexture[] = [];
+  private frameTextures: THREE.Texture[] = [];
 
   register(texture: AnimatedTexture | THREE.Texture): void {
     if (texture instanceof AnimatedTexture) {
       this.animatedTextures.push(texture);
     }
+  }
+
+  /**
+   * Owns textures decoded from a one-shot animated asset. These frames are
+   * selected by the note renderer per event, so they must not be advanced by
+   * the shared looping animation clock.
+   */
+  registerFrameTextures(textures: THREE.Texture[]): void {
+    this.frameTextures.push(...textures);
   }
 
   /**
@@ -249,6 +299,12 @@ export class AnimatedTextureManager {
       texture.dispose();
     }
     this.animatedTextures = [];
+    for (const texture of this.frameTextures) {
+      texture.dispose();
+      const image = texture.image as {close?: () => void} | undefined;
+      image?.close?.();
+    }
+    this.frameTextures = [];
   }
 }
 
@@ -355,6 +411,139 @@ export async function loadHighwaySustainTextures(
     ),
   ]);
   return {fretted, open};
+}
+
+/** Load the original five-fret playline flame animations. */
+export async function loadHighwayFlameTextures(
+  textureLoader: THREE.TextureLoader,
+  animatedTextureManager?: AnimatedTextureManager,
+  openFlameForDrums = false,
+): Promise<HighwayFlameTextures> {
+  const [hit, open] = await Promise.all([
+    loadAnimatedFrameTextures(
+      textureLoader,
+      HIGHWAY_HIT_FLAME_URL,
+      animatedTextureManager,
+    ),
+    loadStaticFrameTexture(
+      textureLoader,
+      openFlameForDrums ? HIGHWAY_OPEN_FLAME_DRUM_URL : HIGHWAY_OPEN_FLAME_URL,
+      animatedTextureManager,
+    ),
+  ]);
+  return {hit, open};
+}
+
+/** Load the layered original fret-button art used by 4-/5-lane hitlines. */
+export async function loadHighwayFretTextures(
+  textureLoader: THREE.TextureLoader,
+  animatedTextureManager?: AnimatedTextureManager,
+): Promise<HighwayFretTextures> {
+  const entries = await Promise.all(
+    HIGHWAY_FRET_STYLES.flatMap(style =>
+      HIGHWAY_FRET_LAYERS.map(async layer => {
+        const texture = await loadTexture(
+          textureLoader,
+          `/assets/preview/assets2/frets/${style}-${layer}.webp`,
+          animatedTextureManager,
+        );
+        return [style, layer, texture] as const;
+      }),
+    ),
+  );
+
+  const result = {} as HighwayFretTextures;
+  for (const style of HIGHWAY_FRET_STYLES) {
+    result[style] = {} as Record<HighwayFretLayer, THREE.Texture>;
+  }
+  for (const [style, layer, texture] of entries) {
+    result[style][layer] = texture;
+  }
+  return result;
+}
+
+/**
+ * Decode one animated WebP into shareable frame textures. Flames are
+ * event-triggered one-shots, so they cannot use the regular global
+ * AnimatedTexture clock: two notes may hit on different frames at once.
+ *
+ * Browsers without ImageDecoder still receive the first frame as a static
+ * fallback, which keeps the highway renderable even without animation.
+ */
+async function loadAnimatedFrameTextures(
+  textureLoader: THREE.TextureLoader,
+  url: string,
+  animatedTextureManager?: AnimatedTextureManager,
+): Promise<THREE.Texture[]> {
+  if (!isImageDecoderSupported()) {
+    return [await loadStaticTexture(textureLoader, url)];
+  }
+
+  let decoder: ImageDecoder | null = null;
+  let textures: THREE.Texture[] = [];
+  try {
+    const response = await fetch(url);
+    if (!response.ok || !response.body) {
+      throw new Error(`Failed to fetch ${url}`);
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/webp';
+    if (!(await ImageDecoder.isTypeSupported(contentType))) {
+      return [await loadStaticTexture(textureLoader, url)];
+    }
+
+    decoder = new ImageDecoder({data: response.body, type: contentType});
+    await decoder.completed;
+
+    const track = decoder.tracks.selectedTrack;
+    if (!track) throw new Error(`No animation track found in ${url}`);
+
+    for (let frameIndex = 0; frameIndex < track.frameCount; frameIndex++) {
+      const result = await decoder.decode({frameIndex});
+      const videoFrame = result.image;
+      // ImageBitmap ignores THREE.Texture.flipY. Match TextureLoader's
+      // orientation at bitmap creation so the authored flame base stays at
+      // the playline and the flame rises away from it.
+      const bitmap = await createImageBitmap(videoFrame, {
+        imageOrientation: 'flipY',
+      });
+      videoFrame.close();
+
+      const texture = new THREE.Texture(bitmap);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.needsUpdate = true;
+      textures.push(texture);
+    }
+
+    decoder.close();
+    decoder = null;
+    animatedTextureManager?.registerFrameTextures(textures);
+    return textures.length > 0
+      ? textures
+      : [await loadStaticTexture(textureLoader, url)];
+  } catch (error) {
+    decoder?.close();
+    for (const texture of textures) {
+      texture.dispose();
+      const image = texture.image as {close?: () => void} | undefined;
+      image?.close?.();
+    }
+    console.warn(
+      `Failed to decode animated flame texture from ${url}, falling back to static:`,
+      error,
+    );
+    return [await loadStaticTexture(textureLoader, url)];
+  }
+}
+
+async function loadStaticFrameTexture(
+  textureLoader: THREE.TextureLoader,
+  url: string,
+  animatedTextureManager?: AnimatedTextureManager,
+): Promise<THREE.Texture[]> {
+  const texture = await loadStaticTexture(textureLoader, url);
+  animatedTextureManager?.registerFrameTextures([texture]);
+  return [texture];
 }
 
 /**

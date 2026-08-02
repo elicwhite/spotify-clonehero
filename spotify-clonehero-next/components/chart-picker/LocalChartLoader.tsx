@@ -13,6 +13,8 @@ import {
 import {ChartResponseEncore} from '@/lib/chartSelection';
 
 export interface LocalChart {
+  /** The original package files, retained for round-trip export flows. */
+  loaded: LoadedFiles;
   metadata: ChartResponseEncore;
   chart: ParsedChart;
   chartDoc: ChartDocument;
@@ -64,6 +66,7 @@ export default function LocalChartLoader({
 
         const m = parsedChart.metadata;
         onLoaded({
+          loaded,
           metadata: {
             name: m.name ?? loaded.originalName,
             artist: m.artist ?? 'Unknown Artist',

@@ -4,7 +4,11 @@ import {schemaForInstrument} from '../../chart-edit/instruments';
 import type {ChartElement} from './SceneReconciler';
 import type {NoteElementData} from './NoteRenderer';
 import {resolveNoteGeometry} from './notePlacement';
-import type {Track} from './types';
+import {
+  HIGHWAY_FLAME_DURATION_MS,
+  HIGHWAY_OPEN_FLAME_DURATION_MS,
+  type Track,
+} from './types';
 
 // ---------------------------------------------------------------------------
 // NoteType -> name, for element key generation (e.g. 'note:480:redDrum')
@@ -70,6 +74,10 @@ export function trackToElements(
 ): ChartElement[] {
   const schema = schemaForInstrument(track.instrument);
   const supportsSustain = schema?.supportsSustain ?? false;
+  const supportsFlame =
+    track.instrument === 'guitar' ||
+    track.instrument === 'bass' ||
+    track.instrument === 'drums';
   const renderTrack = schema?.normalizeForRender
     ? (schema.normalizeForRender(
         track,
@@ -153,7 +161,18 @@ export function trackToElements(
         key,
         kind: 'note',
         msTime: note.msTime,
-        endMsTime: note.msTime + (supportsSustain ? note.msLength : 0),
+        endMsTime:
+          note.msTime +
+          (supportsFlame
+            ? Math.max(
+                note.msLength,
+                geometry.isOpen || geometry.isKick
+                  ? HIGHWAY_OPEN_FLAME_DURATION_MS
+                  : HIGHWAY_FLAME_DURATION_MS,
+              )
+            : supportsSustain
+              ? note.msLength
+              : 0),
         data,
       });
     }

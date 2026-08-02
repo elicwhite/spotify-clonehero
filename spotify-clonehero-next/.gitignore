@@ -46,6 +46,7 @@ supabase/.branches
 
 # Large ONNX model files (downloaded at runtime and cached in OPFS)
 public/models/*.onnx
+public/models/guitar-reduction-v1/
 
 # Test sng files
 public/*.sng

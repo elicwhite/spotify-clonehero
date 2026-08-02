@@ -6,6 +6,10 @@ import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 import {trackToElements} from '../trackToElements';
 import type {Track} from '../types';
 import type {NoteElementData} from '../NoteRenderer';
+import {
+  HIGHWAY_FLAME_DURATION_MS,
+  HIGHWAY_OPEN_FLAME_DURATION_MS,
+} from '../types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -154,6 +158,14 @@ describe('trackToElements', () => {
   });
 
   describe('five-fret (guitar)', () => {
+    it('keeps notes active long enough for the playline flame animation', () => {
+      const elements = trackToElements(
+        makeTrack([[note(noteTypes.green, 0, 0)]], {instrument: 'guitar'}),
+      );
+
+      expect(elements[0].endMsTime).toBe(HIGHWAY_FLAME_DURATION_MS);
+    });
+
     it('converts an open note to a full-width element with sustain length', () => {
       const track = makeTrack([[note(noteTypes.open, 0, 0, 0, 240)]], {
         instrument: 'guitar',
@@ -168,6 +180,9 @@ describe('trackToElements', () => {
       expect(data.lane).toBe(-1);
       // Five-fret schema declares supportsSustain: true.
       expect(data.msLength).toBe(240);
+      expect(elements[0].endMsTime).toBe(
+        Math.max(240, HIGHWAY_OPEN_FLAME_DURATION_MS),
+      );
     });
 
     it('converts fretted notes to their pad lanes, ordered green/red/yellow/blue/orange', () => {
@@ -194,6 +209,24 @@ describe('trackToElements', () => {
 
       const data = elements[0].data as NoteElementData;
       expect(data.msLength).toBe(0);
+    });
+  });
+
+  describe('drum flames', () => {
+    it('keeps pad notes active long enough for the playline flame animation', () => {
+      const elements = trackToElements(
+        makeTrack([[note(noteTypes.redDrum, 0, 0)]]),
+      );
+
+      expect(elements[0].endMsTime).toBe(HIGHWAY_FLAME_DURATION_MS);
+    });
+
+    it('keeps kick notes active for the full-width drum flame', () => {
+      const elements = trackToElements(
+        makeTrack([[note(noteTypes.kick, 0, 0)]]),
+      );
+
+      expect(elements[0].endMsTime).toBe(HIGHWAY_OPEN_FLAME_DURATION_MS);
     });
   });
 
