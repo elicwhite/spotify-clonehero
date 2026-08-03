@@ -29,6 +29,8 @@ export {
 } from './content-stamps';
 export {
   availableTrackKeys,
+  findPreferredTrack,
+  parseTrackKeyId,
   preferredTrackForChart,
   preferredTrackKey,
   SUPPORTED_TRACK_INSTRUMENTS,

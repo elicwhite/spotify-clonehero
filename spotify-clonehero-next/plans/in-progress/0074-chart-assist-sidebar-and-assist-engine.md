@@ -458,6 +458,19 @@ green (`pnpm typecheck && pnpm test && pnpm lint` + browser validation).
   a bigger project than the feature.) Then: matrix, visibility-only
   selection, per-pane interaction targeting, keyboard-entry targeting,
   picker deletion, responsive grid. Suites 3-4.
+  **Amendment (Phase 3 as built):** section C's "single-instrument
+  surfaces pin one visible track" is relaxed — `/guitar-edit`,
+  `/bass-edit` and `/drum-edit` pin the matrix to their one instrument
+  but may show up to `MAX_HIGHWAY_PANES` (3) difficulty panes of that
+  instrument. That is what the matrix model already means everywhere
+  else (visibility is per instrument+difficulty cell), and it is safe
+  because note selection/hover ids are unconditionally track-qualified,
+  so a `tick:type` id shared by Expert and Hard never resolves in both
+  panes. **Open question (deferred from Phase 3 review):** a vocals
+  scope still replaces every note pane while the matrix shows its
+  tracks lit, a presentation contradiction; resolving it (mutually
+  exclusive picker vs a vocals row in the matrix) is a product
+  decision, revisit alongside Phase 6.
 - **Phase 4 — Difficulty generation.** Worker + seam, bass-on-guitar
   spot-check gate, commands + provenance, matrix buttons + recommendation
   card. Remaining Suite 5 cases, Suite 3 generate rows.

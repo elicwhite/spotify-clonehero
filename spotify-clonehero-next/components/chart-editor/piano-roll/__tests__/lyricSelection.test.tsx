@@ -199,7 +199,11 @@ function findNoteX(
     let hit = false;
     act(() => {
       click(canvas, x, y);
-      hit = getSelectedIds(stateRef.current!, 'note').has(noteId);
+      // Selection ids are track-qualified; this harness's only track is
+      // the fixture's drums Expert.
+      hit = getSelectedIds(stateRef.current!, 'note').has(
+        `drums:expert|${noteId}`,
+      );
       click(canvas, 999, 999);
     });
     if (hit) return x;

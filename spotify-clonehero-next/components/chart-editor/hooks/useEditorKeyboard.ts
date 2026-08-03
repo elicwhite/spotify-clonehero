@@ -8,8 +8,10 @@ import {useAudioServiceContext} from '../AudioServiceContext';
 import {
   getSelectedIds,
   getFirstSelectedId,
+  parseTrackKeyId,
   selectActiveSchema,
   selectActiveTrack,
+  trackKeyId,
   type ToolMode,
 } from '@/lib/chart-editor-core';
 import {
@@ -141,6 +143,7 @@ function activeNoteIds(
  * - Editing (Mod+Z undo, Mod+Shift+Z/Mod+Y redo, Delete, Mod+A, Escape)
  * - Copy/Paste (Mod+C, Mod+V, Mod+X)
  * - Loop region (Mod+L to clear)
+ * - Active-track retargeting (Alt+Down / Alt+Up cycle visible tracks)
  * - Save (Mod+S)
  *
  * @param onSave - Callback for Mod+S save
@@ -398,6 +401,46 @@ export function useEditorKeyboard(onSave?: () => void) {
       );
       dispatch({type: 'SET_SELECTION', kind: 'note', ids: allIds});
     }
+  });
+
+  // -----------------------------------------------------------------------
+  // Retarget keyboard entry to another visible track (Alt+Down / Alt+Up).
+  //
+  // Pointer-wise, `activeScope` moves with a mousedown in a highway pane.
+  // These two bindings are the keyboard-only route to the same thing, and
+  // the only route at all to a visible track past the highway's pane cap
+  // (it renders in the piano roll but has no pane to click).
+  // -----------------------------------------------------------------------
+  const cycleActiveTrack = useCallback(
+    (direction: 1 | -1) => {
+      const ids = Array.from(state.visibleTrackKeys);
+      if (ids.length === 0) return;
+      const currentId =
+        state.activeScope.kind === 'track'
+          ? trackKeyId(state.activeScope.track)
+          : null;
+      const currentIndex = currentId ? ids.indexOf(currentId) : -1;
+      const nextIndex =
+        currentIndex === -1
+          ? direction === 1
+            ? 0
+            : ids.length - 1
+          : (currentIndex + direction + ids.length) % ids.length;
+      const nextTrack = parseTrackKeyId(ids[nextIndex]);
+      if (!nextTrack) return;
+      dispatch({
+        type: 'SET_ACTIVE_SCOPE',
+        scope: {kind: 'track', track: nextTrack},
+      });
+    },
+    [dispatch, state.activeScope, state.visibleTrackKeys],
+  );
+
+  useHotkey('Alt+ArrowDown', () => cycleActiveTrack(1), {
+    conflictBehavior: 'allow',
+  });
+  useHotkey('Alt+ArrowUp', () => cycleActiveTrack(-1), {
+    conflictBehavior: 'allow',
   });
 
   // -----------------------------------------------------------------------

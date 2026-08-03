@@ -68,14 +68,12 @@ export default function NoteInspector({className}: NoteInspectorProps) {
     if (!track) return [];
     const activeSchema = selectActiveSchema(state) ?? drums4LaneSchema;
     const selected = getSelectedIds(state, 'note');
-    return listNotes(track, activeSchema).filter(
-      n =>
-        selected.has(
-          trackQualifiedNoteId(
-            trackKeyFromScope(state.activeScope)!,
-            noteId(n),
-          ),
-        ) || selected.has(noteId(n)),
+    const trackKey = trackKeyFromScope(state.activeScope);
+    if (!trackKey) return [];
+    // Selection ids are always track-qualified, so only this scope's own
+    // track contributes notes to the inspector.
+    return listNotes(track, activeSchema).filter(n =>
+      selected.has(trackQualifiedNoteId(trackKey, noteId(n))),
     );
   }, [state]);
 

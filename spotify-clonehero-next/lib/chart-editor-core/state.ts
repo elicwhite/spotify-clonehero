@@ -1,4 +1,4 @@
-import type {Dispatch, MutableRefObject} from 'react';
+import type {Dispatch} from 'react';
 import type {ChartDocument, DownbeatFlags, EntityKind} from '@/lib/chart-edit';
 import type {
   EditCommand,
@@ -8,8 +8,6 @@ import type {
 import type {TrackKeyId} from './trackInventory';
 import type {EditorCapabilities} from '@/components/chart-editor/capabilities';
 import type {HighwayMode} from '@/lib/preview/highway';
-import type {SceneReconciler} from '@/lib/preview/highway/SceneReconciler';
-import type {NoteRenderer} from '@/lib/preview/highway/NoteRenderer';
 import type {EditorScope} from '@/components/chart-editor/scope';
 import {EMPTY_STAMP, type AssistProvenance} from './content-stamps';
 import type {TrackKey} from '@/lib/chart-edit';
@@ -157,8 +155,12 @@ export interface ChartEditorState {
   /** Set of track names that are muted. */
   mutedTracks: Set<string>;
 
-  /** Track rows explicitly shown in the stacked piano roll. */
-  visibleTrackKeys: Set<string>;
+  /** Track rows shown in the stacked piano roll and as highway panes on
+   *  surfaces that ship the Chart Matrix (`capabilities.showChartMatrix`);
+   *  the matrix is the only thing that writes it, and surfaces without one
+   *  render `activeScope` instead. Only ever names tracks the loaded doc
+   *  contains — the reducer reconciles every write against `chartDoc`. */
+  visibleTrackKeys: ReadonlySet<string>;
 
   // -- Cursor --
 
@@ -248,7 +250,7 @@ export type ChartEditorAction =
   | {type: 'TOGGLE_MUTE_TRACK'; track: string}
   | {type: 'SET_MUTED_TRACKS'; tracks: Set<string>}
   | {type: 'SET_TRACK_VISIBILITY'; track: TrackKey; visible: boolean}
-  | {type: 'SET_VISIBLE_TRACKS'; tracks: Set<string>}
+  | {type: 'SET_VISIBLE_TRACKS'; tracks: ReadonlySet<string>}
   // -- Cursor --
   | {type: 'SET_CURSOR_TICK'; tick: number}
   // -- Loop --
@@ -266,13 +268,15 @@ export type ChartEditorAction =
   // -- Scope --
   | {type: 'SET_ACTIVE_SCOPE'; scope: EditorScope};
 
+/**
+ * The editor's shared state + dispatch. Renderer handles are deliberately
+ * absent: each highway pane owns its own `SceneReconciler`/`NoteRenderer`
+ * and passes them to its own hooks, so there is no single renderer for the
+ * context to name (plan 0074 Phase 3).
+ */
 export interface ChartEditorContextValue {
   state: ChartEditorState;
   dispatch: Dispatch<ChartEditorAction>;
-  /** Shared ref to the SceneReconciler for declarative element updates. */
-  reconcilerRef: MutableRefObject<SceneReconciler | null>;
-  /** Shared ref to the NoteRenderer for overlay state management. */
-  noteRendererRef: MutableRefObject<NoteRenderer | null>;
   /** Per-page interaction profile. Set once at provider mount. */
   capabilities: EditorCapabilities;
 }

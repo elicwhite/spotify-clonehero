@@ -288,7 +288,11 @@ describe('computeChartElements', () => {
       const during = computeChartElements({
         ...inputs,
         // 480 ticks at 120 BPM / res 480 = +500ms
-        noteDrag: {tickDelta: 480, laneDelta: 0, ids: new Set(['480:redDrum'])},
+        noteDrag: {
+          tickDelta: 480,
+          laneDelta: 0,
+          ids: new Set(['drums:expert|480:redDrum']),
+        },
       });
 
       expect(during.map(e => e.key)).toEqual(before.map(e => e.key));
@@ -308,7 +312,11 @@ describe('computeChartElements', () => {
       const before = computeChartElements({...inputs, noteDrag: null});
       const during = computeChartElements({
         ...inputs,
-        noteDrag: {tickDelta: 0, laneDelta: 1, ids: new Set(['480:redDrum'])},
+        noteDrag: {
+          tickDelta: 0,
+          laneDelta: 1,
+          ids: new Set(['drums:expert|480:redDrum']),
+        },
       });
 
       const dragged = during.find(e => e.key === 'note:480:redDrum')!;
@@ -354,7 +362,11 @@ describe('computeChartElements', () => {
       const before = computeChartElements({...inputs, noteDrag: null});
       const during = computeChartElements({
         ...inputs,
-        noteDrag: {tickDelta: 0, laneDelta: 1, ids: new Set(['480:red'])},
+        noteDrag: {
+          tickDelta: 0,
+          laneDelta: 1,
+          ids: new Set(['guitar:expert|480:red']),
+        },
       });
       const data = during.find(e => e.key === 'note:480:red')!
         .data as NoteElementData;
@@ -396,7 +408,7 @@ describe('computeChartElements', () => {
         noteDrag: {
           tickDelta: 0,
           laneDelta: 2,
-          ids: new Set(['480:open']),
+          ids: new Set(['guitar:expert|480:open']),
         },
         timedTempos,
         resolution,
@@ -415,7 +427,11 @@ describe('computeChartElements', () => {
       const inputs = baseInputs();
       const during = computeChartElements({
         ...inputs,
-        noteDrag: {tickDelta: 480, laneDelta: 2, ids: new Set(['0:kick'])},
+        noteDrag: {
+          tickDelta: 480,
+          laneDelta: 2,
+          ids: new Set(['drums:expert|0:kick']),
+        },
       });
 
       const dragged = during.find(e => e.key === 'note:0:kick')!;
@@ -431,7 +447,11 @@ describe('computeChartElements', () => {
       const before = computeChartElements({...inputs, noteDrag: null});
       const during = computeChartElements({
         ...inputs,
-        noteDrag: {tickDelta: 480, laneDelta: 0, ids: new Set(['480:redDrum'])},
+        noteDrag: {
+          tickDelta: 480,
+          laneDelta: 0,
+          ids: new Set(['drums:expert|480:redDrum']),
+        },
       });
 
       const dragged = during.find(e => e.key === 'note:480:redDrum')!;

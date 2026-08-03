@@ -32,7 +32,11 @@ describe('track-qualified note ids', () => {
     ]);
   });
 
-  it('keeps legacy local ids compatible during migration', () => {
-    expect(localNoteIdForTrack('480:redDrum', drumsExpert)).toBe('480:redDrum');
+  it('resolves an unqualified id to no track at all', () => {
+    // Qualification is unconditional on every producer, so an id without an
+    // owning track names nothing — treating it as "mine" would light the
+    // same `tick:type` up in every pane and piano-roll row that has it.
+    expect(localNoteIdForTrack('480:redDrum', drumsExpert)).toBeNull();
+    expect(localNoteIdsForTrack(['480:redDrum'], drumsExpert)).toEqual([]);
   });
 });

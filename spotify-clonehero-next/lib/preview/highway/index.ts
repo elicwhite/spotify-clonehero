@@ -56,6 +56,19 @@ export {LyricsOverlay} from './LyricsOverlay';
 // setupRenderer (public API -- signature unchanged)
 // ---------------------------------------------------------------------------
 
+/**
+ * Number of live `setupRenderer` handles (created, not yet destroyed).
+ *
+ * `MarkerRenderer`'s marker-texture cache is module-scoped and keyed only by
+ * label content and state, so every live renderer's marker sprites share the
+ * same `CanvasTexture` objects. A single renderer therefore must not clear it
+ * on teardown: with several highway panes mounted, one pane closing would
+ * dispose textures its siblings are still drawing with and empty the dedupe
+ * map out from under them. The cache is cleared only when the last live
+ * renderer goes away.
+ */
+let liveRendererCount = 0;
+
 export interface RendererConfig {
   /** When false, render a neutral floor + skip the drum hitbox + skip drum
    *  note rendering. Defaults to true (drum-edit). */
@@ -90,11 +103,23 @@ export const setupRenderer = (
   renderer.setPixelRatio(dpr);
   renderer.localClippingEnabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  liveRendererCount++;
 
   /** Lyrics overlay (Clone Hero-style karaoke at top of screen). */
   let lyricsOverlay: LyricsOverlay | null = null;
   /** Set to true when destroy() is called, prevents late async startRender. */
   let destroyed = false;
+  /**
+   * Guards the synchronous disposal block against running twice. Multi-pane
+   * highway mounting (plan 0074 Phase 3) churns renderers fast enough that a
+   * pane can be torn down more than once in the same tick (e.g. an effect
+   * cleanup racing an explicit "swap renderer" call), and a second
+   * `renderer.dispose()`/`forceContextLoss()` on an already-lost WebGL
+   * context is undefined behavior in some browsers. `destroy()` is safe to
+   * call any number of times; only the first call does anything, and only
+   * the first call decrements `liveRendererCount`.
+   */
+  let disposedSync = false;
 
   function setSize() {
     const width = sizingRef.current?.offsetWidth ?? window.innerWidth;
@@ -205,12 +230,22 @@ export const setupRenderer = (
 
     destroy: async () => {
       destroyed = true;
+      // Everything through `forceContextLoss()` below is synchronous —
+      // deterministic teardown (plan 0074 Phase 3 spike requirement): a
+      // pane unmount must cancel the RAF loop and release the GPU context
+      // before this call returns, not after some later microtask. Guarded
+      // so a second destroy() call (see `disposedSync` above) is a no-op
+      // instead of double-disposing the renderer.
+      if (disposedSync) return;
+      disposedSync = true;
+      liveRendererCount = Math.max(0, liveRendererCount - 1);
       window.removeEventListener('resize', onResize, false);
       resizeObserver.disconnect();
       renderer.setAnimationLoop(null);
       renderer.renderLists.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
+      renderer.domElement.remove();
       // Dispose animated textures if track was prepared
       if (trackPromise) {
         try {
@@ -226,7 +261,6 @@ export const setupRenderer = (
           interactionManager?.dispose();
           reconciler.dispose();
           nr.dispose();
-          MarkerRenderer.clearTextureCache();
         } catch {
           // Ignore errors during cleanup
         }
@@ -239,6 +273,11 @@ export const setupRenderer = (
       classicHighwayMesh = null;
       lyricsOverlay?.dispose();
       lyricsOverlay = null;
+      // Process-global, shared with every other live renderer — see
+      // `liveRendererCount`. Only the last one out turns the lights off.
+      if (liveRendererCount === 0) {
+        MarkerRenderer.clearTextureCache();
+      }
     },
     /** Expose the camera for overlay coordinate mapping (unprojection). */
     getCamera() {

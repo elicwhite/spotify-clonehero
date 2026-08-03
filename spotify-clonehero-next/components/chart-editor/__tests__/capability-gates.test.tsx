@@ -162,6 +162,23 @@ describe('LeftSidebar capability gating', () => {
  * `chartAssist` variant, and whether the host page supplied the wiring that
  * card's action needs. Both are exercised here.
  */
+describe('Chart Matrix mounted in LeftSidebar (plan 0074 Phase 3)', () => {
+  it('renders Chart Matrix above Chart Assist', () => {
+    renderAssist(DRUM_EDIT_CAPABILITIES, FULL_WIRING);
+    const matrixHeading = screen.getByText('Chart Matrix');
+    const assistHeading = screen.getByText('Chart Assist');
+    expect(
+      matrixHeading.compareDocumentPosition(assistHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('hides Chart Matrix under PREVIEW_CAPABILITIES (showChartMatrix: false)', () => {
+    renderAssist(PREVIEW_CAPABILITIES, FULL_WIRING);
+    expect(screen.queryByText('Chart Matrix')).not.toBeInTheDocument();
+  });
+});
+
 describe('Chart Assist section gating', () => {
   it('shows the section with the full card set under DRUM_EDIT_CAPABILITIES', () => {
     renderAssist(DRUM_EDIT_CAPABILITIES, FULL_WIRING);
@@ -279,5 +296,12 @@ describe('EditorCapabilities preset shape', () => {
         expect(preset.selectable.has(kind)).toBe(true);
       }
     }
+  });
+
+  it('gates showChartMatrix: on for DRUM_EDIT, off for PREVIEW/TEMPO/ADD_LYRICS (plan 0074 Phase 3)', () => {
+    expect(DRUM_EDIT_CAPABILITIES.showChartMatrix).toBe('all');
+    expect(PREVIEW_CAPABILITIES.showChartMatrix).toBe(false);
+    expect(TEMPO_CAPABILITIES.showChartMatrix).toBe(false);
+    expect(ADD_LYRICS_CAPABILITIES.showChartMatrix).toBe(false);
   });
 });

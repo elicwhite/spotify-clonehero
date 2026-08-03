@@ -2,7 +2,11 @@ import type {ChartDocument, DownbeatFlags} from '@/lib/chart-edit';
 import {chartEndTick, deriveDownbeatFlags} from '@/lib/chart-edit';
 import type {ChartEditorAction, ChartEditorState} from './state';
 import {UNDO_STACK_CAP} from './state';
-import {preferredTrackForChart, trackKeyId} from './trackInventory';
+import {
+  parseTrackKeyId,
+  preferredTrackForChart,
+  trackKeyId,
+} from './trackInventory';
 import {
   computeAllTrackStamps,
   computeTempoStamp,
@@ -33,6 +37,61 @@ function recoverTrackScope(
         },
       }
     : scope;
+}
+
+/**
+ * Drop visible-track ids the doc no longer contains. `AddTrackCommand` and
+ * its undo change which tracks exist, while visibility is separate state;
+ * without this, undoing an "Add instrument" leaves a highway pane mounted
+ * for a track that no longer exists and that the Chart Matrix — which only
+ * renders rows for present instruments — can no longer hide.
+ *
+ * Returns the original set when nothing was dropped, so unaffected edits
+ * keep their reference identity.
+ */
+function reconcileVisibleTracks(
+  chartDoc: ChartDocument,
+  visible: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const existing = new Set(
+    chartDoc.parsedChart.trackData.map(track => trackKeyId(track)),
+  );
+  const next = new Set<string>();
+  for (const id of visible) {
+    if (existing.has(id)) next.add(id);
+  }
+  return next.size === visible.size ? visible : next;
+}
+
+/**
+ * The doc-derived slice every doc-replacing action (`EXECUTE_COMMAND`,
+ * `UNDO`, `REDO`) writes identically: the new doc, the active scope and
+ * visible-track ids reconciled against it, its downbeat flags, and a
+ * cleared tempo preview — any pending candidate was derived from the doc
+ * being replaced, so rendering or committing it now would desync the views
+ * from the undo stack (0061 §7).
+ *
+ * Content stamps are deliberately NOT here: the three actions each need a
+ * different stamp rule (see their cases).
+ */
+function applyDocToState(
+  state: ChartEditorState,
+  chartDoc: ChartDocument,
+): Pick<
+  ChartEditorState,
+  | 'chartDoc'
+  | 'activeScope'
+  | 'visibleTrackKeys'
+  | 'downbeatFlags'
+  | 'pendingTempoCandidate'
+> {
+  return {
+    chartDoc,
+    activeScope: recoverTrackScope(chartDoc, state.activeScope),
+    visibleTrackKeys: reconcileVisibleTracks(chartDoc, state.visibleTrackKeys),
+    downbeatFlags: computeDownbeatFlags(chartDoc),
+    pendingTempoCandidate: null,
+  };
 }
 
 /**
@@ -156,13 +215,7 @@ export function chartEditorReducer(
 
       return {
         ...state,
-        chartDoc: action.chartDoc,
-        activeScope: recoverTrackScope(action.chartDoc, state.activeScope),
-        downbeatFlags: computeDownbeatFlags(action.chartDoc),
-        // An edit invalidates any in-flight tempo preview (0061 §7): the
-        // candidate was derived from the pre-edit doc and rendering or
-        // committing it now would desync the views from the undo stack.
-        pendingTempoCandidate: null,
+        ...applyDocToState(state, action.chartDoc),
         dirty: true,
         undoStack: newUndoStack,
         undoDocStack: newUndoDocStack,
@@ -205,10 +258,7 @@ export function chartEditorReducer(
 
       return {
         ...state,
-        chartDoc: action.chartDoc,
-        activeScope: recoverTrackScope(action.chartDoc, state.activeScope),
-        downbeatFlags: computeDownbeatFlags(action.chartDoc),
-        pendingTempoCandidate: null,
+        ...applyDocToState(state, action.chartDoc),
         dirty: isDirty,
         undoStack: state.undoStack.slice(0, -1),
         undoDocStack: state.undoDocStack.slice(0, -1),
@@ -234,10 +284,7 @@ export function chartEditorReducer(
 
       return {
         ...state,
-        chartDoc: action.chartDoc,
-        activeScope: recoverTrackScope(action.chartDoc, state.activeScope),
-        downbeatFlags: computeDownbeatFlags(action.chartDoc),
-        pendingTempoCandidate: null,
+        ...applyDocToState(state, action.chartDoc),
         dirty: isDirty,
         undoStack: [...state.undoStack, redoneCommand],
         undoDocStack: [...state.undoDocStack, state.chartDoc],
@@ -285,13 +332,58 @@ export function chartEditorReducer(
     case 'SET_TRACK_VISIBILITY': {
       const visible = new Set(state.visibleTrackKeys);
       const id = trackKeyId(action.track);
-      if (action.visible) visible.add(id);
-      else visible.delete(id);
-      return {...state, visibleTrackKeys: visible};
+      if (action.visible) {
+        // Reconciled like every other write to the set, so "visibleTrackKeys
+        // only ever names tracks the doc contains" holds here too and no
+        // consumer has to re-filter.
+        const inDoc =
+          state.chartDoc === null ||
+          state.chartDoc.parsedChart.trackData.some(
+            track => trackKeyId(track) === id,
+          );
+        if (!inDoc) return state;
+        visible.add(id);
+        // Showing a track is an interaction with it, so it becomes the
+        // last-interacted track. That keeps keyboard note entry, the Note
+        // Inspector, and the non-stacked piano roll (all resolved from
+        // `activeScope`) pointed at the track the user just revealed
+        // instead of at whichever one they last touched.
+        return {
+          ...state,
+          visibleTrackKeys: visible,
+          activeScope: {kind: 'track', track: action.track},
+        };
+      }
+      visible.delete(id);
+      // Hiding the last-interacted track would otherwise leave keyboard
+      // note entry and the Note Inspector (both resolved from
+      // `activeScope`) pointed at a track no pane renders anymore. Fall
+      // back to the next remaining visible track, in the Set's insertion
+      // order — the same order the highway panes render in.
+      let activeScope = state.activeScope;
+      if (
+        activeScope.kind === 'track' &&
+        trackKeyId(activeScope.track) === id &&
+        visible.size > 0
+      ) {
+        const fallbackId = visible.values().next().value;
+        const fallbackTrack = fallbackId ? parseTrackKeyId(fallbackId) : null;
+        if (fallbackTrack) {
+          activeScope = {kind: 'track', track: fallbackTrack};
+        }
+      }
+      return {...state, visibleTrackKeys: visible, activeScope};
     }
 
     case 'SET_VISIBLE_TRACKS':
-      return {...state, visibleTrackKeys: action.tracks};
+      // Reconciled here too, so "visibleTrackKeys only ever names tracks the
+      // doc contains" holds for every write and no consumer has to re-filter.
+      return {
+        ...state,
+        visibleTrackKeys: state.chartDoc
+          ? reconcileVisibleTracks(state.chartDoc, action.tracks)
+          : action.tracks,
+      };
 
     case 'SET_CURSOR_TICK':
       if (state.cursorTick === action.tick) return state;

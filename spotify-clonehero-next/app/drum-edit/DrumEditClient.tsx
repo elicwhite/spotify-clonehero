@@ -4,6 +4,7 @@ import {defaultIniChartModifiers} from '@eliwhite/scan-chart';
 import {
   TrackEditPage,
   DEFAULT_DRUMS_EXPERT_SCOPE,
+  DRUM_EDIT_CAPABILITIES,
   type TrackEditPageConfig,
 } from '@/components/chart-editor';
 
@@ -16,10 +17,14 @@ const PRO_DRUMS_MODIFIERS = {
   pro_drums: true,
 } as const;
 
-const CONFIG: TrackEditPageConfig = {
+export const CONFIG: TrackEditPageConfig = {
   namespace: 'drum-edit',
   route: '/drum-edit',
   defaultScope: DEFAULT_DRUMS_EXPERT_SCOPE,
+  // Pin the Chart Matrix to Drums: this single-instrument page has no
+  // second instrument to add, and difficulty switching happens through the
+  // matrix's own cell toggles instead of a separate picker.
+  capabilities: {...DRUM_EDIT_CAPABILITIES, showChartMatrix: 'drums'},
   pageTitle: 'Edit Drum Chart',
   pageDescription:
     'Load an existing chart to edit drums on the Clone Hero highway.',

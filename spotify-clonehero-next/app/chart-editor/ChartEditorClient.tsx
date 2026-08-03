@@ -2,13 +2,12 @@
 
 import {
   DEFAULT_GUITAR_EXPERT_SCOPE,
+  findPreferredTrack,
   TrackEditPage,
-  TrackScopePicker,
   type TrackEditPageConfig,
 } from '@/components/chart-editor';
-import {findPreferredHighwayTrack} from '@/components/chart-editor/TrackScopePicker';
 
-const CONFIG: TrackEditPageConfig = {
+export const CONFIG: TrackEditPageConfig = {
   namespace: 'chart-editor',
   route: '/chart-editor',
   defaultScope: DEFAULT_GUITAR_EXPERT_SCOPE,
@@ -16,9 +15,12 @@ const CONFIG: TrackEditPageConfig = {
   pageDescription:
     'Load a chart, then switch between its guitar, bass, and drum highways.',
   dropZoneId: 'chart-editor-chart',
-  findTrack: findPreferredHighwayTrack,
+  findTrack: findPreferredTrack,
   noTrackMessage: 'No guitar, bass, or drum track found in chart.',
-  leftPanelChildren: <TrackScopePicker />,
+  // The instrument/difficulty inventory is the Chart Matrix in the shared
+  // sidebar (capabilities default to `'all'`), driven by the same
+  // `visibleTrackKeys`/`SET_TRACK_VISIBILITY` state the multi-pane highway
+  // and stacked piano roll read.
   stackedPianoRoll: true,
 };
 

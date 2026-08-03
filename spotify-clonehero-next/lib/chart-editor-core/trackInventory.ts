@@ -29,6 +29,18 @@ export function trackKeyId(track: TrackKey): TrackKeyId {
   return `${track.instrument}:${track.difficulty}`;
 }
 
+/** Parse a `trackKeyId()`-shaped id (`"${instrument}:${difficulty}"`) back
+ *  into a `TrackKey`. Returns null for a malformed id (defensive only —
+ *  every id stored in `visibleTrackKeys` is produced by `trackKeyId()`). */
+export function parseTrackKeyId(id: TrackKeyId): TrackKey | null {
+  const separator = id.indexOf(':');
+  if (separator <= 0 || separator === id.length - 1) return null;
+  return {
+    instrument: id.slice(0, separator) as TrackKey['instrument'],
+    difficulty: id.slice(separator + 1) as TrackKey['difficulty'],
+  };
+}
+
 export function availableTrackKeys(
   trackData: ParsedTrackData[],
 ): SupportedTrackKey[] {
@@ -62,4 +74,22 @@ export function preferredTrackForChart(
   chartDoc: ChartDocument,
 ): SupportedTrackKey | undefined {
   return preferredTrackKey(chartDoc.parsedChart.trackData);
+}
+
+/**
+ * Resolve {@link preferredTrackKey}'s choice back to the parser's track
+ * object — the initial highway track for the unified `/chart-editor` page
+ * (guitar Expert, then drums Expert, then any Expert, then the first track).
+ */
+export function findPreferredTrack(
+  trackData: ParsedTrackData[],
+): ParsedTrackData | undefined {
+  const preferred = preferredTrackKey(trackData);
+  return preferred
+    ? trackData.find(
+        track =>
+          track.instrument === preferred.instrument &&
+          track.difficulty === preferred.difficulty,
+      )
+    : undefined;
 }

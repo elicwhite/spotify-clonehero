@@ -145,23 +145,34 @@ export interface ChartEditorProps {
 /**
  * Composable chart editor shell with a Moonscraper-inspired layout.
  *
- * Layout:
- * ┌──────────┬───────────────────────────────────────┐
- * │ Left     │                                       │
- * │ Sidebar  │              Highway                  │
- * │          │           (3D, fills space)           │
- * │ Settings │                                       │
- * │ ──────── │                                       │
- * │ Tools    │                                       │
- * │ ──────── │                                       │
- * │ Note     │                                       │
- * │ Inspector│                                       │
- * │ ──────── ├───────────────────────────────────────┤
- * │ [page    │  Piano-roll timeline (ruler / tempo   │
- * │  panels] │  lane / note lanes / waveform row)    │
- * ├──────────┴───────────────────────────────────────┤
- * │  ◀◀  ▶  ▶▶  ──●────── 1:23 / 4:56    [speed] ...  │
- * └───────────────────────────────────────────────────┘
+ * A named-areas CSS grid (`.chart-editor-grid` below) drives two responsive
+ * arrangements of the same four regions (header / sidebar / main / bottom),
+ * switched with a plain `@media` query — no JS measurement:
+ *
+ * Below 1440px — identical to the editor's original flex layout: header
+ * spans the full width, the sidebar sits beside the highway in the middle
+ * row only, and the piano roll spans full width beneath everything.
+ * ┌──────────────────────────────────────────────────┐
+ * │                     Header                        │
+ * ├──────────┬─────────────────────────────────────────┤
+ * │ Sidebar  │              Highway                   │
+ * │          │           (3D, fills space)             │
+ * ├──────────┴─────────────────────────────────────────┤
+ * │  Piano-roll timeline (ruler / tempo lane / notes)  │
+ * ├─────────────────────────────────────────────────────┤
+ * │  ◀◀  ▶  ▶▶  ──●────── 1:23 / 4:56    [speed] ...   │
+ * └─────────────────────────────────────────────────────┘
+ *
+ * At >=1440px — the sidebar becomes a full-height rail; header, highway, and
+ * the piano roll/transport stack to its right.
+ * ┌──────────┬─────────────────────────────────────────┐
+ * │          │                  Header                  │
+ * │ Sidebar  ├─────────────────────────────────────────┤
+ * │ (full    │              Highway                   │
+ * │  height) │           (3D, fills space)             │
+ * │          ├─────────────────────────────────────────┤
+ * │          │  Piano-roll timeline + transport        │
+ * └──────────┴─────────────────────────────────────────┘
  */
 export default function ChartEditor({
   metadata,
@@ -228,12 +239,18 @@ export default function ChartEditor({
   );
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden bg-black">
+    <div className="chart-editor-grid h-full w-full overflow-hidden bg-black">
+      {/* `.chart-editor-grid` lives in `app/globals.css`: a named-areas grid
+       *  switched with a plain `@media` query (no JS measurement). Only the
+       *  container's `grid-template-areas`/`-columns` change between the two
+       *  breakpoints — every child keeps a constant `grid-area` name. */}
       <EditorMCPTools />
       {/* Top bar: song info + export. Pages with their own header (e.g.
        *  add-lyrics) suppress this via `hideHeader`. */}
       {!hideHeader && (
-        <div className="shrink-0 flex items-center justify-between border-b bg-background px-4 py-2">
+        <header
+          style={{gridArea: 'header'}}
+          className="min-w-0 flex items-center justify-between border-b bg-background px-4 py-2">
           {onMetadataChange ? (
             <button
               type="button"
@@ -306,7 +323,7 @@ export default function ChartEditor({
               />
             </div>
           )}
-        </div>
+        </header>
       )}
 
       {onMetadataChange && (
@@ -322,18 +339,29 @@ export default function ChartEditor({
         />
       )}
 
-      {/* Main area: three-column layout */}
-      <div className="flex flex-1 min-h-0">
-        {/* Left sidebar */}
+      {/* Left sidebar — occupies only the middle row below 1440px (today's
+       *  layout); becomes a full-height rail spanning all three rows at
+       *  >=1440px. Same DOM node, same `grid-area: sidebar` in both modes —
+       *  only the container's area map changes. */}
+      <aside
+        style={{gridArea: 'sidebar'}}
+        className="flex min-h-0 overflow-hidden">
         <LeftSidebar
           audioManager={audioManager}
           leftPanelChildren={leftPanelChildren}
           chartAssist={chartAssist}
         />
+      </aside>
 
-        {/* Center: optional sheet music pane + highway. The highway stays
-         *  mounted when the notation pane opens — same split-pane pattern
-         *  as /sheet-music's SongView, with the roles reversed. */}
+      {/* Center: optional sheet music pane + highway. The highway stays
+       *  mounted when the notation pane opens — same split-pane pattern
+       *  as /sheet-music's SongView, with the roles reversed. */}
+      {/* A `section`, not a `main`: the root app layout already wraps every
+       *  route in the page's single `main` landmark. */}
+      <section
+        aria-label="Editing surface"
+        style={{gridArea: 'main'}}
+        className="flex min-w-0 min-h-0 overflow-hidden">
         {showSheetMusic && sheetMusicTrack && (
           <div className="flex flex-1 min-w-0 min-h-0 p-2">
             <SheetMusic
@@ -365,15 +393,18 @@ export default function ChartEditor({
             audioData={highwayAudioData ?? audioData}
             audioChannels={audioChannels}
             durationSeconds={durationSeconds}
+            stackedPianoRoll={stackedPianoRoll && hasMultipleStackedTracks}
           />
         </div>
-      </div>
+      </section>
 
       {/* Bottom bar: transport + piano-roll timeline panel. The panel replaces
        *  both the old waveform strip and the right-side minimap; section
        *  navigation lives in the transport (skip buttons) and the panel's
        *  click-to-seek ruler flags. */}
-      <div className="shrink-0 border-t bg-background">
+      <div
+        style={{gridArea: 'bottom'}}
+        className="min-w-0 border-t bg-background">
         <div className="px-4 py-2.5">
           <TransportControls
             audioManager={audioManager}

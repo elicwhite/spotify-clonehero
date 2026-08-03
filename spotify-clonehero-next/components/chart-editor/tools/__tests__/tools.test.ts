@@ -39,6 +39,10 @@ const KICK_ID = noteId({tick: 0, type: noteTypes.kick});
 const RED_ID = noteId({tick: 480, type: noteTypes.redDrum});
 const YELLOW_ID = noteId({tick: 960, type: noteTypes.yellowDrum});
 
+/** Selection ids are stored track-qualified, so the same local id in another
+ *  track can never be mistaken for this one. */
+const qualified = (id: string) => `drums:expert|${id}`;
+
 function makeSession() {
   return new EditorSession(
     {chartDoc: makeFixtureDoc(), activeScope: DEFAULT_DRUMS_EXPERT_SCOPE},
@@ -153,7 +157,9 @@ describe('selectMoveTool', () => {
       ctx,
       evt({entity: {kind: 'note', id: RED_ID, tick: 480}}),
     );
-    expect(ctx.state.selection.get('note')).toEqual(new Set([RED_ID]));
+    expect(ctx.state.selection.get('note')).toEqual(
+      new Set([qualified(RED_ID)]),
+    );
   });
 
   it('shift-click toggles a second note into the selection', () => {
@@ -171,7 +177,7 @@ describe('selectMoveTool', () => {
       }),
     );
     expect(ctx.state.selection.get('note')).toEqual(
-      new Set([RED_ID, YELLOW_ID]),
+      new Set([qualified(RED_ID), qualified(YELLOW_ID)]),
     );
   });
 
@@ -194,7 +200,7 @@ describe('selectMoveTool', () => {
     session.dispatch({
       type: 'SET_SELECTION',
       kind: 'note',
-      ids: new Set([RED_ID]),
+      ids: new Set([qualified(RED_ID)]),
     });
     const noteDrag: NoteDragState = {
       anchorTick: 480,
@@ -251,7 +257,7 @@ describe('boxSelectTool', () => {
     session.dispatch({
       type: 'SET_SELECTION',
       kind: 'note',
-      ids: new Set([RED_ID]),
+      ids: new Set([qualified(RED_ID)]),
     });
     const ctx = makeContext(session);
     boxSelectTool.onPointerDown(ctx, evt());
@@ -285,7 +291,7 @@ describe('boxSelectTool', () => {
     // rectangle from (0,0) to (100,100) covers ms 0..100 and lanes 0..100
     // — wide enough to catch the kick note at tick 0 / ms 0.
     boxSelectTool.onPointerUp?.(ctx, evt({coords: {x: 100, y: 100}}));
-    expect(ctx.state.selection.get('note')?.has(KICK_ID)).toBe(true);
+    expect(ctx.state.selection.get('note')?.has(qualified(KICK_ID))).toBe(true);
   });
 });
 

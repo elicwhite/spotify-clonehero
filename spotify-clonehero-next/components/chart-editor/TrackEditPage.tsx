@@ -59,6 +59,7 @@ import {
   useAudioServiceContext,
 } from './AudioServiceContext';
 import {trackKeyId, type EditorScope} from './scope';
+import type {EditorCapabilities} from './capabilities';
 import ChartEditor from './ChartEditor';
 import ClickVolumeControl from './ClickVolumeControl';
 import type {AudioSource} from './ExportDialog';
@@ -84,6 +85,15 @@ export interface TrackEditPageConfig {
   route: string;
   /** Scope the editor starts in (instrument/difficulty pair to edit). */
   defaultScope: EditorScope;
+  /**
+   * Capability profile the editor mounts with. Single-instrument pages
+   * (`/guitar-edit`, `/bass-edit`, `/drum-edit`) pin `showChartMatrix` to
+   * their one instrument so the Chart Matrix offers difficulty switching
+   * for that instrument alone, with no "+ Add instrument" affordance.
+   * Defaults to `DRUM_EDIT_CAPABILITIES` (full editing, matrix `'all'`) —
+   * `ChartEditorProvider`'s own default — when omitted.
+   */
+  capabilities?: EditorCapabilities;
   pageTitle: string;
   pageDescription: string;
   dropZoneId: string;
@@ -119,7 +129,9 @@ export default function TrackEditPage(config: TrackEditPageConfig) {
        *  run a task here (Tempo map, Lyrics/Vocals) share it, so only one
        *  assist run is ever in flight and leaving the page aborts it. */}
       <AssistRunnerProvider>
-        <ChartEditorProvider activeScope={config.defaultScope}>
+        <ChartEditorProvider
+          activeScope={config.defaultScope}
+          {...(config.capabilities ? {capabilities: config.capabilities} : {})}>
           <Suspense
             fallback={
               <div className="flex items-center justify-center h-screen">

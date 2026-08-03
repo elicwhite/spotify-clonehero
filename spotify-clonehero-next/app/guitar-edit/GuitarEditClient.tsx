@@ -3,14 +3,18 @@
 import {
   TrackEditPage,
   DEFAULT_GUITAR_EXPERT_SCOPE,
-  DifficultyPicker,
+  DRUM_EDIT_CAPABILITIES,
   type TrackEditPageConfig,
 } from '@/components/chart-editor';
 
-const CONFIG: TrackEditPageConfig = {
+export const CONFIG: TrackEditPageConfig = {
   namespace: 'guitar-edit',
   route: '/guitar-edit',
   defaultScope: DEFAULT_GUITAR_EXPERT_SCOPE,
+  // Pin the Chart Matrix to Guitar: this single-instrument page has no
+  // second instrument to add, and difficulty switching happens through the
+  // matrix's own cell toggles instead of a separate picker.
+  capabilities: {...DRUM_EDIT_CAPABILITIES, showChartMatrix: 'guitar'},
   pageTitle: 'Edit Guitar Chart',
   pageDescription:
     'Load an existing chart to edit guitar on the Clone Hero highway.',
@@ -22,7 +26,6 @@ const CONFIG: TrackEditPageConfig = {
       t => t.instrument === 'guitar' && t.difficulty === 'expert',
     ) ?? trackData.find(t => t.instrument === 'guitar'),
   noTrackMessage: 'No Guitar track found in chart.',
-  headerExtra: <DifficultyPicker />,
 };
 
 export default function GuitarEditClient() {

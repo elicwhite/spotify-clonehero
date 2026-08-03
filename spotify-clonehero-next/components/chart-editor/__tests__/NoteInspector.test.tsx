@@ -21,6 +21,7 @@ import {
 import {
   DEFAULT_DRUMS_EXPERT_SCOPE,
   DEFAULT_GUITAR_EXPERT_SCOPE,
+  trackQualifiedNoteId,
 } from '../scope';
 import {noteId} from '../commands';
 import NoteInspector from '../NoteInspector';
@@ -37,7 +38,13 @@ function makeGuitarDoc(): {doc: ChartDocument; id: string} {
     {tick: 0, type: noteTypes.green},
     guitarSchema,
   );
-  return {doc, id: noteId({tick: 0, type: noteTypes.green})};
+  return {
+    doc,
+    id: trackQualifiedNoteId(
+      {instrument: 'guitar', difficulty: 'expert'},
+      noteId({tick: 0, type: noteTypes.green}),
+    ),
+  };
 }
 
 function makeDrumsDoc(): {doc: ChartDocument; id: string} {
@@ -45,7 +52,13 @@ function makeDrumsDoc(): {doc: ChartDocument; id: string} {
   parsed.trackData.push(emptyTrackData('drums', 'expert'));
   const doc: ChartDocument = {parsedChart: parsed, assets: []};
   addDrumNote(doc.parsedChart.trackData[0], {tick: 0, type: noteTypes.redDrum});
-  return {doc, id: noteId({tick: 0, type: noteTypes.redDrum})};
+  return {
+    doc,
+    id: trackQualifiedNoteId(
+      {instrument: 'drums', difficulty: 'expert'},
+      noteId({tick: 0, type: noteTypes.redDrum}),
+    ),
+  };
 }
 
 function Harness({build}: {build: () => {doc: ChartDocument; id: string}}) {

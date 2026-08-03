@@ -25,7 +25,10 @@ import type {
 } from '@/lib/chart-edit';
 import {findTrack} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
-import {trackKeyId as inventoryTrackKeyId} from '@/lib/chart-editor-core/trackInventory';
+import {
+  parseTrackKeyId,
+  trackKeyId as inventoryTrackKeyId,
+} from '@/lib/chart-editor-core/trackInventory';
 
 export type {TrackKey};
 
@@ -45,26 +48,26 @@ export function parseTrackQualifiedNoteId(
 ): {track: TrackKey; localId: string} | null {
   const separator = id.indexOf('|');
   if (separator <= 0 || separator === id.length - 1) return null;
-  const trackPart = id.slice(0, separator);
-  const localId = id.slice(separator + 1);
-  const colon = trackPart.indexOf(':');
-  if (colon <= 0 || colon === trackPart.length - 1) return null;
-  return {
-    track: {
-      instrument: trackPart.slice(0, colon) as Instrument,
-      difficulty: trackPart.slice(colon + 1) as Difficulty,
-    },
-    localId,
-  };
+  const track = parseTrackKeyId(id.slice(0, separator));
+  if (!track) return null;
+  return {track, localId: id.slice(separator + 1)};
 }
 
-/** Convert a shared selection id into the local id expected by commands. */
+/**
+ * Convert a shared selection id into the local id expected by commands, or
+ * null when the id belongs to another track.
+ *
+ * Every producer of a note selection/hover id qualifies it with its owning
+ * track, so an unqualified id names no track and resolves nowhere — it must
+ * never be treated as "mine", or a `tick:type` id that exists in two tracks
+ * would light up in both.
+ */
 export function localNoteIdForTrack(
   id: string,
   track: TrackKey,
 ): string | null {
   const parsed = parseTrackQualifiedNoteId(id);
-  if (!parsed) return id;
+  if (!parsed) return null;
   return trackKeyId(parsed.track) === trackKeyId(track) ? parsed.localId : null;
 }
 
@@ -101,6 +104,18 @@ export const DEFAULT_VOCALS_SCOPE: EditorScope = {
   kind: 'vocals',
   part: 'vocals',
 };
+
+/** Stable id for one highway pane's scope — React key and pane test id. */
+export function scopePaneKey(scope: EditorScope): string {
+  switch (scope.kind) {
+    case 'track':
+      return trackKeyId(scope.track);
+    case 'vocals':
+      return `vocals:${scope.part}`;
+    case 'global':
+      return 'global';
+  }
+}
 
 export function isTrackScope(
   scope: EditorScope,

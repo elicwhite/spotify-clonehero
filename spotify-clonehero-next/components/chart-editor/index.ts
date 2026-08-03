@@ -17,6 +17,7 @@ export {
   getFirstSelectedId,
   isAnythingSelected,
   selectActiveTrack,
+  findPreferredTrack,
   type ChartEditorState,
   type ChartEditorAction,
   type ChartEditorContextValue,
@@ -67,8 +68,6 @@ export {default as LeftSidebar} from './LeftSidebar';
 export {default as PianoRollTimeline} from './piano-roll/PianoRollTimeline';
 export {default as LoopControls} from './LoopControls';
 export {default as NoteInspector} from './NoteInspector';
-export {default as DifficultyPicker} from './DifficultyPicker';
-export {default as TrackScopePicker} from './TrackScopePicker';
 export {default as ExportDialog} from './ExportDialog';
 export type {AudioSource} from './ExportDialog';
 

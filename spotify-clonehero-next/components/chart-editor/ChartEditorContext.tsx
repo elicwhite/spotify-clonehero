@@ -4,7 +4,6 @@ import {
   createContext,
   useContext,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -48,19 +47,10 @@ export function ChartEditorProvider({
     session.getState,
   );
 
-  const reconcilerRef = useRef<
-    import('@/lib/preview/highway/SceneReconciler').SceneReconciler | null
-  >(null);
-  const noteRendererRef = useRef<
-    import('@/lib/preview/highway/NoteRenderer').NoteRenderer | null
-  >(null);
-
   const value = useMemo<ChartEditorContextValue>(
     () => ({
       state,
       dispatch: session.dispatch,
-      reconcilerRef,
-      noteRendererRef,
       capabilities,
     }),
     [state, session, capabilities],

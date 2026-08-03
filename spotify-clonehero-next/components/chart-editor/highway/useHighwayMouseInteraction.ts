@@ -39,6 +39,7 @@ import {selectActiveSchema} from '@/lib/chart-editor-core';
 import type {EditorCapabilities} from '../capabilities';
 import type {HighwayPopoverState} from './HighwayPopovers';
 import type {MarkerDragState, MarkerKind} from './useMarkerDrag';
+import {trackKeyFromScope, trackQualifiedNoteId} from '../scope';
 import {
   TOOL_REGISTRY,
   resolveCursorContinuation,
@@ -432,7 +433,16 @@ export function useHighwayMouseInteraction(
           id: string;
         } | null = null;
         if (hit?.type === 'note' && capabilities.hoverable.has('note')) {
-          nextHover = {kind: 'note', id: hit.noteId};
+          // Track-qualified, like every stored note id: an unqualified id
+          // would resolve as hovered in every pane that happens to have a
+          // note with the same local id.
+          const trackKey = trackKeyFromScope(state.activeScope);
+          nextHover = {
+            kind: 'note',
+            id: trackKey
+              ? trackQualifiedNoteId(trackKey, hit.noteId)
+              : hit.noteId,
+          };
         } else if (markerRef && capabilities.hoverable.has(markerRef.kind)) {
           nextHover = {kind: markerRef.kind, id: markerRef.id};
         }
@@ -477,6 +487,7 @@ export function useHighwayMouseInteraction(
       markerDrag,
       screenToLane,
       screenToTick,
+      state.activeScope,
       state.activeTool,
     ],
   );

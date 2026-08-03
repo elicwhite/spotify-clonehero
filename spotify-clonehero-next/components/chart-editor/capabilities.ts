@@ -26,6 +26,7 @@ import type {
   CommandOperation,
   EntityKind,
 } from '@/lib/chart-edit';
+import type {SupportedTrackInstrument} from '@/lib/chart-editor-core';
 
 export interface EditorCapabilities {
   /**
@@ -114,6 +115,22 @@ export interface EditorCapabilities {
    * what the section can show, not a promise that anything shows.
    */
   chartAssist: false | 'all' | 'tempo-and-silence' | 'lyrics-only';
+  /**
+   * Show the sidebar's Chart Matrix section (plan 0074 Phase 3, Design C):
+   * rows = instruments present in the chart (guitar/bass/drums, no vocals
+   * row), columns = X/H/M/E, one interaction — click toggles that track's
+   * visibility.
+   *  - `false` — no section at all (`PREVIEW`/`TEMPO`/`ADD_LYRICS`: none of
+   *    these pages edit notes, so a note-visibility matrix has nothing to
+   *    do).
+   *  - `'all'` — every present instrument is a row; `+ Add instrument`
+   *    offers every absent supported instrument.
+   *  - a single instrument — single-instrument edit pages (`/guitar-edit`,
+   *    `/bass-edit`, `/drum-edit`) pin the matrix to their one instrument;
+   *    `+ Add instrument` is hidden since there is no second instrument to
+   *    add on that surface.
+   */
+  showChartMatrix: false | 'all' | SupportedTrackInstrument;
 }
 
 /** Every operation class — the common case for presets with no dispatch
@@ -176,6 +193,7 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
   showEditingControls: true,
   showPianoRollNotes: true,
   chartAssist: 'all',
+  showChartMatrix: 'all',
 };
 
 export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
@@ -197,6 +215,7 @@ export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
   showEditingControls: true,
   showPianoRollNotes: true,
   chartAssist: 'lyrics-only',
+  showChartMatrix: false,
 };
 
 export const PREVIEW_CAPABILITIES: EditorCapabilities = {
@@ -214,6 +233,7 @@ export const PREVIEW_CAPABILITIES: EditorCapabilities = {
   showEditingControls: false,
   showPianoRollNotes: true,
   chartAssist: false,
+  showChartMatrix: false,
 };
 
 /**
@@ -245,4 +265,5 @@ export const TEMPO_CAPABILITIES: EditorCapabilities = {
   showEditingControls: true,
   showPianoRollNotes: false,
   chartAssist: 'tempo-and-silence',
+  showChartMatrix: false,
 };

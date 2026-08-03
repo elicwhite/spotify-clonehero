@@ -88,3 +88,29 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  /* Chart editor shell (components/chart-editor/ChartEditor.tsx): one
+     named-areas grid over header / sidebar / main / bottom. Below 1440px the
+     sidebar occupies only the middle row; at >=1440px it spans all three rows
+     as a full-height rail. Only the area map changes between the two — every
+     child keeps a constant `grid-area`. */
+  .chart-editor-grid {
+    display: grid;
+    grid-template-areas:
+      'header header'
+      'sidebar main'
+      'bottom bottom';
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  @media (min-width: 1440px) {
+    .chart-editor-grid {
+      grid-template-areas:
+        'sidebar header'
+        'sidebar main'
+        'sidebar bottom';
+    }
+  }
+}

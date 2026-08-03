@@ -34,6 +34,7 @@ import type {ToolMode} from '@/lib/chart-editor-core';
 import {useUndoRedo} from './hooks/useEditCommands';
 import NoteInspector from './NoteInspector';
 import LoopControls from './LoopControls';
+import ChartMatrix from './sidebar/ChartMatrix';
 import ChartAssist, {type ChartAssistProps} from './sidebar/ChartAssist';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import {cn} from '@/lib/utils';
@@ -430,6 +431,12 @@ export default function LeftSidebar({
               </div>
             </div>
           )}
+
+          {/* Chart Matrix — instrument/difficulty visibility grid (plan 0074
+           *  Phase 3). Mounted above Chart Assist per the approved sidebar
+           *  redesign; it decides for itself whether it has anything to
+           *  show, from `capabilities.showChartMatrix` and the loaded doc. */}
+          <ChartMatrix />
 
           {/* Chart Assist — Tempo map / Add leading silence / Drum
            *  transcription / Lyrics cards (plan 0074 Phase 2). The section

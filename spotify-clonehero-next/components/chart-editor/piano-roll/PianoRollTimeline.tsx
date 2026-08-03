@@ -1090,28 +1090,16 @@ export default function PianoRollTimeline({
       drawGrid(ctx, timelineW, h, laneTop, laneBottom, view, scene);
       if (showNotes) {
         if (rowLayout) {
-          const hasQualifiedSelection = Array.from(selection).some(id =>
-            id.includes('|'),
-          );
-          const hasQualifiedHover = hoverIdRef.current?.includes('|') ?? false;
-          const activeKeyId = scene.activeTrackKey
-            ? trackKeyId(scene.activeTrackKey)
-            : null;
           for (const row of rowLayout.rows) {
             if (!row.visible) continue;
             const rowScene = sceneForTrackRow(scene, row.row);
-            const rowSelection = hasQualifiedSelection
-              ? new Set(localNoteIdsForTrack(selection, row.row.key))
-              : trackKeyId(row.row.key) === activeKeyId
-                ? selection
-                : new Set<string>();
-            const rowHover =
-              hoverIdRef.current && hasQualifiedHover
-                ? (localNoteIdsForTrack([hoverIdRef.current], row.row.key)[0] ??
-                  null)
-                : trackKeyId(row.row.key) === activeKeyId
-                  ? hoverIdRef.current
-                  : null;
+            const rowSelection = new Set(
+              localNoteIdsForTrack(selection, row.row.key),
+            );
+            const rowHover = hoverIdRef.current
+              ? (localNoteIdsForTrack([hoverIdRef.current], row.row.key)[0] ??
+                null)
+              : null;
             const rowDrag =
               noteDragRef.current &&
               trackKeyId(noteDragRef.current.trackKey) ===
@@ -1152,6 +1140,10 @@ export default function PianoRollTimeline({
             ctx.stroke();
           }
         } else {
+          // Single-track mode draws local `tick:type` ids, so the shared
+          // track-qualified selection/hover is translated to the active
+          // track at the boundary — ids owned by another track drop out.
+          const activeKey = scene.activeTrackKey;
           drawNotes(
             ctx,
             timelineW,
@@ -1159,8 +1151,13 @@ export default function PianoRollTimeline({
             laneH,
             view,
             scene,
-            selection,
-            hoverIdRef.current,
+            activeKey
+              ? new Set(localNoteIdsForTrack(selection, activeKey))
+              : new Set<string>(),
+            activeKey && hoverIdRef.current
+              ? (localNoteIdsForTrack([hoverIdRef.current], activeKey)[0] ??
+                  null)
+              : null,
             noteDragRef.current,
             noteResizeRef.current,
             placeNoteRef.current,
@@ -1761,13 +1758,14 @@ export default function PianoRollTimeline({
   );
 
   // Shared note selection (shift-aware), mirroring the highway's cursor tool.
+  // Ids are always track-qualified — the highway, the piano roll's stacked
+  // rows and its single-track mode all read the same store, so an id without
+  // its owning track would resolve in whichever pane/row happens to have a
+  // note with the same local `tick:type`.
   const selectNote = useCallback(
     (id: string, shift: boolean, trackKey?: TrackKey) => {
       const st = editStateRef.current;
-      const qualifiedId =
-        stackedPianoRollRef.current && trackKey
-          ? trackQualifiedNoteId(trackKey, id)
-          : id;
+      const qualifiedId = trackKey ? trackQualifiedNoteId(trackKey, id) : id;
       const current = getSelectedIds(st, 'note');
       if (shift) {
         const next = new Set(current);
@@ -2160,10 +2158,9 @@ export default function PianoRollTimeline({
           type: 'SET_HOVER',
           hovered: {
             kind: 'note',
-            id:
-              stacked && interactionTrackKey
-                ? trackQualifiedNoteId(interactionTrackKey, hit.id)
-                : hit.id,
+            id: interactionTrackKey
+              ? trackQualifiedNoteId(interactionTrackKey, hit.id)
+              : hit.id,
           },
         });
         if (capabilities.draggable.has('note')) {
@@ -2500,10 +2497,9 @@ export default function PianoRollTimeline({
             )
           : new Set<string>();
         const merged = new Set(marqueeBaseRef.current);
+        const marqueeTrackKey = row?.row.key ?? marquee.trackKey;
         inBox.forEach(id =>
-          merged.add(
-            stacked && row ? trackQualifiedNoteId(row.row.key, id) : id,
-          ),
+          merged.add(trackQualifiedNoteId(marqueeTrackKey, id)),
         );
         dispatch({type: 'SET_SELECTION', kind: 'note', ids: merged});
 
@@ -2664,9 +2660,10 @@ export default function PianoRollTimeline({
             : placing
               ? 'crosshair'
               : 'default';
-      const hoverTrackKey = hoverRow?.row.key;
+      const hoverTrackKey =
+        hoverRow?.row.key ?? trackKeyFromScope(st.activeScope);
       const nextId = hovered
-        ? stacked && hoverTrackKey
+        ? hoverTrackKey
           ? trackQualifiedNoteId(hoverTrackKey, hovered.id)
           : hovered.id
         : null;
@@ -3376,7 +3373,11 @@ export default function PianoRollTimeline({
       setMenu({
         x: menuX,
         y: menuY,
-        items: buildNoteMenu(noteScene, hit, row?.row.key),
+        items: buildNoteMenu(
+          noteScene,
+          hit,
+          row?.row.key ?? trackKeyFromScope(editStateRef.current.activeScope),
+        ),
       });
     },
     [

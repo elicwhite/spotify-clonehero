@@ -34,6 +34,7 @@ import {
   entityContextFromScope,
   localNoteIdsForTrack,
   trackKeyFromScope,
+  trackQualifiedNoteId,
 } from '../scope';
 import {getSelectedIds} from '@/lib/chart-editor-core';
 import {AFFORDANCES} from '../affordances';
@@ -87,12 +88,13 @@ export const selectMoveTool: EditorTool = {
 
     if (entity.kind === 'note') {
       const trackKey = trackKeyFromScope(ctx.state.activeScope);
-      const noteSelection = trackKey
-        ? new Set(
-            localNoteIdsForTrack(getSelectedIds(ctx.state, 'note'), trackKey),
-          )
-        : getSelectedIds(ctx.state, 'note');
-      const selectionId = entity.id;
+      // Selection ids are stored track-qualified so a note id that exists in
+      // more than one track (`"0:green"` on guitar and on bass) can never
+      // resolve as "mine" in another pane or piano-roll row.
+      const noteSelection = getSelectedIds(ctx.state, 'note');
+      const selectionId = trackKey
+        ? trackQualifiedNoteId(trackKey, entity.id)
+        : entity.id;
       if (evt.shiftKey) {
         const newIds = new Set(noteSelection);
         if (newIds.has(selectionId)) {
@@ -120,11 +122,15 @@ export const selectMoveTool: EditorTool = {
     }
 
     if (ctx.capabilities.draggable.has(entity.kind)) {
+      const trackKey = trackKeyFromScope(ctx.state.activeScope);
       ctx.dispatch({
         type: 'SET_HOVER',
         hovered: {
           kind: entity.kind,
-          id: entity.id,
+          id:
+            entity.kind === 'note' && trackKey
+              ? trackQualifiedNoteId(trackKey, entity.id)
+              : entity.id,
         },
       });
       if (entity.kind === 'note') {
@@ -284,14 +290,17 @@ export const boxSelectTool: EditorTool = {
 
     const trackKey = trackKeyFromScope(ctx.state.activeScope);
     if (trackKey) {
-      const current = new Set(
-        localNoteIdsForTrack(getSelectedIds(ctx.state, 'note'), trackKey),
+      // Marquee results are local ids from this track's note list; store
+      // them track-qualified like every other selection id.
+      const qualified = new Set(
+        Array.from(selected).map(id => trackQualifiedNoteId(trackKey, id)),
       );
       if (evt.shiftKey) {
-        selected.forEach(id => current.add(id));
+        const current = new Set(getSelectedIds(ctx.state, 'note'));
+        qualified.forEach(id => current.add(id));
         ctx.dispatch({type: 'SET_SELECTION', kind: 'note', ids: current});
       } else {
-        ctx.dispatch({type: 'SET_SELECTION', kind: 'note', ids: selected});
+        ctx.dispatch({type: 'SET_SELECTION', kind: 'note', ids: qualified});
       }
     } else if (evt.shiftKey) {
       const merged = new Set(getSelectedIds(ctx.state, 'note'));
