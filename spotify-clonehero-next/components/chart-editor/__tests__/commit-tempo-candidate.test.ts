@@ -30,6 +30,10 @@ import {
   type ChartEditorState,
 } from '@/lib/chart-editor-core';
 import {noteTypes} from '@eliwhite/scan-chart';
+import {
+  getAssistProvenance,
+  withAssistProvenance,
+} from '@/lib/chart-editor-core/content-stamps';
 
 const RES = 480;
 
@@ -153,5 +157,40 @@ describe('batch/guarded path stays flag-gated (plan 0061 §3a/§7)', () => {
       2,
     );
     expect(() => guardedBatchRepredict(base, corrected, ONSETS)).toThrow();
+  });
+});
+
+describe('assist provenance across a preview-then-commit (plan 0074 Design C)', () => {
+  test('provenance written after the preview was captured survives the commit', () => {
+    // The candidate is a doc snapshotted at PREVIEW time. Anything written
+    // to the live doc afterwards — here a "Keep as-is" ack — must not be
+    // reverted by committing that older snapshot.
+    const base = makeDoc();
+    const candidate = repredictTempo(
+      base,
+      octaveRescaleSync(synctrackFromChart(base.parsedChart), 2),
+      ONSETS,
+    ).doc;
+
+    const live = withAssistProvenance(base, {
+      acks: {'drum-transcription': {ackStamp: 'stamp-1'}},
+    });
+    const committed = new CommitTempoCandidateCommand(candidate).execute(live);
+
+    expect(getAssistProvenance(committed)!.acks).toEqual({
+      'drum-transcription': {ackStamp: 'stamp-1'},
+    });
+  });
+
+  test('with no provenance on either side the candidate commits verbatim', () => {
+    const base = makeDoc();
+    const candidate = repredictTempo(
+      base,
+      octaveRescaleSync(synctrackFromChart(base.parsedChart), 2),
+      ONSETS,
+    ).doc;
+    expect(new CommitTempoCandidateCommand(candidate).execute(base)).toBe(
+      candidate,
+    );
   });
 });

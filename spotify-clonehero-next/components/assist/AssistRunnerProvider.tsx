@@ -31,6 +31,15 @@ export function AssistRunnerProvider({children}: {children: ReactNode}) {
   );
 }
 
+/** The editor's assist runner, or null outside an `AssistRunnerProvider`.
+ *  For surfaces that render in both worlds: a bare `ChartEditorProvider`
+ *  (capability-gate tests, pages that haven't adopted the engine) has no
+ *  provider, and such a surface hides its run-starting controls rather than
+ *  failing to mount. */
+export function useOptionalAssistRunnerContext(): AssistRunnerControls | null {
+  return useContext(AssistRunnerContext);
+}
+
 /** The editor's assist runner. Throws outside an `AssistRunnerProvider` —
  *  a surface that can start a run must share the editor's single runner. */
 export function useAssistRunnerContext(): AssistRunnerControls {

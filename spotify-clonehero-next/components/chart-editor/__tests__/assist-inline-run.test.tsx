@@ -7,7 +7,8 @@
  * Mounts the real `EditorApp` inside a real `ChartEditorProvider`
  * (`EditorSession`, `useExecuteCommand`, `ReplaceDrumTrackCommand` all run
  * for real). Only the highway/audio boundary is stubbed
- * (`ChartEditor` -> a note-count + `leftPanelChildren` shim,
+ * (`ChartEditor` -> a note-count + `leftPanelChildren` + real `ChartAssist`
+ * shim, so the run is driven through the card the user actually clicks,
  * `usePaddedAudio` -> a static fake `AudioManager`) and the OPFS/pipeline
  * boundary is faked (`storage/opfs`, `pipeline/runner`,
  * `ml/roformer-separation`) — `lib/chart-edit`'s real
@@ -33,13 +34,7 @@ class FakeResizeObserver {
 // used here, since the pipeline is mocked.
 (globalThis as unknown as {ort: unknown}).ort = {};
 
-import {
-  render,
-  screen,
-  waitFor,
-  fireEvent,
-  within,
-} from '@testing-library/react';
+import {render, screen, waitFor, fireEvent} from '@testing-library/react';
 import {noteTypes} from '@eliwhite/scan-chart';
 import {ChartEditorProvider} from '../ChartEditorContext';
 import {AudioServiceProvider} from '../AudioServiceContext';
@@ -83,6 +78,8 @@ const AFTER_BYTES = buildChartBytes(5);
 
 jest.mock('../ChartEditor', () => {
   const React = jest.requireActual('react');
+  const ChartAssist = jest.requireActual('../sidebar/ChartAssist').default;
+  const {TooltipProvider} = jest.requireActual('../../ui/tooltip');
   return {
     __esModule: true,
     default: (props: any) => {
@@ -93,14 +90,19 @@ jest.mock('../ChartEditor', () => {
         ? drumsTrack.noteEventGroups.flat().length
         : 0;
       return React.createElement(
-        'div',
+        TooltipProvider,
         null,
         React.createElement(
           'div',
-          {'data-testid': 'note-count'},
-          String(noteCount),
+          null,
+          React.createElement(
+            'div',
+            {'data-testid': 'note-count'},
+            String(noteCount),
+          ),
+          React.createElement(ChartAssist, props.chartAssist ?? {}),
+          props.leftPanelChildren,
         ),
-        props.leftPanelChildren,
       );
     },
   };
@@ -181,6 +183,8 @@ jest.mock('../../../lib/drum-transcription/ml/roformer-separation', () => ({
     throw new Error('no vocals in this fixture');
   }),
   hasDrumStem: jest.fn(async () => true),
+  readProjectAudioBytes: jest.fn(async () => new ArrayBuffer(4)),
+  ensureProjectStemFingerprint: jest.fn(async () => 'fp-1'),
 }));
 
 let releaseRegenerate: (() => void) | null = null;
@@ -211,10 +215,12 @@ jest.mock('../../../lib/drum-transcription/pipeline/runner', () => ({
 }));
 
 import EditorApp from '@/app/drum-transcription/components/EditorApp';
+import {getProject} from '@/lib/drum-transcription/storage/opfs';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 import {regenerateProject} from '@/lib/drum-transcription/pipeline/runner';
 
 const regenerateProjectMock = regenerateProject as jest.Mock;
+const getProjectMock = getProject as jest.Mock;
 
 function renderEditor() {
   return render(
@@ -228,19 +234,59 @@ function renderEditor() {
   );
 }
 
-/** Opens the confirm dialog and confirms it, returning the resolved
- *  confirm-button element scoped to the dialog (distinct from the sidebar's
- *  "Regenerate" trigger, which shares the same accessible name). */
+/** Clicks the Drum transcription card's Re-run action and confirms the
+ *  dialog it raises (the dialog's confirm shares the trigger's accessible
+ *  name, so it is resolved scoped to the dialog). */
 function confirmRegenerate() {
-  fireEvent.click(screen.getByRole('button', {name: /^regenerate$/i}));
-  const dialog = screen.getByRole('alertdialog');
-  fireEvent.click(within(dialog).getByRole('button', {name: /^regenerate$/i}));
+  fireEvent.click(screen.getByRole('button', {name: /^re-run$/i}));
+  // With the dialog open, Radix hides the rest of the app from the
+  // accessibility tree, so the only reachable "Re-run" is the dialog's own
+  // confirm action.
+  fireEvent.click(screen.getByRole('button', {name: /^re-run$/i}));
 }
 
 beforeEach(() => {
   regenerated = false;
   releaseRegenerate = null;
   regenerateProjectMock.mockClear();
+});
+
+/**
+ * Assist provenance can't ride a `.chart`/`.mid` file, so the project's OPFS
+ * metadata carries it (plan 0074 Design C). These pin both directions.
+ */
+describe('assist provenance persistence', () => {
+  it('honors a persisted stamp that no longer matches the chart', async () => {
+    getProjectMock.mockResolvedValueOnce({
+      id: 'proj-1',
+      name: 'Test Song',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      durationSeconds: 100,
+      stage: 'editing',
+      // A stamp from a grid the user has since edited: the staleness prompt
+      // the user was looking at before the reload comes back.
+      assistProvenance: {drumTranscription: {tempoStamp: 'from-an-old-grid'}},
+    });
+    renderEditor();
+    await waitFor(() =>
+      expect(
+        screen.getByText(/tempo grid changed after transcription/i),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it('seeds a stamp from the loaded chart when none was persisted', async () => {
+    renderEditor();
+    await waitFor(() =>
+      expect(screen.getByTestId('note-count')).toHaveTextContent('3'),
+    );
+    // The chart on disk WAS transcribed against the grid it ships with, so
+    // nothing is stale until the user moves that grid.
+    expect(
+      screen.queryByText(/tempo grid changed after transcription/i),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe('EditorApp inline regenerate (plan 0074 suite 2)', () => {
@@ -251,7 +297,7 @@ describe('EditorApp inline regenerate (plan 0074 suite 2)', () => {
     );
   });
 
-  it('clicking Regenerate expands the inline card into a step list, keeps sibling controls enabled, and applies the new drums track without remounting', async () => {
+  it('clicking Re-run expands the inline card into a step list, keeps sibling controls enabled, and applies the new drums track without remounting', async () => {
     renderEditor();
     await waitFor(() =>
       expect(screen.getByTestId('note-count')).toHaveTextContent('3'),
@@ -290,11 +336,11 @@ describe('EditorApp inline regenerate (plan 0074 suite 2)', () => {
     // component state, reset on remount) is still collapsed.
     expect(screen.queryByRole('slider')).not.toBeInTheDocument();
 
-    // Regenerate is available again (idle button restored).
-    expect(screen.getByRole('button', {name: /^regenerate$/i})).toBeEnabled();
+    // Re-run is available again (idle button restored).
+    expect(screen.getByRole('button', {name: /^re-run$/i})).toBeEnabled();
   });
 
-  it('cancel restores the idle Regenerate button and applies nothing', async () => {
+  it('cancel restores the idle Re-run button and applies nothing', async () => {
     renderEditor();
     await waitFor(() =>
       expect(screen.getByTestId('note-count')).toHaveTextContent('3'),
@@ -308,12 +354,16 @@ describe('EditorApp inline regenerate (plan 0074 suite 2)', () => {
       ).toBeInTheDocument(),
     );
 
-    expect(screen.getByRole('button', {name: /^regenerate$/i})).toBeDisabled();
+    // The card is taken over by the run: its action is gone, not merely
+    // disabled.
+    expect(
+      screen.queryByRole('button', {name: /^re-run$/i}),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', {name: /^cancel$/i}));
 
     await waitFor(() =>
-      expect(screen.getByRole('button', {name: /^regenerate$/i})).toBeEnabled(),
+      expect(screen.getByRole('button', {name: /^re-run$/i})).toBeEnabled(),
     );
     expect(screen.getByText(/cancelled/i)).toBeInTheDocument();
     expect(screen.getByTestId('note-count')).toHaveTextContent('3');

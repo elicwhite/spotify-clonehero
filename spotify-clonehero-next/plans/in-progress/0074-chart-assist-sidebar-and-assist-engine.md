@@ -318,10 +318,17 @@ removal. All land with the matrix in Phase 3.
   `doc.assistProvenance = {difficulties: {[instrument]: {sourceStamp}},
 drumTranscription: {tempoStamp}, ...}`. `GenerateDifficultiesCommand`
   writes tracks + provenance in one command; undo restores both. The
-  "Keep as-is" acknowledgment writes an `ackStamp` the same way.
-  Persistence comes free wherever the doc/project persists; `/tempo` and
-  `/add-lyrics` (no persistence) lose it on reload, as they lose
-  everything today.
+  "Keep as-is" acknowledgment writes an `ackStamp` the same way (through a
+  dedicated reducer action rather than a command, so a dismissal neither
+  lands on the undo stack nor discards the redo branch).
+  Persistence is NOT free: `.chart`/`.mid` have no slot for doc-level
+  metadata, so `/drum-transcription` mirrors the bag into its OPFS project
+  metadata (`ProjectMetadata.assistProvenance`) on every autosave and
+  re-attaches it at load, exactly as it already does for `audioAnchor`. A
+  project with no persisted bag has its drum-transcription stamp seeded
+  from the chart as loaded (its drums really were transcribed against the
+  grid it ships with). `/tempo` and `/add-lyrics` (no persistence) lose it
+  on reload, as they lose everything today.
 - Leading-silence detector: pure function over chart + audio anchor
   (first-BPM outlier vs second marker, or early audio onset), reusing
   plan 0064's machinery.
@@ -360,8 +367,10 @@ drumTranscription: {tempoStamp}, ...}`. `GenerateDifficultiesCommand`
 
 ### F. Chart Editor remains a reusable component
 
-- New capability flags: `showChartMatrix`, `showChartAssist`,
-  `showStemsMixer`; presets updated (PREVIEW: none; TEMPO: tempo +
+- New capability flags: `showChartMatrix`, `showStemsMixer`, and
+  `chartAssist` (`false | 'all' | 'tempo-and-silence' | 'lyrics-only'` —
+  one field rather than a boolean plus a variant, so "hidden" has no
+  variant to carry); presets updated (PREVIEW: none; TEMPO: tempo +
   leading-silence cards only; ADD_LYRICS: lyrics card only;
   single-instrument edit pages: matrix constrained to their instrument).
   `leftPanelChildren`/`headerExtra` stay; drum-transcription's bespoke

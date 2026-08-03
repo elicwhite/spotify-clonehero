@@ -13,6 +13,7 @@ import TransportControls from './TransportControls';
 import ExportDialog from './ExportDialog';
 import SongMetadataDialog from './SongMetadataDialog';
 import LeftSidebar from './LeftSidebar';
+import type {ChartAssistProps} from './sidebar/ChartAssist';
 import PianoRollTimeline from './piano-roll/PianoRollTimeline';
 import EditorMCPTools from './EditorMCPTools';
 import {useChartEditorContext} from './ChartEditorContext';
@@ -96,6 +97,14 @@ export interface ChartEditorProps {
   headerExtra?: ReactNode | undefined;
   /** Content rendered in the left sidebar panel (page-specific). */
   leftPanelChildren?: ReactNode | undefined;
+  /**
+   * Wiring for the sidebar's Chart Assist section (plan 0074 Phase 2). Each
+   * card renders only when the data its action needs is here, so a page
+   * supplies exactly the cards it can actually back:
+   * `/drum-transcription` supplies all of it, `/tempo` only
+   * `audioSampleRate`, and a bare editor supplies none and shows no section.
+   */
+  chartAssist?: ChartAssistProps | undefined;
   /** Callback to provide chart text for export. */
   getChartText?: (() => Promise<string>) | undefined;
   /** Format-agnostic alternative to `getChartText` — see ExportDialog's
@@ -174,6 +183,7 @@ export default function ChartEditor({
   hideHeader,
   headerExtra,
   leftPanelChildren,
+  chartAssist,
   getChartText,
   getChartFile,
   getAudioSources,
@@ -318,6 +328,7 @@ export default function ChartEditor({
         <LeftSidebar
           audioManager={audioManager}
           leftPanelChildren={leftPanelChildren}
+          chartAssist={chartAssist}
         />
 
         {/* Center: optional sheet music pane + highway. The highway stays

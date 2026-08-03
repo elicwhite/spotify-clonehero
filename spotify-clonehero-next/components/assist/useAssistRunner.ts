@@ -25,8 +25,13 @@ import {
   AssistStore,
   IDLE_ASSIST_RUN_STATE,
   type AssistRunState,
+  type AssistRunStatus,
 } from '@/lib/assist/assist-store';
-import type {AssistContext, AssistTaskDef} from '@/lib/assist/tasks';
+import type {
+  AssistContext,
+  AssistTaskDef,
+  AssistTaskKey,
+} from '@/lib/assist/tasks';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 import {
   createStepTimer,
@@ -234,11 +239,46 @@ export function useAssistRunnerControls(): AssistRunnerControls {
   );
 }
 
-/** Subscribes to `store`'s run state. */
+/**
+ * Subscribes to `store`'s full run state, INCLUDING its step list — so this
+ * re-renders on every progress tick. Only the run card (and anything else
+ * that actually renders progress) may call it; a component that just needs
+ * "is a run active, and which one" must use {@link useAssistRunActivity}
+ * instead (plan 0074 Design B: progress ticks must not re-render the world).
+ */
 export function useAssistRunState(store: AssistStore): AssistRunState {
   return useSyncExternalStore(
     store.subscribe,
     store.getState,
     () => IDLE_ASSIST_RUN_STATE,
   );
+}
+
+/** Which task the store's run belongs to and where that run stands — the
+ *  identity of the run, without its steps. */
+export interface AssistRunActivity {
+  task: AssistTaskKey | null;
+  status: AssistRunStatus;
+}
+
+/**
+ * Subscribes to the run's IDENTITY only (`task` + `status`), as two separate
+ * subscriptions so each snapshot stays a primitive: `useSyncExternalStore`
+ * bails out of re-rendering whenever a notification carried nothing but new
+ * step progress — which is every progress tick. Callers that gate UI on "my
+ * task is running" use this so a run never re-renders sibling cards several
+ * times a second.
+ */
+export function useAssistRunActivity(store: AssistStore): AssistRunActivity {
+  const task = useSyncExternalStore(
+    store.subscribe,
+    () => store.getState().task,
+    () => IDLE_ASSIST_RUN_STATE.task,
+  );
+  const status = useSyncExternalStore(
+    store.subscribe,
+    () => store.getState().status,
+    () => IDLE_ASSIST_RUN_STATE.status,
+  );
+  return useMemo(() => ({task, status}), [task, status]);
 }

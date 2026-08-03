@@ -1,20 +1,8 @@
 'use client';
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {Loader2, AlertCircle, RefreshCw} from 'lucide-react';
+import {Loader2, AlertCircle} from 'lucide-react';
 import {toast} from 'sonner';
-
-import {Button} from '@/components/ui/button';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 
 import {
   getProject,
@@ -38,7 +26,10 @@ import {
   loadDrumStem,
   hasVocalsStem,
   loadVocalsStem,
+  readProjectAudioBytes,
+  ensureProjectStemFingerprint,
 } from '@/lib/drum-transcription/ml/roformer-separation';
+import type {AssistAudio} from '@/lib/assist/tasks';
 import {
   decodeAudio,
   interleaveAudioBuffer,
@@ -52,9 +43,13 @@ import {
   getAudioAnchor,
   setAudioAnchor,
 } from '@/lib/chart-edit';
+import {
+  computeTempoStamp,
+  getAssistProvenance,
+  withAssistProvenance,
+} from '@/lib/chart-editor-core';
 import {useHotkey} from '@tanstack/react-hotkeys';
 import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
-import {useExecuteCommand} from '@/components/chart-editor/hooks/useEditCommands';
 import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboard';
 import {useAutoSave} from '@/components/chart-editor/hooks/useAutoSave';
 import {
@@ -66,25 +61,19 @@ import type {
   AudioSource,
   ChartFileFormat,
 } from '@/components/chart-editor/ExportDialog';
-import AddLyricsDialog from '@/components/chart-editor/AddLyricsDialog';
-import {ReplaceDrumTrackCommand} from '@/components/chart-editor/commands';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
-import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
-import {transcribeDrumsTask} from '@/lib/assist/tasks';
-import {isAbortError} from '@/lib/workers/abortable-worker';
+import {useAssistRunActivity} from '@/components/assist/useAssistRunner';
 import StemVolumeControls from './StemVolumeControls';
-import LeadingSilenceButton from './LeadingSilenceButton';
-import {cn} from '@/lib/utils';
 
 type LoadingState = 'loading' | 'ready' | 'error';
 
 interface EditorAppProps {
   projectId: string;
   /**
-   * Whether to offer the Regenerate control (chart-flow grid-provided
-   * projects hide it via `gridIsProvided` regardless). The regenerate run
-   * itself is owned entirely by this component: on confirm it drives the
-   * `transcribe-drums` assist task in place and applies the result via
+   * Whether to offer re-running drum transcription (chart-flow grid-provided
+   * projects withhold it via `gridIsProvided` regardless). The control lives
+   * in the shared Chart Assist section's Drum transcription card, which runs
+   * the `transcribe-drums` assist task in place and applies the result via
    * `ReplaceDrumTrackCommand` — the editor never unmounts.
    */
   showRegenerate?: boolean | undefined;
@@ -101,17 +90,23 @@ export default function EditorApp({
   showRegenerate = false,
 }: EditorAppProps) {
   const {state, dispatch} = useChartEditorContext();
-  const {executeCommand} = useExecuteCommand();
-  // The editor's single runner (shared with AddLyricsDialog), controls only:
-  // subscribing to its state here would re-render the whole editor on every
-  // progress tick. `ConnectedAssistRunCard` (below) is the only subscriber
-  // (plan 0074 Design B).
-  const {
-    store: assistStore,
-    start: startAssistTask,
-    cancel: cancelAssistTask,
-    dismiss: dismissAssistRun,
-  } = useAssistRunnerContext();
+  // The editor's single runner (shared with the Chart Assist cards and the
+  // Add Lyrics dialog). `useAssistRunActivity` subscribes to the run's
+  // identity only — never its step list — so a run in flight doesn't
+  // re-render this whole component on every progress tick (Design B).
+  const {store: assistStore} = useAssistRunnerContext();
+  const assistActivity = useAssistRunActivity(assistStore);
+  // A drum-transcription run rewrites the project's chart and deletes its
+  // review progress, so autosave has to stand down for its duration or a
+  // stale save would rewrite what the pipeline just replaced. The stand-down
+  // ends when the run leaves `running`, which is a moment before the Chart
+  // Assist card applies `ReplaceDrumTrackCommand`. Nothing can save in that
+  // gap: the card applies the command synchronously in the continuation that
+  // resolved the run, so React batches the runner's status change and the
+  // doc swap into one render, and autosave is debounced besides.
+  const regenerating =
+    assistActivity.task === 'transcribe-drums' &&
+    assistActivity.status === 'running';
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
   const [, setLoadingStep] = useState<string>('Loading project metadata...');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -133,53 +128,22 @@ export default function EditorApp({
   const [packageSourceFormat, setPackageSourceFormat] = useState<
     'folder' | 'zip' | 'sng' | null
   >(null);
-  // Regenerate confirmation dialog + in-flight flag. While regenerating,
-  // autosave is disabled so a stale save can't rewrite the edited chart /
-  // review progress after the pipeline has deleted them.
-  //
-  // `regenerating` deliberately spans more than the assist run itself (it
-  // also covers applying the resulting command), and reading the run store
-  // here instead would re-render the whole editor on every progress tick.
-  // It is this component's own "my regenerate is in flight", not a mirror of
-  // the shared runner's status — a run started by another surface must not
-  // disable autosave here.
-  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
-
-  // Runs the `transcribe-drums` assist task in place (plan 0074 Design A/E).
-  // The task reads its audio from the project itself (the pipeline's own
-  // cache carries the separated stem forward), so the context is just the
-  // project id. On success the fresh notes apply
-  // via `ReplaceDrumTrackCommand` together with the
-  // re-predicted tempo map the run authored them against, and the leading-
-  // silence anchor clears (the regenerated chart is audio-relative from
-  // scratch) — so the in-editor doc matches the chart the run persisted. The
-  // editor never unmounts, so undo/redo history and every other panel stay
-  // intact.
-  const handleConfirmRegenerate = useCallback(async () => {
-    setRegenerating(true);
-    try {
-      const result = await startAssistTask(transcribeDrumsTask, {
-        project: {id: projectId},
-      });
-      executeCommand(
-        new ReplaceDrumTrackCommand(result.notes, {
-          sync: result.sync,
-          clearAudioAnchor: true,
-        }),
-      );
-      toast.success('Regenerated beat grid and notes.');
-    } catch (err) {
-      if (!isAbortError(err)) {
-        const message =
-          err instanceof Error ? err.message : 'Regenerate failed';
-        console.error('Regenerate pipeline error:', err);
-        toast.error(message);
-      }
-    } finally {
-      setRegenerating(false);
-    }
-  }, [startAssistTask, executeCommand, projectId]);
+  // Audio source for the Chart Assist Tempo map and Lyrics cards. Goes
+  // through the same two authorities the rest of the project does —
+  // `readProjectAudioBytes` for "which bytes are this project's audio" and
+  // `ensureProjectStemFingerprint` for the key its stems are cached under —
+  // so a run reuses the stems this project already produced instead of
+  // separating the same audio a second time. The bytes stay behind
+  // `loadOriginalBytes` so a run resolved entirely from the stem cache never
+  // reads them.
+  const loadAssistAudio = useCallback(
+    async (): Promise<AssistAudio> => ({
+      stemFingerprint: await ensureProjectStemFingerprint(projectId),
+      loadOriginalBytes: async () =>
+        new Uint8Array(await readProjectAudioBytes(projectId)),
+    }),
+    [projectId],
+  );
 
   // ORIGINAL (unpadded) full-mix + drum-stem PCM, retained across the
   // session — passed to `usePaddedAudio`, which re-pads from source on
@@ -228,6 +192,11 @@ export default function EditorApp({
     // idempotent — runs on every autosave.
     await updateProject(projectId, {
       audioAnchor: getAudioAnchor(state.chartDoc) ?? null,
+      // Assist provenance can't ride the chart file (`.chart`/`.mid` have no
+      // slot for it), so the project metadata is where it persists — same
+      // mirroring as the anchor above, so a reload keeps any staleness
+      // prompt or "Keep as-is" dismissal the user was looking at.
+      assistProvenance: getAssistProvenance(state.chartDoc) ?? null,
     });
   }, [projectId, state.chartDoc]);
 
@@ -357,6 +326,23 @@ export default function EditorApp({
         const persistedAnchor = meta.audioAnchor ?? null;
         if (persistedAnchor) {
           chartDoc = setAudioAnchor(chartDoc, persistedAnchor);
+        }
+
+        // 3b. Re-attach assist provenance (plan 0074 Design C). `.chart`/
+        // `.mid` have nowhere to carry it, so the project's OPFS metadata is
+        // the persistence layer for this page — mirrored on every autosave
+        // the same way `audioAnchor` is. A project transcribed before this
+        // field existed gets a stamp seeded from the chart as loaded: its
+        // drums really were transcribed against the grid it ships with, so
+        // "not stale until the grid moves" is the truthful starting point.
+        // Grid-provided (chart-flow) projects are skipped — their drums came
+        // from the user's own chart, not from a transcription run.
+        if (meta.assistProvenance) {
+          chartDoc = withAssistProvenance(chartDoc, meta.assistProvenance);
+        } else if (meta.gridSource !== 'provided') {
+          chartDoc = withAssistProvenance(chartDoc, {
+            drumTranscription: {tempoStamp: computeTempoStamp(chartDoc)},
+          });
         }
 
         // 4. Find expert drums track
@@ -773,70 +759,15 @@ export default function EditorApp({
             ? 'zip'
             : undefined
       }
-      leftPanelChildren={
-        <>
-          {showRegenerate && !gridIsProvided && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full gap-2"
-                disabled={regenerating}
-                onClick={() => setConfirmRegenerate(true)}>
-                <RefreshCw
-                  className={cn('h-4 w-4', regenerating && 'animate-spin')}
-                />
-                Regenerate
-              </Button>
-              <AlertDialog
-                open={confirmRegenerate}
-                onOpenChange={setConfirmRegenerate}>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Regenerate chart?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This re-runs the beat grid and predicted notes from the
-                      cached audio. All note edits and review progress for this
-                      project will be discarded.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => {
-                        setConfirmRegenerate(false);
-                        handleConfirmRegenerate();
-                      }}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                      Regenerate
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-              <ConnectedAssistRunCard
-                store={assistStore}
-                task="transcribe-drums"
-                onCancel={cancelAssistTask}
-                onDismiss={dismissAssistRun}
-                className="mt-2"
-              />
-            </>
-          )}
-          <StemVolumeControls audioManager={audioManager} />
-          {audioMeta && (
-            <LeadingSilenceButton
-              sampleRate={audioMeta.sampleRate}
-              disabled={audioRebuilding}
-            />
-          )}
-          <div className="pt-4 border-t">
-            <AddLyricsDialog
-              projectId={projectId}
-              onAlignedFromCachedVocals={refreshVocalsStem}
-            />
-          </div>
-        </>
-      }
+      leftPanelChildren={<StemVolumeControls audioManager={audioManager} />}
+      chartAssist={{
+        projectId,
+        allowDrumRerun: showRegenerate && !gridIsProvided,
+        loadAudio: loadAssistAudio,
+        audioSampleRate: audioMeta?.sampleRate,
+        audioBusyReason: audioRebuilding ? 'Rebuilding audio' : undefined,
+        onLyricsAlignedFromCachedVocals: refreshVocalsStem,
+      }}
     />
   );
 }

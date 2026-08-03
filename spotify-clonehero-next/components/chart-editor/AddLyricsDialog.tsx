@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * "Add Lyrics" dialog for the drum-transcription editor (plan 0063 Part C,
- * rewired onto the shared assist engine by plan 0074 Phase 1).
+ * "Add Lyrics" dialog for the chart editor (plan 0063 Part C, rewired onto
+ * the shared assist engine by plan 0074 Phase 1).
  *
  * Drives `lib/assist/tasks.ts`'s `add-lyrics` task on the editor's shared
  * assist runner:
@@ -33,12 +33,8 @@ import {ReplaceLyricsCommand, hasExistingLyrics} from './commands';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {useAssistRunState} from '@/components/assist/useAssistRunner';
 import type {AssistStore} from '@/lib/assist/assist-store';
-import {addLyricsTask} from '@/lib/assist/tasks';
+import {addLyricsTask, type LoadAssistAudio} from '@/lib/assist/tasks';
 import {isAbortError} from '@/lib/workers/abortable-worker';
-import {
-  ensureProjectStemFingerprint,
-  readProjectAudioBytes,
-} from '@/lib/drum-transcription/ml/roformer-separation';
 
 type Status = 'input' | 'processing' | 'error';
 
@@ -70,8 +66,14 @@ function ConnectedLyricsProcessingView({
 }
 
 interface AddLyricsDialogProps {
-  /** OPFS project id — used to locate/produce the vocals stem. */
-  projectId: string;
+  /**
+   * The song's audio, as the host can supply it. A project-backed host
+   * (`/drum-transcription`) returns the project's persisted stem
+   * fingerprint, so a cached roformer vocals stem is reused and the bytes
+   * are never read; a host with only the chart package's audio files
+   * returns bytes alone and the task separates vocals with Demucs.
+   */
+  loadAudio: LoadAssistAudio;
   /**
    * Called after a successful run that aligned against the project's cached
    * roformer vocals, so the host can pick that stem up for surfaces which
@@ -81,7 +83,7 @@ interface AddLyricsDialogProps {
 }
 
 export default function AddLyricsDialog({
-  projectId,
+  loadAudio,
   onAlignedFromCachedVocals,
 }: AddLyricsDialogProps) {
   const {state} = useChartEditorContext();
@@ -133,17 +135,13 @@ export default function AddLyricsDialog({
     setStatus('processing');
 
     try {
-      // The project's persisted fingerprint is the key its stems were
-      // actually stored under, so the task probes that rather than re-hashing
-      // bytes that may no longer reproduce it. The bytes themselves are only
-      // read if the probe misses and the Demucs fallback runs.
-      const stemFingerprint = await ensureProjectStemFingerprint(projectId);
+      // `loadAudio` resolves lazily: a host that knows the project's
+      // persisted stem fingerprint hands it over so the task probes the
+      // cache under the key the stems were actually stored under, and the
+      // bytes themselves are only read if that probe misses and the Demucs
+      // fallback runs.
       const result = await startAssistTask(addLyricsTask, {
-        audio: {
-          stemFingerprint,
-          loadOriginalBytes: async () =>
-            new Uint8Array(await readProjectAudioBytes(projectId)),
-        },
+        audio: await loadAudio(),
         lyrics,
       });
 
@@ -168,7 +166,7 @@ export default function AddLyricsDialog({
   }, [
     state.chartDoc,
     lyrics,
-    projectId,
+    loadAudio,
     executeCommand,
     startAssistTask,
     resetForClose,
@@ -199,8 +197,7 @@ export default function AddLyricsDialog({
           <DialogDescription>
             Paste the song lyrics — they&apos;re automatically split into
             syllables, each line becomes its own phrase, and syllables are
-            auto-aligned to the audio using the project&apos;s separated vocals
-            stem.
+            auto-aligned to the song&apos;s isolated vocals.
           </DialogDescription>
         </DialogHeader>
 

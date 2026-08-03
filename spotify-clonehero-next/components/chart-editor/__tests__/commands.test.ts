@@ -35,6 +35,7 @@ import {
   makeMultiPartVocalsDoc,
 } from './fixtures';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
+import {trackKeyId} from '@/lib/chart-editor-core/trackInventory';
 import {
   getDrumNotes,
   drums4LaneSchema,
@@ -81,6 +82,14 @@ describe('command execute + snapshot-restore', () => {
         ),
       ).toBe(true);
       expectInputUntouched(before, pristine);
+    });
+
+    it('declares its target track in affectedTracks', () => {
+      const cmd = new AddNoteCommand(
+        toSchemaNote({tick: 240, type: noteTypes.redDrum}),
+        DRUMS_KEY,
+      );
+      expect(cmd.affectedTracks).toEqual(new Set([trackKeyId(DRUMS_KEY)]));
     });
 
     // Regression: a note added at a non-zero tick must carry a tempo-map
@@ -280,6 +289,17 @@ describe('command execute + snapshot-restore', () => {
         notes.some(n => n.tick === 720 && n.type === noteTypes.redDrum),
       ).toBe(true);
     });
+
+    it('declares the moved track in affectedTracks', () => {
+      const cmd = new MoveEntitiesCommand(
+        'note',
+        [noteId({tick: 480, type: noteTypes.redDrum})],
+        240,
+        1,
+        {trackKey: DRUMS_KEY},
+      );
+      expect(cmd.affectedTracks).toEqual(new Set([trackKeyId(DRUMS_KEY)]));
+    });
   });
 
   describe('MoveEntitiesCommand (sections)', () => {
@@ -290,6 +310,11 @@ describe('command execute + snapshot-restore', () => {
       const after = cmd.execute(before);
       expect(after.parsedChart.sections.some(s => s.tick === 1440)).toBe(true);
       expectInputUntouched(before, pristine);
+    });
+
+    it('leaves affectedTracks undefined (chart-wide, not track-scoped)', () => {
+      const cmd = new MoveEntitiesCommand('section', ['1920'], -480, 0);
+      expect(cmd.affectedTracks).toBeUndefined();
     });
   });
 
@@ -363,6 +388,11 @@ describe('command execute + snapshot-restore', () => {
           t => t.tick === 0 && t.beatsPerMinute === 200,
         ),
       ).toBe(true);
+    });
+
+    it('leaves affectedTracks undefined (intent carried by entityKinds)', () => {
+      const cmd = new AddBPMCommand(960, 100, 'grid');
+      expect(cmd.affectedTracks).toBeUndefined();
     });
   });
 
@@ -482,6 +512,33 @@ describe('command execute + snapshot-restore', () => {
         notes.some(n => n.tick === 180 && n.type === noteTypes.yellowDrum),
       ).toBe(true);
       expectInputUntouched(before, pristine);
+    });
+
+    it('unions member affectedTracks, ignoring members that declare none', () => {
+      const GUITAR_KEY: TrackKey = {instrument: 'guitar', difficulty: 'expert'};
+      const batch = new BatchCommand([
+        new AddNoteCommand(
+          toSchemaNote({tick: 60, type: noteTypes.kick}),
+          DRUMS_KEY,
+        ),
+        new AddTimeSignatureCommand(960, 3, 4), // no affectedTracks
+        new AddNoteCommand(
+          toSchemaNote({tick: 60, type: noteTypes.green}),
+          GUITAR_KEY,
+          guitarSchema,
+        ),
+      ]);
+      expect(batch.affectedTracks).toEqual(
+        new Set([trackKeyId(DRUMS_KEY), trackKeyId(GUITAR_KEY)]),
+      );
+    });
+
+    it('leaves affectedTracks undefined when no member declares one', () => {
+      const batch = new BatchCommand([
+        new AddTimeSignatureCommand(960, 3, 4),
+        new AddSectionCommand(2880, 'Chorus'),
+      ]);
+      expect(batch.affectedTracks).toBeUndefined();
     });
   });
 

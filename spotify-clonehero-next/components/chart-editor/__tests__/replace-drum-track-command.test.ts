@@ -5,12 +5,18 @@
 import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 import {ReplaceDrumTrackCommand} from '../commands';
 import type {ReplaceDrumTrackSync} from '../commands';
+import {trackKeyId} from '@/lib/chart-editor-core/trackInventory';
 import {
   ADD_LYRICS_CAPABILITIES,
   DRUM_EDIT_CAPABILITIES,
   PREVIEW_CAPABILITIES,
 } from '../capabilities';
 import {isCommandAllowed} from '@/lib/chart-editor-core/capabilityGate';
+import {
+  computeTempoStamp,
+  getAssistProvenance,
+  withAssistProvenance,
+} from '@/lib/chart-editor-core/content-stamps';
 import {makeFixtureDoc, makeEmptyDrumDoc} from './fixtures';
 import {emptyTrackData, mkSection} from '@/lib/chart-edit/__tests__/test-utils';
 import type {DrumNote} from '@/lib/chart-edit';
@@ -56,6 +62,28 @@ describe('ReplaceDrumTrackCommand', () => {
       {tick: 240, type: noteTypes.redDrum, flags: 0},
       {tick: 480, type: noteTypes.yellowDrum, flags: noteFlags.cymbal},
     ]);
+  });
+
+  it('declares the replaced drums track in affectedTracks', () => {
+    const cmd = new ReplaceDrumTrackCommand(transcribedNotes());
+    expect(cmd.affectedTracks).toEqual(
+      new Set([trackKeyId({instrument: 'drums', difficulty: 'expert'})]),
+    );
+  });
+
+  it('still declares just the drums track under options.sync, even though entityKinds gains tempo/timesig', () => {
+    const sync: ReplaceDrumTrackSync = {
+      resolution: 480,
+      tempos: [{tick: 0, beatsPerMinute: 140, msTime: 0}],
+      timeSignatures: [
+        {tick: 0, numerator: 4, denominator: 4, msTime: 0, msLength: 2000},
+      ],
+    };
+    const cmd = new ReplaceDrumTrackCommand(transcribedNotes(), {sync});
+    expect(cmd.affectedTracks).toEqual(
+      new Set([trackKeyId({instrument: 'drums', difficulty: 'expert'})]),
+    );
+    expect(cmd.entityKinds).toEqual(new Set(['note', 'tempo', 'timesig']));
   });
 
   it('clears phrases, lanes, and events on the replaced track that the run did not author', () => {
@@ -256,5 +284,50 @@ describe('ReplaceDrumTrackCommand', () => {
     const cmd = new ReplaceDrumTrackCommand(transcribedNotes());
     expect(isCommandAllowed(cmd, DRUM_EDIT_CAPABILITIES)).toBe(true);
     expect(isCommandAllowed(cmd, PREVIEW_CAPABILITIES)).toBe(false);
+  });
+});
+
+describe('ReplaceDrumTrackCommand provenance (plan 0074 Design C)', () => {
+  it('records the tempo stamp the notes were authored against', () => {
+    const before = makeFixtureDoc();
+    expect(getAssistProvenance(before)).toBeUndefined();
+
+    const after = new ReplaceDrumTrackCommand(transcribedNotes()).execute(
+      before,
+    );
+    // Written by the generating command itself, so undo removes the notes
+    // and the record together — no separate bookkeeping command needed at
+    // any call site.
+    expect(getAssistProvenance(after)!.drumTranscription!.tempoStamp).toBe(
+      computeTempoStamp(after),
+    );
+  });
+
+  it('stamps against the adopted grid when the run brought its own', () => {
+    const sync: ReplaceDrumTrackSync = {
+      resolution: 480,
+      tempos: [{tick: 0, beatsPerMinute: 140, msTime: 0}],
+      timeSignatures: [
+        {tick: 0, numerator: 4, denominator: 4, msTime: 0, msLength: 2000},
+      ],
+    };
+    const after = new ReplaceDrumTrackCommand(transcribedNotes(), {
+      sync,
+    }).execute(makeFixtureDoc());
+    expect(getAssistProvenance(after)!.drumTranscription!.tempoStamp).toBe(
+      computeTempoStamp(after),
+    );
+  });
+
+  it('keeps unrelated provenance entries (e.g. difficulty records)', () => {
+    const before = withAssistProvenance(makeFixtureDoc(), {
+      difficulties: {guitar: {sourceStamp: 'abc'}},
+    });
+    const after = new ReplaceDrumTrackCommand(transcribedNotes()).execute(
+      before,
+    );
+    expect(getAssistProvenance(after)!.difficulties).toEqual({
+      guitar: {sourceStamp: 'abc'},
+    });
   });
 });

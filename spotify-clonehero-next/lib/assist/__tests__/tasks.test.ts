@@ -24,6 +24,7 @@ import {
 import {
   computeStemFingerprint,
   ROFORMER_SEPARATOR_ID,
+  storeStem,
   storeStemOpus,
 } from '@/lib/audio-pipeline/stem-cache';
 
@@ -53,7 +54,12 @@ import {decodeAndResampleTo44k} from '@/lib/audio-pipeline/decode-audio';
 import {resampleTo16kMono} from '@/lib/audio-pipeline/lyrics-audio';
 import {alignVocals} from '@/lib/lyrics-align/aligner';
 
-import {transcribeDrumsTask, addLyricsTask, makeAddLyricsTask} from '../tasks';
+import {
+  transcribeDrumsTask,
+  addLyricsTask,
+  makeAddLyricsTask,
+  makeGenerateTempoMapTask,
+} from '../tasks';
 import type {StepProgressEvent} from '../run-to-steps';
 
 const mockRegenerateProject = regenerateProject as jest.Mock;
@@ -502,5 +508,92 @@ describe('addLyricsTask', () => {
         () => {},
       ),
     ).rejects.toThrow('alignment failed');
+  });
+});
+
+describe('generateTempoMapTask', () => {
+  beforeEach(() => {
+    mockDecode.mockReset();
+  });
+
+  it('planSteps marks the separation steps cached when a drum stem already exists', async () => {
+    const bytes = new Uint8Array([41, 42, 43, 44]);
+    const fingerprint = await computeStemFingerprint(
+      bytes,
+      ROFORMER_SEPARATOR_ID,
+    );
+    await storeStem(fingerprint, 'drums', {
+      left: new Float32Array([0.1, 0.2]),
+      right: new Float32Array([0.3, 0.4]),
+    });
+
+    const steps = await makeGenerateTempoMapTask().planSteps({
+      audio: {loadOriginalBytes: async () => bytes},
+    });
+    expect(steps.find(s => s.key === 'separate')?.cached).toBe(true);
+    expect(steps.find(s => s.key === 'download-separation-model')?.cached).toBe(
+      true,
+    );
+    expect(steps.find(s => s.key === 'beats-fullmix')?.cached).toBe(false);
+  });
+
+  it('planSteps marks the separation steps uncached on a miss', async () => {
+    const steps = await makeGenerateTempoMapTask().planSteps({
+      audio: {loadOriginalBytes: async () => new Uint8Array([45, 46, 47, 48])},
+    });
+    expect(steps.find(s => s.key === 'separate')?.cached).toBe(false);
+    expect(steps.find(s => s.key === 'download-separation-model')?.cached).toBe(
+      false,
+    );
+  });
+
+  it('hands the pipeline worker the fingerprint and no stem, even on a cache hit', async () => {
+    // The worker is the one authority on the drum-stem cache: it loads the
+    // cached stem in the thread that consumes it. A cached stem must
+    // therefore never be read on the main thread and transferred in.
+    const bytes = new Uint8Array([51, 52, 53, 54]);
+    const fingerprint = await computeStemFingerprint(
+      bytes,
+      ROFORMER_SEPARATOR_ID,
+    );
+    await storeStem(fingerprint, 'drums', {
+      left: new Float32Array([0.1, 0.2]),
+      right: new Float32Array([0.3, 0.4]),
+    });
+    mockDecode.mockResolvedValue(fakeAudioBuffer());
+
+    let fake: FakeWorker | undefined;
+    const task = makeGenerateTempoMapTask({
+      createWorker: () => {
+        fake = new FakeWorker();
+        return fake as unknown as Worker;
+      },
+    });
+    const runPromise = task.run(
+      {audio: {loadOriginalBytes: async () => bytes}},
+      new AbortController().signal,
+      () => {},
+    );
+
+    await waitFor(() => (fake?.posted.length ?? 0) > 0);
+    expect(fake!.posted[0].type).toBe('run');
+    expect(fake!.posted[0].fingerprint).toBe(fingerprint);
+    expect(fake!.posted[0].drumStemStereo).toBeNull();
+
+    fake!.emit({
+      type: 'result',
+      result: {
+        synctrack: {origin_ms: 0, tempos: [], timeSignatures: []},
+        sections: null,
+        drumOnsetOffsetMs: null,
+        fullMixBeatCount: 0,
+        drumStemBeatCount: 0,
+        meterStats: null,
+        drumStemStereo: null,
+      },
+    });
+
+    const result = await runPromise;
+    expect(result.synctrack.tempos).toEqual([]);
   });
 });

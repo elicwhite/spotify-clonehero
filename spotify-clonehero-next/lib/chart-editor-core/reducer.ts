@@ -3,6 +3,12 @@ import {chartEndTick, deriveDownbeatFlags} from '@/lib/chart-edit';
 import type {ChartEditorAction, ChartEditorState} from './state';
 import {UNDO_STACK_CAP} from './state';
 import {preferredTrackForChart, trackKeyId} from './trackInventory';
+import {
+  computeAllTrackStamps,
+  computeTempoStamp,
+  recomputeTrackStamps,
+  withAssistProvenance,
+} from './content-stamps';
 
 function recoverTrackScope(
   chartDoc: ChartDocument,
@@ -68,6 +74,10 @@ export function chartEditorReducer(
         visibleTrackKeys: preferred
           ? new Set([trackKeyId(preferred)])
           : new Set(),
+        // A full reload has no continuity with the previous doc's stamps —
+        // recompute everything fresh (plan 0074 Design C).
+        trackStamps: computeAllTrackStamps(action.chartDoc),
+        tempoStamp: computeTempoStamp(action.chartDoc),
       };
     }
     case 'SET_PLAYING':
@@ -125,6 +135,25 @@ export function chartEditorReducer(
         );
       }
 
+      // Content-derived stamps (plan 0074 Design C): recompute only what
+      // this command declares it touched — the affected tracks, and the
+      // tempo stamp when the command's entityKinds include tempo/timesig.
+      // Everything else carries over so undo/redo can restore a prior
+      // stamp value by full-recomputing from the restored doc instead of
+      // trying to reverse an increment.
+      //
+      // A tempo/time-signature edit is the exception to "only the declared
+      // tracks": every tempo command deliberately declares no
+      // `affectedTracks` (its intent is the grid, not one instrument), yet
+      // KEEP-MS re-ticks every note in the doc — and track stamps hash note
+      // ticks. Carrying the pre-edit stamps forward there would leave them
+      // disagreeing with the doc until the next UNDO/REDO full recompute,
+      // which would then flip every track to "stale" with no user edit in
+      // between. So a tempo-touching command forces a full recompute.
+      const tempoTouched =
+        action.command.entityKinds.has('tempo') ||
+        action.command.entityKinds.has('timesig');
+
       return {
         ...state,
         chartDoc: action.chartDoc,
@@ -140,6 +169,28 @@ export function chartEditorReducer(
         // Clear redo stack on new edit (new branch)
         redoStack: [],
         redoDocStack: [],
+        trackStamps: tempoTouched
+          ? computeAllTrackStamps(action.chartDoc)
+          : recomputeTrackStamps(
+              action.chartDoc,
+              state.trackStamps,
+              action.command.affectedTracks,
+            ),
+        tempoStamp: tempoTouched
+          ? computeTempoStamp(action.chartDoc)
+          : state.tempoStamp,
+      };
+    }
+
+    case 'SET_ASSIST_PROVENANCE': {
+      if (!state.chartDoc) return state;
+      // Deliberately leaves every stack and stamp alone: provenance is
+      // metadata about the doc's artifacts, and an ack changes no chart
+      // content, so neither the undo history nor any content stamp moves.
+      return {
+        ...state,
+        chartDoc: withAssistProvenance(state.chartDoc, action.provenance),
+        dirty: true,
       };
     }
 
@@ -163,6 +214,13 @@ export function chartEditorReducer(
         undoDocStack: state.undoDocStack.slice(0, -1),
         redoStack: [...state.redoStack, undoneCommand],
         redoDocStack: [...state.redoDocStack, state.chartDoc],
+        // Full recompute from the restored doc (plan 0074 Design C) — this
+        // is what makes staleness disappear when undo lands back on the
+        // exact content an assist task generated from, and makes a
+        // generated track's stamp disappear together with the track when
+        // undo removes both.
+        trackStamps: computeAllTrackStamps(action.chartDoc),
+        tempoStamp: computeTempoStamp(action.chartDoc),
       };
     }
 
@@ -185,6 +243,9 @@ export function chartEditorReducer(
         undoDocStack: [...state.undoDocStack, state.chartDoc],
         redoStack: state.redoStack.slice(0, -1),
         redoDocStack: state.redoDocStack.slice(0, -1),
+        // Full recompute, same reasoning as UNDO above.
+        trackStamps: computeAllTrackStamps(action.chartDoc),
+        tempoStamp: computeTempoStamp(action.chartDoc),
       };
     }
 

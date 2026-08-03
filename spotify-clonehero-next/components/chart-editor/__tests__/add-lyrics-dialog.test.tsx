@@ -61,7 +61,19 @@ jest.mock('../../../lib/assist/tasks', () => ({
 
 import AddLyricsDialog from '../AddLyricsDialog';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
-import {ensureProjectStemFingerprint} from '@/lib/drum-transcription/ml/roformer-separation';
+import {
+  ensureProjectStemFingerprint,
+  readProjectAudioBytes,
+} from '@/lib/drum-transcription/ml/roformer-separation';
+
+/** The project-backed wiring `/drum-transcription`'s editor hands the dialog:
+ *  the project's persisted stem fingerprint, and its audio bytes behind a
+ *  loader that only runs if the task actually needs them. */
+const projectLoadAudio = async () => ({
+  stemFingerprint: await ensureProjectStemFingerprint('proj-1'),
+  loadOriginalBytes: async () =>
+    new Uint8Array(await readProjectAudioBytes('proj-1')),
+});
 
 function makeDoc(): ChartDocument {
   const parsed = createEmptyChart({bpm: 120, resolution: 480});
@@ -81,7 +93,7 @@ function Harness({
   }, []);
   return (
     <AddLyricsDialog
-      projectId="proj-1"
+      loadAudio={projectLoadAudio}
       onAlignedFromCachedVocals={onCachedVocals}
     />
   );

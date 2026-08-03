@@ -15,12 +15,24 @@
  */
 
 import '@testing-library/jest-dom';
+import {useEffect} from 'react';
 import {render, screen} from '@testing-library/react';
+import {createEmptyChart} from '@eliwhite/scan-chart';
+import type {ChartDocument} from '@/lib/chart-edit';
+import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
+import {TooltipProvider} from '@/components/ui/tooltip';
+import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 import LeftSidebar from '../LeftSidebar';
-import {ChartEditorProvider} from '../ChartEditorContext';
+import type {ChartAssistProps} from '../sidebar/ChartAssist';
+import {
+  ChartEditorProvider,
+  useChartEditorContext,
+} from '../ChartEditorContext';
 import {
   ADD_LYRICS_CAPABILITIES,
   DRUM_EDIT_CAPABILITIES,
+  PREVIEW_CAPABILITIES,
+  TEMPO_CAPABILITIES,
   type EditorCapabilities,
 } from '../capabilities';
 import {DEFAULT_DRUMS_EXPERT_SCOPE, DEFAULT_VOCALS_SCOPE} from '../scope';
@@ -43,6 +55,49 @@ function renderWith(
     <ChartEditorProvider capabilities={capabilities} activeScope={scope}>
       <LeftSidebar audioManager={stubAudioManager()} />
     </ChartEditorProvider>,
+  );
+}
+
+/** Wiring a fully project-backed host (the `/drum-transcription` editor)
+ *  supplies: every Chart Assist card has what its action needs. */
+const FULL_WIRING: ChartAssistProps = {
+  projectId: 'proj-1',
+  loadAudio: async () => ({
+    loadOriginalBytes: async () => new Uint8Array(4),
+  }),
+  audioSampleRate: 44100,
+};
+
+function makeDoc(): ChartDocument {
+  const parsedChart = createEmptyChart({bpm: 120, resolution: 480});
+  parsedChart.trackData.push(emptyTrackData('drums', 'expert'));
+  return {parsedChart, assets: []};
+}
+
+function SidebarWithDoc({wiring}: {wiring: ChartAssistProps}) {
+  const {dispatch} = useChartEditorContext();
+  useEffect(() => {
+    dispatch({type: 'SET_CHART_DOC', chartDoc: makeDoc()});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <LeftSidebar audioManager={stubAudioManager()} chartAssist={wiring} />;
+}
+
+/** Renders the sidebar with a loaded chart, an assist runner, and whatever
+ *  Chart Assist wiring the case is about. */
+function renderAssist(
+  capabilities: EditorCapabilities,
+  wiring: ChartAssistProps,
+  scope = DEFAULT_DRUMS_EXPERT_SCOPE,
+) {
+  return render(
+    <TooltipProvider>
+      <AssistRunnerProvider>
+        <ChartEditorProvider capabilities={capabilities} activeScope={scope}>
+          <SidebarWithDoc wiring={wiring} />
+        </ChartEditorProvider>
+      </AssistRunnerProvider>
+    </TooltipProvider>,
   );
 }
 
@@ -98,6 +153,95 @@ describe('LeftSidebar capability gating', () => {
       // skips the whole component.
       expect(screen.queryByText(/Selected/i)).not.toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * Chart Assist section gating (plan 0074 Phase 2, task 2e). Two independent
+ * dimensions decide whether a card renders: the capability preset's
+ * `chartAssist` variant, and whether the host page supplied the wiring that
+ * card's action needs. Both are exercised here.
+ */
+describe('Chart Assist section gating', () => {
+  it('shows the section with the full card set under DRUM_EDIT_CAPABILITIES', () => {
+    renderAssist(DRUM_EDIT_CAPABILITIES, FULL_WIRING);
+    expect(screen.getByText('Chart Assist')).toBeInTheDocument();
+    expect(screen.getByRole('group', {name: 'Tempo map'})).toBeInTheDocument();
+    expect(
+      screen.getByRole('group', {name: 'Add leading silence'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('group', {name: 'Drum transcription'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('group', {name: 'Lyrics / Vocals'}),
+    ).toBeInTheDocument();
+  });
+
+  it('shows only the Lyrics card under ADD_LYRICS_CAPABILITIES', () => {
+    renderAssist(ADD_LYRICS_CAPABILITIES, FULL_WIRING, DEFAULT_VOCALS_SCOPE);
+    expect(screen.getByText('Chart Assist')).toBeInTheDocument();
+    expect(
+      screen.getByRole('group', {name: 'Lyrics / Vocals'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('group', {name: 'Tempo map'}),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('group', {name: 'Add leading silence'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows only Tempo map + Add leading silence under TEMPO_CAPABILITIES', () => {
+    renderAssist(TEMPO_CAPABILITIES, FULL_WIRING);
+    expect(screen.getByRole('group', {name: 'Tempo map'})).toBeInTheDocument();
+    expect(
+      screen.getByRole('group', {name: 'Add leading silence'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('group', {name: 'Lyrics / Vocals'}),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('group', {name: 'Drum transcription'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('hides the section entirely under PREVIEW_CAPABILITIES', () => {
+    renderAssist(PREVIEW_CAPABILITIES, FULL_WIRING);
+    expect(screen.queryByText('Chart Assist')).not.toBeInTheDocument();
+  });
+
+  it('hides the whole section when the host wired nothing', () => {
+    renderAssist(DRUM_EDIT_CAPABILITIES, {});
+    expect(screen.queryByText('Chart Assist')).not.toBeInTheDocument();
+  });
+
+  it('renders only the cards whose wiring the host supplied', () => {
+    // The `/tempo` shape: audio sample rate, no project, no audio loader.
+    renderAssist(DRUM_EDIT_CAPABILITIES, {audioSampleRate: 44100});
+    expect(
+      screen.getByRole('group', {name: 'Add leading silence'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('group', {name: 'Tempo map'}),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('group', {name: 'Lyrics / Vocals'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('withholds the Drum transcription card when re-running is not allowed', () => {
+    renderAssist(DRUM_EDIT_CAPABILITIES, {
+      ...FULL_WIRING,
+      allowDrumRerun: false,
+    });
+    expect(
+      screen.queryByRole('group', {name: 'Drum transcription'}),
+    ).not.toBeInTheDocument();
+    // Its sibling cards are unaffected.
+    expect(
+      screen.getByRole('group', {name: 'Lyrics / Vocals'}),
+    ).toBeInTheDocument();
   });
 });
 

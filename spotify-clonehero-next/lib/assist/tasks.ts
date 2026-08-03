@@ -13,12 +13,13 @@
  * Tasks are values, and callers start a run by handing the runner the task
  * itself, so each call site's result type comes from the task it named.
  *
- * Two tasks ship in Phase 1: `transcribe-drums` (shells the existing
- * `runner.ts` orchestration, driven by the editor's Regenerate control) and
+ * Three tasks ship in Phase 1/2: `transcribe-drums` (shells the existing
+ * `runner.ts` orchestration, driven by the editor's Regenerate control),
  * `add-lyrics` (the vocals-resolution branch, driven by the in-editor Add
- * Lyrics dialog; the `/add-lyrics` home screen moves onto it in Phase 6).
- * `generate-tempo-map`, `generate-difficulties`, and `add-leading-silence`
- * land in later phases.
+ * Lyrics dialog; the `/add-lyrics` home screen moves onto it in Phase 6),
+ * and `generate-tempo-map` (wraps `runTempoPipelineFromPcm`; its result
+ * applies via `ReplaceTempoMapCommand` when run in-editor). `generate-
+ * difficulties` and `add-leading-silence` land in later phases.
  */
 
 import type {ChartDocument, DrumNote} from '@/lib/chart-edit';
@@ -33,9 +34,11 @@ import {regenerateProject} from '@/lib/drum-transcription/pipeline/runner';
 import {
   computeStemFingerprint,
   ROFORMER_SEPARATOR_ID,
+  hasStem,
   hasStemOpus,
   loadStemOpus,
 } from '@/lib/audio-pipeline/stem-cache';
+import {DRUMS_STEM, VOCALS_STEM} from '@/lib/audio-pipeline/separate-stems';
 import {resampleTo16kMono} from '@/lib/audio-pipeline/lyrics-audio';
 import {decodeAndResampleTo44k} from '@/lib/audio-pipeline/decode-audio';
 import {
@@ -43,6 +46,12 @@ import {
   defaultCreateDemucsWorker,
 } from '@/lib/lyrics-align/demucs-client';
 import {alignVocals, type AlignedSyllable} from '@/lib/lyrics-align/aligner';
+import {
+  runTempoPipeline,
+  defaultCreateWorker as defaultCreateTempoWorker,
+} from '@/lib/tempo-map/pipeline-client';
+import type {Synctrack} from '@/lib/tempo-map/types';
+import type {MeterStats} from '@/lib/tempo-map/meter-confidence';
 import {makeAbortError} from '@/lib/workers/abortable-worker';
 import {waitForOrtRuntime} from '@/lib/onnx/ort-ready';
 import {
@@ -74,6 +83,15 @@ export interface AssistAudio {
    */
   stemFingerprint?: string | undefined;
 }
+
+/**
+ * How a host page hands the assist engine its song audio. Returning the
+ * lazy {@link AssistAudio} rather than bytes is what lets a task that
+ * resolves its work from the stem cache (`add-lyrics` on a cache hit) skip
+ * reading the audio entirely, while a task that always needs the samples
+ * (`generate-tempo-map`) just calls `loadOriginalBytes` itself.
+ */
+export type LoadAssistAudio = () => Promise<AssistAudio>;
 
 export interface AssistContext {
   /** The song's audio, for tasks that need it. Absent for tasks whose
@@ -246,8 +264,6 @@ export const transcribeDrumsTask: AssistTaskDef<TranscribeDrumsResult> = {
 // add-lyrics
 // ---------------------------------------------------------------------------
 
-const VOCALS_STEM_NAME = 'vocals';
-
 /** The separation step describes the branch `planSteps` predicted: a cache
  *  hit reuses the BS-Roformer vocals a drum-transcription run already
  *  separated, and only a miss runs Demucs. Labelling a cache hit "Demucs"
@@ -347,7 +363,7 @@ export function makeAddLyricsTask({
 
     async planSteps(ctx) {
       const fingerprint = await vocalsFingerprint(ctx);
-      const cached = await hasStemOpus(fingerprint, VOCALS_STEM_NAME);
+      const cached = await hasStemOpus(fingerprint, VOCALS_STEM);
       return ADD_LYRICS_STEPS.map(cfg =>
         cfg.key === 'separate'
           ? {...cfg, cached, description: separateStepDescription(cached)}
@@ -364,8 +380,8 @@ export function makeAddLyricsTask({
       // whether the bytes it hands back are actually usable (returns null on
       // a corrupt/interrupted entry), so a probe hit that turns into a load
       // miss still falls back to Demucs rather than failing the task.
-      const cachedOpus = (await hasStemOpus(fingerprint, VOCALS_STEM_NAME))
-        ? await loadStemOpus(fingerprint, VOCALS_STEM_NAME)
+      const cachedOpus = (await hasStemOpus(fingerprint, VOCALS_STEM))
+        ? await loadStemOpus(fingerprint, VOCALS_STEM)
         : null;
 
       let vocals16k: Float32Array;
@@ -415,3 +431,132 @@ export function makeAddLyricsTask({
 }
 
 export const addLyricsTask = makeAddLyricsTask();
+
+// ---------------------------------------------------------------------------
+// generate-tempo-map
+// ---------------------------------------------------------------------------
+
+/** One planned step per pipeline stage (`PipelineProgress['stage']`) — the
+ *  tempo pipeline's own stage union, reported verbatim rather than
+ *  re-grouped, so the step list never drifts from what the worker actually
+ *  reports. */
+const GENERATE_TEMPO_MAP_STEPS: ReadonlyArray<Omit<PlannedStep, 'cached'>> = [
+  {
+    key: 'download-separation-model',
+    label: 'Loading separation model',
+    description: undefined,
+  },
+  {
+    key: 'download-beat-model',
+    label: 'Loading beat-tracking model',
+    description: undefined,
+  },
+  {
+    key: 'separate',
+    label: 'Separating drums from the mix',
+    description: undefined,
+  },
+  {
+    key: 'beats-fullmix',
+    label: 'Tracking beats in the full mix',
+    description: undefined,
+  },
+  {
+    key: 'beats-drums',
+    label: 'Tracking beats in the drum stem',
+    description: undefined,
+  },
+  {key: 'sections', label: 'Labeling song sections', description: undefined},
+  {key: 'convert', label: 'Building the tempo map', description: undefined},
+];
+
+export interface GenerateTempoMapResult {
+  /** Fresh SyncTrack, ready for `ReplaceTempoMapCommand`. */
+  synctrack: Synctrack;
+  meterStats: MeterStats | null;
+  drumOnsetOffsetMs: number | null;
+}
+
+/** The fingerprint the drum stem would be cached under: the caller's
+ *  authoritative value when it has one, else derived from the audio bytes
+ *  (mirrors `add-lyrics`'s `vocalsFingerprint`). */
+async function drumStemFingerprint(
+  ctx: AssistContext,
+  originalBytes: Uint8Array,
+): Promise<string> {
+  const audio = requireAudio(ctx);
+  if (audio.stemFingerprint) return audio.stemFingerprint;
+  return computeStemFingerprint(originalBytes, ROFORMER_SEPARATOR_ID);
+}
+
+/** Test seam: the tempo pipeline worker factory this task spawns. Lives on
+ *  the task, not on `AssistContext`, matching `AddLyricsTaskDeps`. */
+export interface GenerateTempoMapTaskDeps {
+  createWorker?: (() => Worker) | undefined;
+}
+
+export function makeGenerateTempoMapTask({
+  createWorker = defaultCreateTempoWorker,
+}: GenerateTempoMapTaskDeps = {}): AssistTaskDef<GenerateTempoMapResult> {
+  return {
+    key: 'generate-tempo-map',
+    title: 'Tempo map',
+
+    async planSteps(ctx) {
+      const audio = requireAudio(ctx);
+      const originalBytes = await audio.loadOriginalBytes();
+      const fingerprint = await drumStemFingerprint(ctx, originalBytes);
+      const separatingCached = await hasStem(fingerprint, DRUMS_STEM);
+      // A cached drum stem skips the separation model download too — the
+      // pipeline only loads that model to separate. Showing it as pending
+      // work would promise a step that never runs.
+      return GENERATE_TEMPO_MAP_STEPS.map(cfg => ({
+        ...cfg,
+        cached:
+          separatingCached &&
+          (cfg.key === 'separate' || cfg.key === 'download-separation-model'),
+      }));
+    },
+
+    async run(ctx, signal, progress) {
+      if (signal.aborted) throw makeAbortError();
+      const originalBytes = await requireAudio(ctx).loadOriginalBytes();
+
+      if (signal.aborted) throw makeAbortError();
+      const audioBuffer = await decodeAndResampleTo44k(originalBytes);
+      const sourceBytes = originalBytes.buffer.slice(
+        originalBytes.byteOffset,
+        originalBytes.byteOffset + originalBytes.byteLength,
+      ) as ArrayBuffer;
+
+      // No cached-stem load here: `sourceBytes` gives the pipeline worker the
+      // stem fingerprint, and the worker is the one authority on the drum
+      // stem cache — it loads a cached stem itself (falling back to a fresh
+      // separation on a corrupt entry) in the thread that consumes it, so the
+      // stem never crosses the main thread. `planSteps`'s `hasStem` probe is
+      // step-list prediction only (plan 0074 Design A).
+      const result = await runTempoPipeline(audioBuffer, {
+        sourceBytes,
+        onProgress: p => {
+          progress({
+            activeKey: p.stage,
+            progress: p.percent,
+            etaSeconds: p.etaSeconds,
+            detail: p.detail,
+          });
+        },
+        createWorker,
+        signal,
+      });
+
+      progress({activeKey: null, terminal: 'done'});
+      return {
+        synctrack: result.synctrack,
+        meterStats: result.meterStats,
+        drumOnsetOffsetMs: result.drumOnsetOffsetMs,
+      };
+    },
+  };
+}
+
+export const generateTempoMapTask = makeGenerateTempoMapTask();

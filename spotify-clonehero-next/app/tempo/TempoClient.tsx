@@ -88,7 +88,6 @@ import {AudioServiceProvider} from '@/components/chart-editor/AudioServiceContex
 import {TEMPO_CAPABILITIES} from '@/components/chart-editor/capabilities';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
 import {usePaddedAudio} from '@/components/chart-editor/hooks/usePaddedAudio';
-import LeadingSilenceButton from '@/app/drum-transcription/components/LeadingSilenceButton';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -908,6 +907,15 @@ function TempoEditor({
         sections={chart.sections}
         songName={`${result.name} (retempo)`}
         dirty={state.dirty}
+        // Only the leading-silence card: this page IS tempo-map generation,
+        // so a Tempo map card here would be a second door to what the page
+        // already does, and it is not project-backed, so the drum/lyrics
+        // cards have nothing to run against. `ChartAssist` renders the cards
+        // it has wiring for and nothing else.
+        chartAssist={{
+          audioSampleRate: audioMeta?.sampleRate,
+          audioBusyReason: audioRebuilding ? 'Rebuilding audio' : undefined,
+        }}
         getChartFile={getChartFile}
         getExtraAssets={getExtraAssets}
         defaultExportFormat={
@@ -969,12 +977,6 @@ function TempoEditor({
                 onClick={onShowMeterInfo}>
                 Meter info
               </Button>
-            )}
-            {audioMeta && (
-              <LeadingSilenceButton
-                sampleRate={audioMeta.sampleRate}
-                disabled={audioRebuilding}
-              />
             )}
             <Button
               variant="ghost"

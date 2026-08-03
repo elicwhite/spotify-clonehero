@@ -29,8 +29,11 @@ import {
 } from '@/lib/workers/abortable-worker';
 
 const NUM_CHANNELS = 2;
-const DRUMS_STEM = 'drums';
-const VOCALS_STEM = 'vocals';
+/** Stem-cache entry names this module writes. Exported so probe-side callers
+ *  (`lib/assist/tasks.ts`'s cached-step prediction) name the same entries
+ *  this module stores, instead of re-declaring the strings. */
+export const DRUMS_STEM = 'drums';
+export const VOCALS_STEM = 'vocals';
 
 export interface DrumSeparationProgress {
   step: 'loading-model' | 'processing' | 'storing' | 'done';

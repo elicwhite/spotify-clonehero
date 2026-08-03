@@ -34,6 +34,7 @@ import type {ToolMode} from '@/lib/chart-editor-core';
 import {useUndoRedo} from './hooks/useEditCommands';
 import NoteInspector from './NoteInspector';
 import LoopControls from './LoopControls';
+import ChartAssist, {type ChartAssistProps} from './sidebar/ChartAssist';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import {cn} from '@/lib/utils';
 
@@ -75,6 +76,9 @@ const SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 interface LeftSidebarProps {
   audioManager: AudioManager;
   leftPanelChildren?: ReactNode | undefined;
+  /** Host wiring for the Chart Assist section, passed through untouched.
+   *  Each field is documented on `ChartAssistProps`. */
+  chartAssist?: ChartAssistProps | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,6 +88,7 @@ interface LeftSidebarProps {
 export default function LeftSidebar({
   audioManager,
   leftPanelChildren,
+  chartAssist,
 }: LeftSidebarProps) {
   const {state, dispatch, capabilities} = useChartEditorContext();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
@@ -425,6 +430,12 @@ export default function LeftSidebar({
               </div>
             </div>
           )}
+
+          {/* Chart Assist — Tempo map / Add leading silence / Drum
+           *  transcription / Lyrics cards (plan 0074 Phase 2). The section
+           *  decides for itself whether it has anything to show, from
+           *  `capabilities.chartAssist` and the wiring below. */}
+          <ChartAssist {...chartAssist} />
 
           {/* Note inspector — only useful when notes are selectable. */}
           {capabilities.selectable.has('note') && <NoteInspector />}

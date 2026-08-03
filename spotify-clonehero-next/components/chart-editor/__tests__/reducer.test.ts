@@ -10,12 +10,17 @@ import type {TrackKey} from '@/lib/chart-edit';
 const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
 import {
   chartEditorReducer,
+  computeAllTrackStamps,
+  computeTempoStamp,
+  getAssistProvenance,
   initialState,
+  selectDrumTranscriptionStale,
   selectRenderDoc,
+  withAssistProvenance,
   type ChartEditorState,
 } from '@/lib/chart-editor-core';
 import type {EditCommand} from '../commands';
-import {AddNoteCommand, toSchemaNote} from '../commands';
+import {AddBPMCommand, AddNoteCommand, toSchemaNote} from '../commands';
 import {DEFAULT_DRUMS_EXPERT_SCOPE, DEFAULT_VOCALS_SCOPE} from '../scope';
 import {makeFixtureDoc} from './fixtures';
 import {noteTypes} from '@eliwhite/scan-chart';
@@ -475,6 +480,234 @@ describe('chartEditorReducer', () => {
       // committed one.
       expect(selectRenderDoc(previewing)).toBe(cand.doc);
       expect(selectRenderDoc(previewing)).not.toBe(previewing.chartDoc);
+    });
+  });
+
+  describe('assist staleness (plan 0074 Design C)', () => {
+    /**
+     * Minimal `EditCommand` double standing in for a real drum-transcription
+     * command: it writes `assistProvenance` in the SAME doc mutation that
+     * (in the real command) also adds the generated drum track, exactly the
+     * pattern Design C requires of any provenance-writing command. Using a
+     * double here (rather than the real drum-transcription command) keeps
+     * this suite focused on the reducer/selector mechanism, which is what
+     * this task owns — the real command's provenance-writing is a
+     * different task's responsibility.
+     */
+    class FakeTranscribeCommand implements EditCommand {
+      readonly description = 'Transcribe drums';
+      readonly entityKinds = new Set<'note'>(['note']);
+      readonly operations = new Set<'add'>(['add']);
+      readonly affectedTracks = new Set(['drums:expert']);
+      execute(doc: ChartDocument): ChartDocument {
+        return withAssistProvenance(doc, {
+          drumTranscription: {tempoStamp: computeTempoStamp(doc)},
+        });
+      }
+    }
+
+    function loadDoc(doc: ChartDocument): ChartEditorState {
+      return chartEditorReducer(initialState, {
+        type: 'SET_CHART_DOC',
+        chartDoc: doc,
+      });
+    }
+
+    it('trackStamps/tempoStamp are populated on SET_CHART_DOC', () => {
+      const doc = makeFixtureDoc();
+      const loaded = loadDoc(doc);
+      expect(loaded.tempoStamp).toBe(computeTempoStamp(doc));
+      expect(loaded.trackStamps).toEqual(computeAllTrackStamps(doc));
+    });
+
+    it('not stale immediately after transcription generates provenance', () => {
+      const doc = makeFixtureDoc();
+      const loaded = loadDoc(doc);
+      const cmd = new FakeTranscribeCommand();
+      const generated = chartEditorReducer(
+        loaded,
+        executeAction(cmd, loaded.chartDoc!),
+      );
+      expect(selectDrumTranscriptionStale(generated)).toBe(false);
+    });
+
+    it('a tempo edit after generation flags the transcription recommendation as stale', () => {
+      const doc = makeFixtureDoc();
+      const loaded = loadDoc(doc);
+      const generated = chartEditorReducer(
+        loaded,
+        executeAction(new FakeTranscribeCommand(), loaded.chartDoc!),
+      );
+      expect(selectDrumTranscriptionStale(generated)).toBe(false);
+
+      const tempoCmd = new AddBPMCommand(3840, 180, 'audio');
+      const afterTempoEdit = chartEditorReducer(
+        generated,
+        executeAction(tempoCmd, generated.chartDoc!),
+      );
+      expect(selectDrumTranscriptionStale(afterTempoEdit)).toBe(true);
+    });
+
+    it('"Keep as-is" dismisses staleness until the NEXT tempo change', () => {
+      const doc = makeFixtureDoc();
+      const loaded = loadDoc(doc);
+      const generated = chartEditorReducer(
+        loaded,
+        executeAction(new FakeTranscribeCommand(), loaded.chartDoc!),
+      );
+      const afterTempoEdit = chartEditorReducer(
+        generated,
+        executeAction(
+          new AddBPMCommand(3840, 180, 'audio'),
+          generated.chartDoc!,
+        ),
+      );
+      expect(selectDrumTranscriptionStale(afterTempoEdit)).toBe(true);
+
+      // "Keep as-is": ack the CURRENT tempo stamp, keeping the original
+      // generation record (`drumTranscription`) untouched — the ack is a
+      // separate field, not a rewrite of the generation record.
+      const priorProvenance = getAssistProvenance(afterTempoEdit.chartDoc)!;
+      const acked = chartEditorReducer(afterTempoEdit, {
+        type: 'SET_ASSIST_PROVENANCE',
+        provenance: {
+          ...priorProvenance,
+          acks: {
+            'drum-transcription': {ackStamp: afterTempoEdit.tempoStamp},
+          },
+        },
+      });
+      expect(selectDrumTranscriptionStale(acked)).toBe(false);
+      // The dismissal is not an edit: it leaves the undo history alone, so
+      // it can never eat a redo branch the user was about to use.
+      expect(acked.undoStack).toEqual(afterTempoEdit.undoStack);
+      expect(acked.redoStack).toBe(afterTempoEdit.redoStack);
+
+      // A further tempo edit moves the current stamp past the ack — stale
+      // again.
+      const afterSecondTempoEdit = chartEditorReducer(
+        acked,
+        executeAction(new AddBPMCommand(4320, 200, 'audio'), acked.chartDoc!),
+      );
+      expect(selectDrumTranscriptionStale(afterSecondTempoEdit)).toBe(true);
+    });
+
+    it('undo back to generation-time tempo content clears staleness', () => {
+      const doc = makeFixtureDoc();
+      const loaded = loadDoc(doc);
+      const generated = chartEditorReducer(
+        loaded,
+        executeAction(new FakeTranscribeCommand(), loaded.chartDoc!),
+      );
+      const afterTempoEdit = chartEditorReducer(
+        generated,
+        executeAction(
+          new AddBPMCommand(3840, 180, 'audio'),
+          generated.chartDoc!,
+        ),
+      );
+      expect(selectDrumTranscriptionStale(afterTempoEdit)).toBe(true);
+
+      const undone = chartEditorReducer(afterTempoEdit, {
+        type: 'UNDO',
+        chartDoc: generated.chartDoc!,
+      });
+      expect(selectDrumTranscriptionStale(undone)).toBe(false);
+
+      const redone = chartEditorReducer(undone, {
+        type: 'REDO',
+        chartDoc: afterTempoEdit.chartDoc!,
+      });
+      expect(selectDrumTranscriptionStale(redone)).toBe(true);
+    });
+
+    it('undo past the provenance-writing command removes provenance with it', () => {
+      const doc = makeFixtureDoc();
+      const loaded = loadDoc(doc);
+      const generated = chartEditorReducer(
+        loaded,
+        executeAction(new FakeTranscribeCommand(), loaded.chartDoc!),
+      );
+      const afterTempoEdit = chartEditorReducer(
+        generated,
+        executeAction(
+          new AddBPMCommand(3840, 180, 'audio'),
+          generated.chartDoc!,
+        ),
+      );
+      expect(selectDrumTranscriptionStale(afterTempoEdit)).toBe(true);
+
+      const undoneTempo = chartEditorReducer(afterTempoEdit, {
+        type: 'UNDO',
+        chartDoc: generated.chartDoc!,
+      });
+      // Undo past the generating command too: provenance disappears with it,
+      // so there's nothing left to be stale about.
+      const undoneGeneration = chartEditorReducer(undoneTempo, {
+        type: 'UNDO',
+        chartDoc: loaded.chartDoc!,
+      });
+      expect(selectDrumTranscriptionStale(undoneGeneration)).toBe(false);
+
+      const redoneGeneration = chartEditorReducer(undoneGeneration, {
+        type: 'REDO',
+        chartDoc: generated.chartDoc!,
+      });
+      // Redo restores provenance and stamps together.
+      expect(selectDrumTranscriptionStale(redoneGeneration)).toBe(false);
+      expect(redoneGeneration.trackStamps).toEqual(
+        computeAllTrackStamps(generated.chartDoc),
+      );
+    });
+
+    it('a KEEP-MS tempo edit leaves no stamp for a later undo/redo to change', () => {
+      // A tempo command declares no `affectedTracks` but re-ticks every note
+      // under KEEP-MS, and track stamps hash note ticks. If the reducer
+      // carried the pre-edit stamps forward here, the next UNDO/REDO's full
+      // recompute would be the first time the true stamps appeared — and
+      // every difficulty would flip to "stale" with no user edit in between.
+      const doc = makeFixtureDoc();
+      const loaded = loadDoc(doc);
+
+      const afterTempoEdit = chartEditorReducer(
+        loaded,
+        executeAction(new AddBPMCommand(3840, 180, 'audio'), loaded.chartDoc!),
+      );
+      expect(afterTempoEdit.trackStamps).toEqual(
+        computeAllTrackStamps(afterTempoEdit.chartDoc),
+      );
+
+      // Round-tripping through undo and redo lands on exactly the same
+      // stamps both times: no stamp movement the user didn't cause.
+      const undone = chartEditorReducer(afterTempoEdit, {
+        type: 'UNDO',
+        chartDoc: loaded.chartDoc!,
+      });
+      expect(undone.trackStamps).toEqual(loaded.trackStamps);
+      const redone = chartEditorReducer(undone, {
+        type: 'REDO',
+        chartDoc: afterTempoEdit.chartDoc!,
+      });
+      expect(redone.trackStamps).toEqual(afterTempoEdit.trackStamps);
+    });
+
+    it('a note edit re-stamps only its own track', () => {
+      const doc = makeFixtureDoc();
+      const loaded = loadDoc(doc);
+      const beforeStamp = loaded.trackStamps['drums:expert'];
+
+      const cmd = new AddNoteCommand(
+        toSchemaNote({tick: 960, type: noteTypes.kick, length: 0, flags: 0}),
+        DRUMS_KEY,
+      );
+      const afterNoteEdit = chartEditorReducer(
+        loaded,
+        executeAction(cmd, loaded.chartDoc!),
+      );
+      expect(afterNoteEdit.trackStamps['drums:expert']).not.toBe(beforeStamp);
+      expect(afterNoteEdit.trackStamps).toEqual(
+        computeAllTrackStamps(afterNoteEdit.chartDoc),
+      );
     });
   });
 });

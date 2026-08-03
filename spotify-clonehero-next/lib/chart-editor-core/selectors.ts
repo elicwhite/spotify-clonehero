@@ -8,6 +8,8 @@ import type {InstrumentSchema} from '@/lib/chart-edit/instruments';
 import {schemaForTrack} from '@/lib/chart-edit/instruments';
 import {isTrackScope} from '@/components/chart-editor/scope';
 import type {ChartEditorState} from './state';
+import {EMPTY_STAMP, getAssistProvenance, isStampStale} from './content-stamps';
+import type {SupportedTrackInstrument, TrackKeyId} from './trackInventory';
 
 // ---------------------------------------------------------------------------
 // Selection helpers
@@ -86,4 +88,44 @@ export function selectActiveSchema(
   const track = selectActiveTrack(state);
   if (!track) return null;
   return schemaForTrack(track, state.chartDoc?.parsedChart.drumType);
+}
+
+// ---------------------------------------------------------------------------
+// Staleness selectors (plan 0074 Design C)
+// ---------------------------------------------------------------------------
+
+/**
+ * True when the drum track was generated/imported from a tempo map that no
+ * longer matches the current one, and the user hasn't dismissed staleness
+ * for the current tempo stamp via "Keep as-is". False when no drum
+ * transcription provenance exists (nothing to be stale about) or when no
+ * chart is loaded.
+ */
+export function selectDrumTranscriptionStale(state: ChartEditorState): boolean {
+  const provenance = getAssistProvenance(state.chartDoc);
+  const recorded = provenance?.drumTranscription?.tempoStamp;
+  const acked = provenance?.acks?.['drum-transcription']?.ackStamp;
+  return isStampStale(recorded, state.tempoStamp, acked);
+}
+
+/**
+ * True when `instrument`'s generated difficulty tiers were sourced from a
+ * track whose content stamp (`sourceTrackKeyId`) no longer matches, and the
+ * user hasn't dismissed staleness for the current stamp. Shape is defined
+ * for Phase 4 (`GenerateDifficultiesCommand`/matrix Re-generate); no caller
+ * consumes this selector yet.
+ */
+export function selectDifficultyStale(
+  state: ChartEditorState,
+  instrument: SupportedTrackInstrument,
+  sourceTrackKeyId: TrackKeyId,
+): boolean {
+  const provenance = getAssistProvenance(state.chartDoc);
+  const recorded = provenance?.difficulties?.[instrument]?.sourceStamp;
+  const acked = provenance?.acks?.[`difficulty:${instrument}`]?.ackStamp;
+  // A missing stamp means the source track doesn't exist (deleted) —
+  // `EMPTY_STAMP` can never equal a real stamp (16 hex chars), so this reads
+  // as stale.
+  const current = state.trackStamps[sourceTrackKeyId] ?? EMPTY_STAMP;
+  return isStampStale(recorded, current, acked);
 }

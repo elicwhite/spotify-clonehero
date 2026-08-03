@@ -79,6 +79,8 @@ import {
   setNoteLength,
   clearTrackContents,
   emptyTrack,
+  applyLeadingSilence,
+  type LeadingSilencePlan,
   type DownbeatFlags,
 } from '@/lib/chart-edit';
 
@@ -106,6 +108,21 @@ import {
 } from '@/lib/drum-transcription/pipeline/repredict';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
 import {applyAlignedLyricsToDoc} from '@/lib/lyrics-align/apply-lyrics';
+import {
+  trackKeyId,
+  type TrackKeyId,
+} from '@/lib/chart-editor-core/trackInventory';
+import {
+  carryAssistProvenance,
+  restampDrumTranscription,
+  setDrumTranscriptionStamp,
+} from '@/lib/chart-editor-core/content-stamps';
+
+/** `trackKeyId()` of a single `TrackKey`, as a singleton `ReadonlySet` —
+ *  the common case for commands that target exactly one track. */
+function singleTrack(trackKey: TrackKey): ReadonlySet<TrackKeyId> {
+  return new Set([trackKeyId(trackKey)]);
+}
 
 // ---------------------------------------------------------------------------
 // Clone helpers — chart-edit mutates in place, so we clone before calling
@@ -194,6 +211,17 @@ export interface EditCommand {
    * losing information.
    */
   readonly operations: ReadonlySet<CommandOperation>;
+  /**
+   * Instrument/difficulty track(s) this command's edit lands on (plan 0074
+   * Design C's staleness model), as `trackKeyId()` strings. Commands that
+   * hold a `TrackKey` expose it here so the assist engine can invalidate a
+   * generated track's content stamp when a command touches it. `undefined`
+   * for commands whose meaning is already fully carried by `entityKinds` —
+   * tempo/time-signature/section/lyric/global edits, which aren't scoped to
+   * one instrument track. `BatchCommand` unions its children's sets (still
+   * `undefined` if none of them declare one).
+   */
+  readonly affectedTracks?: ReadonlySet<TrackKeyId> | undefined;
 }
 
 /** Freeze-once singleton sets for the common single-kind/single-op cases,
@@ -248,9 +276,11 @@ export class AddTrackCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds = KIND.note;
   readonly operations = OP.add;
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
 
   constructor(private readonly trackKey: TrackKey) {
     this.description = `Add ${trackKey.instrument} ${trackKey.difficulty} track`;
+    this.affectedTracks = singleTrack(trackKey);
   }
 
   execute(doc: ChartDocument): ChartDocument {
@@ -334,6 +364,7 @@ export class AddNoteCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds = KIND.note;
   readonly operations = OP.add;
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
 
   constructor(
     private note: SchemaNote,
@@ -341,6 +372,7 @@ export class AddNoteCommand implements EditCommand {
     private readonly schema: InstrumentSchema = drums4LaneSchema,
   ) {
     this.description = `Add note at tick ${note.tick}`;
+    this.affectedTracks = singleTrack(trackKey);
   }
 
   execute(doc: ChartDocument): ChartDocument {
@@ -382,6 +414,7 @@ export class DeleteNotesCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds = KIND.note;
   readonly operations = OP.delete;
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
 
   constructor(
     private noteIds: Set<string>,
@@ -389,6 +422,7 @@ export class DeleteNotesCommand implements EditCommand {
     private readonly schema?: InstrumentSchema,
   ) {
     this.description = `Delete ${noteIds.size} note(s)`;
+    this.affectedTracks = singleTrack(trackKey);
   }
 
   execute(doc: ChartDocument): ChartDocument {
@@ -427,6 +461,9 @@ export class MoveEntitiesCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds: ReadonlySet<CommandEntityKind>;
   readonly operations = OP.move;
+  /** Only `'note'` moves are track-scoped (lyric/phrase moves scope to a
+   *  vocal part, not a `TrackKey`, so they leave this `undefined`). */
+  readonly affectedTracks?: ReadonlySet<TrackKeyId> | undefined;
   private readonly ctx: EntityContext;
 
   constructor(
@@ -442,6 +479,10 @@ export class MoveEntitiesCommand implements EditCommand {
   ) {
     this.ctx = ctx ?? {};
     this.entityKinds = ENTITY_KIND_TO_COMMAND_KIND[kind];
+    this.affectedTracks =
+      kind === 'note' && this.ctx.trackKey
+        ? singleTrack(this.ctx.trackKey)
+        : undefined;
     const noun = KIND_LABELS[kind];
     this.description = `Move ${ids.length} ${noun}${ids.length === 1 ? '' : 's'}`;
   }
@@ -469,6 +510,7 @@ export class ToggleFlagCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds = KIND.note;
   readonly operations = OP.update;
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
 
   constructor(
     private noteIds: string[],
@@ -477,6 +519,7 @@ export class ToggleFlagCommand implements EditCommand {
     private readonly schema: InstrumentSchema = drums4LaneSchema,
   ) {
     this.description = `Toggle ${flag} on ${noteIds.length} note(s)`;
+    this.affectedTracks = singleTrack(trackKey);
   }
 
   execute(doc: ChartDocument): ChartDocument {
@@ -538,6 +581,7 @@ export class SetNoteTechniqueCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds = KIND.note;
   readonly operations = OP.update;
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
 
   constructor(
     private noteIds: string[],
@@ -546,6 +590,7 @@ export class SetNoteTechniqueCommand implements EditCommand {
     private readonly schema: InstrumentSchema,
   ) {
     this.description = `Set ${technique} on ${noteIds.length} note(s)`;
+    this.affectedTracks = singleTrack(trackKey);
   }
 
   execute(doc: ChartDocument): ChartDocument {
@@ -585,6 +630,7 @@ export class ResizeNotesCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds = KIND.note;
   readonly operations = OP.update;
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
 
   constructor(
     private noteIds: string[],
@@ -593,6 +639,7 @@ export class ResizeNotesCommand implements EditCommand {
     private readonly schema: InstrumentSchema,
   ) {
     this.description = `Resize ${noteIds.length} note(s)`;
+    this.affectedTracks = singleTrack(trackKey);
   }
 
   execute(doc: ChartDocument): ChartDocument {
@@ -641,6 +688,7 @@ export class ToggleKickCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds = KIND.note;
   readonly operations = OP.update;
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
 
   constructor(
     private noteIds: string[],
@@ -648,6 +696,7 @@ export class ToggleKickCommand implements EditCommand {
     private readonly padType: NoteType = noteTypes.redDrum,
   ) {
     this.description = `Toggle kick on ${noteIds.length} note(s)`;
+    this.affectedTracks = singleTrack(trackKey);
   }
 
   execute(doc: ChartDocument): ChartDocument {
@@ -716,6 +765,7 @@ export class AddBPMCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds = KIND.tempo;
   readonly operations = OP.add;
+  readonly affectedTracks?: ReadonlySet<TrackKeyId> | undefined = undefined;
 
   constructor(
     private tick: number,
@@ -1051,16 +1101,97 @@ export class CommitTempoCandidateCommand implements EditCommand {
 
   execute(doc: ChartDocument): ChartDocument {
     const anchor = getAudioAnchor(doc);
+    // The candidate is a doc captured at PREVIEW time, so any assist
+    // provenance written between preview and commit (a generation record, a
+    // "Keep as-is" ack) lives only on the live doc: carry the live bag over
+    // rather than silently reverting it. Returns the candidate itself in the
+    // common case, keeping the identity contract below intact.
+    const candidate = carryAssistProvenance(doc, this.candidate);
     // No leading-silence anchor active: commit the captured candidate
     // byte-identical (object identity — "no re-run, no drift" is a tested
     // contract of this command; see commit-tempo-candidate.test.ts).
-    if (!anchor) return this.candidate;
+    if (!anchor) return candidate;
     // The candidate was captured from a preview computed against `doc` at
     // preview time (`previewStructural`/`previewOctave` in the piano roll),
     // which may carry a stale or absent anchor — re-derive it from the LIVE
     // `doc` being committed against (audio position is the invariant; only
     // the tick needs a fresh map).
-    return refreshAnchorKeepMs(setAudioAnchor(this.candidate, anchor));
+    return refreshAnchorKeepMs(setAudioAnchor(candidate, anchor));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ReplaceTempoMapCommand — Chart Assist tempo-map generation (plan 0074
+// Design A `generate-tempo-map` task)
+// ---------------------------------------------------------------------------
+
+export interface ReplaceTempoMapOptions {
+  /**
+   * True when `synctrack` was generated in the SAME assist run that also
+   * (re)produced the doc's current drum transcription, so that
+   * transcription's provenance should track this map rather than go stale
+   * against it. Defaults to false: a standalone tempo-map regeneration is
+   * the common case, and it correctly invalidates any existing drum
+   * transcription (Design C) — the drums were snapped against the OLD
+   * grid.
+   */
+  fromSameRunAsDrumTranscription?: boolean;
+}
+
+/**
+ * Install a freshly generated `Synctrack` (plan Design A's
+ * `generate-tempo-map` task, wrapping `runTempoPipelineFromPcm`) as the
+ * doc's tempo map, re-deriving every note's tick under it.
+ *
+ * Re-ticking reuses `repredictTempo`'s bounded RESNAP path verbatim —
+ * `onsets` is always `null` here, since the tempo pipeline never decodes
+ * onsets (that is the drum-transcription CRNN's job) — the exact machinery
+ * `RepredictTempoCommand` falls back to for a never-transcribed project, so
+ * a fresh grid retimes through the one keep-ms remap implementation the
+ * tempo commands already share rather than a second bespoke retime.
+ *
+ * `entityKinds` is `{tempo, timesig}`, not `note`: the note re-tick is a
+ * side effect of the tempo-map swap, exactly like `MoveTempoMarkerCommand`'s
+ * KEEP-MS glue (see that class's `entityKinds` doc) — so `TEMPO_CAPABILITIES`,
+ * which grants `tempo`/`timesig` but deliberately withholds `note`, still
+ * allows this command. `affectedTracks` is left undefined: a tempo-map swap
+ * isn't scoped to one instrument track (matches `AddBPMCommand` and the
+ * other tempo commands, none of which declare it).
+ *
+ * Writes `assistProvenance.drumTranscription.tempoStamp` to the new map's
+ * stamp only when `options.fromSameRunAsDrumTranscription` is set
+ * (reflecting a transcription produced together with this exact map);
+ * otherwise any existing recorded stamp is left untouched, so a standalone
+ * tempo regeneration makes an existing drum transcription stale
+ * (`selectDrumTranscriptionStale`, Design C). A doc with no drum
+ * transcription provenance is untouched either way.
+ *
+ * Undo restores the pre-edit snapshot (and its provenance, which rides the
+ * doc) — a tempo remap isn't invertible in closed form, matching every
+ * other tempo command.
+ */
+export class ReplaceTempoMapCommand implements EditCommand {
+  readonly description = 'Generate tempo map';
+  readonly entityKinds = new Set<CommandEntityKind>(['tempo', 'timesig']);
+  readonly operations = OP.update;
+
+  constructor(
+    private synctrack: Synctrack,
+    private options: ReplaceTempoMapOptions = {},
+  ) {}
+
+  execute(doc: ChartDocument): ChartDocument {
+    const anchor = getAudioAnchor(doc);
+    const result = repredictTempo(doc, this.synctrack, null);
+    const retimed = anchor
+      ? refreshAnchorKeepMs(setAudioAnchor(result.doc, anchor))
+      : result.doc;
+
+    // A standalone regeneration leaves any recorded transcription stamp
+    // behind, so the drums snapped to the OLD grid are flagged stale.
+    return this.options.fromSameRunAsDrumTranscription
+      ? restampDrumTranscription(retimed)
+      : retimed;
   }
 }
 
@@ -1248,6 +1379,9 @@ export class BatchCommand implements EditCommand {
   readonly entityKinds: ReadonlySet<CommandEntityKind>;
   /** Union of every member command's `operations`, same rationale. */
   readonly operations: ReadonlySet<CommandOperation>;
+  /** Union of every member command's `affectedTracks`; `undefined` if none
+   *  of them declare one (a batch of chart-wide edits, say). */
+  readonly affectedTracks?: ReadonlySet<TrackKeyId> | undefined;
 
   constructor(
     private commands: EditCommand[],
@@ -1256,12 +1390,18 @@ export class BatchCommand implements EditCommand {
     this.description = description ?? `Batch: ${commands.length} command(s)`;
     const kinds = new Set<CommandEntityKind>();
     const ops = new Set<CommandOperation>();
+    let tracks: Set<TrackKeyId> | undefined;
     for (const cmd of commands) {
       for (const kind of cmd.entityKinds) kinds.add(kind);
       for (const op of cmd.operations) ops.add(op);
+      if (cmd.affectedTracks) {
+        tracks ??= new Set<TrackKeyId>();
+        for (const track of cmd.affectedTracks) tracks.add(track);
+      }
     }
     this.entityKinds = kinds;
     this.operations = ops;
+    this.affectedTracks = tracks;
   }
 
   /** Read-only access to the sub-commands (for incremental edit detection). */
@@ -1409,6 +1549,11 @@ export class ReplaceDrumTrackCommand implements EditCommand {
   readonly description = 'Replace drum track (transcription)';
   readonly entityKinds: ReadonlySet<CommandEntityKind>;
   readonly operations = OP.update;
+  /** Always just the replaced drums track — even under `options.sync`,
+   *  where the tempo/time-signature intent is carried by `entityKinds`
+   *  alone (a synctrack swap isn't scoped to one instrument track, so it
+   *  doesn't add anything here). */
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
 
   private readonly trackKey: TrackKey;
 
@@ -1429,6 +1574,7 @@ export class ReplaceDrumTrackCommand implements EditCommand {
           ...KIND.timesig,
         ])
       : KIND.note;
+    this.affectedTracks = singleTrack(this.trackKey);
   }
 
   execute(doc: ChartDocument): ChartDocument {
@@ -1456,8 +1602,55 @@ export class ReplaceDrumTrackCommand implements EditCommand {
     // Every other event in the doc keeps its tick but now sits under a
     // different map: recompute msTime/msLength chart-wide.
     if (sync) retimeChart(chart);
-    if (this.options.clearAudioAnchor) return setAudioAnchor(newDoc, null);
-    return sync ? refreshAnchorKeepMs(newDoc) : newDoc;
+    const anchored = this.options.clearAudioAnchor
+      ? setAudioAnchor(newDoc, null)
+      : sync
+        ? refreshAnchorKeepMs(newDoc)
+        : newDoc;
+    // The generating command writes the artifact AND its provenance in one
+    // doc mutation (plan 0074 Design C), so undo removes both together and
+    // no separate bookkeeping command is needed at the call site.
+    return setDrumTranscriptionStamp(anchored);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// AddLeadingSilenceCommand — plan 0064 editor-button addendum §5, shared by
+// the Chart Assist "Add leading silence" card
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply a leading-silence plan captured at click time. `execute` re-derives
+ * nothing from the live doc — the plan is a snapshot of what the card
+ * offered the user, so redo (re-running `execute` on the doc left by undo)
+ * reproduces the exact same padding. Undo restores the pre-edit snapshot,
+ * matching the other tempo/anchor-affecting commands here (the ms-domain
+ * shift + resync isn't invertible in closed form).
+ *
+ * `entityKinds` is `{tempo, timesig}`: the plan shifts the SYNC TRACK into a
+ * padded ms domain and every note keeps its tick, so — exactly like
+ * `MoveTempoMarkerCommand`'s KEEP-MS glue and `ReplaceTempoMapCommand` — the
+ * intent is a grid edit and the notes' new ms positions are its side effect.
+ * Declaring `note`/`lyric` here would make the command illegal under
+ * `TEMPO_CAPABILITIES`, which is precisely the surface that offers it.
+ *
+ * The whole grid moving forward by a fixed pad does NOT invalidate a drum
+ * transcription: the drums moved with it, and nothing landed on a different
+ * beat. So the recorded `drumTranscription.tempoStamp` is re-stamped to the
+ * padded map rather than left behind to trip `selectDrumTranscriptionStale`
+ * on an action that changed no musical relationship.
+ */
+export class AddLeadingSilenceCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = new Set<CommandEntityKind>(['tempo', 'timesig']);
+  readonly operations = OP.move;
+
+  constructor(private plan: LeadingSilencePlan) {
+    this.description = `Add leading silence (${plan.bars} bar${plan.bars === 1 ? '' : 's'})`;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    return restampDrumTranscription(applyLeadingSilence(doc, this.plan));
   }
 }
 

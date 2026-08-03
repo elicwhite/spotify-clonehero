@@ -49,6 +49,7 @@ import {
 } from '@/lib/drum-transcription/audio/decoder';
 import type {AudioMetadata} from '@/lib/drum-transcription/audio/types';
 import type {SourceFormat} from '@/components/chart-picker/chart-file-readers';
+import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -115,6 +116,15 @@ export interface ProjectMetadata {
    * audio wholesale (`regenerateProject`), since a fresh chart has no anchor.
    */
   audioAnchor?: {tick: number; ms: number} | null | undefined;
+  /**
+   * Assist-generation provenance mirrored out of the in-memory
+   * `ChartDocument` (plan 0074 Design C). A `.chart`/`.mid` file has nowhere
+   * to carry doc-level metadata, so this field is what makes drum-
+   * transcription staleness and "Keep as-is" dismissals survive a reload.
+   * Undefined on projects saved before this field existed; the editor then
+   * seeds a stamp from the chart as loaded.
+   */
+  assistProvenance?: AssistProvenance | null | undefined;
 }
 
 export type GridSource = 'provided' | 'predicted';
@@ -281,6 +291,7 @@ export async function updateProject(
       | 'gridSource'
       | 'stemFingerprint'
       | 'audioAnchor'
+      | 'assistProvenance'
     >
   >,
 ): Promise<ProjectMetadata> {

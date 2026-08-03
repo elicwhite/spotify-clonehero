@@ -98,6 +98,22 @@ export interface EditorCapabilities {
    * flag (they aren't gated through the `EntityKind` sets above).
    */
   showPianoRollNotes: boolean;
+  /**
+   * Which cards the sidebar's Chart Assist section offers (plan 0074 Phase
+   * 2, Design C):
+   *  - `false` — no section at all.
+   *  - `'all'` — every card this phase ships (Tempo map, Add leading
+   *    silence, Drum transcription, Lyrics/Vocals).
+   *  - `'tempo-and-silence'` — only the Tempo map and Add leading silence
+   *    cards. `/tempo` edits the sync track alone; a Drum transcription or
+   *    Lyrics card there would offer edits `editableEntities` doesn't grant.
+   *  - `'lyrics-only'` — only the Lyrics/Vocals card. Add-lyrics pages only
+   *    ever write to the vocals track.
+   *
+   * A card also needs its host wiring to render, so this is the ceiling on
+   * what the section can show, not a promise that anything shows.
+   */
+  chartAssist: false | 'all' | 'tempo-and-silence' | 'lyrics-only';
 }
 
 /** Every operation class — the common case for presets with no dispatch
@@ -159,6 +175,7 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
   showVocalPartPicker: true,
   showEditingControls: true,
   showPianoRollNotes: true,
+  chartAssist: 'all',
 };
 
 export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
@@ -179,6 +196,7 @@ export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
   showVocalPartPicker: false,
   showEditingControls: true,
   showPianoRollNotes: true,
+  chartAssist: 'lyrics-only',
 };
 
 export const PREVIEW_CAPABILITIES: EditorCapabilities = {
@@ -195,6 +213,7 @@ export const PREVIEW_CAPABILITIES: EditorCapabilities = {
   showVocalPartPicker: true,
   showEditingControls: false,
   showPianoRollNotes: true,
+  chartAssist: false,
 };
 
 /**
@@ -225,4 +244,5 @@ export const TEMPO_CAPABILITIES: EditorCapabilities = {
   showVocalPartPicker: false,
   showEditingControls: true,
   showPianoRollNotes: false,
+  chartAssist: 'tempo-and-silence',
 };

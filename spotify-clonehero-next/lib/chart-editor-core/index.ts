@@ -7,9 +7,26 @@ export {
   isAnythingSelected,
   selectActiveSchema,
   selectActiveTrack,
+  selectDifficultyStale,
+  selectDrumTranscriptionStale,
   selectRenderDoc,
 } from './selectors';
 export {initialState, UNDO_STACK_CAP} from './state';
+export {
+  carryAssistProvenance,
+  computeAllTrackStamps,
+  computeTempoStamp,
+  computeTrackStamp,
+  EMPTY_STAMP,
+  getAssistProvenance,
+  isStampStale,
+  recomputeTrackStamps,
+  restampDrumTranscription,
+  setDrumTranscriptionStamp,
+  withAssistProvenance,
+  type AssistFeatureId,
+  type AssistProvenance,
+} from './content-stamps';
 export {
   availableTrackKeys,
   preferredTrackForChart,
@@ -19,6 +36,7 @@ export {
   trackKeyId,
   type SupportedTrackInstrument,
   type SupportedTrackKey,
+  type TrackKeyId,
 } from './trackInventory';
 export type {
   ChartEditorAction,

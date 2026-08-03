@@ -42,6 +42,12 @@ import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
+import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
+import type {AssistAudio} from '@/lib/assist/tasks';
+import {mixStemsToAudioBuffer} from '@/lib/audio-pipeline/lyrics-audio';
+import {interleaveAudioBuffer} from '@/lib/drum-transcription/audio/decoder';
+import {encodeWavBlob} from '@/lib/audio/wav-encoder';
+import {audioMimeType} from '@/lib/sng/file-utils';
 import type {ChartDocument, ParsedTrackData} from '@/lib/chart-edit';
 import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
@@ -109,16 +115,21 @@ export interface TrackEditPageConfig {
 export default function TrackEditPage(config: TrackEditPageConfig) {
   return (
     <AudioServiceProvider>
-      <ChartEditorProvider activeScope={config.defaultScope}>
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center h-screen">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          }>
-          <TrackEditInner config={config} />
-        </Suspense>
-      </ChartEditorProvider>
+      {/* One assist runner for the whole page: the Chart Assist cards that
+       *  run a task here (Tempo map, Lyrics/Vocals) share it, so only one
+       *  assist run is ever in flight and leaving the page aborts it. */}
+      <AssistRunnerProvider>
+        <ChartEditorProvider activeScope={config.defaultScope}>
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center h-screen">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            }>
+            <TrackEditInner config={config} />
+          </Suspense>
+        </ChartEditorProvider>
+      </AssistRunnerProvider>
     </AudioServiceProvider>
   );
 }
@@ -468,6 +479,9 @@ function TrackEditEditor({
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [audioData, setAudioData] = useState<Float32Array | null>(null);
   const [audioChannels, setAudioChannels] = useState(2);
+  const [audioSampleRate, setAudioSampleRate] = useState<number | undefined>(
+    undefined,
+  );
   // Mirrors audioManagerRef (shared via AudioServiceProvider for
   // event-handler reads) into render-visible state so the CloneHeroRenderer
   // prop is passed without reading ref.current during render.
@@ -583,6 +597,7 @@ function TrackEditEditor({
           }
           setAudioData(interleaved);
           setAudioChannels(channels);
+          setAudioSampleRate(decoded.sampleRate);
           await waveformCtx.close();
         } catch {
           // Waveform is optional — don't fail the whole load
@@ -707,6 +722,41 @@ function TrackEditEditor({
     }));
   }, [projectId, store]);
 
+  // Chart Assist: the song's audio, for the tasks that work from audio bytes
+  // alone. The chart package's own files are the only audio this surface
+  // has, and it has no stem-cache fingerprint to offer, so the task derives
+  // one by hashing whatever bytes come back here.
+  const loadAssistAudio = useCallback(
+    async (): Promise<AssistAudio> => ({
+      loadOriginalBytes: async () => {
+        const audioFiles = await store.loadAudioFiles(projectId);
+        if (audioFiles.length === 0) {
+          throw new Error('No audio files found in project storage');
+        }
+        // A single file IS the full mix: hand its bytes over verbatim, so
+        // the fingerprint derived from them matches the same file separated
+        // by any other tool.
+        if (audioFiles.length === 1) return audioFiles[0].data;
+        // A multi-stem package has no single mixed file, so sum the stems
+        // back into one and encode it, the same reconstruction
+        // `/add-lyrics` performs before re-separating.
+        const mixed = await mixStemsToAudioBuffer(
+          audioFiles.map(f => ({
+            data: f.data,
+            mimeType: audioMimeType(f.fileName),
+          })),
+        );
+        const wav = encodeWavBlob(
+          interleaveAudioBuffer(mixed),
+          mixed.sampleRate,
+          2,
+        );
+        return new Uint8Array(await wav.arrayBuffer());
+      },
+    }),
+    [projectId, store],
+  );
+
   // Loading state
   if (loadingState === 'loading') {
     return (
@@ -752,6 +802,39 @@ function TrackEditEditor({
         dirty={state.dirty}
         getChartText={getChartText}
         getAudioSources={getAudioSources}
+        /*
+         * Chart Assist on this shell, card by card (plan 0074 Phase 2):
+         *
+         * - Tempo map: RUNS. `generate-tempo-map` needs nothing but the
+         *   song's audio bytes, which the chart package supplies.
+         * - Lyrics / Vocals: RUNS. `add-lyrics` needs audio bytes plus the
+         *   pasted text. With no stem-cache fingerprint to offer, a chart
+         *   whose audio was never separated here takes the Demucs branch,
+         *   which is exactly what `/add-lyrics` does with the same input.
+         * - Add leading silence: DISABLED, still shown. The command re-ticks
+         *   the chart and records an `audioAnchor` that the host is then
+         *   responsible for matching by padding the audio it plays and
+         *   exports (`usePaddedAudio`). This shell builds its AudioManager
+         *   once from the package's stem files and exports them untouched,
+         *   and `usePaddedAudio` handles a full mix plus at most one
+         *   secondary stem, so applying the pad here would leave chart and
+         *   audio drifted apart. The detector's advice is still worth
+         *   reading, so the card renders with the action disabled.
+         * - Drum transcription: DISABLED, still shown (only on charts that
+         *   have Expert Drums). `transcribe-drums` regenerates an OPFS
+         *   drum-transcription project, which a chart loaded from a file
+         *   here does not have. The note count and the staleness prompt come
+         *   from editor state alone, and "Keep as-is" is a decision about
+         *   that state, so both keep working.
+         */
+        chartAssist={{
+          loadAudio: loadAssistAudio,
+          audioSampleRate,
+          leadingSilenceDisabledReason:
+            "This editor plays and exports the chart's audio files as they are, so it cannot pad the audio to match the shifted chart.",
+          drumRerunDisabledReason:
+            'Re-running transcription needs the separated drum audio from the drum transcription tool. This chart was loaded from a file, so there is nothing to re-run here.',
+        }}
         headerExtra={headerExtra}
         leftPanelChildren={
           <>

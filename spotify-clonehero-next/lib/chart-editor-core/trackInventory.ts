@@ -20,7 +20,12 @@ export type SupportedTrackKey = Omit<TrackKey, 'instrument'> & {
   instrument: SupportedTrackInstrument;
 };
 
-export function trackKeyId(track: TrackKey): string {
+/** Stable id for a `TrackKey`, as returned by {@link trackKeyId} — the shape
+ *  `EditCommand.affectedTracks` and the assist engine's per-track content
+ *  stamps key on (plan 0074 Design C). */
+export type TrackKeyId = string;
+
+export function trackKeyId(track: TrackKey): TrackKeyId {
   return `${track.instrument}:${track.difficulty}`;
 }
 

@@ -5,11 +5,13 @@ import type {
   SchemaNote,
   TempoGlueMode,
 } from '@/components/chart-editor/commands';
+import type {TrackKeyId} from './trackInventory';
 import type {EditorCapabilities} from '@/components/chart-editor/capabilities';
 import type {HighwayMode} from '@/lib/preview/highway';
 import type {SceneReconciler} from '@/lib/preview/highway/SceneReconciler';
 import type {NoteRenderer} from '@/lib/preview/highway/NoteRenderer';
 import type {EditorScope} from '@/components/chart-editor/scope';
+import {EMPTY_STAMP, type AssistProvenance} from './content-stamps';
 import type {TrackKey} from '@/lib/chart-edit';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
 
@@ -177,6 +179,27 @@ export interface ChartEditorState {
    * is always shown and notation is the optional pane.
    */
   showSheetMusic: boolean;
+
+  // -- Staleness (plan 0074 Design C) --
+
+  /**
+   * Per-track content stamp (`content-stamps.ts`), keyed by `trackKeyId`.
+   * Recomputed for exactly the tracks named in a command's `affectedTracks`
+   * on `EXECUTE_COMMAND` (everything else carried over unchanged); fully
+   * recomputed from the restored doc on `UNDO`/`REDO`/`SET_CHART_DOC`.
+   * Compared against `assistProvenance.difficulties[instrument].sourceStamp`
+   * to detect difficulty staleness.
+   */
+  trackStamps: Readonly<Record<TrackKeyId, string>>;
+
+  /**
+   * Content stamp of the tempo map (`content-stamps.ts`), recomputed
+   * whenever an executed command's `entityKinds` includes `tempo` or
+   * `timesig`, and fully recomputed on `UNDO`/`REDO`/`SET_CHART_DOC`.
+   * Compared against `assistProvenance.drumTranscription.tempoStamp` to
+   * detect drum-transcription staleness.
+   */
+  tempoStamp: string;
 }
 
 export type ChartEditorAction =
@@ -199,6 +222,17 @@ export type ChartEditorAction =
       /** Updated chart document (with re-parsed parsedChart) after apply. */
       chartDoc: ChartDocument;
     }
+  /**
+   * Replace the doc's `assistProvenance` bag without touching the undo or
+   * redo stacks (plan 0074 Design C). Used for "Keep as-is" acknowledgments:
+   * a dismissal is a UI decision about a recommendation, not a chart edit,
+   * so routing it through `EXECUTE_COMMAND` would push a bogus "Update
+   * assist provenance" entry onto the undo stack and — worse — discard the
+   * user's redo branch. Generation provenance still rides its generating
+   * command (`ReplaceDrumTrackCommand`), which is what makes undo remove a
+   * generated track and its provenance together.
+   */
+  | {type: 'SET_ASSIST_PROVENANCE'; provenance: AssistProvenance}
   // -- Undo/Redo --
   | {type: 'UNDO'; chartDoc: ChartDocument}
   | {type: 'REDO'; chartDoc: ChartDocument}
@@ -279,4 +313,7 @@ export const initialState: ChartEditorState = {
   highwayMode: 'classic' as HighwayMode,
   // Sheet music pane
   showSheetMusic: false,
+  // Staleness
+  trackStamps: {},
+  tempoStamp: EMPTY_STAMP,
 };
