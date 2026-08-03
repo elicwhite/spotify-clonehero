@@ -8,6 +8,7 @@ import {createEmptyChart} from '@eliwhite/scan-chart';
 import type {ParsedChart} from '@eliwhite/scan-chart';
 import type {Synctrack} from './types';
 import {swapSynctrack} from './swap-synctrack';
+import {emptyTrack} from '@/lib/chart-edit';
 
 export function buildChartFromSynctrack({
   sync,
@@ -21,22 +22,10 @@ export function buildChartFromSynctrack({
   // the predicted tempos/time signatures with correct ticks.
   const chart = swapSynctrack(empty, sync);
   // Give renderers an end-of-song anchor.
-  const drums = {
-    instrument: 'drums' as const,
-    difficulty: 'expert' as const,
-    starPowerSections: [],
-    rejectedStarPowerSections: [],
-    soloSections: [],
-    flexLanes: [],
-    drumFreestyleSections: [],
-    textEvents: [],
-    versusPhrases: [],
-    animations: [],
-    noteEventGroups: [],
-  };
+  const drums = emptyTrack({instrument: 'drums', difficulty: 'expert'});
   return {
     ...chart,
-    trackData: [drums as unknown as ParsedChart['trackData'][number]],
+    trackData: [drums],
     metadata: {...chart.metadata, song_length: songLengthMs},
-  } as ParsedChart;
+  };
 }

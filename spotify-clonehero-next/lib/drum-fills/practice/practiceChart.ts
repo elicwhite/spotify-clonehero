@@ -20,6 +20,7 @@ import type {
   ParsedTrackData,
 } from '@/lib/chart-edit/types';
 import {noteFlags, noteTypes} from '@/lib/chart-edit/types';
+import {emptyTrack} from '@/lib/chart-edit/empty-track';
 import type {DrumLane} from '@/lib/drum-fills/midi/padMapping';
 import {fillNoteId} from '@/lib/drum-fills/midi/noteId';
 import type {BackingPattern} from './backingTrack';
@@ -216,21 +217,10 @@ export function buildPracticeChart(args: {
   const fillStartMs =
     expectedNotes.length > 0 ? expectedNotes[0].msTime : grooveEndMs;
 
-  const track = {
-    instrument: 'drums',
-    difficulty: 'expert',
-    starPowerSections: [],
-    rejectedStarPowerSections: [],
-    soloSections: [],
-    flexLanes: [],
-    drumFreestyleSections: [],
-    trackEvents: [],
-    textEvents: [],
-    versusPhrases: [],
-    animations: [],
-    unrecognizedMidiEvents: [],
+  const track: ParsedTrackData = {
+    ...emptyTrack({instrument: 'drums', difficulty: 'expert'}),
     noteEventGroups: toNoteEventGroups(planned, msPerTick),
-  } as unknown as ParsedTrackData;
+  };
 
   const empty = createEmptyChart({format: 'chart', resolution: res, bpm});
   const chart = {

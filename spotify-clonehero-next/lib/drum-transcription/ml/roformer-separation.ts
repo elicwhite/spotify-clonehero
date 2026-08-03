@@ -50,14 +50,35 @@ const DRUMS_STEM = 'drums';
 const VOCALS_STEM = 'vocals';
 
 /**
+ * Resolves the project's source audio bytes: the stored verbatim original
+ * upload for current projects, falling back to the stored Opus-at-rest bytes
+ * and then the decoded full-mix PCM for projects created before
+ * original-at-rest storage.
+ *
+ * The single authority for "which bytes represent this project's audio" —
+ * both {@link ensureProjectStemFingerprint}'s hash and any consumer that
+ * needs the raw file (e.g. the Add Lyrics dialog's Demucs fallback) go
+ * through it, so they can never disagree about the fallback chain.
+ */
+export async function readProjectAudioBytes(
+  projectId: string,
+): Promise<ArrayBuffer> {
+  const original = await readOriginalAudio(projectId);
+  if (original) return original.data;
+  const opus = await readSongOpus(projectId);
+  if (opus) return opus;
+  return (await loadFullMixPcm(projectId)).buffer as ArrayBuffer;
+}
+
+/**
  * Returns the project's stem-cache fingerprint, computing and persisting it
  * to project metadata on first use.
  *
- * Hashes the stored verbatim original upload bytes for current projects —
- * matches what `/tempo` hashes for the same file, so the two pages can share
- * a stem cache. Falls back to the stored Opus-at-rest bytes, then the
- * decoded full-mix PCM bytes, for projects created before original-at-rest
- * storage.
+ * Hashes {@link readProjectAudioBytes} — for current projects the verbatim
+ * original upload, which matches what `/tempo` hashes for the same file, so
+ * the two pages share a stem cache. The persisted value is authoritative
+ * once written: it is the key every stem for this project was stored under,
+ * even if the byte-resolution chain would produce something else later.
  */
 export async function ensureProjectStemFingerprint(
   projectId: string,
@@ -65,16 +86,8 @@ export async function ensureProjectStemFingerprint(
   const meta = await getProject(projectId);
   if (meta.stemFingerprint) return meta.stemFingerprint;
 
-  const original = await readOriginalAudio(projectId);
-  let bytes: ArrayBuffer;
-  if (original) {
-    bytes = original.data;
-  } else {
-    const opus = await readSongOpus(projectId);
-    bytes = opus ?? ((await loadFullMixPcm(projectId)).buffer as ArrayBuffer);
-  }
   const fingerprint = await computeStemFingerprint(
-    bytes,
+    await readProjectAudioBytes(projectId),
     ROFORMER_SEPARATOR_ID,
   );
   await updateProject(projectId, {stemFingerprint: fingerprint});
@@ -189,19 +202,22 @@ export async function hasVocalsStem(projectId: string): Promise<boolean> {
  * @param projectId        - OPFS project ID.
  * @param interleavedAudio - Interleaved stereo Float32 PCM at 44.1 kHz.
  * @param onProgress       - Optional progress callback.
+ * @param signal           - Optional abort signal: terminates the separation
+ *                           worker and rejects with an `AbortError`.
  * @returns Interleaved stereo drum-stem Float32 PCM at 44.1 kHz.
  */
 export async function separateDrums(
   projectId: string,
   interleavedAudio: Float32Array,
   onProgress?: DrumSeparationProgressCallback,
+  signal?: AbortSignal,
 ): Promise<Float32Array> {
   const original = await readOriginalAudio(projectId);
 
   if (original) {
     const {drums} = await separateStems(
       new Uint8Array(original.data),
-      {drums: true, vocals: true},
+      {drums: true, vocals: true, signal},
       onProgress,
     );
     await ensureProjectStemFingerprint(projectId);
@@ -226,7 +242,7 @@ export async function separateDrums(
   }
 
   const {drumsLeft, drumsRight, vocalsLeft, vocalsRight} =
-    await runSeparationInWorker(left, right, onProgress);
+    await runSeparationInWorker(left, right, onProgress, undefined, signal);
 
   onProgress?.({step: 'storing', percent: 0});
   const interleavedStem = new Float32Array(numSamples * NUM_CHANNELS);

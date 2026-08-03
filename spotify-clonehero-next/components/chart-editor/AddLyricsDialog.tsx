@@ -1,15 +1,16 @@
 'use client';
 
 /**
- * "Add Lyrics" dialog for the drum-transcription editor (plan 0063 Part C).
+ * "Add Lyrics" dialog for the drum-transcription editor (plan 0063 Part C,
+ * rewired onto the shared assist engine by plan 0074 Phase 1).
  *
- * Reuses the `/add-lyrics` alignment pipeline (aligner.ts) but feeds it the
- * project's roformer-separated vocals stem instead of running Demucs: the
- * stem is stored Opus-encoded in the fingerprint-keyed stem cache
- * (`vocals.opus`) by `separateDrums` (roformer-separation.ts). If a project's
- * cache entry predates vocals capture, this dialog runs separation first.
- *
- * No tier-2 Demucs retry here — that fallback is `/add-lyrics`-specific.
+ * Drives `lib/assist/tasks.ts`'s `add-lyrics` task on the editor's shared
+ * assist runner:
+ * roformer-separated vocals cached from drum transcription (fingerprint-
+ * keyed OPFS cache) are reused when present; otherwise the task falls back
+ * to a fresh Demucs separation of the merged audio. Same task, same step
+ * list, same math as the `/add-lyrics` standalone page — this dialog only
+ * keeps its own modal shell and paste textarea.
  */
 
 import {useCallback, useEffect, useState} from 'react';
@@ -25,78 +26,79 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import ProcessingView, {type ProcessingStep} from '@/components/ProcessingView';
+import ProcessingView from '@/components/ProcessingView';
 import {useChartEditorContext} from './ChartEditorContext';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {ReplaceLyricsCommand, hasExistingLyrics} from './commands';
+import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
+import {useAssistRunState} from '@/components/assist/useAssistRunner';
+import type {AssistStore} from '@/lib/assist/assist-store';
+import {addLyricsTask} from '@/lib/assist/tasks';
+import {isAbortError} from '@/lib/workers/abortable-worker';
 import {
-  hasVocalsStem,
-  loadVocalsStem,
-  separateDrums,
+  ensureProjectStemFingerprint,
+  readProjectAudioBytes,
 } from '@/lib/drum-transcription/ml/roformer-separation';
-import {loadFullMixPcm} from '@/lib/drum-transcription/storage/opfs';
-
-type StepKey = 'separate' | 'load' | 'syllabify' | 'align';
-
-interface StepState {
-  key: StepKey;
-  label: string;
-  status: 'pending' | 'active' | 'done' | 'error';
-  detail?: string | undefined;
-  progress?: number | undefined;
-  etaSeconds?: number | undefined;
-}
-
-const BASE_STEPS: StepState[] = [
-  {key: 'load', label: 'Loading vocals stem', status: 'pending'},
-  {
-    key: 'syllabify',
-    label: 'Splitting lyrics into syllables',
-    status: 'pending',
-  },
-  {key: 'align', label: 'Aligning syllables to audio', status: 'pending'},
-];
-
-const SEPARATE_STEP: StepState = {
-  key: 'separate',
-  label: 'Separating vocals from the mix',
-  status: 'pending',
-};
-
-function toProcessingSteps(steps: StepState[]): ProcessingStep[] {
-  return steps.map(s => ({
-    key: s.key,
-    label: s.label,
-    status: s.status,
-    detail: s.detail,
-    progress: s.progress,
-    etaSeconds: s.etaSeconds,
-  }));
-}
 
 type Status = 'input' | 'processing' | 'error';
+
+/**
+ * `ProcessingView` subscribed to the shared run store. The dialog itself is
+ * always mounted (its trigger button lives inside it), so it must not read
+ * run state at its own root: every progress tick of every editor run would
+ * re-render it. Only this leaf subscribes.
+ *
+ * The runner is shared with the editor's Regenerate control, so steps render
+ * only while the active run is this dialog's.
+ */
+function ConnectedLyricsProcessingView({
+  store,
+  onCancel,
+}: {
+  store: AssistStore;
+  onCancel: () => void;
+}) {
+  const state = useAssistRunState(store);
+  return (
+    <ProcessingView
+      title="Aligning lyrics"
+      steps={state.task === 'add-lyrics' ? state.steps : []}
+      onCancel={onCancel}
+      className="max-w-none border-0 shadow-none p-0"
+    />
+  );
+}
 
 interface AddLyricsDialogProps {
   /** OPFS project id — used to locate/produce the vocals stem. */
   projectId: string;
-  /** Called after this dialog runs separation and a fresh vocals stem lands
-   *  in the cache — lets the host refresh anything derived from it (e.g. the
-   *  piano-roll lyrics row's background waveform). */
-  onVocalsStemChanged?: () => void;
+  /**
+   * Called after a successful run that aligned against the project's cached
+   * roformer vocals, so the host can pick that stem up for surfaces which
+   * render it (the piano-roll lyrics row's background waveform).
+   */
+  onAlignedFromCachedVocals?: (() => void) | undefined;
 }
 
 export default function AddLyricsDialog({
   projectId,
-  onVocalsStemChanged,
+  onAlignedFromCachedVocals,
 }: AddLyricsDialogProps) {
   const {state} = useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
+  // The editor's single runner, shared with the Regenerate control: only one
+  // assist task runs at a time across the editor, and closing the editor
+  // aborts it.
+  const {
+    store: assistStore,
+    start: startAssistTask,
+    cancel: cancelAssistTask,
+  } = useAssistRunnerContext();
 
   const [open, setOpen] = useState(false);
   const [lyrics, setLyrics] = useState('');
   const [status, setStatus] = useState<Status>('input');
   const [error, setError] = useState<string | null>(null);
-  const [steps, setSteps] = useState<StepState[]>(BASE_STEPS);
   const [warningAcked, setWarningAcked] = useState(false);
 
   const existingLyrics = Boolean(
@@ -121,12 +123,7 @@ export default function AddLyricsDialog({
     setLyrics('');
     setStatus('input');
     setError(null);
-    setSteps(BASE_STEPS);
     setWarningAcked(false);
-  }, []);
-
-  const updateStep = useCallback((key: StepKey, update: Partial<StepState>) => {
-    setSteps(prev => prev.map(s => (s.key === key ? {...s, ...update} : s)));
   }, []);
 
   const handleAlign = useCallback(async () => {
@@ -136,94 +133,55 @@ export default function AddLyricsDialog({
     setStatus('processing');
 
     try {
-      const alreadySeparated = await hasVocalsStem(projectId);
-      const initialSteps = alreadySeparated
-        ? BASE_STEPS.map(s => ({...s}))
-        : [SEPARATE_STEP, ...BASE_STEPS].map(s => ({...s}));
-      setSteps(initialSteps);
-
-      if (!alreadySeparated) {
-        updateStep('separate', {status: 'active', detail: 'Loading model...'});
-        const fullMix = await loadFullMixPcm(projectId);
-        await separateDrums(projectId, fullMix, p => {
-          updateStep('separate', {
-            progress: p.percent,
-            etaSeconds: p.etaSeconds,
-            detail:
-              p.step === 'loading-model'
-                ? 'Loading separator model...'
-                : p.step === 'processing'
-                  ? 'Separating stems...'
-                  : p.step === 'storing'
-                    ? 'Storing stems...'
-                    : 'Done',
-          });
-        });
-        updateStep('separate', {status: 'done'});
-        onVocalsStemChanged?.();
-      }
-
-      updateStep('load', {status: 'active', detail: 'Decoding vocals stem...'});
-      const vocalsOpus = await loadVocalsStem(projectId);
-      const {resampleTo16kMono} = await import(
-        '@/lib/audio-pipeline/lyrics-audio'
-      );
-      const vocals16k = await resampleTo16kMono(vocalsOpus, 'audio/opus');
-      updateStep('load', {
-        status: 'done',
-        detail: `${(vocals16k.length / 16000).toFixed(1)}s mono 16kHz`,
-      });
-
-      updateStep('align', {status: 'active'});
-      const {alignVocals} = await import('@/lib/lyrics-align/aligner');
-      const result = await alignVocals(vocals16k, lyrics, (msg, info) => {
-        if (msg.startsWith('Syllabified:')) {
-          updateStep('syllabify', {status: 'done'});
-        } else if (msg.startsWith('Done:')) {
-          updateStep('align', {
-            status: 'done',
-            detail: undefined,
-            progress: undefined,
-          });
-        } else {
-          // Everything else — model download, session load, CTC chunks —
-          // happens inside this step; surface it so a slow model download
-          // doesn't look like a hung aligner.
-          updateStep('align', {detail: msg, progress: info?.percent});
-        }
+      // The project's persisted fingerprint is the key its stems were
+      // actually stored under, so the task probes that rather than re-hashing
+      // bytes that may no longer reproduce it. The bytes themselves are only
+      // read if the probe misses and the Demucs fallback runs.
+      const stemFingerprint = await ensureProjectStemFingerprint(projectId);
+      const result = await startAssistTask(addLyricsTask, {
+        audio: {
+          stemFingerprint,
+          loadOriginalBytes: async () =>
+            new Uint8Array(await readProjectAudioBytes(projectId)),
+        },
+        lyrics,
       });
 
       const command = new ReplaceLyricsCommand(result.syllables);
       executeCommand(command);
 
+      if (result.usedCachedVocals) onAlignedFromCachedVocals?.();
+
       toast.success('Lyrics added to the chart');
       setOpen(false);
       resetForClose();
     } catch (e) {
+      if (isAbortError(e)) {
+        // Cancelled: back to the paste form with the lyrics still in it.
+        setStatus('input');
+        return;
+      }
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
       setStatus('error');
-      setSteps(prev =>
-        prev.map(s =>
-          s.status === 'active' ? {...s, status: 'error', detail: msg} : s,
-        ),
-      );
     }
   }, [
     state.chartDoc,
     lyrics,
     projectId,
     executeCommand,
-    updateStep,
+    startAssistTask,
     resetForClose,
-    onVocalsStemChanged,
+    onAlignedFromCachedVocals,
   ]);
 
   return (
     <Dialog
       open={open}
       onOpenChange={next => {
-        if (!next && status === 'processing') return; // don't close mid-run
+        // Closing mid-run cancels it (terminating the worker) rather than
+        // leaving it running behind a dismissed dialog.
+        if (!next && status === 'processing') cancelAssistTask();
         setOpen(next);
         if (!next) resetForClose();
       }}>
@@ -247,11 +205,9 @@ export default function AddLyricsDialog({
         </DialogHeader>
 
         {status === 'processing' ? (
-          <ProcessingView
-            title="Aligning lyrics"
-            steps={toProcessingSteps(steps)}
-            error={error}
-            className="max-w-none border-0 shadow-none p-0"
+          <ConnectedLyricsProcessingView
+            store={assistStore}
+            onCancel={cancelAssistTask}
           />
         ) : (
           <div className="space-y-4">

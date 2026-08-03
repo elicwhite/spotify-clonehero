@@ -8,8 +8,10 @@ import {
   decodeStemCacheBytesAuto,
   storeStem,
   loadStem,
+  hasStem,
   storeStemOpus,
   loadStemOpus,
+  hasStemOpus,
 } from '../stem-cache';
 import {installFakeOPFS} from '../../drum-transcription/storage/__tests__/fake-opfs';
 
@@ -209,8 +211,10 @@ async function pumpThroughGzip(
 }
 
 describe('OPFS stem cache (fake OPFS)', () => {
+  let fakeOpfs: {store: Map<string, ArrayBuffer>; reset: () => void};
+
   beforeEach(() => {
-    installFakeOPFS();
+    fakeOpfs = installFakeOPFS();
   });
 
   it('storeStem then loadStem round-trips', async () => {
@@ -239,5 +243,229 @@ describe('OPFS stem cache (fake OPFS)', () => {
 
   it('loadStemOpus returns null on a cache miss', async () => {
     expect(await loadStemOpus('does-not-exist', 'vocals')).toBeNull();
+  });
+
+  describe('hasStem / hasStemOpus existence probes', () => {
+    it('hasStem is true after a successful store and false for a miss', async () => {
+      const stem = {
+        left: Float32Array.from([0.1, 0.2]),
+        right: Float32Array.from([-0.1, -0.2]),
+      };
+      expect(await hasStem('fp-probe', 'drums')).toBe(false);
+      await storeStem('fp-probe', 'drums', stem);
+      expect(await hasStem('fp-probe', 'drums')).toBe(true);
+      // A different stem name under the same fingerprint is still a miss.
+      expect(await hasStem('fp-probe', 'bass')).toBe(false);
+    });
+
+    it('hasStemOpus is true after a successful store and false for a miss', async () => {
+      expect(await hasStemOpus('fp-probe-opus', 'vocals')).toBe(false);
+      await storeStemOpus('fp-probe-opus', 'vocals', new Uint8Array([1, 2, 3]));
+      expect(await hasStemOpus('fp-probe-opus', 'vocals')).toBe(true);
+    });
+  });
+
+  describe('atomic writes: interrupted stores are invisible', () => {
+    /**
+     * Simulates a first store() cut off before its writable closed. The
+     * payload write itself is atomic (swap-on-close), so the only trace is
+     * the zero-length file `getFileHandle(…, {create: true})` materialized,
+     * and no completion marker. Written straight into the fake OPFS backing
+     * store, bypassing the real write path.
+     */
+    function simulateInterruptedFirstStore(
+      fingerprint: string,
+      payloadName: string,
+    ): void {
+      const base = `/audio-pipeline/stem-cache/${fingerprint}/${payloadName}`;
+      fakeOpfs.store.set(base, new ArrayBuffer(0));
+      fakeOpfs.store.delete(`${base}.ok`);
+    }
+
+    it('an interrupted first store is invisible to loadStem and hasStem', async () => {
+      simulateInterruptedFirstStore('fp-interrupted', 'drums.f32.gz');
+
+      expect(await hasStem('fp-interrupted', 'drums')).toBe(false);
+      expect(await loadStem('fp-interrupted', 'drums')).toBeNull();
+    });
+
+    it('an interrupted first store is invisible to loadStemOpus and hasStemOpus', async () => {
+      simulateInterruptedFirstStore('fp-interrupted-opus', 'vocals.opus');
+
+      expect(await hasStemOpus('fp-interrupted-opus', 'vocals')).toBe(false);
+      expect(await loadStemOpus('fp-interrupted-opus', 'vocals')).toBeNull();
+    });
+
+    it('an interrupted re-store leaves the existing entry intact and readable', async () => {
+      const stem = {
+        left: Float32Array.from([0.1, 0.2]),
+        right: Float32Array.from([-0.1, -0.2]),
+      };
+      await storeStem('fp-recompute', 'drums', stem);
+
+      // A second storeStem() whose writable never closed: swap-on-close
+      // means the previous payload — and its marker — are untouched, so a
+      // valid entry stays valid rather than becoming a permanent miss.
+      const dir = await navigator.storage.getDirectory();
+      const entryDir = await (
+        await (
+          await dir.getDirectoryHandle('audio-pipeline')
+        ).getDirectoryHandle('stem-cache')
+      ).getDirectoryHandle('fp-recompute');
+      const handle = await entryDir.getFileHandle('drums.f32.gz', {
+        create: true,
+      });
+      const writable = await handle.createWritable();
+      await writable.write(new Uint8Array([9, 9, 9]));
+      // No close(): the store is interrupted here.
+
+      expect(await hasStem('fp-recompute', 'drums')).toBe(true);
+      const loaded = await loadStem('fp-recompute', 'drums');
+      expect(loaded).not.toBeNull();
+      expect(Array.from(loaded!.left)).toEqual(Array.from(stem.left));
+    });
+
+    it('storeStem after an interrupted first store succeeds normally and becomes visible', async () => {
+      simulateInterruptedFirstStore('fp-heal', 'drums.f32.gz');
+      expect(await hasStem('fp-heal', 'drums')).toBe(false);
+
+      const stem = {
+        left: Float32Array.from([0.25]),
+        right: Float32Array.from([-0.25]),
+      };
+      await storeStem('fp-heal', 'drums', stem);
+
+      expect(await hasStem('fp-heal', 'drums')).toBe(true);
+      const loaded = await loadStem('fp-heal', 'drums');
+      expect(loaded).not.toBeNull();
+      expect(Array.from(loaded!.left)).toEqual(Array.from(stem.left));
+    });
+
+    it('a successful store marks the entry complete', async () => {
+      await storeStem('fp-flag', 'drums', {
+        left: Float32Array.from([0.5]),
+        right: Float32Array.from([0.5]),
+      });
+      expect(
+        fakeOpfs.store.has(
+          '/audio-pipeline/stem-cache/fp-flag/drums.f32.gz.ok',
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe('entries written before the completion marker existed', () => {
+    /** A pre-marker entry: payload bytes only, no marker file. */
+    function writeLegacyEntry(
+      fingerprint: string,
+      payloadName: string,
+      payloadBytes: ArrayBuffer,
+    ): void {
+      fakeOpfs.store.set(
+        `/audio-pipeline/stem-cache/${fingerprint}/${payloadName}`,
+        payloadBytes,
+      );
+    }
+
+    it('a valid unmarked stem loads and is marked complete on the way out', async () => {
+      const stem = {
+        left: Float32Array.from([0.1, 0.2, 0.3]),
+        right: Float32Array.from([-0.1, -0.2, -0.3]),
+      };
+      const bytes = await encodeStemCacheBytes(stem);
+      writeLegacyEntry(
+        'fp-legacy',
+        'drums.f32.gz',
+        bytes.buffer as ArrayBuffer,
+      );
+
+      expect(await hasStem('fp-legacy', 'drums')).toBe(true);
+      const loaded = await loadStem('fp-legacy', 'drums');
+      expect(loaded).not.toBeNull();
+      expect(Array.from(loaded!.left)).toEqual(Array.from(stem.left));
+      expect(Array.from(loaded!.right)).toEqual(Array.from(stem.right));
+
+      // Healed: the marker now exists, so later probes hit it directly.
+      expect(
+        fakeOpfs.store.has(
+          '/audio-pipeline/stem-cache/fp-legacy/drums.f32.gz.ok',
+        ),
+      ).toBe(true);
+      expect(await hasStem('fp-legacy', 'drums')).toBe(true);
+    });
+
+    it('a corrupt unmarked stem stays a miss and is not marked', async () => {
+      writeLegacyEntry(
+        'fp-legacy-corrupt',
+        'drums.f32.gz',
+        new Uint8Array([1, 2, 3, 4]).buffer,
+      );
+
+      expect(await loadStem('fp-legacy-corrupt', 'drums')).toBeNull();
+      expect(
+        fakeOpfs.store.has(
+          '/audio-pipeline/stem-cache/fp-legacy-corrupt/drums.f32.gz.ok',
+        ),
+      ).toBe(false);
+    });
+
+    it('a valid unmarked opus stem loads and is marked complete on the way out', async () => {
+      const opusBytes = new Uint8Array([9, 8, 7, 6, 5]);
+      writeLegacyEntry(
+        'fp-legacy-opus',
+        'vocals.opus',
+        opusBytes.buffer as ArrayBuffer,
+      );
+
+      expect(await hasStemOpus('fp-legacy-opus', 'vocals')).toBe(true);
+      const loaded = await loadStemOpus('fp-legacy-opus', 'vocals');
+      expect(loaded).not.toBeNull();
+      expect(Array.from(loaded!)).toEqual(Array.from(opusBytes));
+      expect(
+        fakeOpfs.store.has(
+          '/audio-pipeline/stem-cache/fp-legacy-opus/vocals.opus.ok',
+        ),
+      ).toBe(true);
+    });
+
+    it('an empty unmarked opus payload stays a miss and is not marked', async () => {
+      writeLegacyEntry('fp-legacy-empty', 'vocals.opus', new ArrayBuffer(0));
+
+      expect(await loadStemOpus('fp-legacy-empty', 'vocals')).toBeNull();
+      expect(
+        fakeOpfs.store.has(
+          '/audio-pipeline/stem-cache/fp-legacy-empty/vocals.opus.ok',
+        ),
+      ).toBe(false);
+    });
+  });
+
+  describe('corrupt entries', () => {
+    it('loadStem returns null for a marker-gated but corrupt (non-gzip) payload', async () => {
+      const stem = {
+        left: Float32Array.from([0.1]),
+        right: Float32Array.from([-0.1]),
+      };
+      await storeStem('fp-corrupt', 'drums', stem);
+      // Overwrite the payload after the fact, keeping the marker file (and
+      // hence hasStem's answer) intact - a corrupt-on-disk entry, not an
+      // interrupted write.
+      fakeOpfs.store.set(
+        '/audio-pipeline/stem-cache/fp-corrupt/drums.f32.gz',
+        new Uint8Array([1, 2, 3, 4]).buffer,
+      );
+
+      expect(await hasStem('fp-corrupt', 'drums')).toBe(true);
+      expect(await loadStem('fp-corrupt', 'drums')).toBeNull();
+    });
+
+    it('loadStemOpus returns null when the marker exists but the payload file is missing', async () => {
+      await storeStemOpus('fp-corrupt-opus', 'vocals', new Uint8Array([1]));
+      fakeOpfs.store.delete(
+        '/audio-pipeline/stem-cache/fp-corrupt-opus/vocals.opus',
+      );
+
+      expect(await loadStemOpus('fp-corrupt-opus', 'vocals')).toBeNull();
+    });
   });
 });

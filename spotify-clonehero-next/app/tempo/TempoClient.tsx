@@ -62,7 +62,8 @@ import type {
   LoadedFiles,
   SourceFormat,
 } from '@/components/chart-picker/chart-file-readers';
-import ProcessingView, {type ProcessingStep} from '@/components/ProcessingView';
+import ProcessingView from '@/components/ProcessingView';
+import type {ProcessingStep} from '@/components/processing/StepRow';
 
 import {
   runTempoTrack,

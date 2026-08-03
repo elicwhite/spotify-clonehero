@@ -6,6 +6,16 @@
  * this stands in for it — a flat `Map<path, ArrayBuffer>` keyed by the full
  * path from the OPFS root, with directory handles that are just path
  * prefixes (directories always "exist" implicitly; only files are tracked).
+ *
+ * Two platform semantics matter to code under test and are reproduced here:
+ *
+ *   - `createWritable()` writes to a swap buffer and commits it to the file
+ *     on `close()`. A writable that is never closed leaves the file's
+ *     previous contents untouched, so an interrupted write is never visible
+ *     as a truncated payload. Closing without writing commits an empty
+ *     buffer (the swap starts empty, `keepExistingData` being false).
+ *   - `getFileHandle(name, {create: true})` materializes a zero-length file
+ *     when `name` is absent, and leaves an existing file's contents alone.
  */
 
 function toArrayBuffer(
@@ -22,6 +32,9 @@ function toArrayBuffer(
 
 class FakeFile {
   constructor(private readonly buf: ArrayBuffer) {}
+  get size(): number {
+    return this.buf.byteLength;
+  }
   async arrayBuffer(): Promise<ArrayBuffer> {
     return this.buf.slice(0);
   }
@@ -30,8 +43,10 @@ class FakeFile {
   }
 }
 
+/** Swap buffer: accumulates writes and commits them to the store on close.
+ * Nothing it has written is observable until then. */
 class FakeWritable {
-  private pending: ArrayBuffer | null = null;
+  private readonly chunks: Uint8Array[] = [];
   constructor(
     private readonly path: string,
     private readonly store: Map<string, ArrayBuffer>,
@@ -39,10 +54,17 @@ class FakeWritable {
   async write(
     data: string | ArrayBuffer | Uint8Array<ArrayBufferLike>,
   ): Promise<void> {
-    this.pending = toArrayBuffer(data);
+    this.chunks.push(new Uint8Array(toArrayBuffer(data)));
   }
   async close(): Promise<void> {
-    this.store.set(this.path, this.pending ?? new ArrayBuffer(0));
+    const total = this.chunks.reduce((n, c) => n + c.byteLength, 0);
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of this.chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    this.store.set(this.path, merged.buffer as ArrayBuffer);
   }
 }
 

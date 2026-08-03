@@ -44,7 +44,8 @@ import {
   type SourceFormat,
 } from '@/components/chart-picker/chart-file-readers';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
-import ProcessingView, {type ProcessingStep} from '@/components/ProcessingView';
+import ProcessingView from '@/components/ProcessingView';
+import type {ProcessingStep} from '@/components/processing/StepRow';
 import {
   ChartEditorProvider,
   DEFAULT_VOCALS_SCOPE,

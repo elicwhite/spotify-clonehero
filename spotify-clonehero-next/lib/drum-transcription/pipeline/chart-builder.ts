@@ -22,6 +22,7 @@ import {
   addDrumNote,
   addSection,
   drumTypes,
+  emptyTrack,
 } from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {noteId} from '@/lib/chart-edit';
@@ -91,23 +92,10 @@ export interface TempoLike {
  * replace onto an existing chart). */
 type DrumsTrack = ChartDocument['parsedChart']['trackData'][number];
 
-/** An empty ExpertDrums track skeleton — every non-note field a fresh drums
- * track needs, with no notes yet (see {@link addNotesToDrumsTrack}). */
+/** An empty ExpertDrums track skeleton, with no notes yet (see
+ * {@link addNotesToDrumsTrack}). */
 function createEmptyDrumsTrack(): DrumsTrack {
-  return {
-    instrument: 'drums',
-    difficulty: 'expert',
-    starPowerSections: [],
-    rejectedStarPowerSections: [],
-    drumFreestyleSections: [],
-    soloSections: [],
-    flexLanes: [],
-    noteEventGroups: [],
-    textEvents: [],
-    versusPhrases: [],
-    animations: [],
-    unrecognizedMidiEvents: [],
-  } as never as DrumsTrack;
+  return emptyTrack({instrument: 'drums', difficulty: 'expert'});
 }
 
 /** Adds each snapped {@link DrumNote} to a drums track via chart-edit's

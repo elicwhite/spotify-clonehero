@@ -231,7 +231,131 @@ async function getCacheEntryDir(
   return cacheDir.getDirectoryHandle(fingerprint, {create});
 }
 
-/** Stores a stem (planar stereo Float32 @ 44.1 kHz) in the cache, gzipped. */
+// ---------------------------------------------------------------------------
+// Entry completion marker.
+//
+// A payload write is already atomic on its own: `createWritable()` writes to
+// a swap file and commits it to the target on `close()`, so an interrupted
+// store (cancelled fetch, worker terminated mid-store, tab closed) leaves the
+// file exactly as it was — previous contents for a re-store, or the
+// zero-length file `getFileHandle(…, {create: true})` materialized for a
+// first store. A partially-written payload is never observable.
+//
+// The one thing that isn't self-describing is that zero-length placeholder,
+// so each payload `<name>` gets a sibling `<name>.ok`, written once the
+// payload has fully landed. Probes and loads agree on what counts as present:
+//
+//   - `<name>.ok` present            -> complete, hit.
+//   - no marker, payload non-empty   -> an entry written before the marker
+//                                       existed (or a store interrupted
+//                                       between close and marker). Loaders
+//                                       validate the payload and backfill the
+//                                       marker; probes accept it.
+//   - no marker, payload empty       -> an interrupted first store, miss.
+//
+// Emptiness is read from the file's size, so probes stay a metadata check —
+// no decode, no payload read. The public API (stemName + bytes in, stemName
+// out) is unchanged.
+// ---------------------------------------------------------------------------
+
+function markerName(payloadName: string): string {
+  return `${payloadName}.ok`;
+}
+
+/** Creates an empty file, overwriting any existing one. */
+async function touchFile(
+  dir: FileSystemDirectoryHandle,
+  name: string,
+): Promise<void> {
+  const handle = await dir.getFileHandle(name, {create: true});
+  const writable = await handle.createWritable();
+  await writable.close();
+}
+
+async function entryExists(
+  dir: FileSystemDirectoryHandle,
+  name: string,
+): Promise<boolean> {
+  try {
+    await dir.getFileHandle(name);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether `name` exists and holds at least one byte. Metadata only. */
+async function nonEmptyEntryExists(
+  dir: FileSystemDirectoryHandle,
+  name: string,
+): Promise<boolean> {
+  try {
+    const handle = await dir.getFileHandle(name);
+    return (await handle.getFile()).size > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Writes `bytes` to `payloadName` inside `dir`, then marks it complete. */
+async function writeMarked(
+  dir: FileSystemDirectoryHandle,
+  payloadName: string,
+  bytes: Uint8Array<ArrayBuffer>,
+): Promise<void> {
+  const fileHandle = await dir.getFileHandle(payloadName, {create: true});
+  const writable = await fileHandle.createWritable();
+  await writable.write(bytes);
+  await writable.close();
+  await touchFile(dir, markerName(payloadName));
+}
+
+interface MarkedRead {
+  bytes: Uint8Array<ArrayBuffer>;
+  /** False for an entry written before the marker existed: the caller
+   *  validates the payload and backfills the marker on success. */
+  marked: boolean;
+}
+
+/** Reads `payloadName`'s bytes. Throws (callers catch and treat as a miss)
+ * when the payload itself is missing. */
+async function readMarked(
+  dir: FileSystemDirectoryHandle,
+  payloadName: string,
+): Promise<MarkedRead> {
+  const marked = await entryExists(dir, markerName(payloadName));
+  const fileHandle = await dir.getFileHandle(payloadName);
+  const file = await fileHandle.getFile();
+  return {bytes: new Uint8Array(await file.arrayBuffer()), marked};
+}
+
+/** Marks an unmarked payload complete once a loader has validated it, so
+ * later probes see it without re-reading. Best effort: a failure here only
+ * costs the next probe another validation pass. */
+async function backfillMarker(
+  dir: FileSystemDirectoryHandle,
+  payloadName: string,
+): Promise<void> {
+  try {
+    await touchFile(dir, markerName(payloadName));
+  } catch {
+    // Read-only/quota-exhausted storage: the entry stays unmarked.
+  }
+}
+
+/** Cheap existence probe: the completion marker, or a non-empty unmarked
+ * payload. Metadata only - no decode, no payload read. */
+async function hasMarked(
+  dir: FileSystemDirectoryHandle,
+  payloadName: string,
+): Promise<boolean> {
+  if (await entryExists(dir, markerName(payloadName))) return true;
+  return nonEmptyEntryExists(dir, payloadName);
+}
+
+/** Stores a stem (planar stereo Float32 @ 44.1 kHz) in the cache, gzipped.
+ * Atomic: an interrupted store never leaves a later load/probe seeing a
+ * truncated payload. */
 export async function storeStem(
   fingerprint: string,
   stemName: string,
@@ -239,41 +363,47 @@ export async function storeStem(
 ): Promise<void> {
   const bytes = await encodeStemCacheBytes(stem);
   const dir = await getCacheEntryDir(fingerprint, true);
-  const fileHandle = await dir.getFileHandle(`${stemName}.f32.gz`, {
-    create: true,
-  });
-  const writable = await fileHandle.createWritable();
-  await writable.write(bytes as Uint8Array<ArrayBuffer>);
-  await writable.close();
+  await writeMarked(
+    dir,
+    `${stemName}.f32.gz`,
+    bytes as Uint8Array<ArrayBuffer>,
+  );
 }
 
-/** Loads a cached stem. Returns null on a cache miss or a corrupt entry —
- * never throws — matching the safer default for a cache. */
+/** Loads a cached stem. Returns null on a cache miss, an interrupted write,
+ * or a corrupt entry — never throws — matching the safer default for a
+ * cache. An unmarked entry is decoded and, if valid, marked complete on the
+ * way out so later probes see it directly. */
 export async function loadStem(
   fingerprint: string,
   stemName: string,
 ): Promise<StereoStem | null> {
-  let bytes: Uint8Array<ArrayBuffer>;
+  const payloadName = `${stemName}.f32.gz`;
+  let dir: FileSystemDirectoryHandle;
+  let entry: MarkedRead;
   try {
-    const dir = await getCacheEntryDir(fingerprint, false);
-    const fileHandle = await dir.getFileHandle(`${stemName}.f32.gz`);
-    const file = await fileHandle.getFile();
-    bytes = new Uint8Array(await file.arrayBuffer());
+    dir = await getCacheEntryDir(fingerprint, false);
+    entry = await readMarked(dir, payloadName);
   } catch {
     return null;
   }
-  return decodeStemCacheBytesAuto(bytes);
+  const stem = await decodeStemCacheBytesAuto(entry.bytes);
+  if (!stem) return null;
+  if (!entry.marked) await backfillMarker(dir, payloadName);
+  return stem;
 }
 
-/** Whether a stem is present in the cache for this fingerprint. */
+/** Whether a stem is present in the cache for this fingerprint. Metadata
+ * check only (the completion marker, or a non-empty unmarked payload) - no
+ * decode, no payload read. An entry left behind by an interrupted first
+ * store reports false. */
 export async function hasStem(
   fingerprint: string,
   stemName: string,
 ): Promise<boolean> {
   try {
     const dir = await getCacheEntryDir(fingerprint, false);
-    await dir.getFileHandle(`${stemName}.f32.gz`);
-    return true;
+    return await hasMarked(dir, `${stemName}.f32.gz`);
   } catch {
     return false;
   }
@@ -284,46 +414,54 @@ export async function hasStem(
 // unlike drums, which may be reprocessed by the CRNN later)
 // ---------------------------------------------------------------------------
 
-/** Stores an already Opus-encoded stem in the cache. */
+/** Stores an already Opus-encoded stem in the cache. Atomic: an interrupted
+ * store never leaves a later load/probe seeing a truncated payload. */
 export async function storeStemOpus(
   fingerprint: string,
   stemName: string,
   opusBytes: Uint8Array,
 ): Promise<void> {
   const dir = await getCacheEntryDir(fingerprint, true);
-  const fileHandle = await dir.getFileHandle(`${stemName}.opus`, {
-    create: true,
-  });
-  const writable = await fileHandle.createWritable();
-  await writable.write(opusBytes as Uint8Array<ArrayBuffer>);
-  await writable.close();
+  await writeMarked(
+    dir,
+    `${stemName}.opus`,
+    opusBytes as Uint8Array<ArrayBuffer>,
+  );
 }
 
 /** Loads a cached Opus-encoded stem's raw bytes (undecoded). Returns null
- * on a cache miss — never throws. */
+ * on a cache miss, an interrupted write, or an empty payload — never throws.
+ * An unmarked entry is marked complete on the way out so later probes see it
+ * directly. */
 export async function loadStemOpus(
   fingerprint: string,
   stemName: string,
 ): Promise<Uint8Array | null> {
+  const payloadName = `${stemName}.opus`;
+  let dir: FileSystemDirectoryHandle;
+  let entry: MarkedRead;
   try {
-    const dir = await getCacheEntryDir(fingerprint, false);
-    const fileHandle = await dir.getFileHandle(`${stemName}.opus`);
-    const file = await fileHandle.getFile();
-    return new Uint8Array(await file.arrayBuffer());
+    dir = await getCacheEntryDir(fingerprint, false);
+    entry = await readMarked(dir, payloadName);
   } catch {
     return null;
   }
+  if (entry.bytes.byteLength === 0) return null;
+  if (!entry.marked) await backfillMarker(dir, payloadName);
+  return entry.bytes;
 }
 
-/** Whether an Opus-encoded stem is present in the cache for this fingerprint. */
+/** Whether an Opus-encoded stem is present in the cache for this
+ * fingerprint. Metadata check only (the completion marker, or a non-empty
+ * unmarked payload) - no decode, no payload read. An entry left behind by an
+ * interrupted first store reports false. */
 export async function hasStemOpus(
   fingerprint: string,
   stemName: string,
 ): Promise<boolean> {
   try {
     const dir = await getCacheEntryDir(fingerprint, false);
-    await dir.getFileHandle(`${stemName}.opus`);
-    return true;
+    return await hasMarked(dir, `${stemName}.opus`);
   } catch {
     return false;
   }

@@ -40,12 +40,17 @@ import SourcePicker from './components/SourcePicker';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {readChart} from '@/lib/chart-edit';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
-import ProcessingView, {type ProcessingStep} from '@/components/ProcessingView';
+import ProcessingView from '@/components/ProcessingView';
+import type {ProcessingStep} from '@/components/processing/StepRow';
 import {
-  createPipelineStepTimer,
+  createStepTimer,
   markStepCompletions,
-  pipelineProgressToSteps,
-} from './components/pipelineToSteps';
+  stepProgressToSteps,
+} from '@/lib/assist/run-to-steps';
+import {
+  PIPELINE_PLANNED_STEPS,
+  pipelineProgressToStepEvent,
+} from '@/lib/drum-transcription/pipeline/step-mapping';
 import EditorApp from './components/EditorApp';
 import {ChartEditorProvider} from '@/components/chart-editor/ChartEditorContext';
 import {AudioServiceProvider} from '@/components/chart-editor/AudioServiceContext';
@@ -60,10 +65,13 @@ import {
   runPipeline,
   runPipelineFromChart,
   resumePipeline,
-  regenerateProject,
-  type PipelineProgress,
-  type PipelineStep,
 } from '@/lib/drum-transcription/pipeline/runner';
+import type {
+  PipelineProgress,
+  PipelineStep,
+} from '@/lib/drum-transcription/pipeline/stages';
+import {waitForOrtRuntime} from '@/lib/onnx/ort-ready';
+import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 
 // Browser capabilities are static for the page lifetime, so the subscribe
 // function is a no-op. The server can't answer, so getServerSnapshot returns
@@ -114,7 +122,7 @@ function DrumTranscriptionInner() {
   const [pipelineProgress, setPipelineProgress] =
     useState<PipelineProgress | null>(null);
   const [pipelineAudioFile, setPipelineAudioFile] = useState<File | null>(null);
-  const stepTimerRef = useRef(createPipelineStepTimer());
+  const stepTimerRef = useRef(createStepTimer());
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
 
   // Chart-flow feature: error from the last existing-chart-package load
@@ -123,7 +131,7 @@ function DrumTranscriptionInner() {
 
   // Derive the ProcessingView step list from progress + a wall-clock
   // timer. The timer is a mutable ref read and updated only inside this
-  // effect's callbacks (never during render): pipelineProgressToSteps
+  // effect's callbacks (never during render): stepProgressToSteps
   // records per-step start/completion times and smoothed ETA values that
   // must persist across renders.
   //
@@ -139,13 +147,18 @@ function DrumTranscriptionInner() {
       // tracking. processingSteps isn't cleared here: it's only read while
       // pipelineProgress is non-null, and recompute() below overwrites it
       // the moment a new pipeline starts.
-      stepTimerRef.current = createPipelineStepTimer();
+      stepTimerRef.current = createStepTimer();
       return;
     }
     const recompute = () => {
-      markStepCompletions(pipelineProgress, stepTimerRef.current);
+      const event = pipelineProgressToStepEvent(pipelineProgress);
+      markStepCompletions(PIPELINE_PLANNED_STEPS, event, stepTimerRef.current);
       setProcessingSteps(
-        pipelineProgressToSteps(pipelineProgress, stepTimerRef.current),
+        stepProgressToSteps(
+          PIPELINE_PLANNED_STEPS,
+          event,
+          stepTimerRef.current,
+        ),
       );
     };
     recompute();
@@ -276,31 +289,19 @@ function DrumTranscriptionInner() {
     };
   }, [shouldLoadProjects]);
 
-  // Wait for ORT to be ready, showing loading-runtime step.
-  // Returns a promise that resolves once ortReady is true.
+  // Wait for ORT to be ready, showing the loading-runtime step while it
+  // isn't. The poll itself is shared with the in-editor assist runs
+  // (`ort-ready.ts`); this only adds the home screen's progress display.
   const waitForOrt = useCallback((projectName: string, projectId?: string) => {
-    return new Promise<void>(resolve => {
-      // Check immediately — ORT may already be loaded
-      if ((globalThis as any).ort) {
-        resolve();
-        return;
-      }
-
-      setPipelineProgress({
-        step: 'loading-runtime',
-        progress: 0,
-        projectId,
-        projectName,
-      });
-
-      // Poll for ORT availability (the Script onReady will set it,
-      // but we also check the global directly for robustness)
-      const interval = setInterval(() => {
-        if ((globalThis as any).ort) {
-          clearInterval(interval);
-          resolve();
-        }
-      }, 100);
+    return waitForOrtRuntime({
+      onWaiting: () => {
+        setPipelineProgress({
+          step: 'loading-runtime',
+          progress: 0,
+          projectId,
+          projectName,
+        });
+      },
     });
   }, []);
 
@@ -525,44 +526,6 @@ function DrumTranscriptionInner() {
     }
   }, [router, waitForOrt]);
 
-  // Regenerate the current project's beat grid + predicted notes from its
-  // stored audio. The separated stem comes from the fingerprint-keyed cache,
-  // so only tempo mapping + transcription re-run. Setting pipelineProgress
-  // switches to ProcessingView (unmounting the editor); clearing it on
-  // success remounts the editor, which reloads the fresh chart from OPFS.
-  const handleRegenerate = useCallback(async () => {
-    if (!projectId) return;
-    try {
-      const meta = await getProject(projectId);
-      await waitForOrt(meta.name, projectId);
-
-      setPipelineProgress({
-        step: 'tempo-mapping',
-        progress: 0,
-        projectId,
-        projectName: meta.name,
-      });
-
-      await regenerateProject(projectId, progress => {
-        setPipelineProgress(progress);
-      });
-
-      toast.success('Regenerated beat grid and notes.');
-      setPipelineProgress(null);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Regenerate failed';
-      console.error('Regenerate pipeline error:', err);
-      setPipelineProgress(prev => ({
-        step: 'error',
-        progress: 0,
-        projectId,
-        projectName: prev?.projectName,
-        error: message,
-      }));
-      toast.error(message);
-    }
-  }, [projectId, waitForOrt]);
-
   const handleRetryPipeline = useCallback(() => {
     if (pipelineProgress?.projectId) {
       // Resume existing project
@@ -734,9 +697,11 @@ function DrumTranscriptionInner() {
           </Button>
         </div>
         <AudioServiceProvider>
-          <ChartEditorProvider activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
-            <EditorApp projectId={projectId} onRegenerate={handleRegenerate} />
-          </ChartEditorProvider>
+          <AssistRunnerProvider>
+            <ChartEditorProvider activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
+              <EditorApp projectId={projectId} showRegenerate />
+            </ChartEditorProvider>
+          </AssistRunnerProvider>
         </AudioServiceProvider>
       </div>
     );

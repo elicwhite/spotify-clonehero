@@ -21,6 +21,7 @@ import type {
   DrumClassName,
 } from './types';
 import {DRUM_CLASSES, NUM_DRUM_CLASSES} from './types';
+import {runAbortableWorker} from '@/lib/workers/abortable-worker';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -36,12 +37,16 @@ export interface DrumTranscriber {
    * @param stereoAudio - Interleaved stereo audio [L0, R0, L1, R1, ...] at the expected sample rate (48000 Hz for the stereo CRNN).
    * @param sampleRate - Sample rate of the audio.
    * @param onProgress - Optional progress callback.
+   * @param signal - Optional abort signal. An already-aborted signal rejects
+   *   before any worker spawns; aborting mid-run terminates the worker and
+   *   rejects with a `DOMException` named `AbortError`.
    * @returns The transcription result with raw events and model output.
    */
   transcribe(
     stereoAudio: Float32Array,
     sampleRate: number,
     onProgress?: TranscriptionProgressCallback,
+    signal?: AbortSignal,
   ): Promise<TranscriptionResult>;
 }
 
@@ -147,6 +152,11 @@ async function loadThresholds(): Promise<number[]> {
   return PROVISIONAL_THRESHOLDS.slice();
 }
 
+/** Spawns the real crnn-worker.ts module worker. */
+export function defaultCreateCrnnWorker(): Worker {
+  return new Worker(new URL('./crnn-worker.ts', import.meta.url));
+}
+
 /**
  * Real ONNX-based drum transcriber using the stereo 256-mel CRNN model.
  *
@@ -166,6 +176,7 @@ async function loadThresholds(): Promise<number[]> {
 export class CrnnTranscriber implements DrumTranscriber {
   private modelUrl: string;
   private executionProviders: string[];
+  private createWorker: () => Worker;
 
   /**
    * @param executionProviders - ORT execution provider preference order.
@@ -173,72 +184,77 @@ export class CrnnTranscriber implements DrumTranscriber {
    *   residual can be measured by running the same audio through
    *   `['webgpu', 'wasm']` and `['wasm']` and diffing `modelOutput.predictions`
    *   — see PARITY.md's stage-2 gate term (b). Default matches production.
+   * @param createWorker - Injectable factory (defaults to the real
+   *   crnn-worker.ts) so tests can substitute a fake Worker without a real
+   *   Worker/module-URL environment — same seam as `runSeparationInWorker`
+   *   and `runDemucsInWorker`.
    */
   constructor(
     modelUrl: string = CRNN_MODEL_URL,
     executionProviders: string[] = ['webgpu', 'wasm'],
+    createWorker: () => Worker = defaultCreateCrnnWorker,
   ) {
     this.modelUrl = modelUrl;
     this.executionProviders = executionProviders;
+    this.createWorker = createWorker;
   }
 
   async transcribe(
     stereoAudio: Float32Array,
     sampleRate: number,
     onProgress?: TranscriptionProgressCallback,
+    signal?: AbortSignal,
   ): Promise<TranscriptionResult> {
     const thresholds = await loadThresholds();
-    return new Promise((resolve, reject) => {
-      const worker = new Worker(new URL('./crnn-worker.ts', import.meta.url));
 
-      worker.onmessage = (e: MessageEvent) => {
-        const msg = e.data;
+    return runAbortableWorker<TranscriptionResult>(
+      this.createWorker,
+      signal,
+      (worker, settle) => {
+        worker.onmessage = (e: MessageEvent) => {
+          const msg = e.data;
 
-        switch (msg.type) {
-          case 'progress':
-            onProgress?.({
-              step: msg.step,
-              percent: msg.percent,
-              detail: msg.detail,
-            });
-            break;
+          switch (msg.type) {
+            case 'progress':
+              onProgress?.({
+                step: msg.step,
+                percent: msg.percent,
+                detail: msg.detail,
+              });
+              break;
 
-          case 'result': {
-            const result: TranscriptionResult = {
-              events: msg.events as RawDrumEvent[],
-              modelOutput: msg.modelOutput as ModelOutput,
-              durationSeconds: msg.durationSeconds as number,
-            };
-            worker.terminate();
-            resolve(result);
-            break;
+            case 'result':
+              settle.resolve({
+                events: msg.events as RawDrumEvent[],
+                modelOutput: msg.modelOutput as ModelOutput,
+                durationSeconds: msg.durationSeconds as number,
+              });
+              break;
+
+            case 'error':
+              settle.reject(new Error(msg.message));
+              break;
           }
+        };
 
-          case 'error':
-            worker.terminate();
-            reject(new Error(msg.message));
-            break;
-        }
-      };
+        worker.onerror = err => {
+          settle.reject(new Error(`Worker error: ${err.message}`));
+        };
 
-      worker.onerror = err => {
-        worker.terminate();
-        reject(new Error(`Worker error: ${err.message}`));
-      };
-
-      // Send audio to worker — transfer the buffer for zero-copy
-      worker.postMessage(
-        {
-          type: 'transcribe',
-          stereoAudio,
-          sampleRate,
-          modelUrl: this.modelUrl,
-          thresholds,
-          executionProviders: this.executionProviders,
-        },
-        [stereoAudio.buffer],
-      );
-    });
+        // Send audio to worker — transfer the buffer for zero-copy
+        worker.postMessage(
+          {
+            type: 'transcribe',
+            stereoAudio,
+            sampleRate,
+            modelUrl: this.modelUrl,
+            thresholds,
+            executionProviders: this.executionProviders,
+          },
+          [stereoAudio.buffer],
+        );
+      },
+    );
   }
 }
 

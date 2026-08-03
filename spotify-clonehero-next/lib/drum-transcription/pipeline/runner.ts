@@ -1,31 +1,26 @@
 /**
- * Pipeline runner for the drum transcription feature.
+ * Pipeline orchestration for the drum transcription feature.
  *
- * Orchestrates the full flow:
+ * Sequences the full flow:
  *   audio upload -> decode -> BS-Roformer drum-stem separation
  *     -> resample 44.1k -> 48k -> ML drum transcription (stereo CRNN)
  *     -> chart generation
  *
  * Each step checks OPFS for existing output before running, enabling
  * resumability if the user closes the tab mid-pipeline.
+ *
+ * The stages themselves (and the progress contract they report through) live
+ * in `./stages`; this file is only the three orderings of them.
  */
 
 import {decodeAudio} from '../audio/decoder';
-import {
-  createAudioMetadata,
-  TARGET_SAMPLE_RATE,
-  type AudioMetadata,
-} from '../audio/types';
+import {createAudioMetadata} from '../audio/types';
 import {
   createProject,
-  storeAudioOriginal,
   updateProject,
-  loadFullMixPcm,
   hasStoredAudio,
   writeProjectBinary,
   writeProjectJSON,
-  readProjectJSON,
-  projectFileExists,
   hasProjectChartFile,
   writePackageInfo,
   writeProjectAssets,
@@ -36,19 +31,9 @@ import {
   type ProjectMetadata,
   type PackageInfo,
 } from '../storage/opfs';
-import {
-  separateDrums,
-  hasDrumStem,
-  loadDrumStem,
-} from '../ml/roformer-separation';
-import type {DrumSeparationProgress} from '@/lib/audio-pipeline/separate-stems';
-import {planarStereoToCrnnInput, CRNN_SAMPLE_RATE} from './crnn-audio-prep';
-import {runTempoPipelineFromPcm} from '@/lib/tempo-map/pipeline-client';
-import type {
-  LinkSegSections,
-  PipelineProgress as TempoPipelineProgress,
-  Synctrack,
-} from '@/lib/tempo-map/types';
+import {hasDrumStem} from '../ml/roformer-separation';
+import {CRNN_SAMPLE_RATE} from './crnn-audio-prep';
+import type {LinkSegSections, Synctrack} from '@/lib/tempo-map/types';
 import {CrnnTranscriber, type DrumTranscriber} from '../ml/transcriber';
 import {writeChartFolder} from '@/lib/chart-edit';
 import type {ChartDocument, File as FileEntry} from '@/lib/chart-edit';
@@ -57,315 +42,22 @@ import {
   buildChartDocumentFromExistingChart,
   buildConfidenceData,
   RESOLUTION,
-  DEFAULT_BPM,
   type StoredSynctrack,
 } from './chart-builder';
 import {buildDecodedOnsetsFile, DECODED_ONSETS_FILE} from './decoded-onsets';
 import type {PhaseAlignResult} from './phase-align';
 import {loadPhaseAlignConfig} from '../ml/phase-align-config';
 import type {TranscriptionResult} from '../ml/types';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export type PipelineStep =
-  | 'idle'
-  | 'loading-runtime'
-  | 'decoding'
-  | 'separating'
-  | 'tempo-mapping'
-  | 'transcribing'
-  | 'ready'
-  | 'error';
-
-export interface PipelineProgress {
-  step: PipelineStep;
-  /** Progress within the current step, 0-1. */
-  progress: number;
-  /** Project ID once created. */
-  projectId?: string | undefined;
-  /** Project name. */
-  projectName?: string | undefined;
-  /** Error message if step === 'error'. */
-  error?: string | undefined;
-  /**
-   * Estimated seconds remaining within the current step. Provided when
-   * the underlying step has a meaningful estimate (e.g. the separator's
-   * exponential moving average over segment durations).
-   */
-  etaSeconds?: number | undefined;
-  /** Optional human-readable detail line for the active step. */
-  detail?: string | undefined;
-}
-
-export type PipelineProgressCallback = (progress: PipelineProgress) => void;
-
-// ---------------------------------------------------------------------------
-// Upload storage (original audio at rest)
-// ---------------------------------------------------------------------------
-
-/**
- * Stores a freshly uploaded audio file verbatim ({@link storeAudioOriginal})
- * — the only audio storage new uploads use. Fingerprinting for the shared
- * stem cache hashes these same bytes; conversion to Opus, if needed, happens
- * only at export.
- */
-async function storeUploadedAudioOriginal(
-  projectId: string,
-  sourceBytes: ArrayBuffer,
-  metadata: AudioMetadata,
-  samplesPerChannel: number,
-): Promise<void> {
-  await storeAudioOriginal(projectId, sourceBytes, metadata, samplesPerChannel);
-}
-
-// ---------------------------------------------------------------------------
-// Audio prep for the CRNN transcriber
-// ---------------------------------------------------------------------------
-
-/**
- * Load the audio to transcribe (drum stem if separated, else full mix) and
- * resample it to interleaved stereo at 48 kHz for the CRNN transcriber, via
- * the SAME resample step /tempo's tempo-track.ts uses on its in-memory
- * separation output (crnn-audio-prep.ts).
- *
- * Both the stored drum stem and stored full-mix audio are interleaved stereo
- * at TARGET_SAMPLE_RATE (44.1 kHz).
- */
-async function loadTranscriptionAudio48k(
-  projectId: string,
-): Promise<Float32Array> {
-  let interleaved44k: Float32Array;
-  try {
-    interleaved44k = await loadDrumStem(projectId);
-  } catch {
-    // Stems unavailable (e.g. separation was skipped/failed):
-    // fall back to the full audio mix (already stereo interleaved).
-    interleaved44k = await loadFullMixPcm(projectId);
-  }
-
-  const n = Math.floor(interleaved44k.length / 2);
-  const left = new Float32Array(n);
-  const right = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    left[i] = interleaved44k[i * 2];
-    right[i] = interleaved44k[i * 2 + 1];
-  }
-
-  return planarStereoToCrnnInput(left, right, TARGET_SAMPLE_RATE);
-}
-
-// ---------------------------------------------------------------------------
-// Stem separation progress mapping
-// ---------------------------------------------------------------------------
-
-/** Sub-ranges of the 'separating' step assigned to each separation sub-step,
- * so the dialog's bar moves monotonically instead of resetting to 0 when the
- * model download finishes and processing begins. */
-const SEPARATION_STAGE_RANGES: Record<
-  DrumSeparationProgress['step'],
-  [number, number]
-> = {
-  'loading-model': [0, 0.15],
-  processing: [0.15, 0.97],
-  storing: [0.97, 1],
-  done: [1, 1],
-};
-
-function separationProgressToFraction(p: DrumSeparationProgress): number {
-  const [lo, hi] = SEPARATION_STAGE_RANGES[p.step];
-  return lo + (hi - lo) * Math.min(1, Math.max(0, p.percent));
-}
-
-/**
- * Runs BS-Roformer drum-stem separation for a project, mapping progress into
- * the pipeline's 'separating' step. Separation requires WebGPU/ONNX and is
- * allowed to fail (e.g. WebGPU unavailable): failures are swallowed (logged)
- * so the caller falls back to transcribing the full audio mix rather than
- * failing the whole pipeline. Shared by all three entry points below
- * (runPipeline, runPipelineFromChart, resumePipeline) — each still owns its
- * own "already separated? skip" pre-check and progress bracketing, since
- * that differs slightly (e.g. runPipelineFromChart never resumes).
- */
-async function separateDrumsStep(
-  projectId: string,
-  projectName: string,
-  onProgress: PipelineProgressCallback,
-): Promise<void> {
-  try {
-    const storedAudio = await loadFullMixPcm(projectId);
-    await separateDrums(projectId, storedAudio, sepProgress => {
-      onProgress({
-        step: 'separating',
-        progress: separationProgressToFraction(sepProgress),
-        etaSeconds: sepProgress.etaSeconds,
-        projectId,
-        projectName,
-      });
-    });
-  } catch (err) {
-    console.warn('Stem separation failed, continuing with full mix:', err);
-    onProgress({step: 'separating', progress: 1, projectId, projectName});
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Tempo mapping (reuses the /tempo pipeline)
-// ---------------------------------------------------------------------------
-
-/** Filename for the persisted predicted tempo map (StoredSynctrack). Exported
- * so other consumers (e.g. the F63 confidence gauge) can read it without
- * duplicating the string. */
-export const SYNCTRACK_FILE = 'synctrack.json';
-
-/** Sub-ranges of the 'tempo-mapping' step assigned to each tempo-pipeline
- * stage, so the dialog's bar moves monotonically through the whole step. */
-const TEMPO_STAGE_RANGES: Record<
-  TempoPipelineProgress['stage'],
-  [number, number]
-> = {
-  'download-separation-model': [0, 0.05],
-  separate: [0.05, 0.3],
-  'download-beat-model': [0.3, 0.4],
-  'beats-fullmix': [0.4, 0.62],
-  'beats-drums': [0.62, 0.88],
-  sections: [0.88, 0.96],
-  convert: [0.96, 1],
-};
-
-const TEMPO_STAGE_DETAIL: Record<TempoPipelineProgress['stage'], string> = {
-  'download-separation-model': 'Downloading separation model',
-  separate: 'Separating drums',
-  'download-beat-model': 'Downloading beat-detection model',
-  'beats-fullmix': 'Detecting beats (full mix)',
-  'beats-drums': 'Detecting beats (drum stem)',
-  sections: 'Labeling song sections',
-  convert: 'Fitting tempo map',
-};
-
-function tempoProgressToPipeline(p: TempoPipelineProgress): {
-  progress: number;
-  detail: string;
-  etaSeconds?: number | undefined;
-} {
-  const [lo, hi] = TEMPO_STAGE_RANGES[p.stage];
-  const within = p.percent ?? 0;
-  const base = TEMPO_STAGE_DETAIL[p.stage];
-  return {
-    progress: lo + (hi - lo) * Math.min(1, Math.max(0, within)),
-    detail: p.detail ? `${base} — ${p.detail}` : base,
-    etaSeconds: p.etaSeconds,
-  };
-}
-
-/**
- * Ensure a synctrack exists for the project, running the tempo-map pipeline
- * if needed (persisted to synctrack.json for resumability).
- *
- * Reuses the already-separated transcription drum stem (mono mean of the
- * stored stereo stem — identical to the tempo worker's own mono separation
- * output) so the tempo pipeline never runs a second GPU separation.
- *
- * Returns null on failure — the caller falls back to a flat-tempo chart.
- */
-interface SynctrackResult {
-  synctrack: Synctrack;
-  sections: LinkSegSections | null;
-}
-
-async function ensureSynctrack(
-  projectId: string,
-  projectName: string,
-  sourceBytes: ArrayBuffer | null,
-  onProgress: PipelineProgressCallback,
-): Promise<SynctrackResult | null> {
-  if (await projectFileExists(projectId, SYNCTRACK_FILE)) {
-    try {
-      const stored = await readProjectJSON<StoredSynctrack>(
-        projectId,
-        SYNCTRACK_FILE,
-      );
-      if (stored?.synctrack)
-        return {synctrack: stored.synctrack, sections: stored.sections ?? null};
-      // Parsed but missing the synctrack: fall through and recompute.
-    } catch {
-      // Corrupt file: fall through and recompute.
-    }
-  }
-
-  onProgress({step: 'tempo-mapping', progress: 0, projectId, projectName});
-
-  try {
-    // Full mix, deinterleaved to planar 44.1 kHz stereo.
-    const interleaved = await loadFullMixPcm(projectId);
-    const n = Math.floor(interleaved.length / 2);
-    const left = new Float32Array(n);
-    const right = new Float32Array(n);
-    for (let i = 0; i < n; i++) {
-      left[i] = interleaved[i * 2];
-      right[i] = interleaved[i * 2 + 1];
-    }
-
-    // Planar stereo drum stem from the transcription stem, when present.
-    let drumStemStereo: {left: Float32Array; right: Float32Array} | null = null;
-    try {
-      const stem = await loadDrumStem(projectId);
-      const sn = Math.floor(stem.length / 2);
-      if (sn === n) {
-        const stemLeft = new Float32Array(sn);
-        const stemRight = new Float32Array(sn);
-        for (let i = 0; i < sn; i++) {
-          stemLeft[i] = stem[i * 2];
-          stemRight[i] = stem[i * 2 + 1];
-        }
-        drumStemStereo = {left: stemLeft, right: stemRight};
-      }
-    } catch {
-      // No stem stored (separation skipped/failed): the tempo worker will
-      // separate on its own (or fail, which we catch below).
-    }
-
-    const result = await runTempoPipelineFromPcm(
-      {left, right, sampleRate: TARGET_SAMPLE_RATE},
-      {
-        // Detached buffers (decodeAudioData) have byteLength 0 — skip them.
-        sourceBytes:
-          sourceBytes && sourceBytes.byteLength > 0 ? sourceBytes : null,
-        drumStemStereo,
-        onProgress: p => {
-          const mapped = tempoProgressToPipeline(p);
-          onProgress({
-            step: 'tempo-mapping',
-            progress: mapped.progress,
-            etaSeconds: mapped.etaSeconds,
-            detail: mapped.detail,
-            projectId,
-            projectName,
-          });
-        },
-      },
-    );
-
-    const stored: StoredSynctrack = {
-      synctrack: result.synctrack,
-      meterStats: result.meterStats,
-      drumOnsetOffsetMs: result.drumOnsetOffsetMs,
-      sections: result.sections,
-    };
-    await writeProjectJSON(projectId, SYNCTRACK_FILE, stored);
-
-    onProgress({step: 'tempo-mapping', progress: 1, projectId, projectName});
-    return {synctrack: result.synctrack, sections: result.sections};
-  } catch (err) {
-    console.warn(
-      `Tempo mapping failed, falling back to a flat ${DEFAULT_BPM} BPM chart:`,
-      err,
-    );
-    onProgress({step: 'tempo-mapping', progress: 1, projectId, projectName});
-    return null;
-  }
-}
+import {
+  ensureSynctrack,
+  loadTranscriptionAudio48k,
+  separateDrumsStep,
+  storeUploadedAudioOriginal,
+  SYNCTRACK_FILE,
+  throwIfAborted,
+  type PipelineProgressCallback,
+  type SynctrackMode,
+} from './stages';
 
 // ---------------------------------------------------------------------------
 // Pipeline runner
@@ -739,6 +431,25 @@ export async function runPipelineFromChart(
   return projectId;
 }
 
+export interface ResumePipelineOptions {
+  /**
+   * Aborts the run. Checked at every stage boundary and threaded into the
+   * separation, tempo-mapping, and transcription clients, each of which
+   * terminates its worker and rejects with an `AbortError` — so a cancel
+   * stops GPU work rather than only abandoning the UI. A cancelled run
+   * writes nothing.
+   */
+  signal?: AbortSignal | undefined;
+  /**
+   * `'regenerate'` ({@link regenerateProject}) recomputes the tempo map and
+   * notes even though the project already has a chart, and replaces the
+   * project's derived artifacts only once the run has fully succeeded.
+   * `'resume'` (the default) only fills in what is missing, persisting each
+   * stage as it lands so the next resume can reuse it.
+   */
+  mode?: SynctrackMode | undefined;
+}
+
 /**
  * Resume a pipeline for an existing project that was interrupted.
  *
@@ -748,8 +459,11 @@ export async function resumePipeline(
   projectId: string,
   onProgress: PipelineProgressCallback,
   transcriber?: DrumTranscriber,
+  options: ResumePipelineOptions = {},
 ): Promise<string> {
   const txr = transcriber ?? createDefaultTranscriber();
+  const {signal, mode = 'resume'} = options;
+  throwIfAborted(signal);
 
   const meta = await getProject(projectId);
 
@@ -779,6 +493,12 @@ export async function resumePipeline(
     );
   }
 
+  // In regeneration mode the project already has every artifact; the run
+  // recomputes them anyway and replaces them at the end (below), so a
+  // cancel mid-run leaves the existing chart, tempo map, and review
+  // progress exactly as they were.
+  const needsWork = mode === 'regenerate' || !hasChart;
+
   // Step 2: Stem separation (if needed)
   if (!hasStems) {
     onProgress({
@@ -789,22 +509,29 @@ export async function resumePipeline(
     });
 
     await updateProject(projectId, {stage: 'separating'});
-    await separateDrumsStep(projectId, meta.name, onProgress);
+    await separateDrumsStep(projectId, meta.name, onProgress, signal);
   }
+  throwIfAborted(signal);
 
   // Step 3: Tempo mapping (if needed). Resumed projects have no source
   // bytes in scope (only OPFS PCM), so the tempo worker's stem cache
   // isn't seeded — the pre-separated stem still avoids re-separation.
   let synctrack: Synctrack | null = null;
   let sections: LinkSegSections | null = null;
-  if (!hasChart) {
-    const st = await ensureSynctrack(projectId, meta.name, null, onProgress);
+  let pendingSynctrack: StoredSynctrack | null = null;
+  if (needsWork) {
+    const st = await ensureSynctrack(projectId, meta.name, null, onProgress, {
+      signal,
+      mode,
+    });
     synctrack = st?.synctrack ?? null;
     sections = st?.sections ?? null;
+    pendingSynctrack = st?.pendingStored ?? null;
   }
+  throwIfAborted(signal);
 
   // Step 4: Transcription (if needed)
-  if (!hasChart) {
+  if (needsWork) {
     onProgress({
       step: 'transcribing',
       progress: 0,
@@ -828,7 +555,9 @@ export async function resumePipeline(
           projectName: meta.name,
         });
       },
+      signal,
     );
+    throwIfAborted(signal);
 
     const phaseAlignOut: {result?: PhaseAlignResult} = {};
     const chartDoc = buildChartDocument(
@@ -847,6 +576,23 @@ export async function resumePipeline(
     );
     if (!chartFile) {
       throw new Error('writeChartFolder did not produce a chart file');
+    }
+
+    // Everything the run produces is now in memory. This is the point of no
+    // return: regeneration discards the project's previous derived
+    // artifacts here rather than up front, so a cancel at any earlier point
+    // leaves the persisted project untouched. The subsequent writes have no
+    // await on GPU work between them.
+    throwIfAborted(signal);
+    if (mode === 'regenerate') {
+      await Promise.all(
+        REGENERATED_ARTIFACT_FILES.map(fileName =>
+          deleteProjectFile(projectId, fileName),
+        ),
+      );
+    }
+    if (pendingSynctrack) {
+      await writeProjectJSON(projectId, SYNCTRACK_FILE, pendingSynctrack);
     }
 
     // Write confidence.json before the chart file: the chart file's presence
@@ -891,11 +637,12 @@ export async function resumePipeline(
 // ---------------------------------------------------------------------------
 
 /**
- * Derived artifacts deleted by {@link regenerateProject} so that
- * {@link resumePipeline}'s gates recompute the tempo map and predicted notes.
- * Covers both chart formats plus their edited (autosave) variants — the
- * edited variant must go too, since findProjectChartFile prefers it and a
- * leftover one would shadow the regenerated chart.
+ * Derived artifacts a successful regeneration replaces. Deleted at the end
+ * of the run, immediately before its own outputs are written, so a cancelled
+ * or failed regeneration leaves the project exactly as it was. Covers both
+ * chart formats plus their edited (autosave) variants — the edited variant
+ * must go too, since findProjectChartFile prefers it and a leftover one
+ * would shadow the regenerated chart.
  */
 export const REGENERATED_ARTIFACT_FILES: readonly string[] = [
   SYNCTRACK_FILE,
@@ -919,11 +666,17 @@ export const REGENERATED_ARTIFACT_FILES: readonly string[] = [
  * Only valid for predicted-grid projects: a provided-grid (chart-flow)
  * project's grid is the user's own chart, and this generic path cannot
  * reconstruct its original ParsedChart (same restriction as resume).
+ *
+ * Cancellable: `options.signal` stops the in-flight workers and rejects with
+ * an `AbortError`. Nothing is deleted or written until the run has produced
+ * every output, so cancelling (or failing) leaves the project's chart, tempo
+ * map, review progress, and audio anchor untouched.
  */
 export async function regenerateProject(
   projectId: string,
   onProgress: PipelineProgressCallback,
   transcriber?: DrumTranscriber,
+  options: {signal?: AbortSignal | undefined} = {},
 ): Promise<string> {
   const meta = await getProject(projectId);
   if (meta.gridSource === 'provided') {
@@ -933,15 +686,22 @@ export async function regenerateProject(
     );
   }
 
-  for (const fileName of REGENERATED_ARTIFACT_FILES) {
-    await deleteProjectFile(projectId, fileName);
+  try {
+    const result = await resumePipeline(projectId, onProgress, transcriber, {
+      signal: options.signal,
+      mode: 'regenerate',
+    });
+    // The regenerated chart is audio-relative from scratch — any leading-
+    // silence anchor from the discarded chart no longer applies (0064
+    // addendum §1: "regenerate clears it").
+    await updateProject(projectId, {audioAnchor: null});
+    return result;
+  } catch (err) {
+    // The project still has its original chart: put its stage back so it
+    // isn't mistaken for an interrupted pipeline on the next load.
+    await updateProject(projectId, {stage: meta.stage});
+    throw err;
   }
-  // The regenerated chart is audio-relative from scratch — any leading-
-  // silence anchor from the discarded chart no longer applies (0064
-  // addendum §1: "regenerate clears it").
-  await updateProject(projectId, {stage: 'transcribing', audioAnchor: null});
-
-  return resumePipeline(projectId, onProgress, transcriber);
 }
 
 // ---------------------------------------------------------------------------

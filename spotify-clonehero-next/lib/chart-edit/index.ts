@@ -218,6 +218,13 @@ export {
   type TrackKey,
 } from './find-track';
 
+// Canonical empty-track shape (one list of scan-chart's event containers)
+export {
+  clearTrackContents,
+  emptyTrack,
+  emptyTrackContents,
+} from './empty-track';
+
 // Shared grid-snapping (one implementation for both interaction views)
 export {snapTickToGrid} from './snapping';
 

@@ -5,6 +5,8 @@
  * Ported from ~/projects/vocal-alignment/browser-aligner/src/demucs-client.ts
  */
 
+import {runAbortableWorker} from '@/lib/workers/abortable-worker';
+
 export interface DemucsProgress {
   /** Human-readable status line. */
   message: string;
@@ -28,69 +30,72 @@ export function defaultCreateDemucsWorker(): Worker {
  * `createWorker` is an injectable factory (defaults to the real
  * demucs-worker.ts) so tests can substitute a fake Worker without a real
  * Worker/module-URL environment — same seam as `runSeparationInWorker`.
+ *
+ * `signal` follows the shared worker-cancellation contract
+ * (`lib/workers/abortable-worker.ts`).
  */
 export async function runDemucsInWorker(
   audioBuffer: AudioBuffer,
   onProgress?: (progress: DemucsProgress) => void,
   createWorker: () => Worker = defaultCreateDemucsWorker,
+  signal?: AbortSignal,
 ): Promise<Float32Array> {
   const log = (progress: DemucsProgress) => {
     if (onProgress) onProgress(progress);
     else console.log(progress.message);
   };
 
-  return new Promise((resolve, reject) => {
-    const worker = createWorker();
+  return runAbortableWorker<Float32Array>(
+    createWorker,
+    signal,
+    (worker, settle) => {
+      worker.onmessage = (e: MessageEvent) => {
+        const msg = e.data;
 
-    worker.onmessage = (e: MessageEvent) => {
-      const msg = e.data;
+        if (msg.type === 'progress') {
+          log({
+            message: msg.message,
+            percent: msg.percent,
+            etaSeconds: msg.etaSeconds,
+          });
+        } else if (msg.type === 'loaded') {
+          // Model loaded — now send audio
+          log({message: 'Preparing audio for separation...'});
 
-      if (msg.type === 'progress') {
-        log({
-          message: msg.message,
-          percent: msg.percent,
-          etaSeconds: msg.etaSeconds,
-        });
-      } else if (msg.type === 'loaded') {
-        // Model loaded — now send audio
-        log({message: 'Preparing audio for separation...'});
+          const numSamples = audioBuffer.length;
+          const left = audioBuffer.getChannelData(0);
+          const right =
+            audioBuffer.numberOfChannels > 1
+              ? audioBuffer.getChannelData(1)
+              : left;
 
-        const numSamples = audioBuffer.length;
-        const left = audioBuffer.getChannelData(0);
-        const right =
-          audioBuffer.numberOfChannels > 1
-            ? audioBuffer.getChannelData(1)
-            : left;
+          // Interleave stereo
+          const interleaved = new Float32Array(numSamples * 2);
+          for (let i = 0; i < numSamples; i++) {
+            interleaved[i * 2] = left[i];
+            interleaved[i * 2 + 1] = right[i];
+          }
 
-        // Interleave stereo
-        const interleaved = new Float32Array(numSamples * 2);
-        for (let i = 0; i < numSamples; i++) {
-          interleaved[i * 2] = left[i];
-          interleaved[i * 2 + 1] = right[i];
+          worker.postMessage(
+            {type: 'separate', audioData: interleaved, numSamples},
+            [interleaved.buffer],
+          );
+        } else if (msg.type === 'result') {
+          // Settling terminates the worker, reclaiming all WASM memory.
+          settle.resolve(msg.vocals16k as Float32Array);
+          log({message: 'Worker terminated — WASM memory reclaimed'});
+        } else if (msg.type === 'error') {
+          settle.reject(new Error(msg.message));
         }
+      };
 
-        worker.postMessage(
-          {type: 'separate', audioData: interleaved, numSamples},
-          [interleaved.buffer],
-        );
-      } else if (msg.type === 'result') {
-        // Done — terminate worker to reclaim all WASM memory
-        worker.terminate();
-        log({message: 'Worker terminated — WASM memory reclaimed'});
-        resolve(msg.vocals16k as Float32Array);
-      } else if (msg.type === 'error') {
-        worker.terminate();
-        reject(new Error(msg.message));
-      }
-    };
+      worker.onerror = e => {
+        settle.reject(new Error(e.message || 'Worker error'));
+      };
 
-    worker.onerror = e => {
-      worker.terminate();
-      reject(new Error(e.message || 'Worker error'));
-    };
-
-    // Start by loading the model
-    log({message: 'Starting Demucs worker...'});
-    worker.postMessage({type: 'load'});
-  });
+      // Start by loading the model
+      log({message: 'Starting Demucs worker...'});
+      worker.postMessage({type: 'load'});
+    },
+  );
 }

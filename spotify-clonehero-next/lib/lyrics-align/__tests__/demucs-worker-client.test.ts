@@ -148,4 +148,68 @@ describe('runDemucsInWorker', () => {
     await expect(resultPromise).rejects.toThrow('worker crashed');
     expect(fake!.terminated).toBe(true);
   });
+
+  it('rejects with AbortError before spawning a worker when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let spawned = false;
+
+    const resultPromise = runDemucsInWorker(
+      fakeAudioBuffer([new Float32Array(1)]),
+      undefined,
+      () => {
+        spawned = true;
+        return new FakeWorker() as unknown as Worker;
+      },
+      controller.signal,
+    );
+
+    await expect(resultPromise).rejects.toMatchObject({name: 'AbortError'});
+    expect(spawned).toBe(false);
+  });
+
+  it('terminates the worker and rejects with AbortError when aborted mid-run', async () => {
+    let fake: FakeWorker;
+    const controller = new AbortController();
+
+    const resultPromise = runDemucsInWorker(
+      fakeAudioBuffer([new Float32Array(1)]),
+      undefined,
+      () => {
+        fake = new FakeWorker();
+        return fake as unknown as Worker;
+      },
+      controller.signal,
+    );
+
+    fake!.emit({type: 'loaded'});
+    controller.abort();
+
+    await expect(resultPromise).rejects.toMatchObject({name: 'AbortError'});
+    expect(fake!.terminated).toBe(true);
+  });
+
+  it('removes the abort listener once the run settles normally', async () => {
+    let fake: FakeWorker;
+    const controller = new AbortController();
+    const removeSpy = jest.spyOn(controller.signal, 'removeEventListener');
+
+    const resultPromise = runDemucsInWorker(
+      fakeAudioBuffer([new Float32Array(1)]),
+      undefined,
+      () => {
+        fake = new FakeWorker();
+        return fake as unknown as Worker;
+      },
+      controller.signal,
+    );
+
+    fake!.emit({type: 'result', vocals16k: new Float32Array(0)});
+    await resultPromise;
+
+    expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+
+    // Aborting after settlement must not throw or double-reject.
+    expect(() => controller.abort()).not.toThrow();
+  });
 });

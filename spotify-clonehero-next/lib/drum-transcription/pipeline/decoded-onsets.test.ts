@@ -356,7 +356,7 @@ describe('runner write sites', () => {
 
     await regenerateProject(meta.id, noProgress, fakeTranscriber());
 
-    // The stale artifact was deleted before resume...
+    // The stale artifact was deleted...
     expect(mockOpfs.deleteProjectFile.mock.calls).toContainEqual([
       meta.id,
       DECODED_ONSETS_FILE,

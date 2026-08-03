@@ -77,6 +77,8 @@ import {
   removeNote as removeSchemaNote,
   setNoteFlags,
   setNoteLength,
+  clearTrackContents,
+  emptyTrack,
   type DownbeatFlags,
 } from '@/lib/chart-edit';
 
@@ -228,24 +230,6 @@ const ENTITY_KIND_TO_COMMAND_KIND: Record<
 const TRACK_INSTRUMENT_ORDER = ['guitar', 'bass', 'drums'] as const;
 const TRACK_DIFFICULTY_ORDER = ['expert', 'hard', 'medium', 'easy'] as const;
 
-function emptyTrackData(trackKey: TrackKey): ParsedTrackData {
-  return {
-    instrument: trackKey.instrument,
-    difficulty: trackKey.difficulty,
-    starPowerSections: [],
-    rejectedStarPowerSections: [],
-    soloSections: [],
-    flexLanes: [],
-    drumFreestyleSections: [],
-    trackEvents: [],
-    textEvents: [],
-    versusPhrases: [],
-    animations: [],
-    unrecognizedMidiEvents: [],
-    noteEventGroups: [],
-  } as ParsedTrackData;
-}
-
 function trackSortRank(track: TrackKey): number {
   const instrument = TRACK_INSTRUMENT_ORDER.indexOf(
     track.instrument as (typeof TRACK_INSTRUMENT_ORDER)[number],
@@ -272,7 +256,7 @@ export class AddTrackCommand implements EditCommand {
   execute(doc: ChartDocument): ChartDocument {
     if (findTrack(doc, this.trackKey)) return doc;
 
-    const newTrack = emptyTrackData(this.trackKey);
+    const newTrack = emptyTrack(this.trackKey);
     const trackData = [...doc.parsedChart.trackData];
     const insertionIndex = trackData.findIndex(
       track =>
@@ -1362,6 +1346,118 @@ export class RenameSectionCommand implements EditCommand {
     const section = newDoc.parsedChart.sections.find(s => s.tick === this.tick);
     if (section) section.name = this.newName;
     return newDoc;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ReplaceDrumTrackCommand — Chart Assist drum transcription (plan 0074
+// Design A)
+// ---------------------------------------------------------------------------
+
+/**
+ * The SyncTrack a replacement note set's ticks are authored against. A
+ * transcription run that also (re)predicts the tempo map must hand it over
+ * with the notes: applying the notes under the editor's previous grid would
+ * place every one of them at the wrong time.
+ */
+export interface ReplaceDrumTrackSync {
+  resolution: number;
+  tempos: ParsedChart['tempos'];
+  timeSignatures: ParsedChart['timeSignatures'];
+}
+
+export interface ReplaceDrumTrackOptions {
+  /** Target track. Defaults to Drums Expert. */
+  trackKey?: TrackKey | undefined;
+  /** Adopt this SyncTrack (resolution + tempos + time signatures) along
+   *  with the notes, retiming the whole doc under it. Omit when the notes
+   *  were transcribed against the doc's current grid. */
+  sync?: ReplaceDrumTrackSync | undefined;
+  /** Drop any leading-silence anchor. Regeneration rebuilds the chart
+   *  audio-relative from scratch, so the old anchor no longer applies
+   *  (0064 addendum §1). */
+  clearAudioAnchor?: boolean | undefined;
+}
+
+/**
+ * Replace the chart's Drums Expert track with a freshly transcribed note
+ * set, applied as an in-editor command instead of remounting `EditorApp`
+ * (plan 0074 Design A's `transcribe-drums` task composition). `notes` is the
+ * exact payload `buildDrumsTrackFromOnsets`/`runner.ts` assemble a drums
+ * track from: tick, type, length, and per-note flags (cymbal/accent/ghost),
+ * i.e. `DrumNote[]` — the same shape `addDrumNote` already accepts.
+ *
+ * The whole target track is replaced, not just its notes: star power,
+ * rejected star power, solo sections, flex lanes, freestyle sections, text
+ * events, versus phrases, animations, and unrecognized MIDI events are all
+ * cleared, because the chart the run persisted has none of them. Leaving them would strand phrases and lanes over unrelated new notes
+ * and leave the in-editor doc disagreeing with the persisted chart. Every
+ * other track, and (without `options.sync`) the tempo map, sections, and
+ * lyrics, are untouched — `cloneDocWithTracks` shares them by reference.
+ * With `options.sync` the doc also adopts that grid and is fully retimed
+ * under it, so the applied notes land where the run put them. No-op (returns
+ * `doc` unchanged) if the chart has no target track — mirrors
+ * `AddNoteCommand`'s missing-track handling; every chart this task runs
+ * against already has one (transcription always builds/loads onto an
+ * existing Drums Expert track).
+ *
+ * Undo restores the pre-edit snapshot (`undoDocStack`) — transcription
+ * output doesn't invert in closed form, so whole-doc restore is the safe
+ * inverse, matching `ReplaceLyricsCommand`/the tempo commands.
+ */
+export class ReplaceDrumTrackCommand implements EditCommand {
+  readonly description = 'Replace drum track (transcription)';
+  readonly entityKinds: ReadonlySet<CommandEntityKind>;
+  readonly operations = OP.update;
+
+  private readonly trackKey: TrackKey;
+
+  constructor(
+    private notes: DrumNote[],
+    private readonly options: ReplaceDrumTrackOptions = {},
+  ) {
+    this.trackKey = options.trackKey ?? {
+      instrument: 'drums',
+      difficulty: 'expert',
+    };
+    // Adopting a fresh SyncTrack is a tempo/time-signature edit as well as
+    // a note edit, so the capability gate sees every intent.
+    this.entityKinds = options.sync
+      ? new Set<CommandEntityKind>([
+          ...KIND.note,
+          ...KIND.tempo,
+          ...KIND.timesig,
+        ])
+      : KIND.note;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    const idx = findTargetIndex(doc, this.trackKey);
+    if (idx === -1) return doc;
+
+    const sync = this.options.sync;
+    const newDoc = sync
+      ? cloneDocForRetime(doc)
+      : cloneDocWithTracks(doc, this.trackKey);
+    const chart = newDoc.parsedChart;
+    if (sync) {
+      chart.resolution = sync.resolution;
+      chart.tempos = sync.tempos.map(t => ({...t}));
+      chart.timeSignatures = sync.timeSignatures.map(ts => ({...ts}));
+    }
+
+    const track = clearTrackContents(chart.trackData[idx]);
+    chart.trackData[idx] = track;
+    const timing = makeChartTiming(chart);
+    for (const note of this.notes) {
+      addDrumNote(track, note, timing);
+    }
+
+    // Every other event in the doc keeps its tick but now sits under a
+    // different map: recompute msTime/msLength chart-wide.
+    if (sync) retimeChart(chart);
+    if (this.options.clearAudioAnchor) return setAudioAnchor(newDoc, null);
+    return sync ? refreshAnchorKeepMs(newDoc) : newDoc;
   }
 }
 

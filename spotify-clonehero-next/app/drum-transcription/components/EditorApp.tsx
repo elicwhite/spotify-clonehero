@@ -54,6 +54,7 @@ import {
 } from '@/lib/chart-edit';
 import {useHotkey} from '@tanstack/react-hotkeys';
 import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
+import {useExecuteCommand} from '@/components/chart-editor/hooks/useEditCommands';
 import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboard';
 import {useAutoSave} from '@/components/chart-editor/hooks/useAutoSave';
 import {
@@ -66,6 +67,11 @@ import type {
   ChartFileFormat,
 } from '@/components/chart-editor/ExportDialog';
 import AddLyricsDialog from '@/components/chart-editor/AddLyricsDialog';
+import {ReplaceDrumTrackCommand} from '@/components/chart-editor/commands';
+import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
+import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
+import {transcribeDrumsTask} from '@/lib/assist/tasks';
+import {isAbortError} from '@/lib/workers/abortable-worker';
 import StemVolumeControls from './StemVolumeControls';
 import LeadingSilenceButton from './LeadingSilenceButton';
 import {cn} from '@/lib/utils';
@@ -75,12 +81,13 @@ type LoadingState = 'loading' | 'ready' | 'error';
 interface EditorAppProps {
   projectId: string;
   /**
-   * Re-run the beat grid + predicted notes for this project (using the
-   * cached separated stem). Invoked after the user confirms the destructive
-   * warning; the parent owns the pipeline run and remounts the editor.
-   * Omit to hide the Regenerate button.
+   * Whether to offer the Regenerate control (chart-flow grid-provided
+   * projects hide it via `gridIsProvided` regardless). The regenerate run
+   * itself is owned entirely by this component: on confirm it drives the
+   * `transcribe-drums` assist task in place and applies the result via
+   * `ReplaceDrumTrackCommand` — the editor never unmounts.
    */
-  onRegenerate?: (() => void) | undefined;
+  showRegenerate?: boolean | undefined;
 }
 
 /**
@@ -89,8 +96,22 @@ interface EditorAppProps {
  * Loads chart + audio from OPFS, creates AudioManager, and renders the
  * shared ChartEditor shell. Passes StemVolumeControls as leftPanelChildren.
  */
-export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
+export default function EditorApp({
+  projectId,
+  showRegenerate = false,
+}: EditorAppProps) {
   const {state, dispatch} = useChartEditorContext();
+  const {executeCommand} = useExecuteCommand();
+  // The editor's single runner (shared with AddLyricsDialog), controls only:
+  // subscribing to its state here would re-render the whole editor on every
+  // progress tick. `ConnectedAssistRunCard` (below) is the only subscriber
+  // (plan 0074 Design B).
+  const {
+    store: assistStore,
+    start: startAssistTask,
+    cancel: cancelAssistTask,
+    dismiss: dismissAssistRun,
+  } = useAssistRunnerContext();
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
   const [, setLoadingStep] = useState<string>('Loading project metadata...');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -115,8 +136,50 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
   // Regenerate confirmation dialog + in-flight flag. While regenerating,
   // autosave is disabled so a stale save can't rewrite the edited chart /
   // review progress after the pipeline has deleted them.
+  //
+  // `regenerating` deliberately spans more than the assist run itself (it
+  // also covers applying the resulting command), and reading the run store
+  // here instead would re-render the whole editor on every progress tick.
+  // It is this component's own "my regenerate is in flight", not a mirror of
+  // the shared runner's status — a run started by another surface must not
+  // disable autosave here.
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+
+  // Runs the `transcribe-drums` assist task in place (plan 0074 Design A/E).
+  // The task reads its audio from the project itself (the pipeline's own
+  // cache carries the separated stem forward), so the context is just the
+  // project id. On success the fresh notes apply
+  // via `ReplaceDrumTrackCommand` together with the
+  // re-predicted tempo map the run authored them against, and the leading-
+  // silence anchor clears (the regenerated chart is audio-relative from
+  // scratch) — so the in-editor doc matches the chart the run persisted. The
+  // editor never unmounts, so undo/redo history and every other panel stay
+  // intact.
+  const handleConfirmRegenerate = useCallback(async () => {
+    setRegenerating(true);
+    try {
+      const result = await startAssistTask(transcribeDrumsTask, {
+        project: {id: projectId},
+      });
+      executeCommand(
+        new ReplaceDrumTrackCommand(result.notes, {
+          sync: result.sync,
+          clearAudioAnchor: true,
+        }),
+      );
+      toast.success('Regenerated beat grid and notes.');
+    } catch (err) {
+      if (!isAbortError(err)) {
+        const message =
+          err instanceof Error ? err.message : 'Regenerate failed';
+        console.error('Regenerate pipeline error:', err);
+        toast.error(message);
+      }
+    } finally {
+      setRegenerating(false);
+    }
+  }, [startAssistTask, executeCommand, projectId]);
 
   // ORIGINAL (unpadded) full-mix + drum-stem PCM, retained across the
   // session — passed to `usePaddedAudio`, which re-pads from source on
@@ -195,12 +258,13 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
 
   // Decode the cached vocals stem (Round 2 §5) into PCM for the piano-roll
   // lyrics row's background waveform, padded to match the current audio
-  // anchor. Called at project load AND again after the Add Lyrics dialog
-  // runs separation, so a stem produced mid-session shows up without a
-  // reload. No-op when no vocals stem is cached (legacy projects that
-  // haven't separated yet). `padSamples` defaults to the chart's current
-  // `audioAnchor` pad amount so a mid-session refresh (post Add-Lyrics)
-  // stays consistent with the live AudioManager.
+  // anchor. Called at project load, and again after an Add Lyrics run that
+  // aligned against the cached roformer vocals, so the waveform appears for
+  // a stem this session hasn't picked up yet. No-op when no vocals stem is
+  // cached (legacy projects, or ones whose lyrics came from the Demucs
+  // fallback, which caches nothing). `padSamples` defaults to the chart's
+  // current `audioAnchor` pad amount so a mid-session refresh stays
+  // consistent with the live AudioManager.
   const refreshVocalsStem = useCallback(
     async (padSamples?: number) => {
       try {
@@ -711,7 +775,7 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
       }
       leftPanelChildren={
         <>
-          {onRegenerate && !gridIsProvided && (
+          {showRegenerate && !gridIsProvided && (
             <>
               <Button
                 variant="outline"
@@ -741,8 +805,7 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
                     <AlertDialogAction
                       onClick={() => {
                         setConfirmRegenerate(false);
-                        setRegenerating(true);
-                        onRegenerate();
+                        handleConfirmRegenerate();
                       }}
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                       Regenerate
@@ -750,6 +813,13 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+              <ConnectedAssistRunCard
+                store={assistStore}
+                task="transcribe-drums"
+                onCancel={cancelAssistTask}
+                onDismiss={dismissAssistRun}
+                className="mt-2"
+              />
             </>
           )}
           <StemVolumeControls audioManager={audioManager} />
@@ -762,7 +832,7 @@ export default function EditorApp({projectId, onRegenerate}: EditorAppProps) {
           <div className="pt-4 border-t">
             <AddLyricsDialog
               projectId={projectId}
-              onVocalsStemChanged={refreshVocalsStem}
+              onAlignedFromCachedVocals={refreshVocalsStem}
             />
           </div>
         </>

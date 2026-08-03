@@ -23,6 +23,10 @@ import {
   loadStemOpus,
   type StereoStem,
 } from '@/lib/audio-pipeline/stem-cache';
+import {
+  makeAbortError,
+  runAbortableWorker,
+} from '@/lib/workers/abortable-worker';
 
 const NUM_CHANNELS = 2;
 const DRUMS_STEM = 'drums';
@@ -65,40 +69,46 @@ export function defaultCreateSeparationWorker(): Worker {
  * separation-worker.ts) so tests can substitute a fake Worker without a real
  * Worker/module-URL environment — exported for that reason; not part of the
  * public API surface used outside this module and its tests.
+ *
+ * `signal` follows the shared worker-cancellation contract
+ * (`lib/workers/abortable-worker.ts`).
  */
 export function runSeparationInWorker(
   left: Float32Array,
   right: Float32Array,
   onProgress?: DrumSeparationProgressCallback,
   createWorker: () => Worker = defaultCreateSeparationWorker,
+  signal?: AbortSignal,
 ): Promise<SeparationWorkerResult> {
-  return new Promise((resolve, reject) => {
-    const worker = createWorker();
+  return runAbortableWorker<SeparationWorkerResult>(
+    createWorker,
+    signal,
+    (worker, settle) => {
+      worker.onmessage = (e: MessageEvent) => {
+        const msg = e.data as SeparationWorkerMessage;
+        if (msg.type === 'progress') {
+          onProgress?.({
+            step: msg.step,
+            percent: msg.percent,
+            etaSeconds: msg.etaSeconds,
+          });
+        } else if (msg.type === 'result') {
+          const {drumsLeft, drumsRight, vocalsLeft, vocalsRight} = msg;
+          settle.resolve({drumsLeft, drumsRight, vocalsLeft, vocalsRight});
+        } else if (msg.type === 'error') {
+          settle.reject(new Error(msg.message));
+        }
+      };
+      worker.onerror = e => {
+        settle.reject(new Error(e.message || 'Separation worker error'));
+      };
 
-    worker.onmessage = (e: MessageEvent) => {
-      const msg = e.data as SeparationWorkerMessage;
-      if (msg.type === 'progress') {
-        onProgress?.({
-          step: msg.step,
-          percent: msg.percent,
-          etaSeconds: msg.etaSeconds,
-        });
-      } else if (msg.type === 'result') {
-        worker.terminate();
-        const {drumsLeft, drumsRight, vocalsLeft, vocalsRight} = msg;
-        resolve({drumsLeft, drumsRight, vocalsLeft, vocalsRight});
-      } else if (msg.type === 'error') {
-        worker.terminate();
-        reject(new Error(msg.message));
-      }
-    };
-    worker.onerror = e => {
-      worker.terminate();
-      reject(new Error(e.message || 'Separation worker error'));
-    };
-
-    worker.postMessage({type: 'run', left, right}, [left.buffer, right.buffer]);
-  });
+      worker.postMessage({type: 'run', left, right}, [
+        left.buffer,
+        right.buffer,
+      ]);
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -110,12 +120,27 @@ export function runSeparationInWorker(
  * fingerprint-keyed cache. Cache-hit stems are returned without spawning a
  * worker; any miss triggers one separation pass that produces (and caches)
  * BOTH drums and vocals, since the worker always computes both.
+ *
+ * `opts.signal`, when provided, aborts the run: an already-aborted signal
+ * rejects immediately (before any cache probe or worker spawn); aborting
+ * mid-separation terminates the worker and rejects with an `AbortError`
+ * DOMException; aborting after separation completes but before the result
+ * is cached also rejects with `AbortError` and skips the store step
+ * entirely (no partial cache write).
  */
 export async function separateStems(
   audioBytes: Uint8Array,
-  opts: {drums?: boolean; vocals?: boolean},
+  opts: {
+    drums?: boolean;
+    vocals?: boolean;
+    signal?: AbortSignal | undefined;
+  },
   onProgress?: DrumSeparationProgressCallback,
 ): Promise<{drums?: StereoStem; vocals?: StereoStem}> {
+  if (opts.signal?.aborted) {
+    throw makeAbortError();
+  }
+
   const fingerprint = await computeStemFingerprint(
     audioBytes,
     ROFORMER_SEPARATOR_ID,
@@ -154,7 +179,17 @@ export async function separateStems(
   const right = decoded.numberOfChannels > 1 ? decoded.getChannelData(1) : left;
 
   const {drumsLeft, drumsRight, vocalsLeft, vocalsRight} =
-    await runSeparationInWorker(left.slice(), right.slice(), onProgress);
+    await runSeparationInWorker(
+      left.slice(),
+      right.slice(),
+      onProgress,
+      undefined,
+      opts.signal,
+    );
+
+  if (opts.signal?.aborted) {
+    throw makeAbortError();
+  }
 
   // Store BOTH freshly-separated stems — the worker always produces both,
   // so seed the whole cache rather than only what was requested.

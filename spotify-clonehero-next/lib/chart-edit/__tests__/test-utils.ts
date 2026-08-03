@@ -1,9 +1,9 @@
 /**
  * Shared test helpers for chart-edit unit tests.
  *
- * Constructs ParsedTrackData entries with all fields the new ParsedChart shape
- * requires (noteEventGroups, animations, textEvents, versusPhrases,
- * unrecognizedMidiEvents, etc.) so tests can build documents synthetically.
+ * Track construction goes through `emptyTrack`, the same canonical empty
+ * shape production code builds from, so a scan-chart schema change can never
+ * leave the fixtures describing a track shape nothing else produces.
  */
 
 import type {
@@ -13,6 +13,7 @@ import type {
   NoteEvent,
   NoteType,
 } from '../types';
+import {emptyTrack} from '../empty-track';
 
 /** Build a ParsedTrackData with all required fields zero-initialized. */
 export function emptyTrackData(
@@ -20,22 +21,7 @@ export function emptyTrackData(
   difficulty: Difficulty,
   overrides: Partial<ParsedTrackData> = {},
 ): ParsedTrackData {
-  return {
-    instrument,
-    difficulty,
-    starPowerSections: [],
-    rejectedStarPowerSections: [],
-    soloSections: [],
-    flexLanes: [],
-    drumFreestyleSections: [],
-    trackEvents: [],
-    textEvents: [],
-    versusPhrases: [],
-    animations: [],
-    unrecognizedMidiEvents: [],
-    noteEventGroups: [],
-    ...overrides,
-  } as ParsedTrackData;
+  return {...emptyTrack({instrument, difficulty}), ...overrides};
 }
 
 /** Fill in msTime/msLength=0 on any section-shaped object. */
