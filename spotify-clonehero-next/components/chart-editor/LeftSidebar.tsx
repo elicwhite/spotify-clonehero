@@ -36,6 +36,7 @@ import NoteInspector from './NoteInspector';
 import LoopControls from './LoopControls';
 import ChartMatrix from './sidebar/ChartMatrix';
 import ChartAssist, {type ChartAssistProps} from './sidebar/ChartAssist';
+import StemsMixer, {type StemsMixerHostProps} from './sidebar/StemsMixer';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import {cn} from '@/lib/utils';
 
@@ -80,6 +81,9 @@ interface LeftSidebarProps {
   /** Host wiring for the Chart Assist section, passed through untouched.
    *  Each field is documented on `ChartAssistProps`. */
   chartAssist?: ChartAssistProps | undefined;
+  /** Host wiring for the Stems mixer section, passed through untouched.
+   *  Each field is documented on `StemsMixerHostProps`. */
+  stemsMixer?: StemsMixerHostProps | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +94,7 @@ export default function LeftSidebar({
   audioManager,
   leftPanelChildren,
   chartAssist,
+  stemsMixer,
 }: LeftSidebarProps) {
   const {state, dispatch, capabilities} = useChartEditorContext();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
@@ -443,6 +448,16 @@ export default function LeftSidebar({
            *  decides for itself whether it has anything to show, from
            *  `capabilities.chartAssist` and the wiring below. */}
           <ChartAssist {...chartAssist} />
+
+          {/* Stems mixer (plan 0074 Phase 5) — one row per audio track the
+           *  live AudioManager carries, plus the metronome click as the last
+           *  (solo-exempt) row, and every click/stem volume control these
+           *  pages offer. The section decides for itself whether it has
+           *  anything to show, from `capabilities.showStemsMixer` and the
+           *  loaded AudioManager. */}
+          {capabilities.showStemsMixer && (
+            <StemsMixer audioManager={audioManager} {...stemsMixer} />
+          )}
 
           {/* Note inspector — only useful when notes are selectable. */}
           {capabilities.selectable.has('note') && <NoteInspector />}

@@ -19,8 +19,8 @@
 import '@testing-library/jest-dom';
 import {act} from 'react';
 
-// jsdom has no ResizeObserver; Radix's Slider (rendered by
-// StemVolumeControls) needs one.
+// jsdom has no ResizeObserver; Radix's Slider (rendered by the Stems
+// mixer) needs one.
 class FakeResizeObserver {
   observe() {}
   unobserve() {}
@@ -80,31 +80,52 @@ jest.mock('../ChartEditor', () => {
   const React = jest.requireActual('react');
   const ChartAssist = jest.requireActual('../sidebar/ChartAssist').default;
   const {TooltipProvider} = jest.requireActual('../../ui/tooltip');
-  return {
-    __esModule: true,
-    default: (props: any) => {
-      const drumsTrack = props.chart.trackData.find(
-        (t: any) => t.instrument === 'drums' && t.difficulty === 'expert',
-      );
-      const noteCount = drumsTrack
-        ? drumsTrack.noteEventGroups.flat().length
-        : 0;
-      return React.createElement(
-        TooltipProvider,
+  function MockChartEditor(props: any) {
+    const drumsTrack = props.chart.trackData.find(
+      (t: any) => t.instrument === 'drums' && t.difficulty === 'expert',
+    );
+    const noteCount = drumsTrack ? drumsTrack.noteEventGroups.flat().length : 0;
+    // A local-state "remount witness", standing in for the real
+    // StemsMixer's own local mixer state: if `EditorApp` (this mock's
+    // parent) were to unmount/remount during a regenerate run, React would
+    // create a fresh instance of this whole mocked component, resetting
+    // this `useState` back to its initial value. Collapsing it before the
+    // run and asserting it's still collapsed after is what proves the run
+    // applied its result via `ReplaceDrumTrackCommand` rather than a
+    // remount.
+    const [expanded, setExpanded] = React.useState(true);
+    return React.createElement(
+      TooltipProvider,
+      null,
+      React.createElement(
+        'div',
         null,
         React.createElement(
           'div',
-          null,
-          React.createElement(
-            'div',
-            {'data-testid': 'note-count'},
-            String(noteCount),
-          ),
-          React.createElement(ChartAssist, props.chartAssist ?? {}),
-          props.leftPanelChildren,
+          {'data-testid': 'note-count'},
+          String(noteCount),
         ),
-      );
-    },
+        React.createElement(
+          'button',
+          {
+            type: 'button',
+            onClick: () => setExpanded((prev: boolean) => !prev),
+          },
+          'Remount witness',
+        ),
+        expanded &&
+          React.createElement('div', {
+            role: 'slider',
+            'aria-label': 'Remount witness marker',
+          }),
+        React.createElement(ChartAssist, props.chartAssist ?? {}),
+        props.leftPanelChildren,
+      ),
+    );
+  }
+  return {
+    __esModule: true,
+    default: MockChartEditor,
   };
 });
 
@@ -115,7 +136,7 @@ jest.mock('../hooks/usePaddedAudio', () => {
     usePaddedAudio: () => ({
       audioManager: {trackNames: ['drums'], setVolume: jest.fn()},
       fullMixPcm: null,
-      secondaryPcm: null,
+      stems: [],
       durationSeconds: 100,
       rebuilding: false,
     }),
@@ -303,10 +324,10 @@ describe('EditorApp inline regenerate (plan 0074 suite 2)', () => {
       expect(screen.getByTestId('note-count')).toHaveTextContent('3'),
     );
 
-    // Collapse the Stem Volumes panel (a stateful sibling) before running
-    // regenerate — if EditorApp were to unmount/remount during the run this
-    // local state would reset back to expanded.
-    fireEvent.click(screen.getByRole('button', {name: /stem volumes/i}));
+    // Collapse the remount-witness marker (a stateful sibling) before
+    // running regenerate — if EditorApp were to unmount/remount during the
+    // run this local state would reset back to expanded.
+    fireEvent.click(screen.getByRole('button', {name: /remount witness/i}));
     expect(screen.queryByRole('slider')).not.toBeInTheDocument();
 
     confirmRegenerate();
@@ -332,8 +353,8 @@ describe('EditorApp inline regenerate (plan 0074 suite 2)', () => {
       expect(screen.getByTestId('note-count')).toHaveTextContent('5'),
     );
 
-    // The editor never unmounted: the collapsed Stem Volumes state (local
-    // component state, reset on remount) is still collapsed.
+    // The editor never unmounted: the collapsed remount-witness state
+    // (local component state, reset on remount) is still collapsed.
     expect(screen.queryByRole('slider')).not.toBeInTheDocument();
 
     // Re-run is available again (idle button restored).

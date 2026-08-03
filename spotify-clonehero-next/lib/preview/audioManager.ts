@@ -91,19 +91,24 @@ export class AudioManager {
     // would connect nodes on a closed context.
     if (this.#destroyed) return;
 
-    const groupedFiles: GroupedFile = audioFiles.reduce(
-      (acc, file) => {
-        const isDrums = file.fileName.includes('drums');
-        if (isDrums) {
-          const drumGroup = acc.find(group => group.fileName === 'drums');
-          drumGroup!.datas.push(file.data);
+    // Every file whose name contains `drums` (drums_1.ogg, drums_2.ogg, ...)
+    // plays as one `drums` track. The group is created only when such a file
+    // exists, so a package without drums audio has no empty `drums` track
+    // that UI built from `trackNames` would offer as a phantom control.
+    const groupedFiles: GroupedFile = audioFiles.reduce((acc, file) => {
+      const isDrums = file.fileName.includes('drums');
+      if (isDrums) {
+        const drumGroup = acc.find(group => group.fileName === 'drums');
+        if (drumGroup) {
+          drumGroup.datas.push(file.data);
         } else {
-          acc.push({fileName: file.fileName, datas: [file.data]});
+          acc.push({fileName: 'drums', datas: [file.data]});
         }
-        return acc;
-      },
-      [{fileName: 'drums', datas: []} as GroupedFile[0]],
-    );
+      } else {
+        acc.push({fileName: file.fileName, datas: [file.data]});
+      }
+      return acc;
+    }, [] as GroupedFile);
 
     await Promise.all(
       groupedFiles.map(async group => {
@@ -336,6 +341,12 @@ export class AudioManager {
     }
 
     this.#tracks[trackName].volume = volume > 1 ? 1 : volume < 0 ? 0 : volume;
+  }
+
+  /** Current volume (0-1) for a track, or null for an unknown track. */
+  getVolume(trackName: string): number | null {
+    const track = this.#tracks[trackName];
+    return track ? track.volume : null;
   }
 
   get trackNames(): readonly string[] {

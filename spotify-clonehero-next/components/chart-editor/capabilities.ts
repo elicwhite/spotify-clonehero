@@ -131,6 +131,22 @@ export interface EditorCapabilities {
    *    add on that surface.
    */
   showChartMatrix: false | 'all' | SupportedTrackInstrument;
+  /**
+   * Show the sidebar's Stems mixer (plan 0074 Phase 5): one row per track
+   * the live `AudioManager` carries, plus the metronome click. It is the
+   * one place any of these pages offers a click-volume control, so it stays
+   * on for any surface that plays a synthesized click
+   * track at all — including `TEMPO_CAPABILITIES`: `/tempo` builds its
+   * AudioManager through the same `usePaddedAudio` click-track machinery as
+   * DRUM_EDIT, and today has NO UI for that click stem or for its
+   * highway-waveform drum stem, so the mixer is a net-new control there,
+   * not a redundant one.
+   *  - `false` — no section (`PREVIEW`: pure playback, no chart-editing
+   *    context to mix for; `ADD_LYRICS`: pins the highway to Waveform mode
+   *    around lyric alignment and has no stem story of its own to expose).
+   *  - `true` — full editor/tempo pages.
+   */
+  showStemsMixer: boolean;
 }
 
 /** Every operation class — the common case for presets with no dispatch
@@ -194,6 +210,7 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
   showPianoRollNotes: true,
   chartAssist: 'all',
   showChartMatrix: 'all',
+  showStemsMixer: true,
 };
 
 export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
@@ -216,6 +233,7 @@ export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
   showPianoRollNotes: true,
   chartAssist: 'lyrics-only',
   showChartMatrix: false,
+  showStemsMixer: false,
 };
 
 export const PREVIEW_CAPABILITIES: EditorCapabilities = {
@@ -234,6 +252,7 @@ export const PREVIEW_CAPABILITIES: EditorCapabilities = {
   showPianoRollNotes: true,
   chartAssist: false,
   showChartMatrix: false,
+  showStemsMixer: false,
 };
 
 /**
@@ -266,4 +285,5 @@ export const TEMPO_CAPABILITIES: EditorCapabilities = {
   showPianoRollNotes: false,
   chartAssist: 'tempo-and-silence',
   showChartMatrix: false,
+  showStemsMixer: true,
 };

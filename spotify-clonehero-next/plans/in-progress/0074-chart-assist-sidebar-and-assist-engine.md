@@ -280,9 +280,16 @@ interface AssistRunState {
   copy). Cards mount `AssistRunCard` inline when their task runs.
 - `StemsMixer.tsx` — rows from `AudioManager.trackNames` + session stem
   metadata; volume via `setVolume`; mute/solo as a mixer-state solo bus
-  resolving to effective volumes; AI-separated stems (session-added from
-  cache/separation) badged; drag-drop add triggers the padded-audio
-  rebuild.
+  resolving to effective volumes (`mixerBus.ts`, the single implementation
+  of that policy, read by both the volume push and the row rendering);
+  AI-separated stems (session-added from cache/separation) badged;
+  drag-drop add triggers the padded-audio rebuild.
+  - **Decided:** `/drum-transcription`'s `D` (solo drums) / `M` (mute
+    drums) hotkeys are dropped rather than rebound. They addressed one
+    hard-coded track from a page-specific panel; the mixer's per-row M/S
+    buttons cover every track on every host, and a global hotkey that
+    silently picks one row out of N is worse than no hotkey. Revisit only
+    with a design for which row a bare keypress targets.
 - `UtilityCluster.tsx` — Snap dropdown (1/4..1/32 wired to
   `SET_GRID_DIVISION`), speed, A/B loop, cursor+add tools, undo/redo.
   Zoom/highway-style/sheet-music leave the default surface (state remains
@@ -427,6 +434,25 @@ Behavior suites:
    regenerate still work post-migration.
 8. **Capability regression (RTL)**: per-surface section snapshots
    extending `capability-gates.test.tsx`.
+
+## Route model (owner decision, 2026-08-03)
+
+The app's editor-adjacent routes are exactly these; `/guitar-edit`,
+`/bass-edit`, and `/drum-edit` are deleted (their pinned-instrument
+matrix variant and the Phase-3 multi-difficulty-pane amendment retire
+with them):
+
+- `/chart-editor`: select a folder/chart, open the editor with every
+  instrument's highest difficulty visible (all Experts).
+- `/drum-difficulties` (renamed from `/difficulties`): select a chart;
+  error if it has no Expert drums; run lower-difficulty generation;
+  open the editor with drums X/H/M/E visible. Supersedes the standalone
+  comparison-grid UI on that route (see plan 0071, amended).
+- `/guitar-difficulties`: same flow for guitar.
+- `/drum-transcription`: separation + transcription pipeline, then the
+  editor with only Expert drums visible.
+
+Implemented as a route-consolidation pass between Phases 5 and 6.
 
 ## Phasing
 

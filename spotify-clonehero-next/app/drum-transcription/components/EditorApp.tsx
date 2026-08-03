@@ -48,13 +48,14 @@ import {
   getAssistProvenance,
   withAssistProvenance,
 } from '@/lib/chart-editor-core';
-import {useHotkey} from '@tanstack/react-hotkeys';
 import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
 import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboard';
 import {useAutoSave} from '@/components/chart-editor/hooks/useAutoSave';
 import {
   usePaddedAudio,
   anchorPadSamples,
+  stemPcm,
+  type AudioStemInput,
 } from '@/components/chart-editor/hooks/usePaddedAudio';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
 import type {
@@ -63,7 +64,6 @@ import type {
 } from '@/components/chart-editor/ExportDialog';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {useAssistRunActivity} from '@/components/assist/useAssistRunner';
-import StemVolumeControls from './StemVolumeControls';
 
 type LoadingState = 'loading' | 'ready' | 'error';
 
@@ -83,7 +83,9 @@ interface EditorAppProps {
  * Top-level editor layout for drum-transcription.
  *
  * Loads chart + audio from OPFS, creates AudioManager, and renders the
- * shared ChartEditor shell. Passes StemVolumeControls as leftPanelChildren.
+ * shared ChartEditor shell, including the sidebar's Stems mixer wiring
+ * (`stemsMixer`: stem origins, drop-to-add, and the
+ * drums-locked-during-regenerate treatment).
  */
 export default function EditorApp({
   projectId,
@@ -158,6 +160,11 @@ export default function EditorApp({
   // callbacks (never during render), so a ref is fine.
   const originalVocalsStemPcmRef = useRef<Float32Array | null>(null);
 
+  // Stems dropped onto the Stems mixer's drop-zone row at runtime (plan 0074
+  // Phase 5). Merged into `paddedAudioStems` below, so adding one triggers
+  // `usePaddedAudio`'s stem-list rebuild the same way an anchor change does.
+  const [userAddedStems, setUserAddedStems] = useState<AudioStemInput[]>([]);
+
   // Build the save function for auto-save
   const saveFn = useCallback(async () => {
     if (!state.chartDoc) return;
@@ -207,23 +214,6 @@ export default function EditorApp({
 
   // Register shared editor keyboard shortcuts
   useEditorKeyboard(save);
-
-  // -----------------------------------------------------------------------
-  // Drum-transcription-specific keyboard shortcuts via useHotkey
-  // -----------------------------------------------------------------------
-
-  // D - toggle drums solo
-  useHotkey('D', () => {
-    dispatch({
-      type: 'SET_SOLO_TRACK',
-      track: state.soloTrack === 'drums' ? null : 'drums',
-    });
-  });
-
-  // M - toggle mute drums
-  useHotkey('M', () => {
-    dispatch({type: 'TOGGLE_MUTE_TRACK', track: 'drums'});
-  });
 
   // Decode the cached vocals stem (Round 2 §5) into PCM for the piano-roll
   // lyrics row's background waveform, padded to match the current audio
@@ -445,20 +435,56 @@ export default function EditorApp({
   // Padded-AudioManager lifecycle (initial build + rebuild on `audioAnchor`
   // changes) — 0064 addendum §5/§3, extracted into a shared hook so every
   // chart-editor host page gets the same leading-silence-aware audio.
+  const paddedAudioStems = useMemo(
+    () => [
+      ...(originalDrumStemPcm
+        ? [
+            {
+              name: 'drums',
+              pcm: originalDrumStemPcm,
+              origin: 'ai-separated' as const,
+            },
+          ]
+        : []),
+      ...userAddedStems,
+    ],
+    [originalDrumStemPcm, userAddedStems],
+  );
+
+  // Adds a dropped stem (StemsMixer's drop-zone row) to the padded-audio
+  // stem list, which rebuilds the AudioManager to include it. The mixer
+  // always hands over 44.1 kHz stereo PCM, while `buildPaddedAudioManager`
+  // WAV-encodes it with this project's `audioMeta` — a mismatch would write
+  // a header that misdescribes the samples and play the stem at the wrong
+  // speed, so reject it instead.
+  const handleAddStem = useCallback(
+    (input: {name: string; pcm: Float32Array; origin: 'user-added'}) => {
+      if (
+        audioMeta &&
+        (audioMeta.sampleRate !== 44100 || audioMeta.channels !== 2)
+      ) {
+        toast.error('This project’s audio format cannot take added stems');
+        return;
+      }
+      setUserAddedStems(prev => [...prev, input]);
+    },
+    [audioMeta],
+  );
+
   const {
     audioManager,
     fullMixPcm: audioPcm,
-    secondaryPcm: drumStemPcm,
+    stems: audioStems,
     durationSeconds,
     rebuilding: audioRebuilding,
   } = usePaddedAudio({
     chartDoc: state.chartDoc,
     audioMeta,
     fullMixPcm: originalFullMixPcm,
-    secondaryPcm: originalDrumStemPcm,
-    secondaryFileName: 'drums.wav',
+    stems: paddedAudioStems,
     onSongEnded: () => dispatch({type: 'SET_PLAYING', isPlaying: false}),
   });
+  const drumStemPcm = stemPcm(audioStems, 'drums');
 
   // Build a minimal metadata object for CloneHeroRenderer.
   const cloneHeroMetadata = useMemo(
@@ -759,7 +785,6 @@ export default function EditorApp({
             ? 'zip'
             : undefined
       }
-      leftPanelChildren={<StemVolumeControls audioManager={audioManager} />}
       chartAssist={{
         projectId,
         allowDrumRerun: showRegenerate && !gridIsProvided,
@@ -767,6 +792,15 @@ export default function EditorApp({
         audioSampleRate: audioMeta?.sampleRate,
         audioBusyReason: audioRebuilding ? 'Rebuilding audio' : undefined,
         onLyricsAlignedFromCachedVocals: refreshVocalsStem,
+      }}
+      stemsMixer={{
+        stemOrigins: audioStems,
+        onAddStem: handleAddStem,
+        // The drums track is locked while a transcribe-drums run is
+        // rewriting it — mirrors the Chart Matrix's own busy treatment for
+        // the same run, so the mixer row and the matrix cells lock
+        // together; transport/A-B loop stay interactive throughout.
+        lockedTrackNames: regenerating ? new Set(['drums']) : undefined,
       }}
     />
   );

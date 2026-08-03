@@ -87,7 +87,10 @@ import {
 import {AudioServiceProvider} from '@/components/chart-editor/AudioServiceContext';
 import {TEMPO_CAPABILITIES} from '@/components/chart-editor/capabilities';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
-import {usePaddedAudio} from '@/components/chart-editor/hooks/usePaddedAudio';
+import {
+  usePaddedAudio,
+  stemPcm,
+} from '@/components/chart-editor/hooks/usePaddedAudio';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -801,19 +804,34 @@ function TempoEditor({
     };
   }, [result.drumStemStereo, audioMeta]);
 
+  const paddedAudioStems = useMemo(
+    () =>
+      drumStemInterleaved
+        ? [
+            {
+              name: 'drums',
+              pcm: drumStemInterleaved,
+              origin: 'ai-separated' as const,
+            },
+          ]
+        : [],
+    [drumStemInterleaved],
+  );
+
   const {
     audioManager,
     fullMixPcm: audioPcm,
-    secondaryPcm: drumStemPcm,
+    stems: audioStems,
     durationSeconds,
     rebuilding: audioRebuilding,
   } = usePaddedAudio({
     chartDoc: state.chartDoc,
     audioMeta,
     fullMixPcm,
-    secondaryPcm: drumStemInterleaved,
+    stems: paddedAudioStems,
     onSongEnded: () => dispatch({type: 'SET_PLAYING', isPlaying: false}),
   });
+  const drumStemPcm = stemPcm(audioStems, 'drums');
 
   const cloneHeroMetadata = useMemo(() => {
     const songLength = Math.max(
@@ -916,6 +934,10 @@ function TempoEditor({
           audioSampleRate: audioMeta?.sampleRate,
           audioBusyReason: audioRebuilding ? 'Rebuilding audio' : undefined,
         }}
+        // Origins only: this page's stem list comes from its own separation
+        // run, and it has no drop-to-add wiring, so the mixer here just
+        // badges the separated drum stem.
+        stemsMixer={{stemOrigins: audioStems}}
         getChartFile={getChartFile}
         getExtraAssets={getExtraAssets}
         defaultExportFormat={

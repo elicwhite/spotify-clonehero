@@ -1,3 +1,11 @@
+> **Amendment (2026-08-03, plan 0074 route decision):** the `/difficulties`
+> route is renamed `/drum-difficulties` and becomes a generation flow that
+> lands in the shared chart editor (select chart -> require Expert drums ->
+> generate H/M/E -> editor with drums X/H/M/E visible). The standalone
+> comparison-grid UI this plan describes no longer has a shipping route;
+> its algorithm-comparison value lives on in the reduction libs and their
+> parity fixtures. Reassess this plan's remaining scope against that.
+
 # 0071 — /difficulties: side-by-side drum difficulty-reduction comparison
 
 Product page at `/difficulties`. User uploads a chart with an Expert drum

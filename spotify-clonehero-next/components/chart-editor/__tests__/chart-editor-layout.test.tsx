@@ -42,7 +42,13 @@ jest.mock('../TransportControls', () => ({
   default: () => <div data-testid="transport-controls-stub" />,
 }));
 const metadata = {} as ChartResponseEncore;
-const audioManager = {} as AudioManager;
+// `trackNames`/`setVolume`: the sidebar's Stems mixer (plan 0074 Phase 5)
+// reads these on every mount now that DRUM_EDIT_CAPABILITIES (the default)
+// shows it.
+const audioManager = {
+  trackNames: [],
+  setVolume: () => {},
+} as unknown as AudioManager;
 
 function renderEditor() {
   const chart = createEmptyChart({bpm: 120, resolution: 480});

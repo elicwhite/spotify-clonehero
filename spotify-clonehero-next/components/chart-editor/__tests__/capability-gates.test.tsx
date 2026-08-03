@@ -16,7 +16,7 @@
 
 import '@testing-library/jest-dom';
 import {useEffect} from 'react';
-import {render, screen} from '@testing-library/react';
+import {fireEvent, render, screen, within} from '@testing-library/react';
 import {createEmptyChart} from '@eliwhite/scan-chart';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
@@ -38,12 +38,28 @@ import {
 import {DEFAULT_DRUMS_EXPERT_SCOPE, DEFAULT_VOCALS_SCOPE} from '../scope';
 import type {AudioManager} from '@/lib/preview/audioManager';
 
-/** Minimal AudioManager stub. LeftSidebar only calls `setTempo`; the rest
- *  of the surface is unreachable through the rendered controls in tests
- *  that don't simulate clicks. */
-function stubAudioManager(): AudioManager {
+// jsdom has no ResizeObserver; Radix's Slider (one per Stems mixer row)
+// needs one.
+class FakeResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+(globalThis as unknown as {ResizeObserver: unknown}).ResizeObserver =
+  FakeResizeObserver;
+
+/** Minimal AudioManager stub. LeftSidebar calls `setTempo`, the A/B loop
+ *  controls read `currentTime`/`setPracticeMode`, and the Stems mixer (plan
+ *  0074 Phase 5) reads `trackNames`/`setVolume`. The mixer renders one row
+ *  per track name, and nothing at all for an empty list, so cases about the
+ *  mixer pass track names explicitly. */
+function stubAudioManager(trackNames: string[] = []): AudioManager {
   return {
     setTempo: () => {},
+    trackNames,
+    setVolume: () => {},
+    currentTime: 12,
+    setPracticeMode: () => {},
   } as unknown as AudioManager;
 }
 
@@ -55,6 +71,25 @@ function renderWith(
     <ChartEditorProvider capabilities={capabilities} activeScope={scope}>
       <LeftSidebar audioManager={stubAudioManager()} />
     </ChartEditorProvider>,
+  );
+}
+
+/** Sidebar with real audio tracks, for the Stems mixer cases. */
+function renderWithTracks(
+  capabilities: EditorCapabilities,
+  trackNames: string[],
+  stemsMixer?: React.ComponentProps<typeof LeftSidebar>['stemsMixer'],
+  scope = DEFAULT_DRUMS_EXPERT_SCOPE,
+) {
+  return render(
+    <TooltipProvider>
+      <ChartEditorProvider capabilities={capabilities} activeScope={scope}>
+        <LeftSidebar
+          audioManager={stubAudioManager(trackNames)}
+          stemsMixer={stemsMixer}
+        />
+      </ChartEditorProvider>
+    </TooltipProvider>,
   );
 }
 
@@ -303,5 +338,59 @@ describe('EditorCapabilities preset shape', () => {
     expect(PREVIEW_CAPABILITIES.showChartMatrix).toBe(false);
     expect(TEMPO_CAPABILITIES.showChartMatrix).toBe(false);
     expect(ADD_LYRICS_CAPABILITIES.showChartMatrix).toBe(false);
+  });
+});
+
+/**
+ * Stems mixer gating + lock behavior (plan 0074 Phase 5, Suite 6/8). The
+ * mixer renders nothing for an empty track list, so every case here supplies
+ * real track names — otherwise `showStemsMixer: true` and `false` would look
+ * identical.
+ */
+describe('Stems mixer gating', () => {
+  it('shows the mixer under DRUM_EDIT_CAPABILITIES', () => {
+    renderWithTracks(DRUM_EDIT_CAPABILITIES, ['song', 'drums', 'click']);
+    expect(screen.getByText('Stems')).toBeInTheDocument();
+    expect(screen.getByTestId('stem-row-drums')).toBeInTheDocument();
+  });
+
+  it('shows the mixer under TEMPO_CAPABILITIES', () => {
+    renderWithTracks(TEMPO_CAPABILITIES, ['song', 'drums', 'click']);
+    expect(screen.getByTestId('stem-row-song')).toBeInTheDocument();
+  });
+
+  it('hides the mixer under PREVIEW_CAPABILITIES even with tracks loaded', () => {
+    renderWithTracks(PREVIEW_CAPABILITIES, ['song', 'drums', 'click']);
+    expect(screen.queryByTestId('stem-row-song')).not.toBeInTheDocument();
+  });
+
+  it('hides the mixer under ADD_LYRICS_CAPABILITIES even with tracks loaded', () => {
+    renderWithTracks(
+      ADD_LYRICS_CAPABILITIES,
+      ['song', 'vocals', 'click'],
+      undefined,
+      DEFAULT_VOCALS_SCOPE,
+    );
+    expect(screen.queryByTestId('stem-row-vocals')).not.toBeInTheDocument();
+  });
+
+  it('keeps the A/B loop usable while an assist run locks a stem row', () => {
+    renderWithTracks(DRUM_EDIT_CAPABILITIES, ['song', 'drums', 'click'], {
+      lockedTrackNames: new Set(['drums']),
+    });
+
+    // The locked row's own controls are inert...
+    expect(screen.getByRole('button', {name: 'Mute Drums'})).toBeDisabled();
+    expect(
+      within(screen.getByTestId('stem-row-drums')).getByRole('slider'),
+    ).toHaveAttribute('data-disabled');
+
+    // ...while the transport-adjacent A/B loop still takes input: setting A
+    // turns the loop on, which reveals the clear-loop control.
+    const setA = screen.getByRole('button', {name: 'A'});
+    expect(setA).toBeEnabled();
+    fireEvent.click(setA);
+    expect(screen.getByRole('button', {name: 'B'})).toBeEnabled();
+    expect(screen.getByText(/0:12/)).toBeInTheDocument();
   });
 });

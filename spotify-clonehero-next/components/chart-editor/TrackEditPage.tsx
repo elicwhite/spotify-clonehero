@@ -51,7 +51,10 @@ import {audioMimeType} from '@/lib/sng/file-utils';
 import type {ChartDocument, ParsedTrackData} from '@/lib/chart-edit';
 import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
-import {generateBeatClickTrackWav} from '@/lib/preview/clickTrack';
+import {
+  CLICK_TRACK_NAME,
+  generateBeatClickTrackWav,
+} from '@/lib/preview/clickTrack';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {ChartEditorProvider, useChartEditorContext} from './ChartEditorContext';
 import {
@@ -61,7 +64,6 @@ import {
 import {trackKeyId, type EditorScope} from './scope';
 import type {EditorCapabilities} from './capabilities';
 import ChartEditor from './ChartEditor';
-import ClickVolumeControl from './ClickVolumeControl';
 import type {AudioSource} from './ExportDialog';
 import {useEditorKeyboard} from './hooks/useEditorKeyboard';
 import {useAutoSave} from './hooks/useAutoSave';
@@ -629,7 +631,10 @@ function TrackEditEditor({
               waveformDurationSec * 1000,
               chartDelayMs,
             );
-            audioFiles.push({fileName: 'click.wav', data: clickWav});
+            audioFiles.push({
+              fileName: `${CLICK_TRACK_NAME}.wav`,
+              data: clickWav,
+            });
           } catch (err) {
             // Click track is a nice-to-have — don't fail the whole load if
             // synthesis fails for some reason.
@@ -648,7 +653,7 @@ function TrackEditEditor({
 
         audioManager.setChartDelay(chartDelayMs / 1000);
         try {
-          audioManager.setVolume('click', 0);
+          audioManager.setVolume(CLICK_TRACK_NAME, 0);
         } catch {
           // Click track failed to generate above — no such stem to silence.
         }
@@ -826,12 +831,13 @@ function TrackEditEditor({
          * - Add leading silence: DISABLED, still shown. The command re-ticks
          *   the chart and records an `audioAnchor` that the host is then
          *   responsible for matching by padding the audio it plays and
-         *   exports (`usePaddedAudio`). This shell builds its AudioManager
-         *   once from the package's stem files and exports them untouched,
-         *   and `usePaddedAudio` handles a full mix plus at most one
-         *   secondary stem, so applying the pad here would leave chart and
-         *   audio drifted apart. The detector's advice is still worth
-         *   reading, so the card renders with the action disabled.
+         *   exports. This shell doesn't use `usePaddedAudio`: it builds its
+         *   `AudioManager` directly from the package's audio files below and
+         *   has no rebuild-on-`audioAnchor`-change wiring, so padding the
+         *   chart without also padding every audio file this page
+         *   plays/exports would leave them drifted apart. The detector's
+         *   advice is still worth reading, so the card renders with the
+         *   action disabled.
          * - Drum transcription: DISABLED, still shown (only on charts that
          *   have Expert Drums). `transcribe-drums` regenerates an OPFS
          *   drum-transcription project, which a chart loaded from a file
@@ -843,17 +849,12 @@ function TrackEditEditor({
           loadAudio: loadAssistAudio,
           audioSampleRate,
           leadingSilenceDisabledReason:
-            "This editor plays and exports the chart's audio files as they are, so it cannot pad the audio to match the shifted chart.",
+            "This editor builds its audio playback directly from the chart's files and never pads it to match a shifted chart, so it cannot add leading silence here yet.",
           drumRerunDisabledReason:
             'Re-running transcription needs the separated drum audio from the drum transcription tool. This chart was loaded from a file, so there is nothing to re-run here.',
         }}
         headerExtra={headerExtra}
-        leftPanelChildren={
-          <>
-            {leftPanelChildren}
-            <ClickVolumeControl audioManager={audioManager} />
-          </>
-        }
+        leftPanelChildren={leftPanelChildren}
         stackedPianoRoll={stackedPianoRoll}
       />
     </div>

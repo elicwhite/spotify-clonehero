@@ -3,94 +3,10 @@
  */
 
 import {AudioManager} from '../audioManager';
-
-/**
- * Minimal Web Audio mocks. The real AudioManager constructor decodes audio,
- * loads a worklet, and creates buffer sources. We stub just enough to let
- * us exercise `seekTo()` without actually wiring up a real audio graph.
- */
-
-class FakeAudioParam {
-  value = 1;
-  setValueAtTime(v: number) {
-    this.value = v;
-  }
-}
-
-class FakeAudioBufferSource {
-  buffer: unknown = null;
-  playbackRate = new FakeAudioParam();
-  connect() {}
-  disconnect() {}
-  start() {}
-  stop() {}
-  addEventListener() {}
-  removeEventListener() {}
-}
-
-class FakeGainNode {
-  gain = new FakeAudioParam();
-  connect() {}
-  disconnect() {}
-}
-
-class FakeWorkletNode {
-  parameters = {
-    get(name: string) {
-      void name;
-      return new FakeAudioParam();
-    },
-  };
-  connect() {}
-}
-
-class FakeAudioContext {
-  state: 'running' | 'suspended' | 'closed' = 'suspended';
-  currentTime = 0;
-  baseLatency = 0;
-  outputLatency = 0;
-  destination = {} as AudioNode;
-  audioWorklet = {
-    addModule: jest.fn().mockResolvedValue(undefined),
-  };
-  createBufferSource() {
-    return new FakeAudioBufferSource() as unknown as AudioBufferSourceNode;
-  }
-  createGain() {
-    return new FakeGainNode() as unknown as GainNode;
-  }
-  decodeAudioData(_buf: ArrayBuffer): Promise<AudioBuffer> {
-    return Promise.resolve({duration: 60, length: 60} as AudioBuffer);
-  }
-  resume(): Promise<void> {
-    this.state = 'running';
-    return Promise.resolve();
-  }
-  suspend(): Promise<void> {
-    this.state = 'suspended';
-    return Promise.resolve();
-  }
-  close(): Promise<void> {
-    this.state = 'closed';
-    return Promise.resolve();
-  }
-}
+import {installFakeWebAudio} from './fakeWebAudio';
 
 beforeAll(() => {
-  // @ts-expect-error - test stub
-  global.AudioContext = FakeAudioContext;
-  // @ts-expect-error - test stub
-  global.AudioWorkletNode = FakeWorkletNode;
-  // requestAnimationFrame isn't strictly needed here (we only test the
-  // paused path), but keep a no-op stub so the constructor doesn't crash
-  // if anything schedules a frame.
-  global.requestAnimationFrame =
-    global.requestAnimationFrame ??
-    ((cb: FrameRequestCallback) => {
-      void cb;
-      return 0;
-    });
-  global.cancelAnimationFrame = global.cancelAnimationFrame ?? (() => {});
+  installFakeWebAudio();
 });
 
 async function makeAudioManager(): Promise<AudioManager> {

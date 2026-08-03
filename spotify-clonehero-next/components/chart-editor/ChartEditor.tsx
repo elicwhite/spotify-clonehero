@@ -14,6 +14,7 @@ import ExportDialog from './ExportDialog';
 import SongMetadataDialog from './SongMetadataDialog';
 import LeftSidebar from './LeftSidebar';
 import type {ChartAssistProps} from './sidebar/ChartAssist';
+import type {StemsMixerHostProps} from './sidebar/StemsMixer';
 import PianoRollTimeline from './piano-roll/PianoRollTimeline';
 import EditorMCPTools from './EditorMCPTools';
 import {useChartEditorContext} from './ChartEditorContext';
@@ -105,6 +106,15 @@ export interface ChartEditorProps {
    * `audioSampleRate`, and a bare editor supplies none and shows no section.
    */
   chartAssist?: ChartAssistProps | undefined;
+  /**
+   * Wiring for the sidebar's Stems mixer section (plan 0074 Phase 5):
+   * per-stem origin (for the AI-separated badge), an add-a-stem callback for
+   * hosts that can rebuild their padded AudioManager, and which track names
+   * an assist run currently has locked. A page that supplies nothing still
+   * gets a mixer (from `audioManager.trackNames` alone) whenever
+   * `capabilities.showStemsMixer` is on.
+   */
+  stemsMixer?: StemsMixerHostProps | undefined;
   /** Callback to provide chart text for export. */
   getChartText?: (() => Promise<string>) | undefined;
   /** Format-agnostic alternative to `getChartText` — see ExportDialog's
@@ -195,6 +205,7 @@ export default function ChartEditor({
   headerExtra,
   leftPanelChildren,
   chartAssist,
+  stemsMixer,
   getChartText,
   getChartFile,
   getAudioSources,
@@ -350,6 +361,7 @@ export default function ChartEditor({
           audioManager={audioManager}
           leftPanelChildren={leftPanelChildren}
           chartAssist={chartAssist}
+          stemsMixer={stemsMixer}
         />
       </aside>
 

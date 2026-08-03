@@ -13,6 +13,13 @@
  *   tempo map (no VexFlow measure layout).
  */
 
+/**
+ * The `AudioManager` track name the synthesized click plays under. Callers
+ * register it as `${CLICK_TRACK_NAME}.wav` (AudioManager derives the track
+ * name from the file's basename) and address its volume by this name.
+ */
+export const CLICK_TRACK_NAME = 'click';
+
 export interface TempoMapEntry {
   tick: number;
   beatsPerMinute: number;
@@ -229,7 +236,7 @@ export function buildBeatClickEvents({
  * audio-track-relative time, with one click per beat (accented downbeats),
  * derived from the chart's tempo map and time signatures. Loudness is not
  * baked in — the caller controls volume in real time via
- * `AudioManager.setVolume('click', ...)`, matching every other stem.
+ * `AudioManager.setVolume(CLICK_TRACK_NAME, ...)`, matching every other stem.
  */
 export async function generateBeatClickTrackWav(
   chart: {

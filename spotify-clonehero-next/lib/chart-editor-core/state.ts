@@ -146,15 +146,6 @@ export interface ChartEditorState {
   /** Depth of undo stack when the last save occurred. */
   savedUndoDepth: number;
 
-  // -- Audio mixing --
-
-  /** Per-track volume levels (0-1). */
-  trackVolumes: Record<string, number>;
-  /** Track name that is currently soloed (only this track is heard). */
-  soloTrack: string | null;
-  /** Set of track names that are muted. */
-  mutedTracks: Set<string>;
-
   /** Track rows shown in the stacked piano roll and as highway panes on
    *  surfaces that ship the Chart Matrix (`capabilities.showChartMatrix`);
    *  the matrix is the only thing that writes it, and surfaces without one
@@ -244,11 +235,6 @@ export type ChartEditorAction =
       type: 'SET_CLIPBOARD';
       clipboard: {notes: SchemaNote[]; sourceScope: EditorScope} | null;
     }
-  // -- Audio mixing --
-  | {type: 'SET_TRACK_VOLUME'; track: string; volume: number}
-  | {type: 'SET_SOLO_TRACK'; track: string | null}
-  | {type: 'TOGGLE_MUTE_TRACK'; track: string}
-  | {type: 'SET_MUTED_TRACKS'; tracks: Set<string>}
   | {type: 'SET_TRACK_VISIBILITY'; track: TrackKey; visible: boolean}
   | {type: 'SET_VISIBLE_TRACKS'; tracks: ReadonlySet<string>}
   // -- Cursor --
@@ -304,10 +290,6 @@ export const initialState: ChartEditorState = {
   redoDocStack: [],
   clipboard: null,
   savedUndoDepth: 0,
-  // Audio mixing
-  trackVolumes: {},
-  soloTrack: null,
-  mutedTracks: new Set(),
   visibleTrackKeys: new Set(),
   // Cursor
   cursorTick: 0,

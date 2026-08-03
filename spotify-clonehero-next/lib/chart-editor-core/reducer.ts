@@ -306,29 +306,6 @@ export function chartEditorReducer(
     case 'SET_CLIPBOARD':
       return {...state, clipboard: action.clipboard};
 
-    case 'SET_TRACK_VOLUME': {
-      return {
-        ...state,
-        trackVolumes: {...state.trackVolumes, [action.track]: action.volume},
-      };
-    }
-
-    case 'SET_SOLO_TRACK':
-      return {...state, soloTrack: action.track};
-
-    case 'TOGGLE_MUTE_TRACK': {
-      const newMuted = new Set(state.mutedTracks);
-      if (newMuted.has(action.track)) {
-        newMuted.delete(action.track);
-      } else {
-        newMuted.add(action.track);
-      }
-      return {...state, mutedTracks: newMuted};
-    }
-
-    case 'SET_MUTED_TRACKS':
-      return {...state, mutedTracks: action.tracks};
-
     case 'SET_TRACK_VISIBILITY': {
       const visible = new Set(state.visibleTrackKeys);
       const id = trackKeyId(action.track);
