@@ -2,7 +2,7 @@
  * Onyx Gem / ProType taxonomy and `compute_pro`.
  *
  * Direct port of `onyx_reduce.py`'s Gem model (Drums.hs:156-163) and
- * `compute_pro` (Drums.hs:328-345). **Production note:** the `/difficulties`
+ * `compute_pro` (Drums.hs:328-345). **Note:** the comparison
  * pipeline consumes scan-chart's already-resolved Pro lanes
  * (`adapter/onyx.ts`'s `resolvedGems`), NOT raw markers — a faithful native
  * `compute_pro` is impossible from `ParsedChart` (the raw region markers are

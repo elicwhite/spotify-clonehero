@@ -3,7 +3,7 @@
  * out the other side a downloadable Blob.
  *
  * The last step of every export flow in the app. Kept here so the three
- * callers (the editor's export dialog, /difficulties, /add-lyrics) share one
+ * callers (the editor's export dialog, /drum-difficulties, /add-lyrics) share one
  * definition of what a `.zip` and a `.sng` download are, rather than each
  * re-deriving the MIME type and the sng-bytes-to-Blob wrapping.
  */

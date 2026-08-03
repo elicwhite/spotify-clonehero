@@ -4,7 +4,7 @@
  * Clone Hero / YARG packages should ship Opus audio. Different editor pages
  * hand the export dialog audio in whatever format they have on hand — the
  * drum-transcription stem path already produces `.opus`, but the "original
- * uploaded file" path and the drum-edit page emit `.wav`/`.mp3`/`.ogg`/etc.,
+ * uploaded file" path and the chart editor emit `.wav`/`.mp3`/`.ogg`/etc.,
  * and chart-flow passthrough assets can carry secondary audio in any format.
  *
  * This module normalizes all of that: any audio file that isn't already Opus

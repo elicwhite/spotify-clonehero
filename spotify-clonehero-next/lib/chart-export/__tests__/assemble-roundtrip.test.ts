@@ -1,7 +1,7 @@
 /**
  * Tests for `assembleChartFiles`'s round-trip mode — `metadata` omitted.
  *
- * Flows that MINT a chart (drum transcription, /difficulties) supply
+ * Flows that MINT a chart (drum transcription) supply
  * metadata and get the chart stamped with that identity plus drum ratings.
  * Flows that EDIT somebody else's chart and hand it back (/add-lyrics) omit
  * it, and must get the document's own metadata through untouched: stamping

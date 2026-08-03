@@ -411,6 +411,9 @@ export default function EditorApp({
         // 10. Update editor state. ChartDoc carries the parsed chart;
         // consumers derive the active track via selectActiveTrack().
         // `usePaddedAudio` builds the AudioManager once this lands.
+        // Visibility comes with it: `SET_CHART_DOC` seeds the doc's
+        // preferred track, which is Expert Drums for transcription output —
+        // the one visible track the route model gives this editor.
         dispatch({type: 'SET_CHART_DOC', chartDoc});
         setLoadingState('ready');
       } catch (err) {

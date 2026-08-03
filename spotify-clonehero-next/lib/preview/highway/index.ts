@@ -71,7 +71,7 @@ let liveRendererCount = 0;
 
 export interface RendererConfig {
   /** When false, render a neutral floor + skip the drum hitbox + skip drum
-   *  note rendering. Defaults to true (drum-edit). */
+   *  note rendering. Defaults to true (drum editing). */
   showDrumLanes?: boolean;
   /** Which drum-tom art style to render: square (angular gem, default) or
    *  round (circular head). Cymbals and kick have only one style.
@@ -508,7 +508,7 @@ export const setupRenderer = (
     classicHighwayMesh = highway;
 
     // SceneOverlays + InteractionManager are created for any track — they
-    // power the cursor / ghost / hit-testing surface for both drum-edit
+    // power the cursor / ghost / hit-testing surface for both drum-editing
     // and lanes-off (lyrics) modes. Drum-specific render paths inside them
     // simply have nothing to draw when no drum notes are present. With no
     // track (vocals/global scope), geometry falls back to the 4-lane drum

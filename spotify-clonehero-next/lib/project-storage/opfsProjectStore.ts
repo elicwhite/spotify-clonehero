@@ -1,7 +1,9 @@
 /**
- * OPFS (Origin Private File System) storage for single-instrument chart-edit
- * projects (drum-edit, guitar-edit, ...). Each caller gets an isolated store
- * keyed by its own namespace so features never collide in OPFS.
+ * OPFS (Origin Private File System) storage for chart-edit projects. Each
+ * caller gets an isolated store keyed by its own namespace so features never
+ * collide in OPFS. A store may also declare read-only legacy namespaces it
+ * adopts, so projects written by a route that has since been folded into
+ * another one stay listable, loadable, saveable, and deletable in place.
  *
  * Directory structure (per namespace):
  *   {namespace}/
@@ -59,23 +61,87 @@ function generateId(): string {
   return `${timestamp}-${random}`;
 }
 
+export interface OpfsProjectStoreOptions {
+  /**
+   * Namespaces this store adopts in addition to its own. New projects are
+   * always written to `namespace`; a project found in a legacy namespace is
+   * read and written where it already lives, so no bulk copy is needed.
+   */
+  legacyNamespaces?: readonly string[];
+}
+
 /**
  * Builds a set of project CRUD functions namespaced under `{namespace}/` in
- * OPFS. Each caller (drum-edit, guitar-edit, ...) instantiates its own store
- * so projects from different editors never collide.
+ * OPFS. Each caller instantiates its own store so projects from different
+ * editors never collide.
  */
-export function createOpfsProjectStore(namespace: string) {
+export function createOpfsProjectStore(
+  namespace: string,
+  options: OpfsProjectStoreOptions = {},
+) {
+  const legacyNamespaces = options.legacyNamespaces ?? [];
+
   async function getNamespaceDir(): Promise<FileSystemDirectoryHandle> {
     const root = await getOPFSRoot();
     return root.getDirectoryHandle(namespace, {create: true});
+  }
+
+  /** Every namespace this store reads, primary first. Missing legacy
+   *  directories are skipped rather than created. */
+  async function getReadableNamespaceDirs(): Promise<
+    {name: string; dir: FileSystemDirectoryHandle}[]
+  > {
+    const root = await getOPFSRoot();
+    const dirs: {name: string; dir: FileSystemDirectoryHandle}[] = [
+      {
+        name: namespace,
+        dir: await root.getDirectoryHandle(namespace, {
+          create: true,
+        }),
+      },
+    ];
+    for (const legacy of legacyNamespaces) {
+      try {
+        dirs.push({
+          name: legacy,
+          dir: await root.getDirectoryHandle(legacy),
+        });
+      } catch {
+        // Legacy namespace was never written on this origin.
+      }
+    }
+    return dirs;
   }
 
   async function getProjectDir(
     projectId: string,
     options: {create: boolean} = {create: false},
   ): Promise<FileSystemDirectoryHandle> {
-    const ns = await getNamespaceDir();
-    return ns.getDirectoryHandle(projectId, {create: options.create});
+    if (options.create) {
+      const ns = await getNamespaceDir();
+      return ns.getDirectoryHandle(projectId, {create: true});
+    }
+    let firstError: unknown = null;
+    for (const {dir} of await getReadableNamespaceDirs()) {
+      try {
+        return await openProjectDir(dir, projectId);
+      } catch (err) {
+        firstError ??= err;
+      }
+    }
+    throw firstError ?? new Error(`Project "${projectId}" not found`);
+  }
+
+  /** Resolves `projectId` inside one namespace. Presence of `metadata.json`
+   *  is what makes a directory a project, and it's what distinguishes the
+   *  namespace that owns the project from the ones that merely could. */
+  async function openProjectDir(
+    ns: FileSystemDirectoryHandle,
+    projectId: string,
+  ): Promise<FileSystemDirectoryHandle> {
+    const dir = await ns.getDirectoryHandle(projectId);
+    await dir.getFileHandle(METADATA_FILE);
+    return dir;
   }
 
   /**
@@ -168,29 +234,39 @@ export function createOpfsProjectStore(namespace: string) {
   }
 
   /**
-   * Lists all projects in this namespace, sorted most recent first.
+   * Lists all projects this store reads (its own namespace plus any legacy
+   * ones), sorted most recent first.
    */
   async function listProjects(): Promise<ProjectSummary[]> {
     try {
-      const ns = await getNamespaceDir();
       const summaries: ProjectSummary[] = [];
+      const seen = new Set<string>();
 
-      for await (const [name, handle] of ns.entries()) {
-        if (handle.kind !== 'directory') continue;
-        try {
-          const metaHandle = await handle.getFileHandle(METADATA_FILE);
-          const metadata = (await readJsonFile(metaHandle)) as ProjectMetadata;
-          summaries.push({
-            id: metadata.id,
-            name: metadata.name,
-            artist: metadata.artist,
-            createdAt: metadata.createdAt,
-            updatedAt: metadata.updatedAt,
-          });
-        } catch {
-          console.warn(
-            `${namespace}: Skipping directory "${name}" — missing or invalid metadata`,
-          );
+      for (const {name: nsName, dir: ns} of await getReadableNamespaceDirs()) {
+        for await (const [name, handle] of ns.entries()) {
+          if (handle.kind !== 'directory') continue;
+          try {
+            const metaHandle = await handle.getFileHandle(METADATA_FILE);
+            const metadata = (await readJsonFile(
+              metaHandle,
+            )) as ProjectMetadata;
+            // A legacy namespace that happens to reuse an id already listed
+            // is shadowed by the primary namespace, matching which one
+            // `getProjectDir` resolves.
+            if (seen.has(metadata.id)) continue;
+            seen.add(metadata.id);
+            summaries.push({
+              id: metadata.id,
+              name: metadata.name,
+              artist: metadata.artist,
+              createdAt: metadata.createdAt,
+              updatedAt: metadata.updatedAt,
+            });
+          } catch {
+            console.warn(
+              `${nsName}: Skipping directory "${name}" — missing or invalid metadata`,
+            );
+          }
         }
       }
 
@@ -219,8 +295,21 @@ export function createOpfsProjectStore(namespace: string) {
    * Deletes a project and all its files from OPFS.
    */
   async function deleteProject(projectId: string): Promise<void> {
-    const ns = await getNamespaceDir();
-    await ns.removeEntry(projectId, {recursive: true});
+    let firstError: unknown = null;
+    for (const {dir} of await getReadableNamespaceDirs()) {
+      try {
+        await openProjectDir(dir, projectId);
+      } catch {
+        continue;
+      }
+      try {
+        await dir.removeEntry(projectId, {recursive: true});
+        return;
+      } catch (err) {
+        firstError ??= err;
+      }
+    }
+    throw firstError ?? new Error(`Project "${projectId}" not found`);
   }
 
   /**

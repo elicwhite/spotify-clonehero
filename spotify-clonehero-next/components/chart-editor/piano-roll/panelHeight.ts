@@ -2,10 +2,10 @@
  * Piano-roll panel height persistence (plan 0062 §1).
  *
  * The panel is user-resizable via a drag handle on its top edge. The height
- * is persisted to `localStorage` under **one key shared across all three
- * host pages** (`/drum-transcription`, `/drum-edit`, `/add-lyrics`) — it's
- * one editor, one panel, one height; per-page keys would make the same
- * editor feel inconsistent (§1).
+ * is persisted to `localStorage` under **one key shared across every
+ * host page** (`/drum-transcription`, `/chart-editor`, `/add-lyrics`) —
+ * it's one editor, one panel, one height; per-page keys would make the
+ * same editor feel inconsistent (§1).
  *
  * Pure read/write/clamp helpers, no React — the component owns the drag
  * gesture and calls these at drag-start (load) and drag-end (save).

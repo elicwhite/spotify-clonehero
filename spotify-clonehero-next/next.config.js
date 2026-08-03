@@ -25,6 +25,35 @@ const nextConfig = {
     ],
   },
   allowedDevOrigins: ['localhost', '127.0.0.1'],
+  async redirects() {
+    // Route model (plan 0074, 2026-08-03): /difficulties was renamed to
+    // /drum-difficulties, and the three single-instrument edit routes were
+    // folded into /chart-editor, which reads their old OPFS namespaces as
+    // legacy stores so a `?project=` link keeps resolving. Permanent so
+    // search engines and bookmarks update.
+    return [
+      {
+        source: '/difficulties',
+        destination: '/drum-difficulties',
+        permanent: true,
+      },
+      {
+        source: '/drum-edit',
+        destination: '/chart-editor',
+        permanent: true,
+      },
+      {
+        source: '/guitar-edit',
+        destination: '/chart-editor',
+        permanent: true,
+      },
+      {
+        source: '/bass-edit',
+        destination: '/chart-editor',
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     // https://nextjs.org/docs/13/app/building-your-application/routing/middleware#setting-headers
     // https://sqlocal.dev/guide/setup#cross-origin-isolation

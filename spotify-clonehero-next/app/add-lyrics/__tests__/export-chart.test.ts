@@ -96,7 +96,7 @@ describe('buildChartExport', () => {
 
   it('leaves the source chart identity alone', async () => {
     // This page round-trips somebody else's chart, so unlike the flows that
-    // mint one (drum transcription, /difficulties) it must not stamp drum
+    // mint one (drum transcription) it must not stamp drum
     // ratings or rewrite the charter credit onto a chart that never had them.
     const doc = makeAlignedDoc();
     doc.parsedChart.metadata.charter = 'Original Charter';

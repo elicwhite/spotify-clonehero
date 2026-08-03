@@ -135,27 +135,6 @@ describe('ChartMatrix capability gating', () => {
       unmount();
     }
   });
-
-  it('constrains rows to the pinned instrument on a single-instrument preset', () => {
-    renderMatrix(makeTwoInstrumentDoc(), {
-      ...DRUM_EDIT_CAPABILITIES,
-      showChartMatrix: 'guitar',
-    });
-    expect(screen.getByText('Guitar')).toBeInTheDocument();
-    expect(screen.queryByText('Drums')).not.toBeInTheDocument();
-    // No second instrument to add on a pinned single-instrument page.
-    expect(
-      screen.queryByRole('button', {name: /add instrument/i}),
-    ).not.toBeInTheDocument();
-  });
-
-  it('renders no section when the pinned instrument is absent from the chart', () => {
-    renderMatrix(makeDrumsOnlyDoc(), {
-      ...DRUM_EDIT_CAPABILITIES,
-      showChartMatrix: 'guitar',
-    });
-    expect(screen.queryByText('Chart Matrix')).not.toBeInTheDocument();
-  });
 });
 
 describe('ChartMatrix visibility toggle', () => {

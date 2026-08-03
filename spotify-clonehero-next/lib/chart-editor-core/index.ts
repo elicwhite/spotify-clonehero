@@ -29,7 +29,7 @@ export {
 } from './content-stamps';
 export {
   availableTrackKeys,
-  findPreferredTrack,
+  highestDifficultyTrackKeys,
   LOWER_TRACK_DIFFICULTIES,
   parseTrackKeyId,
   preferredTrackForChart,

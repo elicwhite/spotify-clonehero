@@ -18,7 +18,8 @@
  *    neither editable nor rendered in the piano roll.
  *
  * Pages mount `<ChartEditor capabilities={...}>` to pick a profile. Pages
- * that omit the prop fall back to drum-edit for backward compatibility.
+ * that omit the prop fall back to `DRUM_EDIT_CAPABILITIES` for backward
+ * compatibility.
  */
 
 import type {
@@ -26,7 +27,6 @@ import type {
   CommandOperation,
   EntityKind,
 } from '@/lib/chart-edit';
-import type {SupportedTrackInstrument} from '@/lib/chart-editor-core';
 
 export interface EditorCapabilities {
   /**
@@ -123,14 +123,13 @@ export interface EditorCapabilities {
    *  - `false` — no section at all (`PREVIEW`/`TEMPO`/`ADD_LYRICS`: none of
    *    these pages edit notes, so a note-visibility matrix has nothing to
    *    do).
-   *  - `'all'` — every present instrument is a row; `+ Add instrument`
-   *    offers every absent supported instrument.
-   *  - a single instrument — single-instrument edit pages (`/guitar-edit`,
-   *    `/bass-edit`, `/drum-edit`) pin the matrix to their one instrument;
-   *    `+ Add instrument` is hidden since there is no second instrument to
-   *    add on that surface.
+   *  - `true` — every present instrument is a row; `+ Add instrument` offers
+   *    every absent supported instrument. The single-instrument pinned
+   *    variant retired with the single-instrument edit routes it served
+   *    (plan 0074 route-consolidation pass) — every surface that ships the
+   *    matrix now shows every instrument the chart has.
    */
-  showChartMatrix: false | 'all' | SupportedTrackInstrument;
+  showChartMatrix: boolean;
   /**
    * Show the sidebar's Stems mixer (plan 0074 Phase 5): one row per track
    * the live `AudioManager` carries, plus the metronome click. It is the
@@ -209,7 +208,7 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
   showEditingControls: true,
   showPianoRollNotes: true,
   chartAssist: 'all',
-  showChartMatrix: 'all',
+  showChartMatrix: true,
   showStemsMixer: true,
 };
 

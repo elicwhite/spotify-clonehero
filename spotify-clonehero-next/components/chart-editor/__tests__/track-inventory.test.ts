@@ -174,9 +174,9 @@ describe('track View state and scope recovery', () => {
     });
 
     // Showing a track is an interaction with it, so it becomes the
-    // last-interacted one. On surfaces whose piano roll is not stacked
-    // (`/guitar-edit`, `/bass-edit`, `/drum-edit`), that piano roll reads
-    // `activeScope`, so this is what keeps it in step with the matrix.
+    // last-interacted one. On surfaces whose piano roll is not stacked,
+    // that piano roll reads `activeScope`, so this is what keeps it in
+    // step with the matrix.
     it('retargets activeScope to the track being shown (visible: true)', () => {
       const withDrumsVisible = chartEditorReducer(
         {

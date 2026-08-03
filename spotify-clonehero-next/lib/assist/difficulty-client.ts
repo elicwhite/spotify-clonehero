@@ -93,11 +93,10 @@ export interface DifficultyGenerationProgress {
   detail?: string | undefined;
 }
 
-/** The payload each instrument's reducer needs, mirroring
- * `lib/drum-difficulty/computeReductions` and `lib/guitar-difficulty/reduce`'s
- * own input shapes: drums take the already-featurizer-ready
+/** The payload each instrument's reducer needs, mirroring their own input
+ * shapes: drums take the already-featurizer-ready
  * {@link OursSongInput} (built via `buildOursInput` from a `RawDrumChart` +
- * `ParsedChart` at the call site, same as `/difficulties`' `runOurs`);
+ * `ParsedChart` at the call site);
  * guitar/bass take a `ParsedChart` plus the single Expert track being
  * reduced, same as `reduceGuitarDifficulties`'s own signature. The reducer
  * reads only timing (`resolution`, `tempos`, `timeSignatures`, `sections`)

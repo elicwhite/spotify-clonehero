@@ -13,10 +13,9 @@
  * peer, not a single "selected" one.
  *
  * `capabilities.showChartMatrix` gates the whole section: `false` on pages
- * that don't edit notes (`PREVIEW`/`TEMPO`/`ADD_LYRICS`), `'all'` on
- * DRUM_EDIT-style full editors, or a single instrument on pages pinned to
- * one instrument (`/guitar-edit`, `/bass-edit`, `/drum-edit`), which also
- * hides "+ Add instrument" — there is no second instrument to add there.
+ * that don't edit notes (`PREVIEW`/`TEMPO`/`ADD_LYRICS`), `true` on
+ * DRUM_EDIT-style full editors, which is every surface that ships the
+ * matrix at all — every present instrument is always a row.
  */
 
 import {useCallback, useState} from 'react';
@@ -53,7 +52,6 @@ export default function ChartMatrix() {
   const {generatingInstrument, disabledReasonFor, start} =
     useDifficultyGeneration();
 
-  const variant = capabilities.showChartMatrix;
   const doc = state.chartDoc;
   const trackData = doc?.parsedChart.trackData ?? [];
 
@@ -76,22 +74,17 @@ export default function ChartMatrix() {
     [executeCommand, dispatch],
   );
 
-  if (!variant || !doc) return null;
+  if (!capabilities.showChartMatrix || !doc) return null;
 
-  const rowInstruments = (
-    variant === 'all' ? SUPPORTED_TRACK_INSTRUMENTS : [variant]
-  ).filter(instrument =>
+  const rowInstruments = SUPPORTED_TRACK_INSTRUMENTS.filter(instrument =>
     trackData.some(track => track.instrument === instrument),
   );
 
   if (rowInstruments.length === 0) return null;
 
-  const missingInstruments =
-    variant === 'all'
-      ? SUPPORTED_TRACK_INSTRUMENTS.filter(
-          instrument => !rowInstruments.includes(instrument),
-        )
-      : [];
+  const missingInstruments = SUPPORTED_TRACK_INSTRUMENTS.filter(
+    instrument => !rowInstruments.includes(instrument),
+  );
 
   const provenance = getAssistProvenance(doc);
 
@@ -165,7 +158,7 @@ export default function ChartMatrix() {
         Click a difficulty to show or hide it in the editor.
       </p>
 
-      {variant === 'all' && missingInstruments.length > 0 && (
+      {missingInstruments.length > 0 && (
         <div className="relative">
           <Button
             type="button"

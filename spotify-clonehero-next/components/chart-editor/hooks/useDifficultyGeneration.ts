@@ -24,7 +24,8 @@
  *   run, and stamping the post-edit Expert would record tiers reduced from
  *   the pre-edit one as fresh;
  * - the typed block reason (no Expert track, no notes, not a Pro Drums
- *   chart), rendered with the instrument's label.
+ *   chart), reported through the shared
+ *   `difficultyGenerationBlockMessage`.
  */
 
 import {useCallback, useSyncExternalStore} from 'react';
@@ -35,6 +36,7 @@ import {useExecuteCommand} from './useEditCommands';
 import {GenerateDifficultiesCommand} from '../commands';
 import {trackKeyId} from '../scope';
 import {INSTRUMENT_LABEL} from '../trackLabels';
+import {difficultyGenerationBlockMessage} from '../difficultyGenerationMessages';
 import {
   LOWER_TRACK_DIFFICULTIES,
   type SupportedTrackInstrument,
@@ -42,10 +44,7 @@ import {
 import type {AssistStore} from '@/lib/assist/assist-store';
 import {useOptionalAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {ASSIST_RUN_BUSY_MESSAGE} from '@/components/assist/useAssistRunner';
-import {
-  buildDifficultyGenerationInput,
-  type DifficultyGenerationBlockReason,
-} from '@/lib/assist/difficulty-input';
+import {buildDifficultyGenerationInput} from '@/lib/assist/difficulty-input';
 import {difficultyGenerationDisabledReason} from '@/lib/assist/difficulty-client';
 import {generateDifficultiesTask} from '@/lib/assist/tasks';
 import {isAbortError} from '@/lib/workers/abortable-worker';
@@ -81,24 +80,6 @@ function setActiveInstrument(
   if (instrument === null) activeInstruments.delete(store);
   else activeInstruments.set(store, instrument);
   for (const listener of activeInstrumentListeners) listener();
-}
-
-function blockMessage(
-  instrument: SupportedTrackInstrument,
-  reason: DifficultyGenerationBlockReason,
-): string {
-  const label = INSTRUMENT_LABEL[instrument];
-  switch (reason) {
-    case 'no-expert-track':
-    case 'no-drums':
-      return `No ${label} Expert track to generate from.`;
-    case 'no-expert-notes':
-      return `The ${label} Expert track has no notes to generate from.`;
-    case 'not-pro-drums-five-lane':
-      return 'Difficulty generation needs a Pro Drums chart. This chart is five-lane drums.';
-    case 'not-pro-drums-four-lane':
-      return 'Difficulty generation needs a Pro Drums chart. This chart is four-lane drums with no cymbal markers.';
-  }
 }
 
 export interface DifficultyGenerationControls {
@@ -148,13 +129,15 @@ export function useDifficultyGeneration(): DifficultyGenerationControls {
 
       const built = buildDifficultyGenerationInput(doc, instrument);
       if (!built.ok) {
-        toast.error(blockMessage(instrument, built.reason));
+        toast.error(difficultyGenerationBlockMessage(instrument, built.reason));
         return;
       }
       const sourceStamp =
         state.trackStamps[trackKeyId({instrument, difficulty: 'expert'})];
       if (sourceStamp === undefined) {
-        toast.error(blockMessage(instrument, 'no-expert-track'));
+        toast.error(
+          difficultyGenerationBlockMessage(instrument, 'no-expert-track'),
+        );
         return;
       }
 

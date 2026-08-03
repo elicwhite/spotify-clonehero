@@ -100,8 +100,8 @@ interface ChartSourceOptions {
 }
 
 /**
- * MINT mode: the caller is creating a chart (drum transcription,
- * /difficulties). Its name/artist/charter replace whatever the document
+ * MINT mode: the caller is creating a chart (drum transcription).
+ * Its name/artist/charter replace whatever the document
  * carried, the chart is declared `pro_drums` with a drums difficulty, and
  * `song_length` is (re)computed.
  */

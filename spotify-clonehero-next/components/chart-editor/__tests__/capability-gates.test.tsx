@@ -334,7 +334,7 @@ describe('EditorCapabilities preset shape', () => {
   });
 
   it('gates showChartMatrix: on for DRUM_EDIT, off for PREVIEW/TEMPO/ADD_LYRICS (plan 0074 Phase 3)', () => {
-    expect(DRUM_EDIT_CAPABILITIES.showChartMatrix).toBe('all');
+    expect(DRUM_EDIT_CAPABILITIES.showChartMatrix).toBe(true);
     expect(PREVIEW_CAPABILITIES.showChartMatrix).toBe(false);
     expect(TEMPO_CAPABILITIES.showChartMatrix).toBe(false);
     expect(ADD_LYRICS_CAPABILITIES.showChartMatrix).toBe(false);

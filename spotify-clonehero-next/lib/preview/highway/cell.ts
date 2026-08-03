@@ -32,10 +32,9 @@ import type {Note, Track} from './types';
  * note + marker renderers, and a `SceneReconciler` seeded with the track's
  * notes.
  *
- * This is the piece `setupRenderer.prepTrack` composes for its one scene and
- * that `multiCell.ts` composes once per grid cell. Editor-only layers
- * (`SceneOverlays`, `InteractionManager`, lyrics/waveform/grid) live in
- * `prepTrack`, not here — a comparison cell doesn't want them.
+ * This is the piece `setupRenderer.prepTrack` composes for its one scene.
+ * Editor-only layers (`SceneOverlays`, `InteractionManager`,
+ * lyrics/waveform/grid) live in `prepTrack`, not here.
  */
 
 /**
@@ -83,13 +82,13 @@ export function createHighwayClippingPlanes(): HighwayClippingPlanes {
 }
 
 /**
- * The texture-dependent inputs a cell renders from. In `setupRenderer` these
- * are per-instance; in `multiCell.ts` one set is shared across every cell that
- * uses the same instrument + tomStyle (see `loadCellTextures`).
+ * The texture-dependent inputs a cell renders from, one instance per
+ * `setupRenderer` (see `loadCellTextures`).
  *
- * `highwayTexture.offset.y` is mutated every frame to scroll the floor, so a
- * shared instance requires the offset to be re-set immediately before each
- * cell's own render (renders within a frame are sequential).
+ * `highwayTexture.offset.y` is mutated every frame to scroll the floor, so
+ * sharing one instance across cells would require the offset to be re-set
+ * immediately before each cell's own render (renders within a frame are
+ * sequential).
  */
 export interface CellTextures {
   highwayTexture: THREE.Texture;

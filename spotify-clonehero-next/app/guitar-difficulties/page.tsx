@@ -2,9 +2,10 @@ import type {Metadata} from 'next';
 import GuitarDifficultiesClient from './GuitarDifficultiesClient';
 
 export const metadata: Metadata = {
-  title: 'Guitar Difficulty Comparison',
+  title: 'Guitar Difficulty Generation',
   description:
-    'Select a chart and compare Expert, Hard, Medium, and Easy five-fret guitar reductions side by side.',
+    'Drop a chart with an Expert guitar track to generate Hard, Medium, ' +
+    'and Easy difficulties, then fine-tune them in the chart editor.',
 };
 
 export default function Page() {

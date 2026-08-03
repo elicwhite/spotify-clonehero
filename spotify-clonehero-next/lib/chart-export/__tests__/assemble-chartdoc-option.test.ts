@@ -1,7 +1,7 @@
 /**
  * Tests for `assembleChartFiles`'s `chartDoc` option — an already-parsed
  * (and possibly modified) `ChartDocument` supplied directly, bypassing the
- * internal `chartText`/`chartFile` parse. Added for the `/difficulties`
+ * internal `chartText`/`chartFile` parse. Added for the difficulty-generation
  * page's chart export (merges Ours' reduced tracks into the uploaded
  * chart's `trackData` before assembly), which needs the real, `song.ini`-
  * merged metadata (e.g. `delay`) that a chart-file-only parse can't see.

@@ -131,9 +131,9 @@ const FULL_WIRING: Wiring = {
 };
 
 /**
- * What the shared `TrackEditPage` shell (`/chart-editor`, `/guitar-edit`,
- * `/bass-edit`, `/drum-edit`) supplies: the chart package's audio, and a
- * reason for each of the two cards whose action that surface can't perform.
+ * What the shared `TrackEditPage` shell (`/chart-editor`) supplies: the
+ * chart package's audio, and a reason for each of the two cards whose
+ * action that surface can't perform.
  */
 const TRACK_EDIT_WIRING: Wiring = {
   loadAudio: async () => ({

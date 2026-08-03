@@ -106,6 +106,6 @@ describe('panelHeight: save + round trip', () => {
     // back what the other wrote, because both go through the same key.
     const storage = fakeStorage();
     savePanelHeight(333, storage); // simulates /drum-transcription
-    expect(loadPanelHeight(storage)).toBe(333); // /drum-edit reads the same value
+    expect(loadPanelHeight(storage)).toBe(333); // /chart-editor reads the same value
   });
 });

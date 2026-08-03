@@ -51,7 +51,7 @@ export function trackToTierContent(track: Track): DifficultyTierContent {
 
 /** Normalizes either reducer's output to the common {@link DifficultyTierSet}
  *  `GenerateDifficultiesCommand` consumes. Drums route through
- *  `oursNotesToTrack` (the same lane/type/flags resolution `/difficulties`
+ *  `oursNotesToTrack` (the same lane/type/flags resolution the highway
  *  renders from) first; guitar's tiers are already renderable `Track`s,
  *  carrying the star power / solo / flex-lane ranges the ONNX reducer
  *  predicts alongside the notes. */

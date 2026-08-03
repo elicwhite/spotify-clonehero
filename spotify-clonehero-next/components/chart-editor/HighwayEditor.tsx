@@ -40,9 +40,11 @@ interface HighwayEditorProps {
 
 /** Highway panes render at most this many visible tracks at once (2026-08-03
  *  spike: 1-4 simultaneous `HighwayPreview` panes all sustained ~240
- *  draw-loops/s with a flat worst-1% frame; pane count was capped at 3 with
- *  an overflow indicator rather than at the untested 4th pane). */
-const MAX_HIGHWAY_PANES = 3;
+ *  draw-loops/s with a flat worst-1% frame). Four is what the route model
+ *  needs: `/drum-difficulties` and `/guitar-difficulties` land with one
+ *  instrument's Expert/Hard/Medium/Easy all visible. Beyond that the extra
+ *  tracks fall to the "+N more" overflow chip. */
+const MAX_HIGHWAY_PANES = 4;
 
 /**
  * On surfaces that show the Chart Matrix, renders one highway pane per
@@ -156,7 +158,7 @@ export default function HighwayEditor({
   // it -- deriving from the reducer-seeded visible set would show whichever
   // track `preferredTrackForChart` picked, out of step with the rest of the
   // page.
-  const matrixDrivesPanes = capabilities.showChartMatrix !== false;
+  const matrixDrivesPanes = capabilities.showChartMatrix;
   const activeScope = state.activeScope;
 
   const paneScopes: EditorScope[] = useMemo(() => {

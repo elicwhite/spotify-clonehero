@@ -454,6 +454,36 @@ with them):
 
 Implemented as a route-consolidation pass between Phases 5 and 6.
 
+Two consequences of the model, resolved as built:
+
+- `MAX_HIGHWAY_PANES` is **4**, not 3. The difficulty routes land with one
+  instrument's X/H/M/E all visible, and a cap of 3 would silently demote
+  Easy to the overflow chip while its matrix cell read as visible. The
+  Phase 3 spike measured 1-4 simultaneous panes at ~240 draw-loops/s with a
+  flat worst-1% frame, so 4 is inside what was measured.
+- The three deleted edit routes redirect permanently to `/chart-editor`,
+  which adopts their OPFS namespaces (`drum-edit`, `guitar-edit`,
+  `bass-edit`) as read/write legacy stores. Projects saved on those routes
+  stay listed and a `?project=` link still resolves; no data is copied.
+- The comparison surface Phase 4's amendment 1 pointed HOPCAT/Onyx at is
+  gone with `/difficulties`. What went with it: `computeReductions.ts`
+  (the comparison entry point) and the two export wrappers the deleted
+  export dialogs called (`lib/drum-difficulty/exportChart.ts`,
+  `lib/guitar-difficulty/exportChart.ts`) — generated tiers now reach a
+  chart only through `GenerateDifficultiesCommand`. What stays:
+  `lib/drum-difficulty/{hopcat,onyx}` and their adapters, as reference
+  implementations of the upstream reducers with the parity tests that
+  pin them to it. They have no production caller and are not expected to
+  grow one.
+- Both hosts that mount the editor from a chart package — `TrackEditPage`
+  and `DifficultyGenerationFlow` — build their `ChartEditor` props through
+  one module (`components/chart-editor/chartPackage.ts`): the click stem,
+  the chart delay, the waveform PCM and sample rate, the export sources
+  and the Chart Assist audio boundary. `TrackEditPageConfig` no longer
+  carries per-route track selection (`findTrack` / `noTrackMessage` /
+  `seedAllInstrumentsVisible` / `capabilities`): seeding every
+  instrument's highest charted difficulty is the shell's only behavior.
+
 ## Phasing
 
 Six phases (review finding 7 re-slice), each independently shippable and
@@ -484,7 +514,12 @@ green (`pnpm typecheck && pnpm test && pnpm lint` + browser validation).
   a bigger project than the feature.) Then: matrix, visibility-only
   selection, per-pane interaction targeting, keyboard-entry targeting,
   picker deletion, responsive grid. Suites 3-4.
-  **Amendment (Phase 3 as built):** section C's "single-instrument
+  **Superseded (route model, 2026-08-03):** the amendment below described
+  a pinned-matrix, multi-difficulty-pane behavior for `/guitar-edit`,
+  `/bass-edit` and `/drum-edit`; those routes are deleted and the pinned
+  `showChartMatrix` variant retired with them (see "Route model" section),
+  so this amendment no longer applies to anything in the app.
+  ~~**Amendment (Phase 3 as built):** section C's "single-instrument
   surfaces pin one visible track" is relaxed — `/guitar-edit`,
   `/bass-edit` and `/drum-edit` pin the matrix to their one instrument
   but may show up to `MAX_HIGHWAY_PANES` (3) difficulty panes of that
@@ -492,7 +527,7 @@ green (`pnpm typecheck && pnpm test && pnpm lint` + browser validation).
   else (visibility is per instrument+difficulty cell), and it is safe
   because note selection/hover ids are unconditionally track-qualified,
   so a `tick:type` id shared by Expert and Hard never resolves in both
-  panes. **Open question (deferred from Phase 3 review):** a vocals
+  panes.~~ **Open question (deferred from Phase 3 review):** a vocals
   scope still replaces every note pane while the matrix shows its
   tracks lit, a presentation contradiction; resolving it (mutually
   exclusive picker vs a vocals row in the matrix) is a product

@@ -3,7 +3,7 @@
  */
 /**
  * Multi-pane highway (plan 0074 Phase 3, Suite 4): `HighwayEditor` renders
- * one pane per visible track, caps at 3 with an overflow chip, and each
+ * one pane per visible track, caps at 4 with an overflow chip, and each
  * pane's interaction hooks target that pane's own track — never the
  * globally-last-set `activeScope` of some other pane.
  *
@@ -30,7 +30,6 @@ import {useEditorKeyboard} from '../hooks/useEditorKeyboard';
 import PianoRollTimeline from '../piano-roll/PianoRollTimeline';
 import {
   ADD_LYRICS_CAPABILITIES,
-  DRUM_EDIT_CAPABILITIES,
   PREVIEW_CAPABILITIES,
   TEMPO_CAPABILITIES,
   type EditorCapabilities,
@@ -144,9 +143,10 @@ function makeMultiInstrumentDoc(): ChartDocument {
   parsed.trackData.push(emptyTrackData('drums', 'expert'));
   parsed.trackData.push(emptyTrackData('guitar', 'expert'));
   parsed.trackData.push(emptyTrackData('bass', 'expert'));
-  // Fourth charted track: lets a test make 4 tracks visible and exercise
-  // MAX_HIGHWAY_PANES + the overflow chip.
+  // Fourth and fifth charted tracks: let a test fill MAX_HIGHWAY_PANES (4)
+  // and then exceed it to exercise the overflow chip.
   parsed.trackData.push(emptyTrackData('guitar', 'hard'));
+  parsed.trackData.push(emptyTrackData('guitar', 'medium'));
   const doc: ChartDocument = {parsedChart: parsed, assets: []};
 
   addDrumNote(doc.parsedChart.trackData[0], {tick: 0, type: noteTypes.kick});
@@ -315,10 +315,10 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
     expect(screen.getByText('Guitar · Expert')).toBeInTheDocument();
   });
 
-  it('renders every visible track up to the cap with no overflow chip', async () => {
+  it('renders four visible tracks with no overflow chip (the X/H/M/E route model)', async () => {
     renderHarness({
       chartDoc: makeMultiInstrumentDoc(),
-      visible: ['drums:expert', 'guitar:expert', 'bass:expert'],
+      visible: ['drums:expert', 'guitar:expert', 'bass:expert', 'guitar:hard'],
     });
     await waitFor(() =>
       expect(
@@ -329,15 +329,22 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
       screen.getByTestId('highway-pane-guitar:expert'),
     ).toBeInTheDocument();
     expect(screen.getByTestId('highway-pane-bass:expert')).toBeInTheDocument();
+    expect(screen.getByTestId('highway-pane-guitar:hard')).toBeInTheDocument();
     expect(
       screen.queryByTestId('highway-overflow-indicator'),
     ).not.toBeInTheDocument();
   });
 
-  it('caps panes at 3 and shows a "+N more" overflow indicator beyond that', async () => {
+  it('caps panes at 4 and shows a "+N more" overflow indicator beyond that', async () => {
     renderHarness({
       chartDoc: makeMultiInstrumentDoc(),
-      visible: ['drums:expert', 'guitar:expert', 'bass:expert', 'guitar:hard'],
+      visible: [
+        'drums:expert',
+        'guitar:expert',
+        'bass:expert',
+        'guitar:hard',
+        'guitar:medium',
+      ],
     });
 
     await waitFor(() =>
@@ -345,13 +352,14 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
         screen.getByTestId('highway-pane-drums:expert'),
       ).toBeInTheDocument(),
     );
-    // First three visible tracks get panes; the fourth does not.
+    // First four visible tracks get panes; the fifth does not.
     expect(
       screen.getByTestId('highway-pane-guitar:expert'),
     ).toBeInTheDocument();
     expect(screen.getByTestId('highway-pane-bass:expert')).toBeInTheDocument();
+    expect(screen.getByTestId('highway-pane-guitar:hard')).toBeInTheDocument();
     expect(
-      screen.queryByTestId('highway-pane-guitar:hard'),
+      screen.queryByTestId('highway-pane-guitar:medium'),
     ).not.toBeInTheDocument();
 
     // The harness renders a single-track piano roll, which does NOT show the
@@ -375,6 +383,7 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
             'guitar:expert',
             'bass:expert',
             'guitar:hard',
+            'guitar:medium',
           ]),
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -715,9 +724,9 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Piano-roll producer / consumer, on surfaces whose piano roll is NOT stacked
-// (`/drum-edit`, `/guitar-edit`, `/bass-edit`): the same track-qualified id
-// convention has to hold there too, in both directions.
+// Piano-roll producer / consumer, on surfaces whose piano roll is NOT
+// stacked: the same track-qualified id convention has to hold there too,
+// in both directions.
 // ---------------------------------------------------------------------------
 
 describe('single-track piano roll ↔ highway selection (plan 0074 Phase 3)', () => {
@@ -895,7 +904,7 @@ describe('single-track piano roll ↔ highway selection (plan 0074 Phase 3)', ()
   });
 
   it('renders a highway note selection in the single-track piano roll', async () => {
-    // `/drum-edit`: one drums pane, a piano roll that is not stacked.
+    // One drums pane, a piano roll that is not stacked.
     mockTrackHits['drums:expert'] = noteHit('480:redDrum');
     const doc = makeMultiInstrumentDoc();
 
@@ -959,14 +968,13 @@ describe('single-track piano roll ↔ highway selection (plan 0074 Phase 3)', ()
   });
 
   it('does not leak a piano-roll selection into another difficulty pane of the same instrument', async () => {
-    // `/guitar-edit` with the matrix pinned to guitar and BOTH Expert and
-    // Hard toggled on: two panes, and "480:green" exists in both tracks.
+    // Guitar Expert and Hard both toggled visible: two panes, and
+    // "480:green" exists in both tracks.
     const doc = makeMultiInstrumentDoc();
     const {container} = renderSurface({
       doc,
       visible: ['guitar:expert', 'guitar:hard'],
       scope: DEFAULT_GUITAR_EXPERT_SCOPE,
-      capabilities: {...DRUM_EDIT_CAPABILITIES, showChartMatrix: 'guitar'},
     });
 
     await screen.findByTestId('highway-pane-guitar:expert');

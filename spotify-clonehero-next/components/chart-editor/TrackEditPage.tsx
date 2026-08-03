@@ -18,8 +18,6 @@ import {
   Music,
 } from 'lucide-react';
 import {toast} from 'sonner';
-import {parseChartFile, type IniChartModifiers} from '@eliwhite/scan-chart';
-
 import {Button} from '@/components/ui/button';
 import {
   Card,
@@ -41,20 +39,9 @@ import {
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
-import {readChart, writeChartFolder} from '@/lib/chart-edit';
+import {readChartForEditing} from '@/lib/chart-edit';
+import {highestDifficultyTrackKeys} from '@/lib/chart-editor-core';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
-import type {AssistAudio} from '@/lib/assist/tasks';
-import {mixStemsToAudioBuffer} from '@/lib/audio-pipeline/lyrics-audio';
-import {interleaveAudioBuffer} from '@/lib/drum-transcription/audio/decoder';
-import {encodeWavBlob} from '@/lib/audio/wav-encoder';
-import {audioMimeType} from '@/lib/sng/file-utils';
-import type {ChartDocument, ParsedTrackData} from '@/lib/chart-edit';
-import {AudioManager} from '@/lib/preview/audioManager';
-import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
-import {
-  CLICK_TRACK_NAME,
-  generateBeatClickTrackWav,
-} from '@/lib/preview/clickTrack';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {ChartEditorProvider, useChartEditorContext} from './ChartEditorContext';
 import {
@@ -62,9 +49,13 @@ import {
   useAudioServiceContext,
 } from './AudioServiceContext';
 import {trackKeyId, type EditorScope} from './scope';
-import type {EditorCapabilities} from './capabilities';
 import ChartEditor from './ChartEditor';
-import type {AudioSource} from './ExportDialog';
+import {
+  chartDocToChartText,
+  prepareChartPackageAudio,
+  useChartPackageEditor,
+  type PreparedChartPackageAudio,
+} from './chartPackage';
 import {useEditorKeyboard} from './hooks/useEditorKeyboard';
 import {useAutoSave} from './hooks/useAutoSave';
 import {
@@ -74,44 +65,38 @@ import {
 } from '@/lib/project-storage/opfsProjectStore';
 
 /**
- * Configuration for a single-instrument chart-edit page (`/drum-edit`,
- * `/guitar-edit`). Everything that differs between those pages — OPFS
- * namespace, default scope, ini modifiers, which track to load, labels —
- * is captured here; `TrackEditPage` implements the shared shell (load
- * screen, OPFS project list, chart loading/parsing, `ChartEditor` mount)
- * once.
+ * Message shown for a chart with nothing this editor can open: no guitar,
+ * bass or drum track at any difficulty.
+ */
+export const NO_SUPPORTED_TRACK_MESSAGE =
+  'No guitar, bass, or drum track found in chart.';
+
+/**
+ * Configuration for an OPFS-project-backed chart-edit page (`/chart-editor`).
+ * The OPFS namespace, default scope and labels are captured here;
+ * `TrackEditPage` implements the shared shell (load screen, OPFS project
+ * list, chart loading/parsing, `ChartEditor` mount) once.
+ *
+ * Two things are deliberately not configurable, because getting either wrong
+ * is silent: which tracks the editor opens with (every instrument's highest
+ * charted difficulty, route model plan 0074), and how a chart is parsed for
+ * editing (`readChartForEditing`, so cymbal edits round-trip).
  */
 export interface TrackEditPageConfig {
   /** OPFS namespace for this page's projects, and its route path. */
   namespace: string;
   route: string;
+  /**
+   * Namespaces written by routes that have since been folded into this one.
+   * Their projects stay listable and editable in place; new projects are
+   * always written to `namespace`.
+   */
+  legacyNamespaces?: readonly string[];
   /** Scope the editor starts in (instrument/difficulty pair to edit). */
   defaultScope: EditorScope;
-  /**
-   * Capability profile the editor mounts with. Single-instrument pages
-   * (`/guitar-edit`, `/bass-edit`, `/drum-edit`) pin `showChartMatrix` to
-   * their one instrument so the Chart Matrix offers difficulty switching
-   * for that instrument alone, with no "+ Add instrument" affordance.
-   * Defaults to `DRUM_EDIT_CAPABILITIES` (full editing, matrix `'all'`) —
-   * `ChartEditorProvider`'s own default — when omitted.
-   */
-  capabilities?: EditorCapabilities;
   pageTitle: string;
   pageDescription: string;
   dropZoneId: string;
-  /** Ini chart modifiers to force on every parse (e.g. `{pro_drums: true}`). */
-  iniChartModifiersOverride?: Partial<IniChartModifiers>;
-  /**
-   * Pick the track to edit from a freshly parsed chart's `trackData`, or
-   * `undefined` if the chart has none of this page's instrument. Called
-   * both when loading a new chart (existence check) and when opening a
-   * saved project (existence check + resolving which difficulty to show).
-   */
-  findTrack: (
-    trackData: ChartDocument['parsedChart']['trackData'],
-  ) => ParsedTrackData | undefined;
-  /** Error message shown when `findTrack` returns nothing. */
-  noTrackMessage: string;
   /** Extra control rendered in the ChartEditor header (e.g. a difficulty picker). */
   headerExtra?: ReactNode;
   /** Extra controls rendered in the ChartEditor left sidebar. */
@@ -131,9 +116,7 @@ export default function TrackEditPage(config: TrackEditPageConfig) {
        *  run a task here (Tempo map, Lyrics/Vocals) share it, so only one
        *  assist run is ever in flight and leaving the page aborts it. */}
       <AssistRunnerProvider>
-        <ChartEditorProvider
-          activeScope={config.defaultScope}
-          {...(config.capabilities ? {capabilities: config.capabilities} : {})}>
+        <ChartEditorProvider activeScope={config.defaultScope}>
           <Suspense
             fallback={
               <div className="flex items-center justify-center h-screen">
@@ -161,12 +144,16 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
     pageTitle,
     pageDescription,
     dropZoneId,
-    iniChartModifiersOverride,
-    findTrack,
-    noTrackMessage,
+    legacyNamespaces,
   } = config;
 
-  const store = useMemo(() => createOpfsProjectStore(namespace), [namespace]);
+  const store = useMemo(
+    () =>
+      createOpfsProjectStore(namespace, {
+        legacyNamespaces: legacyNamespaces ?? [],
+      }),
+    [namespace, legacyNamespaces],
+  );
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -217,14 +204,17 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
       try {
         const {files, sourceFormat, originalName, sngMetadata} = loaded;
 
-        const chartDoc = readChart(files, iniChartModifiersOverride);
+        const chartDoc = readChartForEditing(files);
         const name =
           chartDoc.parsedChart.metadata.name ?? originalName ?? 'Unknown';
         const artist = chartDoc.parsedChart.metadata.artist ?? 'Unknown';
         const charter = chartDoc.parsedChart.metadata.charter ?? 'Unknown';
 
-        if (!findTrack(chartDoc.parsedChart.trackData)) {
-          throw new Error(noTrackMessage);
+        if (
+          highestDifficultyTrackKeys(chartDoc.parsedChart.trackData).length ===
+          0
+        ) {
+          throw new Error(NO_SUPPORTED_TRACK_MESSAGE);
         }
 
         // Find audio files
@@ -249,14 +239,7 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
 
         // Force .chart output format (input may have been .mid)
         chartDoc.parsedChart.format = 'chart';
-        const chartFiles = writeChartFolder(chartDoc);
-        const chartFileEntry = chartFiles.find(
-          f => f.fileName === 'notes.chart',
-        );
-        if (!chartFileEntry) {
-          throw new Error('writeChartFolder did not produce notes.chart');
-        }
-        const chartText = new TextDecoder().decode(chartFileEntry.data);
+        const chartText = chartDocToChartText(chartDoc);
 
         // Create OPFS project
         const meta = await store.createProject({
@@ -281,14 +264,7 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
         setPageState('load');
       }
     },
-    [
-      router,
-      store,
-      route,
-      iniChartModifiersOverride,
-      findTrack,
-      noTrackMessage,
-    ],
+    [router, store, route],
   );
 
   // Handle opening an existing project
@@ -476,14 +452,7 @@ function TrackEditEditor({
   onBack,
   onReady,
 }: TrackEditEditorProps) {
-  const {
-    iniChartModifiersOverride,
-    findTrack,
-    noTrackMessage,
-    headerExtra,
-    leftPanelChildren,
-    stackedPianoRoll,
-  } = config;
+  const {headerExtra, leftPanelChildren, stackedPianoRoll} = config;
   const {state, dispatch} = useChartEditorContext();
   const {setAudioManager: publishAudioManager} = useAudioServiceContext();
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
@@ -491,24 +460,19 @@ function TrackEditEditor({
   const [errorMessage, setErrorMessage] = useState('');
   const [projectMeta, setProjectMeta] = useState<ProjectMetadata | null>(null);
   const [durationSeconds, setDurationSeconds] = useState(0);
-  const [audioData, setAudioData] = useState<Float32Array | null>(null);
-  const [audioChannels, setAudioChannels] = useState(2);
-  const [audioSampleRate, setAudioSampleRate] = useState<number | undefined>(
-    undefined,
-  );
-  // Mirrors audioManagerRef (shared via AudioServiceProvider for
-  // event-handler reads) into render-visible state so the CloneHeroRenderer
-  // prop is passed without reading ref.current during render.
-  const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
+  // Mirrors the AudioManager published on AudioServiceProvider (which
+  // event handlers read through a ref) into render-visible state, along
+  // with the PCM decoded beside it.
+  const [audio, setAudio] = useState<PreparedChartPackageAudio | null>(null);
+  const audioManager = audio?.audioManager ?? null;
 
   // Auto-save: write edited chart to OPFS
   const saveFn = useCallback(async () => {
     if (!state.chartDoc) return;
-    const files = writeChartFolder(state.chartDoc);
-    const chartFile = files.find(f => f.fileName === 'notes.chart');
-    if (!chartFile) return;
-    const chartText = new TextDecoder().decode(chartFile.data);
-    await store.writeEditedChart(projectId, chartText);
+    await store.writeEditedChart(
+      projectId,
+      chartDocToChartText(state.chartDoc),
+    );
   }, [projectId, state.chartDoc, store]);
 
   const {save} = useAutoSave(loadingState === 'ready' ? saveFn : null);
@@ -519,7 +483,8 @@ function TrackEditEditor({
   // Load project data from OPFS
   useEffect(() => {
     let cancelled = false;
-    let createdAudioManager: AudioManager | null = null;
+    let createdAudioManager: PreparedChartPackageAudio['audioManager'] | null =
+      null;
 
     async function loadProject() {
       try {
@@ -535,22 +500,25 @@ function TrackEditEditor({
         const chartText = await store.readChartText(projectId);
         if (cancelled) return;
 
-        // 3. Parse chart
+        // 3. Build the editable ChartDocument. This is the editor's parse:
+        // a basic four-lane drum chart is read as pro-drums so the cymbal
+        // toggle the editor offers survives the save it writes.
         const chartBytes = new TextEncoder().encode(chartText);
-        const parsed = parseChartFile(
-          chartBytes,
-          'chart',
-          iniChartModifiersOverride,
-        );
+        const chartDoc = readChartForEditing([
+          {fileName: 'notes.chart', data: chartBytes},
+        ]);
+        const parsed = chartDoc.parsedChart;
 
-        // 4. Find the track to edit — prefer the default scope's
-        // difficulty, else whatever findTrack resolves. If the resolved
-        // track's difficulty differs from the current scope, switch scope
-        // to match so the highway/header reflect what's actually loaded.
-        const track = findTrack(parsed.trackData);
-        if (!track) {
+        // 4. Resolve the tracks to open: every instrument's highest charted
+        // difficulty (route model, plan 0074). The scope to focus is drums
+        // when it's among them, else the first one — a chart with none of
+        // them has nothing this editor can open.
+        const seededKeys = highestDifficultyTrackKeys(parsed.trackData);
+        const scopeTrack =
+          seededKeys.find(k => k.instrument === 'drums') ?? seededKeys[0];
+        if (!scopeTrack) {
           throw new Error(
-            `${noTrackMessage} Available tracks: ` +
+            `${NO_SUPPORTED_TRACK_MESSAGE} Available tracks: ` +
               parsed.trackData
                 .map(t => `${t.instrument}/${t.difficulty}`)
                 .join(', '),
@@ -559,28 +527,22 @@ function TrackEditEditor({
         const currentScope = state.activeScope;
         if (
           currentScope.kind !== 'track' ||
-          currentScope.track.instrument !== track.instrument ||
-          currentScope.track.difficulty !== track.difficulty
+          currentScope.track.instrument !== scopeTrack.instrument ||
+          currentScope.track.difficulty !== scopeTrack.difficulty
         ) {
           dispatch({
             type: 'SET_ACTIVE_SCOPE',
             scope: {
               kind: 'track',
               track: {
-                instrument: track.instrument,
-                difficulty: track.difficulty,
+                instrument: scopeTrack.instrument,
+                difficulty: scopeTrack.difficulty,
               },
             },
           });
         }
 
-        // 5. Build editable ChartDocument.
-        const chartDoc = readChart(
-          [{fileName: 'notes.chart', data: chartBytes}],
-          iniChartModifiersOverride,
-        );
-
-        // 6. Load audio files from OPFS
+        // 5. Load audio files from OPFS
         setLoadingStep('Loading audio...');
         const audioFiles = await store.loadAudioFiles(projectId);
         if (cancelled) return;
@@ -589,92 +551,37 @@ function TrackEditEditor({
           throw new Error('No audio files found in project storage');
         }
 
-        // 7. Decode first audio file to raw PCM for waveform display. Also
-        // gives us the song duration, needed below to size the synthesized
-        // click track before AudioManager is constructed.
-        let waveformDurationSec = 0;
-        try {
-          const waveformCtx = new AudioContext({sampleRate: 44100});
-          const firstAudio = audioFiles[0];
-          const buf = firstAudio.data.slice(0).buffer;
-          const decoded = await waveformCtx.decodeAudioData(buf as ArrayBuffer);
-          const channels = decoded.numberOfChannels;
-          waveformDurationSec = decoded.duration;
-          // Interleave channels into a single Float32Array
-          const length = decoded.length;
-          const interleaved = new Float32Array(length * channels);
-          for (let ch = 0; ch < channels; ch++) {
-            const channelData = decoded.getChannelData(ch);
-            for (let i = 0; i < length; i++) {
-              interleaved[i * channels + ch] = channelData[i];
-            }
-          }
-          setAudioData(interleaved);
-          setAudioChannels(channels);
-          setAudioSampleRate(decoded.sampleRate);
-          await waveformCtx.close();
-        } catch {
-          // Waveform is optional — don't fail the whole load
-          console.warn('Could not decode audio for waveform display');
-        }
-        if (cancelled) return;
-
-        // 8. Synthesize the metronome click stem from the chart's tempo map
-        // and time signatures, and register it as its own "click" audio
-        // file so AudioManager gives it the same playback-speed/seek sync
-        // as every other track. Volume defaults to silent (0) below.
-        const chartDelayMs = getChartDelayMs(chartDoc.parsedChart.metadata);
-        if (waveformDurationSec > 0) {
-          try {
-            const clickWav = await generateBeatClickTrackWav(
-              chartDoc.parsedChart,
-              waveformDurationSec * 1000,
-              chartDelayMs,
-            );
-            audioFiles.push({
-              fileName: `${CLICK_TRACK_NAME}.wav`,
-              data: clickWav,
-            });
-          } catch (err) {
-            // Click track is a nice-to-have — don't fail the whole load if
-            // synthesis fails for some reason.
-            console.warn('Could not generate click track:', err);
-          }
-        }
-        if (cancelled) return;
-
-        // 9. Create AudioManager
+        // 6. Build playback + waveform from the package (shared with the
+        // difficulty-generation flow): decoded PCM, the synthesized click
+        // stem, and the chart delay applied to the AudioManager.
         setLoadingStep('Preparing audio playback...');
-        const audioManager = new AudioManager(audioFiles, () => {
-          dispatch({type: 'SET_PLAYING', isPlaying: false});
+        const prepared = await prepareChartPackageAudio({
+          chartDoc,
+          audioFiles,
+          onPlaybackEnded: () =>
+            dispatch({type: 'SET_PLAYING', isPlaying: false}),
         });
-        await audioManager.ready;
-        if (cancelled) return;
-
-        audioManager.setChartDelay(chartDelayMs / 1000);
-        try {
-          audioManager.setVolume(CLICK_TRACK_NAME, 0);
-        } catch {
-          // Click track failed to generate above — no such stem to silence.
+        if (cancelled) {
+          // Unmounted while the audio was being built: the cleanup below has
+          // already run and never saw this manager, so destroy it here or its
+          // AudioContext outlives the page.
+          prepared.audioManager.destroy();
+          return;
         }
-        createdAudioManager = audioManager;
-        publishAudioManager(audioManager);
-        setAudioManager(audioManager);
+        createdAudioManager = prepared.audioManager;
 
-        // 10. Update editor state. ChartDoc carries the parsed chart;
+        publishAudioManager(prepared.audioManager);
+        setAudio(prepared);
+
+        // 7. Update editor state. ChartDoc carries the parsed chart;
         // consumers derive the active track via selectActiveTrack().
         dispatch({type: 'SET_CHART_DOC', chartDoc});
-        // The unified editor starts with exactly the track chosen by the
-        // page's preference function in View mode. Other tracks remain
-        // available in the sidebar without duplicating the piano roll.
+        // The editor starts with every instrument's highest charted
+        // difficulty visible. Other tracks remain available in the sidebar
+        // without duplicating the piano roll.
         dispatch({
           type: 'SET_VISIBLE_TRACKS',
-          tracks: new Set([
-            trackKeyId({
-              instrument: track.instrument,
-              difficulty: track.difficulty,
-            }),
-          ]),
+          tracks: new Set(seededKeys.map(trackKeyId)),
         });
         setLoadingState('ready');
         onReady();
@@ -695,7 +602,7 @@ function TrackEditEditor({
       cancelled = true;
       createdAudioManager?.destroy();
       publishAudioManager(null);
-      setAudioManager(null);
+      setAudio(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
@@ -719,60 +626,17 @@ function TrackEditEditor({
     [projectMeta],
   );
 
-  // Export: provide chart text
-  const getChartText = useCallback(async (): Promise<string> => {
-    if (!state.chartDoc) throw new Error('No chart document');
-    const files = writeChartFolder(state.chartDoc);
-    const chartFile = files.find(f => f.fileName === 'notes.chart');
-    if (!chartFile)
-      throw new Error('writeChartFolder did not produce notes.chart');
-    return new TextDecoder().decode(chartFile.data);
-  }, [state.chartDoc]);
-
-  // Export: provide audio sources (original audio files from the package).
-  // This page has no separated stems, so the stem preference is ignored.
-  const getAudioSources = useCallback(async (): Promise<AudioSource[]> => {
-    const audioFiles = await store.loadAudioFiles(projectId);
-    return audioFiles.map(f => ({
-      fileName: f.fileName,
-      data: f.data.buffer as ArrayBuffer,
-    }));
-  }, [projectId, store]);
-
-  // Chart Assist: the song's audio, for the tasks that work from audio bytes
-  // alone. The chart package's own files are the only audio this surface
-  // has, and it has no stem-cache fingerprint to offer, so the task derives
-  // one by hashing whatever bytes come back here.
-  const loadAssistAudio = useCallback(
-    async (): Promise<AssistAudio> => ({
-      loadOriginalBytes: async () => {
-        const audioFiles = await store.loadAudioFiles(projectId);
-        if (audioFiles.length === 0) {
-          throw new Error('No audio files found in project storage');
-        }
-        // A single file IS the full mix: hand its bytes over verbatim, so
-        // the fingerprint derived from them matches the same file separated
-        // by any other tool.
-        if (audioFiles.length === 1) return audioFiles[0].data;
-        // A multi-stem package has no single mixed file, so sum the stems
-        // back into one and encode it, the same reconstruction
-        // `/add-lyrics` performs before re-separating.
-        const mixed = await mixStemsToAudioBuffer(
-          audioFiles.map(f => ({
-            data: f.data,
-            mimeType: audioMimeType(f.fileName),
-          })),
-        );
-        const wav = encodeWavBlob(
-          interleaveAudioBuffer(mixed),
-          mixed.sampleRate,
-          2,
-        );
-        return new Uint8Array(await wav.arrayBuffer());
-      },
-    }),
+  // The project's own audio files: what this host exports, and what Chart
+  // Assist's audio tasks work from.
+  const loadAudioFiles = useCallback(
+    () => store.loadAudioFiles(projectId),
     [projectId, store],
   );
+  const chartPackage = useChartPackageEditor({
+    audio,
+    chartDoc: state.chartDoc ?? null,
+    loadAudioFiles,
+  });
 
   // Loading state
   if (loadingState === 'loading') {
@@ -809,50 +673,17 @@ function TrackEditEditor({
         metadata={cloneHeroMetadata}
         chart={chart}
         audioManager={audioManager}
-        audioData={audioData ?? undefined}
-        audioChannels={audioChannels}
+        audioData={chartPackage.audioData}
+        audioChannels={chartPackage.audioChannels}
         durationSeconds={durationSeconds}
         sections={chart.sections}
         songName={projectMeta?.name ?? 'Untitled'}
         artistName={projectMeta?.artist}
         charterName={projectMeta?.charter}
         dirty={state.dirty}
-        getChartText={getChartText}
-        getAudioSources={getAudioSources}
-        /*
-         * Chart Assist on this shell, card by card (plan 0074 Phase 2):
-         *
-         * - Tempo map: RUNS. `generate-tempo-map` needs nothing but the
-         *   song's audio bytes, which the chart package supplies.
-         * - Lyrics / Vocals: RUNS. `add-lyrics` needs audio bytes plus the
-         *   pasted text. With no stem-cache fingerprint to offer, a chart
-         *   whose audio was never separated here takes the Demucs branch,
-         *   which is exactly what `/add-lyrics` does with the same input.
-         * - Add leading silence: DISABLED, still shown. The command re-ticks
-         *   the chart and records an `audioAnchor` that the host is then
-         *   responsible for matching by padding the audio it plays and
-         *   exports. This shell doesn't use `usePaddedAudio`: it builds its
-         *   `AudioManager` directly from the package's audio files below and
-         *   has no rebuild-on-`audioAnchor`-change wiring, so padding the
-         *   chart without also padding every audio file this page
-         *   plays/exports would leave them drifted apart. The detector's
-         *   advice is still worth reading, so the card renders with the
-         *   action disabled.
-         * - Drum transcription: DISABLED, still shown (only on charts that
-         *   have Expert Drums). `transcribe-drums` regenerates an OPFS
-         *   drum-transcription project, which a chart loaded from a file
-         *   here does not have. The note count and the staleness prompt come
-         *   from editor state alone, and "Keep as-is" is a decision about
-         *   that state, so both keep working.
-         */
-        chartAssist={{
-          loadAudio: loadAssistAudio,
-          audioSampleRate,
-          leadingSilenceDisabledReason:
-            "This editor builds its audio playback directly from the chart's files and never pads it to match a shifted chart, so it cannot add leading silence here yet.",
-          drumRerunDisabledReason:
-            'Re-running transcription needs the separated drum audio from the drum transcription tool. This chart was loaded from a file, so there is nothing to re-run here.',
-        }}
+        getChartText={chartPackage.getChartText}
+        getAudioSources={chartPackage.getAudioSources}
+        chartAssist={chartPackage.chartAssist}
         headerExtra={headerExtra}
         leftPanelChildren={leftPanelChildren}
         stackedPianoRoll={stackedPianoRoll}

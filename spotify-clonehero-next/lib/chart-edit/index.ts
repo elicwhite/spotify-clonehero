@@ -15,6 +15,8 @@ import {
 } from '@eliwhite/scan-chart';
 import type {ChartDocument, File} from '@eliwhite/scan-chart';
 
+import {drumTypes} from './types';
+
 // Re-export the scan-chart surface consumers depend on
 export {createEmptyChart, writeChartFolder};
 
@@ -260,10 +262,11 @@ export {
  *
  * `iniChartModifiersOverride` merges into the modifiers used for the
  * parse itself, so derived fields (HOPO/cymbal/etc.) reflect the
- * consumer's intended interpretation rather than song.ini's. The
- * drum-edit page uses this with `{pro_drums: true}` so tom/cymbal
- * modifiers are honored from the very first parse, not just on
- * subsequent edit round-trips.
+ * consumer's intended interpretation rather than song.ini's — e.g.
+ * `{pro_drums: true}` so tom/cymbal modifiers are honored from the very
+ * first parse, not just on subsequent edit round-trips. Hosts that open a
+ * chart for editing use {@link readChartForEditing} instead, which picks
+ * that override from the chart itself.
  */
 export function readChart(
   files: File[],
@@ -282,40 +285,74 @@ export function readChart(
     f => !chartFileNames.has(f.fileName.toLowerCase()),
   );
 
-  let {parsedChart} = result;
-  if (iniChartModifiersOverride) {
-    // parseChartAndIni already parsed once with song.ini's modifiers; re-parse
-    // the same bytes with the merged modifiers so HOPO/cymbal/etc. derivation
-    // matches the override from the start. parseChartFile returns the narrow
-    // shape (no chartBytes/format/iniChartModifiers) so we re-stitch the wider
-    // ParsedChart that consumers expect.
-    //
-    // `parseChartFile`'s own `metadata` only carries what the source FILE
-    // embeds (the .chart file's `[Song]` section; nothing at all for .mid —
-    // see scan-chart's `RawChartData.metadata` doc comment). It never sees
-    // song.ini. The first `parseChartAndIni(files)` call above already did
-    // the ini-wins overlay onto `parsedChart.metadata` — that's the metadata
-    // every consumer actually wants (charter, artist, delay, etc.), so it
-    // must be carried through here explicitly, not replaced by the reparse's
-    // narrower one.
-    const iniMergedMetadata = parsedChart.metadata;
-    const mergedModifiers = {
-      ...parsedChart.iniChartModifiers,
-      ...iniChartModifiersOverride,
-    };
-    const reparsed = parseChartFile(
-      parsedChart.chartBytes,
-      parsedChart.format,
-      mergedModifiers,
-    );
-    parsedChart = {
-      ...reparsed,
-      metadata: iniMergedMetadata,
-      chartBytes: parsedChart.chartBytes,
-      format: parsedChart.format,
-      iniChartModifiers: mergedModifiers,
-    };
-  }
+  const {parsedChart} = result;
 
-  return {parsedChart, assets};
+  return {
+    parsedChart: iniChartModifiersOverride
+      ? reparseWithModifiers(parsedChart, iniChartModifiersOverride)
+      : parsedChart,
+    assets,
+  };
+}
+
+/**
+ * Re-parse an already-parsed chart's own bytes with `override` merged into
+ * its modifiers, so HOPO/cymbal/etc. derivation matches the override from the
+ * start. `parseChartFile` returns the narrow shape (no
+ * chartBytes/format/iniChartModifiers) so the wider `ParsedChart` consumers
+ * expect is re-stitched here.
+ *
+ * `parseChartFile`'s own `metadata` only carries what the source FILE embeds
+ * (the .chart file's `[Song]` section; nothing at all for .mid — see
+ * scan-chart's `RawChartData.metadata` doc comment). It never sees song.ini.
+ * The caller's first parse already did the ini-wins overlay onto
+ * `parsedChart.metadata` — that's the metadata every consumer actually wants
+ * (charter, artist, delay, etc.), so it is carried through explicitly rather
+ * than replaced by the reparse's narrower one.
+ */
+function reparseWithModifiers(
+  parsedChart: ChartDocument['parsedChart'],
+  override: Partial<import('@eliwhite/scan-chart').IniChartModifiers>,
+): ChartDocument['parsedChart'] {
+  const iniMergedMetadata = parsedChart.metadata;
+  const mergedModifiers = {
+    ...parsedChart.iniChartModifiers,
+    ...override,
+  };
+  const reparsed = parseChartFile(
+    parsedChart.chartBytes,
+    parsedChart.format,
+    mergedModifiers,
+  );
+  return {
+    ...reparsed,
+    metadata: iniMergedMetadata,
+    chartBytes: parsedChart.chartBytes,
+    format: parsedChart.format,
+    iniChartModifiers: mergedModifiers,
+  };
+}
+
+/**
+ * Parse a chart folder the way the chart editor edits it.
+ *
+ * Same as {@link readChart}, except a chart that parsed as basic four-lane
+ * drums is re-parsed with pro-drums interpretation. The editor offers the
+ * cymbal toggle on every four-lane drum track (`drumSchemaFor` gives
+ * `fourLane` and `fourLanePro` the same schema), but the .chart writer only
+ * emits a cymbal marker when the chart itself is pro-drums — so on a basic
+ * four-lane chart a cymbal edit would be shown, saved, and silently lost on
+ * the next read.
+ *
+ * Charts that already parsed as pro-drums or five-lane keep their own
+ * `drumType`: forcing `pro_drums` outranks five-lane detection in scan-chart,
+ * which would re-read a Guitar Hero five-lane chart as four-lane pro.
+ */
+export function readChartForEditing(files: File[]): ChartDocument {
+  const doc = readChart(files);
+  if (doc.parsedChart.drumType !== drumTypes.fourLane) return doc;
+  return {
+    ...doc,
+    parsedChart: reparseWithModifiers(doc.parsedChart, {pro_drums: true}),
+  };
 }

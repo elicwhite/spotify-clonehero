@@ -62,6 +62,29 @@ export function availableTrackKeys(
   );
 }
 
+/**
+ * The highest charted difficulty for each instrument present in
+ * `trackData` — Expert when charted, else the next difficulty down. Used
+ * to seed initial visibility on `/chart-editor`, where every instrument's
+ * best track starts visible in the Chart Matrix (plan 0074 route model).
+ *
+ * `TRACK_DIFFICULTIES` is already ordered Expert-first, so the first
+ * difficulty found charted for an instrument is its highest.
+ */
+export function highestDifficultyTrackKeys(
+  trackData: ParsedTrackData[],
+): SupportedTrackKey[] {
+  return SUPPORTED_TRACK_INSTRUMENTS.flatMap(instrument => {
+    const highest = TRACK_DIFFICULTIES.find(difficulty =>
+      trackData.some(
+        track =>
+          track.instrument === instrument && track.difficulty === difficulty,
+      ),
+    );
+    return highest ? [{instrument, difficulty: highest}] : [];
+  });
+}
+
 export function preferredTrackKey(
   trackData: ParsedTrackData[],
 ): SupportedTrackKey | undefined {
@@ -82,22 +105,4 @@ export function preferredTrackForChart(
   chartDoc: ChartDocument,
 ): SupportedTrackKey | undefined {
   return preferredTrackKey(chartDoc.parsedChart.trackData);
-}
-
-/**
- * Resolve {@link preferredTrackKey}'s choice back to the parser's track
- * object — the initial highway track for the unified `/chart-editor` page
- * (guitar Expert, then drums Expert, then any Expert, then the first track).
- */
-export function findPreferredTrack(
-  trackData: ParsedTrackData[],
-): ParsedTrackData | undefined {
-  const preferred = preferredTrackKey(trackData);
-  return preferred
-    ? trackData.find(
-        track =>
-          track.instrument === preferred.instrument &&
-          track.difficulty === preferred.difficulty,
-      )
-    : undefined;
 }

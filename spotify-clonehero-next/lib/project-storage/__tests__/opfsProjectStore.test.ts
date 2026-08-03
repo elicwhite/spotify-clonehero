@@ -72,8 +72,8 @@ describe('createOpfsProjectStore', () => {
   });
 
   it('isolates projects between namespaces', async () => {
-    const drumStore = createOpfsProjectStore('drum-edit-test');
-    const guitarStore = createOpfsProjectStore('guitar-edit-test');
+    const drumStore = createOpfsProjectStore('drums-test');
+    const guitarStore = createOpfsProjectStore('guitar-test');
 
     await drumStore.createProject({
       name: 'Drum Song',
@@ -89,5 +89,56 @@ describe('createOpfsProjectStore', () => {
 
     expect(await drumStore.listProjects()).toHaveLength(1);
     expect(await guitarStore.listProjects()).toHaveLength(0);
+  });
+
+  it('adopts a legacy namespace so projects saved by a retired route stay usable', async () => {
+    const legacyStore = createOpfsProjectStore('legacy-route');
+    const legacy = await legacyStore.createProject({
+      name: 'Old Song',
+      artist: 'Artist',
+      charter: 'Charter',
+      durationSeconds: 60,
+      sourceFormat: 'sng',
+      originalName: 'old.sng',
+      chartText: 'old-chart',
+      audioFiles: [],
+      allFiles: [{fileName: 'notes.chart', data: new Uint8Array([1])}],
+    });
+
+    const store = createOpfsProjectStore('current-route', {
+      legacyNamespaces: ['legacy-route'],
+    });
+
+    expect((await store.listProjects()).map(p => p.id)).toEqual([legacy.id]);
+    expect(await store.getProject(legacy.id)).toEqual(legacy);
+    expect(await store.readChartText(legacy.id)).toBe('old-chart');
+
+    // Saves land on the project where it already lives, not on a copy.
+    await store.writeEditedChart(legacy.id, 'edited-in-place');
+    expect(await legacyStore.readChartText(legacy.id)).toBe('edited-in-place');
+
+    // New projects go to the current namespace, and both are listed.
+    const fresh = await store.createProject({
+      name: 'New Song',
+      artist: 'Artist',
+      charter: 'Charter',
+      durationSeconds: 60,
+      sourceFormat: 'sng',
+      originalName: 'new.sng',
+      chartText: 'new-chart',
+      audioFiles: [],
+      allFiles: [{fileName: 'notes.chart', data: new Uint8Array([1])}],
+    });
+    expect((await store.listProjects()).map(p => p.id).sort()).toEqual(
+      [legacy.id, fresh.id].sort(),
+    );
+    expect((await legacyStore.listProjects()).map(p => p.id)).toEqual([
+      legacy.id,
+    ]);
+
+    // Deleting a legacy project removes it where it lives.
+    await store.deleteProject(legacy.id);
+    expect(await legacyStore.listProjects()).toHaveLength(0);
+    expect((await store.listProjects()).map(p => p.id)).toEqual([fresh.id]);
   });
 });

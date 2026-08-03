@@ -27,9 +27,9 @@
  * renders its status and recommendation with the action disabled and that
  * reason on the tooltip. `/drum-transcription` wires all four to run;
  * `/tempo` wires the leading-silence card only; the shared `TrackEditPage`
- * shell (`/chart-editor`, `/guitar-edit`, `/bass-edit`, `/drum-edit`) runs
- * the two audio-only tasks and passes reasons for the other two; a bare
- * `ChartEditor` with no wiring renders no section at all.
+ * shell (`/chart-editor`) runs the two audio-only tasks and passes reasons
+ * for the other two; a bare `ChartEditor` with no wiring renders no section
+ * at all.
  */
 
 import {useState} from 'react';

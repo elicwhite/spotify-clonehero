@@ -95,11 +95,6 @@ export const DEFAULT_GUITAR_EXPERT_SCOPE: EditorScope = {
   track: {instrument: 'guitar', difficulty: 'expert'},
 };
 
-export const DEFAULT_BASS_EXPERT_SCOPE: EditorScope = {
-  kind: 'track',
-  track: {instrument: 'bass', difficulty: 'expert'},
-};
-
 export const DEFAULT_VOCALS_SCOPE: EditorScope = {
   kind: 'vocals',
   part: 'vocals',

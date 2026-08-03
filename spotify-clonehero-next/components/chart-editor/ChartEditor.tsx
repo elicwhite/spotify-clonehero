@@ -92,7 +92,7 @@ export interface ChartEditorProps {
   hideHeader?: boolean | undefined;
   /**
    * Extra content rendered in the top bar between the song info and the
-   * Export button (e.g. guitar-edit's difficulty picker). Ignored when
+   * Export button (e.g. a page's difficulty picker). Ignored when
    * `hideHeader` is set.
    */
   headerExtra?: ReactNode | undefined;

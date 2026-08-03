@@ -17,7 +17,6 @@ export {
   getFirstSelectedId,
   isAnythingSelected,
   selectActiveTrack,
-  findPreferredTrack,
   type ChartEditorState,
   type ChartEditorAction,
   type ChartEditorContextValue,
@@ -29,7 +28,6 @@ export {
 export {
   DEFAULT_DRUMS_EXPERT_SCOPE,
   DEFAULT_GUITAR_EXPERT_SCOPE,
-  DEFAULT_BASS_EXPERT_SCOPE,
   DEFAULT_VOCALS_SCOPE,
   describeScope,
   entityContextFromScope,
@@ -54,7 +52,7 @@ export {
 export {default as ChartEditor} from './ChartEditor';
 export type {ChartEditorProps} from './ChartEditor';
 
-// Full-page shell for single-instrument chart-edit pages (/drum-edit, /guitar-edit)
+// Full-page shell for a chart-edit page backed by an OPFS project (/chart-editor)
 export {default as TrackEditPage} from './TrackEditPage';
 export type {TrackEditPageConfig} from './TrackEditPage';
 

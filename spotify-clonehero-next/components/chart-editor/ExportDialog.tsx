@@ -233,7 +233,7 @@ export default function ExportDialog({
       }
       // 3a. Normalize all audio to Opus before assembly. Some pages provide
       //     already-encoded `.opus` (stem path), others provide wav/mp3/ogg
-      //     (original-file path, drum-edit) or carry secondary audio in the
+      //     (original-file path, `/chart-editor`) or carry secondary audio in the
       //     passthrough assets — transcode any non-Opus audio and rename it to
       //     `.opus`; non-audio assets pass through untouched. Assembly itself
       //     stays pure/sync; this async step is the seam.

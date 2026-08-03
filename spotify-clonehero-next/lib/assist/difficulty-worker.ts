@@ -4,7 +4,8 @@
  * Drums route through `lib/drum-difficulty/ours` (the trained GBM reducer,
  * "Ours" v5) — plan 0071 concluded "ship the trained GBM" and named no
  * competing production default, so Ours is this worker's only drum reducer;
- * HOPCAT/Onyx stay comparison-only tools on `/difficulties`. Guitar routes
+ * the ported HOPCAT/Onyx reducers are reference implementations kept for
+ * their parity tests and have no caller here. Guitar routes
  * through the ONNX reducer in `lib/guitar-difficulty` (models fetched lazily
  * from `assets.musiccharts.tools/models/guitar-reduction-v1` by
  * `loadGuitarReductionRuntime`, the same `getCachedModel`-style pattern other

@@ -8,7 +8,7 @@
  * here. That keeps the registry data, not a controller.
  *
  * Composition with `EditorCapabilities`: capabilities filter which kinds
- * are exposed for the active page (drum-edit vs add-lyrics). Affordances
+ * are exposed for the active page (`/chart-editor` vs `/add-lyrics`). Affordances
  * declare per-kind interactivity. Lookup is `editor exposes kind &&
  * affordance.<flag>`. Plan 0037 unifies these into `EditorProfile`.
  */
