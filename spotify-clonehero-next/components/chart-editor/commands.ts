@@ -30,6 +30,7 @@ import type {
   TrackKey,
   InstrumentSchema,
   NoteFlagName,
+  ChartTiming,
 } from '@/lib/chart-edit';
 import {
   addTimeSignature,
@@ -69,6 +70,7 @@ import {
   refreshAnchorKeepTick,
   schemaNoteId,
   schemaForInstrument,
+  schemaForTrack,
   typeToLane as schemaTypeToLane,
   laneToType as schemaLaneToType,
   toggleFlagBits,
@@ -109,13 +111,21 @@ import {
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
 import {applyAlignedLyricsToDoc} from '@/lib/lyrics-align/apply-lyrics';
 import {
+  LOWER_TRACK_DIFFICULTIES,
   trackKeyId,
+  type SupportedTrackInstrument,
   type TrackKeyId,
 } from '@/lib/chart-editor-core/trackInventory';
+import type {
+  DifficultyTierRange,
+  DifficultyTierSet,
+} from '@/lib/assist/difficulty-protocol';
 import {
   carryAssistProvenance,
+  getAssistProvenance,
   restampDrumTranscription,
   setDrumTranscriptionStamp,
+  withAssistProvenance,
 } from '@/lib/chart-editor-core/content-stamps';
 
 /** `trackKeyId()` of a single `TrackKey`, as a singleton `ReadonlySet` —
@@ -271,6 +281,30 @@ function trackSortRank(track: TrackKey): number {
   );
 }
 
+/** Splices `track` into `trackData` at its instrument/difficulty sort
+ *  position, appending when it sorts last. Mutates the array it is given (a
+ *  copy the caller already made), matching how every command here builds a
+ *  new `trackData`. */
+function insertTrackSorted(
+  trackData: ParsedTrackData[],
+  track: ParsedTrackData,
+): void {
+  const rank = trackSortRank({
+    instrument: track.instrument,
+    difficulty: track.difficulty,
+  });
+  const insertionIndex = trackData.findIndex(
+    existing =>
+      rank <
+      trackSortRank({
+        instrument: existing.instrument,
+        difficulty: existing.difficulty,
+      }),
+  );
+  if (insertionIndex === -1) trackData.push(track);
+  else trackData.splice(insertionIndex, 0, track);
+}
+
 /** Add one empty supported instrument/difficulty track to a chart. */
 export class AddTrackCommand implements EditCommand {
   readonly description: string;
@@ -286,18 +320,8 @@ export class AddTrackCommand implements EditCommand {
   execute(doc: ChartDocument): ChartDocument {
     if (findTrack(doc, this.trackKey)) return doc;
 
-    const newTrack = emptyTrack(this.trackKey);
     const trackData = [...doc.parsedChart.trackData];
-    const insertionIndex = trackData.findIndex(
-      track =>
-        trackSortRank(this.trackKey) <
-        trackSortRank({
-          instrument: track.instrument,
-          difficulty: track.difficulty,
-        }),
-    );
-    if (insertionIndex === -1) trackData.push(newTrack);
-    else trackData.splice(insertionIndex, 0, newTrack);
+    insertTrackSorted(trackData, emptyTrack(this.trackKey));
 
     return {
       ...doc,
@@ -1820,5 +1844,195 @@ export class DeletePhraseCommand implements EditCommand {
     const newDoc = cloneDocFor('lyric', doc);
     const removed = deletePhrase(newDoc, this.tick, this.partName);
     return removed ? newDoc : doc;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GenerateDifficultiesCommand / DeleteLowerDifficultiesCommand — Chart
+// Assist difficulty generation (plan 0074 Design C/D, Phase 4)
+// ---------------------------------------------------------------------------
+
+/** `trackKeyId()` of `instrument`'s three lower-difficulty tracks, as a
+ *  `Set` — the common `affectedTracks` shape for both commands below. */
+function lowerDifficultyTrackIds(
+  instrument: SupportedTrackInstrument,
+): ReadonlySet<TrackKeyId> {
+  return new Set(
+    LOWER_TRACK_DIFFICULTIES.map(difficulty =>
+      trackKeyId({instrument, difficulty}),
+    ),
+  );
+}
+
+/** `ranges` with `msTime`/`msLength` derived from `timing`. */
+function timedRanges<T extends DifficultyTierRange>(
+  ranges: readonly T[],
+  timing: ChartTiming,
+): Array<T & {msTime: number; msLength: number}> {
+  return ranges.map(range => {
+    const timed = {...range, msTime: 0, msLength: 0};
+    applyEventTiming(timed, timing);
+    return timed;
+  });
+}
+
+/**
+ * Install (or replace) `instrument`'s Hard/Medium/Easy tracks from
+ * freshly-generated tiers, and record the source Expert track's content
+ * stamp as `assistProvenance.difficulties[instrument]` in the SAME doc
+ * mutation (plan 0074 Design C/D) — so undo removes the tracks and the
+ * provenance entry together, exactly like `ReplaceDrumTrackCommand`'s
+ * `setDrumTranscriptionStamp` write.
+ *
+ * `sourceStamp` is the Expert track's stamp as of the moment the run's input
+ * was built, NOT as of apply time: Expert stays editable during a run, and
+ * stamping the post-edit Expert would mark tiers reduced from the pre-edit
+ * one as fresh, permanently hiding the staleness the user should see.
+ *
+ * A tier replaces that difficulty's track wholesale, the same way
+ * `ReplaceDrumTrackCommand` replaces Expert: an existing lower-difficulty
+ * track is cleared and refilled from the tier, so its phrases, lanes and
+ * sections are the generated ones and nothing of the old track survives. A
+ * difficulty with no existing track is created and inserted in
+ * instrument/difficulty sort order (matching `AddTrackCommand`).
+ *
+ * No-op (returns `doc` unchanged) if `instrument` has no Expert track —
+ * there is nothing to generate from or stamp a source against.
+ *
+ * `entityKinds` is `{'note'}` (installing tracks is a note edit, same as
+ * `AddTrackCommand`); `affectedTracks` is the three lower `TrackKey`s —
+ * NOT the Expert track, which this command reads but never writes.
+ *
+ * Undo restores the pre-edit snapshot (`undoDocStack`) — matching every
+ * other assist-generation command here.
+ */
+export class GenerateDifficultiesCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.note;
+  readonly operations = OP.add;
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
+
+  constructor(
+    private readonly instrument: SupportedTrackInstrument,
+    private readonly tiers: DifficultyTierSet,
+    /** The source Expert track's content stamp, captured when the run's
+     *  input was built. */
+    private readonly sourceStamp: string,
+  ) {
+    this.description = `Generate ${instrument} difficulties`;
+    this.affectedTracks = lowerDifficultyTrackIds(instrument);
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    const expertKey: TrackKey = {
+      instrument: this.instrument,
+      difficulty: 'expert',
+    };
+    const expert = findTrack(doc, expertKey);
+    if (!expert) return doc;
+
+    const schema =
+      schemaForTrack(expert.track, doc.parsedChart.drumType) ??
+      schemaForInstrument(this.instrument);
+    if (!schema) return doc;
+
+    const timing = makeChartTiming(doc.parsedChart);
+    const trackData = [...doc.parsedChart.trackData];
+
+    for (const difficulty of LOWER_TRACK_DIFFICULTIES) {
+      const key: TrackKey = {instrument: this.instrument, difficulty};
+      const existingIndex = trackData.findIndex(
+        t => t.instrument === key.instrument && t.difficulty === key.difficulty,
+      );
+      const track =
+        existingIndex === -1
+          ? emptyTrack(key)
+          : clearTrackContents(trackData[existingIndex]);
+      const tier = this.tiers[difficulty];
+      for (const note of tier.notes) {
+        addSchemaNote(track, note, schema, timing);
+      }
+      track.starPowerSections = timedRanges(tier.starPowerSections, timing);
+      track.rejectedStarPowerSections = timedRanges(
+        tier.rejectedStarPowerSections,
+        timing,
+      );
+      track.soloSections = timedRanges(tier.soloSections, timing);
+      track.flexLanes = timedRanges(tier.flexLanes, timing);
+      if (existingIndex === -1) insertTrackSorted(trackData, track);
+      else trackData[existingIndex] = track;
+    }
+
+    const newDoc: ChartDocument = {
+      ...doc,
+      parsedChart: {...doc.parsedChart, trackData},
+    };
+
+    const provenance = getAssistProvenance(doc);
+    return withAssistProvenance(newDoc, {
+      ...provenance,
+      difficulties: {
+        ...provenance?.difficulties,
+        [this.instrument]: {sourceStamp: this.sourceStamp},
+      },
+    });
+  }
+}
+
+/**
+ * Remove `instrument`'s Hard/Medium/Easy tracks and its
+ * `assistProvenance.difficulties[instrument]` entry as one undoable unit
+ * (plan 0074 Design D) — the inverse of `GenerateDifficultiesCommand`. The
+ * Expert track, every other instrument's tracks, and any unrelated
+ * provenance (drum transcription, other instruments' difficulty records,
+ * acks) are left untouched.
+ *
+ * No-op (returns `doc` unchanged) if none of the three lower-difficulty
+ * tracks exist AND there's no provenance entry to clear — nothing to do.
+ *
+ * `entityKinds` is `{'note'}`; `affectedTracks` is the same three lower
+ * `TrackKey`s `GenerateDifficultiesCommand` declares.
+ *
+ * Undo restores the pre-edit snapshot (`undoDocStack`).
+ */
+export class DeleteLowerDifficultiesCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.note;
+  readonly operations = OP.delete;
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
+
+  constructor(private readonly instrument: SupportedTrackInstrument) {
+    this.description = `Delete ${instrument} lower difficulties`;
+    this.affectedTracks = lowerDifficultyTrackIds(instrument);
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    const provenance = getAssistProvenance(doc);
+    const difficulties = provenance?.difficulties;
+    const hadRecord = difficulties?.[this.instrument] !== undefined;
+    const trackData = doc.parsedChart.trackData.filter(
+      t =>
+        !(
+          t.instrument === this.instrument &&
+          (LOWER_TRACK_DIFFICULTIES as readonly string[]).includes(t.difficulty)
+        ),
+    );
+    const removedAnyTrack =
+      trackData.length !== doc.parsedChart.trackData.length;
+    if (!removedAnyTrack && !hadRecord) return doc;
+
+    // Spreading `doc` already carries `assistProvenance` over unchanged, so
+    // only the case that actually edits the bag rewrites it.
+    const newDoc: ChartDocument = {
+      ...doc,
+      parsedChart: {...doc.parsedChart, trackData},
+    };
+    if (!difficulties || !hadRecord) return newDoc;
+
+    const {[this.instrument]: _removed, ...restDifficulties} = difficulties;
+    return withAssistProvenance(newDoc, {
+      ...provenance,
+      difficulties: restDifficulties,
+    });
   }
 }

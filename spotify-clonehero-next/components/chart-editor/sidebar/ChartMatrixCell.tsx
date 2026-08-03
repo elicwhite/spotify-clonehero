@@ -23,6 +23,11 @@ export interface ChartMatrixCellProps {
   visible: boolean;
   tooltip: string;
   onToggle: () => void;
+  /** True while this cell's instrument has a `generate-difficulties` run in
+   *  flight (plan 0074 Phase 4): the cell keeps showing its current
+   *  visibility but stops accepting clicks, so a mid-generation toggle can't
+   *  race the command that's about to install/replace this track. */
+  locked?: boolean | undefined;
 }
 
 export default function ChartMatrixCell({
@@ -32,6 +37,7 @@ export default function ChartMatrixCell({
   visible,
   tooltip,
   onToggle,
+  locked = false,
 }: ChartMatrixCellProps) {
   return (
     <Tooltip>
@@ -40,6 +46,7 @@ export default function ChartMatrixCell({
           type="button"
           aria-label={name}
           aria-pressed={visible}
+          disabled={locked}
           onClick={onToggle}
           style={{gridColumn}}
           className={cn(
@@ -47,12 +54,13 @@ export default function ChartMatrixCell({
             visible
               ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
               : 'border-input bg-background text-muted-foreground hover:bg-muted',
+            locked && 'opacity-50 cursor-not-allowed',
           )}>
           {label}
         </button>
       </TooltipTrigger>
       <TooltipContent side="right" className="whitespace-pre-line">
-        {tooltip}
+        {locked ? `${tooltip}\nGenerating...` : tooltip}
       </TooltipContent>
     </Tooltip>
   );

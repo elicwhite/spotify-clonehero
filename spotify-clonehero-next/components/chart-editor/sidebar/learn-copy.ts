@@ -4,7 +4,7 @@
  * for editorial reasons, not for code reasons.
  */
 
-export type LearnKey = 'tempo' | 'silence' | 'drums' | 'lyrics';
+export type LearnKey = 'tempo' | 'silence' | 'drums' | 'lyrics' | 'difficulty';
 
 export const LEARN_COPY: Record<
   LearnKey,
@@ -36,6 +36,13 @@ export const LEARN_COPY: Record<
     paragraphs: [
       'Paste plain lyric text and the AI aligns each phrase to the vocal audio, producing the karaoke-style lyric track players see in game.',
       'Alignment uses the separated vocal stem, so it works even when the song is a full mix. Re-running replaces the current placement; you can still fine-tune individual phrase timings by hand afterwards.',
+    ],
+  },
+  difficulty: {
+    title: 'Difficulty generation',
+    paragraphs: [
+      "Generates Hard, Medium, and Easy charts from an instrument's Expert chart, thinning notes down to something playable at each level.",
+      'It reads Expert at the moment it runs. If you edit Expert afterwards, the lower difficulties can drift out of sync, which is why they get flagged as possibly stale. Re-generating replaces the whole Hard/Medium/Easy set for that instrument only.',
     ],
   },
 };

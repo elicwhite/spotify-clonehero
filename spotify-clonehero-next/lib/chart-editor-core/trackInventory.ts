@@ -16,6 +16,14 @@ export const TRACK_DIFFICULTIES: Difficulty[] = [
   'easy',
 ];
 
+/** The difficulties reduced from Expert, in descending order. Difficulty
+ *  generation and deletion are set-shaped — they always write or remove all
+ *  three together (plan 0074 Design D) — so every surface that touches the
+ *  set names it from here. */
+export const LOWER_TRACK_DIFFICULTIES = ['hard', 'medium', 'easy'] as const;
+
+export type LowerTrackDifficulty = (typeof LOWER_TRACK_DIFFICULTIES)[number];
+
 export type SupportedTrackKey = Omit<TrackKey, 'instrument'> & {
   instrument: SupportedTrackInstrument;
 };

@@ -474,6 +474,38 @@ green (`pnpm typecheck && pnpm test && pnpm lint` + browser validation).
 - **Phase 4 — Difficulty generation.** Worker + seam, bass-on-guitar
   spot-check gate, commands + provenance, matrix buttons + recommendation
   card. Remaining Suite 5 cases, Suite 3 generate rows.
+
+  **Amendment (Phase 4 as built):** the two owner-facing gates in Design
+  D resolved as follows.
+  1. _Drum algorithm._ Drums run `lib/drum-difficulty/ours` (the trained
+     GBM, "Ours" v5) and nothing else, per plan 0071's conclusion ("Ship
+     the trained GBM") and its export decision that only our model's
+     version is ever written. HOPCAT/Onyx stay comparison-only on
+     `/difficulties`.
+  2. _Bass._ Bass ships **disabled**. The spot check the plan asks for
+     could not be run: no chart in this repo has a bass track (all 20
+     `lib/drum-difficulty/__fixtures__/reduction-*/notes.mid` are
+     drums-only), and a synthetic bass part would test that the code
+     runs, not that the guitar reducer produces musically sane bass.
+     Applying the gate's own instruction for unacceptable quality to
+     "quality could not be assessed", `runDifficultyGeneration` rejects
+     bass with a typed `UnsupportedInstrumentError` before spawning a
+     worker, and both the matrix bar and the Chart Assist card render
+     disabled with that reason. Which instruments are refused lives in one
+     place, `difficulty-client.ts`'s `GENERATION_DISABLED_INSTRUMENTS`,
+     read by the run guard and by the UI (via
+     `difficultyGenerationDisabledReason`), so re-enabling once a real bass
+     chart is available to spot-check is emptying that set plus widening
+     the worker request union in `difficulty-protocol.ts`.
+
+  Also as built: generation is set-shaped, so an instrument charted with
+  only part of Hard/Medium/Easy still gets a Generate bar (rendered
+  under its cells) rather than no affordance at all. **Deferred:**
+  provenance records only the source Expert stamp, so re-generating
+  replaces hand edits in Hard/Medium/Easy with no per-tier warning; the
+  disclosure lives in the Learn-more copy. Recording per-tier stamps at
+  generation time would let the confirm name which tier has user edits.
+
 - **Phase 5 — Stems mixer.** `usePaddedAudio` generalization to a stem
   list, mixer UI, AI-stem provenance, drop-to-add. Suite 6.
 - **Phase 6 — Home screens.** `/add-lyrics`, `/tempo`, then

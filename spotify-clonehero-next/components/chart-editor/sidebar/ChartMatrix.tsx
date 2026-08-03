@@ -19,20 +19,25 @@
  * hides "+ Add instrument" — there is no second instrument to add there.
  */
 
-import {useState} from 'react';
+import {useCallback, useState} from 'react';
 import {Plus} from 'lucide-react';
+import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
 import {useChartEditorContext} from '../ChartEditorContext';
 import {useExecuteCommand} from '../hooks/useEditCommands';
-import {AddTrackCommand} from '../commands';
+import {AddTrackCommand, DeleteLowerDifficultiesCommand} from '../commands';
 import {trackKeyId} from '../scope';
 import type {TrackKey} from '../scope';
 import {
   getAssistProvenance,
+  LOWER_TRACK_DIFFICULTIES,
+  selectDifficultyStale,
   SUPPORTED_TRACK_INSTRUMENTS,
   type SupportedTrackInstrument,
 } from '@/lib/chart-editor-core';
+import {useOptionalAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
+import {useDifficultyGeneration} from '../hooks/useDifficultyGeneration';
 import ChartMatrixRow from './ChartMatrixRow';
 import {DIFFICULTY_COLUMNS, INSTRUMENT_LABEL} from '../trackLabels';
 
@@ -43,11 +48,33 @@ const GRID_TEMPLATE_COLUMNS = '4.25rem repeat(4, minmax(0, 1fr))';
 export default function ChartMatrix() {
   const {state, dispatch, capabilities} = useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
+  const runner = useOptionalAssistRunnerContext();
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const {generatingInstrument, disabledReasonFor, start} =
+    useDifficultyGeneration();
 
   const variant = capabilities.showChartMatrix;
   const doc = state.chartDoc;
   const trackData = doc?.parsedChart.trackData ?? [];
+
+  // Deletes the generated set and drops its visibility keys, so a later
+  // regeneration doesn't resurrect a pane the user never asked for.
+  const deleteGenerated = useCallback(
+    (instrument: SupportedTrackInstrument) => {
+      executeCommand(new DeleteLowerDifficultiesCommand(instrument));
+      for (const difficulty of LOWER_TRACK_DIFFICULTIES) {
+        dispatch({
+          type: 'SET_TRACK_VISIBILITY',
+          track: {instrument, difficulty},
+          visible: false,
+        });
+      }
+      toast.success(
+        `Deleted ${INSTRUMENT_LABEL[instrument]} Hard, Medium, Easy.`,
+      );
+    },
+    [executeCommand, dispatch],
+  );
 
   if (!variant || !doc) return null;
 
@@ -108,16 +135,30 @@ export default function ChartMatrix() {
           </div>
         ))}
 
-        {rowInstruments.map(instrument => (
-          <ChartMatrixRow
-            key={instrument}
-            instrument={instrument}
-            trackData={trackData}
-            visibleTrackKeys={state.visibleTrackKeys}
-            provenance={provenance}
-            onToggle={toggle}
-          />
-        ))}
+        {rowInstruments.map(instrument => {
+          const stale = selectDifficultyStale(
+            state,
+            instrument,
+            trackKeyId({instrument, difficulty: 'expert'}),
+          );
+          const disabledReason = disabledReasonFor(instrument);
+          return (
+            <ChartMatrixRow
+              key={instrument}
+              instrument={instrument}
+              trackData={trackData}
+              visibleTrackKeys={state.visibleTrackKeys}
+              provenance={provenance}
+              onToggle={toggle}
+              stale={stale}
+              generating={generatingInstrument === instrument}
+              onGenerate={() => start(instrument)}
+              generateDisabledReason={disabledReason}
+              onDelete={() => deleteGenerated(instrument)}
+              runner={runner}
+            />
+          );
+        })}
       </div>
 
       <p className="text-[10px] text-muted-foreground">

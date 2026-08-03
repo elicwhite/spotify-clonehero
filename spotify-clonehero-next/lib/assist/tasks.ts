@@ -25,6 +25,13 @@
 import type {ChartDocument, DrumNote} from '@/lib/chart-edit';
 import {readChart, getDrumNotes} from '@/lib/chart-edit';
 import {
+  runDifficultyGeneration,
+  defaultCreateWorker as defaultCreateDifficultyWorker,
+  type DifficultyGenerationInput,
+} from './difficulty-client';
+import {tiersToTierSet} from './difficulty-tiers';
+import type {DifficultyTierSet} from './difficulty-protocol';
+import {
   findProjectChartFile,
   getProject,
   readProjectBinary,
@@ -102,6 +109,10 @@ export interface AssistContext {
   project?: {id: string} | undefined;
   /** Pasted lyrics text — required by `add-lyrics`. */
   lyrics?: string | undefined;
+  /** The instrument + source data `generate-difficulties` reduces from.
+   *  Required by that task only; built from the chart doc's Expert track by
+   *  `buildDifficultyGenerationInput` (`./difficulty-input`). */
+  difficultyGeneration?: DifficultyGenerationInput | undefined;
 }
 
 export type AssistProgressSink = (event: StepProgressEvent) => void;
@@ -560,3 +571,74 @@ export function makeGenerateTempoMapTask({
 }
 
 export const generateTempoMapTask = makeGenerateTempoMapTask();
+
+// ---------------------------------------------------------------------------
+// generate-difficulties
+// ---------------------------------------------------------------------------
+
+export interface GenerateDifficultiesResult {
+  tiers: DifficultyTierSet;
+}
+
+function requireDifficultyGeneration(
+  ctx: AssistContext,
+): DifficultyGenerationInput {
+  if (!ctx.difficultyGeneration) {
+    throw new Error('generate-difficulties requires ctx.difficultyGeneration');
+  }
+  return ctx.difficultyGeneration;
+}
+
+const GENERATE_DIFFICULTIES_STEPS: ReadonlyArray<Omit<PlannedStep, 'cached'>> =
+  [
+    {
+      key: 'reduce',
+      label: 'Reducing Expert to Hard, Medium, Easy',
+      description: undefined,
+    },
+  ];
+
+/** Test seam: the difficulty-generation worker factory this task spawns.
+ *  Lives on the task, matching `AddLyricsTaskDeps`/`GenerateTempoMapTaskDeps`. */
+export interface GenerateDifficultiesTaskDeps {
+  createWorker?: (() => Worker) | undefined;
+}
+
+export function makeGenerateDifficultiesTask({
+  createWorker = defaultCreateDifficultyWorker,
+}: GenerateDifficultiesTaskDeps = {}): AssistTaskDef<GenerateDifficultiesResult> {
+  return {
+    key: 'generate-difficulties',
+    title: 'Difficulty generation',
+
+    // A single reporting step (Design D: "planSteps = single reducing-
+    // difficulty step") — the reducers report one opaque percent, not a
+    // multi-stage pipeline, so a longer predicted list would promise
+    // structure that doesn't exist.
+    async planSteps() {
+      return GENERATE_DIFFICULTIES_STEPS.map(cfg => ({...cfg, cached: false}));
+    },
+
+    async run(ctx, signal, progress) {
+      const gen = requireDifficultyGeneration(ctx);
+      if (signal.aborted) throw makeAbortError();
+
+      progress({activeKey: 'reduce', progress: 0});
+      const {tiers} = await runDifficultyGeneration(
+        gen,
+        {createWorker, signal},
+        p =>
+          progress({
+            activeKey: 'reduce',
+            progress: p.percent,
+            detail: p.detail,
+          }),
+      );
+
+      progress({activeKey: null, terminal: 'done'});
+      return {tiers: tiersToTierSet(tiers)};
+    },
+  };
+}
+
+export const generateDifficultiesTask = makeGenerateDifficultiesTask();

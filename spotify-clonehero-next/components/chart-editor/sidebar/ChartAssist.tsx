@@ -36,15 +36,21 @@ import {useState} from 'react';
 
 import {useChartEditorContext} from '../ChartEditorContext';
 import {useExecuteCommand} from '../hooks/useEditCommands';
-import {selectDrumTranscriptionStale} from '@/lib/chart-editor-core';
+import {
+  selectDifficultyStale,
+  selectDrumTranscriptionStale,
+  SUPPORTED_TRACK_INSTRUMENTS,
+} from '@/lib/chart-editor-core';
 import {findTrack} from '@/lib/chart-edit';
 import {useOptionalAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
+import {trackKeyId} from '../scope';
 import LearnMoreModal from './LearnMoreModal';
 import {LEARN_COPY, type LearnKey} from './learn-copy';
 import type {LoadAssistAudio} from '@/lib/assist/tasks';
 import TempoMapCard from './TempoMapCard';
 import LeadingSilenceCard from './LeadingSilenceCard';
 import DrumTranscriptionCard from './DrumTranscriptionCard';
+import DifficultyGenerationCard from './DifficultyGenerationCard';
 import LyricsCard from './LyricsCard';
 
 export interface ChartAssistProps {
@@ -128,7 +134,32 @@ export default function ChartAssist({
   const showLyrics =
     (variant === 'all' || variant === 'lyrics-only') && loadAudio != null;
 
-  if (!showTempo && !showSilence && !showDrums && !showLyrics) return null;
+  // Difficulty regeneration cards: one per instrument whose Hard/Medium/Easy
+  // set was generated from an Expert track that has since changed. Runs the
+  // same `generate-difficulties` task the Chart Matrix row's "Re-generate"
+  // affordance starts (plan 0074 Design C/D).
+  const staleDifficultyInstruments =
+    variant === 'all' && runner != null && doc != null
+      ? SUPPORTED_TRACK_INSTRUMENTS.filter(
+          instrument =>
+            findTrack(doc, {instrument, difficulty: 'expert'}) != null &&
+            selectDifficultyStale(
+              state,
+              instrument,
+              trackKeyId({instrument, difficulty: 'expert'}),
+            ),
+        )
+      : [];
+
+  if (
+    !showTempo &&
+    !showSilence &&
+    !showDrums &&
+    !showLyrics &&
+    staleDifficultyInstruments.length === 0
+  ) {
+    return null;
+  }
 
   return (
     <div className="space-y-2 pt-4 border-t">
@@ -172,6 +203,13 @@ export default function ChartAssist({
             onLearnMore={setLearnOpen}
           />
         )}
+        {staleDifficultyInstruments.map(instrument => (
+          <DifficultyGenerationCard
+            key={instrument}
+            instrument={instrument}
+            onLearnMore={setLearnOpen}
+          />
+        ))}
       </div>
 
       {learnOpen && (

@@ -40,7 +40,7 @@ import {
 } from '../capabilities';
 import {DEFAULT_DRUMS_EXPERT_SCOPE, trackKeyId} from '../scope';
 import ChartMatrix from '../sidebar/ChartMatrix';
-import {GENERATION_DEFERRED_REASON} from '../sidebar/ChartMatrixRow';
+import {GENERATION_NOT_WIRED_REASON} from '../hooks/useDifficultyGeneration';
 
 /** Drums Expert (5 notes) + Guitar Expert (2 notes) — two rows, no lower
  *  difficulties on either, both fixture inputs the Generate/Add-instrument
@@ -301,7 +301,7 @@ describe('ChartMatrix grid placement', () => {
   });
 });
 
-describe('ChartMatrix Generate H · M · E (Phase 4 deferred)', () => {
+describe('ChartMatrix Generate H · M · E (no assist runner wired)', () => {
   it('renders the disabled Generate affordance with its reason when no lower difficulty is charted', () => {
     renderMatrix(makeTwoInstrumentDoc());
 
@@ -310,13 +310,38 @@ describe('ChartMatrix Generate H · M · E (Phase 4 deferred)', () => {
     });
     expect(generate).toHaveAttribute('aria-disabled', 'true');
     expect(
-      screen.getAllByText(GENERATION_DEFERRED_REASON).length,
+      screen.getAllByText(GENERATION_NOT_WIRED_REASON).length,
     ).toBeGreaterThan(0);
   });
 
-  it('does not render Generate for an instrument that already has lower difficulties', () => {
+  it('keeps a Generate affordance for an instrument charted with only part of the lower set', () => {
+    // Generation is set-shaped (it writes all three), so a Hard-only
+    // instrument still has a way to ask for the set; the bar moves under the
+    // cells instead of spanning the empty columns.
     const doc = makeTwoInstrumentDoc();
     doc.parsedChart.trackData.push(emptyTrackData('guitar', 'hard'));
+    renderMatrix(doc);
+
+    const generate = screen.getByRole('button', {
+      name: 'Generate Guitar Hard, Medium, Easy difficulties',
+    });
+    // Disabled the same way the spanning bar is, so the reason stays
+    // reachable by hover, by keyboard and by screen reader.
+    expect(generate).toHaveAttribute('aria-disabled', 'true');
+    expect(
+      screen.getAllByText(GENERATION_NOT_WIRED_REASON).length,
+    ).toBeGreaterThan(0);
+    expect(generate.parentElement!.style.gridColumn).toBe('1 / 6');
+    expect(
+      screen.getByRole('button', {name: 'Guitar Hard'}),
+    ).toBeInTheDocument();
+  });
+
+  it('does not render Generate for an instrument charted with the whole lower set', () => {
+    const doc = makeTwoInstrumentDoc();
+    for (const difficulty of ['hard', 'medium', 'easy'] as const) {
+      doc.parsedChart.trackData.push(emptyTrackData('guitar', difficulty));
+    }
     renderMatrix(doc);
 
     expect(
@@ -324,8 +349,5 @@ describe('ChartMatrix Generate H · M · E (Phase 4 deferred)', () => {
         name: 'Generate Guitar Hard, Medium, Easy difficulties',
       }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('button', {name: 'Guitar Hard'}),
-    ).toBeInTheDocument();
   });
 });
