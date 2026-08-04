@@ -279,12 +279,16 @@ describe('StemsMixer', () => {
       'false',
     );
 
-    // An explicit mute on the same row is a different rendering: it drops
-    // the solo-silenced explanation and turns the label red.
+    // An explicit mute on the same row is a different rendering: it drops the
+    // solo-silenced explanation and fills the row's own M toggle red (the
+    // approved prototype puts the alarm on the toggle, not on the label —
+    // both silent states render the label quietly).
     fireEvent.click(screen.getByRole('button', {name: 'Mute Song'}));
     const muted = screen.getByTestId('stem-row-song');
     expect(muted).not.toHaveAttribute('title');
-    expect(within(muted).getByText('Song').className).toContain('text-red-500');
+    const muteToggle = within(muted).getByRole('button', {name: 'Unmute Song'});
+    expect(muteToggle).toHaveAttribute('aria-pressed', 'true');
+    expect(muteToggle.className).toContain('bg-red-600');
     expect(muted.className).not.toEqual(soloSilencedClassName);
   });
 

@@ -310,7 +310,9 @@ describe('ChartMatrix Generate H · M · E (no assist runner wired)', () => {
     expect(
       screen.getAllByText(GENERATION_NOT_WIRED_REASON).length,
     ).toBeGreaterThan(0);
-    expect(generate.parentElement!.style.gridColumn).toBe('1 / 6');
+    // Under the cells, on the same three columns they occupy — the approved
+    // prototype's `.gen-bar.under` span, not a full-width bar.
+    expect(generate.parentElement!.style.gridColumn).toBe('3 / 6');
     expect(
       screen.getByRole('button', {name: 'Guitar Hard'}),
     ).toBeInTheDocument();

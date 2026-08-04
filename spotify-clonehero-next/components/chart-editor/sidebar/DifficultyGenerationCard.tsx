@@ -80,7 +80,39 @@ export default function DifficultyGenerationCard({
       note="Expert changed since these were generated. Re-generate to match, or keep them. Your call."
       attn
       learnKey="difficulty"
-      onLearnMore={onLearnMore}>
+      onLearnMore={onLearnMore}
+      aiLabel="AI-generated from Expert"
+      actions={
+        generating ? null : (
+          <>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="h-7 gap-1.5"
+                    disabled={disabledReason !== undefined}
+                    onClick={() => start(instrument)}>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Re-generate
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {disabledReason !== undefined && (
+                <TooltipContent side="right">{disabledReason}</TooltipContent>
+              )}
+            </Tooltip>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7"
+              onClick={handleKeepAsIs}>
+              Keep as-is
+            </Button>
+          </>
+        )
+      }>
       {generating && runner && (
         // Gated on THIS card's own `generating` flag, not just the task key:
         // the assist runner is shared editor-wide, and another instrument's
@@ -92,35 +124,6 @@ export default function DifficultyGenerationCard({
           onCancel={runner.cancel}
           onDismiss={runner.dismiss}
         />
-      )}
-      {!generating && (
-        <div className="flex flex-wrap gap-1.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="h-7 gap-1.5"
-                  disabled={disabledReason !== undefined}
-                  onClick={() => start(instrument)}>
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Re-generate
-                </Button>
-              </span>
-            </TooltipTrigger>
-            {disabledReason !== undefined && (
-              <TooltipContent side="right">{disabledReason}</TooltipContent>
-            )}
-          </Tooltip>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7"
-            onClick={handleKeepAsIs}>
-            Keep as-is
-          </Button>
-        </div>
       )}
     </CardShell>
   );

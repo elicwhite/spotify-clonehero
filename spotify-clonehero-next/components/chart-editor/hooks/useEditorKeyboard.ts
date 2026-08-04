@@ -71,15 +71,18 @@ const GRID_SHORTCUT_MAP: Record<string, number> = {
 };
 
 /**
- * Tool mode mapped to number keys 1-6 (always available via Ctrl+N,
- * also available without modifier when not in Place mode).
+ * Tool mode mapped to number keys (always available via Ctrl+N, also
+ * available without modifier when not in Place mode).
+ *
+ * Only the modes the sidebar's tool row can show as active are bound.
+ * `erase`, `bpm` and `timesig` are reachable through the piano roll's
+ * context menus and Delete/Backspace instead, and have no button to
+ * light up, so a hotkey into them would strand the user in a mode with
+ * no visible state and no obvious way out.
  */
 const TOOL_SHORTCUT_MAP: Record<string, ToolMode> = {
   '1': 'cursor',
   '2': 'place',
-  '3': 'erase',
-  '4': 'bpm',
-  '5': 'timesig',
   '6': 'section',
 };
 
@@ -137,7 +140,7 @@ function activeNoteIds(
  * Generic shortcuts (shared across all editor pages):
  * - Grid navigation (Up/Down/Left/Right arrows = grid step, Mod+arrows = measure)
  * - Lane keys (0-5 in Place mode = place/toggle note at cursor)
- * - Tool selection (Mod+1-6 always, 1-6 when not in Place mode)
+ * - Tool selection (Mod+1/2/6 always, 1/2/6 when not in Place mode)
  * - Note flags (Q, A, S)
  * - Grid snap (Shift+1 through Shift+6, Shift+0)
  * - Editing (Mod+Z undo, Mod+Shift+Z/Mod+Y redo, Delete, Mod+A, Escape)
@@ -444,7 +447,7 @@ export function useEditorKeyboard(onSave?: () => void) {
   });
 
   // -----------------------------------------------------------------------
-  // Tool selection via Mod+1-6 (always available)
+  // Tool selection via Mod+N (always available)
   // -----------------------------------------------------------------------
   for (const [key, tool] of Object.entries(TOOL_SHORTCUT_MAP)) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -646,7 +649,7 @@ export function useEditorKeyboard(onSave?: () => void) {
   }
 
   // -----------------------------------------------------------------------
-  // Tool selection (1-6, when NOT in Place mode)
+  // Tool selection (number keys, when NOT in Place mode)
   // -----------------------------------------------------------------------
   for (const [key, tool] of Object.entries(TOOL_SHORTCUT_MAP)) {
     // eslint-disable-next-line react-hooks/rules-of-hooks

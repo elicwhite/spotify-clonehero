@@ -12,6 +12,11 @@ import {Slider} from '@/components/ui/slider';
 import {Tooltip, TooltipContent, TooltipTrigger} from '@/components/ui/tooltip';
 import {cn} from '@/lib/utils';
 
+/** The prototype's 17px bordered M/S toggles; the active state is a solid
+ *  fill (red for mute, green for solo) rather than a tint. */
+const MS_BUTTON_CLASS =
+  'flex h-[1.0625rem] w-[1.0625rem] shrink-0 items-center justify-center rounded border text-[9.5px] font-bold text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-50';
+
 export interface StemMixerRowProps {
   /** The AudioManager track name this row controls — used as a stable test
    *  hook (`data-testid="stem-row-${name}"`). The shared `Slider` primitive
@@ -36,6 +41,12 @@ export interface StemMixerRowProps {
   /** True while an assist run has this stem's track locked — controls
    *  disable but the row keeps rendering its current values. */
   locked: boolean;
+  /** Glyph beside the stem name: a waveform for audio stems, a metronome for
+   *  the click row (the approved prototype's `.stem-name svg`). */
+  icon: React.ElementType;
+  /** Draws the dashed rule the prototype puts above the click row, marking it
+   *  as the one row that is not part of the exported chart audio. */
+  topSeparator?: boolean | undefined;
   onVolumeChange: (volume: number) => void;
   onReset: () => void;
   onToggleMute: () => void;
@@ -52,6 +63,8 @@ export default function StemMixerRow({
   dimmedBySolo,
   aiSeparated,
   locked,
+  icon: Icon,
+  topSeparator = false,
   onVolumeChange,
   onReset,
   onToggleMute,
@@ -69,16 +82,22 @@ export default function StemMixerRow({
           : undefined
       }
       className={cn(
-        'grid grid-cols-[minmax(0,1fr)_7rem_auto] items-center gap-2 rounded-md px-1 py-0.5',
+        // The prototype's column rhythm: a fixed name column, the slider
+        // taking the remaining width, then a fixed readout and the toggles.
+        'grid h-6 grid-cols-[5.125rem_minmax(0,1fr)_2rem_auto] items-center gap-1.5 rounded-md px-1 hover:bg-muted/40',
+        topSeparator && 'mt-1 border-t border-dashed pt-1 h-7 rounded-none',
         (mute || dimmedBySolo) && 'opacity-60',
         dimmedBySolo &&
           'bg-[repeating-linear-gradient(135deg,transparent,transparent_3px,currentColor_3px,currentColor_4px)] text-muted-foreground/25',
       )}>
       <div className="flex min-w-0 items-center gap-1">
+        <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
         <span
           className={cn(
-            'truncate text-xs text-foreground',
-            mute && 'text-red-500 dark:text-red-400',
+            'truncate text-[11px] text-foreground',
+            // Muted rows go quiet rather than alarming: the M toggle itself
+            // carries the red, matching the prototype.
+            (mute || dimmedBySolo) && 'text-muted-foreground',
           )}>
           {label}
         </span>
@@ -100,7 +119,7 @@ export default function StemMixerRow({
       </div>
 
       <div
-        className="flex items-center gap-1.5"
+        className="flex min-w-0 items-center"
         onDoubleClick={locked ? undefined : onReset}>
         <Slider
           aria-label={`${label} volume`}
@@ -112,10 +131,11 @@ export default function StemMixerRow({
           onValueChange={v => onVolumeChange(v[0])}
           className="flex-1"
         />
-        <span className="w-7 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
-          {volume}%
-        </span>
       </div>
+
+      <span className="text-right text-[10px] tabular-nums text-muted-foreground">
+        {volume}%
+      </span>
 
       <div className="flex items-center gap-1">
         <button
@@ -125,9 +145,8 @@ export default function StemMixerRow({
           disabled={locked}
           onClick={onToggleMute}
           className={cn(
-            'flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-50',
-            mute &&
-              'bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400',
+            MS_BUTTON_CLASS,
+            mute && 'border-red-600 bg-red-600 text-white',
           )}>
           M
         </button>
@@ -139,9 +158,8 @@ export default function StemMixerRow({
             disabled={locked}
             onClick={onToggleSolo}
             className={cn(
-              'flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-50',
-              solo &&
-                'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+              MS_BUTTON_CLASS,
+              solo && 'border-green-600 bg-green-600 text-white',
             )}>
             S
           </button>

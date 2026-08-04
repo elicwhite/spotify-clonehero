@@ -11,8 +11,7 @@
  *    placement tools are hidden.
  *  - {@link PREVIEW_CAPABILITIES}: read-only playback — nothing is
  *    interactive on the highway and all editing chrome is hidden; only
- *    playback-related sidebar controls (loop, speed, zoom, highway mode)
- *    remain.
+ *    playback-related sidebar controls (loop, speed) remain.
  *  - {@link TEMPO_CAPABILITIES}: `/tempo`'s tempo-mapping editor — tempo,
  *    time-signature, and section markers are editable; notes and lyrics are
  *    neither editable nor rendered in the piano roll.
@@ -64,23 +63,13 @@ export interface EditorCapabilities {
    */
   showDrumLanes: boolean;
   /**
-   * Show the sidebar's Tools section (cursor / place / erase / bpm /
-   * timesig / section). Add-lyrics suppresses this since the only valid
-   * tool is the cursor — no choice to surface.
+   * Show the utility cluster's tool row (cursor / add-note / section).
+   * Add-lyrics suppresses this since the only valid tool is the cursor —
+   * no choice to surface. (Renamed from the old "Tools section" doc: plan
+   * 0074 Phase 7 moved this row into `UtilityCluster` and dropped bpm/
+   * timesig/erase — see that file's header for why.)
    */
   showToolPalette: boolean;
-  /**
-   * Show the sidebar's Highway-mode toggle (Classic ↔ Waveform).
-   * Add-lyrics pins the highway to Waveform, so the toggle is hidden.
-   */
-  showHighwayModeToggle: boolean;
-  /**
-   * Show the sidebar's Sheet Music toggle, which opens a VexFlow notation
-   * pane beside the highway (the inverse of /sheet-music, where notation
-   * is primary and the highway is the optional pane). Only meaningful for
-   * charts with a drums track — the sidebar also checks that.
-   */
-  showSheetMusicToggle: boolean;
   /**
    * Show the sidebar's Vocal Part picker on multi-part vocal charts.
    * Add-lyrics suppresses this — the aligner only writes lyrics to the
@@ -159,7 +148,9 @@ const ALL_OPERATIONS = new Set<CommandOperation>([
 
 export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
   // Full editing: notes, sections, lyrics/phrases, and the tempo/timesig
-  // markers reachable from the Tools palette's bpm/timesig buttons.
+  // markers reachable from the piano roll's tempo-lane context menu (plan
+  // 0074 Phase 7 dropped the sidebar's bpm/timesig buttons — that menu was
+  // always the real affordance).
   editableEntities: new Set<CommandEntityKind>([
     'note',
     'section',
@@ -202,8 +193,6 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
   showNotePlacementTools: true,
   showDrumLanes: true,
   showToolPalette: true,
-  showHighwayModeToggle: true,
-  showSheetMusicToggle: false,
   showVocalPartPicker: true,
   showEditingControls: true,
   showPianoRollNotes: true,
@@ -225,8 +214,6 @@ export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
   showNotePlacementTools: false,
   showDrumLanes: false,
   showToolPalette: false,
-  showHighwayModeToggle: false,
-  showSheetMusicToggle: false,
   showVocalPartPicker: false,
   showEditingControls: true,
   showPianoRollNotes: true,
@@ -244,8 +231,6 @@ export const PREVIEW_CAPABILITIES: EditorCapabilities = {
   showNotePlacementTools: false,
   showDrumLanes: true,
   showToolPalette: false,
-  showHighwayModeToggle: true,
-  showSheetMusicToggle: true,
   showVocalPartPicker: true,
   showEditingControls: false,
   showPianoRollNotes: true,
@@ -274,11 +259,9 @@ export const TEMPO_CAPABILITIES: EditorCapabilities = {
   showNotePlacementTools: false,
   showDrumLanes: true,
   showToolPalette: false,
-  showHighwayModeToggle: true,
   // The sheet-music pane requires at least one charted note; /tempo's
   // audio-only mode has an empty placeholder drums track, so the toggle
   // stays hidden rather than risk it on a chart with nothing to notate.
-  showSheetMusicToggle: false,
   showVocalPartPicker: false,
   showEditingControls: true,
   showPianoRollNotes: false,

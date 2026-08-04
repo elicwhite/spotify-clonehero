@@ -36,11 +36,13 @@ export default function LyricsCard({
       name="Lyrics / Vocals"
       explanation="Aligns pasted lyric text to the vocals for in-game karaoke lyrics."
       learnKey="lyrics"
-      onLearnMore={onLearnMore}>
-      <AddLyricsDialog
-        loadAudio={loadAudio}
-        onAlignedFromCachedVocals={onAlignedFromCachedVocals}
-      />
-    </CardShell>
+      onLearnMore={onLearnMore}
+      actions={
+        <AddLyricsDialog
+          loadAudio={loadAudio}
+          onAlignedFromCachedVocals={onAlignedFromCachedVocals}
+        />
+      }
+    />
   );
 }

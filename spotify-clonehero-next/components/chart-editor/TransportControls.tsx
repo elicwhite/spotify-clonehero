@@ -2,7 +2,7 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useHotkey, formatForDisplay} from '@tanstack/react-hotkeys';
-import {Play, Pause, SkipBack, SkipForward, Minus, Plus} from 'lucide-react';
+import {Play, Pause, SkipBack, SkipForward} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {
   Tooltip,
@@ -11,6 +11,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import type {AudioManager} from '@/lib/preview/audioManager';
+import {usePlaybackSpeed} from './hooks/usePlaybackSpeed';
 
 interface Section {
   name: string;
@@ -42,9 +43,6 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-/** Available speed presets. */
-const SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
-
 /**
  * Unified playback transport controls for the drum transcription editor.
  *
@@ -54,8 +52,8 @@ const SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
  *
  * Features:
  * - Play/Pause toggle
- * - Seek slider with current time display
- * - Speed control with presets
+ * - Current time display
+ * - Speed readout, stepped with the [ and ] hotkeys
  * - Section jumping (skip forward/back between chart sections)
  * - Keyboard shortcuts (Space, Left/Right, [ / ])
  */
@@ -68,8 +66,10 @@ export default function TransportControls({
 }: TransportControlsProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [tempo, setTempo] = useState(1.0);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Playback speed is one editor-wide value with one ladder: the sidebar's
+  // stepper and this bar's hotkeys are two surfaces on the same hook.
+  const {speed, step: stepSpeed} = usePlaybackSpeed(audioManager);
 
   // Poll AudioManager every frame to drive the time/playing displays.
   // Keep both the loop function and its handle local to the effect so
@@ -97,21 +97,6 @@ export default function TransportControls({
       await audioManager.play({time: currentTime});
     }
   }, [audioManager, currentTime]);
-
-  // Speed control
-  const handleSpeedChange = useCallback(
-    (delta: number) => {
-      const currentIdx = SPEED_PRESETS.indexOf(tempo);
-      const nextIdx = Math.max(
-        0,
-        Math.min(SPEED_PRESETS.length - 1, currentIdx + delta),
-      );
-      const newTempo = SPEED_PRESETS[nextIdx];
-      audioManager.setTempo(newTempo);
-      setTempo(newTempo);
-    },
-    [audioManager, tempo],
-  );
 
   // Section jumping
   // Section msTime values are chart time — use playChartTime for seeking
@@ -147,11 +132,11 @@ export default function TransportControls({
   // Arrow keys are handled by useEditorKeyboard (grid navigation)
 
   useHotkey('[', () => {
-    handleSpeedChange(-1);
+    stepSpeed(-1);
   });
 
   useHotkey(']', () => {
-    handleSpeedChange(1);
+    stepSpeed(1);
   });
 
   return (
@@ -165,10 +150,10 @@ export default function TransportControls({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-[1.625rem] w-[1.625rem]"
               onClick={jumpToPrevSection}
               disabled={sections.length === 0}>
-              <SkipBack className="h-4 w-4" />
+              <SkipBack className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>
@@ -182,12 +167,12 @@ export default function TransportControls({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-[1.625rem] w-[1.625rem]"
               onClick={togglePlayPause}>
               {isPlaying ? (
-                <Pause className="h-4 w-4" />
+                <Pause className="h-3.5 w-3.5" />
               ) : (
-                <Play className="h-4 w-4" />
+                <Play className="h-3.5 w-3.5" />
               )}
             </Button>
           </TooltipTrigger>
@@ -202,10 +187,10 @@ export default function TransportControls({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-[1.625rem] w-[1.625rem]"
               onClick={jumpToNextSection}
               disabled={sections.length === 0}>
-              <SkipForward className="h-4 w-4" />
+              <SkipForward className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>
@@ -214,47 +199,19 @@ export default function TransportControls({
         </Tooltip>
 
         {/* Time display (chart-relative) */}
-        <span className="min-w-[5.5rem] text-sm font-mono text-muted-foreground tabular-nums whitespace-nowrap">
+        <span className="min-w-[5.5rem] text-xs font-mono text-muted-foreground tabular-nums whitespace-nowrap">
           {formatTime(audioManager.chartTime)} / {formatTime(durationSeconds)}
         </span>
 
         {/* Slot for waveform or other content between controls */}
         {children ?? <div className="flex-1" />}
 
-        {/* Speed control */}
-        <div className="flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => handleSpeedChange(-1)}
-                disabled={tempo <= SPEED_PRESETS[0]}>
-                <Minus className="h-3 w-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Slower ([)</TooltipContent>
-          </Tooltip>
-
-          <span className="min-w-[3.5rem] text-center text-xs font-mono text-muted-foreground">
-            {tempo}x
-          </span>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => handleSpeedChange(1)}
-                disabled={tempo >= SPEED_PRESETS[SPEED_PRESETS.length - 1]}>
-                <Plus className="h-3 w-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Faster (])</TooltipContent>
-          </Tooltip>
-        </div>
+        {/* Speed: a readout, not a control. The stepper lives once, in the
+         *  sidebar's utility cluster; the `[` / `]` hotkeys above still drive
+         *  it from here, and both surfaces read the same reducer value. */}
+        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+          Speed {Math.round(speed * 100)}%
+        </span>
       </div>
     </TooltipProvider>
   );

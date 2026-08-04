@@ -75,14 +75,16 @@ export default function LeadingSilenceCard({
       note={recommendation?.detail}
       attn={recommendation !== null}
       learnKey="silence"
-      onLearnMore={onLearnMore}>
-      <CardAction
-        disabledReason={disabledReason ?? audioBusyReason}
-        onClick={handleClick}
-        icon={AudioWaveform}
-        label="Add leading silence"
-        variant={recommendation !== null ? 'default' : 'outline'}
-      />
-    </CardShell>
+      onLearnMore={onLearnMore}
+      actions={
+        <CardAction
+          disabledReason={disabledReason ?? audioBusyReason}
+          onClick={handleClick}
+          icon={AudioWaveform}
+          label="Add leading silence"
+          variant={recommendation !== null ? 'default' : 'outline'}
+        />
+      }
+    />
   );
 }

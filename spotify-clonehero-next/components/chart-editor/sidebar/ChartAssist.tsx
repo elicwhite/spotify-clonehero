@@ -45,6 +45,7 @@ import {findTrack} from '@/lib/chart-edit';
 import {useOptionalAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {trackKeyId} from '../scope';
 import LearnMoreModal from './LearnMoreModal';
+import SectionHeading, {SIDEBAR_SECTION_CLASS} from './SectionHeading';
 import {LEARN_COPY, type LearnKey} from './learn-copy';
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 import TempoMapCard from './TempoMapCard';
@@ -162,9 +163,10 @@ export default function ChartAssist({
   }
 
   return (
-    <div className="space-y-2 pt-4 border-t">
-      <span className="text-sm font-medium">Chart Assist</span>
-      <div className="space-y-2">
+    <div className={SIDEBAR_SECTION_CLASS}>
+      <SectionHeading title="Chart Assist" />
+      {/* Card gap: the prototype's 6px between stacked assist cards. */}
+      <div className="space-y-1.5">
         {showTempo && (
           <TempoMapCard
             runner={runner}

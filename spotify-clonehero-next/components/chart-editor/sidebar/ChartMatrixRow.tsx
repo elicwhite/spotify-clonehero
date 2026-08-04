@@ -9,13 +9,13 @@
  *   (disabled with a typed reason for an instrument this build can't
  *   generate yet — currently bass, see `difficulty-client.ts`'s bass
  *   spot-check gate doc comment).
- * - Some but not all of Hard/Medium/Easy charted: a full-width "Generate
- *   H · M · E" bar under the cells. Generation is set-shaped (it writes all
- *   three), so a partial set still has an affordance rather than being
- *   reachable only by deleting what is there.
+ * - Some but not all of Hard/Medium/Easy charted: a slim "Generate H · M · E"
+ *   bar directly under those three columns. Generation is set-shaped (it
+ *   writes all three), so a partial set still has an affordance rather than
+ *   being reachable only by deleting what is there.
  * - Lower difficulties charted and stale (Expert edited since generation): a
- *   full-width, amber "Re-generate H · M · E" bar under the cells, mirroring
- *   the Chart Assist recommendation card's own call-to-action.
+ *   slim amber "Re-generate H · M · E" bar under those columns, mirroring the
+ *   Chart Assist recommendation card's own call-to-action.
  * - Lower difficulties charted: the per-instrument overflow menu offers
  *   "Delete H · M · E difficulties" with an inline confirm/cancel.
  *
@@ -61,7 +61,7 @@ interface GenerateSetBarProps {
   instrument: SupportedTrackInstrument;
   /** True to span the empty H/M/E columns on the cells' own grid row (a row
    *  with no lower difficulties at all), matching the cells' height. False
-   *  puts the bar full width on the row below them. */
+   *  puts a slimmer bar on the grid row below them, same three columns. */
   spansEmptyCells: boolean;
   /** Amber call-to-action styling and "Re-generate" wording (Expert changed
    *  since these tiers were generated). */
@@ -97,8 +97,12 @@ function GenerateSetBar({
   const label = INSTRUMENT_LABEL[instrument];
   const disabled = disabledReason !== undefined;
   const reasonId = `gen-reason-${instrument}`;
-  const gridColumn = spansEmptyCells ? '3 / 6' : '1 / 6';
-  const minHeight = spansEmptyCells ? 'min-h-[1.875rem]' : 'min-h-[1.625rem]';
+  // Both bars occupy the H/M/E columns: spanning the empty cells on the row
+  // itself when there are none, and directly under those same three cells
+  // otherwise — the prototype's `.gen-bar.inrow` and `.gen-bar.under`, which
+  // share a column span and differ only in height and treatment.
+  const gridColumn = '3 / 6';
+  const minHeight = spansEmptyCells ? 'min-h-[1.875rem]' : 'min-h-[1.25rem]';
 
   if (generating && runner) {
     return (
@@ -132,20 +136,24 @@ function GenerateSetBar({
               onGenerate();
             }}
             className={cn(
-              'flex w-full items-center justify-center gap-1.5 rounded-md text-[11px] font-medium',
+              'flex w-full items-center justify-center gap-1.5 rounded-md text-[10.5px] font-semibold transition-colors',
               minHeight,
               stale
                 ? 'border border-amber-400/60 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/20 dark:text-amber-300'
-                : 'border border-dashed text-muted-foreground',
+                : // The prototype tints the plain Generate bar with the accent
+                  // rather than leaving it neutral grey: it is an offer, not a
+                  // disabled placeholder.
+                  'border border-dashed border-primary/40 bg-primary/5 text-primary',
               disabled && 'cursor-default',
-              disabled && !stale && 'text-muted-foreground/60',
+              disabled &&
+                !stale &&
+                'border-border/60 bg-transparent text-muted-foreground/60',
               disabled && stale && 'opacity-70',
-              !disabled && (stale ? 'hover:bg-amber-100' : 'hover:bg-muted'),
+              !disabled &&
+                (stale ? 'hover:bg-amber-100' : 'hover:bg-primary/10'),
             )}>
             <Sparkles className="h-3 w-3" />
-            {stale
-              ? 'Re-generate H · M · E (Expert changed)'
-              : 'Generate H · M · E'}
+            {stale ? 'Re-generate H · M · E' : 'Generate H · M · E'}
           </button>
         </TooltipTrigger>
         {disabled && (

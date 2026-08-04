@@ -1,27 +1,6 @@
 'use client';
 
 import {type ReactNode} from 'react';
-import {formatForDisplay} from '@tanstack/react-hotkeys';
-import {
-  MousePointer2,
-  Plus,
-  Eraser,
-  Activity,
-  Timer,
-  Bookmark,
-  Undo2,
-  Redo2,
-  Minus,
-  AudioWaveform,
-  Music,
-} from 'lucide-react';
-import {Button} from '@/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import {
   Select,
   SelectContent,
@@ -29,47 +8,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {TooltipProvider} from '@/components/ui/tooltip';
 import {useChartEditorContext} from './ChartEditorContext';
-import type {ToolMode} from '@/lib/chart-editor-core';
-import {useUndoRedo} from './hooks/useEditCommands';
 import NoteInspector from './NoteInspector';
-import LoopControls from './LoopControls';
 import ChartMatrix from './sidebar/ChartMatrix';
 import ChartAssist, {type ChartAssistProps} from './sidebar/ChartAssist';
 import StemsMixer, {type StemsMixerHostProps} from './sidebar/StemsMixer';
+import UtilityCluster from './sidebar/UtilityCluster';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import {cn} from '@/lib/utils';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const TOOL_ITEMS: {
-  mode: ToolMode;
-  icon: React.ElementType;
-  label: string;
-  hotkey: string;
-}[] = [
-  {mode: 'cursor', icon: MousePointer2, label: 'Cursor', hotkey: 'Mod+1'},
-  {mode: 'place', icon: Plus, label: 'Place Note', hotkey: 'Mod+2'},
-  {mode: 'erase', icon: Eraser, label: 'Eraser', hotkey: 'Mod+3'},
-  {mode: 'bpm', icon: Activity, label: 'BPM', hotkey: 'Mod+4'},
-  {mode: 'timesig', icon: Timer, label: 'Time Sig', hotkey: 'Mod+5'},
-  {mode: 'section', icon: Bookmark, label: 'Section', hotkey: 'Mod+6'},
-];
-
-const GRID_OPTIONS: {value: string; label: string}[] = [
-  {value: '4', label: '1/4'},
-  {value: '8', label: '1/8'},
-  {value: '12', label: '1/12'},
-  {value: '16', label: '1/16'},
-  {value: '32', label: '1/32'},
-  {value: '64', label: '1/64'},
-  {value: '0', label: 'Free'},
-];
-
-/** Available speed presets matching TransportControls. */
-const SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
 // ---------------------------------------------------------------------------
 // Props
@@ -97,11 +43,6 @@ export default function LeftSidebar({
   stemsMixer,
 }: LeftSidebarProps) {
   const {state, dispatch, capabilities} = useChartEditorContext();
-  const {undo, redo, canUndo, canRedo} = useUndoRedo();
-
-  const speedIdx = SPEED_PRESETS.indexOf(state.playbackSpeed);
-  const canSlower = speedIdx > 0;
-  const canFaster = speedIdx < SPEED_PRESETS.length - 1;
 
   // Vocal-part picker. Only renders when:
   //   - the page exposes the picker (add-lyrics suppresses it — the aligner
@@ -118,142 +59,29 @@ export default function LeftSidebar({
     state.activeScope.kind === 'vocals' &&
     vocalParts.length > 1;
 
-  // Sheet-music pane toggle. Notation rendering only supports drums, so
-  // the toggle is hidden on charts without a drums track.
-  const showSheetMusicToggle =
-    capabilities.showSheetMusicToggle &&
-    (state.chartDoc?.parsedChart.trackData.some(
-      t => t.instrument === 'drums',
-    ) ??
-      false);
+  // The sidebar renders no zoom, highway-style or sheet-music control: the
+  // approved sidebar (plan 0074 Phase 7) is Chart Matrix, Chart Assist,
+  // Stems and the utility cluster. `SET_HIGHWAY_MODE` still has a dispatcher
+  // (add-lyrics' waveform pinning); zoom and the sheet-music pane are
+  // reducer state with no surface.
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex flex-col w-64 shrink-0 border-r bg-background overflow-y-auto overflow-x-hidden">
-        {/* Scrollable sidebar body */}
-        <div className="space-y-4 overflow-y-auto flex-1 p-4">
-          {/* Loop controls */}
-          <LoopControls audioManager={audioManager} />
-          {/* Grid step — only meaningful when the chart can be edited */}
-          {capabilities.showEditingControls && (
-            <div className="space-y-2 pt-4 border-t">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Grid</span>
-                <Select
-                  value={String(state.gridDivision)}
-                  onValueChange={value =>
-                    dispatch({
-                      type: 'SET_GRID_DIVISION',
-                      division: Number(value),
-                    })
-                  }>
-                  <SelectTrigger className="h-8 w-[5.5rem] text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {GRID_OPTIONS.map(opt => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-
-          {/* Speed */}
-          <div className="space-y-2 pt-4 border-t">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Speed</span>
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-6 w-6"
-                  disabled={!canSlower}
-                  onClick={() => {
-                    if (!canSlower) return;
-                    const speed = SPEED_PRESETS[speedIdx - 1];
-                    audioManager.setTempo(speed);
-                    dispatch({type: 'SET_PLAYBACK_SPEED', speed});
-                  }}>
-                  <Minus className="h-3 w-3" />
-                </Button>
-                <span
-                  className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[3rem] text-center cursor-pointer hover:bg-muted/80 transition-colors"
-                  onClick={() => {
-                    audioManager.setTempo(1.0);
-                    dispatch({type: 'SET_PLAYBACK_SPEED', speed: 1.0});
-                  }}
-                  title="Click to reset to 1.00x">
-                  {state.playbackSpeed.toFixed(2)}x
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-6 w-6"
-                  disabled={!canFaster}
-                  onClick={() => {
-                    if (!canFaster) return;
-                    const speed = SPEED_PRESETS[speedIdx + 1];
-                    audioManager.setTempo(speed);
-                    dispatch({type: 'SET_PLAYBACK_SPEED', speed});
-                  }}>
-                  <Plus className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Zoom */}
-          <div className="space-y-2 pt-4 border-t">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Zoom</span>
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-6 w-6"
-                  disabled={state.zoom <= 0.3}
-                  onClick={() =>
-                    dispatch({
-                      type: 'SET_ZOOM',
-                      zoom: Math.max(0.3, +(state.zoom - 0.1).toFixed(1)),
-                    })
-                  }>
-                  <Minus className="h-3 w-3" />
-                </Button>
-                <span
-                  className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[3rem] text-center cursor-pointer hover:bg-muted/80 transition-colors"
-                  onClick={() => dispatch({type: 'SET_ZOOM', zoom: 1.0})}
-                  title="Click to reset to 100%">
-                  {Math.round(state.zoom * 100)}%
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-6 w-6"
-                  disabled={state.zoom >= 3.0}
-                  onClick={() =>
-                    dispatch({
-                      type: 'SET_ZOOM',
-                      zoom: Math.min(3.0, +(state.zoom + 0.1).toFixed(1)),
-                    })
-                  }>
-                  <Plus className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Vocal part picker — only for multi-part vocal charts. Switching
-              parts clears any active marker selection (selection is
-              part-scoped via the EntityRef id format), and the editor
-              re-derives which lyrics/phrases are visible from the new
-              part. */}
+      {/* 290px rail, the approved prototype's sidebar width — wide enough for
+       *  the utility cluster's three columns and the matrix's label column. */}
+      <div className="flex flex-col w-[18.125rem] shrink-0 border-r bg-background overflow-y-auto overflow-x-hidden">
+        {/* Scrollable sidebar body. Padding and inter-section gap read the
+         *  editor density scope's token (`app/globals.css`, plan 0074 Phase 7
+         *  task 7c), with the roomy `1rem` as the no-scope fallback. */}
+        <div className="space-y-[var(--ed-pad-section,1rem)] overflow-y-auto flex-1 p-[var(--ed-pad-section,1rem)]">
+          {/* Vocal part picker — retained above the prototype's section order
+           *  (functional necessity, like NoteInspector): only for multi-part
+           *  vocal charts. Switching parts clears any active marker selection
+           *  (selection is part-scoped via the EntityRef id format), and the
+           *  editor re-derives which lyrics/phrases are visible from the new
+           *  part. */}
           {showVocalPartPicker && (
-            <div className="space-y-2 pt-4 border-t">
+            <div className="space-y-2 pb-2 border-b">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Vocal Part</span>
                 <Select
@@ -296,174 +124,42 @@ export default function LeftSidebar({
             </div>
           )}
 
-          {/* Highway mode toggle — hidden on pages that pin the mode (add-lyrics) */}
-          {capabilities.showHighwayModeToggle && (
-            <div className="space-y-2 pt-4 border-t">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Highway</span>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={
-                        state.highwayMode === 'waveform'
-                          ? 'secondary'
-                          : 'outline'
-                      }
-                      size="sm"
-                      className="h-7 gap-1.5 text-xs"
-                      onClick={() =>
-                        dispatch({
-                          type: 'SET_HIGHWAY_MODE',
-                          mode:
-                            state.highwayMode === 'waveform'
-                              ? 'classic'
-                              : 'waveform',
-                        })
-                      }>
-                      <AudioWaveform className="h-3.5 w-3.5" />
-                      {state.highwayMode === 'waveform'
-                        ? 'Waveform'
-                        : 'Classic'}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    Toggle waveform highway surface
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-          )}
-
-          {/* Sheet music pane toggle — shows VexFlow notation beside the
-              highway (the inverse of /sheet-music's highway toggle). */}
-          {showSheetMusicToggle && (
-            <div className="space-y-2 pt-4 border-t">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Sheet Music</span>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={state.showSheetMusic ? 'secondary' : 'outline'}
-                      size="sm"
-                      className="h-7 gap-1.5 text-xs"
-                      onClick={() =>
-                        dispatch({
-                          type: 'SET_SHOW_SHEET_MUSIC',
-                          show: !state.showSheetMusic,
-                        })
-                      }>
-                      <Music className="h-3.5 w-3.5" />
-                      {state.showSheetMusic ? 'Shown' : 'Hidden'}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    Show sheet music notation beside the highway
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-          )}
-
-          {/* Tool palette + Note inspector. Hidden on pages that don't expose
-           *  multiple tools (add-lyrics). Undo/Redo still surface below. */}
-          {capabilities.showToolPalette && (
-            <div className="space-y-2 pt-4 border-t">
-              <span className="text-sm font-medium">Tools</span>
-              <div className="grid grid-cols-3 gap-1.5">
-                {TOOL_ITEMS.map(({mode, icon: Icon, label, hotkey}) => (
-                  <Tooltip key={mode}>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={
-                          state.activeTool === mode ? 'secondary' : 'ghost'
-                        }
-                        size="icon"
-                        aria-label={label}
-                        className={cn(
-                          'h-9 w-full',
-                          state.activeTool === mode && 'ring-1 ring-primary',
-                        )}
-                        onClick={() =>
-                          dispatch({type: 'SET_ACTIVE_TOOL', tool: mode})
-                        }>
-                        <Icon className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      {label} ({formatForDisplay(hotkey)})
-                    </TooltipContent>
-                  </Tooltip>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Undo/Redo — hidden on read-only pages. */}
-          {capabilities.showEditingControls && (
-            <div className="space-y-2 pt-4 border-t">
-              <span className="text-sm font-medium">History</span>
-              <div className="flex items-center gap-1.5">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={!canUndo}
-                      onClick={undo}>
-                      <Undo2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    Undo ({formatForDisplay('Mod+Z')})
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={!canRedo}
-                      onClick={redo}>
-                      <Redo2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    Redo ({formatForDisplay('Mod+Shift+Z')})
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-          )}
-
           {/* Chart Matrix — instrument/difficulty visibility grid (plan 0074
-           *  Phase 3). Mounted above Chart Assist per the approved sidebar
-           *  redesign; it decides for itself whether it has anything to
-           *  show, from `capabilities.showChartMatrix` and the loaded doc. */}
+           *  Phase 3), first per the approved sidebar order. Decides for
+           *  itself whether it has anything to show, from
+           *  `capabilities.showChartMatrix` and the loaded doc. */}
           <ChartMatrix />
 
           {/* Chart Assist — Tempo map / Add leading silence / Drum
-           *  transcription / Lyrics cards (plan 0074 Phase 2). The section
-           *  decides for itself whether it has anything to show, from
+           *  transcription / Lyrics cards (plan 0074 Phase 2). Decides for
+           *  itself whether it has anything to show, from
            *  `capabilities.chartAssist` and the wiring below. */}
           <ChartAssist {...chartAssist} />
 
+          {/* Note inspector — placed between Chart Assist and Stems (plan 0074
+           *  Phase 7): a deliberate addition over the approved prototype,
+           *  which has no equivalent panel — without it, selected-note detail
+           *  (type, tick, flags) would have nowhere to go. Only useful when
+           *  notes are selectable. */}
+          {capabilities.selectable.has('note') && <NoteInspector />}
+
           {/* Stems mixer (plan 0074 Phase 5) — one row per audio track the
            *  live AudioManager carries, plus the metronome click as the last
-           *  (solo-exempt) row, and every click/stem volume control these
-           *  pages offer. The section decides for itself whether it has
-           *  anything to show, from `capabilities.showStemsMixer` and the
-           *  loaded AudioManager. */}
+           *  (solo-exempt) row. Decides for itself whether it has anything to
+           *  show, from `capabilities.showStemsMixer` and the loaded
+           *  AudioManager. */}
           {capabilities.showStemsMixer && (
             <StemsMixer audioManager={audioManager} {...stemsMixer} />
           )}
 
-          {/* Note inspector — only useful when notes are selectable. */}
-          {capabilities.selectable.has('note') && <NoteInspector />}
-
-          {/* Page-specific panels */}
+          {/* Page-specific panels — stay last before the utility cluster. */}
           {leftPanelChildren}
+
+          {/* Snap / Speed / Loop utility cluster (plan 0074 Phase 7) — always
+           *  last: snap grid, playback speed, A/B loop, and the compact tool
+           *  row (cursor + add-note, undo/redo). Replaces the old separately-
+           *  headed Grid/Speed/Zoom/Tools/History blocks. */}
+          <UtilityCluster audioManager={audioManager} />
         </div>
       </div>
     </TooltipProvider>

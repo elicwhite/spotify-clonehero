@@ -51,6 +51,7 @@ import {
   useAudioServiceContext,
 } from '@/components/chart-editor';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
+import {EditorHeaderContent} from '@/components/SiteChrome';
 import {MoveEntitiesCommand} from '@/components/chart-editor/commands';
 import {track} from '@/lib/analytics/track';
 import {AudioManager} from '@/lib/preview/audioManager';
@@ -547,24 +548,29 @@ function LyricsAlignInner() {
     const charterName = md.charter ?? 'Unknown';
     return (
       <main className="h-screen w-screen flex flex-col bg-background overflow-hidden">
-        <div className="shrink-0 border-b bg-background px-4 py-2 flex items-center gap-3 flex-wrap">
-          <div className="min-w-0 mr-auto">
+        {/* This page's identity and actions fill the app's one slim editor
+            header row (the same row `ChartEditor` fills on other editor
+            pages, which is why it is passed `hideHeader`). Identity runs on
+            one line so the row stays a single 42px bar. */}
+        <EditorHeaderContent>
+          <div className="flex min-w-0 mr-auto items-baseline gap-2">
             <h1 className="text-sm font-semibold truncate">
               {removeStyleTags(songName)}
               <span className="text-muted-foreground font-normal"> by </span>
               {removeStyleTags(artistName)}
             </h1>
-            <p className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground truncate">
               {alignedSyllables.length} syllables aligned into{' '}
               {alignedSyllables.filter(s => s.newLine).length} lines
-            </p>
+            </span>
           </div>
-          <span className="hidden sm:inline text-xs text-muted-foreground">
+          <span className="hidden sm:inline shrink-0 text-xs text-muted-foreground">
             Drag any lyric to fix its timing
           </span>
           <Button
             variant="outline"
             size="sm"
+            className="shrink-0"
             onClick={() => {
               if (editorData) {
                 editorData.audioManager.destroy();
@@ -581,11 +587,15 @@ function LyricsAlignInner() {
           {/* Disabled until the editor is prepared: until then the session
               doc is still the previous alignment's (or nothing at all), and
               exporting it would hand back the wrong chart. */}
-          <Button size="sm" onClick={handleDownload} disabled={!editorData}>
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={handleDownload}
+            disabled={!editorData}>
             <Download className="h-4 w-4 mr-1" />
             Download .{chart.sourceFormat === 'sng' ? 'sng' : 'zip'}
           </Button>
-        </div>
+        </EditorHeaderContent>
         <Dialog open={showIntroModal} onOpenChange={setShowIntroModal}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>

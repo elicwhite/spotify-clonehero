@@ -19,11 +19,17 @@ const buttonVariants = cva(
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
       },
+      // Heights read the editor-density token with their standard value as
+      // the fallback, so a button is 40/36/40px everywhere and 28px inside
+      // the editor's `data-density="compact"` scope (`app/globals.css`).
+      // `lg` keeps a fixed height: it is a page-level call to action, not a
+      // dense editor control. A caller passing its own `h-*` still wins via
+      // tailwind-merge.
       size: {
-        default: 'h-10 px-4 py-2',
-        sm: 'h-9 rounded-md px-3',
+        default: 'h-[var(--ed-control-h,2.5rem)] px-4 py-2',
+        sm: 'h-[var(--ed-control-h,2.25rem)] rounded-md px-3',
         lg: 'h-11 rounded-md px-8',
-        icon: 'h-10 w-10',
+        icon: 'h-[var(--ed-control-h,2.5rem)] w-[var(--ed-control-h,2.5rem)]',
       },
     },
     defaultVariants: {

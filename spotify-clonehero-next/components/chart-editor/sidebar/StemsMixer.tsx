@@ -27,7 +27,7 @@
  */
 
 import {useEffect, useMemo, useRef, useState} from 'react';
-import {Upload} from 'lucide-react';
+import {AudioWaveform, Timer, Upload} from 'lucide-react';
 import {toast} from 'sonner';
 
 import type {AudioManager} from '@/lib/preview/audioManager';
@@ -39,6 +39,7 @@ import {
 import {pickFiles} from '@/lib/sng/read-dropped-entries';
 import {cn} from '@/lib/utils';
 import type {AudioStem} from '../hooks/usePaddedAudio';
+import SectionHeading, {SIDEBAR_SECTION_CLASS} from './SectionHeading';
 import StemMixerRow from './StemMixerRow';
 import {defaultVolumeFor, resolveMixer, type MixerRowState} from './mixerBus';
 
@@ -236,15 +237,19 @@ export default function StemsMixer({
   if (trackNames.length === 0) return null;
 
   return (
-    <div className="space-y-1.5 pt-4 border-t">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Stems</span>
+    <div className={cn(SIDEBAR_SECTION_CLASS, 'space-y-1.5')}>
+      {/* The prototype puts both the solo indicator and the reset hint in the
+       *  section heading row rather than under the rows. */}
+      <SectionHeading title="Stems">
         {anySolo && (
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+          <span className="text-[9px] font-bold uppercase tracking-[0.05em] text-green-600 dark:text-green-400">
             Solo
           </span>
         )}
-      </div>
+        <span className="ml-auto text-[9px] text-muted-foreground">
+          double-click a slider to reset
+        </span>
+      </SectionHeading>
 
       <div className="space-y-0.5">
         {orderedNames.map(name => {
@@ -261,6 +266,8 @@ export default function StemsMixer({
               volume={row.volume}
               mute={row.mute}
               solo={row.solo}
+              icon={isClick ? Timer : AudioWaveform}
+              topSeparator={isClick}
               soloExempt={isClick}
               dimmedBySolo={resolved[name].dimmedBySolo}
               aiSeparated={!isClick && origin === 'ai-separated'}
@@ -309,10 +316,6 @@ export default function StemsMixer({
           Drop an audio file to add a stem
         </div>
       )}
-
-      <p className="text-[10px] text-muted-foreground">
-        Double-click a slider to reset it.
-      </p>
     </div>
   );
 }

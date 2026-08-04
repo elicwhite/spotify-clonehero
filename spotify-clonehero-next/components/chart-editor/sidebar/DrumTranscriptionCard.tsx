@@ -74,7 +74,7 @@ export default function DrumTranscriptionCard({
   // described as AI-transcribed. A hand-authored chart opened in an editor
   // that offers this card is still just someone's chart.
   const transcribed = getAssistProvenance(doc)?.drumTranscription != null;
-  const status = `${transcribed ? 'AI-transcribed · ' : ''}${noteCount} notes on Drums · Expert`;
+  const status = `${noteCount} notes on Drums · Expert`;
 
   const {running, run} = useAssistTaskRun(runner, transcribeDrumsTask, {
     prepareInput: async () => {
@@ -124,6 +124,7 @@ export default function DrumTranscriptionCard({
       icon={Drum}
       name="Drum transcription"
       status={status}
+      aiLabel={transcribed ? 'AI-transcribed' : undefined}
       explanation="Turns the drum audio into an Expert drum chart automatically."
       note={
         stale
@@ -132,34 +133,35 @@ export default function DrumTranscriptionCard({
       }
       attn={stale}
       learnKey="drums"
-      onLearnMore={onLearnMore}>
+      onLearnMore={onLearnMore}
+      actions={
+        running ? null : (
+          <>
+            <CardAction
+              disabledReason={rerunDisabledReason}
+              onClick={() => setConfirmOpen(true)}
+              icon={RefreshCw}
+              label={noteCount === 0 ? 'Transcribe' : 'Re-run'}
+              variant={stale ? 'default' : 'outline'}
+            />
+            {stale && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7"
+                onClick={handleKeepAsIs}>
+                Keep as-is
+              </Button>
+            )}
+          </>
+        )
+      }>
       <ConnectedAssistRunCard
         store={runner.store}
         task="transcribe-drums"
         onCancel={runner.cancel}
         onDismiss={runner.dismiss}
       />
-      {!running && (
-        <div className="flex flex-wrap gap-1.5">
-          <CardAction
-            disabledReason={rerunDisabledReason}
-            onClick={() => setConfirmOpen(true)}
-            icon={RefreshCw}
-            label={noteCount === 0 ? 'Transcribe' : 'Re-run'}
-            variant={stale ? 'default' : 'outline'}
-          />
-          {stale && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7"
-              onClick={handleKeepAsIs}>
-              Keep as-is
-            </Button>
-          )}
-        </div>
-      )}
-
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

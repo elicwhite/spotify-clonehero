@@ -1,0 +1,140 @@
+/**
+ * @jest-environment jsdom
+ */
+/**
+ * Behavior tests for the sidebar's "Snap · Speed · Loop" utility cluster.
+ *
+ * Two contracts that changed in plan 0074 Phase 7 and that nothing else
+ * covers:
+ * 1. Every grid division the `Shift+N` hotkeys can dispatch has a matching
+ *    snap option, so the trigger always names the active snap.
+ * 2. The speed stepper reads and writes the same `playbackSpeed` the
+ *    `[` / `]` transport hotkeys use, so the two surfaces can't disagree.
+ */
+
+import '@testing-library/jest-dom';
+import {useEffect} from 'react';
+import {fireEvent, render, screen} from '@testing-library/react';
+import {TooltipProvider} from '@/components/ui/tooltip';
+import UtilityCluster from '../sidebar/UtilityCluster';
+import {
+  ChartEditorProvider,
+  useChartEditorContext,
+} from '../ChartEditorContext';
+import {DRUM_EDIT_CAPABILITIES} from '../capabilities';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../scope';
+import type {AudioManager} from '@/lib/preview/audioManager';
+
+class FakeResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+(globalThis as unknown as {ResizeObserver: unknown}).ResizeObserver =
+  FakeResizeObserver;
+
+/** Divisions reachable from `GRID_SHORTCUT_MAP` in
+ *  `hooks/useEditorKeyboard.ts` (Shift+1..Shift+6, Shift+0). */
+const HOTKEY_DIVISIONS = [4, 8, 12, 16, 32, 64, 0];
+
+function stubAudioManager(setTempo: (t: number) => void = () => {}) {
+  return {
+    setTempo,
+    trackNames: [],
+    setVolume: () => {},
+    currentTime: 0,
+    setPracticeMode: () => {},
+  } as unknown as AudioManager;
+}
+
+/** Mounts the cluster and applies `division` / `speed` to editor state. */
+function Harness({
+  division,
+  speed,
+  audioManager,
+}: {
+  division?: number | undefined;
+  speed?: number | undefined;
+  audioManager: AudioManager;
+}) {
+  const {dispatch} = useChartEditorContext();
+  useEffect(() => {
+    if (division !== undefined) {
+      dispatch({type: 'SET_GRID_DIVISION', division});
+    }
+    if (speed !== undefined) {
+      dispatch({type: 'SET_PLAYBACK_SPEED', speed});
+    }
+  }, [dispatch, division, speed]);
+  return <UtilityCluster audioManager={audioManager} />;
+}
+
+function renderCluster(opts: {
+  division?: number;
+  speed?: number;
+  audioManager?: AudioManager;
+}) {
+  return render(
+    <TooltipProvider>
+      <ChartEditorProvider
+        capabilities={DRUM_EDIT_CAPABILITIES}
+        activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
+        <Harness
+          division={opts.division}
+          speed={opts.speed}
+          audioManager={opts.audioManager ?? stubAudioManager()}
+        />
+      </ChartEditorProvider>
+    </TooltipProvider>,
+  );
+}
+
+describe('UtilityCluster snap control', () => {
+  it.each(HOTKEY_DIVISIONS)(
+    'names the active snap after the hotkey sets division %i',
+    division => {
+      renderCluster({division});
+      const trigger = screen.getByRole('combobox', {name: /snap/i});
+      expect(trigger).toHaveTextContent(/\S/);
+    },
+  );
+
+  it('labels free snap as Free and a subdivision as a fraction', () => {
+    const {unmount} = renderCluster({division: 0});
+    expect(screen.getByRole('combobox', {name: /snap/i})).toHaveTextContent(
+      'Free',
+    );
+    unmount();
+
+    renderCluster({division: 64});
+    expect(screen.getByRole('combobox', {name: /snap/i})).toHaveTextContent(
+      '1/64',
+    );
+  });
+});
+
+describe('UtilityCluster speed stepper', () => {
+  it('shows the speed the rest of the editor is playing at', () => {
+    renderCluster({speed: 1.5});
+    expect(screen.getByText('150%')).toBeInTheDocument();
+  });
+
+  it('steps down to the next preset and retempos the audio', () => {
+    const setTempo = jest.fn();
+    renderCluster({speed: 1.0, audioManager: stubAudioManager(setTempo)});
+
+    fireEvent.click(screen.getByRole('button', {name: /slower/i}));
+
+    expect(setTempo).toHaveBeenCalledWith(0.75);
+    expect(screen.getByText('75%')).toBeInTheDocument();
+  });
+
+  it('stops at the slowest and fastest presets', () => {
+    const {unmount} = renderCluster({speed: 0.25});
+    expect(screen.getByRole('button', {name: /slower/i})).toBeDisabled();
+    unmount();
+
+    renderCluster({speed: 2.0});
+    expect(screen.getByRole('button', {name: /faster/i})).toBeDisabled();
+  });
+});

@@ -109,13 +109,24 @@ function makeDoc(): ChartDocument {
   return {parsedChart, assets: []};
 }
 
-function SidebarWithDoc({wiring}: {wiring: ChartAssistProps}) {
+function SidebarWithDoc({
+  wiring,
+  trackNames = [],
+}: {
+  wiring: ChartAssistProps;
+  trackNames?: string[];
+}) {
   const {dispatch} = useChartEditorContext();
   useEffect(() => {
     dispatch({type: 'SET_CHART_DOC', chartDoc: makeDoc()});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  return <LeftSidebar audioManager={stubAudioManager()} chartAssist={wiring} />;
+  return (
+    <LeftSidebar
+      audioManager={stubAudioManager(trackNames)}
+      chartAssist={wiring}
+    />
+  );
 }
 
 /** Renders the sidebar with a loaded chart, an assist runner, and whatever
@@ -124,12 +135,13 @@ function renderAssist(
   capabilities: EditorCapabilities,
   wiring: ChartAssistProps,
   scope = DEFAULT_DRUMS_EXPERT_SCOPE,
+  trackNames: string[] = [],
 ) {
   return render(
     <TooltipProvider>
       <AssistRunnerProvider>
         <ChartEditorProvider capabilities={capabilities} activeScope={scope}>
-          <SidebarWithDoc wiring={wiring} />
+          <SidebarWithDoc wiring={wiring} trackNames={trackNames} />
         </ChartEditorProvider>
       </AssistRunnerProvider>
     </TooltipProvider>,
@@ -137,18 +149,16 @@ function renderAssist(
 }
 
 /**
- * Buttons rendered by the Tools palette. Querying for these directly
- * pins the gate to the actual interactive controls — a bug that hides
- * the section header but keeps the buttons would still fail this test.
+ * Buttons rendered by the utility cluster's tool row (plan 0074 Phase 7:
+ * cursor + add-note, plus the Section overflow button — see
+ * `UtilityCluster.tsx`'s file header for why bpm/timesig/erase don't have
+ * sidebar buttons anymore: bpm/timesig are reachable from the piano roll's
+ * tempo-lane context menu, and erase from Delete/Backspace + the note
+ * context menu). Querying for these directly pins the gate to the actual
+ * interactive controls — a bug that hides the section header but keeps the
+ * buttons would still fail this test.
  */
-const TOOL_BUTTON_NAMES = [
-  /cursor/i,
-  /place note/i,
-  /eraser/i,
-  /bpm/i,
-  /time sig/i,
-  /section/i,
-] as const;
+const TOOL_BUTTON_NAMES = [/cursor/i, /place note/i, /section/i] as const;
 
 describe('LeftSidebar capability gating', () => {
   describe('DRUM_EDIT_CAPABILITIES', () => {
@@ -156,14 +166,10 @@ describe('LeftSidebar capability gating', () => {
       renderWith(DRUM_EDIT_CAPABILITIES);
     });
 
-    it('renders every Tools-palette button', () => {
+    it('renders every tool-row button', () => {
       for (const name of TOOL_BUTTON_NAMES) {
         expect(screen.getByRole('button', {name})).toBeInTheDocument();
       }
-    });
-
-    it('shows the Highway-mode toggle', () => {
-      expect(screen.getByText('Highway')).toBeInTheDocument();
     });
   });
 
@@ -172,14 +178,10 @@ describe('LeftSidebar capability gating', () => {
       renderWith(ADD_LYRICS_CAPABILITIES, DEFAULT_VOCALS_SCOPE);
     });
 
-    it('hides every Tools-palette button', () => {
+    it('hides every tool-row button', () => {
       for (const name of TOOL_BUTTON_NAMES) {
         expect(screen.queryByRole('button', {name})).not.toBeInTheDocument();
       }
-    });
-
-    it('hides the Highway-mode toggle', () => {
-      expect(screen.queryByText('Highway')).not.toBeInTheDocument();
     });
 
     it('hides the NoteInspector (notes are not selectable)', () => {
@@ -392,5 +394,34 @@ describe('Stems mixer gating', () => {
     fireEvent.click(setA);
     expect(screen.getByRole('button', {name: 'B'})).toBeEnabled();
     expect(screen.getByText(/0:12/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * Sidebar section order (plan 0074 Phase 7): Chart Matrix -> Chart Assist ->
+ * Stems -> the "Snap · Speed · Loop" utility cluster, matching the approved
+ * prototype (`loading-inline.html`). Asserted by accessible heading name/
+ * order rather than DOM class or testid, so a change that reorders sections
+ * but keeps their markup would still fail this test.
+ */
+describe('Sidebar section order (plan 0074 Phase 7)', () => {
+  it('renders Chart Matrix, Chart Assist, Stems, then the utility cluster in that order', () => {
+    renderAssist(
+      DRUM_EDIT_CAPABILITIES,
+      FULL_WIRING,
+      DEFAULT_DRUMS_EXPERT_SCOPE,
+      ['song', 'drums', 'click'],
+    );
+
+    const headingNames = screen
+      .getAllByRole('heading', {level: 3})
+      .map(h => h.textContent);
+
+    expect(headingNames).toEqual([
+      'Chart Matrix',
+      'Chart Assist',
+      'Stems',
+      'Snap · Speed · Loop',
+    ]);
   });
 });

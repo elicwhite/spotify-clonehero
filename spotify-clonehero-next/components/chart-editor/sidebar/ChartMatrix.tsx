@@ -38,11 +38,13 @@ import {
 import {useOptionalAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {useDifficultyGeneration} from '../hooks/useDifficultyGeneration';
 import ChartMatrixRow from './ChartMatrixRow';
+import SectionHeading, {SIDEBAR_SECTION_CLASS} from './SectionHeading';
 import {DIFFICULTY_COLUMNS, INSTRUMENT_LABEL} from '../trackLabels';
 
 /** `2fr`-style column layout: a fixed label column, then four equal
- *  difficulty columns (X/H/M/E). */
-const GRID_TEMPLATE_COLUMNS = '4.25rem repeat(4, minmax(0, 1fr))';
+ *  difficulty columns (X/H/M/E). The label column is the approved
+ *  prototype's 78px. */
+const GRID_TEMPLATE_COLUMNS = '4.875rem repeat(4, minmax(0, 1fr))';
 
 export default function ChartMatrix() {
   const {state, dispatch, capabilities} = useChartEditorContext();
@@ -104,8 +106,8 @@ export default function ChartMatrix() {
   };
 
   return (
-    <div className="space-y-2 pt-4 border-t">
-      <span className="text-sm font-medium">Chart Matrix</span>
+    <div className={SIDEBAR_SECTION_CLASS}>
+      <SectionHeading title="Chart Matrix" />
 
       <div
         data-testid="chart-matrix-grid"

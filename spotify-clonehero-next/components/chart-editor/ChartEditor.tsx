@@ -8,6 +8,7 @@ import type {AudioManager} from '@/lib/preview/audioManager';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
 import type {AudioSource, AssetFile, ChartFileFormat} from './ExportDialog';
 
+import {EditorHeaderContent} from '@/components/SiteChrome';
 import HighwayEditor from './HighwayEditor';
 import TransportControls from './TransportControls';
 import ExportDialog from './ExportDialog';
@@ -17,8 +18,7 @@ import type {ChartAssistProps} from './sidebar/ChartAssist';
 import type {StemsMixerHostProps} from './sidebar/StemsMixer';
 import PianoRollTimeline from './piano-roll/PianoRollTimeline';
 import EditorMCPTools from './EditorMCPTools';
-import {useChartEditorContext} from './ChartEditorContext';
-import SheetMusic from '@/app/sheet-music/[slug]/SheetMusic';
+import {useEditorDensity} from './hooks/useEditorDensity';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -184,6 +184,43 @@ export interface ChartEditorProps {
  * │          │  Piano-roll timeline + transport        │
  * └──────────┴─────────────────────────────────────────┘
  */
+/**
+ * The header's song identity, on ONE line: title, artist and charter run
+ * inline (the approved prototype's `header .title` + `header .sub`) rather
+ * than stacking the charter on a second row, which is what let the header
+ * stay a single slim bar.
+ */
+function SongIdentity({
+  songName,
+  artistName,
+  charterName,
+  dirty,
+  children,
+}: {
+  songName: string;
+  artistName?: string | undefined;
+  charterName?: string | undefined;
+  dirty?: boolean | undefined;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 items-baseline gap-2">
+      <h1 className="text-sm font-semibold text-foreground truncate">
+        {songName}
+      </h1>
+      <span className="text-xs text-muted-foreground truncate">
+        {artistName && `by ${artistName}`}
+        {artistName && charterName && ' · '}
+        {charterName && `Charted by ${charterName}`}
+      </span>
+      {children}
+      {dirty && (
+        <span className="text-[10px] text-amber-400 shrink-0">Unsaved</span>
+      )}
+    </div>
+  );
+}
+
 export default function ChartEditor({
   metadata,
   chart,
@@ -216,31 +253,11 @@ export default function ChartEditor({
   chartFormatSelectable,
   stackedPianoRoll = false,
 }: ChartEditorProps) {
-  const {state, dispatch} = useChartEditorContext();
   const [metadataOpen, setMetadataOpen] = useState(false);
+  // Compact type/spacing scale for as long as an editor is on screen,
+  // portalled Radix surfaces included (`hooks/useEditorDensity.ts`).
+  useEditorDensity();
 
-  // Drums track for the optional sheet-music pane. Prefers the expert
-  // difficulty (notation matches what the highway scope shows by default),
-  // falling back to any charted drums difficulty.
-  const sheetMusicTrack = useMemo(
-    () =>
-      chart.trackData.find(
-        t => t.instrument === 'drums' && t.difficulty === 'expert',
-      ) ??
-      chart.trackData.find(t => t.instrument === 'drums') ??
-      null,
-    [chart],
-  );
-
-  // Lyrics for the sheet-music pane, same source /sheet-music uses.
-  const sheetMusicLyrics = useMemo(
-    () =>
-      chart.vocalTracks?.parts['vocals']?.notePhrases.flatMap(p => p.lyrics) ??
-      [],
-    [chart],
-  );
-
-  const showSheetMusic = state.showSheetMusic && sheetMusicTrack !== null;
   const hasMultipleStackedTracks = useMemo(
     () =>
       chart.trackData.filter(track =>
@@ -254,64 +271,38 @@ export default function ChartEditor({
       {/* `.chart-editor-grid` lives in `app/globals.css`: a named-areas grid
        *  switched with a plain `@media` query (no JS measurement). Only the
        *  container's `grid-template-areas`/`-columns` change between the two
-       *  breakpoints — every child keeps a constant `grid-area` name. */}
+       *  breakpoints — every child keeps a constant `grid-area` name. The
+       *  `header` area is used only when this component renders its own
+       *  header row (no app shell around it); inside the app the row lives
+       *  in the site chrome above the grid and the area collapses to 0. */}
       <EditorMCPTools />
-      {/* Top bar: song info + export. Pages with their own header (e.g.
-       *  add-lyrics) suppress this via `hideHeader`. */}
+      {/* Song info + export, rendered into the app's one slim header row.
+       *  Pages that fill that row themselves (e.g. add-lyrics) suppress this
+       *  via `hideHeader`. */}
       {!hideHeader && (
-        <header
-          style={{gridArea: 'header'}}
-          className="min-w-0 flex items-center justify-between border-b bg-background px-4 py-2">
+        <EditorHeaderContent standaloneStyle={{gridArea: 'header'}}>
           {onMetadataChange ? (
             <button
               type="button"
               onClick={() => setMetadataOpen(true)}
               title="Edit song details"
-              className="group min-w-0 text-left rounded-sm -mx-1 px-1 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm font-semibold text-foreground truncate">
-                  {songName}
-                </h1>
-                {artistName && (
-                  <span className="text-sm text-muted-foreground truncate">
-                    by {artistName}
-                  </span>
-                )}
+              className="group min-w-0 mr-auto text-left rounded-sm -mx-1 px-1 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <SongIdentity
+                songName={songName}
+                artistName={artistName}
+                charterName={charterName}
+                dirty={dirty}>
                 <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
-                {dirty && (
-                  <span className="text-[10px] text-amber-400 shrink-0">
-                    Unsaved
-                  </span>
-                )}
-              </div>
-              {charterName && (
-                <p className="text-xs text-muted-foreground truncate">
-                  Charted by {charterName}
-                </p>
-              )}
+              </SongIdentity>
             </button>
           ) : (
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm font-semibold text-foreground truncate">
-                  {songName}
-                </h1>
-                {artistName && (
-                  <span className="text-sm text-muted-foreground truncate">
-                    by {artistName}
-                  </span>
-                )}
-                {dirty && (
-                  <span className="text-[10px] text-amber-400 shrink-0">
-                    Unsaved
-                  </span>
-                )}
-              </div>
-              {charterName && (
-                <p className="text-xs text-muted-foreground truncate">
-                  Charted by {charterName}
-                </p>
-              )}
+            <div className="min-w-0 mr-auto">
+              <SongIdentity
+                songName={songName}
+                artistName={artistName}
+                charterName={charterName}
+                dirty={dirty}
+              />
             </div>
           )}
           {headerExtra && (
@@ -334,7 +325,7 @@ export default function ChartEditor({
               />
             </div>
           )}
-        </header>
+        </EditorHeaderContent>
       )}
 
       {onMetadataChange && (
@@ -365,37 +356,13 @@ export default function ChartEditor({
         />
       </aside>
 
-      {/* Center: optional sheet music pane + highway. The highway stays
-       *  mounted when the notation pane opens — same split-pane pattern
-       *  as /sheet-music's SongView, with the roles reversed. */}
+      {/* Center: the highway. */}
       {/* A `section`, not a `main`: the root app layout already wraps every
        *  route in the page's single `main` landmark. */}
       <section
         aria-label="Editing surface"
         style={{gridArea: 'main'}}
         className="flex min-w-0 min-h-0 overflow-hidden">
-        {showSheetMusic && sheetMusicTrack && (
-          <div className="flex flex-1 min-w-0 min-h-0 p-2">
-            <SheetMusic
-              chart={chart}
-              track={sheetMusicTrack}
-              showBarNumbers={true}
-              enableColors={false}
-              showLyrics={true}
-              lyrics={sheetMusicLyrics}
-              zoom={state.zoom}
-              onSelectMeasure={time => {
-                audioManager.playChartTime(time);
-                dispatch({type: 'SET_PLAYING', isPlaying: true});
-              }}
-              triggerRerender=""
-              practiceModeConfig={null}
-              onPracticeMeasureSelect={() => {}}
-              selectionIndex={null}
-              getChartTimeSec={() => audioManager.chartTime}
-            />
-          </div>
-        )}
         <div className="relative flex-1 min-w-0 min-h-0">
           <HighwayEditor
             metadata={metadata}

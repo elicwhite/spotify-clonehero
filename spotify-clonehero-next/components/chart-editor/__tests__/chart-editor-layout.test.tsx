@@ -16,18 +16,24 @@
  *
  * Heavy children (`HighwayEditor`, `PianoRollTimeline`, `TransportControls`)
  * are stubbed — they need a WebGL/canvas surface jsdom doesn't provide and
- * aren't what this test is about. `SheetMusic` never mounts here since
- * `state.showSheetMusic` defaults to false.
+ * aren't what this test is about.
  */
 
 import '@testing-library/jest-dom';
-import {render, screen} from '@testing-library/react';
+import {render, screen, within} from '@testing-library/react';
 import {createEmptyChart} from '@eliwhite/scan-chart';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
+import SiteHeader, {EditorChromeProvider} from '@/components/SiteChrome';
 import {ChartEditorProvider} from '../ChartEditorContext';
 import {AudioServiceProvider} from '../AudioServiceContext';
 import ChartEditor from '../ChartEditor';
+
+let mockPathname = '/chart-editor';
+jest.mock('next/navigation', () => ({
+  usePathname: () => mockPathname,
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 jest.mock('../HighwayEditor', () => ({
   __esModule: true,
@@ -50,22 +56,56 @@ const audioManager = {
   setVolume: () => {},
 } as unknown as AudioManager;
 
-function renderEditor() {
-  const chart = createEmptyChart({bpm: 120, resolution: 480});
-  return render(
+function editor(props: {hideHeader?: boolean} = {}) {
+  return (
     <AudioServiceProvider>
       <ChartEditorProvider>
         <ChartEditor
           metadata={metadata}
-          chart={chart}
+          chart={createEmptyChart({bpm: 120, resolution: 480})}
           audioManager={audioManager}
           durationSeconds={180}
           songName="Test Song"
+          {...props}
         />
       </ChartEditorProvider>
-    </AudioServiceProvider>,
+    </AudioServiceProvider>
   );
 }
+
+function renderEditor(props: {hideHeader?: boolean} = {}) {
+  return render(editor(props));
+}
+
+function SiteNavStub() {
+  return <nav>Music Charts Tools</nav>;
+}
+
+beforeEach(() => {
+  mockPathname = '/chart-editor';
+});
+
+describe('editor density scope (plan 0074 Phase 7 task 7c)', () => {
+  it('marks the document root compact while an editor is mounted, and clears it after', () => {
+    const {unmount} = renderEditor();
+
+    // The root, not the editor's own subtree: Radix portals Select menus and
+    // dialogs into `document.body`, outside any editor-scoped wrapper.
+    expect(document.documentElement.dataset['density']).toBe('compact');
+
+    unmount();
+    expect(document.documentElement.dataset['density']).toBeUndefined();
+  });
+
+  it('does not mark a non-editor page compact (/spotify)', async () => {
+    // Dynamic import so this suite doesn't drag /spotify's module graph
+    // (Supabase client, etc.) into every other test in this file.
+    const {default: WelcomeCard} = await import('@/app/spotify/WelcomeCard');
+    render(<WelcomeCard />);
+
+    expect(document.documentElement.dataset['density']).toBeUndefined();
+  });
+});
 
 describe('ChartEditor responsive grid', () => {
   it('renders the header, sidebar, and editing-surface regions the grid places into named areas', () => {
@@ -101,26 +141,55 @@ describe('ChartEditor responsive grid', () => {
   });
 
   it('does not render the header landmark when hideHeader suppresses it (both modes stay landmark-consistent)', () => {
-    const chart = createEmptyChart({bpm: 120, resolution: 480});
-    render(
-      <AudioServiceProvider>
-        <ChartEditorProvider>
-          <ChartEditor
-            metadata={metadata}
-            chart={chart}
-            audioManager={audioManager}
-            durationSeconds={180}
-            songName="Test Song"
-            hideHeader
-          />
-        </ChartEditorProvider>
-      </AudioServiceProvider>,
-    );
+    renderEditor({hideHeader: true});
 
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
     expect(screen.getByRole('complementary')).toBeInTheDocument();
     expect(
       screen.getByRole('region', {name: 'Editing surface'}),
     ).toBeInTheDocument();
+  });
+});
+
+describe('compact editor header (plan 0074 Phase 7 task 7b)', () => {
+  it('includes the app-icon tile (links home) in the header row', () => {
+    renderEditor();
+
+    const header = screen.getByRole('banner');
+    expect(
+      within(header).getByRole('link', {name: 'Music Charts Tools home'}),
+    ).toHaveAttribute('href', '/');
+  });
+
+  it("puts the editor's song identity in the site chrome's one row, not a second one", () => {
+    render(
+      <EditorChromeProvider>
+        <SiteHeader siteNav={<SiteNavStub />} />
+        {editor()}
+      </EditorChromeProvider>,
+    );
+
+    // One header row in the whole tree, carrying both the app icon and the
+    // editor's identity — the editor does not stack a row of its own.
+    const headers = screen.getAllByRole('banner');
+    expect(headers).toHaveLength(1);
+    expect(headers[0]).toHaveTextContent('Test Song');
+    expect(
+      screen.getAllByRole('link', {name: 'Music Charts Tools home'}),
+    ).toHaveLength(1);
+  });
+
+  it('keeps the full site nav on a non-editor route', () => {
+    mockPathname = '/spotify';
+    render(
+      <EditorChromeProvider>
+        <SiteHeader siteNav={<SiteNavStub />} />
+      </EditorChromeProvider>,
+    );
+
+    expect(screen.getByText('Music Charts Tools')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', {name: 'Music Charts Tools home'}),
+    ).not.toBeInTheDocument();
   });
 });

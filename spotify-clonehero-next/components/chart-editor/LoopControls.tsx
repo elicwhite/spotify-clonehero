@@ -14,6 +14,11 @@ import {useChartEditorContext} from './ChartEditorContext';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import {cn} from '@/lib/utils';
 
+/** One cell of the segmented control: square corners, a hairline divider
+ *  from its neighbour, and no shadow of its own. */
+const SEGMENT_CLASS =
+  'h-full flex-1 rounded-none px-2 text-[10.5px] font-medium text-muted-foreground shadow-none hover:bg-muted';
+
 interface LoopControlsProps {
   audioManager: AudioManager;
   className?: string;
@@ -80,64 +85,70 @@ export default function LoopControls({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className={cn('flex items-center gap-1', className)}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={hasLoop ? 'secondary' : 'ghost'}
-              size="sm"
-              className={cn(
-                'h-7 px-2 text-xs',
-                hasLoop && 'ring-1 ring-blue-400',
-              )}
-              onClick={setLoopStart}>
-              A
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Set loop start</TooltipContent>
-        </Tooltip>
+      {/* One segmented A | B | clear control, the prototype's `.seg`, rather
+       *  than three loose buttons. */}
+      <div className={cn('flex items-center gap-1.5', className)}>
+        <div className="flex h-7 shrink-0 overflow-hidden rounded-md border">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  SEGMENT_CLASS,
+                  'border-r',
+                  hasLoop && 'text-foreground',
+                )}
+                onClick={setLoopStart}>
+                A
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Set loop start</TooltipContent>
+          </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={hasLoop ? 'secondary' : 'ghost'}
-              size="sm"
-              className={cn(
-                'h-7 px-2 text-xs',
-                hasLoop && 'ring-1 ring-blue-400',
-              )}
-              onClick={setLoopEnd}>
-              B
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Set loop end</TooltipContent>
-        </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  SEGMENT_CLASS,
+                  'border-r',
+                  hasLoop && 'text-foreground',
+                )}
+                onClick={setLoopEnd}>
+                B
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Set loop end</TooltipContent>
+          </Tooltip>
 
-        {hasLoop && (
-          <>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-1"
-                  onClick={clearLoop}>
-                  <X className="h-3 w-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Clear loop ({formatForDisplay('Mod+L')})
-              </TooltipContent>
-            </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Clear loop"
+                disabled={!hasLoop}
+                className={SEGMENT_CLASS}
+                onClick={clearLoop}>
+                <X className="h-2.5 w-2.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              Clear loop ({formatForDisplay('Mod+L')})
+            </TooltipContent>
+          </Tooltip>
+        </div>
 
-            <span className="text-[10px] text-muted-foreground font-mono">
-              {formatMs(state.loopRegion!.startMs)} -{' '}
-              {formatMs(state.loopRegion!.endMs)}
-            </span>
-          </>
+        {hasLoop ? (
+          <span className="text-[10px] text-muted-foreground font-mono">
+            {formatMs(state.loopRegion!.startMs)} -{' '}
+            {formatMs(state.loopRegion!.endMs)}
+          </span>
+        ) : (
+          <Repeat className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         )}
-
-        {!hasLoop && <Repeat className="h-3.5 w-3.5 text-muted-foreground" />}
       </div>
     </TooltipProvider>
   );

@@ -605,7 +605,7 @@ green (`pnpm typecheck && pnpm test && pnpm lint` + browser validation).
   2026-08-03).** The shipped sidebar accreted new sections around the old
   controls; the approved prototype's structure and density never fully
   landed. Scope:
-  1. **Sidebar order and content exactly per the prototype**: Chart
+  1. **DONE (task 7a).** **Sidebar order and content exactly per the prototype**: Chart
      Matrix -> Chart Assist -> Stems -> one Snap / Speed / Loop utility
      cluster at the BOTTOM (Snap dropdown 1/4..1/32 wired to grid
      division, speed stepper, A/B loop, cursor + add tools, undo/redo).
@@ -614,21 +614,191 @@ green (`pnpm typecheck && pnpm test && pnpm lint` + browser validation).
      palette, and the History section (undo/redo live in the utility
      cluster). Underlying state stays for capability-gated surfaces
      that still need it; the default editor surface stops rendering it.
-  2. **Editor density scope**: editor-rendering pages get a compact
+  2. **DONE (task 7c).** **Editor density scope**: editor-rendering pages get a compact
      visual scale (type ~12-13px, tight paddings, dense cards) via a
      scoped mechanism (e.g. an editor-layout wrapper class adjusting
      the token scale), leaving /spotify, /sheet-music and all other
      pages exactly as they are. No global token changes.
-  3. **Compact editor header** per the prototype: one slim row - app
+  3. **DONE (tasks 7b + 7d).** **Compact editor header** per the prototype: one slim row - app
      icon, song title/artist/charter inline, Preview + Export on the
      right - replacing the tall site header + separate song row on
      editor pages only. Site navigation remains reachable (judge: icon
      links home).
-  4. **Prototype parity audit**: systematic comparison of the live
+  4. **DONE (task 7d, see "Parity decisions" below).** **Prototype parity audit**: systematic comparison of the live
      /chart-editor against the approved prototype (loading-inline.html)
      cataloguing every visual/structural difference EXCEPT highway and
      piano-roll contents; each diff either converges to the prototype
      or is recorded here with a reason.
+
+  **Amendment (task 7a, sidebar restructure, as built):** three deliberate
+  departures from a literal prototype read, each because the prototype is
+  a design mock and the app has affordances it doesn't model:
+  1. **NoteInspector kept, placed between Chart Assist and Stems.** The
+     prototype has no equivalent panel — it never models note selection —
+     but without it, selected-note detail (type, tick, flags, cymbal/
+     technique toggles) has nowhere to go. Functional necessity, not a
+     prototype miss.
+  2. **bpm/timesig tools dropped rather than moved to an overflow.**
+     Investigated what the piano roll already supports: its tempo-lane
+     right-click context menu (`PianoRollTimeline.tsx`'s `buildTempoMenu`)
+     already offers "Add tempo marker here" and "Insert time signature
+     change here" — a real, shipped affordance, not a gap. The erase tool
+     is dropped for the same reason (Delete/Backspace + the note context
+     menu's "Delete note" already cover it). The section tool has no such
+     equivalent — nothing else lets a user START a new section (existing
+     sections can be dragged/renamed, but not created) — so it keeps a
+     small icon button beside undo/redo in the utility cluster's tool row,
+     per the plan's own fallback instruction.
+  3. **Vocal Part picker kept**, rendered above Chart Matrix when the active
+     scope is a multi-part vocal chart. Not in the prototype (which has no
+     vocals-scope concept at all — vocals are a pinned piano-roll lane, not
+     a matrix row) but still needed: without it there's no way to switch
+     which vocal part's lyrics/phrases the piano roll shows.
+
+  **Parity decisions (task 7d).** Every visual/structural difference found
+  between the live editor and `loading-inline.html`, excluding highway and
+  piano-roll contents. "Converged" changed the app to match the prototype;
+  "recorded" kept the app's behavior, with the reason on the same line.
+  - Section headings: converged. All four sidebar sections now share
+    `SectionHeading` (11px uppercase, letter-spaced, muted), replacing the
+    mix of 14px medium headings and one already-compact heading.
+  - Section separators: converged. One hairline between sections, none above
+    the first (`SIDEBAR_SECTION_CLASS`'s `first:` variants), since which
+    section comes first depends on the page's capabilities.
+  - Sidebar width: converged 256px -> 290px, the prototype's rail.
+  - Matrix label column: converged 68px -> 78px.
+  - Plain "Generate H · M · E" bar: converged to the prototype's accent-tinted
+    dashed treatment; it reads as an offer, not a disabled placeholder.
+  - Under-cell generate/re-generate bar: converged from full width to the
+    prototype's H/M/E column span (`3 / 6`) and 20px height.
+  - "Re-generate H · M · E (Expert changed)": converged to the prototype's
+    plain "Re-generate H · M · E"; the amber treatment and the card's own
+    note already say why.
+  - Assist card actions: converged. The card's own buttons and "Learn more"
+    share one row (`CardShell`'s new `actions` prop), instead of stacking
+    "Learn more" on a row of its own.
+  - AI provenance: converged. Card status lines carry the prototype's accent
+    sparkle badge (`CardShell`'s `aiLabel`) rather than plain grey text.
+  - Card icon tile: converged 24px -> the prototype's 22px.
+  - Stems row layout: converged to the prototype's column rhythm (fixed
+    82px name, flexible slider, fixed readout) from a fixed-width slider.
+  - Stems M/S toggles: converged to 17px bordered toggles with solid active
+    fills, red for mute and green for solo (the app had an amber solo).
+  - Muted stem name: converged to the prototype's quiet grey; the alarm colour
+    lives on the M toggle, so mute and solo-silenced rows read alike in the
+    name and differ where the prototype differs them.
+  - "double-click a slider to reset": converged from a paragraph under the
+    rows to the prototype's slot in the section heading row.
+  - Stem row glyphs: converged. A waveform per stem, a metronome on the click
+    row, plus the prototype's dashed rule above that row.
+  - A/B loop: converged to the prototype's one segmented A | B | clear
+    control, from three loose buttons.
+  - Utility cluster layout: converged to the prototype's three equal columns.
+  - Transport speed: converged. The transport shows the prototype's plain
+    "Speed 100%" readout at the right; the stepper exists once, in the
+    sidebar. Both surfaces go through one hook (`usePlaybackSpeed`) for the
+    value, the preset ladder and the write, so the `[` / `]` hotkeys and the
+    sidebar stepper can no longer disagree.
+  - Header song identity: converged to one line (title, artist, charter
+    inline), which is what lets the header be a single 42px row.
+  - Transport bar colour: recorded. The prototype's transport is dark because
+    it is glued to the dark stage; the app's sits at the top of the light
+    bottom panel with the piano roll, and inherits that surface. Same order
+    (highway, transport, piano roll), app-appropriate chrome.
+  - "Preview" header button: recorded (already found in task 7b). No preview
+    affordance exists anywhere in the editor chrome, and inventing a dead
+    button is worse than omitting it.
+  - Every compact header is one 42px row: converged. There is a single row
+    (`components/SiteChrome.tsx`'s `EditorHeaderRow`) and every editor screen
+    fills it — see the header-shell amendment below.
+  - Row overflow menu offers only Delete: recorded. The prototype's menu also
+    repeats Generate/Re-generate, which the row's own bar already offers two
+    pixels away.
+  - Overflow "⋯" always visible: recorded. The prototype reveals it on row
+    hover; a permanently visible control is reachable by touch and by
+    keyboard without a hover state to discover.
+  - Lyrics card has no "Placed · N phrases" status: recorded. The prototype
+    mocks that count; the card would have to derive it from the doc, which is
+    a behavior change rather than a visual one.
+  - Solo-silenced hatch on the row, not the slider fill: recorded. The
+    prototype hatches the fill; the app's shared `Slider` primitive would have
+    to be forked to paint its fill, for a strictly cosmetic difference.
+  - NoteInspector, Vocal Part picker, dropped bpm/timesig/erase tools:
+    recorded above, in this phase's task-7a amendment.
+  - Snap dropdown carries 1/64 and Free: recorded, a deliberate departure from
+    the prototype's 1/4..1/32 mock list. `GRID_SHORTCUT_MAP` binds `Shift+6`
+    to 1/64 and `Shift+0` to Free; if the dropdown omitted them, either
+    hotkey would leave `state.gridDivision` with no matching item, blanking
+    the trigger with no UI path back.
+  - Column hint chips name this app's bindings, not the mock's: recorded.
+    The prototype prints `G`, `-/+` and `[ ]`; the real bindings are
+    `Shift+1`..`Shift+6` for snap and `[` / `]` for speed, and setting loop
+    points has no hotkey at all, so that column shows no chip.
+  - `Mod+3/4/5` (erase/bpm/timesig) hotkeys dropped with the tools:
+    recorded. With those tools gone from the row, the bindings entered a
+    mode with no button to light up and no discoverable exit.
+  - Sheet-music pane and `state.zoom` are now unreachable: recorded as a
+    functional deletion, not a capability gate. `showSheetMusicToggle` was
+    the only dispatcher of `SET_SHOW_SHEET_MUSIC` and `showSheetMusic`
+    defaults false, so `ChartEditor`'s notation pane — and `state.zoom`,
+    whose only consumer is that pane — no longer render on /preview, which
+    previously enabled the toggle. The reducer actions stay because
+    restoring the pane behind a future surface is a UI change only. The pane
+    itself is deleted from `ChartEditor` (branch, its two memos and the
+    static `SheetMusic` import) rather than left wired to a flag that cannot
+    become true — it was pulling VexFlow into every editor bundle.
+  - Waveform highway mode is now reachable only from add-lyrics: recorded.
+    `SET_HIGHWAY_MODE` is dispatched only by `AddLyricsClient`'s waveform
+    pinning, so drum-edit/preview/tempo lost the toggle outright.
+  - Auth/account controls absent on editor routes: recorded, pending owner
+    sign-off. The editor header row renders only the app icon and the page's
+    own content, so Log In and the `/account` link are unreachable without
+    navigating home first.
+
+  **Amendment (header shell and density scope, as restructured).** Both
+  mechanisms were rebuilt after review; the shipped structure is:
+  - **One header row, filled by the page.** `SiteChrome.tsx` renders exactly
+    one `EditorHeaderRow` (42px: app icon + a content slot) on editor routes,
+    and `EditorHeaderContent` puts a page's identity and actions into that
+    slot with a portal (React context crosses portals, so the content still
+    reads the editor's providers). `ChartEditor` and add-lyrics both fill the
+    one row instead of rendering competing rows. Deleted with the previous
+    shape: the header-ownership context, its provider, `useOwnsSiteHeader`,
+    the separate `CompactSiteHeader`, and the frame at first paint where an
+    editor route rendered both a site row and a page row. Outside the app
+    shell (an embed, or a test rendering `ChartEditor` alone)
+    `EditorHeaderContent` renders its own row, so the header is never
+    missing; the grid keeps its `header` area for exactly that case, and
+    collapses to 0 inside the shell — which is also the prototype's
+    "head head" layout, header full-width above the full-height sidebar.
+    `app/layout.tsx` passes the site nav (`components/SiteNav.tsx`, still a
+    server component) into the client header as a prop, so reading the
+    pathname does not push the nav into the client bundle.
+  - **Density is scoped to the editor's lifetime, not to a route.**
+    `useEditorDensity` (`components/chart-editor/hooks/`) sets
+    `data-density="compact"` on the document root while at least one
+    `ChartEditor` is mounted, ref-counted so overlapping mounts cannot drop
+    it early. Root scoping is what reaches Radix's portalled Select menus,
+    Dialogs and AlertDialogs — they render into `document.body`, outside any
+    editor-owned wrapper, so the previous subtree class left every popover at
+    full size. Lifetime scoping (rather than the header's route list) also
+    keeps the compact scale off the pre-editor picker/search screens of
+    `/tempo`, `/drum-transcription` and `/preview`, which are ordinary
+    content pages. The hand-placed `.editor-density` classes are gone.
+  - **Control heights are a token, not a specificity hack.** `Button`
+    (default/sm/icon), `Input` and `SelectTrigger` read
+    `h-[var(--ed-control-h, <standard value>)]`, so the scope compacts them
+    by setting the variable and every other page computes exactly the height
+    it did before. The `.editor-density button.h-10` descendant rules are
+    gone. `--ed-*` spacing tokens are named by role (`--ed-pad-section`,
+    `--ed-pad-card`, `--ed-gap-section`); per-element type sizes stay literal
+    (they are one-off prototype values, not a shared scale).
+  - **One playback-speed ladder.** `usePlaybackSpeed`
+    (`components/chart-editor/hooks/`) owns the preset list, the current
+    index, the guards and the audio-engine + reducer write. The sidebar
+    stepper and the transport's `[` / `]` hotkeys are two surfaces on it, so
+    the presets cannot be extended in one place only; a speed outside the
+    list snaps to the nearest rung instead of deadening the stepper.
 
   Acceptance: side-by-side screenshots at matching viewport; suites
   updated (capability gates, layout tests); non-editor pages pixel-

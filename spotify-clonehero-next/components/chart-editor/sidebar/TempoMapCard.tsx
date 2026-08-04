@@ -47,7 +47,17 @@ export default function TempoMapCard({
       name="Tempo map"
       explanation="Finds the beats in the audio and builds the grid every note snaps to."
       learnKey="tempo"
-      onLearnMore={onLearnMore}>
+      onLearnMore={onLearnMore}
+      actions={
+        running ? null : (
+          <CardAction
+            disabledReason={audioBusyReason}
+            onClick={run}
+            icon={RefreshCw}
+            label="Generate tempo map"
+          />
+        )
+      }>
       {/* The run card renders itself only while this task's run is the
        *  active one, and keeps a terminal message (error, "Cancelled.") on
        *  screen for a moment after. The action returns as soon as the run
@@ -59,14 +69,6 @@ export default function TempoMapCard({
         onCancel={runner.cancel}
         onDismiss={runner.dismiss}
       />
-      {!running && (
-        <CardAction
-          disabledReason={audioBusyReason}
-          onClick={run}
-          icon={RefreshCw}
-          label="Generate tempo map"
-        />
-      )}
     </CardShell>
   );
 }
