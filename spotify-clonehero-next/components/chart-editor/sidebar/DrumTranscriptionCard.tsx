@@ -73,7 +73,8 @@ export default function DrumTranscriptionCard({
   // Only a chart that actually carries a transcription record may be
   // described as AI-transcribed. A hand-authored chart opened in an editor
   // that offers this card is still just someone's chart.
-  const transcribed = getAssistProvenance(doc)?.drumTranscription != null;
+  const transcribed =
+    getAssistProvenance(doc)?.tempoDerived?.['drum-transcription'] != null;
   const status = `${noteCount} notes on Drums · Expert`;
 
   const {running, run} = useAssistTaskRun(runner, transcribeDrumsTask, {
@@ -121,11 +122,11 @@ export default function DrumTranscriptionCard({
 
   return (
     <CardShell
-      icon={Drum}
+      icon={<Drum />}
       name="Drum transcription"
       status={status}
       aiLabel={transcribed ? 'AI-transcribed' : undefined}
-      explanation="Turns the drum audio into an Expert drum chart automatically."
+      explanation="Writes a first-pass Expert drum chart from the audio, a faster starting point to tweak, not a finished chart."
       note={
         stale
           ? 'Tempo grid changed after transcription. Re-run if the grid moved where drums land. Your call.'

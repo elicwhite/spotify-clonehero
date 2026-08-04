@@ -13,13 +13,7 @@ import {EMPTY_STAMP, type AssistProvenance} from './content-stamps';
 import type {TrackKey} from '@/lib/chart-edit';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
 
-export type ToolMode =
-  | 'cursor'
-  | 'place'
-  | 'erase'
-  | 'bpm'
-  | 'timesig'
-  | 'section';
+export type ToolMode = 'cursor' | 'place' | 'erase' | 'bpm' | 'timesig';
 
 /** Maximum number of undo entries before oldest are discarded. */
 export const UNDO_STACK_CAP = 200;

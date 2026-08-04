@@ -147,10 +147,12 @@ describe('GenerateDifficultiesCommand', () => {
 
   it('keeps unrelated provenance entries (e.g. a drum-transcription record)', () => {
     const before = withAssistProvenance(makeFixtureDoc(), {
-      drumTranscription: {tempoStamp: 'xyz'},
+      tempoDerived: {'drum-transcription': {tempoStamp: 'xyz'}},
     });
     const after = generateOn(before).execute(before);
-    expect(getAssistProvenance(after)!.drumTranscription).toEqual({
+    expect(
+      getAssistProvenance(after)!.tempoDerived!['drum-transcription'],
+    ).toEqual({
       tempoStamp: 'xyz',
     });
   });
@@ -314,7 +316,7 @@ describe('DeleteLowerDifficultiesCommand', () => {
         drums: {sourceStamp: 'irrelevant-will-be-overwritten'},
         guitar: {sourceStamp: 'guitar-stamp'},
       },
-      drumTranscription: {tempoStamp: 'tempo-stamp'},
+      tempoDerived: {'drum-transcription': {tempoStamp: 'tempo-stamp'}},
       acks: {'difficulty:drums': {ackStamp: 'ack-stamp'}},
     });
     const after = new DeleteLowerDifficultiesCommand('drums').execute(before);
@@ -322,7 +324,9 @@ describe('DeleteLowerDifficultiesCommand', () => {
     expect(provenance.difficulties).toEqual({
       guitar: {sourceStamp: 'guitar-stamp'},
     });
-    expect(provenance.drumTranscription).toEqual({tempoStamp: 'tempo-stamp'});
+    expect(provenance.tempoDerived?.['drum-transcription']).toEqual({
+      tempoStamp: 'tempo-stamp',
+    });
     expect(provenance.acks).toEqual({
       'difficulty:drums': {ackStamp: 'ack-stamp'},
     });

@@ -45,7 +45,7 @@ let vocalsSource: 'cache' | 'demucs' | 'bundled' = 'cache';
 jest.mock('../../../lib/assist/tasks/add-lyrics', () => ({
   addLyricsTask: {
     key: 'add-lyrics',
-    title: 'Lyrics / Vocals',
+    title: 'Lyrics',
     planSteps: async () => [
       {key: 'align', label: 'Aligning syllables to audio'},
     ],

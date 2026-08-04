@@ -9,6 +9,7 @@ import {schemaForTrack} from '@/lib/chart-edit/instruments';
 import {isTrackScope} from '@/components/chart-editor/scope';
 import type {ChartEditorState} from './state';
 import {EMPTY_STAMP, getAssistProvenance, isStampStale} from './content-stamps';
+import type {TempoDerivedFeature} from './content-stamps';
 import type {SupportedTrackInstrument, TrackKeyId} from './trackInventory';
 
 // ---------------------------------------------------------------------------
@@ -95,16 +96,20 @@ export function selectActiveSchema(
 // ---------------------------------------------------------------------------
 
 /**
- * True when the drum track was generated/imported from a tempo map that no
- * longer matches the current one, and the user hasn't dismissed staleness
- * for the current tempo stamp via "Keep as-is". False when no drum
- * transcription provenance exists (nothing to be stale about) or when no
+ * True when `feature`'s artifact was generated under a tempo map that no
+ * longer matches the current one, and the user hasn't dismissed staleness for
+ * the current tempo stamp via "Keep as-is". False when the feature has no
+ * provenance (nothing to be stale about — hand-authored section titles and a
+ * hand-charted drum track are nobody's recommendation to revisit) or when no
  * chart is loaded.
  */
-export function selectDrumTranscriptionStale(state: ChartEditorState): boolean {
+export function selectTempoDerivedStale(
+  state: ChartEditorState,
+  feature: TempoDerivedFeature,
+): boolean {
   const provenance = getAssistProvenance(state.chartDoc);
-  const recorded = provenance?.drumTranscription?.tempoStamp;
-  const acked = provenance?.acks?.['drum-transcription']?.ackStamp;
+  const recorded = provenance?.tempoDerived?.[feature]?.tempoStamp;
+  const acked = provenance?.acks?.[feature]?.ackStamp;
   return isStampStale(recorded, state.tempoStamp, acked);
 }
 

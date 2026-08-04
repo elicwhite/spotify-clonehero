@@ -214,6 +214,7 @@ export function makeAddLyricsTask({
     if (signal.aborted) throw makeAbortError();
     const audioBuffer = await decodeAndResampleTo44k(
       await audio.loadOriginalBytes(),
+      {signal},
     );
     if (signal.aborted) throw makeAbortError();
     return {
@@ -224,7 +225,7 @@ export function makeAddLyricsTask({
 
   return {
     key: 'add-lyrics',
-    title: 'Lyrics / Vocals',
+    title: 'Lyrics',
 
     async planSteps({vocals}) {
       switch (vocals.kind) {

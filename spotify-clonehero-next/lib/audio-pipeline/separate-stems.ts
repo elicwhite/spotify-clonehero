@@ -17,12 +17,13 @@ import type {SeparationWorkerMessage} from '@/lib/drum-transcription/ml/separati
 import {
   computeStemFingerprint,
   ROFORMER_SEPARATOR_ID,
-  storeStem,
+  storeStemBytes,
   loadStem,
   storeStemOpus,
   loadStemOpus,
   type StereoStem,
 } from '@/lib/audio-pipeline/stem-cache';
+import {encodeStemCacheBytesInWorker} from '@/lib/audio-pipeline/pcm-client';
 import {
   makeAbortError,
   runAbortableWorker,
@@ -130,6 +131,11 @@ export function runSeparationInWorker(
  * DOMException; aborting after separation completes but before the result
  * is cached also rejects with `AbortError` and skips the store step
  * entirely (no partial cache write).
+ *
+ * `opts.createPcmWorker` overrides the factory for the resample + gzip
+ * worker (`pcm-worker.ts`), which is what keeps the long synchronous PCM
+ * jobs on either side of separation off the main thread; tests inject a fake
+ * through it.
  */
 export async function separateStems(
   audioBytes: Uint8Array,
@@ -137,6 +143,7 @@ export async function separateStems(
     drums?: boolean;
     vocals?: boolean;
     signal?: AbortSignal | undefined;
+    createPcmWorker?: (() => Worker) | undefined;
   },
   onProgress?: DrumSeparationProgressCallback,
 ): Promise<{drums?: StereoStem; vocals?: StereoStem}> {
@@ -176,7 +183,11 @@ export async function separateStems(
   }
 
   // ---- Decode + separate ----
-  const decoded = await decodeAndResampleTo44k(audioBytes);
+  const pcmWorkerOpts = {
+    createWorker: opts.createPcmWorker,
+    signal: opts.signal,
+  };
+  const decoded = await decodeAndResampleTo44k(audioBytes, pcmWorkerOpts);
   const numSamples = decoded.length;
   const left = decoded.getChannelData(0);
   const right = decoded.numberOfChannels > 1 ? decoded.getChannelData(1) : left;
@@ -197,10 +208,16 @@ export async function separateStems(
   // Store BOTH freshly-separated stems — the worker always produces both,
   // so seed the whole cache rather than only what was requested.
   onProgress?.({step: 'storing', percent: 0});
-  await storeStem(fingerprint, DRUMS_STEM, {
-    left: drumsLeft,
-    right: drumsRight,
-  });
+  // Pack + gzip in the PCM worker: a full-song stem is ~90 MB and Blink
+  // deflates one write in a single uninterrupted task. The channels are
+  // transferred in and echoed back, so `stem` below - not the detached
+  // `drumsLeft`/`drumsRight` - is what the caller gets.
+  const {bytes: drumsBytes, stem: drumsStem} =
+    await encodeStemCacheBytesInWorker(
+      {left: drumsLeft, right: drumsRight},
+      pcmWorkerOpts,
+    );
+  await storeStemBytes(fingerprint, DRUMS_STEM, drumsBytes);
   const interleavedVocals = new Float32Array(numSamples * NUM_CHANNELS);
   for (let i = 0; i < numSamples; i++) {
     interleavedVocals[i * 2] = vocalsLeft[i];
@@ -214,7 +231,7 @@ export async function separateStems(
   await storeStemOpus(fingerprint, VOCALS_STEM, vocalsOpus);
   onProgress?.({step: 'done', percent: 1});
 
-  if (needsDrums) result.drums = {left: drumsLeft, right: drumsRight};
+  if (needsDrums) result.drums = drumsStem;
   if (needsVocals) result.vocals = {left: vocalsLeft, right: vocalsRight};
   return result;
 }

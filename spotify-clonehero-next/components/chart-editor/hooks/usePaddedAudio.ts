@@ -113,6 +113,11 @@ function stemsEqual(
  * pad-sample count. Pads the full mix and every stem identically, WAV-
  * encodes them (one WAV per stem, named `${stem.name}.wav`), and constructs
  * the manager.
+ *
+ * `fullMixName` is the mixer/track name the full mix registers under. It
+ * defaults to `song`, but a package with no `song` file promotes one of its
+ * own files (e.g. `guitar`) to the full-mix slot, and that row has to carry
+ * the name of the audio it is actually playing.
  */
 export async function buildPaddedAudioManager(
   padSamples: number,
@@ -121,6 +126,7 @@ export async function buildPaddedAudioManager(
   stems: ReadonlyArray<AudioStemInput>,
   chartDoc: ChartDocument,
   onSongEnded: () => void,
+  fullMixName = 'song',
 ): Promise<{
   audioManager: AudioManager;
   paddedFullMixPcm: Float32Array;
@@ -134,7 +140,7 @@ export async function buildPaddedAudioManager(
   );
   const fullMixArray = new Uint8Array(await fullMixWav.arrayBuffer());
   const audioFiles: {fileName: string; data: Uint8Array}[] = [
-    {fileName: 'song.wav', data: fullMixArray},
+    {fileName: `${fullMixName}.wav`, data: fullMixArray},
   ];
 
   const paddedStems: AudioStem[] = [];
@@ -176,6 +182,9 @@ export interface UsePaddedAudioParams {
   audioMeta: PaddedAudioMeta | null;
   /** ORIGINAL (unpadded) full-mix PCM. Null until loaded. */
   fullMixPcm: Float32Array | null;
+  /** Track name for the full mix. Defaults to `song`; a package with no
+   *  `song` file passes the name of the file it promoted instead. */
+  fullMixName?: string;
   /** ORIGINAL (unpadded) named stems (e.g. an isolated drum stem, an
    *  AI-separated vocal stem). Empty (or omitted) for pages with a single
    *  audio source, e.g. /tempo. Changing the list (add/remove/swap a stem)
@@ -210,6 +219,7 @@ export function usePaddedAudio({
   chartDoc,
   audioMeta,
   fullMixPcm,
+  fullMixName = 'song',
   stems = [],
   onSongEnded,
 }: UsePaddedAudioParams): UsePaddedAudioResult {
@@ -295,6 +305,7 @@ export function usePaddedAudio({
           stems,
           chartDoc,
           onSongEnded,
+          fullMixName,
         );
 
         if (!mountedRef.current || token !== rebuildTokenRef.current) {
@@ -341,6 +352,7 @@ export function usePaddedAudio({
     chartDoc,
     audioMeta,
     fullMixPcm,
+    fullMixName,
     stems,
     onSongEnded,
     audioManagerRef,

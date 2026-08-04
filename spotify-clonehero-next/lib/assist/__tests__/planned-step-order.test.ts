@@ -33,6 +33,7 @@ jest.mock('../../audio-pipeline/stem-cache', () => ({
 
 import {hasStem, hasStemOpus} from '@/lib/audio-pipeline/stem-cache';
 import {makeGenerateTempoMapTask} from '../tasks/generate-tempo-map';
+import {makeGenerateSectionsTask} from '../tasks/generate-sections';
 import {makeAddLyricsTask} from '../tasks/add-lyrics';
 import {makeGenerateDifficultiesTask} from '../tasks/generate-difficulties';
 
@@ -111,7 +112,6 @@ describe('generate-tempo-map planned order', () => {
     'download-beat-model',
     'beats-fullmix',
     'beats-drums',
-    'sections',
     'convert',
     'transcribe-drums',
   ];
@@ -139,9 +139,41 @@ describe('generate-tempo-map planned order', () => {
       'download-beat-model',
       'beats-fullmix',
       'beats-drums',
-      'sections',
       'convert',
       'transcribe-drums',
+    ]);
+  });
+
+  // Plan 0076 item 24: the KS-warp stage does real tempo work (it aligns the
+  // grid to detected drum onsets) and takes long enough that hiding it would
+  // misrepresent the run — so it stays, presented as tempo work rather than
+  // as "listening to drum hits", which read like transcription.
+  it('presents the KS-warp stage as tempo work, with a reason', async () => {
+    mockHasStem.mockResolvedValue(false);
+    const steps = await makeGenerateTempoMapTask().planSteps({audio: AUDIO});
+    const step = steps.find(s => s.key === 'transcribe-drums');
+    expect(step?.label).toBe('Aligning grid to drum hits');
+    expect(step?.description).toBeTruthy();
+  });
+
+  // Plan 0076 item 23: section labeling is its own task now, so a tempo run
+  // neither plans nor emits a 'sections' stage.
+  it('plans no section-labeling stage', async () => {
+    mockHasStem.mockResolvedValue(false);
+    const steps = await makeGenerateTempoMapTask().planSteps({audio: AUDIO});
+    expect(steps.map(s => s.key)).not.toContain('sections');
+  });
+});
+
+describe('generate-sections planned order', () => {
+  // `lib/tempo-map/pipeline-worker.ts` (`runSections`): no separation, no
+  // drum-stem beat pass, no converter.
+  it('matches the sections-only emission order', async () => {
+    const steps = await makeGenerateSectionsTask().planSteps({audio: AUDIO});
+    expectOrderMatchesEmissions(steps, [
+      'download-beat-model',
+      'beats-fullmix',
+      'sections',
     ]);
   });
 });

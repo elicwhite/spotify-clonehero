@@ -12,15 +12,25 @@
  * `difficulty-worker-logic.test.ts`) and `GenerateDifficultiesCommand`'s own
  * doc mutation has its own suite (`generate-difficulties-command.test.ts`).
  * What's under test here is the wiring: the matrix row's Generate/
- * Re-generate/Delete affordances, the Chart Assist recommendation card, the
+ * Re-generate affordances, the Chart Assist recommendation card, the
  * shared assist runner driving both through the same run, and the
  * undo/staleness/ack behavior that follows from a real run applying a real
  * command against the real reducer.
+ *
+ * Delete H/M/E is not offered from the matrix row: it lives on the
+ * difficulty-generation Chart Assist card (plan 0076 item 8), asserted
+ * below alongside the card's other actions.
  */
 
 import '@testing-library/jest-dom';
 import {useEffect, useRef} from 'react';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import {noteTypes} from '@eliwhite/scan-chart';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {TooltipProvider} from '@/components/ui/tooltip';
@@ -170,6 +180,12 @@ function renderEditor(doc: ChartDocument) {
       </AssistRunnerProvider>
     </TooltipProvider>,
   );
+}
+
+/** Clicks a card's action and confirms any confirmation dialog it raises. */
+function clickAndConfirm(name: RegExp, confirmName: RegExp) {
+  fireEvent.click(screen.getByRole('button', {name}));
+  fireEvent.click(screen.getByRole('button', {name: confirmName}));
 }
 
 beforeEach(() => {
@@ -402,6 +418,20 @@ describe('Staleness: Expert edit after generation', () => {
     ).toBeInTheDocument();
   });
 
+  it('uses the shared drums.png icon (plan 0076 item 9), not a generic glyph', () => {
+    renderEditor(makeGeneratedDoc());
+    fireEvent.click(screen.getByRole('button', {name: 'edit expert'}));
+
+    const card = screen.getByRole('group', {name: 'Drums difficulty'});
+    // Decorative (`alt=""`, `aria-hidden`), so it's outside the accessibility
+    // tree `getByRole` would query — assert on the DOM directly.
+    const img = card.querySelector('img') as HTMLImageElement;
+    expect(img).not.toBeNull();
+    expect(img.src).toContain(
+      encodeURIComponent('/assets/instruments/drums.png'),
+    );
+  });
+
   it('Keep as-is dismisses both until the next Expert edit', () => {
     renderEditor(makeGeneratedDoc());
     fireEvent.click(screen.getByRole('button', {name: 'edit expert'}));
@@ -426,11 +456,10 @@ describe('Staleness: Expert edit after generation', () => {
     ).toBeInTheDocument();
   });
 
-  it('Re-generate from the CARD locks the rows cells and withdraws its Delete option', async () => {
+  it('Re-generate from the CARD locks the rows cells', async () => {
     // The matrix row and the assist card are separately mounted consumers of
-    // the same run. A run started on one has to be visible to the other, or
-    // the row would still offer "Delete Hard, Medium, and Easy" against the
-    // tracks this run is about to replace.
+    // the same run. A run started on one has to be visible to the other, so
+    // the row's H/M/E cells lock while the card's run is in flight.
     renderEditor(makeGeneratedDoc());
     fireEvent.click(screen.getByRole('button', {name: 'edit expert'}));
 
@@ -442,15 +471,6 @@ describe('Staleness: Expert edit after generation', () => {
     );
     expect(screen.getByRole('button', {name: 'Drums Medium'})).toBeDisabled();
     expect(screen.getByRole('button', {name: 'Drums Easy'})).toBeDisabled();
-
-    const options = screen.getByRole('button', {name: 'Drums options'});
-    expect(options).toHaveAttribute('aria-disabled', 'true');
-    fireEvent.click(options);
-    expect(
-      screen.queryByRole('button', {
-        name: 'Delete Hard, Medium, and Easy difficulties',
-      }),
-    ).not.toBeInTheDocument();
 
     captured!.resolve({tiers: tiers()});
     await waitFor(() =>
@@ -483,20 +503,53 @@ describe('Staleness: Expert edit after generation', () => {
   });
 });
 
-describe('Delete H · M · E', () => {
-  it('confirm removes the set and restores the Generate affordance', () => {
+// Delete H/M/E moved off the matrix row (plan 0076 item 8) onto the
+// difficulty-generation Chart Assist card, which owns its own delete suite.
+describe('Delete H/M/E from the Chart Assist card', () => {
+  it('offers Delete alongside Re-generate/Keep-as-is once the card is showing', () => {
     renderEditor(makeGeneratedDoc());
+    fireEvent.click(screen.getByRole('button', {name: 'edit expert'}));
 
-    fireEvent.click(screen.getByRole('button', {name: 'Drums options'}));
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Delete Hard, Medium, and Easy difficulties',
-      }),
-    );
-    fireEvent.click(screen.getByRole('button', {name: 'Delete'}));
+    const card = screen.getByRole('group', {name: 'Drums difficulty'});
+    expect(
+      within(card).getByRole('button', {name: /^delete$/i}),
+    ).toBeInTheDocument();
+  });
+
+  it('cancelling the confirm leaves the generated set untouched', () => {
+    renderEditor(makeGeneratedDoc());
+    fireEvent.click(screen.getByRole('button', {name: 'edit expert'}));
+
+    fireEvent.click(screen.getByRole('button', {name: /^delete$/i}));
+    fireEvent.click(screen.getByRole('button', {name: /^cancel$/i}));
+
+    expect(
+      screen.getByRole('button', {name: 'Drums Hard'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('group', {name: 'Drums difficulty'}),
+    ).toBeInTheDocument();
+  });
+
+  it('confirming deletes the H/M/E tracks, drops their visibility, and clears the card', () => {
+    renderEditor(makeGeneratedDoc());
+    fireEvent.click(screen.getByRole('button', {name: 'edit expert'}));
+
+    clickAndConfirm(/^delete$/i, /^delete$/i);
 
     expect(
       screen.queryByRole('button', {name: 'Drums Hard'}),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {name: 'Drums Medium'}),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {name: 'Drums Easy'}),
+    ).not.toBeInTheDocument();
+    // Nothing left to be stale about: the card is gone, and the matrix row's
+    // Generate affordance is back (the same state as never having generated).
+    expect(
+      screen.queryByRole('group', {name: 'Drums difficulty'}),
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole('button', {
@@ -505,17 +558,16 @@ describe('Delete H · M · E', () => {
     ).toBeInTheDocument();
   });
 
-  it('cancel leaves the set intact', () => {
+  it('undo restores the deleted tracks', () => {
     renderEditor(makeGeneratedDoc());
+    fireEvent.click(screen.getByRole('button', {name: 'edit expert'}));
 
-    fireEvent.click(screen.getByRole('button', {name: 'Drums options'}));
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Delete Hard, Medium, and Easy difficulties',
-      }),
-    );
-    fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+    clickAndConfirm(/^delete$/i, /^delete$/i);
+    expect(
+      screen.queryByRole('button', {name: 'Drums Hard'}),
+    ).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', {name: 'undo'}));
     expect(
       screen.getByRole('button', {name: 'Drums Hard'}),
     ).toBeInTheDocument();

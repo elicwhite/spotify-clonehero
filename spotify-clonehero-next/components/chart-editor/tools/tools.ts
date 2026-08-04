@@ -9,10 +9,11 @@
  * down time based on whether a selectable entity is under the cursor,
  * mirroring the single `case 'cursor':` branch it replaces.
  *
- * `sectionTool` (the toolbar's "add section" tool, `ToolMode === 'section'`)
- * is distinct from the double-click-to-rename affordance on an *existing*
- * section: that rename gesture fires while `selectMoveTool` (cursor mode) is
- * active, since it targets an already-selectable entity, not a new one.
+ * Sections have no tool of their own: they are added from the piano roll's
+ * section-strip context menu ("Add section here", plan 0076 item 19) and
+ * renamed by double-clicking an existing one, which fires while
+ * `selectMoveTool` (cursor mode) is active because it targets an
+ * already-selectable entity.
  */
 
 import {
@@ -410,22 +411,6 @@ export const timeSignatureMarkerTool: EditorTool = {
   onPointerDown(ctx: ToolContext, evt: PointerHitInfo): void {
     ctx.onOpenPopover({
       kind: 'timesig',
-      tick: evt.tick,
-      x: evt.coords.x,
-      y: evt.coords.y,
-    });
-  },
-};
-
-/** Opens the "add section" popover at the clicked tick. Renaming an
- *  *existing* section is `selectMoveTool`'s double-click affordance, not
- *  this tool — see the module doc comment. */
-export const sectionTool: EditorTool = {
-  id: 'section',
-
-  onPointerDown(ctx: ToolContext, evt: PointerHitInfo): void {
-    ctx.onOpenPopover({
-      kind: 'section',
       tick: evt.tick,
       x: evt.coords.x,
       y: evt.coords.y,

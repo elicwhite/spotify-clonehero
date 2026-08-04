@@ -12,22 +12,33 @@ import {
   makeAbortError,
   runAbortableWorker,
 } from '@/lib/workers/abortable-worker';
+import {uniqueBuffers} from '@/lib/workers/transfer';
 import type {
   PipelineProgress,
-  PipelineResult,
+  PipelineResultFor,
+  PipelineRunKind,
+  PipelineRunRequest,
   PipelineWorkerMessage,
 } from './types';
 
-export interface TempoPipelineOptions {
+export interface TempoPipelineOptions<
+  K extends PipelineRunKind = PipelineRunKind,
+> {
   /** Raw source bytes; hashed for the OPFS drum-stem cache. */
   sourceBytes?: ArrayBuffer | null;
   /**
    * Pre-separated drum stem, planar stereo at 44.1 kHz. When provided,
    * the worker skips BS-Roformer separation and echoes the stem back in
    * the result. The buffers are transferred to the worker (detached for
-   * the caller) — consume `PipelineResult.drumStemStereo` afterwards.
+   * the caller) — consume `TempoMapPipelineResult.drumStemStereo` afterwards.
    */
   drumStemStereo?: {left: Float32Array; right: Float32Array} | null;
+  /**
+   * What this run is for (see {@link PipelineRunKind}). Determines the
+   * result shape: only a tempo-map kind comes back with a grid. Defaults to
+   * `'tempo-map+sections'`, the full pipeline.
+   */
+  kind?: K | undefined;
   onProgress?: (p: PipelineProgress) => void;
   /**
    * Injectable worker factory (defaults to the real pipeline-worker.ts) so
@@ -48,10 +59,12 @@ export function defaultCreateWorker(): Worker {
   });
 }
 
-export async function runTempoPipeline(
+export async function runTempoPipeline<
+  K extends PipelineRunKind = 'tempo-map+sections',
+>(
   audioBuffer: AudioBuffer,
-  options: TempoPipelineOptions = {},
-): Promise<PipelineResult> {
+  options: TempoPipelineOptions<K> = {},
+): Promise<PipelineResultFor<K>> {
   const left = audioBuffer.getChannelData(0).slice();
   const right =
     audioBuffer.numberOfChannels > 1
@@ -69,10 +82,12 @@ export async function runTempoPipeline(
  * `left`/`right` buffers are transferred to the worker (detached for the
  * caller), so pass copies if you still need them.
  */
-export async function runTempoPipelineFromPcm(
+export async function runTempoPipelineFromPcm<
+  K extends PipelineRunKind = 'tempo-map+sections',
+>(
   input: {left: Float32Array; right: Float32Array; sampleRate: number},
-  options: TempoPipelineOptions = {},
-): Promise<PipelineResult> {
+  options: TempoPipelineOptions<K> = {},
+): Promise<PipelineResultFor<K>> {
   if (options.signal?.aborted) {
     throw makeAbortError();
   }
@@ -85,7 +100,7 @@ export async function runTempoPipelineFromPcm(
   const drumStemStereo = options.drumStemStereo ?? null;
   const createWorker = options.createWorker ?? defaultCreateWorker;
 
-  return runAbortableWorker<PipelineResult>(
+  return runAbortableWorker<PipelineResultFor<K>>(
     createWorker,
     options.signal,
     (worker, settle) => {
@@ -95,7 +110,7 @@ export async function runTempoPipelineFromPcm(
           const {type: _type, ...p} = msg;
           options.onProgress?.(p);
         } else if (msg.type === 'result') {
-          settle.resolve(msg.result);
+          settle.resolve(msg.result as PipelineResultFor<K>);
         } else if (msg.type === 'error') {
           settle.reject(new Error(msg.message));
         }
@@ -104,27 +119,21 @@ export async function runTempoPipelineFromPcm(
         settle.reject(new Error(e.message || 'Tempo pipeline worker error'));
       };
 
-      const transfer: Transferable[] = [left.buffer, right.buffer];
-      if (drumStemStereo) {
-        // Dedupe: the two channels may be views over one shared buffer.
-        for (const buf of new Set([
-          drumStemStereo.left.buffer,
-          drumStemStereo.right.buffer,
-        ])) {
-          transfer.push(buf);
-        }
-      }
-      worker.postMessage(
-        {
-          type: 'run',
-          left,
-          right,
-          sampleRate,
-          fingerprint,
-          drumStemStereo,
-        },
-        transfer,
+      const transfer = uniqueBuffers(
+        left,
+        right,
+        ...(drumStemStereo ? [drumStemStereo.left, drumStemStereo.right] : []),
       );
+      const request: PipelineRunRequest = {
+        type: 'run',
+        kind: options.kind ?? 'tempo-map+sections',
+        left,
+        right,
+        sampleRate,
+        fingerprint,
+        drumStemStereo,
+      };
+      worker.postMessage(request, transfer);
     },
   );
 }

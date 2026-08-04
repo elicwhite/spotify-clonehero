@@ -382,7 +382,6 @@ function HighwayEditorPane({
         return 'pointer';
       case 'bpm':
       case 'timesig':
-      case 'section':
         return 'crosshair';
       default:
         return 'default';

@@ -353,21 +353,33 @@ async function hasMarked(
   return nonEmptyEntryExists(dir, payloadName);
 }
 
-/** Stores a stem (planar stereo Float32 @ 44.1 kHz) in the cache, gzipped.
- * Atomic: an interrupted store never leaves a later load/probe seeing a
+/** Stores an already-encoded (`encodeStemCacheBytes`) stem payload. The entry
+ * point for callers that gzipped elsewhere - on the main thread that means
+ * `pcm-worker.ts`, since Blink deflates a single write in one uninterrupted
+ * task. Atomic: an interrupted store never leaves a later load/probe seeing a
  * truncated payload. */
-export async function storeStem(
+export async function storeStemBytes(
   fingerprint: string,
   stemName: string,
-  stem: StereoStem,
+  bytes: Uint8Array,
 ): Promise<void> {
-  const bytes = await encodeStemCacheBytes(stem);
   const dir = await getCacheEntryDir(fingerprint, true);
   await writeMarked(
     dir,
     `${stemName}.f32.gz`,
     bytes as Uint8Array<ArrayBuffer>,
   );
+}
+
+/** Stores a stem (planar stereo Float32 @ 44.1 kHz) in the cache, gzipping it
+ * on the calling thread. Used from worker contexts (e.g. the tempo pipeline
+ * worker), which are already off the main thread. */
+export async function storeStem(
+  fingerprint: string,
+  stemName: string,
+  stem: StereoStem,
+): Promise<void> {
+  await storeStemBytes(fingerprint, stemName, await encodeStemCacheBytes(stem));
 }
 
 /** Loads a cached stem. Returns null on a cache miss, an interrupted write,

@@ -4,7 +4,7 @@ import {Inter as FontSans} from 'next/font/google';
 import ContextProviders from './ContextProviders';
 import {cn} from '@/lib/utils';
 import {Toaster} from 'sonner';
-import SiteHeader from '@/components/SiteChrome';
+import SiteHeader, {SiteMain} from '@/components/SiteChrome';
 import SiteNav from '@/components/SiteNav';
 import WebMCPInit from './WebMCPInit';
 import WebMCPTools from './WebMCPTools';
@@ -55,9 +55,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
               nav and the compact editor row, and passing the nav as a prop
               keeps the server-rendered nav out of the client bundle. */}
           <SiteHeader siteNav={<SiteNav />} />
-          <main className="flex flex-col flex-1 items-center align-center min-h-0 p-4">
-            {children}
-          </main>
+          <SiteMain>{children}</SiteMain>
         </ContextProviders>
         <Toaster />
         <WebMCPInit />

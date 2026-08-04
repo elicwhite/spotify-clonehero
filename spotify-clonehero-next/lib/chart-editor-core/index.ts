@@ -8,8 +8,8 @@ export {
   selectActiveSchema,
   selectActiveTrack,
   selectDifficultyStale,
-  selectDrumTranscriptionStale,
   selectRenderDoc,
+  selectTempoDerivedStale,
 } from './selectors';
 export {initialState, UNDO_STACK_CAP} from './state';
 export {
@@ -21,11 +21,12 @@ export {
   getAssistProvenance,
   isStampStale,
   recomputeTrackStamps,
-  restampDrumTranscription,
-  setDrumTranscriptionStamp,
+  restampTempoDerived,
+  setTempoStamp,
   withAssistProvenance,
   type AssistFeatureId,
   type AssistProvenance,
+  type TempoDerivedFeature,
 } from './content-stamps';
 export {
   availableTrackKeys,

@@ -179,16 +179,17 @@ export async function chartPackageAudioBytes(
  * with the action disabled and these on the tooltip.
  */
 export const CHART_PACKAGE_ASSIST_DISABLED_REASONS = {
-  /** Padding the chart is only half of adding leading silence: these hosts
-   *  build playback straight from the package's audio files and never pad
-   *  them, so a shifted chart would drift away from its audio. */
-  leadingSilence:
-    "This editor builds its audio playback directly from the chart's files and never pads it to match a shifted chart, so it cannot add leading silence here yet.",
+  /** Padding the chart is only half of adding leading silence: a host that
+   *  builds playback straight from the package's audio files and never pads
+   *  them would let a shifted chart drift away from its audio. Declared by
+   *  the difficulty-generation flow, which does exactly that; `TrackEditPage`
+   *  pads both its playback (`usePaddedAudio`) and its exported audio, so it
+   *  declares no reason at all. */
+  leadingSilence: "Can't pad this editor's audio to match a shifted chart yet.",
   /** Re-running transcription needs the separated drum stem an OPFS
    *  drum-transcription project holds, which a chart loaded from a file
    *  doesn't have. */
-  drumRerun:
-    'Re-running transcription needs the separated drum audio from the drum transcription tool. This chart was loaded from a file, so there is nothing to re-run here.',
+  drumRerun: 'No separated drum audio to re-run from.',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -196,8 +197,6 @@ export const CHART_PACKAGE_ASSIST_DISABLED_REASONS = {
 // ---------------------------------------------------------------------------
 
 export interface ChartPackageEditorProps {
-  audioData: Float32Array | undefined;
-  audioChannels: number;
   getChartText: () => Promise<string>;
   getAudioSources: () => Promise<AudioSource[]>;
   chartAssist: ChartAssistProps;
@@ -210,11 +209,15 @@ export interface ChartPackageEditorProps {
  * Chart Assist on these hosts, card by card (plan 0074 Phase 2):
  * - Tempo map: RUNS. `generate-tempo-map` needs nothing but the song's audio
  *   bytes, which the chart package supplies.
- * - Lyrics / Vocals: RUNS. `add-lyrics` needs audio bytes plus the pasted
+ * - Lyrics: RUNS. `add-lyrics` needs audio bytes plus the pasted
  *   text. With no stem-cache fingerprint to offer, a chart whose audio was
  *   never separated here takes the Demucs branch, which is exactly what
  *   `/add-lyrics` does with the same input.
- * - Add leading silence: DISABLED, still shown.
+ * - Add leading silence: shown either way. A host that builds playback
+ *   straight from the package's files declares
+ *   `CHART_PACKAGE_ASSIST_DISABLED_REASONS.leadingSilence` and the action is
+ *   disabled; a host that pads its playback and its exported audio
+ *   (`TrackEditPage`) declares nothing and the action runs.
  * - Drum transcription: DISABLED, still shown (only on charts that have
  *   Expert Drums). The note count and the staleness prompt come from editor
  *   state alone, and "Keep as-is" is a decision about that state, so both
@@ -224,11 +227,17 @@ export interface ChartPackageEditorProps {
  * dependency of the memoized callbacks handed to the editor.
  */
 export function useChartPackageEditor(args: {
-  audio: PreparedChartPackageAudio | null;
   chartDoc: ChartDocument | null;
   loadAudioFiles: () => Promise<Files>;
+  /**
+   * The stem-cache fingerprint this host has persisted for the audio, when
+   * it has one. Supplied, assist tasks key the cache with it verbatim rather
+   * than hashing the bytes — which for a multi-file package means mixing the
+   * whole song down first.
+   */
+  stemFingerprint?: string | undefined;
 }): ChartPackageEditorProps {
-  const {audio, chartDoc, loadAudioFiles} = args;
+  const {chartDoc, loadAudioFiles, stemFingerprint} = args;
 
   const getChartText = useCallback(async (): Promise<string> => {
     if (!chartDoc) throw new Error('No chart document');
@@ -247,27 +256,18 @@ export function useChartPackageEditor(args: {
     async (): Promise<AssistAudio> => ({
       loadOriginalBytes: async () =>
         chartPackageAudioBytes(await loadAudioFiles()),
+      stemFingerprint,
     }),
-    [loadAudioFiles],
+    [loadAudioFiles, stemFingerprint],
   );
 
-  const audioSampleRate = audio?.audioSampleRate;
   const chartAssist = useMemo<ChartAssistProps>(
     () => ({
       loadAudio,
-      audioSampleRate,
-      leadingSilenceDisabledReason:
-        CHART_PACKAGE_ASSIST_DISABLED_REASONS.leadingSilence,
       drumRerunDisabledReason: CHART_PACKAGE_ASSIST_DISABLED_REASONS.drumRerun,
     }),
-    [loadAudio, audioSampleRate],
+    [loadAudio],
   );
 
-  return {
-    audioData: audio?.audioData,
-    audioChannels: audio?.audioChannels ?? 2,
-    getChartText,
-    getAudioSources,
-    chartAssist,
-  };
+  return {getChartText, getAudioSources, chartAssist};
 }

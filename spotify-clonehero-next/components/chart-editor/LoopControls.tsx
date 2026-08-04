@@ -27,9 +27,13 @@ interface LoopControlsProps {
 /**
  * A-B loop controls for section review.
  *
- * - "Set A" sets loop start at current playback position
- * - "Set B" sets loop end at current playback position
+ * - "A" sets loop start at the current playhead position
+ * - "B" sets loop end at the current playhead position
  * - "Clear" removes the loop
+ *
+ * Each button carries an accessible name and tooltip naming the interaction
+ * (plan 0076 item 21: the bare "A"/"B" labels alone didn't say what
+ * clicking them does) — the interaction model itself is unchanged.
  *
  * Uses AudioManager's setPracticeMode() for the actual loop playback.
  */
@@ -94,6 +98,7 @@ export default function LoopControls({
               <Button
                 variant="ghost"
                 size="sm"
+                aria-label="Set loop start at playhead"
                 className={cn(
                   SEGMENT_CLASS,
                   'border-r',
@@ -103,7 +108,7 @@ export default function LoopControls({
                 A
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Set loop start</TooltipContent>
+            <TooltipContent>Set loop start at playhead</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -111,6 +116,7 @@ export default function LoopControls({
               <Button
                 variant="ghost"
                 size="sm"
+                aria-label="Set loop end at playhead"
                 className={cn(
                   SEGMENT_CLASS,
                   'border-r',
@@ -120,7 +126,7 @@ export default function LoopControls({
                 B
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Set loop end</TooltipContent>
+            <TooltipContent>Set loop end at playhead</TooltipContent>
           </Tooltip>
 
           <Tooltip>

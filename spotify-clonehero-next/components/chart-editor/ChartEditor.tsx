@@ -360,27 +360,17 @@ export default function ChartEditor({
       {/* Center: the highway. */}
       {/* A `section`, not a `main`: the root app layout already wraps every
        *  route in the page's single `main` landmark. */}
-      {/* `pl-4 bg-background` is the gutter between the sidebar and the
-       *  highway (owner feedback, 2026-08-03: the sidebar looked skewed
-       *  because the app shell's outer padding — `app/layout.tsx`'s `main`,
-       *  `p-4`/1rem — sat left of the sidebar while the sidebar was flush
-       *  against the highway). Padding on this area rather than a grid
-       *  `column-gap`: a gap column would run the full height of the grid
-       *  at >=1440px, where the sidebar is a full-height rail, painting a
-       *  stripe of the grid's own editor surface beside the light header and
-       *  bottom rows. Padding keeps the gutter in the middle row only and
-       *  fills it with `--background`, so it matches the shell's outer
-       *  padding in both themes.
-       *
-       *  Consequence, and unresolved: because the gutter is this area's own
-       *  padding, at >=1440px the `header` and `bottom` rows sit flush
-       *  against the sidebar while the highway is inset 16px, so the three
-       *  rows do not share a left edge. Plan 0076 item 3 asks for the
-       *  highway flush instead; that item owns the decision. */}
+      {/* Flush against the sidebar (owner feedback, plan 0076 item 3: the
+       *  highway area must touch its container, no left gutter). At >=1440px
+       *  the sidebar is a full-height rail, so this keeps the `header`,
+       *  `main` and `bottom` rows sharing one left edge against it. The
+       *  shell's own outer padding (`SiteMain` in
+       *  `components/SiteChrome.tsx`, `px-3` on editor routes) is what
+       *  remains visible outside the grid. */}
       <section
         aria-label="Editing surface"
         style={{gridArea: 'main'}}
-        className="flex min-w-0 min-h-0 overflow-hidden bg-background pl-4">
+        className="flex min-w-0 min-h-0 overflow-hidden bg-background">
         <div className="relative flex-1 min-w-0 min-h-0">
           <HighwayEditor
             metadata={metadata}

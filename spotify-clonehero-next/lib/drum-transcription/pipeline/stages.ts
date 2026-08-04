@@ -329,6 +329,9 @@ export async function ensureSynctrack(
     const result = await runTempoPipelineFromPcm(
       {...fullMix, sampleRate: TARGET_SAMPLE_RATE},
       {
+        // The full pipeline: this project wants both the grid and the
+        // section labels it writes onto the fresh chart.
+        kind: 'tempo-map+sections',
         // Detached buffers (decodeAudioData) have byteLength 0 — skip them.
         sourceBytes:
           sourceBytes && sourceBytes.byteLength > 0 ? sourceBytes : null,

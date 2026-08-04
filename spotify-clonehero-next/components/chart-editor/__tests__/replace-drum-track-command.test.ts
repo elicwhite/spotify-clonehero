@@ -298,9 +298,10 @@ describe('ReplaceDrumTrackCommand provenance (plan 0074 Design C)', () => {
     // Written by the generating command itself, so undo removes the notes
     // and the record together — no separate bookkeeping command needed at
     // any call site.
-    expect(getAssistProvenance(after)!.drumTranscription!.tempoStamp).toBe(
-      computeTempoStamp(after),
-    );
+    expect(
+      getAssistProvenance(after)!.tempoDerived!['drum-transcription']!
+        .tempoStamp,
+    ).toBe(computeTempoStamp(after));
   });
 
   it('stamps against the adopted grid when the run brought its own', () => {
@@ -314,9 +315,10 @@ describe('ReplaceDrumTrackCommand provenance (plan 0074 Design C)', () => {
     const after = new ReplaceDrumTrackCommand(transcribedNotes(), {
       sync,
     }).execute(makeFixtureDoc());
-    expect(getAssistProvenance(after)!.drumTranscription!.tempoStamp).toBe(
-      computeTempoStamp(after),
-    );
+    expect(
+      getAssistProvenance(after)!.tempoDerived!['drum-transcription']!
+        .tempoStamp,
+    ).toBe(computeTempoStamp(after));
   });
 
   it('keeps unrelated provenance entries (e.g. difficulty records)', () => {

@@ -13,19 +13,22 @@
  * (`showEditingControls`, `showToolPalette`), so capability-gated pages keep
  * exactly the affordances they had.
  *
- * bpm/timesig/erase tools do NOT move here. bpm and timesig are dropped
- * because the piano roll's tempo-lane right-click menu already offers "Add
- * tempo marker here" and "Insert time signature change here"
+ * bpm/timesig/erase/section tools do NOT move here. bpm and timesig are
+ * dropped because the piano roll's tempo-lane right-click menu already
+ * offers "Add tempo marker here" and "Insert time signature change here"
  * (`PianoRollTimeline.tsx`'s `buildTempoMenu`) — a real, already-shipped
  * affordance, not a gap. Erase is dropped because Delete/Backspace and the
  * note context menu's "Delete note" already remove selected notes. Section
- * has no such equivalent — nothing else in the piano roll or highway lets a
- * user START a new section — so it keeps a small icon button beside
- * undo/redo instead of losing its only affordance.
+ * is dropped the same way (plan 0076 item 19): the section strip (the
+ * piano roll's ruler) now has its own right-click menu — "Add section
+ * here" on empty space, "Rename section…"/"Delete section" on an existing
+ * flag (`PianoRollTimeline.tsx`'s `buildSectionMenu`, the same
+ * hit-vs-empty split `buildTempoMenu` uses) — so the tool button's only
+ * affordance (starting a new section) has a real replacement.
  */
 
 import {formatForDisplay} from '@tanstack/react-hotkeys';
-import {MousePointer2, Plus, Bookmark, Minus, Undo2, Redo2} from 'lucide-react';
+import {MousePointer2, Plus, Minus, Undo2, Redo2} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {
   Tooltip,
@@ -70,14 +73,6 @@ const SNAP_OPTIONS: {value: string; label: string}[] = [
   {value: '64', label: '1/64'},
 ];
 
-/** Shared styling for the column hint chips. Each hint names a binding
- *  that this app actually registers: snap is `Shift+1`..`Shift+6` /
- *  `Shift+0` (`GRID_SHORTCUT_MAP` in `hooks/useEditorKeyboard.ts`) and
- *  speed is `[` / `]` (`TransportControls.tsx`). The A/B loop column
- *  shows no chip because setting loop points has no hotkey. */
-const KBD_CLASS =
-  'text-[9px] text-muted-foreground/70 border rounded px-1 leading-none';
-
 interface UtilityClusterProps {
   audioManager: AudioManager;
 }
@@ -113,7 +108,6 @@ export default function UtilityCluster({audioManager}: UtilityClusterProps) {
                 <span className="text-[10px] font-semibold text-muted-foreground">
                   Snap
                 </span>
-                <kbd className={KBD_CLASS}>{'⇧1-6'}</kbd>
               </div>
               <Select
                 value={String(state.gridDivision)}
@@ -142,7 +136,6 @@ export default function UtilityCluster({audioManager}: UtilityClusterProps) {
               <span className="text-[10px] font-semibold text-muted-foreground">
                 Speed
               </span>
-              <kbd className={KBD_CLASS}>[ ]</kbd>
             </div>
             <div className="flex items-center h-7 border rounded-md overflow-hidden">
               <Button
@@ -179,6 +172,14 @@ export default function UtilityCluster({audioManager}: UtilityClusterProps) {
               </span>
             </div>
             <LoopControls audioManager={audioManager} className="flex-wrap" />
+            {/* Item 21: the segmented A/B/clear control alone doesn't say
+             *  what clicking it does — this one-line caption plus each
+             *  button's accessible name/tooltip (`LoopControls.tsx`) is
+             *  the discoverability fix; the interaction (set at the
+             *  current playhead position) is unchanged. */}
+            <p className="text-[9px] leading-tight text-muted-foreground/70">
+              Sets start/end at the playhead
+            </p>
           </div>
         </div>
 
@@ -227,15 +228,6 @@ export default function UtilityCluster({audioManager}: UtilityClusterProps) {
                 Redo ({formatForDisplay('Mod+Shift+Z')})
               </TooltipContent>
             </Tooltip>
-            <span className="flex-1" />
-            {/* Section tool: no equivalent affordance elsewhere (unlike
-             *  bpm/timesig), so it keeps a button — see file header. */}
-            <ToolButton
-              mode="section"
-              icon={Bookmark}
-              label="Section"
-              hotkey="Mod+6"
-            />
           </div>
         )}
       </div>

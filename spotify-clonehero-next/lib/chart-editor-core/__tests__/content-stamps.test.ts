@@ -14,8 +14,8 @@ import {
   getAssistProvenance,
   isStampStale,
   recomputeTrackStamps,
-  restampDrumTranscription,
-  setDrumTranscriptionStamp,
+  restampTempoDerived,
+  setTempoStamp,
   withAssistProvenance,
 } from '../content-stamps';
 import {trackKeyId} from '../trackInventory';
@@ -164,55 +164,93 @@ describe('assist provenance helpers', () => {
   it('withAssistProvenance attaches provenance readable via getAssistProvenance', () => {
     const doc = makeFixtureDoc();
     const withProvenance = withAssistProvenance(doc, {
-      drumTranscription: {tempoStamp: 'abc'},
+      tempoDerived: {'drum-transcription': {tempoStamp: 'abc'}},
     });
     expect(getAssistProvenance(withProvenance)).toEqual({
-      drumTranscription: {tempoStamp: 'abc'},
+      tempoDerived: {'drum-transcription': {tempoStamp: 'abc'}},
     });
     // The original doc is untouched.
     expect(getAssistProvenance(doc)).toBeUndefined();
   });
 });
 
-describe('drum-transcription provenance writers', () => {
-  it('setDrumTranscriptionStamp records the doc own tempo stamp', () => {
+describe('tempo-derived provenance writers', () => {
+  it('setTempoStamp records the doc own tempo stamp', () => {
     const doc = makeFixtureDoc();
-    const stamped = setDrumTranscriptionStamp(doc);
-    expect(getAssistProvenance(stamped)!.drumTranscription).toEqual({
-      tempoStamp: computeTempoStamp(doc),
+    const stamped = setTempoStamp(doc, 'drum-transcription');
+    expect(getAssistProvenance(stamped)!.tempoDerived).toEqual({
+      'drum-transcription': {tempoStamp: computeTempoStamp(doc)},
     });
   });
 
-  it('setDrumTranscriptionStamp keeps the rest of the bag', () => {
+  it('setTempoStamp keeps the rest of the bag', () => {
     const doc = withAssistProvenance(makeFixtureDoc(), {
       acks: {'drum-transcription': {ackStamp: 'ack-1'}},
     });
-    expect(getAssistProvenance(setDrumTranscriptionStamp(doc))!.acks).toEqual({
-      'drum-transcription': {ackStamp: 'ack-1'},
+    expect(
+      getAssistProvenance(setTempoStamp(doc, 'drum-transcription'))!.acks,
+    ).toEqual({'drum-transcription': {ackStamp: 'ack-1'}});
+  });
+
+  it('setTempoStamp leaves the other features records alone', () => {
+    const doc = withAssistProvenance(makeFixtureDoc(), {
+      tempoDerived: {sections: {tempoStamp: 'sections-stamp'}},
+    });
+    expect(
+      getAssistProvenance(setTempoStamp(doc, 'drum-transcription'))!
+        .tempoDerived,
+    ).toEqual({
+      sections: {tempoStamp: 'sections-stamp'},
+      'drum-transcription': {tempoStamp: computeTempoStamp(doc)},
     });
   });
 
-  it('setDrumTranscriptionStamp writes a record even when there was none', () => {
+  it('restampTempoDerived leaves a doc with no record untouched', () => {
     const doc = makeFixtureDoc();
-    expect(
-      getAssistProvenance(setDrumTranscriptionStamp(doc))!.drumTranscription,
-    ).toBeDefined();
-  });
-
-  it('restampDrumTranscription leaves a doc with no record untouched', () => {
-    const doc = makeFixtureDoc();
-    const restamped = restampDrumTranscription(doc);
+    const restamped = restampTempoDerived(doc);
     expect(restamped).toBe(doc);
     expect(getAssistProvenance(restamped)).toBeUndefined();
   });
 
-  it('restampDrumTranscription re-points an existing record at the current map', () => {
+  it('restampTempoDerived re-points every recorded feature at the current map', () => {
     const doc = withAssistProvenance(makeFixtureDoc(), {
-      drumTranscription: {tempoStamp: 'stale-stamp'},
+      tempoDerived: {
+        'drum-transcription': {tempoStamp: 'stale-stamp'},
+        sections: {tempoStamp: 'stale-stamp'},
+      },
+    });
+    expect(getAssistProvenance(restampTempoDerived(doc))!.tempoDerived).toEqual(
+      {
+        'drum-transcription': {tempoStamp: computeTempoStamp(doc)},
+        sections: {tempoStamp: computeTempoStamp(doc)},
+      },
+    );
+  });
+
+  it('restampTempoDerived restamps only the named features', () => {
+    const doc = withAssistProvenance(makeFixtureDoc(), {
+      tempoDerived: {
+        'drum-transcription': {tempoStamp: 'stale-stamp'},
+        sections: {tempoStamp: 'stale-stamp'},
+      },
     });
     expect(
-      getAssistProvenance(restampDrumTranscription(doc))!.drumTranscription,
-    ).toEqual({tempoStamp: computeTempoStamp(doc)});
+      getAssistProvenance(restampTempoDerived(doc, 'drum-transcription'))!
+        .tempoDerived,
+    ).toEqual({
+      'drum-transcription': {tempoStamp: computeTempoStamp(doc)},
+      sections: {tempoStamp: 'stale-stamp'},
+    });
+  });
+
+  it('restampTempoDerived does not invent a record for a feature that has none', () => {
+    const doc = withAssistProvenance(makeFixtureDoc(), {
+      tempoDerived: {sections: {tempoStamp: 'stale-stamp'}},
+    });
+    expect(
+      getAssistProvenance(restampTempoDerived(doc, 'drum-transcription'))!
+        .tempoDerived!['drum-transcription'],
+    ).toBeUndefined();
   });
 });
 
@@ -220,13 +258,15 @@ describe('carryAssistProvenance', () => {
   it('returns the target untouched when the source carries no bag', () => {
     const from = makeFixtureDoc();
     const to = withAssistProvenance(makeFixtureDoc(), {
-      drumTranscription: {tempoStamp: 'candidate'},
+      tempoDerived: {'drum-transcription': {tempoStamp: 'candidate'}},
     });
     expect(carryAssistProvenance(from, to)).toBe(to);
   });
 
   it('returns the target untouched when both sides share a bag', () => {
-    const provenance = {drumTranscription: {tempoStamp: 'shared'}};
+    const provenance = {
+      tempoDerived: {'drum-transcription': {tempoStamp: 'shared'}},
+    };
     const from = withAssistProvenance(makeFixtureDoc(), provenance);
     const to = withAssistProvenance(makeFixtureDoc(), provenance);
     expect(carryAssistProvenance(from, to)).toBe(to);
@@ -237,12 +277,14 @@ describe('carryAssistProvenance', () => {
       acks: {'drum-transcription': {ackStamp: 'acked-after-preview'}},
     });
     const to = withAssistProvenance(makeFixtureDoc(), {
-      drumTranscription: {tempoStamp: 'candidate'},
+      tempoDerived: {'drum-transcription': {tempoStamp: 'candidate'}},
     });
     const carried = carryAssistProvenance(from, to);
     expect(getAssistProvenance(carried)).toEqual(getAssistProvenance(from));
     // The target doc itself is untouched.
-    expect(getAssistProvenance(to)!.drumTranscription).toEqual({
+    expect(
+      getAssistProvenance(to)!.tempoDerived!['drum-transcription'],
+    ).toEqual({
       tempoStamp: 'candidate',
     });
   });

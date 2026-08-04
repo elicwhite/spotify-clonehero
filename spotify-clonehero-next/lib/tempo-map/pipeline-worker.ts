@@ -33,6 +33,7 @@ import {
   stereoStemToMono,
   type StereoStem,
 } from '@/lib/audio-pipeline/stem-cache';
+import {uniqueBuffers} from '@/lib/workers/transfer';
 import {beatsToSynctrack, PL_LSQ_TOL_MS_DEFAULT} from './converter';
 import {computeMeterStats} from './meter-confidence';
 import {
@@ -44,6 +45,7 @@ import type {
   PipelineProgress,
   PipelineRunRequest,
   PipelineWorkerMessage,
+  Synctrack,
 } from './types';
 
 const ORT_WASM_CDN =
@@ -88,33 +90,42 @@ function downloadProgressAdapter(stage: PipelineProgress['stage']) {
   };
 }
 
-// --- pipeline ------------------------------------------------------------
+// --- stages ---------------------------------------------------------------
 
-async function run(req: PipelineRunRequest) {
-  ort.env.wasm.wasmPaths = ORT_WASM_CDN;
-  // Multi-threading would require nested pthread workers, which fails inside
-  // a bundled web worker; same constraint as the Demucs worker.
-  ort.env.wasm.numThreads = 1;
-  ort.env.logLevel = 'error';
-
-  void initSoxr();
-
-  // ---- resample input to 44.1k for the separator ----
-  let left = req.left;
-  let right = req.right;
-  if (req.sampleRate !== SEPARATION_SAMPLE_RATE) {
-    [left, right] = await Promise.all([
-      resampleSoxr(left, req.sampleRate, SEPARATION_SAMPLE_RATE),
-      resampleSoxr(right, req.sampleRate, SEPARATION_SAMPLE_RATE),
-    ]);
+/** Resample the request's PCM to the rate the separator and both beat passes
+ *  work at. Returns the request's own buffers untouched when it already is. */
+async function resampleToSeparationRate(
+  req: PipelineRunRequest,
+): Promise<{left: Float32Array; right: Float32Array}> {
+  if (req.sampleRate === SEPARATION_SAMPLE_RATE) {
+    return {left: req.left, right: req.right};
   }
-  const N = left.length;
+  const [left, right] = await Promise.all([
+    resampleSoxr(req.left, req.sampleRate, SEPARATION_SAMPLE_RATE),
+    resampleSoxr(req.right, req.sampleRate, SEPARATION_SAMPLE_RATE),
+  ]);
+  return {left, right};
+}
 
-  // ---- S1: drum stem (pre-separated, OPFS-cached, or freshly separated) ----
-  // Planar stereo throughout: CRNN transcription (drum-transcription/
-  // pipeline/tempo-track.ts) consumes the stereo stem from the result, so
-  // every source — caller, cache, fresh separation — must surface it.
-  let drumStemStereo: StereoStem | null = null;
+function monoMixdown(left: Float32Array, right: Float32Array): Float32Array {
+  const mono = new Float32Array(left.length);
+  for (let i = 0; i < left.length; i++) mono[i] = (left[i] + right[i]) * 0.5;
+  return mono;
+}
+
+/**
+ * S1: the drum stem, from whichever source has one — supplied by the caller,
+ * the OPFS cache, or a fresh BS-Roformer separation. Planar stereo
+ * throughout: CRNN transcription (drum-transcription/pipeline/tempo-track.ts)
+ * consumes the stereo stem from the result, so every source must surface it.
+ * Only the tempo-map path calls this; LinkSeg needs nothing from the drums.
+ */
+async function obtainDrumStem(
+  req: PipelineRunRequest,
+  left: Float32Array,
+  right: Float32Array,
+): Promise<StereoStem> {
+  const N = left.length;
   if (
     req.drumStemStereo &&
     Math.min(
@@ -125,73 +136,101 @@ async function run(req: PipelineRunRequest) {
     // Caller already separated the drums (drum-transcription pipeline):
     // skip BS-Roformer entirely. Seed the OPFS cache so a later standalone
     // /tempo run on the same file also cache-hits.
-    drumStemStereo = req.drumStemStereo;
     progress({
       stage: 'separate',
       percent: 1,
       detail: 'Reused drums from transcription',
     });
     if (req.fingerprint)
-      await storeStem(req.fingerprint, 'drums', drumStemStereo);
+      await storeStem(req.fingerprint, 'drums', req.drumStemStereo);
+    return req.drumStemStereo;
   }
-  if (!drumStemStereo && req.fingerprint) {
+
+  if (req.fingerprint) {
     const cached = await loadStem(req.fingerprint, 'drums');
     if (cached) {
-      drumStemStereo = cached;
       progress({
         stage: 'separate',
         percent: 1,
         detail: 'Reused drums from a previous run',
       });
+      return cached;
     }
   }
 
-  if (!drumStemStereo) {
-    progress({stage: 'download-separation-model'});
-    const roformerBytes = await getCachedModel(
-      ROFORMER_MODEL_URL,
-      ROFORMER_CACHE_KEY,
-      downloadProgressAdapter('download-separation-model'),
-      ROFORMER_MIN_BYTES,
-      'drum separator',
-    );
-    progress({stage: 'download-separation-model', percent: 1});
+  progress({stage: 'download-separation-model'});
+  const roformerBytes = await getCachedModel(
+    ROFORMER_MODEL_URL,
+    ROFORMER_CACHE_KEY,
+    downloadProgressAdapter('download-separation-model'),
+    ROFORMER_MIN_BYTES,
+    'drum separator',
+  );
+  progress({stage: 'download-separation-model', percent: 1});
 
-    const roformerSession = await ort.InferenceSession.create(
-      new Uint8Array(roformerBytes),
-      {
-        executionProviders: ['webgpu', 'wasm'],
-        graphOptimizationLevel: 'disabled',
+  const roformerSession = await ort.InferenceSession.create(
+    new Uint8Array(roformerBytes),
+    {
+      executionProviders: ['webgpu', 'wasm'],
+      graphOptimizationLevel: 'disabled',
+    },
+  );
+
+  progress({stage: 'separate', percent: 0});
+  let separated: StereoStem;
+  try {
+    separated = await separateDrumStem({
+      ort,
+      left,
+      right,
+      session: roformerSession,
+      output: 'stereo',
+      onProgress: ({segment, totalSegments, etaSec}) => {
+        progress({
+          stage: 'separate',
+          percent: segment / totalSegments,
+          etaSeconds: etaSec,
+        });
       },
-    );
-
-    progress({stage: 'separate', percent: 0});
-    try {
-      const stereo = await separateDrumStem({
-        ort,
-        left,
-        right,
-        session: roformerSession,
-        output: 'stereo',
-        onProgress: ({segment, totalSegments, etaSec}) => {
-          progress({
-            stage: 'separate',
-            percent: segment / totalSegments,
-            etaSeconds: etaSec,
-          });
-        },
-      });
-      drumStemStereo = stereo;
-    } finally {
-      await roformerSession.release();
-    }
-    if (req.fingerprint)
-      await storeStem(req.fingerprint, 'drums', drumStemStereo);
+    });
+  } finally {
+    await roformerSession.release();
   }
+  if (req.fingerprint) await storeStem(req.fingerprint, 'drums', separated);
+  return separated;
+}
 
-  const drumStem = stereoStemToMono(drumStemStereo);
+/** One Beat This! pass over a mono signal: resample, mel, ONNX, DBN
+ *  postprocessor. */
+async function runBeatThisPass(
+  session: ort.InferenceSession,
+  monoPcm: Float32Array,
+  sr: number,
+  stage: 'beats-fullmix' | 'beats-drums',
+) {
+  progress({stage, percent: 0});
+  const mono22k = await resampleToBeatThis(monoPcm, sr);
+  const {mel, T} = computeLogMel(mono22k);
+  const {beatLogits, downbeatLogits} = await runBeatThisOnnx({
+    ort,
+    session,
+    mel,
+    T,
+    onChunk: (done, total) => progress({stage, percent: done / total}),
+  });
+  const audioSeconds = mono22k.length / BEAT_THIS_SAMPLE_RATE;
+  const fps = T / audioSeconds;
+  const pp = runPostprocessor({beatLogits, downbeatLogits, fps});
+  return {pp, beatLogits, fps, mono22k, audioSeconds};
+}
 
-  // ---- Beat This! model ----
+type BeatPass = Awaited<ReturnType<typeof runBeatThisPass>>;
+
+/** Download/create the Beat This! session, run `fn` against it, release it.
+ *  Both the full-mix and drum-stem passes share one session. */
+async function withBeatThisSession<T>(
+  fn: (session: ort.InferenceSession) => Promise<T>,
+): Promise<T> {
   progress({stage: 'download-beat-model'});
   const beatThisBytes = await getCachedModel(
     BEAT_THIS_MODEL_URL,
@@ -201,86 +240,56 @@ async function run(req: PipelineRunRequest) {
     'beat tracker',
   );
   progress({stage: 'download-beat-model', percent: 1});
-  const beatThisSession = await ort.InferenceSession.create(
+  const session = await ort.InferenceSession.create(
     new Uint8Array(beatThisBytes),
-    {
-      executionProviders: ['wasm'],
-      graphOptimizationLevel: 'all',
-    },
+    {executionProviders: ['wasm'], graphOptimizationLevel: 'all'},
   );
-
-  // One session, two sequential calls: full mix, then drum stem.
-  const runBeatThisOn = async (
-    monoPcm: Float32Array,
-    sr: number,
-    stage: 'beats-fullmix' | 'beats-drums',
-  ) => {
-    const mono22k = await resampleToBeatThis(monoPcm, sr);
-    const {mel, T} = computeLogMel(mono22k);
-    const {beatLogits, downbeatLogits} = await runBeatThisOnnx({
-      ort,
-      session: beatThisSession,
-      mel,
-      T,
-      onChunk: (done, total) => progress({stage, percent: done / total}),
-    });
-    const audioSeconds = mono22k.length / BEAT_THIS_SAMPLE_RATE;
-    const fps = T / audioSeconds;
-    const pp = runPostprocessor({beatLogits, downbeatLogits, fps});
-    return {pp, beatLogits, fps, mono22k, audioSeconds};
-  };
-
-  let fm: Awaited<ReturnType<typeof runBeatThisOn>>;
-  let ds: Awaited<ReturnType<typeof runBeatThisOn>>;
   try {
-    // ---- S2: Beat This! on the full mix ----
-    progress({stage: 'beats-fullmix', percent: 0});
-    const fullMixMono = new Float32Array(N);
-    for (let i = 0; i < N; i++) fullMixMono[i] = (left[i] + right[i]) * 0.5;
-    fm = await runBeatThisOn(
-      fullMixMono,
-      SEPARATION_SAMPLE_RATE,
-      'beats-fullmix',
-    );
-
-    // ---- S3: Beat This! on the drum stem ----
-    progress({stage: 'beats-drums', percent: 0});
-    ds = await runBeatThisOn(drumStem, SEPARATION_SAMPLE_RATE, 'beats-drums');
+    return await fn(session);
   } finally {
-    await beatThisSession.release();
+    await session.release();
   }
+}
 
-  // ---- S3b: LinkSeg functional section labels (full-mix beats + 22.05k audio) ----
-  let sections: LinkSegSections | null = null;
+/** S3b: LinkSeg functional section labels, from the full-mix beats and the
+ *  22.05 kHz full-mix audio that pass already produced. Section labeling is a
+ *  nice-to-have; a failure yields null rather than failing the whole run. */
+async function labelSections(fm: BeatPass): Promise<LinkSegSections | null> {
   try {
     progress({stage: 'sections', percent: 0});
     const linksegSession = await loadLinkSegSession(ort, m =>
       progress({stage: 'sections', detail: m}),
     );
     try {
-      sections = await runLinkSegSections({
+      const sections = await runLinkSegSections({
         session: linksegSession,
         ortTensor: ort.Tensor,
         beatTimes: fm.pp.beats,
         wave22k: fm.mono22k,
         duration: fm.audioSeconds,
       });
+      progress({stage: 'sections', percent: 1});
+      return sections;
     } finally {
       await linksegSession.release();
     }
-    progress({stage: 'sections', percent: 1});
   } catch (err) {
-    // Section labeling is a nice-to-have; never fail the whole pipeline over it.
     console.warn(
       'LinkSeg section labeling failed; continuing without labels:',
       err,
     );
-    sections = null;
+    return null;
   }
+}
 
-  // ---- S2b: drum-onset offset ----
+/** S2b + S4: the drum-onset offset and the beats → synctrack converter. */
+function buildTempoMap(
+  fm: BeatPass,
+  ds: BeatPass,
+  drumStem: Float32Array,
+): {synctrack: Synctrack; drumOnsetOffsetMs: number | null} {
   progress({stage: 'convert'});
-  const offsetMs = computeDrumOnsetOffsetMs({
+  const drumOnsetOffsetMs = computeDrumOnsetOffsetMs({
     drumStemPcm: drumStem,
     sr: SEPARATION_SAMPLE_RATE,
     ppFmBeatsSec: fm.pp.beats,
@@ -297,14 +306,13 @@ async function run(req: PipelineRunRequest) {
     dsIoiMs = iois[Math.floor(iois.length / 2)];
   }
 
-  // ---- S4: heuristic converter ----
-  const sync = beatsToSynctrack({
+  const synctrack = beatsToSynctrack({
     beats: fm.pp.beats,
     downbeats: fm.pp.downbeats,
     beatLogits: fm.beatLogits,
     fps: fm.fps,
     drumStemPpIoiMs: dsIoiMs,
-    drumOnsetOffsetMs: offsetMs,
+    drumOnsetOffsetMs,
     drumPpBeatsSec: ds.pp.beats,
     // PL_LSQ (banked drum-to-chart keep 83d432d, 2026-07-02): sparse
     // jitter-averaged tempo maps — ~6x fewer tempo events AND better
@@ -312,31 +320,95 @@ async function run(req: PipelineRunRequest) {
     // behavior, so this is opt-in here rather than a converter default.
     plLsqTolMs: PL_LSQ_TOL_MS_DEFAULT,
   });
-  if (!sync) {
+  if (!synctrack) {
     throw new Error(
       "Couldn't detect enough beats in this audio to build a tempo map.",
     );
   }
+  return {synctrack, drumOnsetOffsetMs};
+}
+
+// --- pipeline ------------------------------------------------------------
+
+/** A sections-only run: full-mix beats, then LinkSeg. No separation, no
+ *  drum-stem beat pass, no converter — and no grid in the result. */
+async function runSections(req: PipelineRunRequest) {
+  const {left, right} = await resampleToSeparationRate(req);
+  const fm = await withBeatThisSession(session =>
+    runBeatThisPass(
+      session,
+      monoMixdown(left, right),
+      SEPARATION_SAMPLE_RATE,
+      'beats-fullmix',
+    ),
+  );
+  post({
+    type: 'result',
+    result: {
+      kind: 'sections',
+      sections: await labelSections(fm),
+      fullMixBeatCount: fm.pp.beats.length,
+      meterStats: computeMeterStats(fm.pp.beats, fm.pp.downbeats),
+    },
+  });
+}
+
+/** A tempo-map run, optionally also labeling sections off the same full-mix
+ *  beat pass. */
+async function runTempoMap(req: PipelineRunRequest, withSections: boolean) {
+  const {left, right} = await resampleToSeparationRate(req);
+  const drumStemStereo = await obtainDrumStem(req, left, right);
+  const drumStem = stereoStemToMono(drumStemStereo);
+
+  const {fm, ds} = await withBeatThisSession(async session => ({
+    fm: await runBeatThisPass(
+      session,
+      monoMixdown(left, right),
+      SEPARATION_SAMPLE_RATE,
+      'beats-fullmix',
+    ),
+    ds: await runBeatThisPass(
+      session,
+      drumStem,
+      SEPARATION_SAMPLE_RATE,
+      'beats-drums',
+    ),
+  }));
+
+  const sections = withSections ? await labelSections(fm) : null;
+  const {synctrack, drumOnsetOffsetMs} = buildTempoMap(fm, ds, drumStem);
 
   post(
     {
       type: 'result',
       result: {
-        synctrack: sync,
+        kind: 'tempo-map',
+        synctrack,
         sections,
-        drumOnsetOffsetMs: offsetMs,
+        drumOnsetOffsetMs,
         fullMixBeatCount: fm.pp.beats.length,
         drumStemBeatCount: ds.pp.beats.length,
         meterStats: computeMeterStats(fm.pp.beats, fm.pp.downbeats),
         drumStemStereo,
       },
     },
-    // A cache-hit stem's channels are two views over ONE packed buffer —
-    // dedupe so the same ArrayBuffer isn't transferred twice.
-    drumStemStereo
-      ? [...new Set([drumStemStereo.left.buffer, drumStemStereo.right.buffer])]
-      : [],
+    // A cache-hit stem's channels are two views over ONE packed buffer, and
+    // `uniqueBuffers` is what keeps it out of the transfer list twice.
+    uniqueBuffers(drumStemStereo.left, drumStemStereo.right),
   );
+}
+
+async function run(req: PipelineRunRequest) {
+  ort.env.wasm.wasmPaths = ORT_WASM_CDN;
+  // Multi-threading would require nested pthread workers, which fails inside
+  // a bundled web worker; same constraint as the Demucs worker.
+  ort.env.wasm.numThreads = 1;
+  ort.env.logLevel = 'error';
+
+  void initSoxr();
+
+  if (req.kind === 'sections') return runSections(req);
+  return runTempoMap(req, req.kind === 'tempo-map+sections');
 }
 
 self.addEventListener('message', (e: MessageEvent) => {

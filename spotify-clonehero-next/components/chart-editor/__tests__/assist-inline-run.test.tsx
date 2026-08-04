@@ -293,7 +293,9 @@ describe('assist provenance persistence', () => {
       stage: 'editing',
       // A stamp from a grid the user has since edited: the staleness prompt
       // the user was looking at before the reload comes back.
-      assistProvenance: {drumTranscription: {tempoStamp: 'from-an-old-grid'}},
+      assistProvenance: {
+        tempoDerived: {'drum-transcription': {tempoStamp: 'from-an-old-grid'}},
+      },
     });
     renderEditor();
     await waitFor(() =>

@@ -150,15 +150,16 @@ function renderAssist(
 
 /**
  * Buttons rendered by the utility cluster's tool row (plan 0074 Phase 7:
- * cursor + add-note, plus the Section overflow button — see
- * `UtilityCluster.tsx`'s file header for why bpm/timesig/erase don't have
- * sidebar buttons anymore: bpm/timesig are reachable from the piano roll's
- * tempo-lane context menu, and erase from Delete/Backspace + the note
- * context menu). Querying for these directly pins the gate to the actual
- * interactive controls — a bug that hides the section header but keeps the
- * buttons would still fail this test.
+ * cursor + add-note — see `UtilityCluster.tsx`'s file header for why
+ * bpm/timesig/erase/section don't have sidebar buttons anymore: bpm/timesig
+ * are reachable from the piano roll's tempo-lane context menu, erase from
+ * Delete/Backspace + the note context menu, and section (plan 0076 item 19)
+ * from the section strip's own right-click menu). Querying for these
+ * directly pins the gate to the actual interactive controls — a bug that
+ * hides the section header but keeps the buttons would still fail this
+ * test.
  */
-const TOOL_BUTTON_NAMES = [/cursor/i, /place note/i, /section/i] as const;
+const TOOL_BUTTON_NAMES = [/cursor/i, /place note/i] as const;
 
 describe('LeftSidebar capability gating', () => {
   describe('DRUM_EDIT_CAPABILITIES', () => {
@@ -220,40 +221,41 @@ describe('Chart Assist section gating', () => {
   it('shows the section with the full card set under DRUM_EDIT_CAPABILITIES', () => {
     renderAssist(DRUM_EDIT_CAPABILITIES, FULL_WIRING);
     expect(screen.getByText('Chart Assist')).toBeInTheDocument();
-    expect(screen.getByRole('group', {name: 'Tempo map'})).toBeInTheDocument();
-    expect(
-      screen.getByRole('group', {name: 'Add leading silence'}),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('group', {name: 'Drum transcription'}),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('group', {name: 'Lyrics / Vocals'}),
-    ).toBeInTheDocument();
+    for (const name of [
+      'Tempo map',
+      'Sections',
+      'Add leading silence',
+      'Drum transcription',
+      'Lyrics',
+    ]) {
+      expect(screen.getByRole('group', {name})).toBeInTheDocument();
+    }
   });
 
   it('shows only the Lyrics card under ADD_LYRICS_CAPABILITIES', () => {
     renderAssist(ADD_LYRICS_CAPABILITIES, FULL_WIRING, DEFAULT_VOCALS_SCOPE);
     expect(screen.getByText('Chart Assist')).toBeInTheDocument();
-    expect(
-      screen.getByRole('group', {name: 'Lyrics / Vocals'}),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('group', {name: 'Lyrics'})).toBeInTheDocument();
     expect(
       screen.queryByRole('group', {name: 'Tempo map'}),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('group', {name: 'Sections'}),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('group', {name: 'Add leading silence'}),
     ).not.toBeInTheDocument();
   });
 
-  it('shows only Tempo map + Add leading silence under TEMPO_CAPABILITIES', () => {
+  it('shows Tempo map + Sections + Add leading silence under TEMPO_CAPABILITIES', () => {
     renderAssist(TEMPO_CAPABILITIES, FULL_WIRING);
     expect(screen.getByRole('group', {name: 'Tempo map'})).toBeInTheDocument();
+    expect(screen.getByRole('group', {name: 'Sections'})).toBeInTheDocument();
     expect(
       screen.getByRole('group', {name: 'Add leading silence'}),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('group', {name: 'Lyrics / Vocals'}),
+      screen.queryByRole('group', {name: 'Lyrics'}),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('group', {name: 'Drum transcription'}),
@@ -280,7 +282,7 @@ describe('Chart Assist section gating', () => {
       screen.queryByRole('group', {name: 'Tempo map'}),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('group', {name: 'Lyrics / Vocals'}),
+      screen.queryByRole('group', {name: 'Lyrics'}),
     ).not.toBeInTheDocument();
   });
 
@@ -293,9 +295,7 @@ describe('Chart Assist section gating', () => {
       screen.queryByRole('group', {name: 'Drum transcription'}),
     ).not.toBeInTheDocument();
     // Its sibling cards are unaffected.
-    expect(
-      screen.getByRole('group', {name: 'Lyrics / Vocals'}),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('group', {name: 'Lyrics'})).toBeInTheDocument();
   });
 });
 
@@ -388,11 +388,17 @@ describe('Stems mixer gating', () => {
     ).toHaveAttribute('data-disabled');
 
     // ...while the transport-adjacent A/B loop still takes input: setting A
-    // turns the loop on, which reveals the clear-loop control.
-    const setA = screen.getByRole('button', {name: 'A'});
+    // turns the loop on, which reveals the clear-loop control. Plan 0076
+    // item 21 renamed the bare "A"/"B" labels to accessible names that state
+    // the interaction.
+    const setA = screen.getByRole('button', {
+      name: 'Set loop start at playhead',
+    });
     expect(setA).toBeEnabled();
     fireEvent.click(setA);
-    expect(screen.getByRole('button', {name: 'B'})).toBeEnabled();
+    expect(
+      screen.getByRole('button', {name: 'Set loop end at playhead'}),
+    ).toBeEnabled();
     expect(screen.getByText(/0:12/)).toBeInTheDocument();
   });
 });

@@ -8,7 +8,10 @@
  * decodes natively at 48 kHz.
  */
 
-import {resampleSoxr} from '@/lib/tempo-map/resampler-soxr';
+import {
+  resampleStereoInWorker,
+  type PcmWorkerOptions,
+} from '@/lib/audio-pipeline/pcm-client';
 
 export async function decodeNativeRate(data: Uint8Array): Promise<AudioBuffer> {
   // Probe context just to learn the file's natural decode rate is not
@@ -36,9 +39,15 @@ export async function decodeNativeRate(data: Uint8Array): Promise<AudioBuffer> {
  * per-channel resample), so both pages feed the stem separator
  * byte-identical 44.1kHz PCM for identical input bytes. Channel count is
  * preserved (mono stays mono; surround is capped to stereo).
+ *
+ * `decodeAudioData` already does its work off the main thread, but libsoxr
+ * does not: one `resampleSoxr` call blocks its thread for the whole signal.
+ * The resample therefore runs in `pcm-worker.ts`, which is why this takes an
+ * optional worker factory / abort signal.
  */
 export async function decodeAndResampleTo44k(
   data: ArrayBuffer | Uint8Array,
+  options: PcmWorkerOptions = {},
 ): Promise<AudioBuffer> {
   const u8 = data instanceof Uint8Array ? data : new Uint8Array(data);
   const decoded = await decodeNativeRate(u8);
@@ -57,10 +66,16 @@ export async function decodeAndResampleTo44k(
     resampledLeft = left.slice();
     resampledRight = right.slice();
   } else {
-    [resampledLeft, resampledRight] = await Promise.all([
-      resampleSoxr(left, decoded.sampleRate, 44100),
-      resampleSoxr(right, decoded.sampleRate, 44100),
-    ]);
+    // Copies: AudioBuffer channel views can't be transferred to the worker.
+    const resampled = await resampleStereoInWorker(
+      left.slice(),
+      right.slice(),
+      decoded.sampleRate,
+      44100,
+      options,
+    );
+    resampledLeft = resampled.left;
+    resampledRight = resampled.right;
   }
 
   const out = new AudioBuffer({

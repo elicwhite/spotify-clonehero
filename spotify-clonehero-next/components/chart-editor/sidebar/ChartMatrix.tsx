@@ -18,19 +18,17 @@
  * matrix at all — every present instrument is always a row.
  */
 
-import {useCallback, useState} from 'react';
+import {useState} from 'react';
 import {Plus} from 'lucide-react';
-import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
 import {useChartEditorContext} from '../ChartEditorContext';
 import {useExecuteCommand} from '../hooks/useEditCommands';
-import {AddTrackCommand, DeleteLowerDifficultiesCommand} from '../commands';
+import {AddTrackCommand} from '../commands';
 import {trackKeyId} from '../scope';
 import type {TrackKey} from '../scope';
 import {
   getAssistProvenance,
-  LOWER_TRACK_DIFFICULTIES,
   selectDifficultyStale,
   SUPPORTED_TRACK_INSTRUMENTS,
   type SupportedTrackInstrument,
@@ -38,6 +36,7 @@ import {
 import {useOptionalAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {useDifficultyGeneration} from '../hooks/useDifficultyGeneration';
 import ChartMatrixRow from './ChartMatrixRow';
+import InstrumentIcon from '../InstrumentIcon';
 import SectionHeading, {SIDEBAR_SECTION_CLASS} from './SectionHeading';
 import {DIFFICULTY_COLUMNS, INSTRUMENT_LABEL} from '../trackLabels';
 
@@ -56,25 +55,6 @@ export default function ChartMatrix() {
 
   const doc = state.chartDoc;
   const trackData = doc?.parsedChart.trackData ?? [];
-
-  // Deletes the generated set and drops its visibility keys, so a later
-  // regeneration doesn't resurrect a pane the user never asked for.
-  const deleteGenerated = useCallback(
-    (instrument: SupportedTrackInstrument) => {
-      executeCommand(new DeleteLowerDifficultiesCommand(instrument));
-      for (const difficulty of LOWER_TRACK_DIFFICULTIES) {
-        dispatch({
-          type: 'SET_TRACK_VISIBILITY',
-          track: {instrument, difficulty},
-          visible: false,
-        });
-      }
-      toast.success(
-        `Deleted ${INSTRUMENT_LABEL[instrument]} Hard, Medium, Easy.`,
-      );
-    },
-    [executeCommand, dispatch],
-  );
 
   if (!capabilities.showChartMatrix || !doc) return null;
 
@@ -148,7 +128,6 @@ export default function ChartMatrix() {
               generating={generatingInstrument === instrument}
               onGenerate={() => start(instrument)}
               generateDisabledReason={disabledReason}
-              onDelete={() => deleteGenerated(instrument)}
               runner={runner}
             />
           );
@@ -175,8 +154,13 @@ export default function ChartMatrix() {
                 <button
                   key={instrument}
                   type="button"
-                  className="flex w-full rounded px-2 py-1.5 text-left text-xs hover:bg-accent"
+                  className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs hover:bg-accent"
                   onClick={() => addInstrument(instrument)}>
+                  <InstrumentIcon
+                    instrument={instrument}
+                    size={16}
+                    className="h-4 w-4 shrink-0"
+                  />
                   {INSTRUMENT_LABEL[instrument]}
                 </button>
               ))}

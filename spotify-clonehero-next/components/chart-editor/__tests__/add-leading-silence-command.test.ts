@@ -56,15 +56,18 @@ describe('AddLeadingSilenceCommand', () => {
   it('re-stamps drum-transcription provenance instead of flagging it stale', () => {
     const base = makeFixtureDoc();
     const before = withAssistProvenance(base, {
-      drumTranscription: {tempoStamp: computeTempoStamp(base)},
+      tempoDerived: {
+        'drum-transcription': {tempoStamp: computeTempoStamp(base)},
+      },
     });
     const after = new AddLeadingSilenceCommand(planFor(before)).execute(before);
 
     // The grid moved, but the drums moved with it by the same fixed pad, so
     // nothing landed on a different beat.
-    expect(getAssistProvenance(after)!.drumTranscription!.tempoStamp).toBe(
-      computeTempoStamp(after),
-    );
+    expect(
+      getAssistProvenance(after)!.tempoDerived!['drum-transcription']!
+        .tempoStamp,
+    ).toBe(computeTempoStamp(after));
   });
 
   it('leaves a doc with no transcription provenance alone', () => {

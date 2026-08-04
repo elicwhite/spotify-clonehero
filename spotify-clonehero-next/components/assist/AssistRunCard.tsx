@@ -63,7 +63,12 @@ export default function AssistRunCard({
 
       {state.status === 'running' && onCancel && (
         <div className="flex justify-end">
-          <Button variant="ghost" size="sm" onClick={onCancel}>
+          {/* `xs`, not `sm`: `sm` only shrinks height, its label stays the
+           *  base `text-sm` (14px) - visibly larger than the `text-xs` step
+           *  rows and "Cancelled." copy this button sits beside (plan 0076
+           *  item 7). `xs` is the button scale already reserved for assist
+           *  card action rows (`components/ui/button.tsx`). */}
+          <Button variant="ghost" size="xs" onClick={onCancel}>
             Cancel
           </Button>
         </div>
@@ -71,7 +76,7 @@ export default function AssistRunCard({
 
       {state.status === 'error' && onDismiss && (
         <div className="flex justify-end">
-          <Button variant="ghost" size="sm" onClick={onDismiss}>
+          <Button variant="ghost" size="xs" onClick={onDismiss}>
             Dismiss
           </Button>
         </div>

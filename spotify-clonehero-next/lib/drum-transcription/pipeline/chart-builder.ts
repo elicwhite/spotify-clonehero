@@ -27,6 +27,10 @@ import {
 import type {ChartDocument} from '@/lib/chart-edit';
 import {noteId} from '@/lib/chart-edit';
 import {
+  buildBarTicks,
+  linkSegSectionsToMarkers,
+} from '@/lib/chart-edit/helpers/linkseg-sections';
+import {
   swapSynctrack,
   DEFAULT_SNAP_TOLERANCE_MS,
 } from '@/lib/tempo-map/swap-synctrack';
@@ -284,57 +288,15 @@ export function buildChartDocument(
   }));
 
   // Enumerate real measure (bar-line) ticks up to the chart end.
-  const barTicks: number[] = [];
-  {
-    let t = 0;
-    while (t < endTick) {
-      barTicks.push(t);
-      const next = getNextMeasureTick(t, 1, RESOLUTION, timeSigs);
-      if (next <= t) break; // safety: never loop in place
-      t = next;
-    }
-  }
-  const snapToBar = (tick: number): number => {
-    // nearest bar-line to `tick`
-    let best = barTicks[0];
-    let bestD = Math.abs(tick - best);
-    for (let i = 1; i < barTicks.length; i++) {
-      const d = Math.abs(tick - barTicks[i]);
-      if (d < bestD) {
-        bestD = d;
-        best = barTicks[i];
-      } else if (barTicks[i] > tick) {
-        break; // barTicks ascending: distance only grows past `tick`
-      }
-    }
-    return best;
-  };
+  const barTicks = buildBarTicks(RESOLUTION, timeSigs, endTick);
 
   if (sections && sections.labels.length > 0) {
-    // LinkSeg functional labels: a marker at each segment start (times[0..S-1]),
-    // snapped to the nearest bar-line. Number repeated labels (Verse 1, Verse 2, ...).
-    const total = new Map<string, number>();
-    for (const name of sections.labels)
-      total.set(name, (total.get(name) ?? 0) + 1);
-    const seen = new Map<string, number>();
-    let prevTick = -1;
-    for (let i = 0; i < sections.labels.length; i++) {
-      const base = sections.labels[i];
-      const rawTick = msToTick(
-        sections.times[i] * 1000,
-        timedTempos,
-        RESOLUTION,
-      );
-      const tick = snapToBar(rawTick);
-      // If two boundaries snap to the same bar-line, keep the first and skip this
-      // one WITHOUT advancing the repeat counter — otherwise addSection would
-      // replace the prior marker and leave an orphan (e.g. "Verse 2" with no "Verse 1").
-      if (tick === prevTick) continue;
-      const idx = (seen.get(base) ?? 0) + 1;
-      seen.set(base, idx);
-      const name = (total.get(base) ?? 0) > 1 ? `${base} ${idx}` : base;
-      addSection(doc, tick, name);
-      prevTick = tick;
+    for (const marker of linkSegSectionsToMarkers(sections, {
+      timedTempos,
+      resolution: RESOLUTION,
+      barTicks,
+    })) {
+      addSection(doc, marker.tick, marker.name);
     }
   } else {
     // Fallback (no LinkSeg): section markers every 4 bars.

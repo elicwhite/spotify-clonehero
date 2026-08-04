@@ -200,6 +200,37 @@ describe('ChartMatrix visibility toggle', () => {
   });
 });
 
+describe('ChartMatrix instrument icons and no overflow menu (plan 0076 items 8/9)', () => {
+  it('renders an instrument icon per row and no per-row overflow menu', () => {
+    renderMatrix(makeTwoInstrumentDoc());
+
+    // One InstrumentIcon per row, each pointed at that instrument's PNG.
+    const drumsIcon = document.querySelector(
+      'img[src*="drums.png"]',
+    ) as HTMLImageElement | null;
+    const guitarIcon = document.querySelector(
+      'img[src*="guitar.png"]',
+    ) as HTMLImageElement | null;
+    expect(drumsIcon).not.toBeNull();
+    expect(guitarIcon).not.toBeNull();
+
+    // No overflow ("...") menu button on either row (plan 0076 item 8
+    // removed it, along with the truncated name it caused).
+    expect(
+      screen.queryByRole('button', {name: /options$/i}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders the instrument name untruncated', () => {
+    renderMatrix(makeTwoInstrumentDoc());
+
+    const drumsLabel = screen.getByText('Drums');
+    const guitarLabel = screen.getByText('Guitar');
+    expect(drumsLabel.className).not.toMatch(/truncate/);
+    expect(guitarLabel.className).not.toMatch(/truncate/);
+  });
+});
+
 describe('ChartMatrix + Add instrument', () => {
   it('offers only absent instruments and adds a newly-visible Expert track', () => {
     renderMatrix(makeDrumsOnlyDoc());
@@ -222,6 +253,15 @@ describe('ChartMatrix + Add instrument', () => {
       'aria-pressed',
       'true',
     );
+  });
+
+  it('shows an instrument icon on each offered add-instrument option (plan 0076 item 9)', () => {
+    renderMatrix(makeDrumsOnlyDoc());
+
+    fireEvent.click(screen.getByRole('button', {name: /add instrument/i}));
+
+    expect(document.querySelector('img[src*="guitar.png"]')).not.toBeNull();
+    expect(document.querySelector('img[src*="bass.png"]')).not.toBeNull();
   });
 });
 

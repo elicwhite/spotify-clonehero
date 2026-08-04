@@ -14,7 +14,7 @@ import {
   computeTempoStamp,
   getAssistProvenance,
   initialState,
-  selectDrumTranscriptionStale,
+  selectTempoDerivedStale,
   selectRenderDoc,
   withAssistProvenance,
   type ChartEditorState,
@@ -501,7 +501,9 @@ describe('chartEditorReducer', () => {
       readonly affectedTracks = new Set(['drums:expert']);
       execute(doc: ChartDocument): ChartDocument {
         return withAssistProvenance(doc, {
-          drumTranscription: {tempoStamp: computeTempoStamp(doc)},
+          tempoDerived: {
+            'drum-transcription': {tempoStamp: computeTempoStamp(doc)},
+          },
         });
       }
     }
@@ -528,7 +530,9 @@ describe('chartEditorReducer', () => {
         loaded,
         executeAction(cmd, loaded.chartDoc!),
       );
-      expect(selectDrumTranscriptionStale(generated)).toBe(false);
+      expect(selectTempoDerivedStale(generated, 'drum-transcription')).toBe(
+        false,
+      );
     });
 
     it('a tempo edit after generation flags the transcription recommendation as stale', () => {
@@ -538,14 +542,18 @@ describe('chartEditorReducer', () => {
         loaded,
         executeAction(new FakeTranscribeCommand(), loaded.chartDoc!),
       );
-      expect(selectDrumTranscriptionStale(generated)).toBe(false);
+      expect(selectTempoDerivedStale(generated, 'drum-transcription')).toBe(
+        false,
+      );
 
       const tempoCmd = new AddBPMCommand(3840, 180, 'audio');
       const afterTempoEdit = chartEditorReducer(
         generated,
         executeAction(tempoCmd, generated.chartDoc!),
       );
-      expect(selectDrumTranscriptionStale(afterTempoEdit)).toBe(true);
+      expect(
+        selectTempoDerivedStale(afterTempoEdit, 'drum-transcription'),
+      ).toBe(true);
     });
 
     it('"Keep as-is" dismisses staleness until the NEXT tempo change', () => {
@@ -562,7 +570,9 @@ describe('chartEditorReducer', () => {
           generated.chartDoc!,
         ),
       );
-      expect(selectDrumTranscriptionStale(afterTempoEdit)).toBe(true);
+      expect(
+        selectTempoDerivedStale(afterTempoEdit, 'drum-transcription'),
+      ).toBe(true);
 
       // "Keep as-is": ack the CURRENT tempo stamp, keeping the original
       // generation record (`drumTranscription`) untouched — the ack is a
@@ -577,7 +587,7 @@ describe('chartEditorReducer', () => {
           },
         },
       });
-      expect(selectDrumTranscriptionStale(acked)).toBe(false);
+      expect(selectTempoDerivedStale(acked, 'drum-transcription')).toBe(false);
       // The dismissal is not an edit: it leaves the undo history alone, so
       // it can never eat a redo branch the user was about to use.
       expect(acked.undoStack).toEqual(afterTempoEdit.undoStack);
@@ -589,7 +599,9 @@ describe('chartEditorReducer', () => {
         acked,
         executeAction(new AddBPMCommand(4320, 200, 'audio'), acked.chartDoc!),
       );
-      expect(selectDrumTranscriptionStale(afterSecondTempoEdit)).toBe(true);
+      expect(
+        selectTempoDerivedStale(afterSecondTempoEdit, 'drum-transcription'),
+      ).toBe(true);
     });
 
     it('undo back to generation-time tempo content clears staleness', () => {
@@ -606,19 +618,21 @@ describe('chartEditorReducer', () => {
           generated.chartDoc!,
         ),
       );
-      expect(selectDrumTranscriptionStale(afterTempoEdit)).toBe(true);
+      expect(
+        selectTempoDerivedStale(afterTempoEdit, 'drum-transcription'),
+      ).toBe(true);
 
       const undone = chartEditorReducer(afterTempoEdit, {
         type: 'UNDO',
         chartDoc: generated.chartDoc!,
       });
-      expect(selectDrumTranscriptionStale(undone)).toBe(false);
+      expect(selectTempoDerivedStale(undone, 'drum-transcription')).toBe(false);
 
       const redone = chartEditorReducer(undone, {
         type: 'REDO',
         chartDoc: afterTempoEdit.chartDoc!,
       });
-      expect(selectDrumTranscriptionStale(redone)).toBe(true);
+      expect(selectTempoDerivedStale(redone, 'drum-transcription')).toBe(true);
     });
 
     it('undo past the provenance-writing command removes provenance with it', () => {
@@ -635,7 +649,9 @@ describe('chartEditorReducer', () => {
           generated.chartDoc!,
         ),
       );
-      expect(selectDrumTranscriptionStale(afterTempoEdit)).toBe(true);
+      expect(
+        selectTempoDerivedStale(afterTempoEdit, 'drum-transcription'),
+      ).toBe(true);
 
       const undoneTempo = chartEditorReducer(afterTempoEdit, {
         type: 'UNDO',
@@ -647,14 +663,18 @@ describe('chartEditorReducer', () => {
         type: 'UNDO',
         chartDoc: loaded.chartDoc!,
       });
-      expect(selectDrumTranscriptionStale(undoneGeneration)).toBe(false);
+      expect(
+        selectTempoDerivedStale(undoneGeneration, 'drum-transcription'),
+      ).toBe(false);
 
       const redoneGeneration = chartEditorReducer(undoneGeneration, {
         type: 'REDO',
         chartDoc: generated.chartDoc!,
       });
       // Redo restores provenance and stamps together.
-      expect(selectDrumTranscriptionStale(redoneGeneration)).toBe(false);
+      expect(
+        selectTempoDerivedStale(redoneGeneration, 'drum-transcription'),
+      ).toBe(false);
       expect(redoneGeneration.trackStamps).toEqual(
         computeAllTrackStamps(generated.chartDoc),
       );

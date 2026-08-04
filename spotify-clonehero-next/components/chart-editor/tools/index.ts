@@ -13,7 +13,6 @@ export {
   eraseTool,
   tempoMarkerTool,
   timeSignatureMarkerTool,
-  sectionTool,
   lyricsTimingTool,
 } from './tools';
 export {

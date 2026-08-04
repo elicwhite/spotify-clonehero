@@ -189,9 +189,13 @@ function scriptedTask() {
 }
 
 function fakePipelineResult(
-  drumStemStereo: {left: Float32Array; right: Float32Array} | null = null,
+  drumStemStereo: {left: Float32Array; right: Float32Array} = {
+    left: new Float32Array(1),
+    right: new Float32Array(1),
+  },
 ) {
   return {
+    kind: 'tempo-map' as const,
     synctrack: {
       origin_ms: 0,
       tempos: [{ms: 0, bpm: 120}],

@@ -93,11 +93,11 @@ export interface EditorCapabilities {
    * 2, Design C):
    *  - `false` — no section at all.
    *  - `'all'` — every card this phase ships (Tempo map, Add leading
-   *    silence, Drum transcription, Lyrics/Vocals).
+   *    silence, Drum transcription, Lyrics).
    *  - `'tempo-and-silence'` — only the Tempo map and Add leading silence
    *    cards. `/tempo` edits the sync track alone; a Drum transcription or
    *    Lyrics card there would offer edits `editableEntities` doesn't grant.
-   *  - `'lyrics-only'` — only the Lyrics/Vocals card. Add-lyrics pages only
+   *  - `'lyrics-only'` — only the Lyrics card. Add-lyrics pages only
    *    ever write to the vocals track.
    *
    * A card also needs its host wiring to render, so this is the ceiling on

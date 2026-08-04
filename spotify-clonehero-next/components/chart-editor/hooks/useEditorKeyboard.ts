@@ -83,7 +83,6 @@ const GRID_SHORTCUT_MAP: Record<string, number> = {
 const TOOL_SHORTCUT_MAP: Record<string, ToolMode> = {
   '1': 'cursor',
   '2': 'place',
-  '6': 'section',
 };
 
 /**

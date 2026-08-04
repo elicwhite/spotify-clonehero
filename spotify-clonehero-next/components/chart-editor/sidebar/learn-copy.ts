@@ -4,7 +4,13 @@
  * for editorial reasons, not for code reasons.
  */
 
-export type LearnKey = 'tempo' | 'silence' | 'drums' | 'lyrics' | 'difficulty';
+export type LearnKey =
+  | 'tempo'
+  | 'sections'
+  | 'silence'
+  | 'drums'
+  | 'lyrics'
+  | 'difficulty';
 
 export const LEARN_COPY: Record<
   LearnKey,
@@ -13,29 +19,36 @@ export const LEARN_COPY: Record<
   tempo: {
     title: 'Tempo map',
     paragraphs: [
-      'The tempo map is the grid every note snaps to. The AI listens to the audio, finds the beats, and fits tempo changes so bars and beats line up with the actual performance, even when the tempo drifts through the song.',
-      'Re-generating replaces the whole map, including any tempo points you have edited by hand. Charts keep their positions in beats, so if the grid moves underneath them, AI-made charts like the drum transcription may need a re-run.',
+      'Give ours a try. It works best for 4/4 songs. It might choose the wrong downbeat, but you can select a different downbeat in the piano roll and it will update the generated tempo map.',
+      'Having a great tempo map makes drum transcription significantly more accurate, so make sure you are happy there first, or regenerate the drum transcription if you update the tempo map afterwards.',
+    ],
+  },
+  sections: {
+    title: 'Sections',
+    paragraphs: [
+      'Section markers name the parts of the song (intro, verse, chorus) and are what players see called out as the chart scrolls past. This listens for where the song changes character, then puts a marker on the nearest bar line and names each part.',
+      'Sections are generated on their own, so building a tempo map never rewrites titles you wrote yourself. Because markers land on bar lines, changing the tempo map afterwards can leave them a bar off, which is why they get flagged as possibly stale. Re-generating replaces every section marker and nothing else.',
     ],
   },
   silence: {
     title: 'Add leading silence',
     paragraphs: [
-      'Charts need a moment of silence before the first note so the tempo grid has somewhere to anchor and players get a count-in. When the audio starts almost immediately, the first notes can feel unhittable and the grid may not align cleanly.',
-      'This tool prepends a short stretch of silence to every audio stem, then shifts the tempo map and all charts by the same amount. Nothing is lost, and you can trim the silence again later if you change your mind.',
+      'Charting recommendations call for a certain amount of silence before the first notes, for playability. When starting fresh from a song you often need silence added to align the start to a full measure.',
+      'We recommend adding leading silence whenever the tempo map changes, so the song starts with a full measure.',
     ],
   },
   drums: {
     title: 'Drum transcription',
     paragraphs: [
-      'Drum transcription listens to the drum audio and writes the Expert drum chart for you: kick, snare, toms and cymbals, each hit placed on the tempo grid.',
+      'This is a first pass, not a finished chart: it listens to the drum audio and writes a baseline Expert drum chart (kick, snare, toms and cymbals, each hit placed on the tempo grid) significantly faster than charting from scratch. Expect to tweak and change things afterwards.',
       'It reads the tempo map at the moment it runs. If you edit the grid afterwards, the chart can drift off the beat, which is why it gets flagged as possibly stale. Re-running replaces the Expert drum chart only; your other instruments are untouched.',
     ],
   },
   lyrics: {
-    title: 'Lyrics / Vocals',
+    title: 'Lyrics',
     paragraphs: [
-      'Paste plain lyric text and the AI aligns each phrase to the vocal audio, producing the karaoke-style lyric track players see in game.',
-      'Alignment uses the separated vocal stem, so it works even when the song is a full mix. Re-running replaces the current placement; you can still fine-tune individual phrase timings by hand afterwards.',
+      'Paste plain lyric text and it gets automatically synced to the audio, syllable-by-syllable, against the isolated vocal stem.',
+      'Re-running replaces the current placement; you can still fine-tune individual phrase timings by hand afterwards.',
     ],
   },
   difficulty: {

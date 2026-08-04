@@ -7,7 +7,7 @@
  *
  * The heading stays an `<h3>` so section order is assertable by accessible
  * heading name, and `children` is the prototype's right-hand slot in the
- * heading row (the mixer's SOLO indicator and its reset hint).
+ * heading row (the mixer's SOLO indicator).
  */
 
 import type {ReactNode} from 'react';

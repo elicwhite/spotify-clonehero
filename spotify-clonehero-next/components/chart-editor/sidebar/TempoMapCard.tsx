@@ -43,7 +43,7 @@ export default function TempoMapCard({
 
   return (
     <CardShell
-      icon={Clock}
+      icon={<Clock />}
       name="Tempo map"
       explanation="Finds the beats in the audio and builds the grid every note snaps to."
       learnKey="tempo"

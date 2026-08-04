@@ -69,9 +69,9 @@ export default function LeadingSilenceCard({
 
   return (
     <CardShell
-      icon={AudioWaveform}
+      icon={<AudioWaveform />}
       name="Add leading silence"
-      explanation="Gives the song a count-in so the grid and first notes line up."
+      explanation="Adds silence before the first note so the chart starts on a full measure."
       note={recommendation?.detail}
       attn={recommendation !== null}
       learnKey="silence"

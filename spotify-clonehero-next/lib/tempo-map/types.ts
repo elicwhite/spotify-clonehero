@@ -47,37 +47,75 @@ export interface LinkSegSections {
   labels: string[];
 }
 
-export interface PipelineResult {
-  synctrack: Synctrack;
-  /** LinkSeg functional section labels (null if too few beats or model failed). */
-  sections: LinkSegSections | null;
-  /** Drum-onset offset in ms (diagnostic). */
-  drumOnsetOffsetMs: number | null;
+/**
+ * What a pipeline run is FOR. The tempo map (a grid) and the section labels
+ * (song structure) are independent products, and a caller regenerating one
+ * must not silently regenerate the other (plan 0076 item 23), so a run names
+ * which it wants and gets back exactly that shape.
+ *
+ * `'sections'` skips drum separation and the drum-stem beat pass entirely:
+ * LinkSeg reads full-mix beats and the 22.05 kHz full-mix audio only, so a
+ * sections-only run never needs a stem, and its result cannot carry a grid.
+ */
+export type PipelineRunKind = 'tempo-map' | 'tempo-map+sections' | 'sections';
+
+/** What every run produces, both derived from the full-mix beat pass that
+ *  every run performs. */
+interface PipelineDiagnostics {
   /** Full-mix PP beat count (diagnostic). */
   fullMixBeatCount: number;
-  /** Drum-stem PP beat count (diagnostic). */
-  drumStemBeatCount: number;
   /** Meter regularity from the beat tracker (null = too short to measure).
    * frac4 < METER_CONFIDENCE_THRESHOLD → warn that time signatures likely
    * need manual work. */
   meterStats: import('./meter-confidence').MeterStats | null;
-  /**
-   * The drum stem the pipeline ran on, planar stereo at 44.1 kHz —
-   * present whenever a stem exists, whether freshly separated, loaded
-   * from the OPFS cache, or supplied by the caller (echoed back; request
-   * buffers are transferred to the worker, so this is the caller's only
-   * live copy). Lets a caller run CRNN transcription
-   * (lib/drum-transcription/pipeline/tempo-track.ts) on the SAME stem
-   * without a second BS-Roformer pass. `null` only when separation
-   * failed.
-   */
-  drumStemStereo: {left: Float32Array; right: Float32Array} | null;
 }
+
+/** Result of a `'tempo-map'` or `'tempo-map+sections'` run. */
+export interface TempoMapPipelineResult extends PipelineDiagnostics {
+  kind: 'tempo-map';
+  /** The generated grid. Always present: a run that asks for a tempo map and
+   *  can't build one rejects instead. */
+  synctrack: Synctrack;
+  /** LinkSeg functional section labels. Null on a `'tempo-map'` run (which
+   *  never asks for them), and on a `'tempo-map+sections'` run whose audio
+   *  had too few beats or whose model failed. */
+  sections: LinkSegSections | null;
+  /** Drum-onset offset in ms (diagnostic). */
+  drumOnsetOffsetMs: number | null;
+  /** Drum-stem PP beat count (diagnostic). */
+  drumStemBeatCount: number;
+  /**
+   * The drum stem the pipeline ran on, planar stereo at 44.1 kHz — whether
+   * freshly separated, loaded from the OPFS cache, or supplied by the caller
+   * (echoed back; request buffers are transferred to the worker, so this is
+   * the caller's only live copy). Lets a caller run CRNN transcription
+   * (lib/drum-transcription/pipeline/tempo-track.ts) on the SAME stem
+   * without a second BS-Roformer pass.
+   */
+  drumStemStereo: {left: Float32Array; right: Float32Array};
+}
+
+/** Result of a `'sections'` run — structurally unable to carry a grid. */
+export interface SectionsPipelineResult extends PipelineDiagnostics {
+  kind: 'sections';
+  /** LinkSeg functional section labels (null when the song had too few beats
+   *  or the model failed). */
+  sections: LinkSegSections | null;
+}
+
+export type PipelineResult = TempoMapPipelineResult | SectionsPipelineResult;
+
+/** The result shape a given run kind produces. */
+export type PipelineResultFor<K extends PipelineRunKind> = K extends 'sections'
+  ? SectionsPipelineResult
+  : TempoMapPipelineResult;
 
 // --- worker message protocol -------------------------------------------
 
 export interface PipelineRunRequest {
   type: 'run';
+  /** Which product this run is for (see {@link PipelineRunKind}). */
+  kind: PipelineRunKind;
   /** Planar mono-per-channel PCM at `sampleRate`. */
   left: Float32Array;
   right: Float32Array;

@@ -44,8 +44,8 @@ import {
   setAudioAnchor,
 } from '@/lib/chart-edit';
 import {
-  computeTempoStamp,
   getAssistProvenance,
+  setTempoStamp,
   withAssistProvenance,
 } from '@/lib/chart-editor-core';
 import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
@@ -330,9 +330,7 @@ export default function EditorApp({
         if (meta.assistProvenance) {
           chartDoc = withAssistProvenance(chartDoc, meta.assistProvenance);
         } else if (meta.gridSource !== 'provided') {
-          chartDoc = withAssistProvenance(chartDoc, {
-            drumTranscription: {tempoStamp: computeTempoStamp(chartDoc)},
-          });
+          chartDoc = setTempoStamp(chartDoc, 'drum-transcription');
         }
 
         // 4. Find expert drums track

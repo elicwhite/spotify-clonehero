@@ -19,7 +19,6 @@ import {
   eraseTool,
   lyricsTimingTool,
   placeNoteTool,
-  sectionTool,
   selectMoveTool,
   tempoMarkerTool,
   timeSignatureMarkerTool,
@@ -447,15 +446,6 @@ describe('timeSignatureMarkerTool', () => {
   });
 });
 
-describe('sectionTool', () => {
-  it('opens the add-section popover at the clicked tick', () => {
-    const session = makeSession();
-    const ctx = makeContext(session);
-    sectionTool.onPointerDown(ctx, evt({tick: 240, coords: {x: 3, y: 4}}));
-    expect(ctx.popovers).toEqual([{kind: 'section', tick: 240, x: 3, y: 4}]);
-  });
-});
-
 describe('lyricsTimingTool', () => {
   it('selects a lyric entity and starts a marker drag', () => {
     const session = makeSession();
@@ -515,9 +505,6 @@ describe('registry', () => {
     expect(
       resolveToolForPointerDown('timesig', evt(), DRUM_EDIT_CAPABILITIES),
     ).toBe(timeSignatureMarkerTool);
-    expect(
-      resolveToolForPointerDown('section', evt(), DRUM_EDIT_CAPABILITIES),
-    ).toBe(sectionTool);
   });
 
   it('resolveCursorContinuation follows an in-flight note drag to selectMoveTool', () => {

@@ -50,14 +50,13 @@ const GENERATE_TEMPO_MAP_STEPS: ReadonlyArray<Omit<PlannedStep, 'cached'>> = [
     label: 'Finding the beat of the drums',
     description: undefined,
   },
-  {key: 'sections', label: 'Labeling song sections', description: undefined},
   {key: 'convert', label: 'Building the tempo map', description: undefined},
   {
     key: 'transcribe-drums',
-    label: 'Listening to the drum hits',
+    label: 'Aligning grid to drum hits',
     description:
-      'Runs the same drum-transcription model as /drum-transcription, used ' +
-      'here to anchor the tempo map to the actual kick/snare hits.',
+      'Finds where the kicks and snares actually land and nudges the grid ' +
+      'onto them, so bar lines sit on the beat you hear instead of near it.',
   },
 ];
 
@@ -121,7 +120,7 @@ export function makeGenerateTempoMapTask({
       // own use — supplies that buffer; everything else decodes here.
       const audioBuffer = audio.loadDecodedMix
         ? await audio.loadDecodedMix()
-        : await decodeAndResampleTo44k(originalBytes);
+        : await decodeAndResampleTo44k(originalBytes, {signal});
       const sourceBytes = originalBytes.buffer.slice(
         originalBytes.byteOffset,
         originalBytes.byteOffset + originalBytes.byteLength,
@@ -140,6 +139,10 @@ export function makeGenerateTempoMapTask({
       // step-list prediction only (plan 0074 Design A).
       const result = await runTempoTrack(audioBuffer, {
         sourceBytes,
+        // Section titles belong to the chart's author. Generating a grid must
+        // never rewrite them, so the LinkSeg stage is off here entirely and
+        // lives in its own `generate-sections` task (plan 0076 item 23).
+        sections: false,
         onProgress: p => {
           progress({
             activeKey: p.stage,

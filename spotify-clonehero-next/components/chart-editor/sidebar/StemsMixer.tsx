@@ -27,6 +27,7 @@
  */
 
 import {useEffect, useMemo, useRef, useState} from 'react';
+import type {ReactNode} from 'react';
 import {AudioWaveform, Timer, Upload} from 'lucide-react';
 import {toast} from 'sonner';
 
@@ -39,6 +40,7 @@ import {
 import {pickFiles} from '@/lib/sng/read-dropped-entries';
 import {cn} from '@/lib/utils';
 import type {AudioStem} from '../hooks/usePaddedAudio';
+import InstrumentIcon, {type IconableInstrument} from '../InstrumentIcon';
 import SectionHeading, {SIDEBAR_SECTION_CLASS} from './SectionHeading';
 import StemMixerRow from './StemMixerRow';
 import {defaultVolumeFor, resolveMixer, type MixerRowState} from './mixerBus';
@@ -83,6 +85,29 @@ export interface StemsMixerProps extends StemsMixerHostProps {
 
 function displayLabel(name: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/** The instruments a stem row can be iconified as (plan 0076 item 9: the
+ *  instrument PNGs everywhere an instrument is represented by an icon). A
+ *  row whose name doesn't name one of them - the full mix, a dropped stem,
+ *  a `rhythm`/`keys` track with no art - keeps the generic waveform. */
+const ICONABLE_STEM_INSTRUMENTS: readonly IconableInstrument[] = [
+  'drums',
+  'guitar',
+  'bass',
+  'vocals',
+];
+
+/** Icon element for a stem row. Matches on substring because AudioManager
+ *  track names carry the package's own file names (`drums_1`, `rhythm`). */
+function stemIcon(name: string): ReactNode {
+  const lower = name.toLowerCase();
+  const instrument = ICONABLE_STEM_INSTRUMENTS.find(i => lower.includes(i));
+  return instrument ? (
+    <InstrumentIcon instrument={instrument} />
+  ) : (
+    <AudioWaveform />
+  );
 }
 
 /**
@@ -238,17 +263,16 @@ export default function StemsMixer({
 
   return (
     <div className={cn(SIDEBAR_SECTION_CLASS, 'space-y-1.5')}>
-      {/* The prototype puts both the solo indicator and the reset hint in the
-       *  section heading row rather than under the rows. */}
+      {/* The prototype puts the solo indicator in the section heading row
+       *  rather than under the rows. Double-click resets a slider, unhinted
+       *  (plan 0076 item 17) — it's the same convention as the piano roll
+       *  and A/B loop markers. */}
       <SectionHeading title="Stems">
         {anySolo && (
-          <span className="text-[9px] font-bold uppercase tracking-[0.05em] text-green-600 dark:text-green-400">
+          <span className="ml-auto text-[9px] font-bold uppercase tracking-[0.05em] text-green-600 dark:text-green-400">
             Solo
           </span>
         )}
-        <span className="ml-auto text-[9px] text-muted-foreground">
-          double-click a slider to reset
-        </span>
       </SectionHeading>
 
       <div className="space-y-0.5">
@@ -266,7 +290,7 @@ export default function StemsMixer({
               volume={row.volume}
               mute={row.mute}
               solo={row.solo}
-              icon={isClick ? Timer : AudioWaveform}
+              icon={isClick ? <Timer /> : stemIcon(name)}
               topSeparator={isClick}
               soloExempt={isClick}
               dimmedBySolo={resolved[name].dimmedBySolo}

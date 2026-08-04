@@ -158,6 +158,24 @@ describe('buildPaddedAudioManager — N-stem construction (plan 0074 Task 5a)', 
     expect(fileNames.sort()).toEqual(['click.wav', 'song.wav']);
   });
 
+  it('names the full mix after the file it came from', async () => {
+    // A package with no `song` file promotes one of its own (here guitar)
+    // into the full-mix slot; the mixer row and its WAV take that name, so
+    // the row isn't labelled "song" while playing guitar.
+    await buildPaddedAudioManager(
+      0,
+      AUDIO_META,
+      interleavedPcm(100),
+      [{name: 'bass', pcm: interleavedPcm(100), origin: 'chart-file' as const}],
+      makeChartDoc(),
+      () => {},
+      'guitar',
+    );
+
+    const fileNames = lastCapturedFiles.map(f => f.fileName);
+    expect(fileNames.sort()).toEqual(['bass.wav', 'click.wav', 'guitar.wav']);
+  });
+
   it('pads every stem by the same sample count as the full mix', async () => {
     const chartDoc = makeChartDoc();
     const padSamples = 50;

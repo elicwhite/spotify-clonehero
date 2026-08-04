@@ -21,7 +21,12 @@
  * — the one store; the panel holds only view state (leftMs, pxPerMs, follow).
  *
  * Navigation (62-1): zoom (wheel), pan (shift+wheel / trackpad deltaX), scrub
- * (ruler + waveform), catch-up playhead follow, section-flag click-to-seek.
+ * (ruler + waveform), catch-up playhead follow, section-flag click-to-seek
+ * and drag-to-move. The ruler's right-click menu (item 19, plan 0076) is the
+ * section strip's only add/rename/delete affordance: "Add section here" at
+ * the clicked (snapped) tick on empty space, "Rename section…"/"Delete
+ * section" on an existing flag — mirrors `buildTempoMenu`'s hit-vs-empty
+ * split and reuses the lyrics row's inline text-input overlay.
  *
  * Note editing (62-2): shared selection/hover, note drag (delta-snapped, lane
  * change single-note only, lane-locked multi-drag), left-drag marquee
@@ -52,7 +57,7 @@
  * "Delete lyric"), a phrase band's body ("Delete phrase" / "Add lyric…"), or
  * empty row space ("Add phrase here") — plus a waveform show/hide toggle on
  * all three. "Edit lyric…"/"Add lyric…" open a small positioned `<input>`
- * overlay (`LyricTextEditor`): Enter commits via `SetLyricTextCommand` /
+ * overlay (`InlineTextEditor`): Enter commits via `SetLyricTextCommand` /
  * `AddLyricCommand`, Escape cancels, blur commits (so the overlay never
  * lingers open). A phrase band's start/end edge is drag-resizable
  * (`ew-resize` cursor within `PHRASE_EDGE_HIT_RADIUS` px), reusing the
@@ -128,6 +133,9 @@ import {
   SetLyricTextCommand,
   AddPhraseCommand,
   DeletePhraseCommand,
+  AddSectionCommand,
+  DeleteSectionCommand,
+  RenameSectionCommand,
   type EditCommand,
 } from '../commands';
 import {computeNoteDragDelta, exceedsDragThreshold} from '../editing/gestures';
@@ -377,11 +385,12 @@ interface PhraseEdgeDrag {
   moved: boolean;
 }
 
-/** Inline text editor overlay state for the lyrics row's "Edit lyric…" /
- *  "Add lyric…" context-menu actions (Round 2 §2). A small positioned
- *  `<input>` rendered over the canvas; `onCommit` runs the corresponding
- *  command with the input's final text. */
-interface LyricTextEditor {
+/** Inline text editor overlay state: a small positioned `<input>` rendered
+ *  over the canvas, whose `onCommit` runs a command with the input's final
+ *  text. Generic over any positioned text-commit flow — the lyrics row's
+ *  "Edit lyric…"/"Add lyric…" (Round 2 §2) and the section strip's
+ *  rename/add (plan 0076 item 19) all go through it. */
+interface InlineTextEditor {
   /** Canvas-space position (px) to anchor the input at. */
   x: number;
   y: number;
@@ -603,16 +612,18 @@ export default function PianoRollTimeline({
 
   const [menu, setMenu] = useState<MenuState | null>(null);
 
-  // -- Lyrics-row inline text editor (Round 2 §2): "Edit lyric…"/"Add lyric…"
-  // open a small positioned <input> over the canvas rather than a modal —
-  // consistent with the rest of the panel's lightweight canvas+DOM overlays
-  // (the context menu itself, the waveform-source chip).
-  const [lyricEditor, setLyricEditor] = useState<LyricTextEditor | null>(null);
-  // Escape sets `lyricEditor` to null, which unmounts the (focused) <input>;
+  // -- Inline text editor: the lyrics row's "Edit lyric…"/"Add lyric…" and
+  // the section strip's rename/add all open a small positioned <input> over
+  // the canvas rather than a modal — consistent with the rest of the panel's
+  // lightweight canvas+DOM overlays (the context menu itself, the
+  // waveform-source chip).
+  const [inlineTextEditor, setInlineTextEditor] =
+    useState<InlineTextEditor | null>(null);
+  // Escape sets `inlineTextEditor` to null, which unmounts the (focused) <input>;
   // some browsers enqueue a `blur` for a removed focused element, which
   // would otherwise re-run `onCommit` right after the cancel. This flag
   // makes Escape's cancel win.
-  const lyricEditorCancelledRef = useRef(false);
+  const inlineTextEditorCancelledRef = useRef(false);
 
   // -- Vocals-stem waveform toggle (Round 2 §5): plain view state, not
   // persisted (no project id reaches the panel — same rationale as the
@@ -3191,21 +3202,83 @@ export default function PianoRollTimeline({
     [waveSources, selectedSourceId],
   );
 
-  /** Open the lyrics row's inline text editor (Round 2 §2) at canvas
-   *  position `(x, y)`, prefilled with `initialText`. `onCommit` runs on
-   *  Enter or blur with the input's final text; Escape cancels without
-   *  calling it. */
-  const openLyricEditor = useCallback(
+  /** Open the inline text editor at canvas position `(x, y)`, prefilled
+   *  with `initialText`. `onCommit` runs on Enter or blur with the input's
+   *  final text; Escape cancels without calling it. */
+  const openInlineTextEditor = useCallback(
     (
       x: number,
       y: number,
       initialText: string,
       onCommit: (text: string) => void,
     ) => {
-      lyricEditorCancelledRef.current = false;
-      setLyricEditor({x, y, initialText, onCommit});
+      inlineTextEditorCancelledRef.current = false;
+      setInlineTextEditor({x, y, initialText, onCommit});
     },
     [],
+  );
+
+  /** Build the section strip's context menu (item 19): mirrors
+   *  `buildTempoMenu`'s hit-vs-empty split. Right-clicking an existing
+   *  flag offers rename/delete (the strip's other gestures are
+   *  drag-to-move and click-to-seek); empty
+   *  ruler space offers "Add section here" at the clicked tick, snapped
+   *  per the current grid setting (`snappedTickAt`). Rename/add reuse the
+   *  shared inline `<input>` overlay (`openInlineTextEditor`) rather than a
+   *  new overlay type.
+   *
+   *  Returns [] on a surface that can't edit sections (the preview viewer),
+   *  the way `buildTempoMenu` gates its structural items: offering menu
+   *  entries the session's `isCommandAllowed` would then drop is worse than
+   *  offering no menu. */
+  const buildSectionMenu = useCallback(
+    (x: number, y: number, scene: ChartScene): MenuItem[] => {
+      if (
+        !capabilities.showEditingControls ||
+        !capabilities.editableEntities.has('section')
+      ) {
+        return [];
+      }
+      const canvas = canvasRef.current;
+      const hit = canvas ? hitSection(canvas, x, viewRef.current, scene) : null;
+      if (hit) {
+        return [
+          {
+            label: 'Rename section…',
+            onSelect: () =>
+              openInlineTextEditor(x, y, hit.name, text => {
+                const trimmed = text.trim();
+                if (trimmed && trimmed !== hit.name) {
+                  executeCommand(
+                    new RenameSectionCommand(hit.tick, hit.name, trimmed),
+                  );
+                }
+              }),
+          },
+          {
+            label: 'Delete section',
+            danger: true,
+            onSelect: () =>
+              executeCommand(new DeleteSectionCommand(hit.tick, hit.name)),
+          },
+        ];
+      }
+      // Clamped like the section drag path: the view can pan left of tick 0.
+      const tick = Math.max(0, snappedTickAt(x));
+      return [
+        {
+          label: 'Add section here',
+          onSelect: () =>
+            openInlineTextEditor(x, y, '', text => {
+              const trimmed = text.trim();
+              if (trimmed) {
+                executeCommand(new AddSectionCommand(tick, trimmed));
+              }
+            }),
+        },
+      ];
+    },
+    [capabilities, executeCommand, openInlineTextEditor, snappedTickAt],
   );
 
   /** Build the lyrics row's context menu (Round 2 §2): a chip's edit/delete,
@@ -3231,7 +3304,7 @@ export default function PianoRollTimeline({
           {
             label: 'Edit lyric…',
             onSelect: () =>
-              openLyricEditor(x, y, chipHit.text, text => {
+              openInlineTextEditor(x, y, chipHit.text, text => {
                 const trimmed = text.trim();
                 if (trimmed) {
                   executeCommand(
@@ -3274,7 +3347,7 @@ export default function PianoRollTimeline({
           {
             label: 'Add lyric…',
             onSelect: () =>
-              openLyricEditor(x, y, '', text => {
+              openInlineTextEditor(x, y, '', text => {
                 const trimmed = text.trim();
                 if (trimmed) {
                   executeCommand(
@@ -3302,7 +3375,7 @@ export default function PianoRollTimeline({
         waveformToggle,
       ];
     },
-    [capabilities, executeCommand, openLyricEditor, showVocalsWave],
+    [capabilities, executeCommand, openInlineTextEditor, showVocalsWave],
   );
 
   const handleContextMenu = useCallback(
@@ -3324,6 +3397,17 @@ export default function PianoRollTimeline({
       }
       const x = point.x;
       const menuX = stacked ? point.rawX : x;
+
+      // Section strip (the ruler; item 19): an existing flag offers
+      // rename/delete, empty space offers "Add section here" at the
+      // clicked (snapped) tick. Checked first — it is the narrowest band
+      // (0..RULER_H) and would otherwise fall through to the tempo lane's
+      // broader `y < g.laneTop` check below.
+      if (y <= RULER_H) {
+        const items = buildSectionMenu(x, y, scene);
+        setMenu(items.length ? {x: menuX, y: menuY, items} : null);
+        return;
+      }
 
       // Lyrics row (Round 2 §2/§4/§5): directly under the ruler now.
       if (y > RULER_H && y < g.tempoTop) {
@@ -3347,12 +3431,6 @@ export default function PianoRollTimeline({
         // bottom edge.
         const top = Math.max(4, menuY - items.length * 30 - 6);
         setMenu(items.length ? {x: menuX, y: top, items} : null);
-        return;
-      }
-
-      // Ruler carries no menu.
-      if (y <= RULER_H) {
-        setMenu(null);
         return;
       }
 
@@ -3383,6 +3461,7 @@ export default function PianoRollTimeline({
     [
       buildLyricsMenu,
       buildNoteMenu,
+      buildSectionMenu,
       buildSourceMenu,
       buildTempoMenu,
       capabilities,
@@ -3753,30 +3832,30 @@ export default function PianoRollTimeline({
             lyric…" position a small `<input>` over the canvas rather than a
             modal. Enter commits; Escape cancels; blur also commits (so the
             input never lingers open with no way to close it). */}
-        {lyricEditor && (
+        {inlineTextEditor && (
           <input
-            key={`${lyricEditor.x}:${lyricEditor.y}`}
+            key={`${inlineTextEditor.x}:${inlineTextEditor.y}`}
             autoFocus
-            defaultValue={lyricEditor.initialText}
+            defaultValue={inlineTextEditor.initialText}
             className="absolute z-50 w-28 rounded border border-border bg-popover px-1.5 py-0.5 text-xs text-popover-foreground shadow-md focus:outline-none"
-            style={{left: lyricEditor.x, top: lyricEditor.y}}
+            style={{left: inlineTextEditor.x, top: inlineTextEditor.y}}
             onPointerDown={e => e.stopPropagation()}
             onKeyDown={e => {
               if (e.key === 'Enter') {
                 e.currentTarget.blur();
               } else if (e.key === 'Escape') {
-                lyricEditorCancelledRef.current = true;
-                setLyricEditor(null);
+                inlineTextEditorCancelledRef.current = true;
+                setInlineTextEditor(null);
               }
               e.stopPropagation();
             }}
             onBlur={e => {
-              if (lyricEditorCancelledRef.current) {
-                lyricEditorCancelledRef.current = false;
+              if (inlineTextEditorCancelledRef.current) {
+                inlineTextEditorCancelledRef.current = false;
                 return;
               }
-              lyricEditor.onCommit(e.currentTarget.value);
-              setLyricEditor(null);
+              inlineTextEditor.onCommit(e.currentTarget.value);
+              setInlineTextEditor(null);
             }}
           />
         )}

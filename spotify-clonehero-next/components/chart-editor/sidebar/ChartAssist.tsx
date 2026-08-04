@@ -3,11 +3,11 @@
 /**
  * Chart Assist sidebar section (plan 0074 Phase 2, Design C).
  *
- * Cards this phase: Tempo map, Add leading silence (detector-driven
- * call-to-action), Drum transcription (staleness + Re-run/Keep-as-is),
- * Lyrics/Vocals — one module each, beside this one. The difficulty-
- * regeneration card is Phase 4 (Design D) and deliberately doesn't exist yet
- * — `capabilities.chartAssist` has no slot for it.
+ * Cards: Tempo map, Sections (its own LinkSeg run, staleness + Keep-as-is),
+ * Add leading silence (detector-driven call-to-action), Drum transcription
+ * (staleness + Re-run/Keep-as-is), Lyrics, and a per-instrument difficulty
+ * regeneration card (one per stale instrument) — one module each, beside
+ * this one.
  *
  * This module owns only which cards exist and the section chrome around
  * them. A card that runs a task starts it on the editor's shared assist
@@ -27,9 +27,11 @@
  * renders its status and recommendation with the action disabled and that
  * reason on the tooltip. `/drum-transcription` wires all four to run;
  * `/tempo` wires the leading-silence card only; the shared `TrackEditPage`
- * shell (`/chart-editor`) runs the two audio-only tasks and passes reasons
- * for the other two; a bare `ChartEditor` with no wiring renders no section
- * at all.
+ * shell (`/chart-editor`) pads its own playback and exported audio
+ * (`usePaddedAudio`), so it runs the audio-backed tasks honestly and
+ * passes a reason only for the drum-transcription re-run (no OPFS
+ * drum-transcription project behind a chart loaded from a file); a bare
+ * `ChartEditor` with no wiring renders no section at all.
  */
 
 import {useState} from 'react';
@@ -38,7 +40,7 @@ import {useChartEditorContext} from '../ChartEditorContext';
 import {useExecuteCommand} from '../hooks/useEditCommands';
 import {
   selectDifficultyStale,
-  selectDrumTranscriptionStale,
+  selectTempoDerivedStale,
   SUPPORTED_TRACK_INSTRUMENTS,
 } from '@/lib/chart-editor-core';
 import {findTrack} from '@/lib/chart-edit';
@@ -49,6 +51,7 @@ import SectionHeading, {SIDEBAR_SECTION_CLASS} from './SectionHeading';
 import {LEARN_COPY, type LearnKey} from './learn-copy';
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 import TempoMapCard from './TempoMapCard';
+import SectionsCard from './SectionsCard';
 import LeadingSilenceCard from './LeadingSilenceCard';
 import DrumTranscriptionCard from './DrumTranscriptionCard';
 import DifficultyGenerationCard from './DifficultyGenerationCard';
@@ -66,8 +69,8 @@ export interface ChartAssistProps {
   allowDrumRerun?: boolean | undefined;
   /** Loads the song's audio (with the stem-cache fingerprint it's keyed
    *  under, when the host knows it) for the Tempo map card's
-   *  `generate-tempo-map` task and the Lyrics/Vocals card's `add-lyrics`
-   *  task. Without it neither card renders. */
+   *  `generate-tempo-map` task and the Lyrics card's `add-lyrics` task.
+   *  Without it neither card renders. */
   loadAudio?: LoadAssistAudio | undefined;
   /** Sample rate of the loaded audio, for the leading-silence pad's sample
    *  quantization. Without it the Add leading silence card doesn't render. */
@@ -118,7 +121,9 @@ export default function ChartAssist({
   // Card visibility = capability variant AND either the wiring that card's
   // action needs, or a host-supplied reason it can't run here. A card with
   // neither is absent.
-  const showTempo =
+  // Tempo map and Sections need the same wiring: a runner plus the song's
+  // audio, since each is its own pipeline run installed as a chart edit.
+  const showAudioBackedCards =
     (variant === 'all' || variant === 'tempo-and-silence') &&
     runner != null &&
     loadAudio != null;
@@ -153,7 +158,7 @@ export default function ChartAssist({
       : [];
 
   if (
-    !showTempo &&
+    !showAudioBackedCards &&
     !showSilence &&
     !showDrums &&
     !showLyrics &&
@@ -167,8 +172,19 @@ export default function ChartAssist({
       <SectionHeading title="Chart Assist" />
       {/* Card gap: the prototype's 6px between stacked assist cards. */}
       <div className="space-y-1.5">
-        {showTempo && (
+        {showAudioBackedCards && (
           <TempoMapCard
+            runner={runner}
+            loadAudio={loadAudio}
+            audioBusyReason={audioBusyReason}
+            executeCommand={executeCommand}
+            onLearnMore={setLearnOpen}
+          />
+        )}
+        {showAudioBackedCards && (
+          <SectionsCard
+            doc={doc}
+            stale={selectTempoDerivedStale(state, 'sections')}
             runner={runner}
             loadAudio={loadAudio}
             audioBusyReason={audioBusyReason}
@@ -190,7 +206,7 @@ export default function ChartAssist({
         {showDrums && (
           <DrumTranscriptionCard
             doc={doc}
-            stale={selectDrumTranscriptionStale(state)}
+            stale={selectTempoDerivedStale(state, 'drum-transcription')}
             projectId={projectId}
             rerunDisabledReason={drumRerunDisabledReason}
             runner={runner}

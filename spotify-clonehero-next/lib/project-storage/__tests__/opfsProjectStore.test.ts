@@ -141,4 +141,72 @@ describe('createOpfsProjectStore', () => {
     expect(await legacyStore.listProjects()).toHaveLength(0);
     expect((await store.listProjects()).map(p => p.id)).toEqual([fresh.id]);
   });
+  /**
+   * `ProjectMetadata.audioAnchor` (plan 0064 addendum §1, plan 0076 item 18):
+   * a `.chart` file has nowhere to carry the doc-level `audioAnchor` leading
+   * silence sets, so the project's metadata is where it persists. Without
+   * this round-trip a reload would leave a shifted chart playing against
+   * unpadded audio.
+   */
+  describe('audioAnchor persistence', () => {
+    async function makeProject(
+      store: ReturnType<typeof createOpfsProjectStore>,
+    ) {
+      return store.createProject({
+        name: 'Song',
+        artist: 'Artist',
+        charter: 'Charter',
+        durationSeconds: 60,
+        sourceFormat: 'sng',
+        originalName: 'song.sng',
+        chartText: 'chart',
+        audioFiles: [],
+        allFiles: [{fileName: 'notes.chart', data: new Uint8Array([1])}],
+      });
+    }
+
+    it('round-trips an anchor through updateProject and a re-read', async () => {
+      const store = createOpfsProjectStore('anchor-test');
+      const meta = await makeProject(store);
+
+      const updated = await store.updateProject(meta.id, {
+        audioAnchor: {tick: 1536, ms: 3238.9},
+      });
+      expect(updated.audioAnchor).toEqual({tick: 1536, ms: 3238.9});
+      expect((await store.getProject(meta.id)).audioAnchor).toEqual({
+        tick: 1536,
+        ms: 3238.9,
+      });
+
+      const cleared = await store.updateProject(meta.id, {audioAnchor: null});
+      expect(cleared.audioAnchor).toBeNull();
+      expect((await store.getProject(meta.id)).audioAnchor).toBeNull();
+    });
+
+    it('reads metadata written before the field existed as no anchor', async () => {
+      const store = createOpfsProjectStore('anchor-test');
+      const meta = await makeProject(store);
+
+      // createProject writes no anchor field at all — exactly the shape of
+      // every project stored before it existed.
+      expect(meta.audioAnchor).toBeUndefined();
+      const reread = await store.getProject(meta.id);
+      expect(reread.audioAnchor).toBeUndefined();
+      expect(reread.audioAnchor ?? null).toBeNull();
+    });
+
+    it('leaves fields the patch does not name untouched', async () => {
+      const store = createOpfsProjectStore('anchor-test');
+      const meta = await makeProject(store);
+
+      await store.updateProject(meta.id, {audioAnchor: {tick: 100, ms: 200}});
+      const renamed = await store.updateProject(meta.id, {name: 'Renamed'});
+
+      expect(renamed.name).toBe('Renamed');
+      expect(renamed.audioAnchor).toEqual({tick: 100, ms: 200});
+      expect(renamed.artist).toBe(meta.artist);
+      expect(renamed.id).toBe(meta.id);
+      expect(renamed.createdAt).toBe(meta.createdAt);
+    });
+  });
 });

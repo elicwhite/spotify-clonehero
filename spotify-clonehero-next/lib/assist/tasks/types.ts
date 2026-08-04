@@ -18,7 +18,8 @@
  *
  * The tasks themselves live one per file beside this one:
  * `transcribe-drums`, `add-lyrics`, `generate-tempo-map`,
- * `generate-difficulties`. `add-leading-silence` lands in a later phase.
+ * `generate-sections`, `generate-difficulties`. `add-leading-silence` lands
+ * in a later phase.
  */
 
 import {
@@ -30,6 +31,7 @@ import type {PlannedStep, StepProgressEvent} from '../run-to-steps';
 export type AssistTaskKey =
   | 'transcribe-drums'
   | 'generate-tempo-map'
+  | 'generate-sections'
   | 'add-lyrics'
   | 'generate-difficulties'
   | 'add-leading-silence';

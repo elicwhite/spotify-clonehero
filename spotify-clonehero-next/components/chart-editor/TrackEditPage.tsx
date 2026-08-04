@@ -39,25 +39,30 @@ import {
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
-import {readChartForEditing} from '@/lib/chart-edit';
+import {
+  getAudioAnchor,
+  readChartForEditing,
+  setAudioAnchor,
+} from '@/lib/chart-edit';
 import {highestDifficultyTrackKeys} from '@/lib/chart-editor-core';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {ChartEditorProvider, useChartEditorContext} from './ChartEditorContext';
-import {
-  AudioServiceProvider,
-  useAudioServiceContext,
-} from './AudioServiceContext';
+import {AudioServiceProvider} from './AudioServiceContext';
 import {trackKeyId, type EditorScope} from './scope';
 import ChartEditor from './ChartEditor';
-import {
-  chartDocToChartText,
-  prepareChartPackageAudio,
-  useChartPackageEditor,
-  type PreparedChartPackageAudio,
-} from './chartPackage';
+import type {AudioSource} from './ExportDialog';
+import {chartDocToChartText, useChartPackageEditor} from './chartPackage';
 import {useEditorKeyboard} from './hooks/useEditorKeyboard';
 import {useAutoSave} from './hooks/useAutoSave';
+import {anchorPadSamples, usePaddedAudio} from './hooks/usePaddedAudio';
+import {
+  decodeChartPackageAudio,
+  padPackageAudio,
+  PACKAGE_AUDIO_META,
+  type DecodedPackageAudio,
+} from './hooks/projectAudio';
+import {useSeparatedStems} from './hooks/useSeparatedStems';
 import {
   createOpfsProjectStore,
   type ProjectSummary,
@@ -113,7 +118,7 @@ export default function TrackEditPage(config: TrackEditPageConfig) {
   return (
     <AudioServiceProvider>
       {/* One assist runner for the whole page: the Chart Assist cards that
-       *  run a task here (Tempo map, Lyrics/Vocals) share it, so only one
+       *  run a task here (Tempo map, Lyrics) share it, so only one
        *  assist run is ever in flight and leaving the page aborts it. */}
       <AssistRunnerProvider>
         <ChartEditorProvider activeScope={config.defaultScope}>
@@ -454,18 +459,17 @@ function TrackEditEditor({
 }: TrackEditEditorProps) {
   const {headerExtra, leftPanelChildren, stackedPianoRoll} = config;
   const {state, dispatch} = useChartEditorContext();
-  const {setAudioManager: publishAudioManager} = useAudioServiceContext();
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
   const [loadingStep, setLoadingStep] = useState('Loading project...');
   const [errorMessage, setErrorMessage] = useState('');
   const [projectMeta, setProjectMeta] = useState<ProjectMetadata | null>(null);
-  const [durationSeconds, setDurationSeconds] = useState(0);
-  // Mirrors the AudioManager published on AudioServiceProvider (which
-  // event handlers read through a ref) into render-visible state, along
-  // with the PCM decoded beside it.
-  const [audio, setAudio] = useState<PreparedChartPackageAudio | null>(null);
-  const audioManager = audio?.audioManager ?? null;
-
+  // ORIGINAL (unpadded) PCM for the project's own audio files, retained
+  // across the session: `usePaddedAudio` re-pads from these on every
+  // `audioAnchor` change rather than compounding padding onto an
+  // already-padded buffer, and the export path below pads from them too.
+  const [packageAudio, setPackageAudio] = useState<DecodedPackageAudio | null>(
+    null,
+  );
   // Auto-save: write edited chart to OPFS
   const saveFn = useCallback(async () => {
     if (!state.chartDoc) return;
@@ -473,6 +477,13 @@ function TrackEditEditor({
       projectId,
       chartDocToChartText(state.chartDoc),
     );
+    // Mirror the doc's audio anchor into project metadata: a `.chart` file
+    // has nowhere to carry it, and without it a reload would show a chart
+    // shifted by the leading silence against unpadded audio. Cheap and
+    // idempotent — runs on every autosave.
+    await store.updateProject(projectId, {
+      audioAnchor: getAudioAnchor(state.chartDoc) ?? null,
+    });
   }, [projectId, state.chartDoc, store]);
 
   const {save} = useAutoSave(loadingState === 'ready' ? saveFn : null);
@@ -483,8 +494,6 @@ function TrackEditEditor({
   // Load project data from OPFS
   useEffect(() => {
     let cancelled = false;
-    let createdAudioManager: PreparedChartPackageAudio['audioManager'] | null =
-      null;
 
     async function loadProject() {
       try {
@@ -493,7 +502,6 @@ function TrackEditEditor({
         const meta = await store.getProject(projectId);
         if (cancelled) return;
         setProjectMeta(meta);
-        setDurationSeconds(meta.durationSeconds);
 
         // 2. Load chart text (prefer edited, fallback to original)
         setLoadingStep('Loading chart data...');
@@ -504,9 +512,15 @@ function TrackEditEditor({
         // a basic four-lane drum chart is read as pro-drums so the cymbal
         // toggle the editor offers survives the save it writes.
         const chartBytes = new TextEncoder().encode(chartText);
-        const chartDoc = readChartForEditing([
+        let chartDoc = readChartForEditing([
           {fileName: 'notes.chart', data: chartBytes},
         ]);
+        // 3a. Re-attach the persisted audio anchor (0064 addendum §1)
+        // before this doc is ever dispatched, so the padding the chart was
+        // saved with is the padding playback and export rebuild from.
+        if (meta.audioAnchor) {
+          chartDoc = setAudioAnchor(chartDoc, meta.audioAnchor);
+        }
         const parsed = chartDoc.parsedChart;
 
         // 4. Resolve the tracks to open: every instrument's highest charted
@@ -551,27 +565,15 @@ function TrackEditEditor({
           throw new Error('No audio files found in project storage');
         }
 
-        // 6. Build playback + waveform from the package (shared with the
-        // difficulty-generation flow): decoded PCM, the synthesized click
-        // stem, and the chart delay applied to the AudioManager.
+        // 6. Decode the package's audio into ORIGINAL (unpadded) PCM.
+        // `usePaddedAudio` builds the AudioManager from it (full mix +
+        // stems + the synthesized click, chart delay applied) once the
+        // chart doc below lands, and rebuilds it whenever the chart's
+        // `audioAnchor` or the stem list changes.
         setLoadingStep('Preparing audio playback...');
-        const prepared = await prepareChartPackageAudio({
-          chartDoc,
-          audioFiles,
-          onPlaybackEnded: () =>
-            dispatch({type: 'SET_PLAYING', isPlaying: false}),
-        });
-        if (cancelled) {
-          // Unmounted while the audio was being built: the cleanup below has
-          // already run and never saw this manager, so destroy it here or its
-          // AudioContext outlives the page.
-          prepared.audioManager.destroy();
-          return;
-        }
-        createdAudioManager = prepared.audioManager;
-
-        publishAudioManager(prepared.audioManager);
-        setAudio(prepared);
+        const decodedAudio = await decodeChartPackageAudio(audioFiles);
+        if (cancelled) return;
+        setPackageAudio(decodedAudio);
 
         // 7. Update editor state. ChartDoc carries the parsed chart;
         // consumers derive the active track via selectActiveTrack().
@@ -600,9 +602,7 @@ function TrackEditEditor({
 
     return () => {
       cancelled = true;
-      createdAudioManager?.destroy();
-      publishAudioManager(null);
-      setAudio(null);
+      setPackageAudio(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
@@ -626,17 +626,110 @@ function TrackEditEditor({
     [projectMeta],
   );
 
-  // The project's own audio files: what this host exports, and what Chart
-  // Assist's audio tasks work from.
+  // The project's own audio files, raw: what Chart Assist's audio tasks
+  // fingerprint and work from, and what an unpadded export ships verbatim.
   const loadAudioFiles = useCallback(
     () => store.loadAudioFiles(projectId),
     [projectId, store],
   );
+  // The stem-cache key stored for THIS project. `projectMeta` lags one
+  // render behind a client-side project switch, and another project's key
+  // says nothing about this one's audio - it would resolve the previous
+  // song's separated stems.
+  const storedStemFingerprint =
+    projectMeta?.id === projectId ? projectMeta.stemFingerprint : undefined;
+
+  // Playback and the waveform come from `usePaddedAudio` below; what this
+  // host wants from the chart-package boundary is the chart text, the raw
+  // export sources, and the assist audio loader.
   const chartPackage = useChartPackageEditor({
-    audio,
     chartDoc: state.chartDoc ?? null,
     loadAudioFiles,
+    stemFingerprint: storedStemFingerprint,
   });
+
+  // Persist a fingerprint the stem probe had to compute, so every later load
+  // of this project reads the stem cache directly instead of mixing the
+  // package down and hashing it again.
+  const handleFingerprintResolved = useCallback(
+    (stemFingerprint: string) => {
+      setProjectMeta(prev => (prev ? {...prev, stemFingerprint} : prev));
+      void store
+        .updateProject(projectId, {stemFingerprint})
+        .catch(err => console.warn('Could not persist stem fingerprint:', err));
+    },
+    [projectId, store],
+  );
+
+  const separatedStems = useSeparatedStems({
+    projectId,
+    packageAudio,
+    loadAssistAudio: chartPackage.chartAssist.loadAudio,
+    storedFingerprint: storedStemFingerprint,
+    onFingerprintResolved: handleFingerprintResolved,
+  });
+
+  // Everything the live AudioManager plays: the package's own files, plus
+  // whatever an assist run separated out of them.
+  const stems = useMemo(
+    () => [...(packageAudio?.stems ?? []), ...separatedStems],
+    [packageAudio, separatedStems],
+  );
+  const onSongEnded = useCallback(
+    () => dispatch({type: 'SET_PLAYING', isPlaying: false}),
+    [dispatch],
+  );
+  const {
+    audioManager,
+    fullMixPcm: paddedFullMixPcm,
+    stems: paddedStems,
+    durationSeconds: audioDurationSeconds,
+    rebuilding: audioRebuilding,
+  } = usePaddedAudio({
+    chartDoc: state.chartDoc,
+    audioMeta: packageAudio ? PACKAGE_AUDIO_META : null,
+    fullMixPcm: packageAudio?.fullMixPcm ?? null,
+    // A package with no `song` file promotes one of its own (guitar, bass)
+    // into the full-mix slot; the mixer row has to carry that file's name,
+    // not a "song" row playing guitar.
+    fullMixName: packageAudio?.fullMixName ?? 'song',
+    stems,
+    onSongEnded,
+  });
+
+  /**
+   * Export audio. With no leading silence applied the package's own files
+   * ship verbatim (`chartPackage.getAudioSources`). With an `audioAnchor`
+   * set, every note in the chart has moved by that much, so the exported
+   * audio has to move with it: each of the package's files is padded from
+   * the decoded PCM playback already uses and re-encoded. Only the
+   * package's own audio is exported — a separated stem is a mixing aid, not
+   * part of the chart. The stored audio at rest is never modified.
+   */
+  const rawAudioSources = chartPackage.getAudioSources;
+  const getAudioSources = useCallback(async (): Promise<AudioSource[]> => {
+    const anchor = state.chartDoc ? getAudioAnchor(state.chartDoc) : null;
+    const padSamples = anchorPadSamples(anchor, PACKAGE_AUDIO_META.sampleRate);
+    if (padSamples <= 0 || !packageAudio) return rawAudioSources();
+    return padPackageAudio(packageAudio, padSamples);
+  }, [state.chartDoc, packageAudio, rawAudioSources]);
+
+  /**
+   * Chart Assist wiring for this host, on top of the chart-package defaults:
+   * the sample rate of the decoded audio (the leading-silence pad quantizes
+   * to it) and a busy reason while the padded AudioManager rebuilds. No
+   * leading-silence disabled reason is declared — this editor pads playback
+   * through `usePaddedAudio` and pads its exported audio to match, so the
+   * action is honest here.
+   */
+  const chartAssist = useMemo(
+    () => ({
+      ...chartPackage.chartAssist,
+      audioSampleRate: PACKAGE_AUDIO_META.sampleRate,
+      audioBusyReason: audioRebuilding ? 'Rebuilding audio' : undefined,
+    }),
+    [chartPackage.chartAssist, audioRebuilding],
+  );
 
   // Loading state
   if (loadingState === 'loading') {
@@ -673,17 +766,20 @@ function TrackEditEditor({
         metadata={cloneHeroMetadata}
         chart={chart}
         audioManager={audioManager}
-        audioData={chartPackage.audioData}
-        audioChannels={chartPackage.audioChannels}
-        durationSeconds={durationSeconds}
+        audioData={paddedFullMixPcm ?? undefined}
+        audioChannels={PACKAGE_AUDIO_META.channels}
+        durationSeconds={
+          audioDurationSeconds || (projectMeta?.durationSeconds ?? 0)
+        }
         sections={chart.sections}
         songName={projectMeta?.name ?? 'Untitled'}
         artistName={projectMeta?.artist}
         charterName={projectMeta?.charter}
         dirty={state.dirty}
         getChartText={chartPackage.getChartText}
-        getAudioSources={chartPackage.getAudioSources}
-        chartAssist={chartPackage.chartAssist}
+        getAudioSources={getAudioSources}
+        chartAssist={chartAssist}
+        stemsMixer={{stemOrigins: paddedStems}}
         headerExtra={headerExtra}
         leftPanelChildren={leftPanelChildren}
         stackedPianoRoll={stackedPianoRoll}

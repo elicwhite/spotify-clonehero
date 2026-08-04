@@ -96,6 +96,15 @@ export interface TempoTrackFromPcmInput {
    * `runTempoPipelineFromPcm`. */
   createWorker?: (() => Worker) | undefined;
   /**
+   * Whether to also run LinkSeg section labeling (plan 0076 item 23).
+   * Default true, for `/drum-transcription`'s audio flow, which writes the
+   * labels onto the fresh chart it builds. The editor's tempo-map
+   * regeneration passes `false`: it replaces a grid on a chart whose section
+   * titles are the user's, and must leave them alone. `false` also skips the
+   * LinkSeg model load, so it is faster as well as safer.
+   */
+  sections?: boolean | undefined;
+  /**
    * Aborts the run, per the shared worker-cancellation contract
    * (`lib/workers/abortable-worker.ts`). Terminates the tempo-pipeline
    * worker and, once past it, the CRNN transcription worker.
@@ -115,17 +124,21 @@ export async function runTempoTrackFromPcm(
   const {left, right, sampleRate, sourceBytes = null, onProgress} = input;
   const txr = input.transcriber ?? new CrnnTranscriber();
 
-  const tempoOpts: TempoPipelineOptions = {
+  // The tempo map is always wanted here; only section labeling is optional.
+  const kind = input.sections === false ? 'tempo-map' : 'tempo-map+sections';
+  const tempoOpts: TempoPipelineOptions<typeof kind> = {
     sourceBytes,
     drumStemStereo: input.drumStemStereo ?? null,
     onProgress: p => onProgress?.(p),
     ...(input.createWorker ? {createWorker: input.createWorker} : {}),
+    kind,
     signal: input.signal,
   };
   const tempoResult = await runTempoPipelineFromPcm(
     {left, right, sampleRate},
     tempoOpts,
   );
+  const rawSynctrack = tempoResult.synctrack;
 
   // The worker surfaces the stereo stem no matter where it came from —
   // caller-supplied (echoed back; the input copy above was transferred
@@ -157,14 +170,11 @@ export async function runTempoTrackFromPcm(
     input.signal,
   );
 
-  const synctrack = finalizeSynctrack(
-    tempoResult.synctrack,
-    transcribed.events,
-  );
+  const synctrack = finalizeSynctrack(rawSynctrack, transcribed.events);
 
   return {
     synctrack,
-    rawSynctrack: tempoResult.synctrack,
+    rawSynctrack,
     events: transcribed.events,
     durationSeconds: transcribed.durationSeconds,
     sections: tempoResult.sections,

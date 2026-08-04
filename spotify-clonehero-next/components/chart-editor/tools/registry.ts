@@ -26,7 +26,6 @@ import {
   eraseTool,
   tempoMarkerTool,
   timeSignatureMarkerTool,
-  sectionTool,
 } from './tools';
 import type {EditorTool, PointerHitInfo, ToolContext} from './types';
 
@@ -38,7 +37,6 @@ export const TOOL_REGISTRY: Record<ToolMode, readonly EditorTool[]> = {
   erase: [eraseTool],
   bpm: [tempoMarkerTool],
   timesig: [timeSignatureMarkerTool],
-  section: [sectionTool],
 };
 
 /** Which tool a pointer-down in the given `ToolMode` should dispatch to. */

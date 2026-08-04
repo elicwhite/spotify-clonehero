@@ -23,12 +23,19 @@ export const InstrumentImage = memo(function InstrumentImage({
   onClick,
   responsive,
   size,
+  alt,
 }: {
   instrument: AllowedInstrument;
   classNames?: string | undefined;
   onClick?: ((instrument: AllowedInstrument) => void) | undefined;
   responsive?: boolean | undefined;
-  size?: 'sm' | 'md' | 'lg' | undefined;
+  /** Named scale, or an exact square pixel size for a call site that has to
+   *  match neighbouring glyphs (the chart editor's icon tiles). */
+  size?: 'sm' | 'md' | 'lg' | number | undefined;
+  /** Accessible name for the glyph. `null` renders it DECORATIVELY (`alt=""`
+   *  plus `aria-hidden`), for a call site whose adjacent visible text already
+   *  carries the name. */
+  alt?: string | null | undefined;
 }) {
   if (responsive != null && size != null) {
     throw new Error('responsive and size cannot be used together');
@@ -40,13 +47,22 @@ export const InstrumentImage = memo(function InstrumentImage({
     }
   }, [instrument, onClick]);
 
-  const dimension = size == 'sm' ? 16 : size == 'md' ? 32 : 64;
+  const dimension =
+    typeof size === 'number'
+      ? size
+      : size == 'sm'
+        ? 16
+        : size == 'md'
+          ? 32
+          : 64;
+  const decorative = alt === null;
 
   return (
     <Image
       className={cn('inline-block', classNames)}
       key={instrument}
-      alt={`Icon for instrument ${instrument}`}
+      alt={decorative ? '' : (alt ?? `Icon for instrument ${instrument}`)}
+      aria-hidden={decorative ? true : undefined}
       src={`/assets/instruments/${instrument}.png`}
       width={dimension}
       height={dimension}

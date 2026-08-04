@@ -7,6 +7,7 @@
  */
 
 import {useId} from 'react';
+import type {ReactNode} from 'react';
 import {Sparkles} from 'lucide-react';
 
 import {Button} from '@/components/ui/button';
@@ -16,7 +17,15 @@ import {cn} from '@/lib/utils';
 import type {LearnKey} from './learn-copy';
 
 export interface CardShellProps {
-  icon: React.ElementType;
+  /**
+   * The card's icon-tile glyph (a lucide icon like `<Clock />`, or
+   * `<InstrumentIcon instrument="guitar" />` for a card that represents an
+   * instrument, plan 0076 item 9). The tile sizes and colours whatever it
+   * renders through descendant selectors, so a lucide `svg` and
+   * `InstrumentIcon`'s `next/image` both land at the same size with no
+   * cooperation from the glyph itself.
+   */
+  icon: ReactNode;
   name: string;
   status?: string | undefined;
   /**
@@ -42,7 +51,7 @@ export interface CardShellProps {
 }
 
 export function CardShell({
-  icon: Icon,
+  icon,
   name,
   status,
   aiLabel,
@@ -73,16 +82,15 @@ export function CardShell({
       <div className="flex items-start gap-2">
         <div
           className={cn(
-            // 22px tile, the prototype's `.card-icon`.
+            // 22px tile, the prototype's `.card-icon`, sizing its glyph to
+            // 14px whether that is an svg or an img.
             'h-[1.375rem] w-[1.375rem] rounded-md bg-muted flex items-center justify-center shrink-0',
-            attn && 'bg-amber-100 dark:bg-amber-900/40',
+            '[&_svg]:size-3.5 [&_img]:size-3.5 [&_img]:object-contain',
+            'text-muted-foreground',
+            attn &&
+              'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300',
           )}>
-          <Icon
-            className={cn(
-              'h-3.5 w-3.5 text-muted-foreground',
-              attn && 'text-amber-700 dark:text-amber-300',
-            )}
-          />
+          {icon}
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-xs font-semibold">{name}</div>
@@ -165,7 +173,13 @@ export function CardAction({
         <TooltipTrigger asChild>
           <span className="inline-block">{button}</span>
         </TooltipTrigger>
-        <TooltipContent side="right">{disabledReason}</TooltipContent>
+        {/* `max-w` + `text-balance` (plan 0076 item 16): a disabled reason is
+         *  a short phrase, and this wraps it onto two balanced lines in the
+         *  narrow sidebar instead of one very wide line. Scoped to the assist
+         *  CTAs rather than applied to every tooltip in the app. */}
+        <TooltipContent side="right" className="max-w-[220px] text-balance">
+          {disabledReason}
+        </TooltipContent>
       </Tooltip>
       {/* The tooltip is the sighted user's route to the reason, and a
        *  disabled button can't be focused to open it — so the same sentence

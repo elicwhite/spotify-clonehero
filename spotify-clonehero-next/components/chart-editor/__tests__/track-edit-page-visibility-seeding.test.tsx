@@ -76,6 +76,37 @@ jest.mock('../../../lib/preview/clickTrack', () => ({
   generateBeatClickTrackWav: jest.fn(async () => new Uint8Array([0])),
 }));
 
+// jsdom's Blob has no `arrayBuffer()`; `encodeWavBlob` (used inside
+// `usePaddedAudio`'s build) relies on it. Node's Blob has it.
+(globalThis as unknown as {Blob: unknown}).Blob = require('buffer').Blob;
+
+// The editor decodes the project's audio files into PCM for
+// `usePaddedAudio`; jsdom has neither OfflineAudioContext nor the soxr
+// resampler behind the real decode.
+jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
+  decodeAudio: jest.fn(async () => ({
+    numberOfChannels: 2,
+    length: 8,
+    sampleRate: 44100,
+    duration: 8 / 44100,
+    getChannelData: () => new Float32Array(8),
+  })),
+  interleaveAudioBuffer: jest.fn(() => new Float32Array(16)),
+}));
+
+// The editor probes the stem cache for anything separation produced for
+// this project's audio. Nothing was separated here, and jsdom has neither
+// OPFS nor `crypto.subtle` for the fingerprint the probe is keyed by.
+jest.mock('../../../lib/audio-pipeline/stem-cache', () => {
+  const actual = jest.requireActual('../../../lib/audio-pipeline/stem-cache');
+  return {
+    ...actual,
+    computeStemFingerprint: jest.fn(async () => 'fingerprint-1'),
+    loadStem: jest.fn(async () => null),
+    loadStemOpus: jest.fn(async () => null),
+  };
+});
+
 class FakeAudioContext {
   async decodeAudioData(_buffer: ArrayBuffer) {
     return {
@@ -116,6 +147,7 @@ jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
     // returned can't be affected by another.
     loadAudioFiles: jest.fn(async () => fixtureAudioFiles.map(f => ({...f}))),
     writeEditedChart: jest.fn(async () => {}),
+    updateProject: jest.fn(async () => ({})),
     deleteProject: jest.fn(async () => {}),
     createProject: jest.fn(),
   })),

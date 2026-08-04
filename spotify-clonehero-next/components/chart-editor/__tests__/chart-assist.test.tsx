@@ -27,8 +27,12 @@ import {
 import {createEmptyChart, noteTypes} from '@eliwhite/scan-chart';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
-import {addDrumNote} from '@/lib/chart-edit';
-import {computeTempoStamp, withAssistProvenance} from '@/lib/chart-editor-core';
+import {addDrumNote, addSection} from '@/lib/chart-edit';
+import {
+  computeTempoStamp,
+  setTempoStamp,
+  withAssistProvenance,
+} from '@/lib/chart-editor-core';
 import {TooltipProvider} from '@/components/ui/tooltip';
 
 import {
@@ -106,9 +110,33 @@ function makeDoc(noteCount = 1): ChartDocument {
 function makeDocWithFreshProvenance(): ChartDocument {
   const doc = makeDoc();
   return withAssistProvenance(doc, {
-    drumTranscription: {tempoStamp: computeTempoStamp(doc)},
+    tempoDerived: {'drum-transcription': {tempoStamp: computeTempoStamp(doc)}},
   });
 }
+
+/**
+ * A doc carrying section markers. `generated: true` stamps them as this
+ * task's own output (what a `generate-sections` run writes); without it they
+ * are the charter's hand-written titles, which is a different card state.
+ */
+function makeDocWithSections(
+  names: string[],
+  {generated}: {generated: boolean},
+): ChartDocument {
+  const doc = makeDocWithFreshProvenance();
+  names.forEach((name, index) => addSection(doc, index * 1920, name));
+  return generated ? setTempoStamp(doc, 'sections') : doc;
+}
+
+/** Every card `DRUM_EDIT_CAPABILITIES` + full wiring renders, by the
+ *  accessible name of its `group`. */
+const ALL_CARD_NAMES = [
+  'Tempo map',
+  'Sections',
+  'Add leading silence',
+  'Drum transcription',
+  'Lyrics',
+];
 
 interface Wiring {
   projectId?: string | undefined;
@@ -134,19 +162,21 @@ const FULL_WIRING: Wiring = {
 };
 
 /**
- * What the shared `TrackEditPage` shell (`/chart-editor`) supplies: the
- * chart package's audio, and a reason for each of the two cards whose
- * action that surface can't perform.
+ * What a host with the chart package's audio but neither padded playback nor
+ * a drum-transcription project supplies — the difficulty-generation flow
+ * (`components/difficulty-generation/DifficultyGenerationFlow.tsx`), whose
+ * reasons these strings mirror. Both affected cards still render: the point
+ * of the disabled-with-a-reason path is that a card's status and
+ * recommendation are worth showing even where its action can't run.
  */
-const TRACK_EDIT_WIRING: Wiring = {
+const DISABLED_ACTIONS_WIRING: Wiring = {
   loadAudio: async () => ({
     loadOriginalBytes: async () => new Uint8Array(4),
   }),
   audioSampleRate: 44100,
   leadingSilenceDisabledReason:
-    "This editor plays and exports the chart's audio files as they are, so it cannot pad the audio to match the shifted chart.",
-  drumRerunDisabledReason:
-    'Re-running transcription needs the separated drum audio from the drum transcription tool. This chart was loaded from a file, so there is nothing to re-run here.',
+    "Can't pad this editor's audio to match a shifted chart yet.",
+  drumRerunDisabledReason: 'No separated drum audio to re-run from.',
 };
 
 function Harness({doc, wiring}: {doc: ChartDocument; wiring: Wiring}) {
@@ -207,19 +237,20 @@ describe('ChartAssist capability gating', () => {
   it('renders every card under DRUM_EDIT_CAPABILITIES', () => {
     renderChartAssist(makeDocWithFreshProvenance(), DRUM_EDIT_CAPABILITIES);
     expect(screen.getByText('Chart Assist')).toBeInTheDocument();
-    for (const name of [
-      'Tempo map',
-      'Add leading silence',
-      'Drum transcription',
-      'Lyrics / Vocals',
-    ]) {
+    for (const name of ALL_CARD_NAMES) {
       expect(screen.getByRole('group', {name})).toBeInTheDocument();
     }
+    // Nothing beyond the enumerated set, so a card added without a test
+    // fails here instead of shipping unasserted.
+    expect(screen.getAllByRole('group')).toHaveLength(ALL_CARD_NAMES.length);
   });
 
-  it('renders only Tempo map + Add leading silence under TEMPO_CAPABILITIES', () => {
+  it('renders Tempo map + Sections + Add leading silence under TEMPO_CAPABILITIES', () => {
     renderChartAssist(makeDocWithFreshProvenance(), TEMPO_CAPABILITIES);
     expect(screen.getByRole('group', {name: 'Tempo map'})).toBeInTheDocument();
+    // Sections rides the same wiring as Tempo map (a runner plus the song's
+    // audio), so a tempo-only host gets it too.
+    expect(screen.getByRole('group', {name: 'Sections'})).toBeInTheDocument();
     expect(
       screen.getByRole('group', {name: 'Add leading silence'}),
     ).toBeInTheDocument();
@@ -227,24 +258,14 @@ describe('ChartAssist capability gating', () => {
       screen.queryByRole('group', {name: 'Drum transcription'}),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('group', {name: 'Lyrics / Vocals'}),
+      screen.queryByRole('group', {name: 'Lyrics'}),
     ).not.toBeInTheDocument();
   });
 
   it('renders only the Lyrics card under ADD_LYRICS_CAPABILITIES', () => {
     renderChartAssist(makeDocWithFreshProvenance(), ADD_LYRICS_CAPABILITIES);
-    expect(
-      screen.getByRole('group', {name: 'Lyrics / Vocals'}),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('group', {name: 'Tempo map'}),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('group', {name: 'Add leading silence'}),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('group', {name: 'Drum transcription'}),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole('group', {name: 'Lyrics'})).toBeInTheDocument();
+    expect(screen.getAllByRole('group')).toHaveLength(1);
   });
 
   it('renders nothing under PREVIEW_CAPABILITIES', () => {
@@ -254,24 +275,24 @@ describe('ChartAssist capability gating', () => {
 });
 
 /**
- * The `TrackEditPage` surface: a chart loaded from a file, with its own
- * audio but no drum-transcription project behind it and no way to pad the
- * audio it plays and exports. Two cards run, two render with a disabled
- * action and a reason, and none of the four is silently missing.
+ * A chart loaded from a file, with its own audio but no drum-transcription
+ * project behind it and no way to pad the audio it plays and exports (the
+ * difficulty-generation flow). The audio-backed cards run; the two whose
+ * action this host can't perform render with a disabled action and a reason,
+ * and no card is silently missing.
  */
-describe('ChartAssist on the TrackEditPage surface', () => {
+describe('ChartAssist where the host disables two actions', () => {
   function renderTrackEdit(doc = makeDoc()) {
-    return renderChartAssist(doc, DRUM_EDIT_CAPABILITIES, TRACK_EDIT_WIRING);
+    return renderChartAssist(
+      doc,
+      DRUM_EDIT_CAPABILITIES,
+      DISABLED_ACTIONS_WIRING,
+    );
   }
 
-  it('renders all four cards', () => {
+  it('renders every card', () => {
     renderTrackEdit();
-    for (const name of [
-      'Tempo map',
-      'Add leading silence',
-      'Drum transcription',
-      'Lyrics / Vocals',
-    ]) {
+    for (const name of ALL_CARD_NAMES) {
       expect(screen.getByRole('group', {name})).toBeInTheDocument();
     }
   });
@@ -292,7 +313,7 @@ describe('ChartAssist on the TrackEditPage surface', () => {
     // The reason reaches a sighted user through the tooltip and everyone
     // else through the button's accessible description.
     expect(button).toHaveAccessibleDescription(
-      /cannot pad the audio to match/i,
+      /can't pad this editor's audio/i,
     );
   });
 
@@ -301,7 +322,7 @@ describe('ChartAssist on the TrackEditPage surface', () => {
     const button = screen.getByRole('button', {name: /^re-run$/i});
     expect(button).toBeDisabled();
     expect(button).toHaveAccessibleDescription(
-      /needs the separated drum audio/i,
+      /no separated drum audio to re-run from/i,
     );
   });
 
@@ -415,6 +436,98 @@ describe('ChartAssist leading-silence recommendation', () => {
   });
 });
 
+/**
+ * The Sections card (plan 0076 item 23). Sections are their own artifact now,
+ * so the card has three states a tempo-map run no longer decides for it: no
+ * markers at all, markers the charter wrote, and markers this task generated
+ * (which alone can go stale).
+ */
+describe('ChartAssist Sections card', () => {
+  function sectionsCard(): HTMLElement {
+    return screen.getByRole('group', {name: 'Sections'});
+  }
+
+  it('offers "Generate sections" on a chart that has none', () => {
+    renderChartAssist(makeDocWithFreshProvenance());
+    const card = sectionsCard();
+    expect(within(card).getByText('0 sections')).toBeInTheDocument();
+    expect(
+      within(card).getByRole('button', {name: /generate sections/i}),
+    ).toBeEnabled();
+    expect(within(card).queryByText(/already has section titles/i)).toBeNull();
+  });
+
+  it('switches the action to "Re-generate" and warns about hand-written titles', () => {
+    renderChartAssist(makeDocWithSections(['Intro'], {generated: false}));
+    const card = sectionsCard();
+    expect(within(card).getByText('1 section')).toBeInTheDocument();
+    expect(
+      within(card).getByRole('button', {name: /re-generate/i}),
+    ).toBeEnabled();
+    expect(
+      within(card).getByText(/already has section titles you wrote/i),
+    ).toBeInTheDocument();
+    // Titles the charter wrote are not this task's to claim.
+    expect(within(card).queryByText(/ai-labeled/i)).toBeNull();
+  });
+
+  it('claims an AI origin only for sections it generated, and says nothing about replacing them', () => {
+    renderChartAssist(
+      makeDocWithSections(['Intro', 'Verse 1'], {generated: true}),
+    );
+    const card = sectionsCard();
+    // The badge and the count share one line, so the count is matched
+    // within it rather than as an element of its own.
+    expect(within(card).getByText(/2 sections/)).toBeInTheDocument();
+    expect(within(card).getByText(/ai-labeled/i)).toBeInTheDocument();
+    expect(within(card).queryByText(/already has section titles/i)).toBeNull();
+  });
+
+  it('flags generated sections stale after a tempo edit, and "Keep as-is" dismisses it', () => {
+    renderChartAssist(makeDocWithSections(['Intro'], {generated: true}));
+    expect(
+      within(sectionsCard()).queryByText(/may sit on the wrong bars/i),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', {name: /edit tempo/i}));
+    expect(
+      within(sectionsCard()).getByText(/may sit on the wrong bars/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      within(sectionsCard()).getByRole('button', {name: /keep as-is/i}),
+    );
+    expect(
+      within(sectionsCard()).queryByText(/may sit on the wrong bars/i),
+    ).toBeNull();
+  });
+
+  it('leaves hand-written sections unflagged by a tempo edit', () => {
+    // No provenance for them, so there is no generated artifact to call
+    // stale — the charter placed those markers deliberately.
+    renderChartAssist(makeDocWithSections(['Intro'], {generated: false}));
+    fireEvent.click(screen.getByRole('button', {name: /edit tempo/i}));
+    expect(
+      within(sectionsCard()).queryByText(/may sit on the wrong bars/i),
+    ).toBeNull();
+  });
+});
+
+describe('ChartAssist Lyrics card copy (plan 0076 item 13)', () => {
+  it('is titled just "Lyrics", never says karaoke or calls itself vocals', () => {
+    renderChartAssist(makeDocWithFreshProvenance());
+    const card = screen.getByRole('group', {name: 'Lyrics'});
+    expect(within(card).queryByText(/karaoke/i)).not.toBeInTheDocument();
+    expect(within(card).queryByText(/\bvocals\b/i)).not.toBeInTheDocument();
+    // Uses the shared vocals.png icon (item 9), not a lucide glyph.
+    const img = card.querySelector('img') as HTMLImageElement;
+    expect(img).not.toBeNull();
+    expect(img.src).toContain(
+      encodeURIComponent('/assets/instruments/vocals.png'),
+    );
+  });
+});
+
 describe('ChartAssist Learn more', () => {
   it('opens and closes with the Drum transcription copy', () => {
     renderChartAssist(makeDocWithFreshProvenance());
@@ -427,7 +540,7 @@ describe('ChartAssist Learn more', () => {
       screen.getByRole('heading', {name: /drum transcription/i}),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/writes the expert drum chart for you/i),
+      screen.getByText(/writes a baseline expert drum chart/i),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', {name: /got it/i}));

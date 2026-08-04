@@ -1,7 +1,9 @@
 'use client';
 
 /**
- * Chart Assist "Lyrics / Vocals" card (plan 0074 Phase 2).
+ * Chart Assist "Lyrics" card (plan 0074 Phase 2; plan 0076 item 13: titled
+ * and worded as just "Lyrics" — never "karaoke", never "vocals" since vocals
+ * implies pitches, which this doesn't touch).
  *
  * Delegates to the existing `AddLyricsDialog` wholesale (same task, same
  * dialog, same paste-textarea flow the drum-transcription editor already
@@ -9,11 +11,10 @@
  * a thin wrapper around its trigger button.
  */
 
-import {Captions} from 'lucide-react';
-
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 
 import AddLyricsDialog from '../AddLyricsDialog';
+import InstrumentIcon from '../InstrumentIcon';
 import {CardShell} from './CardShell';
 import type {LearnKey} from './learn-copy';
 
@@ -32,9 +33,9 @@ export default function LyricsCard({
 }: LyricsCardProps) {
   return (
     <CardShell
-      icon={Captions}
-      name="Lyrics / Vocals"
-      explanation="Aligns pasted lyric text to the vocals for in-game karaoke lyrics."
+      icon={<InstrumentIcon instrument="vocals" size={14} />}
+      name="Lyrics"
+      explanation="Automatically syncs pasted lyric text to the audio, syllable-by-syllable."
       learnKey="lyrics"
       onLearnMore={onLearnMore}
       actions={

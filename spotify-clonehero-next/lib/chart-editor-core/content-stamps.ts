@@ -160,9 +160,18 @@ export function recomputeTrackStamps(
  * per track without a nested record.
  */
 export type AssistFeatureId =
-  | 'drum-transcription'
+  | TempoDerivedFeature
   | 'leading-silence'
   | `difficulty:${SupportedTrackInstrument}`;
+
+/**
+ * An assist artifact whose staleness is measured against the TEMPO MAP
+ * rather than against its own content: the artifact was placed on the bars
+ * of one particular grid, so a changed grid can leave it on the wrong bars.
+ * Both members share one provenance record, one restamp rule and one
+ * staleness rule, so a third tempo-derived artifact needs no new shape.
+ */
+export type TempoDerivedFeature = 'drum-transcription' | 'sections';
 
 /**
  * Generation provenance for assist-produced artifacts. Lives INSIDE
@@ -185,11 +194,15 @@ export interface AssistProvenance {
   difficulties?: Partial<
     Record<SupportedTrackInstrument, {sourceStamp: string}>
   >;
-  /** Drum-transcription provenance: the tempo-map stamp in effect when the
-   *  drum track was generated/imported. Staleness tracks tempo, not the
-   *  drum track's own content, since re-transcription is a tempo-map
-   *  concern, not an edit-history one. */
-  drumTranscription?: {tempoStamp: string};
+  /**
+   * Per-feature tempo-derived provenance: the tempo-map stamp in effect when
+   * that artifact was generated. Staleness tracks tempo, not the artifact's
+   * own content — re-transcribing drums and re-labeling sections are both
+   * tempo-map concerns, not edit-history ones. It is a recommendation, not a
+   * fact: a small tempo edit often leaves the artifact perfectly good, which
+   * is why the cards offer "Keep as-is".
+   */
+  tempoDerived?: Partial<Record<TempoDerivedFeature, {tempoStamp: string}>>;
   /** Per-feature "Keep as-is" acknowledgment: the stamp the user last
    *  dismissed staleness against. A dismissal lasts only until the
    *  relevant current stamp moves past this value again. */
@@ -221,28 +234,46 @@ export function withAssistProvenance(
 }
 
 /**
- * Record the doc's CURRENT tempo map as the grid its drum transcription was
- * generated against — the write a command that produces a transcription
- * performs, in the same doc mutation that installs the notes, so the fresh
- * transcription starts out not stale and undo removes both together.
+ * Record the doc's CURRENT tempo map as the grid `feature`'s artifact was
+ * generated against — the write a command that produces the artifact
+ * performs, in the same doc mutation that installs it, so the fresh artifact
+ * starts out not stale and undo removes both together.
  */
-export function setDrumTranscriptionStamp(doc: ChartDocument): ChartDocument {
+export function setTempoStamp(
+  doc: ChartDocument,
+  feature: TempoDerivedFeature,
+): ChartDocument {
+  const provenance = getAssistProvenance(doc);
   return withAssistProvenance(doc, {
-    ...getAssistProvenance(doc),
-    drumTranscription: {tempoStamp: computeTempoStamp(doc)},
+    ...provenance,
+    tempoDerived: {
+      ...provenance?.tempoDerived,
+      [feature]: {tempoStamp: computeTempoStamp(doc)},
+    },
   });
 }
 
 /**
- * Re-point an EXISTING drum-transcription record at the doc's current tempo
- * map, for edits that moved the grid without moving anything relative to it
- * (a whole-song leading-silence shift, a map generated in the same run as the
- * transcription). A doc that never recorded a transcription is returned
- * untouched: there is nothing to be stale about, so nothing to restamp.
+ * Re-point EXISTING tempo-derived records at the doc's current tempo map,
+ * for edits that moved the grid without moving anything relative to it (a
+ * whole-song leading-silence shift, a map generated in the same run as the
+ * artifact). Restamps every recorded feature by default; pass `features` to
+ * restamp only some of them. A feature that was never generated is left
+ * alone — there is nothing to be stale about, so nothing to restamp — and a
+ * doc with no restampable record is returned by reference.
  */
-export function restampDrumTranscription(doc: ChartDocument): ChartDocument {
-  if (!getAssistProvenance(doc)?.drumTranscription) return doc;
-  return setDrumTranscriptionStamp(doc);
+export function restampTempoDerived(
+  doc: ChartDocument,
+  ...features: TempoDerivedFeature[]
+): ChartDocument {
+  const recorded = getAssistProvenance(doc)?.tempoDerived;
+  if (!recorded) return doc;
+  const targets = (
+    features.length > 0
+      ? features
+      : (Object.keys(recorded) as TempoDerivedFeature[])
+  ).filter(feature => recorded[feature]);
+  return targets.reduce(setTempoStamp, doc);
 }
 
 /**

@@ -31,13 +31,14 @@ class FakeWorker {
 
 function makeResult(): PipelineResult {
   return {
+    kind: 'tempo-map',
     synctrack: {origin_ms: 0, tempos: [], timeSignatures: []},
     sections: null,
     drumOnsetOffsetMs: null,
     fullMixBeatCount: 0,
     drumStemBeatCount: 0,
     meterStats: null,
-    drumStemStereo: null,
+    drumStemStereo: {left: new Float32Array(1), right: new Float32Array(1)},
   };
 }
 

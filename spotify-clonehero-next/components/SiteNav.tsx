@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import {Suspense} from 'react';
-import {Icons} from '@/components/icons';
 import {Button} from '@/components/ui/button';
 import HeaderAuthControls from '@/components/HeaderAuthControls';
+import SocialLinks from '@/components/SocialLinks';
 
 /**
  * The site's full navigation bar, shown on every page that is not an editor
@@ -31,24 +31,7 @@ export default function SiteNav() {
         </div>
 
         <nav className="flex items-center">
-          <Link
-            href="https://discord.gg/EDxu95B98s"
-            target="_blank"
-            rel="noreferrer">
-            <Button variant="ghost" size="icon" className="w-9 px-0">
-              <Icons.discord className="h-4 w-4" />
-              <span className="sr-only">Discord</span>
-            </Button>
-          </Link>
-          <Link
-            href="https://github.com/TheSavior/spotify-clonehero"
-            target="_blank"
-            rel="noreferrer">
-            <Button variant="ghost" size="icon" className="w-9 px-0">
-              <Icons.gitHub className="h-4 w-4" />
-              <span className="sr-only">GitHub</span>
-            </Button>
-          </Link>
+          <SocialLinks variant="nav" />
           <Suspense>
             <HeaderAuthControls />
           </Suspense>

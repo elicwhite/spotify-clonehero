@@ -4,12 +4,18 @@
 /**
  * Behavior tests for the sidebar's "Snap · Speed · Loop" utility cluster.
  *
- * Two contracts that changed in plan 0074 Phase 7 and that nothing else
- * covers:
+ * Contracts covered here that nothing else does:
  * 1. Every grid division the `Shift+N` hotkeys can dispatch has a matching
- *    snap option, so the trigger always names the active snap.
+ *    snap option, so the trigger always names the active snap (plan 0074
+ *    Phase 7).
  * 2. The speed stepper reads and writes the same `playbackSpeed` the
- *    `[` / `]` transport hotkeys use, so the two surfaces can't disagree.
+ *    `[` / `]` transport hotkeys use, so the two surfaces can't disagree
+ *    (plan 0074 Phase 7).
+ * 3. The section tool button is gone — its replacement is the piano roll's
+ *    section-strip context menu (plan 0076 item 19).
+ * 4. The Snap/Speed keyboard-hint pills are gone (plan 0076 item 20).
+ * 5. The A/B loop buttons carry an accessible name stating the interaction
+ *    (plan 0076 item 21).
  */
 
 import '@testing-library/jest-dom';
@@ -110,6 +116,43 @@ describe('UtilityCluster snap control', () => {
     expect(screen.getByRole('combobox', {name: /snap/i})).toHaveTextContent(
       '1/64',
     );
+  });
+});
+
+describe('UtilityCluster section tool removal (plan 0076 item 19)', () => {
+  it('renders no section tool button (its replacement is the section-strip context menu)', () => {
+    renderCluster({});
+    expect(
+      screen.queryByRole('button', {name: /section/i}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('still renders the cursor and place-note tools', () => {
+    renderCluster({});
+    expect(screen.getByRole('button', {name: /cursor/i})).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {name: /place note/i}),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('UtilityCluster keyboard-hint pills removal (plan 0076 item 20)', () => {
+  it('renders no Snap/Speed/Loop keyboard-hint pills', () => {
+    renderCluster({});
+    expect(screen.queryByText('⇧1-6')).not.toBeInTheDocument();
+    expect(screen.queryByText('[ ]')).not.toBeInTheDocument();
+  });
+});
+
+describe('UtilityCluster A/B loop discoverability (plan 0076 item 21)', () => {
+  it('names the loop-start and loop-end interaction on the A/B buttons', () => {
+    renderCluster({});
+    expect(
+      screen.getByRole('button', {name: 'Set loop start at playhead'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {name: 'Set loop end at playhead'}),
+    ).toBeInTheDocument();
   });
 });
 

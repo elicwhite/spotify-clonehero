@@ -51,6 +51,7 @@ import {
 import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboard';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
 import {
+  CHART_PACKAGE_ASSIST_DISABLED_REASONS,
   prepareChartPackageAudio,
   useChartPackageEditor,
   type PreparedChartPackageAudio,
@@ -464,10 +465,26 @@ function GeneratedChartEditor({loaded}: {loaded: LoadedChart}) {
     [candidate.audioFiles],
   );
   const chartPackage = useChartPackageEditor({
-    audio,
     chartDoc: state.chartDoc ?? null,
     loadAudioFiles,
   });
+
+  /**
+   * Chart Assist wiring for this host: the sample rate of the audio it
+   * decoded (the leading-silence pad quantizes to it), plus the reason it
+   * can't offer that action — this route plays the package's audio files
+   * straight and never pads them, so a shifted chart would drift away from
+   * its audio.
+   */
+  const chartAssist = useMemo(
+    () => ({
+      ...chartPackage.chartAssist,
+      audioSampleRate: audio.audioSampleRate,
+      leadingSilenceDisabledReason:
+        CHART_PACKAGE_ASSIST_DISABLED_REASONS.leadingSilence,
+    }),
+    [chartPackage.chartAssist, audio.audioSampleRate],
+  );
 
   const metadata = useMemo(
     () =>
@@ -494,8 +511,8 @@ function GeneratedChartEditor({loaded}: {loaded: LoadedChart}) {
         metadata={metadata}
         chart={chart}
         audioManager={audio.audioManager}
-        audioData={chartPackage.audioData}
-        audioChannels={chartPackage.audioChannels}
+        audioData={audio.audioData}
+        audioChannels={audio.audioChannels}
         durationSeconds={durationSeconds}
         sections={chart.sections}
         songName={candidate.meta.name}
@@ -508,7 +525,7 @@ function GeneratedChartEditor({loaded}: {loaded: LoadedChart}) {
         stackedPianoRoll
         getChartText={chartPackage.getChartText}
         getAudioSources={chartPackage.getAudioSources}
-        chartAssist={chartPackage.chartAssist}
+        chartAssist={chartAssist}
       />
     </div>
   );

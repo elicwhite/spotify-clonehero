@@ -34,6 +34,23 @@ export interface ProjectMetadata {
   sourceFormat: SourceFormat;
   originalName: string;
   sngMetadata?: Record<string, string> | undefined;
+  /**
+   * Chart-time position of the audio's true start when leading silence has
+   * been added (plan 0064 addendum §1) — mirrors the in-memory
+   * `ChartDocument`'s `audioAnchor`, which a `.chart` file has nowhere to
+   * carry. A host re-attaches it on load and pads the audio it plays and
+   * exports by `audioAnchor.ms`. Absent/null means no padding.
+   */
+  audioAnchor?: {tick: number; ms: number} | null | undefined;
+  /**
+   * The key this project's audio is cached under in the fingerprint-keyed
+   * stem cache — a hash of the audio bytes plus the separator's identity.
+   * Written once, the first time something separates this project's audio.
+   * Present, a stem lookup is a direct cache read; absent, nothing has ever
+   * been separated here, so there is nothing to look up and no reason to pay
+   * for the hash (a multi-file package has to be mixed down to compute one).
+   */
+  stemFingerprint?: string | undefined;
 }
 
 export interface ProjectSummary {
@@ -292,6 +309,28 @@ export function createOpfsProjectStore(
   }
 
   /**
+   * Patches a project's metadata, leaving every field the patch doesn't
+   * name untouched, and returns the stored result. `id`, `createdAt` and
+   * `updatedAt` are not patchable: identity is fixed, and `updatedAt` is
+   * stamped here.
+   */
+  async function updateProject(
+    projectId: string,
+    patch: Partial<Omit<ProjectMetadata, 'id' | 'createdAt' | 'updatedAt'>>,
+  ): Promise<ProjectMetadata> {
+    const dir = await getProjectDir(projectId);
+    const metaHandle = await dir.getFileHandle(METADATA_FILE);
+    const metadata = (await readJsonFile(metaHandle)) as ProjectMetadata;
+    const updated: ProjectMetadata = {
+      ...metadata,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    await writeFile(metaHandle, JSON.stringify(updated));
+    return updated;
+  }
+
+  /**
    * Deletes a project and all its files from OPFS.
    */
   async function deleteProject(projectId: string): Promise<void> {
@@ -434,6 +473,7 @@ export function createOpfsProjectStore(
     createProject,
     listProjects,
     getProject,
+    updateProject,
     deleteProject,
     readChartText,
     writeEditedChart,

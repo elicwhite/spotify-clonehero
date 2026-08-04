@@ -20,6 +20,7 @@ import {
   runSeparationInWorker,
   separateStems,
 } from '@/lib/audio-pipeline/separate-stems';
+import {encodeStemCacheBytes} from '@/lib/audio-pipeline/stem-cache';
 import type {SeparationWorkerMessage} from '@/lib/drum-transcription/ml/separation-worker';
 import {installFakeOPFS} from '@/lib/drum-transcription/storage/__tests__/fake-opfs';
 
@@ -55,6 +56,28 @@ class FakeWorker {
   emit(msg: SeparationWorkerMessage) {
     this.onmessage?.({data: msg});
   }
+}
+
+/** Stand-in for `pcm-worker.ts`: runs the real gzip so what lands in the
+ *  fake OPFS is a payload `loadStem` can actually decode. */
+function createPcmWorker(): Worker {
+  const worker = {
+    onmessage: null as ((e: {data: unknown}) => void) | null,
+    onerror: null,
+    terminate() {},
+    postMessage(req: {type: string; left: Float32Array; right: Float32Array}) {
+      void (async () => {
+        const bytes = await encodeStemCacheBytes({
+          left: req.left,
+          right: req.right,
+        });
+        worker.onmessage?.({
+          data: {type: 'gzipped', bytes, left: req.left, right: req.right},
+        });
+      })();
+    },
+  };
+  return worker as unknown as Worker;
 }
 
 function fakeResult(): SeparationWorkerMessage {
@@ -253,6 +276,7 @@ describe('separateStems cancellation', () => {
       drums: true,
       vocals: true,
       signal: controller.signal,
+      createPcmWorker,
     });
 
     await waitForWorker();
@@ -269,6 +293,7 @@ describe('separateStems cancellation', () => {
     const second = await separateStems(new Uint8Array([1, 2, 3]), {
       drums: true,
       vocals: true,
+      createPcmWorker,
     });
     expect(second.drums).toBeDefined();
     expect(fakeWorker).toBeNull();

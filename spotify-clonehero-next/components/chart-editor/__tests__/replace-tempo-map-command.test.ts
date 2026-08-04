@@ -18,7 +18,7 @@ import {
 import {
   chartEditorReducer,
   initialState,
-  selectDrumTranscriptionStale,
+  selectTempoDerivedStale,
   type ChartEditorState,
 } from '@/lib/chart-editor-core';
 import type {EditCommand} from '../commands';
@@ -133,32 +133,42 @@ describe('ReplaceTempoMapCommand', () => {
 
     it('a standalone tempo regeneration leaves the recorded stamp untouched, making transcription stale', () => {
       const withProvenance = withAssistProvenance(makeFixtureDoc(), {
-        drumTranscription: {tempoStamp: computeTempoStamp(makeFixtureDoc())},
+        tempoDerived: {
+          'drum-transcription': {
+            tempoStamp: computeTempoStamp(makeFixtureDoc()),
+          },
+        },
       });
       const after = new ReplaceTempoMapCommand(SLOW_SYNC).execute(
         withProvenance,
       );
       const provenance = getAssistProvenance(after)!;
       // Recorded stamp carried over verbatim...
-      expect(provenance.drumTranscription!.tempoStamp).toBe(
-        getAssistProvenance(withProvenance)!.drumTranscription!.tempoStamp,
+      expect(provenance.tempoDerived?.['drum-transcription']!.tempoStamp).toBe(
+        getAssistProvenance(withProvenance)!.tempoDerived![
+          'drum-transcription'
+        ]!.tempoStamp,
       );
       // ...which no longer matches the new map's stamp.
-      expect(provenance.drumTranscription!.tempoStamp).not.toBe(
-        computeTempoStamp(after),
-      );
+      expect(
+        provenance.tempoDerived?.['drum-transcription']!.tempoStamp,
+      ).not.toBe(computeTempoStamp(after));
     });
 
     it('fromSameRunAsDrumTranscription re-stamps provenance to the new map, staying fresh', () => {
       const withProvenance = withAssistProvenance(makeFixtureDoc(), {
-        drumTranscription: {tempoStamp: computeTempoStamp(makeFixtureDoc())},
+        tempoDerived: {
+          'drum-transcription': {
+            tempoStamp: computeTempoStamp(makeFixtureDoc()),
+          },
+        },
       });
       const after = new ReplaceTempoMapCommand(SLOW_SYNC, {
         fromSameRunAsDrumTranscription: true,
       }).execute(withProvenance);
 
       const provenance = getAssistProvenance(after)!;
-      expect(provenance.drumTranscription!.tempoStamp).toBe(
+      expect(provenance.tempoDerived?.['drum-transcription']!.tempoStamp).toBe(
         computeTempoStamp(after),
       );
     });
@@ -167,21 +177,31 @@ describe('ReplaceTempoMapCommand', () => {
   describe('staleness selector (reducer-level)', () => {
     it('flips selectDrumTranscriptionStale after a standalone tempo regeneration', () => {
       const doc = withAssistProvenance(makeFixtureDoc(), {
-        drumTranscription: {tempoStamp: computeTempoStamp(makeFixtureDoc())},
+        tempoDerived: {
+          'drum-transcription': {
+            tempoStamp: computeTempoStamp(makeFixtureDoc()),
+          },
+        },
       });
       const loaded = loadDoc(doc);
-      expect(selectDrumTranscriptionStale(loaded)).toBe(false);
+      expect(selectTempoDerivedStale(loaded, 'drum-transcription')).toBe(false);
 
       const regenerated = chartEditorReducer(
         loaded,
         executeAction(new ReplaceTempoMapCommand(SLOW_SYNC), loaded.chartDoc!),
       );
-      expect(selectDrumTranscriptionStale(regenerated)).toBe(true);
+      expect(selectTempoDerivedStale(regenerated, 'drum-transcription')).toBe(
+        true,
+      );
     });
 
     it('does not flip staleness when generated in the same run as the drum transcription', () => {
       const doc = withAssistProvenance(makeFixtureDoc(), {
-        drumTranscription: {tempoStamp: computeTempoStamp(makeFixtureDoc())},
+        tempoDerived: {
+          'drum-transcription': {
+            tempoStamp: computeTempoStamp(makeFixtureDoc()),
+          },
+        },
       });
       const loaded = loadDoc(doc);
 
@@ -194,7 +214,9 @@ describe('ReplaceTempoMapCommand', () => {
           loaded.chartDoc!,
         ),
       );
-      expect(selectDrumTranscriptionStale(regenerated)).toBe(false);
+      expect(selectTempoDerivedStale(regenerated, 'drum-transcription')).toBe(
+        false,
+      );
     });
   });
 

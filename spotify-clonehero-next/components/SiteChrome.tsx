@@ -3,6 +3,7 @@
 import {type ReactNode} from 'react';
 import {usePathname} from 'next/navigation';
 import CompactSiteHeader from '@/components/CompactSiteHeader';
+import {cn} from '@/lib/utils';
 
 /**
  * Routes whose pages render (or lead into) the chart editor shell
@@ -45,4 +46,32 @@ export default function SiteHeader({siteNav}: {siteNav: ReactNode}) {
     return <>{siteNav}</>;
   }
   return <CompactSiteHeader />;
+}
+
+/**
+ * `app/layout.tsx`'s single `<main>` landmark. Editor routes carry no top
+ * padding, so the compact header's bottom border sits flush on the
+ * sidebar/main-pane border (plan 0076 item 2); non-editor routes keep the
+ * full `p-4`. Lives beside `SiteHeader` (same route check, same client
+ * boundary) rather than in the root layout so the route list has one place
+ * to stay in sync, per `feedback_no_reexports`-style single-source rules.
+ *
+ * The inset on editor routes is `0.75rem` (`px-3 pb-3`) rather than the full
+ * `1rem`, matching the prototype's tighter outer gutter on the sidebar's left
+ * edge and the highway's right edge (plan 0076 items 3-4). `ChartEditor`'s
+ * grid adds no gutter of its own between the sidebar and the highway, so this
+ * wrapper's inset is the only outer padding on editor routes.
+ */
+export function SiteMain({children}: {children: ReactNode}) {
+  const pathname = usePathname();
+  const editor = isEditorRoute(pathname ?? '');
+  return (
+    <main
+      className={cn(
+        'flex flex-col flex-1 items-center align-center min-h-0',
+        editor ? 'px-3 pb-3' : 'p-4',
+      )}>
+      {children}
+    </main>
+  );
 }

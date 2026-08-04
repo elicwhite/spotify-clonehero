@@ -7,6 +7,7 @@
  * `StemsMixer`'s solo-bus resolution).
  */
 
+import type {ReactNode} from 'react';
 import {Sparkles} from 'lucide-react';
 import {Slider} from '@/components/ui/slider';
 import {Tooltip, TooltipContent, TooltipTrigger} from '@/components/ui/tooltip';
@@ -41,9 +42,12 @@ export interface StemMixerRowProps {
   /** True while an assist run has this stem's track locked — controls
    *  disable but the row keeps rendering its current values. */
   locked: boolean;
-  /** Glyph beside the stem name: a waveform for audio stems, a metronome for
-   *  the click row (the approved prototype's `.stem-name svg`). */
-  icon: React.ElementType;
+  /** Glyph beside the stem name: an instrument PNG (`InstrumentIcon`) for a
+   *  row that names an instrument, a metronome for the click row, a waveform
+   *  otherwise (the approved prototype's `.stem-name svg`). The name column
+   *  sizes and colours it through descendant selectors, so an svg and an
+   *  `img` both land at 12px with no cooperation from the glyph itself. */
+  icon: ReactNode;
   /** Draws the dashed rule the prototype puts above the click row, marking it
    *  as the one row that is not part of the exported chart audio. */
   topSeparator?: boolean | undefined;
@@ -63,7 +67,7 @@ export default function StemMixerRow({
   dimmedBySolo,
   aiSeparated,
   locked,
-  icon: Icon,
+  icon,
   topSeparator = false,
   onVolumeChange,
   onReset,
@@ -90,8 +94,8 @@ export default function StemMixerRow({
         dimmedBySolo &&
           'bg-[repeating-linear-gradient(135deg,transparent,transparent_3px,currentColor_3px,currentColor_4px)] text-muted-foreground/25',
       )}>
-      <div className="flex min-w-0 items-center gap-1">
-        <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
+      <div className="flex min-w-0 items-center gap-1 text-muted-foreground [&_svg]:size-3 [&_svg]:shrink-0 [&_img]:size-3 [&_img]:shrink-0 [&_img]:object-contain">
+        {icon}
         <span
           className={cn(
             'truncate text-[11px] text-foreground',

@@ -22,7 +22,6 @@ import TickPopover from './TickPopover';
 import {
   AddBPMCommand,
   AddTimeSignatureCommand,
-  AddSectionCommand,
   RenameSectionCommand,
   type EditCommand,
   type TempoGlueMode,
@@ -31,7 +30,6 @@ import {
 export type HighwayPopoverState =
   | {kind: 'bpm'; tick: number; x: number; y: number; initialBpm: number}
   | {kind: 'timesig'; tick: number; x: number; y: number}
-  | {kind: 'section'; tick: number; x: number; y: number}
   | {
       kind: 'section-rename';
       tick: number;
@@ -166,61 +164,6 @@ function TimeSigForm({tick, x, y, onClose, executeCommand}: FormCommonProps) {
   );
 }
 
-function SectionAddForm({
-  tick,
-  x,
-  y,
-  onClose,
-  executeCommand,
-}: FormCommonProps) {
-  const [sectionNameInput, setSectionNameInput] = useState('');
-  const handleSubmit = () => {
-    const name = sectionNameInput.trim();
-    if (!name) return;
-    executeCommand(new AddSectionCommand(tick, name));
-    onClose();
-  };
-  return (
-    <TickPopover x={x} y={y} onClose={onClose} caption={`Tick: ${tick}`}>
-      <form
-        onSubmit={e => {
-          e.preventDefault();
-          handleSubmit();
-        }}
-        className="flex items-center gap-1">
-        <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-          Section:
-        </label>
-        <Input
-          type="text"
-          value={sectionNameInput}
-          onChange={e => setSectionNameInput(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Escape') {
-              e.stopPropagation();
-              onClose();
-            }
-          }}
-          className="h-7 w-32 text-xs"
-          placeholder="e.g. verse 1"
-          autoFocus
-        />
-        <Button type="submit" size="sm" className="h-7 px-2 text-xs">
-          Add
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          onClick={onClose}>
-          Cancel
-        </Button>
-      </form>
-    </TickPopover>
-  );
-}
-
 function SectionRenameForm({
   tick,
   x,
@@ -306,16 +249,6 @@ export default function HighwayPopovers({
     case 'timesig':
       return (
         <TimeSigForm
-          tick={popover.tick}
-          x={popover.x}
-          y={popover.y}
-          onClose={onClose}
-          executeCommand={executeCommand}
-        />
-      );
-    case 'section':
-      return (
-        <SectionAddForm
           tick={popover.tick}
           x={popover.x}
           y={popover.y}

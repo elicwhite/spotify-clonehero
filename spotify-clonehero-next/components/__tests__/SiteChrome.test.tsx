@@ -12,7 +12,7 @@
 
 import '@testing-library/jest-dom';
 import {render, screen} from '@testing-library/react';
-import SiteHeader from '../SiteChrome';
+import SiteHeader, {SiteMain} from '../SiteChrome';
 import EditorHeaderRow from '../chart-editor/EditorHeaderRow';
 
 let mockPathname = '/spotify';
@@ -65,6 +65,22 @@ describe('SiteHeader', () => {
     expect(screen.getByText('Log In')).toBeInTheDocument();
   });
 
+  it('includes the GitHub and Discord icon links on an editor route (plan 0076 item 1)', () => {
+    mockPathname = '/chart-editor';
+    renderChrome();
+
+    const githubLink = screen.getByRole('link', {name: 'GitHub'});
+    expect(githubLink).toHaveAttribute(
+      'href',
+      'https://github.com/TheSavior/spotify-clonehero',
+    );
+    const discordLink = screen.getByRole('link', {name: 'Discord'});
+    expect(discordLink).toHaveAttribute(
+      'href',
+      'https://discord.gg/EDxu95B98s',
+    );
+  });
+
   it('treats nested editor sub-paths as editor routes too', () => {
     mockPathname = '/add-lyrics/anything';
     renderChrome();
@@ -94,5 +110,36 @@ describe("EditorHeaderRow (the editor's own song-identity row)", () => {
     render(<EditorHeaderRow>Song title</EditorHeaderRow>);
 
     expect(screen.getByText('Song title')).toBeInTheDocument();
+  });
+});
+
+describe('SiteMain (plan 0076 item 2: no gap below the compact header)', () => {
+  it('drops top padding on an editor route so the grid sits flush under the header', () => {
+    mockPathname = '/chart-editor';
+    render(
+      <SiteMain>
+        <div data-testid="grid">grid</div>
+      </SiteMain>,
+    );
+
+    const main = screen.getByTestId('grid').parentElement;
+    expect(main?.tagName).toBe('MAIN');
+    expect(main).not.toHaveClass('p-4');
+    expect(main).not.toHaveClass('pt-4');
+    // 0.75rem, not the full 1rem (plan 0076 items 3-4: the outer gutter on
+    // editor routes still read as too roomy against the prototype at 1rem).
+    expect(main).toHaveClass('px-3', 'pb-3');
+  });
+
+  it('keeps the full padding on a non-editor route', () => {
+    mockPathname = '/spotify';
+    render(
+      <SiteMain>
+        <div data-testid="content">content</div>
+      </SiteMain>,
+    );
+
+    const main = screen.getByTestId('content').parentElement;
+    expect(main).toHaveClass('p-4');
   });
 });

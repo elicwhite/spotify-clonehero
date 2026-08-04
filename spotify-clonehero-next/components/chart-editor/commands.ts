@@ -123,10 +123,16 @@ import type {
 import {
   carryAssistProvenance,
   getAssistProvenance,
-  restampDrumTranscription,
-  setDrumTranscriptionStamp,
+  restampTempoDerived,
+  setTempoStamp,
   withAssistProvenance,
 } from '@/lib/chart-editor-core/content-stamps';
+import {
+  buildBarTicks,
+  linkSegSectionsToMarkers,
+  type LinkSegSectionInput,
+} from '@/lib/chart-edit/helpers/linkseg-sections';
+import {buildTimedTempos, msToTick} from '@/lib/drum-transcription/timing';
 
 /** `trackKeyId()` of a single `TrackKey`, as a singleton `ReadonlySet` —
  *  the common case for commands that target exactly one track. */
@@ -1182,12 +1188,12 @@ export interface ReplaceTempoMapOptions {
  * isn't scoped to one instrument track (matches `AddBPMCommand` and the
  * other tempo commands, none of which declare it).
  *
- * Writes `assistProvenance.drumTranscription.tempoStamp` to the new map's
- * stamp only when `options.fromSameRunAsDrumTranscription` is set
+ * Restamps the recorded drum-transcription provenance onto the new map only
+ * when `options.fromSameRunAsDrumTranscription` is set
  * (reflecting a transcription produced together with this exact map);
  * otherwise any existing recorded stamp is left untouched, so a standalone
  * tempo regeneration makes an existing drum transcription stale
- * (`selectDrumTranscriptionStale`, Design C). A doc with no drum
+ * (`selectTempoDerivedStale`, Design C). A doc with no drum
  * transcription provenance is untouched either way.
  *
  * Undo restores the pre-edit snapshot (and its provenance, which rides the
@@ -1214,7 +1220,7 @@ export class ReplaceTempoMapCommand implements EditCommand {
     // A standalone regeneration leaves any recorded transcription stamp
     // behind, so the drums snapped to the OLD grid are flagged stale.
     return this.options.fromSameRunAsDrumTranscription
-      ? restampDrumTranscription(retimed)
+      ? restampTempoDerived(retimed, 'drum-transcription')
       : retimed;
   }
 }
@@ -1514,6 +1520,78 @@ export class RenameSectionCommand implements EditCommand {
 }
 
 // ---------------------------------------------------------------------------
+// ReplaceSectionsCommand — Chart Assist section labeling (plan 0076 item 23)
+// ---------------------------------------------------------------------------
+
+/**
+ * Replace the chart's section markers with a freshly labeled set, and record
+ * the grid they were placed on as `assistProvenance.sections`.
+ *
+ * SECTION EVENTS ONLY. `cloneDocWithSections` shares every track, the tempo
+ * map, the lyrics, and the assets by reference, so this command is
+ * structurally unable to touch anything but `parsedChart.sections` — which is
+ * the whole point of splitting section generation out of tempo-map
+ * generation (plan 0076 item 23): each one now changes exactly its own
+ * artifact.
+ *
+ * The LinkSeg output is in seconds, so the ms→tick conversion and the
+ * bar-line snap happen HERE, against the doc's grid at the moment the
+ * command runs, rather than in the task — a run that finishes after the user
+ * edited the tempo map still lands its markers on real bar-lines.
+ *
+ * Those seconds are ORIGINAL-audio-relative (the task analyzes the package's
+ * own audio bytes), while the doc's grid lives on the padded timeline
+ * whenever an `audioAnchor` is set — so every time shifts by `anchor.ms`
+ * before conversion (0064 addendum §7, the same convention
+ * `ReDeriveNotesCommand` applies to decoded onsets). Without the shift every
+ * marker on a chart with leading silence lands one anchor early.
+ *
+ * Undo restores the pre-edit snapshot (and the provenance, which rides the
+ * doc), matching the other whole-artifact replacements.
+ */
+export class ReplaceSectionsCommand implements EditCommand {
+  readonly description = 'Generate sections';
+  readonly entityKinds = KIND.section;
+  readonly operations = OP.update;
+
+  constructor(private sections: LinkSegSectionInput) {}
+
+  execute(doc: ChartDocument): ChartDocument {
+    const newDoc = cloneDocWithSections(doc);
+    const chart = newDoc.parsedChart;
+    const anchorMs = getAudioAnchor(doc)?.ms ?? 0;
+    const sections: LinkSegSectionInput =
+      anchorMs === 0
+        ? this.sections
+        : {
+            ...this.sections,
+            times: this.sections.times.map(t => t + anchorMs / 1000),
+          };
+    const timedTempos = buildTimedTempos(chart.tempos, chart.resolution);
+    const lastSectionMs =
+      (sections.times[sections.times.length - 1] ?? 0) * 1000;
+    // The bar ladder has to reach past the last marker, or `snapTickToBar`
+    // would clamp late sections onto the final enumerated bar.
+    const endTick =
+      Math.max(
+        chartEndTick(chart),
+        msToTick(lastSectionMs, timedTempos, chart.resolution, 'ceil'),
+      ) + 1;
+    const markers = linkSegSectionsToMarkers(sections, {
+      timedTempos,
+      resolution: chart.resolution,
+      barTicks: buildBarTicks(chart.resolution, chart.timeSignatures, endTick),
+    });
+
+    chart.sections = [];
+    for (const marker of markers) {
+      addSection(newDoc, marker.tick, marker.name);
+    }
+    return setTempoStamp(newDoc, 'sections');
+  }
+}
+
+// ---------------------------------------------------------------------------
 // ReplaceDrumTrackCommand — Chart Assist drum transcription (plan 0074
 // Design A)
 // ---------------------------------------------------------------------------
@@ -1634,7 +1712,7 @@ export class ReplaceDrumTrackCommand implements EditCommand {
     // The generating command writes the artifact AND its provenance in one
     // doc mutation (plan 0074 Design C), so undo removes both together and
     // no separate bookkeeping command is needed at the call site.
-    return setDrumTranscriptionStamp(anchored);
+    return setTempoStamp(anchored, 'drum-transcription');
   }
 }
 
@@ -1658,11 +1736,12 @@ export class ReplaceDrumTrackCommand implements EditCommand {
  * Declaring `note`/`lyric` here would make the command illegal under
  * `TEMPO_CAPABILITIES`, which is precisely the surface that offers it.
  *
- * The whole grid moving forward by a fixed pad does NOT invalidate a drum
- * transcription: the drums moved with it, and nothing landed on a different
- * beat. So the recorded `drumTranscription.tempoStamp` is re-stamped to the
- * padded map rather than left behind to trip `selectDrumTranscriptionStale`
- * on an action that changed no musical relationship.
+ * The whole grid moving forward by a fixed pad does NOT invalidate anything
+ * generated against it: the drums and the section markers moved with it, and
+ * nothing landed on a different beat. So every tempo-derived record is
+ * re-stamped onto the padded map rather than left behind to trip
+ * `selectTempoDerivedStale` on an action that changed no musical
+ * relationship.
  */
 export class AddLeadingSilenceCommand implements EditCommand {
   readonly description: string;
@@ -1674,7 +1753,10 @@ export class AddLeadingSilenceCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    return restampDrumTranscription(applyLeadingSilence(doc, this.plan));
+    // Everything shifts together, so nothing moved relative to the grid:
+    // both the transcription and the section markers are still as correct as
+    // they were, and neither should be flagged stale.
+    return restampTempoDerived(applyLeadingSilence(doc, this.plan));
   }
 }
 
@@ -1882,7 +1964,7 @@ function timedRanges<T extends DifficultyTierRange>(
  * stamp as `assistProvenance.difficulties[instrument]` in the SAME doc
  * mutation (plan 0074 Design C/D) — so undo removes the tracks and the
  * provenance entry together, exactly like `ReplaceDrumTrackCommand`'s
- * `setDrumTranscriptionStamp` write.
+ * `setTempoStamp` write.
  *
  * `sourceStamp` is the Expert track's stamp as of the moment the run's input
  * was built, NOT as of apply time: Expert stays editable during a run, and

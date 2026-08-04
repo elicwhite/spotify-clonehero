@@ -154,12 +154,11 @@ export default function AddLyricsDialog({
         setOpen(next);
         if (!next) resetForClose();
       }}>
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full gap-2"
-        onClick={() => setOpen(true)}>
-        <AudioWaveform className="h-4 w-4" />
+      {/* Plan 0076 item 14: same `xs` scale as every other card's
+       *  `CardAction` button, so this sits on the actions row beside "Learn
+       *  more" instead of standing out as a full-width outlier. */}
+      <Button variant="outline" size="xs" onClick={() => setOpen(true)}>
+        <AudioWaveform />
         Add Lyrics
       </Button>
       <DialogContent className="sm:max-w-lg">
