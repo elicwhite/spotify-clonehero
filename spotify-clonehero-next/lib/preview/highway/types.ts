@@ -41,10 +41,6 @@ export const HIGHWAY_FLAME_FRAME_DURATION_MS = 1000 / 60;
 /** How long the fifteen-frame fretted hit flame remains active. */
 export const HIGHWAY_FLAME_DURATION_MS = HIGHWAY_FLAME_FRAME_DURATION_MS * 15;
 
-/** How long the static open-note flame overlay remains active. */
-export const HIGHWAY_OPEN_FLAME_DURATION_MS =
-  HIGHWAY_FLAME_FRAME_DURATION_MS * 8;
-
 export const NOTE_COLORS = {
   green: '#01B11A',
   red: '#DD2214',

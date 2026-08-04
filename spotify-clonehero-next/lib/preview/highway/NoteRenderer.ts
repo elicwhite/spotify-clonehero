@@ -12,7 +12,6 @@ import type {
 import {
   HIGHWAY_FLAME_DURATION_MS,
   HIGHWAY_FLAME_FRAME_DURATION_MS,
-  HIGHWAY_OPEN_FLAME_DURATION_MS,
   OPEN_NOTE_ANCHOR_Y,
   SCALE,
   type Note,
@@ -51,19 +50,7 @@ const SELECTION_ROLE = 'selection-highlight';
 const FLAME_ROLE = 'playline-flame';
 const CHILD_SELECTION = 2;
 const FLAME_PIVOT_Y = 0.2;
-// The open guitar flame's white arch is the visual continuation of the fret's
-// raised top curve, not the center of the source image. The source has enough
-// transparent/flame detail below that curve that using .5 leaves the arch
-// visibly low against the hitline.
-const OPEN_FLAME_PIVOT_Y = 0.36;
 const FLAME_HEIGHT = SCALE * 2.2;
-// The source open flame is divided into five equal arches. Five times the
-// authored guitar lane spacing makes those arch centers land on the five
-// fret centers instead of stretching past the outer buttons.
-const OPEN_FLAME_WIDTH = 0.193 * 5;
-// `open_flame_drum.png` has four arches matching the four strip-lane drum
-// hitline. Kick is the drum track's full-width note, so use that span.
-const DRUM_OPEN_FLAME_WIDTH = 0.169 * 4;
 
 /** Height of the horizontal kick bar sprite (vertically centered on the beat line). */
 const KICK_SCALE = 0.045;
@@ -329,10 +316,12 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
   }
 
   /**
-   * Animate the one-shot flame at the fixed playline. The note group itself
-   * keeps scrolling past the line, so the flame is counter-positioned to stay
-   * anchored at world Y=-1 while the note's time window keeps it alive long
-   * enough for all frames to play.
+   * Animate the one-shot fretted-note flame at the fixed playline. The note
+   * group itself keeps scrolling past the line, so the flame is
+   * counter-positioned to stay anchored at world Y=-1 while the note's time
+   * window keeps it alive long enough for all frames to play. Open and kick
+   * notes never get a flame child (see createFlame), so this is a no-op for
+   * them.
    */
   update(group: THREE.Group, currentTimeMs: number): void {
     const flame = group.children.find(
@@ -340,21 +329,13 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     );
     if (!(flame instanceof THREE.Sprite)) return;
 
-    const userData = group.userData as {
-      flameMsTime?: number;
-      flameOpen?: boolean;
-    };
+    const userData = group.userData as {flameMsTime?: number};
     const flameMsTime = userData.flameMsTime;
     if (flameMsTime == null) return;
 
     const elapsed = currentTimeMs - flameMsTime;
-    const textures = userData.flameOpen
-      ? this.flameTextures?.open
-      : this.flameTextures?.hit;
-    const duration = userData.flameOpen
-      ? HIGHWAY_OPEN_FLAME_DURATION_MS
-      : HIGHWAY_FLAME_DURATION_MS;
-    if (!textures?.length || elapsed < 0 || elapsed >= duration) {
+    const textures = this.flameTextures?.hit;
+    if (!textures?.length || elapsed < 0 || elapsed >= HIGHWAY_FLAME_DURATION_MS) {
       flame.visible = false;
       return;
     }
@@ -507,16 +488,18 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
     return plane;
   }
 
+  /**
+   * Open guitar/bass notes and drum kicks don't get a playline hit flame.
+   * Only fretted pad notes (lane >= 0) do.
+   */
   private createFlame(
     group: THREE.Group,
     data: NoteElementData,
     msTime: number,
   ): void {
-    const fullWidth = data.isOpen || data.isKick;
-    const textures = fullWidth
-      ? this.flameTextures?.open
-      : this.flameTextures?.hit;
-    if (!textures?.length || (!fullWidth && data.lane < 0)) return;
+    if (data.isOpen || data.isKick || data.lane < 0) return;
+    const textures = this.flameTextures?.hit;
+    if (!textures?.length) return;
 
     const material = new THREE.SpriteMaterial({map: textures[0]});
     material.clippingPlanes = this.clippingPlanes;
@@ -525,27 +508,12 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
 
     const flame = new THREE.Sprite(material);
     flame.userData['role'] = FLAME_ROLE;
-    if (fullWidth) {
-      // The open flame is one complete five-arch sprite, not an animation
-      // sheet. Preserve its source aspect ratio so each arch stays aligned
-      // with the fret hitline instead of stretching vertically.
-      // Kick flames use a separate four-lane source with its own existing
-      // placement. Guitar/bass open flames are anchored at the fret crest so
-      // the five white arches sit on the matching hitline curves.
-      flame.center.set(0.5, data.isKick ? 0.5 : OPEN_FLAME_PIVOT_Y);
-      const aspectRatio =
-        flame.material.map!.image.width / flame.material.map!.image.height;
-      const flameWidth = data.isKick ? DRUM_OPEN_FLAME_WIDTH : OPEN_FLAME_WIDTH;
-      flame.scale.set(flameWidth, flameWidth / aspectRatio, 1);
-    } else {
-      flame.center.set(0.5, FLAME_PIVOT_Y);
-      flame.scale.set(FLAME_HEIGHT, FLAME_HEIGHT, 1);
-    }
+    flame.center.set(0.5, FLAME_PIVOT_Y);
+    flame.scale.set(FLAME_HEIGHT, FLAME_HEIGHT, 1);
     flame.position.z = 0;
     flame.renderOrder = 6;
     flame.visible = false;
     group.userData['flameMsTime'] = msTime;
-    group.userData['flameOpen'] = fullWidth;
     group.add(flame);
   }
 }

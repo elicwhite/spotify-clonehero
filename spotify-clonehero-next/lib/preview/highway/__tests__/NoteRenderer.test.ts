@@ -198,7 +198,7 @@ describe('NoteRenderer', () => {
     expect(group.position.x).toBe(0);
   });
 
-  it('anchors guitar open flame arches to the fret tops', () => {
+  it('does not create a flame for open notes', () => {
     const renderer = new NoteRenderer(
       jest.fn().mockReturnValue(new (THREE.SpriteMaterial as any)()),
       [],
@@ -208,7 +208,7 @@ describe('NoteRenderer', () => {
       1.5,
       null,
       {
-        hit: [],
+        hit: Array.from({length: 15}, (_, frame) => ({frame})),
         open: [new (THREE.SpriteMaterial as any)().map],
       } as any,
     );
@@ -216,9 +216,32 @@ describe('NoteRenderer', () => {
     const group = renderer.create(makeNoteData({isOpen: true, lane: -1}));
     const flame = group.children.find(
       (child: any) => child.userData?.['role'] === 'playline-flame',
-    ) as any;
+    );
 
-    expect(flame.center.set).toHaveBeenCalledWith(0.5, 0.36);
+    expect(flame).toBeUndefined();
+  });
+
+  it('does not create a flame for kick notes', () => {
+    const renderer = new NoteRenderer(
+      jest.fn().mockReturnValue(new (THREE.SpriteMaterial as any)()),
+      [],
+      [],
+      '#FFFFFF',
+      1,
+      1.5,
+      null,
+      {
+        hit: Array.from({length: 15}, (_, frame) => ({frame})),
+        open: [new (THREE.SpriteMaterial as any)().map],
+      } as any,
+    );
+
+    const group = renderer.create(makeNoteData({isKick: true, lane: -1}));
+    const flame = group.children.find(
+      (child: any) => child.userData?.['role'] === 'playline-flame',
+    );
+
+    expect(flame).toBeUndefined();
   });
 
   it('create() renders sustains for fretted and full-width open notes', () => {

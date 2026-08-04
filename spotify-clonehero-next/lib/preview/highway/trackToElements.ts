@@ -4,11 +4,7 @@ import {schemaForInstrument} from '../../chart-edit/instruments';
 import type {ChartElement} from './SceneReconciler';
 import type {NoteElementData} from './NoteRenderer';
 import {resolveNoteGeometry} from './notePlacement';
-import {
-  HIGHWAY_FLAME_DURATION_MS,
-  HIGHWAY_OPEN_FLAME_DURATION_MS,
-  type Track,
-} from './types';
+import {HIGHWAY_FLAME_DURATION_MS, type Track} from './types';
 
 // ---------------------------------------------------------------------------
 // NoteType -> name, for element key generation (e.g. 'note:480:redDrum')
@@ -74,6 +70,8 @@ export function trackToElements(
 ): ChartElement[] {
   const schema = schemaForInstrument(track.instrument);
   const supportsSustain = schema?.supportsSustain ?? false;
+  // Only fretted pad notes get a playline hit flame -- open guitar/bass
+  // notes and drum kicks don't.
   const supportsFlame =
     track.instrument === 'guitar' ||
     track.instrument === 'bass' ||
@@ -163,13 +161,8 @@ export function trackToElements(
         msTime: note.msTime,
         endMsTime:
           note.msTime +
-          (supportsFlame
-            ? Math.max(
-                note.msLength,
-                geometry.isOpen || geometry.isKick
-                  ? HIGHWAY_OPEN_FLAME_DURATION_MS
-                  : HIGHWAY_FLAME_DURATION_MS,
-              )
+          (supportsFlame && !geometry.isOpen && !geometry.isKick
+            ? Math.max(note.msLength, HIGHWAY_FLAME_DURATION_MS)
             : supportsSustain
               ? note.msLength
               : 0),

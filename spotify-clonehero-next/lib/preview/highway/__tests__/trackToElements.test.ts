@@ -6,10 +6,7 @@ import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 import {trackToElements} from '../trackToElements';
 import type {Track} from '../types';
 import type {NoteElementData} from '../NoteRenderer';
-import {
-  HIGHWAY_FLAME_DURATION_MS,
-  HIGHWAY_OPEN_FLAME_DURATION_MS,
-} from '../types';
+import {HIGHWAY_FLAME_DURATION_MS} from '../types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -180,9 +177,9 @@ describe('trackToElements', () => {
       expect(data.lane).toBe(-1);
       // Five-fret schema declares supportsSustain: true.
       expect(data.msLength).toBe(240);
-      expect(elements[0].endMsTime).toBe(
-        Math.max(240, HIGHWAY_OPEN_FLAME_DURATION_MS),
-      );
+      // Open notes don't get a playline flame, so the element only stays
+      // alive for its sustain length.
+      expect(elements[0].endMsTime).toBe(240);
     });
 
     it('converts fretted notes to their pad lanes, ordered green/red/yellow/blue/orange', () => {
@@ -221,12 +218,12 @@ describe('trackToElements', () => {
       expect(elements[0].endMsTime).toBe(HIGHWAY_FLAME_DURATION_MS);
     });
 
-    it('keeps kick notes active for the full-width drum flame', () => {
+    it('does not extend kick notes for a flame (kicks have none)', () => {
       const elements = trackToElements(
         makeTrack([[note(noteTypes.kick, 0, 0)]]),
       );
 
-      expect(elements[0].endMsTime).toBe(HIGHWAY_OPEN_FLAME_DURATION_MS);
+      expect(elements[0].endMsTime).toBe(0);
     });
   });
 
