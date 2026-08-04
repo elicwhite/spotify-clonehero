@@ -25,9 +25,10 @@ import {SceneOverlays, type OverlayState} from './SceneOverlays';
 import {InteractionManager} from './InteractionManager';
 import {SceneReconciler} from './SceneReconciler';
 import {NoteRenderer} from './NoteRenderer';
-import {MarkerRenderer} from './MarkerRenderer';
 import {LyricsOverlay} from './LyricsOverlay';
 import {buildHighwayCell} from './cell';
+import {HighwayRoot} from './HighwayRoot';
+import {acquireRenderer, releaseRenderer} from './rendererRegistry';
 import type {Track} from './types';
 
 // Re-export public types, constants, and utilities
@@ -51,23 +52,27 @@ export {MarkerRenderer} from './MarkerRenderer';
 export {trackToElements} from './trackToElements';
 export {chartToElements} from './chartToElements';
 export {LyricsOverlay} from './LyricsOverlay';
+export {HighwayRoot} from './HighwayRoot';
+export {
+  setupStage,
+  type HighwayStage,
+  type StageHighwayHandle,
+  type StageConfig,
+  type AddHighwayOptions,
+} from './stage';
+export {
+  computeStageLayout,
+  toGlRect,
+  MAX_HIGHWAYS,
+  MIN_HIGHWAY_PX,
+  HIGHWAY_GAP_PX,
+  type StageLayout,
+  type HighwayRect,
+} from './layout';
 
 // ---------------------------------------------------------------------------
-// setupRenderer (public API -- signature unchanged)
+// setupRenderer (public API -- one canvas, one highway)
 // ---------------------------------------------------------------------------
-
-/**
- * Number of live `setupRenderer` handles (created, not yet destroyed).
- *
- * `MarkerRenderer`'s marker-texture cache is module-scoped and keyed only by
- * label content and state, so every live renderer's marker sprites share the
- * same `CanvasTexture` objects. A single renderer therefore must not clear it
- * on teardown: with several highway panes mounted, one pane closing would
- * dispose textures its siblings are still drawing with and empty the dedupe
- * map out from under them. The cache is cleared only when the last live
- * renderer goes away.
- */
-let liveRendererCount = 0;
 
 export interface RendererConfig {
   /** When false, render a neutral floor + skip the drum hitbox + skip drum
@@ -77,18 +82,6 @@ export interface RendererConfig {
    *  round (circular head). Cymbals and kick have only one style.
    *  TODO: surface as a user preference. */
   tomStyle?: 'square' | 'round';
-  /**
-   * Draw the karaoke lyrics overlay in this canvas. Defaults to true.
-   * Changeable afterwards via `setLyricsVisible`.
-   *
-   * Lyrics belong to the song, not to a track, so a side-by-side highway
-   * would otherwise draw the same karaoke line once per pane. The overlay is
-   * a second WebGL pass inside this renderer's own canvas, so it can only be
-   * suppressed per canvas: side-by-side layouts leave it on for the leftmost
-   * pane and turn it off everywhere else. The overlay is still built and fed
-   * on a canvas that is not drawing it, so turning it back on is instant.
-   */
-  showLyrics?: boolean;
 }
 
 export const setupRenderer = (
@@ -101,11 +94,6 @@ export const setupRenderer = (
 ) => {
   const showDrumLanes = config.showDrumLanes ?? true;
   const tomStyle = config.tomStyle ?? 'square';
-  // Whether this canvas draws the chart-wide karaoke overlay. Mutable: a
-  // pane's share changes whenever the side-by-side layout changes, and the
-  // flag is read per frame rather than baked into the scene, so a change
-  // never needs the renderer rebuilt.
-  let showLyrics = config.showLyrics ?? true;
   const highwaySpeed = 1.5;
 
   const camera = new THREE.PerspectiveCamera(90, 1 / 1, 0.01, 10);
@@ -120,21 +108,20 @@ export const setupRenderer = (
   renderer.setPixelRatio(dpr);
   renderer.localClippingEnabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  liveRendererCount++;
+  acquireRenderer();
 
   /** Lyrics overlay (Clone Hero-style karaoke at top of screen). */
   let lyricsOverlay: LyricsOverlay | null = null;
   /** Set to true when destroy() is called, prevents late async startRender. */
   let destroyed = false;
   /**
-   * Guards the synchronous disposal block against running twice. Multi-pane
-   * highway mounting (plan 0074 Phase 3) churns renderers fast enough that a
-   * pane can be torn down more than once in the same tick (e.g. an effect
+   * Guards the synchronous disposal block against running twice. A host can
+   * tear this renderer down more than once in the same tick (e.g. an effect
    * cleanup racing an explicit "swap renderer" call), and a second
    * `renderer.dispose()`/`forceContextLoss()` on an already-lost WebGL
    * context is undefined behavior in some browsers. `destroy()` is safe to
    * call any number of times; only the first call does anything, and only
-   * the first call decrements `liveRendererCount`.
+   * the first call releases this renderer from `rendererRegistry`.
    */
   let disposedSync = false;
 
@@ -152,8 +139,8 @@ export const setupRenderer = (
     setSize();
   }
   window.addEventListener('resize', onResize, false);
-  // Window resize misses layout-driven size changes (e.g. a sibling pane
-  // opening next to the highway), so also watch the sizing container itself.
+  // Window resize misses layout-driven size changes (e.g. a sidebar opening
+  // next to the highway), so also watch the sizing container itself.
   const resizeObserver = new ResizeObserver(onResize);
   if (sizingRef.current) {
     resizeObserver.observe(sizingRef.current);
@@ -222,7 +209,11 @@ export const setupRenderer = (
       // materials (SpriteMaterial, MeshBasicMaterial, etc.) default to
       // fog: true; nothing else to wire up.
       scene.fog = new THREE.Fog(0x000000, 2.0, 2.5);
-      trackPromise = prepTrack(scene, track);
+      // One highway, one camera: the root sits at world X 0 on layer 0,
+      // where the single camera draws everything.
+      const root = new HighwayRoot(0);
+      scene.add(root);
+      trackPromise = prepTrack(scene, root, track);
       return trackPromise;
     },
 
@@ -248,14 +239,13 @@ export const setupRenderer = (
     destroy: async () => {
       destroyed = true;
       // Everything through `forceContextLoss()` below is synchronous —
-      // deterministic teardown (plan 0074 Phase 3 spike requirement): a
-      // pane unmount must cancel the RAF loop and release the GPU context
-      // before this call returns, not after some later microtask. Guarded
+      // deterministic teardown: a host unmount must cancel the RAF loop and
+      // release the GPU context before this call returns, not after some
+      // later microtask. Guarded
       // so a second destroy() call (see `disposedSync` above) is a no-op
       // instead of double-disposing the renderer.
       if (disposedSync) return;
       disposedSync = true;
-      liveRendererCount = Math.max(0, liveRendererCount - 1);
       window.removeEventListener('resize', onResize, false);
       resizeObserver.disconnect();
       renderer.setAnimationLoop(null);
@@ -290,11 +280,9 @@ export const setupRenderer = (
       classicHighwayMesh = null;
       lyricsOverlay?.dispose();
       lyricsOverlay = null;
-      // Process-global, shared with every other live renderer — see
-      // `liveRendererCount`. Only the last one out turns the lights off.
-      if (liveRendererCount === 0) {
-        MarkerRenderer.clearTextureCache();
-      }
+      // Process-global, shared with every other live renderer and stage. Only
+      // the last one out turns the lights off.
+      releaseRenderer();
     },
     /** Expose the camera for overlay coordinate mapping (unprojection). */
     getCamera() {
@@ -362,11 +350,11 @@ export const setupRenderer = (
     async setWaveformData(
       config: Omit<WaveformSurfaceConfig, 'highwayWidth' | 'highwaySpeed'>,
     ): Promise<void> {
-      const {scene} = await trackPromise;
+      const {root} = await trackPromise;
 
       // Dispose previous waveform surface if any
       if (waveformSurface) {
-        scene.remove(waveformSurface.getMesh());
+        root.remove(waveformSurface.getMesh());
         waveformSurface.dispose();
         waveformSurface = null;
       }
@@ -379,7 +367,7 @@ export const setupRenderer = (
         highwayWidth: 0.84,
         highwaySpeed,
       };
-      waveformSurface = createWaveformSurface(scene, fullConfig);
+      waveformSurface = createWaveformSurface(root, fullConfig);
 
       // Apply current mode. Keep the classic highway mesh visible
       // beneath the waveform surface so the highway's left/right edges
@@ -396,11 +384,11 @@ export const setupRenderer = (
     async setGridData(
       config: Omit<GridOverlayConfig, 'highwayWidth' | 'highwaySpeed'>,
     ): Promise<void> {
-      const {scene} = await trackPromise;
+      const {root} = await trackPromise;
 
       // Dispose previous grid overlay if any
       if (gridOverlay) {
-        scene.remove(gridOverlay.getMesh());
+        root.remove(gridOverlay.getMesh());
         gridOverlay.dispose();
         gridOverlay = null;
       }
@@ -410,7 +398,7 @@ export const setupRenderer = (
         highwayWidth: 0.9,
         highwaySpeed,
       };
-      gridOverlay = createGridOverlay(scene, fullConfig, noteClippingPlanes);
+      gridOverlay = createGridOverlay(root, fullConfig, noteClippingPlanes);
 
       // Grid lines always visible (both classic and waveform modes)
       gridOverlay.setVisible(true);
@@ -437,13 +425,9 @@ export const setupRenderer = (
     },
 
     /**
-     * Push fresh karaoke lyrics + vocal phrases. Called whenever the
-     * editor's `parsedChart` updates (lyric flag drag, lyric edit, etc.).
-     * Lazy-creates the overlay when the original chart had no lyrics but
-     * the user has added at least one — mirrors the prepTrack path. The
-     * overlay is kept fed even on a canvas that is not currently drawing it
-     * (`showLyrics: false`), so `setLyricsVisible(true)` shows the current
-     * line immediately.
+     * Push fresh karaoke lyrics + vocal phrases. Lazy-creates the overlay
+     * when the original chart had no lyrics but the caller has added at
+     * least one — mirrors the prepTrack path.
      */
     async setLyricsData(
       lyrics: {msTime: number; text: string; msLength?: number}[],
@@ -461,21 +445,15 @@ export const setupRenderer = (
       const height = sizingRef.current?.offsetHeight ?? window.innerHeight;
       lyricsOverlay = new LyricsOverlay(lyrics, vocalPhrases, width, height);
     },
-
-    /**
-     * Draw the karaoke lyrics overlay in this canvas, or not. Lyrics belong
-     * to the song rather than a track, so a side-by-side highway draws them
-     * in exactly one pane; which pane that is changes as panes are shown and
-     * hidden.
-     */
-    setLyricsVisible(visible: boolean): void {
-      showLyrics = visible;
-    },
   };
 
   return methods;
 
-  async function prepTrack(scene: THREE.Scene, track: Track | null) {
+  async function prepTrack(
+    scene: THREE.Scene,
+    root: HighwayRoot,
+    track: Track | null,
+  ) {
     const {highwayTexture} = await initPromise;
     const schema = track ? schemaForTrack(track, chart.drumType) : null;
 
@@ -515,7 +493,7 @@ export const setupRenderer = (
     // Build the reusable scene core (floor, hitbox/strikeline, note + marker
     // renderers, reconciler seeded with the track's notes). Shared verbatim
     // with the multi-cell grid via cell.ts.
-    const {highway, reconciler, noteRenderer} = await buildHighwayCell(scene, {
+    const {highway, reconciler, noteRenderer} = await buildHighwayCell(root, {
       chart,
       track,
       textureLoader,
@@ -542,7 +520,7 @@ export const setupRenderer = (
     // it, but the classes still need *some* valid lane geometry to construct.
     const overlaySchema = schema ?? drums4LaneSchema;
     const sceneOverlays = new SceneOverlays(
-      scene,
+      root,
       highwaySpeed,
       noteClippingPlanes,
       overlaySchema,
@@ -561,9 +539,8 @@ export const setupRenderer = (
       overlaySchema,
     );
 
-    // Create the lyrics overlay whenever the chart has lyrics. Whether this
-    // canvas actually draws it is decided per frame by `showLyrics`, so a
-    // pane that starts hidden can be shown without rebuilding the renderer.
+    // Create the lyrics overlay whenever the chart has lyrics, drawn as a
+    // second full-canvas pass over this renderer's one highway.
     const vocals = chart.vocalTracks.parts['vocals'];
     const chartLyrics = vocals?.notePhrases.flatMap(p => p.lyrics) ?? [];
     if (chartLyrics.length > 0) {
@@ -579,6 +556,7 @@ export const setupRenderer = (
 
     return {
       scene,
+      root,
       highwayTexture,
       animatedTextureManager,
       sceneOverlays,
@@ -647,10 +625,8 @@ export const setupRenderer = (
         renderer.render(scene, camera);
 
         // Render lyrics overlay on top (second pass, no depth clear).
-        // `update` still runs while hidden so the overlay's own animation
-        // state stays current and showing it again is seamless.
         const overlay = lyricsOverlay;
-        if (overlay?.update(elapsedTime) === true && showLyrics) {
+        if (overlay?.update(elapsedTime) === true) {
           renderer.autoClear = false;
           renderer.render(overlay.scene, overlay.camera);
           renderer.autoClear = true;

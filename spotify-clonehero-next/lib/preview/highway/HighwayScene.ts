@@ -19,29 +19,29 @@ export type HighwayMode = 'classic' | 'waveform';
 // ---------------------------------------------------------------------------
 
 /**
- * Creates a WaveformSurface and adds it to the scene at renderOrder 0.
+ * Creates a WaveformSurface and adds it under `root` at renderOrder 0.
  * Returns the instance for update/dispose lifecycle management.
  */
 export function createWaveformSurface(
-  scene: THREE.Scene,
+  root: THREE.Object3D,
   config: WaveformSurfaceConfig,
 ): WaveformSurface {
   const surface = new WaveformSurface(config);
-  scene.add(surface.getMesh());
+  root.add(surface.getMesh());
   return surface;
 }
 
 /**
- * Creates a GridOverlay and adds it to the scene.
+ * Creates a GridOverlay and adds it under `root`.
  * Returns the instance for update/dispose lifecycle management.
  */
 export function createGridOverlay(
-  scene: THREE.Scene,
+  root: THREE.Object3D,
   config: GridOverlayConfig,
   clippingPlanes?: THREE.Plane[],
 ): GridOverlay {
   const overlay = new GridOverlay(config, clippingPlanes);
-  scene.add(overlay.getMesh());
+  root.add(overlay.getMesh());
   return overlay;
 }
 

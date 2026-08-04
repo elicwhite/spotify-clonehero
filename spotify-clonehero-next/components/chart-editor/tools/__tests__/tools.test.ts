@@ -17,13 +17,11 @@ import {makeFixtureDoc} from '../../__tests__/fixtures';
 import {
   boxSelectTool,
   eraseTool,
-  lyricsTimingTool,
   placeNoteTool,
   selectMoveTool,
-  tempoMarkerTool,
-  timeSignatureMarkerTool,
 } from '../tools';
 import {
+  TOOL_REGISTRY,
   resolveCursorContinuation,
   resolveToolForPointerDown,
 } from '../registry';
@@ -95,7 +93,6 @@ function makeContext(
       return session.getState();
     },
     capabilities: DRUM_EDIT_CAPABILITIES,
-    activePartName: 'vocals',
     schema: drums4LaneSchema,
     activeNotes: [],
     timedTempos: [{tick: 0, beatsPerMinute: 120, msTime: 0}],
@@ -247,6 +244,33 @@ describe('selectMoveTool', () => {
       kind: 'section-rename',
       currentSectionName: 'Intro',
     });
+  });
+
+  it('starts a marker drag on a section', () => {
+    const session = makeSession();
+    const ctx = makeContext(session);
+    selectMoveTool.onPointerDown(
+      ctx,
+      evt({
+        entity: {kind: 'section', id: '480', tick: 480},
+        hit: {type: 'section', tick: 480, name: 'Verse'},
+      }),
+    );
+    expect(ctx.markerDrag).toEqual({
+      kind: 'section',
+      originalTick: 480,
+      currentTick: 480,
+    });
+  });
+
+  it('starts no marker drag on a lyric entity', () => {
+    const session = makeSession();
+    const ctx = makeContext(session);
+    selectMoveTool.onPointerDown(
+      ctx,
+      evt({entity: {kind: 'lyric', id: 'vocals:240', tick: 240}}),
+    );
+    expect(ctx.markerDrag).toBeNull();
   });
 });
 
@@ -418,61 +442,6 @@ describe('eraseTool', () => {
   });
 });
 
-describe('tempoMarkerTool', () => {
-  it('opens the bpm popover pre-filled with the tempo in effect at the tick', () => {
-    const session = makeSession();
-    const ctx = makeContext(session, {
-      timedTempos: [
-        {tick: 0, beatsPerMinute: 120, msTime: 0},
-        {tick: 1920, beatsPerMinute: 140, msTime: 8000},
-      ],
-    });
-    tempoMarkerTool.onPointerDown(ctx, evt({tick: 2000, coords: {x: 5, y: 6}}));
-    expect(ctx.popovers).toEqual([
-      {kind: 'bpm', tick: 2000, x: 5, y: 6, initialBpm: 140},
-    ]);
-  });
-});
-
-describe('timeSignatureMarkerTool', () => {
-  it('opens the timesig popover at the clicked tick', () => {
-    const session = makeSession();
-    const ctx = makeContext(session);
-    timeSignatureMarkerTool.onPointerDown(
-      ctx,
-      evt({tick: 960, coords: {x: 1, y: 2}}),
-    );
-    expect(ctx.popovers).toEqual([{kind: 'timesig', tick: 960, x: 1, y: 2}]);
-  });
-});
-
-describe('lyricsTimingTool', () => {
-  it('selects a lyric entity and starts a marker drag', () => {
-    const session = makeSession();
-    const ctx = makeContext(session);
-    lyricsTimingTool.onPointerDown(
-      ctx,
-      evt({entity: {kind: 'lyric', id: 'lyric-1', tick: 240}}),
-    );
-    expect(ctx.state.selection.get('lyric')).toEqual(new Set(['lyric-1']));
-    expect(ctx.markerDrag).toEqual({
-      kind: 'lyric',
-      originalTick: 240,
-      currentTick: 240,
-    });
-  });
-
-  it('ignores note entities', () => {
-    const session = makeSession();
-    const ctx = makeContext(session);
-    lyricsTimingTool.onPointerDown(
-      ctx,
-      evt({entity: {kind: 'note', id: RED_ID, tick: 480}}),
-    );
-    expect(ctx.state.selection.get('note')?.size ?? 0).toBe(0);
-  });
-});
-
 describe('registry', () => {
   it('resolveToolForPointerDown picks selectMoveTool for a selectable hit', () => {
     const tool = resolveToolForPointerDown(
@@ -499,12 +468,14 @@ describe('registry', () => {
     expect(
       resolveToolForPointerDown('erase', evt(), DRUM_EDIT_CAPABILITIES),
     ).toBe(eraseTool);
-    expect(
-      resolveToolForPointerDown('bpm', evt(), DRUM_EDIT_CAPABILITIES),
-    ).toBe(tempoMarkerTool);
-    expect(
-      resolveToolForPointerDown('timesig', evt(), DRUM_EDIT_CAPABILITIES),
-    ).toBe(timeSignatureMarkerTool);
+  });
+
+  it('registers a tool for every ToolMode and none for tempo editing', () => {
+    expect(Object.keys(TOOL_REGISTRY).sort()).toEqual([
+      'cursor',
+      'erase',
+      'place',
+    ]);
   });
 
   it('resolveCursorContinuation follows an in-flight note drag to selectMoveTool', () => {

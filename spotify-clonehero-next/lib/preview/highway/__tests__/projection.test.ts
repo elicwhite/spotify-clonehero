@@ -105,6 +105,21 @@ describe('buildProjectionFor', () => {
     expect(projection.markers.some(m => m.kind === 'ts')).toBe(true);
   });
 
+  it('gives a section the first right-side stack slot when a time signature shares its tick', () => {
+    const track = makeTrack([[note(noteTypes.redDrum, 480, 250)]]);
+    const doc = makeDoc(track);
+
+    const projection = buildProjectionFor(DRUMS_SCOPE, doc, drums4LaneSchema);
+    const section = projection.markers.find(m => m.kind === 'section');
+    const timeSignature = projection.markers.find(m => m.kind === 'ts');
+
+    // The highway draws sections and not time signatures, so the section flag
+    // must sit flush against the rail rather than at an offset reserved for a
+    // badge nobody draws.
+    expect(section?.data).toMatchObject({stackIndex: 0});
+    expect(timeSignature?.data).toMatchObject({stackIndex: 1});
+  });
+
   it('returns no note elements for a vocals scope', () => {
     const track = makeTrack([[note(noteTypes.redDrum, 480, 250)]]);
     const doc = makeDoc(track);

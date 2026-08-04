@@ -28,7 +28,6 @@ import {
 } from 'react';
 import type {HitResult, InteractionManager} from '@/lib/preview/highway';
 import type {EntityKind, NoteEvent} from '@/lib/chart-edit';
-import {lyricId, phraseEndId, phraseStartId} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import type {EditCommand} from '../commands';
 import type {
@@ -79,7 +78,6 @@ export interface UseHighwayMouseInteractionInputs {
   interactionManagerRef: RefObject<InteractionManager | null>;
   state: ChartEditorState;
   capabilities: EditorCapabilities;
-  activePartName: string;
   activeNotes: NoteEvent[];
   timedTempos: TimedTempo[];
   resolution: number;
@@ -89,7 +87,7 @@ export interface UseHighwayMouseInteractionInputs {
   commitMarkerDrag: (moveExceededThreshold: boolean) => void;
   executeCommand: (cmd: EditCommand) => void;
   dispatch: (action: ChartEditorAction) => void;
-  /** Called from the BPM / TimeSig / Section / Section-rename tools. */
+  /** Called from the section-rename affordance on `selectMoveTool`. */
   onOpenPopover: (popover: HighwayPopoverState) => void;
   /**
    * When true, an uncommitted tempo candidate is being previewed (0061 §7):
@@ -140,37 +138,19 @@ function hitTick(hit: HitResult): number | null {
 }
 
 /**
- * Translate a side-marker hit (section/lyric/phrase-start/phrase-end) into
- * its EntityKind + id. Notes and highway hits have separate paths.
+ * Translate a side-marker hit into its EntityKind + id. Notes and highway
+ * hits have separate paths.
  *
- * Lyric and phrase ids are namespaced by `partName` so harm1/harm2/harm3
- * lyrics with the same tick don't collide.
+ * Sections are the only marker kind the highway draws
+ * (`HIGHWAY_ELEMENT_KINDS` in `lib/preview/highway/cell.ts`), so they are the
+ * only kind an `InteractionManager` can resolve; lyric and phrase markers are
+ * hit-tested by the piano roll instead.
  */
 function markerHitToRef(
   hit: HitResult,
-  partName: string,
 ): {kind: MarkerKind; id: string; tick: number} | null {
-  if (!hit) return null;
-  switch (hit.type) {
-    case 'section':
-      return {kind: 'section', id: String(hit.tick), tick: hit.tick};
-    case 'lyric':
-      return {kind: 'lyric', id: lyricId(hit.tick, partName), tick: hit.tick};
-    case 'phrase-start':
-      return {
-        kind: 'phrase-start',
-        id: phraseStartId(hit.tick, partName),
-        tick: hit.tick,
-      };
-    case 'phrase-end':
-      return {
-        kind: 'phrase-end',
-        id: phraseEndId(hit.endTick, partName),
-        tick: hit.endTick,
-      };
-    default:
-      return null;
-  }
+  if (hit?.type !== 'section') return null;
+  return {kind: 'section', id: String(hit.tick), tick: hit.tick};
 }
 
 /**
@@ -182,13 +162,12 @@ function markerHitToRef(
  */
 function hitToEntityRef(
   hit: HitResult,
-  partName: string,
 ): {kind: EntityKind; id: string; tick: number} | null {
   if (!hit) return null;
   if (hit.type === 'note') {
     return {kind: 'note', id: hit.noteId, tick: hit.tick};
   }
-  return markerHitToRef(hit, partName);
+  return markerHitToRef(hit);
 }
 
 export function useHighwayMouseInteraction(
@@ -199,7 +178,6 @@ export function useHighwayMouseInteraction(
     interactionManagerRef,
     state,
     capabilities,
-    activePartName,
     activeNotes,
     timedTempos,
     resolution,
@@ -301,7 +279,6 @@ export function useHighwayMouseInteraction(
     return {
       state,
       capabilities,
-      activePartName,
       schema: selectActiveSchema(state),
       activeNotes,
       timedTempos,
@@ -336,7 +313,6 @@ export function useHighwayMouseInteraction(
     };
   }, [
     activeNotes,
-    activePartName,
     beginMarkerDrag,
     capabilities,
     commitMarkerDrag,
@@ -374,7 +350,7 @@ export function useHighwayMouseInteraction(
         hit && 'lane' in hit ? hit.lane : screenToLane(coords.x, coords.y);
       const tick = hitTick(hit) ?? screenToTick(coords.x, coords.y);
 
-      const entity = hitToEntityRef(hit, activePartName);
+      const entity = hitToEntityRef(hit);
 
       const evt: PointerHitInfo = {
         coords,
@@ -392,7 +368,6 @@ export function useHighwayMouseInteraction(
       tool?.onPointerDown(buildToolContext(), evt);
     },
     [
-      activePartName,
       buildToolContext,
       capabilities,
       editingLocked,
@@ -408,7 +383,7 @@ export function useHighwayMouseInteraction(
     (e: ReactMouseEvent<HTMLDivElement>) => {
       const coords = getElementCoords(e);
       const hit = hitTestAt(coords.x, coords.y);
-      const markerRef = markerHitToRef(hit, activePartName);
+      const markerRef = markerHitToRef(hit);
 
       // Update hover lane/tick from hit result.
       if (hit) {
@@ -428,13 +403,10 @@ export function useHighwayMouseInteraction(
       // don't want the hover visual to flicker as the cursor passes over
       // other entities mid-drag.
       if (!markerDrag && !isDragging) {
-        let nextHover: {
-          kind: 'note' | 'section' | 'lyric' | 'phrase-start' | 'phrase-end';
-          id: string;
-        } | null = null;
+        let nextHover: {kind: 'note' | 'section'; id: string} | null = null;
         if (hit?.type === 'note' && capabilities.hoverable.has('note')) {
           // Track-qualified, like every stored note id: an unqualified id
-          // would resolve as hovered in every pane that happens to have a
+          // would resolve as hovered in every lane that happens to have a
           // note with the same local id.
           const trackKey = trackKeyFromScope(state.activeScope);
           nextHover = {
@@ -464,7 +436,7 @@ export function useHighwayMouseInteraction(
         lane:
           hit && 'lane' in hit ? hit.lane : screenToLane(coords.x, coords.y),
         tick: hitTick(hit) ?? screenToTick(coords.x, coords.y),
-        entity: hitToEntityRef(hit, activePartName),
+        entity: hitToEntityRef(hit),
       };
       const ctx = buildToolContext();
       if (state.activeTool === 'cursor') {
@@ -476,7 +448,6 @@ export function useHighwayMouseInteraction(
       }
     },
     [
-      activePartName,
       buildToolContext,
       capabilities.hoverable,
       dispatch,

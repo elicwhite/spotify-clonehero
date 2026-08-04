@@ -92,7 +92,12 @@ export interface OverlayState {
  * so they match the 3D perspective exactly.
  */
 export class SceneOverlays {
-  private scene: THREE.Scene;
+  /**
+   * Parent the overlay groups are added under. Typed as `Object3D` so the
+   * overlays can live in a highway group inside a shared scene; only
+   * `.add()` / `.remove()` are used.
+   */
+  private root: THREE.Object3D;
   private highwaySpeed: number;
   private clippingPlanes: THREE.Plane[];
 
@@ -150,12 +155,12 @@ export class SceneOverlays {
   private highwayHalfWidth: number;
 
   constructor(
-    scene: THREE.Scene,
+    root: THREE.Object3D,
     highwaySpeed: number,
     clippingPlanes: THREE.Plane[],
     schema: InstrumentSchema,
   ) {
-    this.scene = scene;
+    this.root = root;
     this.highwaySpeed = highwaySpeed;
     this.clippingPlanes = clippingPlanes;
     this.numLanes = schema.lanes.length;
@@ -173,8 +178,8 @@ export class SceneOverlays {
     this.highwayHalfWidth = schema.highwayWidth / 2;
 
     // Add container groups to scene
-    this.scene.add(this.ghostNoteGroup);
-    this.scene.add(this.loopGroup);
+    this.root.add(this.ghostNoteGroup);
+    this.root.add(this.loopGroup);
   }
 
   // -----------------------------------------------------------------------
@@ -217,14 +222,14 @@ export class SceneOverlays {
     // Cursor
     this.cursorLine?.geometry.dispose();
     this.cursorLineMaterial?.dispose();
-    if (this.cursorLine) this.scene.remove(this.cursorLine);
+    if (this.cursorLine) this.root.remove(this.cursorLine);
     this.cursorTickLabel?.material instanceof THREE.SpriteMaterial &&
       this.cursorTickLabel.material.dispose();
     this.cursorTickLabelTexture?.dispose();
-    if (this.cursorTickLabel) this.scene.remove(this.cursorTickLabel);
+    if (this.cursorTickLabel) this.root.remove(this.cursorTickLabel);
 
     // Ghost notes
-    this.scene.remove(this.ghostNoteGroup);
+    this.root.remove(this.ghostNoteGroup);
     for (const mesh of this.ghostNoteMeshes) {
       mesh.geometry.dispose();
       (mesh.material as THREE.MeshBasicMaterial).dispose();
@@ -238,20 +243,20 @@ export class SceneOverlays {
     if (this.eraserHighlight) {
       this.eraserHighlight.geometry.dispose();
       (this.eraserHighlight.material as THREE.MeshBasicMaterial).dispose();
-      this.scene.remove(this.eraserHighlight);
+      this.root.remove(this.eraserHighlight);
     }
 
     // Crosshair
     this.crosshairLine?.geometry.dispose();
     this.crosshairLineMaterial?.dispose();
-    if (this.crosshairLine) this.scene.remove(this.crosshairLine);
+    if (this.crosshairLine) this.root.remove(this.crosshairLine);
     this.crosshairLabel?.material instanceof THREE.SpriteMaterial &&
       this.crosshairLabel.material.dispose();
     this.crosshairLabelTexture?.dispose();
-    if (this.crosshairLabel) this.scene.remove(this.crosshairLabel);
+    if (this.crosshairLabel) this.root.remove(this.crosshairLabel);
 
     // Loop region
-    this.scene.remove(this.loopGroup);
+    this.root.remove(this.loopGroup);
   }
 
   // -----------------------------------------------------------------------
@@ -297,7 +302,7 @@ export class SceneOverlays {
       this.cursorLineMaterial.clippingPlanes = this.clippingPlanes;
       this.cursorLine = new THREE.Line(geometry, this.cursorLineMaterial);
       this.cursorLine.renderOrder = 10;
-      this.scene.add(this.cursorLine);
+      this.root.add(this.cursorLine);
     }
 
     this.cursorLine.position.y = worldY;
@@ -318,7 +323,7 @@ export class SceneOverlays {
         this.cursorTickLabel = new THREE.Sprite(labelMat);
         this.cursorTickLabel.scale.set(0.15, 0.03, 1);
         this.cursorTickLabel.renderOrder = 11;
-        this.scene.add(this.cursorTickLabel);
+        this.root.add(this.cursorTickLabel);
       } else {
         (this.cursorTickLabel.material as THREE.SpriteMaterial).map =
           this.cursorTickLabelTexture;
@@ -450,7 +455,7 @@ export class SceneOverlays {
       });
       this.eraserHighlight = new THREE.Mesh(geometry, material);
       this.eraserHighlight.renderOrder = 5;
-      this.scene.add(this.eraserHighlight);
+      this.root.add(this.eraserHighlight);
     }
 
     // Update geometry to match lane width
@@ -512,7 +517,7 @@ export class SceneOverlays {
       this.crosshairLineMaterial.clippingPlanes = this.clippingPlanes;
       this.crosshairLine = new THREE.Line(geometry, this.crosshairLineMaterial);
       this.crosshairLine.renderOrder = 10;
-      this.scene.add(this.crosshairLine);
+      this.root.add(this.crosshairLine);
     }
 
     this.crosshairLineMaterial!.color.set(lineColor);
@@ -541,7 +546,7 @@ export class SceneOverlays {
         this.crosshairLabel = new THREE.Sprite(labelMat);
         this.crosshairLabel.scale.set(0.25, 0.025, 1);
         this.crosshairLabel.renderOrder = 11;
-        this.scene.add(this.crosshairLabel);
+        this.root.add(this.crosshairLabel);
       } else {
         (this.crosshairLabel.material as THREE.SpriteMaterial).map =
           this.crosshairLabelTexture;

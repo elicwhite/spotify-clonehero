@@ -58,10 +58,8 @@ export type {TrackEditPageConfig} from './TrackEditPage';
 
 // Sub-components (for advanced composition)
 export {default as HighwayEditor} from './HighwayEditor';
-export {default as HighwayPreview} from './HighwayPreview';
-export type {HighwayRendererHandle} from './HighwayPreview';
+export {default as HighwayLane} from './highway/HighwayLane';
 export {default as TransportControls} from './TransportControls';
-export {default as EditToolbar} from './EditToolbar';
 export {default as LeftSidebar} from './LeftSidebar';
 export {default as PianoRollTimeline} from './piano-roll/PianoRollTimeline';
 export {default as LoopControls} from './LoopControls';

@@ -3,16 +3,17 @@
  */
 /**
  * Multi-pane highway (plan 0074 Phase 3, Suite 4): `HighwayEditor` renders
- * one pane per visible track, caps at 4 with an overflow chip, and each
- * pane's interaction hooks target that pane's own track — never the
+ * one pane per visible track, caps the count at however many lanes the
+ * measured canvas width holds with a "+N more" overflow chip, and each pane's
+ * interaction hooks target that pane's own track — never the
  * globally-last-set `activeScope` of some other pane.
  *
- * `@/lib/preview/highway`'s `setupRenderer` is mocked wholesale: real
- * `HighwayPreview` instances would need a WebGL context jsdom doesn't
- * provide. The fake renderer resolves `getInteractionManager()` to a stub
- * whose `hitTest` is configured per-track (via `mockTrackHits`), so pointer
- * events drive the REAL `useHighwayMouseInteraction` / tool-registry /
- * command stack end to end — only the THREE.js boundary is faked.
+ * `@/lib/preview/highway`'s `setupStage` is mocked wholesale: a real stage
+ * would need a WebGL context jsdom doesn't provide. The fake stage's
+ * `addHighway` resolves a handle whose `getInteractionManager()` yields a
+ * stub with a per-track `hitTest` (via `mockTrackHits`), so pointer events
+ * drive the REAL `useHighwayMouseInteraction` / tool-registry / command stack
+ * end to end — only the THREE.js boundary is faked.
  */
 
 import '@testing-library/jest-dom';
@@ -45,81 +46,41 @@ import type {ChartDocument} from '@/lib/chart-edit';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {HitResult} from '@/lib/preview/highway';
+import {
+  createFakeStage as mockCreateFakeStage,
+  type FakeHighway,
+  type FakeStage,
+} from './fakeStage';
 
 // ---------------------------------------------------------------------------
-// setupRenderer mock — see file header.
+// setupStage mock — see file header.
 // ---------------------------------------------------------------------------
 
-/** hitTest result each fake renderer's InteractionManager returns, keyed by
+/** hitTest result each fake highway's InteractionManager returns, keyed by
  *  `"${instrument}:${difficulty}"`. Set per-test before rendering. */
 const mockTrackHits: Record<string, HitResult> = {};
 
-/** Every fake renderer created, in creation order — lets tests assert
- *  `destroy` was called on the right instance without depending on internal
- *  HighwayPreview refs. */
-const mockRendererInstances: Array<{
-  track: {instrument: string; difficulty: string} | null;
-  destroy: jest.Mock;
-  reconciler: {
-    setElements: jest.Mock;
-    setHoveredKey: jest.Mock;
-    setSelectedKeys: jest.Mock;
-    dispose: jest.Mock;
-  };
-}> = [];
+/** Every highway mounted on any fake stage, in mount order -- lets tests
+ *  assert which track a highway drew and that removal disposed the right one. */
+const mockStageHighways: FakeHighway[] = [];
 
-function mockMakeRenderer() {
-  const interactionManager = {
-    hitTest: jest.fn(() => null as HitResult),
-    screenToLane: jest.fn(() => 0),
-    screenToMs: jest.fn(() => 0),
-    screenToTick: jest.fn(() => 0),
-    setTimingData: jest.fn(),
-    dispose: jest.fn(),
-  };
-  const reconciler = {
-    setElements: jest.fn(),
-    setHoveredKey: jest.fn(),
-    setSelectedKeys: jest.fn(),
-    dispose: jest.fn(),
-  };
-  const noteRenderer = {dispose: jest.fn()};
-  const destroy = jest.fn(async () => {});
-  const instance = {
-    track: null as {instrument: string; difficulty: string} | null,
-    destroy,
-    reconciler,
-  };
-  mockRendererInstances.push(instance);
+/** Every fake stage created, in creation order. */
+const mockStages: FakeStage[] = [];
 
-  return {
-    prepTrack: jest.fn(
-      async (track: {instrument: string; difficulty: string} | null) => {
-        instance.track = track;
-        if (track) {
-          const key = `${track.instrument}:${track.difficulty}`;
-          interactionManager.hitTest.mockReturnValue(
-            mockTrackHits[key] ?? null,
-          );
-        }
-      },
-    ),
-    startRender: jest.fn(async () => {}),
-    destroy,
-    getCamera: jest.fn(),
-    getHighwaySpeed: jest.fn(() => 1.5),
-    setOverlayState: jest.fn(),
-    setTimingData: jest.fn(async () => {}),
-    getInteractionManager: jest.fn(async () => interactionManager),
-    getReconciler: jest.fn(async () => reconciler),
-    getNoteRenderer: jest.fn(async () => noteRenderer),
-    setWaveformData: jest.fn(async () => {}),
-    setGridData: jest.fn(async () => {}),
-    setLyricsData: jest.fn(async () => {}),
-    setLyricsVisible: jest.fn(),
-    setHighwayMode: jest.fn(),
-    getHighwayMode: jest.fn(() => 'classic' as const),
-  };
+function mockMakeStage(): FakeStage {
+  const stage = mockCreateFakeStage({
+    onHighwayMounted: highway => {
+      mockStageHighways.push(highway);
+      if (highway.track) {
+        const key = `${highway.track.instrument}:${highway.track.difficulty}`;
+        highway.interactionManager.hitTest.mockReturnValue(
+          mockTrackHits[key] ?? null,
+        );
+      }
+    },
+  });
+  mockStages.push(stage);
+  return stage;
 }
 
 // jest.mock's string argument is a literal Jest resolves itself (unlike a
@@ -131,7 +92,7 @@ jest.mock('../../../lib/preview/highway', () => {
   const actual = jest.requireActual('../../../lib/preview/highway');
   return {
     ...actual,
-    setupRenderer: jest.fn(() => mockMakeRenderer()),
+    setupStage: jest.fn(() => mockMakeStage()),
   };
 });
 
@@ -144,8 +105,8 @@ function makeMultiInstrumentDoc(): ChartDocument {
   parsed.trackData.push(emptyTrackData('drums', 'expert'));
   parsed.trackData.push(emptyTrackData('guitar', 'expert'));
   parsed.trackData.push(emptyTrackData('bass', 'expert'));
-  // Fourth and fifth charted tracks: let a test fill MAX_HIGHWAY_PANES (4)
-  // and then exceed it to exercise the overflow chip.
+  // Fourth and fifth charted tracks: let a test fill the four lanes a 900 px
+  // canvas holds and then exceed them to exercise the overflow chip.
   parsed.trackData.push(emptyTrackData('guitar', 'hard'));
   parsed.trackData.push(emptyTrackData('guitar', 'medium'));
   const doc: ChartDocument = {parsedChart: parsed, assets: []};
@@ -182,8 +143,12 @@ function makeMultiInstrumentDoc(): ChartDocument {
   return doc;
 }
 
+/** Stable identity: the stage is keyed on `metadata`, so a fresh object per
+ *  render would tear the whole stage down and rebuild it mid-test. */
+const metadata = {song_length: 60_000} as ChartResponseEncore;
+
 function makeMetadata(): ChartResponseEncore {
-  return {song_length: 60_000} as ChartResponseEncore;
+  return metadata;
 }
 
 const fakeAudioManager = {} as AudioManager;
@@ -283,8 +248,31 @@ function renderHarness(props: {
   );
 }
 
+/**
+ * jsdom has no layout, so every element reports 0 for `offsetWidth` /
+ * `offsetHeight` — which is exactly the unmeasured case `computeStageLayout`
+ * falls back on (cap = `MAX_HIGHWAYS`). Stubbing the prototype getters is the
+ * only way to drive the width-derived lane cap from jsdom; the default of 0
+ * keeps every other test on the fallback path.
+ */
+const simulatedCanvas = {width: 0, height: 0};
+
+beforeAll(() => {
+  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+    configurable: true,
+    get: () => simulatedCanvas.width,
+  });
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+    configurable: true,
+    get: () => simulatedCanvas.height,
+  });
+});
+
 beforeEach(() => {
-  mockRendererInstances.length = 0;
+  mockStageHighways.length = 0;
+  mockStages.length = 0;
+  simulatedCanvas.width = 0;
+  simulatedCanvas.height = 0;
   for (const key of Object.keys(mockTrackHits)) delete mockTrackHits[key];
 });
 
@@ -306,16 +294,21 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByTestId('highway-pane-drums:expert'),
+        screen.getByTestId('highway-lane-drums:expert'),
       ).toBeInTheDocument();
       expect(
-        screen.getByTestId('highway-pane-guitar:expert'),
+        screen.getByTestId('highway-lane-guitar:expert'),
       ).toBeInTheDocument();
     });
     expect(screen.getByText('Drums · Expert')).toBeInTheDocument();
     expect(screen.getByText('Guitar · Expert')).toBeInTheDocument();
   });
 
+  // This case survives in jsdom only because `computeStageLayout` reports
+  // `measured: false` at a canvas width of 0 and hands back `MAX_HIGHWAYS`
+  // instead of a width-derived cap. Without that rule every layout here would
+  // collapse to a single lane. The cap itself is exercised against simulated
+  // widths in the "width-derived lane cap" block below.
   it('renders four visible tracks with no overflow chip (the X/H/M/E route model)', async () => {
     renderHarness({
       chartDoc: makeMultiInstrumentDoc(),
@@ -323,20 +316,23 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
     });
     await waitFor(() =>
       expect(
-        screen.getByTestId('highway-pane-drums:expert'),
+        screen.getByTestId('highway-lane-drums:expert'),
       ).toBeInTheDocument(),
     );
     expect(
-      screen.getByTestId('highway-pane-guitar:expert'),
+      screen.getByTestId('highway-lane-guitar:expert'),
     ).toBeInTheDocument();
-    expect(screen.getByTestId('highway-pane-bass:expert')).toBeInTheDocument();
-    expect(screen.getByTestId('highway-pane-guitar:hard')).toBeInTheDocument();
+    expect(screen.getByTestId('highway-lane-bass:expert')).toBeInTheDocument();
+    expect(screen.getByTestId('highway-lane-guitar:hard')).toBeInTheDocument();
     expect(
       screen.queryByTestId('highway-overflow-indicator'),
     ).not.toBeInTheDocument();
   });
 
-  it('caps panes at 4 and shows a "+N more" overflow indicator beyond that', async () => {
+  it('caps panes at the width-derived maximum and shows a "+N more" overflow indicator beyond that', async () => {
+    // 900 CSS px holds four 200 px lanes plus their hairlines, not five.
+    simulatedCanvas.width = 900;
+    simulatedCanvas.height = 400;
     renderHarness({
       chartDoc: makeMultiInstrumentDoc(),
       visible: [
@@ -350,17 +346,17 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByTestId('highway-pane-drums:expert'),
+        screen.getByTestId('highway-lane-drums:expert'),
       ).toBeInTheDocument(),
     );
     // First four visible tracks get panes; the fifth does not.
     expect(
-      screen.getByTestId('highway-pane-guitar:expert'),
+      screen.getByTestId('highway-lane-guitar:expert'),
     ).toBeInTheDocument();
-    expect(screen.getByTestId('highway-pane-bass:expert')).toBeInTheDocument();
-    expect(screen.getByTestId('highway-pane-guitar:hard')).toBeInTheDocument();
+    expect(screen.getByTestId('highway-lane-bass:expert')).toBeInTheDocument();
+    expect(screen.getByTestId('highway-lane-guitar:hard')).toBeInTheDocument();
     expect(
-      screen.queryByTestId('highway-pane-guitar:medium'),
+      screen.queryByTestId('highway-lane-guitar:medium'),
     ).not.toBeInTheDocument();
 
     // The harness renders a single-track piano roll, which does NOT show the
@@ -371,6 +367,8 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
   });
 
   it('points the overflow chip at the piano roll when it stacks every track', async () => {
+    simulatedCanvas.width = 900;
+    simulatedCanvas.height = 400;
     const doc = makeMultiInstrumentDoc();
 
     function StackedHarness() {
@@ -425,11 +423,11 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByTestId('highway-pane-drums:expert'),
+        screen.getByTestId('highway-lane-drums:expert'),
       ).toBeInTheDocument(),
     );
     expect(
-      screen.queryByTestId('highway-pane-bass:expert'),
+      screen.queryByTestId('highway-lane-bass:expert'),
     ).not.toBeInTheDocument();
   });
 
@@ -443,12 +441,12 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
       activeTool: 'erase',
     });
 
-    const drumsPane = await screen.findByTestId('highway-pane-drums:expert');
-    const guitarPane = await screen.findByTestId('highway-pane-guitar:expert');
-    // The InteractionManager only resolves after the fake renderer's
+    const drumsPane = await screen.findByTestId('highway-lane-drums:expert');
+    const guitarPane = await screen.findByTestId('highway-lane-guitar:expert');
+    // The InteractionManager only resolves after the fake highway's
     // getInteractionManager() promise settles — wait for that microtask.
     await waitFor(() =>
-      expect(mockRendererInstances.length).toBeGreaterThanOrEqual(2),
+      expect(mockStageHighways.length).toBeGreaterThanOrEqual(2),
     );
 
     const drumsInteraction = drumsPane.querySelector(
@@ -489,9 +487,9 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
       activeTool: 'cursor',
     });
 
-    const guitarPane = await screen.findByTestId('highway-pane-guitar:expert');
+    const guitarPane = await screen.findByTestId('highway-lane-guitar:expert');
     await waitFor(() =>
-      expect(mockRendererInstances.length).toBeGreaterThanOrEqual(2),
+      expect(mockStageHighways.length).toBeGreaterThanOrEqual(2),
     );
 
     act(() => {
@@ -507,8 +505,8 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
       ),
     );
 
-    // ...and the bass pane's renderer is never told to highlight a note.
-    const bassReconciler = mockRendererInstances.find(
+    // ...and the bass pane's highway is never told to highlight a note.
+    const bassReconciler = mockStageHighways.find(
       i => i.track?.instrument === 'bass',
     )!.reconciler;
     for (const call of bassReconciler.setSelectedKeys.mock.calls) {
@@ -526,9 +524,9 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
       activeTool: 'cursor',
     });
 
-    const guitarPane = await screen.findByTestId('highway-pane-guitar:expert');
+    const guitarPane = await screen.findByTestId('highway-lane-guitar:expert');
     await waitFor(() =>
-      expect(mockRendererInstances.length).toBeGreaterThanOrEqual(2),
+      expect(mockStageHighways.length).toBeGreaterThanOrEqual(2),
     );
 
     act(() => {
@@ -609,17 +607,17 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
     // `SET_CHART_DOC` seeds visibleTrackKeys with the preferred track, but a
     // vocals scope renders its own pane instead of any notes pane.
     expect(
-      await screen.findByTestId('highway-pane-vocals:vocals'),
+      await screen.findByTestId('highway-lane-vocals:vocals'),
     ).toBeInTheDocument();
     expect(
-      screen.queryByTestId('highway-pane-guitar:expert'),
+      screen.queryByTestId('highway-lane-guitar:expert'),
     ).not.toBeInTheDocument();
     expect(screen.queryByText('Guitar · Expert')).not.toBeInTheDocument();
-    // No notes track is resolved for the pane's renderer.
+    // No notes track is resolved for the pane's highway.
     await waitFor(() =>
-      expect(mockRendererInstances.length).toBeGreaterThanOrEqual(1),
+      expect(mockStageHighways.length).toBeGreaterThanOrEqual(1),
     );
-    expect(mockRendererInstances[0].track).toBeNull();
+    expect(mockStageHighways[0].track).toBeNull();
   });
 
   it.each([
@@ -661,10 +659,10 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
       );
 
       expect(
-        await screen.findByTestId('highway-pane-drums:expert'),
+        await screen.findByTestId('highway-lane-drums:expert'),
       ).toBeInTheDocument();
       expect(
-        screen.queryByTestId('highway-pane-guitar:expert'),
+        screen.queryByTestId('highway-lane-guitar:expert'),
       ).not.toBeInTheDocument();
       expect(screen.getByTestId('active-scope-probe').textContent).toBe(
         'drums:expert',
@@ -672,7 +670,7 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
     },
   );
 
-  it("disposes a pane's renderer deterministically when its track is toggled off", async () => {
+  it("removes the highway's root and disposes its reconciler without touching the stage renderer", async () => {
     mockTrackHits['drums:expert'] = noteHit('0:kick');
     const doc = makeMultiInstrumentDoc();
 
@@ -701,12 +699,13 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
     );
 
     await waitFor(() =>
-      expect(mockRendererInstances.length).toBeGreaterThanOrEqual(2),
+      expect(mockStageHighways.length).toBeGreaterThanOrEqual(2),
     );
-    const drumsInstance = mockRendererInstances.find(
+    const drumsHighway = mockStageHighways.find(
       i => i.track?.instrument === 'drums',
     )!;
-    expect(drumsInstance.destroy).not.toHaveBeenCalled();
+    const stage = mockStages[mockStages.length - 1];
+    expect(drumsHighway.reconciler.dispose).not.toHaveBeenCalled();
 
     // Toggle the drums track off — re-render with only guitar visible.
     rerender(
@@ -717,10 +716,191 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
       </AudioServiceProvider>,
     );
 
-    // Exactly once, and synchronously with the unmount — the renderer's own
-    // idempotency under a repeated destroy() is covered against the real
-    // implementation in `lib/preview/highway/__tests__/teardown.test.ts`.
-    await waitFor(() => expect(drumsInstance.destroy).toHaveBeenCalledTimes(1));
+    // The drums highway is unmounted from the stage and its own scene objects
+    // are disposed; the stage's renderer, canvas, and surviving highways are
+    // untouched. The stage's own teardown idempotency is covered against the
+    // real implementation in `lib/preview/highway/__tests__/teardown.test.ts`.
+    await waitFor(() =>
+      expect(stage.removeHighway).toHaveBeenCalledWith('drums:expert'),
+    );
+    expect(drumsHighway.reconciler.dispose).toHaveBeenCalledTimes(1);
+    expect(stage.destroy).not.toHaveBeenCalled();
+    // One stage for the whole session: toggling a track never builds a second
+    // renderer, which is the whole point of mounting highways into a live one.
+    expect(mockStages).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Width-derived lane cap (plan 0075 Phase 4). How many lanes fit comes from
+// `computeStageLayout` reading the measured canvas width, not from a constant.
+// ---------------------------------------------------------------------------
+
+describe('width-derived lane cap (plan 0075 Phase 4)', () => {
+  /** Every live `ResizeObserver` callback, so a test can drive a resize. */
+  const resizeCallbacks: (() => void)[] = [];
+  let previousResizeObserver: unknown;
+
+  beforeAll(() => {
+    previousResizeObserver = (globalThis as {ResizeObserver?: unknown})
+      .ResizeObserver;
+    (globalThis as {ResizeObserver?: unknown}).ResizeObserver = class {
+      constructor(callback: () => void) {
+        resizeCallbacks.push(callback);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+  });
+
+  afterAll(() => {
+    (globalThis as {ResizeObserver?: unknown}).ResizeObserver =
+      previousResizeObserver;
+  });
+
+  beforeEach(() => {
+    resizeCallbacks.length = 0;
+  });
+
+  const fiveTracks = [
+    'drums:expert',
+    'guitar:expert',
+    'bass:expert',
+    'guitar:hard',
+    'guitar:medium',
+  ];
+
+  it('fits fewer lanes on a narrow canvas', async () => {
+    // 500 px holds two 200 px lanes plus a hairline, not three.
+    simulatedCanvas.width = 500;
+    simulatedCanvas.height = 400;
+    renderHarness({chartDoc: makeMultiInstrumentDoc(), visible: fiveTracks});
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('highway-lane-drums:expert'),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByTestId('highway-lane-guitar:expert'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('highway-lane-bass:expert'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('highway-overflow-indicator')).toHaveTextContent(
+      '+3 more hidden',
+    );
+  });
+
+  it('falls back to MAX_HIGHWAYS when the canvas width is unmeasured', async () => {
+    // The default jsdom state: no layout, so offsetWidth is 0. Every routing
+    // test in this file depends on this rule holding.
+    renderHarness({chartDoc: makeMultiInstrumentDoc(), visible: fiveTracks});
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('highway-lane-drums:expert'),
+      ).toBeInTheDocument(),
+    );
+    for (const id of fiveTracks) {
+      expect(screen.getByTestId(`highway-lane-${id}`)).toBeInTheDocument();
+    }
+    expect(
+      screen.queryByTestId('highway-overflow-indicator'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('rebuilds the stage and re-adds every visible lane after a lost context', async () => {
+    // One context now backs the whole strip, so losing it blanks every lane
+    // at once: the editor answers by building a replacement stage.
+    simulatedCanvas.width = 900;
+    simulatedCanvas.height = 400;
+    renderHarness({
+      chartDoc: makeMultiInstrumentDoc(),
+      visible: ['drums:expert', 'guitar:expert'],
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('highway-lane-guitar:expert'),
+      ).toBeInTheDocument(),
+    );
+    expect(mockStages).toHaveLength(1);
+    const lost = mockStages[0];
+
+    act(() => {
+      lost.loseContext();
+    });
+
+    await waitFor(() => expect(mockStages).toHaveLength(2));
+    const replacement = mockStages[1];
+    expect(lost.destroy).toHaveBeenCalledTimes(1);
+
+    // The current visible set comes back on the new context, and it renders.
+    await waitFor(() =>
+      expect(replacement.addHighway).toHaveBeenCalledTimes(2),
+    );
+    expect(replacement.addHighway.mock.calls.map(call => call[0])).toEqual([
+      'drums:expert',
+      'guitar:expert',
+    ]);
+    expect(replacement.startRender).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByTestId('highway-lane-guitar:expert'),
+    ).toBeInTheDocument();
+  });
+
+  it('re-lays out the lanes on resize without rebuilding the stage', async () => {
+    simulatedCanvas.width = 500;
+    simulatedCanvas.height = 400;
+    renderHarness({chartDoc: makeMultiInstrumentDoc(), visible: fiveTracks});
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('highway-lane-guitar:expert'),
+      ).toBeInTheDocument(),
+    );
+    const stage = mockStages[mockStages.length - 1];
+    expect(
+      screen.queryByTestId('highway-lane-bass:expert'),
+    ).not.toBeInTheDocument();
+
+    // Widen the canvas: two more lanes now fit.
+    simulatedCanvas.width = 900;
+    act(() => {
+      for (const callback of resizeCallbacks) callback();
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('highway-lane-guitar:hard'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('highway-lane-bass:expert')).toBeInTheDocument();
+    expect(screen.getByTestId('highway-overflow-indicator')).toHaveTextContent(
+      '+1 more hidden',
+    );
+
+    // The two lanes that were already up are never remounted, and the wider
+    // layout reaches the stage through `setLayout` -- no new stage, no
+    // teardown, no second renderer.
+    expect(stage.removeHighway).not.toHaveBeenCalled();
+    expect(stage.destroy).not.toHaveBeenCalled();
+    expect(mockStages).toHaveLength(1);
+
+    const [lastLayout, lastOrder] =
+      stage.setLayout.mock.calls[stage.setLayout.mock.calls.length - 1];
+    expect(lastLayout.canvas).toEqual({width: 900, height: 400});
+    expect(lastLayout.measured).toBe(true);
+    expect(lastLayout.maxHighways).toBe(4);
+    expect(lastLayout.highways).toHaveLength(4);
+    expect(lastOrder).toEqual([
+      'drums:expert',
+      'guitar:expert',
+      'bass:expert',
+      'guitar:hard',
+    ]);
   });
 });
 
@@ -841,10 +1021,10 @@ describe('single-track piano roll ↔ highway selection (plan 0074 Phase 3)', ()
     throw new Error(`clickNoteInPianoRoll: never selected ${expectedId}`);
   }
 
-  /** Every reconciler belonging to a pane that rendered `track` — a pane may
-   *  build more than one renderer over its lifetime. */
+  /** Every reconciler belonging to a highway that rendered `track` — a pane
+   *  may mount more than one highway over its lifetime. */
   function reconcilersFor(instrument: string, difficulty: string) {
-    return mockRendererInstances
+    return mockStageHighways
       .filter(
         i =>
           i.track?.instrument === instrument &&
@@ -915,9 +1095,9 @@ describe('single-track piano roll ↔ highway selection (plan 0074 Phase 3)', ()
       scope: DEFAULT_DRUMS_EXPERT_SCOPE,
     });
 
-    const pane = await screen.findByTestId('highway-pane-drums:expert');
+    const pane = await screen.findByTestId('highway-lane-drums:expert');
     await waitFor(() =>
-      expect(mockRendererInstances.length).toBeGreaterThanOrEqual(1),
+      expect(mockStageHighways.length).toBeGreaterThanOrEqual(1),
     );
     // Nothing is selected yet, so nothing has painted a selection halo.
     expect(paintedFills).not.toContain(SELECTION_HALO);
@@ -948,9 +1128,9 @@ describe('single-track piano roll ↔ highway selection (plan 0074 Phase 3)', ()
       scope: DEFAULT_DRUMS_EXPERT_SCOPE,
     });
 
-    await screen.findByTestId('highway-pane-drums:expert');
+    await screen.findByTestId('highway-lane-drums:expert');
     await waitFor(() =>
-      expect(mockRendererInstances.length).toBeGreaterThanOrEqual(1),
+      expect(mockStageHighways.length).toBeGreaterThanOrEqual(1),
     );
     const canvas = container.querySelector('canvas') as HTMLCanvasElement;
 
@@ -978,10 +1158,10 @@ describe('single-track piano roll ↔ highway selection (plan 0074 Phase 3)', ()
       scope: DEFAULT_GUITAR_EXPERT_SCOPE,
     });
 
-    await screen.findByTestId('highway-pane-guitar:expert');
-    await screen.findByTestId('highway-pane-guitar:hard');
+    await screen.findByTestId('highway-lane-guitar:expert');
+    await screen.findByTestId('highway-lane-guitar:hard');
     await waitFor(() =>
-      expect(mockRendererInstances.length).toBeGreaterThanOrEqual(2),
+      expect(mockStageHighways.length).toBeGreaterThanOrEqual(2),
     );
     const canvas = container.querySelector('canvas') as HTMLCanvasElement;
 

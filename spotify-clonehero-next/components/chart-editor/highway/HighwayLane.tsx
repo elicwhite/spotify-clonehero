@@ -1,46 +1,46 @@
 'use client';
 
 /**
- * One highway pane in the multi-pane `HighwayEditor` grid (plan 0074 Phase
- * 3). Wraps a single `HighwayPreview` + its transparent interaction layer,
- * and owns every per-pane piece of the interaction stack: the renderer
- * handle, the resolved `InteractionManager` + `SceneReconciler` pair, and
- * one instance each of `useHighwayMouseInteraction`, `useChartElements`,
- * `useHighwaySync`, and `useMarkerDrag` — all parameterized by this pane's
- * own `scope` instead of a single shared `activeScope`.
+ * One highway in the side-by-side strip. A lane owns no canvas and no WebGL
+ * context: `HighwayEditor` runs a single `HighwayStage`, and the lane mounts
+ * one highway group inside it (`useStageHighway`) and positions its own
+ * transparent interaction layer over that highway's rect of the shared canvas.
  *
- * Commands issued from this pane target this pane's `scope` because every
- * hook here is fed a `paneState` — a shallow copy of the real editor state
- * with `activeScope` overridden to the pane's scope — rather than the real
+ * Everything else is per lane: the resolved `InteractionManager` +
+ * `SceneReconciler` pair, and one instance each of
+ * `useHighwayMouseInteraction`, `useChartElements`, `useHighwaySync`, and
+ * `useMarkerDrag` — all parameterized by this lane's own `scope` instead of a
+ * single shared `activeScope`.
+ *
+ * Commands issued from this lane target this lane's `scope` because every
+ * hook here is fed a `laneState` — a shallow copy of the real editor state
+ * with `activeScope` overridden to the lane's scope — rather than the real
  * `state.activeScope`. Tools resolve their command's `trackKey` exclusively
  * from `ctx.state.activeScope` (`tools/tools.ts`), so this is enough to
- * retarget the entire existing tool/command stack per pane with no changes
+ * retarget the entire existing tool/command stack per lane with no changes
  * to `tools/*`.
  *
- * A pane's scope is a track scope on every notes-editing surface; on
+ * A lane's scope is a track scope on every notes-editing surface; on
  * `/add-lyrics` it is the vocals scope, which resolves no notes track (the
  * neutral floor) and drives lyric/phrase markers off the active vocal part.
  *
- * "Last-interacted" semantics: a mousedown in a pane that is not already
- * the active one dispatches `SET_ACTIVE_SCOPE` to this pane's scope. This
+ * "Last-interacted" semantics: a mousedown in a lane that is not already
+ * the active one dispatches `SET_ACTIVE_SCOPE` to this lane's scope. This
  * is the ONLY place `activeScope` changes on interaction — it drives the
  * Note Inspector and keyboard note entry, and is never rendered as a visual
  * focus treatment (plan 0074 Design C — "no focus concept anywhere").
  *
- * Chrome: a pane has no border and no rounding of its own — it sits flush
- * against its neighbours inside `HighwayEditor`'s single dark surface, with
- * only the track label as a small floating chip. Chart-wide chrome is drawn
- * once for the whole highway area: `showLyrics` gates the renderer's karaoke
- * overlay pass, `showTempoBadges` gates whether the BPM / time-signature
- * badge markers are produced at all. See `HighwayEditor` for which pane gets
- * them.
+ * Chrome: a lane has no border and no rounding of its own — the stage paints
+ * one continuous black canvas underneath every lane — and the only per-lane
+ * chrome is the instrument · difficulty label chip. Chart-wide chrome (the
+ * karaoke lyrics line) is drawn once by the stage.
  *
  * Performance guard: this component never subscribes to the assist-run
- * store — assist progress ticks must not re-render panes.
+ * store — assist progress ticks must not re-render lanes.
  *
  * Props, not context, for the shared derivations (`renderDoc`, timing,
- * `editingLocked`): `HighwayEditor` memoizes each one once and every pane
- * reads the same object. The pane is deliberately NOT wrapped in `memo` —
+ * `editingLocked`): `HighwayEditor` memoizes each one once and every lane
+ * reads the same object. The lane is deliberately NOT wrapped in `memo` —
  * `state` is a prop and changes on every `SET_CURRENT_TIME` tick during
  * playback, so a memo boundary here would re-render on every tick anyway
  * while reading as a guarantee it cannot make.
@@ -59,13 +59,10 @@ import {
 } from '@/lib/chart-edit';
 import {useAudioServiceContext} from '../AudioServiceContext';
 import {msToTick} from '@/lib/drum-transcription/timing';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
-import type {AudioManager} from '@/lib/preview/audioManager';
-import type {InteractionManager} from '@/lib/preview/highway';
-import type {SceneReconciler} from '@/lib/preview/highway/SceneReconciler';
+import type {HighwayStage} from '@/lib/preview/highway';
+import type {HighwayRect} from '@/lib/preview/highway/layout';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import type {ChartDocument} from '@/lib/chart-edit';
-import HighwayPreview, {type HighwayRendererHandle} from '../HighwayPreview';
 import type {EditCommand} from '../commands';
 import type {EditorCapabilities} from '../capabilities';
 import {getSelectedIds} from '@/lib/chart-editor-core';
@@ -73,6 +70,7 @@ import {useChartElements} from './useChartElements';
 import {useHighwaySync} from './useHighwaySync';
 import {useMarkerDrag} from './useMarkerDrag';
 import {useHighwayMouseInteraction} from './useHighwayMouseInteraction';
+import {useStageHighway} from './useStageHighway';
 import HighwayPopovers, {type HighwayPopoverState} from './HighwayPopovers';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import {scopePaneKey, trackKeyFromScope, type EditorScope} from '../scope';
@@ -80,13 +78,15 @@ import {trackLabel} from '../trackLabels';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
-export interface HighwayEditorPaneProps {
-  /** What this pane edits — a track on notes surfaces, the active vocal
+export interface HighwayLaneProps {
+  /** What this lane edits — a track on notes surfaces, the active vocal
    *  part on `/add-lyrics`. */
   scope: EditorScope;
-  metadata: ChartResponseEncore;
+  /** The stage this lane mounts its highway into. Null before it exists. */
+  stage: HighwayStage | null;
+  /** This lane's slice of the shared canvas, in CSS pixels. */
+  rect: HighwayRect | undefined;
   chart: ParsedChart;
-  audioManager: AudioManager;
   audioData?: Float32Array | undefined;
   audioChannels: number;
   durationSeconds?: number | undefined;
@@ -99,26 +99,13 @@ export interface HighwayEditorPaneProps {
   renderTimedTempos: TimedTempo[];
   resolution: number;
   editingLocked: boolean;
-  /**
-   * Draw the chart-wide karaoke lyrics overlay in this pane. `HighwayEditor`
-   * turns it on for exactly one pane so a side-by-side highway shows one
-   * karaoke line for the whole area, not one per track.
-   */
-  showLyrics: boolean;
-  /**
-   * Produce the chart-wide BPM / time-signature badge markers for this
-   * pane. Off in side-by-side layouts, where they are both duplicated and
-   * clipped by the narrow pane frustum.
-   */
-  showTempoBadges: boolean;
-  className?: string | undefined;
 }
 
-function HighwayEditorPane({
+function HighwayLane({
   scope,
-  metadata,
+  stage,
+  rect,
   chart,
-  audioManager,
   audioData,
   audioChannels,
   durationSeconds,
@@ -131,83 +118,73 @@ function HighwayEditorPane({
   renderTimedTempos,
   resolution,
   editingLocked,
-  showLyrics,
-  showTempoBadges,
-  className,
-}: HighwayEditorPaneProps) {
-  const paneScope = scope;
-  const track = trackKeyFromScope(paneScope);
+}: HighwayLaneProps) {
+  const laneScope = scope;
+  const track = trackKeyFromScope(laneScope);
+  const laneId = scopePaneKey(laneScope);
 
   // Shallow copy with `activeScope` overridden — every selector/tool that
-  // reads `state.activeScope` resolves to THIS pane's scope without any
+  // reads `state.activeScope` resolves to THIS lane's scope without any
   // change to the selectors or the tool registry.
-  const paneState = useMemo(
-    () => ({...state, activeScope: paneScope}),
-    [state, paneScope],
+  const laneState = useMemo(
+    () => ({...state, activeScope: laneScope}),
+    [state, laneScope],
   );
 
   const activePartName =
-    paneScope.kind === 'vocals' ? paneScope.part : DEFAULT_VOCALS_PART;
+    laneScope.kind === 'vocals' ? laneScope.part : DEFAULT_VOCALS_PART;
 
   const interactionRef = useRef<HTMLDivElement>(null);
 
-  const rendererHandleRef = useRef<HighwayRendererHandle | null>(null);
-  const [rendererVersion, setRendererVersion] = useState(0);
-  const reconcilerRef = useRef<SceneReconciler | null>(null);
-  const interactionManagerRef = useRef<InteractionManager | null>(null);
+  // `null` when this lane has no notes track (vocals/global) or the chart
+  // doesn't contain the requested one. The highway then skips lanes, hitbox,
+  // and note-texture loading and draws only the neutral floor + markers.
+  const activeTrack = useMemo(() => {
+    if (!track) return null;
+    return (
+      chart.trackData.find(
+        t =>
+          t.instrument === track.instrument &&
+          t.difficulty === track.difficulty,
+      ) ?? null
+    );
+  }, [chart, track]);
 
-  const readyGenerationRef = useRef(0);
-  const handleRendererReady = useCallback(
-    (handle: HighwayRendererHandle | null) => {
-      rendererHandleRef.current = handle;
-      // Every ready/teardown callback invalidates the previous generation, so
-      // a `Promise.all` still in flight for a renderer that has since gone
-      // away can never write its disposed reconciler back into the refs.
-      const gen = ++readyGenerationRef.current;
-      if (!handle) {
-        interactionManagerRef.current = null;
-        reconcilerRef.current = null;
-        setRendererVersion(v => v + 1);
-        return;
-      }
-      Promise.all([
-        handle.getReconciler(),
-        handle.getInteractionManager(),
-      ]).then(([rec, im]) => {
-        if (readyGenerationRef.current !== gen) return;
-        reconcilerRef.current = rec;
-        interactionManagerRef.current = im;
-        setRendererVersion(v => v + 1);
-      });
-    },
-    [],
-  );
+  const {
+    handleRef: stageHandleRef,
+    reconcilerRef,
+    interactionManagerRef,
+    version: stageHighwayVersion,
+  } = useStageHighway({
+    stage,
+    id: laneId,
+    track: activeTrack,
+    showDrumLanes: capabilities.showDrumLanes && activeTrack != null,
+  });
 
-  /** Whether this pane is the last-interacted one. Drives only the
+  /** Whether this lane is the last-interacted one. Drives only the
    *  `SET_ACTIVE_SCOPE` dispatch below — never a visual treatment. */
-  const isActivePane = scopePaneKey(state.activeScope) === scopePaneKey(scope);
+  const isActiveLane = scopePaneKey(state.activeScope) === laneId;
 
   const [popover, setPopover] = useState<HighwayPopoverState | null>(null);
   const closePopover = useCallback(() => setPopover(null), []);
 
-  // Keyed on the doc and this pane's track only. Deriving it from
-  // `paneState` would re-list every note in the track, once per pane, on
+  // Keyed on the doc and this lane's track only. Deriving it from
+  // `laneState` would re-list every note in the track, once per lane, on
   // every playback tick (`SET_CURRENT_TIME`) — nothing about the note list
   // depends on transport state.
   const chartDoc = state.chartDoc;
   const activeNotes = useMemo(() => {
     if (!chartDoc || !track) return [];
-    const activeTrack = findTrack(chartDoc, track)?.track ?? null;
-    if (!activeTrack) return [];
-    const schema = schemaForTrack(activeTrack, chartDoc.parsedChart.drumType);
-    return schema ? listNotes(activeTrack, schema) : [];
+    const trackData = findTrack(chartDoc, track)?.track ?? null;
+    if (!trackData) return [];
+    const schema = schemaForTrack(trackData, chartDoc.parsedChart.drumType);
+    return schema ? listNotes(trackData, schema) : [];
   }, [chartDoc, track]);
 
   const {markerDrag, beginMarkerDrag, updateMarkerDrag, commitMarkerDrag} =
     useMarkerDrag({
-      chart: state.chartDoc?.parsedChart ?? null,
-      activeScope: paneScope,
-      activePartName,
+      activeScope: laneScope,
       executeCommand,
       dispatch,
     });
@@ -227,9 +204,8 @@ function HighwayEditorPane({
   } = useHighwayMouseInteraction({
     interactionRef,
     interactionManagerRef,
-    state: paneState,
+    state: laneState,
     capabilities,
-    activePartName,
     activeNotes,
     timedTempos,
     resolution,
@@ -243,27 +219,24 @@ function HighwayEditorPane({
     editingLocked,
   });
 
-  // Last-interacted semantics: any pointer-down in this pane becomes the
+  // Last-interacted semantics: any pointer-down in this lane becomes the
   // active scope. Never a visual focus treatment — just retargets keyboard
   // entry / Note Inspector.
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!isActivePane) {
-        dispatch({type: 'SET_ACTIVE_SCOPE', scope: paneScope});
+      if (!isActiveLane) {
+        dispatch({type: 'SET_ACTIVE_SCOPE', scope: laneScope});
       }
       onMouseDown(e);
     },
-    [dispatch, isActivePane, onMouseDown, paneScope],
+    [dispatch, isActiveLane, onMouseDown, laneScope],
   );
 
   useHighwaySync({
-    rendererHandleRef,
-    rendererVersion,
+    stageHandleRef,
+    stageHighwayVersion,
     chartDoc: renderDoc,
     durationSeconds,
-    timedTempos: renderTimedTempos,
-    resolution,
-    partName: activePartName,
     audioData,
     audioChannels,
     highwayMode: state.highwayMode,
@@ -288,9 +261,9 @@ function HighwayEditorPane({
 
   useChartElements({
     reconcilerRef,
-    rendererVersion,
+    rendererVersion: stageHighwayVersion,
     chart: renderDoc?.parsedChart ?? null,
-    activeScope: paneScope,
+    activeScope: laneScope,
     partName: activePartName,
     capabilities,
     selection: state.selection,
@@ -299,13 +272,12 @@ function HighwayEditorPane({
     noteDrag: noteDragHint,
     timedTempos: renderTimedTempos,
     resolution,
-    showTempoBadges,
   });
 
   // ---------------------------------------------------------------------
   // Wheel scrolling -- scrub cursor forward/backward by one grid step.
-  // Chart-wide (not per-track), attached per pane so scrubbing works no
-  // matter which pane the pointer is over.
+  // Chart-wide (not per-track), attached per lane so scrubbing works no
+  // matter which lane the pointer is over.
   // ---------------------------------------------------------------------
   const {audioManagerRef} = useAudioServiceContext();
   useEffect(() => {
@@ -364,12 +336,8 @@ function HighwayEditorPane({
     }
     if (
       state.activeTool === 'cursor' &&
-      hoveredHitType &&
-      (hoveredHitType === 'section' ||
-        hoveredHitType === 'lyric' ||
-        hoveredHitType === 'phrase-start' ||
-        hoveredHitType === 'phrase-end') &&
-      capabilities.selectable.has(hoveredHitType)
+      hoveredHitType === 'section' &&
+      capabilities.selectable.has('section')
     ) {
       return 'pointer';
     }
@@ -380,9 +348,6 @@ function HighwayEditorPane({
         return 'crosshair';
       case 'erase':
         return 'pointer';
-      case 'bpm':
-      case 'timesig':
-        return 'crosshair';
       default:
         return 'default';
     }
@@ -392,25 +357,20 @@ function HighwayEditorPane({
 
   return (
     <div
-      className={className}
-      style={{cursor: cursorStyle, position: 'relative'}}
-      data-testid={`highway-pane-${scopePaneKey(scope)}`}>
+      className="absolute z-10 overflow-hidden"
+      style={{
+        cursor: cursorStyle,
+        left: rect?.x ?? 0,
+        top: rect?.y ?? 0,
+        width: rect?.width ?? 0,
+        height: rect?.height ?? 0,
+      }}
+      data-testid={`highway-lane-${laneId}`}>
       {label && (
         <div className="pointer-events-none absolute left-2 top-2 z-30 rounded-full bg-[var(--ed-surface-hover)] px-2 py-0.5 text-xs font-medium text-white/80 backdrop-blur-sm">
           {label}
         </div>
       )}
-
-      <HighwayPreview
-        metadata={metadata}
-        chart={chart}
-        audioManager={audioManager}
-        className="h-full w-full"
-        showLanes={capabilities.showDrumLanes}
-        trackKey={track}
-        showLyrics={showLyrics}
-        onRendererReady={handleRendererReady}
-      />
 
       <div
         ref={interactionRef}
@@ -446,10 +406,9 @@ function HighwayEditorPane({
         popover={popover}
         onClose={closePopover}
         executeCommand={executeCommand}
-        tempoGlueMode={state.tempoGlueMode}
       />
     </div>
   );
 }
 
-export default HighwayEditorPane;
+export default HighwayLane;

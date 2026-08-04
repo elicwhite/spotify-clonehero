@@ -1008,6 +1008,81 @@ describe('SceneReconciler', () => {
   });
 
   // -----------------------------------------------------------------------
+  // acceptedKinds allowlist
+  // -----------------------------------------------------------------------
+
+  describe('acceptedKinds', () => {
+    it('accepts every kind when no allowlist is given', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
+
+      reconciler.setElements([
+        el('note:0:kick', 0, {}, 'note'),
+        el('bpm:0', 0, {}, 'bpm'),
+      ]);
+
+      expect(reconciler.getElements().map(e => e.key)).toEqual([
+        'note:0:kick',
+        'bpm:0',
+      ]);
+    });
+
+    it('drops elements outside the allowlist before storing them', () => {
+      const scene = new MockScene() as any;
+      const noteRenderer = createMockRenderer();
+      const sectionRenderer = createMockRenderer();
+      const reconciler = new SceneReconciler(
+        scene,
+        {note: noteRenderer, section: sectionRenderer},
+        1.5,
+        new Set(['note', 'section']),
+      );
+
+      reconciler.setElements([
+        el('note:0:kick', 0, {}, 'note'),
+        el('section:0', 0, {}, 'section'),
+        el('lyric:vocals:0', 0, {}, 'lyric'),
+        el('bpm:0', 0, {}, 'bpm'),
+        el('ts:0', 0, {}, 'ts'),
+      ]);
+      reconciler.updateWindow(0);
+
+      expect(reconciler.getElements().map(e => e.key)).toEqual([
+        'note:0:kick',
+        'section:0',
+      ]);
+      expect([...reconciler.getActiveGroups().keys()]).toEqual([
+        'note:0:kick',
+        'section:0',
+      ]);
+      expect(reconciler.getElement('bpm:0')).toBeUndefined();
+      expect(scene.addedGroups).toHaveLength(2);
+    });
+
+    it('never recycles a dropped element when a later push omits it', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(
+        scene,
+        {note: renderer},
+        1.5,
+        new Set(['note']),
+      );
+
+      reconciler.setElements([
+        el('note:0:kick', 0, {}, 'note'),
+        el('bpm:0', 0, {}, 'bpm'),
+      ]);
+      reconciler.updateWindow(0);
+      reconciler.setElements([el('note:0:kick', 0, {}, 'note')]);
+
+      expect(renderer.recycled).toHaveLength(0);
+      expect(reconciler.getActiveGroupsRevision()).toBe(1);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // dispose
   // -----------------------------------------------------------------------
 

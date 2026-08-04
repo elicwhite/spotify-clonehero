@@ -19,14 +19,7 @@
 import type {ToolMode} from '@/lib/chart-editor-core';
 import {AFFORDANCES} from '../affordances';
 import type {EditorCapabilities} from '../capabilities';
-import {
-  selectMoveTool,
-  boxSelectTool,
-  placeNoteTool,
-  eraseTool,
-  tempoMarkerTool,
-  timeSignatureMarkerTool,
-} from './tools';
+import {selectMoveTool, boxSelectTool, placeNoteTool, eraseTool} from './tools';
 import type {EditorTool, PointerHitInfo, ToolContext} from './types';
 
 /** Every tool registered for each `ToolMode`. `'cursor'` is the only mode
@@ -35,8 +28,6 @@ export const TOOL_REGISTRY: Record<ToolMode, readonly EditorTool[]> = {
   cursor: [selectMoveTool, boxSelectTool],
   place: [placeNoteTool],
   erase: [eraseTool],
-  bpm: [tempoMarkerTool],
-  timesig: [timeSignatureMarkerTool],
 };
 
 /** Which tool a pointer-down in the given `ToolMode` should dispatch to. */

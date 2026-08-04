@@ -1,6 +1,13 @@
 'use client';
 
-import {useMemo, useEffect, useRef} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {useChartEditorContext} from './ChartEditorContext';
 import {useAudioManager} from './AudioServiceContext';
 import {parseTrackKeyId, selectRenderDoc} from '@/lib/chart-editor-core';
@@ -11,7 +18,11 @@ import {
   msToTick,
   snapToGrid,
 } from '@/lib/drum-transcription/timing';
-import HighwayEditorPane from './highway/HighwayEditorPane';
+import HighwayLane from './highway/HighwayLane';
+import {useStageSync} from './highway/useStageSync';
+import {setupStage, type HighwayStage} from '@/lib/preview/highway';
+import {computeStageLayout} from '@/lib/preview/highway/layout';
+import {DEFAULT_VOCALS_PART} from '@/lib/chart-edit';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {TrackKey} from '@/lib/chart-edit';
@@ -33,62 +44,48 @@ interface HighwayEditorProps {
   /**
    * Whether the piano roll below stacks one row per track. Only affects the
    * overflow chip's copy: a stacked piano roll does show the tracks that
-   * didn't get a pane, a single-track one doesn't.
+   * didn't get a lane, a single-track one doesn't.
    */
   stackedPianoRoll?: boolean | undefined;
 }
 
-/** Highway panes render at most this many visible tracks at once (2026-08-03
- *  spike: 1-4 simultaneous `HighwayPreview` panes all sustained ~240
- *  draw-loops/s with a flat worst-1% frame). Four is what the route model
- *  needs: `/drum-difficulties` and `/guitar-difficulties` land with one
- *  instrument's Expert/Hard/Medium/Easy all visible. Beyond that the extra
- *  tracks fall to the "+N more" overflow chip. */
-const MAX_HIGHWAY_PANES = 4;
-
 /**
- * On surfaces that show the Chart Matrix, renders one highway pane per
+ * On surfaces that show the Chart Matrix, renders one highway lane per
  * visible track (`state.visibleTrackKeys`, insertion order), capped at
- * `MAX_HIGHWAY_PANES` with a "+N more" overflow chip. Every pane is
- * independently editable — no "focused" pane concept; `activeScope` tracks
- * only which pane was last interacted with, for keyboard entry and the Note
+ * `layout.maxHighways` with a "+N more" overflow chip. Every lane is
+ * independently editable — no "focused" lane concept; `activeScope` tracks
+ * only which lane was last interacted with, for keyboard entry and the Note
  * Inspector (plan 0074 Design C). Surfaces with `showChartMatrix: false`
- * have no way to change the visible set, so they render a single pane on
+ * have no way to change the visible set, so they render a single lane on
  * `activeScope`, the track they were configured with.
  *
  * A vocals scope (`/add-lyrics`) is the one non-track surface: it renders a
- * single pane scoped to the active vocal part, with no notes track and no
+ * single lane scoped to the active vocal part, with no notes track and no
  * matrix behind it, so the neutral floor plus lyric/phrase markers is what
- * the pane draws.
+ * the lane draws.
  *
- * All per-pane interaction (mouse handling, chart-element push, renderer
- * sync, marker drag) lives in `HighwayEditorPane`; this component only
- * resolves the pane list and the state shared by every pane (render doc,
- * timing, lock state).
+ * One scene, one canvas. This component owns a single `HighwayStage`: one
+ * `WebGLRenderer`, one `THREE.Scene`, one animation loop, with each lane's
+ * highway a group inside it rendered through its own camera into its own
+ * viewport/scissor slice. It measures the canvas host, derives the lane rects
+ * from `computeStageLayout`, and pushes that one `StageLayout` object to both
+ * consumers — the absolutely-positioned lane overlays and the stage's GL
+ * rects — so DOM pixels and GL pixels cannot drift apart.
  *
- * Shared chrome. Panes sit flush inside one dark surface — no per-pane
- * border or rounding, only a 1px seam of the container's color between
- * them — and chart-wide chrome is drawn once for the whole area rather
- * than once per pane:
+ * The lane cap comes from that same layout: `maxHighways` is how many lanes
+ * the measured canvas width can hold at `MIN_HIGHWAY_PX` each. Showing or
+ * hiding a track, or resizing the window past a lane's worth of width, adds
+ * or removes one highway on the live stage — it never rebuilds the stage, the
+ * renderer, or the context.
  *
- *   - Karaoke lyrics (`showLyrics`) render in the leftmost pane only. The
- *     overlay is a second WebGL pass inside a pane's own canvas
- *     (`LyricsOverlay`, `lib/preview/highway/index.ts`), so it cannot be
- *     centered across panes without moving it out of THREE and into a DOM
- *     layer over the whole highway area. Leftmost-pane placement is the
- *     honest fit for the current renderer.
- *   - BPM / time-signature badges (`showTempoBadges`) are produced only
- *     when there is a single pane. They are world-space sprites anchored
- *     just outside the highway's left and right edges, so a narrow pane's
- *     camera frustum cuts them off — the clipping the multi-pane layout
- *     showed. Unlike the lyrics overlay these are ordinary marker
- *     elements, so a pane that should not show them simply never produces
- *     them (`useChartElements`), which also keeps the left/right marker
- *     stack indices computed over exactly the markers a pane draws. They
- *     are read-only on every capability preset (no
- *     preset lists `tempo`/`timesig` as hoverable, selectable, or
- *     draggable), so hiding them costs no interaction; the piano roll's
- *     tempo lane is the full-width place to read and edit them.
+ * Chart-wide chrome is drawn once by the stage rather than once per lane: the
+ * karaoke lyrics line spans the whole strip, top-center, reading the active
+ * vocal part on a vocals scope and the default part everywhere else.
+ *
+ * All per-lane interaction (mouse handling, chart-element push, renderer
+ * sync, marker drag) lives in `HighwayLane`; this component resolves the lane
+ * list, the state shared by every lane (render doc, timing, lock state), and
+ * the stage.
  */
 export default function HighwayEditor({
   metadata,
@@ -128,12 +125,12 @@ export default function HighwayEditor({
   const resolution = state.chartDoc?.parsedChart.resolution ?? 480;
 
   // A pending candidate is a read-only preview contract: note editing is
-  // gated in every pane while it's up (see HighwayEditorPane).
+  // gated in every lane while it's up (see HighwayLane).
   const editingLocked = state.pendingTempoCandidate !== null;
 
   // ---------------------------------------------------------------------------
   // Sync cursor tick with playback. Chart-wide, so it lives once here
-  // rather than once per pane.
+  // rather than once per lane.
   // ---------------------------------------------------------------------------
   const prevIsPlayingRef = useRef(state.isPlaying);
   useEffect(() => {
@@ -160,7 +157,7 @@ export default function HighwayEditor({
   ]);
 
   // ---------------------------------------------------------------------------
-  // Pane list -- ordered by state.visibleTrackKeys insertion order, capped.
+  // Lane list -- ordered by state.visibleTrackKeys insertion order, capped.
   // The reducer guarantees every id here names a track the doc contains, so
   // this only has to parse them.
   // ---------------------------------------------------------------------------
@@ -178,65 +175,160 @@ export default function HighwayEditor({
   // `visibleTrackKeys` is the Chart Matrix's state, and the matrix is the
   // only thing that writes it. Surfaces without a matrix (`/preview`,
   // `/tempo`, `/add-lyrics`) configure their track through `activeScope`
-  // instead, and their piano roll reads it too, so their single pane follows
+  // instead, and their piano roll reads it too, so their single lane follows
   // it -- deriving from the reducer-seeded visible set would show whichever
   // track `preferredTrackForChart` picked, out of step with the rest of the
   // page.
-  const matrixDrivesPanes = capabilities.showChartMatrix;
+  const matrixDrivesLanes = capabilities.showChartMatrix;
   const activeScope = state.activeScope;
 
-  const paneScopes: EditorScope[] = useMemo(() => {
+  const laneScopes: EditorScope[] = useMemo(() => {
     if (vocalsScope) return [vocalsScope];
-    if (!matrixDrivesPanes) return [activeScope];
+    if (!matrixDrivesLanes) return [activeScope];
     return visibleTracks.map(track => ({kind: 'track' as const, track}));
-  }, [vocalsScope, matrixDrivesPanes, activeScope, visibleTracks]);
+  }, [vocalsScope, matrixDrivesLanes, activeScope, visibleTracks]);
 
-  const panes = paneScopes.slice(0, MAX_HIGHWAY_PANES);
-  const overflowCount = Math.max(0, paneScopes.length - MAX_HIGHWAY_PANES);
+  // ---------------------------------------------------------------------------
+  // The stage: one renderer, one canvas, one scene, one animation loop.
+  // ---------------------------------------------------------------------------
+  const sizingRef = useRef<HTMLDivElement>(null);
+  const canvasHostRef = useRef<HTMLDivElement>(null);
+  const [stage, setStage] = useState<HighwayStage | null>(null);
 
-  if (panes.length === 0) {
-    // Reachable through the UI: the matrix lets the user hide every track,
-    // including the last one (the approved prototype's "No tracks shown"
-    // state).
-    return (
-      <div
-        className={cn(
-          // The theme-independent editor-surface tokens, not
-          // `text-muted-foreground`: this sits on the black highway surface
-          // in both themes, and the muted token is a mid grey tuned for
-          // `--background` - on black it falls under AA.
-          'relative flex h-full w-full items-center justify-center bg-[var(--ed-surface)] text-sm text-[color:var(--ed-surface-fg-muted)]',
-          className,
-        )}>
-        No tracks shown. Click a difficulty in the Chart Matrix to show it here.
-      </div>
+  // Chart data updates flow through the reconciler, never through a stage
+  // rebuild, so the stage only reads the chart when a highway is first built.
+  const chartRef = useRef(chart);
+  useEffect(() => {
+    chartRef.current = chart;
+  });
+
+  // One context now backs every lane, so losing it blanks the whole strip.
+  // Bumping this generation destroys the dead stage and builds a new one; each
+  // lane's mount effect keys off the stage identity, so the current visible
+  // set re-adds itself onto the new context.
+  const [stageGeneration, setStageGeneration] = useState(0);
+
+  useEffect(() => {
+    const created = setupStage(
+      metadata,
+      chartRef.current,
+      sizingRef,
+      canvasHostRef,
+      audioManager,
     );
-  }
+    const unsubscribe = created.onContextLost(() => {
+      setStageGeneration(generation => generation + 1);
+    });
+    created.startRender();
+    setStage(created);
+    return () => {
+      unsubscribe();
+      setStage(null);
+      created.destroy();
+    };
+  }, [metadata, audioManager, stageGeneration]);
+
+  // ---------------------------------------------------------------------------
+  // Measurement -> layout. React measures the canvas host once for the whole
+  // strip; the stage never measures anything itself.
+  // ---------------------------------------------------------------------------
+  const [canvasSize, setCanvasSize] = useState({width: 0, height: 0});
+
+  const measure = useCallback(() => {
+    const el = sizingRef.current;
+    if (!el) return;
+    setCanvasSize(prev =>
+      prev.width === el.offsetWidth && prev.height === el.offsetHeight
+        ? prev
+        : {width: el.offsetWidth, height: el.offsetHeight},
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    measure();
+    const el = sizingRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [measure]);
+
+  // ---------------------------------------------------------------------------
+  // Layout -> lane slice. One `StageLayout` object drives everything: how many
+  // lanes fit, the overflow chip, the lane overlay rects, and the stage's GL
+  // rects. `maxHighways` depends only on the canvas width, so a first pass
+  // over the full lane list reports the cap and a second lays out only the
+  // lanes that fit. At width 0 -- before the first measurement, and in jsdom,
+  // which has no layout at all -- `computeStageLayout` reports
+  // `measured: false` and falls back to `MAX_HIGHWAYS`, so lane routing
+  // behaves as it does at full width instead of collapsing to one lane.
+  // ---------------------------------------------------------------------------
+  const layout = useMemo(() => {
+    const canvas = {
+      canvasWidth: canvasSize.width,
+      canvasHeight: canvasSize.height,
+    };
+    const probe = computeStageLayout({
+      ...canvas,
+      highwayCount: laneScopes.length,
+    });
+    if (laneScopes.length <= probe.maxHighways) return probe;
+    return computeStageLayout({...canvas, highwayCount: probe.maxHighways});
+  }, [canvasSize.width, canvasSize.height, laneScopes.length]);
+
+  const lanes = useMemo(
+    () => laneScopes.slice(0, layout.maxHighways),
+    [laneScopes, layout.maxHighways],
+  );
+  const overflowCount = Math.max(0, laneScopes.length - layout.maxHighways);
+
+  const laneIds = useMemo(() => lanes.map(scopePaneKey), [lanes]);
+
+  // The same `layout` object that positions the lane overlays below.
+  useEffect(() => {
+    stage?.setLayout(layout, laneIds);
+  }, [stage, layout, laneIds]);
+
+  // Lyrics belong to the song: one push for the whole strip, off the active
+  // vocal part on `/add-lyrics` and the default part everywhere else.
+  const stagePartName = vocalsScope ? vocalsScope.part : DEFAULT_VOCALS_PART;
+  useStageSync({
+    stage,
+    chartDoc: renderDoc,
+    timedTempos: renderTimedTempos,
+    resolution,
+    partName: stagePartName,
+  });
 
   return (
     <div
+      ref={sizingRef}
       className={cn(
-        // Opaque token, not a translucent white: `darkMode` is `media`, so
-        // a translucent seam would composite against `--background` and read
-        // as a bright hairline in light mode and near-invisible in dark. The
-        // seam sits between two black canvases and must look the same in
-        // both themes.
-        'relative grid h-full w-full overflow-hidden bg-[var(--ed-surface-seam)]',
+        'relative h-full w-full overflow-hidden bg-[var(--ed-surface)]',
         className,
+      )}>
+      <div ref={canvasHostRef} className="absolute inset-0" />
+
+      {lanes.length === 0 && (
+        // Reachable through the UI: the matrix lets the user hide every
+        // track, including the last one (the approved prototype's "No tracks
+        // shown" state). The theme-independent editor-surface tokens, not
+        // `text-muted-foreground`: this sits on the black highway surface in
+        // both themes, and the muted token is a mid grey tuned for
+        // `--background` - on black it falls under AA.
+        <div className="absolute inset-0 z-20 flex items-center justify-center text-sm text-[color:var(--ed-surface-fg-muted)]">
+          No tracks shown. Click a difficulty in the Chart Matrix to show it
+          here.
+        </div>
       )}
-      style={{
-        gridTemplateColumns: `repeat(${panes.length}, 1fr)`,
-        // Panes paint their own black canvas edge to edge, so the container's
-        // color is only ever visible through this 1px seam between them.
-        gap: '1px',
-      }}>
-      {panes.map((scope, index) => (
-        <HighwayEditorPane
+
+      {lanes.map((scope, index) => (
+        <HighwayLane
           key={scopePaneKey(scope)}
           scope={scope}
-          metadata={metadata}
+          stage={stage}
+          rect={layout.highways[index]}
           chart={chart}
-          audioManager={audioManager}
           audioData={audioData}
           audioChannels={audioChannels}
           durationSeconds={durationSeconds}
@@ -249,9 +341,6 @@ export default function HighwayEditor({
           renderTimedTempos={renderTimedTempos}
           resolution={resolution}
           editingLocked={editingLocked}
-          showLyrics={index === 0}
-          showTempoBadges={panes.length === 1}
-          className="relative overflow-hidden bg-[var(--ed-surface)]"
         />
       ))}
 

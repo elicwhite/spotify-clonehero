@@ -1,41 +1,39 @@
 'use client';
 
 /**
- * Pushes editor-side state into the Three.js renderer/scene each time
+ * Pushes editor-side state into one highway of the shared stage each time
  * relevant slices change.
  *
- * Each effect has the same shape: read a renderer handle, read some React
- * state, call one of `handle.setX(...)`. Co-locating them keeps the editor
+ * Each effect has the same shape: read the highway handle, read some React
+ * state, call one of `handle.setX(...)`. Co-locating them keeps the lane
  * component focused on UI, and makes it obvious which pieces of state the
  * renderer actually consumes.
+ *
+ * Everything here is per highway. The chart-wide pushes — the karaoke lyrics
+ * overlay and the tempo map — belong to the stage and live in `useStageSync`.
  *
  * One-way data flow: editor state → renderer. The renderer never reads
  * back; it just consumes the most recent push.
  */
 
 import {useEffect, type RefObject} from 'react';
-import type {HighwayRendererHandle} from '../HighwayPreview';
+import type {StageHighwayHandle} from '@/lib/preview/highway';
 import type {ChartDocument} from '@/lib/chart-edit';
-import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import type {HighwayMode} from '@/lib/preview/highway';
 import type {ToolMode} from '@/lib/chart-editor-core';
 
 export interface HighwaySyncInputs {
-  rendererHandleRef: RefObject<HighwayRendererHandle | null>;
+  stageHandleRef: RefObject<StageHighwayHandle | null>;
   /**
-   * Bumped whenever the renderer handle is created or replaced. Drives
-   * "first push after mount" — every effect lists this so the renderer
-   * gets seeded with the current state on a fresh mount.
+   * Bumped whenever this highway's handle is created or torn down. Drives
+   * "first push after mount" — every effect lists this so a freshly mounted
+   * highway gets seeded with the current state.
    */
-  rendererVersion: number;
+  stageHighwayVersion: number;
 
-  // Document + timing
+  // Document
   chartDoc: ChartDocument | null;
   durationSeconds: number | undefined;
-  timedTempos: TimedTempo[];
-  resolution: number;
-  /** Active vocal part — drives which `vocalTracks.parts[part]` powers the karaoke overlay. */
-  partName: string;
 
   // Audio waveform
   audioData: Float32Array | undefined;
@@ -59,13 +57,10 @@ export interface HighwaySyncInputs {
  */
 export function useHighwaySync(inputs: HighwaySyncInputs): void {
   const {
-    rendererHandleRef,
-    rendererVersion,
+    stageHandleRef,
+    stageHighwayVersion,
     chartDoc,
     durationSeconds,
-    timedTempos,
-    resolution,
-    partName,
     audioData,
     audioChannels,
     highwayMode,
@@ -81,7 +76,7 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
   // Waveform highway texture
   // -----------------------------------------------------------------------
   useEffect(() => {
-    const handle = rendererHandleRef.current;
+    const handle = stageHandleRef.current;
     if (!handle || !audioData || !durationSeconds) return;
     handle.setWaveformData({
       audioData,
@@ -89,8 +84,8 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
       durationMs: durationSeconds * 1000,
     });
   }, [
-    rendererHandleRef,
-    rendererVersion,
+    stageHandleRef,
+    stageHighwayVersion,
     audioData,
     audioChannels,
     durationSeconds,
@@ -100,7 +95,7 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
   // Grid (beats + bars)
   // -----------------------------------------------------------------------
   useEffect(() => {
-    const handle = rendererHandleRef.current;
+    const handle = stageHandleRef.current;
     if (!handle || !chartDoc || !durationSeconds) return;
     const tempos = chartDoc.parsedChart.tempos.map(t => ({
       tick: t.tick,
@@ -117,44 +112,16 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
       resolution: chartDoc.parsedChart.resolution,
       durationMs: durationSeconds * 1000,
     });
-  }, [rendererHandleRef, rendererVersion, chartDoc, durationSeconds]);
+  }, [stageHandleRef, stageHighwayVersion, chartDoc, durationSeconds]);
 
   // -----------------------------------------------------------------------
   // Highway mode (classic vs waveform)
   // -----------------------------------------------------------------------
   useEffect(() => {
-    const handle = rendererHandleRef.current;
+    const handle = stageHandleRef.current;
     if (!handle) return;
     handle.setHighwayMode(highwayMode);
-  }, [rendererHandleRef, rendererVersion, highwayMode]);
-
-  // -----------------------------------------------------------------------
-  // Timing data (tempos + resolution)
-  // -----------------------------------------------------------------------
-  useEffect(() => {
-    const handle = rendererHandleRef.current;
-    if (!handle || timedTempos.length === 0) return;
-    handle.setTimingData(timedTempos, resolution);
-  }, [rendererHandleRef, rendererVersion, timedTempos, resolution]);
-
-  // -----------------------------------------------------------------------
-  // Karaoke lyrics overlay — re-push on every chartDoc change so the
-  // overlay tracks lyric/phrase edits (drag, rename, add, remove).
-  // The handle lazy-creates the overlay if the original chart had no
-  // lyrics but the user has now added some.
-  // -----------------------------------------------------------------------
-  useEffect(() => {
-    const handle = rendererHandleRef.current;
-    if (!handle || !chartDoc) return;
-    const vocals = chartDoc.parsedChart.vocalTracks?.parts?.[partName];
-    const lyrics = vocals?.notePhrases.flatMap(p => p.lyrics) ?? [];
-    const phrases =
-      vocals?.notePhrases.map(p => ({
-        msTime: p.msTime,
-        msLength: p.msLength,
-      })) ?? [];
-    handle.setLyricsData(lyrics, phrases);
-  }, [rendererHandleRef, rendererVersion, chartDoc, partName]);
+  }, [stageHandleRef, stageHighwayVersion, highwayMode]);
 
   // -----------------------------------------------------------------------
   // Overlay state (cursor, tool, hover, loop, playing). Selection visuals are
@@ -162,7 +129,7 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
   // notes share the same dispatch path as the marker entities.
   // -----------------------------------------------------------------------
   useEffect(() => {
-    const handle = rendererHandleRef.current;
+    const handle = stageHandleRef.current;
     if (handle) {
       handle.setOverlayState({
         cursorTick: hoverTick ?? cursorTick,
@@ -174,8 +141,8 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
       });
     }
   }, [
-    rendererHandleRef,
-    rendererVersion,
+    stageHandleRef,
+    stageHighwayVersion,
     cursorTick,
     isPlaying,
     activeTool,

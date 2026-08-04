@@ -77,7 +77,6 @@ export interface ToolDragAccessors {
 export interface ToolContext {
   state: ChartEditorState;
   capabilities: EditorCapabilities;
-  activePartName: string;
   /** The active scope's `InstrumentSchema` (`selectActiveSchema`), or null
    *  for non-track scopes (`vocals`/`global`). Tools resolve lane/type math
    *  through this instead of a hardcoded `drums4LaneSchema`. */
@@ -102,9 +101,9 @@ export interface ToolContext {
 
 /**
  * A registered highway tool. `onPointerDown` is required — a tool that only
- * fires on click (BPM/timesig/section popovers) implements just that.
- * `onPointerMove`/`onPointerUp` are optional continuations for tools that
- * span a drag (select-move, box-select, erase-paint, marker drag).
+ * fires on click implements just that. `onPointerMove`/`onPointerUp` are
+ * optional continuations for tools that span a drag (select-move, box-select,
+ * erase-paint, section drag).
  */
 export interface EditorTool {
   id: string;

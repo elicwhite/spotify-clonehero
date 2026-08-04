@@ -11,7 +11,7 @@ export {
   selectRenderDoc,
   selectTempoDerivedStale,
 } from './selectors';
-export {initialState, UNDO_STACK_CAP} from './state';
+export {initialState, TOOL_MODES, UNDO_STACK_CAP} from './state';
 export {
   carryAssistProvenance,
   computeAllTrackStamps,

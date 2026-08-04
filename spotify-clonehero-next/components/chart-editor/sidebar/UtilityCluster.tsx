@@ -13,11 +13,12 @@
  * (`showEditingControls`, `showToolPalette`), so capability-gated pages keep
  * exactly the affordances they had.
  *
- * bpm/timesig/erase/section tools do NOT move here. bpm and timesig are
- * dropped because the piano roll's tempo-lane right-click menu already
+ * erase/section tools do NOT move here. Tempo and time-signature editing has
+ * no tool row entry at all: the piano roll's tempo-lane right-click menu
  * offers "Add tempo marker here" and "Insert time signature change here"
- * (`PianoRollTimeline.tsx`'s `buildTempoMenu`) — a real, already-shipped
- * affordance, not a gap. Erase is dropped because Delete/Backspace and the
+ * (`PianoRollTimeline.tsx`'s `buildTempoMenu`), and its tempo lane is the
+ * only place those values are read and edited. Erase is dropped because
+ * Delete/Backspace and the
  * note context menu's "Delete note" already remove selected notes. Section
  * is dropped the same way (plan 0076 item 19): the section strip (the
  * piano roll's ruler) now has its own right-click menu — "Add section

@@ -19,7 +19,7 @@ import {
   type HighwayFretTextures,
   type HighwaySustainTextures,
 } from './TextureManager';
-import {SceneReconciler} from './SceneReconciler';
+import {SceneReconciler, type ElementRenderer} from './SceneReconciler';
 import {NoteRenderer} from './NoteRenderer';
 import {MarkerRenderer} from './MarkerRenderer';
 import {trackToElements} from './trackToElements';
@@ -145,14 +145,26 @@ export async function loadCellTextures(
   };
 }
 
+/**
+ * What a highway draws: notes and section markers. Beat/measure grid lines
+ * come from `GridOverlay`, which is geometry rather than an element kind.
+ * Tempo, time-signature, lyric, and phrase markers belong to the piano roll —
+ * its tempo lane and lyrics row are where they are read and edited.
+ *
+ * This is the single enforcement point. It types the reconciler's renderer
+ * map below (so a renderer for another kind cannot be registered) and is
+ * handed to the reconciler as its accepted-kind allowlist (so an element of
+ * another kind is never stored, windowed, or hit-tested), which lets callers
+ * push the whole chart projection without filtering it first.
+ */
+export type HighwayElementKind = 'note' | 'section';
+
+export const HIGHWAY_ELEMENT_KINDS: ReadonlySet<HighwayElementKind> =
+  new Set<HighwayElementKind>(['note', 'section']);
+
 /** The per-marker-kind renderers a highway scene registers. */
 export interface CellMarkerRenderers {
   section: MarkerRenderer;
-  lyric: MarkerRenderer;
-  phraseStart: MarkerRenderer;
-  phraseEnd: MarkerRenderer;
-  bpm: MarkerRenderer;
-  ts: MarkerRenderer;
 }
 
 /** The reusable scene core `buildHighwayCell` returns. */
@@ -162,6 +174,16 @@ export interface HighwayCellCore {
   reconciler: SceneReconciler;
   noteRenderer: NoteRenderer;
   markerRenderers: CellMarkerRenderers;
+  /**
+   * Remove the meshes this cell added to `root` (the floor plus the hitbox or
+   * plain strikeline) and release their geometry, materials, and the textures
+   * those materials loaded. The scrolling floor texture is not touched: it
+   * belongs to `CellTextures`, so `disposeCellTextures` releases it.
+   *
+   * A stage keeps one long-lived context across highway churn, so a removed
+   * highway's GPU memory is only reclaimed if the highway hands it back.
+   */
+  disposeMeshes(): void;
 }
 
 export interface BuildHighwayCellParams {
@@ -177,13 +199,15 @@ export interface BuildHighwayCellParams {
 }
 
 /**
- * Build the highway floor + hitbox/strikeline + note/marker renderers +
- * reconciler into `scene`, seeding the reconciler with the track's notes.
- * Adds meshes to `scene` as a side effect and returns the handles the caller
- * needs for per-frame updates and teardown.
+ * Build the highway floor + hitbox/strikeline + note/section renderers +
+ * reconciler into `root`, seeding the reconciler with the track's notes.
+ * `root` is any `Object3D` — a scene for a single-highway renderer, or a
+ * highway group inside a shared scene. Adds meshes to `root` as a side effect
+ * and returns the handles the caller needs for per-frame updates and
+ * teardown.
  */
 export async function buildHighwayCell(
-  scene: THREE.Scene,
+  root: THREE.Object3D,
   params: BuildHighwayCellParams,
 ): Promise<HighwayCellCore> {
   const {chart, track, textureLoader, textures, clippingPlanes, highwaySpeed} =
@@ -204,16 +228,16 @@ export async function buildHighwayCell(
         }
       : null;
 
+  const ownedMeshes: THREE.Object3D[] = [];
   let highway: THREE.Mesh;
   if (!lanesActive) {
     // Lanes-off: the same textured floor, no hitbox, a plain strikeline bar.
     highway = createHighway(textures.highwayTexture, LANES_OFF_HIGHWAY_WIDTH);
-    scene.add(highway);
-    scene.add(createPlainStrikeline(LANES_OFF_HIGHWAY_WIDTH));
+    ownedMeshes.push(highway, createPlainStrikeline(LANES_OFF_HIGHWAY_WIDTH));
   } else {
     highway = createHighway(textures.highwayTexture, schema?.highwayWidth ?? 1);
-    scene.add(highway);
-    scene.add(
+    ownedMeshes.push(
+      highway,
       await loadAndCreateHitBox(
         textureLoader,
         schema?.hitboxTexturePath ?? '/assets/preview/assets/isolated.png',
@@ -222,6 +246,7 @@ export async function buildHighwayCell(
       ),
     );
   }
+  for (const mesh of ownedMeshes) root.add(mesh);
 
   const sustainStyle = schema
     ? sustainStyleForSchema(schema)
@@ -240,33 +265,18 @@ export async function buildHighwayCell(
 
   const markerRenderers: CellMarkerRenderers = {
     section: new MarkerRenderer(clippingPlanes.marker, 'right', [0, 200, 40]),
-    lyric: new MarkerRenderer(clippingPlanes.marker, 'left', [40, 120, 255]),
-    phraseStart: new MarkerRenderer(
-      clippingPlanes.marker,
-      'left',
-      [40, 120, 255],
-    ),
-    phraseEnd: new MarkerRenderer(
-      clippingPlanes.marker,
-      'left',
-      [40, 120, 255],
-    ),
-    bpm: new MarkerRenderer(clippingPlanes.marker, 'left', [180, 40, 255]),
-    ts: new MarkerRenderer(clippingPlanes.marker, 'right', [255, 80, 60]),
+  };
+
+  const renderers: Record<HighwayElementKind, ElementRenderer> = {
+    note: noteRenderer,
+    section: markerRenderers.section,
   };
 
   const reconciler = new SceneReconciler(
-    scene,
-    {
-      note: noteRenderer,
-      section: markerRenderers.section,
-      lyric: markerRenderers.lyric,
-      'phrase-start': markerRenderers.phraseStart,
-      'phrase-end': markerRenderers.phraseEnd,
-      bpm: markerRenderers.bpm,
-      ts: markerRenderers.ts,
-    },
+    root,
+    renderers,
     highwaySpeed,
+    HIGHWAY_ELEMENT_KINDS,
   );
 
   // With lanes inactive, seed empty — HighwayEditor populates markers from the
@@ -275,5 +285,52 @@ export async function buildHighwayCell(
   const elements = lanesActive && track ? trackToElements(track, chart) : [];
   reconciler.setElements(elements);
 
-  return {highway, reconciler, noteRenderer, markerRenderers};
+  function disposeMeshes(): void {
+    for (const mesh of ownedMeshes) {
+      root.remove(mesh);
+      disposeObjectTree(mesh, textures.highwayTexture);
+    }
+    ownedMeshes.length = 0;
+  }
+
+  return {highway, reconciler, noteRenderer, markerRenderers, disposeMeshes};
+}
+
+/**
+ * Release the geometry, materials, and material textures of `object` and every
+ * descendant. `sharedTexture` is left alone: the scrolling floor texture is
+ * owned by `CellTextures`, not by the mesh that samples it.
+ */
+function disposeObjectTree(
+  object: THREE.Object3D,
+  sharedTexture: THREE.Texture,
+): void {
+  if (object instanceof THREE.Mesh || object instanceof THREE.Sprite) {
+    // Every sprite in the scene shares one module-scoped geometry inside
+    // THREE, so only a mesh's own geometry may be released here.
+    if (object instanceof THREE.Mesh) object.geometry?.dispose();
+    const material = object.material as
+      | THREE.Material
+      | THREE.Material[]
+      | undefined;
+    for (const mat of Array.isArray(material) ? material : [material]) {
+      if (!mat) continue;
+      const map = (mat as {map?: THREE.Texture | null}).map;
+      if (map && map !== sharedTexture) map.dispose();
+      mat.dispose();
+    }
+  }
+  for (const child of [...object.children]) {
+    disposeObjectTree(child, sharedTexture);
+  }
+}
+
+/**
+ * Release the textures one highway loaded for itself. Every `CellTextures` set
+ * comes from its own `loadCellTextures` call, so nothing here is shared with
+ * another highway.
+ */
+export function disposeCellTextures(textures: CellTextures): void {
+  textures.animatedTextureManager.dispose();
+  textures.highwayTexture.dispose();
 }

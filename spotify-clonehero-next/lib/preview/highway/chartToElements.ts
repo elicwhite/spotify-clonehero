@@ -43,20 +43,6 @@ export function chartToElements(
   return elements;
 }
 
-export interface MarkerElementOptions {
-  /**
-   * Emit the chart-wide BPM / time-signature badges. Defaults to true.
-   *
-   * Side-by-side highway panes turn them off: the badges are world-space
-   * sprites anchored just outside the highway's left and right edges, so a
-   * narrow pane's camera frustum cuts them in half, and every pane would
-   * repeat the same chart-wide value. Omitting them here rather than
-   * dropping them downstream keeps the left/right marker stack indices
-   * computed over exactly the markers that will be drawn.
-   */
-  tempoMarkers?: boolean;
-}
-
 /**
  * Builds the chart-wide + vocal-part marker elements (sections, lyrics,
  * vocal phrases, BPM changes, time signatures) for a `ParsedChart`,
@@ -67,9 +53,7 @@ export interface MarkerElementOptions {
 export function buildMarkerElements(
   parsedChart: ParsedChart,
   vocalPartName: string = 'vocals',
-  options: MarkerElementOptions = {},
 ): ChartElement[] {
-  const tempoMarkers = options.tempoMarkers ?? true;
   const elements: ChartElement[] = [];
 
   // Sections
@@ -114,30 +98,28 @@ export function buildMarkerElements(
     });
   }
 
-  if (tempoMarkers) {
-    // BPM changes (tempos)
-    for (const tempo of parsedChart.tempos) {
-      elements.push({
-        key: chartMarkerKey('bpm', tempo.tick),
-        kind: 'bpm',
-        msTime: tempo.msTime,
-        data: {
-          text: `\u2669 ${tempo.beatsPerMinute.toFixed(2)}`,
-        } satisfies MarkerElementData,
-      });
-    }
+  // BPM changes (tempos)
+  for (const tempo of parsedChart.tempos) {
+    elements.push({
+      key: chartMarkerKey('bpm', tempo.tick),
+      kind: 'bpm',
+      msTime: tempo.msTime,
+      data: {
+        text: `\u2669 ${tempo.beatsPerMinute.toFixed(2)}`,
+      } satisfies MarkerElementData,
+    });
+  }
 
-    // Time signatures
-    for (const ts of parsedChart.timeSignatures) {
-      elements.push({
-        key: chartMarkerKey('ts', ts.tick),
-        kind: 'ts',
-        msTime: ts.msTime,
-        data: {
-          text: `${ts.numerator}/${ts.denominator}`,
-        } satisfies MarkerElementData,
-      });
-    }
+  // Time signatures
+  for (const ts of parsedChart.timeSignatures) {
+    elements.push({
+      key: chartMarkerKey('ts', ts.tick),
+      kind: 'ts',
+      msTime: ts.msTime,
+      data: {
+        text: `${ts.numerator}/${ts.denominator}`,
+      } satisfies MarkerElementData,
+    });
   }
 
   // Compute stack indices for markers at the same tick on the same side.

@@ -45,12 +45,23 @@ export class InteractionManager {
   /** Half the highway's visual width, from `schema.highwayWidth`. */
   private highwayHalfWidth: number;
 
+  /**
+   * World X of the highway root this manager tests against. Every world-space
+   * X the ray produces is shifted by `-rootWorldX` before it is compared to
+   * schema lane offsets or the highway bounds, all of which are expressed
+   * root-locally around 0. A single-highway renderer leaves this at 0.
+   */
+  private rootWorldX: number;
+
   private raycaster = new THREE.Raycaster();
   /** Reusable vector to avoid per-frame allocations. */
   private ndcVec = new THREE.Vector2();
   /** Reusable plane for highway intersection. */
   private highwayPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-  /** Reusable vector for intersection point. */
+  /**
+   * Reusable vector for the highway-plane intersection point. Always
+   * root-local: `intersectHighwayPlaneLocal` is its only writer.
+   */
   private intersectionPoint = new THREE.Vector3();
 
   // Timing data for coordinate conversion
@@ -88,8 +99,10 @@ export class InteractionManager {
     highwaySpeed: number,
     getElapsedMs: () => number,
     schema: InstrumentSchema,
+    rootWorldX: number = 0,
   ) {
     this.camera = camera;
+    this.rootWorldX = rootWorldX;
     this.reconciler = reconciler;
     this.highwaySpeed = highwaySpeed;
     this.getElapsedMs = getElapsedMs;
@@ -268,17 +281,14 @@ export class InteractionManager {
   // -----------------------------------------------------------------------
   // Marker hit testing
   //
-  // Markers are ChartElements in the reconciler with keys like
-  // `section:{tick}`, `lyric:{tick}`, `phrase-start:{tick}`,
-  // `phrase-end:{endTick}`. Each renders as a horizontal line across the
-  // highway plus a side-mounted text flag. The flag is the actual click
-  // target — Three.js's sprite raycaster catches a hit anywhere inside the
-  // billboarded quad. The line beneath the flag also counts: a small
-  // tolerance around the row's Y matches anywhere on the rule.
-  //
-  // Within the marker tier, lyric wins over phrase-* (smallest target),
-  // then phrase-end, then phrase-start, then section. BPM/TS markers are
-  // hit-tested separately by the editor today and are excluded here.
+  // Sections are the only marker kind on the highway (`HIGHWAY_ELEMENT_KINDS`
+  // in `cell.ts`); tempo, time-signature, lyric, and phrase markers live in
+  // the piano roll. A section is a ChartElement in the reconciler keyed
+  // `section:{tick}` and renders as a horizontal line across the highway plus
+  // a side-mounted text flag. The flag is the actual click target —
+  // Three.js's sprite raycaster catches a hit anywhere inside the billboarded
+  // quad. The line beneath the flag also counts: a small tolerance around the
+  // row's Y matches anywhere on the rule.
   // -----------------------------------------------------------------------
 
   /**
@@ -288,12 +298,7 @@ export class InteractionManager {
    */
   private static readonly MARKER_LINE_TOLERANCE_PX = 8;
 
-  private static readonly MARKER_PRIORITY: ReadonlyArray<string> = [
-    'lyric:',
-    'phrase-end:',
-    'phrase-start:',
-    'section:',
-  ];
+  private static readonly MARKER_PRIORITY: ReadonlyArray<string> = ['section:'];
 
   /**
    * Hit-test only the side-mounted flag boxes (off the highway).
@@ -304,10 +309,9 @@ export class InteractionManager {
    * That avoids the perspective + billboard subtleties of projecting
    * world-space corners back to screen pixels.
    *
-   * Among hit sprites, pick the one with the highest priority
-   * (lyric > phrase-end > phrase-start > section). Distance order from
-   * the raycaster isn't reliable for picking between stacked markers
-   * because all flag sprites share the same depth.
+   * Among hit sprites, pick the one with the highest `MARKER_PRIORITY`.
+   * Distance order from the raycaster isn't reliable for picking between
+   * stacked markers because all flag sprites share the same depth.
    */
   private hitTestMarkerFlags(): HitResult {
     if (this.cachedMarkerSprites.length === 0) return null;
@@ -344,7 +348,11 @@ export class InteractionManager {
       for (const [key, group] of this.reconciler.getActiveGroups()) {
         if (!key.startsWith(prefix)) continue;
 
-        tempWorld.set(0, group.position.y, 0);
+        // Probe on the root's own X. With a per-viewport camera that has no
+        // yaw, `projected.y` is independent of X, so this is a no-op today —
+        // written explicitly because a camera that viewed this root
+        // off-axis would make it load-bearing.
+        tempWorld.set(this.rootWorldX, group.position.y, 0);
         const projected = tempWorld.project(this.camera);
         const lineScreenY = ((-projected.y + 1) / 2) * canvasH;
         if (
@@ -368,18 +376,8 @@ export class InteractionManager {
     const parsed = parseMarkerKey(key);
     if (!parsed) return null;
 
-    switch (parsed.kind) {
-      case 'section':
-        return {type: 'section', tick: parsed.tick, name: data.text};
-      case 'lyric':
-        return {type: 'lyric', tick: parsed.tick, text: data.text};
-      case 'phrase-start':
-        return {type: 'phrase-start', tick: parsed.tick};
-      case 'phrase-end':
-        return {type: 'phrase-end', endTick: parsed.tick};
-      default:
-        return null;
-    }
+    if (parsed.kind !== 'section') return null;
+    return {type: 'section', tick: parsed.tick, name: data.text};
   }
 
   // -----------------------------------------------------------------------
@@ -387,10 +385,7 @@ export class InteractionManager {
   // -----------------------------------------------------------------------
 
   private hitTestHighway(gridDivision: number): HitResult {
-    const hit = this.raycaster.ray.intersectPlane(
-      this.highwayPlane,
-      this.intersectionPoint,
-    );
+    const hit = this.intersectHighwayPlaneLocal();
     if (!hit) return null;
 
     // Check if intersection is within highway bounds
@@ -518,9 +513,6 @@ export class InteractionManager {
     if (!hit) {
       switch (toolMode) {
         case 'place':
-        case 'bpm':
-        case 'timesig':
-        case 'section':
           return 'crosshair';
         case 'erase':
           return 'pointer';
@@ -547,9 +539,6 @@ export class InteractionManager {
       case 'highway':
         switch (toolMode) {
           case 'place':
-          case 'bpm':
-          case 'timesig':
-          case 'section':
             return 'crosshair';
           case 'erase':
             return 'pointer';
@@ -564,7 +553,28 @@ export class InteractionManager {
   // -----------------------------------------------------------------------
 
   /**
-   * Unproject a canvas-pixel coordinate to a 3D point on the highway plane (z=0).
+   * Intersect the current ray with the highway plane (z=0) and return the hit
+   * root-locally: `x` is shifted by `-rootWorldX`, so the highway bounds,
+   * `worldXToLane`, and the schema's lane offsets -- all expressed around 0 --
+   * apply unchanged at any root position. Every consumer of the shared
+   * `intersectionPoint` goes through here, so it only ever holds root-local X.
+   *
+   * The returned vector is that shared instance, valid until the next call.
+   */
+  private intersectHighwayPlaneLocal(): THREE.Vector3 | null {
+    const hit = this.raycaster.ray.intersectPlane(
+      this.highwayPlane,
+      this.intersectionPoint,
+    );
+    if (!hit) return null;
+    hit.x -= this.rootWorldX;
+    return hit;
+  }
+
+  /**
+   * Unproject a canvas-pixel coordinate to a root-local point on the highway
+   * plane. Aims the shared raycaster, so it invalidates any hit-test in
+   * progress.
    */
   private screenToWorldPoint(
     canvasX: number,
@@ -577,10 +587,7 @@ export class InteractionManager {
 
     this.ndcVec.set(ndcX, ndcY);
     this.raycaster.setFromCamera(this.ndcVec, this.camera);
-    return this.raycaster.ray.intersectPlane(
-      this.highwayPlane,
-      this.intersectionPoint,
-    );
+    return this.intersectHighwayPlaneLocal();
   }
 
   /** Find the closest lane index for a world X coordinate. */

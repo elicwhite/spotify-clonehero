@@ -75,10 +75,10 @@ const GRID_SHORTCUT_MAP: Record<string, number> = {
  * available without modifier when not in Place mode).
  *
  * Only the modes the sidebar's tool row can show as active are bound.
- * `erase`, `bpm` and `timesig` are reachable through the piano roll's
- * context menus and Delete/Backspace instead, and have no button to
- * light up, so a hotkey into them would strand the user in a mode with
- * no visible state and no obvious way out.
+ * `erase` is reachable through the piano roll's context menus and
+ * Delete/Backspace instead, and has no button to light up, so a hotkey into
+ * it would strand the user in a mode with no visible state and no obvious
+ * way out.
  */
 const TOOL_SHORTCUT_MAP: Record<string, ToolMode> = {
   '1': 'cursor',

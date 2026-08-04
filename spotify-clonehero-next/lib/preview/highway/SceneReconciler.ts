@@ -60,9 +60,23 @@ export interface ElementRenderer<T = unknown> {
  * handles the diff, and pooling amortises allocation costs.
  */
 export class SceneReconciler {
-  private scene: THREE.Scene;
+  /**
+   * Parent the reconciler adds and removes element groups under. Typed as
+   * `Object3D` so a highway can be reconciled into a group inside a shared
+   * scene as well as directly into a scene; the reconciler only calls
+   * `.add()` / `.remove()`.
+   */
+  private root: THREE.Object3D;
   private renderers: Record<string, ElementRenderer>;
   private highwaySpeed: number;
+  /**
+   * Allowlist of element kinds this reconciler accepts, or null to accept
+   * every kind. `setElements` drops anything outside the list before it is
+   * stored, so a rejected kind is never sorted, windowed, positioned, or
+   * hit-tested. The highway passes `HIGHWAY_ELEMENT_KINDS` (`cell.ts`) here;
+   * that constant is the single place deciding what a highway draws.
+   */
+  private acceptedKinds: ReadonlySet<string> | null;
 
   /** Declared elements by key. */
   private elements = new Map<string, ChartElement>();
@@ -99,13 +113,15 @@ export class SceneReconciler {
   private hoveredKey: string | null = null;
 
   constructor(
-    scene: THREE.Scene,
+    root: THREE.Object3D,
     renderers: Record<string, ElementRenderer>,
     highwaySpeed: number,
+    acceptedKinds?: ReadonlySet<string>,
   ) {
-    this.scene = scene;
+    this.root = root;
     this.renderers = renderers;
     this.highwaySpeed = highwaySpeed;
+    this.acceptedKinds = acceptedKinds ?? null;
   }
 
   // -----------------------------------------------------------------------
@@ -114,12 +130,17 @@ export class SceneReconciler {
 
   /**
    * Declare the full set of elements that should exist.
-   * The reconciler diffs against its internal state and patches the scene.
+   * The reconciler diffs against its internal state and patches the root.
    * Only elements in the visible window get Three.js groups.
+   *
+   * Kinds outside `acceptedKinds` are dropped here, before any state is
+   * recorded: callers may hand over the whole chart projection and let the
+   * reconciler keep the subset its surface draws.
    */
   setElements(elements: ChartElement[]): void {
     const newMap = new Map<string, ChartElement>();
     for (const el of elements) {
+      if (this.acceptedKinds && !this.acceptedKinds.has(el.kind)) continue;
       newMap.set(el.key, el);
     }
 
@@ -128,7 +149,7 @@ export class SceneReconciler {
       if (!newMap.has(key)) {
         const group = this.activeGroups.get(key);
         if (group) {
-          this.scene.remove(group);
+          this.root.remove(group);
           this.recycleGroup(oldEl.kind, group);
           this.activeGroups.delete(key);
           this.activeGroupsRevision++;
@@ -143,7 +164,7 @@ export class SceneReconciler {
         // Changed -- recycle old group; will be recreated by updateWindow
         const group = this.activeGroups.get(key);
         if (group) {
-          this.scene.remove(group);
+          this.root.remove(group);
           this.recycleGroup(oldEl.kind, group);
           this.activeGroups.delete(key);
           this.activeGroupsRevision++;
@@ -215,7 +236,7 @@ export class SceneReconciler {
       if (!group) {
         // Enter window -- create group
         group = this.acquireGroup(el.kind, el, renderer);
-        this.scene.add(group);
+        this.root.add(group);
         this.activeGroups.set(el.key, group);
         this.activeGroupsRevision++;
 
@@ -236,7 +257,7 @@ export class SceneReconciler {
     // Recycle groups that left the window
     for (const [key, group] of this.activeGroups) {
       if (!inWindow.has(key)) {
-        this.scene.remove(group);
+        this.root.remove(group);
         const el = this.elements.get(key);
         if (el) {
           this.recycleGroup(el.kind, group);
@@ -359,7 +380,7 @@ export class SceneReconciler {
   dispose(): void {
     // Recycle all active groups
     for (const [key, group] of this.activeGroups) {
-      this.scene.remove(group);
+      this.root.remove(group);
       const el = this.elements.get(key);
       if (el) {
         this.recycleGroup(el.kind, group);

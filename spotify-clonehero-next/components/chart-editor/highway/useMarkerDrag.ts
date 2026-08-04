@@ -1,7 +1,12 @@
 'use client';
 
 /**
- * Single-entity marker drag state (sections, lyrics, phrase-start, phrase-end).
+ * Single-entity marker drag state on the highway.
+ *
+ * Sections are the only marker kind the highway draws
+ * (`HIGHWAY_ELEMENT_KINDS` in `lib/preview/highway/cell.ts`), so they are the
+ * only kind this hook moves. Lyric and phrase markers are dragged in the
+ * piano roll's lyrics row, which owns its own drag path.
  *
  * Note drag is multi-entity and goes through `state.selection` + the regular
  * mouse handlers. Marker drag is one-at-a-time and lives entirely inside this
@@ -9,20 +14,15 @@
  *
  * The hook is *callable* from a pointer-move handler: feed it the raw tick
  * under the cursor and it will clamp to the bounds the underlying entity
- * handler enforces on commit (lyrics stay in their phrase, phrase-start can't
- * cross the previous phrase's end, etc.). The renderer ghost reads the
- * clamped tick so it never wanders past where the move could land.
+ * handler enforces on commit. The renderer ghost reads the clamped tick so it
+ * never wanders past where the move could land.
  */
 
 import {useCallback, useState} from 'react';
-import type {parseChartFile} from '@eliwhite/scan-chart';
-import {lyricId, phraseEndId, phraseStartId} from '@/lib/chart-edit';
 import {MoveEntitiesCommand, type EditCommand} from '../commands';
 import {entityContextFromScope, type EditorScope} from '../scope';
 
-type ParsedChart = ReturnType<typeof parseChartFile>;
-
-export type MarkerKind = 'section' | 'lyric' | 'phrase-start' | 'phrase-end';
+export type MarkerKind = 'section';
 
 export interface MarkerDragState {
   kind: MarkerKind;
@@ -32,9 +32,7 @@ export interface MarkerDragState {
 }
 
 export interface UseMarkerDragInputs {
-  chart: ParsedChart | null;
   activeScope: EditorScope;
-  activePartName: string;
   executeCommand: (cmd: EditCommand) => void;
   dispatch: (action: {
     type: 'SET_SELECTION';
@@ -63,77 +61,17 @@ export interface UseMarkerDragOutputs {
 }
 
 /**
- * Build the entity-ref id for a side-marker by kind + tick + active part.
- * Mirrors the id format `markerHitToRef` produces in HighwayEditor.
+ * Entity-ref id for a section marker by tick. Mirrors the id format
+ * `markerHitToRef` produces in `useHighwayMouseInteraction`.
  */
-function markerEntityId(
-  kind: MarkerKind,
-  tick: number,
-  partName: string,
-): string {
-  switch (kind) {
-    case 'section':
-      return String(tick);
-    case 'lyric':
-      return lyricId(tick, partName);
-    case 'phrase-start':
-      return phraseStartId(tick, partName);
-    case 'phrase-end':
-      return phraseEndId(tick, partName);
-  }
-}
-
-/**
- * Tick range that a marker drag is allowed to settle into, mirroring the
- * clamping each chart-edit handler applies on move. Sections drag freely;
- * only lyrics + phrase markers are bounded.
- */
-function computeMarkerDragBounds(
-  chart: ParsedChart,
-  kind: MarkerKind,
-  originalTick: number,
-  partName: string,
-): {min: number; max: number} {
-  if (kind === 'section') return {min: 0, max: Number.POSITIVE_INFINITY};
-
-  const phrases = chart.vocalTracks?.parts?.[partName]?.notePhrases ?? [];
-
-  if (kind === 'lyric') {
-    // Lyric stays inside the phrase that owns it.
-    const phrase = phrases.find(p =>
-      p.lyrics.some(l => l.tick === originalTick),
-    );
-    if (!phrase) return {min: 0, max: Number.POSITIVE_INFINITY};
-    return {min: phrase.tick, max: phrase.tick + phrase.length};
-  }
-
-  if (kind === 'phrase-start') {
-    const idx = phrases.findIndex(p => p.tick === originalTick);
-    if (idx === -1) return {min: 0, max: Number.POSITIVE_INFINITY};
-    const phrase = phrases[idx];
-    const prev = phrases[idx - 1];
-    return {
-      min: prev ? prev.tick + prev.length : 0,
-      // Keep at least 1 tick of phrase length; matches MIN_PHRASE_LENGTH.
-      max: phrase.tick + phrase.length - 1,
-    };
-  }
-
-  // phrase-end
-  const idx = phrases.findIndex(p => p.tick + p.length === originalTick);
-  if (idx === -1) return {min: 0, max: Number.POSITIVE_INFINITY};
-  const phrase = phrases[idx];
-  const next = phrases[idx + 1];
-  return {
-    min: phrase.tick + 1,
-    max: next ? next.tick : Number.POSITIVE_INFINITY,
-  };
+function markerEntityId(tick: number): string {
+  return String(tick);
 }
 
 export function useMarkerDrag(
   inputs: UseMarkerDragInputs,
 ): UseMarkerDragOutputs {
-  const {chart, activeScope, activePartName, executeCommand, dispatch} = inputs;
+  const {activeScope, executeCommand, dispatch} = inputs;
   const [markerDrag, setMarkerDrag] = useState<MarkerDragState | null>(null);
 
   const beginMarkerDrag = useCallback(
@@ -143,23 +81,16 @@ export function useMarkerDrag(
     [],
   );
 
-  const updateMarkerDrag = useCallback(
-    (rawTick: number) => {
-      setMarkerDrag(prev => {
-        if (!prev || !chart) return prev;
-        const bounds = computeMarkerDragBounds(
-          chart,
-          prev.kind,
-          prev.originalTick,
-          activePartName,
-        );
-        const newTick = Math.max(bounds.min, Math.min(bounds.max, rawTick));
-        if (newTick === prev.currentTick) return prev;
-        return {...prev, currentTick: newTick};
-      });
-    },
-    [chart, activePartName],
-  );
+  const updateMarkerDrag = useCallback((rawTick: number) => {
+    setMarkerDrag(prev => {
+      if (!prev) return prev;
+      // Mirrors the clamp the chart-edit section handler applies on move: a
+      // section can sit at any non-negative tick.
+      const newTick = Math.max(0, rawTick);
+      if (newTick === prev.currentTick) return prev;
+      return {...prev, currentTick: newTick};
+    });
+  }, []);
 
   const commitMarkerDrag = useCallback(
     (moveExceededThreshold: boolean) => {
@@ -174,16 +105,8 @@ export function useMarkerDrag(
         markerDrag.currentTick !== markerDrag.originalTick;
       if (moved) {
         const tickDelta = markerDrag.currentTick - markerDrag.originalTick;
-        const originalId = markerEntityId(
-          markerDrag.kind,
-          markerDrag.originalTick,
-          activePartName,
-        );
-        const currentId = markerEntityId(
-          markerDrag.kind,
-          markerDrag.currentTick,
-          activePartName,
-        );
+        const originalId = markerEntityId(markerDrag.originalTick);
+        const currentId = markerEntityId(markerDrag.currentTick);
         executeCommand(
           new MoveEntitiesCommand(
             markerDrag.kind,
@@ -204,7 +127,7 @@ export function useMarkerDrag(
       }
       setMarkerDrag(null);
     },
-    [markerDrag, activeScope, activePartName, executeCommand, dispatch],
+    [markerDrag, activeScope, executeCommand, dispatch],
   );
 
   const cancelMarkerDrag = useCallback(() => {

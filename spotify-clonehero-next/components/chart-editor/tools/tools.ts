@@ -14,12 +14,14 @@
  * renamed by double-clicking an existing one, which fires while
  * `selectMoveTool` (cursor mode) is active because it targets an
  * already-selectable entity.
+ *
+ * Sections are also the only marker kind these tools move. The highway draws
+ * notes, grid lines, and sections and nothing else
+ * (`HIGHWAY_ELEMENT_KINDS` in `lib/preview/highway/cell.ts`); tempo,
+ * time-signature, lyric, and phrase editing all live in the piano roll.
  */
 
 import {
-  lyricId,
-  phraseEndId,
-  phraseStartId,
   parseSchemaNoteId,
   typeToLane as schemaTypeToLane,
   padLaneRange,
@@ -44,7 +46,7 @@ import {computeNoteDragDelta, exceedsDragThreshold} from '../editing/gestures';
 import type {EditorTool, PointerHitInfo, ToolContext} from './types';
 
 /**
- * Click-to-select / click-and-drag-to-move on notes and side markers, plus
+ * Click-to-select / click-and-drag-to-move on notes and section markers, plus
  * the double-click-to-rename affordance for `inlineEditable` kinds
  * (sections today). Only fires when a selectable entity is under the
  * cursor — `boxSelectTool` handles empty-highway clicks.
@@ -149,8 +151,8 @@ export const selectMoveTool: EditorTool = {
           laneDelta: 0,
           active: false,
         });
-      } else {
-        ctx.beginMarkerDrag(entity.kind, entity.tick);
+      } else if (entity.kind === 'section') {
+        ctx.beginMarkerDrag('section', entity.tick);
       }
     }
     ctx.drag.setDragStart(coords);
@@ -378,100 +380,3 @@ export const eraseTool: EditorTool = {
     }
   },
 };
-
-/** Opens the BPM popover, pre-filled with the tempo in effect at the
- *  clicked tick. */
-export const tempoMarkerTool: EditorTool = {
-  id: 'bpm',
-
-  onPointerDown(ctx: ToolContext, evt: PointerHitInfo): void {
-    let initialBpm = 120;
-    if (ctx.timedTempos.length > 0) {
-      let idx = 0;
-      for (let i = 1; i < ctx.timedTempos.length; i++) {
-        if (ctx.timedTempos[i].tick <= evt.tick) idx = i;
-        else break;
-      }
-      initialBpm = ctx.timedTempos[idx].beatsPerMinute;
-    }
-    ctx.onOpenPopover({
-      kind: 'bpm',
-      tick: evt.tick,
-      x: evt.coords.x,
-      y: evt.coords.y,
-      initialBpm,
-    });
-  },
-};
-
-/** Opens the time-signature popover at the clicked tick. */
-export const timeSignatureMarkerTool: EditorTool = {
-  id: 'timesig',
-
-  onPointerDown(ctx: ToolContext, evt: PointerHitInfo): void {
-    ctx.onOpenPopover({
-      kind: 'timesig',
-      tick: evt.tick,
-      x: evt.coords.x,
-      y: evt.coords.y,
-    });
-  },
-};
-
-/**
- * Lyrics-timing selection for the add-lyrics flow (plan 0038 §Design lists
- * this alongside the highway switch tools). Not wired to a `ToolMode` yet —
- * `/add-lyrics` doesn't route through `useHighwayMouseInteraction` today —
- * so this scopes `selectMoveTool`'s selection behavior to lyric/phrase
- * entities only, ready to register once the add-lyrics timing UI adopts the
- * shared highway interaction hook.
- */
-export const lyricsTimingTool: EditorTool = {
-  id: 'lyrics-timing',
-
-  onPointerDown(ctx: ToolContext, evt: PointerHitInfo): void {
-    const {entity} = evt;
-    if (!entity) return;
-    if (
-      entity.kind !== 'lyric' &&
-      entity.kind !== 'phrase-start' &&
-      entity.kind !== 'phrase-end'
-    ) {
-      return;
-    }
-    if (!ctx.capabilities.selectable.has(entity.kind)) return;
-    ctx.dispatch({
-      type: 'SET_SELECTION',
-      kind: entity.kind,
-      ids: new Set([entity.id]),
-    });
-    if (ctx.capabilities.draggable.has(entity.kind)) {
-      ctx.dispatch({
-        type: 'SET_HOVER',
-        hovered: {kind: entity.kind, id: entity.id},
-      });
-      ctx.beginMarkerDrag(entity.kind, entity.tick);
-      ctx.drag.setDragStart(evt.coords);
-      ctx.drag.setDragCurrent(evt.coords);
-    }
-  },
-
-  onPointerMove(ctx: ToolContext, evt: PointerHitInfo): void {
-    if (ctx.markerDrag && ctx.drag.dragStart) {
-      ctx.updateMarkerDrag(ctx.screenToTick(evt.coords.x, evt.coords.y));
-    }
-  },
-
-  onPointerUp(ctx: ToolContext, evt: PointerHitInfo): void {
-    if (ctx.markerDrag && ctx.drag.dragStart) {
-      const dx = evt.coords.x - ctx.drag.dragStart.x;
-      const dy = evt.coords.y - ctx.drag.dragStart.y;
-      ctx.commitMarkerDrag(exceedsDragThreshold(dx, dy));
-    }
-  },
-};
-
-// Referenced for the id helpers used when building `EntityRef`s outside this
-// module (registry.ts); re-exported so callers don't reach into chart-edit
-// directly just for these three.
-export {lyricId, phraseEndId, phraseStartId};

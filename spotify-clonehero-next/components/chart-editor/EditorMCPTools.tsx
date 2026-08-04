@@ -7,6 +7,8 @@ import {
   getSelectedIds,
   selectActiveTrack,
   selectActiveSchema,
+  TOOL_MODES,
+  type ToolMode,
 } from '@/lib/chart-editor-core';
 import {
   describeScope,
@@ -473,19 +475,29 @@ export default function EditorMCPTools() {
     if (toolPaletteEnabled) {
       register({
         name: 'editor_set_tool',
-        description:
-          'Switch active tool: cursor, place, erase, bpm, timesig, section',
+        description: 'Switch active tool: cursor, place, erase',
         inputSchema: {
           type: 'object',
           properties: {tool: {type: 'string'}},
           required: ['tool'],
         },
         execute: async args => {
+          const requested = String(args['tool']);
+          if (!TOOL_MODES.includes(requested as ToolMode)) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Unknown tool "${requested}". Valid tools: ${TOOL_MODES.join(', ')}`,
+                },
+              ],
+            };
+          }
           dispatchRef.current({
             type: 'SET_ACTIVE_TOOL',
-            tool: args['tool'] as any,
+            tool: requested as ToolMode,
           });
-          return {content: [{type: 'text', text: `Tool: ${args['tool']}`}]};
+          return {content: [{type: 'text', text: `Tool: ${requested}`}]};
         },
       });
     }

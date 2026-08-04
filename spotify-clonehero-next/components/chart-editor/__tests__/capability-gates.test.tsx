@@ -151,10 +151,11 @@ function renderAssist(
 /**
  * Buttons rendered by the utility cluster's tool row (plan 0074 Phase 7:
  * cursor + add-note — see `UtilityCluster.tsx`'s file header for why
- * bpm/timesig/erase/section don't have sidebar buttons anymore: bpm/timesig
- * are reachable from the piano roll's tempo-lane context menu, erase from
+ * erase/section don't have sidebar buttons: erase is reachable from
  * Delete/Backspace + the note context menu, and section (plan 0076 item 19)
- * from the section strip's own right-click menu). Querying for these
+ * from the section strip's own right-click menu; tempo and time-signature
+ * editing belongs to the piano-roll tempo lane, not to a highway tool).
+ * Querying for these
  * directly pins the gate to the actual interactive controls — a bug that
  * hides the section header but keeps the buttons would still fail this
  * test.
@@ -304,9 +305,9 @@ describe('EditorCapabilities preset shape', () => {
     expect(DRUM_EDIT_CAPABILITIES.selectable.has('note')).toBe(true);
     expect(DRUM_EDIT_CAPABILITIES.selectable.has('section')).toBe(true);
     // The editor's Add Lyrics flow (plan 0063 Part C) writes into the same
-    // vocalTracks the piano-roll lyrics row and the highway marker drag both
-    // read/write, so lyrics are interactive here too, not just on
-    // /add-lyrics.
+    // vocalTracks the piano-roll lyrics row reads and writes, so lyrics are
+    // interactive here too, not just on /add-lyrics. The sets are honoured by
+    // the piano roll: the highway draws notes, grid lines, and sections only.
     expect(DRUM_EDIT_CAPABILITIES.selectable.has('lyric')).toBe(true);
     expect(DRUM_EDIT_CAPABILITIES.draggable.has('lyric')).toBe(true);
     expect(DRUM_EDIT_CAPABILITIES.showDrumLanes).toBe(true);

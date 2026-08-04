@@ -58,16 +58,16 @@ export interface EditorCapabilities {
   showNotePlacementTools: boolean;
   /**
    * Render the drum highway: 5 lanes, hit box, drum-note geometry. When
-   * false, the highway draws a neutral floor with no lanes — lyrics +
-   * phrase + section markers still render normally.
+   * false, the highway draws a neutral floor with no lanes — section markers
+   * still render normally.
    */
   showDrumLanes: boolean;
   /**
    * Show the utility cluster's tool row (cursor / add-note / section).
    * Add-lyrics suppresses this since the only valid tool is the cursor —
    * no choice to surface. (Renamed from the old "Tools section" doc: plan
-   * 0074 Phase 7 moved this row into `UtilityCluster` and dropped bpm/
-   * timesig/erase — see that file's header for why.)
+   * 0074 Phase 7 moved this row into `UtilityCluster`, which offers cursor
+   * and add-note only — see that file's header for why.)
    */
   showToolPalette: boolean;
   /**
@@ -148,9 +148,7 @@ const ALL_OPERATIONS = new Set<CommandOperation>([
 
 export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
   // Full editing: notes, sections, lyrics/phrases, and the tempo/timesig
-  // markers reachable from the piano roll's tempo-lane context menu (plan
-  // 0074 Phase 7 dropped the sidebar's bpm/timesig buttons — that menu was
-  // always the real affordance).
+  // markers, which are reached from the piano roll's tempo-lane context menu.
   editableEntities: new Set<CommandEntityKind>([
     'note',
     'section',
@@ -161,14 +159,13 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
     'timesig',
   ]),
   allowedOperations: ALL_OPERATIONS,
-  // 'lyric' joined this preset in plan 0063 Part D: the drum-transcription
-  // editor gained an Add Lyrics flow (Part C) that writes into the same
-  // `vocalTracks` the piano-roll lyrics row and the highway's marker drag
-  // both read/write, so lyric chips need to be hoverable/selectable/
-  // draggable here too — not just on the dedicated /add-lyrics page.
-  // 'phrase-start'/'phrase-end' joined in Round 2 §2: the piano roll's
-  // lyrics row supports resizing a phrase band by dragging its edges,
-  // which moves these same marker kinds via `MoveEntitiesCommand`.
+  // 'lyric', 'phrase-start', and 'phrase-end' are here for the piano roll's
+  // lyrics row: the editor's Add Lyrics flow writes into the same
+  // `vocalTracks` that row reads, so its chips are hoverable/selectable/
+  // draggable outside the dedicated /add-lyrics page too, and resizing a
+  // phrase band by dragging its edges moves the phrase markers via
+  // `MoveEntitiesCommand`. The highway honours none of these kinds: it draws
+  // notes, grid lines, and section markers only.
   hoverable: new Set([
     'note',
     'section',

@@ -13,7 +13,15 @@ import {EMPTY_STAMP, type AssistProvenance} from './content-stamps';
 import type {TrackKey} from '@/lib/chart-edit';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
 
-export type ToolMode = 'cursor' | 'place' | 'erase' | 'bpm' | 'timesig';
+/**
+ * The highway's pointer modes. Tempo and time-signature editing is not among
+ * them: those are edited in the piano roll's tempo lane and ruler, not on the
+ * highway. `activeTool` is runtime-only state seeded to `'cursor'` and never
+ * persisted, so no stored value can carry a mode that no longer exists.
+ */
+export const TOOL_MODES = ['cursor', 'place', 'erase'] as const;
+
+export type ToolMode = (typeof TOOL_MODES)[number];
 
 /** Maximum number of undo entries before oldest are discarded. */
 export const UNDO_STACK_CAP = 200;

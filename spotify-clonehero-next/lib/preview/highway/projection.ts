@@ -22,10 +22,7 @@ import {resolveScopeTrack} from '@/components/chart-editor/scope';
 import type {InstrumentSchema, LaneDefinition} from '@/lib/chart-edit';
 import type {ChartElement} from './SceneReconciler';
 import {trackToElements} from './trackToElements';
-import {
-  buildMarkerElements,
-  type MarkerElementOptions,
-} from './chartToElements';
+import {buildMarkerElements} from './chartToElements';
 import type {Track} from './types';
 
 // ---------------------------------------------------------------------------
@@ -136,7 +133,7 @@ export type VocalsProjection = EditorProjection;
  * replacing the older approach of handing the renderer a synthetic empty
  * `drums`/`expert` track just to give `prepTrack` an `instrument` to
  * resolve a schema/textures from — the renderer now accepts `track: null`
- * directly (see `HighwayPreview`/`setupRenderer`).
+ * directly (see `setupStage`/`setupRenderer`).
  */
 export function buildVocalsProjection(
   doc: ChartDocument | null,
@@ -156,15 +153,11 @@ export function buildVocalsProjection(
  *
  * `vocalPartName` selects which vocal part's lyrics/phrases contribute to
  * `markers`; defaults to `scope.part` for `vocals` scopes, else `'vocals'`.
- *
- * `markerOptions` selects which chart-wide markers are produced; see
- * {@link MarkerElementOptions}.
  */
 export function buildProjectionFor(
   scope: EditorScope,
   doc: ChartDocument | null,
   schema: InstrumentSchema | null,
-  markerOptions: MarkerElementOptions = {},
 ): EditorProjection {
   if (!doc) return EMPTY_PROJECTION;
 
@@ -174,11 +167,7 @@ export function buildProjectionFor(
     : [];
 
   const vocalPartName = scope.kind === 'vocals' ? scope.part : 'vocals';
-  const markers = buildMarkerElements(
-    doc.parsedChart,
-    vocalPartName,
-    markerOptions,
-  );
+  const markers = buildMarkerElements(doc.parsedChart, vocalPartName);
 
   return {
     lanes: schema?.lanes ?? [],

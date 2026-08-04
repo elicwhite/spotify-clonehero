@@ -94,12 +94,6 @@ export interface UseChartElementsInputs {
   noteDrag: NoteDragHint | null;
   timedTempos: TimedTempo[];
   resolution: number;
-  /**
-   * Emit the chart-wide BPM / time-signature badge markers for this pane.
-   * `HighwayEditor` turns them off in side-by-side layouts, where a narrow
-   * pane's frustum clips them and every pane would repeat them.
-   */
-  showTempoBadges: boolean;
 }
 
 /**
@@ -116,8 +110,6 @@ export interface ComputeChartElementsInputs {
   noteDrag: NoteDragHint | null;
   timedTempos: TimedTempo[];
   resolution: number;
-  /** Emit the BPM / time-signature badge markers. Defaults to true. */
-  showTempoBadges?: boolean;
 }
 
 /**
@@ -130,10 +122,11 @@ export interface ComputeChartElementsInputs {
  * `trackToElements` nor `buildMarkerElements` reads lane geometry today;
  * this call site only needs `projection.elements` + `projection.markers`.
  *
- * `showTempoBadges` is the one pane-layout input: it decides whether the
- * chart-wide BPM / time-signature badges are produced at all. The renderer
- * below draws whatever it is handed, so the pane's share of the chart-wide
- * chrome is decided here, at the producer.
+ * The full projection is produced here, including the marker kinds the
+ * highway does not draw. Narrowing happens at the consumer: the highway's
+ * reconciler accepts `HIGHWAY_ELEMENT_KINDS` only
+ * (`lib/preview/highway/cell.ts`), and the piano roll consumes the same
+ * projection and needs every kind.
  *
  * Drag handling: when a marker is being dragged, its element is rewritten
  * with a live `msTime` derived from `markerDrag.currentTick`. The
@@ -158,15 +151,12 @@ export function computeChartElements(
     noteDrag,
     timedTempos,
     resolution,
-    showTempoBadges = true,
   } = inputs;
   // `computeChartElements` still takes the narrower `ParsedChart` shape
   // (see the type comment above); `buildProjectionFor` only reads
   // `doc.parsedChart`, so a minimal wrapper is enough to reuse it here.
   const doc = {parsedChart: chart} as unknown as ChartDocument;
-  const projection = buildProjectionFor(activeScope, doc, null, {
-    tempoMarkers: showTempoBadges,
-  });
+  const projection = buildProjectionFor(activeScope, doc, null);
   const elements = [...projection.elements, ...projection.markers];
 
   const dragKey = markerDrag
@@ -272,7 +262,6 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
     noteDrag,
     timedTempos,
     resolution,
-    showTempoBadges,
   } = inputs;
 
   // ---------------------------------------------------------------------
@@ -293,7 +282,6 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
         noteDrag,
         timedTempos,
         resolution,
-        showTempoBadges,
       }),
     );
   }, [
@@ -307,7 +295,6 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
     noteDrag,
     timedTempos,
     resolution,
-    showTempoBadges,
   ]);
 
   // ---------------------------------------------------------------------
