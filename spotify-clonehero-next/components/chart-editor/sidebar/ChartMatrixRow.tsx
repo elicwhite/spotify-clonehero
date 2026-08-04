@@ -6,9 +6,8 @@
  * Hard/Medium/Easy set:
  *
  * - No lower difficulties charted: a spanning "Generate H · M · E" bar
- *   (disabled with a typed reason for an instrument this build can't
- *   generate yet — currently bass, see `difficulty-client.ts`'s bass
- *   spot-check gate doc comment).
+ *   (disabled with a typed reason when no assist runner is wired in — see
+ *   `useDifficultyGeneration`'s `disabledReason`).
  * - Some but not all of Hard/Medium/Easy charted: a slim "Generate H · M · E"
  *   bar directly under those three columns. Generation is set-shaped (it
  *   writes all three), so a partial set still has an affordance rather than
@@ -217,9 +216,9 @@ export interface ChartMatrixRowProps {
   generating: boolean;
   /** Starts (or restarts) generation for this instrument. */
   onGenerate: () => void;
-  /** Why `onGenerate` can't run here — a standing limit (no runner) or the
-   *  bass spot-check gate's typed reason. The single discriminator for the
-   *  Generate bar's disabled state; undefined means it is live. */
+  /** Why `onGenerate` can't run here — a standing limit (no runner, or an
+   *  instrument this build doesn't generate for). The single discriminator
+   *  for the Generate bar's disabled state; undefined means it is live. */
   generateDisabledReason: string | undefined;
   /** Deletes this instrument's generated Hard/Medium/Easy set. Deletion is a
    *  plain command, so it is offered independently of whether generation can

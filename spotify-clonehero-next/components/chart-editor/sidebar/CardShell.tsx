@@ -111,8 +111,8 @@ export function CardShell({
         {actions}
         <Button
           variant="ghost"
-          size="sm"
-          className="h-6 px-2 text-[11px] text-muted-foreground"
+          size="xs"
+          className="text-muted-foreground"
           onClick={() => onLearnMore(learnKey)}>
           Learn more
         </Button>
@@ -147,12 +147,14 @@ export function CardAction({
   const button = (
     <Button
       variant={variant}
-      size="sm"
-      className="h-7 gap-1.5"
+      // `xs` is the card-action scale (`components/ui/button.tsx`): the
+      // prototype's `.btn.sm`, one step below shadcn's `sm`, and the only
+      // size that also drops type and icon scale.
+      size="xs"
       disabled={disabledReason !== undefined}
       aria-describedby={disabledReason === undefined ? undefined : reasonId}
       onClick={onClick}>
-      <Icon className="h-3.5 w-3.5" />
+      <Icon />
       {label}
     </Button>
   );

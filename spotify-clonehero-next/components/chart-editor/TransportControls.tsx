@@ -143,6 +143,12 @@ export default function TransportControls({
     <TooltipProvider delayDuration={300}>
       <div
         ref={containerRef}
+        // Layout only. The surface this sits on (dark in both themes, with
+        // its own padding) belongs to the caller: `ChartEditor`'s `bottom`
+        // grid area, which owns the whole bar between the highway and the
+        // piano roll. The foregrounds and hover wash below read the shared
+        // `--ed-surface-*` tokens (`app/globals.css`), so they follow that
+        // surface rather than restating a color of their own.
         className={`flex items-center gap-2 w-full ${className ?? ''}`}>
         {/* Section skip back */}
         <Tooltip>
@@ -150,7 +156,7 @@ export default function TransportControls({
             <Button
               variant="ghost"
               size="icon"
-              className="h-[1.625rem] w-[1.625rem]"
+              className="h-[1.625rem] w-[1.625rem] hover:bg-[var(--ed-surface-hover)] hover:text-white"
               onClick={jumpToPrevSection}
               disabled={sections.length === 0}>
               <SkipBack className="h-3.5 w-3.5" />
@@ -167,7 +173,7 @@ export default function TransportControls({
             <Button
               variant="ghost"
               size="icon"
-              className="h-[1.625rem] w-[1.625rem]"
+              className="h-[1.625rem] w-[1.625rem] hover:bg-[var(--ed-surface-hover)] hover:text-white"
               onClick={togglePlayPause}>
               {isPlaying ? (
                 <Pause className="h-3.5 w-3.5" />
@@ -187,7 +193,7 @@ export default function TransportControls({
             <Button
               variant="ghost"
               size="icon"
-              className="h-[1.625rem] w-[1.625rem]"
+              className="h-[1.625rem] w-[1.625rem] hover:bg-[var(--ed-surface-hover)] hover:text-white"
               onClick={jumpToNextSection}
               disabled={sections.length === 0}>
               <SkipForward className="h-3.5 w-3.5" />
@@ -199,7 +205,7 @@ export default function TransportControls({
         </Tooltip>
 
         {/* Time display (chart-relative) */}
-        <span className="min-w-[5.5rem] text-xs font-mono text-muted-foreground tabular-nums whitespace-nowrap">
+        <span className="min-w-[5.5rem] text-xs font-mono text-[color:var(--ed-surface-fg-muted)] tabular-nums whitespace-nowrap">
           {formatTime(audioManager.chartTime)} / {formatTime(durationSeconds)}
         </span>
 
@@ -209,7 +215,7 @@ export default function TransportControls({
         {/* Speed: a readout, not a control. The stepper lives once, in the
          *  sidebar's utility cluster; the `[` / `]` hotkeys above still drive
          *  it from here, and both surfaces read the same reducer value. */}
-        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+        <span className="shrink-0 text-[11px] tabular-nums text-[color:var(--ed-surface-fg-muted)]">
           Speed {Math.round(speed * 100)}%
         </span>
       </div>

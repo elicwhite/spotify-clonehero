@@ -18,11 +18,10 @@ import type {OursSongInput} from '@/lib/drum-difficulty/ours/featurize';
 import type {ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import type {Track} from '@/lib/preview/highway/types';
 
-/** The instrument a generation run reduces. Bass is a recognized value on
- * the client's input type (so a future spot-check pass can just flip it on),
- * but it never becomes a worker request — `difficultyGenerationDisabledReason`
- * in `difficulty-client.ts` is the one place that decides which instruments
- * this build generates for. */
+/** The instrument a generation run reduces. Bass reuses the guitar reducer
+ * (owner-validated 2026-08-03: "the guitar lower difficulty generation
+ * algorithms work great for Bass too"), so a worker request for bass carries
+ * the same shape as guitar's. */
 export type DifficultyInstrument = 'drums' | 'guitar' | 'bass';
 
 export interface DrumDifficultyTiers {
@@ -43,7 +42,12 @@ export type DifficultyTiers = DrumDifficultyTiers | GuitarDifficultyTiers;
 
 export type DifficultyWorkerRequest =
   | {type: 'run'; instrument: 'drums'; input: OursSongInput}
-  | {type: 'run'; instrument: 'guitar'; chart: ParsedChart; expertTrack: Track};
+  | {
+      type: 'run';
+      instrument: 'guitar' | 'bass';
+      chart: ParsedChart;
+      expertTrack: Track;
+    };
 
 export type DifficultyWorkerMessage =
   | {type: 'progress'; percent: number; detail?: string | undefined}

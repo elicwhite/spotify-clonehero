@@ -45,7 +45,6 @@ import type {AssistStore} from '@/lib/assist/assist-store';
 import {useOptionalAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {ASSIST_RUN_BUSY_MESSAGE} from '@/components/assist/useAssistRunner';
 import {buildDifficultyGenerationInput} from '@/lib/assist/difficulty-input';
-import {difficultyGenerationDisabledReason} from '@/lib/assist/difficulty-client';
 import {generateDifficultiesTask} from '@/lib/assist/tasks/generate-difficulties';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 
@@ -86,11 +85,12 @@ export interface DifficultyGenerationControls {
   /** The instrument whose run is in flight in this editor, or null when
    *  there is none — the same answer on every surface. */
   generatingInstrument: SupportedTrackInstrument | null;
-  /** Why generation can't be offered for `instrument` at all (a standing
-   *  limit, not a property of the chart), or undefined when it can. */
-  disabledReasonFor: (
-    instrument: SupportedTrackInstrument,
-  ) => string | undefined;
+  /** Why generation can't be offered at all (a standing limit, not a
+   *  property of the chart or of any one instrument), or undefined when it
+   *  can. Every instrument the editor supports reduces through a shipped
+   *  reducer, so the only standing limit left is an editor with no assist
+   *  runner wired. */
+  disabledReason: string | undefined;
   /** Starts a run for `instrument` and applies its result. A no-op (with a
    *  toast) when a run is already in flight or generation is disabled. */
   start: (instrument: SupportedTrackInstrument) => void;
@@ -107,21 +107,14 @@ export function useDifficultyGeneration(): DifficultyGenerationControls {
     () => null,
   );
 
-  const disabledReasonFor = useCallback(
-    (instrument: SupportedTrackInstrument): string | undefined => {
-      const unsupported = difficultyGenerationDisabledReason(instrument);
-      if (unsupported !== undefined) return unsupported;
-      if (runner == null) return GENERATION_NOT_WIRED_REASON;
-      return undefined;
-    },
-    [runner],
-  );
+  const disabledReason =
+    runner == null ? GENERATION_NOT_WIRED_REASON : undefined;
 
   const run = useCallback(
     async (instrument: SupportedTrackInstrument) => {
       const doc = state.chartDoc;
       if (!runner || !doc) return;
-      if (disabledReasonFor(instrument) !== undefined) return;
+      if (disabledReason !== undefined) return;
       if (runner.store.getState().status === 'running') {
         toast.error(ASSIST_RUN_BUSY_MESSAGE);
         return;
@@ -176,7 +169,7 @@ export function useDifficultyGeneration(): DifficultyGenerationControls {
       runner,
       state.chartDoc,
       state.trackStamps,
-      disabledReasonFor,
+      disabledReason,
       executeCommand,
       dispatch,
     ],
@@ -189,5 +182,5 @@ export function useDifficultyGeneration(): DifficultyGenerationControls {
     [run],
   );
 
-  return {generatingInstrument, disabledReasonFor, start};
+  return {generatingInstrument, disabledReason, start};
 }

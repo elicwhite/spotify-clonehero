@@ -330,19 +330,19 @@ describe('Generate H · M · E', () => {
     ).toBeEnabled();
   });
 
-  it('disables Generate for bass with the spot-check gate reason', () => {
+  it('enables Generate for bass (owner-validated guitar-reducer reuse, 2026-08-03)', async () => {
     renderEditor(makeDocWith('bass'));
 
     const generate = screen.getByRole('button', {
       name: 'Generate Bass Hard, Medium, Easy difficulties',
     });
-    expect(generate).toHaveAttribute('aria-disabled', 'true');
-    expect(
-      screen.getAllByText(/not available for bass yet/i).length,
-    ).toBeGreaterThan(0);
+    expect(generate).toBeEnabled();
 
     fireEvent.click(generate);
-    expect(buildInputCalls).toEqual([]);
+    await waitFor(() =>
+      expect(buildInputCalls).toEqual([{instrument: 'bass'}]),
+    );
+    expect(captured).not.toBeNull();
   });
 
   it('cancel mid-generation applies nothing and unlocks the row', async () => {

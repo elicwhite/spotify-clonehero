@@ -27,6 +27,14 @@ export interface GuitarReductionProgress {
   message: string;
 }
 
+export interface GuitarReductionOptions {
+  /** Instrument name for user-facing progress copy. The reduction graphs are
+   *  instrument agnostic — bass runs the identical models — so the label is
+   *  presentation only and never reaches the ONNX layer. Defaults to
+   *  `'guitar'`. */
+  instrumentLabel?: string;
+}
+
 const REDUCED_DIFFICULTIES: ReducedGuitarDifficulty[] = [
   'hard',
   'medium',
@@ -44,10 +52,14 @@ export async function reduceGuitarDifficulties(
   chart: ParsedChart,
   expertTrack: Track,
   onProgress?: (progress: GuitarReductionProgress) => void,
+  options?: GuitarReductionOptions,
 ): Promise<ReducedGuitarTracks> {
+  const instrumentLabel = options?.instrumentLabel ?? 'guitar';
   const context = buildGuitarFeatureContext(chart, expertTrack);
   if (context.ticks.length === 0) {
-    throw new Error('The Expert guitar track does not contain any notes.');
+    throw new Error(
+      `The Expert ${instrumentLabel} track does not contain any notes.`,
+    );
   }
 
   const runtime = await loadGuitarReductionRuntime(message =>
@@ -60,7 +72,7 @@ export async function reduceGuitarDifficulties(
   // deterministic tier order and run one graph at a time.
   const runs: Array<readonly [ReducedGuitarDifficulty, GuitarTierRun]> = [];
   for (const tier of REDUCED_DIFFICULTIES) {
-    onProgress?.({message: `Reducing guitar to ${tier}…`});
+    onProgress?.({message: `Reducing ${instrumentLabel} to ${tier}…`});
     const features = featureMatrix(context, tier);
     runs.push([
       tier,

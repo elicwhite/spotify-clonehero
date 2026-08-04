@@ -8,35 +8,19 @@
  * listener is removed however the run settles.
  *
  * ---------------------------------------------------------------------------
- * BASS SPOT-CHECK GATE (plan 0074 Design D risk item — "Bass reuse of the
- * guitar reducer is an experiment, not a decision")
+ * BASS SPOT-CHECK GATE — resolved (owner-validated 2026-08-03)
  * ---------------------------------------------------------------------------
  *
- * The plan calls for spot-checking the guitar ONNX reducer against 2-3 real
- * bass tracks from `lib/drum-difficulty/__fixtures__` (or other available
- * fixture charts with bass parts) before wiring bass through. That check
- * could not be run: every fixture chart in this repo was searched —
- * `lib/drum-difficulty/__fixtures__/reduction-{01..20}/notes.mid` (all 20),
- * `lib/guitar-difficulty`'s own test fixtures, and every other `.mid`/
- * `.chart` file in the tree — and none contains a bass track (all 20
- * reduction fixtures are drums-only MIDI; none has a `PART BASS` track).
- * There is no other in-repo chart with a bass part, and this environment's
- * network sandbox does not permit fetching a real chart from an external
- * source to manufacture one (and fabricating a synthetic "bass" track from
- * unrelated note data would not be a real spot check — it would just assert
- * the code runs, not that the guitar reducer produces musically sane bass
- * output).
- *
- * Given the gate's own instruction for exactly this situation ("if quality is
- * unacceptable, bass generation ships disabled with a tooltip"), the
- * conservative reading applies equally to "quality could not be assessed":
- * bass ships DISABLED here. {@link GENERATION_DISABLED_INSTRUMENTS} is the
- * ONE place that says so — `runDifficultyGeneration` rejects such a request
- * with {@link UnsupportedInstrumentError} synchronously before any worker is
- * spawned, and the UI asks {@link difficultyGenerationDisabledReason} for the
- * text on its disabled affordance. Re-enabling bass once a real spot check is
- * possible is a matter of emptying that set and widening the worker request
- * union in `difficulty-protocol.ts`, not redesigning the pipeline.
+ * The plan's spot-check gate ("Bass reuse of the guitar reducer is an
+ * experiment, not a decision") could not be run in this environment for lack
+ * of a fixture chart with a bass track. The owner has since validated the
+ * guitar reducer against real bass tracks directly ("I have validated that
+ * the guitar lower difficulty generation algorithms work great for Bass
+ * too.", live review 2026-08-03), which is the spot check the gate called
+ * for. Bass generates through the identical guitar reducer path, so every
+ * member of `DifficultyInstrument` is supported and this client has no
+ * instrument gate at all. The UI's only standing reason for a disabled
+ * affordance is "no assist runner wired in" (`useDifficultyGeneration`).
  */
 
 import {
@@ -47,45 +31,10 @@ import type {OursSongInput} from '@/lib/drum-difficulty/ours/featurize';
 import type {ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import type {Track} from '@/lib/preview/highway/types';
 import type {
-  DifficultyInstrument,
   DifficultyTiers,
   DifficultyWorkerMessage,
   DifficultyWorkerRequest,
 } from './difficulty-protocol';
-
-/** The instruments this build refuses to generate difficulties for. See the
- * bass spot-check gate above. */
-const GENERATION_DISABLED_INSTRUMENTS = new Set<DifficultyInstrument>(['bass']);
-
-function unsupportedInstrumentMessage(instrument: string): string {
-  return `Difficulty generation is not available for ${instrument} yet (unvalidated guitar-reducer reuse).`;
-}
-
-/** Thrown synchronously (no worker spawned) for an instrument this client
- * does not yet generate difficulties for. See the bass spot-check gate above
- * for why bass is currently in this state. */
-export class UnsupportedInstrumentError extends Error {
-  readonly instrument: string;
-
-  constructor(instrument: string) {
-    super(unsupportedInstrumentMessage(instrument));
-    this.name = 'UnsupportedInstrumentError';
-    this.instrument = instrument;
-  }
-}
-
-/** Why this build won't generate difficulties for `instrument` at all (a
- * standing limit, not a property of any chart), or undefined when it will.
- * The UI renders this on its disabled affordance; a caller that ignores it
- * and starts a run anyway gets the identical text back as an
- * {@link UnsupportedInstrumentError}. */
-export function difficultyGenerationDisabledReason(
-  instrument: DifficultyInstrument,
-): string | undefined {
-  return GENERATION_DISABLED_INSTRUMENTS.has(instrument)
-    ? unsupportedInstrumentMessage(instrument)
-    : undefined;
-}
 
 export interface DifficultyGenerationProgress {
   /** 0..1. */
@@ -120,19 +69,13 @@ export function defaultCreateWorker(): Worker {
   });
 }
 
-/** Runs one instrument's difficulty-tier generation to completion. Rejects
- * with {@link UnsupportedInstrumentError} for an instrument
- * {@link difficultyGenerationDisabledReason} names, before spawning a worker
- * (see the gate above); otherwise follows the shared cancellable
- * one-shot-worker contract. */
+/** Runs one instrument's difficulty-tier generation to completion, following
+ * the shared cancellable one-shot-worker contract. */
 export async function runDifficultyGeneration(
   input: DifficultyGenerationInput,
   options: RunDifficultyGenerationOptions = {},
   onProgress?: (progress: DifficultyGenerationProgress) => void,
 ): Promise<{tiers: DifficultyTiers}> {
-  if (difficultyGenerationDisabledReason(input.instrument) !== undefined) {
-    throw new UnsupportedInstrumentError(input.instrument);
-  }
   if (options.signal?.aborted) {
     throw makeAbortError();
   }
@@ -143,7 +86,7 @@ export async function runDifficultyGeneration(
       ? {type: 'run', instrument: 'drums', input: input.input}
       : {
           type: 'run',
-          instrument: 'guitar',
+          instrument: input.instrument,
           chart: input.chart,
           expertTrack: input.expertTrack,
         };

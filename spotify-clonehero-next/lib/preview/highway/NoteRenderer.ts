@@ -335,7 +335,11 @@ export class NoteRenderer implements ElementRenderer<NoteElementData> {
 
     const elapsed = currentTimeMs - flameMsTime;
     const textures = this.flameTextures?.hit;
-    if (!textures?.length || elapsed < 0 || elapsed >= HIGHWAY_FLAME_DURATION_MS) {
+    if (
+      !textures?.length ||
+      elapsed < 0 ||
+      elapsed >= HIGHWAY_FLAME_DURATION_MS
+    ) {
       flame.visible = false;
       return;
     }

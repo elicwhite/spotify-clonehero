@@ -42,10 +42,9 @@ export default function DifficultyGenerationCard({
 }: DifficultyGenerationCardProps) {
   const {state, dispatch} = useChartEditorContext();
   const runner = useOptionalAssistRunnerContext();
-  const {generatingInstrument, disabledReasonFor, start} =
+  const {generatingInstrument, disabledReason, start} =
     useDifficultyGeneration();
   const generating = generatingInstrument === instrument;
-  const disabledReason = disabledReasonFor(instrument);
 
   const label = INSTRUMENT_LABEL[instrument];
   const sourceKey = trackKeyId({instrument, difficulty: 'expert'});
@@ -90,11 +89,10 @@ export default function DifficultyGenerationCard({
                 <span>
                   <Button
                     variant="default"
-                    size="sm"
-                    className="h-7 gap-1.5"
+                    size="xs"
                     disabled={disabledReason !== undefined}
                     onClick={() => start(instrument)}>
-                    <Sparkles className="h-3.5 w-3.5" />
+                    <Sparkles />
                     Re-generate
                   </Button>
                 </span>
@@ -103,11 +101,7 @@ export default function DifficultyGenerationCard({
                 <TooltipContent side="right">{disabledReason}</TooltipContent>
               )}
             </Tooltip>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7"
-              onClick={handleKeepAsIs}>
+            <Button variant="ghost" size="xs" onClick={handleKeepAsIs}>
               Keep as-is
             </Button>
           </>

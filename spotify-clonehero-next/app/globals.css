@@ -70,6 +70,27 @@
 }
 
 @layer base {
+  /* -------------------------------------------------------------------
+   * Editor surface
+   * -------------------------------------------------------------------
+   * The dark chrome the chart editor wraps its highway canvases in: the
+   * grid background, the transport bar, the pane seam, and the text and
+   * hover washes that sit on them.
+   *
+   * Deliberately outside the light/dark token blocks. `darkMode` is
+   * `media`, and a highway canvas is black in both themes, so chrome that
+   * followed the theme would be unreadable against it in light mode.
+   * These are theme-independent by design, and defined once so the
+   * surface has a single place to change.
+   */
+  :root {
+    --ed-surface: #000000;
+    --ed-surface-seam: #262626; /* the 1px hairline between highway panes */
+    --ed-surface-fg: #d4d4d4;
+    --ed-surface-fg-muted: #a3a3a3;
+    --ed-surface-hover: rgb(255 255 255 / 0.1);
+  }
+
   * {
     @apply border-border;
   }
@@ -118,7 +139,7 @@
    * Editor density scope (plan 0074 Phase 7, task 7c)
    * -------------------------------------------------------------------
    * The compact type/spacing/control scale read off the approved
-   * prototype (`loading-inline.html`: 11px uppercase section labels,
+   * prototype (`loading-inline.html`: 10.5px uppercase section labels,
    * ~10-12px card/section padding, ~28px controls).
    *
    * The scope is the document root, set to `data-density="compact"` for
@@ -146,11 +167,12 @@
    * scoping it compacts corners everywhere for free.
    */
   :root[data-density='compact'] {
-    --ed-text-label: 0.6875rem; /* 11px, prototype section labels */
+    --ed-text-label: 0.65625rem; /* 10.5px, prototype `.sec-head h3` */
     --ed-gap-section: 0.5rem; /* 8px, between a section rule and its body */
     --ed-pad-card: 0.625rem; /* 10px, assist card padding */
     --ed-pad-section: 0.75rem; /* 12px, sidebar padding and section gap */
     --ed-control-h: 1.75rem; /* 28px, prototype compact controls */
+    --ed-control-h-sm: 1.5rem; /* 24px, prototype `.btn.sm` card actions */
     --radius: 0.375rem;
   }
 }

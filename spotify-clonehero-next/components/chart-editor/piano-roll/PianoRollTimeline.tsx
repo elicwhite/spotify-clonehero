@@ -3613,7 +3613,7 @@ export default function PianoRollTimeline({
         aria-valuemin={MIN_PANEL_HEIGHT}
         aria-valuemax={MAX_PANEL_HEIGHT}
         title="Drag to resize"
-        className="h-1.5 shrink-0 cursor-row-resize bg-border/70 transition-colors hover:bg-accent"
+        className="h-1.5 shrink-0 cursor-row-resize bg-[color:var(--ed-surface-hover,theme(colors.border/70%))] transition-colors hover:bg-accent"
         onPointerDown={handleResizePointerDown}
         onPointerMove={handleResizePointerMove}
         onPointerUp={endResizeDrag}

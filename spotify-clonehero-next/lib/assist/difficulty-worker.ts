@@ -5,15 +5,13 @@
  * "Ours" v5) — plan 0071 concluded "ship the trained GBM" and named no
  * competing production default, so Ours is this worker's only drum reducer;
  * the ported HOPCAT/Onyx reducers are reference implementations kept for
- * their parity tests and have no caller here. Guitar routes
+ * their parity tests and have no caller here. Guitar and bass both route
  * through the ONNX reducer in `lib/guitar-difficulty` (models fetched lazily
  * from `assets.musiccharts.tools/models/guitar-reduction-v1` by
  * `loadGuitarReductionRuntime`, the same `getCachedModel`-style pattern other
- * workers in this codebase use for large model downloads).
- *
- * Bass never reaches this worker: `difficulty-client.ts` rejects it with a
- * typed `UnsupportedInstrumentError` before spawning (see that file's doc
- * comment for the spot-check gate outcome).
+ * workers in this codebase use for large model downloads) — owner-validated
+ * 2026-08-03 that the guitar reducer works well for bass too, so bass reuses
+ * the identical reduction path with no bass-specific model or branch.
  *
  * Protocol: `{type:'run', instrument, ...}` ->
  * `{type:'progress', percent, detail?}`* -> `{type:'result', tiers}` |
@@ -65,13 +63,15 @@ async function run(req: DifficultyWorkerRequest): Promise<void> {
     return;
   }
 
-  // guitar (and, per the spot-check gate below, never bass in production —
-  // the client rejects bass before this worker is ever spawned).
+  // guitar and bass share the same ONNX reducer (owner-validated 2026-08-03).
+  // The request's instrument is passed as the label so the progress copy the
+  // user reads names the instrument they asked to generate.
   const onGuitarProgress = makeGuitarProgressCounter();
   const {expert: _expert, ...reducedTiers} = await reduceGuitarDifficulties(
     req.chart,
     req.expertTrack,
     p => onGuitarProgress(p.message),
+    {instrumentLabel: req.instrument},
   );
   progress(1);
   post({type: 'result', tiers: {kind: 'guitar', ...reducedTiers}});

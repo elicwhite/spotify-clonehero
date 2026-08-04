@@ -25,9 +25,15 @@ const buttonVariants = cva(
       // `lg` keeps a fixed height: it is a page-level call to action, not a
       // dense editor control. A caller passing its own `h-*` still wins via
       // tailwind-merge.
+      //
+      // `xs` is the one step below `sm`, for a dense row of secondary
+      // actions (assist card action rows). It is the only size that also
+      // drops the text and icon scale — 14px type in a 24px button is what
+      // made every call site override `[&_svg]` by hand.
       size: {
         default: 'h-[var(--ed-control-h,2.5rem)] px-4 py-2',
         sm: 'h-[var(--ed-control-h,2.25rem)] rounded-md px-3',
+        xs: 'h-[var(--ed-control-h-sm,1.75rem)] gap-1.5 rounded-md px-2 text-[11.5px] [&_svg]:size-3',
         lg: 'h-11 rounded-md px-8',
         icon: 'h-[var(--ed-control-h,2.5rem)] w-[var(--ed-control-h,2.5rem)]',
       },

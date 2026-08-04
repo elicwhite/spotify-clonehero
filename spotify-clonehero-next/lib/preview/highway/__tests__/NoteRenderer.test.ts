@@ -209,7 +209,6 @@ describe('NoteRenderer', () => {
       null,
       {
         hit: Array.from({length: 15}, (_, frame) => ({frame})),
-        open: [new (THREE.SpriteMaterial as any)().map],
       } as any,
     );
 
@@ -232,7 +231,6 @@ describe('NoteRenderer', () => {
       null,
       {
         hit: Array.from({length: 15}, (_, frame) => ({frame})),
-        open: [new (THREE.SpriteMaterial as any)().map],
       } as any,
     );
 
@@ -292,7 +290,7 @@ describe('NoteRenderer', () => {
   it('clips note heads and sustain tails at the playline while allowing flames below it', () => {
     const tailClippingPlanes = [{name: 'floor-edge'}] as any;
     const headClippingPlanes = [{name: 'playline'}] as any;
-    const flameTextures = {hit: [{}], open: []};
+    const flameTextures = {hit: [{}]};
     const renderer = new NoteRenderer(
       jest.fn().mockReturnValue(new (THREE.SpriteMaterial as any)()),
       tailClippingPlanes,
@@ -324,7 +322,6 @@ describe('NoteRenderer', () => {
   it('animates a five-fret flame at the playline after the note passes it', () => {
     const flameTextures = {
       hit: Array.from({length: 15}, (_, frame) => ({frame})),
-      open: Array.from({length: 8}, (_, frame) => ({frame})),
     };
     const renderer = new NoteRenderer(
       jest.fn().mockReturnValue(new (THREE.SpriteMaterial as any)()),

@@ -116,6 +116,7 @@ function mockMakeRenderer() {
     setWaveformData: jest.fn(async () => {}),
     setGridData: jest.fn(async () => {}),
     setLyricsData: jest.fn(async () => {}),
+    setLyricsVisible: jest.fn(),
     setHighwayMode: jest.fn(),
     getHighwayMode: jest.fn(() => 'classic' as const),
   };

@@ -65,6 +65,30 @@ const MAX_HIGHWAY_PANES = 4;
  * sync, marker drag) lives in `HighwayEditorPane`; this component only
  * resolves the pane list and the state shared by every pane (render doc,
  * timing, lock state).
+ *
+ * Shared chrome. Panes sit flush inside one dark surface — no per-pane
+ * border or rounding, only a 1px seam of the container's color between
+ * them — and chart-wide chrome is drawn once for the whole area rather
+ * than once per pane:
+ *
+ *   - Karaoke lyrics (`showLyrics`) render in the leftmost pane only. The
+ *     overlay is a second WebGL pass inside a pane's own canvas
+ *     (`LyricsOverlay`, `lib/preview/highway/index.ts`), so it cannot be
+ *     centered across panes without moving it out of THREE and into a DOM
+ *     layer over the whole highway area. Leftmost-pane placement is the
+ *     honest fit for the current renderer.
+ *   - BPM / time-signature badges (`showTempoBadges`) are produced only
+ *     when there is a single pane. They are world-space sprites anchored
+ *     just outside the highway's left and right edges, so a narrow pane's
+ *     camera frustum cuts them off — the clipping the multi-pane layout
+ *     showed. Unlike the lyrics overlay these are ordinary marker
+ *     elements, so a pane that should not show them simply never produces
+ *     them (`useChartElements`), which also keeps the left/right marker
+ *     stack indices computed over exactly the markers a pane draws. They
+ *     are read-only on every capability preset (no
+ *     preset lists `tempo`/`timesig` as hoverable, selectable, or
+ *     draggable), so hiding them costs no interaction; the piano roll's
+ *     tempo lane is the full-width place to read and edit them.
  */
 export default function HighwayEditor({
   metadata,
@@ -177,7 +201,11 @@ export default function HighwayEditor({
     return (
       <div
         className={cn(
-          'relative flex h-full w-full items-center justify-center rounded-lg border bg-black text-sm text-muted-foreground',
+          // The theme-independent editor-surface tokens, not
+          // `text-muted-foreground`: this sits on the black highway surface
+          // in both themes, and the muted token is a mid grey tuned for
+          // `--background` - on black it falls under AA.
+          'relative flex h-full w-full items-center justify-center bg-[var(--ed-surface)] text-sm text-[color:var(--ed-surface-fg-muted)]',
           className,
         )}>
         No tracks shown. Click a difficulty in the Chart Matrix to show it here.
@@ -187,9 +215,22 @@ export default function HighwayEditor({
 
   return (
     <div
-      className={cn('relative grid h-full w-full gap-2', className)}
-      style={{gridTemplateColumns: `repeat(${panes.length}, 1fr)`}}>
-      {panes.map(scope => (
+      className={cn(
+        // Opaque token, not a translucent white: `darkMode` is `media`, so
+        // a translucent seam would composite against `--background` and read
+        // as a bright hairline in light mode and near-invisible in dark. The
+        // seam sits between two black canvases and must look the same in
+        // both themes.
+        'relative grid h-full w-full overflow-hidden bg-[var(--ed-surface-seam)]',
+        className,
+      )}
+      style={{
+        gridTemplateColumns: `repeat(${panes.length}, 1fr)`,
+        // Panes paint their own black canvas edge to edge, so the container's
+        // color is only ever visible through this 1px seam between them.
+        gap: '1px',
+      }}>
+      {panes.map((scope, index) => (
         <HighwayEditorPane
           key={scopePaneKey(scope)}
           scope={scope}
@@ -208,7 +249,9 @@ export default function HighwayEditor({
           renderTimedTempos={renderTimedTempos}
           resolution={resolution}
           editingLocked={editingLocked}
-          className="relative overflow-hidden rounded-lg border bg-black"
+          showLyrics={index === 0}
+          showTempoBadges={panes.length === 1}
+          className="relative overflow-hidden bg-[var(--ed-surface)]"
         />
       ))}
 

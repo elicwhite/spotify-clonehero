@@ -76,6 +76,12 @@ interface HighwayPreviewProps {
    * at all (no lanes, no note textures loaded).
    */
   trackKey?: TrackKey | undefined;
+  /**
+   * Draw the karaoke lyrics overlay in this canvas. Defaults to true. Lyrics
+   * are chart-wide, so a side-by-side highway leaves this on for exactly one
+   * pane (see `HighwayEditor`).
+   */
+  showLyrics?: boolean | undefined;
   /** Called when the renderer is ready (or destroyed). */
   onRendererReady?: (handle: HighwayRendererHandle | null) => void;
 }
@@ -102,6 +108,7 @@ const HighwayPreview = memo(function HighwayPreview({
   className,
   showLanes = true,
   trackKey,
+  showLyrics = true,
   onRendererReady,
 }: HighwayPreviewProps) {
   const sizingRef = useRef<HTMLDivElement>(null!);
@@ -136,6 +143,10 @@ const HighwayPreview = memo(function HighwayPreview({
   activeTrackRef.current = activeTrack;
   const showLanesRef = useRef(effectiveShowLanes);
   showLanesRef.current = effectiveShowLanes;
+  // Seed value only. After setup this flag is pushed through the renderer's
+  // runtime setter (below), never through recreation.
+  const showLyricsRef = useRef(showLyrics);
+  showLyricsRef.current = showLyrics;
 
   useEffect(() => {
     const track = activeTrackRef.current;
@@ -150,7 +161,10 @@ const HighwayPreview = memo(function HighwayPreview({
       sizingRef,
       canvasRef,
       audioManager,
-      {showDrumLanes: showLanesRef.current},
+      {
+        showDrumLanes: showLanesRef.current,
+        showLyrics: showLyricsRef.current,
+      },
     );
     rendererRef.current = renderer;
     renderer.prepTrack(track);
@@ -179,8 +193,11 @@ const HighwayPreview = memo(function HighwayPreview({
       rendererRef.current = null;
       onRendererReady?.(null);
     };
-    // Only recreate the renderer when the instrument/audio changes.
-    // Chart data updates flow through the SceneReconciler (not renderer recreation).
+    // Only recreate the renderer when the instrument/audio changes. Chart
+    // data updates flow through the SceneReconciler, and the lyrics flag
+    // through the runtime setter below - showing or hiding a pane reassigns
+    // it on the surviving panes, which must not lose their WebGL context
+    // over it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     metadata,
@@ -190,9 +207,15 @@ const HighwayPreview = memo(function HighwayPreview({
     trackKey?.difficulty,
   ]);
 
+  // Whether this pane draws the chart-wide karaoke overlay. Declared after
+  // the setup effect so a freshly created renderer already exists here.
+  useEffect(() => {
+    rendererRef.current?.setLyricsVisible(showLyrics);
+  }, [showLyrics]);
+
   return (
     <div
-      className={`relative overflow-hidden rounded-lg border bg-black ${className ?? ''}`}
+      className={`relative overflow-hidden bg-black ${className ?? ''}`}
       ref={sizingRef}>
       <div ref={canvasRef} className="h-full w-full" />
     </div>

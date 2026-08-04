@@ -82,7 +82,8 @@ export interface GuitarReductionRuntime {
   ): Promise<GuitarTierRun>;
 }
 
-const MODEL_ROOT = 'https://assets.musiccharts.tools/models/guitar-reduction-v1';
+const MODEL_ROOT =
+  'https://assets.musiccharts.tools/models/guitar-reduction-v1';
 const ORT_WASM_ROOT =
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
 
@@ -101,7 +102,9 @@ export function loadGuitarReductionRuntime(
 async function createRuntime(
   onProgress?: (message: string) => void,
 ): Promise<GuitarReductionRuntime> {
-  onProgress?.('Loading guitar reduction manifest…');
+  // The runtime is memoized and shared by every instrument that reduces
+  // through these graphs, so its progress copy names no instrument.
+  onProgress?.('Loading difficulty reduction manifest…');
   const [manifest, mediumPhraseDictionary] = await Promise.all([
     fetchJson<GuitarReductionManifest>(`${MODEL_ROOT}/manifest.json`),
     fetchJson<MediumPhraseDictionary>(
@@ -116,7 +119,7 @@ async function createRuntime(
 
   const sessions = new Map<GuitarReductionTier, Ort.InferenceSession>();
   for (const tier of ['hard', 'medium', 'easy'] as const) {
-    onProgress?.(`Loading ${tier} guitar reduction model…`);
+    onProgress?.(`Loading ${tier} difficulty reduction model…`);
     sessions.set(
       tier,
       await createSession(ort, `${MODEL_ROOT}/${manifest.tiers[tier].onnx}`),

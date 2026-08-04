@@ -145,11 +145,7 @@ export default function DrumTranscriptionCard({
               variant={stale ? 'default' : 'outline'}
             />
             {stale && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7"
-                onClick={handleKeepAsIs}>
+              <Button variant="ghost" size="xs" onClick={handleKeepAsIs}>
                 Keep as-is
               </Button>
             )}

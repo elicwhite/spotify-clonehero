@@ -18,8 +18,6 @@ export interface HighwaySustainTextures {
 export interface HighwayFlameTextures {
   /** Frames from `highway-hit-flame.webp`, for pad/fretted notes. */
   hit: THREE.Texture[];
-  /** One complete full-width hitline texture for open/kick notes. */
-  open: THREE.Texture[];
 }
 
 export type HighwayFretStyle = 'first' | 'second' | 'third';
@@ -45,10 +43,6 @@ const HIGHWAY_SUSTAIN_OPEN_URL =
   '/assets/preview/assets2/highway-sustain-open.webp';
 
 const HIGHWAY_HIT_FLAME_URL = '/assets/preview/assets2/highway-hit-flame.webp';
-const HIGHWAY_OPEN_FLAME_URL =
-  '/assets/preview/assets2/highway-open-flame.webp';
-const HIGHWAY_OPEN_FLAME_DRUM_URL =
-  '/assets/preview/assets2/highway-open-flame-drum.webp';
 
 const HIGHWAY_FRET_STYLES: HighwayFretStyle[] = ['first', 'second', 'third'];
 const HIGHWAY_FRET_LAYERS: HighwayFretLayer[] = [
@@ -413,25 +407,21 @@ export async function loadHighwaySustainTextures(
   return {fretted, open};
 }
 
-/** Load the original five-fret playline flame animations. */
+/**
+ * Load the playline flame animation. Only pad/fretted notes get a flame;
+ * guitar/bass opens and drum kicks have none, so no full-width art is
+ * fetched.
+ */
 export async function loadHighwayFlameTextures(
   textureLoader: THREE.TextureLoader,
   animatedTextureManager?: AnimatedTextureManager,
-  openFlameForDrums = false,
 ): Promise<HighwayFlameTextures> {
-  const [hit, open] = await Promise.all([
-    loadAnimatedFrameTextures(
-      textureLoader,
-      HIGHWAY_HIT_FLAME_URL,
-      animatedTextureManager,
-    ),
-    loadStaticFrameTexture(
-      textureLoader,
-      openFlameForDrums ? HIGHWAY_OPEN_FLAME_DRUM_URL : HIGHWAY_OPEN_FLAME_URL,
-      animatedTextureManager,
-    ),
-  ]);
-  return {hit, open};
+  const hit = await loadAnimatedFrameTextures(
+    textureLoader,
+    HIGHWAY_HIT_FLAME_URL,
+    animatedTextureManager,
+  );
+  return {hit};
 }
 
 /** Load the layered original fret-button art used by 4-/5-lane hitlines. */
@@ -534,16 +524,6 @@ async function loadAnimatedFrameTextures(
     );
     return [await loadStaticTexture(textureLoader, url)];
   }
-}
-
-async function loadStaticFrameTexture(
-  textureLoader: THREE.TextureLoader,
-  url: string,
-  animatedTextureManager?: AnimatedTextureManager,
-): Promise<THREE.Texture[]> {
-  const texture = await loadStaticTexture(textureLoader, url);
-  animatedTextureManager?.registerFrameTextures([texture]);
-  return [texture];
 }
 
 /**

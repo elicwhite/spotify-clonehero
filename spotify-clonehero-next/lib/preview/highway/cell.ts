@@ -121,11 +121,7 @@ export async function loadCellTextures(
         ? loadHighwaySustainTextures(textureLoader, animatedTextureManager)
         : Promise.resolve(null),
       instrument === 'guitar' || instrument === 'bass' || instrument === 'drums'
-        ? loadHighwayFlameTextures(
-            textureLoader,
-            animatedTextureManager,
-            instrument === 'drums',
-          )
+        ? loadHighwayFlameTextures(textureLoader, animatedTextureManager)
         : Promise.resolve(null),
       instrument === 'guitar' || instrument === 'bass' || instrument === 'drums'
         ? loadHighwayFretTextures(textureLoader, animatedTextureManager)

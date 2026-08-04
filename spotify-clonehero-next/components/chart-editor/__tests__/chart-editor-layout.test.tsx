@@ -20,11 +20,11 @@
  */
 
 import '@testing-library/jest-dom';
-import {render, screen, within} from '@testing-library/react';
+import {render, screen} from '@testing-library/react';
 import {createEmptyChart} from '@eliwhite/scan-chart';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import SiteHeader, {EditorChromeProvider} from '@/components/SiteChrome';
+import SiteHeader from '@/components/SiteChrome';
 import {ChartEditorProvider} from '../ChartEditorContext';
 import {AudioServiceProvider} from '../AudioServiceContext';
 import ChartEditor from '../ChartEditor';
@@ -33,6 +33,10 @@ let mockPathname = '/chart-editor';
 jest.mock('next/navigation', () => ({
   usePathname: () => mockPathname,
   useSearchParams: () => new URLSearchParams(),
+}));
+
+jest.mock('../../../lib/supabase/AuthProvider', () => ({
+  useAuth: () => ({user: null, loading: false}),
 }));
 
 jest.mock('../HighwayEditor', () => ({
@@ -151,41 +155,37 @@ describe('ChartEditor responsive grid', () => {
   });
 });
 
-describe('compact editor header (plan 0074 Phase 7 task 7b)', () => {
-  it('includes the app-icon tile (links home) in the header row', () => {
+describe('site header + editor header row (plan 0074 Phase 8 task 8c)', () => {
+  it("carries the editor's song identity in its own header row", () => {
     renderEditor();
 
     const header = screen.getByRole('banner');
-    expect(
-      within(header).getByRole('link', {name: 'Music Charts Tools home'}),
-    ).toHaveAttribute('href', '/');
+    expect(header).toHaveTextContent('Test Song');
   });
 
-  it("puts the editor's song identity in the site chrome's one row, not a second one", () => {
+  it('renders the compact site header (home link + auth) above the editor, as a row separate from the editor header', () => {
     render(
-      <EditorChromeProvider>
+      <>
         <SiteHeader siteNav={<SiteNavStub />} />
         {editor()}
-      </EditorChromeProvider>,
+      </>,
     );
 
-    // One header row in the whole tree, carrying both the app icon and the
-    // editor's identity — the editor does not stack a row of its own.
-    const headers = screen.getAllByRole('banner');
-    expect(headers).toHaveLength(1);
-    expect(headers[0]).toHaveTextContent('Test Song');
-    expect(
-      screen.getAllByRole('link', {name: 'Music Charts Tools home'}),
-    ).toHaveLength(1);
+    // The compact site header and the editor's own song row are both on
+    // screen at once - two `<header>` elements, one carrying the site's
+    // home link, the other the song identity - neither suppresses the
+    // other.
+    const homeLink = screen.getByRole('link', {
+      name: 'Music Charts Tools home',
+    });
+    expect(homeLink).toHaveAttribute('href', '/');
+    expect(screen.getByText('Log In')).toBeInTheDocument();
+    expect(screen.getByText('Test Song')).toBeInTheDocument();
   });
 
-  it('keeps the full site nav on a non-editor route', () => {
+  it('keeps the full site nav, and no compact header, on a non-editor route', () => {
     mockPathname = '/spotify';
-    render(
-      <EditorChromeProvider>
-        <SiteHeader siteNav={<SiteNavStub />} />
-      </EditorChromeProvider>,
-    );
+    render(<SiteHeader siteNav={<SiteNavStub />} />);
 
     expect(screen.getByText('Music Charts Tools')).toBeInTheDocument();
     expect(

@@ -2,23 +2,27 @@
  * @jest-environment jsdom
  */
 /**
- * Site-wide header (plan 0074 Phase 7 task 7b): the full site nav on every
- * ordinary page, and on editor-rendering routes one compact row (app icon +
- * a content slot) that a page fills with its own identity and actions
- * instead of stacking a second header row.
+ * Site-wide header (plan 0074 Phase 8 task 8c, owner feedback from live
+ * review 2026-08-03: the site header - brand link home, More Tools, login -
+ * must stay visible at the top of every editor route). The full site nav on
+ * every ordinary page; on an editor route, the compact site header (home
+ * link + More Tools + auth controls) instead - always present, never
+ * suppressed by the page beneath it.
  */
 
 import '@testing-library/jest-dom';
 import {render, screen} from '@testing-library/react';
-import SiteHeader, {
-  EditorChromeProvider,
-  EditorHeaderContent,
-} from '../SiteChrome';
+import SiteHeader from '../SiteChrome';
+import EditorHeaderRow from '../chart-editor/EditorHeaderRow';
 
 let mockPathname = '/spotify';
 jest.mock('next/navigation', () => ({
   usePathname: () => mockPathname,
   useSearchParams: () => new URLSearchParams(),
+}));
+
+jest.mock('../../lib/supabase/AuthProvider', () => ({
+  useAuth: () => ({user: null, loading: false}),
 }));
 
 function SiteNavStub() {
@@ -27,10 +31,10 @@ function SiteNavStub() {
 
 function renderChrome(children?: React.ReactNode) {
   return render(
-    <EditorChromeProvider>
+    <>
       <SiteHeader siteNav={<SiteNavStub />} />
       {children}
-    </EditorChromeProvider>,
+    </>,
   );
 }
 
@@ -46,59 +50,49 @@ describe('SiteHeader', () => {
     expect(
       screen.queryByRole('link', {name: 'Music Charts Tools home'}),
     ).not.toBeInTheDocument();
+    expect(screen.queryByText('Log In')).not.toBeInTheDocument();
   });
 
-  it('renders the compact icon-only row (no site nav) on an editor route', () => {
+  it('renders the compact site header - home link, More Tools, and auth controls - on an editor route', () => {
     mockPathname = '/chart-editor';
     renderChrome();
 
-    expect(screen.queryByText('Music Charts Tools')).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('link', {name: 'Music Charts Tools home'}),
-    ).toBeInTheDocument();
+    const homeLink = screen.getByRole('link', {
+      name: 'Music Charts Tools home',
+    });
+    expect(homeLink).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', {name: 'More Tools'})).toBeInTheDocument();
+    expect(screen.getByText('Log In')).toBeInTheDocument();
   });
 
   it('treats nested editor sub-paths as editor routes too', () => {
     mockPathname = '/add-lyrics/anything';
     renderChrome();
 
-    expect(screen.queryByText('Music Charts Tools')).not.toBeInTheDocument();
     expect(
       screen.getByRole('link', {name: 'Music Charts Tools home'}),
     ).toBeInTheDocument();
   });
 
-  it('puts a page header content into the one compact row rather than a second row', async () => {
+  it('renders exactly one site header, whatever else the page renders', () => {
     mockPathname = '/chart-editor';
-    renderChrome(<EditorHeaderContent>Song title</EditorHeaderContent>);
+    renderChrome(<EditorHeaderRow>Song title</EditorHeaderRow>);
 
-    const row = await screen.findByRole('banner');
-    expect(await screen.findByText('Song title')).toBeInTheDocument();
-    // One header element, one app icon: the page's content joined the row
-    // the site chrome already rendered.
-    expect(screen.getAllByRole('banner')).toHaveLength(1);
+    // The compact site header and the editor's own song row are two
+    // distinct `<header>` elements - both on screen, neither suppressing
+    // the other - but only one of them is the *site* header.
     expect(
       screen.getAllByRole('link', {name: 'Music Charts Tools home'}),
     ).toHaveLength(1);
-    expect(row).toContainElement(screen.getByText('Song title'));
+    expect(screen.getByText('Song title')).toBeInTheDocument();
   });
+});
 
-  it('renders its own row when there is no app shell around it', () => {
-    render(<EditorHeaderContent>Song title</EditorHeaderContent>);
+describe("EditorHeaderRow (the editor's own song-identity row)", () => {
+  it('always renders its own row, independent of route or site chrome', () => {
+    mockPathname = '/spotify';
+    render(<EditorHeaderRow>Song title</EditorHeaderRow>);
 
-    const row = screen.getByRole('banner');
-    expect(row).toContainElement(screen.getByText('Song title'));
-    expect(
-      screen.getByRole('link', {name: 'Music Charts Tools home'}),
-    ).toBeInTheDocument();
-  });
-
-  it('renders no editor row on a non-editor route hosting editor content', () => {
-    renderChrome(<EditorHeaderContent>Song title</EditorHeaderContent>);
-
-    // The site nav stays, and the content falls back to its own row rather
-    // than disappearing into a slot that does not exist.
-    expect(screen.getByText('Music Charts Tools')).toBeInTheDocument();
     expect(screen.getByText('Song title')).toBeInTheDocument();
   });
 });

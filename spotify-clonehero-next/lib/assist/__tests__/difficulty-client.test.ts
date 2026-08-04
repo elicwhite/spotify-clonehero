@@ -4,13 +4,13 @@
  * cancellation, via the injectable `createWorker` seam and a `FakeWorker`
  * standing in for `difficulty-worker.ts` (mirrors
  * `lib/tempo-map/__tests__/pipeline-client-cancel.test.ts`'s convention).
- * Also covers the bass spot-check gate: bass rejects synchronously with
- * `UnsupportedInstrumentError` and never spawns a worker.
+ * Bass is owner-validated (2026-08-03) to reuse the guitar reducer path, so
+ * it generates like guitar; every instrument in the union is supported and
+ * the client has no instrument gate.
  */
 
 import {
   runDifficultyGeneration,
-  UnsupportedInstrumentError,
   defaultCreateWorker,
   type DifficultyGenerationInput,
 } from '../difficulty-client';
@@ -220,37 +220,34 @@ describe('runDifficultyGeneration', () => {
     });
   });
 
-  describe('bass (spot-check gate: ships disabled)', () => {
-    it('rejects synchronously with UnsupportedInstrumentError and never spawns a worker', async () => {
-      let spawned = false;
-      const createWorker = () => {
-        spawned = true;
-        return new FakeWorker() as unknown as Worker;
-      };
+  describe('bass (owner-validated 2026-08-03: reuses the guitar reducer)', () => {
+    it('posts a bass run request carrying the chart and the Expert track', async () => {
+      let fake: FakeWorker;
+      const chart = {resolution: 192} as never;
+      const expertTrack = {difficulty: 'expert'} as never;
+      const tiers = {
+        kind: 'guitar',
+        hard: {} as never,
+        medium: {} as never,
+        easy: {} as never,
+      } as const;
 
-      await expect(
-        runDifficultyGeneration(
-          {
-            instrument: 'bass',
-            chart: {} as never,
-            expertTrack: {} as never,
+      const promise = runDifficultyGeneration(
+        {instrument: 'bass', chart, expertTrack},
+        {
+          createWorker: () => {
+            fake = new FakeWorker();
+            return fake as unknown as Worker;
           },
-          {createWorker},
-        ),
-      ).rejects.toBeInstanceOf(UnsupportedInstrumentError);
-      expect(spawned).toBe(false);
-    });
+        },
+      );
 
-    it('rejects bass even when the signal is already aborted (input validation, not cancellation)', async () => {
-      const controller = new AbortController();
-      controller.abort();
-
-      await expect(
-        runDifficultyGeneration(
-          {instrument: 'bass', chart: {} as never, expertTrack: {} as never},
-          {signal: controller.signal},
-        ),
-      ).rejects.toBeInstanceOf(UnsupportedInstrumentError);
+      fake!.emit({type: 'result', tiers});
+      await expect(promise).resolves.toEqual({tiers});
+      expect(fake!.posted).toEqual([
+        {type: 'run', instrument: 'bass', chart, expertTrack},
+      ]);
+      expect(fake!.terminated).toBe(true);
     });
   });
 });

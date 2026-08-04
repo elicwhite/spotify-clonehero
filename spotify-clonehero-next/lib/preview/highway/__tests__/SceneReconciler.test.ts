@@ -281,6 +281,36 @@ describe('SceneReconciler', () => {
       expect(renderer.recycled).toHaveLength(1);
       expect(reconciler.getActiveGroups().size).toBe(1);
     });
+
+    it('a duplicated key renders the winning element, not the first one seen', () => {
+      const scene = new MockScene() as any;
+      const renderer = createMockRenderer();
+      const reconciler = new SceneReconciler(scene, {note: renderer}, 1.5);
+
+      // A caller can hand the same key twice (two panes contributing the same
+      // element, say). Last one wins, and the group the window walk builds has
+      // to come from that same winner: the accessors read the deduped map, so
+      // a group created off the losing duplicate would render data the
+      // reconciler no longer believes it has.
+      reconciler.setElements([
+        el('note:480:redDrum', 500, {val: 'loser'}),
+        el('note:480:redDrum', 700, {val: 'winner'}),
+      ]);
+      expect(reconciler.getElements()).toHaveLength(1);
+      expect(reconciler.getElement('note:480:redDrum')!.data).toEqual({
+        val: 'winner',
+      });
+
+      reconciler.updateWindow(0);
+      expect(renderer.created).toEqual([{data: {val: 'winner'}, msTime: 700}]);
+      expect(reconciler.getActiveGroups().size).toBe(1);
+      expect(scene.children).toHaveLength(1);
+
+      reconciler.setElements([]);
+      expect(renderer.recycled).toHaveLength(1);
+      expect(reconciler.getActiveGroups().size).toBe(0);
+      expect(scene.children).toHaveLength(0);
+    });
   });
 
   // -----------------------------------------------------------------------

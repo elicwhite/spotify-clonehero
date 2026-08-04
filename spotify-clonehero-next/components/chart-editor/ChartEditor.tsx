@@ -8,7 +8,7 @@ import type {AudioManager} from '@/lib/preview/audioManager';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
 import type {AudioSource, AssetFile, ChartFileFormat} from './ExportDialog';
 
-import {EditorHeaderContent} from '@/components/SiteChrome';
+import EditorHeaderRow from './EditorHeaderRow';
 import HighwayEditor from './HighwayEditor';
 import TransportControls from './TransportControls';
 import ExportDialog from './ExportDialog';
@@ -267,20 +267,21 @@ export default function ChartEditor({
   );
 
   return (
-    <div className="chart-editor-grid h-full w-full overflow-hidden bg-black">
+    <div className="chart-editor-grid h-full w-full overflow-hidden bg-[var(--ed-surface)]">
       {/* `.chart-editor-grid` lives in `app/globals.css`: a named-areas grid
        *  switched with a plain `@media` query (no JS measurement). Only the
        *  container's `grid-template-areas`/`-columns` change between the two
        *  breakpoints — every child keeps a constant `grid-area` name. The
-       *  `header` area is used only when this component renders its own
-       *  header row (no app shell around it); inside the app the row lives
-       *  in the site chrome above the grid and the area collapses to 0. */}
+       *  `header` area holds this component's own 52px song-identity row,
+       *  which sits directly beneath the site's compact header
+       *  (`components/CompactSiteHeader.tsx`) - a separate row above the grid, not
+       *  part of it. */}
       <EditorMCPTools />
-      {/* Song info + export, rendered into the app's one slim header row.
-       *  Pages that fill that row themselves (e.g. add-lyrics) suppress this
-       *  via `hideHeader`. */}
+      {/* Song info + export, this component's own header row. Pages that
+       *  render their own row instead (e.g. add-lyrics) suppress this via
+       *  `hideHeader`. */}
       {!hideHeader && (
-        <EditorHeaderContent standaloneStyle={{gridArea: 'header'}}>
+        <EditorHeaderRow style={{gridArea: 'header'}}>
           {onMetadataChange ? (
             <button
               type="button"
@@ -325,7 +326,7 @@ export default function ChartEditor({
               />
             </div>
           )}
-        </EditorHeaderContent>
+        </EditorHeaderRow>
       )}
 
       {onMetadataChange && (
@@ -359,10 +360,27 @@ export default function ChartEditor({
       {/* Center: the highway. */}
       {/* A `section`, not a `main`: the root app layout already wraps every
        *  route in the page's single `main` landmark. */}
+      {/* `pl-4 bg-background` is the gutter between the sidebar and the
+       *  highway (owner feedback, 2026-08-03: the sidebar looked skewed
+       *  because the app shell's outer padding — `app/layout.tsx`'s `main`,
+       *  `p-4`/1rem — sat left of the sidebar while the sidebar was flush
+       *  against the highway). Padding on this area rather than a grid
+       *  `column-gap`: a gap column would run the full height of the grid
+       *  at >=1440px, where the sidebar is a full-height rail, painting a
+       *  stripe of the grid's own editor surface beside the light header and
+       *  bottom rows. Padding keeps the gutter in the middle row only and
+       *  fills it with `--background`, so it matches the shell's outer
+       *  padding in both themes.
+       *
+       *  Consequence, and unresolved: because the gutter is this area's own
+       *  padding, at >=1440px the `header` and `bottom` rows sit flush
+       *  against the sidebar while the highway is inset 16px, so the three
+       *  rows do not share a left edge. Plan 0076 item 3 asks for the
+       *  highway flush instead; that item owns the decision. */}
       <section
         aria-label="Editing surface"
         style={{gridArea: 'main'}}
-        className="flex min-w-0 min-h-0 overflow-hidden">
+        className="flex min-w-0 min-h-0 overflow-hidden bg-background pl-4">
         <div className="relative flex-1 min-w-0 min-h-0">
           <HighwayEditor
             metadata={metadata}
@@ -381,10 +399,17 @@ export default function ChartEditor({
        *  both the old waveform strip and the right-side minimap; section
        *  navigation lives in the transport (skip buttons) and the panel's
        *  click-to-seek ruler flags. */}
-      <div
-        style={{gridArea: 'bottom'}}
-        className="min-w-0 border-t bg-background">
-        <div className="px-4 py-2.5">
+      <div style={{gridArea: 'bottom'}} className="min-w-0">
+        {/* Owner feedback (2026-08-03, light mode): the transport has the
+         *  play button on it and sits between the highway and the piano
+         *  roll, so it reads as the same dark editor-surface chrome those
+         *  two already use in both themes - not `bg-background`, which
+         *  flips to white in light mode. The `--ed-surface-*` tokens
+         *  (`app/globals.css`) are theme-independent for exactly this
+         *  reason: this repo's Tailwind `darkMode` is `media` (OS
+         *  preference), so a `dark:` class would still go white under a
+         *  light OS theme. */}
+        <div className="border-t border-[color:var(--ed-surface-hover)] bg-[var(--ed-surface)] px-4 py-2.5 text-[color:var(--ed-surface-fg)]">
           <TransportControls
             audioManager={audioManager}
             durationSeconds={durationSeconds}
@@ -400,7 +425,7 @@ export default function ChartEditor({
           lyricsWaveChannels={lyricsWaveChannels}
           decodedOnsets={decodedOnsets}
           stackedPianoRoll={stackedPianoRoll && hasMultipleStackedTracks}
-          className="border-t"
+          className="border-t border-[color:var(--ed-surface-hover)]"
         />
       </div>
     </div>

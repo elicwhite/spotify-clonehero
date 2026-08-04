@@ -268,6 +268,106 @@ describe('computeChartElements', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Chart-wide tempo badges
+  // -------------------------------------------------------------------------
+
+  describe('showTempoBadges', () => {
+    const badgeInputs = (showTempoBadges?: boolean) => ({
+      chart: makeFixtureDoc().parsedChart,
+      activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
+      partName: 'vocals',
+      capabilities: DRUM_EDIT_CAPABILITIES,
+      markerDrag: null,
+      noteDrag: null,
+      timedTempos,
+      resolution,
+      ...(showTempoBadges === undefined ? {} : {showTempoBadges}),
+    });
+
+    it('produces BPM and time-signature markers by default', () => {
+      const elements = computeChartElements(badgeInputs());
+      expect(elements.some(e => e.kind === 'bpm')).toBe(true);
+      expect(elements.some(e => e.kind === 'ts')).toBe(true);
+    });
+
+    it('produces no BPM or time-signature markers when badges are off', () => {
+      const elements = computeChartElements(badgeInputs(false));
+      expect(elements.some(e => e.kind === 'bpm')).toBe(false);
+      expect(elements.some(e => e.kind === 'ts')).toBe(false);
+    });
+
+    it('keeps the other markers and notes untouched when badges are off', () => {
+      const withBadges = computeChartElements(badgeInputs(true));
+      const withoutBadges = computeChartElements(badgeInputs(false));
+
+      const nonBadgeKeys = withBadges
+        .filter(e => e.kind !== 'bpm' && e.kind !== 'ts')
+        .map(e => e.key);
+      expect(withoutBadges.map(e => e.key)).toEqual(nonBadgeKeys);
+    });
+
+    // Marker stack indices are assigned per tick+side across the whole
+    // marker set, and BPM badges share the left side with lyrics and phrase
+    // markers. Omitting the badges at the producer means the stack is
+    // computed over exactly the markers that will be drawn, so a surviving
+    // left-side marker never carries a slot reserved for a badge that is
+    // not there.
+    it('stacks a left-side marker as if alone when its BPM badge is omitted', () => {
+      const doc = makeFixtureDoc();
+      // Put a tempo change on the same tick as the first lyric so the two
+      // would land in the same left-side stack group.
+      const lyric =
+        doc.parsedChart.vocalTracks.parts['vocals']?.notePhrases[0]?.lyrics[0];
+      expect(lyric).toBeDefined();
+      doc.parsedChart.tempos = [
+        ...doc.parsedChart.tempos,
+        {
+          tick: lyric!.tick,
+          msTime: lyric!.msTime,
+          beatsPerMinute: 140,
+        } as (typeof doc.parsedChart.tempos)[number],
+      ];
+
+      const shared = {
+        chart: doc.parsedChart,
+        activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
+        partName: 'vocals',
+        capabilities: DRUM_EDIT_CAPABILITIES,
+        markerDrag: null,
+        noteDrag: null,
+        timedTempos,
+        resolution,
+      };
+
+      const withBadges = computeChartElements({
+        ...shared,
+        showTempoBadges: true,
+      });
+      const withoutBadges = computeChartElements({
+        ...shared,
+        showTempoBadges: false,
+      });
+
+      // The badge takes a slot in the shared group when it is produced.
+      const badge = withBadges.find(
+        e => e.kind === 'bpm' && e.msTime === lyric!.msTime,
+      );
+      expect(
+        (badge!.data as {stackIndex?: number}).stackIndex,
+      ).toBeGreaterThanOrEqual(0);
+
+      // With the badge omitted the lyric is alone in its group, so it stacks
+      // at the base slot rather than around a gap.
+      const stackIndexOf = (elements: typeof withBadges) =>
+        (
+          elements.find(e => e.kind === 'lyric' && e.msTime === lyric!.msTime)!
+            .data as {stackIndex?: number}
+        ).stackIndex ?? 0;
+      expect(stackIndexOf(withoutBadges)).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Note drag preview
   // -------------------------------------------------------------------------
 

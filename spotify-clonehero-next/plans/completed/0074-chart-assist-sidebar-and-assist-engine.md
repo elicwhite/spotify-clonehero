@@ -572,6 +572,17 @@ green (`pnpm typecheck && pnpm test && pnpm lint` + browser validation).
      chart is available to spot-check is emptying that set plus widening
      the worker request union in `difficulty-protocol.ts`.
 
+     **Update (2026-08-03, owner review):** the owner ran the spot check
+     this repo couldn't and validated the guitar reducer against real bass
+     tracks directly ("I have validated that the guitar lower difficulty
+     generation algorithms work great for Bass too."). Bass generation is
+     now enabled: `GENERATION_DISABLED_INSTRUMENTS`,
+     `difficultyGenerationDisabledReason` and `UnsupportedInstrumentError`
+     are removed outright rather than emptied, and bass requests flow
+     through the same worker path as guitar. The reduction graphs are
+     instrument agnostic, so the reducer takes an `instrumentLabel` used
+     only for the progress and error copy the user reads.
+
   Also as built: generation is set-shaped, so an instrument charted with
   only part of Hard/Medium/Easy still gets a Generate bar (rendered
   under its cells) rather than no affordance at all. **Deferred:**
@@ -750,30 +761,29 @@ green (`pnpm typecheck && pnpm test && pnpm lint` + browser validation).
   - Waveform highway mode is now reachable only from add-lyrics: recorded.
     `SET_HIGHWAY_MODE` is dispatched only by `AddLyricsClient`'s waveform
     pinning, so drum-edit/preview/tempo lost the toggle outright.
-  - Auth/account controls absent on editor routes: recorded, pending owner
-    sign-off. The editor header row renders only the app icon and the page's
-    own content, so Log In and the `/account` link are unreachable without
-    navigating home first.
+  - Auth/account controls absent on editor routes: resolved by the header
+    amendment below. The compact site header carries Log In and the
+    `/account` link on every editor route.
 
   **Amendment (header shell and density scope, as restructured).** Both
   mechanisms were rebuilt after review; the shipped structure is:
-  - **One header row, filled by the page.** `SiteChrome.tsx` renders exactly
-    one `EditorHeaderRow` (42px: app icon + a content slot) on editor routes,
-    and `EditorHeaderContent` puts a page's identity and actions into that
-    slot with a portal (React context crosses portals, so the content still
-    reads the editor's providers). `ChartEditor` and add-lyrics both fill the
-    one row instead of rendering competing rows. Deleted with the previous
-    shape: the header-ownership context, its provider, `useOwnsSiteHeader`,
-    the separate `CompactSiteHeader`, and the frame at first paint where an
-    editor route rendered both a site row and a page row. Outside the app
-    shell (an embed, or a test rendering `ChartEditor` alone)
-    `EditorHeaderContent` renders its own row, so the header is never
-    missing; the grid keeps its `header` area for exactly that case, and
-    collapses to 0 inside the shell — which is also the prototype's
-    "head head" layout, header full-width above the full-height sidebar.
-    `app/layout.tsx` passes the site nav (`components/SiteNav.tsx`, still a
-    server component) into the client header as a prop, so reading the
-    pathname does not push the nav into the client bundle.
+  - **Two stacked rows, neither a slot** (owner feedback, live review
+    2026-08-03: "we need our site header to be on the top of the page, as it
+    includes the login button and link to other tools"). `SiteChrome.tsx`
+    picks per route: an editor route renders `CompactSiteHeader` (a slim 40px
+    site row — brand link home, More Tools, auth controls), every other route
+    renders the full site nav. Directly beneath it, whichever page owns the
+    editor renders `EditorHeaderRow` (52px: song identity plus actions like
+    Export) itself — `ChartEditor` into its grid's `header` area, add-lyrics
+    into its own column. There is no portal and no shared slot, so neither
+    row has to know the other's contents and a page rendered outside the app
+    shell (an embed, or a test rendering `ChartEditor` alone) still gets its
+    identity row. Deleted with the previous shape: the header-ownership
+    context, its provider, `useOwnsSiteHeader`, `EditorHeaderContent` and its
+    portal slot, and `EditorAppIcon`. `app/layout.tsx` passes the site nav
+    (`components/SiteNav.tsx`, still a server component) into the client
+    header as a prop, so reading the pathname does not push the nav into the
+    client bundle.
   - **Density is scoped to the editor's lifetime, not to a route.**
     `useEditorDensity` (`components/chart-editor/hooks/`) sets
     `data-density="compact"` on the document root while at least one

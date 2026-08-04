@@ -152,9 +152,13 @@ export class SceneReconciler {
       // Unchanged: keep existing group (if any)
     }
 
-    // 3. Update internal state
+    // 3. Update internal state. `updateWindow` walks `sortedElements` to
+    // decide what gets a Three.js group, so it is derived from the deduped
+    // map rather than the caller's raw array.
     this.elements = newMap;
-    this.sortedElements = elements.slice().sort((a, b) => a.msTime - b.msTime);
+    this.sortedElements = Array.from(newMap.values()).sort(
+      (a, b) => a.msTime - b.msTime,
+    );
     this.maxEndMsPrefix = [];
     let maxEndMs = -Infinity;
     for (const el of this.sortedElements) {

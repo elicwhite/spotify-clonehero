@@ -51,7 +51,7 @@ import {
   useAudioServiceContext,
 } from '@/components/chart-editor';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
-import {EditorHeaderContent} from '@/components/SiteChrome';
+import EditorHeaderRow from '@/components/chart-editor/EditorHeaderRow';
 import {MoveEntitiesCommand} from '@/components/chart-editor/commands';
 import {track} from '@/lib/analytics/track';
 import {AudioManager} from '@/lib/preview/audioManager';
@@ -548,11 +548,12 @@ function LyricsAlignInner() {
     const charterName = md.charter ?? 'Unknown';
     return (
       <main className="h-screen w-screen flex flex-col bg-background overflow-hidden">
-        {/* This page's identity and actions fill the app's one slim editor
-            header row (the same row `ChartEditor` fills on other editor
-            pages, which is why it is passed `hideHeader`). Identity runs on
-            one line so the row stays a single 42px bar. */}
-        <EditorHeaderContent>
+        {/* This page's own 52px song-identity row, directly beneath the
+            site's compact header (`components/CompactSiteHeader.tsx`) - the same
+            row `ChartEditor` renders on other editor pages, which is why the
+            editor below is passed `hideHeader`. Identity runs on one line so
+            the row stays a single bar. */}
+        <EditorHeaderRow>
           <div className="flex min-w-0 mr-auto items-baseline gap-2">
             <h1 className="text-sm font-semibold truncate">
               {removeStyleTags(songName)}
@@ -595,7 +596,7 @@ function LyricsAlignInner() {
             <Download className="h-4 w-4 mr-1" />
             Download .{chart.sourceFormat === 'sng' ? 'sng' : 'zip'}
           </Button>
-        </EditorHeaderContent>
+        </EditorHeaderRow>
         <Dialog open={showIntroModal} onOpenChange={setShowIntroModal}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>

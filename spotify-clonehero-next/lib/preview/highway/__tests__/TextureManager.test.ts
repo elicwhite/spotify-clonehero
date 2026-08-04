@@ -192,19 +192,17 @@ describe('loadNoteTextures texture matrix', () => {
 });
 
 describe('loadHighwayFlameTextures', () => {
-  it('loads the fretted and open playline animations as frame sets', async () => {
+  it('loads only the pad/fretted playline animation', async () => {
     const loader = new StubTextureLoader();
     const textures = await loadHighwayFlameTextures(
       loader as unknown as THREE.TextureLoader,
     );
 
-    // jsdom has no ImageDecoder, so each animated WebP falls back to its
+    // jsdom has no ImageDecoder, so the animated WebP falls back to its
     // first frame while still exercising the production URL contract.
     expect(textures.hit).toHaveLength(1);
-    expect(textures.open).toHaveLength(1);
     expect(loader.requestedUrls).toEqual([
       '/assets/preview/assets2/highway-hit-flame.webp',
-      '/assets/preview/assets2/highway-open-flame.webp',
     ]);
   });
 });

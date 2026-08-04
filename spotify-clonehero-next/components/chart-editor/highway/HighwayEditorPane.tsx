@@ -27,6 +27,14 @@
  * Note Inspector and keyboard note entry, and is never rendered as a visual
  * focus treatment (plan 0074 Design C — "no focus concept anywhere").
  *
+ * Chrome: a pane has no border and no rounding of its own — it sits flush
+ * against its neighbours inside `HighwayEditor`'s single dark surface, with
+ * only the track label as a small floating chip. Chart-wide chrome is drawn
+ * once for the whole highway area: `showLyrics` gates the renderer's karaoke
+ * overlay pass, `showTempoBadges` gates whether the BPM / time-signature
+ * badge markers are produced at all. See `HighwayEditor` for which pane gets
+ * them.
+ *
  * Performance guard: this component never subscribes to the assist-run
  * store — assist progress ticks must not re-render panes.
  *
@@ -91,6 +99,18 @@ export interface HighwayEditorPaneProps {
   renderTimedTempos: TimedTempo[];
   resolution: number;
   editingLocked: boolean;
+  /**
+   * Draw the chart-wide karaoke lyrics overlay in this pane. `HighwayEditor`
+   * turns it on for exactly one pane so a side-by-side highway shows one
+   * karaoke line for the whole area, not one per track.
+   */
+  showLyrics: boolean;
+  /**
+   * Produce the chart-wide BPM / time-signature badge markers for this
+   * pane. Off in side-by-side layouts, where they are both duplicated and
+   * clipped by the narrow pane frustum.
+   */
+  showTempoBadges: boolean;
   className?: string | undefined;
 }
 
@@ -111,6 +131,8 @@ function HighwayEditorPane({
   renderTimedTempos,
   resolution,
   editingLocked,
+  showLyrics,
+  showTempoBadges,
   className,
 }: HighwayEditorPaneProps) {
   const paneScope = scope;
@@ -277,6 +299,7 @@ function HighwayEditorPane({
     noteDrag: noteDragHint,
     timedTempos: renderTimedTempos,
     resolution,
+    showTempoBadges,
   });
 
   // ---------------------------------------------------------------------
@@ -374,7 +397,7 @@ function HighwayEditorPane({
       style={{cursor: cursorStyle, position: 'relative'}}
       data-testid={`highway-pane-${scopePaneKey(scope)}`}>
       {label && (
-        <div className="pointer-events-none absolute left-2 top-2 z-30 rounded bg-black/60 px-2 py-0.5 text-xs text-white">
+        <div className="pointer-events-none absolute left-2 top-2 z-30 rounded-full bg-[var(--ed-surface-hover)] px-2 py-0.5 text-xs font-medium text-white/80 backdrop-blur-sm">
           {label}
         </div>
       )}
@@ -386,6 +409,7 @@ function HighwayEditorPane({
         className="h-full w-full"
         showLanes={capabilities.showDrumLanes}
         trackKey={track}
+        showLyrics={showLyrics}
         onRendererReady={handleRendererReady}
       />
 

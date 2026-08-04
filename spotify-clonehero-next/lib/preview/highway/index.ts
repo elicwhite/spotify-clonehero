@@ -77,6 +77,18 @@ export interface RendererConfig {
    *  round (circular head). Cymbals and kick have only one style.
    *  TODO: surface as a user preference. */
   tomStyle?: 'square' | 'round';
+  /**
+   * Draw the karaoke lyrics overlay in this canvas. Defaults to true.
+   * Changeable afterwards via `setLyricsVisible`.
+   *
+   * Lyrics belong to the song, not to a track, so a side-by-side highway
+   * would otherwise draw the same karaoke line once per pane. The overlay is
+   * a second WebGL pass inside this renderer's own canvas, so it can only be
+   * suppressed per canvas: side-by-side layouts leave it on for the leftmost
+   * pane and turn it off everywhere else. The overlay is still built and fed
+   * on a canvas that is not drawing it, so turning it back on is instant.
+   */
+  showLyrics?: boolean;
 }
 
 export const setupRenderer = (
@@ -89,6 +101,11 @@ export const setupRenderer = (
 ) => {
   const showDrumLanes = config.showDrumLanes ?? true;
   const tomStyle = config.tomStyle ?? 'square';
+  // Whether this canvas draws the chart-wide karaoke overlay. Mutable: a
+  // pane's share changes whenever the side-by-side layout changes, and the
+  // flag is read per frame rather than baked into the scene, so a change
+  // never needs the renderer rebuilt.
+  let showLyrics = config.showLyrics ?? true;
   const highwaySpeed = 1.5;
 
   const camera = new THREE.PerspectiveCamera(90, 1 / 1, 0.01, 10);
@@ -423,7 +440,10 @@ export const setupRenderer = (
      * Push fresh karaoke lyrics + vocal phrases. Called whenever the
      * editor's `parsedChart` updates (lyric flag drag, lyric edit, etc.).
      * Lazy-creates the overlay when the original chart had no lyrics but
-     * the user has added at least one — mirrors the prepTrack path.
+     * the user has added at least one — mirrors the prepTrack path. The
+     * overlay is kept fed even on a canvas that is not currently drawing it
+     * (`showLyrics: false`), so `setLyricsVisible(true)` shows the current
+     * line immediately.
      */
     async setLyricsData(
       lyrics: {msTime: number; text: string; msLength?: number}[],
@@ -440,6 +460,16 @@ export const setupRenderer = (
       const width = sizingRef.current?.offsetWidth ?? window.innerWidth;
       const height = sizingRef.current?.offsetHeight ?? window.innerHeight;
       lyricsOverlay = new LyricsOverlay(lyrics, vocalPhrases, width, height);
+    },
+
+    /**
+     * Draw the karaoke lyrics overlay in this canvas, or not. Lyrics belong
+     * to the song rather than a track, so a side-by-side highway draws them
+     * in exactly one pane; which pane that is changes as panes are shown and
+     * hidden.
+     */
+    setLyricsVisible(visible: boolean): void {
+      showLyrics = visible;
     },
   };
 
@@ -473,11 +503,7 @@ export const setupRenderer = (
       track?.instrument === 'guitar' ||
       track?.instrument === 'bass' ||
       track?.instrument === 'drums'
-        ? await loadHighwayFlameTextures(
-            textureLoader,
-            animatedTextureManager,
-            track.instrument === 'drums',
-          )
+        ? await loadHighwayFlameTextures(textureLoader, animatedTextureManager)
         : null;
     const fretTextures =
       track?.instrument === 'guitar' ||
@@ -535,7 +561,9 @@ export const setupRenderer = (
       overlaySchema,
     );
 
-    // Create lyrics overlay if chart has lyrics
+    // Create the lyrics overlay whenever the chart has lyrics. Whether this
+    // canvas actually draws it is decided per frame by `showLyrics`, so a
+    // pane that starts hidden can be shown without rebuilding the renderer.
     const vocals = chart.vocalTracks.parts['vocals'];
     const chartLyrics = vocals?.notePhrases.flatMap(p => p.lyrics) ?? [];
     if (chartLyrics.length > 0) {
@@ -618,10 +646,13 @@ export const setupRenderer = (
       try {
         renderer.render(scene, camera);
 
-        // Render lyrics overlay on top (second pass, no depth clear)
-        if (lyricsOverlay?.update(elapsedTime)) {
+        // Render lyrics overlay on top (second pass, no depth clear).
+        // `update` still runs while hidden so the overlay's own animation
+        // state stays current and showing it again is seamless.
+        const overlay = lyricsOverlay;
+        if (overlay?.update(elapsedTime) === true && showLyrics) {
           renderer.autoClear = false;
-          renderer.render(lyricsOverlay.scene, lyricsOverlay.camera);
+          renderer.render(overlay.scene, overlay.camera);
           renderer.autoClear = true;
         }
       } catch (e) {

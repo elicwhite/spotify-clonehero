@@ -51,7 +51,7 @@ export default function ChartMatrix() {
   const {executeCommand} = useExecuteCommand();
   const runner = useOptionalAssistRunnerContext();
   const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const {generatingInstrument, disabledReasonFor, start} =
+  const {generatingInstrument, disabledReason, start} =
     useDifficultyGeneration();
 
   const doc = state.chartDoc;
@@ -136,7 +136,6 @@ export default function ChartMatrix() {
             instrument,
             trackKeyId({instrument, difficulty: 'expert'}),
           );
-          const disabledReason = disabledReasonFor(instrument);
           return (
             <ChartMatrixRow
               key={instrument}
