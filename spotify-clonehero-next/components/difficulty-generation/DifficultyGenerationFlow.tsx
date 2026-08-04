@@ -44,7 +44,6 @@ import {
   AssistRunnerProvider,
   useAssistRunnerContext,
 } from '@/components/assist/AssistRunnerProvider';
-import {useAssistRunState} from '@/components/assist/useAssistRunner';
 import {
   ChartEditorProvider,
   useChartEditorContext,
@@ -69,11 +68,12 @@ import {buildDifficultyGenerationInput} from '@/lib/assist/difficulty-input';
 import type {DifficultyGenerationInput} from '@/lib/assist/difficulty-client';
 import {
   generateDifficultiesTask,
-  type AssistTaskDef,
+  type GenerateDifficultiesInput,
   type GenerateDifficultiesResult,
-} from '@/lib/assist/tasks';
+} from '@/lib/assist/tasks/generate-difficulties';
+import type {AssistTaskDef} from '@/lib/assist/tasks/types';
 import {isAbortError} from '@/lib/workers/abortable-worker';
-import ProcessingView from '@/components/ProcessingView';
+import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
 
 /** Only the two instruments this route model offers a generation route for.
  *  Bass generation ships disabled everywhere (plan 0074 Design D) and is not
@@ -87,7 +87,7 @@ export interface DifficultyGenerationFlowConfig {
   dropZoneId: string;
   /** Test seam: override the `generate-difficulties` task, e.g. one built
    *  with `makeGenerateDifficultiesTask({createWorker: fakeWorkerFactory})`. */
-  task?: AssistTaskDef<GenerateDifficultiesResult>;
+  task?: AssistTaskDef<GenerateDifficultiesResult, GenerateDifficultiesInput>;
 }
 
 interface SongMeta {
@@ -232,7 +232,6 @@ function DifficultyGenerationFlowInner({
 
   const {dispatch} = useChartEditorContext();
   const runner = useAssistRunnerContext();
-  const runState = useAssistRunState(runner.store);
   const {setAudioManager: publishAudioManager} = useAudioServiceContext();
 
   const [flow, setFlow] = useState<FlowState>({kind: 'picker', error: null});
@@ -316,9 +315,7 @@ function DifficultyGenerationFlowInner({
       setFlow({kind: 'generating', loaded, error: null});
 
       try {
-        const result = await runner.start(task, {
-          difficultyGeneration: candidate.input,
-        });
+        const result = await runner.start(task, candidate.input);
         // Applied directly against the just-loaded `chartDoc`, not through
         // `useExecuteCommand`'s `state.chartDoc` — that hook's closure was
         // captured before the `SET_CHART_DOC` dispatch above and won't see
@@ -380,10 +377,11 @@ function DifficultyGenerationFlowInner({
     const {loaded, error} = flow;
     return (
       <main className="flex min-h-screen items-center justify-center p-4">
-        <ProcessingView
+        <ConnectedProcessingView
+          store={runner.store}
+          taskKey="generate-difficulties"
           title={`Generating ${label} Hard, Medium, Easy`}
           subtitle={loaded.candidate.meta.name}
-          steps={runState.steps}
           error={error}
           onCancel={
             error

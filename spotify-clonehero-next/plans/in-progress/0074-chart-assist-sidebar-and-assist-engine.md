@@ -211,6 +211,19 @@ interface AssistRunState {
 - `ctx.chart?`: the in-editor `ChartDocument` + revision info when run
   from the editor.
 
+**Amendment (as built):** "explicit, not a god object" is enforced by the
+type system rather than by discipline. `AssistTaskDef<Result, Input>` is
+parameterised on the task's own input and `start<Result, Input>(task,
+input)` takes it, so there is no shared `AssistContext` for one task's
+fields to accumulate in: `transcribe-drums` takes the ordering to run,
+`add-lyrics` takes its lyrics plus a `vocals` union naming which of the
+three resolution branches to take, `generate-tempo-map` takes the audio,
+`generate-difficulties` takes the reduction input. A caller that omits
+what a task needs no longer compiles, so none of the runtime
+`require*(ctx)` throws exist. Shared contracts (`AssistAudio`,
+`AssistTaskDef`, `AssistTaskKey`) live in `lib/assist/tasks/types.ts`,
+one task per sibling file.
+
 **Task compositions:**
 
 - `transcribe-drums` (in-editor, Phase 1): a shell around the EXISTING
@@ -574,6 +587,52 @@ green (`pnpm typecheck && pnpm test && pnpm lint` + browser validation).
   bookkeeping preserved, resumability validated). Delete the four step
   machines; grep-gate: no `ProcessingStep[]` production outside
   `lib/assist/`. Suite 7.
+
+  **Amendment (Phase 6 as built):** `runner.ts` is _shelled_, not
+  rewritten. Its four orderings (upload, chart package, resume,
+  regenerate) stay exactly as they are and remain the single pipeline
+  implementation; the `transcribe-drums` task names which one a run
+  performs and predicts its step list from the same OPFS existence checks
+  that ordering makes. This is Design A's own "no fifth duplicate, and
+  OPFS artifacts stay correct for later resumes" rule applied at the last
+  phase too: re-authoring the persistence path would put the resumability
+  the phase is meant to validate at risk for no user-visible gain. What
+  the phase does deliver is what the grep-gate names — the four page-local
+  step machines are gone and no `ProcessingStep[]` is produced outside
+  `lib/assist/`.
+
+- **Phase 7 - Prototype parity and editor density (owner request,
+  2026-08-03).** The shipped sidebar accreted new sections around the old
+  controls; the approved prototype's structure and density never fully
+  landed. Scope:
+  1. **Sidebar order and content exactly per the prototype**: Chart
+     Matrix -> Chart Assist -> Stems -> one Snap / Speed / Loop utility
+     cluster at the BOTTOM (Snap dropdown 1/4..1/32 wired to grid
+     division, speed stepper, A/B loop, cursor + add tools, undo/redo).
+     Delete from the editor sidebar: the top A/B block, Grid row, Zoom
+     row, Highway style toggle, Sheet music toggle, the old Tools
+     palette, and the History section (undo/redo live in the utility
+     cluster). Underlying state stays for capability-gated surfaces
+     that still need it; the default editor surface stops rendering it.
+  2. **Editor density scope**: editor-rendering pages get a compact
+     visual scale (type ~12-13px, tight paddings, dense cards) via a
+     scoped mechanism (e.g. an editor-layout wrapper class adjusting
+     the token scale), leaving /spotify, /sheet-music and all other
+     pages exactly as they are. No global token changes.
+  3. **Compact editor header** per the prototype: one slim row - app
+     icon, song title/artist/charter inline, Preview + Export on the
+     right - replacing the tall site header + separate song row on
+     editor pages only. Site navigation remains reachable (judge: icon
+     links home).
+  4. **Prototype parity audit**: systematic comparison of the live
+     /chart-editor against the approved prototype (loading-inline.html)
+     cataloguing every visual/structural difference EXCEPT highway and
+     piano-roll contents; each diff either converges to the prototype
+     or is recorded here with a reason.
+
+  Acceptance: side-by-side screenshots at matching viewport; suites
+  updated (capability gates, layout tests); non-editor pages pixel-
+  unchanged (spot screenshots).
 
 ## Non-goals
 

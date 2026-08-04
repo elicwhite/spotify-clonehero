@@ -11,6 +11,12 @@
  *
  * The stages themselves (and the progress contract they report through) live
  * in `./stages`; this file is only the three orderings of them.
+ *
+ * The assist engine's `transcribe-drums` task
+ * (`lib/assist/tasks/transcribe-drums.ts`) is the one caller of all four
+ * entry points below: it predicts each ordering's step
+ * list from the same OPFS existence checks the ordering itself performs, maps
+ * the progress reported here onto that list, and supplies the AbortSignal.
  */
 
 import {decodeAudio} from '../audio/decoder';
@@ -63,6 +69,15 @@ import {
 // Pipeline runner
 // ---------------------------------------------------------------------------
 
+/** Cancellation for a pipeline run. The signal is checked at every stage
+ *  boundary and threaded into the separation, tempo-mapping, and
+ *  transcription clients, each of which terminates its worker and rejects
+ *  with an `AbortError`. The stages that already landed stay persisted —
+ *  that is what makes the interrupted project resumable. */
+export interface PipelineRunOptions {
+  signal?: AbortSignal | undefined;
+}
+
 /**
  * Run the full drum transcription pipeline.
  *
@@ -70,6 +85,7 @@ import {
  * @param fileName - Display name for the project.
  * @param onProgress - Callback for progress updates.
  * @param transcriber - Optional transcriber implementation. If omitted, uses CrnnTranscriber.
+ * @param options - Cancellation.
  * @returns The project ID.
  */
 export async function runPipeline(
@@ -77,8 +93,11 @@ export async function runPipeline(
   fileName: string,
   onProgress: PipelineProgressCallback,
   transcriber?: DrumTranscriber,
+  options: PipelineRunOptions = {},
 ): Promise<string> {
   const txr = transcriber ?? createDefaultTranscriber();
+  const {signal} = options;
+  throwIfAborted(signal);
 
   // Step 1: Decode audio and create project
   onProgress({step: 'decoding', progress: 0, projectName: fileName});
@@ -128,6 +147,7 @@ export async function runPipeline(
   // Stem separation requires ONNX Runtime + WebGPU. If unavailable (e.g.
   // dev mode without model loaded), we skip it gracefully and the
   // transcription step will fall back to using the full audio mix.
+  throwIfAborted(signal);
   const stemsExist = await hasDrumStem(projectId);
   if (!stemsExist) {
     onProgress({
@@ -138,8 +158,9 @@ export async function runPipeline(
     });
 
     await updateProject(projectId, {stage: 'separating'});
-    await separateDrumsStep(projectId, metadata.name, onProgress);
+    await separateDrumsStep(projectId, metadata.name, onProgress, signal);
   }
+  throwIfAborted(signal);
 
   onProgress({
     step: 'separating',
@@ -160,10 +181,12 @@ export async function runPipeline(
       metadata.name,
       sourceBytes,
       onProgress,
+      {signal},
     );
     synctrack = st?.synctrack ?? null;
     sections = st?.sections ?? null;
   }
+  throwIfAborted(signal);
 
   // Step 4: Transcription
   if (!chartExists) {
@@ -192,7 +215,9 @@ export async function runPipeline(
           projectName: metadata.name,
         });
       },
+      signal,
     );
+    throwIfAborted(signal);
 
     // Build ChartDocument from transcription results under the real tempo
     // map (or flat DEFAULT_BPM when tempo mapping failed). PHASE-ALIGN's
@@ -299,8 +324,11 @@ export async function runPipelineFromChart(
   input: ExistingChartPipelineInput,
   onProgress: PipelineProgressCallback,
   transcriber?: DrumTranscriber,
+  options: PipelineRunOptions = {},
 ): Promise<string> {
   const txr = transcriber ?? createDefaultTranscriber();
+  const {signal} = options;
+  throwIfAborted(signal);
   const {chartDoc, audioFile, packageInfo, extraAssets} = input;
 
   const projectName =
@@ -341,6 +369,7 @@ export async function runPipelineFromChart(
   // Step 2: Stem separation (identical to runPipeline, including the
   // already-separated pre-check — inert today since this is always a fresh
   // project, but kept for consistency with the other two entry points).
+  throwIfAborted(signal);
   const stemsExist = await hasDrumStem(projectId);
   if (!stemsExist) {
     onProgress({
@@ -350,8 +379,9 @@ export async function runPipelineFromChart(
       projectName: metadata.name,
     });
     await updateProject(projectId, {stage: 'separating'});
-    await separateDrumsStep(projectId, metadata.name, onProgress);
+    await separateDrumsStep(projectId, metadata.name, onProgress, signal);
   }
+  throwIfAborted(signal);
   onProgress({
     step: 'separating',
     progress: 1,
@@ -383,7 +413,9 @@ export async function runPipelineFromChart(
         projectName: metadata.name,
       });
     },
+    signal,
   );
+  throwIfAborted(signal);
 
   const finalChartDoc = buildChartDocumentFromExistingChart(
     chartDoc,

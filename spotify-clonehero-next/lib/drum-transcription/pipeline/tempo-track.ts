@@ -17,14 +17,16 @@
  *     — the same function chart-builder.ts's buildChartDocument calls.
  *
  * This module only COMPOSES those three; it introduces no new stage logic.
- * Given the same audio, drum-transcription's chart-builder.ts and /tempo's
- * runTempoTrack call finalizeSynctrack with the same (rawSynctrack, events)
- * pair, so the two features are structurally unable to install different
- * grids for the same song — see tempo-track-equivalence.test.ts.
+ * The assist engine's `generate-tempo-map` task
+ * (lib/assist/tasks/generate-tempo-map.ts) is the one caller — it is what /tempo and the editor's Tempo map card both run.
+ * Given the same audio, drum-transcription's chart-builder.ts and this
+ * module call finalizeSynctrack with the same (rawSynctrack, events) pair,
+ * so the two features are structurally unable to install different grids for
+ * the same song — see tempo-track-equivalence.test.ts.
  *
  * /drum-transcription continues past this point to snap+emit notes
- * (chart-builder.ts); /tempo stops here and swaps `synctrack` onto a chart
- * of its own (new, or an existing upload's).
+ * (chart-builder.ts); tempo-map generation stops here and swaps `synctrack`
+ * onto a chart of its own (new, or an existing upload's).
  */
 
 import {
@@ -90,6 +92,15 @@ export interface TempoTrackFromPcmInput {
   /** Overridable for tests (mock transcriber) — defaults to the real
    * ONNX-backed CrnnTranscriber, same as drum-transcription's runner. */
   transcriber?: DrumTranscriber;
+  /** Injectable tempo-pipeline worker factory, forwarded verbatim to
+   * `runTempoPipelineFromPcm`. */
+  createWorker?: (() => Worker) | undefined;
+  /**
+   * Aborts the run, per the shared worker-cancellation contract
+   * (`lib/workers/abortable-worker.ts`). Terminates the tempo-pipeline
+   * worker and, once past it, the CRNN transcription worker.
+   */
+  signal?: AbortSignal | undefined;
   onProgress?: (p: TempoTrackProgress) => void;
 }
 
@@ -108,6 +119,8 @@ export async function runTempoTrackFromPcm(
     sourceBytes,
     drumStemStereo: input.drumStemStereo ?? null,
     onProgress: p => onProgress?.(p),
+    ...(input.createWorker ? {createWorker: input.createWorker} : {}),
+    signal: input.signal,
   };
   const tempoResult = await runTempoPipelineFromPcm(
     {left, right, sampleRate},
@@ -132,12 +145,16 @@ export async function runTempoTrackFromPcm(
     stereoStem.right,
   );
 
-  const transcribed = await txr.transcribe(crnnInput, CRNN_SAMPLE_RATE, p =>
-    onProgress?.({
-      stage: 'transcribe-drums',
-      percent: p.percent,
-      ...(p.detail !== undefined ? {detail: p.detail} : {}),
-    }),
+  const transcribed = await txr.transcribe(
+    crnnInput,
+    CRNN_SAMPLE_RATE,
+    p =>
+      onProgress?.({
+        stage: 'transcribe-drums',
+        percent: p.percent,
+        ...(p.detail !== undefined ? {detail: p.detail} : {}),
+      }),
+    input.signal,
   );
 
   const synctrack = finalizeSynctrack(

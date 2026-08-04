@@ -829,8 +829,12 @@ export async function loadAudioMeta(
 }
 
 /**
- * Checks whether audio has been stored for a project, in either the legacy
- * (`full.pcm`) or current (`song.opus`) format.
+ * Checks whether audio has been stored for a project, in any of the three
+ * generations {@link loadFullMixPcm} can read: legacy `full.pcm`,
+ * opus-at-rest `song.opus`, or the current original-at-rest
+ * `original.<ext>`. This is the gate `resumePipeline` uses to decide a
+ * project is resumable at all, so it must accept exactly what that loader
+ * accepts.
  */
 export async function hasStoredAudio(projectId: string): Promise<boolean> {
   try {
@@ -839,9 +843,23 @@ export async function hasStoredAudio(projectId: string): Promise<boolean> {
       await audioDir.getFileHandle(AUDIO_PCM_FILE);
       return true;
     } catch {
+      // Not a legacy project.
+    }
+    try {
       await audioDir.getFileHandle(AUDIO_OPUS_FILE);
       return true;
+    } catch {
+      // Not an opus-at-rest project.
     }
+    for await (const [name, handle] of audioDir.entries()) {
+      if (
+        handle.kind === 'file' &&
+        name.startsWith(`${ORIGINAL_AUDIO_BASENAME}.`)
+      ) {
+        return true;
+      }
+    }
+    return false;
   } catch {
     return false;
   }

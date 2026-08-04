@@ -53,7 +53,7 @@ jest.mock('../../../lib/assist/difficulty-input', () => ({
   },
 }));
 
-jest.mock('../../../lib/assist/tasks', () => ({
+jest.mock('../../../lib/assist/tasks/generate-difficulties', () => ({
   generateDifficultiesTask: {
     key: 'generate-difficulties',
     title: 'Difficulty generation',

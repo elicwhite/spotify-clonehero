@@ -46,7 +46,7 @@ import {useOptionalAssistRunnerContext} from '@/components/assist/AssistRunnerPr
 import {trackKeyId} from '../scope';
 import LearnMoreModal from './LearnMoreModal';
 import {LEARN_COPY, type LearnKey} from './learn-copy';
-import type {LoadAssistAudio} from '@/lib/assist/tasks';
+import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 import TempoMapCard from './TempoMapCard';
 import LeadingSilenceCard from './LeadingSilenceCard';
 import DrumTranscriptionCard from './DrumTranscriptionCard';

@@ -18,7 +18,7 @@ import {addDrumNote} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import type {OursOutNote} from '@/lib/drum-difficulty/ours/reduce';
 import {buildDifficultyGenerationInput} from '../difficulty-input';
-import {makeGenerateDifficultiesTask} from '../tasks';
+import {makeGenerateDifficultiesTask} from '../tasks/generate-difficulties';
 import type {
   DifficultyWorkerMessage,
   DifficultyWorkerRequest,
@@ -158,7 +158,7 @@ describe('generate-difficulties task result conversion', () => {
     if (!built.ok) return;
 
     const promise = task.run(
-      {difficultyGeneration: built.input},
+      built.input,
       new AbortController().signal,
       () => {},
     );
@@ -224,11 +224,9 @@ describe('generate-difficulties task result conversion', () => {
 
     const promise = task.run(
       {
-        difficultyGeneration: {
-          instrument: 'guitar',
-          chart: {} as never,
-          expertTrack: {} as never,
-        },
+        instrument: 'guitar',
+        chart: {} as never,
+        expertTrack: {} as never,
       },
       new AbortController().signal,
       () => {},

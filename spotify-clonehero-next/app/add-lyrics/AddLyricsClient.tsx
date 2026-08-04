@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import {toast} from 'sonner';
 import {parseChartFile} from '@eliwhite/scan-chart';
-import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
 import {Button} from '@/components/ui/button';
 import {
   Dialog,
@@ -32,8 +31,6 @@ import {readChart, type ChartDocument} from '@/lib/chart-edit';
 import {downloadBlob} from '@/lib/download';
 import {buildChartExport} from './export-chart';
 import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
-import {mixStemsToAudioBuffer} from '@/lib/audio-pipeline/lyrics-audio';
-import {runDemucsInWorker} from '@/lib/lyrics-align/demucs-client';
 import {applyAlignedLyricsToDoc} from '@/lib/lyrics-align/apply-lyrics';
 import {
   detectFormat,
@@ -44,8 +41,7 @@ import {
   type SourceFormat,
 } from '@/components/chart-picker/chart-file-readers';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
-import ProcessingView from '@/components/ProcessingView';
-import type {ProcessingStep} from '@/components/processing/StepRow';
+import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
 import {
   ChartEditorProvider,
   DEFAULT_VOCALS_SCOPE,
@@ -60,6 +56,12 @@ import {track} from '@/lib/analytics/track';
 import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
+import {useAssistRunnerControls} from '@/components/assist/useAssistRunner';
+import {
+  addLyricsTask,
+  type AddLyricsInput,
+} from '@/lib/assist/tasks/add-lyrics';
+import {isAbortError} from '@/lib/workers/abortable-worker';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -74,71 +76,6 @@ interface LoadedChart {
   sourceFormat: SourceFormat;
   originalName: string;
   sngMetadata?: Record<string, string> | undefined;
-}
-
-/**
- * Mutable per-step state for the alignment pipeline. Keeps the same
- * fields ProcessingStep wants plus startTime so we can compute
- * durationMs on completion.
- */
-type AlignStepKey =
-  | 'decode'
-  | 'separate'
-  | 'syllabify'
-  | 'align'
-  | 'separate2'
-  | 'align2';
-
-interface AlignStepState {
-  key: AlignStepKey;
-  label: string;
-  description?: string | undefined;
-  status: 'pending' | 'active' | 'done' | 'error';
-  detail?: string | undefined;
-  progress?: number | undefined;
-  etaSeconds?: number | undefined;
-  startTime?: number | undefined;
-  endTime?: number | undefined;
-}
-
-const ALIGN_STEPS: AlignStepState[] = [
-  {key: 'decode', label: 'Decoding audio', status: 'pending'},
-  {key: 'separate', label: 'Separating vocal stem', status: 'pending'},
-  {
-    key: 'syllabify',
-    label: 'Splitting lyrics into syllables',
-    status: 'pending',
-  },
-  {key: 'align', label: 'Aligning syllables to audio', status: 'pending'},
-];
-
-const TIER2_STEPS: AlignStepState[] = [
-  {
-    key: 'separate2',
-    label: 'Re-separating vocals from full mix',
-    status: 'pending',
-  },
-  {key: 'align2', label: 'Re-aligning with new vocal stem', status: 'pending'},
-];
-
-function alignStepsToProcessingSteps(
-  steps: AlignStepState[],
-): ProcessingStep[] {
-  return steps.map(s => ({
-    key: s.key,
-    label: s.label,
-    description: s.description,
-    status: s.status,
-    detail: s.detail,
-    progress: s.progress,
-    etaSeconds: s.etaSeconds,
-    durationMs:
-      s.status === 'done' &&
-      s.startTime !== undefined &&
-      s.endTime !== undefined
-        ? s.endTime - s.startTime
-        : undefined,
-  }));
 }
 
 type Status =
@@ -197,6 +134,22 @@ function loadChartFromFiles(loaded: LoadedFiles): LoadedChart {
     originalName,
     sngMetadata,
   };
+}
+
+/** The chart's primary mix file: `song.*` when present, else the first audio
+ *  file. Used both as the `add-lyrics` task's audio source (its bytes are
+ *  what the roformer-cache fingerprint and the Demucs fallback are computed
+ *  from) and, on tier-2 escalation, as one of the stems re-mixed for a fresh
+ *  separation. */
+function pickSongFile(chart: LoadedChart): {
+  fileName: string;
+  data: Uint8Array;
+} {
+  return (
+    chart.audioFiles.find(
+      f => getBasename(f.fileName).toLowerCase() === 'song',
+    ) ?? chart.audioFiles[0]
+  );
 }
 
 /** Decode audio into an interleaved Float32 PCM buffer for waveform display. */
@@ -270,11 +223,9 @@ function LyricsAlignInner() {
   const [error, setError] = useState<string | null>(null);
   const [chart, setChart] = useState<LoadedChart | null>(null);
   const [lyrics, setLyrics] = useState('');
-  const [alignedLines, setAlignedLines] = useState<LyricLine[]>([]);
   const [alignedSyllables, setAlignedSyllables] = useState<AlignedSyllable[]>(
     [],
   );
-  const [alignSteps, setAlignSteps] = useState<AlignStepState[]>(ALIGN_STEPS);
   const [showLyricsWarning, setShowLyricsWarning] = useState(false);
   /**
    * Float32 16kHz mono PCM of the vocals stem used for alignment. Either
@@ -289,24 +240,14 @@ function LyricsAlignInner() {
   const [showIntroModal, setShowIntroModal] = useState(false);
   const initStartedRef = useRef(false);
 
-  const updateAlignStep = useCallback(
-    (key: AlignStepState['key'], update: Partial<AlignStepState>) => {
-      setAlignSteps(prev =>
-        prev.map(s => (s.key === key ? {...s, ...update} : s)),
-      );
-    },
-    [],
-  );
-
-  // Tick once a second so each in-flight step's elapsed-fallback ETA
-  // re-renders even when no new progress message has arrived. Cheap;
-  // the interval only runs while alignment is processing.
-  const [, setProcessingTick] = useState(0);
-  useEffect(() => {
-    if (status !== 'processing') return;
-    const id = setInterval(() => setProcessingTick(t => t + 1), 1000);
-    return () => clearInterval(id);
-  }, [status]);
+  // The page's own assist runner — nothing else on this page shares it, so
+  // it doesn't need the editor's `AssistRunnerProvider`/context; the same
+  // `add-lyrics` task, `run-to-steps.ts` adapter, and cancellation contract
+  // as the in-editor `AddLyricsDialog` and `/drum-transcription`.
+  const runner = useAssistRunnerControls();
+  /** Which alignment pass is in flight, for the processing card's caption.
+   *  `null` outside a run. */
+  const [tierPass, setTierPass] = useState<1 | 2 | null>(null);
 
   // Preload alignment model in worker once chart is loaded
   useEffect(() => {
@@ -367,220 +308,62 @@ function LyricsAlignInner() {
     if (!chart || !lyrics.trim()) return;
 
     setError(null);
-    setAlignedLines([]);
     setAlignedSyllables([]);
     setShowLyricsWarning(false);
-    setAlignSteps(
-      ALIGN_STEPS.map(s => ({
-        ...s,
-        status: 'pending',
-        detail: undefined,
-        progress: undefined,
-        etaSeconds: undefined,
-        startTime: undefined,
-        endTime: undefined,
-      })),
-    );
+    setTierPass(1);
     setStatus('processing');
     track({event: 'add_lyrics_align_started'});
     const alignStartedAt = Date.now();
 
     try {
-      let vocals16k: Float32Array;
+      // Pass 1: the shared `add-lyrics` task's own vocals-resolution rule —
+      // a bundled `vocals.*` stem is used as-is (no separation at all); else
+      // a roformer-separated stem already cached under this audio's
+      // fingerprint (from a drum-transcription/tempo run on the same file)
+      // is reused; else a fresh Demucs separation runs. Same task, same
+      // step list, same math as the in-editor Add Lyrics dialog.
+      const input: AddLyricsInput = {
+        lyrics,
+        vocals: chart.vocalsFile
+          ? {kind: 'bundled', stem: chart.vocalsFile}
+          : {
+              kind: 'resolve',
+              audio: {loadOriginalBytes: async () => pickSongFile(chart).data},
+            },
+      };
+      let result = await runner.start(addLyricsTask, input);
 
-      if (chart.vocalsFile) {
-        updateAlignStep('decode', {
-          status: 'done',
-          detail: 'Vocals stem found in chart',
-          endTime: Date.now(),
-        });
-        updateAlignStep('separate', {
-          status: 'active',
-          detail: 'Using existing vocals stem (skipping Demucs)',
-          startTime: Date.now(),
-        });
-
-        const {resampleTo16kMono} = await import(
-          '@/lib/audio-pipeline/lyrics-audio'
-        );
-        vocals16k = await resampleTo16kMono(
-          chart.vocalsFile.data,
-          chart.vocalsFile.mimeType,
-        );
-
-        updateAlignStep('separate', {
-          status: 'done',
-          detail: `${(vocals16k.length / 16000).toFixed(1)}s mono 16kHz (from vocals stem)`,
-          endTime: Date.now(),
-        });
-      } else {
-        updateAlignStep('decode', {
-          status: 'active',
-          detail: 'Decoding audio file...',
-          startTime: Date.now(),
-        });
-
-        const songFile =
-          chart.audioFiles.find(
-            f => getBasename(f.fileName).toLowerCase() === 'song',
-          ) ?? chart.audioFiles[0];
-
-        const ext = getExtension(songFile.fileName).toLowerCase();
-        const mime = getMimeForExtension(ext);
-        const blob = new Blob([songFile.data as Uint8Array<ArrayBuffer>], {
-          type: mime,
-        });
-        const arrayBuffer = await blob.arrayBuffer();
-
-        const audioCtx = new AudioContext({sampleRate: 44100});
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        await audioCtx.close();
-
-        updateAlignStep('decode', {
-          status: 'done',
-          detail: `${audioBuffer.duration.toFixed(1)}s, ${audioBuffer.numberOfChannels}ch, ${audioBuffer.sampleRate}Hz`,
-          endTime: Date.now(),
-        });
-
-        updateAlignStep('separate', {
-          status: 'active',
-          detail: 'Starting Demucs worker...',
-          startTime: Date.now(),
-        });
-
-        vocals16k = await runDemucsInWorker(audioBuffer, p =>
-          updateAlignStep('separate', {
-            detail: p.message,
-            progress: p.percent,
-            etaSeconds: p.etaSeconds,
-          }),
-        );
-
-        updateAlignStep('separate', {
-          status: 'done',
-          detail: `${(vocals16k.length / 16000).toFixed(1)}s mono 16kHz — worker terminated`,
-          endTime: Date.now(),
-        });
-      }
-
-      updateAlignStep('align', {
-        status: 'active',
-        startTime: Date.now(),
-      });
-
-      // Stash a *copy* of the vocal stem for the highway waveform
-      // display. alignVocals posts vocals16k into a worker and detaches
-      // the underlying ArrayBuffer, which would leave the React-state
-      // reference empty and the waveform invisible. Cloning is cheap
-      // (~5 MB for a 5-minute song at 16kHz) and keeps the highway buffer
-      // independent of the alignment pipeline. Never serialized into the
-      // downloaded chart.
-      setVocalsWaveform(new Float32Array(vocals16k));
-
-      const {alignVocals} = await import('@/lib/lyrics-align/aligner');
-
-      let result = await alignVocals(vocals16k, lyrics, (msg, info) => {
-        if (msg.startsWith('Syllabified:')) {
-          updateAlignStep('syllabify', {
-            status: 'done',
-            detail: '',
-            startTime: Date.now(),
-            endTime: Date.now(),
-          });
-        } else if (msg.startsWith('Done:')) {
-          updateAlignStep('align', {
-            status: 'done',
-            detail: undefined,
-            progress: undefined,
-            endTime: Date.now(),
-          });
-        } else {
-          // Model download / session load / CTC chunk messages — surface
-          // them so a slow model download doesn't look like a hung aligner.
-          updateAlignStep('align', {detail: msg, progress: info?.percent});
-        }
-      });
-
-      // Tier-2 fallback: when pass-1 used the chart's bundled vocals stem
-      // and the alignment was catastrophic (lowConfidenceFrac >= 0.75),
-      // retry with a fresh Demucs separation against a reconstructed mix.
-      // Only escalate if there's something new to try — pass 1 already
-      // ran Demucs, or there's only one stem to mix → no point.
+      // Tier-2 fallback: when pass 1 resolved vocals without separating the
+      // mix itself (a bundled stem, or a roformer stem out of the cache) and
+      // the alignment was catastrophic (lowConfidenceFrac >= 0.75), retry
+      // with a fresh Demucs separation against every chart stem mixed back
+      // together. A second run of the same task with a variant step list
+      // (forced Demucs, no cache/bundled branch) rather than a second
+      // implementation. Only escalate if there's something new to try — pass
+      // 1 already ran Demucs, or there's only one stem to mix → no point.
       const canEscalate =
         result.lowConfidence &&
-        chart.vocalsFile != null &&
+        result.vocalsSource !== 'demucs' &&
         chart.audioFiles.length >= 2;
 
       if (canEscalate) {
-        const lowPct = Math.round(result.lowConfidenceFrac * 100);
-        updateAlignStep('align', {
-          description: `Confidence was low (${lowPct}% of syllables). Trying again with a fresh separation.`,
+        setTierPass(2);
+        result = await runner.start(addLyricsTask, {
+          lyrics,
+          vocals: {
+            kind: 'stems',
+            stems: chart.audioFiles.map(f => ({
+              data: f.data,
+              mimeType: getMimeForExtension(getExtension(f.fileName)),
+            })),
+          },
         });
-        setAlignSteps(prev => [...prev, ...TIER2_STEPS.map(s => ({...s}))]);
-
-        updateAlignStep('separate2', {
-          status: 'active',
-          detail: 'Mixing chart stems for re-separation...',
-          startTime: Date.now(),
-        });
-
-        const stemInputs = chart.audioFiles.map(f => ({
-          data: f.data,
-          mimeType: getMimeForExtension(getExtension(f.fileName)),
-        }));
-        const mixedBuffer = await mixStemsToAudioBuffer(stemInputs);
-
-        updateAlignStep('separate2', {
-          detail: 'Starting Demucs worker...',
-        });
-
-        const vocals16k_2 = await runDemucsInWorker(mixedBuffer, p =>
-          updateAlignStep('separate2', {
-            detail: p.message,
-            progress: p.percent,
-            etaSeconds: p.etaSeconds,
-          }),
-        );
-        updateAlignStep('separate2', {
-          status: 'done',
-          detail: `${(vocals16k_2.length / 16000).toFixed(1)}s mono 16kHz — re-separated`,
-          endTime: Date.now(),
-        });
-
-        setVocalsWaveform(new Float32Array(vocals16k_2));
-
-        updateAlignStep('align2', {
-          status: 'active',
-          startTime: Date.now(),
-        });
-        const result2 = await alignVocals(vocals16k_2, lyrics, (msg, info) => {
-          if (msg.startsWith('Done:')) {
-            updateAlignStep('align2', {
-              status: 'done',
-              detail: undefined,
-              progress: undefined,
-              endTime: Date.now(),
-            });
-          } else if (!msg.startsWith('Syllabified:')) {
-            updateAlignStep('align2', {detail: msg, progress: info?.percent});
-          }
-        });
-
-        // Use the second pass unconditionally — first-pass timings were
-        // already discarded above when we set vocalsWaveform.
-        result = result2;
       }
 
-      setAlignSteps(prev =>
-        prev.map(s => ({
-          ...s,
-          status:
-            s.status === 'pending' || s.status === 'active' ? 'done' : s.status,
-          endTime: s.endTime ?? Date.now(),
-        })),
-      );
-
-      setAlignedLines(result.lines);
+      // The task hands back a buffer it kept out of the alignment worker's
+      // transfer list, so it is already the caller's to render. Never
+      // serialized into the downloaded chart.
+      setVocalsWaveform(result.vocals16k);
       setAlignedSyllables(result.syllables);
       setStatus('done');
       track({
@@ -590,19 +373,22 @@ function LyricsAlignInner() {
         lowConfidenceFrac: Math.round(result.lowConfidenceFrac * 100) / 100,
       });
     } catch (e) {
+      if (isAbortError(e)) {
+        // Cancelled: back to the paste form with the lyrics still in it.
+        setStatus('input');
+        return;
+      }
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
       setStatus('error');
       const failedStep =
-        alignSteps.find(s => s.status === 'active')?.key ?? 'unknown';
-      setAlignSteps(prev =>
-        prev.map(s =>
-          s.status === 'active' ? {...s, status: 'error', detail: msg} : s,
-        ),
-      );
+        runner.store.getState().steps.find(s => s.status === 'active')?.key ??
+        'unknown';
       track({event: 'add_lyrics_align_failed', step: failedStep});
+    } finally {
+      setTierPass(null);
     }
-  }, [chart, lyrics, updateAlignStep, alignSteps]);
+  }, [chart, lyrics, runner]);
 
   const handleDownload = useCallback(() => {
     // Export the editor's live document. It starts as the aligned doc and
@@ -637,7 +423,7 @@ function LyricsAlignInner() {
     }
   }, [chart, state.chartDoc, state.undoStack]);
 
-  const showEditor = status === 'done' && alignedLines.length > 0;
+  const showEditor = status === 'done' && alignedSyllables.length > 0;
 
   // Prepare the ChartEditor view when alignment completes. Builds a fresh
   // ChartDocument with the aligned lyrics applied, a running AudioManager,
@@ -769,8 +555,8 @@ function LyricsAlignInner() {
               {removeStyleTags(artistName)}
             </h1>
             <p className="text-xs text-muted-foreground">
-              {alignedLines.reduce((n, l) => n + l.syllables.length, 0)}{' '}
-              syllables aligned into {alignedLines.length} lines
+              {alignedSyllables.length} syllables aligned into{' '}
+              {alignedSyllables.filter(s => s.newLine).length} lines
             </p>
           </div>
           <span className="hidden sm:inline text-xs text-muted-foreground">
@@ -785,7 +571,6 @@ function LyricsAlignInner() {
               }
               publishAudioManager(null);
               setEditorData(null);
-              setAlignedLines([]);
               setAlignedSyllables([]);
               setVocalsWaveform(null);
               setStatus('input');
@@ -956,12 +741,19 @@ function LyricsAlignInner() {
               </div>
 
               {/* Processing card. Renders inside the same column so the
-                  song info header stays at the top while the steps run. */}
+                  song info header stays at the top while the steps run. Only
+                  this leaf subscribes to the run's progress ticks. */}
               {status === 'processing' && (
-                <ProcessingView
+                <ConnectedProcessingView
+                  store={runner.store}
+                  taskKey="add-lyrics"
                   title="Adding lyrics to your chart"
-                  steps={alignStepsToProcessingSteps(alignSteps)}
-                  error={error}
+                  description={
+                    tierPass === 2
+                      ? 'Confidence was low on the first pass, trying again with a fresh separation.'
+                      : undefined
+                  }
+                  onCancel={runner.cancel}
                   className="max-w-none"
                 />
               )}

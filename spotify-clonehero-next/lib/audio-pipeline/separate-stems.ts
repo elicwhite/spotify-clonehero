@@ -30,7 +30,7 @@ import {
 
 const NUM_CHANNELS = 2;
 /** Stem-cache entry names this module writes. Exported so probe-side callers
- *  (`lib/assist/tasks.ts`'s cached-step prediction) name the same entries
+ *  (`lib/assist/tasks/`'s cached-step prediction) name the same entries
  *  this module stores, instead of re-declaring the strings. */
 export const DRUMS_STEM = 'drums';
 export const VOCALS_STEM = 'vocals';

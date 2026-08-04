@@ -14,7 +14,7 @@ import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
 import StepRow from '@/components/processing/StepRow';
 import type {AssistRunState, AssistStore} from '@/lib/assist/assist-store';
-import type {AssistTaskKey} from '@/lib/assist/tasks';
+import type {AssistTaskKey} from '@/lib/assist/tasks/types';
 import {useAssistRunState} from './useAssistRunner';
 
 export interface AssistRunCardProps {

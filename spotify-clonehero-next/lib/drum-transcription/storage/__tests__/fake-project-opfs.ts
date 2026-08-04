@@ -30,16 +30,24 @@ export interface ProjectOpfsMock {
   __reset: () => void;
   CHART_FILE_BASENAMES: {chart: string; mid: string};
   editedVariant: (baseName: string) => string;
+  createProject: jest.Mock;
+  listProjects: jest.Mock;
+  deleteProject: jest.Mock;
   getProject: jest.Mock;
   updateProject: jest.Mock;
   hasStoredAudio: jest.Mock;
+  storeAudioOriginal: jest.Mock;
   loadFullMixPcm: jest.Mock;
   readOriginalAudio: jest.Mock;
   readSongOpus: jest.Mock;
   writeProjectBinary: jest.Mock;
+  readProjectBinary: jest.Mock;
   writeProjectJSON: jest.Mock;
   readProjectJSON: jest.Mock;
+  writePackageInfo: jest.Mock;
+  writeProjectAssets: jest.Mock;
   projectFileExists: jest.Mock;
+  findProjectChartFile: jest.Mock;
   hasProjectChartFile: jest.Mock;
   deleteProjectFile: jest.Mock;
 }
@@ -53,11 +61,13 @@ export interface ProjectOpfsMockOptions {
   originalAudioBytes?: Uint8Array;
 }
 
+/** Same preference order as `findProjectChartFile`: an autosaved edited
+ *  sibling shadows the pipeline's own output. */
 const CHART_BASENAMES = [
-  'notes.chart',
-  'notes.mid',
   'notes.edited.chart',
   'notes.edited.mid',
+  'notes.chart',
+  'notes.mid',
 ];
 
 export function createProjectOpfsMock({
@@ -82,6 +92,26 @@ export function createProjectOpfsMock({
       const dot = baseName.lastIndexOf('.');
       return `${baseName.slice(0, dot)}.edited${baseName.slice(dot)}`;
     },
+    createProject: jest.fn(async (name: string) => {
+      const id = `proj-${projects.size + 1}`;
+      const meta = {
+        id,
+        name,
+        createdAt: '',
+        updatedAt: '',
+        stage: 'uploaded',
+        gridSource: 'predicted',
+      };
+      projects.set(id, meta);
+      return meta;
+    }),
+    listProjects: jest.fn(async () => [...projects.values()]),
+    deleteProject: jest.fn(async (id: string) => {
+      projects.delete(id);
+      for (const fileKey of [...files.keys()]) {
+        if (fileKey.startsWith(`${id}/`)) files.delete(fileKey);
+      }
+    }),
     getProject: jest.fn(async (id: string) => {
       const meta = projects.get(id);
       if (!meta) throw new Error(`no project ${id}`);
@@ -93,6 +123,12 @@ export function createProjectOpfsMock({
       },
     ),
     hasStoredAudio: jest.fn(async () => true),
+    storeAudioOriginal: jest.fn(
+      async (id: string, bytes: ArrayBuffer, meta: unknown) => {
+        files.set(key(id, 'audio/original'), bytes);
+        files.set(key(id, 'audio/meta.json'), JSON.stringify(meta));
+      },
+    ),
     loadFullMixPcm: jest.fn(async () => new Float32Array(fullMixPcmSamples)),
     readOriginalAudio: jest.fn(async () => ({
       data: originalAudioBytes.slice().buffer,
@@ -103,6 +139,20 @@ export function createProjectOpfsMock({
         files.set(key(id, name), data);
       },
     ),
+    readProjectBinary: jest.fn(async (id: string, name: string) => {
+      const raw = files.get(key(id, name));
+      // `ArrayBuffer.isView` rather than `instanceof Uint8Array`: a jsdom
+      // test environment and the Node realm the chart writer runs in don't
+      // share a Uint8Array constructor.
+      if (ArrayBuffer.isView(raw)) {
+        return raw.buffer.slice(
+          raw.byteOffset,
+          raw.byteOffset + raw.byteLength,
+        ) as ArrayBuffer;
+      }
+      if (raw instanceof ArrayBuffer) return raw;
+      throw new Error(`missing ${name}`);
+    }),
     writeProjectJSON: jest.fn(
       async (id: string, name: string, data: unknown) => {
         files.set(key(id, name), JSON.stringify(data));
@@ -113,8 +163,22 @@ export function createProjectOpfsMock({
       if (typeof raw !== 'string') throw new Error(`missing ${name}`);
       return JSON.parse(raw);
     }),
+    writePackageInfo: jest.fn(async (id: string, info: unknown) => {
+      files.set(key(id, 'package.json'), JSON.stringify(info));
+    }),
+    writeProjectAssets: jest.fn(
+      async (id: string, assets: {fileName: string; data: unknown}[]) => {
+        for (const asset of assets) {
+          files.set(key(id, `assets/${asset.fileName}`), asset.data);
+        }
+      },
+    ),
     projectFileExists: jest.fn(async (id: string, name: string) =>
       files.has(key(id, name)),
+    ),
+    findProjectChartFile: jest.fn(
+      async (id: string) =>
+        CHART_BASENAMES.find(n => files.has(key(id, n))) ?? null,
     ),
     hasProjectChartFile: jest.fn(async (id: string) =>
       CHART_BASENAMES.some(n => files.has(key(id, n))),

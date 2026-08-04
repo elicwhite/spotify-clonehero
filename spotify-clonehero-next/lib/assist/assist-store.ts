@@ -9,7 +9,7 @@
  */
 
 import type {ProcessingStep} from '@/components/processing/StepRow';
-import type {AssistTaskKey} from './tasks';
+import type {AssistTaskKey} from './tasks/types';
 
 export type AssistRunStatus =
   | 'idle'

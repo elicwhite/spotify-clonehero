@@ -19,18 +19,18 @@
 
 import {toast} from 'sonner';
 
-import type {AssistContext, AssistTaskDef} from '@/lib/assist/tasks';
+import type {AssistTaskDef} from '@/lib/assist/tasks/types';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 import {
   useAssistRunActivity,
   type AssistRunnerControls,
 } from './useAssistRunner';
 
-export interface AssistTaskRunOptions<Result> {
-  /** Builds the task's run context. Async so a caller can load audio bytes
-   *  (or anything else the task needs) first; a failure here is reported the
+export interface AssistTaskRunOptions<Result, Input> {
+  /** Builds the task's input. Async so a caller can load audio bytes (or
+   *  anything else the task needs) first; a failure here is reported the
    *  same way a failed run is. */
-  prepareContext: () => Promise<AssistContext>;
+  prepareInput: () => Promise<Input>;
   /** Applies a successful run's result — typically executing the command
    *  that installs it. */
   applyResult: (result: Result) => void;
@@ -45,16 +45,20 @@ export interface AssistTaskRun {
   run: () => void;
 }
 
-export function useAssistTaskRun<Result>(
+export function useAssistTaskRun<Result, Input>(
   runner: AssistRunnerControls,
-  task: AssistTaskDef<Result>,
-  {prepareContext, applyResult, successMessage}: AssistTaskRunOptions<Result>,
+  task: AssistTaskDef<Result, Input>,
+  {
+    prepareInput,
+    applyResult,
+    successMessage,
+  }: AssistTaskRunOptions<Result, Input>,
 ): AssistTaskRun {
   const activity = useAssistRunActivity(runner.store);
 
   async function start(): Promise<void> {
     try {
-      const result = await runner.start(task, await prepareContext());
+      const result = await runner.start(task, await prepareInput());
       applyResult(result);
       toast.success(successMessage);
     } catch (e) {

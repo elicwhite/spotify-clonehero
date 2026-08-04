@@ -11,7 +11,7 @@
 
 import {Captions} from 'lucide-react';
 
-import type {LoadAssistAudio} from '@/lib/assist/tasks';
+import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 
 import AddLyricsDialog from '../AddLyricsDialog';
 import {CardShell} from './CardShell';

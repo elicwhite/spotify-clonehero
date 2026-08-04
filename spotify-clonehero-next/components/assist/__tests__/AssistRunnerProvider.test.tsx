@@ -18,7 +18,7 @@
 import '@testing-library/jest-dom';
 import {act, useState} from 'react';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
-import type {AssistTaskDef} from '@/lib/assist/tasks';
+import type {AssistTaskDef} from '@/lib/assist/tasks/types';
 
 interface CapturedRun {
   signal: AbortSignal;
@@ -50,16 +50,19 @@ function fakeTask(key: string, stepKey: string, stepLabel: string) {
   };
 }
 
-jest.mock('../../../lib/assist/tasks', () => ({
+jest.mock('../../../lib/assist/tasks/transcribe-drums', () => ({
   transcribeDrumsTask: fakeTask(
     'transcribe-drums',
     'transcribing',
     'Transcribing Drums',
   ),
+}));
+jest.mock('../../../lib/assist/tasks/add-lyrics', () => ({
   addLyricsTask: fakeTask('add-lyrics', 'align', 'Aligning syllables'),
 }));
 
-import {transcribeDrumsTask, addLyricsTask} from '@/lib/assist/tasks';
+import {transcribeDrumsTask} from '@/lib/assist/tasks/transcribe-drums';
+import {addLyricsTask} from '@/lib/assist/tasks/add-lyrics';
 import {
   AssistRunnerProvider,
   useAssistRunnerContext,
@@ -73,7 +76,7 @@ function StartSurface({
   task,
 }: {
   label: string;
-  task: AssistTaskDef<unknown>;
+  task: AssistTaskDef<unknown, unknown>;
 }) {
   const {start} = useAssistRunnerContext();
   const [message, setMessage] = useState<string | null>(null);

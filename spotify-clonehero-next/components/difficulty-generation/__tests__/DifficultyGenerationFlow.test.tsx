@@ -30,7 +30,7 @@ import {
   guitarSchema,
 } from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
-import {makeGenerateDifficultiesTask} from '@/lib/assist/tasks';
+import {makeGenerateDifficultiesTask} from '@/lib/assist/tasks/generate-difficulties';
 import type {
   DifficultyWorkerMessage,
   DifficultyWorkerRequest,

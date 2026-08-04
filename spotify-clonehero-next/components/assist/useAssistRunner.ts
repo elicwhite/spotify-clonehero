@@ -27,11 +27,7 @@ import {
   type AssistRunState,
   type AssistRunStatus,
 } from '@/lib/assist/assist-store';
-import type {
-  AssistContext,
-  AssistTaskDef,
-  AssistTaskKey,
-} from '@/lib/assist/tasks';
+import type {AssistTaskDef, AssistTaskKey} from '@/lib/assist/tasks/types';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 import {
   createStepTimer,
@@ -57,10 +53,11 @@ export interface AssistRunnerControls {
    *  `state` re-renders on every progress tick. */
   store: AssistStore;
   /**
-   * Starts a task run. Callers pass the task itself, so the returned promise
-   * carries that task's own result type — no registry lookup, no cast, and
-   * no "task not implemented" failure mode: a task that doesn't exist yet
-   * isn't a value anyone can pass.
+   * Starts a task run. Callers pass the task itself, so the input they must
+   * supply and the result the returned promise carries are both that task's
+   * own types — no registry lookup, no cast, no "task not implemented"
+   * failure mode (a task that doesn't exist yet isn't a value anyone can
+   * pass), and no field a task needs that the compiler lets a caller omit.
    *
    * Resolves with the task's result on success and rejects otherwise — a
    * `DOMException` named `AbortError` on cancel, or the task's own error.
@@ -71,9 +68,9 @@ export interface AssistRunnerControls {
    * Rejects immediately with {@link ASSIST_RUN_BUSY_MESSAGE} when a run is
    * already in flight, leaving that run untouched.
    */
-  start: <Result>(
-    task: AssistTaskDef<Result>,
-    ctx: AssistContext,
+  start: <Result, Input>(
+    task: AssistTaskDef<Result, Input>,
+    input: Input,
   ) => Promise<Result>;
   /** Aborts the currently active run, if any. A no-op when idle. */
   cancel: () => void;
@@ -121,9 +118,9 @@ export function useAssistRunnerControls(): AssistRunnerControls {
   }, [store, clearFlashTimer]);
 
   const start = useCallback(
-    <Result>(
-      task: AssistTaskDef<Result>,
-      ctx: AssistContext,
+    <Result, Input>(
+      task: AssistTaskDef<Result, Input>,
+      input: Input,
     ): Promise<Result> => {
       // One active run per runner, and one runner per editor: a second start
       // is refused rather than silently abandoning the run in flight.
@@ -153,7 +150,7 @@ export function useAssistRunnerControls(): AssistRunnerControls {
       const runPromise = (async () => {
         let plannedSteps: PlannedStep[] = [];
         try {
-          plannedSteps = await task.planSteps(ctx);
+          plannedSteps = await task.planSteps(input);
 
           if (isCurrent()) {
             store.setState({
@@ -177,7 +174,7 @@ export function useAssistRunnerControls(): AssistRunnerControls {
             });
           };
 
-          const result = await task.run(ctx, signal, reportProgress);
+          const result = await task.run(input, signal, reportProgress);
           if (isCurrent()) {
             store.setState({
               task: taskKey,

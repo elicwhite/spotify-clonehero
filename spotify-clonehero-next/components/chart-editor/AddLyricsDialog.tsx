@@ -1,11 +1,10 @@
 'use client';
 
 /**
- * "Add Lyrics" dialog for the chart editor (plan 0063 Part C, rewired onto
- * the shared assist engine by plan 0074 Phase 1).
+ * "Add Lyrics" dialog for the chart editor (plan 0063 Part C, plan 0074).
  *
- * Drives `lib/assist/tasks.ts`'s `add-lyrics` task on the editor's shared
- * assist runner:
+ * Drives `lib/assist/tasks/add-lyrics.ts`'s `add-lyrics` task on the editor's
+ * shared assist runner:
  * roformer-separated vocals cached from drum transcription (fingerprint-
  * keyed OPFS cache) are reused when present; otherwise the task falls back
  * to a fresh Demucs separation of the merged audio. Same task, same step
@@ -26,44 +25,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import ProcessingView from '@/components/ProcessingView';
+import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
 import {useChartEditorContext} from './ChartEditorContext';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {ReplaceLyricsCommand, hasExistingLyrics} from './commands';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
-import {useAssistRunState} from '@/components/assist/useAssistRunner';
-import type {AssistStore} from '@/lib/assist/assist-store';
-import {addLyricsTask, type LoadAssistAudio} from '@/lib/assist/tasks';
+import {addLyricsTask} from '@/lib/assist/tasks/add-lyrics';
+import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 
 type Status = 'input' | 'processing' | 'error';
-
-/**
- * `ProcessingView` subscribed to the shared run store. The dialog itself is
- * always mounted (its trigger button lives inside it), so it must not read
- * run state at its own root: every progress tick of every editor run would
- * re-render it. Only this leaf subscribes.
- *
- * The runner is shared with the editor's Regenerate control, so steps render
- * only while the active run is this dialog's.
- */
-function ConnectedLyricsProcessingView({
-  store,
-  onCancel,
-}: {
-  store: AssistStore;
-  onCancel: () => void;
-}) {
-  const state = useAssistRunState(store);
-  return (
-    <ProcessingView
-      title="Aligning lyrics"
-      steps={state.task === 'add-lyrics' ? state.steps : []}
-      onCancel={onCancel}
-      className="max-w-none border-0 shadow-none p-0"
-    />
-  );
-}
 
 interface AddLyricsDialogProps {
   /**
@@ -141,14 +112,14 @@ export default function AddLyricsDialog({
       // bytes themselves are only read if that probe misses and the Demucs
       // fallback runs.
       const result = await startAssistTask(addLyricsTask, {
-        audio: await loadAudio(),
         lyrics,
+        vocals: {kind: 'resolve', audio: await loadAudio()},
       });
 
       const command = new ReplaceLyricsCommand(result.syllables);
       executeCommand(command);
 
-      if (result.usedCachedVocals) onAlignedFromCachedVocals?.();
+      if (result.vocalsSource === 'cache') onAlignedFromCachedVocals?.();
 
       toast.success('Lyrics added to the chart');
       setOpen(false);
@@ -202,9 +173,12 @@ export default function AddLyricsDialog({
         </DialogHeader>
 
         {status === 'processing' ? (
-          <ConnectedLyricsProcessingView
+          <ConnectedProcessingView
             store={assistStore}
+            taskKey="add-lyrics"
+            title="Aligning lyrics"
             onCancel={cancelAssistTask}
+            className="max-w-none border-0 shadow-none p-0"
           />
         ) : (
           <div className="space-y-4">

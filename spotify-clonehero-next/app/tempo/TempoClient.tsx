@@ -48,7 +48,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {Switch} from '@/components/ui/switch';
-import {calculateTimeRemaining} from '@/lib/ui-utils';
 import {
   findAudioFiles,
   type Files,
@@ -62,13 +61,8 @@ import type {
   LoadedFiles,
   SourceFormat,
 } from '@/components/chart-picker/chart-file-readers';
-import ProcessingView from '@/components/ProcessingView';
-import type {ProcessingStep} from '@/components/processing/StepRow';
+import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
 
-import {
-  runTempoTrack,
-  type TempoTrackProgress,
-} from '@/lib/drum-transcription/pipeline/tempo-track';
 import {mergeAudioFiles} from '@/lib/tempo-map/merge-audio';
 import {swapSynctrack} from '@/lib/tempo-map/swap-synctrack';
 import {buildChartFromSynctrack} from '@/lib/tempo-map/build-chart';
@@ -77,6 +71,15 @@ import {
   METER_CONFIDENCE_THRESHOLD,
   type MeterStats,
 } from '@/lib/tempo-map/meter-confidence';
+
+import {useAssistRunnerControls} from '@/components/assist/useAssistRunner';
+import {
+  generateTempoMapTask,
+  type GenerateTempoMapInput,
+  type GenerateTempoMapResult,
+} from '@/lib/assist/tasks/generate-tempo-map';
+import type {AssistTaskDef} from '@/lib/assist/tasks/types';
+import {isAbortError} from '@/lib/workers/abortable-worker';
 
 import ChartEditor from '@/components/chart-editor/ChartEditor';
 import type {AssetFile} from '@/components/chart-editor/ExportDialog';
@@ -130,45 +133,6 @@ const PRO_DRUMS_MODIFIERS = {
   ...defaultIniChartModifiers,
   pro_drums: true,
 } as const;
-
-// ---------------------------------------------------------------------------
-// Processing steps
-// ---------------------------------------------------------------------------
-
-const STEP_DEFS: Array<{key: string; label: string; description?: string}> = [
-  {key: 'prepare', label: 'Reading your song'},
-  {
-    key: 'download-separation-model',
-    label: 'Downloading the drum-separation model',
-    description:
-      'About 336 MB — only happens the first time, then it’s saved in your browser.',
-  },
-  {
-    key: 'separate',
-    label: 'Isolating the drums',
-    description: 'Listening for just the drum kit. This is the longest step.',
-  },
-  {
-    key: 'download-beat-model',
-    label: 'Downloading the beat-finding model',
-    description: 'About 83 MB — only happens the first time.',
-  },
-  {key: 'beats-fullmix', label: 'Finding the beat of the whole song'},
-  {key: 'beats-drums', label: 'Finding the beat of the drums'},
-  {key: 'convert', label: 'Building the tempo map'},
-  {
-    key: 'transcribe-drums',
-    label: 'Listening to the drum hits',
-    description:
-      'Runs the same drum-transcription model as /drum-transcription, used ' +
-      'here to anchor the tempo map to the actual kick/snare hits.',
-  },
-  {key: 'chart', label: 'Writing the chart'},
-];
-
-function initialSteps(): ProcessingStep[] {
-  return STEP_DEFS.map(d => ({...d, status: 'pending'}));
-}
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -237,95 +201,54 @@ function writeAndReparse(
 // Component
 // ---------------------------------------------------------------------------
 
-export default function TempoClient() {
+export interface TempoClientProps {
+  /** Test seam: override the `generate-tempo-map` assist task, e.g. one
+   *  built with `makeGenerateTempoMapTask({createWorker: ...})` so tests can
+   *  script its worker instead of spawning the real one. Defaults to the
+   *  shared `generateTempoMapTask` singleton. */
+  task?: AssistTaskDef<GenerateTempoMapResult, GenerateTempoMapInput>;
+}
+
+export default function TempoClient({
+  task = generateTempoMapTask,
+}: TempoClientProps = {}) {
   const [webGPU, setWebGPU] = useState<boolean | null>(null);
   const [phase, setPhase] = useState<
     'pick' | 'pick-chart' | 'processing' | 'results'
   >('pick');
-  const [steps, setSteps] = useState<ProcessingStep[]>(initialSteps());
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ResultState | null>(null);
   const [variant, setVariant] = useState<Variant>('new');
 
   const audioInputRef = useRef<HTMLInputElement>(null);
-  const stepTimers = useRef<Record<string, number>>({});
+  /** Set by Cancel while the page is still reading/decoding the input, before
+   *  the run exists for the runner to abort. Checked once that work is done,
+   *  so Cancel in that window really does return to the picker. */
+  const cancelBeforeRunRef = useRef(false);
+
+  // The page's single assist runner. Not shared with an editor here (this
+  // page IS the tempo-generation flow), so it's owned locally rather than
+  // through `AssistRunnerProvider`.
+  const {
+    store: assistStore,
+    start: startAssistTask,
+    cancel: cancelAssistTask,
+  } = useAssistRunnerControls();
+
+  /** Cancel means one thing on this screen: stop whatever is running and go
+   *  back to the picker. It is the same affordance before the run exists,
+   *  during it, and after a failure (where `ProcessingView` labels it
+   *  "Back"). */
+  const backToPicker = useCallback(() => {
+    cancelBeforeRunRef.current = true;
+    cancelAssistTask();
+    setError(null);
+    setPhase('pick');
+  }, [cancelAssistTask]);
 
   useEffect(() => {
     isWebGPUAvailable().then(setWebGPU);
   }, []);
-
-  // ---------- step bookkeeping ----------
-  const updateStep = useCallback(
-    (key: string, patch: Partial<ProcessingStep>) => {
-      setSteps(prev => prev.map(s => (s.key === key ? {...s, ...patch} : s)));
-    },
-    [],
-  );
-
-  const startStep = useCallback((key: string) => {
-    stepTimers.current[key] = Date.now();
-    setSteps(prev =>
-      prev.map(s => {
-        if (s.key === key) return {...s, status: 'active'};
-        // Anything still active before this step finished.
-        if (s.status === 'active') {
-          return {
-            ...s,
-            status: 'done',
-            durationMs: Date.now() - (stepTimers.current[s.key] ?? Date.now()),
-            etaSeconds: undefined,
-            detail: undefined,
-          };
-        }
-        return s;
-      }),
-    );
-  }, []);
-
-  const finishAll = useCallback(() => {
-    setSteps(prev =>
-      prev.map(s =>
-        s.status === 'active'
-          ? {
-              ...s,
-              status: 'done',
-              durationMs:
-                Date.now() - (stepTimers.current[s.key] ?? Date.now()),
-              etaSeconds: undefined,
-            }
-          : s,
-      ),
-    );
-  }, []);
-
-  const onPipelineProgress = useCallback(
-    (p: TempoTrackProgress) => {
-      const key = p.stage;
-      if (!stepTimers.current[key]) startStep(key);
-      let etaSeconds = p.etaSeconds;
-      if (
-        etaSeconds === undefined &&
-        p.percent !== undefined &&
-        p.percent > 0
-      ) {
-        // Derive an ETA from elapsed time and fraction complete.
-        const startedAt = new Date(stepTimers.current[key]);
-        etaSeconds =
-          calculateTimeRemaining(
-            startedAt,
-            100,
-            Math.round(p.percent * 100),
-            0,
-          ) / 1000;
-      }
-      updateStep(key, {
-        progress: p.percent,
-        etaSeconds,
-        detail: p.detail,
-      });
-    },
-    [startStep, updateStep],
-  );
 
   // ---------- the pipeline ----------
   const process = useCallback(
@@ -334,27 +257,34 @@ export default function TempoClient() {
     ) => {
       setPhase('processing');
       setError(null);
-      setSteps(initialSteps());
-      stepTimers.current = {};
       setVariant('new');
+      cancelBeforeRunRef.current = false;
 
       try {
-        startStep('prepare');
-
-        let audioBuffer: AudioBuffer;
-        let sourceBytes: ArrayBuffer | null = null;
         let name: string;
         let audioFiles: Files;
         let originalChart: ParsedChart | null = null;
         let chartAssets: ScanFile[] = [];
         let sourceFormat: SourceFormat | null = null;
+        let originalBytes: Uint8Array;
+        let songLengthMs = 0;
+        /** The audio the task analyzes. Chart mode mixes the chart's stems
+         *  down to one buffer, so beat tracking sees the whole song rather
+         *  than whichever stem the fingerprint happens to be taken from;
+         *  audio mode hands back the buffer decoded below. */
+        let loadDecodedMix: (() => Promise<AudioBuffer>) | undefined;
 
         if (input.kind === 'audio') {
           const bytes = new Uint8Array(await input.file.arrayBuffer());
-          sourceBytes = bytes.buffer.slice(0) as ArrayBuffer;
+          originalBytes = bytes;
           name = basename(input.file.name);
           audioFiles = [{fileName: input.file.name, data: bytes}];
-          audioBuffer = await decodeStandaloneAudio(bytes);
+          // Audio mode has no chart of its own to derive a length from, so
+          // the file is decoded here; the task analyzes this same buffer
+          // rather than decoding the bytes a second time.
+          const audioBuffer = await decodeStandaloneAudio(bytes);
+          songLengthMs = audioBuffer.duration * 1000;
+          loadDecodedMix = async () => audioBuffer;
         } else {
           const {loaded} = input;
           name = loaded.originalName;
@@ -366,22 +296,25 @@ export default function TempoClient() {
           if (audioFiles.length === 0) {
             throw new Error('This chart has no audio files to analyze.');
           }
-          audioBuffer = await mergeAudioFiles(audioFiles);
           // Hash the chart's first audio file for the drum-stem cache.
-          const first = audioFiles[0].data;
-          sourceBytes = first.buffer.slice(
-            first.byteOffset,
-            first.byteOffset + first.byteLength,
-          ) as ArrayBuffer;
+          originalBytes = audioFiles[0].data;
+          const stems = audioFiles;
+          loadDecodedMix = () => mergeAudioFiles(stems);
         }
 
-        const pipelineResult = await runTempoTrack(audioBuffer, {
-          sourceBytes,
-          onProgress: onPipelineProgress,
-        });
+        if (cancelBeforeRunRef.current) {
+          setPhase('pick');
+          return;
+        }
 
-        startStep('chart');
-        const sync = pipelineResult.synctrack;
+        const taskResult = await startAssistTask(task, {
+          audio: {
+            loadOriginalBytes: async () => originalBytes,
+            loadDecodedMix,
+          },
+        });
+        const sync = taskResult.synctrack;
+        const drumStemStereo = taskResult.drumStemStereo;
 
         // Chart mode derives the new chart inside ResultsView (so the
         // snap-to-grid toggle can re-derive it); audio mode is fixed here.
@@ -391,10 +324,7 @@ export default function TempoClient() {
           modifiers = {...originalChart.iniChartModifiers, pro_drums: true};
           newChart = originalChart; // placeholder; ResultsView derives the real one
         } else {
-          const built = buildChartFromSynctrack({
-            sync,
-            songLengthMs: audioBuffer.duration * 1000,
-          });
+          const built = buildChartFromSynctrack({sync, songLengthMs});
           built.metadata.name = name;
           const audioAsset: ScanFile = {
             fileName: `song.${audioFiles[0].fileName.split('.').pop()}`,
@@ -404,7 +334,6 @@ export default function TempoClient() {
           ({chart: newChart} = writeAndReparse(built, chartAssets, modifiers));
         }
 
-        finishAll();
         setResult({
           mode: input.kind,
           name,
@@ -414,17 +343,23 @@ export default function TempoClient() {
           modifiers,
           newChart,
           synctrack: sync,
-          meterStats: pipelineResult.meterStats,
-          drumStemStereo: pipelineResult.drumStemStereo,
+          meterStats: taskResult.meterStats,
+          drumStemStereo,
           sourceFormat,
         });
         setPhase('results');
       } catch (err) {
+        if (isAbortError(err)) {
+          // Cancelled: back to the picker.
+          setPhase('pick');
+          setError(null);
+          return;
+        }
         console.error(err);
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [startStep, finishAll, onPipelineProgress],
+    [startAssistTask, task],
   );
 
   // ---------- render ----------
@@ -448,16 +383,14 @@ export default function TempoClient() {
   if (phase === 'processing') {
     return (
       <main className="min-h-[80vh] flex items-center justify-center p-6">
-        <ProcessingView
+        <ConnectedProcessingView
+          store={assistStore}
+          taskKey={task.key}
           title="Mapping the tempo"
           subtitle={undefined}
-          steps={steps}
           error={error}
           onRetry={undefined}
-          onCancel={() => {
-            setPhase('pick');
-            setError(null);
-          }}
+          onCancel={backToPicker}
         />
       </main>
     );

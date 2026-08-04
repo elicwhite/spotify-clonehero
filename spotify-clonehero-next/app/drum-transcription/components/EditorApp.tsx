@@ -29,7 +29,7 @@ import {
   readProjectAudioBytes,
   ensureProjectStemFingerprint,
 } from '@/lib/drum-transcription/ml/roformer-separation';
-import type {AssistAudio} from '@/lib/assist/tasks';
+import type {AssistAudio} from '@/lib/assist/tasks/types';
 import {
   decodeAudio,
   interleaveAudioBuffer,

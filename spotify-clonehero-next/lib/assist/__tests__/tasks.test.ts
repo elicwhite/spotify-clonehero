@@ -1,5 +1,5 @@
 /**
- * lib/assist/tasks.ts tests (plan 0074 Phase 1, Suite 1).
+ * lib/assist/tasks/ tests (plan 0074 Phase 1, Suite 1).
  *
  * `regenerateProject`, `hasDrumStem`, `decodeAndResampleTo44k`,
  * `resampleTo16kMono`, and `alignVocals` are mocked module boundaries —
@@ -10,7 +10,11 @@
  * is genuine, not asserted against a mock's own bookkeeping.
  */
 
+import {readFileSync} from 'fs';
+import path from 'path';
 import {createEmptyChart, noteTypes} from '@eliwhite/scan-chart';
+import {finalizeSynctrack} from '@/lib/tempo-map/finalize-synctrack';
+import type {Synctrack} from '@/lib/tempo-map/types';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {addDrumNote, writeChartFolder} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
@@ -47,6 +51,12 @@ jest.mock('../../audio-pipeline/lyrics-audio', () => ({
 jest.mock('../../lyrics-align/aligner', () => ({
   alignVocals: jest.fn(),
 }));
+// Resampling the separated stem to the CRNN's rate pulls a wasm resampler
+// over the network; the rate conversion itself is not what these tests are
+// about.
+jest.mock('../../drum-transcription/pipeline/crnn-audio-prep', () => ({
+  planarStereoToCrnnInput: jest.fn(async () => new Float32Array(8)),
+}));
 
 import {regenerateProject} from '@/lib/drum-transcription/pipeline/runner';
 import {hasDrumStem} from '@/lib/drum-transcription/ml/roformer-separation';
@@ -54,13 +64,15 @@ import {decodeAndResampleTo44k} from '@/lib/audio-pipeline/decode-audio';
 import {resampleTo16kMono} from '@/lib/audio-pipeline/lyrics-audio';
 import {alignVocals} from '@/lib/lyrics-align/aligner';
 
+import {transcribeDrumsTask} from '../tasks/transcribe-drums';
 import {
-  transcribeDrumsTask,
   addLyricsTask,
   makeAddLyricsTask,
-  makeGenerateTempoMapTask,
-} from '../tasks';
+  type AddLyricsInput,
+} from '../tasks/add-lyrics';
+import {makeGenerateTempoMapTask} from '../tasks/generate-tempo-map';
 import type {StepProgressEvent} from '../run-to-steps';
+import type {DrumTranscriber} from '@/lib/drum-transcription/ml/transcriber';
 
 const mockRegenerateProject = regenerateProject as jest.Mock;
 const mockHasDrumStem = hasDrumStem as jest.Mock;
@@ -147,8 +159,7 @@ describe('transcribeDrumsTask', () => {
     mockHasDrumStem.mockResolvedValue(true);
     const project = await createProject('song');
     const steps = await transcribeDrumsTask.planSteps({
-      audio: {loadOriginalBytes: async () => new Uint8Array()},
-      project: {id: project.id},
+      run: {kind: 'regenerate', projectId: project.id},
     });
     expect(steps.find(s => s.key === 'separating')?.cached).toBe(true);
     expect(steps.find(s => s.key === 'tempo-mapping')?.cached).toBe(false);
@@ -158,22 +169,20 @@ describe('transcribeDrumsTask', () => {
     mockHasDrumStem.mockResolvedValue(false);
     const project = await createProject('song');
     const steps = await transcribeDrumsTask.planSteps({
-      audio: {loadOriginalBytes: async () => new Uint8Array()},
-      project: {id: project.id},
+      run: {kind: 'regenerate', projectId: project.id},
     });
     expect(steps.find(s => s.key === 'separating')?.cached).toBe(false);
   });
 
-  it('planSteps marks "tempo-mapping" cached for a hand-written (provided-grid) tempo map', async () => {
+  it('planSteps leaves "tempo-mapping" uncached even for a provided-grid project (regenerateProject refuses those runs outright)', async () => {
     mockHasDrumStem.mockResolvedValue(false);
     const project = await createProject('song');
     await updateProject(project.id, {gridSource: 'provided'});
 
     const steps = await transcribeDrumsTask.planSteps({
-      audio: {loadOriginalBytes: async () => new Uint8Array()},
-      project: {id: project.id},
+      run: {kind: 'regenerate', projectId: project.id},
     });
-    expect(steps.find(s => s.key === 'tempo-mapping')?.cached).toBe(true);
+    expect(steps.find(s => s.key === 'tempo-mapping')?.cached).toBe(false);
   });
 
   it('planSteps leaves "tempo-mapping" uncached for a regenerate run even with a persisted map', async () => {
@@ -184,8 +193,7 @@ describe('transcribeDrumsTask', () => {
     });
 
     const steps = await transcribeDrumsTask.planSteps({
-      audio: {loadOriginalBytes: async () => new Uint8Array()},
-      project: {id: project.id},
+      run: {kind: 'regenerate', projectId: project.id},
     });
     expect(steps.find(s => s.key === 'tempo-mapping')?.cached).toBe(false);
   });
@@ -214,10 +222,7 @@ describe('transcribeDrumsTask', () => {
     const events: StepProgressEvent[] = [];
     const controller = new AbortController();
     const result = await transcribeDrumsTask.run(
-      {
-        audio: {loadOriginalBytes: async () => new Uint8Array()},
-        project: {id: project.id},
-      },
+      {run: {kind: 'regenerate', projectId: project.id}},
       controller.signal,
       e => events.push(e),
     );
@@ -241,10 +246,7 @@ describe('transcribeDrumsTask', () => {
     const controller = new AbortController();
     await expect(
       transcribeDrumsTask.run(
-        {
-          audio: {loadOriginalBytes: async () => new Uint8Array()},
-          project: {id: project.id},
-        },
+        {run: {kind: 'regenerate', projectId: project.id}},
         controller.signal,
         () => {},
       ),
@@ -273,10 +275,7 @@ describe('transcribeDrumsTask', () => {
 
     const controller = new AbortController();
     const runPromise = transcribeDrumsTask.run(
-      {
-        audio: {loadOriginalBytes: async () => new Uint8Array()},
-        project: {id: project.id},
-      },
+      {run: {kind: 'regenerate', projectId: project.id}},
       controller.signal,
       () => {},
     );
@@ -302,8 +301,8 @@ describe('addLyricsTask', () => {
     await storeStemOpus(fingerprint, 'vocals', new Uint8Array([9, 9, 9]));
 
     const steps = await addLyricsTask.planSteps({
-      audio: {loadOriginalBytes: async () => bytes},
       lyrics: 'la la',
+      vocals: {kind: 'resolve', audio: {loadOriginalBytes: async () => bytes}},
     });
     expect(steps.find(s => s.key === 'separate')?.cached).toBe(true);
   });
@@ -311,8 +310,8 @@ describe('addLyricsTask', () => {
   it('planSteps marks "separate" uncached on a miss', async () => {
     const bytes = new Uint8Array([2, 2, 2, 2]);
     const steps = await addLyricsTask.planSteps({
-      audio: {loadOriginalBytes: async () => bytes},
       lyrics: 'la la',
+      vocals: {kind: 'resolve', audio: {loadOriginalBytes: async () => bytes}},
     });
     expect(steps.find(s => s.key === 'separate')?.cached).toBe(false);
   });
@@ -349,8 +348,11 @@ describe('addLyricsTask', () => {
     });
     const result = await task.run(
       {
-        audio: {loadOriginalBytes: async () => bytes},
         lyrics: 'la la',
+        vocals: {
+          kind: 'resolve',
+          audio: {loadOriginalBytes: async () => bytes},
+        },
       },
       controller.signal,
       e => events.push(e),
@@ -388,15 +390,18 @@ describe('addLyricsTask', () => {
     });
 
     let bytesRead = 0;
-    const ctx = {
-      audio: {
-        stemFingerprint: persistedFingerprint,
-        loadOriginalBytes: async () => {
-          bytesRead += 1;
-          return new Uint8Array([99, 99, 99]);
+    const input: AddLyricsInput = {
+      lyrics: 'la la',
+      vocals: {
+        kind: 'resolve',
+        audio: {
+          stemFingerprint: persistedFingerprint,
+          loadOriginalBytes: async () => {
+            bytesRead += 1;
+            return new Uint8Array([99, 99, 99]);
+          },
         },
       },
-      lyrics: 'la la',
     };
     const task = makeAddLyricsTask({
       createDemucsWorker: () => {
@@ -404,14 +409,14 @@ describe('addLyricsTask', () => {
       },
     });
 
-    const steps = await task.planSteps(ctx);
+    const steps = await task.planSteps(input);
     expect(steps.find(s => s.key === 'separate')?.cached).toBe(true);
 
     const controller = new AbortController();
-    const result = await task.run(ctx, controller.signal, () => {});
+    const result = await task.run(input, controller.signal, () => {});
 
     expect(mockResample).toHaveBeenCalledWith(opusBytes, 'audio/opus');
-    expect(result.usedCachedVocals).toBe(true);
+    expect(result.vocalsSource).toBe('cache');
     // A cache hit never reads (or re-hashes) the audio file.
     expect(bytesRead).toBe(0);
   });
@@ -419,13 +424,20 @@ describe('addLyricsTask', () => {
   it('cache miss spawns Demucs via the injected createDemucsWorker factory', async () => {
     const bytes = new Uint8Array([10, 11, 12, 13]);
     mockDecode.mockResolvedValue(fakeAudioBuffer());
-    mockAlignVocals.mockResolvedValue({
-      lines: [],
-      words: [],
-      syllables: [],
-      durationMs: 0,
-      lowConfidenceFrac: 0,
-      lowConfidence: false,
+    // The real `alignVocals` posts the stem into its worker with the buffer
+    // in the transfer list, which detaches the caller's view. Reproduce that
+    // here so the result's stem is only non-empty if the task copied it
+    // before aligning.
+    mockAlignVocals.mockImplementation(async (pcm: Float32Array) => {
+      structuredClone(pcm, {transfer: [pcm.buffer]});
+      return {
+        lines: [],
+        words: [],
+        syllables: [],
+        durationMs: 0,
+        lowConfidenceFrac: 0,
+        lowConfidence: false,
+      };
     });
 
     let fake: FakeWorker | undefined;
@@ -438,8 +450,11 @@ describe('addLyricsTask', () => {
     });
     const runPromise = task.run(
       {
-        audio: {loadOriginalBytes: async () => bytes},
         lyrics: 'la la',
+        vocals: {
+          kind: 'resolve',
+          audio: {loadOriginalBytes: async () => bytes},
+        },
       },
       controller.signal,
       () => {},
@@ -457,7 +472,15 @@ describe('addLyricsTask', () => {
     expect(fake!.terminated).toBe(true);
     expect(mockResample).not.toHaveBeenCalled();
     expect(result.syllables).toEqual([]);
-    expect(result.usedCachedVocals).toBe(false);
+    expect(result.vocalsSource).toBe('demucs');
+    // The returned stem stays readable after `alignVocals` transferred the
+    // separated buffer into its worker (which detaches `vocals16k` itself) —
+    // hosts render a waveform from it.
+    expect(vocals16k.length).toBe(0);
+    expect(Array.from(result.vocals16k)).toEqual([
+      expect.closeTo(0.3, 5),
+      expect.closeTo(0.4, 5),
+    ]);
   });
 
   it('cancels the Demucs branch immediately, terminating the worker and applying nothing', async () => {
@@ -474,8 +497,11 @@ describe('addLyricsTask', () => {
     });
     const runPromise = task.run(
       {
-        audio: {loadOriginalBytes: async () => bytes},
         lyrics: 'la la',
+        vocals: {
+          kind: 'resolve',
+          audio: {loadOriginalBytes: async () => bytes},
+        },
       },
       controller.signal,
       () => {},
@@ -503,7 +529,13 @@ describe('addLyricsTask', () => {
     const controller = new AbortController();
     await expect(
       addLyricsTask.run(
-        {audio: {loadOriginalBytes: async () => bytes}, lyrics: 'la la'},
+        {
+          lyrics: 'la la',
+          vocals: {
+            kind: 'resolve',
+            audio: {loadOriginalBytes: async () => bytes},
+          },
+        },
         controller.signal,
         () => {},
       ),
@@ -547,6 +579,63 @@ describe('generateTempoMapTask', () => {
     );
   });
 
+  it('analyzes the caller-supplied decoded mix rather than the fingerprint file', async () => {
+    // A chart package is several stem files; its first file is what the
+    // stem-cache fingerprint is taken from, but beat tracking has to see the
+    // whole song, so a host that has stems supplies the mixdown itself.
+    const bytes = new Uint8Array([61, 62, 63, 64]);
+    const mixed = {
+      length: 3,
+      numberOfChannels: 1,
+      getChannelData: () => new Float32Array([0.5, 0.5, 0.5]),
+    } as unknown as AudioBuffer;
+    mockDecode.mockResolvedValue(fakeAudioBuffer());
+
+    let fake: FakeWorker | undefined;
+    const task = makeGenerateTempoMapTask({
+      createWorker: () => {
+        fake = new FakeWorker();
+        return fake as unknown as Worker;
+      },
+      transcriber: {
+        transcribe: async () => ({events: [], modelOutput: null}),
+      } as unknown as DrumTranscriber,
+    });
+    const runPromise = task.run(
+      {
+        audio: {
+          loadOriginalBytes: async () => bytes,
+          loadDecodedMix: async () => mixed,
+        },
+      },
+      new AbortController().signal,
+      () => {},
+    );
+
+    await waitFor(() => (fake?.posted.length ?? 0) > 0);
+    expect(mockDecode).not.toHaveBeenCalled();
+    expect(Array.from(fake!.posted[0].left as Float32Array)).toEqual([
+      0.5, 0.5, 0.5,
+    ]);
+
+    fake!.emit({
+      type: 'result',
+      result: {
+        synctrack: {origin_ms: 0, tempos: [], timeSignatures: []},
+        sections: null,
+        drumOnsetOffsetMs: null,
+        fullMixBeatCount: 0,
+        drumStemBeatCount: 0,
+        meterStats: null,
+        drumStemStereo: {
+          left: new Float32Array(4096),
+          right: new Float32Array(4096),
+        },
+      },
+    });
+    await runPromise;
+  });
+
   it('hands the pipeline worker the fingerprint and no stem, even on a cache hit', async () => {
     // The worker is the one authority on the drum-stem cache: it loads the
     // cached stem in the thread that consumes it. A cached stem must
@@ -568,6 +657,12 @@ describe('generateTempoMapTask', () => {
         fake = new FakeWorker();
         return fake as unknown as Worker;
       },
+      // The run anchors the grid on transcribed drum hits (the same
+      // finalization /drum-transcription performs), so it always transcribes
+      // the stem the pipeline hands back.
+      transcriber: {
+        transcribe: async () => ({events: [], modelOutput: null}),
+      } as unknown as DrumTranscriber,
     });
     const runPromise = task.run(
       {audio: {loadOriginalBytes: async () => bytes}},
@@ -589,11 +684,93 @@ describe('generateTempoMapTask', () => {
         fullMixBeatCount: 0,
         drumStemBeatCount: 0,
         meterStats: null,
-        drumStemStereo: null,
+        drumStemStereo: {
+          left: new Float32Array(4096),
+          right: new Float32Array(4096),
+        },
       },
     });
 
     const result = await runPromise;
     expect(result.synctrack.tempos).toEqual([]);
+  });
+
+  it('finalizes the worker grid through KS-warp/REACH before returning it', async () => {
+    // The shipping /tempo path: TempoClient -> generateTempoMapTask.run ->
+    // runTempoTrack -> finalizeSynctrack. tempo-track-equivalence.test.ts
+    // pins that finalizeSynctrack agrees with chart-builder's call site, but
+    // only this asserts that /tempo's own task actually runs it — without it,
+    // dropping the warp from tempo-track.ts would ship a raw grid silently.
+    const fixture = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          '../../tempo-map/__tests__/fixtures/ks-warp-reach/reach-01.json',
+        ),
+        'utf8',
+      ),
+    ) as {
+      incumbent_grid: Synctrack;
+      ks_onsets_ms: number[];
+      all_onsets_ms: number[];
+    };
+    const ksSet = new Set(fixture.ks_onsets_ms);
+    const events = [
+      ...fixture.ks_onsets_ms.map(ms => ({
+        timeSeconds: ms / 1000,
+        drumClass: 'BD' as const,
+        midiPitch: 36,
+        confidence: 1,
+      })),
+      ...fixture.all_onsets_ms
+        .filter(ms => !ksSet.has(ms))
+        .map(ms => ({
+          timeSeconds: ms / 1000,
+          drumClass: 'HH' as const,
+          midiPitch: 42,
+          confidence: 1,
+        })),
+    ];
+    const expected = finalizeSynctrack(fixture.incumbent_grid, events);
+    // Guards against a vacuous assertion: this fixture's warp really does
+    // move the grid, so returning the raw one would fail below.
+    expect(expected).not.toEqual(fixture.incumbent_grid);
+
+    mockDecode.mockResolvedValue(fakeAudioBuffer());
+    let fake: FakeWorker | undefined;
+    const task = makeGenerateTempoMapTask({
+      createWorker: () => {
+        fake = new FakeWorker();
+        return fake as unknown as Worker;
+      },
+      transcriber: {
+        transcribe: async () => ({events, durationSeconds: 300}),
+      } as unknown as DrumTranscriber,
+    });
+    const runPromise = task.run(
+      {audio: {loadOriginalBytes: async () => new Uint8Array([71, 72])}},
+      new AbortController().signal,
+      () => {},
+    );
+
+    await waitFor(() => (fake?.posted.length ?? 0) > 0);
+    fake!.emit({
+      type: 'result',
+      result: {
+        synctrack: fixture.incumbent_grid,
+        sections: null,
+        drumOnsetOffsetMs: null,
+        fullMixBeatCount: 0,
+        drumStemBeatCount: 0,
+        meterStats: null,
+        drumStemStereo: {
+          left: new Float32Array(4096),
+          right: new Float32Array(4096),
+        },
+      },
+    });
+
+    const result = await runPromise;
+    expect(result.synctrack).toEqual(expected);
   });
 });

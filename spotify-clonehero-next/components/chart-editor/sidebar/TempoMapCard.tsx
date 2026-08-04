@@ -11,7 +11,8 @@ import {Clock, RefreshCw} from 'lucide-react';
 import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
 import type {AssistRunnerControls} from '@/components/assist/useAssistRunner';
 import {useAssistTaskRun} from '@/components/assist/useAssistTaskRun';
-import {generateTempoMapTask, type LoadAssistAudio} from '@/lib/assist/tasks';
+import {generateTempoMapTask} from '@/lib/assist/tasks/generate-tempo-map';
+import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 
 import type {EditCommand} from '../commands';
 import {ReplaceTempoMapCommand} from '../commands';
@@ -34,7 +35,7 @@ export default function TempoMapCard({
   onLearnMore,
 }: TempoMapCardProps) {
   const {running, run} = useAssistTaskRun(runner, generateTempoMapTask, {
-    prepareContext: async () => ({audio: await loadAudio()}),
+    prepareInput: async () => ({audio: await loadAudio()}),
     applyResult: result =>
       executeCommand(new ReplaceTempoMapCommand(result.synctrack)),
     successMessage: 'Tempo map generated',

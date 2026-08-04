@@ -2,12 +2,12 @@
  * The drum-transcription pipeline's progress, expressed in the assist
  * engine's reporting vocabulary (`run-to-steps.ts`).
  *
- * `runner.ts` reports a single `{step, progress}` enum + scalar. Every
- * surface that renders that as a step list — the `/drum-transcription` home
- * screen (full pipeline, five steps) and the in-editor `transcribe-drums`
- * task (regeneration, three steps) — projects it through this one mapper
- * onto its own step table, so there is exactly one place where a pipeline
- * step becomes a rendered step.
+ * `runner.ts` reports a single `{step, progress}` enum + scalar. The
+ * `transcribe-drums` task projects it through this one mapper onto the step
+ * table its run needs — the full pipeline (five steps) for the
+ * `/drum-transcription` home screen's upload/chart/resume runs, the
+ * regeneration subset (three steps) for the in-editor re-run — so there is
+ * exactly one place where a pipeline step becomes a rendered step.
  *
  * This is drum-transcription-specific and therefore lives with the pipeline
  * it describes; `lib/assist/run-to-steps.ts` is the generic half.
@@ -50,12 +50,12 @@ export const PIPELINE_PLANNED_STEPS: readonly PlannedStep[] = [
 
 /**
  * The subset an in-editor regeneration reports: the audio is already stored
- * and decoded, so the run starts at separation.
+ * and decoded, so the run starts at separation. The runtime wait stays on
+ * the list because a regeneration still waits for ONNX Runtime before its
+ * first worker; dropping it would leave the card blank for that whole wait.
  */
 export const REGENERATE_PLANNED_STEPS: readonly PlannedStep[] =
-  PIPELINE_PLANNED_STEPS.filter(
-    s => s.key !== 'loading-runtime' && s.key !== 'decoding',
-  );
+  PIPELINE_PLANNED_STEPS.filter(s => s.key !== 'decoding');
 
 /**
  * One pipeline tick as a step event. 'ready' means the whole run finished;

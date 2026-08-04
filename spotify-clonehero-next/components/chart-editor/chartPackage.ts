@@ -29,7 +29,7 @@ import {mixStemsToAudioBuffer} from '@/lib/audio-pipeline/lyrics-audio';
 import {interleaveAudioBuffer} from '@/lib/drum-transcription/audio/decoder';
 import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {audioMimeType} from '@/lib/sng/file-utils';
-import type {AssistAudio} from '@/lib/assist/tasks';
+import type {AssistAudio} from '@/lib/assist/tasks/types';
 import type {AudioSource} from './ExportDialog';
 import type {ChartAssistProps} from './sidebar/ChartAssist';
 

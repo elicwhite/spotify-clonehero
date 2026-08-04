@@ -55,7 +55,7 @@ interface CapturedRun {
 let capturedTranscribe: CapturedRun | null = null;
 let capturedTempo: CapturedRun | null = null;
 
-jest.mock('../../../lib/assist/tasks', () => ({
+jest.mock('../../../lib/assist/tasks/transcribe-drums', () => ({
   transcribeDrumsTask: {
     key: 'transcribe-drums',
     title: 'Drum transcription',
@@ -68,6 +68,9 @@ jest.mock('../../../lib/assist/tasks', () => ({
         );
       }),
   },
+}));
+
+jest.mock('../../../lib/assist/tasks/generate-tempo-map', () => ({
   generateTempoMapTask: {
     key: 'generate-tempo-map',
     title: 'Tempo map',

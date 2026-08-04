@@ -40,17 +40,7 @@ import SourcePicker from './components/SourcePicker';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {readChart} from '@/lib/chart-edit';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
-import ProcessingView from '@/components/ProcessingView';
-import type {ProcessingStep} from '@/components/processing/StepRow';
-import {
-  createStepTimer,
-  markStepCompletions,
-  stepProgressToSteps,
-} from '@/lib/assist/run-to-steps';
-import {
-  PIPELINE_PLANNED_STEPS,
-  pipelineProgressToStepEvent,
-} from '@/lib/drum-transcription/pipeline/step-mapping';
+import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
 import EditorApp from './components/EditorApp';
 import {ChartEditorProvider} from '@/components/chart-editor/ChartEditorContext';
 import {AudioServiceProvider} from '@/components/chart-editor/AudioServiceContext';
@@ -62,15 +52,14 @@ import {
   type ProjectSummary,
 } from '@/lib/drum-transcription/storage/opfs';
 import {
-  runPipeline,
-  runPipelineFromChart,
-  resumePipeline,
-} from '@/lib/drum-transcription/pipeline/runner';
-import type {
-  PipelineProgress,
-  PipelineStep,
-} from '@/lib/drum-transcription/pipeline/stages';
-import {waitForOrtRuntime} from '@/lib/onnx/ort-ready';
+  transcribeDrumsTask,
+  type TranscribeDrumsRun,
+} from '@/lib/assist/tasks/transcribe-drums';
+import {
+  ASSIST_RUN_BUSY_MESSAGE,
+  useAssistRunnerControls,
+} from '@/components/assist/useAssistRunner';
+import {isAbortError} from '@/lib/workers/abortable-worker';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 
 // Browser capabilities are static for the page lifetime, so the subscribe
@@ -118,53 +107,19 @@ function DrumTranscriptionInner() {
   // to flip a loading flag synchronously before kicking off the fetch.
   const [projectsLoaded, setProjectsLoaded] = useState(false);
 
-  // Pipeline state
-  const [pipelineProgress, setPipelineProgress] =
-    useState<PipelineProgress | null>(null);
-  const [pipelineAudioFile, setPipelineAudioFile] = useState<File | null>(null);
-  const stepTimerRef = useRef(createStepTimer());
-  const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
+  // The page's assist runner: every pipeline run on this screen (upload,
+  // chart package, resume) is a `transcribe-drums` task run on it, so the
+  // step list, its wall-clock/ETA math, and cancellation all come from the
+  // engine rather than from a step machine kept here.
+  const runner = useAssistRunnerControls();
+  const [runRequest, setRunRequest] = useState<PipelineRunRequest | null>(null);
+  const runProjectIdRef = useRef<string | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+  const isProcessing = runRequest !== null;
 
   // Chart-flow feature: error from the last existing-chart-package load
   // attempt (SourcePicker owns the audio-vs-chart mode toggle itself).
   const [chartFlowError, setChartFlowError] = useState<string | null>(null);
-
-  // Derive the ProcessingView step list from progress + a wall-clock
-  // timer. The timer is a mutable ref read and updated only inside this
-  // effect's callbacks (never during render): stepProgressToSteps
-  // records per-step start/completion times and smoothed ETA values that
-  // must persist across renders.
-  //
-  // recompute runs immediately when progress changes and again once per
-  // second so the active step's elapsed-based ETA refreshes even when the
-  // worker hasn't sent a new progress message. The runner doesn't
-  // separately notify us that a previous step finished, so we mark
-  // completions before converting (advancing past a step implicitly
-  // completes it).
-  useEffect(() => {
-    if (!pipelineProgress) {
-      // Reset the timer so the next pipeline starts with fresh wall-clock
-      // tracking. processingSteps isn't cleared here: it's only read while
-      // pipelineProgress is non-null, and recompute() below overwrites it
-      // the moment a new pipeline starts.
-      stepTimerRef.current = createStepTimer();
-      return;
-    }
-    const recompute = () => {
-      const event = pipelineProgressToStepEvent(pipelineProgress);
-      markStepCompletions(PIPELINE_PLANNED_STEPS, event, stepTimerRef.current);
-      setProcessingSteps(
-        stepProgressToSteps(
-          PIPELINE_PLANNED_STEPS,
-          event,
-          stepTimerRef.current,
-        ),
-      );
-    };
-    recompute();
-    const id = setInterval(recompute, 1000);
-    return () => clearInterval(id);
-  }, [pipelineProgress]);
 
   // Result of checking a project's stage, tagged with the projectId we
   // checked for. Tagging lets us derive UI state from a single source:
@@ -183,11 +138,61 @@ function DrumTranscriptionInner() {
   // Delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
 
-  const isProcessing =
-    pipelineProgress !== null &&
-    pipelineProgress.step !== 'ready' &&
-    pipelineProgress.step !== 'error' &&
-    pipelineProgress.step !== 'idle';
+  /**
+   * Runs one `transcribe-drums` task on the page's runner and owns the
+   * screen's response to the three outcomes: success hands the project on,
+   * cancellation returns to the previous screen with nothing applied, and a
+   * failure keeps the step list on screen with a Retry that re-runs this
+   * same request.
+   */
+  const startRun = useCallback(
+    async (request: PipelineRunRequest) => {
+      // A run this screen already started is still going (a remounted effect
+      // asking for the same resume, or a project switch mid-run). The live
+      // run owns the screen: refusing a duplicate must leave its title, its
+      // step list, and the project Retry points at exactly as they are, so
+      // this returns before touching any of them. `runner.start` refuses on
+      // the same condition; checking here keeps the refusal from landing
+      // after the state below has already been rewritten.
+      if (runner.store.getState().status === 'running') return;
+
+      setRunRequest(request);
+      setRunError(null);
+      // The project this run is working in, as soon as it exists: either the
+      // one it was pointed at, or the one an upload/chart run creates part
+      // way through. Retry needs it (see `handleRetryPipeline`).
+      runProjectIdRef.current =
+        request.run.kind === 'resume' || request.run.kind === 'regenerate'
+          ? request.run.projectId
+          : null;
+      try {
+        const result = await runner.start(transcribeDrumsTask, {
+          run: request.run,
+          onProjectCreated: id => {
+            runProjectIdRef.current = id;
+          },
+        });
+        toast.success('Processing complete! Opening editor.');
+        setRunRequest(null);
+        request.onSuccess(result.projectId);
+      } catch (err) {
+        if (isAbortError(err)) {
+          setRunRequest(null);
+          return;
+        }
+        if (err instanceof Error && err.message === ASSIST_RUN_BUSY_MESSAGE) {
+          // Refusing a duplicate is not a pipeline failure and must not
+          // replace the live run's step list with an error.
+          return;
+        }
+        const message = err instanceof Error ? err.message : 'Pipeline failed';
+        console.error('Pipeline error:', err);
+        setRunError(message);
+        toast.error(message);
+      }
+    },
+    [runner],
+  );
 
   // When projectId is set via URL, check if the project needs pipeline work
   // before rendering EditorApp (which would show a generic spinner and fail
@@ -211,44 +216,14 @@ function DrumTranscriptionInner() {
         // Project needs pipeline processing — show ProcessingView and resume
         setProjectCheck({projectId: projectId!, needsProcessing: true});
 
-        const initialStep: PipelineStep =
-          meta.stage === 'uploaded'
-            ? 'decoding'
-            : meta.stage === 'separating'
-              ? 'separating'
-              : 'transcribing';
-
-        setPipelineProgress({
-          step: initialStep,
-          progress: 0,
-          projectId: projectId!,
-          projectName: meta.name,
+        await startRun({
+          title: `Processing: ${meta.name}`,
+          run: {kind: 'resume', projectId: projectId!},
+          onSuccess: () => {
+            if (cancelled) return;
+            setProjectCheck({projectId: projectId!, needsProcessing: false});
+          },
         });
-
-        try {
-          await resumePipeline(projectId!, progress => {
-            if (!cancelled) setPipelineProgress(progress);
-          });
-
-          if (cancelled) return;
-
-          toast.success('Processing complete! Opening editor.');
-          setPipelineProgress(null);
-          setProjectCheck({projectId: projectId!, needsProcessing: false});
-        } catch (err) {
-          if (cancelled) return;
-          const message =
-            err instanceof Error ? err.message : 'Pipeline failed';
-          console.error('Resume pipeline error (URL):', err);
-          setPipelineProgress({
-            step: 'error',
-            progress: 0,
-            projectId: projectId!,
-            projectName: meta.name,
-            error: message,
-          });
-          toast.error(message);
-        }
       } catch {
         if (cancelled) return;
         // Can't load metadata — let EditorApp handle the error
@@ -260,7 +235,7 @@ function DrumTranscriptionInner() {
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, startRun]);
 
   // Load project list when no project is selected and not processing.
   // All state writes happen in promise callbacks (post-await), so the
@@ -289,60 +264,20 @@ function DrumTranscriptionInner() {
     };
   }, [shouldLoadProjects]);
 
-  // Wait for ORT to be ready, showing the loading-runtime step while it
-  // isn't. The poll itself is shared with the in-editor assist runs
-  // (`ort-ready.ts`); this only adds the home screen's progress display.
-  const waitForOrt = useCallback((projectName: string, projectId?: string) => {
-    return waitForOrtRuntime({
-      onWaiting: () => {
-        setPipelineProgress({
-          step: 'loading-runtime',
-          progress: 0,
-          projectId,
-          projectName,
-        });
-      },
-    });
-  }, []);
+  const openEditor = useCallback(
+    (id: string) => router.push(`/drum-transcription?project=${id}`),
+    [router],
+  );
 
   // Handle audio upload -> start pipeline
   const handleStartPipeline = useCallback(
-    async (file: File) => {
-      setPipelineAudioFile(file);
-
-      try {
-        // Wait for ONNX Runtime to load
-        await waitForOrt(file.name);
-
-        setPipelineProgress({
-          step: 'decoding',
-          progress: 0,
-          projectName: file.name,
-        });
-
-        const finalProjectId = await runPipeline(file, file.name, progress => {
-          setPipelineProgress(progress);
-        });
-
-        // Pipeline complete -- navigate to editor
-        toast.success('Processing complete! Opening editor.');
-        setPipelineProgress(null);
-        setPipelineAudioFile(null);
-        router.push(`/drum-transcription?project=${finalProjectId}`);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Pipeline failed';
-        console.error('Pipeline error:', err);
-        setPipelineProgress(prev => ({
-          step: 'error',
-          progress: 0,
-          projectId: prev?.projectId,
-          projectName: prev?.projectName,
-          error: message,
-        }));
-        toast.error(message);
-      }
-    },
-    [router, waitForOrt],
+    (file: File) =>
+      startRun({
+        title: `Processing: ${file.name}`,
+        run: {kind: 'upload', audioFile: file, fileName: file.name},
+        onSuccess: openEditor,
+      }),
+    [openEditor, startRun],
   );
 
   // Handle an existing chart package being dropped/selected -> start the
@@ -379,48 +314,34 @@ function DrumTranscriptionInner() {
             f.fileName.toLowerCase() !== primaryNameLower,
         );
 
-        setPipelineAudioFile(primaryAudioFile);
-        await waitForOrt(primaryAudioFile.name);
-
-        setPipelineProgress({
-          step: 'decoding',
-          progress: 0,
-          projectName: primaryAudioFile.name,
-        });
-
-        const finalProjectId = await runPipelineFromChart(
-          {
-            chartDoc,
-            audioFile: primaryAudioFile,
-            packageInfo: {
-              sourceFormat: loaded.sourceFormat,
-              originalName: loaded.originalName,
-              sngMetadata: loaded.sngMetadata,
+        await startRun({
+          title: `Processing: ${primaryAudioFile.name}`,
+          run: {
+            kind: 'chart',
+            input: {
+              chartDoc,
+              audioFile: primaryAudioFile,
+              packageInfo: {
+                sourceFormat: loaded.sourceFormat,
+                originalName: loaded.originalName,
+                sngMetadata: loaded.sngMetadata,
+              },
+              extraAssets,
             },
-            extraAssets,
           },
-          progress => setPipelineProgress(progress),
-        );
-
-        toast.success('Processing complete! Opening editor.');
-        setPipelineProgress(null);
-        setPipelineAudioFile(null);
-        router.push(`/drum-transcription?project=${finalProjectId}`);
+          onSuccess: openEditor,
+        });
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Pipeline failed';
-        console.error('Chart-flow pipeline error:', err);
+        // Reading the package failed before any run started; the picker
+        // shows this in place.
+        const message =
+          err instanceof Error ? err.message : 'Could not read chart package';
+        console.error('Chart-flow load error:', err);
         setChartFlowError(message);
-        setPipelineProgress(prev => ({
-          step: 'error',
-          progress: 0,
-          projectId: prev?.projectId,
-          projectName: prev?.projectName,
-          error: message,
-        }));
         toast.error(message);
       }
     },
-    [router, waitForOrt],
+    [openEditor, startRun],
   );
 
   // Handle selecting an existing project
@@ -431,125 +352,73 @@ function DrumTranscriptionInner() {
 
         // If project is already in editing stage, go straight to editor
         if (meta.stage === 'editing' || meta.stage === 'exported') {
-          router.push(`/drum-transcription?project=${id}`);
+          openEditor(id);
           return;
         }
 
-        // Wait for ONNX Runtime before resuming pipeline
-        await waitForOrt(meta.name, id);
-
-        // Resume the pipeline — map the project stage to the
-        // correct pipeline step so ProcessingView highlights the right stage.
-        const initialStep: PipelineStep =
-          meta.stage === 'uploaded'
-            ? 'decoding'
-            : meta.stage === 'separating'
-              ? 'separating'
-              : 'transcribing';
-
-        setPipelineProgress({
-          step: initialStep,
-          progress: 0,
-          projectId: id,
-          projectName: meta.name,
+        await startRun({
+          title: `Processing: ${meta.name}`,
+          run: {kind: 'resume', projectId: id},
+          onSuccess: openEditor,
         });
-
-        try {
-          await resumePipeline(id, progress => {
-            setPipelineProgress(progress);
-          });
-
-          toast.success('Processing complete! Opening editor.');
-          setPipelineProgress(null);
-          router.push(`/drum-transcription?project=${id}`);
-        } catch (err) {
-          const message =
-            err instanceof Error ? err.message : 'Pipeline failed';
-          console.error('Resume pipeline error:', err);
-          setPipelineProgress({
-            step: 'error',
-            progress: 0,
-            projectId: id,
-            projectName: meta.name,
-            error: message,
-          });
-          toast.error(message);
-        }
       } catch {
         // If we can't even load the project metadata, just try the editor
-        router.push(`/drum-transcription?project=${id}`);
+        openEditor(id);
       }
     },
-    [router, waitForOrt],
+    [openEditor, startRun],
   );
 
   // Handle demo button
   const handleTryDemo = useCallback(async () => {
+    let file: File;
     try {
-      // Wait for ONNX Runtime to load
-      await waitForOrt('Demo Drum Sample');
-
-      setPipelineProgress({
-        step: 'decoding',
-        progress: 0,
-        projectName: 'Demo Drum Sample',
-      });
-
       const response = await fetch('/drumsample.mp3');
       if (!response.ok) {
         throw new Error('Failed to fetch demo audio file');
       }
       const blob = await response.blob();
-      const file = new File([blob], 'Demo Drum Sample.mp3', {
-        type: 'audio/mpeg',
-      });
-
-      const finalProjectId = await runPipeline(file, file.name, progress => {
-        setPipelineProgress(progress);
-      });
-
-      toast.success('Processing complete! Opening editor.');
-      setPipelineProgress(null);
-      router.push(`/drum-transcription?project=${finalProjectId}`);
+      file = new File([blob], 'Demo Drum Sample.mp3', {type: 'audio/mpeg'});
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : 'Failed to process demo';
-      console.error('Demo pipeline error:', err);
-      setPipelineProgress(prev => ({
-        step: 'error',
-        progress: 0,
-        projectId: prev?.projectId,
-        projectName: prev?.projectName ?? 'Demo Drum Sample',
-        error: message,
-      }));
+        err instanceof Error ? err.message : 'Failed to load the demo audio';
+      console.error('Demo fetch error:', err);
       toast.error(message);
+      return;
     }
-  }, [router, waitForOrt]);
+    await handleStartPipeline(file);
+  }, [handleStartPipeline]);
 
+  // Retry the run that just failed. Once a run has a project, retrying
+  // resumes it: every stage that already landed is on disk, and re-running
+  // the original upload/chart request would create a second project and
+  // redo the decode and separation from scratch.
   const handleRetryPipeline = useCallback(() => {
-    if (pipelineProgress?.projectId) {
-      // Resume existing project
-      handleSelectProject(pipelineProgress.projectId);
-    } else if (pipelineAudioFile) {
-      // Re-run with the same file
-      handleStartPipeline(pipelineAudioFile);
+    if (!runRequest) return;
+    const inProgressProjectId = runProjectIdRef.current;
+    if (inProgressProjectId) {
+      void startRun({
+        title: runRequest.title,
+        run: {kind: 'resume', projectId: inProgressProjectId},
+        onSuccess: runRequest.onSuccess,
+      });
+      return;
     }
-  }, [
-    pipelineProgress,
-    pipelineAudioFile,
-    handleSelectProject,
-    handleStartPipeline,
-  ]);
+    void startRun(runRequest);
+  }, [runRequest, startRun]);
 
   const handleCancelPipeline = useCallback(() => {
-    setPipelineProgress(null);
-    setPipelineAudioFile(null);
+    // Aborts the in-flight run's workers; after a failure there is nothing
+    // left to abort and this only clears the screen.
+    runner.cancel();
+    setRunRequest(null);
+    setRunError(null);
     // Preserve the tag for the current project so checkingProject stays
     // false; we've just decided this project no longer needs processing.
     setProjectCheck(prev =>
       prev ? {projectId: prev.projectId, needsProcessing: false} : null,
     );
-  }, []);
+  }, [runner]);
 
   const handleBackToProjects = useCallback(() => {
     router.push('/drum-transcription');
@@ -625,7 +494,7 @@ function DrumTranscriptionInner() {
   }
 
   // Processing view -- shown when pipeline is running (from upload, project list, or URL-based resume)
-  if (isProcessing || pipelineProgress?.step === 'error') {
+  if (isProcessing) {
     return (
       <div className="flex flex-col items-center justify-center flex-1 w-full gap-6">
         <div className="px-4 py-2 self-start">
@@ -638,19 +507,12 @@ function DrumTranscriptionInner() {
             Back to Projects
           </Button>
         </div>
-        <ProcessingView
-          title={
-            pipelineProgress?.projectName
-              ? `Processing: ${pipelineProgress.projectName}`
-              : 'Processing'
-          }
+        <ConnectedProcessingView
+          store={runner.store}
+          taskKey="transcribe-drums"
+          title={runRequest.title}
           description="This may take a few minutes depending on the audio length."
-          steps={processingSteps}
-          error={
-            pipelineProgress?.step === 'error'
-              ? (pipelineProgress.error ?? 'An unexpected error occurred.')
-              : undefined
-          }
+          error={runError}
           onRetry={handleRetryPipeline}
           onCancel={handleCancelPipeline}
         />
@@ -672,8 +534,8 @@ function DrumTranscriptionInner() {
       );
     }
 
-    // Project needs processing but pipeline hasn't started yet (shouldn't normally
-    // happen since checkProjectStage sets pipelineProgress which triggers the
+    // Project needs processing but the run hasn't started yet (shouldn't
+    // normally happen since checkProjectStage starts one, which triggers the
     // isProcessing branch above, but guard against the brief gap)
     if (projectNeedsProcessing) {
       return (
@@ -815,6 +677,14 @@ function DrumTranscriptionInner() {
       </AlertDialog>
     </div>
   );
+}
+
+/** One pipeline run this screen can start, kept so Retry can re-run exactly
+ *  the same request and the header can name what is processing. */
+interface PipelineRunRequest {
+  title: string;
+  run: TranscribeDrumsRun;
+  onSuccess: (projectId: string) => void;
 }
 
 /**

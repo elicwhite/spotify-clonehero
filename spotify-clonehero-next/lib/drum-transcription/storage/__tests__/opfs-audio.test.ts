@@ -194,6 +194,20 @@ describe('Opus-at-rest audio storage', () => {
       await expect(opfs.hasStoredAudio(meta.id)).resolves.toBe(true);
     });
 
+    it('true for an original-at-rest project (original.<ext>)', async () => {
+      // What `storeAudioOriginal` writes today, and what `resumePipeline`
+      // gates resumability on: a project uploaded now must not read as
+      // having no audio.
+      const meta = await opfs.createProject('original');
+      await opfs.storeAudioOriginal(
+        meta.id,
+        new Uint8Array([1, 2, 3]).buffer,
+        AUDIO_META,
+        44100,
+      );
+      await expect(opfs.hasStoredAudio(meta.id)).resolves.toBe(true);
+    });
+
     it('false when neither is stored', async () => {
       const meta = await opfs.createProject('empty');
       await expect(opfs.hasStoredAudio(meta.id)).resolves.toBe(false);

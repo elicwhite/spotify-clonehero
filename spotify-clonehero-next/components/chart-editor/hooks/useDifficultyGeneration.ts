@@ -46,7 +46,7 @@ import {useOptionalAssistRunnerContext} from '@/components/assist/AssistRunnerPr
 import {ASSIST_RUN_BUSY_MESSAGE} from '@/components/assist/useAssistRunner';
 import {buildDifficultyGenerationInput} from '@/lib/assist/difficulty-input';
 import {difficultyGenerationDisabledReason} from '@/lib/assist/difficulty-client';
-import {generateDifficultiesTask} from '@/lib/assist/tasks';
+import {generateDifficultiesTask} from '@/lib/assist/tasks/generate-difficulties';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 
 /** Shown where there is no assist runner in the tree (host pages that render
@@ -143,9 +143,10 @@ export function useDifficultyGeneration(): DifficultyGenerationControls {
 
       setActiveInstrument(runner.store, instrument);
       try {
-        const result = await runner.start(generateDifficultiesTask, {
-          difficultyGeneration: built.input,
-        });
+        const result = await runner.start(
+          generateDifficultiesTask,
+          built.input,
+        );
         executeCommand(
           new GenerateDifficultiesCommand(
             instrument,

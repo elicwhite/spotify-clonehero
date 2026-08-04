@@ -24,7 +24,7 @@ import {
 import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
 import type {AssistRunnerControls} from '@/components/assist/useAssistRunner';
 import {useAssistTaskRun} from '@/components/assist/useAssistTaskRun';
-import {transcribeDrumsTask} from '@/lib/assist/tasks';
+import {transcribeDrumsTask} from '@/lib/assist/tasks/transcribe-drums';
 import {getAssistProvenance} from '@/lib/chart-editor-core';
 import {findTrack, getDrumNotes, type ChartDocument} from '@/lib/chart-edit';
 
@@ -77,13 +77,15 @@ export default function DrumTranscriptionCard({
   const status = `${transcribed ? 'AI-transcribed · ' : ''}${noteCount} notes on Drums · Expert`;
 
   const {running, run} = useAssistTaskRun(runner, transcribeDrumsTask, {
-    prepareContext: async () => {
+    prepareInput: async () => {
       if (projectId === undefined) {
         throw new Error(
           rerunDisabledReason ?? 'Drum transcription has no project to re-run',
         );
       }
-      return {project: {id: projectId}};
+      // Re-running from inside the editor means regenerating this project:
+      // the tempo map and notes are recomputed and replace what is there.
+      return {run: {kind: 'regenerate' as const, projectId}};
     },
     // The run rebuilt the chart from audio, so the old leading-silence anchor
     // no longer describes it (0064 addendum §1). The command itself records

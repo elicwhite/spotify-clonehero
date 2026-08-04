@@ -40,9 +40,9 @@ interface CapturedRun {
 }
 
 let captured: CapturedRun | null = null;
-let usedCachedVocals = true;
+let vocalsSource: 'cache' | 'demucs' | 'bundled' = 'cache';
 
-jest.mock('../../../lib/assist/tasks', () => ({
+jest.mock('../../../lib/assist/tasks/add-lyrics', () => ({
   addLyricsTask: {
     key: 'add-lyrics',
     title: 'Lyrics / Vocals',
@@ -125,12 +125,13 @@ const alignedResult = () => ({
   ],
   lowConfidence: false,
   lowConfidenceFrac: 0,
-  usedCachedVocals,
+  vocalsSource,
+  vocals16k: new Float32Array(4),
 });
 
 beforeEach(() => {
   captured = null;
-  usedCachedVocals = true;
+  vocalsSource = 'cache';
   (ensureProjectStemFingerprint as jest.Mock).mockClear();
 });
 
@@ -140,9 +141,16 @@ describe('AddLyricsDialog on the shared assist runner', () => {
     await startAlign();
 
     expect(ensureProjectStemFingerprint).toHaveBeenCalledWith('proj-1');
-    expect(captured!.ctx.audio.stemFingerprint).toBe('persisted-fingerprint');
-    expect(captured!.ctx.audio.originalBytes).toBeUndefined();
-    expect(typeof captured!.ctx.audio.loadOriginalBytes).toBe('function');
+    // The dialog resolves vocals from the project's own audio, so the task
+    // probes the cache under the fingerprint the stems were stored under.
+    expect(captured!.ctx.vocals.kind).toBe('resolve');
+    expect(captured!.ctx.vocals.audio.stemFingerprint).toBe(
+      'persisted-fingerprint',
+    );
+    expect(captured!.ctx.vocals.audio.originalBytes).toBeUndefined();
+    expect(typeof captured!.ctx.vocals.audio.loadOriginalBytes).toBe(
+      'function',
+    );
 
     await act(async () => {
       captured!.resolve(alignedResult());
@@ -181,7 +189,7 @@ describe('AddLyricsDialog on the shared assist runner', () => {
   });
 
   it('does not notify the host when the run had to separate with Demucs', async () => {
-    usedCachedVocals = false;
+    vocalsSource = 'demucs';
     const onCachedVocals = jest.fn();
     renderDialog(onCachedVocals);
     await startAlign();
