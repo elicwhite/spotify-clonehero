@@ -27,6 +27,24 @@ export type ToolMode = (typeof TOOL_MODES)[number];
 export const UNDO_STACK_CAP = 200;
 
 /**
+ * One reversible step: the command that ran, the `ChartDocument` as it was
+ * before it ran, and the `visibleTrackKeys` as they were before it ran.
+ *
+ * Kept as one record rather than parallel stacks so the three cannot fall out
+ * of alignment — there is no index to keep in step and no "what if this array
+ * is shorter" case to defend against. The doc snapshot is what makes undo
+ * snapshot replay instead of command inversion; the visibility snapshot is
+ * what makes undo restore the rows that were on screen, since visibility is
+ * separate state that a doc-changing command (a delete, and the reducer's
+ * at-least-one-visible repair) can move on its own.
+ */
+export interface UndoEntry {
+  command: EditCommand;
+  doc: ChartDocument;
+  visible: ReadonlySet<string>;
+}
+
+/**
  * A tempo-map edit's uncommitted result, rendered as a preview overlay (plan
  * 0061 §7 "Panel hosting contract"). This is the ONE preview channel for all
  * tempo gestures — a class-(a) marker drag in flight (0062 §7) and the §7
@@ -127,14 +145,11 @@ export interface ChartEditorState {
 
   // -- Undo/Redo --
 
-  /** Stack of executed commands, most recent last. */
-  undoStack: EditCommand[];
-  /** Stack of undone commands, most recent last. */
-  redoStack: EditCommand[];
-  /** Copy of chart doc snapshots for each undo/redo step. */
-  undoDocStack: ChartDocument[];
-  /** Copy of chart doc snapshots for redo. */
-  redoDocStack: ChartDocument[];
+  /** Reversible steps, most recent last. Popping one restores everything the
+   *  step needs — see {@link UndoEntry}. */
+  undoEntries: UndoEntry[];
+  /** Undone steps, most recent last; redo pops from here. */
+  redoEntries: UndoEntry[];
   /**
    * Clipboard for copy/paste operations (plan 0037 Task 6). Schema-typed
    * (`SchemaNote` — raw scan-chart `NoteType` + flag bitmask, not the
@@ -286,10 +301,8 @@ export const initialState: ChartEditorState = {
   gridDivision: 4,
   dirty: false,
   // Undo/Redo
-  undoStack: [],
-  redoStack: [],
-  undoDocStack: [],
-  redoDocStack: [],
+  undoEntries: [],
+  redoEntries: [],
   clipboard: null,
   savedUndoDepth: 0,
   visibleTrackKeys: new Set(),

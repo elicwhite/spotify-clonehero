@@ -22,24 +22,38 @@ import type {DrumType, NoteType} from '@eliwhite/scan-chart';
 import {drumTypes, noteFlags, noteTypes} from '@eliwhite/scan-chart';
 import type {InstrumentSchema, LaneDefinition, SchemaTrack} from './types';
 
-// World-space X coordinates for the drum highway. Mirrors the formula in
-// `lib/preview/highway/types.ts:calculateNoteXOffset('drums', i)`. Kept as
-// data on the schema so InteractionManager + place-mode logic can resolve
-// "lane → world X" without recomputing geometry. Update both when the
-// renderer's lane spacing changes.
-//   leftOffset = 0.135, NOTE_SPAN_WIDTH = 0.95, SCALE = 0.105
-//   stripX(i)  = 0.135 + -(0.95 / 2) + 0.105 + ((0.95 - 0.105) / 5) * i
-//              = -0.235 + 0.169 * i
-const STRIP_X = (i: number): number => -0.235 + 0.169 * i;
-const KICK_X = 0; // kick centers on the highway
+// World-space X coordinates for the drum highway, and the only place they are
+// spelled: everything that places drum geometry (renderer notes, strikeline
+// frets, hit targets) reads `worldXOffset` off these lanes, resolved through
+// `schemaForTrack`/`drumSchemaFor`.
+//
+// The pads spread across the 0.9-wide drum highway with the same edge inset
+// fraction the five-fret pads use on their 1.1-wide one, which puts the four
+// pad centers 0.211 apart -- wider than the 0.197 fret sprite drawn at each
+// center, so the strikeline reads as four separate buttons.
+const PAD_X_START = -0.3165;
+const PAD_X_STEP = 0.211;
+const STRIP_X = (i: number): number => PAD_X_START + PAD_X_STEP * i;
+// Five-lane drums fit one more pad into the same span, so the pads are closer
+// together and their sprites do touch. Five pads spread symmetrically means
+// the middle one sits dead center, on the same X as the kick -- see
+// `KICK_X` below for what that costs and who absorbs it.
+const STRIP_X_5LANE = (i: number): number =>
+  PAD_X_START + ((PAD_X_STEP * 3) / 4) * i;
+// The kick centers on the highway: it renders as a full-width bar, so this X
+// is only where its hover ghost sits and where a pointer has to be to mean
+// "kick" rather than a pad. With four pads that is the free gap between
+// yellow and blue; with five it is the blue pad's own center, so 5-lane
+// pointer placement resolves to blue and the kick is placed with its
+// `defaultKey` instead (`worldXToLane` in `InteractionManager.ts` spells the
+// tie-break, and `drums.schema.test.ts` pins it).
+const KICK_X = 0;
 
-// `index` mirrors each lane's position in `drums4LaneSchema.lanes` (the
-// schema `typeToLane`/`laneToType` and the editor's numeric lane logic
-// actually use). KICK is shared with `drums5LaneSchema` below, where its
-// true array position is one higher (5, not 4) — that schema isn't wired
-// into the editor's numeric lane logic today, so this is a display-only
-// approximation there, same as it was before this lane reordered.
-const KICK: LaneDefinition = {
+// `index` is each lane's position in its schema's `lanes` array, which is the
+// numbering `typeToLane`/`laneToType` and every hit-test/drag/marquee speak
+// in. The kick is last in both schemas, so it needs a per-schema definition:
+// index 4 with four pads, index 5 with five.
+const KICK_4LANE: LaneDefinition = {
   index: 4,
   noteType: noteTypes.kick,
   label: 'Kick',
@@ -49,6 +63,8 @@ const KICK: LaneDefinition = {
   worldXOffset: KICK_X,
   fullWidth: true,
 };
+
+const KICK_5LANE: LaneDefinition = {...KICK_4LANE, index: 5};
 
 const RED: LaneDefinition = {
   index: 0,
@@ -98,7 +114,7 @@ const GREEN_5LANE: LaneDefinition = {
   pianoRollColor: '#5cc262',
   defaultKey: '6',
   variant: '5-lane',
-  worldXOffset: STRIP_X(4),
+  worldXOffset: STRIP_X_5LANE(4),
 };
 
 /**
@@ -170,7 +186,7 @@ const DRUM_FLAG_BINDINGS: InstrumentSchema['flagBindings'] = [
 
 export const drums4LaneSchema: InstrumentSchema = {
   instrument: 'drums',
-  lanes: [RED, YELLOW, BLUE, GREEN_4LANE, KICK],
+  lanes: [RED, YELLOW, BLUE, GREEN_4LANE, KICK_4LANE],
   flagBindings: DRUM_FLAG_BINDINGS,
   // Kick spans the full highway rather than sitting in a pad lane, so it
   // never participates in lane-shift moves (arrow keys, note drag).
@@ -190,13 +206,15 @@ export const drums4LaneSchema: InstrumentSchema = {
  */
 export const drums5LaneSchema: InstrumentSchema = {
   instrument: 'drums',
+  // The four shared pad lanes sit at their own X here: five pads divide the
+  // same span the 4-lane schema gives four.
   lanes: [
-    RED,
-    YELLOW,
-    BLUE,
-    {...GREEN_4LANE, label: 'Orange'},
+    {...RED, worldXOffset: STRIP_X_5LANE(0)},
+    {...YELLOW, worldXOffset: STRIP_X_5LANE(1)},
+    {...BLUE, worldXOffset: STRIP_X_5LANE(2)},
+    {...GREEN_4LANE, label: 'Orange', worldXOffset: STRIP_X_5LANE(3)},
     GREEN_5LANE,
-    KICK,
+    KICK_5LANE,
   ],
   flagBindings: drums4LaneSchema.flagBindings,
   laneShiftExcludes: [noteTypes.kick],

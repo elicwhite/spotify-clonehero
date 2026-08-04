@@ -195,7 +195,7 @@ describe('ReplaceDrumTrackCommand', () => {
     const cmd = new ReplaceDrumTrackCommand(transcribedNotes());
     const afterExecute = cmd.execute(before);
 
-    // Undo: reinstall the pre-command doc (the `undoDocStack` contract).
+    // Undo: reinstall the pre-command doc (the `undoEntries` contract).
     const afterUndo = before;
     const undoneNotes = afterUndo.parsedChart.trackData[0].noteEventGroups
       .flat()

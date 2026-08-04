@@ -4,8 +4,18 @@ import {cva, type VariantProps} from 'class-variance-authority';
 
 import {cn} from '@/lib/utils';
 
+// Upstream shadcn puts `[&_svg]:size-4` in the base string. It is deliberately
+// absent here: `size-*` is a Tailwind 3.4 utility and this app is on 3.3.5, so
+// the base declaration compiled to nothing for this app's whole history and
+// every button in the tree sizes its icon on the icon itself
+// (`<Pencil className="h-3.5 w-3.5" />`). `tailwind.config.js` now backfills
+// the `size-*` utility, and a base rule would win over those: `.<btn> svg` is
+// (0,1,1) against the icon's own (0,1,0) `.h-3\.5`, so restoring it would
+// resize ~40 icons across the app to 16px at once. Icon size stays where the
+// call sites already spell it; `xs` below is the one variant that sets it,
+// because its call sites pass unsized lucide glyphs.
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0',
   {
     variants: {
       variant: {

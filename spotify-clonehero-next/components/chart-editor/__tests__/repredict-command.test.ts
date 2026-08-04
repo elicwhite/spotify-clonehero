@@ -3,7 +3,7 @@
  *
  * The command wraps `repredictTempo`: it commits a RE-PREDICT candidate when
  * decoded onsets are available and a RESNAP fallback (with the disclosure
- * flag) when they are not. Undo is snapshot replay (`undoDocStack`), not
+ * flag) when they are not. Undo is snapshot replay (`undoEntries`), not
  * command inversion — `execute()` must leave its input doc untouched so that
  * doc remains a valid snapshot to restore to.
  */

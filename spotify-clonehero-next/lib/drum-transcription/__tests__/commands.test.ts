@@ -2,7 +2,7 @@
  * Tests for the EditCommand pattern (0007a).
  *
  * Verifies that each command correctly transforms a `ChartDocument`. Undo is
- * snapshot replay (`undoDocStack` in the reducer), not command inversion, so
+ * snapshot replay (`undoEntries` in the reducer), not command inversion, so
  * these tests assert `execute()` never mutates its input doc — that's what
  * makes the input a valid snapshot for the reducer to restore.
  */

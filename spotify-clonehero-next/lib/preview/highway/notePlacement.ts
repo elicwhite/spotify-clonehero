@@ -1,11 +1,16 @@
-import {noteTypes, type Instrument, type NoteType} from '@eliwhite/scan-chart';
+import {
+  noteTypes,
+  type DrumType,
+  type Instrument,
+  type NoteType,
+} from '@eliwhite/scan-chart';
 import {interpretDrumNote} from '../../drum-mapping/noteToInstrument';
 import {
+  drumSchemaFor,
   schemaForInstrument,
   type InstrumentSchema,
   type LaneDefinition,
 } from '../../chart-edit/instruments';
-import {calculateNoteXOffset} from './types';
 
 // ---------------------------------------------------------------------------
 // notePlacement -- resolves a note's highway geometry from InstrumentSchema
@@ -85,12 +90,21 @@ export function sustainStyleForSchema(schema: InstrumentSchema): SustainStyle {
  * `interpretDrumNote` (the single source of truth for that transform) is
  * consulted for drum tracks. Every other instrument maps `note.type`
  * straight to a schema lane.
+ *
+ * `drumType` picks the drum lane layout (4-lane vs 5-lane); the two spread a
+ * different number of pads across the same highway width, so a caller that
+ * knows the chart's drum type must pass it or notes land at the 4-lane X
+ * positions while the strikeline frets are drawn at the 5-lane ones.
  */
 export function resolveNoteGeometry(
   instrument: Instrument,
   note: {type: NoteType; flags: number},
+  drumType?: DrumType | null,
 ): NoteGeometry | null {
-  const schema = schemaForInstrument(instrument);
+  const schema =
+    instrument === 'drums'
+      ? drumSchemaFor(drumType ?? null)
+      : schemaForInstrument(instrument);
   if (!schema) return null;
 
   const fullWidthLane = schema.lanes.find(lane => lane.fullWidth);
@@ -116,7 +130,7 @@ export function resolveNoteGeometry(
       editorLane: lanes[lane].index,
       isKick: false,
       isOpen: false,
-      xPosition: calculateNoteXOffset(instrument, lane),
+      xPosition: lanes[lane].worldXOffset,
     };
   }
 
@@ -136,6 +150,6 @@ export function resolveNoteGeometry(
     editorLane: lanes[lane].index,
     isKick: false,
     isOpen: false,
-    xPosition: calculateNoteXOffset(instrument, lane),
+    xPosition: lanes[lane].worldXOffset,
   };
 }

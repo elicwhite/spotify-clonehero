@@ -26,8 +26,16 @@
  * answer — its difficulty cells lock (`ChartMatrixCell`'s `locked`), so a
  * mid-generation toggle can't race the command that's about to
  * install/replace the tracks. Other rows are unaffected.
+ *
+ * Right-click on the row label or a cell opens the delete context menu
+ * (plan 0077 item 6), built by `ChartMatrixContextMenu`. This row only
+ * forwards the two `onContextMenu` callbacks, adding the one thing it alone
+ * knows: whether THIS instrument has any lower difficulties charted at all
+ * (`hasLowerDifficulties`), which decides whether "Delete all lower
+ * difficulties" belongs in the menu.
  */
 
+import type {MouseEvent} from 'react';
 import {Sparkles} from 'lucide-react';
 import {Tooltip, TooltipContent, TooltipTrigger} from '@/components/ui/tooltip';
 import {cn} from '@/lib/utils';
@@ -36,6 +44,7 @@ import type {AssistProvenance} from '@/lib/chart-editor-core';
 import {
   LOWER_TRACK_DIFFICULTIES,
   type SupportedTrackInstrument,
+  type SupportedTrackKey,
 } from '@/lib/chart-editor-core';
 import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
 import type {AssistRunnerControls} from '@/components/assist/useAssistRunner';
@@ -219,6 +228,21 @@ export interface ChartMatrixRowProps {
    *  0074 Design B). Null when no runner is wired into this host; present
    *  even for an instrument whose generation is disabled. */
   runner: AssistRunnerControls | null;
+  /** Opens the delete context menu anchored on the row label (plan 0077
+   *  item 6: "Delete instrument" / "Delete all lower difficulties"). */
+  onRowContextMenu: (
+    e: MouseEvent,
+    instrument: SupportedTrackInstrument,
+    hasLowerDifficulties: boolean,
+  ) => void;
+  /** Opens the delete context menu anchored on one cell (plan 0077 item 6:
+   *  "Delete difficulty" / "Delete all lower difficulties" / "Delete
+   *  instrument"). */
+  onCellContextMenu: (
+    e: MouseEvent,
+    trackKey: SupportedTrackKey,
+    hasLowerDifficulties: boolean,
+  ) => void;
 }
 
 export default function ChartMatrixRow({
@@ -232,6 +256,8 @@ export default function ChartMatrixRow({
   onGenerate,
   generateDisabledReason,
   runner,
+  onRowContextMenu,
+  onCellContextMenu,
 }: ChartMatrixRowProps) {
   const tracksByDifficulty = new Map(
     trackData
@@ -253,6 +279,9 @@ export default function ChartMatrixRow({
     <>
       <div
         style={{gridColumn: 1}}
+        onContextMenu={e =>
+          onRowContextMenu(e, instrument, hasLowerDifficulties)
+        }
         className="flex min-h-[1.875rem] items-center gap-1.5 text-xs font-semibold">
         <InstrumentIcon
           instrument={instrument}
@@ -273,7 +302,10 @@ export default function ChartMatrixRow({
         // (which is what a spanning "Generate H · M · E" bar would otherwise
         // do to an Expert-only instrument).
         if (!track) return null;
-        const trackKey: TrackKey = {instrument, difficulty: col.difficulty};
+        const trackKey: SupportedTrackKey = {
+          instrument,
+          difficulty: col.difficulty,
+        };
         const visible = visibleTrackKeys.has(trackKeyId(trackKey));
         const locked = generating && col.difficulty !== 'expert';
         return (
@@ -292,6 +324,9 @@ export default function ChartMatrixRow({
               visible,
             )}
             onToggle={() => onToggle(trackKey)}
+            onContextMenu={e =>
+              onCellContextMenu(e, trackKey, hasLowerDifficulties)
+            }
           />
         );
       })}

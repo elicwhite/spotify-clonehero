@@ -16,9 +16,14 @@
  * that don't edit notes (`PREVIEW`/`TEMPO`/`ADD_LYRICS`), `true` on
  * DRUM_EDIT-style full editors, which is every surface that ships the
  * matrix at all — every present instrument is always a row.
+ *
+ * Right-click on a row label or a cell opens the delete context menu (plan
+ * 0077 item 6, OWNER OVERRIDE 2026-08-04: per-difficulty deletion). The menu
+ * itself lives in `ChartMatrixContextMenu`; the matrix only decides where it
+ * opened and on what.
  */
 
-import {useState} from 'react';
+import {useCallback, useState, type MouseEvent} from 'react';
 import {Plus} from 'lucide-react';
 
 import {Button} from '@/components/ui/button';
@@ -32,10 +37,14 @@ import {
   selectDifficultyStale,
   SUPPORTED_TRACK_INSTRUMENTS,
   type SupportedTrackInstrument,
+  type SupportedTrackKey,
 } from '@/lib/chart-editor-core';
 import {useOptionalAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {useDifficultyGeneration} from '../hooks/useDifficultyGeneration';
 import ChartMatrixRow from './ChartMatrixRow';
+import ChartMatrixContextMenu, {
+  type MatrixMenuTarget,
+} from './ChartMatrixContextMenu';
 import InstrumentIcon from '../InstrumentIcon';
 import SectionHeading, {SIDEBAR_SECTION_CLASS} from './SectionHeading';
 import {DIFFICULTY_COLUMNS, INSTRUMENT_LABEL} from '../trackLabels';
@@ -52,6 +61,50 @@ export default function ChartMatrix() {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const {generatingInstrument, disabledReason, start} =
     useDifficultyGeneration();
+  const [menu, setMenu] = useState<MatrixMenuTarget | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+
+  // Right-click on the row label or a cell opens the delete menu (plan 0077
+  // item 6). Suppressed while THIS instrument's generation is in flight —
+  // same reason `ChartMatrixCell`'s `locked` blocks its click: a delete
+  // mid-generation could race the command about to install/replace tracks.
+  const openMenu = useCallback(
+    (
+      e: MouseEvent,
+      instrument: SupportedTrackInstrument,
+      trackKey: SupportedTrackKey | null,
+      hasLowerDifficulties: boolean,
+    ) => {
+      e.preventDefault();
+      if (generatingInstrument === instrument) return;
+      setMenu({
+        x: e.clientX,
+        y: e.clientY,
+        instrument,
+        trackKey,
+        hasLowerDifficulties,
+      });
+    },
+    [generatingInstrument],
+  );
+
+  const openRowMenu = useCallback(
+    (
+      e: MouseEvent,
+      instrument: SupportedTrackInstrument,
+      hasLowerDifficulties: boolean,
+    ) => openMenu(e, instrument, null, hasLowerDifficulties),
+    [openMenu],
+  );
+
+  const openCellMenu = useCallback(
+    (
+      e: MouseEvent,
+      trackKey: SupportedTrackKey,
+      hasLowerDifficulties: boolean,
+    ) => openMenu(e, trackKey.instrument, trackKey, hasLowerDifficulties),
+    [openMenu],
+  );
 
   const doc = state.chartDoc;
   const trackData = doc?.parsedChart.trackData ?? [];
@@ -129,6 +182,8 @@ export default function ChartMatrix() {
               onGenerate={() => start(instrument)}
               generateDisabledReason={disabledReason}
               runner={runner}
+              onRowContextMenu={openRowMenu}
+              onCellContextMenu={openCellMenu}
             />
           );
         })}
@@ -168,6 +223,8 @@ export default function ChartMatrix() {
           )}
         </div>
       )}
+
+      {menu && <ChartMatrixContextMenu target={menu} onClose={closeMenu} />}
     </div>
   );
 }

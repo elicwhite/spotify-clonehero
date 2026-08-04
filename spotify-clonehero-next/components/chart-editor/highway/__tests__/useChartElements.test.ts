@@ -27,7 +27,8 @@ import {AddNoteCommand, toSchemaNote} from '../../commands';
 import {markerDragReconcilerKey} from '@/lib/preview/highway/reconcilerKey';
 import type {NoteElementData} from '@/lib/preview/highway/NoteRenderer';
 import type {TrackKey} from '@/lib/chart-edit';
-import {noteTypes} from '@eliwhite/scan-chart';
+import {drumTypes, noteTypes} from '@eliwhite/scan-chart';
+import {drums4LaneSchema, drums5LaneSchema} from '@/lib/chart-edit/instruments';
 
 describe('computeChartElements', () => {
   // Resolution=480, 120 BPM in the fixture: 480 ticks = 500ms. Matches
@@ -471,6 +472,75 @@ describe('computeChartElements', () => {
       expect(data.lane).toBe(-1);
       // Tick preview still applies: 480 ticks → 500ms downstream of tick 0.
       expect(dragged.msTime).toBeCloseTo(500, 5);
+    });
+
+    it('previews a 5-lane drum drag at the 5-lane pad positions', () => {
+      // Regression: the drag resolved its schema with `schemaForInstrument`,
+      // which always answers 4-lane for drums. On a 5-lane chart the notes
+      // are drawn at the 5-lane Xs, so the preview jumped to a position the
+      // renderer never draws a pad at — and a lane index past the 4-lane
+      // schema's four pads could not be reached at all.
+      const doc = makeFixtureDoc();
+      const chart = {
+        ...doc.parsedChart,
+        drumType: drumTypes.fiveLane,
+      };
+      const inputs = {
+        chart,
+        activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
+        partName: 'vocals',
+        capabilities: DRUM_EDIT_CAPABILITIES,
+        markerDrag: null,
+        timedTempos,
+        resolution,
+      };
+
+      const during = computeChartElements({
+        ...inputs,
+        noteDrag: {
+          tickDelta: 0,
+          laneDelta: 1,
+          ids: new Set(['drums:expert|1440:blueDrum']),
+        },
+      });
+      const data = during.find(e => e.key === 'note:1440:blueDrum')!
+        .data as NoteElementData;
+
+      const fiveLanePads = drums5LaneSchema.lanes
+        .filter(lane => !lane.fullWidth)
+        .sort((a, b) => a.index - b.index);
+      expect(fiveLanePads).toHaveLength(5);
+      expect(data.lane).toBe(3);
+      expect(data.xPosition).toBe(fiveLanePads[3].worldXOffset);
+      expect(data.xPosition).not.toBe(
+        drums4LaneSchema.lanes.find(lane => lane.label === 'Green')!
+          .worldXOffset,
+      );
+    });
+
+    it('can drag a 5-lane drum note onto the fifth pad', () => {
+      // Under the 4-lane schema this clamped at the fourth pad.
+      const doc = makeFixtureDoc();
+      const chart = {...doc.parsedChart, drumType: drumTypes.fiveLane};
+      const during = computeChartElements({
+        chart,
+        activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
+        partName: 'vocals',
+        capabilities: DRUM_EDIT_CAPABILITIES,
+        markerDrag: null,
+        noteDrag: {
+          tickDelta: 0,
+          laneDelta: 2,
+          ids: new Set(['drums:expert|1440:blueDrum']),
+        },
+        timedTempos,
+        resolution,
+      });
+      const data = during.find(e => e.key === 'note:1440:blueDrum')!
+        .data as NoteElementData;
+
+      expect(data.lane).toBe(4);
+      expect(data.editorLane).toBe(4);
     });
 
     it('skips the preview when timedTempos is empty', () => {

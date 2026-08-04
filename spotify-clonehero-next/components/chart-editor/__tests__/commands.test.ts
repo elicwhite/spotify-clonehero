@@ -2,7 +2,7 @@
  * Command execute + snapshot-restore tests.
  *
  * Undo is snapshot replay, not command inversion (`ChartEditorContext.tsx`
- * pushes the pre-command doc onto `undoDocStack` and `useUndoRedo`
+ * pushes the pre-command doc onto `undoEntries` and `useUndoRedo`
  * reinstalls it directly — commands have no `undo()` method). So each test
  * here asserts two things: `execute()` produces the expected structural
  * change, and `execute()` never mutates its input doc — which is exactly
@@ -51,7 +51,7 @@ const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
 /**
  * Asserts `execute()` leaves `before` structurally identical to a pristine
  * doc built the same way — i.e. `before` is still a valid pre-edit snapshot
- * for the reducer's `undoDocStack` to restore.
+ * for the reducer's `undoEntries` to restore.
  */
 function expectInputUntouched(
   before: ChartDocument,

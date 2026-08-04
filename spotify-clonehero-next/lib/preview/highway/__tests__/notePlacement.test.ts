@@ -5,8 +5,20 @@
 
 import {noteTypes, noteFlags, type NoteType} from '@eliwhite/scan-chart';
 import {resolveNoteGeometry, padLaneColors} from '../notePlacement';
-import {calculateNoteXOffset} from '../types';
-import {guitarSchema, drums4LaneSchema} from '../../../chart-edit/instruments';
+import {
+  guitarSchema,
+  drums4LaneSchema,
+  type InstrumentSchema,
+} from '../../../chart-edit/instruments';
+
+/** The schema's own X for a pad lane -- the single source of truth every
+ *  expectation below is read against, so a wrong `resolveNoteGeometry` can
+ *  never agree with a second copy of the geometry. */
+function padX(schema: InstrumentSchema, lane: number): number {
+  return schema.lanes
+    .filter(l => !l.fullWidth)
+    .sort((a, b) => a.index - b.index)[lane].worldXOffset;
+}
 
 describe('resolveNoteGeometry', () => {
   describe('drums', () => {
@@ -38,7 +50,7 @@ describe('resolveNoteGeometry', () => {
           editorLane: lane,
           isKick: false,
           isOpen: false,
-          xPosition: calculateNoteXOffset('drums', lane),
+          xPosition: padX(drums4LaneSchema, lane),
         });
       }
     });
@@ -62,9 +74,7 @@ describe('resolveNoteGeometry', () => {
 
   describe('five-fret (guitar)', () => {
     it('uses the visible five-pad hit-area centers for fretted notes', () => {
-      const centers = [0, 1, 2, 3, 4].map(lane =>
-        calculateNoteXOffset('guitar', lane),
-      );
+      const centers = [0, 1, 2, 3, 4].map(lane => padX(guitarSchema, lane));
       [-0.386, -0.193, 0, 0.193, 0.386].forEach((expected, lane) =>
         expect(centers[lane]).toBeCloseTo(expected, 6),
       );
@@ -99,7 +109,7 @@ describe('resolveNoteGeometry', () => {
           editorLane: lane + 1,
           isKick: false,
           isOpen: false,
-          xPosition: calculateNoteXOffset('guitar', lane),
+          xPosition: padX(guitarSchema, lane),
         });
       }
     });
@@ -115,7 +125,7 @@ describe('resolveNoteGeometry', () => {
           editorLane: 2,
           isKick: false,
           isOpen: false,
-          xPosition: calculateNoteXOffset(instrument, 1),
+          xPosition: padX(guitarSchema, 1),
         });
       }
     });

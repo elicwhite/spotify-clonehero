@@ -129,7 +129,16 @@ export default function TransportControls({
     togglePlayPause();
   });
 
-  // Arrow keys are handled by useEditorKeyboard (grid navigation)
+  // Plain arrow keys are handled by useEditorKeyboard (grid navigation).
+  // Mod+Left/Right live here, not there, so they can call the same
+  // jumpToPrevSection/jumpToNextSection handlers the buttons above use.
+  useHotkey('Mod+ArrowLeft', () => {
+    jumpToPrevSection();
+  });
+
+  useHotkey('Mod+ArrowRight', () => {
+    jumpToNextSection();
+  });
 
   useHotkey('[', () => {
     stepSpeed(-1);

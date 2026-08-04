@@ -129,7 +129,7 @@ describe('EditorSession.dispatch capability gate', () => {
     session.dispatch({type: 'EXECUTE_COMMAND', command: cmd, chartDoc: newDoc});
 
     expect(session.getState()).toBe(before);
-    expect(session.getState().undoStack).toHaveLength(0);
+    expect(session.getState().undoEntries).toHaveLength(0);
     expect(notified).toBe(false);
     expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('rejected'));
@@ -145,7 +145,7 @@ describe('EditorSession.dispatch capability gate', () => {
     session.dispatch({type: 'EXECUTE_COMMAND', command: cmd, chartDoc: newDoc});
 
     expect(session.getState()).not.toBe(before);
-    expect(session.getState().undoStack).toHaveLength(1);
+    expect(session.getState().undoEntries).toHaveLength(1);
     expect(session.getState().chartDoc).toBe(newDoc);
   });
 

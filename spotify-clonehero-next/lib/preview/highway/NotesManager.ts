@@ -1,6 +1,10 @@
 import * as THREE from 'three';
-import {Instrument, noteTypes} from '@eliwhite/scan-chart';
-import {schemaForInstrument} from '../../chart-edit/instruments';
+import {DrumType, Instrument, noteTypes} from '@eliwhite/scan-chart';
+import {
+  schemaForInstrument,
+  drumSchemaFor,
+  type InstrumentSchema,
+} from '../../chart-edit/instruments';
 import {EventSequence} from './EventSequence';
 import {
   AnimatedTextureManager,
@@ -52,6 +56,9 @@ export interface NotesDiff {
 export class NotesManager {
   private scene: THREE.Scene;
   private instrument: Instrument;
+  /** Chart-level drum layout. Drum lane X positions differ between 4- and
+   *  5-lane, so note geometry cannot be resolved from the instrument alone. */
+  private drumType: DrumType | null;
   private highwaySpeed: number;
   private clippingPlanes: THREE.Plane[];
   private laneColors: string[] = [];
@@ -83,11 +90,20 @@ export class NotesManager {
     instrument: Instrument,
     highwaySpeed: number,
     clippingPlanes: THREE.Plane[],
+    drumType: DrumType | null = null,
   ) {
     this.scene = scene;
     this.instrument = instrument;
     this.highwaySpeed = highwaySpeed;
     this.clippingPlanes = clippingPlanes;
+    this.drumType = drumType;
+  }
+
+  /** The schema this manager places notes with. */
+  private schema(): InstrumentSchema | null {
+    return this.instrument === 'drums'
+      ? drumSchemaFor(this.drumType)
+      : schemaForInstrument(this.instrument);
   }
 
   // -----------------------------------------------------------------------
@@ -138,12 +154,11 @@ export class NotesManager {
     );
     this.getTextureForNote = getTextureForNote;
 
-    const supportsSustain =
-      schemaForInstrument(this.instrument)?.supportsSustain ?? false;
+    const schema = this.schema();
+    const supportsSustain = schema?.supportsSustain ?? false;
     this.sustainTextures = supportsSustain
       ? await loadHighwaySustainTextures(textureLoader, animatedTextureManager)
       : null;
-    const schema = schemaForInstrument(this.instrument);
     if (schema) {
       const sustainStyle = sustainStyleForSchema(schema);
       this.laneColors = sustainStyle.padColors;
@@ -182,7 +197,11 @@ export class NotesManager {
       const starPower = inStarPowerSection(time);
 
       for (const note of group) {
-        const geometry = resolveNoteGeometry(this.instrument, note);
+        const geometry = resolveNoteGeometry(
+          this.instrument,
+          note,
+          this.drumType,
+        );
         if (!geometry) continue;
 
         prepared.push({

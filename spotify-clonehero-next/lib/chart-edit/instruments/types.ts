@@ -15,8 +15,9 @@
  * consume the same schemas.
  *
  * Highway world-space X positions for each lane live on
- * `LaneDefinition.worldXOffset`; InteractionManager + place-mode logic
- * read them so the schema is the single source of truth for geometry.
+ * `LaneDefinition.worldXOffset`; the renderer, InteractionManager and
+ * place-mode logic all read them, so the schema is the single source of
+ * truth for geometry.
  */
 
 import type {Instrument, NoteType, ParsedChart} from '@eliwhite/scan-chart';
@@ -54,12 +55,13 @@ export interface LaneDefinition {
   variant?: string;
   /**
    * Highway world-space X position (Three.js units) where this lane sits.
-   * Hit-testing and note-placement code consume this so the schema is the
-   * single source of truth for lane geometry. Must stay in sync with
-   * `calculateNoteXOffset` in `lib/preview/highway/types.ts`. Optional
-   * because some lanes (vocals, dance) have no highway position.
+   * The single source of truth for lane geometry: the renderer's notes,
+   * the strikeline frets, and hit-testing all read it, so there is nowhere
+   * else a lane's X can be spelled and no way for two spellings to
+   * disagree. Instruments with no highway (vocals, dance) declare no lanes
+   * at all rather than lanes without a position.
    */
-  worldXOffset?: number;
+  worldXOffset: number;
   /**
    * True for a lane that renders as a single full-width sprite centered on
    * the highway rather than a pad lane (drums' kick, five-fret's open

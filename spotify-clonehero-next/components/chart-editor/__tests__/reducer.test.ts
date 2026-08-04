@@ -41,8 +41,8 @@ describe('chartEditorReducer', () => {
     it('starts with no chart doc and the drums-expert scope', () => {
       expect(initialState.chartDoc).toBeNull();
       expect(initialState.activeScope).toEqual(DEFAULT_DRUMS_EXPERT_SCOPE);
-      expect(initialState.undoStack).toHaveLength(0);
-      expect(initialState.redoStack).toHaveLength(0);
+      expect(initialState.undoEntries).toHaveLength(0);
+      expect(initialState.redoEntries).toHaveLength(0);
       expect(initialState.dirty).toBe(false);
       expect(initialState.selection.size).toBe(0);
     });
@@ -128,11 +128,10 @@ describe('chartEditorReducer', () => {
       );
       const next = chartEditorReducer(seeded, executeAction(cmd, doc));
 
-      expect(next.undoStack).toHaveLength(1);
-      expect(next.undoStack[0]).toBe(cmd);
-      expect(next.undoDocStack).toHaveLength(1);
-      expect(next.undoDocStack[0]).toBe(doc); // pre-execution snapshot
-      expect(next.redoStack).toHaveLength(0);
+      expect(next.undoEntries).toHaveLength(1);
+      expect(next.undoEntries[0].command).toBe(cmd);
+      expect(next.undoEntries[0].doc).toBe(doc); // pre-execution snapshot
+      expect(next.redoEntries).toHaveLength(0);
       expect(next.dirty).toBe(true);
     });
 
@@ -141,18 +140,21 @@ describe('chartEditorReducer', () => {
       const seeded = {
         ...initialState,
         chartDoc: doc,
-        redoStack: [
-          new AddNoteCommand(
-            toSchemaNote({
-              tick: 0,
-              type: noteTypes.kick,
-              length: 0,
-              flags: 0,
-            }),
-            DRUMS_KEY,
-          ),
+        redoEntries: [
+          {
+            command: new AddNoteCommand(
+              toSchemaNote({
+                tick: 0,
+                type: noteTypes.kick,
+                length: 0,
+                flags: 0,
+              }),
+              DRUMS_KEY,
+            ),
+            doc,
+            visible: new Set<string>(),
+          },
         ],
-        redoDocStack: [doc],
       };
       const cmd = new AddNoteCommand(
         toSchemaNote({
@@ -164,8 +166,7 @@ describe('chartEditorReducer', () => {
         DRUMS_KEY,
       );
       const next = chartEditorReducer(seeded, executeAction(cmd, doc));
-      expect(next.redoStack).toHaveLength(0);
-      expect(next.redoDocStack).toHaveLength(0);
+      expect(next.redoEntries).toHaveLength(0);
     });
 
     it('caps the undo stack at UNDO_STACK_CAP (200)', () => {
@@ -187,8 +188,7 @@ describe('chartEditorReducer', () => {
         doc = action.chartDoc;
       }
 
-      expect(state.undoStack).toHaveLength(200);
-      expect(state.undoDocStack).toHaveLength(200);
+      expect(state.undoEntries).toHaveLength(200);
     });
 
     it('returns state unchanged when chartDoc is null', () => {
@@ -230,9 +230,9 @@ describe('chartEditorReducer', () => {
         chartDoc: doc,
       });
 
-      expect(undone.undoStack).toHaveLength(0);
-      expect(undone.redoStack).toHaveLength(1);
-      expect(undone.redoStack[0]).toBe(cmd);
+      expect(undone.undoEntries).toHaveLength(0);
+      expect(undone.redoEntries).toHaveLength(1);
+      expect(undone.redoEntries[0].command).toBe(cmd);
       // chartDoc rolls back to the pre-exec snapshot.
       expect(undone.chartDoc).toBe(doc);
     });
@@ -259,8 +259,8 @@ describe('chartEditorReducer', () => {
         chartDoc: exec.chartDoc!,
       });
 
-      expect(redone.undoStack).toHaveLength(1);
-      expect(redone.redoStack).toHaveLength(0);
+      expect(redone.undoEntries).toHaveLength(1);
+      expect(redone.redoEntries).toHaveLength(0);
       expect(redone.chartDoc).toBe(exec.chartDoc);
     });
 
@@ -590,8 +590,8 @@ describe('chartEditorReducer', () => {
       expect(selectTempoDerivedStale(acked, 'drum-transcription')).toBe(false);
       // The dismissal is not an edit: it leaves the undo history alone, so
       // it can never eat a redo branch the user was about to use.
-      expect(acked.undoStack).toEqual(afterTempoEdit.undoStack);
-      expect(acked.redoStack).toBe(afterTempoEdit.redoStack);
+      expect(acked.undoEntries).toEqual(afterTempoEdit.undoEntries);
+      expect(acked.redoEntries).toBe(afterTempoEdit.redoEntries);
 
       // A further tempo edit moves the current stamp past the ack — stale
       // again.

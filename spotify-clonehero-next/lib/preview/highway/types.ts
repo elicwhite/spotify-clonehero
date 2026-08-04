@@ -14,15 +14,7 @@ export type SelectedTrack = {
 export type Song = {};
 
 export const SCALE = 0.105;
-export const NOTE_SPAN_WIDTH = 0.95;
 
-/**
- * Visible five-fret pad centers in the source-backed fret hitline. The
- * downloaded fret sprites use a wider spacing than the old isolated hitbox;
- * sharing these centers keeps approaching notes aligned with the layered pads.
- */
-const FIVE_FRET_PAD_X_START = -0.386;
-const FIVE_FRET_PAD_X_STEP = 0.193;
 /**
  * Anchor for the visible portion of the full-width open-note texture.
  *
@@ -128,18 +120,3 @@ export type HitResult =
       ms: number;
     }
   | null;
-
-export function calculateNoteXOffset(instrument: Instrument, lane: number) {
-  if (instrument !== 'drums') {
-    return FIVE_FRET_PAD_X_START + FIVE_FRET_PAD_X_STEP * lane;
-  }
-
-  const leftOffset = 0.135;
-
-  return (
-    leftOffset +
-    -(NOTE_SPAN_WIDTH / 2) +
-    SCALE +
-    ((NOTE_SPAN_WIDTH - SCALE) / 5) * lane
-  );
-}

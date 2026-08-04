@@ -408,9 +408,10 @@ function LyricsAlignInner() {
 
       downloadBlob(blob, fileName);
 
-      const manualMoveCount = state.undoStack.filter(
-        cmd =>
-          cmd instanceof MoveEntitiesCommand && LYRIC_MOVE_KINDS.has(cmd.kind),
+      const manualMoveCount = state.undoEntries.filter(
+        ({command}) =>
+          command instanceof MoveEntitiesCommand &&
+          LYRIC_MOVE_KINDS.has(command.kind),
       ).length;
       track({
         event: 'add_lyrics_exported',
@@ -422,7 +423,7 @@ function LyricsAlignInner() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Export failed');
     }
-  }, [chart, state.chartDoc, state.undoStack]);
+  }, [chart, state.chartDoc, state.undoEntries]);
 
   const showEditor = status === 'done' && alignedSyllables.length > 0;
 

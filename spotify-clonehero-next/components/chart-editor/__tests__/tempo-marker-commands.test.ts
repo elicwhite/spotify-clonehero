@@ -6,7 +6,7 @@
  *  - `'audio'` → KEEP-MS: notes keep their wall-clock time, re-tick.
  *
  * Add-on-line is mapping-neutral (no note moves under either mode). Undo is
- * snapshot replay (`undoDocStack`), not command inversion — a remap isn't
+ * snapshot replay (`undoEntries`), not command inversion — a remap isn't
  * closed-form invertible, so each `execute()` must leave its input doc
  * untouched to remain a valid snapshot.
  */

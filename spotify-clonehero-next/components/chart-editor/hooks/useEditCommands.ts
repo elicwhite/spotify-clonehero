@@ -42,36 +42,34 @@ export function useExecuteCommand() {
 /**
  * Hook that provides undo and redo functions.
  *
- * Undo/redo replay the `ChartDocument` snapshots pushed onto
- * undoDocStack/redoDocStack at EXECUTE_COMMAND time — no re-parsing.
- * As with `useExecuteCommand`, the reconciler push is subscription-driven
- * (`useChartElements` reacts to the dispatched doc), so these only dispatch.
+ * Undo/redo replay the `ChartDocument` snapshots carried on the
+ * `undoEntries`/`redoEntries` steps pushed at EXECUTE_COMMAND time — no
+ * re-parsing. As with `useExecuteCommand`, the reconciler push is
+ * subscription-driven (`useChartElements` reacts to the dispatched doc), so
+ * these only dispatch.
  */
 export function useUndoRedo() {
   const {state, dispatch} = useChartEditorContext();
 
   const undo = useCallback(() => {
-    if (state.undoStack.length === 0 || state.undoDocStack.length === 0) return;
-
-    // Snapshots in undoDocStack are the PRE-command ChartDocuments: the
-    // reducer pushes the doc that was current *before* each command applied
-    // (EXECUTE_COMMAND stores `prevDoc`). Undo restores the top one directly,
-    // no re-parsing.
-    const prevDoc = state.undoDocStack[state.undoDocStack.length - 1];
-    dispatch({type: 'UNDO', chartDoc: prevDoc});
-  }, [state.undoStack, state.undoDocStack, dispatch]);
+    // An entry's `doc` is the PRE-command ChartDocument: the reducer stores
+    // the doc that was current *before* that command applied. Undo reinstalls
+    // the top one directly, no re-parsing.
+    const entry = state.undoEntries[state.undoEntries.length - 1];
+    if (!entry) return;
+    dispatch({type: 'UNDO', chartDoc: entry.doc});
+  }, [state.undoEntries, dispatch]);
 
   const redo = useCallback(() => {
-    if (state.redoStack.length === 0 || state.redoDocStack.length === 0) return;
-
-    const redoDoc = state.redoDocStack[state.redoDocStack.length - 1];
-    dispatch({type: 'REDO', chartDoc: redoDoc});
-  }, [state.redoStack, state.redoDocStack, dispatch]);
+    const entry = state.redoEntries[state.redoEntries.length - 1];
+    if (!entry) return;
+    dispatch({type: 'REDO', chartDoc: entry.doc});
+  }, [state.redoEntries, dispatch]);
 
   return {
     undo,
     redo,
-    canUndo: state.undoStack.length > 0,
-    canRedo: state.redoStack.length > 0,
+    canUndo: state.undoEntries.length > 0,
+    canRedo: state.redoEntries.length > 0,
   };
 }

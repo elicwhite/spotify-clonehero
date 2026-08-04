@@ -27,8 +27,9 @@ export class InteractionManager {
   /**
    * Editor lane → world X position, carried wholesale from the schema
    * (array order matches `schema.lanes` order, which is also the "editor
-   * lane" numbering `typeToLane`/`laneToType` use). The renderer's
-   * `calculateNoteXOffset` is what each lane's `worldXOffset` mirrors.
+   * lane" numbering `typeToLane`/`laneToType` use). `worldXOffset` is the
+   * only place a lane's X is spelled, so a hit target can never land
+   * somewhere the renderer did not draw the lane.
    */
   private laneXPositions: Array<{lane: number; x: number}>;
 
@@ -107,18 +108,25 @@ export class InteractionManager {
     this.highwaySpeed = highwaySpeed;
     this.getElapsedMs = getElapsedMs;
     this.schema = schema;
-    const nearestLaneCandidates = schema.lanes.filter(
-      lane => !lane.fullWidth || schema.instrument === 'drums',
-    );
-    this.laneXPositions = nearestLaneCandidates.map(l => {
-      if (l.worldXOffset === undefined) {
-        throw new Error(
-          `${schema.instrument} schema lane ${l.index} (${l.label}) is missing worldXOffset`,
-        );
-      }
-      return {lane: l.index, x: l.worldXOffset};
-    });
-    this.fullWidthLane = schema.lanes.findIndex(l => l.fullWidth);
+    // Drums are the one instrument whose full-width lane (kick) is also a
+    // pointer target: aiming at the highway's center means "kick".
+    //
+    // Pad lanes come first, and `worldXToLane` keeps the first of an equal
+    // pair, so a pad always wins a tie against the kick. That decides 5-lane
+    // drums, where the middle pad shares the kick's center X: without the
+    // ordering the kick would shadow blue on every click, and blue is the
+    // lane a pointer can actually express.
+    const nearestLaneCandidates = [
+      ...schema.lanes.filter(lane => !lane.fullWidth),
+      ...schema.lanes.filter(
+        lane => lane.fullWidth && schema.instrument === 'drums',
+      ),
+    ];
+    this.laneXPositions = nearestLaneCandidates.map(l => ({
+      lane: l.index,
+      x: l.worldXOffset,
+    }));
+    this.fullWidthLane = schema.lanes.find(l => l.fullWidth)?.index ?? -1;
     this.highwayHalfWidth = schema.highwayWidth / 2;
   }
 
@@ -590,7 +598,12 @@ export class InteractionManager {
     return this.intersectHighwayPlaneLocal();
   }
 
-  /** Find the closest lane index for a world X coordinate. */
+  /**
+   * Find the closest lane index for a world X coordinate. Strict `<` keeps
+   * the earlier of two equidistant candidates, and the constructor orders
+   * `laneXPositions` pads-first, so a pad beats the full-width lane whenever
+   * they share an X (5-lane drums).
+   */
   private worldXToLane(worldX: number): number {
     let bestLane = this.fullWidthLane >= 0 ? this.fullWidthLane : 0;
     let bestDist = Infinity;

@@ -102,6 +102,10 @@ import {
 } from '@/lib/drum-transcription/pipeline/repredict';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
 import {useChartEditorContext} from '../ChartEditorContext';
+import ContextMenuPopover, {
+  useDismissOnOutsidePointerDown,
+  type ContextMenuItem,
+} from '../ContextMenuPopover';
 import {getSelectedIds, selectRenderDoc} from '@/lib/chart-editor-core';
 import {
   entityContextFromScope,
@@ -321,17 +325,10 @@ type PointerMode =
   | 'resize';
 
 /** One entry in a right-click context menu (§10). */
-interface MenuItem {
-  label: string;
-  disabled?: boolean;
-  /** Renders in the destructive (red) style. */
-  danger?: boolean;
-  /** Radio-style checkmark (waveform source picker, §11). */
-  checked?: boolean;
-  onSelect: () => void;
-}
+type MenuItem = ContextMenuItem;
 
-/** Open context-menu state (note lane or tempo lane, §7/§8/§10). */
+/** Open context-menu state (note lane or tempo lane, §7/§8/§10).
+ *  `x`/`y` are canvas-local, matching the popover's `absolute` anchor. */
 interface MenuState {
   x: number;
   y: number;
@@ -611,6 +608,7 @@ export default function PianoRollTimeline({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
 
   // -- Inline text editor: the lyrics row's "Edit lyric…"/"Add lyric…" and
   // the section strip's rename/add all open a small positioned <input> over
@@ -3549,21 +3547,13 @@ export default function PianoRollTimeline({
       }
     };
     window.addEventListener('keydown', onKeyDown, {capture: true});
-    if (!menu) {
-      return () =>
-        window.removeEventListener('keydown', onKeyDown, {capture: true});
-    }
-    const onDown = () => setMenu(null);
-    // Defer so the opening right-click doesn't immediately dismiss it.
-    const t = window.setTimeout(() => {
-      window.addEventListener('pointerdown', onDown, {once: true});
-    }, 0);
-    return () => {
+    return () =>
       window.removeEventListener('keydown', onKeyDown, {capture: true});
-      window.removeEventListener('pointerdown', onDown);
-      window.clearTimeout(t);
-    };
   }, [menu, cancelInFlightGesture]);
+
+  // The outside-click half of dismissal is the plain shared one; only Escape
+  // needs this panel's tier logic above.
+  useDismissOnOutsidePointerDown(menu !== null, closeMenu);
 
   // -- Structural tempo correction control (61-7) ----------------------------
   // The preview state is DERIVED from the one store: a structural candidate is
@@ -3800,33 +3790,12 @@ export default function PianoRollTimeline({
           </div>
         )}
         {menu && (
-          <div
-            className="absolute z-50 min-w-[160px] rounded-md border border-border bg-popover py-1 text-sm text-popover-foreground shadow-md"
-            style={{left: menu.x, top: menu.y}}
-            onPointerDown={e => e.stopPropagation()}>
-            {menu.items.map((item, i) => (
-              <button
-                key={i}
-                type="button"
-                disabled={item.disabled}
-                className={cn(
-                  'block w-full px-3 py-1.5 text-left hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
-                  item.danger && 'text-red-400',
-                )}
-                onClick={() => {
-                  if (item.disabled) return;
-                  item.onSelect();
-                  setMenu(null);
-                }}>
-                {item.checked !== undefined && (
-                  <span className="mr-1.5 inline-block w-2 text-accent-foreground">
-                    {item.checked ? '✓' : ''}
-                  </span>
-                )}
-                {item.label}
-              </button>
-            ))}
-          </div>
+          <ContextMenuPopover
+            x={menu.x}
+            y={menu.y}
+            items={menu.items}
+            onAfterSelect={closeMenu}
+          />
         )}
         {/* Lyrics row inline text editor (Round 2 §2): "Edit lyric…" / "Add
             lyric…" position a small `<input>` over the canvas rather than a

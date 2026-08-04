@@ -32,7 +32,13 @@ export default function SectionHeading({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <h3 className="text-[var(--ed-text-label,0.6875rem)] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+      {/* The `length:` hint is load-bearing. `text-*` is ambiguous in
+       *  Tailwind (font size or text colour) and a bare `var()` carries no
+       *  type, so Tailwind resolves `text-[var(--x)]` to the colour plugin
+       *  and emits `color:` with no `font-size:` at all. The hint pins it to
+       *  the font-size plugin. See the compiled-CSS assertions in
+       *  `__tests__/sidebar-typography.test.tsx`. */}
+      <h3 className="text-[length:var(--ed-text-label,0.6875rem)] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
         {title}
       </h3>
       {children}

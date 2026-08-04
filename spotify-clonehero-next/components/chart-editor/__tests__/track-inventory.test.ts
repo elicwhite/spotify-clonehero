@@ -1,5 +1,5 @@
 import {parseChartFile, writeChartFolder} from '@eliwhite/scan-chart';
-import {AddTrackCommand} from '../commands';
+import {AddTrackCommand, DeleteInstrumentCommand} from '../commands';
 import {makeFixtureDoc} from './fixtures';
 import {chartEditorReducer, initialState} from '@/lib/chart-editor-core';
 import type {TrackKey} from '@/lib/chart-edit';
@@ -74,8 +74,7 @@ describe('track View state and scope recovery', () => {
     const focused = {
       ...initialState,
       chartDoc: added,
-      undoStack: [command],
-      undoDocStack: [source],
+      undoEntries: [{command, doc: source, visible: new Set<string>()}],
       activeScope: {
         kind: 'track' as const,
         track: {instrument: 'guitar' as const, difficulty: 'expert' as const},
@@ -234,6 +233,115 @@ describe('track View state and scope recovery', () => {
       });
 
       expect(shown.visibleTrackKeys).toEqual(new Set(['drums:expert']));
+    });
+  });
+
+  // The at-least-one-visible invariant lives in the reducer's
+  // `reconcileVisibleTracks`, so it holds for every doc-replacing action
+  // rather than for the one UI that happens to delete tracks. These pin it at
+  // that layer; `chart-matrix-context-menu.test.tsx` covers the user-facing
+  // path through the Chart Matrix's delete menu.
+  describe('a doc change that empties the visible set falls back', () => {
+    /** Drums Expert loaded, plus a guitar Expert added and made visible. */
+    function twoVisibleTracks() {
+      const loaded = chartEditorReducer(initialState, {
+        type: 'SET_CHART_DOC',
+        chartDoc: makeFixtureDoc(),
+      });
+      const guitarKey: TrackKey = {instrument: 'guitar', difficulty: 'expert'};
+      const add = new AddTrackCommand(guitarKey);
+      const added = chartEditorReducer(loaded, {
+        type: 'EXECUTE_COMMAND',
+        command: add,
+        chartDoc: add.execute(loaded.chartDoc!),
+      });
+      return chartEditorReducer(added, {
+        type: 'SET_TRACK_VISIBILITY',
+        track: guitarKey,
+        visible: true,
+      });
+    }
+
+    it('shows the preferred remaining track when a command removes every visible one', () => {
+      const before = twoVisibleTracks();
+      const onlyGuitarVisible = chartEditorReducer(before, {
+        type: 'SET_TRACK_VISIBILITY',
+        track: {instrument: 'drums', difficulty: 'expert'},
+        visible: false,
+      });
+      expect(onlyGuitarVisible.visibleTrackKeys).toEqual(
+        new Set(['guitar:expert']),
+      );
+
+      const remove = new DeleteInstrumentCommand('guitar');
+      const after = chartEditorReducer(onlyGuitarVisible, {
+        type: 'EXECUTE_COMMAND',
+        command: remove,
+        chartDoc: remove.execute(onlyGuitarVisible.chartDoc!),
+      });
+
+      expect(after.visibleTrackKeys).toEqual(new Set(['drums:expert']));
+    });
+
+    it('leaves an intentionally empty visible set alone', () => {
+      const before = twoVisibleTracks();
+      let hidden = before;
+      for (const instrument of ['drums', 'guitar'] as const) {
+        hidden = chartEditorReducer(hidden, {
+          type: 'SET_TRACK_VISIBILITY',
+          track: {instrument, difficulty: 'expert'},
+          visible: false,
+        });
+      }
+      expect(hidden.visibleTrackKeys).toEqual(new Set());
+
+      const remove = new DeleteInstrumentCommand('guitar');
+      const after = chartEditorReducer(hidden, {
+        type: 'EXECUTE_COMMAND',
+        command: remove,
+        chartDoc: remove.execute(hidden.chartDoc!),
+      });
+
+      expect(after.visibleTrackKeys).toEqual(new Set());
+    });
+
+    it('does not force a fallback while another visible track survives', () => {
+      const before = twoVisibleTracks();
+      expect(before.visibleTrackKeys).toEqual(
+        new Set(['drums:expert', 'guitar:expert']),
+      );
+
+      const remove = new DeleteInstrumentCommand('guitar');
+      const after = chartEditorReducer(before, {
+        type: 'EXECUTE_COMMAND',
+        command: remove,
+        chartDoc: remove.execute(before.chartDoc!),
+      });
+
+      expect(after.visibleTrackKeys).toEqual(new Set(['drums:expert']));
+    });
+
+    it('undo puts the deleted track back on screen instead of keeping the fallback', () => {
+      const before = twoVisibleTracks();
+      const onlyGuitarVisible = chartEditorReducer(before, {
+        type: 'SET_TRACK_VISIBILITY',
+        track: {instrument: 'drums', difficulty: 'expert'},
+        visible: false,
+      });
+      const remove = new DeleteInstrumentCommand('guitar');
+      const after = chartEditorReducer(onlyGuitarVisible, {
+        type: 'EXECUTE_COMMAND',
+        command: remove,
+        chartDoc: remove.execute(onlyGuitarVisible.chartDoc!),
+      });
+      expect(after.visibleTrackKeys).toEqual(new Set(['drums:expert']));
+
+      const undone = chartEditorReducer(after, {
+        type: 'UNDO',
+        chartDoc: after.undoEntries[after.undoEntries.length - 1].doc,
+      });
+
+      expect(undone.visibleTrackKeys).toEqual(new Set(['guitar:expert']));
     });
   });
 });

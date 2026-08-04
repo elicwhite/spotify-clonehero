@@ -38,8 +38,6 @@ export {
   type HitResult,
   type PreparedNote,
   SCALE,
-  NOTE_SPAN_WIDTH,
-  calculateNoteXOffset,
 } from './types';
 export {NotesManager, type NotesDiff} from './NotesManager';
 export {areAnimationsSupported} from './TextureManager';

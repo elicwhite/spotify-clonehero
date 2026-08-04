@@ -162,12 +162,18 @@
    * the component's own classes. Tailwind-merge still wins the normal
    * way — a caller passing its own `h-*`/`p-*` drops the token class.
    *
+   * Ambiguous utilities need a CSS data-type hint when the arbitrary
+   * value is a bare `var()`: `text-*` is font size or text colour, and
+   * Tailwind resolves an untyped `var()` to the colour plugin, so
+   * `text-[var(--ed-text-label)]` compiles to `color:` and sets no font
+   * size at all. Spend `text-[length:var(--ed-text-label,...)]`.
+   *
    * `--radius` is the one standard token restated here: shadcn's
    * `rounded-*` utilities and component classes already read it, so
    * scoping it compacts corners everywhere for free.
    */
   :root[data-density='compact'] {
-    --ed-text-label: 0.65625rem; /* 10.5px, prototype `.sec-head h3` */
+    --ed-text-label: 0.6875rem; /* 11px, prototype `.sec-head h3` */
     --ed-gap-section: 0.5rem; /* 8px, between a section rule and its body */
     --ed-pad-card: 0.625rem; /* 10px, assist card padding */
     --ed-pad-section: 0.75rem; /* 12px, sidebar padding and section gap */

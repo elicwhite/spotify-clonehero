@@ -23,7 +23,7 @@
  */
 
 import {useEffect, type RefObject} from 'react';
-import type {parseChartFile} from '@eliwhite/scan-chart';
+import type {DrumType, Instrument, parseChartFile} from '@eliwhite/scan-chart';
 import type {
   ChartElement,
   SceneReconciler,
@@ -42,7 +42,11 @@ import {tickToMs} from '@/lib/drum-transcription/timing';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {buildProjectionFor} from '@/lib/preview/highway/projection';
 import type {NoteElementData} from '@/lib/preview/highway/NoteRenderer';
-import {schemaForInstrument} from '@/lib/chart-edit/instruments';
+import {
+  drumSchemaFor,
+  schemaForInstrument,
+  type InstrumentSchema,
+} from '@/lib/chart-edit/instruments';
 import {
   markerDragReconcilerKey,
   reconcilerKeyFor,
@@ -110,6 +114,19 @@ export interface ComputeChartElementsInputs {
   noteDrag: NoteDragHint | null;
   timedTempos: TimedTempo[];
   resolution: number;
+}
+
+/**
+ * The lane schema for an `EditorScope`'s track. Scopes carry a `TrackKey`
+ * (instrument + difficulty), not the parsed track, so the drum layout has to
+ * come from the chart alongside it.
+ */
+function laneSchemaFor(
+  instrument: Instrument,
+  drumType: DrumType | null | undefined,
+): InstrumentSchema | null {
+  if (instrument === 'drums') return drumSchemaFor(drumType);
+  return schemaForInstrument(instrument);
 }
 
 /**
@@ -181,9 +198,14 @@ export function computeChartElements(
     noteDrag && timedTempos.length > 0
       ? new Set(noteDragIds.map(id => reconcilerKeyFor('note', id)))
       : null;
+  // Resolved with the chart's `drumType`, not from the instrument alone:
+  // `schemaForInstrument` always answers 4-lane for drums, and a lateral drag
+  // resolved against the wrong drum schema previews the note at an X the
+  // renderer never draws it at -- or, for a fifth-pad note that has no 4-lane
+  // lane at all, silently does nothing.
   const noteSchema =
     activeScope.kind === 'track'
-      ? schemaForInstrument(activeScope.track.instrument)
+      ? laneSchemaFor(activeScope.track.instrument, chart.drumType)
       : null;
   const padLanes =
     noteSchema?.lanes
@@ -234,7 +256,7 @@ export function computeChartElements(
             ...data,
             lane: newPadIndex,
             editorLane: newLaneDefinition.index,
-            xPosition: newLaneDefinition.worldXOffset ?? data.xPosition,
+            xPosition: newLaneDefinition.worldXOffset,
             note: {...data.note, type: newLaneDefinition.noteType},
           } satisfies NoteElementData,
         };

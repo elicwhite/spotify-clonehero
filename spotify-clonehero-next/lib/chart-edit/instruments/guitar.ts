@@ -14,15 +14,12 @@ import type {Instrument} from '@eliwhite/scan-chart';
 import {noteTypes} from '@eliwhite/scan-chart';
 import type {InstrumentSchema, LaneDefinition} from './types';
 
-// World-space X coordinates for the five-fret highway. Mirrors the formula
-// in `lib/preview/highway/types.ts:calculateNoteXOffset('guitar', i)`,
-// where `i` is the pad-lane index (open excluded, matching
-// `notePlacement.ts`'s `padLanes(schema)` order). Kept as data on the
-// schema so InteractionManager + place-mode logic can resolve "lane →
-// world X" without recomputing geometry. Update both when the renderer's
-// lane spacing changes.
-// These values mirror the five visible pad centers in the source-backed
-// layered fret hitline. Keep them in sync with highway/types.ts.
+// World-space X coordinates for the five-fret highway, and the only place
+// they are spelled: everything that places five-fret geometry (renderer
+// notes, strikeline frets, hit targets) reads `worldXOffset` off these lanes.
+// `i` is the pad-lane index (open excluded, matching `notePlacement.ts`'s
+// `padLanes(schema)` order). The values are the five visible pad centers in
+// the source-backed layered fret hitline.
 const FRET_X = (i: number): number => -0.386 + 0.193 * i;
 const OPEN_X = 0; // open centers on the highway, like kick
 

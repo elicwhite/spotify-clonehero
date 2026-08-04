@@ -223,7 +223,7 @@ export async function buildHighwayCell(
   const fretConfig =
     fretLanes && (fretLanes.length === 4 || fretLanes.length === 5)
       ? {
-          laneXs: fretLanes.map(lane => lane.worldXOffset ?? 0),
+          laneXs: fretLanes.map(lane => lane.worldXOffset),
           laneColors: fretLanes.map(lane => lane.color),
         }
       : null;

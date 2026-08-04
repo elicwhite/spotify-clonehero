@@ -3,10 +3,15 @@ import * as THREE from 'three';
 import type {ParsedChart} from '../chorus-chart-processing';
 import {ChartResponseEncore} from '../../chartSelection';
 import {AudioManager} from '../audioManager';
-import {schemaForTrack, drums4LaneSchema} from '../../chart-edit/instruments';
+import {
+  schemaForTrack,
+  drums4LaneSchema,
+  type InstrumentSchema,
+} from '../../chart-edit/instruments';
 import {
   createWaveformSurface,
   createGridOverlay,
+  LANES_OFF_HIGHWAY_WIDTH,
   type HighwayMode,
 } from './HighwayScene';
 import type {WaveformSurface, WaveformSurfaceConfig} from './WaveformSurface';
@@ -26,6 +31,7 @@ import {
   type HighwayClippingPlanes,
 } from './cell';
 import {toGlRect, type HighwayRect, type StageLayout} from './layout';
+import {computeHighwayCameraFit, HIGHWAY_CAMERA} from './cameraFit';
 import {acquireRenderer, releaseRenderer} from './rendererRegistry';
 import type {Track} from './types';
 
@@ -167,11 +173,16 @@ interface StageContext {
 }
 
 function makeCamera(worldX: number): THREE.PerspectiveCamera {
-  const camera = new THREE.PerspectiveCamera(90, 1 / 1, 0.01, 10);
+  const camera = new THREE.PerspectiveCamera(
+    HIGHWAY_CAMERA.fovDeg,
+    1 / 1,
+    0.01,
+    10,
+  );
   camera.position.x = worldX;
-  camera.position.z = 0.8;
-  camera.position.y = -1.3;
-  camera.rotation.x = THREE.MathUtils.degToRad(60);
+  camera.position.z = HIGHWAY_CAMERA.z;
+  camera.position.y = HIGHWAY_CAMERA.y;
+  camera.rotation.x = THREE.MathUtils.degToRad(HIGHWAY_CAMERA.pitchDeg);
   return camera;
 }
 
@@ -196,6 +207,16 @@ class StageHighway implements StageHighwayHandle {
   readonly ready: Promise<void>;
   /** DOM-space rect from the last `setLayout`; null until one arrives. */
   rect: HighwayRect | null = null;
+
+  /**
+   * Half this highway's floor width in world units, from the track's schema.
+   * Resolved in the constructor rather than in `build()`: a rect can be seeded
+   * before the cell finishes building, and the camera fit needs the width the
+   * moment the first rect lands.
+   */
+  private readonly halfWidth: number;
+  /** The track's schema; null for scopes with no notes track. */
+  private readonly schema: InstrumentSchema | null;
 
   private readonly ctx: StageContext;
   private disposed = false;
@@ -226,6 +247,13 @@ class StageHighway implements StageHighwayHandle {
     this.ctx = ctx;
     this.id = id;
     this.slot = slot;
+
+    // Lanes-off scopes (vocals/global) draw the neutral floor at the drum
+    // width, so they fit against that same width.
+    this.schema = opts.track
+      ? schemaForTrack(opts.track, ctx.chart.drumType)
+      : null;
+    this.halfWidth = (this.schema?.highwayWidth ?? LANES_OFF_HIGHWAY_WIDTH) / 2;
 
     const worldX = slot * HIGHWAY_ROOT_SPACING;
     const layerIndex = layerForSlot(slot);
@@ -279,10 +307,7 @@ class StageHighway implements StageHighwayHandle {
     // and lanes-off (lyrics) modes. With no track, geometry falls back to
     // the 4-lane drum schema: nothing renders through it, but both classes
     // need some valid lane geometry to construct.
-    const schema = opts.track
-      ? schemaForTrack(opts.track, ctx.chart.drumType)
-      : null;
-    const overlaySchema = schema ?? drums4LaneSchema;
+    const overlaySchema = this.schema ?? drums4LaneSchema;
     this.sceneOverlays = new SceneOverlays(
       this.root,
       HIGHWAY_SPEED,
@@ -394,11 +419,33 @@ class StageHighway implements StageHighwayHandle {
     this.interactionManager?.setTimingData(timedTempos, resolution);
   }
 
-  /** Set this highway's viewport rect and the camera aspect that matches it. */
+  /**
+   * Set this highway's viewport rect, the camera aspect that matches it, and
+   * the fit that keeps the whole highway inside that rect.
+   *
+   * `setViewOffset` overwrites `camera.aspect` with `fullWidth / fullHeight`,
+   * so the virtual frame is sized `aspect * 2` by `2`: it restates the aspect
+   * unchanged, and its 2-unit height makes `offsetY` read directly in NDC.
+   */
   setRect(rect: HighwayRect | null): void {
     this.rect = rect;
     if (rect && rect.width > 0 && rect.height > 0) {
-      this.camera.aspect = rect.width / rect.height;
+      const aspect = rect.width / rect.height;
+      const fit = computeHighwayCameraFit({aspect, halfWidth: this.halfWidth});
+      this.camera.aspect = aspect;
+      this.camera.fov = fit.fovDeg;
+      if (fit.ndcShiftY !== 0) {
+        this.camera.setViewOffset(
+          aspect * 2,
+          2,
+          0,
+          fit.ndcShiftY,
+          aspect * 2,
+          2,
+        );
+      } else {
+        this.camera.clearViewOffset();
+      }
       this.camera.updateProjectionMatrix();
     }
   }

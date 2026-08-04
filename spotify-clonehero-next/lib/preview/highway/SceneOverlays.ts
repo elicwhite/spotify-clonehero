@@ -65,6 +65,43 @@ function createCrosshairLabelTexture(
   return texture;
 }
 
+/**
+ * The horizontal band the eraser highlights for a lane: halfway to the
+ * nearest lane on each side, or out to the highway edge when there is none.
+ *
+ * Neighbors are found by strict comparison rather than by position in a
+ * sorted list, because two lanes can legitimately share an X (5-lane drums
+ * put the middle pad on the kick's center) and looking a position up by
+ * value finds whichever entry sorted first, which collapses the band of the
+ * other one to zero width.
+ */
+export function eraserBand(
+  laneX: number,
+  laneXs: readonly number[],
+  highwayHalfWidth: number,
+): {centerX: number; width: number} {
+  let leftNeighborX = -Infinity;
+  let rightNeighborX = Infinity;
+  for (const x of laneXs) {
+    if (x < laneX && x > leftNeighborX) leftNeighborX = x;
+    if (x > laneX && x < rightNeighborX) rightNeighborX = x;
+  }
+
+  const leftBoundX =
+    leftNeighborX === -Infinity
+      ? -highwayHalfWidth
+      : (leftNeighborX + laneX) / 2;
+  const rightBoundX =
+    rightNeighborX === Infinity
+      ? highwayHalfWidth
+      : (laneX + rightNeighborX) / 2;
+
+  return {
+    centerX: (leftBoundX + rightBoundX) / 2,
+    width: rightBoundX - leftBoundX,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // SceneOverlays
 // ---------------------------------------------------------------------------
@@ -164,15 +201,11 @@ export class SceneOverlays {
     this.highwaySpeed = highwaySpeed;
     this.clippingPlanes = clippingPlanes;
     this.numLanes = schema.lanes.length;
-    this.laneXPositions = schema.lanes.map(l => {
-      if (l.worldXOffset === undefined) {
-        throw new Error(
-          `${schema.instrument} schema lane ${l.index} (${l.label}) is missing worldXOffset`,
-        );
-      }
-      return l.worldXOffset;
-    });
-    this.laneColorsHex = schema.lanes.map(l =>
+    // Both arrays are addressed by editor lane number (`state.hoverLane`), so
+    // they are ordered by `lane.index` rather than by array position.
+    const lanesByIndex = schema.lanes.slice().sort((a, b) => a.index - b.index);
+    this.laneXPositions = lanesByIndex.map(l => l.worldXOffset);
+    this.laneColorsHex = lanesByIndex.map(l =>
       Number.parseInt(l.color.replace(/^#/, ''), 16),
     );
     this.highwayHalfWidth = schema.highwayWidth / 2;
@@ -428,21 +461,11 @@ export class SceneOverlays {
       return;
     }
 
-    const laneX = this.laneXPositions[state.hoverLane];
-    const sortedLaneXs = this.laneXPositions.slice().sort((a, b) => a - b);
-    const sortedIdx = sortedLaneXs.indexOf(laneX);
-
-    const leftBoundX =
-      sortedIdx === 0
-        ? -this.highwayHalfWidth
-        : (sortedLaneXs[sortedIdx - 1] + laneX) / 2;
-    const rightBoundX =
-      sortedIdx === sortedLaneXs.length - 1
-        ? this.highwayHalfWidth
-        : (laneX + sortedLaneXs[sortedIdx + 1]) / 2;
-
-    const width = rightBoundX - leftBoundX;
-    const centerX = (leftBoundX + rightBoundX) / 2;
+    const {centerX, width} = eraserBand(
+      this.laneXPositions[state.hoverLane],
+      this.laneXPositions,
+      this.highwayHalfWidth,
+    );
 
     if (!this.eraserHighlight) {
       const geometry = new THREE.PlaneGeometry(1, 3.5);

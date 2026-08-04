@@ -118,7 +118,7 @@ describe('preview → accept (plan 0061 §7)', () => {
     // The commit clears the preview channel (invalidation rule).
     expect(state.pendingTempoCandidate).toBeNull();
     // One undo entry restores the pre-commit doc.
-    expect(state.undoDocStack[state.undoDocStack.length - 1]).toBe(base);
+    expect(state.undoEntries[state.undoEntries.length - 1].doc).toBe(base);
   });
 });
 
@@ -143,7 +143,7 @@ describe('preview → reject (plan 0061 §7)', () => {
     expect(state.pendingTempoCandidate).toBeNull();
     // The committed doc never changed — same object, no snapshot pushed.
     expect(state.chartDoc).toBe(base);
-    expect(state.undoStack).toHaveLength(0);
+    expect(state.undoEntries).toHaveLength(0);
     expect(state.dirty).toBe(false);
   });
 });

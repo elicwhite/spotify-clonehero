@@ -137,7 +137,8 @@ function activeNoteIds(
  * @tanstack/react-hotkeys `useHotkey` for declarative, composable bindings.
  *
  * Generic shortcuts (shared across all editor pages):
- * - Grid navigation (Up/Down/Left/Right arrows = grid step, Mod+arrows = measure)
+ * - Grid navigation (Up/Down/Left/Right arrows = grid step, Mod+Up/Down =
+ *   measure; Mod+Left/Right = section, bound in TransportControls)
  * - Lane keys (0-5 in Place mode = place/toggle note at cursor)
  * - Tool selection (Mod+1/2/6 always, 1/2/6 when not in Place mode)
  * - Note flags (Q, A, S)
@@ -523,7 +524,10 @@ export function useEditorKeyboard(onSave?: () => void) {
   );
 
   // -----------------------------------------------------------------------
-  // Measure navigation (Mod+arrows)
+  // Measure navigation (Mod+Up/Down). Mod+Left/Right is section navigation
+  // instead, bound in TransportControls alongside its skip-back/skip-forward
+  // buttons (same target computation, same handler) since that's what the
+  // transport's tooltips advertise for those keys.
   // -----------------------------------------------------------------------
   useHotkey('Mod+ArrowUp', () => {
     if (state.isPlaying || !state.chartDoc) return;
@@ -538,23 +542,6 @@ export function useEditorKeyboard(onSave?: () => void) {
     seekToTick(newTick);
   });
 
-  useHotkey(
-    'Mod+ArrowRight',
-    () => {
-      if (state.isPlaying || !state.chartDoc) return;
-      const baseTick = getCursorFromAudio();
-      const newTick = getNextMeasureTick(
-        baseTick,
-        1,
-        state.chartDoc.parsedChart.resolution,
-        state.chartDoc.parsedChart.timeSignatures,
-      );
-      dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
-      seekToTick(newTick);
-    },
-    {conflictBehavior: 'allow'},
-  );
-
   useHotkey('Mod+ArrowDown', () => {
     if (state.isPlaying || !state.chartDoc) return;
     const baseTick = getCursorFromAudio();
@@ -567,23 +554,6 @@ export function useEditorKeyboard(onSave?: () => void) {
     dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
     seekToTick(newTick);
   });
-
-  useHotkey(
-    'Mod+ArrowLeft',
-    () => {
-      if (state.isPlaying || !state.chartDoc) return;
-      const baseTick = getCursorFromAudio();
-      const newTick = getNextMeasureTick(
-        baseTick,
-        -1,
-        state.chartDoc.parsedChart.resolution,
-        state.chartDoc.parsedChart.timeSignatures,
-      );
-      dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
-      seekToTick(newTick);
-    },
-    {conflictBehavior: 'allow'},
-  );
 
   // -----------------------------------------------------------------------
   // Grid snap shortcuts (Shift+number)

@@ -44,7 +44,7 @@ describe('section drag: command parity with the highway', () => {
     );
 
     // execute() must leave its input doc untouched — that's what makes it a
-    // valid snapshot for the reducer's `undoDocStack` to restore.
+    // valid snapshot for the reducer's `undoEntries` to restore.
     expect(normalizeDoc(doc)).toEqual(normalizeDoc(makeFixtureDoc()));
   });
 

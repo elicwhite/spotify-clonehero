@@ -3,7 +3,7 @@
  *
  * All mutations to the chart go through commands. Undo/redo is snapshot
  * replay: the reducer pushes the pre-command `ChartDocument` onto
- * `undoDocStack` at dispatch time and `useUndoRedo` reinstalls docs directly
+ * `undoEntries` at dispatch time and `useUndoRedo` reinstalls docs directly
  * (`hooks/useEditCommands.ts`) — commands only ever need `execute()`.
  *
  * Commands are immutable -- execute() returns new state rather than
@@ -112,8 +112,10 @@ import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
 import {applyAlignedLyricsToDoc} from '@/lib/lyrics-align/apply-lyrics';
 import {
   LOWER_TRACK_DIFFICULTIES,
+  TRACK_DIFFICULTIES,
   trackKeyId,
   type SupportedTrackInstrument,
+  type SupportedTrackKey,
   type TrackKeyId,
 } from '@/lib/chart-editor-core/trackInventory';
 import type {
@@ -786,7 +788,7 @@ export class ToggleKickCommand implements EditCommand {
  * grid (notes keep ticks and ride the moving grid via `retimeChart`). The BPM
  * is format-quantized at edit time (plan 0061 §2).
  *
- * Undo restores the pre-edit snapshot (`undoDocStack`) — a KEEP-MS remap
+ * Undo restores the pre-edit snapshot (`undoEntries`) — a KEEP-MS remap
  * quantizes/nudges notes and is not invertible in closed form, so whole-doc
  * restore is the safe inverse (plan 0061 Risks), matching the other tempo
  * commands.
@@ -1643,7 +1645,7 @@ export interface ReplaceDrumTrackOptions {
  * against already has one (transcription always builds/loads onto an
  * existing Drums Expert track).
  *
- * Undo restores the pre-edit snapshot (`undoDocStack`) — transcription
+ * Undo restores the pre-edit snapshot (`undoEntries`) — transcription
  * output doesn't invert in closed form, so whole-doc restore is the safe
  * inverse, matching `ReplaceLyricsCommand`/the tempo commands.
  */
@@ -1784,7 +1786,7 @@ export function hasExistingLyrics(
 /**
  * Replace the chart's `vocals` part with freshly-aligned lyrics (Add Lyrics
  * dialog, plan 0063 Part C). Undo restores the pre-edit snapshot
- * (`undoDocStack`) — the aligned syllables don't invert in closed form.
+ * (`undoEntries`) — the aligned syllables don't invert in closed form.
  */
 export class ReplaceLyricsCommand implements EditCommand {
   readonly description = 'Add lyrics';
@@ -1985,7 +1987,7 @@ function timedRanges<T extends DifficultyTierRange>(
  * `AddTrackCommand`); `affectedTracks` is the three lower `TrackKey`s —
  * NOT the Expert track, which this command reads but never writes.
  *
- * Undo restores the pre-edit snapshot (`undoDocStack`) — matching every
+ * Undo restores the pre-edit snapshot (`undoEntries`) — matching every
  * other assist-generation command here.
  */
 export class GenerateDifficultiesCommand implements EditCommand {
@@ -2061,6 +2063,58 @@ export class GenerateDifficultiesCommand implements EditCommand {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Track deletion — Chart Matrix right-click context menu (plan 0077 item 6).
+// OWNER OVERRIDE (2026-08-04): the plan originally made difficulty deletion
+// set-only (`DeleteLowerDifficultiesCommand`); this reintroduces deleting
+// exactly one difficulty, on top of the set-shaped delete and a new
+// whole-instrument delete. All three share `deleteTracks` below, so the three
+// differ only in what they remove and when the provenance record survives.
+// ---------------------------------------------------------------------------
+
+/**
+ * The body every track-deleting command has: drop the tracks `removes`
+ * selects, and decide what becomes of the instrument's
+ * `assistProvenance.difficulties[instrument]` entry — the Expert content stamp
+ * a generated Hard/Medium/Easy set was produced from.
+ *
+ * `keepsProvenance` is asked, with the tracks that survived, whether that
+ * record still describes something; when it does not, the record is dropped in
+ * the same undoable step. Only that question differs between the three
+ * commands, so it is the only thing they pass.
+ *
+ * Returns `doc` untouched when there was nothing to remove and no record to
+ * clear.
+ */
+function deleteTracks(
+  doc: ChartDocument,
+  instrument: SupportedTrackInstrument,
+  removes: (track: ParsedTrackData) => boolean,
+  keepsProvenance: (remaining: ParsedTrackData[]) => boolean,
+): ChartDocument {
+  const provenance = getAssistProvenance(doc);
+  const difficulties = provenance?.difficulties;
+  const hadRecord = difficulties?.[instrument] !== undefined;
+
+  const trackData = doc.parsedChart.trackData.filter(t => !removes(t));
+  const removedAnyTrack = trackData.length !== doc.parsedChart.trackData.length;
+  if (!removedAnyTrack && !hadRecord) return doc;
+
+  // Spreading `doc` already carries `assistProvenance` over unchanged, so only
+  // the case that actually edits the bag rewrites it.
+  const newDoc: ChartDocument = {
+    ...doc,
+    parsedChart: {...doc.parsedChart, trackData},
+  };
+  if (!difficulties || !hadRecord || keepsProvenance(trackData)) return newDoc;
+
+  const {[instrument]: _removed, ...restDifficulties} = difficulties;
+  return withAssistProvenance(newDoc, {
+    ...provenance,
+    difficulties: restDifficulties,
+  });
+}
+
 /**
  * Remove `instrument`'s Hard/Medium/Easy tracks and its
  * `assistProvenance.difficulties[instrument]` entry as one undoable unit
@@ -2069,13 +2123,13 @@ export class GenerateDifficultiesCommand implements EditCommand {
  * provenance (drum transcription, other instruments' difficulty records,
  * acks) are left untouched.
  *
- * No-op (returns `doc` unchanged) if none of the three lower-difficulty
- * tracks exist AND there's no provenance entry to clear — nothing to do.
+ * Nothing the record describes survives the whole set going away, so it is
+ * always dropped.
  *
  * `entityKinds` is `{'note'}`; `affectedTracks` is the same three lower
  * `TrackKey`s `GenerateDifficultiesCommand` declares.
  *
- * Undo restores the pre-edit snapshot (`undoDocStack`).
+ * Undo restores the pre-edit snapshot (`undoEntries`).
  */
 export class DeleteLowerDifficultiesCommand implements EditCommand {
   readonly description: string;
@@ -2089,32 +2143,106 @@ export class DeleteLowerDifficultiesCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    const provenance = getAssistProvenance(doc);
-    const difficulties = provenance?.difficulties;
-    const hadRecord = difficulties?.[this.instrument] !== undefined;
-    const trackData = doc.parsedChart.trackData.filter(
+    return deleteTracks(
+      doc,
+      this.instrument,
       t =>
-        !(
-          t.instrument === this.instrument &&
-          (LOWER_TRACK_DIFFICULTIES as readonly string[]).includes(t.difficulty)
+        t.instrument === this.instrument &&
+        (LOWER_TRACK_DIFFICULTIES as readonly string[]).includes(t.difficulty),
+      () => false,
+    );
+  }
+}
+
+/**
+ * Remove exactly one instrument/difficulty track (plan 0077 item 6's "Delete
+ * difficulty" cell action) — unlike `DeleteLowerDifficultiesCommand`, which is
+ * always set-shaped (all three lower tiers together), this removes only the
+ * one track named by `trackKey`.
+ *
+ * This is the one deletion whose provenance record can survive, and the rule
+ * is the `keepsProvenance` lambda below (the plan's open provenance question,
+ * decided here):
+ *
+ *  - Deleting Expert: the record's own subject is gone, so it is dropped
+ *    unconditionally, even if generated Hard/Medium/Easy tracks survive —
+ *    there is no longer an Expert to compare their staleness against
+ *    (`selectDifficultyStale` reads the live Expert stamp). This is the
+ *    owner's explicit instruction.
+ *  - Deleting one lower tier (Hard, Medium or Easy) while at least one
+ *    sibling lower tier survives: the record is KEPT. It still accurately
+ *    names the Expert stamp the survivors were generated from — provenance
+ *    is instrument-keyed, not per-tier — so dropping it would silently
+ *    un-stale the remaining generated tracks (they'd read as hand-charted
+ *    instead of AI-generated).
+ *  - Deleting the last surviving lower tier: nothing the record describes
+ *    remains, so it is dropped — matching `DeleteLowerDifficultiesCommand`'s
+ *    rule for removing the whole set.
+ *
+ * No-op if the track doesn't exist. Undo restores the pre-edit snapshot.
+ */
+export class DeleteTrackCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.note;
+  readonly operations = OP.delete;
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
+
+  constructor(private readonly trackKey: SupportedTrackKey) {
+    this.description = `Delete ${trackKey.instrument} ${trackKey.difficulty} track`;
+    this.affectedTracks = singleTrack(trackKey);
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    if (findTargetIndex(doc, this.trackKey) === -1) return doc;
+    const {instrument, difficulty} = this.trackKey;
+    return deleteTracks(
+      doc,
+      instrument,
+      t => t.instrument === instrument && t.difficulty === difficulty,
+      remaining =>
+        difficulty !== 'expert' &&
+        LOWER_TRACK_DIFFICULTIES.some(
+          lower =>
+            lower !== difficulty &&
+            remaining.some(
+              t => t.instrument === instrument && t.difficulty === lower,
+            ),
         ),
     );
-    const removedAnyTrack =
-      trackData.length !== doc.parsedChart.trackData.length;
-    if (!removedAnyTrack && !hadRecord) return doc;
+  }
+}
 
-    // Spreading `doc` already carries `assistProvenance` over unchanged, so
-    // only the case that actually edits the bag rewrites it.
-    const newDoc: ChartDocument = {
-      ...doc,
-      parsedChart: {...doc.parsedChart, trackData},
-    };
-    if (!difficulties || !hadRecord) return newDoc;
+/**
+ * Remove every difficulty of one instrument (plan 0077 item 6's "Delete
+ * instrument" action, offered on both the row label and each cell) and its
+ * `assistProvenance.difficulties[instrument]` entry, if any — nothing that
+ * entry describes survives an instrument delete, so it is always dropped,
+ * unlike `DeleteTrackCommand`'s per-tier nuance above.
+ *
+ * No-op if the instrument has no tracks AND no provenance entry to clear.
+ * Undo restores the pre-edit snapshot.
+ */
+export class DeleteInstrumentCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.note;
+  readonly operations = OP.delete;
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
 
-    const {[this.instrument]: _removed, ...restDifficulties} = difficulties;
-    return withAssistProvenance(newDoc, {
-      ...provenance,
-      difficulties: restDifficulties,
-    });
+  constructor(private readonly instrument: SupportedTrackInstrument) {
+    this.description = `Delete ${instrument}`;
+    this.affectedTracks = new Set(
+      TRACK_DIFFICULTIES.map(difficulty =>
+        trackKeyId({instrument, difficulty}),
+      ),
+    );
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    return deleteTracks(
+      doc,
+      this.instrument,
+      t => t.instrument === this.instrument,
+      () => false,
+    );
   }
 }

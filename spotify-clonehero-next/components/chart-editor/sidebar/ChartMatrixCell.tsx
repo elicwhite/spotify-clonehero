@@ -8,6 +8,7 @@
  * (note count, AI origin) rides the tooltip only.
  */
 
+import type {MouseEvent} from 'react';
 import {Tooltip, TooltipContent, TooltipTrigger} from '@/components/ui/tooltip';
 import {cn} from '@/lib/utils';
 
@@ -23,6 +24,10 @@ export interface ChartMatrixCellProps {
   visible: boolean;
   tooltip: string;
   onToggle: () => void;
+  /** Right-click handler for the matrix's delete context menu (plan 0077
+   *  item 6). Omitted (or a no-op while `locked`) suppresses the menu, e.g.
+   *  a page that doesn't wire deletion in. */
+  onContextMenu?: ((e: MouseEvent) => void) | undefined;
   /** True while this cell's instrument has a `generate-difficulties` run in
    *  flight (plan 0074 Phase 4): the cell keeps showing its current
    *  visibility but stops accepting clicks, so a mid-generation toggle can't
@@ -37,6 +42,7 @@ export default function ChartMatrixCell({
   visible,
   tooltip,
   onToggle,
+  onContextMenu,
   locked = false,
 }: ChartMatrixCellProps) {
   return (
@@ -48,6 +54,7 @@ export default function ChartMatrixCell({
           aria-pressed={visible}
           disabled={locked}
           onClick={onToggle}
+          onContextMenu={onContextMenu}
           style={{gridColumn}}
           className={cn(
             'flex min-h-[1.875rem] items-center justify-center rounded-md border text-xs font-bold transition-colors',

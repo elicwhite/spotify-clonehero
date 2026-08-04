@@ -9,6 +9,9 @@
 // One `StageLayout` object feeds both consumers -- the DOM interaction
 // overlays and the GL viewport/scissor rects -- so the two can never disagree
 // by a pixel.
+//
+// What camera renders a highway inside one of these rects is the other half of
+// the same job, and lives next door in `cameraFit.ts`.
 
 /** Narrowest highway that stays legible and clickable, in CSS pixels. */
 export const MIN_HIGHWAY_PX = 200;

@@ -97,5 +97,20 @@ module.exports = {
       },
     },
   },
-  plugins: [require('tailwindcss-animate')],
+  plugins: [
+    require('tailwindcss-animate'),
+    // `size-*` (width and height together) is a Tailwind 3.4 utility and this
+    // app is on 3.3.5, where every `size-4` in the tree compiled to nothing at
+    // all — silently, so shadcn components pasted in from upstream rendered
+    // their lucide glyphs at lucide's own 24px default. Backfilling the
+    // utility here fixes every present and future `size-*` in one place and
+    // lets `components/ui/*` stay upstream-shaped; a Tailwind 3.4 upgrade
+    // makes this plugin redundant rather than wrong.
+    require('tailwindcss/plugin')(({matchUtilities, theme}) => {
+      matchUtilities(
+        {size: value => ({width: value, height: value})},
+        {values: theme('spacing')},
+      );
+    }),
+  ],
 };

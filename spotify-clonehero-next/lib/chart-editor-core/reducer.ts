@@ -46,6 +46,13 @@ function recoverTrackScope(
  * for a track that no longer exists and that the Chart Matrix — which only
  * renders rows for present instruments — can no longer hide.
  *
+ * A drop that empties the set entirely falls back to the doc's preferred
+ * track, so no command can leave the editor with nothing on screen. Only
+ * that *transition* triggers the fallback: an already-empty set is a
+ * legitimate user state (`SET_TRACK_VISIBILITY` deliberately lets the user
+ * hide the final row), so an edit made while everything is hidden must not
+ * unhide a row the user never asked for.
+ *
  * Returns the original set when nothing was dropped, so unaffected edits
  * keep their reference identity.
  */
@@ -60,7 +67,12 @@ function reconcileVisibleTracks(
   for (const id of visible) {
     if (existing.has(id)) next.add(id);
   }
-  return next.size === visible.size ? visible : next;
+  if (next.size === visible.size) return visible;
+  if (next.size === 0) {
+    const fallback = preferredTrackForChart(chartDoc);
+    if (fallback) next.add(trackKeyId(fallback));
+  }
+  return next;
 }
 
 /**
@@ -71,12 +83,17 @@ function reconcileVisibleTracks(
  * being replaced, so rendering or committing it now would desync the views
  * from the undo stack (0061 §7).
  *
+ * `visible` defaults to the current visible set; `UNDO`/`REDO` pass the
+ * snapshot they popped so a restored track comes back visible if it was
+ * visible when the edit ran.
+ *
  * Content stamps are deliberately NOT here: the three actions each need a
  * different stamp rule (see their cases).
  */
 function applyDocToState(
   state: ChartEditorState,
   chartDoc: ChartDocument,
+  visible: ReadonlySet<string> = state.visibleTrackKeys,
 ): Pick<
   ChartEditorState,
   | 'chartDoc'
@@ -88,7 +105,7 @@ function applyDocToState(
   return {
     chartDoc,
     activeScope: recoverTrackScope(chartDoc, state.activeScope),
-    visibleTrackKeys: reconcileVisibleTracks(chartDoc, state.visibleTrackKeys),
+    visibleTrackKeys: reconcileVisibleTracks(chartDoc, visible),
     downbeatFlags: computeDownbeatFlags(chartDoc),
     pendingTempoCandidate: null,
   };
@@ -184,15 +201,15 @@ export function chartEditorReducer(
       const prevDoc = state.chartDoc;
       if (!prevDoc) return state;
 
-      // Push to undo stack, cap at limit
-      let newUndoStack = [...state.undoStack, action.command];
-      let newUndoDocStack = [...state.undoDocStack, prevDoc];
-      if (newUndoStack.length > UNDO_STACK_CAP) {
-        newUndoStack = newUndoStack.slice(newUndoStack.length - UNDO_STACK_CAP);
-        newUndoDocStack = newUndoDocStack.slice(
-          newUndoDocStack.length - UNDO_STACK_CAP,
-        );
-      }
+      // Push the pre-command state as one entry, capped at the limit.
+      const undoEntries = [
+        ...state.undoEntries,
+        {
+          command: action.command,
+          doc: prevDoc,
+          visible: state.visibleTrackKeys,
+        },
+      ].slice(-UNDO_STACK_CAP);
 
       // Content-derived stamps (plan 0074 Design C): recompute only what
       // this command declares it touched — the affected tracks, and the
@@ -217,11 +234,9 @@ export function chartEditorReducer(
         ...state,
         ...applyDocToState(state, action.chartDoc),
         dirty: true,
-        undoStack: newUndoStack,
-        undoDocStack: newUndoDocStack,
+        undoEntries,
         // Clear redo stack on new edit (new branch)
-        redoStack: [],
-        redoDocStack: [],
+        redoEntries: [],
         trackStamps: tempoTouched
           ? computeAllTrackStamps(action.chartDoc)
           : recomputeTrackStamps(
@@ -248,22 +263,26 @@ export function chartEditorReducer(
     }
 
     case 'UNDO': {
-      if (state.undoStack.length === 0 || !state.chartDoc) return state;
-
-      const undoneCommand = state.undoStack[state.undoStack.length - 1];
+      const undone = state.undoEntries[state.undoEntries.length - 1];
+      if (!undone || !state.chartDoc) return state;
 
       // Check if we've returned to the saved state
-      const newUndoDepth = state.undoStack.length - 1;
+      const newUndoDepth = state.undoEntries.length - 1;
       const isDirty = newUndoDepth !== state.savedUndoDepth;
 
       return {
         ...state,
-        ...applyDocToState(state, action.chartDoc),
+        ...applyDocToState(state, action.chartDoc, undone.visible),
         dirty: isDirty,
-        undoStack: state.undoStack.slice(0, -1),
-        undoDocStack: state.undoDocStack.slice(0, -1),
-        redoStack: [...state.redoStack, undoneCommand],
-        redoDocStack: [...state.redoDocStack, state.chartDoc],
+        undoEntries: state.undoEntries.slice(0, -1),
+        redoEntries: [
+          ...state.redoEntries,
+          {
+            command: undone.command,
+            doc: state.chartDoc,
+            visible: state.visibleTrackKeys,
+          },
+        ],
         // Full recompute from the restored doc (plan 0074 Design C) — this
         // is what makes staleness disappear when undo lands back on the
         // exact content an assist task generated from, and makes a
@@ -275,21 +294,25 @@ export function chartEditorReducer(
     }
 
     case 'REDO': {
-      if (state.redoStack.length === 0 || !state.chartDoc) return state;
+      const redone = state.redoEntries[state.redoEntries.length - 1];
+      if (!redone || !state.chartDoc) return state;
 
-      const redoneCommand = state.redoStack[state.redoStack.length - 1];
-
-      const newUndoDepth = state.undoStack.length + 1;
+      const newUndoDepth = state.undoEntries.length + 1;
       const isDirty = newUndoDepth !== state.savedUndoDepth;
 
       return {
         ...state,
-        ...applyDocToState(state, action.chartDoc),
+        ...applyDocToState(state, action.chartDoc, redone.visible),
         dirty: isDirty,
-        undoStack: [...state.undoStack, redoneCommand],
-        undoDocStack: [...state.undoDocStack, state.chartDoc],
-        redoStack: state.redoStack.slice(0, -1),
-        redoDocStack: state.redoDocStack.slice(0, -1),
+        undoEntries: [
+          ...state.undoEntries,
+          {
+            command: redone.command,
+            doc: state.chartDoc,
+            visible: state.visibleTrackKeys,
+          },
+        ],
+        redoEntries: state.redoEntries.slice(0, -1),
         // Full recompute, same reasoning as UNDO above.
         trackStamps: computeAllTrackStamps(action.chartDoc),
         tempoStamp: computeTempoStamp(action.chartDoc),
@@ -300,7 +323,7 @@ export function chartEditorReducer(
       return {
         ...state,
         dirty: false,
-        savedUndoDepth: state.undoStack.length,
+        savedUndoDepth: state.undoEntries.length,
       };
 
     case 'SET_CLIPBOARD':

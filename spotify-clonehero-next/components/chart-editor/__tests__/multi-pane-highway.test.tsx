@@ -191,11 +191,11 @@ function Harness({
   );
 }
 
-/** Exposes `state.undoStack` as JSON text so tests can assert on the last
+/** Exposes `state.undoEntries` as JSON text so tests can assert on the last
  *  issued command without reaching into React internals. */
 function UndoStackProbe() {
   const {state} = useChartEditorContext();
-  const last = state.undoStack[state.undoStack.length - 1];
+  const last = state.undoEntries[state.undoEntries.length - 1]?.command;
   return (
     <pre data-testid="undo-stack-probe">
       {last ? JSON.stringify(Array.from(last.affectedTracks ?? [])) : ''}

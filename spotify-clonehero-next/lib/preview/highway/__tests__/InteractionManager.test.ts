@@ -3,8 +3,7 @@
  *
  * Plan 0067 point 8: InteractionManager takes the active InstrumentSchema at
  * construction instead of reading `drums4LaneSchema` at module level, so
- * five-fret (and any other) schemas can hit-test their own lanes instead of
- * throwing for missing `worldXOffset`.
+ * five-fret (and any other) schemas hit-test their own lanes.
  */
 
 import * as THREE from 'three';
@@ -13,6 +12,7 @@ import {SceneReconciler, type ElementRenderer} from '../SceneReconciler';
 import {HIGHWAY_ELEMENT_KINDS} from '../cell';
 import {drums4LaneSchema} from '@/lib/chart-edit';
 import {guitarSchema} from '@/lib/chart-edit/instruments/guitar';
+import {drums5LaneSchema} from '@/lib/chart-edit/instruments/drums';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,7 +78,7 @@ describe('InteractionManager -- schema-driven lane geometry', () => {
     expect(lanesSeen).toEqual(new Set([0, 1, 2, 3, 4]));
   });
 
-  it('constructs with guitarSchema (no worldXOffset throw) and hit-tests all 5 fret lanes', () => {
+  it('constructs with guitarSchema and hit-tests all 5 fret lanes', () => {
     const im = new InteractionManager(
       makeCamera(),
       makeReconciler(),
@@ -98,27 +98,6 @@ describe('InteractionManager -- schema-driven lane geometry', () => {
 
     // Open is a full-width note, not an ordinary nearest-lane target.
     expect(lanesSeen).toEqual(new Set([1, 2, 3, 4, 5]));
-  });
-
-  it('throws when a schema lane is missing worldXOffset', () => {
-    const brokenSchema = {
-      ...guitarSchema,
-      lanes: guitarSchema.lanes.map(l => {
-        const {worldXOffset: _worldXOffset, ...rest} = l;
-        return rest;
-      }),
-    };
-
-    expect(
-      () =>
-        new InteractionManager(
-          makeCamera(),
-          makeReconciler(),
-          1.5,
-          () => 0,
-          brokenSchema,
-        ),
-    ).toThrow(/missing worldXOffset/);
   });
 });
 
@@ -294,5 +273,55 @@ describe('InteractionManager -- marker line projected.y invariant', () => {
 
     expect(zeroRows.length).toBeGreaterThan(0);
     expect(eightRows).toEqual(zeroRows);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pad-vs-kick ties on 5-lane drums (plan 0077 item 2)
+// ---------------------------------------------------------------------------
+
+describe('InteractionManager -- 5-lane drums pad/kick tie', () => {
+  const canvasW = 1000;
+  const canvasH = 1000;
+
+  function lanesAcross(schema: typeof drums5LaneSchema): Set<number> {
+    const im = new InteractionManager(
+      makeCamera(),
+      makeReconciler(),
+      1.5,
+      () => 0,
+      schema,
+    );
+    const seen = new Set<number>();
+    for (let x = 0; x <= canvasW; x++) {
+      const hit = im.hitTest(x, canvasH / 2, canvasW, canvasH);
+      if (hit && hit.type === 'highway') seen.add(hit.lane);
+    }
+    return seen;
+  }
+
+  it('reaches all five pads', () => {
+    // Five pads spread symmetrically put the middle one on the highway's
+    // center line, which is also the kick's X. The kick used to win that tie
+    // by being earlier in the schema, making the middle pad unreachable by
+    // pointer on every 5-lane chart.
+    const seen = lanesAcross(drums5LaneSchema);
+    expect([...seen].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('still reaches the kick on 4-lane, where it owns the center gap', () => {
+    const seen = lanesAcross(drums4LaneSchema);
+    expect(seen.has(4)).toBe(true);
+  });
+
+  it('resolves the exact center pixel to the middle pad, not the kick', () => {
+    const im = new InteractionManager(
+      makeCamera(),
+      makeReconciler(),
+      1.5,
+      () => 0,
+      drums5LaneSchema,
+    );
+    expect(im.screenToLane(canvasW / 2, canvasH / 2, canvasW, canvasH)).toBe(2);
   });
 });

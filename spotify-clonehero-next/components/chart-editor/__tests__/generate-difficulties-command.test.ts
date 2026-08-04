@@ -172,7 +172,7 @@ describe('GenerateDifficultiesCommand', () => {
   });
 
   it('leaves the pre-command doc intact, so an undo snapshot restore has no generated tracks or provenance', () => {
-    // Undo reinstalls the pre-command doc (the `undoDocStack` contract), so
+    // Undo reinstalls the pre-command doc (the `undoEntries` contract), so
     // what undo restores is exactly what `execute` must not have touched.
     const before = makeFixtureDoc();
     generateOn(before).execute(before);
@@ -381,7 +381,7 @@ describe('difficulty staleness selector (plan 0074 Design C)', () => {
   it('flips stale when Expert is edited after generation, and is not stale again once the edit is undone', () => {
     const doc = makeFixtureDoc();
     const generated = generateOn(doc).execute(doc);
-    // `generated` stands in for the doc an `undoDocStack` snapshot would
+    // `generated` stands in for the doc an `undoEntries` snapshot would
     // restore, so the note edit below must not mutate it: deep-clone
     // before mutating, exactly like a real note-edit command clones before
     // touching a track (`cloneDocWithTracks`).

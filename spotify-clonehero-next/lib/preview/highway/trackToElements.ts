@@ -1,6 +1,6 @@
 import {noteTypes} from '@eliwhite/scan-chart';
 import type {ParsedChart} from '../chorus-chart-processing';
-import {schemaForInstrument} from '../../chart-edit/instruments';
+import {schemaForTrack} from '../../chart-edit/instruments';
 import type {ChartElement} from './SceneReconciler';
 import type {NoteElementData} from './NoteRenderer';
 import {resolveNoteGeometry} from './notePlacement';
@@ -68,7 +68,7 @@ export function trackToElements(
   track: Track,
   chart?: ParsedChart,
 ): ChartElement[] {
-  const schema = schemaForInstrument(track.instrument);
+  const schema = schemaForTrack(track, chart?.drumType);
   const supportsSustain = schema?.supportsSustain ?? false;
   // Only fretted pad notes get a playline hit flame -- open guitar/bass
   // notes and drum kicks don't.
@@ -141,7 +141,11 @@ export function trackToElements(
       const typeName = NOTE_TYPE_NAMES[realNote.type];
       if (!typeName) continue;
 
-      const geometry = resolveNoteGeometry(renderTrack.instrument, note);
+      const geometry = resolveNoteGeometry(
+        renderTrack.instrument,
+        note,
+        chart?.drumType,
+      );
       if (!geometry) continue;
 
       const key = `note:${tick}:${typeName}`;
