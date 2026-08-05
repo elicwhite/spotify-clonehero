@@ -26,8 +26,15 @@ export class FakeAudioBufferSource {
 
 export class FakeGainNode {
   gain = new FakeAudioParam();
-  connect() {}
-  disconnect() {}
+  /** The node(s) this gain is currently connected to, so tests can assert
+   *  routing (direct to destination vs. through the worklet). */
+  connectedTo: unknown[] = [];
+  connect(target: unknown) {
+    this.connectedTo.push(target);
+  }
+  disconnect() {
+    this.connectedTo = [];
+  }
 }
 
 export class FakeWorkletNode {
@@ -37,7 +44,11 @@ export class FakeWorkletNode {
       return new FakeAudioParam();
     },
   };
+  port = {
+    postMessage: jest.fn(),
+  };
   connect() {}
+  disconnect() {}
 }
 
 export class FakeAudioContext {

@@ -245,10 +245,13 @@ export class AudioManager {
       this.#lastTempoChangeEffectiveTime = this.#effectivePlayTime;
     }
 
+    const tempoChanged = tempo !== this.#tempoConfig.tempo;
     this.#tempoConfig.tempo = tempo;
 
     if (this.#soundTouchWorklet) {
-      // Worklet performs pitch correction only: set rate=1/tempo and tempo=tempo so total time scaling = 1
+      // Worklet performs pitch correction only: set rate=1/tempo and tempo=tempo so total time scaling = 1.
+      // These parameters only matter while the worklet is in the signal path
+      // (tempo !== 1.0); AudioTrack routes around it entirely at tempo 1.0.
       const tempoParam = this.#soundTouchWorklet.parameters.get('tempo');
       const rateParam = this.#soundTouchWorklet.parameters.get('rate');
       const pitchParam = this.#soundTouchWorklet.parameters.get('pitch');
@@ -259,10 +262,23 @@ export class AudioManager {
       if (pitchParam) pitchParam.setValueAtTime(1.0, this.#context.currentTime);
     }
 
+    // A tempo change may switch a track's routing (direct <-> worklet) or
+    // leave the worklet holding audio queued for the old parameters. Either
+    // way its FIFOs are now stale, so drop them before anything plays again.
+    if (tempoChanged) {
+      this.#clearWorklet();
+    }
+
     // Update all tracks to use the new tempo (drive playbackRate at the source)
     Object.values(this.#tracks).forEach(track => {
       track.setTempo(tempo);
     });
+  }
+
+  /** Empty the SoundTouch worklet's internal FIFOs so it doesn't play stale,
+   *  pre-transition audio once it's back in (or still in) the signal path. */
+  #clearWorklet() {
+    this.#soundTouchWorklet?.port.postMessage({type: 'clear'});
   }
 
   // Convenience methods for speed control
@@ -333,6 +349,12 @@ export class AudioManager {
     this.#effectivePlayTime = offset;
     this.#lastTempoChangeRealTime = currentTime;
     this.#lastTempoChangeEffectiveTime = offset;
+
+    // Sources are being rebuilt at a new offset; if the worklet is in the
+    // signal path it may still hold audio queued from before this jump.
+    if (this.#tempoConfig.tempo !== 1.0) {
+      this.#clearWorklet();
+    }
 
     Object.values(this.#tracks).forEach(track => {
       track.start(currentTime, offset);
@@ -546,6 +568,12 @@ export class AudioManager {
     Object.values(this.#tracks).forEach(track => {
       track.stop();
     });
+
+    // Sources are being rebuilt at the seeked offset; drop anything the
+    // worklet still has queued from before the seek.
+    if (this.#tempoConfig.tempo !== 1.0) {
+      this.#clearWorklet();
+    }
 
     this.#noteSeek(timeSec);
 
@@ -766,24 +794,37 @@ class AudioTrack {
     this.#onSongEnded = onSongEnded;
     this.#workletNode = workletNode || null;
 
-    this.#gainNodes = new Array(audioBuffers.length).fill(null).map(() => {
-      const gainNode = this.#context.createGain();
-
-      // Connect through the worklet if available, otherwise directly to destination
-      if (this.#workletNode) {
-        gainNode.connect(this.#workletNode);
-      } else {
-        gainNode.connect(this.#context.destination);
-      }
-
-      return gainNode;
-    });
+    this.#gainNodes = new Array(audioBuffers.length)
+      .fill(null)
+      .map(() => this.#context.createGain());
+    this.#routeGains();
 
     this.#duration = Math.max(
       ...this.#audioBuffers.map(buffer => buffer.duration),
     );
 
     this.volume = 1;
+  }
+
+  /**
+   * Where a gain node's output should go: at tempo 1.0 (or with no worklet
+   * loaded), straight to the destination, bypassing the SoundTouch worklet's
+   * WSOLA processing entirely so unshifted playback carries none of its
+   * ~110ms latency. Off 1.0, through the worklet for pitch correction.
+   */
+  #routeTarget(): AudioNode {
+    return this.#workletNode && this.#tempo !== 1.0
+      ? this.#workletNode
+      : this.#context.destination;
+  }
+
+  /** (Re)connect every gain node to the current route target. */
+  #routeGains(): void {
+    const target = this.#routeTarget();
+    this.#gainNodes.forEach(gainNode => {
+      gainNode.disconnect();
+      gainNode.connect(target);
+    });
   }
 
   get ended() {
@@ -831,7 +872,11 @@ class AudioTrack {
 
   // Tempo control methods
   setTempo(tempo: number) {
+    const previousTarget = this.#routeTarget();
     this.#tempo = tempo;
+    if (this.#routeTarget() !== previousTarget) {
+      this.#routeGains();
+    }
     // Update live sources so the graph feeds more/fewer samples per second
     this.#sources.forEach(src => {
       try {

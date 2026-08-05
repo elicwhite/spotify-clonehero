@@ -707,8 +707,10 @@ var Stretch = (function (_AbstractFifoSamplePi2) {
     _this3.autoSeqSetting = false; // Use fixed values instead of auto
     _this3.autoSeekSetting = false; // Use fixed values instead of auto
     _this3._tempo = 1;
+    // In an AudioWorkletGlobalScope, the global `sampleRate` holds the real
+    // context sample rate; fall back to 44100 outside that scope.
     _this3.setParameters(
-      44100,
+      typeof sampleRate !== 'undefined' ? sampleRate : 44100,
       DEFAULT_SEQUENCE_MS,
       DEFAULT_SEEKWINDOW_MS,
       DEFAULT_OVERLAP_MS,
@@ -877,7 +879,7 @@ var Stretch = (function (_AbstractFifoSamplePi2) {
         var i = 0;
         this.preCalculateCorrelationReferenceStereo();
         bestOffset = 0;
-        bestCorrelation = Number.MIN_VALUE;
+        bestCorrelation = -Infinity;
         for (; i < this.seekLength; i = i + 1) {
           correlation = this.calculateCrossCorrelationStereo(
             2 * i,
@@ -901,7 +903,7 @@ var Stretch = (function (_AbstractFifoSamplePi2) {
         var correlationOffset;
         var tempOffset;
         this.preCalculateCorrelationReferenceStereo();
-        bestCorrelation = Number.MIN_VALUE;
+        bestCorrelation = -Infinity;
         bestOffset = 0;
         correlationOffset = 0;
         tempOffset = 0;
@@ -947,7 +949,8 @@ var Stretch = (function (_AbstractFifoSamplePi2) {
         var mixing = this._inputBuffer.vector;
         mixingPosition += this._inputBuffer.startIndex;
         var correlation = 0;
-        var i = 2;
+        var norm = 0;
+        var i = 0;
         var calcLength = 2 * this.overlapLength;
         var mixingOffset;
         for (; i < calcLength; i = i + 2) {
@@ -955,8 +958,13 @@ var Stretch = (function (_AbstractFifoSamplePi2) {
           correlation +=
             mixing[mixingOffset] * compare[i] +
             mixing[mixingOffset + 1] * compare[i + 1];
+          norm +=
+            mixing[mixingOffset] * mixing[mixingOffset] +
+            mixing[mixingOffset + 1] * mixing[mixingOffset + 1];
         }
-        return correlation;
+        // Normalize by the energy of the candidate segment so loud regions
+        // inside the seek window don't outscore the true continuation point.
+        return correlation / Math.sqrt(norm < 1e-9 ? 1.0 : norm);
       },
     },
     {
@@ -1414,6 +1422,11 @@ var SoundTouchWorklet = (function (_AudioWorkletProcesso) {
     _this.bufferSize = 128;
     _this._samples = new Float32Array(_this.bufferSize * 2);
     _this._pipe = new SoundTouch();
+    _this.port.onmessage = function (event) {
+      if (event.data && event.data.type === 'clear') {
+        _this._pipe.clear();
+      }
+    };
     return _this;
   }
   _inherits(SoundTouchWorklet, _AudioWorkletProcesso);
@@ -1458,6 +1471,21 @@ var SoundTouchWorklet = (function (_AudioWorkletProcesso) {
           this._pipe.rate = rate;
           this._pipe.tempo = tempo;
           this._pipe.pitch = pitch * Math.pow(2, pitchSemitones / 12);
+          var isNeutral =
+            rate === 1 && tempo === 1 && pitch === 1 && pitchSemitones === 0;
+          var pipeHasPendingData =
+            this._pipe.inputBuffer.frameCount > 0 ||
+            this._pipe.outputBuffer.frameCount > 0;
+          if (isNeutral && !pipeHasPendingData) {
+            // Buffers are empty and params are neutral: copy straight through
+            // with zero latency instead of round-tripping through the
+            // pipeline.
+            for (var _i2 = 0; _i2 < leftInput.length; _i2++) {
+              leftOutput[_i2] = leftInput[_i2];
+              rightOutput[_i2] = rightInput[_i2];
+            }
+            return true;
+          }
           for (var i = 0; i < leftInput.length; i++) {
             samples[i * 2] = leftInput[i];
             samples[i * 2 + 1] = rightInput[i];
@@ -1465,14 +1493,23 @@ var SoundTouchWorklet = (function (_AudioWorkletProcesso) {
           this._pipe.inputBuffer.putSamples(samples, 0, leftInput.length);
           this._pipe.process();
           var processedSamples = new Float32Array(leftInput.length * 2);
+          var avail = this._pipe.outputBuffer.frameCount;
+          var framesToReceive = Math.min(avail, leftOutput.length);
           this._pipe.outputBuffer.receiveSamples(
             processedSamples,
-            leftOutput.length,
+            framesToReceive,
           );
           for (var _i = 0; _i < leftInput.length; _i++) {
-            leftOutput[_i] = processedSamples[_i * 2];
-            rightOutput[_i] = processedSamples[_i * 2 + 1];
-            if (isNaN(leftOutput[_i]) || isNaN(rightOutput[_i])) {
+            if (_i < framesToReceive) {
+              leftOutput[_i] = processedSamples[_i * 2];
+              rightOutput[_i] = processedSamples[_i * 2 + 1];
+              if (isNaN(leftOutput[_i]) || isNaN(rightOutput[_i])) {
+                leftOutput[_i] = 0;
+                rightOutput[_i] = 0;
+              }
+            } else {
+              // Not enough processed samples yet (pipeline still priming or
+              // draining): output silence instead of stale buffer contents.
               leftOutput[_i] = 0;
               rightOutput[_i] = 0;
             }
