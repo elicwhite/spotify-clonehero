@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * The Chart Matrix's right-click delete menu (plan 0077 item 6, OWNER
- * OVERRIDE 2026-08-04: per-difficulty deletion).
+ * The Chart Matrix's right-click delete menu: delete one difficulty, every
+ * difficulty below Expert, or the whole instrument.
  *
  * The popover, its positioning and its dismissal lifecycle are the editor's
  * shared `ContextMenuPopover`, the same one the piano roll opens. What lives
@@ -28,6 +28,7 @@ import type {
   SupportedTrackInstrument,
   SupportedTrackKey,
 } from '@/lib/chart-editor-core';
+import {Button} from '@/components/ui/button';
 
 import ContextMenuPopover, {
   useDismissOnEscape,
@@ -41,6 +42,13 @@ import {
 } from '../commands';
 import {useExecuteCommand} from '../hooks/useEditCommands';
 import {INSTRUMENT_LABEL, trackLabel} from '../trackLabels';
+
+/**
+ * Wide enough for the longest label, "Delete all lower difficulties", at the
+ * popover's 11.5px type — and applied to the confirm step too, so stepping
+ * from the list to the confirm doesn't resize the popover under the pointer.
+ */
+const MIN_WIDTH_PX = 170;
 
 /** What the menu was opened on — the only input to which items it offers. */
 export interface MatrixMenuTarget {
@@ -142,25 +150,30 @@ export default function ChartMatrixContextMenu({
         x={target.x}
         y={target.y}
         anchor="fixed"
-        minWidthPx={190}>
-        <div className="px-3 py-2">
-          <p className="mb-1 text-xs font-medium">{confirming.title}</p>
-          <p className="mb-2 text-[11px] text-muted-foreground">
+        minWidthPx={MIN_WIDTH_PX}>
+        <div className="px-2 py-1.5">
+          <p className="mb-0.5 font-medium">{confirming.title}</p>
+          <p className="mb-1.5 text-[10.5px] leading-snug text-muted-foreground">
             {confirming.body}
           </p>
-          <div className="flex justify-end gap-1.5">
-            <button
+          {/* `xs` is the shared small-control size — the same
+              `--ed-control-h-sm` height and 11.5px type the menu rows above
+              use, so both steps read as one surface. */}
+          <div className="flex justify-end gap-1">
+            <Button
               type="button"
-              className="rounded px-2 py-1 text-xs hover:bg-accent"
+              variant="ghost"
+              size="xs"
               onClick={() => setConfirming(null)}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="rounded bg-destructive px-2 py-1 text-xs text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
+              size="xs"
               onClick={() => runDelete(confirming)}>
               Delete
-            </button>
+            </Button>
           </div>
         </div>
       </ContextMenuPopover>
@@ -173,7 +186,7 @@ export default function ChartMatrixContextMenu({
       x={target.x}
       y={target.y}
       anchor="fixed"
-      minWidthPx={190}
+      minWidthPx={MIN_WIDTH_PX}
       items={deleteActionsFor(target).map(action => ({
         label: action.label,
         danger: true,

@@ -20,10 +20,12 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
 
 import {cn} from '@/lib/utils';
+import {computeContextMenuPlacement} from './contextMenuPlacement';
 
 /**
  * Destructive item colour.
@@ -43,6 +45,18 @@ import {cn} from '@/lib/utils';
  */
 const DANGER_TEXT =
   'text-red-700 hover:text-red-700 dark:text-red-400 dark:hover:text-red-400';
+
+/**
+ * Row height for a menu item, on the editor's compact control scale.
+ *
+ * `--ed-control-h-sm` is the same token the sidebar's small controls and the
+ * `xs` button variant spend, so a menu row lines up with the chrome it was
+ * opened from. It resolves to 24px under `data-density="compact"` — which the
+ * editor always sets while it is mounted, and which reaches this popover
+ * because the scope lives on the document root. The 1.75rem fallback is the
+ * unscoped size, so the component stays usable outside an editor.
+ */
+const ITEM_HEIGHT = 'h-[var(--ed-control-h-sm,1.75rem)]';
 
 /** One entry in a right-click context menu. */
 export interface ContextMenuItem {
@@ -79,48 +93,94 @@ export default function ContextMenuPopover({
   x,
   y,
   anchor = 'absolute',
-  minWidthPx = 160,
+  minWidthPx = 140,
   items,
   children,
   onAfterSelect,
   'data-testid': testId,
 }: ContextMenuPopoverProps) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const [nudge, setNudge] = useState({x: 0, y: 0});
+  // Rendered position/size, and whether it has been placed yet. Starts
+  // unplaced at the raw pointer coordinates and hidden, so the very first
+  // paint (a menu taller than the viewport, say) never flashes in the wrong
+  // spot before the layout effect below corrects it.
+  const [placed, setPlaced] = useState(false);
+  const [style, setStyle] = useState<{
+    left: number;
+    top: number;
+    maxHeight?: number;
+  }>({left: x, top: y});
 
-  // A menu opened near the right or bottom edge would otherwise render partly
-  // offscreen. Measured after layout and applied as an offset, so the menu
-  // still opens at the pointer everywhere it fits. Viewport-relative, so this
-  // only applies to the `fixed` anchor; jsdom reports a zero-size rect, which
-  // yields no offset.
+  // Flip-to-fit (plan 0079 §3): measure the rendered menu, then pick the open
+  // direction from the space actually available, rather than always opening
+  // below-right and letting it run off the screen.
   //
-  // The overflow is computed from `x`/`y` plus the measured SIZE, never from
-  // the measured position: the element being measured is already carrying the
-  // previous offset, so reading its right/bottom edge would find the overflow
-  // gone and reset the offset to zero, then find it again on the next pass.
+  // `anchor: 'fixed'` coordinates are already viewport space. `anchor:
+  // 'absolute'` coordinates are local to the nearest positioned ancestor (the
+  // piano roll's canvas wrapper), so they're converted to viewport space via
+  // that ancestor's own bounding rect before being handed to the placement
+  // math, and the result converted back before it's used as `left`/`top` —
+  // comparing container-local coordinates against the viewport directly would
+  // flip a menu inside a short scrolled container for the wrong reason.
+  //
+  // jsdom always reports a zero-size rect for the (unstyled, unlaid-out)
+  // menu, which would otherwise collapse every menu to the top-left corner;
+  // treated as "can't measure yet" and left at the raw pointer coordinates,
+  // matching the pre-flip-to-fit behaviour.
   useLayoutEffect(() => {
-    if (anchor !== 'fixed') return;
     const element = ref.current;
     if (!element) return;
     const {width, height} = element.getBoundingClientRect();
-    const overflowX = Math.max(0, x + width - window.innerWidth + 4);
-    const overflowY = Math.max(0, y + height - window.innerHeight + 4);
-    setNudge(current =>
-      current.x === -overflowX && current.y === -overflowY
-        ? current
-        : {x: -overflowX, y: -overflowY},
-    );
+    if (width === 0 || height === 0) {
+      setStyle({left: x, top: y});
+      setPlaced(true);
+      return;
+    }
+
+    const containerRect =
+      anchor === 'absolute'
+        ? (element.offsetParent as HTMLElement | null)?.getBoundingClientRect()
+        : undefined;
+    const containerLeft = containerRect?.left ?? 0;
+    const containerTop = containerRect?.top ?? 0;
+
+    const placement = computeContextMenuPlacement({
+      pointerX: x + containerLeft,
+      pointerY: y + containerTop,
+      menuWidth: width,
+      menuHeight: height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    });
+
+    setStyle({
+      left: placement.x - containerLeft,
+      top: placement.y - containerTop,
+      ...(placement.maxHeight === undefined
+        ? {}
+        : {maxHeight: placement.maxHeight}),
+    });
+    setPlaced(true);
   }, [anchor, x, y, items, children]);
+
+  const positionStyle: CSSProperties = {
+    left: style.left,
+    top: style.top,
+    minWidth: minWidthPx,
+    maxHeight: style.maxHeight,
+    overflowY: style.maxHeight !== undefined ? 'auto' : undefined,
+    visibility: placed ? 'visible' : 'hidden',
+  };
 
   return (
     <div
       ref={ref}
       data-testid={testId}
       className={cn(
-        'z-50 rounded-md border border-border bg-popover py-1 text-sm text-popover-foreground shadow-md',
+        'z-50 rounded-sm border border-border bg-popover py-0.5 text-[11.5px] text-popover-foreground shadow-md',
         anchor === 'fixed' ? 'fixed' : 'absolute',
       )}
-      style={{left: x + nudge.x, top: y + nudge.y, minWidth: minWidthPx}}
+      style={positionStyle}
       onPointerDown={e => e.stopPropagation()}>
       {children ??
         items?.map((item, i) => (
@@ -129,7 +189,8 @@ export default function ContextMenuPopover({
             type="button"
             disabled={item.disabled}
             className={cn(
-              'block w-full px-3 py-1.5 text-left hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
+              'flex w-full items-center whitespace-nowrap px-2 text-left hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
+              ITEM_HEIGHT,
               item.danger && DANGER_TEXT,
             )}
             onClick={() => {
@@ -138,7 +199,9 @@ export default function ContextMenuPopover({
               onAfterSelect?.();
             }}>
             {item.checked !== undefined && (
-              <span className="mr-1.5 inline-block w-2 text-accent-foreground">
+              // Fixed-width and never shrinking, so labels start at the same
+              // x whether or not their row is the checked one.
+              <span className="mr-1 w-2.5 shrink-0 text-center text-accent-foreground">
                 {item.checked ? '✓' : ''}
               </span>
             )}

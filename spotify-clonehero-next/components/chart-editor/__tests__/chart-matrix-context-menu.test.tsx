@@ -11,6 +11,8 @@
  */
 
 import '@testing-library/jest-dom';
+import path from 'node:path';
+import fs from 'node:fs';
 import {useEffect} from 'react';
 import {render, screen, fireEvent, within} from '@testing-library/react';
 import {createEmptyChart, noteTypes} from '@eliwhite/scan-chart';
@@ -199,6 +201,82 @@ describe('Chart Matrix context menu — items per surface', () => {
       screen.queryByTestId('chart-matrix-context-menu'),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId('drum-tracks')).toHaveTextContent('expert');
+  });
+});
+
+describe('Chart Matrix context menu — compact density', () => {
+  /** The row height class every menu item carries. */
+  const ROW_HEIGHT_CLASS = 'h-[var(--ed-control-h-sm,1.75rem)]';
+
+  /** `1.5rem` / `24px` to px. */
+  function toPx(length: string): number {
+    const n = Number.parseFloat(length);
+    return length.endsWith('rem') ? n * 16 : n;
+  }
+
+  /** What `app/globals.css` gives `--ed-control-h-sm` in the compact scope. */
+  function compactControlHeightSm(): string {
+    const css = fs.readFileSync(
+      path.join(__dirname, '../../../app/globals.css'),
+      'utf8',
+    );
+    const scope = css.match(
+      /:root\[data-density='compact'\]\s*\{([^}]*)\}/,
+    )?.[1];
+    const value = scope?.match(/--ed-control-h-sm:\s*([^;]+);/)?.[1];
+    if (!value) throw new Error('no compact value for --ed-control-h-sm');
+    return value.trim();
+  }
+
+  it('sizes menu rows from the editor small-control token, not a roomy literal', () => {
+    renderMatrix(makeTwoInstrumentDoc());
+    const item = within(openCellMenu('Drums Expert')).getByRole('button', {
+      name: 'Delete instrument',
+    });
+    expect(item).toHaveClass(ROW_HEIGHT_CLASS);
+    expect(item).toHaveClass('px-2');
+  });
+
+  it('keeps rows at a usable hit target both inside and outside the density scope', () => {
+    // Below ~22px a row stops being comfortably clickable. Both numbers the
+    // rendered class can resolve to are pinned: the value the compact scope
+    // gives the token, and the fallback the class carries for an unscoped
+    // page.
+    expect(toPx(compactControlHeightSm())).toBeGreaterThanOrEqual(22);
+    expect(toPx('1.75rem')).toBeGreaterThanOrEqual(22);
+  });
+
+  it('drops the popover to the editor type scale', () => {
+    renderMatrix(makeTwoInstrumentDoc());
+    const menu = openCellMenu('Drums Expert');
+    expect(menu).toHaveClass('text-[11.5px]');
+    expect(menu).not.toHaveClass('text-sm');
+  });
+
+  it('puts the confirm step on the same small control scale as the rows', () => {
+    renderMatrix(makeTwoInstrumentDoc());
+    const menu = openCellMenu('Drums Expert');
+    fireEvent.click(
+      within(menu).getByRole('button', {name: 'Delete difficulty'}),
+    );
+    const confirm = screen.getByTestId('chart-matrix-context-menu');
+    for (const name of ['Cancel', 'Delete']) {
+      const button = within(confirm).getByRole('button', {name});
+      expect(button).toHaveClass(ROW_HEIGHT_CLASS);
+      expect(button).toHaveClass('text-[11.5px]');
+    }
+  });
+
+  it('does not resize the popover between the item list and the confirm step', () => {
+    renderMatrix(makeTwoInstrumentDoc());
+    const menu = openCellMenu('Drums Expert');
+    const listWidth = menu.style.minWidth;
+    fireEvent.click(
+      within(menu).getByRole('button', {name: 'Delete difficulty'}),
+    );
+    expect(screen.getByTestId('chart-matrix-context-menu').style.minWidth).toBe(
+      listWidth,
+    );
   });
 });
 
