@@ -161,6 +161,7 @@ jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
       originalName: 'Test Song',
     })),
     readChartText: jest.fn(async () => fixtureChartText),
+    readSongIni: jest.fn(async () => null),
     loadAudioFiles: jest.fn(async () => [
       {
         fileName: 'song.ogg',

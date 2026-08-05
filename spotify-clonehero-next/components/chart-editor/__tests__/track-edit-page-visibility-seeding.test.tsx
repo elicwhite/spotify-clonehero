@@ -144,6 +144,7 @@ jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
       originalName: 'Test Song',
     })),
     readChartText: jest.fn(async () => fixtureChartText),
+    readSongIni: jest.fn(async () => null),
     // A fresh array each call, so a test that inspects what one call
     // returned can't be affected by another.
     loadAudioFiles: jest.fn(async () => fixtureAudioFiles.map(f => ({...f}))),

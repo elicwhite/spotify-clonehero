@@ -203,6 +203,11 @@ export interface AssistProvenance {
    * is why the cards offer "Keep as-is".
    */
   tempoDerived?: Partial<Record<TempoDerivedFeature, {tempoStamp: string}>>;
+  /** The Expert drums stamp in effect when the user last chose a `song.ini`
+   *  drum intensity in the song-details dialog. The dialog compares it
+   *  against the track's current stamp to tell an intensity chosen for this
+   *  chart apart from one left over from an earlier version of it. */
+  songIniDrumDifficulty?: {sourceStamp: string};
   /** Per-feature "Keep as-is" acknowledgment: the stamp the user last
    *  dismissed staleness against. A dismissal lasts only until the
    *  relevant current stamp moves past this value again. */

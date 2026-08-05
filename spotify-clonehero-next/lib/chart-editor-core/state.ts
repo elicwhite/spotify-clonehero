@@ -244,6 +244,14 @@ export type ChartEditorAction =
    * generated track and its provenance together.
    */
   | {type: 'SET_ASSIST_PROVENANCE'; provenance: AssistProvenance}
+  /**
+   * The song-details dialog's save: a doc whose `song.ini` metadata (and the
+   * drum recommendation's provenance) differ from the current one. Not
+   * `SET_CHART_DOC`, which means "a different chart is now open" and reseeds
+   * track selection, scope and every content stamp — none of which this edit
+   * touches, since it changes no note, tempo or section.
+   */
+  | {type: 'SET_CHART_METADATA'; chartDoc: ChartDocument}
   // -- Undo/Redo --
   | {type: 'UNDO'; chartDoc: ChartDocument}
   | {type: 'REDO'; chartDoc: ChartDocument}

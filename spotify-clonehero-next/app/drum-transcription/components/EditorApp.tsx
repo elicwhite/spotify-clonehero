@@ -7,7 +7,6 @@ import {toast} from 'sonner';
 import {
   getProject,
   readProjectBinary,
-  writeProjectBinary,
   findProjectChartFile,
   editedVariant,
   updateProject,
@@ -47,6 +46,7 @@ import {
   getAssistProvenance,
   setTempoStamp,
   withAssistProvenance,
+  type SongMetadataValue,
 } from '@/lib/chart-editor-core';
 import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
 import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboard';
@@ -506,59 +506,18 @@ export default function EditorApp({
     [projectMeta],
   );
 
-  // Persist edited song/artist/charter from the header dialog. Updates the
-  // chart doc metadata (saved into the edited chart file's [Song] section,
-  // notes.edited.chart or notes.edited.mid) and renames the project to
-  // "Song by Artist" so the projects list reflects it.
+  // The header dialog has already written the edit into the chart doc, which
+  // the autosave below persists along with every other edit. What only this
+  // page can do is rename the project to "Song by Artist" (charter is not
+  // included) so the projects list reflects it.
   const handleMetadataChange = useCallback(
-    async ({
-      name,
-      artist,
-      charter,
-    }: {
-      name: string;
-      artist: string;
-      charter: string;
-    }) => {
-      if (!state.chartDoc) return;
-
-      const updatedDoc = {
-        ...state.chartDoc,
-        parsedChart: {
-          ...state.chartDoc.parsedChart,
-          metadata: {
-            ...state.chartDoc.parsedChart.metadata,
-            name,
-            artist,
-            charter,
-          },
-        },
-      };
-      dispatch({type: 'SET_CHART_DOC', chartDoc: updatedDoc});
-
-      // Persist the chart (metadata rides along in the [Song] section),
-      // in whichever format this project's chart uses.
-      const files = writeChartFolder(updatedDoc);
-      const chartFileOut = files.find(
-        f => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
-      );
-      if (!chartFileOut) {
-        throw new Error('writeChartFolder did not produce a chart file');
-      }
-      await writeProjectBinary(
-        projectId,
-        editedVariant(chartFileOut.fileName),
-        chartFileOut.data,
-      );
-
-      // Rename the project — "Song by Artist" (charter is not included).
+    async ({name, artist}: SongMetadataValue) => {
       const projectName = artist.trim() ? `${name} by ${artist}` : name;
       const updated = await updateProject(projectId, {name: projectName});
       setProjectMeta(updated);
-
       toast.success('Song details saved');
     },
-    [projectId, state.chartDoc, dispatch],
+    [projectId],
   );
 
   // Provide the chart file for export in the requested format, serialized

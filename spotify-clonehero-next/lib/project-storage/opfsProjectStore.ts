@@ -18,6 +18,7 @@
 
 import {writeFile, readJsonFile, readTextFile} from '@/lib/fileSystemHelpers';
 import type {SourceFormat} from '@/components/chart-picker/chart-file-readers';
+import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
 
 const METADATA_FILE = 'metadata.json';
 const AUDIO_DIR = 'audio';
@@ -51,6 +52,14 @@ export interface ProjectMetadata {
    * for the hash (a multi-file package has to be mixed down to compute one).
    */
   stemFingerprint?: string | undefined;
+  /**
+   * Assist-generation provenance mirrored out of the in-memory
+   * `ChartDocument`. A `.chart`/`.mid` file has nowhere to carry doc-level
+   * metadata, so this is what makes a staleness prompt, a "Keep as-is"
+   * dismissal, or a chosen `song.ini` drum intensity's provenance survive a
+   * reload. Absent on projects saved before anything recorded provenance.
+   */
+  assistProvenance?: AssistProvenance | null | undefined;
 }
 
 export interface ProjectSummary {
@@ -366,6 +375,27 @@ export function createOpfsProjectStore(
   }
 
   /**
+   * Reads the project's `song.ini` bytes, or `null` when the imported package
+   * carried none.
+   *
+   * The editable chart is stored as `.chart` text, which has nowhere to carry
+   * most of `song.ini` (the per-instrument `diff_*` fields, `icon`,
+   * `loading_phrase`, custom keys), so a host that wants the chart's real
+   * metadata reads this alongside the chart text. The file is stored under
+   * whatever name the package used, so the match is case-insensitive.
+   */
+  async function readSongIni(projectId: string): Promise<Uint8Array | null> {
+    const dir = await getProjectDir(projectId);
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind !== 'file') continue;
+      if (name.toLowerCase() !== 'song.ini') continue;
+      const file = await (handle as FileSystemFileHandle).getFile();
+      return new Uint8Array(await file.arrayBuffer());
+    }
+    return null;
+  }
+
+  /**
    * Writes the edited chart text to OPFS.
    */
   async function writeEditedChart(
@@ -476,6 +506,7 @@ export function createOpfsProjectStore(
     updateProject,
     deleteProject,
     readChartText,
+    readSongIni,
     writeEditedChart,
     loadAudioFiles,
     loadFilesForExport,

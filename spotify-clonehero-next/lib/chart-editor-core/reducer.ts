@@ -262,6 +262,13 @@ export function chartEditorReducer(
       };
     }
 
+    case 'SET_CHART_METADATA': {
+      if (!state.chartDoc) return state;
+      // `song.ini` fields are not chart content: no track, tempo map or
+      // section moved, so every stamp and both history stacks stand.
+      return {...state, chartDoc: action.chartDoc, dirty: true};
+    }
+
     case 'UNDO': {
       const undone = state.undoEntries[state.undoEntries.length - 1];
       if (!undone || !state.chartDoc) return state;

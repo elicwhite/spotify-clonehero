@@ -29,6 +29,13 @@ export {
   type TempoDerivedFeature,
 } from './content-stamps';
 export {
+  applySongIniMetadata,
+  readSongIniMetadata,
+  withSongIniFields,
+  type SongIniMetadataValue,
+  type SongMetadataValue,
+} from './songIniMetadata';
+export {
   availableTrackKeys,
   highestDifficultyTrackKeys,
   LOWER_TRACK_DIFFICULTIES,

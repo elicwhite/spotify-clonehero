@@ -1,7 +1,13 @@
 'use client';
 
 import {useState, useCallback} from 'react';
-import {AlertTriangle, Download, Loader2} from 'lucide-react';
+import {
+  AlertTriangle,
+  Download,
+  FileArchive,
+  Loader2,
+  Package,
+} from 'lucide-react';
 import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
@@ -9,7 +15,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -23,6 +28,7 @@ import {
 } from '@/components/ui/select';
 import {Label} from '@/components/ui/label';
 import {Switch} from '@/components/ui/switch';
+import {cn} from '@/lib/utils';
 
 import {
   assembleChartFiles,
@@ -32,8 +38,27 @@ import {
   type PackageFormat,
 } from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
+import type {ChartDocument} from '@/lib/chart-edit';
+import type {DifficultyField} from '@/lib/chart-difficulty';
+import type {SongIniMetadataValue} from '@/lib/chart-editor-core';
 
-import SongMetadataFields from './SongMetadataFields';
+/**
+ * The intensities the chart actually declares. A field the user left unset is
+ * omitted rather than sent as the `-1` sentinel, so `assembleChartFiles` keeps
+ * whatever the document carried — including the rated-drums default it stamps
+ * on a minted chart.
+ */
+function declaredDifficulties(
+  value: SongIniMetadataValue,
+): Partial<Record<DifficultyField, number>> {
+  const declared: Partial<Record<DifficultyField, number>> = {};
+  for (const [field, intensity] of Object.entries(value.difficulties)) {
+    if (intensity !== null && intensity !== undefined) {
+      declared[field as DifficultyField] = intensity;
+    }
+  }
+  return declared;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,11 +80,14 @@ export interface AudioSource {
 export type ChartFileFormat = 'chart' | 'mid';
 
 interface ExportDialogProps {
-  /** Default song name, pre-filled into the export form. */
+  /**
+   * Song name written into the exported `song.ini` and the download's file
+   * name. Read-only here — editing lives in the song-details dialog.
+   */
   songName: string;
-  /** Default artist name, pre-filled into the export form. */
+  /** Artist name written into the exported `song.ini`. Read-only here. */
   artistName?: string | undefined;
-  /** Default charter credit, pre-filled into the export form. */
+  /** Charter credit written into the exported `song.ini`. Read-only here. */
   charterName?: string | undefined;
   /**
    * Provides the chart text to export. Must return a valid .chart string.
@@ -81,6 +109,14 @@ interface ExportDialogProps {
         format: ChartFileFormat;
       }) => Promise<{fileName: string; data: Uint8Array}>)
     | undefined;
+  /**
+   * The live document, when the host has one. Preferred over `getChartText`,
+   * whose `.chart` text carries no `song.ini` surface at all: assembling from
+   * the document keeps `icon`, `loading_phrase`, `album_track`, a keys
+   * difficulty, any custom ini key and the chart's assets. `getChartFile`
+   * still wins, since only it can honour the chart-file format select.
+   */
+  chartDoc?: ChartDocument | undefined;
   /**
    * Provides audio sources to include in the package.
    *
@@ -106,9 +142,10 @@ interface ExportDialogProps {
    */
   getExtraAssets?: (() => Promise<AssetFile[]>) | undefined;
   /**
-   * Preselects the package format select (e.g. to match the original
-   * package's format when re-exporting an existing chart). Defaults to
-   * 'zip' when omitted.
+   * Marks which of the two package buttons (zip / sng) matches the format
+   * the project was originally imported from, so the dialog can badge it as
+   * "Recommended" when re-exporting an existing chart. Both buttons stay
+   * fully usable either way. Omit when there's no original package to match.
    */
   defaultFormat?: PackageFormat | undefined;
   /**
@@ -129,6 +166,14 @@ interface ExportDialogProps {
    * can't convert at all (e.g. /tempo, /add-lyrics) leave both unset.
    */
   chartFormatSelectable?: boolean | undefined;
+  /**
+   * The rest of the chart's `song.ini` surface — album / genre / year and the
+   * per-instrument intensities the song-details dialog authors. Only the
+   * identity fields are editable here; these ride along so the exported
+   * `song.ini` matches what the editor shows, which a chart file alone can't
+   * carry (`.chart` has no `diff_*` fields).
+   */
+  iniMetadata?: SongIniMetadataValue | undefined;
 }
 
 /** A passthrough asset file for package assembly (see {@link getExtraAssets}). */
@@ -144,8 +189,10 @@ export interface AssetFile {
 /**
  * Export dialog for downloading the chart as a .zip or .sng package.
  *
- * Allows the user to select package format (ZIP or SNG) and
- * triggers a browser download with the packaged chart and audio.
+ * The user picks the package format directly by clicking one of two large
+ * buttons, each of which packages and downloads immediately. Song / artist /
+ * charter and the rest of `song.ini` are read from the document, not edited
+ * here — that lives in the song-details dialog.
  *
  * Chart and audio data are provided via callback props, making
  * this component independent of any storage backend.
@@ -156,142 +203,150 @@ export default function ExportDialog({
   charterName,
   getChartText,
   getChartFile,
+  chartDoc,
   getAudioSources,
   showStemChoice = false,
   getExtraAssets,
-  defaultFormat = 'zip',
+  defaultFormat,
   sourceChartFormat,
   chartFormatSelectable = false,
+  iniMetadata,
 }: ExportDialogProps) {
   const [open, setOpen] = useState(false);
-  const [packageFormat, setPackageFormat] =
-    useState<PackageFormat>(defaultFormat);
   const [includeStems, setIncludeStems] = useState(true);
-  const [isExporting, setIsExporting] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<PackageFormat | null>(
+    null,
+  );
   const [chartFileFormat, setChartFileFormat] = useState<ChartFileFormat>(
     sourceChartFormat ?? 'chart',
   );
 
-  // Editable metadata, (re)seeded from the props each time the dialog opens.
-  const [metadata, setMetadata] = useState({
-    name: songName,
-    artist: artistName ?? '',
-    charter: charterName ?? '',
-  });
-
   const handleOpenChange = useCallback(
     (next: boolean) => {
       if (next) {
-        setMetadata({
-          name: songName,
-          artist: artistName ?? '',
-          charter: charterName ?? '',
-        });
         setChartFileFormat(sourceChartFormat ?? 'chart');
       }
       setOpen(next);
     },
-    [songName, artistName, charterName, sourceChartFormat],
+    [sourceChartFormat],
   );
 
-  const handleExport = useCallback(async () => {
-    setIsExporting(true);
-    try {
-      // 1. Get the chart — prefer the format-agnostic getChartFile (handles
-      // .mid-sourced chart-flow projects) over getChartText.
-      if (!getChartFile && !getChartText) {
-        throw new Error('ExportDialog requires getChartFile or getChartText');
-      }
-      const chartFile = getChartFile
-        ? await getChartFile({format: chartFileFormat})
-        : undefined;
-      const chartText =
-        chartFile || !getChartText ? undefined : await getChartText();
-
-      // 2. Collect audio sources. When the page offers a stem choice, honor
-      //    the toggle; otherwise include whatever audio it provides.
-      let audioFiles: AudioSource[] = [];
-      if (getAudioSources) {
-        try {
-          audioFiles = await getAudioSources({
-            includeStems: showStemChoice ? includeStems : true,
-          });
-        } catch (err) {
-          console.warn('Failed to get audio sources:', err);
+  const handleExport = useCallback(
+    async (packageFormat: PackageFormat) => {
+      setExportingFormat(packageFormat);
+      try {
+        // 1. Get the chart. getChartFile wins (it is the only source that can
+        // honour the chart-file format select), then the live document, then
+        // the `.chart` text.
+        const chartSource = getChartFile
+          ? {chartFile: await getChartFile({format: chartFileFormat})}
+          : chartDoc
+            ? {chartDoc}
+            : getChartText
+              ? {chartText: await getChartText()}
+              : null;
+        if (!chartSource) {
+          throw new Error(
+            'ExportDialog requires getChartFile, chartDoc or getChartText',
+          );
         }
-      }
 
-      // 3. Assemble notes.chart + song.ini + audio (+ any passthrough
-      //    assets from an existing chart package) into a flat file list.
-      let extraAssets: AssetFile[] = [];
-      if (getExtraAssets) {
-        try {
-          extraAssets = await getExtraAssets();
-        } catch (err) {
-          console.warn('Failed to get extra assets:', err);
+        // 2. Collect audio sources. When the page offers a stem choice, honor
+        //    the toggle; otherwise include whatever audio it provides.
+        let audioFiles: AudioSource[] = [];
+        if (getAudioSources) {
+          try {
+            audioFiles = await getAudioSources({
+              includeStems: showStemChoice ? includeStems : true,
+            });
+          } catch (err) {
+            console.warn('Failed to get audio sources:', err);
+          }
         }
+
+        // 3. Assemble notes.chart + song.ini + audio (+ any passthrough
+        //    assets from an existing chart package) into a flat file list.
+        let extraAssets: AssetFile[] = [];
+        if (getExtraAssets) {
+          try {
+            extraAssets = await getExtraAssets();
+          } catch (err) {
+            console.warn('Failed to get extra assets:', err);
+          }
+        }
+        // 3a. Normalize all audio to Opus before assembly. Some pages provide
+        //     already-encoded `.opus` (stem path), others provide wav/mp3/ogg
+        //     (original-file path, `/chart-editor`) or carry secondary audio in the
+        //     passthrough assets — transcode any non-Opus audio and rename it to
+        //     `.opus`; non-audio assets pass through untouched. Assembly itself
+        //     stays pure/sync; this async step is the seam.
+        const {files: opusAudioSources, durationMs: audioDurationMs} =
+          await transcodeAudioFilesToOpus(audioFiles);
+        const {files: opusExtraAssets, durationMs: extraAssetDurationMs} =
+          await transcodeAudioFilesToOpus(extraAssets);
+        // Longest decoded stem/track wins — e.g. an instrumental stem can run
+        // longer than the drums stem.
+        const songLengthMs =
+          audioDurationMs != null || extraAssetDurationMs != null
+            ? Math.max(audioDurationMs ?? 0, extraAssetDurationMs ?? 0)
+            : undefined;
+
+        const cleanMetadata = {
+          name: songName.trim() || 'Untitled',
+          artist: (artistName ?? '').trim(),
+          charter: (charterName ?? '').trim(),
+          ...(iniMetadata
+            ? {
+                album: iniMetadata.album,
+                genre: iniMetadata.genre,
+                year: iniMetadata.year,
+                difficulties: declaredDifficulties(iniMetadata),
+              }
+            : {}),
+        };
+        const fileEntries = assembleChartFiles({
+          ...chartSource,
+          metadata: cleanMetadata,
+          audioSources: opusAudioSources,
+          extraAssets: opusExtraAssets,
+          ...(songLengthMs != null ? {songLengthMs} : {}),
+        });
+
+        // 4. Package as ZIP or SNG
+        const {blob, extension} = packageChartFiles(fileEntries, packageFormat);
+
+        // 5. Trigger browser download, named `Artist - Song (Charter)`
+        downloadBlob(blob, chartPackageFileName(cleanMetadata, extension));
+
+        const audioNote =
+          audioFiles.length > 0
+            ? ` with ${audioFiles.length} audio file${audioFiles.length === 1 ? '' : 's'}`
+            : ' (no audio included)';
+        toast.success(`Chart exported${audioNote}`);
+        setOpen(false);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Export failed';
+        console.error('Export error:', err);
+        toast.error(msg);
+      } finally {
+        setExportingFormat(null);
       }
-      // 3a. Normalize all audio to Opus before assembly. Some pages provide
-      //     already-encoded `.opus` (stem path), others provide wav/mp3/ogg
-      //     (original-file path, `/chart-editor`) or carry secondary audio in the
-      //     passthrough assets — transcode any non-Opus audio and rename it to
-      //     `.opus`; non-audio assets pass through untouched. Assembly itself
-      //     stays pure/sync; this async step is the seam.
-      const {files: opusAudioSources, durationMs: audioDurationMs} =
-        await transcodeAudioFilesToOpus(audioFiles);
-      const {files: opusExtraAssets, durationMs: extraAssetDurationMs} =
-        await transcodeAudioFilesToOpus(extraAssets);
-      // Longest decoded stem/track wins — e.g. an instrumental stem can run
-      // longer than the drums stem.
-      const songLengthMs =
-        audioDurationMs != null || extraAssetDurationMs != null
-          ? Math.max(audioDurationMs ?? 0, extraAssetDurationMs ?? 0)
-          : undefined;
-
-      const cleanMetadata = {
-        name: metadata.name.trim() || 'Untitled',
-        artist: metadata.artist.trim(),
-        charter: metadata.charter.trim(),
-      };
-      const fileEntries = assembleChartFiles({
-        ...(chartFile ? {chartFile} : {}),
-        ...(chartText !== undefined ? {chartText} : {}),
-        metadata: cleanMetadata,
-        audioSources: opusAudioSources,
-        extraAssets: opusExtraAssets,
-        ...(songLengthMs != null ? {songLengthMs} : {}),
-      });
-
-      // 4. Package as ZIP or SNG
-      const {blob, extension} = packageChartFiles(fileEntries, packageFormat);
-
-      // 5. Trigger browser download, named `Artist - Song (Charter)`
-      downloadBlob(blob, chartPackageFileName(cleanMetadata, extension));
-
-      const audioNote =
-        audioFiles.length > 0
-          ? ` with ${audioFiles.length} audio file${audioFiles.length === 1 ? '' : 's'}`
-          : ' (no audio included)';
-      toast.success(`Chart exported${audioNote}`);
-      setOpen(false);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Export failed';
-      console.error('Export error:', err);
-      toast.error(msg);
-    } finally {
-      setIsExporting(false);
-    }
-  }, [
-    metadata,
-    packageFormat,
-    chartFileFormat,
-    includeStems,
-    getChartText,
-    getChartFile,
-    getAudioSources,
-    showStemChoice,
-    getExtraAssets,
-  ]);
+    },
+    [
+      songName,
+      artistName,
+      charterName,
+      iniMetadata,
+      chartFileFormat,
+      includeStems,
+      getChartText,
+      getChartFile,
+      chartDoc,
+      getAudioSources,
+      showStemChoice,
+      getExtraAssets,
+    ],
+  );
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -306,36 +361,11 @@ export default function ExportDialog({
         <DialogHeader>
           <DialogTitle>Export Chart</DialogTitle>
           <DialogDescription>
-            Confirm the song details and download the packaged chart.
+            Pick the package you want. Song details come from the chart itself.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
-          {/* Song / artist / charter metadata */}
-          <SongMetadataFields
-            value={metadata}
-            onChange={setMetadata}
-            idPrefix="export"
-          />
-
-          {/* Package format selector (outer container: zip/sng) */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="package-format" className="text-right">
-              Package
-            </Label>
-            <Select
-              value={packageFormat}
-              onValueChange={v => setPackageFormat(v as PackageFormat)}>
-              <SelectTrigger className="col-span-3" id="package-format">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="zip">ZIP (standard)</SelectItem>
-                <SelectItem value="sng">SNG (Clone Hero / YARG)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
           {/* Chart file format selector (notes.chart vs notes.mid) — only
               shown when the page can actually convert between them. The
               lossy-conversion warning only applies when there's a known
@@ -363,12 +393,12 @@ export default function ExportDialog({
                     {sourceChartFormat === 'chart' ? (
                       <span>
                         This chart was made as .chart. Converting to .mid can be
-                        lossy — some .chart-only data may not survive.
+                        lossy, some .chart-only data may not survive.
                       </span>
                     ) : (
                       <span>
                         This chart was made as .mid. Converting to .chart can be
-                        lossy — some .mid-only data may not survive.
+                        lossy, some .mid-only data may not survive.
                       </span>
                     )}
                   </p>
@@ -397,24 +427,82 @@ export default function ExportDialog({
               </div>
             </div>
           )}
-        </div>
 
-        <DialogFooter>
-          <Button onClick={handleExport} disabled={isExporting}>
-            {isExporting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                Exporting...
-              </>
-            ) : (
-              <>
-                <Download className="h-4 w-4 mr-1" />
-                Download .{packageFormat}
-              </>
-            )}
-          </Button>
-        </DialogFooter>
+          {/* Package format: two equal-weight buttons, each downloads
+              immediately on click. */}
+          <div className="grid grid-cols-2 gap-3">
+            <PackageButton
+              icon={FileArchive}
+              title=".zip"
+              description="A folder of loose files: chart, audio and song.ini."
+              recommended={defaultFormat === 'zip'}
+              busy={exportingFormat === 'zip'}
+              disabled={exportingFormat != null}
+              onClick={() => handleExport('zip')}
+            />
+            <PackageButton
+              icon={Package}
+              title=".sng"
+              description="A single packed file for Clone Hero and YARG."
+              recommended={defaultFormat === 'sng'}
+              busy={exportingFormat === 'sng'}
+              disabled={exportingFormat != null}
+              onClick={() => handleExport('sng')}
+            />
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface PackageButtonProps {
+  icon: typeof FileArchive;
+  title: string;
+  description: string;
+  recommended: boolean;
+  busy: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}
+
+/** One of the two large, equal-weight export choices. */
+function PackageButton({
+  icon: Icon,
+  title,
+  description,
+  recommended,
+  busy,
+  disabled,
+  onClick,
+}: PackageButtonProps) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={`Download ${title} package`}
+      className={cn(
+        'relative flex h-auto flex-col items-center gap-2 whitespace-normal px-4 py-6 text-center',
+        recommended && 'border-primary',
+      )}>
+      {recommended && (
+        <span className="absolute right-2 top-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+          Recommended
+        </span>
+      )}
+      {busy ? (
+        <Loader2 className="h-6 w-6 animate-spin" />
+      ) : (
+        <Icon className="h-6 w-6" />
+      )}
+      <span className="text-base font-semibold">
+        {busy ? 'Exporting…' : title}
+      </span>
+      <span className="text-xs font-normal text-muted-foreground">
+        {description}
+      </span>
+    </Button>
   );
 }

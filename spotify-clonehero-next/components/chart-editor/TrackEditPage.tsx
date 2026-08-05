@@ -44,7 +44,13 @@ import {
   readChartForEditing,
   setAudioAnchor,
 } from '@/lib/chart-edit';
-import {highestDifficultyTrackKeys} from '@/lib/chart-editor-core';
+import {
+  getAssistProvenance,
+  highestDifficultyTrackKeys,
+  withAssistProvenance,
+  withSongIniFields,
+  type SongMetadataValue,
+} from '@/lib/chart-editor-core';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {ChartEditorProvider, useChartEditorContext} from './ChartEditorContext';
@@ -483,6 +489,10 @@ function TrackEditEditor({
     // idempotent — runs on every autosave.
     await store.updateProject(projectId, {
       audioAnchor: getAudioAnchor(state.chartDoc) ?? null,
+      // Assist provenance can't ride the chart file either, so it is mirrored
+      // the same way — a reload keeps any staleness prompt, "Keep as-is"
+      // dismissal, or chosen drum intensity's provenance the user left.
+      assistProvenance: getAssistProvenance(state.chartDoc) ?? null,
     });
   }, [projectId, state.chartDoc, store]);
 
@@ -507,19 +517,33 @@ function TrackEditEditor({
         setLoadingStep('Loading chart data...');
         const chartText = await store.readChartText(projectId);
         if (cancelled) return;
+        const songIni = await store.readSongIni(projectId);
+        if (cancelled) return;
 
         // 3. Build the editable ChartDocument. This is the editor's parse:
         // a basic four-lane drum chart is read as pro-drums so the cymbal
-        // toggle the editor offers survives the save it writes.
+        // toggle the editor offers survives the save it writes. The package's
+        // `song.ini` is overlaid onto the result, since the persisted `.chart`
+        // has nowhere to carry the fields that live only there (every
+        // `diff_*`, `icon`, custom keys).
         const chartBytes = new TextEncoder().encode(chartText);
         let chartDoc = readChartForEditing([
           {fileName: 'notes.chart', data: chartBytes},
         ]);
+        if (songIni) {
+          chartDoc = withSongIniFields(chartDoc, {
+            fileName: 'song.ini',
+            data: songIni,
+          });
+        }
         // 3a. Re-attach the persisted audio anchor (0064 addendum §1)
         // before this doc is ever dispatched, so the padding the chart was
         // saved with is the padding playback and export rebuild from.
         if (meta.audioAnchor) {
           chartDoc = setAudioAnchor(chartDoc, meta.audioAnchor);
+        }
+        if (meta.assistProvenance) {
+          chartDoc = withAssistProvenance(chartDoc, meta.assistProvenance);
         }
         const parsed = chartDoc.parsedChart;
 
@@ -731,6 +755,22 @@ function TrackEditEditor({
     [chartPackage.chartAssist, audioRebuilding],
   );
 
+  // The song-details dialog has already written its edit into the chart doc,
+  // which the autosave above persists. The identity fields are also the
+  // project record's own, and the header, the projects list and the export
+  // file name all read them from there, so they are mirrored across.
+  const handleMetadataChange = useCallback(
+    async ({name, artist, charter}: SongMetadataValue) => {
+      const updated = await store.updateProject(projectId, {
+        name,
+        artist,
+        charter,
+      });
+      setProjectMeta(updated);
+    },
+    [projectId, store],
+  );
+
   // Loading state
   if (loadingState === 'loading') {
     return (
@@ -775,6 +815,7 @@ function TrackEditEditor({
         songName={projectMeta?.name ?? 'Untitled'}
         artistName={projectMeta?.artist}
         charterName={projectMeta?.charter}
+        onMetadataChange={handleMetadataChange}
         dirty={state.dirty}
         getChartText={chartPackage.getChartText}
         getAudioSources={getAudioSources}

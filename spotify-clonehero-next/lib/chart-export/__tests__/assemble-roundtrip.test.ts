@@ -13,6 +13,7 @@ import {describe, test, expect} from '@jest/globals';
 import type {ChartDocument} from '@eliwhite/scan-chart';
 
 import {createEmptyChart} from '@/lib/chart-edit';
+import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 
 import {assembleChartFiles} from '../assemble';
 
@@ -102,7 +103,7 @@ describe('assembleChartFiles round-trip mode (no metadata)', () => {
     expect(songIniText(entries)).toContain('song_length = 999');
   });
 
-  test('supplying metadata still stamps identity and ratings', () => {
+  test('supplying metadata stamps identity', () => {
     const ini = songIniText(
       assembleChartFiles({
         chartDoc: chartDoc(),
@@ -112,7 +113,32 @@ describe('assembleChartFiles round-trip mode (no metadata)', () => {
 
     expect(ini).toContain('name = New');
     expect(ini).toContain('charter = New Charter');
-    expect(ini).toMatch(/pro_drums/);
-    expect(ini).toMatch(/diff_drums/);
+  });
+
+  test('the drum ratings follow the drums track, not the stamp', () => {
+    const withoutDrums = songIniText(
+      assembleChartFiles({
+        chartDoc: chartDoc(),
+        metadata: {name: 'New', artist: 'New Artist', charter: 'New Charter'},
+      }),
+    );
+    expect(withoutDrums).not.toMatch(/pro_drums/);
+    expect(withoutDrums).not.toMatch(/diff_drums/);
+
+    const doc = chartDoc();
+    const withDrums = songIniText(
+      assembleChartFiles({
+        chartDoc: {
+          ...doc,
+          parsedChart: {
+            ...doc.parsedChart,
+            trackData: [emptyTrackData('drums', 'expert')],
+          },
+        },
+        metadata: {name: 'New', artist: 'New Artist', charter: 'New Charter'},
+      }),
+    );
+    expect(withDrums).toMatch(/pro_drums/);
+    expect(withDrums).toMatch(/diff_drums/);
   });
 });

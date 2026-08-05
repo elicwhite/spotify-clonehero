@@ -18,6 +18,7 @@ import type {
 } from '@eliwhite/scan-chart';
 
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
+import {DIFFICULTY_FIELDS, type DifficultyField} from '@/lib/chart-difficulty';
 
 /** Metadata the user supplies (or confirms) at export time. */
 export interface ChartPackageMetadata {
@@ -27,6 +28,20 @@ export interface ChartPackageMetadata {
   artist: string;
   /** Charter credit. Blank falls back to `MusicCharts.tools`. */
   charter: string;
+  /** `song.ini`'s `album`. Omitted leaves whatever the document carried. */
+  album?: string | undefined;
+  /** `song.ini`'s `genre`. Omitted leaves whatever the document carried. */
+  genre?: string | undefined;
+  /** `song.ini`'s `year`. A string, per the ini spec — charts in the wild
+   *  carry `2004`, `, 2004` and plain prose alike. */
+  year?: string | undefined;
+  /**
+   * Per-instrument `diff_*` intensities on the 0-6 scale, keyed by canonical
+   * `song.ini` field name. `-1` is the spec's "not set" sentinel and is
+   * written through as-is; a field left out of this record keeps the
+   * document's existing value.
+   */
+  difficulties?: Readonly<Partial<Record<DifficultyField, number>>> | undefined;
 }
 
 /** A named audio source to include in the package. Callers normalize audio to
@@ -158,6 +173,11 @@ function chartEndMs(parsedChart: ParsedChart): number {
 /**
  * Apply a minting flow's identity + ratings to a chart's metadata, or hand
  * the chart back untouched when no metadata was supplied (round-trip export).
+ *
+ * Every field the caller did not name rides through verbatim, unrecognised
+ * `song.ini` keys (`metadata.extraIniFields`) included, so a chart that
+ * declared `icon`, `loading_phrase`, `album_track`, a keys difficulty or a
+ * custom key comes back out declaring exactly the same thing.
  */
 function stampMetadata(
   parsedChart: ParsedChart,
@@ -167,6 +187,12 @@ function stampMetadata(
   if (!metadata) return parsedChart;
 
   const existing = parsedChart.metadata;
+  // The drum defaults below describe a drums arrangement, so they are only
+  // applied to a chart that has one. Stamping them on a guitar-only chart
+  // would advertise rated Pro Drums the package does not contain.
+  const hasDrums = parsedChart.trackData.some(
+    track => track.instrument === 'drums',
+  );
   // Declare a drums difficulty so scan-chart / chart managers see a rated
   // chart. The chart file alone carries this; any diff_drums the pipeline
   // set in song.ini separately is gone by here; default to 0 when absent.
@@ -174,6 +200,29 @@ function stampMetadata(
     existing.diff_drums != null && existing.diff_drums >= 0
       ? existing.diff_drums
       : 0;
+  // A five-lane chart is the one drum layout Pro Drums cannot describe, and
+  // scan-chart rejects a chart declaring both.
+  const drumDefaults =
+    hasDrums && !existing.five_lane_drums
+      ? {
+          pro_drums: true,
+          diff_drums: diffDrums,
+          // Phase Shift "real drums" difficulty. The default mirrors
+          // diff_drums: a four-lane Pro Drums chart declares the same
+          // intensity in both, and `difficulties` below can still set them
+          // apart if the user did.
+          diff_drums_real: diffDrums,
+        }
+      : {};
+  // Whatever the user set in the song-details editor is authoritative over
+  // both the document's value and the `diff_drums` fallback above. Only the
+  // fields actually present in the record are overwritten, so an unedited
+  // instrument keeps whatever the chart already declared.
+  const difficulties: Partial<Record<DifficultyField, number>> = {};
+  for (const field of DIFFICULTY_FIELDS) {
+    const value = metadata.difficulties?.[field];
+    if (value !== undefined) difficulties[field] = value;
+  }
   // Shallow-clone rather than mutate `parsedChart` in place — a
   // caller-supplied `chartDoc` (the `chartDoc` option) may be reused
   // elsewhere and shouldn't be silently modified by this call.
@@ -184,11 +233,11 @@ function stampMetadata(
       name: metadata.name,
       artist: metadata.artist,
       charter: metadata.charter.trim() || 'MusicCharts.tools',
-      pro_drums: true,
-      diff_drums: diffDrums,
-      // Phase Shift "real drums" difficulty — kept equal to diff_drums since
-      // this pipeline doesn't distinguish a separate real-drums chart.
-      diff_drums_real: diffDrums,
+      ...(metadata.album !== undefined ? {album: metadata.album} : {}),
+      ...(metadata.genre !== undefined ? {genre: metadata.genre} : {}),
+      ...(metadata.year !== undefined ? {year: metadata.year} : {}),
+      ...drumDefaults,
+      ...difficulties,
       song_length:
         songLengthMs != null && songLengthMs > 0
           ? Math.round(songLengthMs)

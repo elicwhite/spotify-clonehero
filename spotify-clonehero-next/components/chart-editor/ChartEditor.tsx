@@ -1,9 +1,15 @@
 'use client';
 
-import {type ReactNode, useMemo, useState} from 'react';
+import {type ReactNode, useCallback, useMemo, useState} from 'react';
 import {Pencil} from 'lucide-react';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
+import {
+  applySongIniMetadata,
+  computeTrackStamp,
+  readSongIniMetadata,
+  type SongIniMetadataValue,
+} from '@/lib/chart-editor-core';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
 import type {AudioSource, AssetFile, ChartFileFormat} from './ExportDialog';
@@ -18,6 +24,7 @@ import type {ChartAssistProps} from './sidebar/ChartAssist';
 import type {StemsMixerHostProps} from './sidebar/StemsMixer';
 import PianoRollTimeline from './piano-roll/PianoRollTimeline';
 import EditorMCPTools from './EditorMCPTools';
+import {useChartEditorContext} from './ChartEditorContext';
 import {useEditorDensity} from './hooks/useEditorDensity';
 import {useLoopRegionSync} from './hooks/useLoopRegionSync';
 
@@ -72,16 +79,17 @@ export interface ChartEditorProps {
   /** Charter name for display. */
   charterName?: string | undefined;
   /**
-   * Called when the user edits song/artist/charter via the header dialog.
-   * When provided, the header song info becomes clickable to open that editor.
-   * The page is responsible for persisting the change.
+   * Called after the user edits the chart's `song.ini` metadata via the header
+   * dialog. When provided, the header song info becomes clickable to open that
+   * editor.
+   *
+   * The chart document is already updated by the time this runs; what the host
+   * owes is its own project record, which carries the same identity fields
+   * under its own name. Everything else rides the document to the host's
+   * autosave.
    */
   onMetadataChange?:
-    | ((meta: {
-        name: string;
-        artist: string;
-        charter: string;
-      }) => void | Promise<void>)
+    | ((meta: SongIniMetadataValue) => void | Promise<void>)
     | undefined;
   /** Whether the chart has unsaved changes. */
   dirty?: boolean | undefined;
@@ -255,6 +263,7 @@ export default function ChartEditor({
   stackedPianoRoll = false,
 }: ChartEditorProps) {
   const [metadataOpen, setMetadataOpen] = useState(false);
+  const {state, dispatch} = useChartEditorContext();
   // Compact type/spacing scale for as long as an editor is on screen,
   // portalled Radix surfaces included (`hooks/useEditorDensity.ts`).
   useEditorDensity();
@@ -262,6 +271,49 @@ export default function ChartEditor({
   // host mounts, so the region is honoured on surfaces that render no loop
   // controls of their own.
   useLoopRegionSync(audioManager);
+
+  // The song.ini fields the header dialog edits. The catalog, difficulty and
+  // provenance halves are read straight off the live document, so a save is
+  // visible everywhere at once; identity comes down from the host, which owns
+  // the project record those three fields also name.
+  const metadataValue = useMemo<SongIniMetadataValue>(
+    () =>
+      readSongIniMetadata(state.chartDoc, {
+        name: songName,
+        artist: artistName ?? '',
+        charter: charterName ?? '',
+      }),
+    [state.chartDoc, songName, artistName, charterName],
+  );
+
+  // Staleness source for the drum difficulty recommendation: the Expert drums
+  // track's content stamp, the same hash the Chart Assist cards compare.
+  // Hashing every note is only worth doing while the dialog can show the
+  // result — this component re-renders on every chart edit.
+  const currentDrumStamp = useMemo(() => {
+    if (!metadataOpen) return undefined;
+    const track = chart.trackData.find(
+      candidate =>
+        candidate.instrument === 'drums' && candidate.difficulty === 'expert',
+    );
+    return track ? computeTrackStamp(track) : undefined;
+  }, [chart, metadataOpen]);
+
+  // The document is written here, through the one conversion every host
+  // shares, so no host can persist a subset of what the dialog collected. The
+  // host is left with only what it alone owns: its project record's identity.
+  const handleMetadataSave = useCallback(
+    async (next: SongIniMetadataValue) => {
+      if (state.chartDoc) {
+        dispatch({
+          type: 'SET_CHART_METADATA',
+          chartDoc: applySongIniMetadata(state.chartDoc, next),
+        });
+      }
+      await onMetadataChange?.(next);
+    },
+    [dispatch, onMetadataChange, state.chartDoc],
+  );
 
   const hasMultipleStackedTracks = useMemo(
     () =>
@@ -320,8 +372,10 @@ export default function ChartEditor({
                 songName={songName}
                 artistName={artistName}
                 charterName={charterName}
+                iniMetadata={state.chartDoc ? metadataValue : undefined}
                 getChartText={getChartText}
                 getChartFile={getChartFile}
+                chartDoc={state.chartDoc ?? undefined}
                 getAudioSources={getAudioSources}
                 showStemChoice={showStemChoice}
                 getExtraAssets={getExtraAssets}
@@ -338,12 +392,10 @@ export default function ChartEditor({
         <SongMetadataDialog
           open={metadataOpen}
           onOpenChange={setMetadataOpen}
-          value={{
-            name: songName,
-            artist: artistName ?? '',
-            charter: charterName ?? '',
-          }}
-          onSave={onMetadataChange}
+          value={metadataValue}
+          onSave={handleMetadataSave}
+          chart={chart}
+          currentDrumStamp={currentDrumStamp}
         />
       )}
 
