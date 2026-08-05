@@ -79,6 +79,7 @@ jest.mock('../../../lib/preview/audioManager', () => ({
     this.pause = jest.fn(async () => {});
     this.resume = jest.fn(async () => {});
     this.seekToChartTime = jest.fn(async () => {});
+    this.setLoopRegion = jest.fn();
     audioManagers.push(this);
   }),
 }));

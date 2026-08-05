@@ -1,5 +1,11 @@
 import {getBasename} from '../src-shared/utils';
 import {Files} from './chorus-chart-processing';
+import {
+  evaluateLoop,
+  isUsableLoopRegion,
+  seekEscapesLoop,
+  type LoopRegion,
+} from './loopRegion';
 
 type GroupedFile = {
   fileName: string;
@@ -11,6 +17,18 @@ export interface PracticeModeConfig {
   endMeasureMs: number;
   startTimeMs: number; // 2 seconds before start measure
   endTimeMs: number; // 2 seconds after end measure
+}
+
+/**
+ * The one loop the manager honours. Practice mode and the chart editor's A/B
+ * loop both compile down to this, so there is a single place that decides to
+ * wrap playback and a single seek path.
+ */
+interface ActiveLoop extends LoopRegion {
+  /** Which clock `startMs`/`endMs` are measured on. */
+  timeBase: 'audio' | 'chart';
+  /** See `confine` in `evaluateLoop`. */
+  confine: boolean;
 }
 
 export interface TempoConfig {
@@ -31,7 +49,8 @@ export class AudioManager {
   #isInitialized: boolean = false;
   #destroyed: boolean = false;
   #onSongEnded: (() => void) | null;
-  #practiceModeConfig: PracticeModeConfig | null = null;
+  #activeLoop: ActiveLoop | null = null;
+  #loopEscaped: boolean = false;
 
   // Track effective playback time accounting for tempo changes
   #effectivePlayTime: number = 0;
@@ -306,6 +325,7 @@ export class AudioManager {
     const currentTime = this.#context.currentTime;
     const songLength = this.#duration;
     const offset: number = time ?? songLength * percent!;
+    this.#noteSeek(offset);
     this.#trackOffset = offset;
     this.#startedAt = currentTime;
 
@@ -407,6 +427,13 @@ export class AudioManager {
         this.#smoothingRafId = 0;
         this.#lastFrameTime = 0;
         this.#smoothedTime = this.#rawCurrentTime;
+        return;
+      }
+
+      // Wrap before smoothing so the playhead never renders past the loop
+      // end. A wrap re-enters play(), which restarts this loop with fresh
+      // timing, so this tick must not schedule another frame of its own.
+      if (this.updateLoop()) {
         return;
       }
 
@@ -520,6 +547,8 @@ export class AudioManager {
       track.stop();
     });
 
+    this.#noteSeek(timeSec);
+
     const realTime = this.#context.currentTime;
     this.#trackOffset = timeSec;
     this.#startedAt = realTime;
@@ -579,16 +608,74 @@ export class AudioManager {
     this.#context.close();
   }
 
+  /**
+   * Confine playback to a practice section (audio-time ms), or `null` to
+   * release it. Replaces whatever loop is set — the manager honours one at a
+   * time.
+   */
   setPracticeMode(practiceMode: PracticeModeConfig | null) {
-    this.#practiceModeConfig = practiceMode;
+    this.#setActiveLoop(
+      practiceMode === null
+        ? null
+        : {
+            startMs: practiceMode.startTimeMs,
+            endMs: practiceMode.endTimeMs,
+            timeBase: 'audio',
+            confine: true,
+          },
+    );
   }
 
-  getPracticeMode(): PracticeModeConfig | null {
-    return this.#practiceModeConfig;
+  /**
+   * Set the A/B loop region in chart-relative ms (the time base the chart
+   * editor's `loopRegion` state uses), or `null` to clear it. Playback wraps
+   * from `endMs` back to `startMs`; seeking to or past the end leaves the
+   * user free to keep listening past it.
+   *
+   * Moving the markers hands control back to the loop, so dragging the end
+   * flag behind the playhead wraps on the next frame of playback instead of
+   * being mistaken for the user having escaped.
+   *
+   * Replaces any practice-mode section, so there is only ever one loop.
+   */
+  setLoopRegion(region: LoopRegion | null) {
+    this.#setActiveLoop(
+      isUsableLoopRegion(region)
+        ? {
+            startMs: region.startMs,
+            endMs: region.endMs,
+            timeBase: 'chart',
+            confine: false,
+          }
+        : null,
+    );
   }
 
-  isPracticeMode(): boolean {
-    return this.#practiceModeConfig !== null;
+  /** Install the one loop, in charge of the playhead from this moment on. */
+  #setActiveLoop(loop: ActiveLoop | null) {
+    this.#activeLoop = loop;
+    this.#loopEscaped = false;
+  }
+
+  /**
+   * Record whether a seek to `timeSec` (audio clock) leaves the active loop.
+   * Every seek runs through here, so the loop can tell "the user went
+   * somewhere past the end" from "the end moved behind the playhead".
+   */
+  #noteSeek(timeSec: number) {
+    const loop = this.#activeLoop;
+    if (!loop) {
+      this.#loopEscaped = false;
+      return;
+    }
+    this.#loopEscaped = seekEscapesLoop(loop, this.#toLoopMs(loop, timeSec));
+  }
+
+  /** The active A/B loop in chart ms, or `null` (practice mode is not one). */
+  getLoopRegion(): LoopRegion | null {
+    const loop = this.#activeLoop;
+    if (!loop || loop.timeBase !== 'chart') return null;
+    return {startMs: loop.startMs, endMs: loop.endMs};
   }
 
   #handleTrackEnded() {
@@ -596,9 +683,14 @@ export class AudioManager {
       return;
     }
 
-    // If in practice mode, loop back to start of practice section
-    if (this.#practiceModeConfig !== null) {
-      this.play({time: this.#practiceModeConfig.startTimeMs / 1000});
+    // A loop whose end sits past the last sample never gets a crossing to
+    // wrap on, so running out of audio wraps instead of ending the song. An
+    // A/B loop skips that once the user has escaped it: someone who seeked
+    // past the loop and played the rest of the song out gets the end of the
+    // song, not a jump back into a region they deliberately left.
+    const loop = this.#activeLoop;
+    if (loop !== null && (loop.confine || !this.#loopEscaped)) {
+      this.play({time: this.#toAudioSec(loop, Math.max(0, loop.startMs))});
       return;
     }
 
@@ -606,20 +698,46 @@ export class AudioManager {
     this.#onSongEnded?.();
   }
 
-  // Check if we need to loop in practice mode
-  checkPracticeModeLoop() {
-    if (!this.#practiceModeConfig || !this.#isInitialized) {
-      return;
+  /** A position in a loop's own time base, as audio-clock seconds. */
+  #toAudioSec(loop: ActiveLoop, ms: number): number {
+    const sec = ms / 1000;
+    return loop.timeBase === 'chart' ? sec + this.#chartDelay : sec;
+  }
+
+  /** An audio-clock position in seconds, as ms in a loop's own time base. */
+  #toLoopMs(loop: ActiveLoop, timeSec: number): number {
+    const sec =
+      loop.timeBase === 'chart' ? timeSec - this.#chartDelay : timeSec;
+    return sec * 1000;
+  }
+
+  /**
+   * Wrap playback if the playhead has left the active loop. Called every
+   * frame from the smoothing loop; also exposed so callers with their own
+   * tick can drive it. Returns true when it seeked.
+   */
+  updateLoop(): boolean {
+    const loop = this.#activeLoop;
+    if (!loop || !this.#isInitialized) {
+      return false;
     }
 
-    const currentTimeMs = this.currentTime * 1000;
+    const currentMs =
+      (loop.timeBase === 'chart' ? this.chartTime : this.currentTime) * 1000;
 
-    // If we've reached the end of the practice section, loop back
-    if (currentTimeMs >= this.#practiceModeConfig.endTimeMs) {
-      this.play({time: this.#practiceModeConfig.startTimeMs / 1000});
-    } else if (currentTimeMs < this.#practiceModeConfig.startTimeMs) {
-      this.play({time: this.#practiceModeConfig.startTimeMs / 1000});
-    }
+    const {seekToMs, escaped} = evaluateLoop({
+      currentMs,
+      region: loop,
+      isPlaying: this.isPlaying,
+      escaped: this.#loopEscaped,
+      confine: loop.confine,
+    });
+    this.#loopEscaped = escaped;
+
+    if (seekToMs === null) return false;
+
+    this.play({time: this.#toAudioSec(loop, seekToMs)});
+    return true;
   }
 }
 

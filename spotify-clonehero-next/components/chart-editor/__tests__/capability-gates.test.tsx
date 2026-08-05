@@ -23,6 +23,7 @@ import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import {TooltipProvider} from '@/components/ui/tooltip';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 import LeftSidebar from '../LeftSidebar';
+import {fakeAudioManager} from './fakeAudioManager';
 import type {ChartAssistProps} from '../sidebar/ChartAssist';
 import {
   ChartEditorProvider,
@@ -48,19 +49,10 @@ class FakeResizeObserver {
 (globalThis as unknown as {ResizeObserver: unknown}).ResizeObserver =
   FakeResizeObserver;
 
-/** Minimal AudioManager stub. LeftSidebar calls `setTempo`, the A/B loop
- *  controls read `currentTime`/`setPracticeMode`, and the Stems mixer (plan
- *  0074 Phase 5) reads `trackNames`/`setVolume`. The mixer renders one row
- *  per track name, and nothing at all for an empty list, so cases about the
- *  mixer pass track names explicitly. */
+/** The mixer renders one row per track name, and nothing at all for an
+ *  empty list, so cases about the mixer pass track names explicitly. */
 function stubAudioManager(trackNames: string[] = []): AudioManager {
-  return {
-    setTempo: () => {},
-    trackNames,
-    setVolume: () => {},
-    currentTime: 12,
-    setPracticeMode: () => {},
-  } as unknown as AudioManager;
+  return fakeAudioManager({trackNames, currentTime: 12, chartTime: 12});
 }
 
 function renderWith(

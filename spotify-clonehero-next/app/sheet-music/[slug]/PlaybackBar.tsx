@@ -38,7 +38,7 @@ export default function PlaybackBar({
 
       // Check for practice mode looping
       if (audioManagerRef.current && isPlaying) {
-        audioManagerRef.current.checkPracticeModeLoop();
+        audioManagerRef.current.updateLoop();
       }
     },
     isPlaying ? 100 : null,

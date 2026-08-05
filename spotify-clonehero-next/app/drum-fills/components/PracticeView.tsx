@@ -597,9 +597,9 @@ function PracticeSession({
     if (!am || !am.isInitialized) return;
     const chartMs = am.chartTime * 1000;
 
-    // Practice-mode looping is handled by AudioManager.checkPracticeModeLoop,
+    // Practice-mode looping is handled by AudioManager.updateLoop,
     // but we re-anchor scoring here based on the fill window crossings.
-    if (am.isPlaying) am.checkPracticeModeLoop();
+    if (am.isPlaying) am.updateLoop();
 
     // Arm a timing-window early so an early downbeat hit is captured and
     // credited to the first note instead of being dropped.

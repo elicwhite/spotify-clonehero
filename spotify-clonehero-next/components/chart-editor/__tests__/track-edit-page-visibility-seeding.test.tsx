@@ -68,6 +68,7 @@ jest.mock('../../../lib/preview/audioManager', () => ({
     this.trackNames = audioFiles.map(f => f.fileName);
     this.setChartDelay = jest.fn();
     this.setVolume = jest.fn();
+    this.setLoopRegion = jest.fn();
     this.destroy = jest.fn();
   }),
 }));

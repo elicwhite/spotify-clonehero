@@ -420,7 +420,7 @@ export default function Renderer({
 
   // Offset practice mode times for AudioManager.
   // PracticeModeConfig stores chart times in startTimeMs/endTimeMs,
-  // but AudioManager.checkPracticeModeLoop compares against audio time,
+  // but AudioManager.updateLoop compares against audio time,
   // so we must shift by chartDelayMs when passing to AudioManager.
   const toAudioPracticeMode = useCallback(
     (config: PracticeModeConfig): PracticeModeConfig => ({

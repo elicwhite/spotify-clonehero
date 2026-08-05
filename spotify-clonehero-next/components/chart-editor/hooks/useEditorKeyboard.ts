@@ -382,10 +382,6 @@ export function useEditorKeyboard(onSave?: () => void) {
   // -----------------------------------------------------------------------
   useHotkey('Mod+L', () => {
     dispatch({type: 'SET_LOOP_REGION', region: null});
-    const am = audioManagerRef.current;
-    if (am) {
-      am.setPracticeMode(null);
-    }
   });
 
   // -----------------------------------------------------------------------

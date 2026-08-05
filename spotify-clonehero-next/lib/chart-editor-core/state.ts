@@ -8,6 +8,7 @@ import type {
 import type {TrackKeyId} from './trackInventory';
 import type {EditorCapabilities} from '@/components/chart-editor/capabilities';
 import type {HighwayMode} from '@/lib/preview/highway';
+import type {LoopRegion} from '@/lib/preview/loopRegion';
 import type {EditorScope} from '@/components/chart-editor/scope';
 import {EMPTY_STAMP, type AssistProvenance} from './content-stamps';
 import type {TrackKey} from '@/lib/chart-edit';
@@ -177,8 +178,8 @@ export interface ChartEditorState {
 
   // -- Loop region --
 
-  /** A-B loop region in milliseconds. null = no loop. */
-  loopRegion: {startMs: number; endMs: number} | null;
+  /** A-B loop region in chart-relative milliseconds. null = no loop. */
+  loopRegion: LoopRegion | null;
 
   /** Highway display mode: 'classic' (texture) or 'waveform' (audio waveform surface). */
   highwayMode: HighwayMode;
@@ -257,7 +258,7 @@ export type ChartEditorAction =
   // -- Cursor --
   | {type: 'SET_CURSOR_TICK'; tick: number}
   // -- Loop --
-  | {type: 'SET_LOOP_REGION'; region: {startMs: number; endMs: number} | null}
+  | {type: 'SET_LOOP_REGION'; region: LoopRegion | null}
   // -- Highway mode --
   | {type: 'SET_HIGHWAY_MODE'; mode: HighwayMode}
   // -- Sheet music pane --

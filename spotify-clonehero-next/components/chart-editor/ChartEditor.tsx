@@ -19,6 +19,7 @@ import type {StemsMixerHostProps} from './sidebar/StemsMixer';
 import PianoRollTimeline from './piano-roll/PianoRollTimeline';
 import EditorMCPTools from './EditorMCPTools';
 import {useEditorDensity} from './hooks/useEditorDensity';
+import {useLoopRegionSync} from './hooks/useLoopRegionSync';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -257,6 +258,10 @@ export default function ChartEditor({
   // Compact type/spacing scale for as long as an editor is on screen,
   // portalled Radix surfaces included (`hooks/useEditorDensity.ts`).
   useEditorDensity();
+  // The A/B loop reaches playback from here, the one component every editor
+  // host mounts, so the region is honoured on surfaces that render no loop
+  // controls of their own.
+  useLoopRegionSync(audioManager);
 
   const hasMultipleStackedTracks = useMemo(
     () =>

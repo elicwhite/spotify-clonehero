@@ -23,7 +23,7 @@ import '@testing-library/jest-dom';
 import {render, screen} from '@testing-library/react';
 import {createEmptyChart} from '@eliwhite/scan-chart';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
-import type {AudioManager} from '@/lib/preview/audioManager';
+import {fakeAudioManager} from './fakeAudioManager';
 import SiteHeader from '@/components/SiteChrome';
 import {ChartEditorProvider} from '../ChartEditorContext';
 import {AudioServiceProvider} from '../AudioServiceContext';
@@ -52,13 +52,7 @@ jest.mock('../TransportControls', () => ({
   default: () => <div data-testid="transport-controls-stub" />,
 }));
 const metadata = {} as ChartResponseEncore;
-// `trackNames`/`setVolume`: the sidebar's Stems mixer (plan 0074 Phase 5)
-// reads these on every mount now that DRUM_EDIT_CAPABILITIES (the default)
-// shows it.
-const audioManager = {
-  trackNames: [],
-  setVolume: () => {},
-} as unknown as AudioManager;
+const audioManager = fakeAudioManager();
 
 function editor(props: {hideHeader?: boolean} = {}) {
   return (

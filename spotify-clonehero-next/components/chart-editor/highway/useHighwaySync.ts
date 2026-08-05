@@ -20,6 +20,7 @@ import {useEffect, type RefObject} from 'react';
 import type {StageHighwayHandle} from '@/lib/preview/highway';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {HighwayMode} from '@/lib/preview/highway';
+import type {LoopRegion} from '@/lib/preview/loopRegion';
 import type {ToolMode} from '@/lib/chart-editor-core';
 
 export interface HighwaySyncInputs {
@@ -48,7 +49,7 @@ export interface HighwaySyncInputs {
   activeTool: ToolMode;
   hoverLane: number | null;
   hoverTick: number | null;
-  loopRegion: {startMs: number; endMs: number} | null;
+  loopRegion: LoopRegion | null;
 }
 
 /**

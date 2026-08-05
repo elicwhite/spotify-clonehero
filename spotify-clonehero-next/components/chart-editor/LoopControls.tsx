@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/tooltip';
 import {useChartEditorContext} from './ChartEditorContext';
 import type {AudioManager} from '@/lib/preview/audioManager';
+import {loopEndRegionAt, loopStartRegionAt} from './piano-roll/loopFlags';
 import {cn} from '@/lib/utils';
 
 /** One cell of the segmented control: square corners, a hairline divider
@@ -32,10 +33,11 @@ interface LoopControlsProps {
  * - "Clear" removes the loop
  *
  * Each button carries an accessible name and tooltip naming the interaction
- * (plan 0076 item 21: the bare "A"/"B" labels alone didn't say what
- * clicking them does) — the interaction model itself is unchanged.
+ * (the bare "A"/"B" labels alone don't say what clicking them does).
  *
- * Uses AudioManager's setPracticeMode() for the actual loop playback.
+ * Positions are chart-relative ms — the same time base the piano roll and
+ * the highway draw `state.loopRegion` in. Dispatching is the whole job: the
+ * editor root carries the region to the engine through `useLoopRegionSync`.
  */
 export default function LoopControls({
   audioManager,
@@ -44,46 +46,24 @@ export default function LoopControls({
   const {state, dispatch} = useChartEditorContext();
 
   const setLoopStart = useCallback(() => {
-    const currentMs = audioManager.currentTime * 1000;
-    const endMs = state.loopRegion?.endMs ?? currentMs + 4000;
-
-    const region = {
-      startMs: currentMs,
-      endMs: Math.max(currentMs + 100, endMs),
-    };
-    dispatch({type: 'SET_LOOP_REGION', region});
-
-    // Apply to AudioManager
-    audioManager.setPracticeMode({
-      startMeasureMs: region.startMs,
-      endMeasureMs: region.endMs,
-      startTimeMs: Math.max(0, region.startMs - 2000),
-      endTimeMs: region.endMs,
+    const currentMs = audioManager.chartTime * 1000;
+    dispatch({
+      type: 'SET_LOOP_REGION',
+      region: loopStartRegionAt(currentMs, state.loopRegion),
     });
   }, [state.loopRegion, audioManager, dispatch]);
 
   const setLoopEnd = useCallback(() => {
-    const currentMs = audioManager.currentTime * 1000;
-    const startMs = state.loopRegion?.startMs ?? Math.max(0, currentMs - 4000);
-
-    const region = {
-      startMs: Math.min(startMs, currentMs - 100),
-      endMs: currentMs,
-    };
-    dispatch({type: 'SET_LOOP_REGION', region});
-
-    audioManager.setPracticeMode({
-      startMeasureMs: region.startMs,
-      endMeasureMs: region.endMs,
-      startTimeMs: Math.max(0, region.startMs - 2000),
-      endTimeMs: region.endMs,
+    const currentMs = audioManager.chartTime * 1000;
+    dispatch({
+      type: 'SET_LOOP_REGION',
+      region: loopEndRegionAt(currentMs, state.loopRegion),
     });
   }, [state.loopRegion, audioManager, dispatch]);
 
   const clearLoop = useCallback(() => {
     dispatch({type: 'SET_LOOP_REGION', region: null});
-    audioManager.setPracticeMode(null);
-  }, [audioManager, dispatch]);
+  }, [dispatch]);
 
   const hasLoop = state.loopRegion !== null;
 
