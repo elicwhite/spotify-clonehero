@@ -8,9 +8,15 @@ import {useAudioServiceContext} from '../AudioServiceContext';
 import {
   getSelectedIds,
   getFirstSelectedId,
+  isClipboardEmpty,
   parseTrackKeyId,
+  pasteAnchorTick,
+  pasteLyricsAt,
+  pasteNotesAt,
   selectActiveSchema,
   selectActiveTrack,
+  toClipboardLyrics,
+  toClipboardNotes,
   trackKeyId,
   type ToolMode,
 } from '@/lib/chart-editor-core';
@@ -21,6 +27,7 @@ import {
 } from '../scope';
 import {useExecuteCommand, useUndoRedo} from './useEditCommands';
 import {
+  AddLyricCommand,
   AddNoteCommand,
   DeleteLyricCommand,
   DeleteNotesCommand,
@@ -35,7 +42,9 @@ import {
 } from '../commands';
 import {
   findTrack,
+  lyricId,
   parseLyricId,
+  DEFAULT_VOCALS_PART,
   drums4LaneSchema,
   drums5LaneSchema,
   guitarSchema,
@@ -174,6 +183,25 @@ export function useEditorKeyboard(onSave?: () => void) {
     [state],
   );
 
+  // The playhead's live tick, UNSNAPPED. `state.cursorTick` only moves on
+  // explicit cursor placement (arrow keys, a highway click), so anything
+  // that must act "where the playhead is" — paste — has to read the audio
+  // position instead. Falls back to `cursorTick` when there's no audio.
+  const getPlayheadTick = useCallback((): number => {
+    const am = audioManagerRef.current;
+    if (!am || !state.chartDoc) return state.cursorTick;
+    const timedTempos = buildTimedTempos(
+      state.chartDoc.parsedChart.tempos,
+      state.chartDoc.parsedChart.resolution,
+    );
+    if (timedTempos.length === 0) return state.cursorTick;
+    return msToTick(
+      am.chartTime * 1000,
+      timedTempos,
+      state.chartDoc.parsedChart.resolution,
+    );
+  }, [audioManagerRef, state.chartDoc, state.cursorTick]);
+
   // Helper: sync cursor tick from current audio position.
   // After playback or timeline clicks, the audio position may have moved
   // without updating cursorTick. This returns the current audio position
@@ -257,127 +285,227 @@ export function useEditorKeyboard(onSave?: () => void) {
   );
 
   // -----------------------------------------------------------------------
-  // Copy (Mod+C)
+  // Clipboard (Mod+C / Mod+X / Mod+V)
+  //
+  // Copy captures two independent payloads: the active track's selected
+  // notes (tick offsets from the earliest, see `toClipboardNotes`) and the
+  // selected lyrics (millisecond offsets from the earliest, see
+  // `toClipboardLyrics`). Each payload keeps its own anchor, so a mixed
+  // copy pastes notes from the first note and lyrics from the first lyric.
   // -----------------------------------------------------------------------
+
+  /** Notes currently selected on the active track, in chart terms. */
+  const getSelectedTrackNotes = useCallback(() => {
+    const selectedIds = activeNoteIds(state);
+    const track = getActiveTrack();
+    const trackKey = trackKeyFromScope(state.activeScope);
+    if (selectedIds.size === 0 || !track || !trackKey) {
+      return {trackKey: null, selectedIds, notes: [] as SchemaNote[]};
+    }
+    const schema = schemaForInstrument(trackKey.instrument) ?? drums4LaneSchema;
+    const notes = listNotes(track, schema)
+      .filter(n => selectedIds.has(noteId(n)))
+      .map(n => toSchemaNote(n));
+    return {trackKey, selectedIds, notes};
+  }, [state, getActiveTrack]);
+
+  /** Selected syllables with their RAW event text, so a paste round-trips
+   *  hyphenation and pitch markers rather than the row's display text. */
+  const getSelectedLyrics = useCallback(() => {
+    const ids = getSelectedIds(state, 'lyric');
+    const out: {tick: number; text: string; partName: string}[] = [];
+    if (ids.size === 0 || !state.chartDoc) return out;
+    const parts = state.chartDoc.parsedChart.vocalTracks?.parts ?? {};
+    for (const [partName, part] of Object.entries(parts)) {
+      for (const phrase of part.notePhrases) {
+        for (const lyric of phrase.lyrics) {
+          if (ids.has(lyricId(lyric.tick, partName))) {
+            out.push({tick: lyric.tick, text: lyric.text, partName});
+          }
+        }
+      }
+    }
+    return out;
+  }, [state]);
+
+  const writeClipboard = useCallback(() => {
+    if (!state.chartDoc) return {notes: [] as SchemaNote[], lyricTicks: []};
+    const {notes} = getSelectedTrackNotes();
+    const lyrics = getSelectedLyrics();
+    if (notes.length === 0 && lyrics.length === 0) {
+      return {notes: [] as SchemaNote[], lyricTicks: []};
+    }
+    const timedTempos = buildTimedTempos(
+      state.chartDoc.parsedChart.tempos,
+      state.chartDoc.parsedChart.resolution,
+    );
+    dispatch({
+      type: 'SET_CLIPBOARD',
+      clipboard: {
+        notes: toClipboardNotes(notes),
+        lyrics: toClipboardLyrics(
+          lyrics,
+          timedTempos,
+          state.chartDoc.parsedChart.resolution,
+        ),
+        sourceScope: state.activeScope,
+      },
+    });
+    return {notes, lyricTicks: lyrics};
+  }, [state, dispatch, getSelectedTrackNotes, getSelectedLyrics]);
+
+  const clipboardHasSelection =
+    activeNoteIds(state).size > 0 || getSelectedIds(state, 'lyric').size > 0;
+
   useHotkey(
     'Mod+C',
     () => {
-      const selectedIds = activeNoteIds(state);
-      if (selectedIds.size === 0) return;
-      const track = getActiveTrack();
-      const trackKey = trackKeyFromScope(state.activeScope);
-      if (!track || !trackKey) return;
-      const schema =
-        schemaForInstrument(trackKey.instrument) ?? drums4LaneSchema;
-      const selected = listNotes(track, schema).filter(n =>
-        selectedIds.has(noteId(n)),
-      );
-      if (selected.length === 0) return;
-
-      const minTick = Math.min(...selected.map(n => n.tick));
-      const notes: SchemaNote[] = selected.map(n =>
-        toSchemaNote({...n, tick: n.tick - minTick}),
-      );
-      dispatch({
-        type: 'SET_CLIPBOARD',
-        clipboard: {notes, sourceScope: state.activeScope},
-      });
+      writeClipboard();
     },
-    {enabled: activeNoteIds(state).size > 0},
+    {enabled: clipboardHasSelection},
   );
 
-  // -----------------------------------------------------------------------
-  // Cut (Mod+X)
-  // -----------------------------------------------------------------------
   useHotkey(
     'Mod+X',
     () => {
-      const selectedIds = activeNoteIds(state);
-      if (selectedIds.size === 0) return;
-      const track = getActiveTrack();
-      const trackKey = trackKeyFromScope(state.activeScope);
-      if (!track || !trackKey) return;
-      const schema =
-        schemaForInstrument(trackKey.instrument) ?? drums4LaneSchema;
-      const selected = listNotes(track, schema).filter(n =>
-        selectedIds.has(noteId(n)),
+      const copied = writeClipboard();
+      const commands: EditCommand[] = [];
+      const {trackKey, selectedIds} = getSelectedTrackNotes();
+      if (trackKey && copied.notes.length > 0) {
+        commands.push(
+          new DeleteNotesCommand(selectedIds as Set<string>, trackKey),
+        );
+      }
+      for (const lyric of copied.lyricTicks) {
+        commands.push(new DeleteLyricCommand(lyric.tick, lyric.partName));
+      }
+      if (commands.length === 0) return;
+      executeCommand(
+        commands.length === 1
+          ? commands[0]
+          : new BatchCommand(commands, 'Cut selection'),
       );
-      if (selected.length === 0) return;
-
-      // Copy
-      const minTick = Math.min(...selected.map(n => n.tick));
-      const notes: SchemaNote[] = selected.map(n =>
-        toSchemaNote({...n, tick: n.tick - minTick}),
-      );
-      dispatch({
-        type: 'SET_CLIPBOARD',
-        clipboard: {notes, sourceScope: state.activeScope},
-      });
-
-      // Delete
-      executeCommand(new DeleteNotesCommand(selectedIds, trackKey));
       dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
+      dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: new Set()});
     },
-    {enabled: activeNoteIds(state).size > 0},
+    {enabled: clipboardHasSelection},
   );
 
-  // -----------------------------------------------------------------------
-  // Paste (Mod+V)
-  // -----------------------------------------------------------------------
+  // Paste places the clipboard at the PLAYHEAD. Notes land grid-snapped
+  // (`pasteAnchorTick`) and keep their tick deltas; lyrics land exactly on
+  // the playhead and keep their real-time spacing. Collisions resolve in
+  // favour of what is already in the chart: a pasted note whose tick and lane
+  // are taken is dropped, and so is a syllable whose tick is taken or that
+  // falls outside every phrase. The rest of the paste still lands. The whole
+  // paste runs as one `BatchCommand`, so a single undo reverses it.
   useHotkey(
     'Mod+V',
     () => {
       const clipboard = state.clipboard;
-      if (!clipboard || clipboard.notes.length === 0 || !state.chartDoc) return;
-      const cursorTick = state.cursorTick;
+      if (isClipboardEmpty(clipboard) || !state.chartDoc) return;
+
+      const {resolution} = state.chartDoc.parsedChart;
+      const timedTempos = buildTimedTempos(
+        state.chartDoc.parsedChart.tempos,
+        resolution,
+      );
+      const playheadTick = getPlayheadTick();
+      const commands: EditCommand[] = [];
+      const pastedNoteIds = new Set<string>();
+      const pastedLyricIds = new Set<string>();
 
       const trackKey = trackKeyFromScope(state.activeScope);
-      if (!trackKey) return;
-      const targetSchema = selectActiveSchema(state) ?? drums4LaneSchema;
-      // Source track is resolved via drumType from the same chartDoc — the
-      // clipboard doesn't store its own drumType, but drumType is a
-      // chart-level (not track-level) property, so the active doc's value
-      // applies to the source scope too.
-      const sourceTrackKey = trackKeyFromScope(clipboard.sourceScope);
-      const sourceTrack = sourceTrackKey
-        ? findTrack(state.chartDoc, sourceTrackKey)?.track
-        : null;
-      const sourceSchema = sourceTrack
-        ? (schemaForTrack(sourceTrack, state.chartDoc.parsedChart.drumType) ??
-          targetSchema)
-        : targetSchema;
+      if (trackKey && clipboard.notes.length > 0) {
+        const targetSchema = selectActiveSchema(state) ?? drums4LaneSchema;
+        // Source track is resolved via drumType from the same chartDoc — the
+        // clipboard doesn't store its own drumType, but drumType is a
+        // chart-level (not track-level) property, so the active doc's value
+        // applies to the source scope too.
+        const sourceTrackKey = trackKeyFromScope(clipboard.sourceScope);
+        const sourceTrack = sourceTrackKey
+          ? findTrack(state.chartDoc, sourceTrackKey)?.track
+          : null;
+        const sourceSchema = sourceTrack
+          ? (schemaForTrack(sourceTrack, state.chartDoc.parsedChart.drumType) ??
+            targetSchema)
+          : targetSchema;
 
-      // Translate each note through the target track's schema (lane-by-lane
-      // via translateSchemaNote) so pasting across instruments/difficulties
-      // with different lane layouts lands on the right lane rather than
-      // reusing the source's raw NoteType. Notes with no counterpart lane
-      // in the target schema are dropped.
-      const translated = clipboard.notes
-        .map(n =>
-          translateSchemaNote(
-            {...n, tick: n.tick + cursorTick},
-            sourceSchema,
-            targetSchema,
-          ),
-        )
-        .filter((n): n is SchemaNote => n !== null);
+        // Translate each note through the target track's schema (lane-by-lane
+        // via translateSchemaNote) so pasting across instruments/difficulties
+        // with different lane layouts lands on the right lane rather than
+        // reusing the source's raw NoteType. Notes with no counterpart lane
+        // in the target schema are dropped.
+        const anchorTick = pasteAnchorTick(
+          playheadTick,
+          resolution,
+          state.gridDivision,
+        );
+        const translated = pasteNotesAt(clipboard.notes, anchorTick)
+          .map(n => translateSchemaNote(n, sourceSchema, targetSchema))
+          .filter((n): n is SchemaNote => n !== null);
+        // Existing notes win a tick+lane collision: the pasted duplicate is
+        // dropped and the rest of the paste still lands. Dropping it here
+        // rather than letting `AddNoteCommand` no-op keeps an all-colliding
+        // paste from pushing an empty step onto the undo stack.
+        const targetTrack = findTrack(state.chartDoc, trackKey)?.track;
+        const occupied = new Set(
+          targetTrack
+            ? listNotes(targetTrack, targetSchema).map(n => noteId(n))
+            : [],
+        );
+        for (const note of translated) {
+          if (occupied.has(noteId(note))) continue;
+          commands.push(new AddNoteCommand(note, trackKey, targetSchema));
+          pastedNoteIds.add(trackQualifiedNoteId(trackKey, noteId(note)));
+        }
+      }
 
-      const commands = translated.map(
-        n => new AddNoteCommand(n, trackKey, targetSchema),
+      if (clipboard.lyrics.length > 0) {
+        const placed = pasteLyricsAt(
+          clipboard.lyrics,
+          Math.max(0, Math.round(playheadTick)),
+          timedTempos,
+          resolution,
+        );
+        // A syllable only lands where `addLyric` would accept it: inside an
+        // existing phrase, on a tick no syllable already occupies. Filtering
+        // here rather than letting the command no-op keeps a paste that lands
+        // nowhere from pushing an empty step onto the undo stack.
+        const phrases =
+          state.chartDoc.parsedChart.vocalTracks?.parts?.[DEFAULT_VOCALS_PART]
+            ?.notePhrases ?? [];
+        for (const lyric of placed) {
+          const phrase = phrases.find(
+            p => lyric.tick >= p.tick && lyric.tick <= p.tick + p.length,
+          );
+          if (!phrase) continue;
+          if (phrase.lyrics.some(l => l.tick === lyric.tick)) continue;
+          // Two copied syllables can round onto the same destination tick
+          // when the target tempo is faster than the source's; the second
+          // one is dropped rather than queued behind a command that would
+          // find the tick taken by the time it ran.
+          if (pastedLyricIds.has(lyricId(lyric.tick, DEFAULT_VOCALS_PART))) {
+            continue;
+          }
+          commands.push(
+            new AddLyricCommand(lyric.tick, lyric.text, DEFAULT_VOCALS_PART),
+          );
+          pastedLyricIds.add(lyricId(lyric.tick, DEFAULT_VOCALS_PART));
+        }
+      }
+
+      if (commands.length === 0) return;
+      executeCommand(
+        new BatchCommand(commands, `Paste ${commands.length} item(s)`),
       );
-
-      if (commands.length > 0) {
-        executeCommand(
-          new BatchCommand(commands, `Paste ${commands.length} note(s)`),
-        );
-
-        const newIds = new Set(
-          translated.map(n => trackQualifiedNoteId(trackKey, noteId(n))),
-        );
-        dispatch({type: 'SET_SELECTION', kind: 'note', ids: newIds});
+      if (pastedNoteIds.size > 0) {
+        dispatch({type: 'SET_SELECTION', kind: 'note', ids: pastedNoteIds});
+      }
+      if (pastedLyricIds.size > 0) {
+        dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: pastedLyricIds});
       }
     },
-    {enabled: state.clipboard !== null && state.chartDoc !== null},
+    {enabled: !isClipboardEmpty(state.clipboard) && state.chartDoc !== null},
   );
 
   // -----------------------------------------------------------------------

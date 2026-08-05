@@ -1,5 +1,15 @@
 export {EditorSession} from './EditorSession';
 export {chartEditorReducer} from './reducer';
+export {
+  isClipboardEmpty,
+  pasteAnchorTick,
+  pasteLyricsAt,
+  pasteNotesAt,
+  toClipboardLyrics,
+  toClipboardNotes,
+  type ClipboardLyric,
+  type EditorClipboard,
+} from './clipboard';
 export {isCommandAllowed} from './capabilityGate';
 export {
   getFirstSelectedId,

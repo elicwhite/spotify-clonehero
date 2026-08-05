@@ -2,7 +2,6 @@ import type {Dispatch} from 'react';
 import type {ChartDocument, DownbeatFlags, EntityKind} from '@/lib/chart-edit';
 import type {
   EditCommand,
-  SchemaNote,
   TempoGlueMode,
 } from '@/components/chart-editor/commands';
 import type {TrackKeyId} from './trackInventory';
@@ -10,6 +9,7 @@ import type {EditorCapabilities} from '@/components/chart-editor/capabilities';
 import type {HighwayMode} from '@/lib/preview/highway';
 import type {LoopRegion} from '@/lib/preview/loopRegion';
 import type {EditorScope} from '@/components/chart-editor/scope';
+import type {EditorClipboard} from './clipboard';
 import {EMPTY_STAMP, type AssistProvenance} from './content-stamps';
 import type {TrackKey} from '@/lib/chart-edit';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
@@ -152,15 +152,16 @@ export interface ChartEditorState {
   /** Undone steps, most recent last; redo pops from here. */
   redoEntries: UndoEntry[];
   /**
-   * Clipboard for copy/paste operations (plan 0037 Task 6). Schema-typed
+   * Clipboard for copy/paste operations. Notes are schema-typed
    * (`SchemaNote` — raw scan-chart `NoteType` + flag bitmask, not the
-   * drums-only `DrumNote` facade) and tagged with the scope it was copied
+   * drums-only `DrumNote` facade) and tagged with the scope they were copied
    * from, so paste can translate lane-by-lane into the *target* scope's
    * `InstrumentSchema` (`translateSchemaNote`) instead of assuming the
-   * source and destination tracks share a schema. Null when nothing has
-   * been copied yet.
+   * source and destination tracks share a schema. See {@link EditorClipboard}
+   * for the anchor-relative units notes and lyrics are stored in. Null when
+   * nothing has been copied yet.
    */
-  clipboard: {notes: SchemaNote[]; sourceScope: EditorScope} | null;
+  clipboard: EditorClipboard | null;
   /** Depth of undo stack when the last save occurred. */
   savedUndoDepth: number;
 
@@ -259,7 +260,7 @@ export type ChartEditorAction =
   // -- Clipboard --
   | {
       type: 'SET_CLIPBOARD';
-      clipboard: {notes: SchemaNote[]; sourceScope: EditorScope} | null;
+      clipboard: EditorClipboard | null;
     }
   | {type: 'SET_TRACK_VISIBILITY'; track: TrackKey; visible: boolean}
   | {type: 'SET_VISIBLE_TRACKS'; tracks: ReadonlySet<string>}
