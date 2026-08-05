@@ -191,7 +191,7 @@ export function followLeftMs(input: FollowInput): number {
 }
 
 export interface GlyphWidthInput {
-  /** Ticks in one grid step (e.g. `resolution / gridDivision`). */
+  /** Ticks in one grid step (`gridStepTicks(resolution, gridDivision)`). */
   gridStepTicks: number;
   /** Local ms-per-tick at the note's position (from the tempo map). */
   msPerTick: number;

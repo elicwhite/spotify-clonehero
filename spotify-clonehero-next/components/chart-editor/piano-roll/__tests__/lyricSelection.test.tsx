@@ -22,7 +22,14 @@ import {
   ChartEditorProvider,
   useChartEditorContext,
 } from '../../ChartEditorContext';
-import {getSelectedIds, type ChartEditorState} from '@/lib/chart-editor-core';
+import {
+  getSelectedIds,
+  type ChartEditorAction,
+  type ChartEditorState,
+} from '@/lib/chart-editor-core';
+import type {Dispatch} from 'react';
+
+type ChartEditorDispatch = Dispatch<ChartEditorAction>;
 import {retimeChart} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {makeFixtureDoc} from '../../__tests__/fixtures';
@@ -101,20 +108,28 @@ function SeedDoc({make}: {make: () => ChartDocument}) {
 /** Stashes the latest context state into `outRef.current` on every render,
  *  so the test can read selection + the committed doc without reaching into
  *  private component internals. */
-function StateCapture({outRef}: {outRef: {current: ChartEditorState | null}}) {
-  const {state} = useChartEditorContext();
+function StateCapture({
+  outRef,
+  dispatchRef,
+}: {
+  outRef: {current: ChartEditorState | null};
+  dispatchRef: {current: ChartEditorDispatch | null};
+}) {
+  const {state, dispatch} = useChartEditorContext();
   useEffect(() => {
     outRef.current = state;
+    dispatchRef.current = dispatch;
   });
   return null;
 }
 
 async function mountPanel(make: () => ChartDocument = makeFixtureDoc) {
   const stateRef: {current: ChartEditorState | null} = {current: null};
+  const dispatchRef: {current: ChartEditorDispatch | null} = {current: null};
   const {container} = render(
     <ChartEditorProvider>
       <SeedDoc make={make} />
-      <StateCapture outRef={stateRef} />
+      <StateCapture outRef={stateRef} dispatchRef={dispatchRef} />
       <PianoRollTimeline
         audioManager={stubAudioManager()}
         durationSeconds={10}
@@ -127,7 +142,7 @@ async function mountPanel(make: () => ChartDocument = makeFixtureDoc) {
   });
   const canvas = container.querySelector('canvas');
   if (!canvas) throw new Error('canvas not mounted');
-  return {canvas, stateRef};
+  return {canvas, stateRef, dispatchRef};
 }
 
 function fireAt(
@@ -383,7 +398,15 @@ describe('marquee (drag-select) spans notes and the lyrics row, never tempo', ()
 
 describe('dragging a mixed note+lyric selection moves both together', () => {
   it('moves the selected note(s) and lyric by the same tick delta', async () => {
-    const {canvas, stateRef} = await mountPanel();
+    const {canvas, stateRef, dispatchRef} = await mountPanel();
+
+    // A 1/16 grid: `gridDivision` counts subdivisions per WHOLE note, so at
+    // resolution 480 the lattice is `480 * 4 / 16` = 120 ticks. The fixture's
+    // notes sit a quarter (480 ticks) apart, so the drag below can only land
+    // clear of every one of them on a grid finer than a quarter.
+    act(() => {
+      dispatchRef.current!({type: 'SET_GRID_DIVISION', division: 16});
+    });
 
     // Build a mixed selection: two notes + one lyric, all clear of each
     // other's hit radius. Blue (tick 1440) sits in its own lane row; its x

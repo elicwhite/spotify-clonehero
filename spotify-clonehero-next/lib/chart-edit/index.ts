@@ -228,7 +228,7 @@ export {
 } from './empty-track';
 
 // Shared grid-snapping (one implementation for both interaction views)
-export {snapTickToGrid} from './snapping';
+export {snapTickToGrid, gridStepTicks, nextGridTick} from './snapping';
 
 // Per-instrument display schemas (lane data, flag bindings, default keys)
 export {

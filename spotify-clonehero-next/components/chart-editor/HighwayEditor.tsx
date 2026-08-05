@@ -13,16 +13,12 @@ import {useAudioManager} from './AudioServiceContext';
 import {parseTrackKeyId, selectRenderDoc} from '@/lib/chart-editor-core';
 import {scopePaneKey, type EditorScope} from './scope';
 import {useExecuteCommand} from './hooks/useEditCommands';
-import {
-  buildTimedTempos,
-  msToTick,
-  snapToGrid,
-} from '@/lib/drum-transcription/timing';
+import {buildTimedTempos, msToTick} from '@/lib/drum-transcription/timing';
 import HighwayLane from './highway/HighwayLane';
 import {useStageSync} from './highway/useStageSync';
 import {setupStage, type HighwayStage} from '@/lib/preview/highway';
 import {computeStageLayout} from '@/lib/preview/highway/layout';
-import {DEFAULT_VOCALS_PART} from '@/lib/chart-edit';
+import {DEFAULT_VOCALS_PART, snapTickToGrid} from '@/lib/chart-edit';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {TrackKey} from '@/lib/chart-edit';
@@ -140,10 +136,13 @@ export default function HighwayEditor({
     if (!state.isPlaying && wasPlaying && state.chartDoc) {
       const currentMs = (activeAudioManager?.currentTime ?? 0) * 1000;
       const cursorTick = msToTick(currentMs, timedTempos, resolution);
-      const snapped =
-        state.gridDivision === 0
-          ? Math.max(0, cursorTick)
-          : Math.max(0, snapToGrid(cursorTick, resolution, state.gridDivision));
+      // The editor's one snap: `gridDivision` counts subdivisions per whole
+      // note, and 0 means free placement (which `snapTickToGrid` handles).
+      const snapped = snapTickToGrid(
+        cursorTick,
+        resolution,
+        state.gridDivision,
+      );
       dispatch({type: 'SET_CURSOR_TICK', tick: snapped});
     }
   }, [

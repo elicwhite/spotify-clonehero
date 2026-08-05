@@ -348,7 +348,8 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
     const added = drumNoteTicks().filter(t => !ticksBefore.has(t));
     expect(added).toHaveLength(1);
     const {resolution} = latest!.state.chartDoc!.parsedChart;
-    const gridSize = Math.round(resolution / latest!.state.gridDivision);
+    // A whole note is `resolution * 4` ticks, and `gridDivision` slices it.
+    const gridSize = Math.round((resolution * 4) / latest!.state.gridDivision);
     expect(added[0] % gridSize).toBe(0);
   });
 

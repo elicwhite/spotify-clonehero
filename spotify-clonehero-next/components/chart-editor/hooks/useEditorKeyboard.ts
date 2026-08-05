@@ -44,6 +44,8 @@ import {
   laneToType,
   schemaForInstrument,
   schemaForTrack,
+  snapTickToGrid,
+  nextGridTick,
   type InstrumentSchema,
   type NoteFlagName,
 } from '@/lib/chart-edit';
@@ -51,8 +53,6 @@ import {
   buildTimedTempos,
   tickToMs,
   msToTick,
-  snapToGrid,
-  getNextGridTick,
   getNextMeasureTick,
 } from '@/lib/drum-transcription/timing';
 
@@ -189,7 +189,7 @@ export function useEditorKeyboard(onSave?: () => void) {
       timedTempos,
       state.chartDoc.parsedChart.resolution,
     );
-    return snapToGrid(
+    return snapTickToGrid(
       tick,
       state.chartDoc.parsedChart.resolution,
       state.gridDivision,
@@ -462,11 +462,11 @@ export function useEditorKeyboard(onSave?: () => void) {
   useHotkey('ArrowUp', () => {
     if (state.isPlaying || !state.chartDoc) return;
     const baseTick = getCursorFromAudio();
-    const newTick = getNextGridTick(
+    const newTick = nextGridTick(
       baseTick,
       1,
-      state.gridDivision,
       state.chartDoc.parsedChart.resolution,
+      state.gridDivision,
     );
     dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
     seekToTick(newTick);
@@ -477,11 +477,11 @@ export function useEditorKeyboard(onSave?: () => void) {
     () => {
       if (state.isPlaying || !state.chartDoc) return;
       const baseTick = getCursorFromAudio();
-      const newTick = getNextGridTick(
+      const newTick = nextGridTick(
         baseTick,
         1,
-        state.gridDivision,
         state.chartDoc.parsedChart.resolution,
+        state.gridDivision,
       );
       dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
       seekToTick(newTick);
@@ -492,11 +492,11 @@ export function useEditorKeyboard(onSave?: () => void) {
   useHotkey('ArrowDown', () => {
     if (state.isPlaying || !state.chartDoc) return;
     const baseTick = getCursorFromAudio();
-    const newTick = getNextGridTick(
+    const newTick = nextGridTick(
       baseTick,
       -1,
-      state.gridDivision,
       state.chartDoc.parsedChart.resolution,
+      state.gridDivision,
     );
     dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
     seekToTick(newTick);
@@ -507,11 +507,11 @@ export function useEditorKeyboard(onSave?: () => void) {
     () => {
       if (state.isPlaying || !state.chartDoc) return;
       const baseTick = getCursorFromAudio();
-      const newTick = getNextGridTick(
+      const newTick = nextGridTick(
         baseTick,
         -1,
-        state.gridDivision,
         state.chartDoc.parsedChart.resolution,
+        state.gridDivision,
       );
       dispatch({type: 'SET_CURSOR_TICK', tick: newTick});
       seekToTick(newTick);
