@@ -27,12 +27,16 @@ import type {InstrumentSchema, LaneDefinition, SchemaTrack} from './types';
 // frets, hit targets) reads `worldXOffset` off these lanes, resolved through
 // `schemaForTrack`/`drumSchemaFor`.
 //
-// The pads spread across the 0.9-wide drum highway with the same edge inset
-// fraction the five-fret pads use on their 1.1-wide one, which puts the four
-// pad centers 0.211 apart -- wider than the 0.197 fret sprite drawn at each
-// center, so the strikeline reads as four separate buttons.
-const PAD_X_START = -0.3165;
-const PAD_X_STEP = 0.211;
+// The pad centers are spaced against the fret button's *visible* outer ring,
+// not its sprite box. The box is 0.197 wide (96/975 units tall at a 192x96
+// aspect) but the authored `cover` ring only fills 95.31% of it, so a ring
+// measures 0.1877 across. The reference highway sets its pad centers about
+// 1.09 ring-widths apart, which is where 0.204 comes from -- close enough to
+// read as one connected strikeline, far enough that the rings stay distinct.
+// `PAD_X_START` is fixed at -1.5 steps: that is the only value centering the
+// strip on the highway for both the four- and five-pad layouts.
+const PAD_X_STEP = 0.204;
+const PAD_X_START = -1.5 * PAD_X_STEP;
 const STRIP_X = (i: number): number => PAD_X_START + PAD_X_STEP * i;
 // Five-lane drums fit one more pad into the same span, so the pads are closer
 // together and their sprites do touch. Five pads spread symmetrically means

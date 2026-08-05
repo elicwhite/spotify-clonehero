@@ -50,8 +50,16 @@ describe.each(SCHEMAS)('%s lane geometry', (_name, schema) => {
 });
 
 describe('drum pad spacing', () => {
-  /** Width of the fret sprite drawn at each pad center on the strikeline. */
-  const FRET_SPRITE_WIDTH = 0.197;
+  /** Width of the fret sprite drawn at each pad center on the strikeline:
+   *  `FRET_SPRITE_HEIGHT * aspectRatio` in `HighwayScene.ts`. */
+  const FRET_SPRITE_WIDTH = (96 / 975) * 2;
+  /** Horizontal fraction of that sprite box the authored `cover` ring
+   *  actually covers, measured from the alpha channel of
+   *  `public/assets/preview/assets2/frets/*-cover.webp` (opaque columns
+   *  4..186 of 192). The sprite box is what the art is drawn into; this is
+   *  what a player sees. */
+  const RING_FRACTION_OF_SPRITE = 183 / 192;
+  const FRET_RING_WIDTH = FRET_SPRITE_WIDTH * RING_FRACTION_OF_SPRITE;
 
   function padXs(schema: InstrumentSchema): number[] {
     return schema.lanes
@@ -61,14 +69,23 @@ describe('drum pad spacing', () => {
   }
 
   it('spaces the four 4-lane pads wider apart than the fret sprite', () => {
-    // Plan 0077 item 2: the frets on the drum strikeline were scrunched
-    // together because the pads were spread with a step narrower than the
-    // sprite drawn at each one, so adjacent buttons overlapped.
+    // A step narrower than the sprite box overlaps adjacent buttons and the
+    // strikeline reads as one scrunched blob.
     const xs = padXs(drums4LaneSchema);
     expect(xs).toHaveLength(4);
     for (let i = 1; i < xs.length; i++) {
       expect(xs[i] - xs[i - 1]).toBeGreaterThan(FRET_SPRITE_WIDTH);
     }
+  });
+
+  it('keeps the 4-lane pad step near 1.09 visible ring widths', () => {
+    // The reference highway's ratio. Pinned because the usable range is
+    // narrow -- below one sprite box (1.05 ring widths) the buttons overlap,
+    // and much above this they read as four islands rather than a strikeline.
+    const xs = padXs(drums4LaneSchema);
+    const step = xs[1] - xs[0];
+    expect(step / FRET_RING_WIDTH).toBeGreaterThan(1.07);
+    expect(step / FRET_RING_WIDTH).toBeLessThan(1.11);
   });
 
   it('centers the pad strip on the highway in both drum layouts', () => {

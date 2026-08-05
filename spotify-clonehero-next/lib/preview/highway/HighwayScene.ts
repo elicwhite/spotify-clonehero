@@ -112,6 +112,9 @@ export function createPlainStrikeline(width: number) {
 export interface HighwayFretHitboxConfig {
   laneXs: number[];
   laneColors: string[];
+  /** Whether to draw the `pick` layer — the dark raised arc behind the
+   *  button. Five-fret strikelines have it; drum pads do not. */
+  showPick: boolean;
 }
 
 const FRET_PATTERN: Record<
@@ -136,9 +139,7 @@ const FRET_PATTERN: Record<
 /**
  * The fret sources are 192x96 sprites imported at 975 pixels per Unity unit.
  * Their authored pivot is at y=.39, which is the point that belongs on the
- * playline. The pick layer is the dark raised arc behind the button visible in
- * the original highway, so it is included even though six-lane charts are not
- * supported by the editor.
+ * playline.
  */
 const FRET_SPRITE_HEIGHT = 96 / 975;
 // The editor highway camera compresses world-space verticals toward the
@@ -147,16 +148,28 @@ const FRET_SPRITE_HEIGHT = 96 / 975;
 const FRET_RENDER_HEIGHT = FRET_SPRITE_HEIGHT * 1.2;
 const FRET_SPRITE_PIVOT_Y = 0.39;
 const FRET_LAYERS: HighwayFretLayer[] = [
+  // The dark raised arc behind the button, drawn only where the reference
+  // highway has one (`HighwayFretHitboxConfig.showPick`).
   'pick',
   'base',
-  'inner_color',
   'half_cover',
   'head_light',
   'head',
-  // The cover is the authored outer-ring mask. It must sit above the head so
-  // the lane color remains visible around the complete button.
+  // Both coloured rings sit above the head: the button reads as an outer ring,
+  // the silver bezel, then a second ring of the same colour around the dome.
+  // `head` is opaque across its whole silhouette, so a ring drawn under it is
+  // invisible no matter how it is tinted.
+  'inner_color',
   'cover',
 ];
+
+/** Layers that carry the lane's colour rather than the art's own greys. Both
+ *  are grey-on-transparent masks, so tinting is a straight material colour:
+ *  `cover` is the outer ring, `inner_color` the ring inside the bezel. */
+const FRET_TINTED_LAYERS: ReadonlySet<HighwayFretLayer> = new Set([
+  'cover',
+  'inner_color',
+]);
 
 function createFretHitbox(
   fretTextures: HighwayFretTextures,
@@ -174,6 +187,7 @@ function createFretHitbox(
     const {style, flipHorizontal} = pattern[lane];
     const source = fretTextures[style];
     for (const layer of FRET_LAYERS) {
+      if (layer === 'pick' && !config.showPick) continue;
       const sourceTexture = source[layer];
       const texture = flipHorizontal ? sourceTexture.clone() : sourceTexture;
       if (texture !== sourceTexture) {
@@ -184,8 +198,9 @@ function createFretHitbox(
       }
       const material = new THREE.SpriteMaterial({
         map: texture,
-        color:
-          layer === 'cover' ? config.laneColors[lane] || '#FFFFFF' : '#FFFFFF',
+        color: FRET_TINTED_LAYERS.has(layer)
+          ? config.laneColors[lane] || '#FFFFFF'
+          : '#FFFFFF',
         transparent: true,
         depthTest: false,
       });

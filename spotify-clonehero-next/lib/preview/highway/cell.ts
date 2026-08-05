@@ -225,6 +225,9 @@ export async function buildHighwayCell(
       ? {
           laneXs: fretLanes.map(lane => lane.worldXOffset),
           laneColors: fretLanes.map(lane => lane.color),
+          // Drum pads sit flat on the strikeline; the raised pick arc behind
+          // the button belongs to the fretted instruments only.
+          showPick: schema?.instrument !== 'drums',
         }
       : null;
 
