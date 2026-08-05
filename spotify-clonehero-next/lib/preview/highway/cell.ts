@@ -21,7 +21,6 @@ import {
 } from './TextureManager';
 import {SceneReconciler, type ElementRenderer} from './SceneReconciler';
 import {NoteRenderer} from './NoteRenderer';
-import {MarkerRenderer} from './MarkerRenderer';
 import {trackToElements} from './trackToElements';
 import {sustainStyleForSchema} from './notePlacement';
 import type {Note, Track} from './types';
@@ -29,8 +28,7 @@ import type {Note, Track} from './types';
 /**
  * The reusable, editor-agnostic core of a single highway scene: the textured
  * floor, the instrument hitbox (or a plain strikeline in lanes-off mode), the
- * note + marker renderers, and a `SceneReconciler` seeded with the track's
- * notes.
+ * note renderer, and a `SceneReconciler` seeded with the track's notes.
  *
  * This is the piece `setupRenderer.prepTrack` composes for its one scene.
  * Editor-only layers (`SceneOverlays`, `InteractionManager`,
@@ -38,15 +36,13 @@ import type {Note, Track} from './types';
  */
 
 /**
- * The two world-space clip planes every highway shares. `note` clips both the
- * bottom (near the strikeline) and the far top; `marker` clips only the top so
- * labels can extend down past the hitline. Numerically identical across cells,
- * so cells may share one set (clipping is evaluated per-render against each
- * cell's own materials).
+ * The world-space clip planes every highway shares. `note` clips both the
+ * bottom (near the strikeline) and the far top. Numerically identical across
+ * cells, so cells may share one set (clipping is evaluated per-render against
+ * each cell's own materials).
  */
 export interface HighwayClippingPlanes {
   note: THREE.Plane[];
-  marker: THREE.Plane[];
 }
 
 /**
@@ -77,7 +73,6 @@ export function createHighwayClippingPlanes(): HighwayClippingPlanes {
   const highwayEndPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0.9);
   return {
     note: [highwayBeginningPlane, highwayEndPlane],
-    marker: [highwayEndPlane],
   };
 }
 
@@ -146,10 +141,11 @@ export async function loadCellTextures(
 }
 
 /**
- * What a highway draws: notes and section markers. Beat/measure grid lines
- * come from `GridOverlay`, which is geometry rather than an element kind.
- * Tempo, time-signature, lyric, and phrase markers belong to the piano roll —
- * its tempo lane and lyrics row are where they are read and edited.
+ * What a highway draws: notes. Beat/measure grid lines come from
+ * `GridOverlay`, which is geometry rather than an element kind. Every marker
+ * kind — section, tempo, time-signature, lyric, phrase — belongs to the piano
+ * roll, whose section strip, tempo lane, and lyrics row are where markers are
+ * read and edited.
  *
  * This is the single enforcement point. It types the reconciler's renderer
  * map below (so a renderer for another kind cannot be registered) and is
@@ -157,15 +153,10 @@ export async function loadCellTextures(
  * another kind is never stored, windowed, or hit-tested), which lets callers
  * push the whole chart projection without filtering it first.
  */
-export type HighwayElementKind = 'note' | 'section';
+export type HighwayElementKind = 'note';
 
 export const HIGHWAY_ELEMENT_KINDS: ReadonlySet<HighwayElementKind> =
-  new Set<HighwayElementKind>(['note', 'section']);
-
-/** The per-marker-kind renderers a highway scene registers. */
-export interface CellMarkerRenderers {
-  section: MarkerRenderer;
-}
+  new Set<HighwayElementKind>(['note']);
 
 /** The reusable scene core `buildHighwayCell` returns. */
 export interface HighwayCellCore {
@@ -173,7 +164,6 @@ export interface HighwayCellCore {
   highway: THREE.Mesh;
   reconciler: SceneReconciler;
   noteRenderer: NoteRenderer;
-  markerRenderers: CellMarkerRenderers;
   /**
    * Remove the meshes this cell added to `root` (the floor plus the hitbox or
    * plain strikeline) and release their geometry, materials, and the textures
@@ -199,7 +189,7 @@ export interface BuildHighwayCellParams {
 }
 
 /**
- * Build the highway floor + hitbox/strikeline + note/section renderers +
+ * Build the highway floor + hitbox/strikeline + note renderer +
  * reconciler into `root`, seeding the reconciler with the track's notes.
  * `root` is any `Object3D` — a scene for a single-highway renderer, or a
  * highway group inside a shared scene. Adds meshes to `root` as a side effect
@@ -266,13 +256,8 @@ export async function buildHighwayCell(
     clippingPlanes.note,
   );
 
-  const markerRenderers: CellMarkerRenderers = {
-    section: new MarkerRenderer(clippingPlanes.marker, 'right', [0, 200, 40]),
-  };
-
   const renderers: Record<HighwayElementKind, ElementRenderer> = {
     note: noteRenderer,
-    section: markerRenderers.section,
   };
 
   const reconciler = new SceneReconciler(
@@ -282,9 +267,9 @@ export async function buildHighwayCell(
     HIGHWAY_ELEMENT_KINDS,
   );
 
-  // With lanes inactive, seed empty — HighwayEditor populates markers from the
-  // full ParsedChart and skips notes when that capability is off, so drawing
-  // notes here would briefly flash drum geometry on a lanes-off page.
+  // With lanes inactive, seed empty — HighwayEditor skips notes when that
+  // capability is off, so drawing notes here would briefly flash drum geometry
+  // on a lanes-off page.
   const elements = lanesActive && track ? trackToElements(track, chart) : [];
   reconciler.setElements(elements);
 
@@ -296,7 +281,7 @@ export async function buildHighwayCell(
     ownedMeshes.length = 0;
   }
 
-  return {highway, reconciler, noteRenderer, markerRenderers, disposeMeshes};
+  return {highway, reconciler, noteRenderer, disposeMeshes};
 }
 
 /**

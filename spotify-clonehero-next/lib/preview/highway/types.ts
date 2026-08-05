@@ -84,7 +84,12 @@ export interface PreparedNote {
 // Hit test result
 // ---------------------------------------------------------------------------
 
-/** Result of a hit-test raycast against the highway scene. */
+/**
+ * Result of a hit-test raycast against the highway scene. The highway draws
+ * and hit-tests notes only (`HIGHWAY_ELEMENT_KINDS` in `cell.ts`), so a hit
+ * is either a note or the bare highway plane under the cursor; marker
+ * hit-testing belongs to the piano roll.
+ */
 export type HitResult =
   | {
       type: 'note';
@@ -93,25 +98,6 @@ export type HitResult =
       note: PreparedNote;
       lane: number;
       tick: number;
-    }
-  | {
-      type: 'section';
-      tick: number;
-      name: string;
-    }
-  | {
-      type: 'lyric';
-      tick: number;
-      text: string;
-    }
-  | {
-      type: 'phrase-start';
-      tick: number;
-    }
-  | {
-      type: 'phrase-end';
-      /** Phrase end tick (== phrase.tick + phrase.length). */
-      endTick: number;
     }
   | {
       type: 'highway';

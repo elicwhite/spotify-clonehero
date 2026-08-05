@@ -11,11 +11,6 @@
  * and its GPU release has to happen synchronously inside the call rather than
  * in some later microtask.
  *
- * Teardown also has to stay local to what is being destroyed:
- * `MarkerRenderer`'s marker-texture cache is module-scoped and shared by every
- * live renderer AND every live stage (`rendererRegistry`), so one going away
- * while another is up must leave those textures alone.
- *
  * The stage adds two more contracts jsdom can pin: mounting a highway builds
  * no second `WebGLRenderer` and unmounting one releases no context, and the
  * frame loop clears the whole canvas before any scissor is in force (without
@@ -26,7 +21,7 @@
  */
 
 import {createEmptyChart} from '@eliwhite/scan-chart';
-import {MarkerRenderer, setupRenderer, setupStage} from '../index';
+import {setupRenderer, setupStage} from '../index';
 import {computeStageLayout, type StageLayout} from '../layout';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
@@ -170,43 +165,6 @@ describe.each([
 
     expect(stub.dispose).toHaveBeenCalledTimes(1);
     expect(stub.forceContextLoss).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('shared marker-texture cache (rendererRegistry)', () => {
-  it('leaves the cache alone until the last renderer is destroyed', async () => {
-    const clearCache = jest.spyOn(MarkerRenderer, 'clearTextureCache');
-    try {
-      const first = makeRenderer();
-      const second = makeRenderer();
-
-      await first.destroy();
-      // `second`'s marker sprites still hold textures from the shared cache.
-      expect(clearCache).not.toHaveBeenCalled();
-
-      await second.destroy();
-      expect(clearCache).toHaveBeenCalledTimes(1);
-    } finally {
-      clearCache.mockRestore();
-    }
-  });
-
-  it('counts a stage and a renderer against the same refcount', async () => {
-    const clearCache = jest.spyOn(MarkerRenderer, 'clearTextureCache');
-    try {
-      // `/chart-review` keeps `setupRenderer`s mounted alongside whatever the
-      // editor's stage is doing, so neither may clear the cache alone.
-      const renderer = makeRenderer();
-      const stage = makeStage();
-
-      stage.destroy();
-      expect(clearCache).not.toHaveBeenCalled();
-
-      await renderer.destroy();
-      expect(clearCache).toHaveBeenCalledTimes(1);
-    } finally {
-      clearCache.mockRestore();
-    }
   });
 });
 

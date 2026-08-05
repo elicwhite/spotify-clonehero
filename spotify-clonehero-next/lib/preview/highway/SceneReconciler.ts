@@ -433,10 +433,10 @@ export class SceneReconciler {
    * therefore don't churn groups.
    *
    * Invariant: no renderer caches `msTime` outside `group.position.y`.
-   * `MarkerRenderer.create` doesn't read msTime; `NoteRenderer.create`
-   * reads `data.msLength` (in element data, not msTime). A renderer that
-   * adds new msTime-derived state must either recompute it in
-   * `updateWindow` or expose its own `setMsTime(group, ms)` hook.
+   * `NoteRenderer.create` reads `data.msLength` (in element data, not
+   * msTime). A renderer that adds new msTime-derived state must either
+   * recompute it in `updateWindow` or expose its own `setMsTime(group, ms)`
+   * hook.
    *
    * Uses a two-level deep comparison to handle nested objects like
    * NoteElementData's `note` sub-object without full recursive deep-equal.

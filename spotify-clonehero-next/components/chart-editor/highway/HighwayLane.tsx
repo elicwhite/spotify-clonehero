@@ -8,9 +8,9 @@
  *
  * Everything else is per lane: the resolved `InteractionManager` +
  * `SceneReconciler` pair, and one instance each of
- * `useHighwayMouseInteraction`, `useChartElements`, `useHighwaySync`, and
- * `useMarkerDrag` — all parameterized by this lane's own `scope` instead of a
- * single shared `activeScope`.
+ * `useHighwayMouseInteraction`, `useChartElements`, and `useHighwaySync` —
+ * all parameterized by this lane's own `scope` instead of a single shared
+ * `activeScope`.
  *
  * Commands issued from this lane target this lane's `scope` because every
  * hook here is fed a `laneState` — a shallow copy of the real editor state
@@ -46,7 +46,7 @@
  * while reading as a guarantee it cannot make.
  */
 
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef} from 'react';
 import type {
   ChartEditorAction,
   ChartEditorState,
@@ -68,10 +68,8 @@ import type {EditorCapabilities} from '../capabilities';
 import {getSelectedIds} from '@/lib/chart-editor-core';
 import {useChartElements} from './useChartElements';
 import {useHighwaySync} from './useHighwaySync';
-import {useMarkerDrag} from './useMarkerDrag';
 import {useHighwayMouseInteraction} from './useHighwayMouseInteraction';
 import {useStageHighway} from './useStageHighway';
-import HighwayPopovers, {type HighwayPopoverState} from './HighwayPopovers';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import {scopePaneKey, trackKeyFromScope, type EditorScope} from '../scope';
 import {trackLabel} from '../trackLabels';
@@ -166,9 +164,6 @@ function HighwayLane({
    *  `SET_ACTIVE_SCOPE` dispatch below — never a visual treatment. */
   const isActiveLane = scopePaneKey(state.activeScope) === laneId;
 
-  const [popover, setPopover] = useState<HighwayPopoverState | null>(null);
-  const closePopover = useCallback(() => setPopover(null), []);
-
   // Keyed on the doc and this lane's track only. Deriving it from
   // `laneState` would re-list every note in the track, once per lane, on
   // every playback tick (`SET_CURRENT_TIME`) — nothing about the note list
@@ -181,13 +176,6 @@ function HighwayLane({
     const schema = schemaForTrack(trackData, chartDoc.parsedChart.drumType);
     return schema ? listNotes(trackData, schema) : [];
   }, [chartDoc, track]);
-
-  const {markerDrag, beginMarkerDrag, updateMarkerDrag, commitMarkerDrag} =
-    useMarkerDrag({
-      activeScope: laneScope,
-      executeCommand,
-      dispatch,
-    });
 
   const {
     onMouseDown,
@@ -209,13 +197,8 @@ function HighwayLane({
     activeNotes,
     timedTempos,
     resolution,
-    markerDrag,
-    beginMarkerDrag,
-    updateMarkerDrag,
-    commitMarkerDrag,
     executeCommand,
     dispatch,
-    onOpenPopover: setPopover,
     editingLocked,
   });
 
@@ -268,7 +251,6 @@ function HighwayLane({
     capabilities,
     selection: state.selection,
     hovered: state.hovered,
-    markerDrag,
     noteDrag: noteDragHint,
     timedTempos: renderTimedTempos,
     resolution,
@@ -328,18 +310,11 @@ function HighwayLane({
   ]);
 
   const cursorStyle = useMemo(() => {
-    if (markerDrag || noteDrag?.active) return 'grabbing';
+    if (noteDrag?.active) return 'grabbing';
     if (hoveredHitType === 'note') {
       if (state.activeTool === 'cursor' || state.activeTool === 'erase') {
         return 'pointer';
       }
-    }
-    if (
-      state.activeTool === 'cursor' &&
-      hoveredHitType === 'section' &&
-      capabilities.selectable.has('section')
-    ) {
-      return 'pointer';
     }
     switch (state.activeTool) {
       case 'cursor':
@@ -351,7 +326,7 @@ function HighwayLane({
       default:
         return 'default';
     }
-  }, [state.activeTool, hoveredHitType, capabilities, markerDrag, noteDrag]);
+  }, [state.activeTool, hoveredHitType, noteDrag]);
 
   const label = track ? trackLabel(track) : null;
 
@@ -366,8 +341,11 @@ function HighwayLane({
         height: rect?.height ?? 0,
       }}
       data-testid={`highway-lane-${laneId}`}>
+      {/* The strikeline projects at ~91% of the pane's height (see
+          `cameraFit`), and notes are clipped there, so a chip pinned to the
+          pane's bottom edge sits under everything the player reads. */}
       {label && (
-        <div className="pointer-events-none absolute left-2 top-2 z-30 rounded-full bg-[var(--ed-surface-hover)] px-2 py-0.5 text-xs font-medium text-white/80 backdrop-blur-sm">
+        <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-full bg-[var(--ed-surface-hover)] px-2 py-0.5 text-xs font-medium text-white/80 backdrop-blur-sm">
           {label}
         </div>
       )}
@@ -386,7 +364,6 @@ function HighwayLane({
         dragStart &&
         dragCurrent &&
         !isDragging &&
-        !markerDrag &&
         (Math.abs(dragCurrent.x - dragStart.x) > 3 ||
           Math.abs(dragCurrent.y - dragStart.y) > 3) && (
           <div
@@ -401,12 +378,6 @@ function HighwayLane({
             }}
           />
         )}
-
-      <HighwayPopovers
-        popover={popover}
-        onClose={closePopover}
-        executeCommand={executeCommand}
-      />
     </div>
   );
 }

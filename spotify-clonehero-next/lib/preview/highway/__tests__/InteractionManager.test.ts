@@ -27,11 +27,11 @@ function noopRenderer(): ElementRenderer {
   };
 }
 
-/** A reconciler shaped like a highway's: notes and sections only. */
+/** A reconciler shaped like a highway's: notes only. */
 function makeReconciler(): SceneReconciler {
   return new SceneReconciler(
     new THREE.Scene(),
-    {note: noopRenderer(), section: noopRenderer()},
+    {note: noopRenderer()},
     1.5,
     HIGHWAY_ELEMENT_KINDS,
   );
@@ -217,62 +217,6 @@ describe('InteractionManager -- root-local X correction', () => {
         );
       }
     }
-  });
-});
-
-describe('InteractionManager -- marker line projected.y invariant', () => {
-  const canvasW = 600;
-  const canvasH = 600;
-
-  /**
-   * A reconciler holding one active section marker at a known ms, so
-   * `hitTestMarkerLines` has a group to project.
-   */
-  function makeSectionReconciler(): SceneReconciler {
-    const reconciler = new SceneReconciler(
-      new THREE.Group(),
-      {note: noopRenderer(), section: noopRenderer()},
-      1.5,
-      HIGHWAY_ELEMENT_KINDS,
-    );
-    reconciler.setElements([
-      {
-        key: 'section:480',
-        kind: 'section',
-        msTime: 500,
-        data: {text: 'Verse'},
-      },
-    ]);
-    reconciler.updateWindow(0);
-    return reconciler;
-  }
-
-  function sectionRows(im: InteractionManager): number[] {
-    const rows: number[] = [];
-    for (let y = 0; y <= canvasH; y++) {
-      const hit = im.hitTest(canvasW / 2, y, canvasW, canvasH);
-      if (hit && hit.type === 'section') rows.push(y);
-    }
-    return rows;
-  }
-
-  it('projects the marker rule line to the same screen rows at worldX 0 and 8', () => {
-    // `hitTestMarkerLines` probes `(rootWorldX, y, 0)`. A per-viewport camera
-    // has no yaw, so `projected.y` is independent of X and the two roots must
-    // agree exactly. This is the invariant a shared, off-axis camera would
-    // silently break.
-    const timing = [{tick: 0, msTime: 0, beatsPerMinute: 120}];
-
-    const zero = makeManagerAt(0, makeSectionReconciler());
-    zero.setTimingData(timing, 192);
-    const eight = makeManagerAt(ROOT_WORLD_X, makeSectionReconciler());
-    eight.setTimingData(timing, 192);
-
-    const zeroRows = sectionRows(zero);
-    const eightRows = sectionRows(eight);
-
-    expect(zeroRows.length).toBeGreaterThan(0);
-    expect(eightRows).toEqual(zeroRows);
   });
 });
 

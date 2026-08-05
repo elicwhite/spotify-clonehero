@@ -122,8 +122,8 @@ export interface OverlayState {
 }
 
 /**
- * Manages 3D overlays in the highway scene: cursor line, section banners,
- * ghost notes, lane dividers, eraser highlight, tool crosshairs, and loop markers.
+ * Manages 3D overlays in the highway scene: cursor line, ghost notes, lane
+ * dividers, eraser highlight, tool crosshairs, and loop markers.
  *
  * All overlays live in the Three.js scene and are positioned in world space,
  * so they match the 3D perspective exactly.

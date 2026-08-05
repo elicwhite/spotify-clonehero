@@ -23,7 +23,6 @@
  */
 
 import type {EntityKind} from '@/lib/chart-edit';
-import {chartMarkerKey, vocalMarkerKey} from './markerKeys';
 
 export function reconcilerKeyFor(
   kind: EntityKind,
@@ -31,30 +30,4 @@ export function reconcilerKeyFor(
   _partName?: string,
 ): string {
   return `${kind}:${id}`;
-}
-
-/** Marker drag operates on this subset of entity kinds. */
-export type MarkerDragKind =
-  | 'section'
-  | 'lyric'
-  | 'phrase-start'
-  | 'phrase-end';
-
-/**
- * Reconciler key for a marker mid-drag, derived from the raw (kind, tick,
- * partName) the drag state carries — without first round-tripping through a
- * stringified entity id. This is the lookup `useChartElements` uses to
- * inject a live `msTime` for the dragged marker.
- *
- * Internally delegates to the canonical formatters (`chartMarkerKey`,
- * `vocalMarkerKey`) so this and `reconcilerKeyFor(kind, entityId)` are
- * guaranteed to agree — see `__tests__/reconcilerKey.test.ts` for the pin.
- */
-export function markerDragReconcilerKey(
-  kind: MarkerDragKind,
-  tick: number,
-  partName: string,
-): string {
-  if (kind === 'section') return chartMarkerKey('section', tick);
-  return vocalMarkerKey(kind, partName, tick);
 }

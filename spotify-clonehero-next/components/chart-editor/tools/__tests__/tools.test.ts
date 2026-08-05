@@ -26,8 +26,6 @@ import {
   resolveToolForPointerDown,
 } from '../registry';
 import type {NoteDragState, PointerHitInfo, ToolContext} from '../types';
-import type {HighwayPopoverState} from '../../highway/HighwayPopovers';
-import type {MarkerDragState, MarkerKind} from '../../highway/useMarkerDrag';
 
 const RESOLUTION = 480;
 
@@ -57,14 +55,7 @@ function makeSession() {
 function makeContext(
   session: EditorSession,
   overrides: Partial<ToolContext> = {},
-): ToolContext & {
-  drag: ToolContext['drag'];
-  popovers: HighwayPopoverState[];
-} {
-  const popovers: HighwayPopoverState[] = [];
-  let markerDrag: MarkerDragState | null = overrides.markerDrag ?? null;
-  let lastClick: {tick: number; time: number} | null = null;
-
+): ToolContext & {drag: ToolContext['drag']} {
   const drag: ToolContext['drag'] = {
     isDragging: false,
     setIsDragging: () => {},
@@ -77,18 +68,9 @@ function makeContext(
     dragCurrent: null,
     setDragCurrent: () => {},
     setHoverTick: () => {},
-    get lastClick() {
-      return lastClick;
-    },
-    setLastClick: value => {
-      lastClick = value;
-    },
   };
 
-  const ctx: ToolContext & {
-    drag: ToolContext['drag'];
-    popovers: HighwayPopoverState[];
-  } = {
+  const ctx: ToolContext & {drag: ToolContext['drag']} = {
     get state() {
       return session.getState();
     },
@@ -108,26 +90,10 @@ function makeContext(
         chartDoc: newDoc,
       });
     },
-    onOpenPopover: (popover: HighwayPopoverState) => {
-      popovers.push(popover);
-    },
     screenToLane: (x: number) => x,
     screenToMs: (x: number) => x,
     screenToTick: (x: number) => x,
-    get markerDrag() {
-      return markerDrag;
-    },
-    beginMarkerDrag: (kind: MarkerKind, originalTick: number) => {
-      markerDrag = {kind, originalTick, currentTick: originalTick};
-    },
-    updateMarkerDrag: (rawTick: number) => {
-      if (markerDrag) markerDrag = {...markerDrag, currentTick: rawTick};
-    },
-    commitMarkerDrag: () => {
-      markerDrag = null;
-    },
     drag,
-    popovers,
     ...overrides,
   };
   return ctx;
@@ -218,8 +184,6 @@ describe('selectMoveTool', () => {
         dragCurrent: {x: 0, y: 0},
         setDragCurrent: () => {},
         setHoverTick: () => {},
-        lastClick: null,
-        setLastClick: () => {},
       },
     });
 
@@ -232,45 +196,22 @@ describe('selectMoveTool', () => {
     expect(movedNote?.tick).toBe(720);
   });
 
-  it('opens the section-rename popover on a fast double-click', () => {
+  it('leaves selection untouched for a non-note entity', () => {
     const session = makeSession();
-    const ctx = makeContext(session);
-    const sectionEntity = {kind: 'section' as const, id: '0', tick: 0};
-    const hit = {type: 'section' as const, tick: 0, name: 'Intro'};
-    selectMoveTool.onPointerDown(ctx, evt({entity: sectionEntity, hit}));
-    selectMoveTool.onPointerDown(ctx, evt({entity: sectionEntity, hit}));
-    expect(ctx.popovers).toHaveLength(1);
-    expect(ctx.popovers[0]).toMatchObject({
-      kind: 'section-rename',
-      currentSectionName: 'Intro',
+    session.dispatch({
+      type: 'SET_SELECTION',
+      kind: 'note',
+      ids: new Set([qualified(RED_ID)]),
     });
-  });
-
-  it('starts a marker drag on a section', () => {
-    const session = makeSession();
     const ctx = makeContext(session);
     selectMoveTool.onPointerDown(
       ctx,
-      evt({
-        entity: {kind: 'section', id: '480', tick: 480},
-        hit: {type: 'section', tick: 480, name: 'Verse'},
-      }),
+      evt({entity: {kind: 'section', id: '480', tick: 480}}),
     );
-    expect(ctx.markerDrag).toEqual({
-      kind: 'section',
-      originalTick: 480,
-      currentTick: 480,
-    });
-  });
-
-  it('starts no marker drag on a lyric entity', () => {
-    const session = makeSession();
-    const ctx = makeContext(session);
-    selectMoveTool.onPointerDown(
-      ctx,
-      evt({entity: {kind: 'lyric', id: 'vocals:240', tick: 240}}),
+    expect(ctx.state.selection.get('note')).toEqual(
+      new Set([qualified(RED_ID)]),
     );
-    expect(ctx.markerDrag).toBeNull();
+    expect(ctx.state.selection.get('section')?.size ?? 0).toBe(0);
   });
 });
 
@@ -306,8 +247,6 @@ describe('boxSelectTool', () => {
         dragCurrent: {x: 100, y: 100},
         setDragCurrent: () => {},
         setHoverTick: () => {},
-        lastClick: null,
-        setLastClick: () => {},
       },
     });
     // screenToLane/screenToMs are pass-through identity stubs here, so a
@@ -368,8 +307,6 @@ describe('eraseTool', () => {
         dragCurrent: null,
         setDragCurrent: () => {},
         setHoverTick: () => {},
-        lastClick: null,
-        setLastClick: () => {},
       },
     });
     eraseTool.onPointerDown(
@@ -398,8 +335,6 @@ describe('eraseTool', () => {
         dragCurrent: {x: 0, y: 0},
         setDragCurrent: () => {},
         setHoverTick: () => {},
-        lastClick: null,
-        setLastClick: () => {},
       },
     });
     eraseTool.onPointerMove?.(
@@ -493,8 +428,6 @@ describe('registry', () => {
         dragCurrent: null,
         setDragCurrent: () => {},
         setHoverTick: () => {},
-        lastClick: null,
-        setLastClick: () => {},
       },
     });
     expect(resolveCursorContinuation(ctx)).toBe(selectMoveTool);

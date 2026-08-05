@@ -1,24 +1,18 @@
 /**
- * EditorTool — the registered-tool contract that replaced the hardcoded
- * `switch (state.activeTool)` in `useHighwayMouseInteraction`. Each tool owns
- * one gesture family; the hook builds a `ToolContext` once per pointer event
- * and hands it to whichever tool(s) the active `ToolMode` resolves to via
- * `../tools/registry`.
+ * EditorTool — the registered-tool contract for highway pointer gestures.
+ * Each tool owns one gesture family; `useHighwayMouseInteraction` builds a
+ * `ToolContext` once per pointer event and hands it to whichever tool(s) the
+ * active `ToolMode` resolves to via `../tools/registry`.
  *
- * The hook still owns all local React state (hover, drag anchors, the
- * double-click timer) because that state has to survive across renders and
- * pointer events — tools read/write it through the `drag` accessor bundle on
- * `ToolContext` rather than owning `useState` themselves, which keeps tools
- * plain, dependency-free objects that a stub `EditorSession`-backed context
- * can drive in tests without React.
+ * The hook owns all local React state (hover, drag anchors) because that
+ * state has to survive across renders and pointer events — tools read/write
+ * it through the `drag` accessor bundle on `ToolContext` rather than owning
+ * `useState` themselves, which keeps tools plain, dependency-free objects
+ * that a stub context can drive in tests without React.
  *
- * This is a pragmatic instantiation of the plan's `ToolContext` sketch
- * (`session` + `rendererRef` + `schema` + `selection`): the hook this
- * replaces never held an `EditorSession` instance, only raw
- * `state`/`dispatch`/`executeCommand` from `ChartEditorContext`, so
- * `ToolContext` carries those directly plus the coordinate/marker-drag
- * helpers every branch needed. A `session`-based context is the natural next
- * step once `ChartEditorContext` itself is backed by `EditorSession`.
+ * `ToolContext` carries raw `state`/`dispatch`/`executeCommand` from
+ * `ChartEditorContext` plus the screen→chart coordinate helpers every tool
+ * needs.
  */
 
 import type {EntityKind, InstrumentSchema, NoteEvent} from '@/lib/chart-edit';
@@ -30,8 +24,6 @@ import type {
 import type {EditorCapabilities} from '../capabilities';
 import type {HitResult} from '@/lib/preview/highway';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
-import type {HighwayPopoverState} from '../highway/HighwayPopovers';
-import type {MarkerDragState, MarkerKind} from '../highway/useMarkerDrag';
 
 /** Live state of a multi-note drag (mirrors `NoteDragState` in the hook). */
 export interface NoteDragState {
@@ -55,7 +47,7 @@ export interface PointerHitInfo {
   entity: EntityRef | null;
 }
 
-/** Read/write accessors for the hook's local drag/hover/double-click state.
+/** Read/write accessors for the hook's local drag/hover state.
  *  Tools mutate the interaction through these instead of owning `useState`
  *  themselves, so the same tool object works against a stub in tests. */
 export interface ToolDragAccessors {
@@ -70,8 +62,6 @@ export interface ToolDragAccessors {
   dragCurrent: {x: number; y: number} | null;
   setDragCurrent: (value: {x: number; y: number} | null) => void;
   setHoverTick: (value: number | null) => void;
-  lastClick: {tick: number; time: number} | null;
-  setLastClick: (value: {tick: number; time: number} | null) => void;
 }
 
 export interface ToolContext {
@@ -88,14 +78,9 @@ export interface ToolContext {
   resolution: number;
   dispatch: (action: ChartEditorAction) => void;
   executeCommand: (cmd: EditCommand) => void;
-  onOpenPopover: (popover: HighwayPopoverState) => void;
   screenToLane: (x: number, y: number) => number;
   screenToMs: (x: number, y: number) => number;
   screenToTick: (x: number, y: number) => number;
-  markerDrag: MarkerDragState | null;
-  beginMarkerDrag: (kind: MarkerKind, originalTick: number) => void;
-  updateMarkerDrag: (rawTick: number) => void;
-  commitMarkerDrag: (moveExceededThreshold: boolean) => void;
   drag: ToolDragAccessors;
 }
 
@@ -103,7 +88,7 @@ export interface ToolContext {
  * A registered highway tool. `onPointerDown` is required — a tool that only
  * fires on click implements just that. `onPointerMove`/`onPointerUp` are
  * optional continuations for tools that span a drag (select-move, box-select,
- * erase-paint, section drag).
+ * erase-paint).
  */
 export interface EditorTool {
   id: string;

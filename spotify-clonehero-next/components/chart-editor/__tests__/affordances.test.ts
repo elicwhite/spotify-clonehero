@@ -35,51 +35,46 @@ describe('AFFORDANCES registry', () => {
       hoverable: true,
       selectable: true,
       deletable: true,
-      inlineEditable: false,
       laneAxis: true,
     });
   });
 
-  it('section: hoverable + selectable + deletable + inline-editable (rename popover)', () => {
+  it('section: hoverable + selectable + deletable', () => {
     expect(AFFORDANCES.section).toEqual<EntityAffordance>({
       kind: 'section',
       hoverable: true,
       selectable: true,
       deletable: true,
-      inlineEditable: true,
       laneAxis: false,
     });
   });
 
-  it('lyric: hoverable + selectable + deletable + inline-editable (text edit)', () => {
+  it('lyric: hoverable + selectable + deletable', () => {
     expect(AFFORDANCES.lyric).toEqual<EntityAffordance>({
       kind: 'lyric',
       hoverable: true,
       selectable: true,
       deletable: true,
-      inlineEditable: true,
       laneAxis: false,
     });
   });
 
-  it('phrase-start: hoverable + selectable + deletable; not inline-editable', () => {
+  it('phrase-start: hoverable + selectable + deletable', () => {
     expect(AFFORDANCES['phrase-start']).toEqual<EntityAffordance>({
       kind: 'phrase-start',
       hoverable: true,
       selectable: true,
       deletable: true,
-      inlineEditable: false,
       laneAxis: false,
     });
   });
 
-  it('phrase-end: hoverable + selectable + deletable; not inline-editable', () => {
+  it('phrase-end: hoverable + selectable + deletable', () => {
     expect(AFFORDANCES['phrase-end']).toEqual<EntityAffordance>({
       kind: 'phrase-end',
       hoverable: true,
       selectable: true,
       deletable: true,
-      inlineEditable: false,
       laneAxis: false,
     });
   });
@@ -94,7 +89,6 @@ describe('AFFORDANCES registry', () => {
       'hoverable',
       'selectable',
       'deletable',
-      'inlineEditable',
       'laneAxis',
     ]);
     for (const kind of kinds) {
@@ -110,7 +104,6 @@ describe('AFFORDANCES registry', () => {
       expect(typeof a.hoverable).toBe('boolean');
       expect(typeof a.selectable).toBe('boolean');
       expect(typeof a.deletable).toBe('boolean');
-      expect(typeof a.inlineEditable).toBe('boolean');
       expect(typeof a.laneAxis).toBe('boolean');
     }
   });

@@ -28,7 +28,6 @@ import {NoteRenderer} from './NoteRenderer';
 import {LyricsOverlay} from './LyricsOverlay';
 import {buildHighwayCell} from './cell';
 import {HighwayRoot} from './HighwayRoot';
-import {acquireRenderer, releaseRenderer} from './rendererRegistry';
 import type {Track} from './types';
 
 // Re-export public types, constants, and utilities
@@ -46,7 +45,6 @@ export {InteractionManager} from './InteractionManager';
 export {type HighwayMode} from './HighwayScene';
 export {SceneReconciler, type ChartElement} from './SceneReconciler';
 export {NoteRenderer} from './NoteRenderer';
-export {MarkerRenderer} from './MarkerRenderer';
 export {trackToElements} from './trackToElements';
 export {chartToElements} from './chartToElements';
 export {LyricsOverlay} from './LyricsOverlay';
@@ -106,7 +104,6 @@ export const setupRenderer = (
   renderer.setPixelRatio(dpr);
   renderer.localClippingEnabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  acquireRenderer();
 
   /** Lyrics overlay (Clone Hero-style karaoke at top of screen). */
   let lyricsOverlay: LyricsOverlay | null = null;
@@ -118,8 +115,7 @@ export const setupRenderer = (
    * cleanup racing an explicit "swap renderer" call), and a second
    * `renderer.dispose()`/`forceContextLoss()` on an already-lost WebGL
    * context is undefined behavior in some browsers. `destroy()` is safe to
-   * call any number of times; only the first call does anything, and only
-   * the first call releases this renderer from `rendererRegistry`.
+   * call any number of times; only the first call does anything.
    */
   let disposedSync = false;
 
@@ -157,15 +153,10 @@ export const setupRenderer = (
   // of the highway near the strikeline / hitline. Notes need this so they
   // disappear when they cross the hitline.
   // highwayEndPlane (normal -Y, const 0.9) clips y > 0.9 — the far end
-  // (top of the visible highway). Both notes and markers want this so
-  // nothing bleeds out the top.
-  // Markers (BPM, time-signature, section, lyric, phrase-start/end) keep
-  // only the top clip so their labels can extend past the hitline to the
-  // bottom edge of the canvas instead of being chopped at y=-1.
+  // (top of the visible highway), so nothing bleeds out the top.
   const highwayBeginningPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1);
   const highwayEndPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0.9);
   const noteClippingPlanes = [highwayBeginningPlane, highwayEndPlane];
-  const markerClippingPlanes = [highwayEndPlane];
 
   async function initialize() {
     const highwayTexture: THREE.Texture =
@@ -278,9 +269,6 @@ export const setupRenderer = (
       classicHighwayMesh = null;
       lyricsOverlay?.dispose();
       lyricsOverlay = null;
-      // Process-global, shared with every other live renderer and stage. Only
-      // the last one out turns the lights off.
-      releaseRenderer();
     },
     /** Expose the camera for overlay coordinate mapping (unprojection). */
     getCamera() {
@@ -503,7 +491,7 @@ export const setupRenderer = (
         getTextureForNote,
         animatedTextureManager,
       },
-      clippingPlanes: {note: noteClippingPlanes, marker: markerClippingPlanes},
+      clippingPlanes: {note: noteClippingPlanes},
       highwaySpeed,
       showDrumLanes,
     });

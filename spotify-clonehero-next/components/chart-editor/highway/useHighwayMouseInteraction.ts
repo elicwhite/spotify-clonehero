@@ -2,16 +2,15 @@
 
 /**
  * Owns every mouse interaction on the highway: pointer down/move/up/leave,
- * hover state, tool-mode dispatch, and popover-open requests. Edit semantics
- * shared with the piano-roll timeline — grid/delta snapping, drag thresholds,
- * lane-locked multi-drag, and marquee range-selection — live in the shared
- * `../editing/` modules (`gestures`, `marquee`) and `lib/chart-edit`'s
- * `snapTickToGrid`; this hook only resolves screen coordinates and calls them.
+ * hover state, and tool-mode dispatch. Edit semantics shared with the
+ * piano-roll timeline — grid/delta snapping, drag thresholds, lane-locked
+ * multi-drag, and marquee range-selection — live in the shared `../editing/`
+ * modules (`gestures`, `marquee`) and `lib/chart-edit`'s `snapTickToGrid`;
+ * this hook only resolves screen coordinates and calls them.
  *
  * The hook is *pure-ish* w.r.t. its inputs: it holds local state for
- * hover/drag, but every action flows out via `onOpenPopover`,
- * `executeCommand`, `dispatch`, and the marker-drag handlers. That makes the
- * hook unit-testable with stub inputs.
+ * hover/drag, but every action flows out via `executeCommand` and
+ * `dispatch`. That makes the hook unit-testable with stub inputs.
  *
  * Coordinate helpers (`screenToLane` / `screenToMs` / `screenToTick` /
  * `hitTest`) live inline because they depend on the interaction manager ref
@@ -21,7 +20,6 @@
 import {
   useCallback,
   useMemo,
-  useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
   type RefObject,
@@ -36,8 +34,6 @@ import type {
 } from '@/lib/chart-editor-core';
 import {selectActiveSchema} from '@/lib/chart-editor-core';
 import type {EditorCapabilities} from '../capabilities';
-import type {HighwayPopoverState} from './HighwayPopovers';
-import type {MarkerDragState, MarkerKind} from './useMarkerDrag';
 import {trackKeyFromScope, trackQualifiedNoteId} from '../scope';
 import {
   TOOL_REGISTRY,
@@ -59,19 +55,12 @@ import type {
  * ignore the kick strip in the highway center).
  *
  * Defined on `EditorTool`'s `ToolContext` (`../tools/types`) since
- * `selectMoveTool` owns note-drag deltas now; re-exported here so existing
- * consumers of this hook's output type are unaffected.
+ * `selectMoveTool` owns note-drag deltas; re-exported here for consumers of
+ * this hook's output type.
  */
 export type NoteDragState = ToolNoteDragState;
 
-export type HoveredHitType =
-  | 'note'
-  | 'section'
-  | 'lyric'
-  | 'phrase-start'
-  | 'phrase-end'
-  | 'highway'
-  | null;
+export type HoveredHitType = 'note' | 'highway' | null;
 
 export interface UseHighwayMouseInteractionInputs {
   interactionRef: RefObject<HTMLDivElement | null>;
@@ -81,22 +70,15 @@ export interface UseHighwayMouseInteractionInputs {
   activeNotes: NoteEvent[];
   timedTempos: TimedTempo[];
   resolution: number;
-  markerDrag: MarkerDragState | null;
-  beginMarkerDrag: (kind: MarkerKind, originalTick: number) => void;
-  updateMarkerDrag: (rawTick: number) => void;
-  commitMarkerDrag: (moveExceededThreshold: boolean) => void;
   executeCommand: (cmd: EditCommand) => void;
   dispatch: (action: ChartEditorAction) => void;
-  /** Called from the section-rename affordance on `selectMoveTool`. */
-  onOpenPopover: (popover: HighwayPopoverState) => void;
   /**
-   * When true, an uncommitted tempo candidate is being previewed (0061 §7):
-   * the highway renders the candidate doc while commands still target the
-   * committed doc, so a click could hit a candidate-only note. Editing gestures
-   * (select/place/erase/drag/popover) are suppressed for the read-only
-   * accept/reject preview contract (plan 0062 finding — "read-only +
-   * accept/reject"); scrub (wheel) stays live since it's handled outside this
-   * hook.
+   * When true, an uncommitted tempo candidate is being previewed: the highway
+   * renders the candidate doc while commands still target the committed doc,
+   * so a click could hit a candidate-only note. Editing gestures
+   * (select/place/erase/drag) are suppressed for the read-only accept/reject
+   * preview contract; scrub (wheel) stays live since it's handled outside
+   * this hook.
    */
   editingLocked?: boolean | undefined;
 }
@@ -121,53 +103,27 @@ export interface UseHighwayMouseInteractionOutputs {
 
 /**
  * Tick to which a HitResult corresponds for cursor / placement purposes.
- * Phrase-end uses its `endTick`; lyrics/sections/highway use their `tick`.
  */
 function hitTick(hit: HitResult): number | null {
-  if (!hit) return null;
-  switch (hit.type) {
-    case 'note':
-    case 'section':
-    case 'lyric':
-    case 'phrase-start':
-    case 'highway':
-      return hit.tick;
-    case 'phrase-end':
-      return hit.endTick;
-  }
+  return hit ? hit.tick : null;
 }
 
 /**
- * Translate a side-marker hit into its EntityKind + id. Notes and highway
- * hits have separate paths.
+ * Hit → entity-ref translation for the tool dispatch, which reads
+ * affordances by kind without per-hit-type branches.
  *
- * Sections are the only marker kind the highway draws
- * (`HIGHWAY_ELEMENT_KINDS` in `lib/preview/highway/cell.ts`), so they are the
- * only kind an `InteractionManager` can resolve; lyric and phrase markers are
+ * Notes are the only kind the highway draws (`HIGHWAY_ELEMENT_KINDS` in
+ * `lib/preview/highway/cell.ts`), so they are the only kind an
+ * `InteractionManager` can resolve; section, lyric, and phrase markers are
  * hit-tested by the piano roll instead.
- */
-function markerHitToRef(
-  hit: HitResult,
-): {kind: MarkerKind; id: string; tick: number} | null {
-  if (hit?.type !== 'section') return null;
-  return {kind: 'section', id: String(hit.tick), tick: hit.tick};
-}
-
-/**
- * Unified hit → entity-ref translation across all selectable kinds.
- * Notes and side-markers funnel through one shape so the cursor-tool
- * dispatch can read affordances by kind without per-hit-type branches.
  *
  * Returns null for highway-plane hits or when there's no hit.
  */
 function hitToEntityRef(
   hit: HitResult,
 ): {kind: EntityKind; id: string; tick: number} | null {
-  if (!hit) return null;
-  if (hit.type === 'note') {
-    return {kind: 'note', id: hit.noteId, tick: hit.tick};
-  }
-  return markerHitToRef(hit);
+  if (hit?.type !== 'note') return null;
+  return {kind: 'note', id: hit.noteId, tick: hit.tick};
 }
 
 export function useHighwayMouseInteraction(
@@ -181,13 +137,8 @@ export function useHighwayMouseInteraction(
     activeNotes,
     timedTempos,
     resolution,
-    markerDrag,
-    beginMarkerDrag,
-    updateMarkerDrag,
-    commitMarkerDrag,
     executeCommand,
     dispatch,
-    onOpenPopover,
     editingLocked = false,
   } = inputs;
 
@@ -203,9 +154,6 @@ export function useHighwayMouseInteraction(
   const [dragCurrent, setDragCurrent] = useState<{x: number; y: number} | null>(
     null,
   );
-
-  // Double-click tracking for section rename.
-  const lastClickRef = useRef<{tick: number; time: number} | null>(null);
 
   // -----------------------------------------------------------------------
   // Coordinate helpers via InteractionManager
@@ -285,14 +233,9 @@ export function useHighwayMouseInteraction(
       resolution,
       dispatch,
       executeCommand,
-      onOpenPopover,
       screenToLane,
       screenToMs,
       screenToTick,
-      markerDrag,
-      beginMarkerDrag,
-      updateMarkerDrag,
-      commitMarkerDrag,
       drag: {
         isDragging,
         setIsDragging,
@@ -305,33 +248,24 @@ export function useHighwayMouseInteraction(
         dragCurrent,
         setDragCurrent,
         setHoverTick,
-        lastClick: lastClickRef.current,
-        setLastClick: value => {
-          lastClickRef.current = value;
-        },
       },
     };
   }, [
     activeNotes,
-    beginMarkerDrag,
     capabilities,
-    commitMarkerDrag,
     dispatch,
     dragCurrent,
     dragStart,
     executeCommand,
     isDragging,
     isErasing,
-    markerDrag,
     noteDrag,
-    onOpenPopover,
     resolution,
     screenToLane,
     screenToMs,
     screenToTick,
     state,
     timedTempos,
-    updateMarkerDrag,
   ]);
 
   // -----------------------------------------------------------------------
@@ -383,7 +317,6 @@ export function useHighwayMouseInteraction(
     (e: ReactMouseEvent<HTMLDivElement>) => {
       const coords = getElementCoords(e);
       const hit = hitTestAt(coords.x, coords.y);
-      const markerRef = markerHitToRef(hit);
 
       // Update hover lane/tick from hit result.
       if (hit) {
@@ -402,8 +335,8 @@ export function useHighwayMouseInteraction(
       // dragged entity hovered: the drag-begin dispatch pinned it, and we
       // don't want the hover visual to flicker as the cursor passes over
       // other entities mid-drag.
-      if (!markerDrag && !isDragging) {
-        let nextHover: {kind: 'note' | 'section'; id: string} | null = null;
+      if (!isDragging) {
+        let nextHover: {kind: 'note'; id: string} | null = null;
         if (hit?.type === 'note' && capabilities.hoverable.has('note')) {
           // Track-qualified, like every stored note id: an unqualified id
           // would resolve as hovered in every lane that happens to have a
@@ -415,8 +348,6 @@ export function useHighwayMouseInteraction(
               ? trackQualifiedNoteId(trackKey, hit.noteId)
               : hit.noteId,
           };
-        } else if (markerRef && capabilities.hoverable.has(markerRef.kind)) {
-          nextHover = {kind: markerRef.kind, id: markerRef.id};
         }
         dispatch({type: 'SET_HOVER', hovered: nextHover});
       }
@@ -425,7 +356,7 @@ export function useHighwayMouseInteraction(
         setDragCurrent(coords);
       }
 
-      // Tool-specific move continuation: note-drag/marker-drag preview
+      // Tool-specific move continuation: note-drag preview
       // (`selectMoveTool`) and paint-erase (`eraseTool`). `'cursor'` mode
       // routes to whichever tool started the in-flight gesture — see
       // `resolveCursorContinuation`.
@@ -455,7 +386,6 @@ export function useHighwayMouseInteraction(
       getElementCoords,
       hitTestAt,
       isDragging,
-      markerDrag,
       screenToLane,
       screenToTick,
       state.activeScope,
@@ -469,8 +399,7 @@ export function useHighwayMouseInteraction(
 
       // Tool-specific up completion: drag-move-commit or box-select-commit
       // (`'cursor'` mode, routed to whichever tool owns the in-flight
-      // gesture) and marker-drag commit (any tool, since a marker drag can
-      // be released while the pointer has moved off the highway plane).
+      // gesture).
       if (dragStart && dragCurrent) {
         const evt: PointerHitInfo = {
           coords,
@@ -514,13 +443,13 @@ export function useHighwayMouseInteraction(
     setIsErasing(false);
     // Clear hover state in the editor reducer (no entity is under the
     // cursor any more). Drag retains its own pin, so a leave during a
-    // multi-note or marker drag does not clear the dragged entity's hover.
-    if (!isDragging && !markerDrag) {
+    // multi-note drag does not clear the dragged entity's hover.
+    if (!isDragging) {
       dispatch({type: 'SET_HOVER', hovered: null});
       setDragStart(null);
       setDragCurrent(null);
     }
-  }, [dispatch, isDragging, markerDrag]);
+  }, [dispatch, isDragging]);
 
   return useMemo(
     () => ({

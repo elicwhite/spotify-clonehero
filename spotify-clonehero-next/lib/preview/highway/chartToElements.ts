@@ -1,9 +1,23 @@
 import type {ParsedChart} from '../chorus-chart-processing';
 import type {ChartElement} from './SceneReconciler';
-import type {MarkerElementData} from './MarkerRenderer';
 import {trackToElements} from './trackToElements';
 import type {Track} from './types';
 import {chartMarkerKey, vocalMarkerKey} from './markerKeys';
+
+// ---------------------------------------------------------------------------
+// MarkerElementData
+// ---------------------------------------------------------------------------
+
+/**
+ * Element data for a marker (section, lyric, vocal phrase, BPM, time
+ * signature): `text` is the rendered label and `stackIndex` separates markers
+ * that land on the same tick on the same side.
+ */
+export interface MarkerElementData {
+  text: string;
+  /** Vertical stack index for markers at the same tick. 0 = no offset. */
+  stackIndex?: number;
+}
 
 // ---------------------------------------------------------------------------
 // chartToElements

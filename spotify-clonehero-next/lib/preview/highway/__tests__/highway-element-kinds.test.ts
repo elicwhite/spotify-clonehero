@@ -1,14 +1,14 @@
 /**
- * The highway draws notes, grid lines, and section markers — and nothing
- * else. `HIGHWAY_ELEMENT_KINDS` (`cell.ts`) is the single point that enforces
- * it: it types the reconciler's renderer map and is handed to the reconciler
- * as its accepted-kind allowlist. Tempo, time-signature, lyric, and phrase
- * markers are read and edited in the piano roll.
+ * The highway draws notes and grid lines — and nothing else.
+ * `HIGHWAY_ELEMENT_KINDS` (`cell.ts`) is the single point that enforces it: it
+ * types the reconciler's renderer map and is handed to the reconciler as its
+ * accepted-kind allowlist. Every marker kind — section, tempo, time-signature,
+ * lyric, phrase — is read and edited in the piano roll.
  *
  * These tests push the *whole* chart projection — the same array
  * `useChartElements` produces, marker kinds included — at a highway-shaped
- * reconciler and pin that only notes and sections survive it, plus the
- * interaction consequence: no rejected kind can ever resolve a hit.
+ * reconciler and pin that only notes survive it, plus the interaction
+ * consequence: no rejected kind can ever resolve a hit.
  *
  * Grid lines are `GridOverlay` geometry rather than reconciled elements, so
  * they are unaffected by the allowlist; `HighwayScene.test.ts` covers them.
@@ -38,7 +38,7 @@ function noopRenderer(): ElementRenderer {
 function makeHighwayReconciler(root: THREE.Object3D): SceneReconciler {
   return new SceneReconciler(
     root,
-    {note: noopRenderer(), section: noopRenderer()},
+    {note: noopRenderer()},
     HIGHWAY_SPEED,
     HIGHWAY_ELEMENT_KINDS,
   );
@@ -58,15 +58,15 @@ function kindsOf(keys: Iterable<string>): Set<string> {
 }
 
 describe('HIGHWAY_ELEMENT_KINDS', () => {
-  it('is exactly notes and sections', () => {
-    expect([...HIGHWAY_ELEMENT_KINDS].sort()).toEqual(['note', 'section']);
+  it('is exactly notes', () => {
+    expect([...HIGHWAY_ELEMENT_KINDS]).toEqual(['note']);
   });
 });
 
 describe('a highway reconciler fed the whole projection', () => {
   it('produces a fixture carrying every kind the highway must reject', () => {
     // Guards the tests below from passing vacuously if the fixture ever stops
-    // producing lyrics, phrases, tempo, or time-signature markers.
+    // producing sections, lyrics, phrases, tempo, or time-signature markers.
     const kinds = new Set(fullProjectionElements().map(e => e.kind));
     expect(kinds).toEqual(
       new Set([
@@ -81,15 +81,13 @@ describe('a highway reconciler fed the whole projection', () => {
     );
   });
 
-  it('stores only note and section elements', () => {
+  it('stores only note elements', () => {
     const reconciler = makeHighwayReconciler(new THREE.Group());
     reconciler.setElements(fullProjectionElements());
 
     const stored = reconciler.getElements();
     expect(stored.length).toBeGreaterThan(0);
-    expect(kindsOf(stored.map(e => e.key))).toEqual(
-      new Set(['note', 'section']),
-    );
+    expect(kindsOf(stored.map(e => e.key))).toEqual(new Set(['note']));
     expect(stored.every(e => HIGHWAY_ELEMENT_KINDS.has(e.kind as never))).toBe(
       true,
     );
@@ -102,7 +100,7 @@ describe('a highway reconciler fed the whole projection', () => {
 
     for (const el of elements) {
       const found = reconciler.getElement(el.key);
-      if (el.kind === 'note' || el.kind === 'section') {
+      if (el.kind === 'note') {
         expect(found).toBeDefined();
       } else {
         expect(found).toBeUndefined();
@@ -110,7 +108,7 @@ describe('a highway reconciler fed the whole projection', () => {
     }
   });
 
-  it('groups and positions only note and section elements', () => {
+  it('groups and positions only note elements', () => {
     const root = new THREE.Group();
     const reconciler = makeHighwayReconciler(root);
     reconciler.setElements(fullProjectionElements());
@@ -118,7 +116,7 @@ describe('a highway reconciler fed the whole projection', () => {
 
     const active = reconciler.getActiveGroups();
     expect(active.size).toBeGreaterThan(0);
-    expect(kindsOf(active.keys())).toEqual(new Set(['note', 'section']));
+    expect(kindsOf(active.keys())).toEqual(new Set(['note']));
     // Every group the reconciler positioned is mounted under the root; a
     // rejected kind never reaches it.
     expect(root.children).toHaveLength(active.size);
@@ -128,9 +126,7 @@ describe('a highway reconciler fed the whole projection', () => {
     const root = new THREE.Group();
     const reconciler = makeHighwayReconciler(root);
     reconciler.setElements(
-      fullProjectionElements().filter(
-        e => e.kind !== 'note' && e.kind !== 'section',
-      ),
+      fullProjectionElements().filter(e => e.kind !== 'note'),
     );
     reconciler.updateWindow(0);
 
@@ -171,21 +167,12 @@ describe('highway hit testing after the de-scope', () => {
     return types;
   }
 
-  it('resolves sections normally', () => {
-    const reconciler = makeHighwayReconciler(new THREE.Group());
-    reconciler.setElements([
-      {key: 'section:480', kind: 'section', msTime: 500, data: {text: 'Verse'}},
-    ]);
-    reconciler.updateWindow(0);
-
-    expect(hitTypesDownTheMiddle(makeManager(reconciler))).toContain('section');
-  });
-
-  it('resolves no marker where a lyric, phrase, bpm, or ts hit once would', () => {
+  it('resolves no marker where a section, lyric, phrase, bpm, or ts hit once would', () => {
     // Same tick, same row, every rejected kind at once: the reconciler never
     // stored them, so the row reads as bare highway.
     const reconciler = makeHighwayReconciler(new THREE.Group());
     reconciler.setElements([
+      {key: 'section:480', kind: 'section', msTime: 500, data: {text: 'Verse'}},
       {key: 'lyric:vocals:480', kind: 'lyric', msTime: 500, data: {text: 'la'}},
       {
         key: 'phrase-start:vocals:480',

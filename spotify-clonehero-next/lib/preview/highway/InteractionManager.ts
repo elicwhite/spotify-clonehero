@@ -1,9 +1,7 @@
 import * as THREE from 'three';
 import type {SceneReconciler} from './SceneReconciler';
 import {NoteRenderer, type NoteElementData} from './NoteRenderer';
-import {MarkerRenderer, type MarkerElementData} from './MarkerRenderer';
 import {type HitResult} from './types';
-import {parseMarkerKey} from './markerKeys';
 import {snapTickToGrid} from '@/lib/chart-edit';
 import type {InstrumentSchema} from '@/lib/chart-edit/instruments/types';
 
@@ -15,8 +13,8 @@ import type {InstrumentSchema} from '@/lib/chart-edit/instruments/types';
  * Handles hit-testing and coordinate conversion for the highway scene.
  *
  * React sends mouse coordinates, InteractionManager raycasts through the
- * Three.js scene and returns what's under the cursor (note, section, or
- * empty highway). React decides what to do with the result.
+ * Three.js scene and returns what's under the cursor (a note or the empty
+ * highway). React decides what to do with the result.
  */
 export class InteractionManager {
   private camera: THREE.PerspectiveCamera;
@@ -77,11 +75,10 @@ export class InteractionManager {
   private getElapsedMs: () => number;
 
   /**
-   * Cached sprite lists for raycasting. Rebuilt when the reconciler's
-   * active-groups revision changes. Notes and markers are cached
-   * separately so each hit-test pass only raycasts against its own kind.
+   * Cached sprite list for raycasting. Rebuilt when the reconciler's
+   * active-groups revision changes.
    *
-   * Tracking by revision (not size) is required: when a hovered marker's
+   * Tracking by revision (not size) is required: when a hovered note's
    * data changes, the reconciler recycles the old group and `updateWindow`
    * re-creates a new one at the same key, so the size returns to its
    * prior value and a size-only check would happily reuse a stale sprite
@@ -90,8 +87,6 @@ export class InteractionManager {
    */
   private cachedNoteSprites: THREE.Sprite[] = [];
   private cachedNoteSpriteToKey = new Map<THREE.Sprite, string>();
-  private cachedMarkerSprites: THREE.Sprite[] = [];
-  private cachedMarkerSpriteToKey = new Map<THREE.Sprite, string>();
   private cachedGroupsRevision = -1;
 
   constructor(
@@ -150,7 +145,7 @@ export class InteractionManager {
   /**
    * Perform a raycast hit-test at the given canvas-relative pixel coordinates.
    *
-   * Priority order: notes > sections > highway plane.
+   * Priority order: notes > highway plane.
    * Returns null if the ray misses the highway entirely.
    *
    * @param canvasX  X pixel offset from the left edge of the canvas/div
@@ -172,30 +167,16 @@ export class InteractionManager {
 
     this.rebuildSpriteCachesIfNeeded();
 
-    // --- 1. Marker flag boxes (off-highway side rails) ---
-    // The flag boxes sit outside the highway lanes, so they can't conflict
-    // with notes. Picking them first means the side-mounted text always
-    // responds to hover even if a note is at the same tick.
-    const flagHit = this.hitTestMarkerFlags();
-    if (flagHit) return flagHit;
-
-    // --- 2. Notes ---
+    // --- 1. Notes ---
     const noteHit = this.hitTestNotes();
     if (noteHit) return noteHit;
 
-    // --- 3. Marker row lines (cross the highway) ---
-    // Lines run through the same X range as notes; checked after notes so
-    // an explicit click on a note still wins, but cursor on the line
-    // anywhere else still picks the marker.
-    const lineHit = this.hitTestMarkerLines(canvasY, canvasH);
-    if (lineHit) return lineHit;
-
-    // --- 4. Intersect the highway plane ---
+    // --- 2. Intersect the highway plane ---
     return this.hitTestHighway(gridDivision);
   }
 
   /**
-   * Rebuild the per-kind sprite caches when the reconciler's active-groups
+   * Rebuild the note sprite cache when the reconciler's active-groups
    * revision has advanced. Cheap to run on a hit (early exit), so
    * `hitTest()` calls it unconditionally on entry.
    */
@@ -205,37 +186,17 @@ export class InteractionManager {
 
     this.cachedNoteSprites.length = 0;
     this.cachedNoteSpriteToKey.clear();
-    this.cachedMarkerSprites.length = 0;
-    this.cachedMarkerSpriteToKey.clear();
 
     for (const [key, group] of this.reconciler.getActiveGroups()) {
-      if (key.startsWith('note:')) {
-        const sprite = NoteRenderer.getSprite(group);
-        if (sprite) {
-          this.cachedNoteSprites.push(sprite);
-          this.cachedNoteSpriteToKey.set(sprite, key);
-        }
-      } else if (InteractionManager.markerPriority(key) >= 0) {
-        const sprite = MarkerRenderer.getFlagSprite(group);
-        if (sprite) {
-          this.cachedMarkerSprites.push(sprite);
-          this.cachedMarkerSpriteToKey.set(sprite, key);
-        }
+      if (!key.startsWith('note:')) continue;
+      const sprite = NoteRenderer.getSprite(group);
+      if (sprite) {
+        this.cachedNoteSprites.push(sprite);
+        this.cachedNoteSpriteToKey.set(sprite, key);
       }
     }
 
     this.cachedGroupsRevision = revision;
-  }
-
-  /**
-   * Index of `key`'s prefix in MARKER_PRIORITY. Lower = higher priority.
-   * Returns -1 if the key isn't a marker.
-   */
-  private static markerPriority(key: string): number {
-    for (let i = 0; i < InteractionManager.MARKER_PRIORITY.length; i++) {
-      if (key.startsWith(InteractionManager.MARKER_PRIORITY[i])) return i;
-    }
-    return -1;
   }
 
   // -----------------------------------------------------------------------
@@ -284,108 +245,6 @@ export class InteractionManager {
       lane,
       tick,
     };
-  }
-
-  // -----------------------------------------------------------------------
-  // Marker hit testing
-  //
-  // Sections are the only marker kind on the highway (`HIGHWAY_ELEMENT_KINDS`
-  // in `cell.ts`); tempo, time-signature, lyric, and phrase markers live in
-  // the piano roll. A section is a ChartElement in the reconciler keyed
-  // `section:{tick}` and renders as a horizontal line across the highway plus
-  // a side-mounted text flag. The flag is the actual click target —
-  // Three.js's sprite raycaster catches a hit anywhere inside the billboarded
-  // quad. The line beneath the flag also counts: a small tolerance around the
-  // row's Y matches anywhere on the rule.
-  // -----------------------------------------------------------------------
-
-  /**
-   * Tolerance in CSS pixels for the row line's Y. The line spans the
-   * highway's full width, so cursor anywhere on the line within this
-   * vertical tolerance counts as a marker hit.
-   */
-  private static readonly MARKER_LINE_TOLERANCE_PX = 8;
-
-  private static readonly MARKER_PRIORITY: ReadonlyArray<string> = ['section:'];
-
-  /**
-   * Hit-test only the side-mounted flag boxes (off the highway).
-   *
-   * Sprite raycasting uses Three.js's built-in `Sprite.raycast`, which
-   * tests against the screen-aligned billboard quad with the sprite's
-   * `center` anchor and `scale` applied — matching what the user sees.
-   * That avoids the perspective + billboard subtleties of projecting
-   * world-space corners back to screen pixels.
-   *
-   * Among hit sprites, pick the one with the highest `MARKER_PRIORITY`.
-   * Distance order from the raycaster isn't reliable for picking between
-   * stacked markers because all flag sprites share the same depth.
-   */
-  private hitTestMarkerFlags(): HitResult {
-    if (this.cachedMarkerSprites.length === 0) return null;
-
-    const hits = this.raycaster.intersectObjects(
-      this.cachedMarkerSprites,
-      false,
-    );
-    if (hits.length === 0) return null;
-
-    let bestKey: string | null = null;
-    let bestPriority = Infinity;
-    for (const hit of hits) {
-      const key = this.cachedMarkerSpriteToKey.get(hit.object as THREE.Sprite);
-      if (!key) continue;
-      const priority = InteractionManager.markerPriority(key);
-      if (priority < 0) continue;
-      if (priority < bestPriority) {
-        bestKey = key;
-        bestPriority = priority;
-      }
-    }
-    if (!bestKey) return null;
-    return this.elementToMarkerHit(bestKey);
-  }
-
-  /** Hit-test only the marker rule lines that cross the highway. */
-  private hitTestMarkerLines(canvasY: number, canvasH: number): HitResult {
-    if (this.timedTempos.length === 0) return null;
-
-    const tempWorld = new THREE.Vector3();
-
-    for (const prefix of InteractionManager.MARKER_PRIORITY) {
-      for (const [key, group] of this.reconciler.getActiveGroups()) {
-        if (!key.startsWith(prefix)) continue;
-
-        // Probe on the root's own X. With a per-viewport camera that has no
-        // yaw, `projected.y` is independent of X, so this is a no-op today —
-        // written explicitly because a camera that viewed this root
-        // off-axis would make it load-bearing.
-        tempWorld.set(this.rootWorldX, group.position.y, 0);
-        const projected = tempWorld.project(this.camera);
-        const lineScreenY = ((-projected.y + 1) / 2) * canvasH;
-        if (
-          Math.abs(canvasY - lineScreenY) >
-          InteractionManager.MARKER_LINE_TOLERANCE_PX
-        ) {
-          continue;
-        }
-
-        const hit = this.elementToMarkerHit(key);
-        if (hit) return hit;
-      }
-    }
-    return null;
-  }
-
-  private elementToMarkerHit(key: string): HitResult {
-    const el = this.reconciler.getElement(key);
-    if (!el) return null;
-    const data = el.data as MarkerElementData;
-    const parsed = parseMarkerKey(key);
-    if (!parsed) return null;
-
-    if (parsed.kind !== 'section') return null;
-    return {type: 'section', tick: parsed.tick, name: data.text};
   }
 
   // -----------------------------------------------------------------------
@@ -539,11 +398,6 @@ export class InteractionManager {
           default:
             return 'crosshair';
         }
-      case 'section':
-      case 'lyric':
-      case 'phrase-start':
-      case 'phrase-end':
-        return toolMode === 'cursor' ? 'pointer' : 'crosshair';
       case 'highway':
         switch (toolMode) {
           case 'place':

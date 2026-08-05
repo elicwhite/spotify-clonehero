@@ -1,24 +1,15 @@
 /**
- * The registered `EditorTool`s. Each one is the direct extraction of one
- * `case` in `useHighwayMouseInteraction`'s former `switch (state.activeTool)`
- * (see plan 0038 Task 7); behavior is unchanged, only relocated so the hook
- * dispatches through `registry.ts` instead of a hardcoded switch.
+ * The registered `EditorTool`s. `useHighwayMouseInteraction` dispatches every
+ * highway pointer event through `registry.ts` into one of these.
  *
  * `cursor` mode (`ToolMode === 'cursor'`) resolves to two tools —
  * `selectMoveTool` and `boxSelectTool` — chosen by `registry.ts` at pointer-
- * down time based on whether a selectable entity is under the cursor,
- * mirroring the single `case 'cursor':` branch it replaces.
+ * down time based on whether a selectable entity is under the cursor.
  *
- * Sections have no tool of their own: they are added from the piano roll's
- * section-strip context menu ("Add section here", plan 0076 item 19) and
- * renamed by double-clicking an existing one, which fires while
- * `selectMoveTool` (cursor mode) is active because it targets an
- * already-selectable entity.
- *
- * Sections are also the only marker kind these tools move. The highway draws
- * notes, grid lines, and sections and nothing else
- * (`HIGHWAY_ELEMENT_KINDS` in `lib/preview/highway/cell.ts`); tempo,
- * time-signature, lyric, and phrase editing all live in the piano roll.
+ * These tools act on notes only: notes are the sole kind the highway draws
+ * and hit-tests (`HIGHWAY_ELEMENT_KINDS` in `lib/preview/highway/cell.ts`),
+ * so section, tempo, time-signature, lyric, and phrase editing all live in
+ * the piano roll.
  */
 
 import {
@@ -46,114 +37,68 @@ import {computeNoteDragDelta, exceedsDragThreshold} from '../editing/gestures';
 import type {EditorTool, PointerHitInfo, ToolContext} from './types';
 
 /**
- * Click-to-select / click-and-drag-to-move on notes and section markers, plus
- * the double-click-to-rename affordance for `inlineEditable` kinds
- * (sections today). Only fires when a selectable entity is under the
- * cursor — `boxSelectTool` handles empty-highway clicks.
+ * Click-to-select / click-and-drag-to-move on notes. Only fires when a
+ * selectable note is under the cursor — `boxSelectTool` handles
+ * empty-highway clicks.
  */
 export const selectMoveTool: EditorTool = {
   id: 'select-move',
 
   onPointerDown(ctx: ToolContext, evt: PointerHitInfo): void {
-    const {hit, entity, coords} = evt;
-    if (!entity) return;
-    const aff = AFFORDANCES[entity.kind];
-
-    if (aff.inlineEditable && ctx.capabilities.selectable.has(entity.kind)) {
-      const now = Date.now();
-      const last = ctx.drag.lastClick;
-      if (last && last.tick === entity.tick && now - last.time < 400) {
-        ctx.drag.setLastClick(null);
-        if (entity.kind === 'section') {
-          const currentName = hit?.type === 'section' ? hit.name : '';
-          ctx.onOpenPopover({
-            kind: 'section-rename',
-            tick: entity.tick,
-            x: coords.x,
-            y: coords.y,
-            initialSectionName: currentName,
-            currentSectionName: currentName,
-          });
-          ctx.dispatch({
-            type: 'SET_SELECTION',
-            kind: 'section',
-            ids: new Set([entity.id]),
-          });
-          return;
-        }
-      }
-      ctx.drag.setLastClick({tick: entity.tick, time: now});
-    }
-
-    if (!aff.selectable || !ctx.capabilities.selectable.has(entity.kind)) {
+    const {entity, coords} = evt;
+    // Notes are the only kind the highway hit-tests; markers are selected
+    // and moved in the piano roll.
+    if (entity?.kind !== 'note') return;
+    if (
+      !AFFORDANCES.note.selectable ||
+      !ctx.capabilities.selectable.has('note')
+    ) {
       return;
     }
 
-    if (entity.kind === 'note') {
-      const trackKey = trackKeyFromScope(ctx.state.activeScope);
-      // Selection ids are stored track-qualified so a note id that exists in
-      // more than one track (`"0:green"` on guitar and on bass) can never
-      // resolve as "mine" in another pane or piano-roll row.
-      const noteSelection = getSelectedIds(ctx.state, 'note');
-      const selectionId = trackKey
-        ? trackQualifiedNoteId(trackKey, entity.id)
-        : entity.id;
-      if (evt.shiftKey) {
-        const newIds = new Set(noteSelection);
-        if (newIds.has(selectionId)) {
-          newIds.delete(selectionId);
-        } else {
-          newIds.add(selectionId);
-        }
-        ctx.dispatch({type: 'SET_SELECTION', kind: 'note', ids: newIds});
-      } else if (!noteSelection.has(selectionId)) {
-        ctx.dispatch({
-          type: 'SET_SELECTION',
-          kind: 'note',
-          ids: new Set([selectionId]),
-        });
+    const trackKey = trackKeyFromScope(ctx.state.activeScope);
+    // Selection ids are stored track-qualified so a note id that exists in
+    // more than one track (`"0:green"` on guitar and on bass) can never
+    // resolve as "mine" in another pane or piano-roll row.
+    const noteSelection = getSelectedIds(ctx.state, 'note');
+    const selectionId = trackKey
+      ? trackQualifiedNoteId(trackKey, entity.id)
+      : entity.id;
+    if (evt.shiftKey) {
+      const newIds = new Set(noteSelection);
+      if (newIds.has(selectionId)) {
+        newIds.delete(selectionId);
+      } else {
+        newIds.add(selectionId);
       }
-    } else {
+      ctx.dispatch({type: 'SET_SELECTION', kind: 'note', ids: newIds});
+    } else if (!noteSelection.has(selectionId)) {
       ctx.dispatch({
         type: 'SET_SELECTION',
-        kind: entity.kind,
-        ids: new Set([entity.id]),
+        kind: 'note',
+        ids: new Set([selectionId]),
       });
-      if (getSelectedIds(ctx.state, 'note').size > 0) {
-        ctx.dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
-      }
     }
 
-    if (ctx.capabilities.draggable.has(entity.kind)) {
-      const trackKey = trackKeyFromScope(ctx.state.activeScope);
+    if (ctx.capabilities.draggable.has('note')) {
       ctx.dispatch({
         type: 'SET_HOVER',
-        hovered: {
-          kind: entity.kind,
-          id:
-            entity.kind === 'note' && trackKey
-              ? trackQualifiedNoteId(trackKey, entity.id)
-              : entity.id,
-        },
+        hovered: {kind: 'note', id: selectionId},
       });
-      if (entity.kind === 'note') {
-        ctx.drag.setIsDragging(true);
-        const parsedId = ctx.schema
-          ? parseSchemaNoteId(entity.id, ctx.schema)
-          : null;
-        ctx.drag.setNoteDrag({
-          anchorTick: entity.tick,
-          anchorLane:
-            parsedId && ctx.schema
-              ? schemaTypeToLane(ctx.schema, parsedId.type)
-              : 0,
-          tickDelta: 0,
-          laneDelta: 0,
-          active: false,
-        });
-      } else if (entity.kind === 'section') {
-        ctx.beginMarkerDrag('section', entity.tick);
-      }
+      ctx.drag.setIsDragging(true);
+      const parsedId = ctx.schema
+        ? parseSchemaNoteId(entity.id, ctx.schema)
+        : null;
+      ctx.drag.setNoteDrag({
+        anchorTick: entity.tick,
+        anchorLane:
+          parsedId && ctx.schema
+            ? schemaTypeToLane(ctx.schema, parsedId.type)
+            : 0,
+        tickDelta: 0,
+        laneDelta: 0,
+        active: false,
+      });
     }
     ctx.drag.setDragStart(coords);
     ctx.drag.setDragCurrent(coords);
@@ -198,13 +143,9 @@ export const selectMoveTool: EditorTool = {
         ctx.drag.setHoverTick(snappedTick);
       }
     }
-
-    if (ctx.markerDrag && ctx.drag.dragStart) {
-      ctx.updateMarkerDrag(ctx.screenToTick(coords.x, coords.y));
-    }
   },
 
-  onPointerUp(ctx: ToolContext, evt: PointerHitInfo): void {
+  onPointerUp(ctx: ToolContext): void {
     const trackKey = trackKeyFromScope(ctx.state.activeScope);
     const noteSelection = trackKey
       ? new Set(
@@ -226,12 +167,6 @@ export const selectMoveTool: EditorTool = {
           entityContextFromScope(ctx.state.activeScope),
         ),
       );
-    }
-
-    if (ctx.markerDrag && ctx.drag.dragStart) {
-      const dx = evt.coords.x - ctx.drag.dragStart.x;
-      const dy = evt.coords.y - ctx.drag.dragStart.y;
-      ctx.commitMarkerDrag(exceedsDragThreshold(dx, dy));
     }
   },
 };
@@ -347,9 +282,8 @@ export const placeNoteTool: EditorTool = {
   },
 };
 
-/** Click/paint-drag to delete deletable entities under the cursor. Only
- *  notes have a wired delete command today; other deletable kinds
- *  (sections, lyrics, phrases) no-op until their handler lands. */
+/** Click/paint-drag to delete notes under the cursor. Notes are the only
+ *  kind the highway hit-tests; markers are erased from the piano roll. */
 export const eraseTool: EditorTool = {
   id: 'erase',
 

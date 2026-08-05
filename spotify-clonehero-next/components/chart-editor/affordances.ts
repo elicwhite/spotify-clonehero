@@ -3,9 +3,9 @@
  * mouse-interaction dispatch.
  *
  * The registry only declares **what an entity affords**: hover, select,
- * delete, inline edit, lane-axis drag. Behavior (which command runs on
- * delete, which popover opens on inline-edit) lives on the active tool, not
- * here. That keeps the registry data, not a controller.
+ * delete, lane-axis drag. Behavior (which command runs on delete) lives on
+ * the active tool, not here. That keeps the registry data, not a
+ * controller.
  *
  * Composition with `EditorCapabilities`: capabilities filter which kinds
  * are exposed for the active page (`/chart-editor` vs `/add-lyrics`). Affordances
@@ -23,12 +23,6 @@ export interface EntityAffordance {
   selectable: boolean;
   /** Erase tool can remove the entity. */
   deletable: boolean;
-  /**
-   * Has an inline editor (popover for rename, value edit, etc.). Tools
-   * decide when to invoke it (e.g. SelectMoveTool opens on double-click;
-   * EraseTool ignores).
-   */
-  inlineEditable: boolean;
   /** Drag changes the lane in addition to the tick. Notes only today. */
   laneAxis: boolean;
 }
@@ -39,7 +33,6 @@ export const AFFORDANCES: Record<EntityKind, EntityAffordance> = {
     hoverable: true,
     selectable: true,
     deletable: true,
-    inlineEditable: false,
     laneAxis: true,
   },
   section: {
@@ -47,7 +40,6 @@ export const AFFORDANCES: Record<EntityKind, EntityAffordance> = {
     hoverable: true,
     selectable: true,
     deletable: true,
-    inlineEditable: true,
     laneAxis: false,
   },
   lyric: {
@@ -55,7 +47,6 @@ export const AFFORDANCES: Record<EntityKind, EntityAffordance> = {
     hoverable: true,
     selectable: true,
     deletable: true,
-    inlineEditable: true,
     laneAxis: false,
   },
   'phrase-start': {
@@ -63,7 +54,6 @@ export const AFFORDANCES: Record<EntityKind, EntityAffordance> = {
     hoverable: true,
     selectable: true,
     deletable: true,
-    inlineEditable: false,
     laneAxis: false,
   },
   'phrase-end': {
@@ -71,7 +61,6 @@ export const AFFORDANCES: Record<EntityKind, EntityAffordance> = {
     hoverable: true,
     selectable: true,
     deletable: true,
-    inlineEditable: false,
     laneAxis: false,
   },
 };

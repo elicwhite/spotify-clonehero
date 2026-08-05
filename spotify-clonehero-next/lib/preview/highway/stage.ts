@@ -32,7 +32,6 @@ import {
 } from './cell';
 import {toGlRect, type HighwayRect, type StageLayout} from './layout';
 import {computeHighwayCameraFit, HIGHWAY_CAMERA} from './cameraFit';
-import {acquireRenderer, releaseRenderer} from './rendererRegistry';
 import type {Track} from './types';
 
 // ---------------------------------------------------------------------------
@@ -565,7 +564,6 @@ export function setupStage(
   renderer.setPixelRatio(dpr);
   renderer.localClippingEnabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  acquireRenderer();
 
   // The canvas is inline by default; the baseline gap below it overflows the
   // container by a few pixels, which can spawn a scrollbar and put the
@@ -843,9 +841,6 @@ export function setupStage(
     highways.clear();
     lyricsOverlay?.dispose();
     lyricsOverlay = null;
-    // Process-global, shared with every other live renderer and stage. Only
-    // the last one out turns the lights off.
-    releaseRenderer();
   }
 
   return {

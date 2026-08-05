@@ -2,13 +2,13 @@
  * Tests for reconcilerKeyFor — the single utility that maps editor
  * selection ids to reconciler keys per entity kind.
  *
- * The single most likely silent-failure mode of plan 0040 is a key-format
- * drift: selection state stores `2880:yellowDrum` but the reconciler keys
+ * The most likely silent-failure mode here is a key-format drift:
+ * selection state stores `2880:yellowDrum` but the reconciler keys
  * its element by `note:2880:yellowDrum`, and the wrong concatenation
  * highlights nothing. These tests pin the contract.
  */
 
-import {markerDragReconcilerKey, reconcilerKeyFor} from '../reconcilerKey';
+import {reconcilerKeyFor} from '../reconcilerKey';
 import {lyricId, phraseEndId, phraseStartId} from '@/lib/chart-edit';
 
 describe('reconcilerKeyFor', () => {
@@ -60,55 +60,6 @@ describe('reconcilerKeyFor', () => {
     it('default vocals partName: lyric:vocals:480', () => {
       const id = lyricId(480, 'vocals');
       expect(reconcilerKeyFor('lyric', id, 'vocals')).toBe('lyric:vocals:480');
-    });
-  });
-
-  describe('markerDragReconcilerKey round-trips with reconcilerKeyFor', () => {
-    // The drag path in `useChartElements` builds keys from raw (kind, tick,
-    // partName) without first stringifying an entity id. These tests pin
-    // that the result matches what the rest of the editor produces from
-    // the entity id, so the two formats can never silently drift.
-    it('section: matches reconcilerKeyFor(section, String(tick))', () => {
-      const tick = 2880;
-      expect(markerDragReconcilerKey('section', tick, 'vocals')).toBe(
-        reconcilerKeyFor('section', String(tick)),
-      );
-    });
-
-    it('lyric: matches reconcilerKeyFor(lyric, lyricId(tick, part))', () => {
-      const tick = 480;
-      const part = 'harm1';
-      expect(markerDragReconcilerKey('lyric', tick, part)).toBe(
-        reconcilerKeyFor('lyric', lyricId(tick, part), part),
-      );
-    });
-
-    it('phrase-start: matches reconcilerKeyFor(phrase-start, phraseStartId(tick, part))', () => {
-      const tick = 960;
-      const part = 'harm2';
-      expect(markerDragReconcilerKey('phrase-start', tick, part)).toBe(
-        reconcilerKeyFor('phrase-start', phraseStartId(tick, part), part),
-      );
-    });
-
-    it('phrase-end: matches reconcilerKeyFor(phrase-end, phraseEndId(endTick, part))', () => {
-      const endTick = 2400;
-      const part = 'harm3';
-      expect(markerDragReconcilerKey('phrase-end', endTick, part)).toBe(
-        reconcilerKeyFor('phrase-end', phraseEndId(endTick, part), part),
-      );
-    });
-
-    it('section: ignores partName', () => {
-      expect(markerDragReconcilerKey('section', 480, 'harm1')).toBe(
-        markerDragReconcilerKey('section', 480, 'harm2'),
-      );
-    });
-
-    it('vocal kinds: include partName so harmonies do not collide', () => {
-      expect(markerDragReconcilerKey('lyric', 480, 'harm1')).not.toBe(
-        markerDragReconcilerKey('lyric', 480, 'harm2'),
-      );
     });
   });
 

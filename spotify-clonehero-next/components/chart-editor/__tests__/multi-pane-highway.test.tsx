@@ -304,6 +304,35 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
     expect(screen.getByText('Guitar · Expert')).toBeInTheDocument();
   });
 
+  it('centers each pane label along the bottom of its own pane', async () => {
+    renderHarness({
+      chartDoc: makeMultiInstrumentDoc(),
+      visible: ['drums:expert', 'guitar:expert'],
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('highway-lane-drums:expert'),
+      ).toBeInTheDocument(),
+    );
+
+    // The strikeline projects near the bottom of a pane but not at its edge
+    // (see `cameraFit`), so the label lives under it — one per pane,
+    // horizontally centered, never over the note-hit area.
+    for (const [laneId, text] of [
+      ['drums:expert', 'Drums · Expert'],
+      ['guitar:expert', 'Guitar · Expert'],
+    ] as const) {
+      const pane = screen.getByTestId(`highway-lane-${laneId}`);
+      const label = screen.getByText(text);
+      expect(pane).toContainElement(label);
+      expect(label.className).toContain('bottom-2');
+      expect(label.className).toContain('left-1/2');
+      expect(label.className).toContain('-translate-x-1/2');
+      expect(label.className).not.toContain('top-2');
+    }
+  });
+
   // This case survives in jsdom only because `computeStageLayout` reports
   // `measured: false` at a canvas width of 0 and hands back `MAX_HIGHWAYS`
   // instead of a width-derived cap. Without that rule every layout here would

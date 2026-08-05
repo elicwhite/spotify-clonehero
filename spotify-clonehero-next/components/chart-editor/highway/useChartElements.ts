@@ -7,8 +7,8 @@
  *
  *   1. **Element set push** — derive `ChartElement[]` from the chart and
  *      capabilities. Element data is intrinsic-only (text, lane, length,
- *      msTime); transient state lives elsewhere. Marker drag injects a
- *      live `msTime` so the dragged marker tracks the cursor; the
+ *      msTime); transient state lives elsewhere. A note drag injects a
+ *      live `msTime` so the dragged notes track the cursor; the
  *      reconciler treats this as reposition-only because `dataEqual`
  *      ignores msTime.
  *
@@ -47,10 +47,7 @@ import {
   schemaForInstrument,
   type InstrumentSchema,
 } from '@/lib/chart-edit/instruments';
-import {
-  markerDragReconcilerKey,
-  reconcilerKeyFor,
-} from '@/lib/preview/highway/reconcilerKey';
+import {reconcilerKeyFor} from '@/lib/preview/highway/reconcilerKey';
 import type {EditorCapabilities} from '../capabilities';
 import {
   isTrackScope,
@@ -58,13 +55,6 @@ import {
   localNoteIdsForTrack,
   type EditorScope,
 } from '../scope';
-import type {MarkerKind} from './useMarkerDrag';
-
-export interface MarkerDragHint {
-  kind: MarkerKind;
-  originalTick: number;
-  currentTick: number;
-}
 
 /**
  * Live multi-note drag preview. `ids` are the selected notes' entity ids
@@ -94,7 +84,6 @@ export interface UseChartElementsInputs {
   selection: ReadonlyMap<EntityKind, ReadonlySet<string>>;
   /** Single hovered entity from the editor reducer (or null). */
   hovered: {kind: EntityKind; id: string} | null;
-  markerDrag: MarkerDragHint | null;
   noteDrag: NoteDragHint | null;
   timedTempos: TimedTempo[];
   resolution: number;
@@ -108,9 +97,7 @@ export interface UseChartElementsInputs {
 export interface ComputeChartElementsInputs {
   chart: ParsedChart;
   activeScope: EditorScope;
-  partName: string;
   capabilities: EditorCapabilities;
-  markerDrag: MarkerDragHint | null;
   noteDrag: NoteDragHint | null;
   timedTempos: TimedTempo[];
   resolution: number;
@@ -131,7 +118,7 @@ function laneSchemaFor(
 
 /**
  * Pure: derive the `ChartElement[]` to push to the reconciler from the
- * current chart + capabilities + marker-drag hint. No React, no refs.
+ * current chart + capabilities + note-drag hint. No React, no refs.
  *
  * Notes + markers come from `buildProjectionFor(activeScope, doc, null)`
  * (`lib/preview/highway/projection.ts`) — the same `EditorProjection`
@@ -145,48 +132,24 @@ function laneSchemaFor(
  * (`lib/preview/highway/cell.ts`), and the piano roll consumes the same
  * projection and needs every kind.
  *
- * Drag handling: when a marker is being dragged, its element is rewritten
- * with a live `msTime` derived from `markerDrag.currentTick`. The
- * reconciler's `dataEqual` ignores `msTime`, so this becomes a
- * reposition-only update — no recycle, no key churn.
- *
- * Note drags work the same way for the tick axis: each selected note's
- * element gets an `msTime` recomputed from its tick plus the drag's
- * `tickDelta`. A non-zero `laneDelta` additionally rewrites the element's
- * lane / xPosition / note type (a data change, so the reconciler recycles
- * the sprite into the previewed lane's visual).
+ * Drag handling: each selected note's element gets an `msTime` recomputed
+ * from its tick plus the drag's `tickDelta`. The reconciler's `dataEqual`
+ * ignores `msTime`, so this is a reposition-only update — no recycle, no key
+ * churn. A non-zero `laneDelta` additionally rewrites the element's lane /
+ * xPosition / note type (a data change, so the reconciler recycles the
+ * sprite into the previewed lane's visual).
  */
 export function computeChartElements(
   inputs: ComputeChartElementsInputs,
 ): ChartElement[] {
-  const {
-    chart,
-    activeScope,
-    partName,
-    capabilities,
-    markerDrag,
-    noteDrag,
-    timedTempos,
-    resolution,
-  } = inputs;
+  const {chart, activeScope, capabilities, noteDrag, timedTempos, resolution} =
+    inputs;
   // `computeChartElements` still takes the narrower `ParsedChart` shape
   // (see the type comment above); `buildProjectionFor` only reads
   // `doc.parsedChart`, so a minimal wrapper is enough to reuse it here.
   const doc = {parsedChart: chart} as unknown as ChartDocument;
   const projection = buildProjectionFor(activeScope, doc, null);
   const elements = [...projection.elements, ...projection.markers];
-
-  const dragKey = markerDrag
-    ? markerDragReconcilerKey(
-        markerDrag.kind,
-        markerDrag.originalTick,
-        partName,
-      )
-    : null;
-  const dragMs =
-    markerDrag && timedTempos.length > 0
-      ? tickToMs(markerDrag.currentTick, timedTempos, resolution)
-      : null;
 
   const noteDragIds =
     noteDrag && isTrackScope(activeScope)
@@ -215,9 +178,6 @@ export function computeChartElements(
   return elements
     .filter(e => capabilities.showDrumLanes || e.kind !== 'note')
     .map(e => {
-      if (dragKey === e.key && dragMs !== null) {
-        return {...e, msTime: dragMs};
-      }
       if (noteDragKeys && e.kind === 'note' && noteDragKeys.has(e.key)) {
         const data = e.data as NoteElementData;
         const tick = data.note.tick ?? 0;
@@ -267,8 +227,8 @@ export function computeChartElements(
 
 /**
  * Effect-only hook. Pushes a fresh element set to the reconciler on every
- * input change; pushes hover/selection through dedicated dispatch
- * channels (no longer baked into element data).
+ * input change; pushes hover/selection through dedicated dispatch channels,
+ * separate from element data.
  */
 export function useChartElements(inputs: UseChartElementsInputs): void {
   const {
@@ -280,7 +240,6 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
     capabilities,
     selection,
     hovered,
-    markerDrag,
     noteDrag,
     timedTempos,
     resolution,
@@ -288,8 +247,8 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
 
   // ---------------------------------------------------------------------
   // 1. Element-set push.
-  //    Intrinsic-only data; drag injects msTime which the reconciler
-  //    treats as reposition-only.
+  //    Intrinsic-only data; a note drag injects msTime which the
+  //    reconciler treats as reposition-only.
   // ---------------------------------------------------------------------
   useEffect(() => {
     const reconciler = reconcilerRef.current;
@@ -298,9 +257,7 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
       computeChartElements({
         chart,
         activeScope,
-        partName,
         capabilities,
-        markerDrag,
         noteDrag,
         timedTempos,
         resolution,
@@ -311,9 +268,7 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
     rendererVersion,
     chart,
     activeScope,
-    partName,
     capabilities,
-    markerDrag,
     noteDrag,
     timedTempos,
     resolution,

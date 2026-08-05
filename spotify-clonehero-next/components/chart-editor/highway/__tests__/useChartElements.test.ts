@@ -9,11 +9,11 @@
  *     (`setHoveredKey` / `setSelectedKeys`); selection state in element
  *     data would force a recycle on every toggle.
  *
- *  2. Marker drag is a reposition-only update. Two computations that
- *     differ only in `markerDrag.currentTick` produce the same set of
+ *  2. A note drag is a reposition-only update. Two computations that
+ *     differ only in `noteDrag.tickDelta` produce the same set of
  *     reconciler keys. The reconciler's `dataEqual` ignores `msTime`, so
- *     the dragged marker stays in the same Three.js group and just
- *     repositions.
+ *     the dragged notes stay in the same Three.js groups and just
+ *     reposition.
  */
 
 import {makeFixtureDoc} from '../../__tests__/fixtures';
@@ -24,7 +24,6 @@ import {
 } from '../../scope';
 import {computeChartElements} from '../useChartElements';
 import {AddNoteCommand, toSchemaNote} from '../../commands';
-import {markerDragReconcilerKey} from '@/lib/preview/highway/reconcilerKey';
 import type {NoteElementData} from '@/lib/preview/highway/NoteRenderer';
 import type {TrackKey} from '@/lib/chart-edit';
 import {drumTypes, noteTypes} from '@eliwhite/scan-chart';
@@ -41,9 +40,7 @@ describe('computeChartElements', () => {
     const elements = computeChartElements({
       chart: doc.parsedChart,
       activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
-      partName: 'vocals',
       capabilities: DRUM_EDIT_CAPABILITIES,
-      markerDrag: null,
       noteDrag: null,
       timedTempos,
       resolution,
@@ -55,81 +52,6 @@ describe('computeChartElements', () => {
       expect(data).not.toHaveProperty('isHovered');
       expect(data).not.toHaveProperty('isSelected');
       expect(data).not.toHaveProperty('isDrag');
-    }
-  });
-
-  it('drag-only msTime change does not change reconciler keys', () => {
-    const doc = makeFixtureDoc();
-
-    const baseInputs = {
-      chart: doc.parsedChart,
-      activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
-      partName: 'vocals',
-      capabilities: DRUM_EDIT_CAPABILITIES,
-      noteDrag: null,
-      timedTempos,
-      resolution,
-    };
-
-    // First push: section drag at the original tick.
-    const elementsAtT0 = computeChartElements({
-      ...baseInputs,
-      markerDrag: {
-        kind: 'section',
-        originalTick: 1920,
-        currentTick: 1920,
-      },
-    });
-
-    // Second push: same drag, cursor moved 240 ticks downstream.
-    const elementsAtT1 = computeChartElements({
-      ...baseInputs,
-      markerDrag: {
-        kind: 'section',
-        originalTick: 1920,
-        currentTick: 2160,
-      },
-    });
-
-    const keysAt0 = elementsAtT0.map(e => e.key);
-    const keysAt1 = elementsAtT1.map(e => e.key);
-    expect(keysAt1).toEqual(keysAt0);
-  });
-
-  it('drag rewrites msTime on the dragged marker only', () => {
-    const doc = makeFixtureDoc();
-    const draggedKey = markerDragReconcilerKey('section', 1920, 'vocals');
-
-    const baseInputs = {
-      chart: doc.parsedChart,
-      activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
-      partName: 'vocals',
-      capabilities: DRUM_EDIT_CAPABILITIES,
-      noteDrag: null,
-      timedTempos,
-      resolution,
-    };
-
-    const before = computeChartElements({...baseInputs, markerDrag: null});
-    const during = computeChartElements({
-      ...baseInputs,
-      markerDrag: {
-        kind: 'section',
-        originalTick: 1920,
-        currentTick: 2400, // 480 ticks downstream → +500ms
-      },
-    });
-
-    // Every non-dragged element keeps its msTime exactly. The dragged
-    // marker's msTime advances to the new cursor tick.
-    for (const el of before) {
-      const after = during.find(d => d.key === el.key);
-      expect(after).toBeDefined();
-      if (el.key === draggedKey) {
-        expect(after!.msTime).not.toBe(el.msTime);
-      } else {
-        expect(after!.msTime).toBe(el.msTime);
-      }
     }
   });
 
@@ -148,9 +70,7 @@ describe('computeChartElements', () => {
     const elements = computeChartElements({
       chart: doc.parsedChart,
       activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
-      partName: 'vocals',
       capabilities: DRUM_EDIT_CAPABILITIES,
-      markerDrag: null,
       noteDrag: null,
       timedTempos,
       resolution,
@@ -173,9 +93,7 @@ describe('computeChartElements', () => {
     const elements = computeChartElements({
       chart: doc.parsedChart,
       activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
-      partName: 'vocals',
       capabilities: noLanesCaps,
-      markerDrag: null,
       noteDrag: null,
       timedTempos,
       resolution,
@@ -192,9 +110,7 @@ describe('computeChartElements', () => {
     const elements = computeChartElements({
       chart: doc.parsedChart,
       activeScope: {kind: 'vocals', part: 'vocals'},
-      partName: 'vocals',
       capabilities: DRUM_EDIT_CAPABILITIES,
-      markerDrag: null,
       noteDrag: null,
       timedTempos,
       resolution,
@@ -216,9 +132,7 @@ describe('computeChartElements', () => {
     const elements = computeChartElements({
       chart: doc.parsedChart,
       activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
-      partName: 'vocals',
       capabilities: PREVIEW_CAPABILITIES,
-      markerDrag: null,
       noteDrag: null,
       timedTempos,
       resolution,
@@ -226,46 +140,6 @@ describe('computeChartElements', () => {
 
     expect(elements.some(e => e.kind === 'note')).toBe(false);
     expect(elements.some(e => e.kind === 'section')).toBe(true);
-  });
-
-  it('omits dragged-msTime rewrite when timedTempos is empty', () => {
-    const doc = makeFixtureDoc();
-    const draggedKey = markerDragReconcilerKey('section', 1920, 'vocals');
-
-    // Baseline: no drag, no rewrite. Captures whatever msTime the chart
-    // happens to carry for this section in the fixture (parser-dependent).
-    const baseline = computeChartElements({
-      chart: doc.parsedChart,
-      activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
-      partName: 'vocals',
-      capabilities: DRUM_EDIT_CAPABILITIES,
-      markerDrag: null,
-      noteDrag: null,
-      timedTempos,
-      resolution,
-    });
-    const baselineMs = baseline.find(e => e.key === draggedKey)!.msTime;
-
-    // Drag with empty tempos: msTime should match baseline (no rewrite),
-    // not advance to the cursor and not produce NaN.
-    const dragged = computeChartElements({
-      chart: doc.parsedChart,
-      activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
-      partName: 'vocals',
-      capabilities: DRUM_EDIT_CAPABILITIES,
-      markerDrag: {
-        kind: 'section',
-        originalTick: 1920,
-        currentTick: 2400,
-      },
-      timedTempos: [],
-      noteDrag: null,
-      resolution,
-    }).find(e => e.key === draggedKey);
-
-    expect(dragged).toBeDefined();
-    expect(dragged!.msTime).toBe(baselineMs);
-    expect(Number.isFinite(dragged!.msTime)).toBe(true);
   });
 
   // -------------------------------------------------------------------------
@@ -281,9 +155,7 @@ describe('computeChartElements', () => {
     const inputs = () => ({
       chart: makeFixtureDoc().parsedChart,
       activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
-      partName: 'vocals',
       capabilities: DRUM_EDIT_CAPABILITIES,
-      markerDrag: null,
       noteDrag: null,
       timedTempos,
       resolution,
@@ -307,9 +179,7 @@ describe('computeChartElements', () => {
     const baseInputs = () => ({
       chart: makeFixtureDoc().parsedChart,
       activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
-      partName: 'vocals',
       capabilities: DRUM_EDIT_CAPABILITIES,
-      markerDrag: null,
       timedTempos,
       resolution,
     });
@@ -384,9 +254,7 @@ describe('computeChartElements', () => {
       const inputs = {
         chart,
         activeScope: DEFAULT_GUITAR_EXPERT_SCOPE,
-        partName: 'vocals',
         capabilities: DRUM_EDIT_CAPABILITIES,
-        markerDrag: null,
         timedTempos,
         resolution,
       };
@@ -434,9 +302,7 @@ describe('computeChartElements', () => {
       const elements = computeChartElements({
         chart,
         activeScope: DEFAULT_GUITAR_EXPERT_SCOPE,
-        partName: 'vocals',
         capabilities: DRUM_EDIT_CAPABILITIES,
-        markerDrag: null,
         noteDrag: {
           tickDelta: 0,
           laneDelta: 2,
@@ -488,9 +354,7 @@ describe('computeChartElements', () => {
       const inputs = {
         chart,
         activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
-        partName: 'vocals',
         capabilities: DRUM_EDIT_CAPABILITIES,
-        markerDrag: null,
         timedTempos,
         resolution,
       };
@@ -525,9 +389,7 @@ describe('computeChartElements', () => {
       const during = computeChartElements({
         chart,
         activeScope: DEFAULT_DRUMS_EXPERT_SCOPE,
-        partName: 'vocals',
         capabilities: DRUM_EDIT_CAPABILITIES,
-        markerDrag: null,
         noteDrag: {
           tickDelta: 0,
           laneDelta: 2,
