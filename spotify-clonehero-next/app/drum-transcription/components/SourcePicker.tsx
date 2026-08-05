@@ -11,8 +11,6 @@ import AudioUploader from './AudioUploader';
 interface SourcePickerProps {
   /** Called when the user selects an audio file for the audio-only path. */
   onFileSelected: (file: File) => void;
-  /** Called when the user clicks "Try Demo" (audio-only path). */
-  onTryDemo: () => void;
   /** Called when the user drops/selects an existing chart package. */
   onChartLoaded: (loaded: LoadedFiles) => void;
   /** Error message from the last chart-package load attempt, if any. */
@@ -30,7 +28,6 @@ interface SourcePickerProps {
  */
 export default function SourcePicker({
   onFileSelected,
-  onTryDemo,
   onChartLoaded,
   chartFlowError,
   disabled,
@@ -80,7 +77,7 @@ export default function SourcePicker({
           Grid source: <strong>predicted</strong> — the tempo map is estimated
           from the audio.
         </p>
-        <AudioUploader onFileSelected={onFileSelected} onTryDemo={onTryDemo} />
+        <AudioUploader onFileSelected={onFileSelected} />
       </div>
     );
   }

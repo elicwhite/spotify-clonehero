@@ -56,7 +56,6 @@ Fully browser-based: upload a song → separate stems via Demucs (ONNX + WebGPU)
 - **Editing happens on the Clone Hero highway** (like Moonscraper), not on a separate grid or sheet music UI.
 - **Stems stored in a fingerprint-keyed OPFS cache** (`drum-transcription/stem-cache/{fingerprint}/drums.pcm`), keyed by a SHA-256 of the uploaded audio bytes + separator model identity so identical inputs reuse separated stems across projects. Only the drum stem is produced. No merged `no_drums.pcm`.
 - **OPFS for storage** (`navigator.storage.getDirectory()`). No IndexedDB for audio/chart data. Namespace under `drum-transcription/` to avoid collisions.
-- **Demo audio** at `public/drumsample.mp3`.
 - **Don't duplicate code.** If a utility exists elsewhere in the project, extract it to a shared lib and update the original callsite first (in its own commit), then use it from the new code.
 - **Tests required** for all business logic. Use Jest (`pnpm test`).
 - **Validate in the browser.** Use chrome-devtools MCP tools to test changes as you make them (see Browser Validation section below).

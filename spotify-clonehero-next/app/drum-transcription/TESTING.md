@@ -16,8 +16,7 @@ Manual verification for the single-pass stereo CRNN pipeline
 ## What to click
 
 1. Open `/drum-transcription`.
-2. Upload a song — use `public/drumsample.mp3` for the fixture behaviors
-   below (or drag in any mp3).
+2. Upload a song — drag in any mp3.
 3. Watch the progress steps: Loading ML Runtime -> Decoding Audio ->
    Separating Stems (BS-Roformer) -> Building Tempo Map -> Transcribing
    Drums (CRNN). The tempo step shows live sub-stage detail (e.g.

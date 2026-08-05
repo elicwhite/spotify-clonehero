@@ -369,26 +369,6 @@ function DrumTranscriptionInner() {
     [openEditor, startRun],
   );
 
-  // Handle demo button
-  const handleTryDemo = useCallback(async () => {
-    let file: File;
-    try {
-      const response = await fetch('/drumsample.mp3');
-      if (!response.ok) {
-        throw new Error('Failed to fetch demo audio file');
-      }
-      const blob = await response.blob();
-      file = new File([blob], 'Demo Drum Sample.mp3', {type: 'audio/mpeg'});
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Failed to load the demo audio';
-      console.error('Demo fetch error:', err);
-      toast.error(message);
-      return;
-    }
-    await handleStartPipeline(file);
-  }, [handleStartPipeline]);
-
   // Retry the run that just failed. Once a run has a project, retrying
   // resumes it: every stage that already landed is on disk, and re-running
   // the original upload/chart request would create a second project and
@@ -587,7 +567,6 @@ function DrumTranscriptionInner() {
           feature). */}
       <SourcePicker
         onFileSelected={handleStartPipeline}
-        onTryDemo={handleTryDemo}
         onChartLoaded={handleChartPackageLoaded}
         chartFlowError={chartFlowError}
         disabled={isProcessing}

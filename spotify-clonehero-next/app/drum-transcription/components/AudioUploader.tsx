@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback, useRef, useState} from 'react';
-import {Upload, Music} from 'lucide-react';
+import {Upload} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent} from '@/components/ui/card';
@@ -14,18 +14,13 @@ import {cn} from '@/lib/utils';
 interface AudioUploaderProps {
   /** Called when the user selects an audio file (file upload or browse). */
   onFileSelected: (file: File) => void;
-  /** Called when the user clicks "Try Demo". */
-  onTryDemo: () => void;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export default function AudioUploader({
-  onFileSelected,
-  onTryDemo,
-}: AudioUploaderProps) {
+export default function AudioUploader({onFileSelected}: AudioUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -106,10 +101,6 @@ export default function AudioUploader({
           <div className="flex gap-3">
             <Button variant="outline" onClick={handleBrowseClick}>
               Browse Files
-            </Button>
-            <Button variant="secondary" onClick={onTryDemo}>
-              <Music className="mr-2 h-4 w-4" />
-              Try Demo
             </Button>
           </div>
           <input
