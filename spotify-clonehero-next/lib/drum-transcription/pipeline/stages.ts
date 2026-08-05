@@ -18,8 +18,8 @@ import {
 } from '../storage/opfs';
 import {TARGET_SAMPLE_RATE, type AudioMetadata} from '../audio/types';
 import {separateDrums, loadDrumStem} from '../ml/roformer-separation';
-import type {DrumSeparationProgress} from '@/lib/audio-pipeline/separate-stems';
 import {planarStereoToCrnnInput} from './crnn-audio-prep';
+import {separationProgressToFraction} from './separation-progress';
 import {runTempoPipelineFromPcm} from '@/lib/tempo-map/pipeline-client';
 import type {
   LinkSegSections,
@@ -135,24 +135,6 @@ function deinterleaveStereo(interleaved: Float32Array): {
 // ---------------------------------------------------------------------------
 // Stem separation
 // ---------------------------------------------------------------------------
-
-/** Sub-ranges of the 'separating' step assigned to each separation sub-step,
- * so the dialog's bar moves monotonically instead of resetting to 0 when the
- * model download finishes and processing begins. */
-const SEPARATION_STAGE_RANGES: Record<
-  DrumSeparationProgress['step'],
-  [number, number]
-> = {
-  'loading-model': [0, 0.15],
-  processing: [0.15, 0.97],
-  storing: [0.97, 1],
-  done: [1, 1],
-};
-
-function separationProgressToFraction(p: DrumSeparationProgress): number {
-  const [lo, hi] = SEPARATION_STAGE_RANGES[p.step];
-  return lo + (hi - lo) * Math.min(1, Math.max(0, p.percent));
-}
 
 /**
  * Runs BS-Roformer drum-stem separation for a project, mapping progress into

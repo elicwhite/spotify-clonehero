@@ -2,8 +2,17 @@
 
 /**
  * Chart Assist "Drum transcription" card (plan 0074 Phase 2, Design C): the
- * staleness prompt, the "Keep as-is" dismissal, and the confirmed re-run of
- * the `transcribe-drums` task.
+ * staleness prompt, the "Keep as-is" dismissal, and the confirmed run of the
+ * `transcribe-drums` task.
+ *
+ * The run takes whichever of the two shapes the host is wired for. A
+ * project-backed host (`/drum-transcription`) regenerates its OPFS project,
+ * which re-predicts the tempo map along with the notes. Any other host runs
+ * `transcribe-drums-from-audio` against the song mix it supplies and the
+ * chart already open, whose SyncTrack stays put. Both re-separate the drums
+ * with BS-Roformer through the shared stem cache, so neither depends on the
+ * host having a separated stem to hand and the action is never dead for
+ * want of one.
  */
 
 import {useCallback, useState} from 'react';
@@ -24,9 +33,19 @@ import {
 import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
 import type {AssistRunnerControls} from '@/components/assist/useAssistRunner';
 import {useAssistTaskRun} from '@/components/assist/useAssistTaskRun';
-import {transcribeDrumsTask} from '@/lib/assist/tasks/transcribe-drums';
+import {
+  transcribeDrumsTask,
+  type TranscribeDrumsSync,
+} from '@/lib/assist/tasks/transcribe-drums';
+import {transcribeDrumsFromAudioTask} from '@/lib/assist/tasks/transcribe-drums-from-audio';
+import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 import {getAssistProvenance} from '@/lib/chart-editor-core';
-import {findTrack, getDrumNotes, type ChartDocument} from '@/lib/chart-edit';
+import {
+  findTrack,
+  getDrumNotes,
+  type ChartDocument,
+  type DrumNote,
+} from '@/lib/chart-edit';
 
 import {useChartEditorContext} from '../ChartEditorContext';
 import type {EditCommand} from '../commands';
@@ -37,16 +56,21 @@ import type {LearnKey} from './learn-copy';
 export interface DrumTranscriptionCardProps {
   doc: ChartDocument | null;
   stale: boolean;
-  /** The OPFS drum-transcription project the re-run regenerates. Undefined
-   *  only together with `rerunDisabledReason`. */
+  /** The OPFS drum-transcription project to regenerate, when the host has
+   *  one. It takes precedence over {@link loadAudio}: regenerating also
+   *  re-predicts that project's tempo map and rewrites its pipeline state,
+   *  which an audio-only run has nowhere to put. */
   projectId: string | undefined;
+  /** The song's audio, for a host with no drum-transcription project. The
+   *  run separates the drums back out of it and snaps them to the chart's
+   *  own grid. */
+  loadAudio: LoadAssistAudio | undefined;
   /**
-   * A STANDING reason this host can't re-run transcription (no
-   * drum-transcription project behind the chart, so there is no separated
-   * drum stem and no pipeline state to regenerate). Set, the re-run action
-   * is disabled with this text; the staleness note and "Keep as-is" still
-   * work, since both are decisions about the chart in the editor rather than
-   * pipeline work.
+   * Why this host can't start a run right now — it has neither a project nor
+   * any audio, or its audio is being rebuilt. Set, the action is disabled
+   * with this text; the staleness note and "Keep as-is" still work, since
+   * both are decisions about the chart in the editor rather than pipeline
+   * work.
    */
   rerunDisabledReason?: string | undefined;
   runner: AssistRunnerControls;
@@ -58,6 +82,7 @@ export default function DrumTranscriptionCard({
   doc,
   stale,
   projectId,
+  loadAudio,
   rerunDisabledReason,
   runner,
   executeCommand,
@@ -77,29 +102,51 @@ export default function DrumTranscriptionCard({
     getAssistProvenance(doc)?.tempoDerived?.['drum-transcription'] != null;
   const status = `${noteCount} notes on Drums · Expert`;
 
-  const {running, run} = useAssistTaskRun(runner, transcribeDrumsTask, {
+  // Both runs land the same way: fresh notes plus the grid they were
+  // authored against. The run rebuilt the chart from audio, so the old
+  // leading-silence anchor no longer describes it (0064 addendum §1). The
+  // command itself records the transcription's provenance.
+  const applyResult = (result: {
+    notes: DrumNote[];
+    sync: TranscribeDrumsSync;
+  }) =>
+    executeCommand(
+      new ReplaceDrumTrackCommand(result.notes, {
+        sync: result.sync,
+        clearAudioAnchor: true,
+      }),
+    );
+
+  // Two runs, one CTA. Which one fires is decided at click time by the
+  // wiring the host gave this card; the hooks are unconditional because
+  // hooks are, and each only builds callbacks.
+  const projectRun = useAssistTaskRun(runner, transcribeDrumsTask, {
     prepareInput: async () => {
       if (projectId === undefined) {
-        throw new Error(
-          rerunDisabledReason ?? 'Drum transcription has no project to re-run',
-        );
+        throw new Error('Drum transcription has no project to regenerate');
       }
-      // Re-running from inside the editor means regenerating this project:
-      // the tempo map and notes are recomputed and replace what is there.
+      // Regenerating a project recomputes its tempo map and notes together
+      // and replaces both.
       return {run: {kind: 'regenerate' as const, projectId}};
     },
-    // The run rebuilt the chart from audio, so the old leading-silence anchor
-    // no longer describes it (0064 addendum §1). The command itself records
-    // the transcription's provenance.
-    applyResult: result =>
-      executeCommand(
-        new ReplaceDrumTrackCommand(result.notes, {
-          sync: result.sync,
-          clearAudioAnchor: true,
-        }),
-      ),
-    successMessage: 'Regenerated beat grid and notes.',
+    applyResult,
+    successMessage: 'Beat grid and notes written.',
   });
+
+  const audioRun = useAssistTaskRun(runner, transcribeDrumsFromAudioTask, {
+    prepareInput: async () => {
+      if (loadAudio === undefined || doc === null) {
+        throw new Error('Drum transcription has no audio to transcribe');
+      }
+      return {audio: await loadAudio(), chartDoc: doc};
+    },
+    applyResult,
+    successMessage: 'Transcribed drums.',
+  });
+
+  const active = projectId !== undefined ? projectRun : audioRun;
+  const running = active.running;
+  const run = active.run;
 
   // "Keep as-is" is a decision about a recommendation, not a chart edit, so
   // it goes straight to the reducer instead of through a command: an
@@ -129,7 +176,7 @@ export default function DrumTranscriptionCard({
       explanation="Writes a first-pass Expert drum chart from the audio, a faster starting point to tweak, not a finished chart."
       note={
         stale
-          ? 'Tempo grid changed after transcription. Re-run if the grid moved where drums land. Your call.'
+          ? 'Tempo grid changed after transcription. Transcribe again if the grid moved where drums land. Your call.'
           : undefined
       }
       attn={stale}
@@ -142,7 +189,7 @@ export default function DrumTranscriptionCard({
               disabledReason={rerunDisabledReason}
               onClick={() => setConfirmOpen(true)}
               icon={RefreshCw}
-              label={noteCount === 0 ? 'Transcribe' : 'Re-run'}
+              label="Run"
               variant={stale ? 'default' : 'outline'}
             />
             {stale && (
@@ -162,11 +209,11 @@ export default function DrumTranscriptionCard({
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Re-run drum transcription?</AlertDialogTitle>
+            <AlertDialogTitle>Run drum transcription?</AlertDialogTitle>
             <AlertDialogDescription>
-              This re-runs the beat grid and predicted notes from the cached
-              audio. All note edits and review progress for this project will be
-              discarded.
+              {projectId !== undefined
+                ? 'This re-predicts the beat grid and the notes from the audio. All note edits and review progress for this project will be discarded.'
+                : 'This separates the drums out of the song and replaces the Expert drum chart. Your tempo map, your other instruments, and every edit outside Expert drums are left alone.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -177,7 +224,7 @@ export default function DrumTranscriptionCard({
                 run();
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Re-run
+              Run
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

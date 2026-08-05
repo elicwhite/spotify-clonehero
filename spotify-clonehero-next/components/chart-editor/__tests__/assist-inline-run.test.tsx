@@ -261,15 +261,15 @@ function renderEditor() {
   );
 }
 
-/** Clicks the Drum transcription card's Re-run action and confirms the
+/** Clicks the Drum transcription card's Run action and confirms the
  *  dialog it raises (the dialog's confirm shares the trigger's accessible
  *  name, so it is resolved scoped to the dialog). */
 function confirmRegenerate() {
-  fireEvent.click(screen.getByRole('button', {name: /^re-run$/i}));
+  fireEvent.click(screen.getByRole('button', {name: /^run$/i}));
   // With the dialog open, Radix hides the rest of the app from the
-  // accessibility tree, so the only reachable "Re-run" is the dialog's own
+  // accessibility tree, so the only reachable "Run" is the dialog's own
   // confirm action.
-  fireEvent.click(screen.getByRole('button', {name: /^re-run$/i}));
+  fireEvent.click(screen.getByRole('button', {name: /^run$/i}));
 }
 
 beforeEach(() => {
@@ -326,7 +326,7 @@ describe('EditorApp inline regenerate (plan 0074 suite 2)', () => {
     );
   });
 
-  it('clicking Re-run expands the inline card into a step list, keeps sibling controls enabled, and applies the new drums track without remounting', async () => {
+  it('clicking Run expands the inline card into a step list, keeps sibling controls enabled, and applies the new drums track without remounting', async () => {
     renderEditor();
     await waitFor(() =>
       expect(screen.getByTestId('note-count')).toHaveTextContent('3'),
@@ -365,11 +365,11 @@ describe('EditorApp inline regenerate (plan 0074 suite 2)', () => {
     // (local component state, reset on remount) is still collapsed.
     expect(screen.queryByRole('slider')).not.toBeInTheDocument();
 
-    // Re-run is available again (idle button restored).
-    expect(screen.getByRole('button', {name: /^re-run$/i})).toBeEnabled();
+    // Run is available again (idle button restored).
+    expect(screen.getByRole('button', {name: /^run$/i})).toBeEnabled();
   });
 
-  it('cancel restores the idle Re-run button and applies nothing', async () => {
+  it('cancel restores the idle Run button and applies nothing', async () => {
     renderEditor();
     await waitFor(() =>
       expect(screen.getByTestId('note-count')).toHaveTextContent('3'),
@@ -386,13 +386,13 @@ describe('EditorApp inline regenerate (plan 0074 suite 2)', () => {
     // The card is taken over by the run: its action is gone, not merely
     // disabled.
     expect(
-      screen.queryByRole('button', {name: /^re-run$/i}),
+      screen.queryByRole('button', {name: /^run$/i}),
     ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', {name: /^cancel$/i}));
 
     await waitFor(() =>
-      expect(screen.getByRole('button', {name: /^re-run$/i})).toBeEnabled(),
+      expect(screen.getByRole('button', {name: /^run$/i})).toBeEnabled(),
     );
     expect(screen.getByText(/cancelled/i)).toBeInTheDocument();
     expect(screen.getByTestId('note-count')).toHaveTextContent('3');

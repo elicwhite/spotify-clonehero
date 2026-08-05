@@ -150,6 +150,7 @@ interface Wiring {
   detectedAudioOnsetMs?: number | undefined;
   leadingSilenceDisabledReason?: string | undefined;
   drumRerunDisabledReason?: string | undefined;
+  audioBusyReason?: string | undefined;
 }
 
 /** What a fully project-backed host supplies, so every card renders. */
@@ -165,9 +166,12 @@ const FULL_WIRING: Wiring = {
  * What a host with the chart package's audio but neither padded playback nor
  * a drum-transcription project supplies — the difficulty-generation flow
  * (`components/difficulty-generation/DifficultyGenerationFlow.tsx`), whose
- * reasons these strings mirror. Both affected cards still render: the point
- * of the disabled-with-a-reason path is that a card's status and
- * recommendation are worth showing even where its action can't run.
+ * reasons these strings mirror. The leading-silence card still renders with
+ * its action dead: the point of the disabled-with-a-reason path is that a
+ * card's status and recommendation are worth showing even where its action
+ * can't run. Drum transcription is the other case — it separates its own
+ * drum stem out of `loadAudio`'s mix, so a host reason about missing stems
+ * doesn't apply to it and its action stays live.
  */
 const DISABLED_ACTIONS_WIRING: Wiring = {
   loadAudio: async () => ({
@@ -277,11 +281,11 @@ describe('ChartAssist capability gating', () => {
 /**
  * A chart loaded from a file, with its own audio but no drum-transcription
  * project behind it and no way to pad the audio it plays and exports (the
- * difficulty-generation flow). The audio-backed cards run; the two whose
- * action this host can't perform render with a disabled action and a reason,
- * and no card is silently missing.
+ * difficulty-generation flow). The audio-backed cards run; the one action
+ * this host can't perform renders disabled with a reason, and no card is
+ * silently missing.
  */
-describe('ChartAssist where the host disables two actions', () => {
+describe('ChartAssist where the host disables an action', () => {
   function renderTrackEdit(doc = makeDoc()) {
     return renderChartAssist(
       doc,
@@ -317,16 +321,26 @@ describe('ChartAssist where the host disables two actions', () => {
     );
   });
 
-  it('disables the transcription re-run and says why', () => {
+  it('keeps drum transcription live despite a host reason about missing stems', () => {
     renderTrackEdit();
-    const button = screen.getByRole('button', {name: /^re-run$/i});
-    expect(button).toBeDisabled();
-    expect(button).toHaveAccessibleDescription(
-      /no separated drum audio to re-run from/i,
-    );
+    const button = screen.getByRole('button', {name: /^run$/i});
+    expect(button).toBeEnabled();
+    expect(button).not.toHaveAccessibleDescription(/no separated drum audio/i);
   });
 
-  it('keeps the staleness prompt and Keep as-is working without a re-run', () => {
+  // The run separates its drums out of the host's audio, so it waits out a
+  // padded-audio rebuild exactly like the tempo map does.
+  it('disables drum transcription while the host rebuilds its audio', () => {
+    renderChartAssist(makeDoc(), DRUM_EDIT_CAPABILITIES, {
+      ...DISABLED_ACTIONS_WIRING,
+      audioBusyReason: 'Rebuilding audio',
+    });
+    const button = screen.getByRole('button', {name: /^run$/i});
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription(/rebuilding audio/i);
+  });
+
+  it('keeps the staleness prompt and Keep as-is working', () => {
     renderTrackEdit(makeDocWithFreshProvenance());
     fireEvent.click(screen.getByRole('button', {name: /edit tempo/i}));
     expect(
@@ -551,10 +565,10 @@ describe('ChartAssist Learn more', () => {
 });
 
 describe('ChartAssist inline run', () => {
-  it('Re-run expands the Drum transcription card into a step list, keeps siblings interactive, applies the result, and clears staleness', async () => {
+  it('Run expands the Drum transcription card into a step list, keeps siblings interactive, applies the result, and clears staleness', async () => {
     renderChartAssist(makeDocWithFreshProvenance());
 
-    clickAndConfirm(/^re-run$/i, /^re-run$/i);
+    clickAndConfirm(/^run$/i, /^run$/i);
 
     await waitFor(() =>
       expect(
@@ -656,7 +670,7 @@ describe('ChartAssist inline run', () => {
       screen.queryByText(/tempo grid changed after transcription/i),
     ).not.toBeInTheDocument();
 
-    clickAndConfirm(/^re-run$/i, /^re-run$/i);
+    clickAndConfirm(/^run$/i, /^run$/i);
     await waitFor(() => expect(capturedTranscribe).not.toBeNull());
     capturedTranscribe!.resolve({
       notes: [{tick: 0, type: noteTypes.kick}],
@@ -681,7 +695,7 @@ describe('ChartAssist inline run', () => {
   it('cancel shows "Cancelled." inline and applies nothing', async () => {
     renderChartAssist(makeDocWithFreshProvenance());
 
-    clickAndConfirm(/^re-run$/i, /^re-run$/i);
+    clickAndConfirm(/^run$/i, /^run$/i);
     await waitFor(() =>
       expect(
         screen.getByRole('list', {name: /progress steps/i}),

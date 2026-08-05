@@ -5,9 +5,9 @@
  *
  * Cards: Tempo map, Sections (its own LinkSeg run, staleness + Keep-as-is),
  * Add leading silence (detector-driven call-to-action), Drum transcription
- * (staleness + Re-run/Keep-as-is), Lyrics, and a per-instrument difficulty
- * regeneration card (one per stale instrument) — one module each, beside
- * this one.
+ * (staleness + Run/Keep-as-is), Lyrics, and a per-instrument difficulty
+ * generation card (one per stale instrument) — one module each, beside this
+ * one.
  *
  * This module owns only which cards exist and the section chrome around
  * them. A card that runs a task starts it on the editor's shared assist
@@ -28,9 +28,9 @@
  * reason on the tooltip. `/drum-transcription` wires all four to run;
  * `/tempo` wires the leading-silence card only; the shared `TrackEditPage`
  * shell (`/chart-editor`) pads its own playback and exported audio
- * (`usePaddedAudio`), so it runs the audio-backed tasks honestly and
- * passes a reason only for the drum-transcription re-run (no OPFS
- * drum-transcription project behind a chart loaded from a file); a bare
+ * (`usePaddedAudio`), so it runs every audio-backed task honestly, drum
+ * transcription included — that one separates its own drum stem out of the
+ * song mix the host supplies, so it needs no project behind it. A bare
  * `ChartEditor` with no wiring renders no section at all.
  */
 
@@ -58,10 +58,9 @@ import DifficultyGenerationCard from './DifficultyGenerationCard';
 import LyricsCard from './LyricsCard';
 
 export interface ChartAssistProps {
-  /** OPFS drum-transcription project id. Required by the Drum transcription
-   *  card's Re-run action; a host with a chart but no such project passes
-   *  `drumRerunDisabledReason` instead. Absent on pages that aren't
-   *  project-backed (`/tempo`, `TrackEditPage`'s routes). */
+  /** OPFS drum-transcription project id. Absent on pages that aren't
+   *  project-backed (`/tempo`, `TrackEditPage`'s routes), where the Drum
+   *  transcription card runs from `loadAudio` instead. */
   projectId?: string | undefined;
   /** Whether re-running drum transcription is offered at all. False for
    *  chart-flow projects whose grid and chart came from a user-supplied
@@ -69,8 +68,9 @@ export interface ChartAssistProps {
   allowDrumRerun?: boolean | undefined;
   /** Loads the song's audio (with the stem-cache fingerprint it's keyed
    *  under, when the host knows it) for the Tempo map card's
-   *  `generate-tempo-map` task and the Lyrics card's `add-lyrics` task.
-   *  Without it neither card renders. */
+   *  `generate-tempo-map` task, the Lyrics card's `add-lyrics` task, and the
+   *  Drum transcription card on hosts with no project id. Without it none of
+   *  those cards renders. */
   loadAudio?: LoadAssistAudio | undefined;
   /** Sample rate of the loaded audio, for the leading-silence pad's sample
    *  quantization. Without it the Add leading silence card doesn't render. */
@@ -81,9 +81,11 @@ export interface ChartAssistProps {
    *  detector recommendation, with the action disabled and this on the
    *  tooltip. */
   leadingSilenceDisabledReason?: string | undefined;
-  /** Why this host can't re-run drum transcription (no drum-transcription
-   *  project behind the chart). The card still renders its note count,
-   *  staleness note, and "Keep as-is". */
+  /** Why this host can't run drum transcription at all. It applies only to a
+   *  host that offers neither a project id nor `loadAudio` — with either of
+   *  those the run has everything it needs, since it separates its own drum
+   *  stem. The card still renders its note count, staleness note, and "Keep
+   *  as-is". */
   drumRerunDisabledReason?: string | undefined;
   /** Set while the host is rebuilding its padded audio: audio-dependent
    *  actions disable and explain themselves with this reason. */
@@ -131,18 +133,30 @@ export default function ChartAssist({
     (variant === 'all' || variant === 'tempo-and-silence') &&
     doc != null &&
     audioSampleRate !== undefined;
+  // Drum transcription runs from a project OR from the host's audio, which
+  // it separates itself — so a host-declared reason it can't run only
+  // applies when the host has neither. Running from the host's audio also
+  // waits out a padded-audio rebuild, like every other audio-backed card.
+  const drumDisabledReason =
+    projectId !== undefined
+      ? undefined
+      : loadAudio != null
+        ? audioBusyReason
+        : drumRerunDisabledReason;
   const showDrums =
     variant === 'all' &&
     allowDrumRerun &&
     runner != null &&
-    (projectId !== undefined || drumRerunDisabledReason !== undefined) &&
+    (projectId !== undefined ||
+      loadAudio != null ||
+      drumRerunDisabledReason !== undefined) &&
     hasDrumsTrack;
   const showLyrics =
     (variant === 'all' || variant === 'lyrics-only') && loadAudio != null;
 
   // Difficulty regeneration cards: one per instrument whose Hard/Medium/Easy
   // set was generated from an Expert track that has since changed. Runs the
-  // same `generate-difficulties` task the Chart Matrix row's "Re-generate"
+  // same `generate-difficulties` task the Chart Matrix row's generate
   // affordance starts (plan 0074 Design C/D).
   const staleDifficultyInstruments =
     variant === 'all' && runner != null && doc != null
@@ -208,7 +222,8 @@ export default function ChartAssist({
             doc={doc}
             stale={selectTempoDerivedStale(state, 'drum-transcription')}
             projectId={projectId}
-            rerunDisabledReason={drumRerunDisabledReason}
+            loadAudio={loadAudio}
+            rerunDisabledReason={drumDisabledReason}
             runner={runner}
             executeCommand={executeCommand}
             onLearnMore={setLearnOpen}

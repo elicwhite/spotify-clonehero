@@ -4,8 +4,10 @@
  * Composes `runner.ts`'s four orderings (fresh upload, existing chart
  * package, resume, regenerate) behind one task: the ordering to run is named
  * by the input, and `planSteps` predicts its step list from the same OPFS
- * existence checks the ordering performs. Both the `/drum-transcription`
- * home screen and the editor's Regenerate control run through it.
+ * existence checks the ordering performs. Every one of them owns an OPFS
+ * drum-transcription project, which is what separates this task from
+ * `transcribe-drums-from-audio.ts` — the same task key run against a host's
+ * audio and open chart, with no project to keep.
  */
 
 import type {ChartDocument, DrumNote} from '@/lib/chart-edit';

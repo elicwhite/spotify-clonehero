@@ -195,9 +195,9 @@ export async function hasVocalsStem(projectId: string): Promise<boolean> {
  * the fingerprint `separateStems` computes matches
  * `ensureProjectStemFingerprint`'s exactly (both hash `readOriginalAudio`
  * first), so the stem it stores is found under the project's fingerprint.
- * Legacy projects with no stored original (only `full.pcm`/`song.opus`) fall
- * back to separating the passed-in PCM directly, same as before this
- * refactor.
+ * Projects with no stored original (only `full.pcm`/`song.opus`) fall back to
+ * separating the passed-in PCM directly, and store the resulting stems under
+ * the fingerprint themselves.
  *
  * @param projectId        - OPFS project ID.
  * @param interleavedAudio - Interleaved stereo Float32 PCM at 44.1 kHz.
@@ -231,8 +231,7 @@ export async function separateDrums(
     return interleavedStem;
   }
 
-  // ---- Legacy fallback: no stored original — separate the passed-in PCM
-  // directly (the pre-Phase-3 path). ----
+  // ---- No stored original: separate the passed-in PCM directly. ----
   const numSamples = Math.floor(interleavedAudio.length / NUM_CHANNELS);
   const left = new Float32Array(numSamples);
   const right = new Float32Array(numSamples);

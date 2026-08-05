@@ -10,7 +10,7 @@
  * for the visit) — so the pieces that must agree between them live here:
  * the metronome click stem, the chart delay applied to playback, the
  * waveform PCM and its sample rate, the export audio sources, and the Chart
- * Assist audio boundary with the reasons a chart package can't offer every
+ * Assist audio boundary with the reason a chart package can't offer every
  * card.
  */
 
@@ -29,6 +29,7 @@ import {mixStemsToAudioBuffer} from '@/lib/audio-pipeline/lyrics-audio';
 import {interleaveAudioBuffer} from '@/lib/drum-transcription/audio/decoder';
 import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {audioMimeType} from '@/lib/sng/file-utils';
+import {getBasename} from '@/lib/src-shared/utils';
 import type {AssistAudio} from '@/lib/assist/tasks/types';
 import type {AudioSource} from './ExportDialog';
 import type {ChartAssistProps} from './sidebar/ChartAssist';
@@ -155,16 +156,23 @@ export function chartDocToChartText(chartDoc: ChartDocument): string {
  * separated by any other tool. A multi-stem package has no single mixed
  * file, so the stems are summed back into one and encoded, the same
  * reconstruction `/add-lyrics` performs before re-separating.
+ *
+ * The metronome click is not music and is dropped from the sum: it is a
+ * charting aid, and mixing it in would put a click on every beat of the
+ * audio these tasks separate and transcribe.
  */
 export async function chartPackageAudioBytes(
   audioFiles: Files,
 ): Promise<Uint8Array> {
-  if (audioFiles.length === 0) {
+  const musicFiles = audioFiles.filter(
+    f => getBasename(f.fileName).toLowerCase() !== CLICK_TRACK_NAME,
+  );
+  if (musicFiles.length === 0) {
     throw new Error('No audio files found in chart package');
   }
-  if (audioFiles.length === 1) return audioFiles[0].data;
+  if (musicFiles.length === 1) return musicFiles[0].data;
   const mixed = await mixStemsToAudioBuffer(
-    audioFiles.map(f => ({
+    musicFiles.map(f => ({
       data: f.data,
       mimeType: audioMimeType(f.fileName),
     })),
@@ -174,9 +182,9 @@ export async function chartPackageAudioBytes(
 }
 
 /**
- * Why a chart-package host can't offer two of the Chart Assist cards' actions.
- * The cards still render — their advice and note counts are worth reading —
- * with the action disabled and these on the tooltip.
+ * Why a chart-package host can't offer one of the Chart Assist cards' actions.
+ * The card still renders — its advice and note counts are worth reading —
+ * with the action disabled and this on the tooltip.
  */
 export const CHART_PACKAGE_ASSIST_DISABLED_REASONS = {
   /** Padding the chart is only half of adding leading silence: a host that
@@ -186,10 +194,6 @@ export const CHART_PACKAGE_ASSIST_DISABLED_REASONS = {
    *  pads both its playback (`usePaddedAudio`) and its exported audio, so it
    *  declares no reason at all. */
   leadingSilence: "Can't pad this editor's audio to match a shifted chart yet.",
-  /** Re-running transcription needs the separated drum stem an OPFS
-   *  drum-transcription project holds, which a chart loaded from a file
-   *  doesn't have. */
-  drumRerun: 'No separated drum audio to re-run from.',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -218,10 +222,9 @@ export interface ChartPackageEditorProps {
  *   `CHART_PACKAGE_ASSIST_DISABLED_REASONS.leadingSilence` and the action is
  *   disabled; a host that pads its playback and its exported audio
  *   (`TrackEditPage`) declares nothing and the action runs.
- * - Drum transcription: DISABLED, still shown (only on charts that have
- *   Expert Drums). The note count and the staleness prompt come from editor
- *   state alone, and "Keep as-is" is a decision about that state, so both
- *   keep working.
+ * - Drum transcription: RUNS, on charts that have Expert Drums.
+ *   `transcribe-drums-from-audio` separates its own drum stem out of the same
+ *   audio bytes, so it needs no OPFS drum-transcription project.
  *
  * `loadAudioFiles` must be referentially stable (a `useCallback`): it is a
  * dependency of the memoized callbacks handed to the editor.
@@ -262,10 +265,7 @@ export function useChartPackageEditor(args: {
   );
 
   const chartAssist = useMemo<ChartAssistProps>(
-    () => ({
-      loadAudio,
-      drumRerunDisabledReason: CHART_PACKAGE_ASSIST_DISABLED_REASONS.drumRerun,
-    }),
+    () => ({loadAudio}),
     [loadAudio],
   );
 

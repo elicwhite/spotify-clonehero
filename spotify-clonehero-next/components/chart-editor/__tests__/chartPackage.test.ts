@@ -35,6 +35,17 @@ jest.mock('../../../lib/preview/clickTrack', () => ({
   generateBeatClickTrackWav: jest.fn(async () => new Uint8Array([0])),
 }));
 
+const mixStemsToAudioBuffer = jest.fn(async (_stems: unknown[]) => ({
+  sampleRate: 44100,
+  numberOfChannels: 2,
+  length: 1,
+  getChannelData: () => new Float32Array([0]),
+}));
+jest.mock('../../../lib/audio-pipeline/lyrics-audio', () => ({
+  mixStemsToAudioBuffer: (...args: unknown[]) =>
+    (mixStemsToAudioBuffer as unknown as (...a: unknown[]) => unknown)(...args),
+}));
+
 class FakeAudioContext {
   async decodeAudioData(_buffer: ArrayBuffer) {
     return {
@@ -51,6 +62,13 @@ class FakeAudioContext {
 (globalThis as unknown as {AudioContext: unknown}).AudioContext =
   FakeAudioContext;
 
+// jsdom's Blob has no `arrayBuffer()`, which the WAV encode path reads back.
+if (typeof Blob.prototype.arrayBuffer !== 'function') {
+  Blob.prototype.arrayBuffer = function () {
+    return Promise.resolve(new ArrayBuffer(0));
+  };
+}
+
 function chartDoc(offsetSeconds = 0): ChartDocument {
   const parsed = createEmptyChart({bpm: 120, resolution: 480});
   parsed.metadata.chart_offset = offsetSeconds;
@@ -63,6 +81,7 @@ function audioFiles(): Files {
 
 beforeEach(() => {
   constructed.length = 0;
+  mixStemsToAudioBuffer.mockClear();
 });
 
 describe('prepareChartPackageAudio', () => {
@@ -114,5 +133,33 @@ describe('chartPackageAudioBytes', () => {
 
   it('rejects a package with no audio', async () => {
     await expect(chartPackageAudioBytes([])).rejects.toThrow(/No audio files/);
+  });
+
+  it('drops a click track, so a lone real stem beside it is still passed through verbatim', async () => {
+    const files: Files = [
+      {fileName: 'song.ogg', data: new Uint8Array([1, 2, 3])},
+      {fileName: 'click.wav', data: new Uint8Array([9])},
+    ];
+    await expect(chartPackageAudioBytes(files)).resolves.toBe(files[0].data);
+    expect(mixStemsToAudioBuffer).not.toHaveBeenCalled();
+  });
+
+  it('keeps the click out of the mix a multi-stem package is summed into', async () => {
+    await chartPackageAudioBytes([
+      {fileName: 'guitar.ogg', data: new Uint8Array([1])},
+      {fileName: 'click.ogg', data: new Uint8Array([9])},
+      {fileName: 'drums.ogg', data: new Uint8Array([2])},
+    ]);
+
+    expect(mixStemsToAudioBuffer).toHaveBeenCalledTimes(1);
+    expect(mixStemsToAudioBuffer.mock.calls[0][0]).toHaveLength(2);
+  });
+
+  it('rejects a package whose only audio is the click track', async () => {
+    await expect(
+      chartPackageAudioBytes([
+        {fileName: 'click.wav', data: new Uint8Array([9])},
+      ]),
+    ).rejects.toThrow(/No audio files/);
   });
 });

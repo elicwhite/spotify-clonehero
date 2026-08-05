@@ -58,6 +58,18 @@ export const REGENERATE_PLANNED_STEPS: readonly PlannedStep[] =
   PIPELINE_PLANNED_STEPS.filter(s => s.key !== 'decoding');
 
 /**
+ * The subset a run against a host's own audio reports. The host hands over
+ * the song as one mix, so there is no decode step of ours to show, and the
+ * chart already carries the grid the notes are authored against, so no tempo
+ * mapping either — what is left is separating the drums back out of that mix
+ * and transcribing them.
+ */
+export const AUDIO_TRANSCRIBE_PLANNED_STEPS: readonly PlannedStep[] =
+  PIPELINE_PLANNED_STEPS.filter(
+    s => s.key !== 'decoding' && s.key !== 'tempo-mapping',
+  );
+
+/**
  * One pipeline tick as a step event. 'ready' means the whole run finished;
  * 'idle'/'error' mean nothing is in flight. Any other step names itself —
  * a step a given step table doesn't list (e.g. 'decoding' during a
