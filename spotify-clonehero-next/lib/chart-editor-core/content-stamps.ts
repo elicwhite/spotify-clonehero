@@ -82,7 +82,7 @@ function serializeTempoMap(chart: ParsedChart): string {
   // a synctrack swap (`ReplaceDrumTrackCommand`'s `options.sync`) can change
   // it while leaving every (tick, bpm) pair looking identical, and that
   // moves where ticks land in time. Downbeat edits need no separate term —
-  // `MarkDownbeatCommand`/`RephaseDownbeatsCommand` express downbeats as
+  // `PlaceDownbeatCommand`/`RephaseDownbeatsCommand` express downbeats as
   // time-signature markers, which the `;ts` section below already hashes.
   const parts: string[] = [`r${chart.resolution}`, ';t'];
   for (const tempo of chart.tempos) {

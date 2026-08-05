@@ -150,6 +150,22 @@ export {
   rephaseDownbeats,
 } from './downbeat-ops';
 
+// Placing a bar line at an arbitrary tick (plan 0082): the shared arithmetic
+// behind "make this a downbeat", "insert a time signature change", and
+// dragging a time-signature marker.
+export {
+  MAX_TS_DENOMINATOR,
+  meterForGap,
+  planDownbeatAt,
+  planTimeSignatureMove,
+  type DownbeatPlan,
+  type DownbeatPlanOk,
+  type DownbeatPlanNoop,
+  type DownbeatPlanInexact,
+  type Meter,
+  type PlacedMeter,
+} from './downbeat';
+
 // Lyric helpers (vocal part lyrics)
 export {
   DEFAULT_VOCALS_PART,

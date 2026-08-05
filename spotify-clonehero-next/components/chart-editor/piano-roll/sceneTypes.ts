@@ -109,6 +109,15 @@ export interface TempoMarkerDrag {
   moved: boolean;
 }
 
+/** Live time-signature-chip drag state. Grid-snapped and absolute, the same
+ *  shape (and the same commit-on-pointer-up contract) as a section drag; the
+ *  drop goes through the shared bar-line placement plan. */
+export interface TimeSignatureDrag {
+  originalTick: number;
+  currentTick: number;
+  moved: boolean;
+}
+
 /** Live section-flag drag state. Grid-snapped and absolute, not
  *  delta-snapped the way a note drag is. */
 export interface SectionDrag {

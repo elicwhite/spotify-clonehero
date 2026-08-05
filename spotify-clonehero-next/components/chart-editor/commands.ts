@@ -34,6 +34,9 @@ import type {
 } from '@/lib/chart-edit';
 import {
   addTimeSignature,
+  removeTimeSignature,
+  planDownbeatAt,
+  planTimeSignatureMove,
   addSection,
   removeSection,
   entityHandlers,
@@ -50,13 +53,9 @@ import {
   applyMarkerMoveBpms,
   makeChartTiming,
   applyEventTiming,
-  deriveDownbeatFlags,
   deriveTimeSignatures,
   normalizeTimeSignatures,
-  markDownbeat,
-  unmarkDownbeat,
   rephaseDownbeats,
-  snapTickToNearestBeat,
   chartEndTick,
   DEFAULT_VOCALS_PART,
   addLyric,
@@ -84,6 +83,8 @@ import {
   applyLeadingSilence,
   type LeadingSilencePlan,
   type DownbeatFlags,
+  type DerivedTimeSignature,
+  type Meter,
 } from '@/lib/chart-edit';
 
 /**
@@ -1270,9 +1271,20 @@ function applyDownbeatFlags(
     chart.resolution,
     trailingNumerator,
   );
+  return applyTimeSignatureList(doc, derived);
+}
 
-  const timing = makeChartTiming(chart);
-  const timeSignatures = derived.map(ts => {
+/**
+ * Replace the doc's `timeSignatures` with `list`, timing each event from the
+ * chart's own tempos. Nothing else on the doc changes — a bar relabel never
+ * retimes a note (plan 0061 §3a class (c)).
+ */
+function applyTimeSignatureList(
+  doc: ChartDocument,
+  list: readonly DerivedTimeSignature[],
+): ChartDocument {
+  const timing = makeChartTiming(doc.parsedChart);
+  const timeSignatures = list.map(ts => {
     const event = {
       tick: ts.tick,
       numerator: ts.numerator,
@@ -1287,82 +1299,6 @@ function applyDownbeatFlags(
   const newDoc = cloneDocWithTimeSignatures(doc);
   newDoc.parsedChart.timeSignatures = timeSignatures;
   return newDoc;
-}
-
-/**
- * Mark the beat nearest `tapTick` as a downbeat (0062 §8). The tap snaps to
- * the nearest denominator-scaled beat; a mid-bar mark produces a derived
- * meter change. No-op if the nearest beat is already a downbeat (or the chart
- * has no beats). Undo restores the pre-edit snapshot.
- */
-export class MarkDownbeatCommand implements EditCommand {
-  readonly description: string;
-  readonly entityKinds = KIND.timesig;
-  readonly operations = OP.update;
-
-  /** `spanEndTick` is the piano-roll's audio-extended beat span (see
-   *  {@link downbeatSpanEndTick}); omit it for callers with no audio view. */
-  constructor(
-    private tapTick: number,
-    private spanEndTick?: number,
-  ) {
-    this.description = `Mark downbeat near tick ${tapTick}`;
-  }
-
-  execute(doc: ChartDocument): ChartDocument {
-    const chart = doc.parsedChart;
-    const endTick = downbeatSpanEndTick(chart, this.spanEndTick);
-    const beatTick = snapTickToNearestBeat(
-      chart.timeSignatures,
-      chart.resolution,
-      endTick,
-      this.tapTick,
-    );
-    if (beatTick == null) return doc;
-
-    const flags = deriveDownbeatFlags(
-      chart.timeSignatures,
-      chart.resolution,
-      endTick,
-    );
-    const newFlags = markDownbeat(flags, beatTick);
-    if (!newFlags) return doc;
-
-    return applyDownbeatFlags(doc, newFlags);
-  }
-}
-
-/**
- * Remove the downbeat at `tick` (0062 §8). Beat 0 is never removable. No-op if
- * no downbeat exists there. Undo restores the pre-edit snapshot.
- */
-export class UnmarkDownbeatCommand implements EditCommand {
-  readonly description: string;
-  readonly entityKinds = KIND.timesig;
-  readonly operations = OP.update;
-
-  /** `spanEndTick` is the piano-roll's audio-extended beat span (see
-   *  {@link downbeatSpanEndTick}); omit it for callers with no audio view. */
-  constructor(
-    private tick: number,
-    private spanEndTick?: number,
-  ) {
-    this.description = `Remove downbeat at tick ${tick}`;
-  }
-
-  execute(doc: ChartDocument): ChartDocument {
-    if (this.tick === 0) return doc;
-    const chart = doc.parsedChart;
-    const flags = deriveDownbeatFlags(
-      chart.timeSignatures,
-      chart.resolution,
-      downbeatSpanEndTick(chart, this.spanEndTick),
-    );
-    const newFlags = unmarkDownbeat(flags, this.tick);
-    if (!newFlags) return doc;
-
-    return applyDownbeatFlags(doc, newFlags);
-  }
 }
 
 /**
@@ -1397,6 +1333,102 @@ export class RephaseDownbeatsCommand implements EditCommand {
     if (!newFlags) return doc;
 
     return applyDownbeatFlags(doc, newFlags);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bar-line placement (plan 0082)
+//
+// "Make this a downbeat", "insert a time signature change here", and dragging
+// a time-signature marker are one operation: put a bar line at a tick and let
+// the measure before it absorb the difference. All three run the same pure
+// plan (`lib/chart-edit/downbeat`), so they can never disagree about what a
+// short measure looks like. A plan that reports `noop` or `inexact` leaves the
+// doc untouched — a target the format can't express is never rounded to a
+// different tick behind the user's back.
+// ---------------------------------------------------------------------------
+
+/**
+ * Place a bar line at `targetTick`. The measure containing it is rewritten to
+ * end there, and `meterAfter` (the region's own meter when omitted) resumes at
+ * the target so every later bar line counts from the new downbeat.
+ */
+export class PlaceDownbeatCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.timesig;
+  readonly operations = OP.update;
+
+  constructor(
+    private targetTick: number,
+    private meterAfter?: Meter,
+  ) {
+    this.description = `Place bar line at tick ${targetTick}`;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    const chart = doc.parsedChart;
+    const plan = planDownbeatAt(
+      chart.timeSignatures,
+      chart.resolution,
+      this.targetTick,
+      this.meterAfter,
+    );
+    if (plan.status !== 'ok') return doc;
+    return applyTimeSignatureList(doc, plan.timeSignatures);
+  }
+}
+
+/**
+ * Move the authored time signature at `fromTick` to `toTick`, keeping its own
+ * meter. The drop has the same preceding-measure consequence as any other
+ * bar-line placement. The tick-0 signature never moves.
+ */
+export class MoveTimeSignatureCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.timesig;
+  readonly operations = OP.move;
+
+  constructor(
+    private fromTick: number,
+    private toTick: number,
+  ) {
+    this.description = `Move time signature from tick ${fromTick} to ${toTick}`;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    const chart = doc.parsedChart;
+    const plan = planTimeSignatureMove(
+      chart.timeSignatures,
+      chart.resolution,
+      this.fromTick,
+      this.toTick,
+    );
+    if (plan.status !== 'ok') return doc;
+    return applyTimeSignatureList(doc, plan.timeSignatures);
+  }
+}
+
+/**
+ * Delete the authored time signature event at `tick`. Bars from there on
+ * inherit the preceding region's meter and phase. The chart's initial
+ * signature (tick 0) is not removable.
+ */
+export class RemoveTimeSignatureCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.timesig;
+  readonly operations = OP.delete;
+
+  constructor(private tick: number) {
+    this.description = `Remove time signature at tick ${tick}`;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    if (this.tick === 0) return doc;
+    const chart = doc.parsedChart;
+    if (!chart.timeSignatures.some(ts => ts.tick === this.tick)) return doc;
+    const newDoc = cloneDocWithTimeSignatures(doc);
+    removeTimeSignature(newDoc, this.tick);
+    return newDoc;
   }
 }
 

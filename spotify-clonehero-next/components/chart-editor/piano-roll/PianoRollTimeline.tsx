@@ -91,8 +91,15 @@ import {
   typeToLane as schemaTypeToLane,
   laneToType as schemaLaneToType,
   drums4LaneSchema,
+  planDownbeatAt,
+  planTimeSignatureMove,
 } from '@/lib/chart-edit';
-import type {ChartDocument, InstrumentSchema, TrackKey} from '@/lib/chart-edit';
+import type {
+  ChartDocument,
+  DownbeatPlan,
+  InstrumentSchema,
+  TrackKey,
+} from '@/lib/chart-edit';
 import type {Synctrack} from '@/lib/tempo-map/types';
 import {octaveRescaleSync} from '@/lib/tempo-map/structural-correction';
 import {
@@ -115,6 +122,7 @@ import {
   trackKeyFromScope,
 } from '../scope';
 import {availableTrackKeys} from '@/lib/chart-editor-core/trackInventory';
+import {toast} from 'sonner';
 import {useExecuteCommand} from '../hooks/useEditCommands';
 import {
   AddNoteCommand,
@@ -122,7 +130,6 @@ import {
   BatchCommand,
   DeleteNotesCommand,
   DeleteTempoMarkerCommand,
-  MarkDownbeatCommand,
   MoveEntitiesCommand,
   MoveTempoMarkerCommand,
   CommitTempoCandidateCommand,
@@ -130,7 +137,9 @@ import {
   ToggleFlagCommand,
   SetNoteTechniqueCommand,
   ResizeNotesCommand,
-  UnmarkDownbeatCommand,
+  PlaceDownbeatCommand,
+  MoveTimeSignatureCommand,
+  RemoveTimeSignatureCommand,
   AddLyricCommand,
   DeleteLyricCommand,
   SetLyricTextCommand,
@@ -147,7 +156,14 @@ import {
   prospectiveNoteAt,
   type ProspectiveNote,
 } from '../editing/prospectiveNote';
-import {clampMarkerMs, hitTempoMarker, nearestBeatTick} from './tempoHitTest';
+import {
+  clampMarkerMs,
+  hitTempoMarker,
+  hitTsChip,
+  nearestBeatTick,
+  TS_CHIP_H,
+  TS_CHIP_TOP,
+} from './tempoHitTest';
 import {
   extractPianoRollNotes,
   isGuitarBassSchema,
@@ -225,6 +241,7 @@ import {
   type SectionFlag,
   type TempoMarker,
   type TempoMarkerDrag,
+  type TimeSignatureDrag,
   type TrackRowGeometry,
   type TrackRowScene,
   type TsChip,
@@ -276,6 +293,7 @@ type PointerMode =
   | 'marquee'
   | 'erase'
   | 'tempo'
+  | 'timesig'
   | 'section'
   | 'loop'
   | 'lyric'
@@ -567,6 +585,13 @@ export default function PianoRollTimeline({
   const tempoDragRef = useRef<TempoMarkerDrag | null>(null);
   /** The committed doc a live tempo drag previews from (captured at grab). */
   const tempoBaseDocRef = useRef<ChartDocument | null>(null);
+  /** In-flight time-signature-chip drag; null when not dragging a chip. */
+  const tsDragRef = useRef<TimeSignatureDrag | null>(null);
+  /** Measured label width per signature tick, recorded by `drawTempoLane` so
+   *  `hitTsChip` tests the pill that was actually painted. */
+  const tsChipWidthsRef = useRef<Map<number, number>>(new Map());
+  /** Tick of the signature chip under the pointer (idle hover), or null. */
+  const tsHoverTickRef = useRef<number | null>(null);
   /** In-flight section-flag drag (§6); null when not dragging a section. */
   const sectionDragRef = useRef<SectionDrag | null>(null);
   /** In-flight A/B loop-flag drag; null when no flag is being dragged. */
@@ -1025,6 +1050,9 @@ export default function PianoRollTimeline({
         hoverMarkerRef.current,
         tempoDragRef.current,
         tempoTop,
+        tsChipWidthsRef.current,
+        tsDragRef.current,
+        tsHoverTickRef.current,
       );
       if (scene.lyricsVisible) {
         const drag = lyricDragRef.current;
@@ -1893,6 +1921,35 @@ export default function PianoRollTimeline({
       // Marker 0 (song-start anchor) is immovable; a miss falls through to
       // nothing (right-click opens the add/downbeat/×2÷2 menu instead).
       if (y < g.laneTop) {
+        // Signature chips sit in the lane's top strip and take the pointer
+        // there, using the same capture/threshold/commit-on-up pattern as a
+        // section flag. `hitTsChip` already excludes the chart's initial
+        // meter, which stays put.
+        const tsIndex =
+          y < g.tempoTop + TS_CHIP_TOP + TS_CHIP_H
+            ? hitTsChip(
+                scene.timeSignatures,
+                viewRef.current,
+                x,
+                tsChipWidthsRef.current,
+              )
+            : -1;
+        if (tsIndex >= 0) {
+          const chip = scene.timeSignatures[tsIndex];
+          canvas.setPointerCapture(e.pointerId);
+          pointerModeRef.current = 'timesig';
+          viewRef.current.follow = false;
+          pointerStartRef.current = {x, y};
+          tsDragRef.current = {
+            originalTick: chip.tick,
+            currentTick: chip.tick,
+            moved: false,
+          };
+          canvas.style.cursor = 'ew-resize';
+          dirtyRef.current = true;
+          drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+          return;
+        }
         const k = hitTempoMarker(scene.tempos, viewRef.current, x);
         if (k > 0) {
           canvas.setPointerCapture(e.pointerId);
@@ -2129,6 +2186,23 @@ export default function PianoRollTimeline({
               currentTick: newTick,
               moved: true,
             };
+            dirtyRef.current = true;
+            drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+          }
+        }
+        return;
+      }
+
+      // Live time-signature-chip drag: absolute grid-snap, the same snap the
+      // section drag and every other placement uses.
+      if (mode === 'timesig' && tsDragRef.current) {
+        const drag = tsDragRef.current;
+        const start = pointerStartRef.current;
+        const dx = start ? x - start.x : 0;
+        if (drag.moved || exceedsDragThreshold(dx, 0)) {
+          const newTick = Math.max(0, snappedTickAt(x));
+          if (newTick !== drag.currentTick || !drag.moved) {
+            tsDragRef.current = {...drag, currentTick: newTick, moved: true};
             dirtyRef.current = true;
             drawRef.current(Math.max(0, audioManager.chartTime * 1000));
           }
@@ -2425,8 +2499,9 @@ export default function PianoRollTimeline({
 
       // Idle hover: cursor + shared hover highlight.
       const clearMarkerHover = () => {
-        if (hoverMarkerRef.current !== -1) {
+        if (hoverMarkerRef.current !== -1 || tsHoverTickRef.current !== null) {
           hoverMarkerRef.current = -1;
+          tsHoverTickRef.current = null;
           dirtyRef.current = true;
           drawRef.current(Math.max(0, audioManager.chartTime * 1000));
         }
@@ -2495,14 +2570,33 @@ export default function PianoRollTimeline({
         }
         return;
       }
-      // Tempo lane: hover a marker (glow + ew-resize cursor, §7).
+      // Tempo lane: hover a tempo marker or a signature chip (glow +
+      // ew-resize cursor, §7).
       if (y < g.laneTop) {
-        const k = hitTempoMarker(scene.tempos, viewRef.current, x);
+        const tsIndex =
+          y < g.tempoTop + TS_CHIP_TOP + TS_CHIP_H
+            ? hitTsChip(
+                scene.timeSignatures,
+                viewRef.current,
+                x,
+                tsChipWidthsRef.current,
+              )
+            : -1;
+        const tsTick = tsIndex >= 0 ? scene.timeSignatures[tsIndex].tick : null;
+        const k =
+          tsTick === null
+            ? hitTempoMarker(scene.tempos, viewRef.current, x)
+            : -1;
         const hoverK = k > 0 ? k : -1;
-        canvas.style.cursor = hoverK >= 0 ? 'ew-resize' : 'default';
+        canvas.style.cursor =
+          hoverK >= 0 || tsTick !== null ? 'ew-resize' : 'default';
         setGhost(null);
-        if (hoverK !== hoverMarkerRef.current) {
+        if (
+          hoverK !== hoverMarkerRef.current ||
+          tsTick !== tsHoverTickRef.current
+        ) {
           hoverMarkerRef.current = hoverK;
+          tsHoverTickRef.current = tsTick;
           dirtyRef.current = true;
           drawRef.current(Math.max(0, audioManager.chartTime * 1000));
         }
@@ -2704,6 +2798,27 @@ export default function PianoRollTimeline({
         }
       }
 
+      // Commit a time-signature-chip drag: the drop runs the shared bar-line
+      // placement, so it rewrites the measure before the new tick exactly the
+      // way "make this a downbeat" does.
+      if (mode === 'timesig' && tsDragRef.current) {
+        const drag = tsDragRef.current;
+        if (drag.moved && drag.currentTick !== drag.originalTick) {
+          const chart = editStateRef.current.chartDoc?.parsedChart;
+          if (chart) {
+            commitBarLinePlanRef.current(
+              planTimeSignatureMove(
+                chart.timeSignatures,
+                chart.resolution,
+                drag.originalTick,
+                drag.currentTick,
+              ),
+              new MoveTimeSignatureCommand(drag.originalTick, drag.currentTick),
+            );
+          }
+        }
+      }
+
       // Commit a loop-flag drag. The loop is transport state, not chart
       // content, so it dispatches rather than going through the undo stack —
       // the same `SET_LOOP_REGION` the transport's A/B buttons dispatch. A
@@ -2830,6 +2945,7 @@ export default function PianoRollTimeline({
       placeNoteRef.current = null;
       tempoDragRef.current = null;
       tempoBaseDocRef.current = null;
+      tsDragRef.current = null;
       sectionDragRef.current = null;
       loopDragRef.current = null;
       lyricDragRef.current = null;
@@ -2884,6 +3000,29 @@ export default function PianoRollTimeline({
     [dispatch],
   );
 
+  /**
+   * Run a bar-line placement, or explain why it can't run. A plan the chart
+   * format cannot express (a gap no legal signature measures, reachable with
+   * snap set to Free) is reported instead of being rounded onto some other
+   * tick behind the user's back; a plan that changes nothing stays silent.
+   */
+  const commitBarLinePlan = useCallback(
+    (plan: DownbeatPlan, command: EditCommand): void => {
+      if (plan.status === 'inexact') {
+        toast.error('That position cannot start a bar', {
+          description:
+            'No time signature can measure the gap back to the previous bar line. Turn snap on, or pick a finer grid.',
+        });
+        return;
+      }
+      if (plan.status === 'noop') return;
+      executeCommand(command);
+    },
+    [executeCommand],
+  );
+  const commitBarLinePlanRef = useRef(commitBarLinePlan);
+  commitBarLinePlanRef.current = commitBarLinePlan;
+
   /** Build the tempo-lane menu (§7 delete-marker; §7/§8 add-marker + downbeat
    *  toggle; Round 2 §6's ×2/÷2 structural correction) at screen x. Returns
    *  [] when nothing actionable is under x. */
@@ -2909,6 +3048,28 @@ export default function PianoRollTimeline({
           onSelect: () => previewOctaveRef.current(0.5),
         },
       ];
+
+      // An authored signature chip under the pointer is the only place the
+      // remove item appears: the hit test reads the very chips the lane
+      // painted, so it can never offer to remove a marker that isn't there.
+      const tsIndex = hitTsChip(
+        scene.timeSignatures,
+        view,
+        x,
+        tsChipWidthsRef.current,
+      );
+      if (tsIndex >= 0) {
+        const chip = scene.timeSignatures[tsIndex];
+        return [
+          ...octaveItems,
+          {
+            label: `Remove time signature change (${chip.label})`,
+            danger: true,
+            onSelect: () =>
+              executeCommand(new RemoveTimeSignatureCommand(chip.tick)),
+          },
+        ];
+      }
 
       const k = hitTempoMarker(scene.tempos, view, x);
       if (k >= 0) {
@@ -2936,12 +3097,19 @@ export default function PianoRollTimeline({
       const isDownbeat = editStateRef.current.downbeatFlags.downbeats.some(
         d => d.tick === beatTick,
       );
+      // The downbeat goes exactly where the grid setting puts it, not on the
+      // nearest quarter: on 1/16 snap a bar line can land on a sixteenth.
+      const downbeatTick = Math.max(0, snappedTickAt(x));
+      const chart = editStateRef.current.chartDoc?.parsedChart;
+      const downbeatPlan = chart
+        ? planDownbeatAt(chart.timeSignatures, chart.resolution, downbeatTick)
+        : null;
       // PRIMARY (QA round-1 / 0061 §6): the expected fix for a mis-phased
       // grid is a whole-song rephase — the phase error is global, not local.
       // Anchoring at an already bar-aligned beat is phase 0 (a no-op), so the
       // item is disabled there. Reuses the existing RephaseDownbeatsCommand.
-      // SECONDARY: the local mark/unmark op, framed explicitly as a meter
-      // (time-signature) change for the rare true mid-song case.
+      // SECONDARY: place a single bar line here, for a grid that drifts part
+      // way through rather than being mis-phased from the start.
       return [
         ...octaveItems,
         {
@@ -2958,21 +3126,24 @@ export default function PianoRollTimeline({
           onSelect: () => executeCommand(new AddTempoMarkerCommand(beatTick)),
         },
         {
-          label: isDownbeat
-            ? 'Remove time signature change'
-            : 'Insert time signature change here',
-          // Beat 0 is always a downbeat and never removable (§8).
-          disabled: beatTick === 0,
-          onSelect: () =>
-            executeCommand(
-              isDownbeat
-                ? new UnmarkDownbeatCommand(beatTick, scene.endTick)
-                : new MarkDownbeatCommand(beatTick, scene.endTick),
-            ),
+          // One capability, one item: a bar line starts here, the measure
+          // before it is rewritten to end here, and every later bar line
+          // counts from here.
+          label: 'Make this a downbeat',
+          // Tick 0 always starts a bar, and a target already on a bar line
+          // with its own signature has nothing to place.
+          disabled: downbeatPlan === null || downbeatPlan.status === 'noop',
+          onSelect: () => {
+            if (!downbeatPlan) return;
+            commitBarLinePlan(
+              downbeatPlan,
+              new PlaceDownbeatCommand(downbeatTick),
+            );
+          },
         },
       ];
     },
-    [executeCommand, capabilities],
+    [executeCommand, capabilities, commitBarLinePlan, snappedTickAt],
   );
 
   /** Build the note context menu (§10): cymbal switch + delete, selection-
@@ -3516,6 +3687,7 @@ export default function PianoRollTimeline({
     marqueeRef.current = null;
     tempoDragRef.current = null;
     tempoBaseDocRef.current = null;
+    tsDragRef.current = null;
     sectionDragRef.current = null;
     loopDragRef.current = null;
     lyricDragRef.current = null;

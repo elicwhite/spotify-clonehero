@@ -269,6 +269,19 @@ function fireAt(
 // y=46, not y=24.
 const TEMPO_LANE = {x: 120, y: 52};
 
+/** Lowest tempo-lane x that hits an authored time-signature chip's pill, or
+ *  -1 when none is drawn. A pointer finds a chip exactly the way a user does:
+ *  the only lane positions that hit it are the ones offering its removal. */
+function findTsChipHitX(canvas: HTMLCanvasElement): number {
+  for (let x = 0; x <= 780; x += 1) {
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x, y: TEMPO_LANE.y, button: 2});
+    });
+    if (screen.queryByText(/Remove time signature change/)) return x;
+  }
+  return -1;
+}
+
 describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
   it('opens the tempo-lane menu on a right-click (button 2)', async () => {
     const canvas = await mountPanel();
@@ -305,11 +318,131 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
       name: /Make this beat 1 \(rephase song\)/,
     });
     expect(rephase).toBeEnabled();
-    expect(
-      screen.getByText('Insert time signature change here'),
-    ).toBeInTheDocument();
-    // The old wording is gone.
+    expect(screen.getByText('Make this a downbeat')).toBeInTheDocument();
     expect(screen.queryByText('Mark as downbeat')).not.toBeInTheDocument();
+  });
+
+  it('disables "Make this a downbeat" once the bar line is already there', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
+    });
+    const after = latest!.state.chartDoc!.parsedChart.timeSignatures.length;
+
+    // Right-click a position that still snaps to the tick just marked, but
+    // clear of the chip the placement drew there (the chip's pill would open
+    // its own remove menu instead of the empty-lane one). The default 1/4
+    // grid is a 480-tick step here, tens of px wide, so backing a few px off
+    // the pill's left edge stays on the same grid tick.
+    const chipHitX = findTsChipHitX(canvas);
+    expect(chipHitX).toBeGreaterThan(0);
+
+    // That position now starts a bar, so the item has nothing to place and
+    // must not stack a second signature there.
+    act(() => {
+      fireAt(canvas, 'contextmenu', {
+        x: chipHitX - 8,
+        y: TEMPO_LANE.y,
+        button: 2,
+      });
+    });
+    expect(
+      screen.getByRole('button', {name: 'Make this a downbeat'}),
+    ).toBeDisabled();
+    expect(latest!.state.chartDoc!.parsedChart.timeSignatures).toHaveLength(
+      after,
+    );
+  });
+
+  // The remove item appears only where the lane paints a chip: the menu and
+  // the renderer read the same authored time-signature list.
+  it('never offers to remove a time signature where no chip is drawn', async () => {
+    const canvas = await mountPanel();
+    // Sweep the whole tempo lane: the fixture has exactly one signature
+    // event (the initial 4/4 at tick 0, which is not removable), so no x
+    // may offer a removal.
+    for (let x = 0; x <= 780; x += 10) {
+      act(() => {
+        fireAt(canvas, 'contextmenu', {x, y: TEMPO_LANE.y, button: 2});
+      });
+      expect(
+        screen.queryByText(/Remove time signature change/),
+      ).not.toBeInTheDocument();
+    }
+  });
+
+  it('offers to remove a time signature exactly where a chip is drawn', async () => {
+    const canvas = await mountPanel();
+    // Place a bar line mid-bar, which writes an authored signature chip.
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
+    });
+    const added = latest!.state.chartDoc!.parsedChart.timeSignatures;
+    expect(added.length).toBeGreaterThan(1);
+    const placedTick = added[added.length - 1].tick;
+
+    // Only a narrow band of the lane — the chip's own pill — offers it.
+    const removableXs: number[] = [];
+    for (let x = 0; x <= 780; x += 2) {
+      act(() => {
+        fireAt(canvas, 'contextmenu', {x, y: TEMPO_LANE.y, button: 2});
+      });
+      if (screen.queryByText(/Remove time signature change/)) {
+        removableXs.push(x);
+      }
+    }
+    expect(removableXs.length).toBeGreaterThan(0);
+    expect(removableXs.length).toBeLessThan(30);
+
+    act(() => {
+      fireAt(canvas, 'contextmenu', {
+        x: removableXs[0],
+        y: TEMPO_LANE.y,
+        button: 2,
+      });
+    });
+    act(() => {
+      screen
+        .getByRole('button', {name: /Remove time signature change/})
+        .click();
+    });
+    expect(
+      latest!.state.chartDoc!.parsedChart.timeSignatures.some(
+        ts => ts.tick === placedTick,
+      ),
+    ).toBe(false);
+  });
+
+  // The bar line lands on the editor's grid, not on the nearest quarter.
+  it('places the downbeat on the current grid division', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      latest!.dispatch({type: 'SET_GRID_DIVISION', division: 16});
+    });
+    const before = latest!.state.chartDoc!.parsedChart.timeSignatures.length;
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: 123, y: TEMPO_LANE.y, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
+    });
+    const signatures = latest!.state.chartDoc!.parsedChart.timeSignatures;
+    expect(signatures.length).toBeGreaterThan(before);
+    const placed = signatures[signatures.length - 1].tick;
+    // `gridDivision` counts subdivisions per WHOLE note, so division 16 at
+    // resolution 480 is a `480 * 4 / 16` = 120-tick step — finer than the
+    // 480-tick quarter a beat-only placement could reach.
+    const {resolution} = latest!.state.chartDoc!.parsedChart;
+    const gridSize = Math.round((resolution * 4) / latest!.state.gridDivision);
+    expect(gridSize).toBe(120);
+    expect(placed % gridSize).toBe(0);
+    expect(placed % resolution).not.toBe(0);
   });
 
   // Change 4: right-clicking the waveform row opens the source picker.
@@ -363,6 +496,68 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
       fireAt(canvas, 'contextmenu', {x: 300, y: 2, button: 2});
     });
     expect(screen.queryByText('Insert note')).not.toBeInTheDocument();
+  });
+
+  // Item 3: signature markers drag like sections and tempo markers, through
+  // the same capture / threshold / commit-on-pointer-up pattern.
+  it('drags a time-signature marker to a new tick', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
+    });
+    const placedTick =
+      latest!.state.chartDoc!.parsedChart.timeSignatures.at(-1)!.tick;
+
+    const chipX = findTsChipHitX(canvas);
+    expect(chipX).toBeGreaterThanOrEqual(0);
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: 400, y: 100}); // dismiss the menu
+      fireAt(canvas, 'pointerup', {x: 400, y: 100});
+    });
+
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: chipX, y: TEMPO_LANE.y});
+      fireAt(canvas, 'pointermove', {x: chipX + 60, y: TEMPO_LANE.y});
+      fireAt(canvas, 'pointerup', {x: chipX + 60, y: TEMPO_LANE.y});
+    });
+
+    const ticks = latest!.state.chartDoc!.parsedChart.timeSignatures.map(
+      ts => ts.tick,
+    );
+    // The marker now anchors a later bar; the measure it left behind takes
+    // its own signature, exactly as a fresh placement would.
+    expect(Math.max(...ticks)).toBeGreaterThan(placedTick);
+    expect(ticks).toEqual([...ticks].sort((a, b) => a - b));
+  });
+
+  it('a signature drag under the threshold leaves the chart alone', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
+    });
+    const before = latest!.state.chartDoc!.parsedChart.timeSignatures.map(
+      ts => ts.tick,
+    );
+    const chipX = findTsChipHitX(canvas);
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: 400, y: 100});
+      fireAt(canvas, 'pointerup', {x: 400, y: 100});
+    });
+
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: chipX, y: TEMPO_LANE.y});
+      fireAt(canvas, 'pointermove', {x: chipX + 1, y: TEMPO_LANE.y});
+      fireAt(canvas, 'pointerup', {x: chipX + 1, y: TEMPO_LANE.y});
+    });
+    expect(
+      latest!.state.chartDoc!.parsedChart.timeSignatures.map(ts => ts.tick),
+    ).toEqual(before);
   });
 
   it('gutter "manage tracks" menu lists every track, not just the visible ones, and can re-show a hidden one', async () => {

@@ -76,6 +76,87 @@ export function clampMarkerMs(
   return Math.max(lo, Math.min(hi, desiredMs));
 }
 
+// ---------------------------------------------------------------------------
+// Time-signature chips
+// ---------------------------------------------------------------------------
+
+/** Pill left edge, in px right of the signature's tick x. */
+export const TS_CHIP_X_OFFSET = 3;
+/** Pill padding right of the label text. */
+export const TS_CHIP_PAD_RIGHT = 8;
+/** Extra grab room left of the tick, so clicking the position itself (not
+ *  just the label) targets the chip. */
+export const TS_CHIP_HIT_SLOP = 4;
+/** Pill top offset within the tempo lane, and its height. */
+export const TS_CHIP_TOP = 2;
+export const TS_CHIP_H = 12;
+/** Fallback pill width for a chip whose label hasn't been measured yet. */
+export const DEFAULT_TS_CHIP_WIDTH = 22;
+
+/** A time-signature marker as far as chip geometry cares. */
+export interface TsChipPos {
+  tick: number;
+  ms: number;
+  label: string;
+}
+
+export interface TsChipRect {
+  left: number;
+  right: number;
+}
+
+/**
+ * Horizontal extent of a signature chip's pill. The lane's renderer paints
+ * this exact rect and the hit test reads this exact rect, so the menu can
+ * never offer to remove a signature that isn't drawn.
+ */
+export function tsChipRect(
+  ms: number,
+  view: PianoRollView,
+  textWidth: number,
+): TsChipRect {
+  const x = msToX(ms, view);
+  return {
+    left: x + TS_CHIP_X_OFFSET,
+    right: x + TS_CHIP_X_OFFSET + textWidth + TS_CHIP_PAD_RIGHT,
+  };
+}
+
+/**
+ * Index of the authored time-signature chip under screen `x`, or -1. `widths`
+ * is the per-tick measured label width the lane's renderer records each frame,
+ * the same width the pill was painted at. Chips are matched only where a
+ * signature event actually exists: a plain bar line carries no chip and is
+ * never a hit.
+ *
+ * The tick-0 signature is the chart's initial meter, which is neither movable
+ * nor removable, so it is excluded here rather than at each call site. That
+ * keeps "which chip can the pointer act on" a single definition, and it stays
+ * right for a chart whose first authored event is not at tick 0.
+ */
+export function hitTsChip(
+  chips: readonly TsChipPos[],
+  view: PianoRollView,
+  x: number,
+  widths: ReadonlyMap<number, number>,
+): number {
+  let best = -1;
+  let bestDx = Infinity;
+  for (let i = 0; i < chips.length; i++) {
+    const chip = chips[i];
+    if (chip.tick === 0) continue;
+    const width = widths.get(chip.tick) ?? DEFAULT_TS_CHIP_WIDTH;
+    const rect = tsChipRect(chip.ms, view, width);
+    if (x < rect.left - TS_CHIP_HIT_SLOP || x > rect.right) continue;
+    const dx = Math.abs(msToX(chip.ms, view) - x);
+    if (dx < bestDx) {
+      best = i;
+      bestDx = dx;
+    }
+  }
+  return best;
+}
+
 /** A beat as far as nearest-beat resolution cares: its tick and real-time ms. */
 export interface BeatPos {
   tick: number;

@@ -14,7 +14,7 @@ import {retimeChart} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {
   AddTempoMarkerCommand,
-  MarkDownbeatCommand,
+  PlaceDownbeatCommand,
   MoveTempoMarkerCommand,
   type TempoGlueMode,
 } from '../../commands';
@@ -149,16 +149,19 @@ describe('context menu → AddTempoMarkerCommand (mapping-neutral)', () => {
   });
 });
 
-describe('context menu → MarkDownbeatCommand', () => {
-  it('marking a mid-bar beat emits a derived meter change (real denominator)', () => {
+describe('context menu → PlaceDownbeatCommand', () => {
+  it('placing a mid-bar bar line emits a meter change with a real denominator', () => {
     const doc = fixture();
     const before = noteMsTimes(doc);
-    // Mark the beat at tick 480 (beat 2 of a 4/4 bar) as a downbeat.
-    const after = new MarkDownbeatCommand(480).execute(doc);
-    // A new TS event appears at the marked beat, carrying a real denominator.
+    // Beat 2 of a 4/4 bar becomes a downbeat.
+    const after = new PlaceDownbeatCommand(480).execute(doc);
+    // A TS event appears at the new bar line, carrying a real denominator.
     const ts = after.parsedChart.timeSignatures.find(t => t.tick === 480);
     expect(ts).toBeDefined();
     expect(ts!.denominator).toBe(4);
+    // The measure it cut short takes a signature exactly one quarter long.
+    const short = after.parsedChart.timeSignatures.find(t => t.tick === 0);
+    expect(short).toMatchObject({numerator: 1, denominator: 4});
     // Bar relabel is class (c): no note is retimed.
     noteMsTimes(after).forEach((ms, i) => expect(ms).toBeCloseTo(before[i], 3));
   });

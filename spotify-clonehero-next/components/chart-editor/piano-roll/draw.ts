@@ -27,6 +27,7 @@ import {
   type PianoRollNote,
 } from './notes';
 import {LYRIC_CHIP_PAD_LEFT, LYRIC_CHIP_PAD_RIGHT} from './hitTest';
+import {TS_CHIP_H, TS_CHIP_TOP, tsChipRect} from './tempoHitTest';
 import {lyricChipPreviewTick} from './lyricsScene';
 import {loopFlagXs} from './loopFlags';
 import {sampleAmpRange, type AmpPyramid} from './wavePeaks';
@@ -44,6 +45,7 @@ import {
   type PhraseEdgeDrag,
   type SectionDrag,
   type TempoMarkerDrag,
+  type TimeSignatureDrag,
   type TrackRowGeometry,
 } from './sceneTypes';
 
@@ -411,6 +413,12 @@ export function drawNotes(
   }
 }
 
+/**
+ * The tempo lane: sparse BPM markers and one chip per authored time
+ * signature. `tsWidthsOut` is populated with each chip's measured label width
+ * so `hitTsChip` tests the SAME pill that was painted — the menu and the drag
+ * can only ever target a signature that is really drawn here.
+ */
 export function drawTempoLane(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -419,6 +427,9 @@ export function drawTempoLane(
   hoverMarker: number,
   tempoDrag: TempoMarkerDrag | null,
   top: number,
+  tsWidthsOut: Map<number, number>,
+  tsDrag: TimeSignatureDrag | null,
+  hoverTsTick: number | null,
 ): void {
   ctx.fillStyle = COLORS.tempoBg;
   ctx.fillRect(0, top, w, TEMPO_H);
@@ -454,20 +465,45 @@ export function drawTempoLane(
     ctx.fillText(marker.bpm.toFixed(1), x + 8, cy + 3.5);
   }
 
-  // Time-signature chips at each meter change.
+  // One chip per authored time-signature event. Every event gets a chip: an
+  // event is the only thing that makes a bar line an authored meter change,
+  // and it is what the lane's hit test, remove item and drag all target.
   ctx.font = '700 9.5px system-ui, sans-serif';
-  let prevLabel = '';
+  tsWidthsOut.clear();
   for (const ts of scene.timeSignatures) {
-    if (ts.label === prevLabel) continue;
-    prevLabel = ts.label;
-    const x = msToX(ts.ms, view);
-    if (x < -50 || x > w + 10) continue;
+    const dragging = tsDrag?.moved === true && tsDrag.originalTick === ts.tick;
     const tw = ctx.measureText(ts.label).width;
-    ctx.fillStyle = 'rgba(122,184,255,0.16)';
-    roundRect(ctx, x + 3, top + 2, tw + 8, 12, 3);
+    tsWidthsOut.set(ts.tick, tw);
+    let ms = ts.ms;
+    if (dragging) {
+      const gx = Math.round(msToX(ts.ms, view)) + 0.5;
+      ctx.strokeStyle = COLORS.ghost;
+      ctx.setLineDash([4, 4]);
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(gx, top);
+      ctx.lineTo(gx, top + TEMPO_H);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      ms = tickToMs(tsDrag!.currentTick, scene.timedTempos, scene.resolution);
+    }
+    const x = msToX(ms, view);
+    if (x < -50 || x > w + 10) continue;
+    const rect = tsChipRect(ms, view, tw);
+    const hot = dragging || hoverTsTick === ts.tick;
+    ctx.fillStyle = hot ? 'rgba(122,184,255,0.34)' : 'rgba(122,184,255,0.16)';
+    roundRect(
+      ctx,
+      rect.left,
+      top + TS_CHIP_TOP,
+      rect.right - rect.left,
+      TS_CHIP_H,
+      3,
+    );
     ctx.fill();
     ctx.fillStyle = COLORS.tempoInk;
-    ctx.fillText(ts.label, x + 7, top + 11.5);
+    ctx.fillText(ts.label, rect.left + 4, top + TS_CHIP_TOP + 9.5);
   }
 }
 
@@ -475,7 +511,8 @@ export function drawTempoLane(
  * Lyrics row: an optional faint vocals waveform (behind everything else), a
  * background band per vocal phrase
  * (line structure at a glance, live-adjusted for an in-flight phrase-edge
- * drag), and a small pill per syllable, showing its text. A chip mid-drag
+ * drag), a solid boundary line with an inward pennant at each phrase start
+ * and end, and a small pill per syllable, showing its text. A chip mid-drag
  * renders at its live (unsnapped) tick; a dashed ghost line marks either the
  * drag's original tick or (when idle) the hovered chip's tick, so the grab
  * point is visible before a drag even starts — the same ghost-line
