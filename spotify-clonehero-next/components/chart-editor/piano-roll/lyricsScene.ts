@@ -15,6 +15,7 @@ import {tickToMs} from '@/lib/drum-transcription/timing';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {lyricId, DEFAULT_VOCALS_PART} from '@/lib/chart-edit';
 import type {NormalizedVocalTrack} from '@/lib/chart-edit';
+import {msToX, type PianoRollView} from './viewMath';
 
 /** One syllable, positioned in real time, with its owning phrase's tick
  *  bounds (the clamp range a drag must respect — mirrors `moveLyric`). */
@@ -102,6 +103,56 @@ export function buildLyricsRowScene(
   }
   chips.sort((a, b) => a.tick - b.tick);
   return {chips, bands};
+}
+
+/** Half-width of the pennant drawn at the top of a phrase-edge line, in px.
+ *  It points INTO the phrase: right for a start, left for an end. */
+export const PHRASE_EDGE_FLAG_W = 5;
+
+/** Height of that pennant, in px. */
+export const PHRASE_EDGE_FLAG_H = 6;
+
+/** Stroke width of a phrase-edge line, in px. Two pixels so the edges read
+ *  as heavier than the one-pixel dashed drag ghosts drawn in the same row. */
+export const PHRASE_EDGE_LINE_W = 2;
+
+/** A phrase boundary's on-screen geometry. `x` is already pixel-aligned for
+ *  a {@link PHRASE_EDGE_LINE_W}-wide stroke; `flagDirection` is the sign to
+ *  multiply {@link PHRASE_EDGE_FLAG_W} by so the pennant points inward. */
+export interface PhraseEdgeMarker {
+  kind: 'start' | 'end';
+  x: number;
+  flagDirection: 1 | -1;
+}
+
+/**
+ * Screen positions for every visible phrase boundary in `bands`, in draw
+ * order (starts and ends interleaved band by band). Bands whose edges both
+ * fall outside the viewport are culled; an edge is kept whenever its line
+ * OR its pennant would touch the canvas.
+ *
+ * `bands` takes the ms values the caller is actually painting, not the
+ * scene's resting ones, so an in-flight phrase-edge drag moves its line with
+ * the band it is resizing.
+ */
+export function phraseEdgeMarkers(
+  bands: readonly {ms: number; msEnd: number}[],
+  view: PianoRollView,
+  width: number,
+): PhraseEdgeMarker[] {
+  const markers: PhraseEdgeMarker[] = [];
+  const margin = PHRASE_EDGE_FLAG_W + PHRASE_EDGE_LINE_W;
+  for (const band of bands) {
+    const startX = Math.round(msToX(band.ms, view));
+    const endX = Math.round(msToX(band.msEnd, view));
+    if (startX >= -margin && startX <= width + margin) {
+      markers.push({kind: 'start', x: startX, flagDirection: 1});
+    }
+    if (endX >= -margin && endX <= width + margin) {
+      markers.push({kind: 'end', x: endX, flagDirection: -1});
+    }
+  }
+  return markers;
 }
 
 /** The chip a lyric-anchored drag is grabbing, plus its live (unsnapped)

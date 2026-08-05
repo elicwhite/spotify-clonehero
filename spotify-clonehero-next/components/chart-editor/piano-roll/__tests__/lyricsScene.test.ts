@@ -8,6 +8,7 @@ import {
   buildLyricsRowScene,
   cleanLyricChipText,
   lyricChipPreviewTick,
+  phraseEdgeMarkers,
   type LyricChip,
 } from '../lyricsScene';
 import type {NormalizedVocalTrack} from '@/lib/chart-edit';
@@ -203,5 +204,57 @@ describe('lyricChipPreviewTick: group-drag live preview', () => {
     expect(lyricChipPreviewTick(chipB, true, null, 60)).toBe(780);
     // Unselected chips are untouched by a note-anchored drag too.
     expect(lyricChipPreviewTick(chipB, false, null, 60)).toBe(720);
+  });
+});
+
+describe('phraseEdgeMarkers (plan 0082 item 7)', () => {
+  const view = {leftMs: 0, pxPerMs: 0.1};
+
+  it('emits a start and an end marker per band, pointing inward', () => {
+    const markers = phraseEdgeMarkers([{ms: 1000, msEnd: 3000}], view, 1000);
+    expect(markers).toEqual([
+      {kind: 'start', x: 100, flagDirection: 1},
+      {kind: 'end', x: 300, flagDirection: -1},
+    ]);
+  });
+
+  it('keeps bands in order and interleaves their edges', () => {
+    const markers = phraseEdgeMarkers(
+      [
+        {ms: 0, msEnd: 1000},
+        {ms: 2000, msEnd: 3000},
+      ],
+      view,
+      1000,
+    );
+    expect(markers.map(m => [m.kind, m.x])).toEqual([
+      ['start', 0],
+      ['end', 100],
+      ['start', 200],
+      ['end', 300],
+    ]);
+  });
+
+  it('culls edges fully off screen but keeps the on-screen edge of a band that straddles the viewport', () => {
+    const markers = phraseEdgeMarkers([{ms: -100000, msEnd: 2000}], view, 1000);
+    expect(markers).toEqual([{kind: 'end', x: 200, flagDirection: -1}]);
+  });
+
+  it('keeps an edge whose pennant would still touch the canvas', () => {
+    const justOffLeft = phraseEdgeMarkers(
+      [{ms: -30, msEnd: 100000}],
+      view,
+      1000,
+    );
+    expect(justOffLeft[0]).toEqual({kind: 'start', x: -3, flagDirection: 1});
+  });
+
+  it('pixel-aligns x so a 2px stroke lands on whole pixels', () => {
+    const markers = phraseEdgeMarkers([{ms: 1004, msEnd: 1009}], view, 1000);
+    expect(markers.map(m => m.x)).toEqual([100, 101]);
+  });
+
+  it('returns nothing when there are no bands', () => {
+    expect(phraseEdgeMarkers([], view, 1000)).toEqual([]);
   });
 });

@@ -1650,6 +1650,10 @@ export default function PianoRollTimeline({
           kind: 'note',
           ids: new Set([qualifiedId]),
         });
+        // A plain click replaces the selection, including a section left
+        // selected from an earlier ruler click. Without this the section
+        // outlives the click and Delete would remove it instead of the note.
+        dispatch({type: 'SET_SELECTION', kind: 'section', ids: new Set()});
       }
     },
     [dispatch],
@@ -1670,6 +1674,9 @@ export default function PianoRollTimeline({
         dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: next});
       } else if (!current.has(id)) {
         dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: new Set([id])});
+        // Same replace-the-selection rule as `selectNote`: a plain chip click
+        // drops a section that a previous ruler click left selected.
+        dispatch({type: 'SET_SELECTION', kind: 'section', ids: new Set()});
       }
     },
     [dispatch],

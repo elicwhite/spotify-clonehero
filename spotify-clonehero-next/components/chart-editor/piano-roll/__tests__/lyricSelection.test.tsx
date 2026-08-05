@@ -270,6 +270,36 @@ describe('lyrics multi-select', () => {
     expect(getSelectedIds(stateRef.current!, 'lyric').size).toBe(1);
   });
 
+  it('a plain click on a chip or a note drops a previously selected section', async () => {
+    const {canvas, stateRef, dispatchRef} = await mountPanel();
+
+    act(() => {
+      dispatchRef.current!({
+        type: 'SET_SELECTION',
+        kind: 'section',
+        ids: new Set(['0']),
+      });
+    });
+    expect(getSelectedIds(stateRef.current!, 'section').size).toBe(1);
+
+    act(() => {
+      click(canvas, LYRIC_240.x, LYRIC_240.y);
+    });
+    expect(getSelectedIds(stateRef.current!, 'lyric').size).toBe(1);
+    expect(getSelectedIds(stateRef.current!, 'section').size).toBe(0);
+
+    act(() => {
+      dispatchRef.current!({
+        type: 'SET_SELECTION',
+        kind: 'section',
+        ids: new Set(['0']),
+      });
+      click(canvas, RED_NOTE.x, RED_NOTE.y);
+    });
+    expect(getSelectedIds(stateRef.current!, 'note').size).toBe(1);
+    expect(getSelectedIds(stateRef.current!, 'section').size).toBe(0);
+  });
+
   it('note and lyric selections coexist independently (mixed selection)', async () => {
     const {canvas, stateRef} = await mountPanel();
 

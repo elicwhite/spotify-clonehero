@@ -28,7 +28,13 @@ import {
 } from './notes';
 import {LYRIC_CHIP_PAD_LEFT, LYRIC_CHIP_PAD_RIGHT} from './hitTest';
 import {TS_CHIP_H, TS_CHIP_TOP, tsChipRect} from './tempoHitTest';
-import {lyricChipPreviewTick} from './lyricsScene';
+import {
+  lyricChipPreviewTick,
+  phraseEdgeMarkers,
+  PHRASE_EDGE_FLAG_H,
+  PHRASE_EDGE_FLAG_W,
+  PHRASE_EDGE_LINE_W,
+} from './lyricsScene';
 import {loopFlagXs} from './loopFlags';
 import {sampleAmpRange, type AmpPyramid} from './wavePeaks';
 import {
@@ -565,18 +571,20 @@ export function drawLyricsRow(
   ctx.lineTo(w, top + height + 0.5);
   ctx.stroke();
 
-  for (const band of scene.lyricBands) {
-    // Live-preview a phrase-edge drag: the dragged edge renders at its
-    // current (unsnapped) tick rather than the band's static bound, so the
-    // band visibly grows/shrinks under the pointer during the resize.
-    let bandMs = band.ms;
-    let bandMsEnd = band.msEnd;
+  // Live-preview a phrase-edge drag: the dragged edge renders at its current
+  // (unsnapped) tick rather than the band's static bound, so the band visibly
+  // grows/shrinks under the pointer during the resize. These are the ms
+  // values the row actually paints, shared by the band fills and the phrase
+  // boundary lines below.
+  const paintedBands = scene.lyricBands.map(band => {
+    let ms = band.ms;
+    let msEnd = band.msEnd;
     if (phraseEdgeDrag) {
       if (
         phraseEdgeDrag.kind === 'phrase-start' &&
         band.tick === phraseEdgeDrag.originalTick
       ) {
-        bandMs = tickToMs(
+        ms = tickToMs(
           phraseEdgeDrag.currentTick,
           scene.timedTempos,
           scene.resolution,
@@ -585,15 +593,19 @@ export function drawLyricsRow(
         phraseEdgeDrag.kind === 'phrase-end' &&
         band.tickEnd === phraseEdgeDrag.originalTick
       ) {
-        bandMsEnd = tickToMs(
+        msEnd = tickToMs(
           phraseEdgeDrag.currentTick,
           scene.timedTempos,
           scene.resolution,
         );
       }
     }
-    const x0 = msToX(bandMs, view);
-    const x1 = msToX(bandMsEnd, view);
+    return {ms, msEnd};
+  });
+
+  for (const band of paintedBands) {
+    const x0 = msToX(band.ms, view);
+    const x1 = msToX(band.msEnd, view);
     if (x1 < 0 || x0 > w) continue;
     const bx = Math.max(0, x0);
     const bw = Math.min(w, x1) - bx;
@@ -601,6 +613,33 @@ export function drawLyricsRow(
     ctx.fillStyle = COLORS.lyricBand;
     ctx.fillRect(bx, top + 2, bw, height - 4);
   }
+
+  // Phrase boundaries: a solid full-height line at each edge, topped with a
+  // pennant pointing into the phrase. Green + right-pointing marks a start,
+  // orange + left-pointing marks an end, which keeps both apart from each
+  // other, from the amber and purple DASHED drag ghosts drawn just below,
+  // and from the ruler's bar ticks and gold section flags. Painted before
+  // the syllable chips so the pills and their text sit on top.
+  ctx.lineWidth = PHRASE_EDGE_LINE_W;
+  for (const marker of phraseEdgeMarkers(paintedBands, view, w)) {
+    const color =
+      marker.kind === 'start' ? COLORS.phraseStart : COLORS.phraseEnd;
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.moveTo(marker.x, top + 1);
+    ctx.lineTo(marker.x, top + height - 1);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(marker.x, top + 1);
+    ctx.lineTo(marker.x + marker.flagDirection * PHRASE_EDGE_FLAG_W, top + 1);
+    ctx.lineTo(marker.x, top + 1 + PHRASE_EDGE_FLAG_H);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  ctx.lineWidth = 1;
 
   // Phrase-edge drag ghost: a dashed line at the edge's original position,
   // once the drag has actually moved past its origin.

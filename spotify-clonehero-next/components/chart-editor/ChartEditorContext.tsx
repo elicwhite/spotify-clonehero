@@ -57,7 +57,15 @@ export function ChartEditorProvider({
   );
 
   return (
-    <HotkeysProvider>
+    // `ignoreInputs: true` is the one central guard for every `useHotkey`
+    // registration under the editor: while a text input, textarea, select or
+    // contenteditable has focus (including one rendered into a portalled
+    // Radix surface, since focus is tracked via `document.activeElement`),
+    // hotkeys don't fire and the field gets normal text-editing behavior
+    // (Cmd+A selects the field's text, arrow keys move the caret, etc.)
+    // instead. Individual registrations override this only where a shortcut
+    // must keep working while typing (Escape, in `useEditorKeyboard`).
+    <HotkeysProvider defaultOptions={{hotkey: {ignoreInputs: true}}}>
       <ChartEditorContext.Provider value={value}>
         {children}
       </ChartEditorContext.Provider>

@@ -51,6 +51,8 @@ export const COLORS = {
   lyricChip: '#c58cff',
   lyricWave: '#6b5a94',
   phraseEdge: '#c58cff',
+  phraseStart: '#4fe0a8',
+  phraseEnd: '#ff8a5c',
   loopFlag: '#4f9dff',
   loopShade: 'rgba(79,157,255,0.16)',
 } as const;

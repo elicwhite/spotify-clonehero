@@ -22,6 +22,7 @@ import {
 import {useExecuteCommand, useUndoRedo} from './useEditCommands';
 import {
   AddNoteCommand,
+  DeleteLyricCommand,
   DeleteNotesCommand,
   DeleteSectionCommand,
   BatchCommand,
@@ -29,10 +30,12 @@ import {
   noteId,
   toSchemaNote,
   translateSchemaNote,
+  type EditCommand,
   type SchemaNote,
 } from '../commands';
 import {
   findTrack,
+  parseLyricId,
   drums4LaneSchema,
   drums5LaneSchema,
   guitarSchema,
@@ -664,8 +667,20 @@ export function useEditorKeyboard(onSave?: () => void) {
   }
 
   // -----------------------------------------------------------------------
-  // Delete / Backspace — delete selected notes or selected section
+  // Delete / Backspace — act on whatever the selection holds.
+  //
+  // A selected section takes the key on its own (it is only ever selected
+  // alone, from the ruler). Otherwise notes and lyrics are both deleted,
+  // since a marquee across the piano roll can select the two together, and
+  // they go out as one batch so a single undo brings them back.
+  //
+  // Phrase starts and ends are deliberately NOT deletable this way: they are
+  // drag handles, never entries in `state.selection`, and "delete a phrase
+  // edge" has no meaning on its own — the phrase-band context menu's
+  // "Delete phrase" is the route to removing a phrase.
   // -----------------------------------------------------------------------
+  const selectedLyricIds = getSelectedIds(state, 'lyric');
+
   const handleDelete = useCallback(() => {
     const selectedSectionId = getFirstSelectedId(state, 'section');
     const selectedSectionTick =
@@ -682,35 +697,58 @@ export function useEditorKeyboard(onSave?: () => void) {
       }
       return;
     }
+
+    const commands: EditCommand[] = [];
     const selectedNotes = activeNoteIds(state);
-    if (selectedNotes.size > 0) {
-      const trackKey = trackKeyFromScope(state.activeScope);
-      if (!trackKey) return;
-      executeCommand(
+    const trackKey = trackKeyFromScope(state.activeScope);
+    if (selectedNotes.size > 0 && trackKey) {
+      commands.push(
         new DeleteNotesCommand(selectedNotes as Set<string>, trackKey),
       );
+    }
+    for (const id of getSelectedIds(state, 'lyric')) {
+      const parsed = parseLyricId(id);
+      if (parsed) {
+        commands.push(new DeleteLyricCommand(parsed.tick, parsed.partName));
+      }
+    }
+    if (commands.length === 0) return;
+
+    executeCommand(
+      commands.length === 1
+        ? commands[0]
+        : new BatchCommand(commands, `Delete ${commands.length} item(s)`),
+    );
+    if (selectedNotes.size > 0) {
       dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
     }
+    dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: new Set()});
   }, [state, executeCommand, dispatch]);
 
-  useHotkey('Delete', handleDelete, {
-    enabled:
-      activeNoteIds(state).size > 0 ||
-      getFirstSelectedId(state, 'section') !== null,
-  });
+  const canDelete =
+    activeNoteIds(state).size > 0 ||
+    selectedLyricIds.size > 0 ||
+    getFirstSelectedId(state, 'section') !== null;
+
+  useHotkey('Delete', handleDelete, {enabled: canDelete});
 
   useHotkey('Backspace', handleDelete, {
-    enabled:
-      activeNoteIds(state).size > 0 ||
-      getFirstSelectedId(state, 'section') !== null,
+    enabled: canDelete,
     conflictBehavior: 'allow',
   });
 
   // -----------------------------------------------------------------------
-  // Escape — deselect all and switch to cursor mode
+  // Escape — deselect all and switch to cursor mode. Explicitly opts out of
+  // the editor's ignore-while-typing default: the piano roll's inline lyric
+  // editor and the Song Details modal both use Escape to cancel, and the
+  // grid-level deselect it also performs here is harmless alongside that.
   // -----------------------------------------------------------------------
-  useHotkey('Escape', () => {
-    dispatch({type: 'CLEAR_SELECTION'});
-    dispatch({type: 'SET_ACTIVE_TOOL', tool: 'cursor'});
-  });
+  useHotkey(
+    'Escape',
+    () => {
+      dispatch({type: 'CLEAR_SELECTION'});
+      dispatch({type: 'SET_ACTIVE_TOOL', tool: 'cursor'});
+    },
+    {ignoreInputs: false},
+  );
 }
