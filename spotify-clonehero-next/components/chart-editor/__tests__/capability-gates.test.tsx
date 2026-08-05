@@ -24,6 +24,7 @@ import {TooltipProvider} from '@/components/ui/tooltip';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 import LeftSidebar from '../LeftSidebar';
 import {fakeAudioManager} from './fakeAudioManager';
+import TransportControls from '../TransportControls';
 import type {ChartAssistProps} from '../sidebar/ChartAssist';
 import {
   ChartEditorProvider,
@@ -141,44 +142,66 @@ function renderAssist(
 }
 
 /**
- * Buttons rendered by the utility cluster's tool row (plan 0074 Phase 7:
- * cursor + add-note — see `UtilityCluster.tsx`'s file header for why
- * erase/section don't have sidebar buttons: erase is reachable from
- * Delete/Backspace + the note context menu, and section (plan 0076 item 19)
- * from the section strip's own right-click menu; tempo and time-signature
- * editing belongs to the piano-roll tempo lane, not to a highway tool).
- * Querying for these
- * directly pins the gate to the actual interactive controls — a bug that
- * hides the section header but keeps the buttons would still fail this
- * test.
+ * The tool actions gated by `capabilities.showToolPalette`: the cursor /
+ * place-note mode switch and undo / redo. They live on the transport bar
+ * (`TransportControls`), not in the sidebar — see `UtilityCluster.tsx`'s
+ * file header for why erase/section have no button at all: erase is
+ * reachable from Delete/Backspace + the note context menu, and section from
+ * the section strip's own right-click menu; tempo and time-signature editing
+ * belongs to the piano-roll tempo lane, not to a highway tool.
+ *
+ * Querying for these directly pins the gate to the actual interactive
+ * controls — a bug that hides the group's separators but keeps the buttons
+ * would still fail this test.
  */
-const TOOL_BUTTON_NAMES = [/cursor/i, /place note/i] as const;
+const TOOL_BUTTON_NAMES = [
+  /cursor/i,
+  /place note/i,
+  /^undo$/i,
+  /^redo$/i,
+] as const;
 
-describe('LeftSidebar capability gating', () => {
+function renderTransport(
+  capabilities: EditorCapabilities,
+  scope = DEFAULT_DRUMS_EXPERT_SCOPE,
+) {
+  return render(
+    <ChartEditorProvider capabilities={capabilities} activeScope={scope}>
+      <TransportControls
+        audioManager={stubAudioManager()}
+        durationSeconds={60}
+      />
+    </ChartEditorProvider>,
+  );
+}
+
+describe('Tool-action capability gating', () => {
   describe('DRUM_EDIT_CAPABILITIES', () => {
-    beforeEach(() => {
-      renderWith(DRUM_EDIT_CAPABILITIES);
-    });
-
-    it('renders every tool-row button', () => {
+    it('renders every tool action on the transport bar', () => {
+      renderTransport(DRUM_EDIT_CAPABILITIES);
       for (const name of TOOL_BUTTON_NAMES) {
         expect(screen.getByRole('button', {name})).toBeInTheDocument();
+      }
+    });
+
+    it('keeps them off the sidebar', () => {
+      renderWith(DRUM_EDIT_CAPABILITIES);
+      for (const name of TOOL_BUTTON_NAMES) {
+        expect(screen.queryByRole('button', {name})).not.toBeInTheDocument();
       }
     });
   });
 
   describe('ADD_LYRICS_CAPABILITIES', () => {
-    beforeEach(() => {
-      renderWith(ADD_LYRICS_CAPABILITIES, DEFAULT_VOCALS_SCOPE);
-    });
-
-    it('hides every tool-row button', () => {
+    it('hides every tool action (showToolPalette: false)', () => {
+      renderTransport(ADD_LYRICS_CAPABILITIES, DEFAULT_VOCALS_SCOPE);
       for (const name of TOOL_BUTTON_NAMES) {
         expect(screen.queryByRole('button', {name})).not.toBeInTheDocument();
       }
     });
 
     it('hides the NoteInspector (notes are not selectable)', () => {
+      renderWith(ADD_LYRICS_CAPABILITIES, DEFAULT_VOCALS_SCOPE);
       // The inspector renders a "Selected" or "Inspector" header. With no
       // notes selectable, the gate (`capabilities.selectable.has('note')`)
       // skips the whole component.

@@ -2,7 +2,16 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useHotkey, formatForDisplay} from '@tanstack/react-hotkeys';
-import {Play, Pause, SkipBack, SkipForward} from 'lucide-react';
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  MousePointer2,
+  Plus,
+  Undo2,
+  Redo2,
+} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {
   Tooltip,
@@ -11,7 +20,15 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import type {AudioManager} from '@/lib/preview/audioManager';
+import type {ToolMode} from '@/lib/chart-editor-core';
+import {useChartEditorContext} from './ChartEditorContext';
+import {useUndoRedo} from './hooks/useEditCommands';
 import {usePlaybackSpeed} from './hooks/usePlaybackSpeed';
+import {cn} from '@/lib/utils';
+
+/** Ghost icon button geometry shared by every control on this bar. */
+const TRANSPORT_BUTTON_CLASS =
+  'h-[1.625rem] w-[1.625rem] hover:bg-[var(--ed-surface-hover)] hover:text-white';
 
 interface Section {
   name: string;
@@ -24,7 +41,7 @@ interface TransportControlsProps {
   durationSeconds: number;
   /** Chart sections for section jumping (optional). */
   sections?: Section[] | undefined;
-  /** Content rendered between the time display and speed controls (e.g. waveform). */
+  /** Content rendered between the time display and the tool actions (e.g. waveform). */
   children?: React.ReactNode | undefined;
   /** Optional CSS class for the container. */
   className?: string | undefined;
@@ -53,9 +70,13 @@ function formatTime(seconds: number): string {
  * Features:
  * - Play/Pause toggle
  * - Current time display
- * - Speed readout, stepped with the [ and ] hotkeys
  * - Section jumping (skip forward/back between chart sections)
+ * - Tool actions at the right end: cursor / place-note, undo / redo
  * - Keyboard shortcuts (Space, Left/Right, [ / ])
+ *
+ * The `[` / `]` speed hotkeys live here, next to the other transport
+ * shortcuts, while the speed value is shown and stepped once in the
+ * sidebar's utility cluster — both surfaces read the same reducer value.
  */
 export default function TransportControls({
   audioManager,
@@ -67,9 +88,11 @@ export default function TransportControls({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const {capabilities} = useChartEditorContext();
+  const {undo, redo, canUndo, canRedo} = useUndoRedo();
   // Playback speed is one editor-wide value with one ladder: the sidebar's
   // stepper and this bar's hotkeys are two surfaces on the same hook.
-  const {speed, step: stepSpeed} = usePlaybackSpeed(audioManager);
+  const {step: stepSpeed} = usePlaybackSpeed(audioManager);
 
   // Poll AudioManager every frame to drive the time/playing displays.
   // Keep both the loop function and its handle local to the effect so
@@ -165,7 +188,7 @@ export default function TransportControls({
             <Button
               variant="ghost"
               size="icon"
-              className="h-[1.625rem] w-[1.625rem] hover:bg-[var(--ed-surface-hover)] hover:text-white"
+              className={TRANSPORT_BUTTON_CLASS}
               onClick={jumpToPrevSection}
               disabled={sections.length === 0}>
               <SkipBack className="h-3.5 w-3.5" />
@@ -182,7 +205,7 @@ export default function TransportControls({
             <Button
               variant="ghost"
               size="icon"
-              className="h-[1.625rem] w-[1.625rem] hover:bg-[var(--ed-surface-hover)] hover:text-white"
+              className={TRANSPORT_BUTTON_CLASS}
               onClick={togglePlayPause}>
               {isPlaying ? (
                 <Pause className="h-3.5 w-3.5" />
@@ -202,7 +225,7 @@ export default function TransportControls({
             <Button
               variant="ghost"
               size="icon"
-              className="h-[1.625rem] w-[1.625rem] hover:bg-[var(--ed-surface-hover)] hover:text-white"
+              className={TRANSPORT_BUTTON_CLASS}
               onClick={jumpToNextSection}
               disabled={sections.length === 0}>
               <SkipForward className="h-3.5 w-3.5" />
@@ -221,13 +244,100 @@ export default function TransportControls({
         {/* Slot for waveform or other content between controls */}
         {children ?? <div className="flex-1" />}
 
-        {/* Speed: a readout, not a control. The stepper lives once, in the
-         *  sidebar's utility cluster; the `[` / `]` hotkeys above still drive
-         *  it from here, and both surfaces read the same reducer value. */}
-        <span className="shrink-0 text-[11px] tabular-nums text-[color:var(--ed-surface-fg-muted)]">
-          Speed {Math.round(speed * 100)}%
-        </span>
+        {/* Tool actions: the editor's mode switch and history, at the end of
+         *  the bar. Gated by the same capability flag every other tool
+         *  affordance uses, so capability-limited pages (preview-only, for
+         *  instance) still get a bare transport. */}
+        {capabilities.showToolPalette && (
+          <div className="flex shrink-0 items-center gap-1">
+            <span className="mx-1 h-4 w-px bg-[var(--ed-surface-hover)]" />
+            <ToolButton
+              mode="cursor"
+              icon={MousePointer2}
+              label="Cursor"
+              hotkey="Mod+1"
+            />
+            <ToolButton
+              mode="place"
+              icon={Plus}
+              label="Place Note"
+              hotkey="Mod+2"
+            />
+            <span className="mx-1 h-4 w-px bg-[var(--ed-surface-hover)]" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Undo"
+                  className={TRANSPORT_BUTTON_CLASS}
+                  disabled={!canUndo}
+                  onClick={undo}>
+                  <Undo2 className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                Undo ({formatForDisplay('Mod+Z')})
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Redo"
+                  className={TRANSPORT_BUTTON_CLASS}
+                  disabled={!canRedo}
+                  onClick={redo}>
+                  <Redo2 className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                Redo ({formatForDisplay('Mod+Shift+Z')})
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        )}
       </div>
     </TooltipProvider>
+  );
+}
+
+/** One tool-mode toggle. The active mode is editor state, so the button is a
+ *  view of `state.activeTool` rather than holding a selection of its own. */
+function ToolButton({
+  mode,
+  icon: Icon,
+  label,
+  hotkey,
+}: {
+  mode: ToolMode;
+  icon: React.ElementType;
+  label: string;
+  hotkey: string;
+}) {
+  const {state, dispatch} = useChartEditorContext();
+  const active = state.activeTool === mode;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={label}
+          aria-pressed={active}
+          className={cn(
+            TRANSPORT_BUTTON_CLASS,
+            active &&
+              'bg-[var(--ed-surface-hover)] text-white ring-1 ring-primary',
+          )}
+          onClick={() => dispatch({type: 'SET_ACTIVE_TOOL', tool: mode})}>
+          <Icon className="h-3.5 w-3.5" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        {label} ({formatForDisplay(hotkey)})
+      </TooltipContent>
+    </Tooltip>
   );
 }

@@ -11,8 +11,9 @@
  * 2. The speed stepper reads and writes the same `playbackSpeed` the
  *    `[` / `]` transport hotkeys use, so the two surfaces can't disagree
  *    (plan 0074 Phase 7).
- * 3. The section tool button is gone — its replacement is the piano roll's
- *    section-strip context menu (plan 0076 item 19).
+ * 3. The cluster holds no tool actions at all — cursor/place-note and
+ *    undo/redo live on the transport bar, and the section tool's replacement
+ *    is the piano roll's section-strip context menu.
  * 4. The Snap/Speed keyboard-hint pills are gone (plan 0076 item 20).
  * 5. The A/B loop buttons carry an accessible name stating the interaction
  *    (plan 0076 item 21).
@@ -30,6 +31,7 @@ import {
 import {DRUM_EDIT_CAPABILITIES} from '../capabilities';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../scope';
 import type {AudioManager} from '@/lib/preview/audioManager';
+import {fakeAudioManager} from './fakeAudioManager';
 
 class FakeResizeObserver {
   observe() {}
@@ -44,13 +46,7 @@ class FakeResizeObserver {
 const HOTKEY_DIVISIONS = [4, 8, 12, 16, 32, 64, 0];
 
 function stubAudioManager(setTempo: (t: number) => void = () => {}) {
-  return {
-    setTempo,
-    trackNames: [],
-    setVolume: () => {},
-    currentTime: 0,
-    setPracticeMode: () => {},
-  } as unknown as AudioManager;
+  return fakeAudioManager({setTempo});
 }
 
 /** Mounts the cluster and applies `division` / `speed` to editor state. */
@@ -119,7 +115,7 @@ describe('UtilityCluster snap control', () => {
   });
 });
 
-describe('UtilityCluster section tool removal (plan 0076 item 19)', () => {
+describe('UtilityCluster tool actions live on the transport', () => {
   it('renders no section tool button (its replacement is the section-strip context menu)', () => {
     renderCluster({});
     expect(
@@ -127,12 +123,11 @@ describe('UtilityCluster section tool removal (plan 0076 item 19)', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('still renders the cursor and place-note tools', () => {
+  it('renders no cursor, place-note or undo/redo buttons', () => {
     renderCluster({});
-    expect(screen.getByRole('button', {name: /cursor/i})).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', {name: /place note/i}),
-    ).toBeInTheDocument();
+    for (const name of [/cursor/i, /place note/i, /^undo$/i, /^redo$/i]) {
+      expect(screen.queryByRole('button', {name})).not.toBeInTheDocument();
+    }
   });
 });
 
