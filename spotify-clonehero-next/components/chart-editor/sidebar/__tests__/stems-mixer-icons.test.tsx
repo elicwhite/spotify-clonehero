@@ -11,8 +11,9 @@ import '@testing-library/jest-dom';
 import {render, screen} from '@testing-library/react';
 
 import StemsMixer from '../StemsMixer';
+import {TooltipProvider} from '@/components/ui/tooltip';
 import {CLICK_TRACK_NAME} from '@/lib/preview/clickTrack';
-import type {AudioManager} from '@/lib/preview/audioManager';
+import {fakeAudioManager} from '../../__tests__/fakeAudioManager';
 
 beforeAll(() => {
   // Radix's Slider primitive (inside every mixer row) observes its track.
@@ -23,12 +24,14 @@ beforeAll(() => {
   };
 });
 
-function stubAudioManager(trackNames: string[]): AudioManager {
-  return {
-    trackNames,
-    setVolume: () => {},
-    getVolume: () => 1,
-  } as unknown as AudioManager;
+/** The mixer's rows carry tooltips on their M/S toggles, so it needs the
+ *  same `TooltipProvider` its only host (`LeftSidebar`) supplies. */
+function renderMixer(trackNames: string[]) {
+  return render(
+    <TooltipProvider>
+      <StemsMixer audioManager={fakeAudioManager({trackNames})} />
+    </TooltipProvider>,
+  );
 }
 
 /** The `src` of the image inside a given stem row, or null when the row
@@ -40,18 +43,14 @@ function rowImageSrc(name: string): string | null {
 
 describe('StemsMixer row icons', () => {
   it('gives each instrument row its own instrument art', () => {
-    render(
-      <StemsMixer
-        audioManager={stubAudioManager([
-          'song',
-          'drums',
-          'guitar',
-          'bass',
-          'vocals',
-          CLICK_TRACK_NAME,
-        ])}
-      />,
-    );
+    renderMixer([
+      'song',
+      'drums',
+      'guitar',
+      'bass',
+      'vocals',
+      CLICK_TRACK_NAME,
+    ]);
 
     expect(rowImageSrc('drums')).toContain('drums.png');
     expect(rowImageSrc('guitar')).toContain('guitar.png');
@@ -60,11 +59,7 @@ describe('StemsMixer row icons', () => {
   });
 
   it('leaves rows that name no instrument on the generic glyph', () => {
-    render(
-      <StemsMixer
-        audioManager={stubAudioManager(['song', 'rhythm', CLICK_TRACK_NAME])}
-      />,
-    );
+    renderMixer(['song', 'rhythm', CLICK_TRACK_NAME]);
 
     expect(rowImageSrc('song')).toBeNull();
     expect(rowImageSrc('rhythm')).toBeNull();

@@ -5,8 +5,8 @@
  * 0074 Phase 4, Design C/D; plan 0076 items 8 and 9). Renders ONLY when
  * `selectDifficultyStale` fires for `instrument` (Expert edited after the
  * Hard/Medium/Easy set was generated) — the same condition that turns the
- * Chart Matrix row's tail into "Re-generate H · M · E". Both surfaces start
- * the identical `generate-difficulties` run; this card additionally offers
+ * Chart Matrix row's tail amber. Both surfaces start the identical
+ * `generate-difficulties` run; this card additionally offers
  * "Keep as-is", mirroring `DrumTranscriptionCard`'s dismissal (a reducer
  * action, not a command, so it neither lands on the undo stack nor discards
  * the redo branch), and "Delete Hard/Medium/Easy" behind the same confirm.
@@ -111,7 +111,7 @@ export default function DifficultyGenerationCard({
       icon={<InstrumentIcon instrument={instrument} size={14} />}
       name={`${label} difficulty`}
       explanation={`${label} Hard, Medium, and Easy were generated from an earlier version of Expert.`}
-      note="Expert changed since these were generated. Re-generate to match, or keep them. Your call."
+      note="Expert changed since these were generated. Generate again to match, or keep them. Your call."
       attn
       learnKey="difficulty"
       onLearnMore={onLearnMore}
@@ -128,7 +128,7 @@ export default function DifficultyGenerationCard({
                     disabled={disabledReason !== undefined}
                     onClick={() => start(instrument)}>
                     <Sparkles />
-                    Re-generate
+                    Generate
                   </Button>
                 </span>
               </TooltipTrigger>

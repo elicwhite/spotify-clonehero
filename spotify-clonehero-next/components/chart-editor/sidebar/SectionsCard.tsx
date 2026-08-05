@@ -121,7 +121,7 @@ export default function SectionsCard({
               disabledReason={audioBusyReason}
               onClick={run}
               icon={RefreshCw}
-              label={sectionCount === 0 ? 'Generate sections' : 'Re-generate'}
+              label="Generate"
               variant={showStale ? 'default' : 'outline'}
             />
             {showStale && (

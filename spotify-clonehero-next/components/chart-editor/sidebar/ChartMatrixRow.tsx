@@ -12,14 +12,13 @@
  *   bar directly under those three columns. Generation is set-shaped (it
  *   writes all three), so a partial set still has an affordance rather than
  *   being reachable only by deleting what is there.
- * - Lower difficulties charted and stale (Expert edited since generation): a
- *   slim amber "Re-generate H · M · E" bar under those columns, mirroring the
- *   Chart Assist recommendation card's own call-to-action.
+ * - Lower difficulties charted and stale (Expert edited since generation): the
+ *   same slim bar under those columns, in amber, mirroring the Chart Assist
+ *   recommendation card's own call-to-action.
  *
- * There is no per-instrument overflow menu on the row (plan 0076 item 8
- * removed it — it truncated the instrument name for a rarely-used "Delete
- * H/M/E" action). That action now lives on the difficulty-generation Chart
- * Assist card instead.
+ * The row carries no per-instrument overflow menu: "Delete H/M/E" lives on the
+ * difficulty-generation Chart Assist card, where it does not cost the row the
+ * width its instrument name needs.
  *
  * While this instrument's generation is in flight — started here OR from the
  * Chart Assist card, since `useDifficultyGeneration` reports one shared
@@ -63,8 +62,9 @@ interface GenerateSetBarProps {
    *  with no lower difficulties at all), matching the cells' height. False
    *  puts a slimmer bar on the grid row below them, same three columns. */
   spansEmptyCells: boolean;
-  /** Amber call-to-action styling and "Re-generate" wording (Expert changed
-   *  since these tiers were generated). */
+  /** Amber call-to-action styling (Expert changed since these tiers were
+   *  generated). The label is the same either way — generating is one
+   *  action, whether or not a set already exists. */
   stale: boolean;
   /** Why the button can't run — rendered in a tooltip AND in an always-present
    *  `sr-only` node, since a disabled control has neither. Undefined = live. */
@@ -75,8 +75,8 @@ interface GenerateSetBarProps {
 }
 
 /**
- * The row's Generate/Re-generate affordance, in both of the places the row
- * puts one. While this instrument's run is in flight the bar is replaced by
+ * The row's Generate affordance, in both of the places the row puts one.
+ * While this instrument's run is in flight the bar is replaced by
  * the shared inline `AssistRunCard` (progress + Cancel), which is the only
  * Cancel affordance the run has.
  *
@@ -114,8 +114,8 @@ function GenerateSetBar({
           onDismiss={runner.dismiss}
           className={
             stale
-              ? 'rounded-md border border-amber-400/60 bg-amber-50 p-2 text-[11px] dark:border-amber-500/40 dark:bg-amber-950/20'
-              : 'text-[11px]'
+              ? 'rounded-md border border-amber-400/60 bg-amber-50 p-2 text-[12px] dark:border-amber-500/40 dark:bg-amber-950/20'
+              : 'text-[12px]'
           }
         />
       </div>
@@ -128,7 +128,7 @@ function GenerateSetBar({
         <TooltipTrigger asChild>
           <button
             type="button"
-            aria-label={`${stale ? 'Re-generate' : 'Generate'} ${label} Hard, Medium, Easy difficulties`}
+            aria-label={`Generate ${label} Hard, Medium, Easy difficulties`}
             aria-disabled={disabled || undefined}
             aria-describedby={disabled ? reasonId : undefined}
             onClick={() => {
@@ -136,7 +136,7 @@ function GenerateSetBar({
               onGenerate();
             }}
             className={cn(
-              'flex w-full items-center justify-center gap-1.5 rounded-md text-[10.5px] font-semibold transition-colors',
+              'flex w-full items-center justify-center gap-1.5 rounded-md text-[11.5px] font-semibold transition-colors',
               minHeight,
               stale
                 ? 'border border-amber-400/60 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/20 dark:text-amber-300'
@@ -153,7 +153,7 @@ function GenerateSetBar({
                 (stale ? 'hover:bg-amber-100' : 'hover:bg-primary/10'),
             )}>
             <Sparkles className="h-3 w-3" />
-            {stale ? 'Re-generate H · M · E' : 'Generate H · M · E'}
+            Generate H · M · E
           </button>
         </TooltipTrigger>
         {disabled && (
@@ -282,7 +282,7 @@ export default function ChartMatrixRow({
         onContextMenu={e =>
           onRowContextMenu(e, instrument, hasLowerDifficulties)
         }
-        className="flex min-h-[1.875rem] items-center gap-1.5 text-xs font-semibold">
+        className="flex min-h-[1.875rem] items-center gap-1.5 text-[13px] font-semibold">
         <InstrumentIcon
           instrument={instrument}
           size={16}

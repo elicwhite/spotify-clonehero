@@ -40,9 +40,9 @@ export interface CardShellProps {
   learnKey: LearnKey;
   onLearnMore: (key: LearnKey) => void;
   /**
-   * The card's own buttons. They share one row with "Learn more" (the
-   * prototype's `.card-actions`), so a card's primary action and its
-   * explainer link sit on the same line instead of stacking.
+   * The card's own buttons (the prototype's `.card-actions`). They get a row
+   * to themselves, above the "Learn more" row; the row is omitted entirely
+   * when a card has no actions to offer (e.g. while its run is in flight).
    */
   actions?: React.ReactNode;
   /** Block content between the copy and the actions row — the inline run
@@ -93,9 +93,9 @@ export function CardShell({
           {icon}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-xs font-semibold">{name}</div>
+          <div className="text-[13px] font-semibold">{name}</div>
           {(status || aiLabel) && (
-            <div className="text-[11px] text-muted-foreground mt-0.5">
+            <div className="text-[12px] text-muted-foreground mt-0.5">
               {aiLabel && (
                 <>
                   <span className="inline-flex items-center gap-0.5 font-semibold text-primary">
@@ -110,17 +110,29 @@ export function CardShell({
           )}
         </div>
       </div>
-      <p className="text-[11px] text-muted-foreground">{explanation}</p>
+      <p className="text-[12px] text-muted-foreground">{explanation}</p>
       {note && (
-        <p className="text-[11px] text-amber-800 dark:text-amber-300">{note}</p>
+        <p className="text-[12px] text-amber-800 dark:text-amber-300">{note}</p>
       )}
       {children}
-      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-        {actions}
+      {actions && (
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          {actions}
+        </div>
+      )}
+      {/* "Learn more" gets its own row on EVERY card, unconditionally. Sharing
+       *  the actions row means the layout depends on the CTA's label length —
+       *  "Add leading silence" and "Generate tempo map" wrap it to a second
+       *  line at the 290px rail while "Transcribe" doesn't — and cards with
+       *  three actions (re-generate / keep / delete) can never fit it at all.
+       *  A dedicated row is the one arrangement that is identical everywhere.
+       *  Flush left (`px-0`) so it lines up with the card's copy rather than
+       *  the buttons above it. */}
+      <div className="pt-0.5">
         <Button
-          variant="ghost"
+          variant="link"
           size="xs"
-          className="text-muted-foreground"
+          className="h-auto px-0 text-muted-foreground"
           onClick={() => onLearnMore(learnKey)}>
           Learn more
         </Button>

@@ -1,13 +1,14 @@
 'use client';
 
 /**
- * Generic "Learn more" modal for a Chart Assist card (plan 0074 Phase 2,
- * Design C). Every card explains itself in one sentence inline and links to
- * a longer explanation here — the same shell, different copy per feature,
- * so a new card never needs a new modal component.
+ * Generic "Learn more" modal for a Chart Assist card. Every card explains
+ * itself in one sentence inline and links to a longer explanation here: the
+ * same shell, different copy per feature, so a new card never needs a new
+ * modal component.
  */
 
 import {HelpCircle} from 'lucide-react';
+import type {LearnParagraph} from './learn-copy';
 import {Button} from '@/components/ui/button';
 import {
   Dialog,
@@ -23,8 +24,8 @@ export interface LearnMoreModalProps {
   onOpenChange: (open: boolean) => void;
   title: string;
   /** One paragraph per `<p>`. Two is the norm (what it does, what to know
-   *  before re-running it) — see `LEARN_COPY` in `learn-copy.ts`. */
-  paragraphs: readonly string[];
+   *  before re-running it). See `LEARN_COPY` in `learn-copy.ts`. */
+  paragraphs: readonly LearnParagraph[];
 }
 
 export default function LearnMoreModal({
@@ -45,7 +46,24 @@ export default function LearnMoreModal({
         <DialogDescription asChild>
           <div className="space-y-3 text-sm text-muted-foreground">
             {paragraphs.map((paragraph, i) => (
-              <p key={i}>{paragraph}</p>
+              <p key={i}>
+                {typeof paragraph === 'string'
+                  ? paragraph
+                  : paragraph.map((node, j) =>
+                      typeof node === 'string' ? (
+                        node
+                      ) : (
+                        <a
+                          key={j}
+                          href={node.href}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="underline underline-offset-2 hover:text-foreground">
+                          {node.text}
+                        </a>
+                      ),
+                    )}
+              </p>
             ))}
           </div>
         </DialogDescription>

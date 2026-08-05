@@ -461,22 +461,22 @@ describe('ChartAssist Sections card', () => {
     return screen.getByRole('group', {name: 'Sections'});
   }
 
-  it('offers "Generate sections" on a chart that has none', () => {
+  it('offers Generate on a chart that has no sections', () => {
     renderChartAssist(makeDocWithFreshProvenance());
     const card = sectionsCard();
     expect(within(card).getByText('0 sections')).toBeInTheDocument();
     expect(
-      within(card).getByRole('button', {name: /generate sections/i}),
+      within(card).getByRole('button', {name: /^generate$/i}),
     ).toBeEnabled();
     expect(within(card).queryByText(/already has section titles/i)).toBeNull();
   });
 
-  it('switches the action to "Re-generate" and warns about hand-written titles', () => {
+  it('keeps the same Generate label and warns about hand-written titles', () => {
     renderChartAssist(makeDocWithSections(['Intro'], {generated: false}));
     const card = sectionsCard();
     expect(within(card).getByText('1 section')).toBeInTheDocument();
     expect(
-      within(card).getByRole('button', {name: /re-generate/i}),
+      within(card).getByRole('button', {name: /^generate$/i}),
     ).toBeEnabled();
     expect(
       within(card).getByText(/already has section titles you wrote/i),
@@ -542,6 +542,40 @@ describe('ChartAssist Lyrics card copy (plan 0076 item 13)', () => {
   });
 });
 
+/**
+ * Every card lays its CTA row and its "Learn more" row out the same way, no
+ * matter how long the CTA label is or how many actions the card offers. The
+ * observable contract is that "Learn more" never shares a parent with any
+ * other button: if it did, whether it wrapped to a second line would depend
+ * on the CTA's label width, which is exactly the inconsistency the split row
+ * removes.
+ */
+describe('ChartAssist card action layout', () => {
+  it('gives "Learn more" a row of its own on every card', () => {
+    renderChartAssist(makeDocWithFreshProvenance());
+
+    const cards = screen.getAllByRole('group');
+    expect(cards).toHaveLength(ALL_CARD_NAMES.length);
+
+    for (const card of cards) {
+      const learnMore = within(card).getByRole('button', {
+        name: /learn more/i,
+      });
+      const row = learnMore.parentElement;
+      expect(row).not.toBeNull();
+      expect(row!.querySelectorAll('button')).toHaveLength(1);
+      // ...and the card's own actions all live in a different row.
+      const actions = within(card)
+        .getAllByRole('button')
+        .filter(button => button !== learnMore);
+      expect(actions.length).toBeGreaterThan(0);
+      for (const action of actions) {
+        expect(row!.contains(action)).toBe(false);
+      }
+    }
+  });
+});
+
 describe('ChartAssist Learn more', () => {
   it('opens and closes with the Drum transcription copy', () => {
     renderChartAssist(makeDocWithFreshProvenance());
@@ -554,7 +588,7 @@ describe('ChartAssist Learn more', () => {
       screen.getByRole('heading', {name: /drum transcription/i}),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/writes a baseline expert drum chart/i),
+      screen.getByText(/we isolate the drums out of the mix/i),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', {name: /got it/i}));

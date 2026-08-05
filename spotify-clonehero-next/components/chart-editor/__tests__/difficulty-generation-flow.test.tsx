@@ -12,7 +12,7 @@
  * `difficulty-worker-logic.test.ts`) and `GenerateDifficultiesCommand`'s own
  * doc mutation has its own suite (`generate-difficulties-command.test.ts`).
  * What's under test here is the wiring: the matrix row's Generate/
- * Re-generate affordances, the Chart Assist recommendation card, the
+ * Generate affordances, the Chart Assist recommendation card, the
  * shared assist runner driving both through the same run, and the
  * undo/staleness/ack behavior that follows from a real run applying a real
  * command against the real reducer.
@@ -267,7 +267,7 @@ describe('Generate H · M · E', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Re-generate Drums Hard, Medium, Easy difficulties',
+        name: 'Generate Drums Hard, Medium, Easy difficulties',
       }),
     );
     await waitFor(() => expect(captured).not.toBeNull());
@@ -393,7 +393,7 @@ describe('Generate H · M · E', () => {
 });
 
 describe('Staleness: Expert edit after generation', () => {
-  it('shows no Re-generate bar or Chart Assist card right after generation', () => {
+  it('shows no stale bar or Chart Assist card right after generation', () => {
     renderEditor(makeGeneratedDoc());
     expect(
       screen.queryByRole('button', {name: /re-generate drums/i}),
@@ -410,7 +410,7 @@ describe('Staleness: Expert edit after generation', () => {
 
     expect(
       screen.getByRole('button', {
-        name: 'Re-generate Drums Hard, Medium, Easy difficulties',
+        name: 'Generate Drums Hard, Medium, Easy difficulties',
       }),
     ).toBeInTheDocument();
     expect(
@@ -456,14 +456,14 @@ describe('Staleness: Expert edit after generation', () => {
     ).toBeInTheDocument();
   });
 
-  it('Re-generate from the CARD locks the rows cells', async () => {
+  it('Generating from the CARD locks the rows cells', async () => {
     // The matrix row and the assist card are separately mounted consumers of
     // the same run. A run started on one has to be visible to the other, so
     // the row's H/M/E cells lock while the card's run is in flight.
     renderEditor(makeGeneratedDoc());
     fireEvent.click(screen.getByRole('button', {name: 'edit expert'}));
 
-    fireEvent.click(screen.getByRole('button', {name: /^re-generate$/i}));
+    fireEvent.click(screen.getByRole('button', {name: /^generate$/i}));
     await waitFor(() => expect(captured).not.toBeNull());
 
     await waitFor(() =>
@@ -480,13 +480,13 @@ describe('Staleness: Expert edit after generation', () => {
     );
   });
 
-  it('Re-generate (from the row) clears the staleness prompt', async () => {
+  it('Generating (from the row) clears the staleness prompt', async () => {
     renderEditor(makeGeneratedDoc());
     fireEvent.click(screen.getByRole('button', {name: 'edit expert'}));
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Re-generate Drums Hard, Medium, Easy difficulties',
+        name: 'Generate Drums Hard, Medium, Easy difficulties',
       }),
     );
     await waitFor(() => expect(captured).not.toBeNull());
@@ -506,7 +506,7 @@ describe('Staleness: Expert edit after generation', () => {
 // Delete H/M/E moved off the matrix row (plan 0076 item 8) onto the
 // difficulty-generation Chart Assist card, which owns its own delete suite.
 describe('Delete H/M/E from the Chart Assist card', () => {
-  it('offers Delete alongside Re-generate/Keep-as-is once the card is showing', () => {
+  it('offers Delete alongside Generate/Keep-as-is once the card is showing', () => {
     renderEditor(makeGeneratedDoc());
     fireEvent.click(screen.getByRole('button', {name: 'edit expert'}));
 

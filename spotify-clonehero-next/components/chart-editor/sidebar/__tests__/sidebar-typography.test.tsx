@@ -13,8 +13,8 @@
  * jsdom's `getComputedStyle` cannot resolve `var()`, so the var-backed values
  * are asserted at the two places that decide them: the utility's declaration
  * and the `:root[data-density='compact']` token block. Manual verification:
- * open a chart editor page, inspect a sidebar `h3` (expect font-size 11px,
- * uppercase, letter-spacing 0.66px) and a Chart Assist action button's svg
+ * open a chart editor page, inspect a sidebar `h3` (expect font-size 12px,
+ * uppercase, letter-spacing 0.72px) and a Chart Assist action button's svg
  * (expect a 12px box inside a 24px button).
  */
 
@@ -98,7 +98,7 @@ function classesOf(element: Element): string[] {
 }
 
 describe('sidebar section heading typography (plan 0077 item 3)', () => {
-  it('compiles to a font size, not a colour, and to the 11px label token', async () => {
+  it('compiles to a font size, not a colour, and to the 12px label token', async () => {
     render(<SectionHeading title="Chart Assist" />);
     const heading = screen.getByRole('heading', {name: 'Chart Assist'});
     const classes = classesOf(heading);
@@ -113,11 +113,11 @@ describe('sidebar section heading typography (plan 0077 item 3)', () => {
     // untyped `var()` to the colour plugin, emitting `color:` and leaving the
     // heading at the inherited 16px body size.
     expect(sizeDecls['color']).toBeUndefined();
-    expect(sizeDecls['font-size']).toBe('var(--ed-text-label,0.6875rem)');
+    expect(sizeDecls['font-size']).toBe('var(--ed-text-label,0.75rem)');
 
-    // 11px is both the no-scope fallback above and the compact token below,
-    // so the heading is 11px whether or not an editor is mounted.
-    expect(densityTokens(root)['--ed-text-label']).toBe('0.6875rem');
+    // 12px is both the no-scope fallback above and the compact token below,
+    // so the heading is 12px whether or not an editor is mounted.
+    expect(densityTokens(root)['--ed-text-label']).toBe('0.75rem');
 
     const uppercase = classes.find(name => name === 'uppercase');
     expect(declarationsFor(root, uppercase as string)['text-transform']).toBe(

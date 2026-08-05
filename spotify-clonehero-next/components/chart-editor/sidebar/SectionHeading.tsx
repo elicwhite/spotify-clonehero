@@ -38,7 +38,7 @@ export default function SectionHeading({
        *  and emits `color:` with no `font-size:` at all. The hint pins it to
        *  the font-size plugin. See the compiled-CSS assertions in
        *  `__tests__/sidebar-typography.test.tsx`. */}
-      <h3 className="text-[length:var(--ed-text-label,0.6875rem)] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+      <h3 className="text-[length:var(--ed-text-label,0.75rem)] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
         {title}
       </h3>
       {children}

@@ -3,7 +3,7 @@
 /**
  * The one place difficulty generation is started and applied (plan 0074
  * Design D). Both surfaces that offer it — the Chart Matrix row's
- * Generate/Re-generate bar and the Chart Assist recommendation card — call
+ * "Generate H · M · E" bar and the Chart Assist recommendation card — call
  * this hook, so they start the same run, apply the same command, and report
  * the same messages instead of two hand-synced copies.
  *

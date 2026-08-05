@@ -269,7 +269,7 @@ export default function StemsMixer({
        *  and A/B loop markers. */}
       <SectionHeading title="Stems">
         {anySolo && (
-          <span className="ml-auto text-[9px] font-bold uppercase tracking-[0.05em] text-green-600 dark:text-green-400">
+          <span className="ml-auto text-[10px] font-bold uppercase tracking-[0.05em] text-green-600 dark:text-green-400">
             Solo
           </span>
         )}
@@ -331,7 +331,7 @@ export default function StemsMixer({
             }
           }}
           className={cn(
-            'flex h-7 items-center justify-center gap-1.5 rounded-md border border-dashed text-[11px] text-muted-foreground transition-colors cursor-pointer',
+            'flex h-7 items-center justify-center gap-1.5 rounded-md border border-dashed text-[12px] text-muted-foreground transition-colors cursor-pointer',
             dragOver
               ? 'border-primary text-primary bg-primary/5'
               : 'hover:border-primary/60 hover:text-foreground',

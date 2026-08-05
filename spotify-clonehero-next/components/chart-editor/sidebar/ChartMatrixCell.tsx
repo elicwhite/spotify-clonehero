@@ -57,7 +57,7 @@ export default function ChartMatrixCell({
           onContextMenu={onContextMenu}
           style={{gridColumn}}
           className={cn(
-            'flex min-h-[1.875rem] items-center justify-center rounded-md border text-xs font-bold transition-colors',
+            'flex min-h-[1.875rem] items-center justify-center rounded-md border text-[13px] font-bold transition-colors',
             visible
               ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
               : 'border-input bg-background text-muted-foreground hover:bg-muted',

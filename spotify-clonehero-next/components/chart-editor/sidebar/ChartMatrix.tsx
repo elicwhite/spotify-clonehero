@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Chart Matrix sidebar section (plan 0074 Phase 3, Design C).
+ * Chart Matrix sidebar section.
  *
  * Rows = instruments present in the chart (guitar/bass/drums — no vocals
  * row, vocals are surfaced in Chart Assist instead). Columns = X/H/M/E.
@@ -17,10 +17,9 @@
  * DRUM_EDIT-style full editors, which is every surface that ships the
  * matrix at all — every present instrument is always a row.
  *
- * Right-click on a row label or a cell opens the delete context menu (plan
- * 0077 item 6, OWNER OVERRIDE 2026-08-04: per-difficulty deletion). The menu
- * itself lives in `ChartMatrixContextMenu`; the matrix only decides where it
- * opened and on what.
+ * Right-click on a row label or a cell opens the delete context menu. The
+ * menu itself lives in `ChartMatrixContextMenu`; the matrix only decides
+ * where it opened and on what.
  */
 
 import {useCallback, useState, type MouseEvent} from 'react';
@@ -45,6 +44,10 @@ import ChartMatrixRow from './ChartMatrixRow';
 import ChartMatrixContextMenu, {
   type MatrixMenuTarget,
 } from './ChartMatrixContextMenu';
+import {
+  useDismissOnEscape,
+  useDismissOnOutsidePointerDown,
+} from '../ContextMenuPopover';
 import InstrumentIcon from '../InstrumentIcon';
 import SectionHeading, {SIDEBAR_SECTION_CLASS} from './SectionHeading';
 import {DIFFICULTY_COLUMNS, INSTRUMENT_LABEL} from '../trackLabels';
@@ -64,8 +67,20 @@ export default function ChartMatrix() {
   const [menu, setMenu] = useState<MatrixMenuTarget | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
 
-  // Right-click on the row label or a cell opens the delete menu (plan 0077
-  // item 6). Suppressed while THIS instrument's generation is in flight —
+  // The "Add instrument" dropdown dismisses the same way the editor's
+  // right-click menus do: the next pointerdown that reaches the window, or
+  // Escape. While it is open, the wrapper below stops propagation of its own
+  // pointerdown, which is what keeps a click on the trigger (or on an option)
+  // from counting as "outside" — without it the trigger could never toggle the
+  // menu shut. The stop is scoped to the open state so that with the dropdown
+  // closed the wrapper is an ordinary part of the sidebar, and a click on it
+  // still dismisses whatever other menu is open.
+  const closeAddMenu = useCallback(() => setAddMenuOpen(false), []);
+  useDismissOnOutsidePointerDown(addMenuOpen, closeAddMenu);
+  useDismissOnEscape(addMenuOpen, closeAddMenu);
+
+  // Right-click on the row label or a cell opens the delete menu.
+  // Suppressed while THIS instrument's generation is in flight —
   // same reason `ChartMatrixCell`'s `locked` blocks its click: a delete
   // mid-generation could race the command about to install/replace tracks.
   const openMenu = useCallback(
@@ -158,7 +173,7 @@ export default function ChartMatrix() {
           <div
             key={col.difficulty}
             style={{gridColumn: 2 + index}}
-            className="text-center text-[10px] font-semibold text-muted-foreground">
+            className="text-center text-[11px] font-semibold text-muted-foreground">
             {col.label}
           </div>
         ))}
@@ -189,27 +204,32 @@ export default function ChartMatrix() {
         })}
       </div>
 
-      <p className="text-[10px] text-muted-foreground">
+      <p className="text-[11px] text-muted-foreground">
         Click a difficulty to show or hide it in the editor.
       </p>
 
       {missingInstruments.length > 0 && (
-        <div className="relative">
+        <div
+          className="relative"
+          onPointerDown={addMenuOpen ? e => e.stopPropagation() : undefined}>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="h-7 w-full justify-center gap-1.5 border-dashed text-xs text-muted-foreground"
+            aria-expanded={addMenuOpen}
+            className="h-7 w-full justify-center gap-1.5 border-dashed text-[13px] text-muted-foreground"
             onClick={() => setAddMenuOpen(open => !open)}>
             <Plus className="h-3.5 w-3.5" /> Add instrument
           </Button>
           {addMenuOpen && (
-            <div className="absolute left-0 right-0 z-40 mt-1 rounded-md border bg-popover p-1 shadow-md">
+            <div
+              data-testid="add-instrument-menu"
+              className="absolute left-0 right-0 z-40 mt-1 rounded-md border bg-popover p-1 shadow-md">
               {missingInstruments.map(instrument => (
                 <button
                   key={instrument}
                   type="button"
-                  className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs hover:bg-accent"
+                  className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-[13px] hover:bg-accent"
                   onClick={() => addInstrument(instrument)}>
                   <InstrumentIcon
                     instrument={instrument}

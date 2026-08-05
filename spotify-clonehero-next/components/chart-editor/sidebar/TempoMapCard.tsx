@@ -45,7 +45,7 @@ export default function TempoMapCard({
     <CardShell
       icon={<Clock />}
       name="Tempo map"
-      explanation="Finds the beats in the audio and builds the grid every note snaps to."
+      explanation="Builds the grid every note snaps to. A rough first pass, so check the downbeat and the meter."
       learnKey="tempo"
       onLearnMore={onLearnMore}
       actions={

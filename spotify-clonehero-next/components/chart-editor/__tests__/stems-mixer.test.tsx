@@ -18,7 +18,13 @@
 import '@testing-library/jest-dom';
 import {useMemo, useState} from 'react';
 import {act} from 'react';
-import {fireEvent, render, screen, within} from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 
 import {TooltipProvider} from '@/components/ui/tooltip';
 import type {AudioManager} from '@/lib/preview/audioManager';
@@ -333,6 +339,23 @@ describe('StemsMixer', () => {
     // ...and the controls still read that way.
     expect(screen.getByRole('button', {name: 'Unmute Song'})).toBeVisible();
     expect(screen.getByRole('button', {name: 'Unsolo Drums'})).toBeVisible();
+  });
+
+  // "M" and "S" say nothing on their own, so each toggle spells its word out
+  // on hover. Radix renders the tooltip content into a portal keyed to the
+  // trigger, so the assertion is on the document, not inside the row.
+  it('spells out "Mute" and "Solo" in a tooltip on the M/S toggles', async () => {
+    const audioManager = makeAudioManager(['song', 'drums', 'click']);
+    renderMixer({audioManager});
+
+    fireEvent.focus(screen.getByRole('button', {name: 'Mute Drums'}));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/^Mute$/);
+
+    fireEvent.blur(screen.getByRole('button', {name: 'Mute Drums'}));
+    fireEvent.focus(screen.getByRole('button', {name: 'Solo Drums'}));
+    await waitFor(() =>
+      expect(screen.getByRole('tooltip')).toHaveTextContent(/^Solo$/),
+    );
   });
 });
 

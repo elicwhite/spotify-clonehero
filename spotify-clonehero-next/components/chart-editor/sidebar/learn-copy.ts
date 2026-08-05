@@ -1,7 +1,12 @@
 /**
- * "Learn more" copy for the Chart Assist cards (plan 0074 Phase 2). Kept
- * beside the cards but out of them: the copy is long-form prose that changes
- * for editorial reasons, not for code reasons.
+ * "Learn more" copy for the Chart Assist cards. Kept beside the cards but out
+ * of them: the copy is long-form prose that changes for editorial reasons,
+ * not for code reasons.
+ *
+ * Every entry assumes the reader already knows what the artifact IS: a
+ * charter knows what a tempo map and a section marker are. Each one leads
+ * with what our implementation does, where it falls down, and what the user
+ * should do about it, in that order.
  */
 
 export type LearnKey =
@@ -12,50 +17,62 @@ export type LearnKey =
   | 'lyrics'
   | 'difficulty';
 
+/** A run of text inside a paragraph, optionally an external link. */
+export type LearnInline = string | {text: string; href: string};
+
+/**
+ * A paragraph is either plain text or a sequence of inline runs, so copy can
+ * carry a link without the modal needing to parse markup.
+ */
+export type LearnParagraph = string | readonly LearnInline[];
+
 export const LEARN_COPY: Record<
   LearnKey,
-  {title: string; paragraphs: string[]}
+  {title: string; paragraphs: readonly LearnParagraph[]}
 > = {
   tempo: {
     title: 'Tempo map',
     paragraphs: [
-      'Give ours a try. It works best for 4/4 songs. It might choose the wrong downbeat, but you can select a different downbeat in the piano roll and it will update the generated tempo map.',
-      'Having a great tempo map makes drum transcription significantly more accurate, so make sure you are happy there first, or regenerate the drum transcription if you update the tempo map afterwards.',
+      'Our tempo maps are a starting point rather than a finished grid. They are most reliable on straight 4/4 material, and the most common miss is the downbeat: the pulse is right, but the bar lines sit on the wrong beat of it. When that happens, select a different downbeat in the piano roll and the generated map is rebuilt around your choice.',
+      'It is worth settling the grid before anything else leans on it. Drum transcription snaps every hit to this map, so an accurate tempo map buys a materially better transcription. If you change the map after transcribing, transcribe again so the notes follow the grid you settled on.',
     ],
   },
   sections: {
     title: 'Sections',
     paragraphs: [
-      'Section markers name the parts of the song (intro, verse, chorus) and are what players see called out as the chart scrolls past. This listens for where the song changes character, then puts a marker on the nearest bar line and names each part.',
-      'Sections are generated on their own, so building a tempo map never rewrites titles you wrote yourself. Because markers land on bar lines, changing the tempo map afterwards can leave them a bar off, which is why they get flagged as possibly stale. Re-generating replaces every section marker and nothing else.',
+      [
+        'We run ',
+        {text: 'LinkSeg', href: 'https://github.com/morgan76/LinkSeg'},
+        ' over the song to find where its structure changes, then label each part with the classic Western section names: intro, verse, chorus, bridge, outro. Expect to rename some of what it finds and to add sections it missed.',
+      ],
     ],
   },
   silence: {
     title: 'Add leading silence',
     paragraphs: [
-      'Charting recommendations call for a certain amount of silence before the first notes, for playability. When starting fresh from a song you often need silence added to align the start to a full measure.',
-      'We recommend adding leading silence whenever the tempo map changes, so the song starts with a full measure.',
+      'This pads the front of the chart so the first notes do not arrive before the player is ready, and so the song opens on a full measure, the amount charting conventions ask for.',
+      'Worth revisiting whenever the tempo map changes, since a new grid moves where the first full measure begins.',
     ],
   },
   drums: {
     title: 'Drum transcription',
     paragraphs: [
-      'This is a first pass, not a finished chart: it listens to the drum audio and writes a baseline Expert drum chart (kick, snare, toms and cymbals, each hit placed on the tempo grid) significantly faster than charting from scratch. Expect to tweak and change things afterwards.',
-      'It reads the tempo map at the moment it runs. If you edit the grid afterwards, the chart can drift off the beat, which is why it gets flagged as possibly stale. Re-running replaces the Expert drum chart only; your other instruments are untouched.',
+      'We isolate the drums out of the mix and write a baseline Expert chart, each hit snapped to the tempo grid. It is a first pass, far faster than charting from scratch, and not a finished chart, so expect to fix hits it invented and add ones it missed.',
+      'It reads the tempo map at the moment it runs, so editing the grid afterwards can leave the chart off the beat. Settle the tempo map before you transcribe, or transcribe again once the tempo edits are done.',
     ],
   },
   lyrics: {
     title: 'Lyrics',
     paragraphs: [
-      'Paste plain lyric text and it gets automatically synced to the audio, syllable-by-syllable, against the isolated vocal stem.',
-      'Re-running replaces the current placement; you can still fine-tune individual phrase timings by hand afterwards.',
+      'Paste plain lyric text and we align it to the isolated vocal stem syllable by syllable, so each phrase lands where it is actually sung.',
+      'It replaces the current placement outright. Individual phrase timings can still be fine-tuned by hand afterwards.',
     ],
   },
   difficulty: {
     title: 'Difficulty generation',
     paragraphs: [
-      "Generates Hard, Medium, and Easy charts from an instrument's Expert chart, thinning notes down to something playable at each level.",
-      'It reads Expert at the moment it runs. If you edit Expert afterwards, the lower difficulties can drift out of sync, which is why they get flagged as possibly stale. Re-generating replaces the whole Hard/Medium/Easy set for that instrument only.',
+      "Thins an instrument's Expert chart into Hard, Medium, and Easy, keeping what carries the part at each level and dropping what stops being playable at that density. The result is a reasonable baseline; a chart you care about is still worth a pass by hand.",
+      'It reads Expert at the moment it runs, so editing Expert afterwards leaves the lower difficulties out of sync; that is what the possibly-stale flag is about. It replaces the whole Hard/Medium/Easy set for that instrument only.',
     ],
   },
 };

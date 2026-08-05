@@ -16,7 +16,7 @@ import {cn} from '@/lib/utils';
 /** The prototype's 17px bordered M/S toggles; the active state is a solid
  *  fill (red for mute, green for solo) rather than a tint. */
 const MS_BUTTON_CLASS =
-  'flex h-[1.0625rem] w-[1.0625rem] shrink-0 items-center justify-center rounded border text-[9.5px] font-bold text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-50';
+  'flex h-[1.0625rem] w-[1.0625rem] shrink-0 items-center justify-center rounded border text-[10.5px] font-bold text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-50';
 
 export interface StemMixerRowProps {
   /** The AudioManager track name this row controls — used as a stable test
@@ -98,7 +98,7 @@ export default function StemMixerRow({
         {icon}
         <span
           className={cn(
-            'truncate text-[11px] text-foreground',
+            'truncate text-[12px] text-foreground',
             // Muted rows go quiet rather than alarming: the M toggle itself
             // carries the red, matching the prototype.
             (mute || dimmedBySolo) && 'text-muted-foreground',
@@ -137,36 +137,52 @@ export default function StemMixerRow({
         />
       </div>
 
-      <span className="text-right text-[10px] tabular-nums text-muted-foreground">
+      <span className="text-right text-[11px] tabular-nums text-muted-foreground">
         {volume}%
       </span>
 
+      {/* "M" and "S" are unreadable as labels on their own, so each toggle
+       *  carries a tooltip spelling the word out. The tooltips open above the
+       *  row: the toggles sit at the right edge of a 290px rail, and a `right`
+       *  side would land offscreen. The accessible names stay row-specific
+       *  ("Mute Drums") — a screen-reader user hears which stem they are on,
+       *  where a sighted user already sees it in the name column. */}
       <div className="flex items-center gap-1">
-        <button
-          type="button"
-          aria-label={mute ? `Unmute ${label}` : `Mute ${label}`}
-          aria-pressed={mute}
-          disabled={locked}
-          onClick={onToggleMute}
-          className={cn(
-            MS_BUTTON_CLASS,
-            mute && 'border-red-600 bg-red-600 text-white',
-          )}>
-          M
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label={mute ? `Unmute ${label}` : `Mute ${label}`}
+              aria-pressed={mute}
+              disabled={locked}
+              onClick={onToggleMute}
+              className={cn(
+                MS_BUTTON_CLASS,
+                mute && 'border-red-600 bg-red-600 text-white',
+              )}>
+              M
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top">Mute</TooltipContent>
+        </Tooltip>
         {!soloExempt && onToggleSolo && (
-          <button
-            type="button"
-            aria-label={solo ? `Unsolo ${label}` : `Solo ${label}`}
-            aria-pressed={solo}
-            disabled={locked}
-            onClick={onToggleSolo}
-            className={cn(
-              MS_BUTTON_CLASS,
-              solo && 'border-green-600 bg-green-600 text-white',
-            )}>
-            S
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={solo ? `Unsolo ${label}` : `Solo ${label}`}
+                aria-pressed={solo}
+                disabled={locked}
+                onClick={onToggleSolo}
+                className={cn(
+                  MS_BUTTON_CLASS,
+                  solo && 'border-green-600 bg-green-600 text-white',
+                )}>
+                S
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Solo</TooltipContent>
+          </Tooltip>
         )}
       </div>
     </div>

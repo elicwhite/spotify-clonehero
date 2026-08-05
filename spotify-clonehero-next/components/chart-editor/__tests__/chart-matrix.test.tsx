@@ -20,7 +20,7 @@
 
 import '@testing-library/jest-dom';
 import {useEffect} from 'react';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {act, render, screen, fireEvent} from '@testing-library/react';
 import {createEmptyChart, noteTypes} from '@eliwhite/scan-chart';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {addDrumNote} from '@/lib/chart-edit';
@@ -262,6 +262,83 @@ describe('ChartMatrix + Add instrument', () => {
 
     expect(document.querySelector('img[src*="guitar.png"]')).not.toBeNull();
     expect(document.querySelector('img[src*="bass.png"]')).not.toBeNull();
+  });
+
+  // The dropdown attaches its window listener on a deferred timer (the click
+  // that opened it is still propagating), so every dismissal case has to let
+  // that timer run before the outside gesture.
+  describe('dismissal', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    function openMenu() {
+      renderMatrix(makeDrumsOnlyDoc());
+      fireEvent.click(screen.getByRole('button', {name: /add instrument/i}));
+      expect(screen.getByTestId('add-instrument-menu')).toBeInTheDocument();
+      act(() => {
+        jest.runAllTimers();
+      });
+    }
+
+    it('closes on a pointerdown outside the menu', () => {
+      openMenu();
+
+      fireEvent.pointerDown(document.body);
+
+      expect(
+        screen.queryByTestId('add-instrument-menu'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('closes on Escape', () => {
+      openMenu();
+
+      fireEvent.keyDown(window, {key: 'Escape'});
+
+      expect(
+        screen.queryByTestId('add-instrument-menu'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('stays open when the pointer goes down inside the menu', () => {
+      openMenu();
+
+      fireEvent.pointerDown(screen.getByRole('button', {name: 'Guitar'}));
+
+      expect(screen.getByTestId('add-instrument-menu')).toBeInTheDocument();
+    });
+
+    // The trigger's wrapper swallows pointerdown only while the dropdown is
+    // open. With it closed the wrapper is ordinary sidebar chrome, so a click
+    // on it still reaches the window and dismisses any other open menu.
+    it('lets pointerdown reach the window while the dropdown is closed', () => {
+      renderMatrix(makeDrumsOnlyDoc());
+      const reachedWindow = jest.fn();
+      window.addEventListener('pointerdown', reachedWindow);
+
+      fireEvent.pointerDown(
+        screen.getByRole('button', {name: /add instrument/i}),
+      );
+
+      expect(reachedWindow).toHaveBeenCalled();
+      window.removeEventListener('pointerdown', reachedWindow);
+    });
+
+    it('closes when the trigger is clicked a second time', () => {
+      openMenu();
+
+      const trigger = screen.getByRole('button', {name: /add instrument/i});
+      fireEvent.pointerDown(trigger);
+      fireEvent.click(trigger);
+
+      expect(
+        screen.queryByTestId('add-instrument-menu'),
+      ).not.toBeInTheDocument();
+    });
   });
 });
 

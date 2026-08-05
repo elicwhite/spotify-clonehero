@@ -52,7 +52,7 @@ export default function CompactSiteHeader() {
       <div className="flex shrink-0 items-center gap-1">
         <SocialLinks variant="compact" />
         <Suspense>
-          <HeaderAuthControls />
+          <HeaderAuthControls variant="compact" />
         </Suspense>
       </div>
     </header>

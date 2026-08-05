@@ -165,7 +165,7 @@ export default function AddLyricsDialog({
         <DialogHeader>
           <DialogTitle>Add Lyrics</DialogTitle>
           <DialogDescription>
-            Paste the song lyrics — they&apos;re automatically split into
+            Paste the song lyrics. They&apos;re automatically split into
             syllables, each line becomes its own phrase, and syllables are
             auto-aligned to the song&apos;s isolated vocals.
           </DialogDescription>
