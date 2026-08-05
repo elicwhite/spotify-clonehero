@@ -76,7 +76,6 @@ import {
   msToTick,
   tickToMs,
 } from '@/lib/drum-transcription/timing';
-import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {
   snapTickToGrid,
   findTrackInParsedChart,
@@ -152,14 +151,12 @@ import {clampMarkerMs, hitTempoMarker, nearestBeatTick} from './tempoHitTest';
 import {
   extractPianoRollNotes,
   isGuitarBassSchema,
-  noteIntersectsPianoRollWindow,
   techniqueForFlags,
   lanesForSchema,
   type FretTechnique,
-  type PianoRollLane,
   type PianoRollNote,
 } from './notes';
-import {buildBeatGrid, barBeatAtTick, type GridBeat} from './scene';
+import {buildBeatGrid, barBeatAtTick} from './scene';
 import {
   laneAtY,
   marqueeBounds,
@@ -170,24 +167,15 @@ import {
   pickPhraseBandAt,
   phraseEdgeDragBounds,
   xToTickNoSnap,
-  LYRIC_CHIP_PAD_LEFT,
-  LYRIC_CHIP_PAD_RIGHT,
   type LaneGeometry,
   type NotePartHit,
 } from './hitTest';
-import {
-  buildLyricsRowScene,
-  lyricChipPreviewTick,
-  type LyricChip,
-  type LyricBand,
-} from './lyricsScene';
+import {buildLyricsRowScene} from './lyricsScene';
 import {
   fitToWidth,
   followLeftMs,
-  glyphWidth,
   msToX,
   panByPx,
-  visibleMsRange,
   xToMs,
   zoomAt,
   zoomBounds,
@@ -200,62 +188,61 @@ import {
   loadPanelHeight,
   savePanelHeight,
 } from './panelHeight';
-import {buildAmpPyramid, sampleAmpRange, type AmpPyramid} from './wavePeaks';
+import {buildAmpPyramid, type AmpPyramid} from './wavePeaks';
 import {resolveEscapeTier} from './escapeRouting';
+import {
+  isInsideLoopShade,
+  loopEndRegionAt,
+  loopStartRegionAt,
+  moveLoopEdge,
+  pickLoopFlagAt,
+} from './loopFlags';
 import {
   buildWaveformSources,
   defaultWaveformSourceId,
   type WaveformSource,
 } from './waveformSources';
 
-// ---------------------------------------------------------------------------
-// Layout + palette
-// ---------------------------------------------------------------------------
-
-const RULER_H = 24;
-const TEMPO_H = 26;
-/** Lyrics row height (plan 0063 Part D) — present only when the 'vocals'
- *  part has lyrics; see {@link lyricsRowHeight}. */
-const LYRICS_ROW_H = 22;
-const WAVE_ROW_H = 40;
-const STACKED_GUTTER_W = 112;
-const STACKED_ROW_HEADER_H = 22;
-const STACKED_LANE_H = 20;
-const STACKED_HIDDEN_ROW_H = STACKED_ROW_HEADER_H;
-
-const COLORS = {
-  chrome: '#12151c',
-  laneBg: '#171b24',
-  laneAlt: '#151923',
-  rulerBg: '#0d1017',
-  rulerInk: '#8b94a5',
-  tempoBg: '#10141c',
-  gridBar: '#59677c',
-  gridBeat: '#3a4557',
-  gridSub: '#2a3342',
-  waveRow: '#4a6288',
-  playhead: '#ff4a57',
-  sectionFlag: '#c9a34a',
-  tempoNode: '#7ab8ff',
-  tempoNodeHot: '#b3d6ff',
-  tempoInk: '#a8c8ea',
-  laneLabel: '#6b7484',
-  ghost: '#f5c742',
-  lyricsBg: '#141726',
-  lyricBand: 'rgba(197,140,255,0.10)',
-  lyricChip: '#c58cff',
-  lyricWave: '#6b5a94',
-  phraseEdge: '#c58cff',
-} as const;
+import {
+  COLORS,
+  LYRICS_ROW_H,
+  OVERLAY_COLORS,
+  RULER_H,
+  STACKED_GUTTER_W,
+  STACKED_LANE_H,
+  STACKED_ROW_HEADER_H,
+  TEMPO_H,
+  WAVE_ROW_H,
+  lyricsRowHeight,
+  type ChartScene,
+  type LoopDrag,
+  type LyricDrag,
+  type PanelNoteDrag,
+  type PanelNoteResize,
+  type PanelPlaceNote,
+  type PhraseEdgeDrag,
+  type SectionDrag,
+  type SectionFlag,
+  type TempoMarker,
+  type TempoMarkerDrag,
+  type TrackRowGeometry,
+  type TrackRowScene,
+  type TsChip,
+  visiblePianoRollRows,
+} from './sceneTypes';
+import {
+  drawGrid,
+  drawLaneLabels,
+  drawLyricsRow,
+  drawNotes,
+  drawRuler,
+  drawStackedGutter,
+  drawTempoLane,
+  drawWave,
+} from './draw';
 
 /** Half-width (px) of a note's pointer hit box around its glyph center. */
 const NOTE_HIT_HALF_WIDTH = 8;
-
-const OVERLAY_COLORS = {
-  hoverHalo: 'rgba(255,255,255,0.32)',
-  marqueeFill: 'rgba(122,184,255,0.14)',
-  marqueeStroke: 'rgba(122,184,255,0.7)',
-} as const;
 
 /**
  * True while a class-(b) structural tempo correction (re-predict / resnap) is
@@ -270,36 +257,6 @@ function isStructuralPreview(state: {
 }): boolean {
   const op = state.pendingTempoCandidate?.op;
   return op === 're-predict' || op === 'resnap';
-}
-
-/** Live note-drag state (piano-roll side; deltas anchored on the grabbed note). */
-interface PanelNoteDrag {
-  trackKey: TrackKey;
-  anchorTick: number;
-  anchorLane: number;
-  tickDelta: number;
-  laneDelta: number;
-  active: boolean;
-}
-
-/** Live guitar/bass sustain endpoint drag. A delta lets multi-selection
- * resizing preserve each note's original length. */
-interface PanelNoteResize {
-  trackKey: TrackKey;
-  noteId: string;
-  originalLength: number;
-  currentLength: number;
-  active: boolean;
-}
-
-/** Live click-drag placement. The lane and head stay fixed; dragging right
- * creates the sustain that the user can later fine-tune with its endpoint. */
-interface PanelPlaceNote {
-  trackKey: TrackKey;
-  lane: number;
-  startTick: number;
-  currentTick: number;
-  active: boolean;
 }
 
 /** In-flight marquee rectangle in canvas px. */
@@ -320,6 +277,7 @@ type PointerMode =
   | 'erase'
   | 'tempo'
   | 'section'
+  | 'loop'
   | 'lyric'
   | 'phrase-edge'
   | 'resize';
@@ -335,53 +293,6 @@ interface MenuState {
   items: MenuItem[];
 }
 
-/** Live tempo-marker drag state (§7). Deltas anchored on the grabbed marker. */
-interface TempoMarkerDrag {
-  /** Index of the marker in the (ms-sorted) tempo list. */
-  index: number;
-  /** Fixed tick of the marker (only its ms moves). */
-  markerTick: number;
-  /** Original ms position — the dashed ghost line. */
-  origMs: number;
-  /** Latest clamped ms under the pointer. */
-  currentMs: number;
-  /** True once the marker has actually moved past its origin. */
-  moved: boolean;
-}
-
-/** Live section-flag drag state (§6). Grid-snapped, absolute (not delta-snapped
- *  like notes) — mirrors the highway's `useMarkerDrag`'s `screenToTick` snap. */
-interface SectionDrag {
-  originalTick: number;
-  currentTick: number;
-  moved: boolean;
-}
-
-/** Live lyric-chip drag state (plan 0063 Part D §2). Unlike a section drag,
- *  the tick is NOT grid-snapped — it tracks the pointer continuously,
- *  clamped to the owning phrase's bounds (mirrors `moveLyric`'s clamp). */
-interface LyricDrag {
-  /** Entity id of the chip as it existed at drag start. */
-  chipId: string;
-  originalTick: number;
-  currentTick: number;
-  phraseMinTick: number;
-  phraseMaxTick: number;
-  moved: boolean;
-}
-
-/** Live phrase-edge (band start/end) drag state (Round 2 §2). Grid-unsnapped
- *  like a lyric drag, clamped to {@link phraseEdgeDragBounds} so the ghost
- *  never overshoots what `movePhraseStart`/`movePhraseEnd` will clamp to. */
-interface PhraseEdgeDrag {
-  kind: 'phrase-start' | 'phrase-end';
-  originalTick: number;
-  currentTick: number;
-  minTick: number;
-  maxTick: number;
-  moved: boolean;
-}
-
 /** Inline text editor overlay state: a small positioned `<input>` rendered
  *  over the canvas, whose `onCommit` runs a command with the input's final
  *  text. Generic over any positioned text-commit flow — the lyrics row's
@@ -395,73 +306,6 @@ interface InlineTextEditor {
   onCommit: (text: string) => void;
 }
 
-// ---------------------------------------------------------------------------
-// Scene (derived, cached per chartDoc / audio)
-// ---------------------------------------------------------------------------
-
-interface TempoMarker {
-  tick: number;
-  ms: number;
-  bpm: number;
-}
-
-interface TsChip {
-  tick: number;
-  ms: number;
-  label: string;
-}
-
-interface SectionFlag {
-  tick: number;
-  ms: number;
-  name: string;
-}
-
-interface ChartScene {
-  resolution: number;
-  timedTempos: TimedTempo[];
-  beats: GridBeat[];
-  tempos: TempoMarker[];
-  timeSignatures: TsChip[];
-  sections: SectionFlag[];
-  notes: PianoRollNote[];
-  rows: TrackRowScene[];
-  activeTrackKey: TrackKey | null;
-  /** Active scope's schema lanes, top→bottom — `PianoRollNote.lane` indexes
-   *  into this array. Empty when `showPianoRollNotes` is off or there's no
-   *  active track. */
-  lanes: PianoRollLane[];
-  /** Active scope's instrument schema — drives lane semantics for note
-   *  mutation (add/drag/marquee). Null when there's no active track. */
-  schema: InstrumentSchema | null;
-  totalMs: number;
-  durationMs: number;
-  /** Audio-extended beat-grid span (shared with the downbeat commands). */
-  endTick: number;
-  /** Lyrics row content (plan 0063 Part D) — the 'vocals' part's syllable
-   *  chips + phrase bands. Empty when the part has no phrases. */
-  lyricChips: LyricChip[];
-  lyricBands: LyricBand[];
-  /** True when the lyrics row should render (the vocals part has phrases). */
-  lyricsVisible: boolean;
-}
-
-interface TrackRowScene {
-  key: TrackKey;
-  schema: InstrumentSchema;
-  lanes: PianoRollLane[];
-  notes: PianoRollNote[];
-}
-
-interface TrackRowGeometry {
-  row: TrackRowScene;
-  top: number;
-  laneTop: number;
-  bottom: number;
-  laneH: number;
-  visible: boolean;
-}
-
 interface StackedNoteHit {
   row: TrackRowGeometry;
   scene: ChartScene;
@@ -469,31 +313,20 @@ interface StackedNoteHit {
   part: NotePartHit | null;
 }
 
-/** Lyrics-row height for the current scene — 0 (row hidden) when the
- *  'vocals' part has no phrases yet. Shared by `panelGeometry` and `draw` so
- *  hit-testing and rendering can never disagree about the row's presence. */
-function lyricsRowHeight(scene: ChartScene | null): number {
-  return scene?.lyricsVisible ? LYRICS_ROW_H : 0;
-}
-
 function stackedRowGeometry(
   scene: ChartScene,
   laneTop: number,
-  visibleTrackKeys: ReadonlySet<string>,
 ): {rows: TrackRowGeometry[]; height: number} {
   let cursor = laneTop;
   const rows = scene.rows.map(row => {
-    const visible = visibleTrackKeys.has(trackKeyId(row.key));
-    const rowHeight = visible
-      ? STACKED_ROW_HEADER_H + Math.max(1, row.lanes.length) * STACKED_LANE_H
-      : STACKED_HIDDEN_ROW_H;
+    const rowHeight =
+      STACKED_ROW_HEADER_H + Math.max(1, row.lanes.length) * STACKED_LANE_H;
     const geometry: TrackRowGeometry = {
       row,
       top: cursor,
-      laneTop: cursor + (visible ? STACKED_ROW_HEADER_H : 0),
+      laneTop: cursor + STACKED_ROW_HEADER_H,
       bottom: cursor + rowHeight,
       laneH: STACKED_LANE_H,
-      visible,
     };
     cursor += rowHeight;
     return geometry;
@@ -509,12 +342,6 @@ function sceneForTrackRow(scene: ChartScene, row: TrackRowScene): ChartScene {
     schema: row.schema,
     activeTrackKey: row.key,
   };
-}
-
-function rowLabel(value: string): string {
-  return value.length > 0
-    ? value[0].toUpperCase() + value.slice(1).toLowerCase()
-    : value;
 }
 
 function copyCanvasRegion(
@@ -742,6 +569,8 @@ export default function PianoRollTimeline({
   const tempoBaseDocRef = useRef<ChartDocument | null>(null);
   /** In-flight section-flag drag (§6); null when not dragging a section. */
   const sectionDragRef = useRef<SectionDrag | null>(null);
+  /** In-flight A/B loop-flag drag; null when no flag is being dragged. */
+  const loopDragRef = useRef<LoopDrag | null>(null);
   /** In-flight lyric-chip drag (plan 0063 Part D §2); null when idle. */
   const lyricDragRef = useRef<LyricDrag | null>(null);
   /** In-flight phrase-edge (band start/end) drag (Round 2 §2); null when idle. */
@@ -862,7 +691,11 @@ export default function PianoRollTimeline({
       capabilities.showPianoRollNotes && isTrackScope(state.activeScope)
         ? state.activeScope.track
         : null;
-    const rows: TrackRowScene[] = capabilities.showPianoRollNotes
+    // Every chartable track, regardless of Chart Matrix visibility — the
+    // gutter's "manage tracks" menu (`openStackedViewMenu`) needs the full
+    // set so a hidden track can still be checked back on from the piano
+    // roll, not just unchecked.
+    const allTrackRows: TrackRowScene[] = capabilities.showPianoRollNotes
       ? availableTrackKeys(parsed.trackData).flatMap(key => {
           const track = findTrackInParsedChart(parsed, key)?.track ?? null;
           const schema = track ? schemaForTrack(track, parsed.drumType) : null;
@@ -877,6 +710,13 @@ export default function PianoRollTimeline({
           ];
         })
       : [];
+    // The stacked layout's row list only ever names tracks the user has
+    // selected in the Chart Matrix (`state.visibleTrackKeys`); a hidden track
+    // gets no row at all.
+    const rows: TrackRowScene[] = visiblePianoRollRows(
+      allTrackRows,
+      state.visibleTrackKeys,
+    );
     const activeRow = activeTrackKey
       ? (rows.find(row => trackKeyId(row.key) === trackKeyId(activeTrackKey)) ??
         null)
@@ -928,6 +768,7 @@ export default function PianoRollTimeline({
       sections,
       notes,
       rows,
+      allTrackKeys: allTrackRows.map(row => row.key),
       activeTrackKey,
       lanes,
       schema,
@@ -942,6 +783,7 @@ export default function PianoRollTimeline({
     tempoCache,
     effectiveDoc,
     state.activeScope,
+    state.visibleTrackKeys,
     capabilities.showPianoRollNotes,
   ]);
 
@@ -981,6 +823,15 @@ export default function PianoRollTimeline({
     lyricSelectionRef.current = getSelectedIds(state, 'lyric');
     dirtyRef.current = true;
   }, [state]);
+
+  // -- A/B loop push: the ruler's loop band/flags read `state.loopRegion`
+  // through `editStateRef`, so a change made anywhere else (the transport's
+  // A/B buttons) needs an explicit repaint. While paused the panel is in its
+  // low-rate idle poll, so draw immediately rather than waiting for it.
+  useEffect(() => {
+    dirtyRef.current = true;
+    drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+  }, [state.loopRegion, audioManager]);
 
   // -- Hover push (shared with the highway; note + lyric kinds) --------------
   useEffect(() => {
@@ -1055,13 +906,7 @@ export default function PianoRollTimeline({
     const tempoTop = lyricsTop + lyricsH;
     const laneTop = tempoTop + TEMPO_H;
     const rowLayout =
-      stacked && scene
-        ? stackedRowGeometry(
-            scene,
-            laneTop,
-            editStateRef.current.visibleTrackKeys,
-          )
-        : null;
+      stacked && scene ? stackedRowGeometry(scene, laneTop) : null;
     const laneBottom = rowLayout ? laneTop + rowLayout.height : h - WAVE_ROW_H;
     const laneCount = Math.max(1, scene?.lanes.length ?? 1);
     const laneH = (laneBottom - laneTop) / laneCount;
@@ -1074,7 +919,6 @@ export default function PianoRollTimeline({
     if (showNotes) {
       if (rowLayout && scene) {
         for (const row of rowLayout.rows) {
-          if (!row.visible) continue;
           for (let lane = 0; lane < row.row.lanes.length; lane++) {
             ctx.fillStyle = lane % 2 ? COLORS.laneAlt : COLORS.laneBg;
             ctx.fillRect(
@@ -1100,7 +944,6 @@ export default function PianoRollTimeline({
       if (showNotes) {
         if (rowLayout) {
           for (const row of rowLayout.rows) {
-            if (!row.visible) continue;
             const rowScene = sceneForTrackRow(scene, row.row);
             const rowSelection = new Set(
               localNoteIdsForTrack(selection, row.row.key),
@@ -1218,6 +1061,9 @@ export default function PianoRollTimeline({
         scene,
         laneBottom,
         sectionDragRef.current,
+        // A live flag drag previews from its own region so the band tracks
+        // the pointer without a dispatch per pointer-move.
+        loopDragRef.current?.region ?? editStateRef.current.loopRegion,
       );
 
       const tempoDrag = tempoDragRef.current;
@@ -1310,11 +1156,7 @@ export default function PianoRollTimeline({
         return viewportHeight;
       }
       const laneTop = RULER_H + lyricsRowHeight(currentScene) + TEMPO_H;
-      const {height} = stackedRowGeometry(
-        currentScene,
-        laneTop,
-        editStateRef.current.visibleTrackKeys,
-      );
+      const {height} = stackedRowGeometry(currentScene, laneTop);
       return height + laneTop + WAVE_ROW_H;
     },
     [],
@@ -1546,18 +1388,14 @@ export default function PianoRollTimeline({
       stackedPianoRollRef.current && (currentScene?.rows.length ?? 0) > 1;
     const stackedRows =
       stacked && currentScene
-        ? stackedRowGeometry(
-            currentScene,
-            laneTop,
-            editStateRef.current.visibleTrackKeys,
-          )
+        ? stackedRowGeometry(currentScene, laneTop)
         : null;
     const laneBottom = stackedRows
       ? laneTop + stackedRows.height
       : h - WAVE_ROW_H;
     const laneCount = Math.max(1, currentScene?.lanes.length ?? 1);
     const laneH = stackedRows
-      ? (stackedRows.rows.find(row => row.visible)?.laneH ?? STACKED_LANE_H)
+      ? (stackedRows.rows[0]?.laneH ?? STACKED_LANE_H)
       : (laneBottom - laneTop) / laneCount;
     return {
       w,
@@ -1606,10 +1444,7 @@ export default function PianoRollTimeline({
     (y: number): TrackRowGeometry | null => {
       const g = panelGeometry();
       if (!g.stacked) return null;
-      return (
-        g.rows.find(row => row.visible && y >= row.laneTop && y < row.bottom) ??
-        null
-      );
+      return g.rows.find(row => y >= row.laneTop && y < row.bottom) ?? null;
     },
     [panelGeometry],
   );
@@ -1912,6 +1747,20 @@ export default function PianoRollTimeline({
         canvas.setPointerCapture(e.pointerId);
         viewRef.current.follow = false;
         if (y <= RULER_H) {
+          // Loop flags first: they render on top of the section flags, so
+          // they win the pointer where the two overlap.
+          const loopRegion = editStateRef.current.loopRegion;
+          const loopFlag = pickLoopFlagAt(loopRegion, viewRef.current, x);
+          if (loopRegion && loopFlag) {
+            pointerModeRef.current = 'loop';
+            pointerStartRef.current = {x, y};
+            loopDragRef.current = {
+              kind: loopFlag,
+              region: loopRegion,
+              moved: false,
+            };
+            return;
+          }
           const hit = hitSection(
             canvasRef.current ?? canvas,
             x,
@@ -2247,6 +2096,24 @@ export default function PianoRollTimeline({
         return;
       }
 
+      // Live loop-flag drag: continuous ms (a playback range, not a chart
+      // entity), clamped by `moveLoopEdge` so the edges keep their order.
+      if (mode === 'loop' && loopDragRef.current) {
+        const drag = loopDragRef.current;
+        const start = pointerStartRef.current;
+        const dx = start ? x - start.x : 0;
+        if (!drag.moved && !exceedsDragThreshold(dx, 0)) return;
+        const region = moveLoopEdge(
+          drag.region,
+          drag.kind,
+          xToMs(x, viewRef.current),
+        );
+        loopDragRef.current = {...drag, region, moved: true};
+        dirtyRef.current = true;
+        drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+        return;
+      }
+
       // Live section-flag drag (§6): absolute grid-snap (not delta-snap —
       // mirrors the highway's `screenToTick(x, y, w, h, gridDivision)`, the
       // same snap a section marker drag uses there).
@@ -2304,10 +2171,9 @@ export default function PianoRollTimeline({
         return;
       }
 
-      // Live lyric-chip drag (plan 0063 Part D §2): NO grid snap — the tick
-      // tracks the pointer continuously, clamped to the chip's owning phrase
-      // (mirrors `moveLyric`'s clamp, and the highway's `useMarkerDrag`
-      // bounds for the `lyric` kind).
+      // Live lyric-chip drag: NO grid snap — the tick tracks the pointer
+      // continuously, clamped to the chip's owning phrase (the same bound
+      // `moveLyric` enforces).
       if (mode === 'lyric' && lyricDragRef.current) {
         const drag = lyricDragRef.current;
         const start = pointerStartRef.current;
@@ -2569,10 +2435,22 @@ export default function PianoRollTimeline({
         // A section flag under the cursor is both click-to-seek and
         // draggable (§6) — `grab` signals the latter; elsewhere in the
         // scrub zones it's a plain seek target.
+        const overLoopFlag =
+          y <= RULER_H &&
+          pickLoopFlagAt(
+            editStateRef.current.loopRegion,
+            viewRef.current,
+            x,
+          ) !== null;
         const overSection =
+          !overLoopFlag &&
           y <= RULER_H &&
           hitSection(canvasRef.current ?? canvas, x, viewRef.current, scene);
-        canvas.style.cursor = overSection ? 'grab' : 'pointer';
+        canvas.style.cursor = overLoopFlag
+          ? 'ew-resize'
+          : overSection
+            ? 'grab'
+            : 'pointer';
         clearMarkerHover();
         setGhost(null);
         if (hoverIdRef.current !== null || lyricHoverIdRef.current !== null) {
@@ -2826,6 +2704,19 @@ export default function PianoRollTimeline({
         }
       }
 
+      // Commit a loop-flag drag. The loop is transport state, not chart
+      // content, so it dispatches rather than going through the undo stack —
+      // the same `SET_LOOP_REGION` the transport's A/B buttons dispatch. A
+      // click that never passed the drag threshold leaves the loop alone
+      // (grabbing a flag is not a seek).
+      if (mode === 'loop' && loopDragRef.current) {
+        const drag = loopDragRef.current;
+        if (drag.moved) {
+          dispatch({type: 'SET_LOOP_REGION', region: drag.region});
+        }
+        loopDragRef.current = null;
+      }
+
       // Commit (or resolve as a click) a section-flag drag (§6): a real drag
       // issues the shared `MoveEntitiesCommand('section', ...)` — the exact
       // command the highway's own section-marker drag uses — grid-snapped;
@@ -2940,6 +2831,7 @@ export default function PianoRollTimeline({
       tempoDragRef.current = null;
       tempoBaseDocRef.current = null;
       sectionDragRef.current = null;
+      loopDragRef.current = null;
       lyricDragRef.current = null;
       phraseEdgeDragRef.current = null;
       marqueeRef.current = null;
@@ -2969,17 +2861,20 @@ export default function PianoRollTimeline({
       setMenu({
         x,
         y,
-        items: currentScene.rows.map(row => {
+        // Every chartable track, not just the ones currently listed in the
+        // stacked view — otherwise a track hidden via this same menu could
+        // never be checked back on from here.
+        items: currentScene.allTrackKeys.map(key => {
           const visible = editStateRef.current.visibleTrackKeys.has(
-            trackKeyId(row.key),
+            trackKeyId(key),
           );
           return {
-            label: `${row.key.instrument} · ${row.key.difficulty}`,
+            label: `${key.instrument} · ${key.difficulty}`,
             checked: visible,
             onSelect: () =>
               dispatch({
                 type: 'SET_TRACK_VISIBILITY',
-                track: row.key,
+                track: key,
                 visible: !visible,
               }),
           };
@@ -3187,6 +3082,57 @@ export default function PianoRollTimeline({
     [dispatch, executeCommand],
   );
 
+  /** "Insert note" for the note-lane menu: places a zero-length note on the
+   *  right-clicked lane at the pointer's grid-snapped tick. Lane → note type
+   *  goes through the same `prospectiveNoteAt` the place tool's ghost uses,
+   *  and it commits the same `AddNoteCommand`, so a menu insert and a place-
+   *  tool click are the same undo step to the stack. Returns null on a
+   *  surface that can't add notes, or when the pointer isn't over a lane —
+   *  including a null `geo`, which is how the stacked layout reports "this y
+   *  is between rows, not inside one". */
+  const buildInsertNoteItem = useCallback(
+    (
+      x: number,
+      y: number,
+      noteScene: ChartScene,
+      geo: LaneGeometry | null,
+      trackKey: TrackKey | null,
+    ): MenuItem | null => {
+      if (
+        !capabilities.showEditingControls ||
+        !capabilities.editableEntities.has('note') ||
+        !noteScene.schema ||
+        !trackKey ||
+        !geo
+      ) {
+        return null;
+      }
+      const lane = laneAtY(y, geo);
+      if (lane === null) return null;
+      const schema = noteScene.schema;
+      // Clamped like the section/tempo add paths: the view can pan left of 0.
+      const tick = Math.max(0, snappedTickAt(x));
+      const prospective = prospectiveNoteAt(lane, tick, schema);
+      return {
+        label: 'Insert note',
+        onSelect: () =>
+          executeCommand(
+            new AddNoteCommand(
+              {
+                tick: prospective.tick,
+                type: prospective.type,
+                length: 0,
+                flags: prospective.flags,
+              },
+              trackKey,
+              schema,
+            ),
+          ),
+      };
+    },
+    [capabilities, executeCommand, snappedTickAt],
+  );
+
   // Waveform-source picker menu (§11): radio-style list of the project's audio
   // sources, current one checked. Shared by the waveform-row right-click and
   // the corner chip.
@@ -3263,6 +3209,31 @@ export default function PianoRollTimeline({
       }
       // Clamped like the section drag path: the view can pan left of tick 0.
       const tick = Math.max(0, snappedTickAt(x));
+      const positionMs = tickToMs(tick, scene.timedTempos, scene.resolution);
+      const loopRegion = editStateRef.current.loopRegion;
+      // The A/B rule (`loopStartRegionAt`/`loopEndRegionAt`) at the
+      // right-clicked position rather than the playhead — with no start set
+      // yet, this offers "start" (which auto-places an end); once a start
+      // exists, it offers "end" to place the matching marker. "Clear loop"
+      // stays on the shaded band's own menu (`buildLoopMenu`).
+      const loopItem: MenuItem =
+        loopRegion === null
+          ? {
+              label: 'Set repeat loop start',
+              onSelect: () =>
+                dispatch({
+                  type: 'SET_LOOP_REGION',
+                  region: loopStartRegionAt(positionMs, loopRegion),
+                }),
+            }
+          : {
+              label: 'Set repeat loop end',
+              onSelect: () =>
+                dispatch({
+                  type: 'SET_LOOP_REGION',
+                  region: loopEndRegionAt(positionMs, loopRegion),
+                }),
+            };
       return [
         {
           label: 'Add section here',
@@ -3274,9 +3245,36 @@ export default function PianoRollTimeline({
               }
             }),
         },
+        loopItem,
       ];
     },
-    [capabilities, executeCommand, openInlineTextEditor, snappedTickAt],
+    [
+      capabilities,
+      dispatch,
+      executeCommand,
+      openInlineTextEditor,
+      snappedTickAt,
+    ],
+  );
+
+  /** "Clear loop" for a right-click inside the A/B loop's shaded band.
+   *  Returns [] outside the band, so the ruler falls through to its section
+   *  menu. */
+  const buildLoopMenu = useCallback(
+    (x: number): MenuItem[] => {
+      if (
+        !isInsideLoopShade(editStateRef.current.loopRegion, viewRef.current, x)
+      ) {
+        return [];
+      }
+      return [
+        {
+          label: 'Clear loop',
+          onSelect: () => dispatch({type: 'SET_LOOP_REGION', region: null}),
+        },
+      ];
+    },
+    [dispatch],
   );
 
   /** Build the lyrics row's context menu (Round 2 §2): a chip's edit/delete,
@@ -3402,7 +3400,20 @@ export default function PianoRollTimeline({
       // (0..RULER_H) and would otherwise fall through to the tempo lane's
       // broader `y < g.laneTop` check below.
       if (y <= RULER_H) {
-        const items = buildSectionMenu(x, y, scene);
+        // The loop band's "Clear loop" wins inside the shading, except on a
+        // section flag — a flag's own rename/delete is the more specific
+        // target and would otherwise be unreachable inside a loop.
+        const onSectionFlag =
+          hitSection(
+            canvasRef.current ?? e.currentTarget,
+            x,
+            viewRef.current,
+            scene,
+          ) !== null;
+        const loopItems = onSectionFlag ? [] : buildLoopMenu(x);
+        const items = loopItems.length
+          ? loopItems
+          : buildSectionMenu(x, y, scene);
         setMenu(items.length ? {x: menuX, y: menuY, items} : null);
         return;
       }
@@ -3437,32 +3448,51 @@ export default function PianoRollTimeline({
       // which the read-only preview contract forbids editing.
       const row = stacked ? stackedRowAtY(y) : null;
       const hit = pickAt(x, y);
-      if (
-        !hit ||
-        !capabilities.selectable.has('note') ||
-        isStructuralPreview(editStateRef.current)
-      ) {
+      if (isStructuralPreview(editStateRef.current)) {
         setMenu(null);
         return;
       }
       const noteScene = row ? sceneForTrackRow(scene, row.row) : scene;
-      setMenu({
-        x: menuX,
-        y: menuY,
-        items: buildNoteMenu(
-          noteScene,
-          hit,
-          row?.row.key ?? trackKeyFromScope(editStateRef.current.activeScope),
-        ),
-      });
+      const noteTrackKey =
+        row?.row.key ?? trackKeyFromScope(editStateRef.current.activeScope);
+      const items: MenuItem[] = [];
+      if (hit && capabilities.selectable.has('note')) {
+        items.push(...buildNoteMenu(noteScene, hit, noteTrackKey));
+      }
+      // Same geometry the place tool resolves for a pointerdown, including
+      // its `stacked && !row` bail: in the stacked layout a y that lands in a
+      // row's header strip belongs to no row, and
+      // the single-track lane geometry would map it to an unrelated lane on
+      // the active-scope track.
+      const insertGeo: LaneGeometry | null = row
+        ? {
+            laneTop: row.laneTop,
+            laneH: row.laneH,
+            laneCount: row.row.lanes.length,
+          }
+        : stacked
+          ? null
+          : laneGeometry();
+      const insert = buildInsertNoteItem(
+        x,
+        y,
+        noteScene,
+        insertGeo,
+        noteTrackKey ?? null,
+      );
+      if (insert) items.push(insert);
+      setMenu(items.length ? {x: menuX, y: menuY, items} : null);
     },
     [
+      buildInsertNoteItem,
+      buildLoopMenu,
       buildLyricsMenu,
       buildNoteMenu,
       buildSectionMenu,
       buildSourceMenu,
       buildTempoMenu,
       capabilities,
+      laneGeometry,
       openStackedViewMenu,
       panelGeometry,
       pickAt,
@@ -3487,6 +3517,7 @@ export default function PianoRollTimeline({
     tempoDragRef.current = null;
     tempoBaseDocRef.current = null;
     sectionDragRef.current = null;
+    loopDragRef.current = null;
     lyricDragRef.current = null;
     phraseEdgeDragRef.current = null;
     pointerStartRef.current = null;
@@ -3661,11 +3692,7 @@ export default function PianoRollTimeline({
   const stackedLayout = stackedPianoRoll && (scene?.rows.length ?? 0) > 1;
   const stackedSharedHeight = RULER_H + lyricsRowHeight(scene) + TEMPO_H;
   const stackedRowsHeight = stackedLayout
-    ? Math.max(
-        0,
-        stackedRowGeometry(scene!, stackedSharedHeight, state.visibleTrackKeys)
-          .height,
-      )
+    ? Math.max(0, stackedRowGeometry(scene!, stackedSharedHeight).height)
     : 0;
 
   return (
@@ -3682,12 +3709,22 @@ export default function PianoRollTimeline({
         aria-valuemin={MIN_PANEL_HEIGHT}
         aria-valuemax={MAX_PANEL_HEIGHT}
         title="Drag to resize"
-        className="h-1.5 shrink-0 cursor-row-resize bg-[color:var(--ed-surface-hover,theme(colors.border/70%))] transition-colors hover:bg-accent"
+        className="group flex h-2.5 shrink-0 cursor-row-resize items-center justify-center gap-[3px] bg-[color:var(--ed-surface-hover,theme(colors.border/70%))] transition-colors hover:bg-accent"
         onPointerDown={handleResizePointerDown}
         onPointerMove={handleResizePointerMove}
         onPointerUp={endResizeDrag}
-        onPointerCancel={endResizeDrag}
-      />
+        onPointerCancel={endResizeDrag}>
+        {/* Centered three-dot grip so the bar reads as draggable at a glance.
+            Purely decorative — the separator itself carries the accessible
+            name and the drag handlers. */}
+        {[0, 1, 2].map(i => (
+          <span
+            key={i}
+            aria-hidden="true"
+            className="size-[3px] rounded-full bg-muted-foreground/60 transition-colors group-hover:bg-foreground"
+          />
+        ))}
+      </div>
       <div
         ref={containerRef}
         className={cn(
@@ -3711,7 +3748,7 @@ export default function PianoRollTimeline({
             />
             <div
               ref={stackedRowsScrollRef}
-              className="min-h-0 flex-1 overflow-auto"
+              className="no-scrollbar min-h-0 flex-1 overflow-auto"
               onWheelCapture={handleWheel}>
               <canvas
                 ref={stackedRowsCanvasRef}
@@ -3772,8 +3809,8 @@ export default function PianoRollTimeline({
             }}>
             <span className="rounded bg-popover/90 px-2 py-0.5 text-popover-foreground shadow-sm">
               {structuralOp === 're-predict'
-                ? 'Re-predicted tempo — preview'
-                : 'Re-snapped (no audio onsets) — preview'}
+                ? 'Re-predicted tempo (preview)'
+                : 'Re-snapped, no audio onsets (preview)'}
             </span>
             <button
               type="button"
@@ -3852,806 +3889,6 @@ function hitSection(
     if (x >= fx - 3 && x <= fx + labelW + 12) return s;
   }
   return null;
-}
-
-// ---------------------------------------------------------------------------
-// Drawing bands
-// ---------------------------------------------------------------------------
-
-function drawGrid(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  laneTop: number,
-  laneBottom: number,
-  view: PianoRollView,
-  scene: ChartScene,
-): void {
-  const [msA, msB] = visibleMsRange(view, w);
-  const beats = scene.beats;
-  // Visible beat window.
-  let a = 0;
-  while (a < beats.length && beats[a].ms < msA - 50) a++;
-  let b = beats.length - 1;
-  while (b > a && beats[b].ms > msB + 50) b--;
-  const visibleCount = Math.max(1, b - a);
-  const avgBeatPx = w / visibleCount;
-
-  ctx.lineWidth = 1;
-  for (let i = a; i <= b && i < beats.length; i++) {
-    const beat = beats[i];
-    const x = Math.round(msToX(beat.ms, view)) + 0.5;
-    if (beat.isDownbeat) {
-      ctx.strokeStyle = COLORS.gridBar;
-      ctx.beginPath();
-      ctx.moveTo(x, RULER_H);
-      ctx.lineTo(x, laneBottom);
-      ctx.stroke();
-      ctx.strokeStyle = COLORS.gridSub;
-      ctx.beginPath();
-      ctx.moveTo(x, laneBottom);
-      ctx.lineTo(x, h);
-      ctx.stroke();
-    } else if (avgBeatPx > 10) {
-      ctx.strokeStyle = COLORS.gridBeat;
-      ctx.beginPath();
-      ctx.moveTo(x, laneTop);
-      ctx.lineTo(x, laneBottom);
-      ctx.stroke();
-    }
-    // Subdivisions appear progressively with zoom.
-    if (i + 1 < beats.length && avgBeatPx > 46) {
-      const per = avgBeatPx > 110 ? 4 : 2;
-      ctx.strokeStyle = COLORS.gridSub;
-      const beatMs = beat.ms;
-      const nextMs = beats[i + 1].ms;
-      for (let s = 1; s < per; s++) {
-        const sx =
-          Math.round(msToX(beatMs + ((nextMs - beatMs) * s) / per, view)) + 0.5;
-        ctx.beginPath();
-        ctx.moveTo(sx, laneTop);
-        ctx.lineTo(sx, laneBottom);
-        ctx.stroke();
-      }
-    }
-  }
-}
-
-function drawNotes(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  laneTop: number,
-  laneH: number,
-  view: PianoRollView,
-  scene: ChartScene,
-  selection: ReadonlySet<string>,
-  hoverId: string | null,
-  drag: PanelNoteDrag | null,
-  resize: PanelNoteResize | null,
-  place: PanelPlaceNote | null,
-  ghost: ProspectiveNote | null,
-): void {
-  const [msA, msB] = visibleMsRange(view, w);
-  const nh = Math.min(laneH - 6, 13);
-  // Local ms-per-tick near the viewport center for glyph sizing.
-  const centerMs = (msA + msB) / 2;
-  const centerTick = msToTick(centerMs, scene.timedTempos, scene.resolution);
-  const msPerTick =
-    (tickToMs(
-      centerTick + scene.resolution,
-      scene.timedTempos,
-      scene.resolution,
-    ) -
-      tickToMs(centerTick, scene.timedTempos, scene.resolution)) /
-    scene.resolution;
-  const nw = glyphWidth({
-    gridStepTicks: scene.resolution / 4,
-    msPerTick,
-    pxPerMs: view.pxPerMs,
-    glyphHeight: nh,
-  });
-  const guitarBass = isGuitarBassSchema(scene.schema);
-
-  // One glyph painter (triangle for cymbals, rounded rect for kick/tom) so the
-  // ghost preview is pixel-identical to a real note at the same size.
-  const paintGlyph = (gx: number, gcy: number, isCymbal: boolean): void => {
-    if (isCymbal) {
-      ctx.beginPath();
-      ctx.moveTo(gx, gcy - nh * 0.62);
-      ctx.lineTo(gx + nw * 0.6, gcy + nh * 0.5);
-      ctx.lineTo(gx - nw * 0.6, gcy + nh * 0.5);
-      ctx.closePath();
-      ctx.fill();
-    } else {
-      roundRect(ctx, gx - nw / 2, gcy - nh / 2, nw, nh, Math.min(2.5, nw / 3));
-      ctx.fill();
-    }
-  };
-
-  const paintFretGlyph = (
-    gx: number,
-    gcy: number,
-    technique: FretTechnique,
-    open: boolean,
-    color: string,
-  ): void => {
-    const glyphW = open ? Math.max(nw * 1.35, nh * 1.05) : nw;
-    if (technique === 'tap') {
-      ctx.beginPath();
-      ctx.moveTo(gx, gcy - nh * 0.68);
-      ctx.lineTo(gx + glyphW * 0.58, gcy);
-      ctx.lineTo(gx, gcy + nh * 0.68);
-      ctx.lineTo(gx - glyphW * 0.58, gcy);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      ctx.beginPath();
-      ctx.arc(gx, gcy, Math.max(1.5, nh * 0.16), 0, Math.PI * 2);
-      ctx.fill();
-      return;
-    }
-    if (technique === 'hopo') {
-      roundRect(
-        ctx,
-        gx - glyphW / 2,
-        gcy - nh / 2,
-        glyphW,
-        nh,
-        Math.min(3, glyphW / 3),
-      );
-      ctx.fillStyle = 'rgba(14,18,28,0.85)';
-      ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = Math.max(1.25, nh * 0.14);
-      ctx.stroke();
-      return;
-    }
-    roundRect(
-      ctx,
-      gx - glyphW / 2,
-      gcy - nh / 2,
-      glyphW,
-      nh,
-      Math.min(3, glyphW / 3),
-    );
-    ctx.fill();
-    if (technique === 'strum') {
-      ctx.fillStyle = 'rgba(255,255,255,0.72)';
-      ctx.fillRect(
-        gx - Math.min(1, glyphW / 8),
-        gcy - nh * 0.34,
-        Math.min(2, glyphW / 4),
-        nh * 0.68,
-      );
-    }
-  };
-
-  const paintFretSustain = (
-    startX: number,
-    endX: number,
-    centerY: number,
-    color: string,
-  ): void => {
-    const sustainHeight = Math.max(6, nh * 0.76);
-    ctx.fillStyle = color;
-    roundRect(
-      ctx,
-      startX,
-      centerY - sustainHeight / 2,
-      Math.max(2, endX - startX),
-      sustainHeight,
-      Math.min(3, sustainHeight / 3),
-    );
-    ctx.fill();
-  };
-
-  const dragActive = drag?.active === true;
-  const halfW = Math.max(nw, nh) / 2 + 2.5;
-  const visibleNotes: Array<{
-    note: PianoRollNote;
-    lane: number;
-    cymbal: boolean;
-    length: number;
-    ms: number;
-    endMs: number;
-    x: number;
-    cy: number;
-    technique: FretTechnique;
-    selected: boolean;
-  }> = [];
-  for (const note of scene.notes) {
-    const selected = selection.has(note.id);
-    // Drag preview: selected notes render at their would-be drop position.
-    let lane = note.lane;
-    let tick = note.tick;
-    let cymbal = note.cymbal;
-    let length = guitarBass ? Math.max(0, note.length ?? 0) : 0;
-    if (dragActive && selected) {
-      tick = Math.max(0, note.tick + drag.tickDelta);
-      const {min: minPadLane, max: maxPadLane} = padLaneRange(
-        scene.schema ?? drums4LaneSchema,
-      );
-      const isPad = note.lane >= minPadLane && note.lane <= maxPadLane;
-      if (drag.laneDelta !== 0 && isPad) {
-        lane = Math.max(
-          minPadLane,
-          Math.min(maxPadLane, note.lane + drag.laneDelta),
-        );
-      }
-      // Would-be drop on an illegal lane renders as a tom (§6 affordance).
-      cymbal = cymbal && !!scene.lanes[lane]?.cymbalOk;
-    }
-    const ms = tickToMs(tick, scene.timedTempos, scene.resolution);
-    if (resize?.active) {
-      const resizeDelta = resize.currentLength - resize.originalLength;
-      if (selected) length = Math.max(0, length + resizeDelta);
-    }
-    if (resize?.noteId === note.id && resize.active)
-      length = resize.currentLength;
-    const endMs = guitarBass
-      ? tickToMs(tick + length, scene.timedTempos, scene.resolution)
-      : ms;
-    if (
-      !noteIntersectsPianoRollWindow(ms, endMs, msA, msB) &&
-      !(dragActive && selected)
-    ) {
-      continue;
-    }
-    if (ms > msB + 50 && !(dragActive && selected)) {
-      // Notes are tick-sorted, so when nothing is dragging nothing later is
-      // visible; during a drag a selected note may be shifted off-window so
-      // we keep scanning.
-      if (!dragActive) break;
-      continue;
-    }
-    const x = msToX(ms, view);
-    const cy = laneTop + lane * laneH + laneH / 2;
-    const technique = techniqueForFlags(note.flags ?? 0);
-    visibleNotes.push({
-      note,
-      lane,
-      cymbal,
-      length,
-      ms,
-      endMs,
-      x,
-      cy,
-      technique,
-      selected,
-    });
-  }
-
-  // Paint every sustain before any note head. A long tail may overlap the
-  // head-time window of a later note, but it must never cover that note.
-  if (guitarBass) {
-    for (const rendered of visibleNotes) {
-      if (rendered.length <= 0) continue;
-      const endX = msToX(rendered.endMs, view);
-      const tailLeft = rendered.x + nw / 2;
-      ctx.globalAlpha = rendered.selected ? 0.9 : 0.78;
-      paintFretSustain(
-        tailLeft,
-        endX,
-        rendered.cy,
-        scene.lanes[rendered.lane]?.color ?? COLORS.laneLabel,
-      );
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  // Heads and their interaction affordances are painted after all tails.
-  for (const rendered of visibleNotes) {
-    const {note, lane, cymbal, x, cy, technique, selected} = rendered;
-    if (selected) {
-      ctx.fillStyle = 'rgba(255,255,255,0.92)';
-      roundRect(ctx, x - halfW, cy - nh / 2 - 2.5, halfW * 2, nh + 5, 3);
-      ctx.fill();
-    } else if (note.id === hoverId) {
-      ctx.fillStyle = OVERLAY_COLORS.hoverHalo;
-      roundRect(ctx, x - halfW, cy - nh / 2 - 2.5, halfW * 2, nh + 5, 3);
-      ctx.fill();
-    }
-    ctx.fillStyle = scene.lanes[lane]?.color ?? COLORS.laneLabel;
-    if (guitarBass) {
-      paintFretGlyph(
-        x,
-        cy,
-        technique,
-        lane === 0,
-        scene.lanes[lane]?.color ?? COLORS.laneLabel,
-      );
-    } else {
-      paintGlyph(x, cy, cymbal);
-    }
-
-    if (
-      rendered.length > 0 &&
-      (selected || note.id === hoverId || resize?.noteId === note.id)
-    ) {
-      const endX = msToX(rendered.endMs, view);
-      ctx.globalAlpha = 0.95;
-      ctx.fillRect(endX - 1, cy - nh * 0.42, 2, nh * 0.84);
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  // Add-mode ghost: the note a click would place, drawn semi-transparent on
-  // the hovered lane at the snapped tick. Never hit-tested (it's paint only).
-  if (ghost) {
-    const gms = tickToMs(ghost.tick, scene.timedTempos, scene.resolution);
-    const gx = msToX(gms, view);
-    const gcy = laneTop + ghost.lane * laneH + laneH / 2;
-    if (gx >= -halfW && gx <= w + halfW) {
-      if (guitarBass && place?.active) {
-        const length = Math.max(0, place.currentTick - place.startTick);
-        if (length > 0) {
-          const endX = msToX(
-            tickToMs(
-              place.startTick + length,
-              scene.timedTempos,
-              scene.resolution,
-            ),
-            view,
-          );
-          ctx.globalAlpha = 0.35;
-          paintFretSustain(
-            gx + nw / 2,
-            endX,
-            gcy,
-            scene.lanes[ghost.lane]?.color ?? COLORS.laneLabel,
-          );
-          ctx.globalAlpha = 1;
-        }
-      }
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = scene.lanes[ghost.lane]?.color ?? COLORS.laneLabel;
-      if (guitarBass) {
-        const ghostTechnique = techniqueForFlags(ghost.flags);
-        paintFretGlyph(
-          gx,
-          gcy,
-          ghostTechnique,
-          ghost.lane === 0,
-          scene.lanes[ghost.lane]?.color ?? COLORS.laneLabel,
-        );
-      } else {
-        paintGlyph(gx, gcy, ghost.cymbal);
-      }
-      ctx.globalAlpha = 1;
-    }
-  }
-}
-
-function drawTempoLane(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  view: PianoRollView,
-  scene: ChartScene,
-  hoverMarker: number,
-  tempoDrag: TempoMarkerDrag | null,
-  top: number,
-): void {
-  ctx.fillStyle = COLORS.tempoBg;
-  ctx.fillRect(0, top, w, TEMPO_H);
-  ctx.strokeStyle = COLORS.gridBeat;
-  ctx.beginPath();
-  ctx.moveTo(0, top + TEMPO_H + 0.5);
-  ctx.lineTo(w, top + TEMPO_H + 0.5);
-  ctx.stroke();
-
-  const cy = top + TEMPO_H * 0.62;
-  ctx.font = '600 9.5px ui-monospace, Menlo, monospace';
-  for (let k = 0; k < scene.tempos.length; k++) {
-    const marker = scene.tempos[k];
-    const x = msToX(marker.ms, view);
-    if (x < -60 || x > w + 20) continue;
-    // Marker 0 (song-start anchor) is never a drag/hover target.
-    const hot = k > 0 && (hoverMarker === k || tempoDrag?.index === k);
-    if (hot) {
-      ctx.fillStyle = 'rgba(122,184,255,0.25)';
-      ctx.beginPath();
-      ctx.arc(x, cy, 9, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.fillStyle = hot ? COLORS.tempoNodeHot : COLORS.tempoNode;
-    ctx.beginPath();
-    ctx.moveTo(x, cy - 5.5);
-    ctx.lineTo(x + 5, cy);
-    ctx.lineTo(x, cy + 5.5);
-    ctx.lineTo(x - 5, cy);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = COLORS.tempoInk;
-    ctx.fillText(marker.bpm.toFixed(1), x + 8, cy + 3.5);
-  }
-
-  // Time-signature chips at each meter change.
-  ctx.font = '700 9.5px system-ui, sans-serif';
-  let prevLabel = '';
-  for (const ts of scene.timeSignatures) {
-    if (ts.label === prevLabel) continue;
-    prevLabel = ts.label;
-    const x = msToX(ts.ms, view);
-    if (x < -50 || x > w + 10) continue;
-    const tw = ctx.measureText(ts.label).width;
-    ctx.fillStyle = 'rgba(122,184,255,0.16)';
-    roundRect(ctx, x + 3, top + 2, tw + 8, 12, 3);
-    ctx.fill();
-    ctx.fillStyle = COLORS.tempoInk;
-    ctx.fillText(ts.label, x + 7, top + 11.5);
-  }
-}
-
-/**
- * Lyrics row (plan 0063 Part D; Round 2 §2/§3/§5): an optional faint vocals
- * waveform (behind everything else), a background band per vocal phrase
- * (line structure at a glance, live-adjusted for an in-flight phrase-edge
- * drag), and a small pill per syllable, showing its text. A chip mid-drag
- * renders at its live (unsnapped) tick; a dashed ghost line marks either the
- * drag's original tick or (when idle) the hovered chip's tick, so the grab
- * point is visible before a drag even starts — the same ghost-line
- * convention the tempo-marker and section-flag drags use elsewhere in this
- * file. `widthsOut` is populated with each chip's measured pill width so
- * `pickLyricChipAt` can hit-test the SAME rect that's painted here.
- */
-function drawLyricsRow(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  view: PianoRollView,
-  scene: ChartScene,
-  top: number,
-  height: number,
-  selection: ReadonlySet<string>,
-  hoverId: string | null,
-  drag: LyricDrag | null,
-  ghostTick: number | null,
-  widthsOut: Map<string, number>,
-  vocalsWave: AmpPyramid | null,
-  phraseEdgeDrag: PhraseEdgeDrag | null,
-  /** Tick delta from an active NOTE-anchored drag (mode 'drag'), so
-   *  co-selected lyrics preview moving together with the notes rather than
-   *  only snapping into place when the note drag commits. Null when no
-   *  note drag is active; ignored when `drag` (a lyric-anchored drag) is
-   *  active — that one already carries its own per-chip deltas below. */
-  noteDragTickDelta: number | null,
-): void {
-  widthsOut.clear();
-
-  ctx.fillStyle = COLORS.lyricsBg;
-  ctx.fillRect(0, top, w, height);
-
-  if (vocalsWave && vocalsWave.levels.length > 0) {
-    drawWave(
-      ctx,
-      w,
-      top,
-      top + height,
-      view,
-      vocalsWave,
-      COLORS.lyricWave,
-      0.35,
-    );
-  }
-
-  ctx.strokeStyle = COLORS.gridBeat;
-  ctx.beginPath();
-  ctx.moveTo(0, top + height + 0.5);
-  ctx.lineTo(w, top + height + 0.5);
-  ctx.stroke();
-
-  for (const band of scene.lyricBands) {
-    // Live-preview a phrase-edge drag: the dragged edge renders at its
-    // current (unsnapped) tick rather than the band's static bound, so the
-    // band visibly grows/shrinks under the pointer during the resize.
-    let bandMs = band.ms;
-    let bandMsEnd = band.msEnd;
-    if (phraseEdgeDrag) {
-      if (
-        phraseEdgeDrag.kind === 'phrase-start' &&
-        band.tick === phraseEdgeDrag.originalTick
-      ) {
-        bandMs = tickToMs(
-          phraseEdgeDrag.currentTick,
-          scene.timedTempos,
-          scene.resolution,
-        );
-      } else if (
-        phraseEdgeDrag.kind === 'phrase-end' &&
-        band.tickEnd === phraseEdgeDrag.originalTick
-      ) {
-        bandMsEnd = tickToMs(
-          phraseEdgeDrag.currentTick,
-          scene.timedTempos,
-          scene.resolution,
-        );
-      }
-    }
-    const x0 = msToX(bandMs, view);
-    const x1 = msToX(bandMsEnd, view);
-    if (x1 < 0 || x0 > w) continue;
-    const bx = Math.max(0, x0);
-    const bw = Math.min(w, x1) - bx;
-    if (bw <= 0) continue;
-    ctx.fillStyle = COLORS.lyricBand;
-    ctx.fillRect(bx, top + 2, bw, height - 4);
-  }
-
-  // Phrase-edge drag ghost: a dashed line at the edge's original position,
-  // once the drag has actually moved past its origin.
-  if (phraseEdgeDrag && phraseEdgeDrag.moved) {
-    const gx =
-      Math.round(
-        msToX(
-          tickToMs(
-            phraseEdgeDrag.originalTick,
-            scene.timedTempos,
-            scene.resolution,
-          ),
-          view,
-        ),
-      ) + 0.5;
-    ctx.strokeStyle = COLORS.phraseEdge;
-    ctx.setLineDash([3, 3]);
-    ctx.globalAlpha = 0.6;
-    ctx.beginPath();
-    ctx.moveTo(gx, top);
-    ctx.lineTo(gx, top + height);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.globalAlpha = 1;
-  }
-
-  // Chip drag/hover ghost line (§3b): drag origin while dragging, else the
-  // hovered chip's tick.
-  if (ghostTick !== null) {
-    const gx =
-      Math.round(
-        msToX(tickToMs(ghostTick, scene.timedTempos, scene.resolution), view),
-      ) + 0.5;
-    ctx.strokeStyle = COLORS.ghost;
-    ctx.setLineDash([3, 3]);
-    ctx.globalAlpha = 0.6;
-    ctx.beginPath();
-    ctx.moveTo(gx, top);
-    ctx.lineTo(gx, top + height);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.globalAlpha = 1;
-  }
-
-  ctx.font = '600 9.5px system-ui, sans-serif';
-  for (const chip of scene.lyricChips) {
-    // The drag's own chip tracks the pointer directly; every OTHER selected
-    // chip previews riding along at the same tick delta (a lyric-anchored
-    // drag's, or a note-anchored drag's when notes+lyrics are dragged
-    // together), clamped to its own phrase — mirroring the group-move
-    // commit in `endPointer` — so a group drag visibly moves together
-    // instead of only the grabbed chip animating and the rest snapping into
-    // place on release. See `lyricChipPreviewTick`.
-    const previewTick = lyricChipPreviewTick(
-      chip,
-      selection.has(chip.id),
-      drag,
-      noteDragTickDelta,
-    );
-    const ms = tickToMs(previewTick, scene.timedTempos, scene.resolution);
-    const x = msToX(ms, view);
-    const tw = ctx.measureText(chip.text).width;
-    widthsOut.set(chip.id, tw);
-    if (x < -60 || x > w + 10) continue;
-    const selected = selection.has(chip.id);
-    const hovered = chip.id === hoverId;
-    ctx.globalAlpha = selected ? 0.42 : hovered ? 0.28 : 0.16;
-    ctx.fillStyle = COLORS.lyricChip;
-    roundRect(
-      ctx,
-      x - LYRIC_CHIP_PAD_LEFT,
-      top + 3,
-      tw + LYRIC_CHIP_PAD_LEFT + LYRIC_CHIP_PAD_RIGHT,
-      height - 6,
-      3,
-    );
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = selected ? '#f4e9ff' : COLORS.lyricChip;
-    ctx.fillText(chip.text, x + 2, top + height - 7);
-  }
-}
-
-function drawRuler(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  view: PianoRollView,
-  scene: ChartScene,
-  laneBottom: number,
-  sectionDrag: SectionDrag | null,
-): void {
-  ctx.fillStyle = COLORS.rulerBg;
-  ctx.fillRect(0, 0, w, RULER_H);
-  ctx.strokeStyle = COLORS.gridBeat;
-  ctx.beginPath();
-  ctx.moveTo(0, RULER_H + 0.5);
-  ctx.lineTo(w, RULER_H + 0.5);
-  ctx.stroke();
-
-  const bars = scene.beats.filter(b => b.isDownbeat);
-  const [msA, msB] = visibleMsRange(view, w);
-  // Average bar spacing in px over the visible window, for label thinning.
-  let visibleBars = 0;
-  for (const bar of bars)
-    if (bar.ms >= msA - 100 && bar.ms <= msB + 100) visibleBars++;
-  const avgBarPx = w / Math.max(1, visibleBars);
-  const labelEvery =
-    avgBarPx > 44 ? 1 : avgBarPx > 22 ? 2 : avgBarPx > 11 ? 4 : 8;
-
-  ctx.font = '500 10px ui-monospace, Menlo, monospace';
-  for (const bar of bars) {
-    const x = msToX(bar.ms, view);
-    if (x < -40 || x > w + 40) continue;
-    ctx.strokeStyle = COLORS.gridBar;
-    ctx.beginPath();
-    ctx.moveTo(Math.round(x) + 0.5, RULER_H - 7);
-    ctx.lineTo(Math.round(x) + 0.5, RULER_H);
-    ctx.stroke();
-    if ((bar.barNumber - 1) % labelEvery === 0) {
-      ctx.fillStyle = COLORS.rulerInk;
-      ctx.fillText(String(bar.barNumber), x + 3, RULER_H - 9);
-    }
-  }
-
-  // Section flags (colored stem + label) — click-to-seek targets, and
-  // draggable (§6): a flag being dragged renders at the pointer's
-  // grid-snapped tick with a dashed ghost line marking its original
-  // position, mirroring the tempo-marker drag's ghost.
-  ctx.font = '600 10px system-ui, sans-serif';
-  for (const s of scene.sections) {
-    const dragging =
-      sectionDrag?.moved === true && sectionDrag.originalTick === s.tick;
-    let x = msToX(s.ms, view);
-    if (dragging) {
-      const gx = Math.round(x) + 0.5;
-      ctx.strokeStyle = COLORS.ghost;
-      ctx.setLineDash([4, 4]);
-      ctx.globalAlpha = 0.6;
-      ctx.beginPath();
-      ctx.moveTo(gx, 2);
-      ctx.lineTo(gx, laneBottom);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.globalAlpha = 1;
-      x = msToX(
-        tickToMs(sectionDrag!.currentTick, scene.timedTempos, scene.resolution),
-        view,
-      );
-    }
-    if (x > w + 10) continue;
-    const tw = ctx.measureText(s.name).width;
-    if (x + tw + 14 < 0) continue;
-    ctx.fillStyle = COLORS.sectionFlag;
-    ctx.fillRect(x, 2, 2, RULER_H - 4);
-    ctx.globalAlpha = dragging ? 0.3 : 0.18;
-    ctx.fillRect(x + 2, 2, tw + 10, 12);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = COLORS.sectionFlag;
-    ctx.fillText(s.name, x + 6, 11.5);
-  }
-}
-
-function drawWave(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  top: number,
-  bottom: number,
-  view: PianoRollView,
-  pyramid: AmpPyramid,
-  color: string = COLORS.waveRow,
-  alpha: number = 0.9,
-): void {
-  if (pyramid.levels.length === 0) return;
-  const mid = (top + bottom) / 2;
-  const half = (bottom - top) / 2;
-  const STEP_PX = 2;
-  // Peaks per zoom bucket (§11 / perf pass): each screen column samples the
-  // MAX amplitude over the ms range it actually spans, from the mip-map
-  // level matching that width — not a single point-sample per column, which
-  // would drop transients between samples whenever pxPerMs makes a column
-  // wider than the base bin.
-  const sample = (x: number): number => {
-    const msA = xToMs(x, view);
-    const msB = xToMs(x + STEP_PX, view);
-    return sampleAmpRange(pyramid, msA, msB);
-  };
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(0, mid);
-  for (let x = 0; x <= w; x += STEP_PX) {
-    ctx.lineTo(x, mid - sample(x) * half * 0.92);
-  }
-  for (let x = w; x >= 0; x -= STEP_PX) {
-    ctx.lineTo(x, mid + sample(x) * half * 0.92);
-  }
-  ctx.closePath();
-  ctx.fill();
-  ctx.globalAlpha = 1;
-}
-
-function drawLaneLabels(
-  ctx: CanvasRenderingContext2D,
-  laneTop: number,
-  laneH: number,
-  lanes: PianoRollLane[],
-): void {
-  ctx.font = '600 9.5px system-ui, sans-serif';
-  for (let l = 0; l < lanes.length; l++) {
-    const y = laneTop + l * laneH;
-    ctx.fillStyle = 'rgba(13,16,23,0.72)';
-    ctx.fillRect(0, y + 2, 44, 13);
-    ctx.fillStyle = COLORS.laneLabel;
-    ctx.fillText(lanes[l].name.toUpperCase(), 5, y + 12);
-  }
-}
-
-function drawStackedGutter(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  rows: readonly TrackRowGeometry[],
-  height: number,
-): void {
-  ctx.fillStyle = COLORS.chrome;
-  ctx.fillRect(0, 0, width, height);
-  ctx.strokeStyle = COLORS.gridBeat;
-  ctx.beginPath();
-  ctx.moveTo(width - 0.5, 0);
-  ctx.lineTo(width - 0.5, height);
-  ctx.stroke();
-
-  ctx.font = '600 10px system-ui, sans-serif';
-  for (const row of rows) {
-    const instrument = rowLabel(row.row.key.instrument);
-    const difficulty = rowLabel(row.row.key.difficulty);
-    ctx.fillStyle = row.visible ? COLORS.tempoBg : COLORS.rulerBg;
-    ctx.fillRect(0, row.top, width, row.bottom - row.top);
-    ctx.strokeStyle = COLORS.gridBeat;
-    ctx.beginPath();
-    ctx.moveTo(0, row.top + 0.5);
-    ctx.lineTo(width, row.top + 0.5);
-    ctx.stroke();
-
-    ctx.fillStyle = row.visible ? COLORS.rulerInk : COLORS.laneLabel;
-    ctx.fillText(`${instrument} · ${difficulty}`, 7, row.top + 15);
-    ctx.fillStyle = row.visible ? '#7ab8ff' : COLORS.laneLabel;
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillText(row.visible ? '◉' : '○', width - 18, row.top + 15);
-    ctx.font = '600 9.5px system-ui, sans-serif';
-
-    if (!row.visible) continue;
-    for (let lane = 0; lane < row.row.lanes.length; lane++) {
-      const laneInfo = row.row.lanes[lane];
-      const y = row.laneTop + lane * row.laneH;
-      ctx.fillStyle = 'rgba(13,16,23,0.72)';
-      ctx.fillRect(4, y + 2, width - 8, Math.max(14, row.laneH - 4));
-      ctx.fillStyle = laneInfo.color || COLORS.laneLabel;
-      ctx.fillText(laneInfo.name.toUpperCase(), 9, y + 13.5);
-    }
-  }
-}
-
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
 }
 
 // Re-exported for future readout use (bar.beat position); keeps the pure

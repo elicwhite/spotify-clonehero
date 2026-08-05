@@ -248,6 +248,61 @@ describe('PianoRollTimeline section-strip context menu (item 19)', () => {
     expect(after.map(s => s.name)).not.toContain('Intro');
   });
 
+  it('offers "Set repeat loop start" on empty ruler space with no loop set, placing an auto end marker', async () => {
+    const {canvas, stateRef} = await mountPanel();
+    expect(stateRef.current?.loopRegion).toBeNull();
+
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...EMPTY_RULER, button: 2});
+    });
+    const startItem = screen.getByText('Set repeat loop start');
+    expect(startItem).toBeInTheDocument();
+    expect(screen.queryByText('Set repeat loop end')).not.toBeInTheDocument();
+
+    act(() => {
+      fireEvent.click(startItem);
+    });
+
+    const region = stateRef.current?.loopRegion;
+    expect(region).not.toBeNull();
+    expect(region!.endMs).toBeGreaterThan(region!.startMs);
+  });
+
+  it('offers "Set repeat loop end" once a start is set, at the clicked position', async () => {
+    const {canvas, stateRef} = await mountPanel();
+
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...EMPTY_RULER, button: 2});
+    });
+    act(() => {
+      fireEvent.click(screen.getByText('Set repeat loop start'));
+    });
+    const startRegion = stateRef.current?.loopRegion;
+    expect(startRegion).not.toBeNull();
+
+    // A second empty-ruler position, clear of the shaded loop band that
+    // `EMPTY_RULER`'s auto-placed end now spans — inside the band the
+    // menu is "Clear loop" (`buildLoopMenu`), not the section strip's.
+    const SECOND_POSITION = {x: 200, y: 10};
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...SECOND_POSITION, button: 2});
+    });
+    expect(screen.getByText('Set repeat loop end')).toBeInTheDocument();
+    expect(screen.queryByText('Set repeat loop start')).not.toBeInTheDocument();
+
+    act(() => {
+      fireEvent.click(screen.getByText('Set repeat loop end'));
+    });
+
+    const endRegion = stateRef.current?.loopRegion;
+    expect(endRegion).not.toBeNull();
+    expect(endRegion!.endMs).toBeGreaterThan(endRegion!.startMs);
+    // The position clicked drives the end (or, since it fell before the
+    // existing start, the clamped-forward start) — either way the region
+    // actually moved from where the first click left it.
+    expect(endRegion).not.toEqual(startRegion);
+  });
+
   it('offers no section menu at all on a read-only surface', async () => {
     // The preview viewer can't edit sections, and the session's command gate
     // would drop these edits anyway - so the ruler stays as menu-less as it
@@ -258,6 +313,7 @@ describe('PianoRollTimeline section-strip context menu (item 19)', () => {
       fireAt(canvas, 'contextmenu', {...EMPTY_RULER, button: 2});
     });
     expect(screen.queryByText('Add section here')).not.toBeInTheDocument();
+    expect(screen.queryByText('Set repeat loop start')).not.toBeInTheDocument();
 
     act(() => {
       fireAt(canvas, 'contextmenu', {...INTRO_FLAG, button: 2});

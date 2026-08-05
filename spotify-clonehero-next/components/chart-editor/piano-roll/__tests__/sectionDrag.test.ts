@@ -1,13 +1,11 @@
 /**
- * Section-drag command parity (plan 0062 §6): "sections and tempo markers
- * are draggable along the timeline." The panel does not invent a bespoke
- * section-move operation — dragging a section flag along the ruler must
- * issue the exact same `MoveEntitiesCommand('section', ...)` the highway's
- * `useMarkerDrag` already issues for a section marker drag (see
- * `highway/useMarkerDrag.ts`'s `commitMarkerDrag`). This test drives that
- * shared seam directly (grid-snapped tick delta -> command -> execute/undo)
- * without rendering either view's canvas, matching the "Two views, one
- * store" invariant: one command type + params for equivalent gestures.
+ * Sections and tempo markers are draggable along the timeline. The panel
+ * invents no bespoke section-move operation — dragging a section flag along
+ * the ruler issues the shared `MoveEntitiesCommand('section', ...)`, the same
+ * command every other surface uses to move an entity. This test drives that
+ * seam directly (grid-snapped tick delta -> command -> execute/undo) without
+ * rendering the canvas, matching the "one store, one command per gesture"
+ * invariant.
  */
 
 import {snapTickToGrid} from '@/lib/chart-edit';
@@ -15,8 +13,8 @@ import {MoveEntitiesCommand} from '../../commands';
 import {entityContextFromScope} from '../../scope';
 import {makeFixtureDoc, normalizeDoc} from '../../__tests__/fixtures';
 
-describe('section drag: command parity with the highway', () => {
-  it('issues MoveEntitiesCommand("section", [id], tickDelta, 0) — the same shape useMarkerDrag builds', () => {
+describe('section drag', () => {
+  it('issues MoveEntitiesCommand("section", [id], tickDelta, 0)', () => {
     const doc = makeFixtureDoc();
     const resolution = doc.parsedChart.resolution;
     const originalTick = 1920; // "Verse" section (see fixtures.ts)

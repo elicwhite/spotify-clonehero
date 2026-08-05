@@ -130,10 +130,56 @@ function SeedDoc({make}: {make: () => ChartDocument}) {
   return null;
 }
 
+/** Marks every one of `trackIds` (`"${instrument}:${difficulty}"`) visible
+ *  in the Chart Matrix once the doc has landed — the piano roll's stacked
+ *  row list only shows what's visible there (item 1), so a test that wants
+ *  more than one stacked row has to opt every track in explicitly. */
+function SeedVisibleTracks({trackIds}: {trackIds: string[]}) {
+  const {state, dispatch} = useChartEditorContext();
+  useEffect(() => {
+    if (!state.chartDoc) return;
+    dispatch({type: 'SET_VISIBLE_TRACKS', tracks: new Set(trackIds)});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.chartDoc, dispatch]);
+  return null;
+}
+
+/** Latest editor state + dispatch, published by {@link Probe} so a test can
+ *  seed transport state (the A/B loop) and read the result of a menu item. */
+let latest: {
+  state: ReturnType<typeof useChartEditorContext>['state'];
+  dispatch: ReturnType<typeof useChartEditorContext>['dispatch'];
+} | null = null;
+
+function Probe() {
+  const {state, dispatch} = useChartEditorContext();
+  // Published in an effect, not during render: the rule the linter enforces
+  // (no side effects in render) applies to test helpers too, and every read
+  // below happens after React has committed.
+  useEffect(() => {
+    latest = {state, dispatch};
+  }, [state, dispatch]);
+  return null;
+}
+
+/** Ticks of every note group on the fixture's expert drum track. */
+function drumNoteTicks(): number[] {
+  const track = latest?.state.chartDoc?.parsedChart.trackData.find(
+    t => t.instrument === 'drums' && t.difficulty === 'expert',
+  );
+  return (track?.noteEventGroups ?? []).map(group => group[0].tick);
+}
+
+function drumNoteCount(): number {
+  return drumNoteTicks().length;
+}
+
 async function mountPanel(make: () => ChartDocument = makeFixtureDoc) {
+  latest = null;
   const {container} = render(
     <ChartEditorProvider>
       <SeedDoc make={make} />
+      <Probe />
       <PianoRollTimeline
         audioManager={stubAudioManager()}
         durationSeconds={10}
@@ -148,6 +194,45 @@ async function mountPanel(make: () => ChartDocument = makeFixtureDoc) {
   });
   const canvas = container.querySelector('canvas');
   if (!canvas) throw new Error('canvas not mounted');
+  return canvas;
+}
+
+/** Two expert-difficulty drum-ish tracks, enough for the stacked layout's
+ *  `rows.length > 1` gate. */
+function makeTwoTrackDoc(): ChartDocument {
+  const parsed = createEmptyChart({bpm: 120, resolution: 480});
+  parsed.trackData.push(emptyTrackData('drums', 'expert'));
+  parsed.trackData.push(emptyTrackData('drums', 'hard'));
+  const doc: ChartDocument = {parsedChart: parsed, assets: []};
+  addDrumNote(doc.parsedChart.trackData[0], {tick: 0, type: noteTypes.kick});
+  addDrumNote(doc.parsedChart.trackData[1], {tick: 0, type: noteTypes.kick});
+  return doc;
+}
+
+/** Mounts the panel in the stacked (per-track rows) layout and returns the
+ *  scrolling rows canvas — the surface whose pointer y is row-relative. */
+async function mountStackedPanel() {
+  latest = null;
+  const {container} = render(
+    <ChartEditorProvider>
+      <SeedDoc make={makeTwoTrackDoc} />
+      <SeedVisibleTracks trackIds={['drums:expert', 'drums:hard']} />
+      <Probe />
+      <PianoRollTimeline
+        audioManager={stubAudioManager()}
+        durationSeconds={10}
+        audioChannels={2}
+        stackedPianoRoll
+      />
+    </ChartEditorProvider>,
+  );
+  await act(async () => {
+    await Promise.resolve();
+  });
+  const canvas = container.querySelector<HTMLCanvasElement>(
+    'canvas[data-piano-roll-region="rows"]',
+  );
+  if (!canvas) throw new Error('stacked rows canvas not mounted');
   return canvas;
 }
 
@@ -239,6 +324,129 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
     expect(screen.getByText('Song (full mix)')).toBeInTheDocument();
     // 'Drums' is the currently-selected source, shown as the checked row.
     expect(screen.getAllByText('Drums')).toHaveLength(1);
+  });
+
+  // Note lane: ruler (24) + lyrics row (22) + tempo lane (26) puts the lanes
+  // at y >= 72, and the waveform row takes the bottom 40 of the 200px canvas.
+  const NOTE_LANE = {x: 300, y: 100};
+
+  it('offers "Insert note" on a note-lane right-click and inserts on select', async () => {
+    const canvas = await mountPanel();
+    const before = drumNoteCount();
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...NOTE_LANE, button: 2});
+    });
+    const insert = screen.getByRole('button', {name: 'Insert note'});
+    const ticksBefore = new Set(drumNoteTicks());
+    act(() => {
+      insert.click();
+    });
+    expect(drumNoteCount()).toBe(before + 1);
+
+    // The inserted tick is snapped to the active grid division, not the raw
+    // tick under the pointer.
+    const added = drumNoteTicks().filter(t => !ticksBefore.has(t));
+    expect(added).toHaveLength(1);
+    const {resolution} = latest!.state.chartDoc!.parsedChart;
+    const gridSize = Math.round(resolution / latest!.state.gridDivision);
+    expect(added[0] % gridSize).toBe(0);
+  });
+
+  it('omits "Insert note" between stacked rows', async () => {
+    // The rows canvas is row-relative, so offsetY 2 lands in the first row's
+    // header strip — inside the note-lane band but inside no row's lanes.
+    // Offering an insert there would place a note on an unrelated lane of the
+    // active-scope track, so the item must not appear at all.
+    const canvas = await mountStackedPanel();
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: 300, y: 2, button: 2});
+    });
+    expect(screen.queryByText('Insert note')).not.toBeInTheDocument();
+  });
+
+  it('gutter "manage tracks" menu lists every track, not just the visible ones, and can re-show a hidden one', async () => {
+    // Three tracks, two visible (so the stacked layout — which needs >1
+    // visible row — is reachable at all) and one Chart-Matrix-hidden. The
+    // gutter's checklist must still offer the hidden one so it can be
+    // checked back on without leaving the piano roll.
+    latest = null;
+    const parsed = createEmptyChart({bpm: 120, resolution: 480});
+    parsed.trackData.push(emptyTrackData('drums', 'expert'));
+    parsed.trackData.push(emptyTrackData('drums', 'hard'));
+    parsed.trackData.push(emptyTrackData('drums', 'medium'));
+    const doc: ChartDocument = {parsedChart: parsed, assets: []};
+    addDrumNote(doc.parsedChart.trackData[0], {tick: 0, type: noteTypes.kick});
+    addDrumNote(doc.parsedChart.trackData[1], {tick: 0, type: noteTypes.kick});
+    addDrumNote(doc.parsedChart.trackData[2], {tick: 0, type: noteTypes.kick});
+
+    const {container} = render(
+      <ChartEditorProvider>
+        <SeedDoc make={() => doc} />
+        <SeedVisibleTracks trackIds={['drums:expert', 'drums:hard']} />
+        <Probe />
+        <PianoRollTimeline
+          audioManager={stubAudioManager()}
+          durationSeconds={10}
+          audioChannels={2}
+          stackedPianoRoll
+        />
+      </ChartEditorProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const canvas = container.querySelector<HTMLCanvasElement>(
+      'canvas[data-piano-roll-region="rows"]',
+    );
+    if (!canvas) throw new Error('stacked rows canvas not mounted');
+
+    act(() => {
+      // x inside STACKED_GUTTER_W (112px) routes to the gutter menu.
+      fireAt(canvas, 'contextmenu', {x: 40, y: 5, button: 2});
+    });
+    expect(screen.getByText('drums · expert')).toBeInTheDocument();
+    expect(screen.getByText('drums · hard')).toBeInTheDocument();
+    expect(screen.getByText('drums · medium')).toBeInTheDocument();
+
+    act(() => {
+      screen.getByText('drums · medium').click();
+    });
+    expect(latest!.state.visibleTrackKeys.has('drums:medium')).toBe(true);
+  });
+
+  it('offers "Clear loop" inside the loop band and clears the region', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      // A loop wide enough that any ruler x is inside the shaded band.
+      latest!.dispatch({
+        type: 'SET_LOOP_REGION',
+        region: {startMs: 0, endMs: 1_000_000},
+      });
+    });
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: 300, y: 12, button: 2});
+    });
+    const clear = screen.getByRole('button', {name: 'Clear loop'});
+    act(() => {
+      clear.click();
+    });
+    expect(latest!.state.loopRegion).toBeNull();
+  });
+
+  it('keeps the section menu on a flag inside the loop band', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      latest!.dispatch({
+        type: 'SET_LOOP_REGION',
+        region: {startMs: 0, endMs: 1_000_000},
+      });
+    });
+    // The fixture's "Intro" flag sits at tick 0, i.e. x = 0 in the ruler.
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: 2, y: 12, button: 2});
+    });
+    expect(screen.getByText('Rename section…')).toBeInTheDocument();
+    expect(screen.queryByText('Clear loop')).not.toBeInTheDocument();
   });
 
   it('disables the rephase item at an already bar-aligned beat', async () => {

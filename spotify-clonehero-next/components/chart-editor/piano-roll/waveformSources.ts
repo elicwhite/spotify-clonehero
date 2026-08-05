@@ -9,6 +9,8 @@
  * defaulting logic is unit-testable.
  */
 
+import {CLICK_TRACK_NAME} from '@/lib/preview/clickTrack';
+
 export interface WaveformSource {
   /** AudioManager track name (the id passed to `getTrackPcm`). */
   id: string;
@@ -31,14 +33,25 @@ export function labelForSource(id: string): string {
 }
 
 /**
+ * True for the synthesized metronome stem `chartPackage` registers alongside
+ * the real audio. It is a click grid, not music: its waveform says nothing
+ * about the song, so it is never a selectable source.
+ */
+function isClickTrack(id: string): boolean {
+  return id.toLowerCase() === CLICK_TRACK_NAME.toLowerCase();
+}
+
+/**
  * Build the selectable source list from the AudioManager track names. The
  * drum stem (the audio the transcription came from) sorts first when present;
- * the rest keep their given order.
+ * the rest keep their given order. The metronome click stem is dropped.
  */
 export function buildWaveformSources(
   trackNames: readonly string[],
 ): WaveformSource[] {
-  const sources = trackNames.map(id => ({id, label: labelForSource(id)}));
+  const sources = trackNames
+    .filter(id => !isClickTrack(id))
+    .map(id => ({id, label: labelForSource(id)}));
   return sources.sort((a, b) => {
     const ad = a.id.toLowerCase() === 'drums' ? 0 : 1;
     const bd = b.id.toLowerCase() === 'drums' ? 0 : 1;
@@ -50,6 +63,9 @@ export function buildWaveformSources(
  * Default source: the drum stem when present (that's the audio the drums were
  * transcribed from), else the full mix, else the first available source.
  * `null` when there are no sources at all.
+ *
+ * Takes a list `buildWaveformSources` produced, so the click stem is already
+ * gone — dropping it is that function's job alone.
  */
 export function defaultWaveformSourceId(
   sources: readonly WaveformSource[],

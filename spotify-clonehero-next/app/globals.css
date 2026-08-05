@@ -182,3 +182,18 @@
     --radius: 0.375rem;
   }
 }
+
+@layer utilities {
+  /* Scroll without a scrollbar gutter. The piano roll's stacked-rows viewport
+     scrolls by wheel/trackpad only and has no room for a bar over the lane
+     canvas; macOS renders an overlay bar there as soon as the element is
+     scrollable, which reads as chrome on top of the notes. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}

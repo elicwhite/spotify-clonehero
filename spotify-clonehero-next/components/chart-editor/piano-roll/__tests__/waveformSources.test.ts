@@ -31,6 +31,18 @@ describe('buildWaveformSources', () => {
   it('handles an empty manager', () => {
     expect(buildWaveformSources([])).toEqual([]);
   });
+
+  it('drops the metronome click stem', () => {
+    expect(
+      buildWaveformSources(['song', 'click', 'drums']).map(s => s.id),
+    ).toEqual(['drums', 'song']);
+  });
+
+  it('drops the click stem regardless of case', () => {
+    expect(buildWaveformSources(['Click', 'song']).map(s => s.id)).toEqual([
+      'song',
+    ]);
+  });
 });
 
 describe('defaultWaveformSourceId', () => {
@@ -54,5 +66,12 @@ describe('defaultWaveformSourceId', () => {
 
   it('returns null with no sources', () => {
     expect(defaultWaveformSourceId([])).toBeNull();
+  });
+
+  it('never defaults to the click stem', () => {
+    expect(defaultWaveformSourceId(buildWaveformSources(['click']))).toBeNull();
+    expect(
+      defaultWaveformSourceId(buildWaveformSources(['click', 'guitar'])),
+    ).toBe('guitar');
   });
 });
