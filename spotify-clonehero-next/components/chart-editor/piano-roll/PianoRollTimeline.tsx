@@ -617,30 +617,22 @@ export default function PianoRollTimeline({
       cancelled = true;
     };
   }, [audioManager]);
-  const defaultSourceId = useMemo(
-    () => defaultWaveformSourceId(waveSources),
-    [waveSources],
-  );
-  // PCM + channel count for the selected source. The host already passes the
-  // DEFAULT source's decoded PCM as `audioData` (the drum stem, or the mix when
-  // no stem exists), so reuse it there and avoid a redundant copy; any other
-  // source is extracted from AudioManager on demand.
+  // PCM + channel count for the selected source, always asked of the
+  // AudioManager by name: it is the one thing that knows which bytes a track
+  // name maps to. `audioData` is only the fallback for a manager that can't
+  // answer (no `getTrackPcm`, or a name it doesn't carry) — it is whatever
+  // single buffer the host happens to hold, which is not necessarily the
+  // selected source or even the default one.
   const wavePcm = useMemo<{
     data: Float32Array | undefined;
     channels: number;
   }>(() => {
-    if (selectedSourceId && selectedSourceId !== defaultSourceId) {
+    if (selectedSourceId) {
       const pcm = audioManager.getTrackPcm?.(selectedSourceId);
       if (pcm) return pcm;
     }
     return {data: audioData, channels: audioChannels};
-  }, [
-    selectedSourceId,
-    defaultSourceId,
-    audioData,
-    audioChannels,
-    audioManager,
-  ]);
+  }, [selectedSourceId, audioData, audioChannels, audioManager]);
 
   // -- Panel height (§1): resizable via a top-edge drag handle, persisted to
   // localStorage under one key shared across every host page. Lazily read
