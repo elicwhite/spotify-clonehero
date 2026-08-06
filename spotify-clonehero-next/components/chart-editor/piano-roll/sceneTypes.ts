@@ -51,8 +51,12 @@ export const COLORS = {
   lyricChip: '#c58cff',
   lyricWave: '#6b5a94',
   phraseEdge: '#c58cff',
-  phraseStart: '#4fe0a8',
-  phraseEnd: '#ff8a5c',
+  // Phrase boundaries read as part of the lyrics row, so they share its
+  // purple rather than introducing two unrelated hues. Start takes the lyric
+  // text's own colour and end a deeper shade of it, which keeps the two
+  // distinguishable without leaving the row's palette.
+  phraseStart: '#c58cff',
+  phraseEnd: '#8f6bd0',
   loopFlag: '#4f9dff',
   loopShade: 'rgba(79,157,255,0.16)',
 } as const;

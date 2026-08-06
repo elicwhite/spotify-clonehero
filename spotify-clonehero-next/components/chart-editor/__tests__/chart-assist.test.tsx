@@ -422,11 +422,13 @@ describe('ChartAssist leading-silence recommendation', () => {
     return doc;
   }
 
-  it('calls out a collapsed lead-in on the Add leading silence card', () => {
+  it('calls out a song with no lead-in on the Add leading silence card', () => {
     renderChartAssist(makeCollapsedLeadInDoc());
     const card = screen.getByRole('group', {name: 'Add leading silence'});
+    // The copy explains the situation in terms of the audio rather than the
+    // BPM threshold that detects it.
     expect(
-      within(card).getByText(/collapsed lead-in rather than real tempo/i),
+      within(card).getByText(/no silence before the first beat/i),
     ).toBeInTheDocument();
   });
 

@@ -60,7 +60,10 @@ describe('detectLeadingSilenceRecommendation — first-bpm-outlier trigger', () 
     const result = detectLeadingSilenceRecommendation(doc, null);
     expect(result).not.toBeNull();
     expect(result!.reason).toBe('first-bpm-outlier');
-    expect(result!.detail).toMatch(/collapsed lead-in/i);
+    // The copy explains the situation in terms of the audio, not in terms of
+    // the BPM threshold that detects it, so it must not quote a number.
+    expect(result!.detail).toMatch(/no silence before the first beat/i);
+    expect(result!.detail).not.toMatch(/\d/);
   });
 
   test('does not fire at exactly one BPM below the threshold', () => {

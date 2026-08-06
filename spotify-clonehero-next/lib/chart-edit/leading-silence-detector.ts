@@ -85,13 +85,14 @@ export function detectLeadingSilenceRecommendation(
   const sync = synctrackFromChart(chart);
 
   if (sync.tempos.length > 1 && sync.tempos[0].bpm >= OUTLIER_BPM_MIN) {
-    const first = sync.tempos[0].bpm;
     return {
       reason: 'first-bpm-outlier',
       detail:
-        `Opening tempo marker is ${first.toFixed(1)} BPM, at or above the ` +
-        `${OUTLIER_BPM_MIN} BPM collapse threshold. This looks like a ` +
-        `collapsed lead-in rather than real tempo.`,
+        'This song starts almost immediately, with no silence before the ' +
+        'first beat, so the generated tempo map had to open with an ' +
+        'impossible tempo to line the grid up with the audio. Adding a few ' +
+        'seconds of silence gives the song somewhere to start from, and the ' +
+        'tempo map is rebuilt to open at the real tempo on the first beat.',
     };
   }
 
