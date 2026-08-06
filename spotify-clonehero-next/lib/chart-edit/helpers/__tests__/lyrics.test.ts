@@ -46,7 +46,7 @@ function addPhrase(doc: ChartDocument, tick: number, length: number) {
 }
 
 describe('addLyric', () => {
-  test('adds a lyric + paired pitch-60 note inside the containing phrase', () => {
+  test('adds a lyric, and no vocal note, inside the containing phrase', () => {
     const doc = makeDoc();
     addPhrase(doc, 0, 960);
 
@@ -56,12 +56,9 @@ describe('addLyric', () => {
     expect(id).toBe(lyricId(480));
     expect(phrase.lyrics).toHaveLength(1);
     expect(phrase.lyrics[0]).toMatchObject({tick: 480, text: 'hel-'});
-    expect(phrase.notes).toHaveLength(1);
-    expect(phrase.notes[0]).toMatchObject({
-      tick: 480,
-      pitch: 60,
-      type: 'pitched',
-    });
+    // A lyric is display text. Declaring a pitched note here would advertise
+    // a playable vocals part nobody charted — see applyAlignedLyricsToDoc.
+    expect(phrase.notes).toEqual([]);
   });
 
   test('returns null when no phrase contains the tick', () => {
@@ -82,19 +79,18 @@ describe('addLyric', () => {
     ).toHaveLength(1);
   });
 
-  test('clamps the placeholder note length to the phrase end', () => {
+  test('adds a lyric that lands near the phrase end', () => {
     const doc = makeDoc();
     addPhrase(doc, 0, 500);
 
-    addLyric(doc, 470, 'end');
+    expect(addLyric(doc, 470, 'end')).toBe(lyricId(470));
     const phrase = doc.parsedChart.vocalTracks.parts['vocals'].notePhrases[0];
-
-    expect(phrase.notes[0].length).toBe(30); // 500 - 470
+    expect(phrase.lyrics.map(l => l.tick)).toEqual([470]);
   });
 });
 
 describe('deleteLyric', () => {
-  test('removes the lyric and its paired note, keeping the phrase when others remain', () => {
+  test('removes the lyric, keeping the phrase when others remain', () => {
     const doc = makeDoc();
     addPhrase(doc, 0, 960);
     addLyric(doc, 0, 'hel-');
@@ -105,6 +101,30 @@ describe('deleteLyric', () => {
 
     expect(removed?.phraseDeleted).toBe(false);
     expect(phrase.lyrics.map(l => l.tick)).toEqual([480]);
+  });
+
+  // This editor writes no vocal notes, but an imported chart with real
+  // vocals has them, and deleting a lyric must take its note with it.
+  test('removes a vocal note the imported chart paired with the lyric', () => {
+    const doc = makeDoc();
+    addPhrase(doc, 0, 960);
+    addLyric(doc, 0, 'hel-');
+    addLyric(doc, 480, 'lo');
+    const phrase = doc.parsedChart.vocalTracks.parts['vocals'].notePhrases[0];
+    for (const tick of [0, 480]) {
+      phrase.notes.push({
+        tick,
+        msTime: 0,
+        length: 60,
+        msLength: 0,
+        pitch: 62,
+        type: 'pitched',
+      });
+    }
+
+    const removed = deleteLyric(doc, 0);
+
+    expect(removed?.note).toMatchObject({tick: 0, pitch: 62});
     expect(phrase.notes.map(n => n.tick)).toEqual([480]);
   });
 
@@ -141,7 +161,7 @@ describe('restoreLyric', () => {
 
     const phrase = doc.parsedChart.vocalTracks.parts['vocals'].notePhrases[0];
     expect(phrase.lyrics.map(l => l.tick)).toEqual([0, 480]);
-    expect(phrase.notes.map(n => n.tick)).toEqual([0, 480]);
+    expect(phrase.notes).toEqual([]);
   });
 
   test('undoes a phrase-emptying delete by restoring the whole phrase', () => {

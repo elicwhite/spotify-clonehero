@@ -34,8 +34,12 @@ export function applyAlignedLyricsToDoc(
   const timedTempos = buildTimedTempos(source.parsedChart.tempos, resolution);
   const tickMs = (tick: number) => tickToMs(tick, timedTempos, resolution);
 
-  // Group lyric events under each phrase and pair each lyric with a placeholder
-  // pitched note (required so scan-chart keeps the phrase on round-trip).
+  // Group lyric events under each phrase. The phrases carry no vocal notes:
+  // a lyric is display text, and a note would declare a playable, pitched
+  // vocals part that nobody charted. Community charts do the same — across a
+  // 1,471-chart sample of lyric-bearing .chart files, the vocal-note count is
+  // zero — and a fabricated note is written out for real by the .mid writer,
+  // so it would reach YARG as a monotone C4 line.
   const notePhrases = vocalPhrases.map(phrase => {
     const phraseLyrics = chartLyrics.filter(
       l => l.tick >= phrase.tick && l.tick <= phrase.tick + phrase.length,
@@ -48,14 +52,7 @@ export function applyAlignedLyricsToDoc(
       length: phrase.length,
       msLength: phraseMsEnd - phraseMsStart,
       isPercussion: false,
-      notes: phraseLyrics.map(l => ({
-        tick: l.tick,
-        msTime: tickMs(l.tick),
-        length: 60,
-        msLength: tickMs(l.tick + 60) - tickMs(l.tick),
-        pitch: 60,
-        type: 'pitched' as const,
-      })),
+      notes: [],
       lyrics: phraseLyrics.map(l => ({
         tick: l.tick,
         msTime: tickMs(l.tick),

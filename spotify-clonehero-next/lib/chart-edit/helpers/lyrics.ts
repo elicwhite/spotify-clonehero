@@ -1,10 +1,11 @@
 /**
  * Lyric event helpers.
  *
- * Lyric events live inside a vocal part's `notePhrases[i].lyrics[j]`. Each
- * lyric is paired with a placeholder note in the same phrase at the same
- * tick (added by writers like add-lyrics so scan-chart preserves the lyric
- * on round-trip). All mutations are in-place.
+ * Lyric events live inside a vocal part's `notePhrases[i].lyrics[j]`. This
+ * editor writes lyrics with no vocal notes beside them — a lyric is display
+ * text, and a note would declare a playable vocals part nobody charted — but
+ * an imported chart with real vocals has notes in the same phrases, so every
+ * helper here keeps them in step. All mutations are in-place.
  *
  * Lyrics are uniquely identified within a vocal part by their tick. The
  * `partName` argument selects which vocal part (`vocals`, `harm1`,
@@ -20,12 +21,6 @@ import type {
 } from '../types';
 import {applyEventTiming, makeChartTiming} from '../retime';
 import {tickToMs} from '@/lib/drum-transcription/timing';
-
-/** Tick-length of a lyric's paired placeholder pitched note (matches the
- *  convention `applyAlignedLyricsToDoc` uses so scan-chart keeps the lyric
- *  on round-trip — see `lib/lyrics-align/apply-lyrics.ts`). Clamped to the
- *  phrase's remaining span when a lyric lands near the phrase's end. */
-const PLACEHOLDER_NOTE_LENGTH = 60;
 
 /** Default vocal part — matches the part used by add-lyrics. */
 export const DEFAULT_VOCALS_PART = 'vocals';
@@ -90,9 +85,9 @@ function findPhraseIndexWithLyric(
  * Move a lyric from `oldTick` to `newTick` within the same phrase.
  *
  * Clamps `newTick` to the phrase's [tick, tick+length] bounds so a lyric
- * never escapes its phrase. The associated placeholder note (at the same
- * tick inside the same phrase) is moved in lockstep so the chart stays
- * consistent.
+ * never escapes its phrase. A vocal note at the same tick in the same phrase
+ * — present only in an imported chart that has real vocals — moves in
+ * lockstep so the chart stays consistent.
  *
  * Returns the resulting tick (which may differ from `newTick` after
  * clamping; equals `oldTick` when the lyric isn't found).
@@ -125,7 +120,7 @@ export function moveLyric(
   const timing = makeChartTiming(doc.parsedChart);
   lyric.msTime = tickToMs(clampedTick, timing.timedTempos, timing.resolution);
 
-  // Keep the paired placeholder note in sync if one exists at the old tick.
+  // Keep a paired vocal note in sync if the chart has one at the old tick.
   const note = phrase.notes.find(n => n.tick === oldTick);
   if (note) {
     note.tick = clampedTick;
@@ -140,10 +135,9 @@ export function moveLyric(
 }
 
 /**
- * Add a syllable at `tick`, paired with a placeholder pitch-60 note (the
- * same convention `applyAlignedLyricsToDoc` uses) in the phrase that
- * contains `tick`. Returns the new lyric's entity id, or `null` when
- * there's no phrase spanning `tick` or a lyric already exists there.
+ * Add a syllable at `tick`, in the phrase that contains it. Returns the new
+ * lyric's entity id, or `null` when there's no phrase spanning `tick` or a
+ * lyric already exists there.
  */
 export function addLyric(
   doc: ChartDocument,
@@ -172,31 +166,15 @@ export function addLyric(
   phrase.lyrics.push(lyric);
   phrase.lyrics.sort((a, b) => a.tick - b.tick);
 
-  if (!phrase.notes.some(n => n.tick === clampedTick)) {
-    const length = Math.max(
-      1,
-      Math.min(
-        PLACEHOLDER_NOTE_LENGTH,
-        phrase.tick + phrase.length - clampedTick,
-      ),
-    );
-    const note: NormalizedVocalNote = {
-      tick: clampedTick,
-      msTime: 0,
-      length,
-      msLength: 0,
-      pitch: 60,
-      type: 'pitched',
-    };
-    applyEventTiming(note, timing);
-    phrase.notes.push(note);
-    phrase.notes.sort((a, b) => a.tick - b.tick);
-  }
+  // No paired vocal note: a lyric added here is display text, matching both
+  // `applyAlignedLyricsToDoc` and the community convention of lyric-bearing
+  // charts carrying no vocal notes at all.
 
   return lyricId(clampedTick, partName);
 }
 
-/** A lyric (and its paired note, if any) as removed by {@link deleteLyric},
+/** A lyric (and its paired vocal note, if the chart had one) as removed by
+ *  {@link deleteLyric},
  *  kept for undo. `phraseSnapshot` carries the whole phrase when deleting
  *  the lyric emptied it (the phrase was removed as a result). */
 export interface RemovedLyric {
@@ -207,7 +185,8 @@ export interface RemovedLyric {
 }
 
 /**
- * Remove the lyric at `tick` (and its paired placeholder note, if any).
+ * Remove the lyric at `tick`, and any vocal note the chart paired with it —
+ * this editor writes none, but an imported chart with real vocals has them.
  * When this empties the owning phrase, the phrase is removed too — an
  * empty phrase carries no lyric structure and would otherwise linger as an
  * invisible band in the lyrics row. Returns `null` if no lyric exists at
