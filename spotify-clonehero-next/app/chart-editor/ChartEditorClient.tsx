@@ -5,6 +5,7 @@ import {
   TrackEditPage,
   type TrackEditPageConfig,
 } from '@/components/chart-editor';
+import OrtRuntimeScript from '@/components/onnx/OrtRuntimeScript';
 
 export const CONFIG: TrackEditPageConfig = {
   namespace: 'chart-editor',
@@ -28,5 +29,13 @@ export const CONFIG: TrackEditPageConfig = {
 };
 
 export default function ChartEditorClient() {
-  return <TrackEditPage {...CONFIG} />;
+  return (
+    <>
+      {/* Chart Assist can start a drum-transcription run from this route, and
+       *  that run gates on `globalThis.ort`. Without this the run waits on a
+       *  runtime nothing on the page ever loads. */}
+      <OrtRuntimeScript />
+      <TrackEditPage {...CONFIG} />
+    </>
+  );
 }

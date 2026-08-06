@@ -9,7 +9,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
-import Script from 'next/script';
+import OrtRuntimeScript from '@/components/onnx/OrtRuntimeScript';
 import {
   AlertTriangle,
   Loader2,
@@ -686,16 +686,10 @@ function formatStage(stage: string): string {
   }
 }
 
-/** ONNX Runtime CDN URL — must match the version used by demucs-next. */
-const ORT_CDN_URL =
-  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.js';
-
 export default function DrumTranscriptionClient() {
   return (
     <>
-      {/* Load ONNX Runtime Web from CDN (avoids bundling ~20MB WASM files).
-          Uses afterInteractive so the page renders first, then the script loads. */}
-      <Script src={ORT_CDN_URL} strategy="afterInteractive" />
+      <OrtRuntimeScript />
       <Suspense fallback={null}>
         <DrumTranscriptionInner />
       </Suspense>
