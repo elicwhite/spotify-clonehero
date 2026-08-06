@@ -23,6 +23,11 @@ export {createEmptyChart, writeChartFolder};
 // Chart file format conversion (.chart <-> .mid) for export
 export {writeChartFileAs} from './write-chart-file-as';
 export type {WrittenChartFile} from './write-chart-file-as';
+
+// The chart file and the `song.ini` beside it, from one serialization — what
+// a host persists so the ini-only fields survive a reload
+export {chartDocToFolderFiles} from './folder-files';
+export type {ChartFolderFiles} from './folder-files';
 export type {
   ChartDocument,
   File,

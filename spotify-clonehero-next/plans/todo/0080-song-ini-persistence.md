@@ -1,6 +1,47 @@
 # 0080 — Persist a real `song.ini` in stored chart projects
 
-Status: todo (revised after adversarial review — see §12)
+Status: implemented as part of plan 0084 (its D7b). Owner decision,
+2026-08-05: 0084 owns the storage-schema change, so this plan's decisions D1
+through D5 shipped as a phase of 0084 rather than as their own round. This
+file stays as the design record and the source of the merge semantics; do not
+implement it separately.
+
+What shipped, and where it differs from this file:
+
+- D1/D3 — one `song.ini` per project, rewritten on every save by both hosts,
+  from the same `writeChartFolder` call the chart file comes from
+  (`chartDocToFolderFiles`, `lib/chart-edit/folder-files.ts`). Ini first,
+  then the chart, per §7.
+- D2 — the merge lives in `withSongIniFields`
+  (`lib/chart-editor-core/songIniMetadata.ts`), which both project load paths
+  already called, rather than in a new `readChartProject`. It strips
+  scan-chart's defaults (`defaultIniMetadata`, derived at runtime as §5c
+  specifies; `stripDefaultIniMetadata`) and then lets every field the chart
+  file defines win. `readChart`'s ini-wins semantics are untouched.
+- D4 — `TrackEditPage` seeds the dialog's identity from the document, falling
+  back to the project record.
+- D5 — both hosts mirror the document's identity into the project record on
+  every save (`documentIdentityFields`), and `EditorApp` had already stopped
+  composing `"Song by Artist"` into `name`.
+
+Deliberately not implemented here: the ini's `IniChartModifiers` are still
+not fed back into the chart parse on load (§6's five-lane behavior change),
+because `withSongIniFields` takes metadata only and re-deriving notes from a
+stale ini on a document the caller already parsed is a bigger change than the
+metadata loss this plan exists to fix. The pipeline runner and
+`regenerateProject` (§5b) do not write an ini of their own; the first
+autosave writes one, and until then the project loads from its chart exactly
+as it did before. Phase 4 (export fidelity) is untouched and remains
+severable.
+
+The trigger for the decision: 0084's work introduced `writeSongIni` in
+`lib/project-storage/`, called only at project creation, with `readChartText`
+not merging the ini back on load. That is the first third of D1/D2 built
+incidentally. A `song.ini` that is written but never read back is worse than
+neither, because the code reads as though persistence works while
+`diff_drums`/`diff_drums_real` still vanish on reload.
+
+Revised after adversarial review — see §12.
 Owner ask: "We need to be persisting and storing a song.ini in our chart
 information, not just `[Song]` in .chart. If this needs to change our data
 model and caching, come up with a plan and review it with a contrarian."

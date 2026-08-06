@@ -29,9 +29,73 @@ import {
 
 import {getAssistProvenance, withAssistProvenance} from './content-stamps';
 
+type IniMetadata = NonNullable<ReturnType<typeof scanIni>['metadata']>;
+
+let derivedDefaults: IniMetadata | null = null;
+
 /**
- * Overlay a `song.ini`'s fields onto a document parsed from a chart file
- * alone.
+ * scan-chart's own `song.ini` default for every metadata key, derived by
+ * parsing an ini with an empty `[song]` section: `getIniString`/
+ * `getIniInteger`/`getIniBoolean` all fall back to that table when a key is
+ * absent, so the result of parsing nothing IS the table.
+ *
+ * Derived rather than transcribed because scan-chart does not export
+ * `defaultMetadata` (only `defaultIniChartModifiers`, an eight-field
+ * projection of it), and a hardcoded copy of ~40 values would drift silently
+ * the next time the fork is bumped. Memoized: the parse is pure and the
+ * answer never changes within a session.
+ */
+export function defaultIniMetadata(): IniMetadata {
+  if (derivedDefaults) return derivedDefaults;
+  const parsed = scanIni([
+    {
+      fileName: 'song.ini',
+      // One key, unrecognised, because a `[song]` section with no keys at all
+      // is not a section as far as the ini parser is concerned. It lands in
+      // `unknownIniValues` and touches no metadata field.
+      data: new TextEncoder().encode('[song]\r\ndefaults_probe = 1\r\n'),
+    },
+  ]);
+  if (!parsed.metadata) {
+    throw new Error('Could not derive song.ini defaults');
+  }
+  derivedDefaults = parsed.metadata;
+  return derivedDefaults;
+}
+
+/**
+ * Drop every key whose value equals scan-chart's default, restoring the
+ * sparse shape a chart-file parse produces.
+ *
+ * `scanIni` returns a fully populated object — every absent key comes back as
+ * `"Unknown Artist"`, `-1`, `""` — while `writeIniFile` omits exactly the
+ * fields that equal those defaults. Left dense, a round-tripped ini would
+ * contribute `"Unknown Artist"` where the user set nothing, and every host
+ * that guards on truthiness (`chart.metadata.name || projectMeta.name`) would
+ * start showing it.
+ *
+ * Default means unset is scan-chart's own semantic, not an invention here:
+ * `extractSongMetadata` raises its `missingValue` issue for exactly the
+ * required fields that equal their default. The cost is that a song genuinely
+ * titled `Unknown Name` reads back as untitled, which is the same trade
+ * scan-chart already makes.
+ */
+export function stripDefaultIniMetadata(
+  metadata: IniMetadata,
+): Partial<IniMetadata> {
+  const defaults = defaultIniMetadata() as Record<string, unknown>;
+  const stripped: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (value === undefined) continue;
+    if (value === defaults[key]) continue;
+    stripped[key] = value;
+  }
+  return stripped as Partial<IniMetadata>;
+}
+
+/**
+ * Merge a project's stored `song.ini` into the document parsed from its chart
+ * file, for a project the editor itself wrote.
  *
  * A `.chart` file carries a handful of `[Song]` fields and nothing else: every
  * `diff_*` but the lead guitar's `Difficulty`, `icon`, `loading_phrase`,
@@ -40,11 +104,21 @@ import {getAssistProvenance, withAssistProvenance} from './content-stamps';
  * beside it has to put the two back together on load, or those fields read as
  * unset in the editor and are gone from whatever it writes next.
  *
- * Only metadata is taken, matching `parseChartAndIni`'s ini-wins overlay
- * (unrecognised keys included, as `extraIniFields`). The parsed chart is
- * otherwise untouched, so the ini's `IniChartModifiers` — HOPO threshold,
- * delay, drum interpretation — cannot re-derive notes the caller already
- * derived once.
+ * The merge is not `parseChartAndIni`'s ini-wins overlay, and deliberately so.
+ * Ini-wins is right for scanning a folder somebody else authored — the game
+ * reads the ini, so the ini is the authority, and `readChart` keeps that
+ * behavior for every non-project route. It is wrong for reloading a project we
+ * wrote ourselves, where both files came out of one `writeChartFolder` call on
+ * one document and the ini is the lossier of the two encodings. So:
+ *
+ * 1. defaults are stripped from the ini (default means unset), and
+ * 2. every field the chart file defines wins, since where the two disagree it
+ *    is because one format could not represent the value.
+ *
+ * Unrecognised ini keys ride along as `extraIniFields`, the only place they
+ * exist. The parsed chart is otherwise untouched, so the ini's
+ * `IniChartModifiers` — HOPO threshold, delay, drum interpretation — cannot
+ * re-derive notes the caller already derived once.
  */
 export function withSongIniFields(
   doc: ChartDocument,
@@ -52,6 +126,12 @@ export function withSongIniFields(
 ): ChartDocument {
   const ini = scanIni([iniFile]);
   if (!ini.metadata) return doc;
+  const fromIni = stripDefaultIniMetadata(ini.metadata);
+  const fromChart: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(doc.parsedChart.metadata)) {
+    if (value === undefined) continue;
+    fromChart[key] = value;
+  }
   const extraIniFields = Object.keys(ini.unknownIniValues).length
     ? {extraIniFields: {...ini.unknownIniValues}}
     : {};
@@ -60,11 +140,31 @@ export function withSongIniFields(
     parsedChart: {
       ...doc.parsedChart,
       metadata: {
-        ...doc.parsedChart.metadata,
-        ...ini.metadata,
+        ...fromIni,
+        ...fromChart,
         ...extraIniFields,
       },
     },
+  };
+}
+
+/**
+ * The identity fields a project record mirrors from the document, for the
+ * hosts that refresh that mirror on every save.
+ *
+ * `ProjectMetadata.name`/`artist`/`charter` back the projects list and the
+ * export file name; they are a display denormalization of the document, never
+ * a metadata source. Only the fields the document actually defines are
+ * returned, so a chart that never had a charter cannot blank the record's.
+ */
+export function documentIdentityFields(
+  doc: ChartDocument,
+): Partial<SongMetadataValue> {
+  const {name, artist, charter} = doc.parsedChart.metadata;
+  return {
+    ...(name === undefined ? {} : {name}),
+    ...(artist === undefined ? {} : {artist}),
+    ...(charter === undefined ? {} : {charter}),
   };
 }
 

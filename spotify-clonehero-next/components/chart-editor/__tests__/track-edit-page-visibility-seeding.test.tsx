@@ -132,6 +132,7 @@ const fixtureAudioFiles = [{fileName: 'song.ogg', data: new Uint8Array([1])}];
 jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
   createOpfsProjectStore: jest.fn(() => ({
     listProjects: jest.fn(async () => []),
+    namespaceOf: jest.fn(async () => 'chart-editor'),
     getProject: jest.fn(async () => ({
       id: 'proj1',
       name: 'Test Song',
@@ -148,6 +149,7 @@ jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
     // A fresh array each call, so a test that inspects what one call
     // returned can't be affected by another.
     loadAudioFiles: jest.fn(async () => fixtureAudioFiles.map(f => ({...f}))),
+    writeSongIni: jest.fn(async () => {}),
     writeEditedChart: jest.fn(async () => {}),
     updateProject: jest.fn(async () => ({})),
     deleteProject: jest.fn(async () => {}),

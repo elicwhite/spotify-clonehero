@@ -16,7 +16,7 @@
 
 import {useCallback, useMemo} from 'react';
 
-import {writeChartFolder} from '@/lib/chart-edit';
+import {chartDocToFolderFiles} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
 import {AudioManager} from '@/lib/preview/audioManager';
@@ -139,14 +139,16 @@ export async function prepareChartPackageAudio(options: {
 // Chart text / assist audio
 // ---------------------------------------------------------------------------
 
-/** The doc as `notes.chart` text, the format both hosts save and export. */
+/** The doc as `notes.chart` text, the format both hosts save and export.
+ *  The `song.ini` from the same serialization is what carries the metadata
+ *  this text cannot ({@link chartDocToFolderFiles}); a host that persists the
+ *  project writes both. */
 export function chartDocToChartText(chartDoc: ChartDocument): string {
-  const files = writeChartFolder(chartDoc);
-  const chartFile = files.find(f => f.fileName === 'notes.chart');
-  if (!chartFile) {
+  const {chart} = chartDocToFolderFiles(chartDoc);
+  if (chart.fileName !== 'notes.chart') {
     throw new Error('writeChartFolder did not produce notes.chart');
   }
-  return new TextDecoder().decode(chartFile.data);
+  return new TextDecoder().decode(chart.data);
 }
 
 /**

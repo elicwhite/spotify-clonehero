@@ -396,6 +396,46 @@ export function createOpfsProjectStore(
   }
 
   /**
+   * Writes the project's `song.ini`, reusing whatever casing the stored file
+   * already uses so a package that shipped `Song.ini` keeps one ini rather
+   * than gaining a second.
+   */
+  async function writeSongIni(
+    projectId: string,
+    data: Uint8Array,
+  ): Promise<void> {
+    const dir = await getProjectDir(projectId);
+    let fileName = 'song.ini';
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind !== 'file') continue;
+      if (name.toLowerCase() !== 'song.ini') continue;
+      fileName = name;
+      break;
+    }
+    const handle = await dir.getFileHandle(fileName, {create: true});
+    await writeFile(handle, data);
+  }
+
+  /**
+   * Adds audio files to a project's `audio/` directory, overwriting any file
+   * of the same name. This is how a project created with no audio is given
+   * some; the caller is responsible for flipping `hasAudio` afterwards.
+   */
+  async function writeAudioFiles(
+    projectId: string,
+    files: ReadonlyArray<{fileName: string; data: Uint8Array}>,
+  ): Promise<void> {
+    const dir = await getProjectDir(projectId);
+    const audioDir = await dir.getDirectoryHandle(AUDIO_DIR, {create: true});
+    for (const file of files) {
+      const handle = await audioDir.getFileHandle(file.fileName, {
+        create: true,
+      });
+      await writeFile(handle, file.data);
+    }
+  }
+
+  /**
    * Writes the edited chart text to OPFS.
    */
   async function writeEditedChart(
@@ -507,6 +547,7 @@ export function createOpfsProjectStore(
     deleteProject,
     readChartText,
     readSongIni,
+    writeSongIni,
     writeEditedChart,
     loadAudioFiles,
     loadFilesForExport,

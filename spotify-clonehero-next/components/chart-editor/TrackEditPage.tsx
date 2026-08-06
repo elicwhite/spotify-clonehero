@@ -40,11 +40,13 @@ import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import {
+  chartDocToFolderFiles,
   getAudioAnchor,
   readChartForEditing,
   setAudioAnchor,
 } from '@/lib/chart-edit';
 import {
+  documentIdentityFields,
   getAssistProvenance,
   highestDifficultyTrackKeys,
   withAssistProvenance,
@@ -479,9 +481,20 @@ function TrackEditEditor({
   // Auto-save: write edited chart to OPFS
   const saveFn = useCallback(async () => {
     if (!state.chartDoc) return;
+    const {chart, ini} = chartDocToFolderFiles(state.chartDoc);
+    if (chart.fileName !== 'notes.chart') {
+      throw new Error('writeChartFolder did not produce notes.chart');
+    }
+    // The ini goes first. A torn save then leaves a newer ini beside an older
+    // chart, and the merge on load lets the chart win on everything it can
+    // express, so the visible result is one autosave's worth of stale chart
+    // content — the same exposure the chart write alone already has. The
+    // reverse order would show stale metadata over fresh content, which reads
+    // to the user as a lost edit.
+    await store.writeSongIni(projectId, ini.data);
     await store.writeEditedChart(
       projectId,
-      chartDocToChartText(state.chartDoc),
+      new TextDecoder().decode(chart.data),
     );
     // Mirror the doc's audio anchor into project metadata: a `.chart` file
     // has nowhere to carry it, and without it a reload would show a chart
@@ -493,6 +506,10 @@ function TrackEditEditor({
       // the same way — a reload keeps any staleness prompt, "Keep as-is"
       // dismissal, or chosen drum intensity's provenance the user left.
       assistProvenance: getAssistProvenance(state.chartDoc) ?? null,
+      // The record's identity is a display denormalization for the projects
+      // list; the document is the truth. Refreshing it here keeps a rename
+      // made anywhere else from being the only writer that has to remember.
+      ...documentIdentityFields(state.chartDoc),
     });
   }, [projectId, state.chartDoc, store]);
 
@@ -812,9 +829,14 @@ function TrackEditEditor({
           audioDurationSeconds || (projectMeta?.durationSeconds ?? 0)
         }
         sections={chart.sections}
-        songName={projectMeta?.name ?? 'Untitled'}
-        artistName={projectMeta?.artist}
-        charterName={projectMeta?.charter}
+        // The document is the identity's source of truth; the record is a
+        // display denormalization of it, and is only fallen back to for a
+        // chart that carries no name of its own. Seeding from the record
+        // unconditionally would let opening the song-details dialog write a
+        // stale record name back over the chart and its ini.
+        songName={chart.metadata.name || projectMeta?.name || 'Untitled'}
+        artistName={chart.metadata.artist || projectMeta?.artist}
+        charterName={chart.metadata.charter || projectMeta?.charter}
         onMetadataChange={handleMetadataChange}
         getChartText={chartPackage.getChartText}
         getAudioSources={getAudioSources}

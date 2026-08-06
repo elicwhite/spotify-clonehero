@@ -7,8 +7,11 @@ import {toast} from 'sonner';
 import {
   getProject,
   readProjectBinary,
+  writeProjectBinary,
+  projectFileExists,
   findProjectChartFile,
   editedVariant,
+  SONG_INI_FILE_NAME,
   updateProject,
   loadAudioMeta,
   loadFullMixPcm,
@@ -36,16 +39,18 @@ import {
 import {padPcmStart} from '@/lib/drum-transcription/audio/pad-pcm';
 import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import {
+  chartDocToFolderFiles,
   readChart,
-  writeChartFolder,
   writeChartFileAs,
   getAudioAnchor,
   setAudioAnchor,
 } from '@/lib/chart-edit';
 import {
+  documentIdentityFields,
   getAssistProvenance,
   setTempoStamp,
   withAssistProvenance,
+  withSongIniFields,
   type SongMetadataValue,
 } from '@/lib/chart-editor-core';
 import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
@@ -170,30 +175,24 @@ export default function EditorApp({
   const saveFn = useCallback(async () => {
     if (!state.chartDoc) return;
 
-    const root = await navigator.storage.getDirectory();
-    const nsDir = await root.getDirectoryHandle('drum-transcription');
-    const projectDir = await nsDir.getDirectoryHandle(projectId);
-
-    // Save edited chart, in whichever format the project's chart uses
+    // Save the edited chart, in whichever format the project's chart uses
     // (notes.edited.chart or notes.edited.mid) — never force one onto the
     // other. Raw bytes are written directly; text-decoding-then-encoding a
-    // .mid chart would corrupt it.
-    const files = writeChartFolder(state.chartDoc);
-    const chartFileOut = files.find(
-      f => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
-    );
-    if (!chartFileOut) {
-      throw new Error('writeChartFolder did not produce a chart file');
-    }
-    const chartFile = await projectDir.getFileHandle(
+    // .mid chart would corrupt it. The `song.ini` from the same
+    // serialization goes beside it, since neither chart format carries the
+    // `diff_*` intensities, `icon`, `loading_phrase` or custom keys the
+    // song-details dialog edits — and on a `.mid` project it is the only
+    // file that carries the song's name, artist and charter at all.
+    const {chart: chartFileOut, ini} = chartDocToFolderFiles(state.chartDoc);
+    // The ini goes first: a torn save then leaves stale chart content under
+    // fresh metadata, and the merge on load lets the chart win on everything
+    // it can express. The reverse order would read as a lost edit.
+    await writeProjectBinary(projectId, SONG_INI_FILE_NAME, ini.data);
+    await writeProjectBinary(
+      projectId,
       editedVariant(chartFileOut.fileName),
-      {create: true},
+      chartFileOut.data,
     );
-    const chartWritable = await chartFile.createWritable();
-    // See opfs.ts writeProjectBinary: our chart bytes are always a
-    // plain-ArrayBuffer view, never SharedArrayBuffer-backed.
-    await chartWritable.write(chartFileOut.data as Uint8Array<ArrayBuffer>);
-    await chartWritable.close();
 
     // Mirror the doc's audio anchor into project metadata (0064 addendum
     // §1) so a reload re-derives the same padded audio. Cheap and
@@ -205,6 +204,10 @@ export default function EditorApp({
       // mirroring as the anchor above, so a reload keeps any staleness
       // prompt or "Keep as-is" dismissal the user was looking at.
       assistProvenance: getAssistProvenance(state.chartDoc) ?? null,
+      // The record's identity is a display denormalization for the projects
+      // list; the document is the truth, so it is refreshed from the same
+      // document this save wrote.
+      ...documentIdentityFields(state.chartDoc),
     });
   }, [projectId, state.chartDoc]);
 
@@ -310,6 +313,21 @@ export default function EditorApp({
           [{fileName: chartFileName, data: chartBytes}],
           {pro_drums: true},
         );
+
+        // 3-i. Merge the project's own `song.ini` back in. It is the only
+        // file that carries the `diff_*` intensities and custom keys the
+        // song-details dialog edits, and on a `.mid` project the only one
+        // carrying the song's name, artist and charter at all. A project
+        // saved before the editor wrote one has none, and loads from the
+        // chart alone exactly as it did before.
+        if (await projectFileExists(projectId, SONG_INI_FILE_NAME)) {
+          const iniBuf = await readProjectBinary(projectId, SONG_INI_FILE_NAME);
+          if (cancelled) return;
+          chartDoc = withSongIniFields(chartDoc, {
+            fileName: SONG_INI_FILE_NAME,
+            data: new Uint8Array(iniBuf),
+          });
+        }
 
         // 3a. Re-attach the persisted audio anchor (0064 addendum §1), if
         // any, before this doc is ever dispatched. Absent/undefined ⇒ no
@@ -494,8 +512,8 @@ export default function EditorApp({
       projectMeta
         ? {
             name: projectMeta.name,
-            artist: '',
-            charter: '',
+            artist: projectMeta.artist ?? '',
+            charter: projectMeta.charter ?? '',
             md5: '',
             hasVideoBackground: false,
             albumArtMd5: '',
@@ -508,13 +526,13 @@ export default function EditorApp({
   );
 
   // The header dialog has already written the edit into the chart doc, which
-  // the autosave below persists along with every other edit. What only this
-  // page can do is rename the project to "Song by Artist" (charter is not
-  // included) so the projects list reflects it.
+  // the autosave below persists along with every other edit. The same three
+  // identity fields are the project record's own, and the shared project
+  // list reads them from there, so they are mirrored across as three fields
+  // rather than composed into one name.
   const handleMetadataChange = useCallback(
-    async ({name, artist}: SongMetadataValue) => {
-      const projectName = artist.trim() ? `${name} by ${artist}` : name;
-      const updated = await updateProject(projectId, {name: projectName});
+    async ({name, artist, charter}: SongMetadataValue) => {
+      const updated = await updateProject(projectId, {name, artist, charter});
       setProjectMeta(updated);
       toast.success('Song details saved');
     },

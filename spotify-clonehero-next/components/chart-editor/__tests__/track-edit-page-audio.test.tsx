@@ -168,6 +168,7 @@ jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
         data: new Uint8Array([PROJECT_AUDIO_BYTE[currentProjectId], 2, 3, 4]),
       },
     ]),
+    writeSongIni: jest.fn(async () => {}),
     writeEditedChart: mockWriteEditedChart,
     updateProject: mockUpdateProject,
     deleteProject: jest.fn(async () => {}),

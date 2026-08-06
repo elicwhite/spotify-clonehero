@@ -39,7 +39,10 @@ export {
 } from './content-stamps';
 export {
   applySongIniMetadata,
+  defaultIniMetadata,
+  documentIdentityFields,
   readSongIniMetadata,
+  stripDefaultIniMetadata,
   withSongIniFields,
   type SongIniMetadataValue,
   type SongMetadataValue,

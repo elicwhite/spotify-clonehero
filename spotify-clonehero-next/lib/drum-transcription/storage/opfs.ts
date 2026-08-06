@@ -83,6 +83,11 @@ function extensionOf(fileName: string): string {
 export interface ProjectMetadata {
   id: string;
   name: string;
+  /** Song artist, for the unified project list. Absent on projects created
+   *  before this field existed; those carry a composed `"Song by Artist"` in
+   *  `name` instead, and self-heal the next time song details are saved. */
+  artist?: string | undefined;
+  charter?: string | undefined;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
   /** Duration of the original audio in seconds, set after decode */
@@ -285,6 +290,8 @@ export async function updateProject(
     Pick<
       ProjectMetadata,
       | 'name'
+      | 'artist'
+      | 'charter'
       | 'durationSeconds'
       | 'stage'
       | 'gridSource'
@@ -448,6 +455,15 @@ export const CHART_FILE_BASENAMES = {
   chart: 'notes.chart',
   mid: 'notes.mid',
 } as const;
+
+/**
+ * The project's `song.ini`, written beside the chart file on every save and
+ * merged back into the document on load. Neither `.chart` nor `.mid` can
+ * carry the per-instrument `diff_*` intensities, `icon`, `loading_phrase` or
+ * a charter's custom keys, and a `.mid` chart carries no metadata at all, so
+ * this file is where the song-details dialog's edits actually persist.
+ */
+export const SONG_INI_FILE_NAME = 'song.ini';
 
 /**
  * Basename -> its "edited" (post-autosave) sibling, same extension —
