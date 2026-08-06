@@ -272,3 +272,32 @@ export async function generateBeatClickTrackWav(
 
   return float32ToWav(trackBuffer, sampleRate);
 }
+
+/**
+ * A value identity for everything {@link generateBeatClickTrackWav} reads.
+ * Two calls with equal signatures produce byte-identical WAVs, so a caller
+ * holding a click track can tell "the tempo map moved, this click is now
+ * wrong" from "the chart changed in some way the click doesn't care about"
+ * without regenerating to find out.
+ *
+ * Compared by VALUE rather than by the tempo array's reference because tempo
+ * edits retime `msTime` in place; a reference check would miss a marker drag
+ * that only moved times.
+ */
+export function clickTrackSignature(
+  chart: {
+    tempos: TempoMapEntry[];
+    timeSignatures: TimeSignatureEntry[];
+    resolution: number;
+  },
+  durationMs: number,
+  chartDelayMs: number = 0,
+): string {
+  const tempos = chart.tempos
+    .map(t => `${t.tick}@${t.beatsPerMinute}@${t.msTime}`)
+    .join(',');
+  const signatures = chart.timeSignatures
+    .map(ts => `${ts.tick}@${ts.numerator}/${ts.denominator}`)
+    .join(',');
+  return `${chart.resolution}|${durationMs}|${chartDelayMs}|${tempos}|${signatures}`;
+}

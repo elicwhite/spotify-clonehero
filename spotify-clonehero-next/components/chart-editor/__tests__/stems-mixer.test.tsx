@@ -200,6 +200,42 @@ describe('StemsMixer', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('an AI-separated stem arrives muted, with a level to unmute to', () => {
+    const audioManager = makeAudioManager(['song', 'drums']);
+    renderMixer({
+      audioManager,
+      stemOrigins: [{name: 'drums', origin: 'ai-separated'}],
+    });
+
+    // Silent, and the row says why: the M toggle is lit, not a slider
+    // parked at zero.
+    expect(lastVolume(audioManager, 'drums')).toBe(0);
+    const row = screen.getByTestId('stem-row-drums');
+    expect(
+      within(row).getByRole('button', {name: 'Unmute Drums'}),
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(within(row).getByText('100%')).toBeInTheDocument();
+    expect(lastVolume(audioManager, 'song')).toBe(1);
+
+    // One click is all it takes to hear it, and it comes back at full level.
+    fireEvent.click(within(row).getByRole('button', {name: 'Unmute Drums'}));
+    expect(lastVolume(audioManager, 'drums')).toBe(1);
+  });
+
+  it('leaves a stem the user dropped in themselves audible', () => {
+    const audioManager = makeAudioManager(['song', 'keys']);
+    renderMixer({
+      audioManager,
+      stemOrigins: [{name: 'keys', origin: 'user-added'}],
+    });
+    expect(lastVolume(audioManager, 'keys')).toBe(1);
+    expect(
+      within(screen.getByTestId('stem-row-keys')).getByRole('button', {
+        name: 'Mute Keys',
+      }),
+    ).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('the click row has no Solo button and is solo-exempt', () => {
     const audioManager = makeAudioManager(['song', 'click']);
     renderMixer({audioManager});

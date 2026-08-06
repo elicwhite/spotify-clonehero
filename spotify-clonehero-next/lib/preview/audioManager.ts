@@ -395,6 +395,53 @@ export class AudioManager {
     return track ? track.volume : null;
   }
 
+  /**
+   * Swap one track's audio for freshly encoded bytes, leaving every other
+   * track playing untouched: the same AudioContext, the same SoundTouch
+   * worklet, the same volume, and the same playhead.
+   *
+   * This exists for the synthesized metronome click, which is a function of
+   * the chart's tempo map and so goes stale the moment the user edits one.
+   * Constructing a replacement `AudioManager` for that would open a second
+   * AudioContext, reload the worklet and re-decode every stem of the song —
+   * seconds of work to change one 8 kHz mono track.
+   *
+   * A no-op on an unknown track name: a caller keeping a derived track in
+   * step shouldn't have to know whether this manager was built with one.
+   */
+  async replaceTrack(trackName: string, data: Uint8Array): Promise<void> {
+    await this.ready;
+    if (this.#destroyed) return;
+    const existing = this.#tracks[trackName];
+    if (!existing) return;
+
+    const buffer = data.slice(0).buffer as ArrayBuffer;
+    const decoded = await this.#context.decodeAudioData(buffer);
+    if (this.#destroyed || this.#tracks[trackName] !== existing) return;
+
+    // Read the playhead BEFORE swapping: the new source has to start where
+    // the old one was, or the click would sit a decode's worth of time
+    // behind the music.
+    const volume = existing.volume;
+    const resumeAt = this.#rawCurrentTime;
+    const wasStarted = this.#isInitialized;
+
+    existing.destroy();
+    const track = new AudioTrack(
+      this.#context,
+      [decoded],
+      this.#handleTrackEnded.bind(this),
+      this.#soundTouchWorklet,
+    );
+    track.setTempo(this.#tempoConfig.tempo);
+    track.volume = volume;
+    this.#tracks[trackName] = track;
+    if (wasStarted) track.start(this.#context.currentTime, resumeAt);
+
+    const durations = Object.values(this.#tracks).map(t => t.duration);
+    this.#duration = durations.length > 0 ? Math.max(...durations) : 0;
+  }
+
   get trackNames(): readonly string[] {
     return Object.keys(this.#tracks);
   }
@@ -863,6 +910,7 @@ class AudioTrack {
   }
 
   set volume(newVolume: number) {
+    this.#volume = newVolume;
     this.#gainNodes.forEach(gainNode => {
       // Let's use an x*x curve (x-squared) since simple linear (x) does not
       // sound as good.

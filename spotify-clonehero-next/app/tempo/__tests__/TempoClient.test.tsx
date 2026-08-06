@@ -50,8 +50,11 @@ jest.mock('../../../components/chart-editor/TransportControls', () => ({
   __esModule: true,
   default: () => <div data-testid="transport-controls-stub" />,
 }));
+// Only the WAV synthesis is stubbed (it needs an OfflineAudioContext jsdom
+// doesn't have); the rest of the module, `clickTrackSignature` included, is
+// pure and stays real.
 jest.mock('../../../lib/preview/clickTrack', () => ({
-  CLICK_TRACK_NAME: 'click',
+  ...jest.requireActual('../../../lib/preview/clickTrack'),
   generateBeatClickTrackWav: jest.fn(async () => new Uint8Array([0])),
 }));
 

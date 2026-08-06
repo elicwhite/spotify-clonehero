@@ -4,7 +4,12 @@
  * table rather than through the DOM.
  */
 
-import {defaultVolumeFor, resolveMixer, type MixerRowState} from '../mixerBus';
+import {
+  defaultMuteFor,
+  defaultVolumeFor,
+  resolveMixer,
+  type MixerRowState,
+} from '../mixerBus';
 
 function row(patch: Partial<MixerRowState> = {}): MixerRowState {
   return {volume: 100, mute: false, solo: false, ...patch};
@@ -22,6 +27,32 @@ describe('defaultVolumeFor', () => {
     // would make Play do nothing with nothing to explain it.
     expect(defaultVolumeFor('click', {silentProject: true})).toBe(70);
     expect(defaultVolumeFor('song', {silentProject: true})).toBe(100);
+  });
+});
+
+describe('defaultMuteFor', () => {
+  it('mutes a separated stem, since its audio is already in the full mix', () => {
+    expect(defaultMuteFor('ai-separated')).toBe(true);
+  });
+
+  it('leaves the chart package’s own stems and dropped files audible', () => {
+    expect(defaultMuteFor('chart-file')).toBe(false);
+    expect(defaultMuteFor('user-added')).toBe(false);
+    expect(defaultMuteFor(undefined)).toBe(false);
+  });
+
+  it('mutes rather than zeroes, so the row keeps a level to unmute to', () => {
+    // The row a separated stem opens with: M lit, slider still at the level
+    // it should play at once the user asks to hear it.
+    const {resolved} = resolveMixer({
+      song: row(),
+      drums: row({
+        volume: defaultVolumeFor('drums'),
+        mute: defaultMuteFor('ai-separated'),
+      }),
+    });
+    expect(resolved['drums']).toEqual({volume: 0, dimmedBySolo: false});
+    expect(defaultVolumeFor('drums')).toBe(100);
   });
 });
 

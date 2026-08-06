@@ -29,6 +29,7 @@ import {AudioManager} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import {
   CLICK_TRACK_NAME,
+  clickTrackSignature,
   generateBeatClickTrackWav,
 } from '@/lib/preview/clickTrack';
 import {padAndEncodeTracks} from '@/lib/audio/pad-encode-client';
@@ -37,7 +38,7 @@ import {getAudioAnchor} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {useAudioServiceContext} from '../AudioServiceContext';
 import type {PadAudioAhead} from '../AudioServiceContext';
-import {defaultVolumeFor} from '../sidebar/mixerBus';
+import {defaultMuteFor, defaultVolumeFor} from '../sidebar/mixerBus';
 
 export interface PaddedAudioMeta {
   sampleRate: number;
@@ -89,6 +90,16 @@ interface PrebuiltPad {
   fullMixName: string;
   stems: ReadonlyArray<AudioStemInput>;
   encoded: PadEncodedTrack[];
+}
+
+/** The click stem a live `AudioManager` is carrying. */
+interface LiveClickTrack {
+  manager: AudioManager;
+  /** {@link clickTrackSignature} of the map it was rendered from. */
+  signature: string;
+  /** Span it was rendered over, which a tempo edit doesn't change — the
+   *  audio is still the same length — so a regeneration reuses it. */
+  durationMs: number;
 }
 
 /** The build inputs `padAudioAhead` reads at call time. */
@@ -211,6 +222,14 @@ export async function buildPaddedAudioManager(
   audioManager: AudioManager;
   paddedFullMixPcm: Float32Array | null;
   paddedStems: ReadonlyArray<AudioStem>;
+  /** Identity of the tempo map / length / delay the click stem inside this
+   *  manager was rendered from, so a caller can tell when it has gone
+   *  stale. See {@link clickTrackSignature}. */
+  clickSignature: string;
+  /** Span the click stem covers. A caller re-rendering the click for a new
+   *  tempo map must reuse this exactly: derive it again from the built
+   *  manager's duration and the signature would never settle. */
+  clickDurationMs: number;
 }> {
   const encoded =
     prebuilt ??
@@ -260,8 +279,25 @@ export async function buildPaddedAudioManager(
     defaultVolumeFor(CLICK_TRACK_NAME, {silentProject: !paddedFullMixPcm}) /
       100,
   );
+  // A stem that arrives muted on the mixer has to be silent from the first
+  // sample, not from the mixer's first commit: the manager may resume
+  // playback before that render lands, and a separated stem doubling the
+  // full mix for a beat is exactly what muting it is meant to prevent.
+  for (const stem of stems) {
+    if (defaultMuteFor(stem.origin)) audioManager.setVolume(stem.name, 0);
+  }
 
-  return {audioManager, paddedFullMixPcm, paddedStems};
+  return {
+    audioManager,
+    paddedFullMixPcm,
+    paddedStems,
+    clickSignature: clickTrackSignature(
+      chartDoc.parsedChart,
+      durationMs,
+      chartDelayMs,
+    ),
+    clickDurationMs: durationMs,
+  };
 }
 
 export interface UsePaddedAudioParams {
@@ -359,6 +395,15 @@ export function usePaddedAudio({
   // Consumed by the first build whose target it matches, and dropped by the
   // first build it doesn't — either way exactly one build looks at it.
   const prebuiltRef = useRef<PrebuiltPad | null>(null);
+  // The click stem currently inside the live manager: which manager it
+  // belongs to, what tempo map it was rendered from, and how long it is.
+  // The click-sync effect below compares the chart's current signature
+  // against this to decide whether the metronome still describes the chart.
+  const clickRef = useRef<LiveClickTrack | null>(null);
+  // Only the newest click regeneration may install itself, so a burst of
+  // tempo edits leaves the LAST map on the manager rather than whichever
+  // render finished last.
+  const clickTokenRef = useRef(0);
   // The latest build inputs, for the non-reactive `padAudioAhead` closure.
   // Written after every render so a run started now encodes from the audio
   // the hook would build from now.
@@ -510,6 +555,11 @@ export function usePaddedAudio({
           if (carried != null) built.audioManager.setVolume(trackName, carried);
         }
 
+        clickRef.current = {
+          manager: built.audioManager,
+          signature: built.clickSignature,
+          durationMs: built.clickDurationMs,
+        };
         publishAudioManager(built.audioManager);
         setAudioManager(built.audioManager);
         setPaddedFullMixPcm(built.paddedFullMixPcm);
@@ -551,6 +601,63 @@ export function usePaddedAudio({
     audioManagerRef,
     publishAudioManager,
   ]);
+
+  // -------------------------------------------------------------------
+  // Click track ↔ tempo map
+  // -------------------------------------------------------------------
+  // The click is how a user hears a tempo map, so it follows every committed
+  // tempo edit rather than waiting for the next full rebuild. Each edit is a
+  // discrete command, so this fires at known moments, not continuously.
+  //
+  // It re-renders the click stem ALONE and swaps that one track
+  // (`replaceTrack`), never the manager: a manager swap re-decodes every
+  // stem of the song and stalls the editor, which would make tempo editing
+  // unusable. Rendering an 8 kHz mono click over a four-minute song is a
+  // few milliseconds of arithmetic plus the decode, which the browser does
+  // off-thread — nowhere near the per-sample, whole-song work that sends
+  // padding into `pad-encode-worker`. It also cannot move: the click's two
+  // oscillator samples come from an `OfflineAudioContext`, which a worker
+  // doesn't have.
+  //
+  // Playback is not interrupted and the playhead does not move: the
+  // replaced track restarts at the current position while everything else
+  // keeps playing, so the next click the user hears is already on the new
+  // map.
+  useEffect(() => {
+    const live = clickRef.current;
+    if (!chartDoc || !audioManager || live?.manager !== audioManager) return;
+
+    const chartDelayMs = getChartDelayMs(chartDoc.parsedChart.metadata);
+    const signature = clickTrackSignature(
+      chartDoc.parsedChart,
+      live.durationMs,
+      chartDelayMs,
+    );
+    if (signature === live.signature) return;
+    clickRef.current = {...live, signature};
+
+    const token = ++clickTokenRef.current;
+    (async () => {
+      try {
+        const wav = await generateBeatClickTrackWav(
+          chartDoc.parsedChart,
+          live.durationMs,
+          chartDelayMs,
+        );
+        if (token !== clickTokenRef.current || !mountedRef.current) return;
+        if (clickRef.current?.manager !== audioManager) return;
+        audioManager.setChartDelay(chartDelayMs / 1000);
+        await audioManager.replaceTrack(CLICK_TRACK_NAME, wav);
+      } catch (err) {
+        // The click is a charting aid: a failed re-render leaves the
+        // previous one playing rather than taking the editor down.
+        console.warn(
+          'Could not update the click track for this tempo map:',
+          err,
+        );
+      }
+    })();
+  }, [chartDoc, audioManager]);
 
   // Tear down the current AudioManager on unmount. Intentionally reads the
   // live ref at cleanup time (not a snapshot from mount) so it destroys

@@ -31,6 +31,7 @@ import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {audioMimeType} from '@/lib/sng/file-utils';
 import {getBasename} from '@/lib/src-shared/utils';
 import type {AssistAudio} from '@/lib/assist/tasks/types';
+import {defaultVolumeFor} from './sidebar/mixerBus';
 import type {AudioSource} from './ExportDialog';
 import type {ChartAssistProps} from './sidebar/ChartAssist';
 
@@ -121,7 +122,10 @@ export async function prepareChartPackageAudio(options: {
   await audioManager.ready;
   audioManager.setChartDelay(chartDelayMs / 1000);
   try {
-    audioManager.setVolume(CLICK_TRACK_NAME, 0);
+    audioManager.setVolume(
+      CLICK_TRACK_NAME,
+      defaultVolumeFor(CLICK_TRACK_NAME) / 100,
+    );
   } catch {
     // Click track failed to generate above — no such stem to silence.
   }

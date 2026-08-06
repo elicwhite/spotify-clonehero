@@ -10,6 +10,7 @@
  */
 
 import {CLICK_TRACK_NAME} from '@/lib/preview/clickTrack';
+import type {AudioStemOrigin} from '../hooks/usePaddedAudio';
 
 /** One row's controls, as the user set them. `volume` is 0-100. */
 export interface MixerRowState {
@@ -57,6 +58,29 @@ export function defaultVolumeFor(
 ): number {
   if (!soloExempt(name)) return 100;
   return silentProject ? 70 : 0;
+}
+
+/**
+ * Whether a stem arrives muted.
+ *
+ * A separated stem is a derived preview artifact whose audio is ALREADY in
+ * the full mix beside it, so playing it unasked doubles that instrument
+ * against itself. It arrives muted rather than at zero volume: mute is the
+ * reversible state the row can advertise (the M toggle lights up, one click
+ * undoes it) and it leaves the slider at the level the stem should play at,
+ * where a zero slider would render as an ordinary live row that happens to
+ * be silent.
+ *
+ * The click is the other way round for the same reason: its slider IS its
+ * control (the user dials in how loud a metronome they want), so it starts
+ * at zero — see {@link defaultVolumeFor} — with its M toggle unlit and its
+ * readout honestly showing 0%.
+ *
+ * A stem the user dropped on the mixer themselves is never muted: adding it
+ * is the request to hear it.
+ */
+export function defaultMuteFor(origin: AudioStemOrigin | undefined): boolean {
+  return origin === 'ai-separated';
 }
 
 /**

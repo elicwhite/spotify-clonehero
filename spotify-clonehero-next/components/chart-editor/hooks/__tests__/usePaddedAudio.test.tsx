@@ -49,6 +49,7 @@ class FakeAudioManager {
   resume = jest.fn(async () => {});
   seekToChartTime = jest.fn(async () => {});
   setChartDelay = jest.fn();
+  replaceTrack = jest.fn(async (_trackName: string, _data: Uint8Array) => {});
   #volumes = new Map<string, number>();
   setVolume = jest.fn((trackName: string, volume: number) => {
     this.#volumes.set(trackName, volume);
@@ -68,10 +69,18 @@ class FakeAudioManager {
 
 // jsdom has no OfflineAudioContext; `generateBeatClickTrackWav` (used inside
 // `buildPaddedAudioManager` to synthesize the click stem) needs one. The
-// click stem's actual content isn't under test here, so stub it out.
+// click stem's actual content isn't under test here, so stub that one export
+// out; the rest of the module, `clickTrackSignature` included, is pure and
+// stays real.
+const clickWavCalls: Array<[unknown, number, number]> = [];
 jest.mock('../../../../lib/preview/clickTrack', () => ({
-  CLICK_TRACK_NAME: 'click',
-  generateBeatClickTrackWav: jest.fn(async () => new Uint8Array(4)),
+  ...jest.requireActual('../../../../lib/preview/clickTrack'),
+  generateBeatClickTrackWav: jest.fn(
+    async (chart: unknown, durationMs: number, chartDelayMs: number) => {
+      clickWavCalls.push([chart, durationMs, chartDelayMs]);
+      return new Uint8Array(4);
+    },
+  ),
 }));
 
 // The pad/encode worker client, wrapped so tests can count how many times a
@@ -567,10 +576,12 @@ describe('usePaddedAudio — hook contract (plan 0074 Task 5a)', () => {
   it('carries per-track volumes onto the new manager before resuming', async () => {
     const chartDoc = makeChartDoc();
     const fullMixPcm = interleavedPcm(100);
+    // Chart-file stems, so the volume being carried is the manager's own
+    // default rather than the silence a separated stem starts at.
     const drums = {
       name: 'drums',
       pcm: interleavedPcm(100),
-      origin: 'ai-separated' as const,
+      origin: 'chart-file' as const,
     };
     const keys = {
       name: 'keys',
@@ -722,6 +733,107 @@ describe('usePaddedAudio — rebuild gating covers the full mix and the length',
 
     rerender({seconds: 200});
     await waitFor(() => expect(result.current.audioManager).not.toBe(first));
+  });
+});
+
+describe('usePaddedAudio — the click track follows the tempo map', () => {
+  function wrapper({children}: {children: React.ReactNode}) {
+    return <AudioServiceProvider>{children}</AudioServiceProvider>;
+  }
+
+  function docWithBpm(bpm: number): ChartDocument {
+    return {parsedChart: createEmptyChart({bpm, resolution: 480}), assets: []};
+  }
+
+  /** A new doc object carrying value-identical sync data by fresh
+   *  references — what a non-tempo edit hands the hook. */
+  function reclonedDoc(doc: ChartDocument): ChartDocument {
+    return {
+      ...doc,
+      parsedChart: {
+        ...doc.parsedChart,
+        tempos: doc.parsedChart.tempos.map(t => ({...t})),
+        timeSignatures: doc.parsedChart.timeSignatures.map(ts => ({...ts})),
+      },
+    };
+  }
+
+  const fullMixPcm = interleavedPcm(100);
+
+  function renderWithDoc(chartDoc: ChartDocument) {
+    return renderHook(
+      ({chartDoc: doc}: {chartDoc: ChartDocument}) =>
+        usePaddedAudio({
+          chartDoc: doc,
+          audioMeta: AUDIO_META,
+          fullMixPcm,
+          stems: [],
+          onSongEnded: () => {},
+        }),
+      {wrapper, initialProps: {chartDoc}},
+    );
+  }
+
+  beforeEach(() => {
+    clickWavCalls.length = 0;
+    lastCapturedFiles = [];
+  });
+
+  it('re-renders the click for a new tempo map without rebuilding the manager', async () => {
+    const {result, rerender} = renderWithDoc(docWithBpm(120));
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const manager = result.current.audioManager as unknown as FakeAudioManager;
+    expect(clickWavCalls).toHaveLength(1);
+    const builtDurationMs = clickWavCalls[0][1];
+
+    rerender({chartDoc: docWithBpm(150)});
+    await waitFor(() => expect(manager.replaceTrack).toHaveBeenCalled());
+
+    // The one track swapped, on the SAME manager: a manager rebuild would
+    // re-decode every stem of the song and stall the editor.
+    expect(result.current.audioManager).toBe(
+      manager as unknown as typeof result.current.audioManager,
+    );
+    expect(manager.replaceTrack.mock.calls[0][0]).toBe('click');
+    expect(clickWavCalls).toHaveLength(2);
+    // Re-rendered over exactly the span the build used — deriving it again
+    // would leave the signature unable to settle.
+    expect(clickWavCalls[1][1]).toBe(builtDurationMs);
+  });
+
+  it('leaves the click alone when the map is unchanged by value', async () => {
+    const doc = docWithBpm(120);
+    const {result, rerender} = renderWithDoc(doc);
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const manager = result.current.audioManager as unknown as FakeAudioManager;
+
+    rerender({chartDoc: reclonedDoc(doc)});
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(manager.replaceTrack).not.toHaveBeenCalled();
+    expect(clickWavCalls).toHaveLength(1);
+  });
+
+  it('installs only the newest map when tempo edits arrive in a burst', async () => {
+    const {result, rerender} = renderWithDoc(docWithBpm(120));
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const manager = result.current.audioManager as unknown as FakeAudioManager;
+
+    rerender({chartDoc: docWithBpm(130)});
+    rerender({chartDoc: docWithBpm(140)});
+    rerender({chartDoc: docWithBpm(150)});
+
+    await waitFor(() => expect(manager.replaceTrack).toHaveBeenCalled());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(manager.replaceTrack).toHaveBeenCalledTimes(1);
+    expect(clickWavCalls.at(-1)?.[0]).toMatchObject({
+      tempos: [expect.objectContaining({beatsPerMinute: 150})],
+    });
   });
 });
 

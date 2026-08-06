@@ -9,7 +9,10 @@
  *
  * Volume/mute/solo live entirely in this component's own state: multiple
  * stems may be solo'd at once, and an explicit mute survives solo churn on
- * other rows. `resolveMixer` turns that state into each row's effective
+ * other rows. A row's opening values come from `mixerBus`'s
+ * `defaultVolumeFor`/`defaultMuteFor` — which is what makes an AI-separated
+ * stem show up muted, since its audio is already in the full mix beside it.
+ * `resolveMixer` turns that state into each row's effective
  * volume and solo-silenced flag; this component pushes those volumes to the
  * AudioManager via `setVolume` and renders the rows from the same value.
  * `AudioManager.trackNames` is fixed at construction (construct-once
@@ -43,7 +46,12 @@ import type {AudioStem} from '../hooks/usePaddedAudio';
 import InstrumentIcon, {type IconableInstrument} from '../InstrumentIcon';
 import SectionHeading, {SIDEBAR_SECTION_CLASS} from './SectionHeading';
 import StemMixerRow from './StemMixerRow';
-import {defaultVolumeFor, resolveMixer, type MixerRowState} from './mixerBus';
+import {
+  defaultMuteFor,
+  defaultVolumeFor,
+  resolveMixer,
+  type MixerRowState,
+} from './mixerBus';
 
 /** A stem's origin, for the AI-separated badge. Keyed by the AudioManager
  *  track name it applies to. Any track absent from this list (typically the
@@ -160,17 +168,19 @@ function uniqueStemName(base: string, existing: ReadonlySet<string>): string {
 
 /** A default row for every track name, reusing an existing row's values
  *  where the name is already known (so live volume/mute/solo survives a
- *  stem-list rebuild for the stems that persist across it). */
+ *  stem-list rebuild for the stems that persist across it — including a
+ *  separated stem the user has since unmuted). */
 function seedRows(
   trackNames: readonly string[],
   prev: Record<string, MixerRowState>,
   silentProject: boolean,
+  origins: ReadonlyMap<string, AudioStem['origin']>,
 ): Record<string, MixerRowState> {
   const next: Record<string, MixerRowState> = {};
   for (const name of trackNames) {
     next[name] = prev[name] ?? {
       volume: defaultVolumeFor(name, {silentProject}),
-      mute: false,
+      mute: defaultMuteFor(origins.get(name)),
       solo: false,
     };
   }
@@ -185,8 +195,13 @@ export default function StemsMixer({
   emptyState = false,
 }: StemsMixerProps) {
   const trackNames = audioManager.trackNames;
+  const originByName = useMemo(() => {
+    const map = new Map<string, AudioStem['origin']>();
+    for (const entry of stemOrigins ?? []) map.set(entry.name, entry.origin);
+    return map;
+  }, [stemOrigins]);
   const [rows, setRows] = useState<Record<string, MixerRowState>>(() =>
-    seedRows(trackNames, {}, emptyState),
+    seedRows(trackNames, {}, emptyState, originByName),
   );
   const [dragOver, setDragOver] = useState(false);
 
@@ -207,7 +222,7 @@ export default function StemsMixer({
   const pendingStemNamesRef = useRef<string[]>([]);
   if (seededForAudioManager !== audioManager) {
     setSeededForAudioManager(audioManager);
-    setRows(prev => seedRows(trackNames, prev, emptyState));
+    setRows(prev => seedRows(trackNames, prev, emptyState, originByName));
   }
 
   // The rebuild landed: every pending name is now a real track name.
@@ -224,12 +239,6 @@ export default function StemsMixer({
       audioManager.setVolume(name, row.volume);
     }
   }, [audioManager, resolved]);
-
-  const originByName = useMemo(() => {
-    const map = new Map<string, AudioStem['origin']>();
-    for (const entry of stemOrigins ?? []) map.set(entry.name, entry.origin);
-    return map;
-  }, [stemOrigins]);
 
   const orderedNames = [
     ...trackNames.filter(name => name !== CLICK_TRACK_NAME),

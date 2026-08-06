@@ -1,4 +1,4 @@
-import {buildBeatClickEvents} from '../clickTrack';
+import {buildBeatClickEvents, clickTrackSignature} from '../clickTrack';
 
 describe('buildBeatClickEvents', () => {
   const resolution = 480;
@@ -156,5 +156,75 @@ describe('buildBeatClickEvents', () => {
     });
 
     expect(events.map(e => Math.round(e.timeMs))).toEqual([0, 500, 1000, 1500]);
+  });
+});
+
+describe('clickTrackSignature', () => {
+  const chart = {
+    tempos: [{tick: 0, beatsPerMinute: 120, msTime: 0}],
+    timeSignatures: [{tick: 0, numerator: 4, denominator: 4}],
+    resolution: 480,
+  };
+
+  it('is equal for value-equal sync data held by different references', () => {
+    // What a note edit hands the editor: a re-cloned doc whose tempo map
+    // says exactly the same thing. Regenerating the click for that would be
+    // pure waste.
+    const recloned = {
+      tempos: chart.tempos.map(t => ({...t})),
+      timeSignatures: chart.timeSignatures.map(ts => ({...ts})),
+      resolution: chart.resolution,
+    };
+    expect(clickTrackSignature(recloned, 4000)).toBe(
+      clickTrackSignature(chart, 4000),
+    );
+  });
+
+  it('changes for every input the generated WAV depends on', () => {
+    const base = clickTrackSignature(chart, 4000, 0);
+    expect(
+      clickTrackSignature(
+        {...chart, tempos: [{tick: 0, beatsPerMinute: 150, msTime: 0}]},
+        4000,
+        0,
+      ),
+    ).not.toBe(base);
+    expect(
+      clickTrackSignature(
+        {...chart, timeSignatures: [{tick: 0, numerator: 3, denominator: 4}]},
+        4000,
+        0,
+      ),
+    ).not.toBe(base);
+    expect(clickTrackSignature({...chart, resolution: 192}, 4000, 0)).not.toBe(
+      base,
+    );
+    expect(clickTrackSignature(chart, 8000, 0)).not.toBe(base);
+    expect(clickTrackSignature(chart, 4000, 120)).not.toBe(base);
+  });
+
+  it('changes when a marker is retimed in place without moving its tick', () => {
+    // Dragging a tempo marker rewrites `msTime` on the existing objects, so
+    // a reference or tick-only check would call the click still valid.
+    const retimed = {
+      ...chart,
+      tempos: [{tick: 0, beatsPerMinute: 120, msTime: 250}],
+    };
+    expect(clickTrackSignature(retimed, 4000)).not.toBe(
+      clickTrackSignature(chart, 4000),
+    );
+  });
+
+  it('distinguishes two markers from one', () => {
+    const two = {
+      ...chart,
+      tempos: [
+        {tick: 0, beatsPerMinute: 120, msTime: 0},
+        {tick: 1920, beatsPerMinute: 140, msTime: 2000},
+      ],
+    };
+    expect(clickTrackSignature(two, 8000)).not.toBe(
+      clickTrackSignature(chart, 8000),
+    );
   });
 });

@@ -93,8 +93,11 @@ jest.mock('../../../lib/preview/audioManager', () => ({
     this.destroy = jest.fn();
   }),
 }));
+// Only the WAV synthesis is stubbed (it needs an OfflineAudioContext jsdom
+// doesn't have); the rest of the module, `clickTrackSignature` included, is
+// pure and stays real.
 jest.mock('../../../lib/preview/clickTrack', () => ({
-  CLICK_TRACK_NAME: 'click',
+  ...jest.requireActual('../../../lib/preview/clickTrack'),
   generateBeatClickTrackWav: jest.fn(async () => new Uint8Array([0])),
 }));
 jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
