@@ -3,6 +3,7 @@
 import {useState, useCallback, useEffect, useRef} from 'react';
 import {
   AlertTriangle,
+  CheckCircle2,
   Download,
   FileArchive,
   Loader2,
@@ -183,6 +184,13 @@ const BENIGN_FOLDER_ISSUES = new Set<FolderIssueType>(['noAlbumArt']);
  * per difficulty) doesn't turn the dialog into a wall of text. */
 const MAX_VISIBLE_ISSUES = 8;
 
+/** The chart check's four visible states. The box is present in all of them,
+ *  so the dialog's height doesn't jump when the scan resolves. */
+type IssueCheckState =
+  | {status: 'checking'}
+  | {status: 'done'; summary: ExportIssueSummary}
+  | {status: 'failed'};
+
 export interface ExportIssueSummary {
   /** Human-readable, deduplicated issue descriptions, in folder → metadata →
    * chart order, capped to `MAX_VISIBLE_ISSUES`. */
@@ -216,6 +224,66 @@ export function summarizeScanIssues(scanned: ScannedChart): ExportIssueSummary {
     lines: unique.slice(0, MAX_VISIBLE_ISSUES),
     totalCount: unique.length,
   };
+}
+
+/**
+ * The chart check's one box, in whichever state the check is in.
+ *
+ * A clean result is worth as much screen space as a dirty one: "we looked and
+ * found nothing" is the answer most people opening this dialog want, and it
+ * can only be told apart from "we haven't looked yet" if both are stated.
+ */
+function ChartCheckBox({check}: {check: IssueCheckState}) {
+  if (check.status === 'checking') {
+    return (
+      <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+        Checking for errors…
+      </div>
+    );
+  }
+
+  // A scan that threw tells the user nothing about the chart, so it must not
+  // read as a clean bill of health. The export itself is unaffected.
+  if (check.status === 'failed') {
+    return (
+      <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+        Couldn’t check this chart for errors. Exporting still works.
+      </div>
+    );
+  }
+
+  const {lines, totalCount} = check.summary;
+  if (totalCount === 0) {
+    return (
+      <div className="flex items-center gap-1.5 rounded-md border border-emerald-600/30 bg-emerald-600/5 p-3 text-xs text-emerald-700 dark:text-emerald-500">
+        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+        No errors found in this chart.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-amber-600/30 bg-amber-600/5 p-3 text-xs text-amber-700 dark:text-amber-500">
+      <p className="flex items-center gap-1.5 font-medium">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+        {totalCount === 1
+          ? '1 issue found in this chart:'
+          : `${totalCount} issues found in this chart:`}
+      </p>
+      <ul className="mt-1.5 list-disc space-y-0.5 pl-6">
+        {lines.map((line, i) => (
+          <li key={i}>{line}</li>
+        ))}
+      </ul>
+      {totalCount > lines.length && (
+        <p className="mt-1 pl-6 text-amber-700/70 dark:text-amber-500/70">
+          +{totalCount - lines.length} more
+        </p>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -431,16 +499,21 @@ export default function ExportDialog({
   // Purely informational (the export buttons stay enabled either way), so
   // this runs once per dialog open rather than on every keystroke in the
   // song-details dialog — `open` is the only dependency that re-triggers it.
-  const [issueSummary, setIssueSummary] = useState<ExportIssueSummary | null>(
-    null,
-  );
+  //
+  // The check is always reported, including while it runs and when it comes
+  // back clean: the box appearing only on a bad chart made a good one
+  // indistinguishable from one still being scanned, so the dialog seemed to
+  // grow an alert after the fact.
+  const [issueCheck, setIssueCheck] = useState<IssueCheckState>({
+    status: 'checking',
+  });
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
 
     (async () => {
-      if (!cancelled) setIssueSummary(null);
+      if (!cancelled) setIssueCheck({status: 'checking'});
       try {
         const {chartSource, audioFiles, extraAssets} = await loadExportInputs();
 
@@ -464,9 +537,15 @@ export default function ExportDialog({
           includeMd5: false,
           includeBTrack: false,
         });
-        if (!cancelled) setIssueSummary(summarizeScanIssues(scanned));
+        if (!cancelled) {
+          setIssueCheck({
+            status: 'done',
+            summary: summarizeScanIssues(scanned),
+          });
+        }
       } catch (err) {
         console.warn('Could not check chart for issues:', err);
+        if (!cancelled) setIssueCheck({status: 'failed'});
       }
     })();
 
@@ -598,29 +677,9 @@ export default function ExportDialog({
             </div>
           )}
 
-          {/* Chart-checker issues: informational only, doesn't block either
-              export button. Nothing renders while it's still computing or
-              once it comes back clean. */}
-          {issueSummary && issueSummary.totalCount > 0 && (
-            <div className="rounded-md border border-amber-600/30 bg-amber-600/5 p-3 text-xs text-amber-700 dark:text-amber-500">
-              <p className="flex items-center gap-1.5 font-medium">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                {issueSummary.totalCount === 1
-                  ? '1 issue found in this chart:'
-                  : `${issueSummary.totalCount} issues found in this chart:`}
-              </p>
-              <ul className="mt-1.5 list-disc space-y-0.5 pl-6">
-                {issueSummary.lines.map((line, i) => (
-                  <li key={i}>{line}</li>
-                ))}
-              </ul>
-              {issueSummary.totalCount > issueSummary.lines.length && (
-                <p className="mt-1 pl-6 text-amber-700/70 dark:text-amber-500/70">
-                  +{issueSummary.totalCount - issueSummary.lines.length} more
-                </p>
-              )}
-            </div>
-          )}
+          {/* Chart-checker result: informational only, never blocks either
+              export button. Always rendered — see `IssueCheckState`. */}
+          <ChartCheckBox check={issueCheck} />
 
           {/* Package format: two equal-weight buttons, each downloads
               immediately on click. */}
