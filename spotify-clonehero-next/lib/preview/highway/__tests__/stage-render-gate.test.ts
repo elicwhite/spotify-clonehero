@@ -13,7 +13,6 @@
  * WebGL context and no image decoding).
  */
 
-import * as THREE from 'three';
 import {createEmptyChart} from '@eliwhite/scan-chart';
 import {setupStage, type HighwayStage} from '../index';
 import {computeStageLayout} from '../layout';
