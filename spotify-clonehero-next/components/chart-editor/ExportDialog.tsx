@@ -13,7 +13,6 @@ import {toast} from 'sonner';
 import {
   parseChartAndIni,
   scanChart,
-  type FolderIssueType,
   type ScannedChart,
 } from '@eliwhite/scan-chart';
 
@@ -172,13 +171,6 @@ async function collectExportInputs(args: {
 // Chart-checker issues
 // ---------------------------------------------------------------------------
 
-/** `folderIssues` too common/unactionable to be worth flagging: every drum
- * transcription and most in-progress edits ship without album art, so
- * reporting it on every export would drown out real problems. Mirrors the
- * tolerance `lib/chart-export/__tests__/package-validation.test.ts` already
- * applies when asserting a packaged chart is clean. */
-const BENIGN_FOLDER_ISSUES = new Set<FolderIssueType>(['noAlbumArt']);
-
 /** Bulleted issues are capped at this many lines; past that a "+N more"
  * summary line takes over so a chart with dozens of small issues (e.g. one
  * per difficulty) doesn't turn the dialog into a wall of text. */
@@ -205,11 +197,14 @@ export interface ExportIssueSummary {
  * `description`, so no separate human-readable mapping is needed here.
  * Duplicate descriptions collapse to one line — a chart-wide problem (e.g. a
  * missing name) shouldn't repeat once per difficulty.
+ *
+ * Nothing is filtered. An issue the user can't act on is a reason to give
+ * them the action, not to hide the issue: missing album art reads here
+ * because Song Details can now add it.
  */
 export function summarizeScanIssues(scanned: ScannedChart): ExportIssueSummary {
   const descriptions: string[] = [];
   for (const issue of scanned.folderIssues) {
-    if (BENIGN_FOLDER_ISSUES.has(issue.folderIssue)) continue;
     descriptions.push(issue.description);
   }
   for (const issue of scanned.metadataIssues) {

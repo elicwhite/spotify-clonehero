@@ -37,7 +37,7 @@ describe('summarizeScanIssues', () => {
     expect(summary.lines).toEqual([]);
   });
 
-  it('drops the benign noAlbumArt folder issue', () => {
+  it('reports missing album art, which Song Details can now fix', () => {
     const summary = summarizeScanIssues(
       fakeScannedChart({
         folderIssues: [
@@ -48,7 +48,7 @@ describe('summarizeScanIssues', () => {
         ],
       }),
     );
-    expect(summary.totalCount).toBe(0);
+    expect(summary.lines).toEqual(["This chart doesn't have album art."]);
   });
 
   it('keeps other folder issues, metadata issues and chart issues, in that order', () => {
