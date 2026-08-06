@@ -26,11 +26,18 @@ jest.mock('../../drum-transcription/pipeline/tempo-track', () => ({
   runTempoTrack: jest.fn(),
 }));
 
+jest.mock('../../lyrics-align/model-cache', () => ({
+  ...jest.requireActual('../../lyrics-align/model-cache'),
+  hasCachedModel: jest.fn(async () => false),
+}));
+
 import {
   runTempoPipeline,
   runTempoPipelineFromPcm,
 } from '@/lib/tempo-map/pipeline-client';
 import {runTempoTrack} from '@/lib/drum-transcription/pipeline/tempo-track';
+import {hasCachedModel} from '@/lib/lyrics-align/model-cache';
+import {BEAT_THIS_CACHE_KEY, BEAT_THIS_MIN_BYTES} from '@/lib/tempo-map/models';
 import type {LinkSegSections} from '@/lib/tempo-map/types';
 
 import {makeGenerateSectionsTask} from '../tasks/generate-sections';
@@ -40,6 +47,7 @@ import type {AssistAudio} from '../tasks/types';
 const mockRunTempoPipeline = runTempoPipeline as jest.Mock;
 const mockRunTempoPipelineFromPcm = runTempoPipelineFromPcm as jest.Mock;
 const mockRunTempoTrack = runTempoTrack as jest.Mock;
+const mockHasCachedModel = hasCachedModel as jest.Mock;
 
 const DECODED = {
   length: 256,
@@ -66,6 +74,33 @@ beforeEach(() => {
   mockRunTempoPipeline.mockReset();
   mockRunTempoPipelineFromPcm.mockReset();
   mockRunTempoTrack.mockReset();
+  mockHasCachedModel.mockReset().mockResolvedValue(false);
+});
+
+// A second run reads Beat This! out of the OPFS model cache and downloads
+// nothing, so the step has to report itself the way any other already-done
+// work does rather than flashing "Downloading" every single run.
+describe.each([
+  ['generate-tempo-map', makeGenerateTempoMapTask],
+  ['generate-sections', makeGenerateSectionsTask],
+] as const)('%s beat-model step', (_name, makeTask) => {
+  it('plans the beat-model download as cached once the model is in OPFS', async () => {
+    mockHasCachedModel.mockResolvedValue(true);
+    const steps = await makeTask().planSteps({audio: AUDIO});
+    expect(steps.find(s => s.key === 'download-beat-model')?.cached).toBe(true);
+    expect(mockHasCachedModel).toHaveBeenCalledWith(
+      BEAT_THIS_CACHE_KEY,
+      BEAT_THIS_MIN_BYTES,
+    );
+  });
+
+  it('plans it as real work when the model is not cached yet', async () => {
+    mockHasCachedModel.mockResolvedValue(false);
+    const steps = await makeTask().planSteps({audio: AUDIO});
+    expect(steps.find(s => s.key === 'download-beat-model')?.cached).toBe(
+      false,
+    );
+  });
 });
 
 describe('generate-tempo-map', () => {
@@ -97,13 +132,46 @@ describe('generate-tempo-map', () => {
     expect(steps.map(s => s.key)).not.toContain('sections');
   });
 
-  it('presents the drum-onset stage as tempo work (plan 0076 item 24)', async () => {
+  it('shows the drum-onset alignment as part of building the tempo map', async () => {
     const steps = await makeGenerateTempoMapTask().planSteps({audio: AUDIO});
-    const step = steps.find(s => s.key === 'transcribe-drums');
-    expect(step?.label).toBe('Aligning grid to drum hits');
+    expect(steps.map(s => s.key)).not.toContain('transcribe-drums');
+    const step = steps.find(s => s.key === 'convert');
+    expect(step?.label).toBe('Building the tempo map');
     // The description has to justify the wait: why this stage makes the map
     // better, not just that a model is running.
     expect(step?.description).toMatch(/grid/i);
+  });
+
+  it('reports the alignment pass as progress on the tempo-map step', async () => {
+    const seen: Array<{
+      activeKey: string | null;
+      progress: number | undefined;
+    }> = [];
+    mockRunTempoTrack.mockImplementation(async (_buffer, options) => {
+      options.onProgress({stage: 'convert'});
+      options.onProgress({stage: 'transcribe-drums', percent: 0.5});
+      return {
+        synctrack: {origin_ms: 0, tempos: [], timeSignatures: []},
+        rawSynctrack: {origin_ms: 0, tempos: [], timeSignatures: []},
+        events: [],
+        durationSeconds: 4,
+        sections: null,
+        meterStats: null,
+        drumOnsetOffsetMs: null,
+        drumStemStereo: null,
+      };
+    });
+    await makeGenerateTempoMapTask().run(
+      {audio: AUDIO},
+      new AbortController().signal,
+      event =>
+        seen.push({activeKey: event.activeKey, progress: event.progress}),
+    );
+    expect(seen).toEqual([
+      {activeKey: 'convert', progress: 0},
+      {activeKey: 'convert', progress: 0.5},
+      {activeKey: null, progress: undefined},
+    ]);
   });
 });
 

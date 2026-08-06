@@ -32,7 +32,10 @@ jest.mock('../../audio-pipeline/stem-cache', () => ({
 }));
 
 import {hasStem, hasStemOpus} from '@/lib/audio-pipeline/stem-cache';
-import {makeGenerateTempoMapTask} from '../tasks/generate-tempo-map';
+import {
+  makeGenerateTempoMapTask,
+  tempoTrackProgressToStepEvent,
+} from '../tasks/generate-tempo-map';
 import {makeGenerateSectionsTask} from '../tasks/generate-sections';
 import {makeAddLyricsTask} from '../tasks/add-lyrics';
 import {makeGenerateDifficultiesTask} from '../tasks/generate-difficulties';
@@ -104,22 +107,26 @@ describe('generate-tempo-map planned order', () => {
   /**
    * `lib/tempo-map/pipeline-worker.ts` (`run`), then the CRNN stage
    * `lib/drum-transcription/pipeline/tempo-track.ts` layers on after the
-   * worker resolves.
+   * worker resolves — each stage put through the task's own mapper, which is
+   * what decides the step key a stage reports into. The CRNN alignment stage
+   * reports into `convert`, so it does not appear as a key of its own.
    */
-  const COLD_EMISSIONS = [
-    'download-separation-model',
-    'separate',
-    'download-beat-model',
-    'beats-fullmix',
-    'beats-drums',
-    'convert',
-    'transcribe-drums',
-  ];
+  const COLD_EMISSIONS = (
+    [
+      'download-separation-model',
+      'separate',
+      'download-beat-model',
+      'beats-fullmix',
+      'beats-drums',
+      'convert',
+      'transcribe-drums',
+    ] as const
+  ).map(stage => tempoTrackProgressToStepEvent({stage}).activeKey!);
 
   it('matches the tempo worker + CRNN emission order on a cold run', async () => {
     mockHasStem.mockResolvedValue(false);
     const steps = await makeGenerateTempoMapTask().planSteps({audio: AUDIO});
-    expect(steps.map(s => s.key)).toEqual(COLD_EMISSIONS);
+    expect(steps.map(s => s.key)).toEqual([...new Set(COLD_EMISSIONS)]);
     expectOrderMatchesEmissions(steps, COLD_EMISSIONS);
   });
 
@@ -134,26 +141,29 @@ describe('generate-tempo-map planned order', () => {
     ).toEqual(['download-separation-model', 'separate']);
     // The cache-hit worker still emits `separate` (with a "reused" detail)
     // before loading the beat model; the model download never happens.
-    expectOrderMatchesEmissions(steps, [
-      'separate',
-      'download-beat-model',
-      'beats-fullmix',
-      'beats-drums',
-      'convert',
-      'transcribe-drums',
-    ]);
+    expectOrderMatchesEmissions(
+      steps,
+      COLD_EMISSIONS.filter(k => k !== 'download-separation-model'),
+    );
   });
 
-  // Plan 0076 item 24: the KS-warp stage does real tempo work (it aligns the
-  // grid to detected drum onsets) and takes long enough that hiding it would
-  // misrepresent the run — so it stays, presented as tempo work rather than
-  // as "listening to drum hits", which read like transcription.
-  it('presents the KS-warp stage as tempo work, with a reason', async () => {
+  // The KS-warp stage does real tempo work (it aligns the grid to detected
+  // drum onsets) and takes long enough that letting the merged step stall
+  // would misrepresent the run — so its progress drives `convert` rather than
+  // being dropped.
+  it('folds the KS-warp stage into the tempo-map step', async () => {
     mockHasStem.mockResolvedValue(false);
     const steps = await makeGenerateTempoMapTask().planSteps({audio: AUDIO});
-    const step = steps.find(s => s.key === 'transcribe-drums');
-    expect(step?.label).toBe('Aligning grid to drum hits');
+    expect(steps.map(s => s.key)).not.toContain('transcribe-drums');
+    const step = steps.find(s => s.key === 'convert');
+    expect(step?.label).toBe('Building the tempo map');
     expect(step?.description).toBeTruthy();
+
+    const event = tempoTrackProgressToStepEvent({
+      stage: 'transcribe-drums',
+      percent: 0.4,
+    });
+    expect(event).toMatchObject({activeKey: 'convert', progress: 0.4});
   });
 
   // Plan 0076 item 23: section labeling is its own task now, so a tempo run

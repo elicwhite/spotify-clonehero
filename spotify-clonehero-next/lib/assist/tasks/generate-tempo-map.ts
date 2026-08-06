@@ -7,12 +7,16 @@ import {hasStem} from '@/lib/audio-pipeline/stem-cache';
 import {DRUMS_STEM} from '@/lib/audio-pipeline/separate-stems';
 import {decodeAndResampleTo44k} from '@/lib/audio-pipeline/decode-audio';
 import {defaultCreateWorker as defaultCreateTempoWorker} from '@/lib/tempo-map/pipeline-client';
-import {runTempoTrack} from '@/lib/drum-transcription/pipeline/tempo-track';
+import {hasBeatThisModelCached} from '@/lib/tempo-map/models';
+import {
+  runTempoTrack,
+  type TempoTrackProgress,
+} from '@/lib/drum-transcription/pipeline/tempo-track';
 import type {DrumTranscriber} from '@/lib/drum-transcription/ml/transcriber';
 import type {Synctrack} from '@/lib/tempo-map/types';
 import type {MeterStats} from '@/lib/tempo-map/meter-confidence';
 import {makeAbortError} from '@/lib/workers/abortable-worker';
-import type {PlannedStep} from '../run-to-steps';
+import type {PlannedStep, StepProgressEvent} from '../run-to-steps';
 import {
   resolveStemFingerprint,
   type AssistAudio,
@@ -50,15 +54,45 @@ const GENERATE_TEMPO_MAP_STEPS: ReadonlyArray<Omit<PlannedStep, 'cached'>> = [
     label: 'Finding the beat of the drums',
     description: undefined,
   },
-  {key: 'convert', label: 'Building the tempo map', description: undefined},
   {
-    key: 'transcribe-drums',
-    label: 'Aligning grid to drum hits',
+    key: 'convert',
+    label: 'Building the tempo map',
     description:
-      'Finds where the kicks and snares actually land and nudges the grid ' +
-      'onto them, so bar lines sit on the beat you hear instead of near it.',
+      'Turns the detected beats into a grid, then finds where the kicks and ' +
+      'snares actually land and nudges the grid onto them, so bar lines sit ' +
+      'on the beat you hear instead of near it.',
   },
 ];
+
+/**
+ * One tempo-pipeline stage as an assist step event. Every stage reports under
+ * its own key except the CRNN alignment pass, which reports into `convert`:
+ * building the grid and warping it onto the drum onsets are two halves of one
+ * result, and splitting them read as two unrelated steps. Folding the pass in
+ * here rather than dropping it keeps the merged step's progress moving for
+ * the whole of the (much longer) alignment half.
+ */
+export function tempoTrackProgressToStepEvent(
+  p: TempoTrackProgress,
+): StepProgressEvent {
+  if (p.stage === 'transcribe-drums') {
+    return {
+      activeKey: 'convert',
+      progress: p.percent,
+      etaSeconds: p.etaSeconds,
+      detail: p.detail,
+    };
+  }
+  return {
+    // The converter itself reports no percent and finishes in milliseconds;
+    // anchoring it at 0 keeps the merged step's progress monotonic once the
+    // alignment pass starts reporting.
+    activeKey: p.stage,
+    progress: p.stage === 'convert' ? 0 : p.percent,
+    etaSeconds: p.etaSeconds,
+    detail: p.detail,
+  };
+}
 
 export interface GenerateTempoMapInput {
   audio: AssistAudio;
@@ -98,15 +132,24 @@ export function makeGenerateTempoMapTask({
     async planSteps({audio}) {
       const originalBytes = await audio.loadOriginalBytes();
       const fingerprint = await resolveStemFingerprint(audio, originalBytes);
-      const separatingCached = await hasStem(fingerprint, DRUMS_STEM);
+      const [separatingCached, beatModelCached] = await Promise.all([
+        hasStem(fingerprint, DRUMS_STEM),
+        // The beat model is never skipped the way separation is, but on a
+        // second run it comes out of the OPFS model cache with no download at
+        // all, so announcing one is a promise the run does not keep.
+        hasBeatThisModelCached(),
+      ]);
       // A cached drum stem skips the separation model download too — the
       // pipeline only loads that model to separate. Showing it as pending
       // work would promise a step that never runs.
       return GENERATE_TEMPO_MAP_STEPS.map(cfg => ({
         ...cfg,
         cached:
-          separatingCached &&
-          (cfg.key === 'separate' || cfg.key === 'download-separation-model'),
+          cfg.key === 'download-beat-model'
+            ? beatModelCached
+            : separatingCached &&
+              (cfg.key === 'separate' ||
+                cfg.key === 'download-separation-model'),
       }));
     },
 
@@ -144,12 +187,7 @@ export function makeGenerateTempoMapTask({
         // lives in its own `generate-sections` task (plan 0076 item 23).
         sections: false,
         onProgress: p => {
-          progress({
-            activeKey: p.stage,
-            progress: p.percent,
-            etaSeconds: p.etaSeconds,
-            detail: p.detail,
-          });
+          progress(tempoTrackProgressToStepEvent(p));
         },
         createWorker,
         signal,

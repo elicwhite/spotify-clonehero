@@ -10,6 +10,9 @@
  * Ported from ~/projects/vocal-alignment/browser-aligner/src/model-cache.ts
  */
 
+/** Directory inside OPFS every cached model file lives in. */
+const MODEL_CACHE_DIR = 'model-cache';
+
 export interface ModelDownloadProgress {
   loadedBytes: number;
   /** 0 when the server didn't report a size. */
@@ -94,7 +97,7 @@ export async function getCachedModel(
   // Try loading from OPFS cache
   try {
     const root = await navigator.storage.getDirectory();
-    const dirHandle = await root.getDirectoryHandle('model-cache', {
+    const dirHandle = await root.getDirectoryHandle(MODEL_CACHE_DIR, {
       create: true,
     });
 
@@ -128,6 +131,31 @@ export async function getCachedModel(
     // OPFS itself unavailable — download without caching, still validated.
     console.warn('OPFS not available, downloading without cache:', e);
     return downloadModel(url, log, minBytes, label);
+  }
+}
+
+/**
+ * Whether `getCachedModel(_, cacheKey, _, minBytes)` would return without
+ * downloading — i.e. the OPFS cache already holds a file of a plausible
+ * size. Lets a step list predict a model download the same way it predicts
+ * any other cached work, instead of always announcing one.
+ *
+ * Answers false for every failure mode (no OPFS, no directory, no file,
+ * short file). The cost of a wrong `false` is one step that finishes at
+ * once; the cost of a wrong `true` would be a hidden multi-minute download.
+ */
+export async function hasCachedModel(
+  cacheKey: string,
+  minBytes: number = 1_000_000,
+): Promise<boolean> {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const dirHandle = await root.getDirectoryHandle(MODEL_CACHE_DIR);
+    const fileHandle = await dirHandle.getFileHandle(cacheKey);
+    const file = await fileHandle.getFile();
+    return file.size >= minBytes;
+  } catch {
+    return false;
   }
 }
 

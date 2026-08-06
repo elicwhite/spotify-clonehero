@@ -17,6 +17,14 @@
 
 import * as ort from 'onnxruntime-web';
 import {getCachedModel} from '@/lib/lyrics-align/model-cache';
+import {
+  BEAT_THIS_CACHE_KEY,
+  BEAT_THIS_MIN_BYTES,
+  BEAT_THIS_MODEL_URL,
+  ROFORMER_CACHE_KEY,
+  ROFORMER_MIN_BYTES,
+  ROFORMER_MODEL_URL,
+} from './models';
 import {resampleSoxr, initSoxr} from './resampler-soxr';
 import {separateDrumStem} from './stem-separation';
 import {
@@ -50,18 +58,6 @@ import type {
 
 const ORT_WASM_CDN =
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
-
-const ROFORMER_MODEL_URL =
-  'https://huggingface.co/elicwhite/bs-roformer-sw-6stem-onnx/resolve/main/bs_roformer_sw_6stem_fp16.onnx';
-const ROFORMER_CACHE_KEY = 'bs_roformer_sw_6stem_fp16.onnx';
-const ROFORMER_MIN_BYTES = 300_000_000; // real size ~336 MB
-
-// Hosted on R2 (assets.musiccharts.tools) — the local public/models/ copy is
-// gitignored and never deploys, so a same-origin URL 404s in production.
-const BEAT_THIS_MODEL_URL =
-  'https://assets.musiccharts.tools/models/beat_this.onnx';
-const BEAT_THIS_CACHE_KEY = 'beat_this_v1.onnx';
-const BEAT_THIS_MIN_BYTES = 70_000_000; // real size ~83 MB
 
 const SEPARATION_SAMPLE_RATE = 44100;
 

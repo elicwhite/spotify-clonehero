@@ -16,6 +16,7 @@ import {
   defaultCreateWorker as defaultCreateTempoWorker,
   runTempoPipeline,
 } from '@/lib/tempo-map/pipeline-client';
+import {hasBeatThisModelCached} from '@/lib/tempo-map/models';
 import type {LinkSegSections} from '@/lib/tempo-map/types';
 import {makeAbortError} from '@/lib/workers/abortable-worker';
 import type {PlannedStep} from '../run-to-steps';
@@ -68,9 +69,15 @@ export function makeGenerateSectionsTask({
     title: 'Sections',
 
     async planSteps() {
-      // No cache probe: nothing this run does is stem-cached, so every step
-      // always runs.
-      return GENERATE_SECTIONS_STEPS.map(cfg => ({...cfg}));
+      // Nothing here is stem-cached, so the only cache that changes the step
+      // list is the OPFS model cache: once Beat This! is in it, the run reads
+      // it locally and downloads nothing. Same probe `generate-tempo-map`
+      // uses, so the two tasks report that step identically.
+      const beatModelCached = await hasBeatThisModelCached();
+      return GENERATE_SECTIONS_STEPS.map(cfg => ({
+        ...cfg,
+        cached: cfg.key === 'download-beat-model' && beatModelCached,
+      }));
     },
 
     async run({audio}, signal, progress) {
