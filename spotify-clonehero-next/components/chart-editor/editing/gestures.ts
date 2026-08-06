@@ -14,6 +14,12 @@
  * already-resolved anchor + snapped cursor.
  */
 
+import {
+  parseSchemaNoteId,
+  typeToLane as schemaTypeToLane,
+  type InstrumentSchema,
+} from '@/lib/chart-edit';
+
 /** Pixel movement past which a press becomes a drag (not a click). */
 export const DRAG_THRESHOLD_PX = 5;
 
@@ -31,35 +37,62 @@ export interface NoteDragInput {
   snappedCursorTick: number;
   /**
    * Cursor's editor lane, or null when the view can't resolve one this frame.
-   * Null / kick's lane leaves the lane delta at its previous value so a
-   * brief excursion off the pad lanes doesn't snap the preview back.
+   * Null leaves the lane delta at its previous value, so a brief excursion
+   * outside the lanes doesn't snap the preview back.
    */
   cursorLane: number | null;
-  /** Number of notes in the current selection — lanes lock when > 1. */
-  selectionSize: number;
-  /** Lane delta from the previous frame (fallback while off the pad lanes). */
+  /** Lane delta from the previous frame (fallback while off the lanes). */
   prevLaneDelta: number;
-  /** First pad lane index, for clamping a resolved pad cursor lane. */
-  minPadLane: number;
-  /** Highest pad lane index, for clamping a resolved pad cursor lane. */
-  maxPadLane: number;
   /**
-   * The schema's lane-shift-excluded lane (drums' kick, five-fret's open),
-   * if any — excluded from the lane-change axis regardless of where in the
-   * schema's lane order it sits (unlike `minPadLane`/`maxPadLane`, this is
-   * an exact exclusion, not a range: a `cursorLane` beyond the pad range
-   * but not equal to `excludedLane` still clamps into range, e.g. a drag
-   * that overshoots past the last pad). Undefined for schemas where every
-   * lane participates in the shift axis.
+   * Lowest and highest lane index the drag may address. A pointer drag points
+   * AT a lane, so this is the schema's full lane range — kick and open
+   * included. (The arrow-key nudge is the gesture that excludes them; see
+   * `LaneAxis` in lib/chart-edit.)
    */
-  excludedLane?: number;
+  minLane: number;
+  maxLane: number;
+  /**
+   * Lowest and highest lane occupied by the selection. The delta is clamped
+   * so this whole span stays inside `[minLane, maxLane]`: clamping each note
+   * independently instead would let a drag past the edge pile the selection
+   * onto one lane, silently destroying the intervals between the notes.
+   *
+   * Equal to the anchor's lane for a single-note drag.
+   */
+  selectionMinLane: number;
+  selectionMaxLane: number;
+}
+
+/**
+ * Lowest and highest lane occupied by a set of selected note ids.
+ *
+ * Note ids carry their own type, so the span is read straight off the
+ * selection without touching the document. `fallbackLane` (the drag anchor's)
+ * covers a selection whose ids don't parse against this schema — a stale
+ * selection from another track — so a drag still behaves like a single-note
+ * one instead of clamping to nothing.
+ */
+export function selectionLaneSpan(
+  noteIds: readonly string[],
+  schema: InstrumentSchema,
+  fallbackLane: number,
+): {min: number; max: number} {
+  const lanes: number[] = [];
+  for (const id of noteIds) {
+    const parsed = parseSchemaNoteId(id, schema);
+    if (!parsed) continue;
+    const lane = schemaTypeToLane(schema, parsed.type);
+    if (lane >= 0) lanes.push(lane);
+  }
+  if (lanes.length === 0) return {min: fallbackLane, max: fallbackLane};
+  return {min: Math.min(...lanes), max: Math.max(...lanes)};
 }
 
 export interface NoteDragDelta {
   /** Snapped tick offset applied to every selected note (delta-snap: the
    *  anchor lands on the grid, relative offsets are preserved). */
   tickDelta: number;
-  /** Pad-lane offset. Always 0 for a kick anchor or a multi-note selection. */
+  /** Lane offset applied to every selected note. */
   laneDelta: number;
 }
 
@@ -69,28 +102,27 @@ export interface NoteDragDelta {
  * - **Delta-snap:** `tickDelta` is the snapped cursor tick minus the grabbed
  *   note's tick, so the grabbed note lands exactly on the grid while every
  *   other selected note keeps its relative (possibly off-grid) offset.
- * - **Lane change is single-note only:** a multi-note selection
- *   (`selectionSize > 1`) locks lanes — the drag moves in time only. An
- *   excluded-lane anchor (kick, open) never changes lane either (it spans
- *   the full width).
- * - Pad lanes clamp to `[minPadLane, maxPadLane]`.
+ * - **Lane change applies to the whole selection**, by the same delta, so a
+ *   run of notes moves to another lane keeping its shape. The delta is
+ *   clamped by the selection's span rather than per note — see
+ *   `selectionMinLane`.
+ * - Every lane is a legal target, kick and open included: the drag names a
+ *   lane by pointing at it.
  */
 export function computeNoteDragDelta(input: NoteDragInput): NoteDragDelta {
   const tickDelta = input.snappedCursorTick - input.anchorTick;
-  const laneLocked = input.selectionSize > 1;
-  let laneDelta = laneLocked ? 0 : input.prevLaneDelta;
+  let laneDelta = input.prevLaneDelta;
   const cursorLane = input.cursorLane;
-  if (
-    !laneLocked &&
-    input.anchorLane !== input.excludedLane &&
-    cursorLane !== null &&
-    cursorLane !== input.excludedLane
-  ) {
-    const clamped = Math.max(
-      input.minPadLane,
-      Math.min(input.maxPadLane, cursorLane),
+  if (cursorLane !== null) {
+    const wanted =
+      Math.max(input.minLane, Math.min(input.maxLane, cursorLane)) -
+      input.anchorLane;
+    // Hold the selection's shape: the delta may not push its lowest note
+    // below `minLane` nor its highest above `maxLane`.
+    laneDelta = Math.max(
+      input.minLane - input.selectionMinLane,
+      Math.min(input.maxLane - input.selectionMaxLane, wanted),
     );
-    laneDelta = clamped - input.anchorLane;
   }
   return {tickDelta, laneDelta};
 }

@@ -49,14 +49,18 @@ describe.each([
     expect(notes[0]).toMatchObject({tick: 480, type: laneA.noteType});
   });
 
-  it('does not add a duplicate at the same tick+type (caller pre-checks)', () => {
+  it('does not add a duplicate at the same tick+type', () => {
     const t = track();
     addNote(t, {tick: 480, type: laneA.noteType}, schema);
-    // addNote itself doesn't dedupe (AddNoteCommand pre-checks via
-    // findNote) — confirm a second insert creates a second NoteEvent in
-    // the group rather than silently merging, so callers must guard.
-    addNote(t, {tick: 480, type: laneA.noteType}, schema);
-    expect(listNotes(t, schema)).toHaveLength(2);
+    // Two notes of one type at one tick are the same note twice, not a
+    // chord, and `.chart` cannot represent it. The second insert replaces
+    // the first rather than stacking, which is what makes a dragged note
+    // dropped onto an existing one dedupe.
+    addNote(t, {tick: 480, type: laneA.noteType, length: 240}, schema);
+    const notes = listNotes(t, schema);
+    expect(notes).toHaveLength(1);
+    // The incoming note wins: it is the one the caller was placing.
+    expect(notes[0].length).toBe(240);
   });
 
   it('removeNote deletes the note', () => {

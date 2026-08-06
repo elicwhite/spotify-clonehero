@@ -222,6 +222,9 @@ export {
   laneToType,
   shiftLane,
   padLaneRange,
+  fullLaneRange,
+  laneRangeFor,
+  type LaneAxis,
   defaultFlagBits,
   toggleFlagBits,
   legalizeFlagBits,
@@ -232,6 +235,8 @@ export {
   setNoteFlags,
   setNoteLength,
   moveNote,
+  moveNotes,
+  type NoteRef,
 } from './entities/notes';
 
 // Generic active-track lookup (replaces findExpertDrumsTrack across the editor)

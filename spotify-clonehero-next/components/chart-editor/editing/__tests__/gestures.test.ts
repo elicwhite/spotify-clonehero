@@ -1,7 +1,8 @@
 /**
  * Shared note-drag semantics tests (plan 0062 invariant 3 / §6). One
- * implementation, called by both the highway and the piano roll — these
- * pin the delta-snap, single-note lane change, and multi-note lane lock.
+ * implementation, called by both the highway and the piano roll — these pin
+ * the delta-snap, the lane change, and the group clamp that holds a
+ * multi-note selection's shape.
  */
 
 import {
@@ -9,22 +10,24 @@ import {
   exceedsDragThreshold,
   DRAG_THRESHOLD_PX,
 } from '../gestures';
-import {guitarSchema, padLaneRange, typeToLane} from '@/lib/chart-edit';
+import {guitarSchema, fullLaneRange, typeToLane} from '@/lib/chart-edit';
 
-const PADS = {minPadLane: 0, maxPadLane: 3, excludedLane: 4};
+/** 4-lane drums: pads 0-3, kick 4. A drag addresses all five. */
+const DRUMS = {minLane: 0, maxLane: 4};
+/** A single-note drag: the selection's span is just the anchor's lane. */
+const solo = (lane: number) => ({
+  selectionMinLane: lane,
+  selectionMaxLane: lane,
+});
 
-// Guitar's pad range/excluded lane (open, plan 0067 point 4) — used to
-// verify the piano-roll drag math generalizes off the drum schema.
-const {min: GUITAR_MIN_PAD, max: GUITAR_MAX_PAD} = padLaneRange(guitarSchema);
+// Guitar's full lane range (open included, plan 0067 point 4) — used to
+// verify the drag math generalizes off the drum schema.
+const {min: GUITAR_MIN, max: GUITAR_MAX} = fullLaneRange(guitarSchema);
 const GUITAR_OPEN_LANE = typeToLane(
   guitarSchema,
   guitarSchema.lanes[0].noteType,
 );
-const GUITAR_PADS = {
-  minPadLane: GUITAR_MIN_PAD,
-  maxPadLane: GUITAR_MAX_PAD,
-  excludedLane: GUITAR_OPEN_LANE,
-};
+const GUITAR = {minLane: GUITAR_MIN, maxLane: GUITAR_MAX};
 
 describe('exceedsDragThreshold', () => {
   it('is false at/under the threshold and true past it', () => {
@@ -46,9 +49,9 @@ describe('computeNoteDragDelta', () => {
       anchorLane: 1,
       snappedCursorTick: 600,
       cursorLane: 1,
-      selectionSize: 1,
       prevLaneDelta: 0,
-      ...PADS,
+      ...DRUMS,
+      ...solo(1),
     });
     expect(tickDelta).toBe(130);
   });
@@ -59,92 +62,137 @@ describe('computeNoteDragDelta', () => {
       anchorLane: 0, // red
       snappedCursorTick: 0,
       cursorLane: 2, // blue
-      selectionSize: 1,
       prevLaneDelta: 0,
-      ...PADS,
+      ...DRUMS,
+      ...solo(0),
     });
     expect(laneDelta).toBe(2);
   });
 
-  it('multi-note selection locks lanes (time-only move)', () => {
-    const {tickDelta, laneDelta} = computeNoteDragDelta({
-      anchorTick: 0,
-      anchorLane: 0,
-      snappedCursorTick: 240,
-      cursorLane: 3,
-      selectionSize: 3,
-      prevLaneDelta: 0,
-      ...PADS,
-    });
-    expect(tickDelta).toBe(240);
-    expect(laneDelta).toBe(0);
-  });
-
-  it('a kick anchor never changes lane', () => {
-    const {laneDelta} = computeNoteDragDelta({
-      anchorTick: 0,
-      anchorLane: 4, // kick
-      snappedCursorTick: 0,
-      cursorLane: 3,
-      selectionSize: 1,
-      prevLaneDelta: 0,
-      ...PADS,
-    });
-    expect(laneDelta).toBe(0);
-  });
-
-  it('clamps pad lanes to the valid range', () => {
+  it('moves a whole selection across lanes by one delta', () => {
+    // The feature: a run of blue notes dragged onto yellow. Anchor blue (2)
+    // to yellow (1), selection entirely in lane 2.
     const {laneDelta} = computeNoteDragDelta({
       anchorTick: 0,
       anchorLane: 2,
       snappedCursorTick: 0,
-      cursorLane: 99, // out of range → clamps to maxPadLane (3)
-      selectionSize: 1,
+      cursorLane: 1,
       prevLaneDelta: 0,
-      ...PADS,
+      ...DRUMS,
+      selectionMinLane: 2,
+      selectionMaxLane: 2,
     });
-    expect(laneDelta).toBe(1); // 3 - 2
+    expect(laneDelta).toBe(-1);
   });
 
-  it('keeps the previous lane delta while off the pad lanes', () => {
-    // cursorLane null (e.g. over the kick strip) → hold the last lane delta.
+  it('clamps by the selection span, so the shape survives the edge', () => {
+    // Selection spans red(0)..blue(2); anchor red. Dragging the anchor far
+    // past the last lane may only shift until blue reaches it — otherwise
+    // the three lanes would pile onto one and the intervals would be gone.
+    const {laneDelta} = computeNoteDragDelta({
+      anchorTick: 0,
+      anchorLane: 0,
+      snappedCursorTick: 0,
+      cursorLane: 99,
+      prevLaneDelta: 0,
+      ...DRUMS,
+      selectionMinLane: 0,
+      selectionMaxLane: 2,
+    });
+    expect(laneDelta).toBe(2); // maxLane(4) - selectionMax(2)
+  });
+
+  it('clamps the same way at the low edge', () => {
+    const {laneDelta} = computeNoteDragDelta({
+      anchorTick: 0,
+      anchorLane: 3,
+      snappedCursorTick: 0,
+      cursorLane: -99,
+      prevLaneDelta: 0,
+      ...DRUMS,
+      selectionMinLane: 1,
+      selectionMaxLane: 3,
+    });
+    expect(laneDelta).toBe(-1); // minLane(0) - selectionMin(1)
+  });
+
+  it('drags a pad note onto kick', () => {
+    const {laneDelta} = computeNoteDragDelta({
+      anchorTick: 0,
+      anchorLane: 3, // green
+      snappedCursorTick: 0,
+      cursorLane: 4, // kick
+      prevLaneDelta: 0,
+      ...DRUMS,
+      ...solo(3),
+    });
+    expect(laneDelta).toBe(1);
+  });
+
+  it('drags a kick note back onto a pad', () => {
+    const {laneDelta} = computeNoteDragDelta({
+      anchorTick: 0,
+      anchorLane: 4, // kick
+      snappedCursorTick: 0,
+      cursorLane: 1, // yellow
+      prevLaneDelta: 0,
+      ...DRUMS,
+      ...solo(4),
+    });
+    expect(laneDelta).toBe(-3);
+  });
+
+  it('clamps a cursor past the last lane', () => {
+    const {laneDelta} = computeNoteDragDelta({
+      anchorTick: 0,
+      anchorLane: 2,
+      snappedCursorTick: 0,
+      cursorLane: 99,
+      prevLaneDelta: 0,
+      ...DRUMS,
+      ...solo(2),
+    });
+    expect(laneDelta).toBe(2); // clamps to lane 4 (kick)
+  });
+
+  it('keeps the previous lane delta when the cursor resolves no lane', () => {
     const {laneDelta} = computeNoteDragDelta({
       anchorTick: 0,
       anchorLane: 1,
       snappedCursorTick: 0,
       cursorLane: null,
-      selectionSize: 1,
       prevLaneDelta: 2,
-      ...PADS,
+      ...DRUMS,
+      ...solo(1),
     });
     expect(laneDelta).toBe(2);
   });
 
-  describe('guitarSchema pad range (plan 0067 point 4)', () => {
-    it('clamps at the guitar pad-lane boundaries', () => {
+  describe('guitarSchema (plan 0067 point 4)', () => {
+    it('clamps at the guitar lane boundaries', () => {
       const {laneDelta} = computeNoteDragDelta({
         anchorTick: 0,
-        anchorLane: 3, // yellow
+        anchorLane: 3,
         snappedCursorTick: 0,
-        cursorLane: 99, // out of range → clamps to maxPadLane (orange, 5)
-        selectionSize: 1,
+        cursorLane: 99,
         prevLaneDelta: 0,
-        ...GUITAR_PADS,
+        ...GUITAR,
+        ...solo(3),
       });
-      expect(laneDelta).toBe(2); // 5 - 3
+      expect(laneDelta).toBe(GUITAR_MAX - 3);
     });
 
-    it('open behaves like kick: an open anchor never changes lane', () => {
+    it('open is a drag target like kick', () => {
       const {laneDelta} = computeNoteDragDelta({
         anchorTick: 0,
-        anchorLane: GUITAR_OPEN_LANE,
+        anchorLane: GUITAR_MAX,
         snappedCursorTick: 0,
-        cursorLane: GUITAR_MAX_PAD,
-        selectionSize: 1,
+        cursorLane: GUITAR_OPEN_LANE,
         prevLaneDelta: 0,
-        ...GUITAR_PADS,
+        ...GUITAR,
+        ...solo(GUITAR_MAX),
       });
-      expect(laneDelta).toBe(0);
+      expect(laneDelta).toBe(GUITAR_OPEN_LANE - GUITAR_MAX);
     });
   });
 });

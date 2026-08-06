@@ -88,7 +88,7 @@ import {
   DEFAULT_VOCALS_PART,
   getAudioAnchor,
   schemaForTrack,
-  padLaneRange,
+  fullLaneRange,
   typeToLane as schemaTypeToLane,
   laneToType as schemaLaneToType,
   drums4LaneSchema,
@@ -152,7 +152,11 @@ import {
   RenameSectionCommand,
   type EditCommand,
 } from '../commands';
-import {computeNoteDragDelta, exceedsDragThreshold} from '../editing/gestures';
+import {
+  computeNoteDragDelta,
+  exceedsDragThreshold,
+  selectionLaneSpan,
+} from '../editing/gestures';
 import {
   MARQUEE_KINDS,
   bandsTouched,
@@ -2548,10 +2552,15 @@ export default function PianoRollTimeline({
               }
             : laneGeometry();
           const dragSchema = dragScene.schema ?? drums4LaneSchema;
-          const {min: minPadLane, max: maxPadLane} = padLaneRange(dragSchema);
-          const excludedLane = dragSchema.laneShiftExcludes?.length
-            ? schemaTypeToLane(dragSchema, dragSchema.laneShiftExcludes[0])
-            : undefined;
+          const {min: minLane, max: maxLane} = fullLaneRange(dragSchema);
+          const span = selectionLaneSpan(
+            localNoteIdsForTrack(
+              getSelectedIds(editStateRef.current, 'note'),
+              drag.trackKey,
+            ),
+            dragSchema,
+            drag.anchorLane,
+          );
           const {tickDelta, laneDelta} = computeNoteDragDelta({
             anchorTick: drag.anchorTick,
             anchorLane: drag.anchorLane,
@@ -2560,14 +2569,11 @@ export default function PianoRollTimeline({
               row && (y < row.laneTop || y >= row.bottom)
                 ? null
                 : laneAtY(y, dragGeo),
-            selectionSize: localNoteIdsForTrack(
-              getSelectedIds(editStateRef.current, 'note'),
-              drag.trackKey,
-            ).length,
             prevLaneDelta: drag.laneDelta,
-            minPadLane,
-            maxPadLane,
-            ...(excludedLane !== undefined ? {excludedLane} : {}),
+            minLane,
+            maxLane,
+            selectionMinLane: span.min,
+            selectionMaxLane: span.max,
           });
           if (
             !drag.active ||

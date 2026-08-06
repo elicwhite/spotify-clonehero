@@ -51,6 +51,7 @@ import {
   parseSchemaNoteId,
   typeToLane as schemaTypeToLane,
   moveNote,
+  moveNotes,
   listNotes,
 } from './notes';
 
@@ -191,6 +192,21 @@ export interface EntityKindHandler {
     laneDelta: number,
     ctx?: EntityContext,
   ): string;
+  /**
+   * Apply one move to many ids at once, returning their new ids in input
+   * order. Optional: a kind that omits it is moved by looping {@link move}.
+   *
+   * A kind whose ids encode position (notes: `(tick, type)`) must implement
+   * this, because looping `move` resolves each id against a document the
+   * earlier moves already changed — see `moveNotes`.
+   */
+  moveMany?(
+    doc: ChartDocument,
+    ids: readonly string[],
+    tickDelta: number,
+    laneDelta: number,
+    ctx?: EntityContext,
+  ): string[];
   /** True if the kind responds to lane-delta input (notes only today). */
   supportsLaneDelta: boolean;
 }
@@ -252,6 +268,31 @@ const noteHandler: EntityKindHandler = {
       schema,
     );
     return moved ? schemaNoteId(moved.tick, moved.type) : id;
+  },
+  moveMany(doc, ids, tickDelta, laneDelta, ctx) {
+    const {track, schema} = resolveTrackAndSchema(doc, ctx);
+    if (!track) return [...ids];
+    const parsed = ids.map(id => parseSchemaNoteId(id, schema));
+    const refs = parsed.filter(p => p !== null);
+    // A drag points at a lane, so it addresses every lane including the ones
+    // the arrow-key nudge excludes (kick, open) — see `LaneAxis`.
+    const moved = moveNotes(
+      doc.parsedChart,
+      track,
+      refs,
+      tickDelta,
+      laneDelta,
+      schema,
+      'all',
+    );
+    // Re-thread results onto the input positions: an id that didn't parse
+    // kept no slot in `refs`, and keeps its old id here.
+    let next = 0;
+    return ids.map((id, i) => {
+      if (parsed[i] === null) return id;
+      const to = moved[next++];
+      return to ? schemaNoteId(to.tick, to.type) : id;
+    });
   },
   supportsLaneDelta: true,
 };

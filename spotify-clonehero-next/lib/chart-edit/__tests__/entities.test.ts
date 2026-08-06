@@ -1,3 +1,4 @@
+import type {NoteType} from '@eliwhite/scan-chart';
 import type {
   ChartDocument,
   NormalizedVocalPart,
@@ -234,6 +235,99 @@ describe('entityHandlers dispatch', () => {
         expect(handler.locate(doc, id, ctx)).not.toBeNull();
       }
     }
+  });
+
+  describe('note handler moveMany (batch note move)', () => {
+    const drumsCtx = {
+      trackKey: {instrument: 'drums', difficulty: 'expert'},
+    } as const;
+
+    function docWith(notes: {tick: number; type: NoteType}[]): ChartDocument {
+      const doc = chartWithDrumTrack();
+      const drums = doc.parsedChart.trackData[0];
+      for (const n of notes) addDrumNote(drums, n);
+      return doc;
+    }
+
+    function ticksAndTypes(doc: ChartDocument) {
+      return getDrumNotes(doc.parsedChart.trackData[0])
+        .map(n => `${n.tick}:${n.type}`)
+        .sort();
+    }
+
+    // The ordering hazard: a note ids by (tick, type), so moving the pair one
+    // at a time would look the second one up in a track the first move has
+    // already rewritten. Blue→yellow lands exactly where yellow still sits.
+    it('does not lose a note whose destination another selected note occupies', () => {
+      const doc = docWith([
+        {tick: 100, type: noteTypes.yellowDrum},
+        {tick: 100, type: noteTypes.blueDrum},
+      ]);
+      const out = cloneDocFor('note', doc, drumsCtx);
+      entityHandlers.note.moveMany!(
+        out,
+        [
+          noteId({tick: 100, type: noteTypes.yellowDrum}),
+          noteId({tick: 100, type: noteTypes.blueDrum}),
+        ],
+        0,
+        -1,
+        drumsCtx,
+      );
+      // yellow→red, blue→yellow. Two notes in, two notes out.
+      expect(ticksAndTypes(out)).toEqual(
+        [`100:${noteTypes.redDrum}`, `100:${noteTypes.yellowDrum}`].sort(),
+      );
+    });
+
+    it('dedupes a note dropped exactly onto an existing one', () => {
+      const doc = docWith([
+        {tick: 100, type: noteTypes.yellowDrum},
+        {tick: 100, type: noteTypes.blueDrum},
+      ]);
+      const out = cloneDocFor('note', doc, drumsCtx);
+      // Move only blue down onto yellow's slot; yellow stays put.
+      entityHandlers.note.moveMany!(
+        out,
+        [noteId({tick: 100, type: noteTypes.blueDrum})],
+        0,
+        -1,
+        drumsCtx,
+      );
+      expect(ticksAndTypes(out)).toEqual([`100:${noteTypes.yellowDrum}`]);
+    });
+
+    it('moves a pad note onto kick', () => {
+      const doc = docWith([{tick: 480, type: noteTypes.greenDrum}]);
+      const out = cloneDocFor('note', doc, drumsCtx);
+      entityHandlers.note.moveMany!(
+        out,
+        [noteId({tick: 480, type: noteTypes.greenDrum})],
+        0,
+        1,
+        drumsCtx,
+      );
+      expect(ticksAndTypes(out)).toEqual([`480:${noteTypes.kick}`]);
+    });
+
+    it('keeps a run intact when it shifts lane', () => {
+      const doc = docWith([
+        {tick: 0, type: noteTypes.blueDrum},
+        {tick: 480, type: noteTypes.blueDrum},
+        {tick: 960, type: noteTypes.blueDrum},
+      ]);
+      const out = cloneDocFor('note', doc, drumsCtx);
+      entityHandlers.note.moveMany!(
+        out,
+        [0, 480, 960].map(tick => noteId({tick, type: noteTypes.blueDrum})),
+        0,
+        -1,
+        drumsCtx,
+      );
+      expect(ticksAndTypes(out)).toEqual(
+        [0, 480, 960].map(t => `${t}:${noteTypes.yellowDrum}`).sort(),
+      );
+    });
   });
 
   it('note handler shifts both tick and lane', () => {

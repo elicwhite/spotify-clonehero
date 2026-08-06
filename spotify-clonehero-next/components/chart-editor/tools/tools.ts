@@ -15,7 +15,7 @@
 import {
   parseSchemaNoteId,
   typeToLane as schemaTypeToLane,
-  padLaneRange,
+  fullLaneRange,
   drums4LaneSchema,
 } from '@/lib/chart-edit';
 import {
@@ -33,7 +33,11 @@ import {
 import {getSelectedIds} from '@/lib/chart-editor-core';
 import {AFFORDANCES} from '../affordances';
 import {selectNotesInRange} from '../editing/marquee';
-import {computeNoteDragDelta, exceedsDragThreshold} from '../editing/gestures';
+import {
+  computeNoteDragDelta,
+  exceedsDragThreshold,
+  selectionLaneSpan,
+} from '../editing/gestures';
 import type {EditorTool, PointerHitInfo, ToolContext} from './types';
 
 /**
@@ -113,20 +117,22 @@ export const selectMoveTool: EditorTool = {
       if (noteDrag.active || exceedsDragThreshold(dx, dy)) {
         const snappedTick = ctx.screenToTick(coords.x, coords.y);
         const dragSchema = ctx.schema ?? drums4LaneSchema;
-        const {min: minPadLane, max: maxPadLane} = padLaneRange(dragSchema);
-        const excludedLane = dragSchema.laneShiftExcludes?.length
-          ? schemaTypeToLane(dragSchema, dragSchema.laneShiftExcludes[0])
-          : undefined;
+        const {min: minLane, max: maxLane} = fullLaneRange(dragSchema);
+        const span = selectionLaneSpan(
+          Array.from(getSelectedIds(ctx.state, 'note')),
+          dragSchema,
+          noteDrag.anchorLane,
+        );
         const {tickDelta, laneDelta} = computeNoteDragDelta({
           anchorTick: noteDrag.anchorTick,
           anchorLane: noteDrag.anchorLane,
           snappedCursorTick: snappedTick,
           cursorLane: ctx.screenToLane(coords.x, coords.y),
-          selectionSize: getSelectedIds(ctx.state, 'note').size,
           prevLaneDelta: noteDrag.laneDelta,
-          minPadLane,
-          maxPadLane,
-          ...(excludedLane !== undefined ? {excludedLane} : {}),
+          minLane,
+          maxLane,
+          selectionMinLane: span.min,
+          selectionMaxLane: span.max,
         });
         if (
           !noteDrag.active ||

@@ -525,8 +525,15 @@ export class MoveEntitiesCommand implements EditCommand {
     const handler = entityHandlers[this.kind];
     const newDoc = cloneDocFor(this.kind, doc, this.ctx);
     const laneDelta = handler.supportsLaneDelta ? this.laneDelta : 0;
-    for (const id of this.ids) {
-      handler.move(newDoc, id, this.tickDelta, laneDelta, this.ctx);
+    // A kind whose ids encode position resolves the whole set at once: moving
+    // them one at a time would look each id up in a document the previous
+    // moves already changed.
+    if (handler.moveMany) {
+      handler.moveMany(newDoc, this.ids, this.tickDelta, laneDelta, this.ctx);
+    } else {
+      for (const id of this.ids) {
+        handler.move(newDoc, id, this.tickDelta, laneDelta, this.ctx);
+      }
     }
     return newDoc;
   }

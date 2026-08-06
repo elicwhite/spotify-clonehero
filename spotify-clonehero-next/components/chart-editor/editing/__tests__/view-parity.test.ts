@@ -58,11 +58,11 @@ describe('view parity: note drag → MoveEntitiesCommand', () => {
       anchorLane: 0,
       snappedCursorTick: 960,
       cursorLane: 0,
-      selectionSize: 1,
       prevLaneDelta: 0,
-      minPadLane: 0,
-      maxPadLane: 3,
-      excludedLane: KICK_LANE,
+      minLane: 0,
+      maxLane: KICK_LANE,
+      selectionMinLane: 0,
+      selectionMaxLane: 0,
     };
     const ids = ['480:redDrum'];
 
@@ -91,23 +91,23 @@ describe('view parity: note drag → MoveEntitiesCommand', () => {
     expectDocsEqual(applied(pianoCmd), applied(highwayCmd));
   });
 
-  it('multi-note drag locks lanes identically in both views', () => {
-    // Two selected notes, dragged up a lane and forward in time. Both views
-    // must lock lanes (time-only move) — same laneDelta 0.
+  it('multi-note drag shifts lanes identically in both views', () => {
+    // Two selected notes spanning red(0)..blue(2), dragged up two lanes and
+    // forward in time. Both views apply the one delta to the whole run.
     const gesture = {
       anchorTick: 480,
       anchorLane: 0,
       snappedCursorTick: 720,
       cursorLane: 2,
-      selectionSize: 2,
       prevLaneDelta: 0,
-      minPadLane: 0,
-      maxPadLane: 3,
-      excludedLane: KICK_LANE,
+      minLane: 0,
+      maxLane: KICK_LANE,
+      selectionMinLane: 0,
+      selectionMaxLane: 2,
     };
     const ids = ['480:redDrum', '1440:blueDrum'];
     const delta = computeNoteDragDelta(gesture);
-    expect(delta.laneDelta).toBe(0);
+    expect(delta.laneDelta).toBe(2);
     expect(delta.tickDelta).toBe(240);
 
     const cmd = new MoveEntitiesCommand(
@@ -119,9 +119,13 @@ describe('view parity: note drag → MoveEntitiesCommand', () => {
     );
     const result = applied(cmd);
     const notes = getDrumNotes(findTrack(result, TRACK_KEY)!.track);
-    // Both moved +240 ticks, neither changed lane.
-    expect(notes.find(n => n.type === noteTypes.redDrum)!.tick).toBe(720);
-    expect(notes.find(n => n.type === noteTypes.blueDrum)!.tick).toBe(1680);
+    // Both moved +240 ticks and up two lanes: red→blue, blue→kick.
+    expect(notes.find(n => n.type === noteTypes.blueDrum)!.tick).toBe(720);
+    // Matched by tick as well as type: the fixture already carries a kick at
+    // tick 0, so finding "a kick" would pass without the drag doing anything.
+    expect(notes.some(n => n.type === noteTypes.kick && n.tick === 1680)).toBe(
+      true,
+    );
   });
 
   it('dragging a cymbal onto Red drops the flag (legality below the view)', () => {
@@ -133,11 +137,11 @@ describe('view parity: note drag → MoveEntitiesCommand', () => {
       anchorLane: 1,
       snappedCursorTick: 960,
       cursorLane: 0,
-      selectionSize: 1,
       prevLaneDelta: 0,
-      minPadLane: 0,
-      maxPadLane: 3,
-      excludedLane: KICK_LANE,
+      minLane: 0,
+      maxLane: KICK_LANE,
+      selectionMinLane: 1,
+      selectionMaxLane: 1,
     });
     expect(delta.laneDelta).toBe(-1);
     const result = new MoveEntitiesCommand(

@@ -80,20 +80,49 @@ export function padLaneRange(schema: InstrumentSchema): {
   return {min: Math.min(...indices), max: Math.max(...indices)};
 }
 
+/** Every lane index in the schema, excluded lanes included. */
+export function fullLaneRange(schema: InstrumentSchema): {
+  min: number;
+  max: number;
+} {
+  const indices = schema.lanes.map(l => l.index);
+  return {min: Math.min(...indices), max: Math.max(...indices)};
+}
+
 /**
- * Shift a NoteType by a lane delta among `schema`'s non-excluded lanes.
- * Excluded lanes (e.g. drums' kick) never change type; the remaining lanes
- * clamp at the boundaries of the non-excluded range instead of sliding into
- * an excluded lane.
+ * Which lanes a lane-shift gesture may address.
+ *
+ *  - `'pads'`: the `laneShiftExcludes` lanes (drums' kick, guitar's open) are
+ *    off the axis entirely — a note in one never moves, and a note outside
+ *    one clamps rather than sliding in. The arrow-key nudge uses this: it is
+ *    a *relative* step, so reaching kick by holding Down one beat too long
+ *    would be an accident.
+ *  - `'all'`: every lane participates. A pointer drag uses this, because it
+ *    *points at* a lane — releasing over the kick row says exactly one thing.
+ */
+export type LaneAxis = 'pads' | 'all';
+
+/** The lane range a gesture on `axis` may address. */
+export function laneRangeFor(
+  schema: InstrumentSchema,
+  axis: LaneAxis,
+): {min: number; max: number} {
+  return axis === 'all' ? fullLaneRange(schema) : padLaneRange(schema);
+}
+
+/**
+ * Shift a NoteType by a lane delta among the lanes `axis` admits, clamping at
+ * that range's boundaries. On the `'pads'` axis an excluded type never moves.
  */
 export function shiftLane(
   schema: InstrumentSchema,
   type: NoteType,
   delta: number,
+  axis: LaneAxis = 'pads',
 ): NoteType {
-  if (schema.laneShiftExcludes?.includes(type)) return type;
+  if (axis === 'pads' && schema.laneShiftExcludes?.includes(type)) return type;
   const current = typeToLane(schema, type);
-  const {min, max} = padLaneRange(schema);
+  const {min, max} = laneRangeFor(schema, axis);
   if (current === -1 || current < min || current > max) return type;
   return laneToType(schema, Math.max(min, Math.min(max, current + delta)));
 }
@@ -255,7 +284,16 @@ export function addNote(
 
   const existing = groupAt(track, tick);
   if (existing) {
-    existing.group.push(newNote);
+    // Two notes of the same type at the same tick are not a chord, they are
+    // the same note twice — a state `.chart` cannot represent. The incoming
+    // note wins: every caller that reaches here is placing or moving a note
+    // deliberately, so its flags are the intended ones.
+    const duplicate = existing.group.findIndex(n => n.type === type);
+    if (duplicate >= 0) {
+      existing.group[duplicate] = newNote;
+    } else {
+      existing.group.push(newNote);
+    }
     for (const bit of groupSharedBits(schema)) {
       if (newNote.flags & bit) {
         for (const n of existing.group) n.flags |= bit;
@@ -372,4 +410,83 @@ export function moveNote(
     makeChartTiming(parsedChart),
   );
   return {tick: newTick, type: newType};
+}
+
+/** One note to move, identified the way the editor identifies it. */
+export interface NoteRef {
+  tick: number;
+  type: NoteType;
+}
+
+/**
+ * Move several notes as one operation.
+ *
+ * This is NOT `moveNote` in a loop, and the difference is load-bearing. A note
+ * is identified by `(tick, type)`, so moving them one at a time resolves each
+ * against a track the earlier moves have already mutated: drag
+ * `{blue@100, yellow@100}` up one lane and blue→yellow lands on a yellow@100
+ * that hasn't moved yet and is still the id the next step will look up. Every
+ * source is therefore resolved against the original track before anything is
+ * removed.
+ *
+ * Destinations that collide collapse, which is what makes a note dropped
+ * exactly onto an existing one dedupe rather than double up. Later entries in
+ * `refs` win, and a moved note always beats a stationary one — the moved note
+ * is the one the user was manipulating.
+ *
+ * Returns each ref's new id position, in input order; a ref that matched no
+ * note maps to `null`.
+ */
+export function moveNotes(
+  parsedChart: ParsedChart,
+  track: ParsedTrackData,
+  refs: readonly NoteRef[],
+  tickDelta: number,
+  laneDelta: number,
+  schema: InstrumentSchema,
+  axis: LaneAxis = 'pads',
+): (NoteRef | null)[] {
+  // Phase 1: resolve every source against the untouched track, capturing the
+  // payload each one carries with it.
+  const resolved = refs.map(ref => {
+    const note = findNote(track, ref.tick, ref.type);
+    if (!note) return null;
+    const newType =
+      laneDelta !== 0
+        ? shiftLane(schema, note.type, laneDelta, axis)
+        : note.type;
+    return {
+      from: {tick: note.tick, type: note.type},
+      to: {tick: Math.max(0, note.tick + tickDelta), type: newType},
+      length: note.length,
+      flags: note.flags,
+    };
+  });
+
+  // Phase 2: vacate every source before filling any destination, so a
+  // destination can reuse a slot another source is leaving.
+  for (const move of resolved) {
+    if (move) removeNote(track, move.from.tick, move.from.type, schema);
+  }
+
+  // Phase 3: place the destinations. `addNote` collapses a same-(tick, type)
+  // collision onto the incoming note, so both a moved-onto-stationary and a
+  // moved-onto-moved landing dedupe here.
+  const timing = makeChartTiming(parsedChart);
+  for (const move of resolved) {
+    if (!move) continue;
+    addNote(
+      track,
+      {
+        tick: move.to.tick,
+        type: move.to.type,
+        length: move.length,
+        flags: move.flags,
+      },
+      schema,
+      timing,
+    );
+  }
+
+  return resolved.map(move => (move ? move.to : null));
 }
