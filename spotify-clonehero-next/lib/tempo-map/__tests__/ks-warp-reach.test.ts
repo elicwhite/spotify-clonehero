@@ -17,11 +17,23 @@
  * d5 parity gate (numpy float64 vs JS float64, differing summation order across a
  * comb-fit/warp/snap/phase-align pipeline; 1e-6 comfortably clears that noise floor
  * without losing sensitivity to a real algorithmic mismatch).
+ *
+ * ONE DELIBERATE DIVERGENCE. The Python reference's `rigid_collapse.anchored_beats`
+ * stops enumerating beats at a fixed 240000 ms, so on a song longer than four
+ * minutes it analysed (and rebuilt the grid over) only the first 4:00 and dropped
+ * the rest. `anchoredBeats` here runs to the grid's own end instead — see its
+ * docstring and ks-warp-long-song.test.ts. Fixtures whose incumbent grid ends past
+ * ANCHORED_BEATS_MIN_MS therefore cannot match the reference dump byte-for-byte;
+ * they assert full-song coverage instead, and are named in LONG_SONG_FIXTURES.
  */
 
 import {readFileSync} from 'fs';
 import path from 'path';
-import {warpGridReach, DEFAULT_KS_WARP_CONFIG} from '../ks-warp';
+import {
+  warpGridReach,
+  DEFAULT_KS_WARP_CONFIG,
+  ANCHORED_BEATS_MIN_MS,
+} from '../ks-warp';
 import type {Synctrack} from '../types';
 
 void DEFAULT_KS_WARP_CONFIG; // re-exported for readers cross-checking the shipped config
@@ -75,6 +87,12 @@ function expectExactSynctrack(sync: Synctrack, expected: Synctrack) {
   }
 }
 
+/** ms past `origin_ms` the fixture's incumbent grid still carries tempos. */
+function incumbentSpanMs(fixture: Fixture): number {
+  const {tempos, origin_ms} = fixture.incumbent_grid;
+  return Math.max(...tempos.map(t => t.ms)) - origin_ms;
+}
+
 describe('warpGridReach vs Python kick_snare_warp_reach.warp_grid_reach reference fixtures', () => {
   const index = loadIndex();
   expect(index.length).toBeGreaterThanOrEqual(3);
@@ -89,6 +107,22 @@ describe('warpGridReach vs Python kick_snare_warp_reach.warp_grid_reach referenc
         fixture.ks_onsets_ms,
         fixture.all_onsets_ms,
       );
+
+      if (incumbentSpanMs(fixture) > ANCHORED_BEATS_MIN_MS) {
+        // Reference-truncated song: the dump only ever covered the first 4:00,
+        // so byte parity is not available. What must hold is that the grid the
+        // app installs reaches the end of the song rather than stopping at the
+        // reference's cap. (`reach-05` additionally flips to admitted here: the
+        // one steady, drifted window in this song sits in the stretch the
+        // reference never enumerated.)
+        expect(grid).not.toBeNull();
+        const warped = grid as Synctrack;
+        const lastTempoMs = warped.tempos[warped.tempos.length - 1].ms;
+        expect(lastTempoMs - warped.origin_ms).toBeGreaterThanOrEqual(
+          incumbentSpanMs(fixture) - 1000,
+        );
+        return;
+      }
 
       if (fixture.admitted) {
         expect(diag.admitted).toBe(true);

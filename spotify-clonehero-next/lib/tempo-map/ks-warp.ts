@@ -254,10 +254,45 @@ function buildOwnOriginTimedTempos(grid: Synctrack): TimedTempo[] {
   return buildTimedTempos(emit, RESOLUTION);
 }
 
+/**
+ * Floor on how far {@link anchoredBeats} enumerates (ms), matching the Python
+ * reference's fixed 4-minute budget. Grids that carry tempo information past
+ * it enumerate to their own end instead.
+ */
+export const ANCHORED_BEATS_MIN_MS = 240000.0;
+
+/**
+ * Runaway guard on the beat-enumeration loop. The real bound is the ms budget;
+ * only a degenerate grid (a BPM so high that a beat barely advances in ms) can
+ * reach this, and 200k beats is ~28 minutes even at 120 BPM.
+ */
+export const ANCHORED_BEATS_MAX_COUNT = 200000;
+
+/** How far past `grid.origin_ms` the grid still carries tempo information: its
+ * last tempo event. Beats after it extrapolate the final BPM. */
+function gridSpanMs(grid: Synctrack): number {
+  let span = 0;
+  for (const t of grid.tempos) span = Math.max(span, t.ms - grid.origin_ms);
+  return span;
+}
+
+/**
+ * Enumerate the grid's beat times, anchored so `beats[0] === grid.origin_ms`.
+ *
+ * The enumeration runs to the grid's own last tempo event (or
+ * {@link ANCHORED_BEATS_MIN_MS}, whichever is later), NOT to a fixed budget.
+ * This is the one deliberate divergence from `rigid_collapse.anchored_beats`,
+ * whose hard 240000 ms cap silently drops every beat past four minutes. That
+ * matters because `warpGridWindowed` rebuilds the whole synctrack out of this
+ * beat array (`gridFromWarped`): under the fixed cap, an admitted warp on a
+ * song longer than four minutes returned a grid whose tempo events stopped at
+ * 4:00, leaving the rest of the song with no tempo markers and its notes off
+ * the bar grid.
+ */
 export function anchoredBeats(
   grid: Synctrack,
-  maxMs = 240000.0,
-  maxB = 4000,
+  maxMs = Math.max(ANCHORED_BEATS_MIN_MS, gridSpanMs(grid)),
+  maxB = ANCHORED_BEATS_MAX_COUNT,
 ): {beats: number[]; origin: number} {
   const origin = grid.origin_ms;
   const timed = buildOwnOriginTimedTempos(grid);
