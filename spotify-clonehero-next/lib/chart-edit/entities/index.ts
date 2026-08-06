@@ -70,14 +70,32 @@ export type EntityKind =
  * superset of `EntityKind`: `'tempo'`/`'timesig'` are edited only through
  * dedicated commands (`MoveTempoMarkerCommand`, `AddTimeSignatureCommand`,
  * the downbeat commands, …), never through the per-kind
- * `EntityKindHandler` surface (`entityHandlers`, selection, hover, drag) —
- * so they aren't `EntityKind`s, but dispatch gating still needs to key on
+ * `EntityKindHandler` surface (`entityHandlers`, hover, generic drag) — so
+ * they aren't `EntityKind`s, but dispatch gating still needs to key on
  * them. A command declares the kind(s) it *intends* to edit here, which is
  * not always the kind(s) it happens to touch: a tempo-marker move that
  * KEEP-MS-remaps every note's tick declares `'tempo'`, not `'note'`, since
  * the note ticks are a side effect of the tempo edit, not the edit itself.
  */
 export type CommandEntityKind = EntityKind | 'tempo' | 'timesig';
+
+/**
+ * Kind space for `ChartEditorState.selection`. Also a superset of
+ * `EntityKind`: the piano roll's marquee rubber-bands over every lane it
+ * covers, so a tempo marker or a time-signature chip can end up selected
+ * alongside notes, sections and lyrics.
+ *
+ * Selection is deliberately WIDER than the `EntityKindHandler` surface.
+ * Being selectable buys an entity two things — a highlight and a place in
+ * a batched Delete — neither of which needs `listIds`/`locate`/`move`.
+ * `'tempo'`/`'timesig'` have no handler, no hover state and no generic
+ * drag: they move only through their own commands, whose ms-space
+ * semantics (`applyMarkerMoveBpms`) a tick-delta `move()` cannot express.
+ * Keeping them out of `EntityKind` keeps that honest, and keeps the
+ * reconciler's key table (`reconcilerKeyFor`) exactly the set of kinds the
+ * highway actually indexes.
+ */
+export type SelectableKind = EntityKind | 'tempo' | 'timesig';
 
 /** Operation class an `EditCommand` performs, for capability gating. */
 export type CommandOperation = 'add' | 'delete' | 'update' | 'move';

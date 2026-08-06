@@ -211,18 +211,22 @@ describe('phraseEdgeMarkers (plan 0082 item 7)', () => {
   const view = {leftMs: 0, pxPerMs: 0.1};
 
   it('emits a start and an end marker per band, pointing inward', () => {
-    const markers = phraseEdgeMarkers([{ms: 1000, msEnd: 3000}], view, 1000);
+    const markers = phraseEdgeMarkers(
+      [{ms: 1000, msEnd: 3000, tick: 480, tickEnd: 1440}],
+      view,
+      1000,
+    );
     expect(markers).toEqual([
-      {kind: 'start', x: 100, flagDirection: 1},
-      {kind: 'end', x: 300, flagDirection: -1},
+      {kind: 'start', x: 100, flagDirection: 1, tick: 480},
+      {kind: 'end', x: 300, flagDirection: -1, tick: 1440},
     ]);
   });
 
   it('keeps bands in order and interleaves their edges', () => {
     const markers = phraseEdgeMarkers(
       [
-        {ms: 0, msEnd: 1000},
-        {ms: 2000, msEnd: 3000},
+        {ms: 0, msEnd: 1000, tick: 0, tickEnd: 480},
+        {ms: 2000, msEnd: 3000, tick: 960, tickEnd: 1440},
       ],
       view,
       1000,
@@ -236,21 +240,36 @@ describe('phraseEdgeMarkers (plan 0082 item 7)', () => {
   });
 
   it('culls edges fully off screen but keeps the on-screen edge of a band that straddles the viewport', () => {
-    const markers = phraseEdgeMarkers([{ms: -100000, msEnd: 2000}], view, 1000);
-    expect(markers).toEqual([{kind: 'end', x: 200, flagDirection: -1}]);
+    const markers = phraseEdgeMarkers(
+      [{ms: -100000, msEnd: 2000, tick: -1, tickEnd: 960}],
+      view,
+      1000,
+    );
+    expect(markers).toEqual([
+      {kind: 'end', x: 200, flagDirection: -1, tick: 960},
+    ]);
   });
 
   it('keeps an edge whose pennant would still touch the canvas', () => {
     const justOffLeft = phraseEdgeMarkers(
-      [{ms: -30, msEnd: 100000}],
+      [{ms: -30, msEnd: 100000, tick: 0, tickEnd: 99999}],
       view,
       1000,
     );
-    expect(justOffLeft[0]).toEqual({kind: 'start', x: -3, flagDirection: 1});
+    expect(justOffLeft[0]).toEqual({
+      kind: 'start',
+      x: -3,
+      flagDirection: 1,
+      tick: 0,
+    });
   });
 
   it('pixel-aligns x so a 2px stroke lands on whole pixels', () => {
-    const markers = phraseEdgeMarkers([{ms: 1004, msEnd: 1009}], view, 1000);
+    const markers = phraseEdgeMarkers(
+      [{ms: 1004, msEnd: 1009, tick: 480, tickEnd: 482}],
+      view,
+      1000,
+    );
     expect(markers.map(m => m.x)).toEqual([100, 101]);
   });
 

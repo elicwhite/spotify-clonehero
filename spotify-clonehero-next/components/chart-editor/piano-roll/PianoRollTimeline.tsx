@@ -82,6 +82,7 @@ import {
   synctrackFromChart,
   audioExtendedEndTick,
   lyricId,
+  parsePhraseId,
   phraseStartId,
   phraseEndId,
   DEFAULT_VOCALS_PART,
@@ -152,7 +153,15 @@ import {
   type EditCommand,
 } from '../commands';
 import {computeNoteDragDelta, exceedsDragThreshold} from '../editing/gestures';
-import {selectNotesInRange, selectLyricsInRange} from '../editing/marquee';
+import {
+  MARQUEE_KINDS,
+  bandsTouched,
+  computeMarqueeSelection,
+  emptyMarqueeSelection,
+  type MarqueeKind,
+  type MarqueeSelection,
+  type PanelBands,
+} from '../editing/marquee';
 import {
   prospectiveNoteAt,
   type ProspectiveNote,
@@ -264,6 +273,40 @@ import {
 const NOTE_HIT_HALF_WIDTH = 8;
 
 /**
+ * The track a marquee started outside the note lanes reports as its scope.
+ * A tempo-lane or lyrics-row drag can still reach the note lanes, so it
+ * needs a track to qualify any note ids it sweeps up; the active scope's
+ * track is that track, with the scene's own fallbacks behind it.
+ */
+/** Tick set from selection ids that are plain `String(tick)` (tempo
+ *  markers, signature chips, section flags). */
+function tickSetFromIds(ids: ReadonlySet<string>): ReadonlySet<number> {
+  const out = new Set<number>();
+  for (const id of ids) {
+    const tick = Number.parseInt(id, 10);
+    if (Number.isFinite(tick)) out.add(tick);
+  }
+  return out;
+}
+
+/** Tick set from `partName:tick` phrase-edge selection ids. */
+function phraseTickSet(ids: ReadonlySet<string>): ReadonlySet<number> {
+  const out = new Set<number>();
+  for (const id of ids) {
+    const parsed = parsePhraseId(id);
+    if (parsed) out.add(parsed.tick);
+  }
+  return out;
+}
+
+function marqueeFallbackTrackKey(scene: ChartScene): TrackKey {
+  return (
+    scene.activeTrackKey ??
+    scene.rows[0]?.key ?? {instrument: 'drums', difficulty: 'expert'}
+  );
+}
+
+/**
  * True while a class-(b) structural tempo correction (re-predict / resnap) is
  * previewed through `pendingTempoCandidate` — the read-only accept/reject
  * contract (0061 §7 / 0062 finding). Note-editing gestures are gated in this
@@ -278,9 +321,26 @@ function isStructuralPreview(state: {
   return op === 're-predict' || op === 'resnap';
 }
 
-/** In-flight marquee rectangle in canvas px. */
+/**
+ * In-flight marquee rectangle in canvas px.
+ *
+ * The marquee is a WHOLE-PANEL gesture: it selects every selectable entity
+ * whose region intersects the rectangle, across every band the rectangle
+ * covers (note lanes, tempo lane, lyrics row, and the ruler's section flags
+ * when the drag reaches up into it). Dragging entirely within one band is
+ * therefore how a selection is narrowed to that band's entities, with no
+ * modifier key.
+ */
 interface PanelMarquee {
   trackKey: TrackKey;
+  /**
+   * True when the drag started inside a stacked track row. Such a marquee
+   * is clamped to that row and only ever selects its notes — the stacked
+   * layout's rows are independent tracks, so a rectangle must not leak
+   * across them. A marquee started in a shared band (tempo lane, lyrics
+   * row) is never row-scoped.
+   */
+  rowScoped: boolean;
   x0: number;
   y0: number;
   x1: number;
@@ -588,6 +648,15 @@ export default function PianoRollTimeline({
    *  into each other's draw pass. */
   const lyricSelectionRef = useRef<ReadonlySet<string>>(new Set());
   const lyricHoverIdRef = useRef<string | null>(null);
+  /** Tick-keyed selection mirrors for the entities the draw layer paints by
+   *  tick rather than by entity id: the tempo lane's markers and signature
+   *  chips, the ruler's section flags, and the lyrics row's phrase edges.
+   *  All of them can be swept up by the panel marquee. */
+  const tempoSelectionRef = useRef<ReadonlySet<number>>(new Set());
+  const tsSelectionRef = useRef<ReadonlySet<number>>(new Set());
+  const sectionSelectionRef = useRef<ReadonlySet<number>>(new Set());
+  const phraseStartSelectionRef = useRef<ReadonlySet<number>>(new Set());
+  const phraseEndSelectionRef = useRef<ReadonlySet<number>>(new Set());
   /** Per-chip measured pill width (px), populated each frame by
    *  `drawLyricsRow` (`ctx.measureText`) — hit-testing (`pickLyricChipAt`)
    *  reads the SAME widths the pill was actually painted at (Round 2 §3). */
@@ -634,12 +703,9 @@ export default function PianoRollTimeline({
   const lyricDragRef = useRef<LyricDrag | null>(null);
   /** In-flight phrase-edge (band start/end) drag (Round 2 §2); null when idle. */
   const phraseEdgeDragRef = useRef<PhraseEdgeDrag | null>(null);
-  /** Selection captured at marquee start, for shift-add merging. */
-  const marqueeBaseRef = useRef<ReadonlySet<string>>(new Set());
-  /** Selection captured at marquee start for the lyrics row (mirrors
-   *  `marqueeBaseRef`, kept separate since notes and lyrics are independent
-   *  entries in `state.selection`). */
-  const marqueeLyricBaseRef = useRef<ReadonlySet<string>>(new Set());
+  /** Per-kind selection captured at marquee start, for shift-add merging.
+   *  Empty for a plain (unshifted) drag, which replaces the selection. */
+  const marqueeBaseRef = useRef<MarqueeSelection>(emptyMarqueeSelection());
   const marqueeShiftRef = useRef(false);
   /** Panel-height resize drag: the height + pointer y at gesture start. */
   const resizeDragRef = useRef<{startHeight: number; startY: number} | null>(
@@ -880,6 +946,17 @@ export default function PianoRollTimeline({
   useEffect(() => {
     selectionRef.current = getSelectedIds(state, 'note');
     lyricSelectionRef.current = getSelectedIds(state, 'lyric');
+    tempoSelectionRef.current = tickSetFromIds(getSelectedIds(state, 'tempo'));
+    tsSelectionRef.current = tickSetFromIds(getSelectedIds(state, 'timesig'));
+    sectionSelectionRef.current = tickSetFromIds(
+      getSelectedIds(state, 'section'),
+    );
+    phraseStartSelectionRef.current = phraseTickSet(
+      getSelectedIds(state, 'phrase-start'),
+    );
+    phraseEndSelectionRef.current = phraseTickSet(
+      getSelectedIds(state, 'phrase-end'),
+    );
     dirtyRef.current = true;
   }, [state]);
 
@@ -1087,6 +1164,8 @@ export default function PianoRollTimeline({
         tsChipWidthsRef.current,
         tsDragRef.current,
         tsHoverTickRef.current,
+        tempoSelectionRef.current,
+        tsSelectionRef.current,
       );
       if (scene.lyricsVisible) {
         const drag = lyricDragRef.current;
@@ -1113,6 +1192,8 @@ export default function PianoRollTimeline({
           lyricChipWidthsRef.current,
           showVocalsWaveRef.current ? vocalsAmpRef.current : null,
           phraseEdgeDragRef.current,
+          phraseStartSelectionRef.current,
+          phraseEndSelectionRef.current,
           noteDragTickDelta,
         );
       }
@@ -1126,6 +1207,7 @@ export default function PianoRollTimeline({
         // A live flag drag previews from its own region so the band tracks
         // the pointer without a dispatch per pointer-move.
         loopDragRef.current?.region ?? editStateRef.current.loopRegion,
+        sectionSelectionRef.current,
       );
 
       const tempoDrag = tempoDragRef.current;
@@ -1479,6 +1561,21 @@ export default function PianoRollTimeline({
     return {laneTop: g.laneTop, laneH: g.laneH, laneCount: g.laneCount};
   }, [panelGeometry]);
 
+  /** The panel's vertical bands, for the marquee's band membership test. */
+  const panelBands = useCallback((): PanelBands => {
+    const g = panelGeometry();
+    return {
+      rulerTop: 0,
+      rulerBottom: RULER_H,
+      lyricsTop: g.lyricsTop,
+      lyricsBottom: g.lyricsTop + g.lyricsH,
+      tempoTop: g.tempoTop,
+      tempoBottom: g.laneTop,
+      laneTop: g.laneTop,
+      laneBottom: g.laneBottom,
+    };
+  }, [panelGeometry]);
+
   const pointFromEvent = useCallback(
     (
       event:
@@ -1785,6 +1882,50 @@ export default function PianoRollTimeline({
       container.removeEventListener('wheel', onWheel, {capture: true});
   }, [applyWheel]);
 
+  /**
+   * Start a whole-panel marquee. Called from every band that can host one
+   * (note lanes, tempo lane, lyrics row) so the capture/base-selection/
+   * clear-on-plain-drag contract has exactly one definition.
+   *
+   * A plain drag clears every marquee kind up front (the sweep picks back
+   * up whatever it crosses); shift captures the current selection as the
+   * base and merges into it, matching the note marquee's long-standing
+   * shift convention.
+   *
+   * The ruler is NOT a start zone: a press there scrubs (or grabs a loop
+   * flag / section flag). Its section flags are still marquee-selectable —
+   * drag up into the ruler from the band below and the rectangle picks them
+   * up like any other band's entities.
+   */
+  const beginMarquee = useCallback(
+    (
+      canvas: HTMLCanvasElement,
+      pointerId: number,
+      x: number,
+      y: number,
+      shiftKey: boolean,
+      trackKey: TrackKey,
+      rowScoped: boolean,
+    ) => {
+      const st = editStateRef.current;
+      canvas.setPointerCapture(pointerId);
+      pointerModeRef.current = 'marquee';
+      pointerStartRef.current = {x, y};
+      marqueeRef.current = {trackKey, rowScoped, x0: x, y0: y, x1: x, y1: y};
+      const base = emptyMarqueeSelection();
+      if (shiftKey) {
+        for (const kind of MARQUEE_KINDS) {
+          for (const id of getSelectedIds(st, kind)) base[kind].add(id);
+        }
+      } else {
+        dispatch({type: 'SET_SELECTION_MULTI', selection: base});
+      }
+      marqueeBaseRef.current = base;
+      marqueeShiftRef.current = shiftKey;
+    },
+    [dispatch],
+  );
+
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       // Right-click never scrubs / drags / marquees — it only opens the
@@ -1926,38 +2067,18 @@ export default function PianoRollTimeline({
         }
 
         // Empty lyrics-row space (no chip, no phrase edge): begin a marquee
-        // the same way empty note-lane space does, below — the rectangle can
-        // now be STARTED from either row, not just dragged into the lyrics
-        // row from a note-lane start. Cursor tool only, mirroring the
-        // note-lane fallback's tool gate.
-        if (
-          editStateRef.current.activeTool === 'cursor' &&
-          capabilities.selectable.has('lyric')
-        ) {
-          const marqueeSt = editStateRef.current;
-          canvas.setPointerCapture(e.pointerId);
-          if (!e.shiftKey) {
-            dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
-            dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: new Set()});
-          }
-          pointerModeRef.current = 'marquee';
-          pointerStartRef.current = {x, y};
-          marqueeRef.current = {
-            trackKey: trackKeyFromScope(editStateRef.current.activeScope) ??
-              scene.activeTrackKey ??
-              scene.rows[0]?.key ?? {instrument: 'drums', difficulty: 'expert'},
-            x0: x,
-            y0: y,
-            x1: x,
-            y1: y,
-          };
-          marqueeBaseRef.current = e.shiftKey
-            ? new Set(getSelectedIds(marqueeSt, 'note'))
-            : new Set();
-          marqueeLyricBaseRef.current = e.shiftKey
-            ? new Set(getSelectedIds(marqueeSt, 'lyric'))
-            : new Set();
-          marqueeShiftRef.current = e.shiftKey;
+        // the same way empty note-lane space does, below. Cursor tool only,
+        // mirroring the note-lane fallback's tool gate.
+        if (editStateRef.current.activeTool === 'cursor') {
+          beginMarquee(
+            canvas,
+            e.pointerId,
+            x,
+            y,
+            e.shiftKey,
+            marqueeFallbackTrackKey(scene),
+            false,
+          );
         }
         return;
       }
@@ -2012,6 +2133,22 @@ export default function PianoRollTimeline({
           canvas.style.cursor = 'ew-resize';
           dirtyRef.current = true;
           drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+          return;
+        }
+        // Empty tempo-lane space: begin a marquee, exactly as the note lanes
+        // and lyrics row do. A drag kept inside this lane selects markers and
+        // signature chips only; dragging down into the lanes or up into the
+        // ruler widens it. Right-click still opens the add/downbeat menu.
+        if (editStateRef.current.activeTool === 'cursor') {
+          beginMarquee(
+            canvas,
+            e.pointerId,
+            x,
+            y,
+            e.shiftKey,
+            marqueeFallbackTrackKey(scene),
+            false,
+          );
         }
         return;
       }
@@ -2137,32 +2274,24 @@ export default function PianoRollTimeline({
         return;
       }
 
-      // Empty space: begin a marquee (plain click on empty clears selection,
-      // notes and lyrics alike — the marquee can pick both back up as it's
-      // dragged over the note lanes and up into the lyrics row).
-      if (!e.shiftKey) {
-        dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
-        dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: new Set()});
-      }
-      pointerModeRef.current = 'marquee';
-      marqueeRef.current = {
-        trackKey: interactionTrackKey!,
-        x0: x,
-        y0: y,
-        x1: x,
-        y1: y,
-      };
-      marqueeBaseRef.current = e.shiftKey
-        ? new Set(getSelectedIds(st, 'note'))
-        : new Set();
-      marqueeLyricBaseRef.current = e.shiftKey
-        ? new Set(getSelectedIds(st, 'lyric'))
-        : new Set();
-      marqueeShiftRef.current = e.shiftKey;
+      // Empty space: begin a marquee. A plain drag clears every kind up
+      // front and the sweep picks back up whatever it crosses, in whichever
+      // bands it reaches.
+      beginMarquee(
+        canvas,
+        e.pointerId,
+        x,
+        y,
+        e.shiftKey,
+        interactionTrackKey!,
+        row !== null,
+      );
     },
     [
       audioManager,
+      beginMarquee,
       capabilities,
+      closeUnlessTapping,
       dispatch,
       executeCommand,
       laneGeometry,
@@ -2438,14 +2567,19 @@ export default function PianoRollTimeline({
         return;
       }
 
-      // Live marquee: select notes inside the box (shift merges).
+      // Live marquee: sweep every band the rectangle reaches (shift merges
+      // with the selection captured at drag start).
       if (mode === 'marquee' && marqueeRef.current) {
         const marquee = marqueeRef.current;
-        const row = stacked ? stackedRowForKey(marquee.trackKey) : null;
+        const row = marquee.rowScoped
+          ? stackedRowForKey(marquee.trackKey)
+          : null;
         const constrainedY = row
           ? Math.max(row.laneTop, Math.min(row.bottom, y))
           : y;
         marqueeRef.current = {...marquee, x1: x, y1: constrainedY};
+        // A row-scoped marquee works in row-local y, so its lane math and
+        // its band test both run against the row's own geometry.
         const marqueeRect = row
           ? {
               ...marqueeRef.current,
@@ -2464,59 +2598,63 @@ export default function PianoRollTimeline({
         const my0 = Math.min(marqueeRect.y0, marqueeRect.y1);
         const my1 = Math.max(marqueeRect.y0, marqueeRect.y1);
 
-        // `marqueeBounds`' lane math always clamps to a valid lane index
-        // (0..laneCount-1), even when the rectangle never gets near the
-        // note lanes — a horizontal-only drag inside the lyrics row would
-        // otherwise resolve to lane 0 (red) and spuriously sweep up red
-        // notes whose ms range happens to overlap. Only select notes when
-        // the rectangle's y-range actually reaches the note-lane band.
-        const reachesNoteLanes = row
-          ? my0 < row.bottom - row.laneTop && my1 > 0
-          : my0 < g.laneBottom && my1 > g.laneTop;
-        const inBox = reachesNoteLanes
-          ? selectNotesInRange(
-              (row ? row.row.notes : scene.notes).map(n => ({
-                tick: n.tick,
-                type: schemaLaneToType(
-                  row?.row.schema ?? scene.schema ?? drums4LaneSchema,
-                  n.lane,
-                ),
-                length: 0,
-                flags: 0,
-              })),
-              bounds,
-              scene.timedTempos,
-              scene.resolution,
-              row?.row.schema ?? scene.schema ?? drums4LaneSchema,
-            )
-          : new Set<string>();
-        const merged = new Set(marqueeBaseRef.current);
-        const marqueeTrackKey = row?.row.key ?? marquee.trackKey;
-        inBox.forEach(id =>
-          merged.add(trackQualifiedNoteId(marqueeTrackKey, id)),
-        );
-        dispatch({type: 'SET_SELECTION', kind: 'note', ids: merged});
+        // Band membership is what narrows a selection: `marqueeBounds`' lane
+        // math always clamps to a valid lane index (0..laneCount-1) even when
+        // the rectangle never gets near the note lanes, so a drag confined to
+        // the tempo lane would otherwise resolve to lane 0 and sweep up red
+        // notes whose ms range happens to overlap. `bandsTouched` gates each
+        // band on the rectangle's actual vertical span.
+        const touched = row
+          ? {
+              ruler: false,
+              lyrics: false,
+              tempo: false,
+              lanes: my0 < row.bottom - row.laneTop && my1 > 0,
+            }
+          : bandsTouched(my0, my1, panelBands());
+        // In the stacked layout every note belongs to a specific row, so
+        // only a row-scoped marquee can select notes; a tempo-lane or
+        // lyrics-row drag there stays out of the lanes.
+        if (!row && stacked) touched.lanes = false;
 
-        // The marquee also picks up lyrics, but only when its rectangle
-        // actually reaches the lyrics row — the tempo lane sits between the
-        // lyrics row and the note lanes, and it never participates (there's
-        // no tempo-marquee selection at all). A drag confined to the note
-        // lanes must not select lyrics just because a note's ms range
-        // overlaps a lyric's.
-        if (
-          !row &&
-          scene.lyricsVisible &&
-          capabilities.selectable.has('lyric')
-        ) {
-          const reachesLyricsRow =
-            my0 < g.lyricsTop + g.lyricsH && my1 > g.lyricsTop;
-          const lyricsInBox = reachesLyricsRow
-            ? selectLyricsInRange(scene.lyricChips, bounds.msMin, bounds.msMax)
-            : new Set<string>();
-          const mergedLyrics = new Set(marqueeLyricBaseRef.current);
-          lyricsInBox.forEach(id => mergedLyrics.add(id));
-          dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: mergedLyrics});
+        const rowSchema = row?.row.schema ?? scene.schema ?? drums4LaneSchema;
+        const swept = computeMarqueeSelection({
+          bounds,
+          touched,
+          allowed: capabilities.selectable,
+          sources: {
+            notes: (row ? row.row.notes : scene.notes).map(n => ({
+              tick: n.tick,
+              type: schemaLaneToType(rowSchema, n.lane),
+              length: 0,
+              flags: 0,
+            })),
+            schema: rowSchema,
+            timedTempos: scene.timedTempos,
+            resolution: scene.resolution,
+            lyricChips: scene.lyricsVisible ? scene.lyricChips : [],
+            phraseBands: scene.lyricsVisible ? scene.lyricBands : [],
+            partName: DEFAULT_VOCALS_PART,
+            tempoMarkers: scene.tempos,
+            timeSignatures: scene.timeSignatures,
+            sections: scene.sections,
+          },
+        });
+
+        // Notes are stored track-qualified; every other kind's id is already
+        // the id the store holds.
+        const marqueeTrackKey = row?.row.key ?? marquee.trackKey;
+        const next: Partial<Record<MarqueeKind, ReadonlySet<string>>> = {};
+        for (const kind of MARQUEE_KINDS) {
+          const merged = new Set(marqueeBaseRef.current[kind]);
+          for (const id of swept[kind]) {
+            merged.add(
+              kind === 'note' ? trackQualifiedNoteId(marqueeTrackKey, id) : id,
+            );
+          }
+          next[kind] = merged;
         }
+        dispatch({type: 'SET_SELECTION_MULTI', selection: next});
 
         dirtyRef.current = true;
         drawRef.current(Math.max(0, audioManager.chartTime * 1000));
@@ -2706,6 +2844,7 @@ export default function PianoRollTimeline({
       dispatch,
       executeCommand,
       laneGeometry,
+      panelBands,
       panelGeometry,
       pickAt,
       pickPartAt,
@@ -2798,6 +2937,14 @@ export default function PianoRollTimeline({
           // independently clamped to its own phrase by `moveLyric` inside
           // the lyric handler. Both moves land in one `BatchCommand` so
           // undo/redo treats the group drag as a single edit.
+          //
+          // Co-selected tempo markers and signature chips deliberately stay
+          // put. A marker move is not a tick translation: `applyMarkerMoveBpms`
+          // moves it in MS and rewrites the BPM of the segments on both sides,
+          // so "move five markers by this delta" needs its own lib operation
+          // (and its own `MIN_SEGMENT_MS` clamping) before it can mean
+          // anything. Sections are chart-wide and likewise ride only their own
+          // ruler drag.
           const lyricIds = Array.from(getSelectedIds(st, 'lyric'));
           const cmds: EditCommand[] = [];
           if (ids.length > 0) {

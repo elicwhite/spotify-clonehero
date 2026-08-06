@@ -1052,6 +1052,58 @@ export class DeleteTempoMarkerCommand implements EditCommand {
   }
 }
 
+/**
+ * Delete N sparse tempo markers in one shot — the multi-marker form of
+ * {@link DeleteTempoMarkerCommand}, for the piano roll's marquee selection.
+ *
+ * Not a `BatchCommand` of single deletes, and the difference is not
+ * cosmetic. `BatchCommand` folds its members over the evolving document, so
+ * N single deletes are N sequential KEEP-MS remaps: each one re-derives
+ * every note's tick from ms and rounds, then the next one rounds on top of
+ * that result, and each also runs its own `nudgeNoteCollisions` pass. The
+ * error compounds with N. Filtering all N ticks first and remapping ONCE
+ * makes the result identical to a single delete's fidelity regardless of
+ * how many markers went out.
+ *
+ * Tick 0 (the song-start anchor) and ticks with no marker are dropped from
+ * the list; if nothing is left the document is returned untouched.
+ */
+export class DeleteTempoMarkersCommand implements EditCommand {
+  readonly description: string;
+  // See `MoveTempoMarkerCommand` — KEEP-MS's note re-tick is an intent side
+  // effect, not a declared note edit.
+  readonly entityKinds = KIND.tempo;
+  readonly operations = OP.delete;
+
+  private readonly ticks: ReadonlySet<number>;
+
+  constructor(
+    ticks: Iterable<number>,
+    private glue: TempoGlueMode,
+  ) {
+    this.ticks = new Set([...ticks].filter(t => t !== 0));
+    this.description = `Delete ${this.ticks.size} tempo marker(s)`;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    const present = doc.parsedChart.tempos.filter(t => this.ticks.has(t.tick));
+    if (present.length === 0) return doc;
+
+    const cloned = cloneDocForRetime(doc);
+    cloned.parsedChart.tempos = cloned.parsedChart.tempos.filter(
+      t => !this.ticks.has(t.tick),
+    );
+
+    if (this.glue === 'grid') {
+      retimeChart(cloned.parsedChart);
+      return refreshAnchorKeepTick(cloned);
+    }
+    return refreshAnchorKeepMs(
+      remapKeepMs(cloned, synctrackFromChart(cloned.parsedChart)),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Structural tempo correction — RE-PREDICT (plan 0061 §3 class (b) / §7)
 // ---------------------------------------------------------------------------

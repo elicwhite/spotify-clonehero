@@ -436,6 +436,10 @@ export function drawTempoLane(
   tsWidthsOut: Map<number, number>,
   tsDrag: TimeSignatureDrag | null,
   hoverTsTick: number | null,
+  /** Ticks of marquee-selected tempo markers. */
+  selectedTempoTicks: ReadonlySet<number>,
+  /** Ticks of marquee-selected time-signature chips. */
+  selectedTsTicks: ReadonlySet<number>,
 ): void {
   ctx.fillStyle = COLORS.tempoBg;
   ctx.fillRect(0, top, w, TEMPO_H);
@@ -451,10 +455,13 @@ export function drawTempoLane(
     const marker = scene.tempos[k];
     const x = msToX(marker.ms, view);
     if (x < -60 || x > w + 20) continue;
-    // Marker 0 (song-start anchor) is never a drag/hover target.
+    // Marker 0 (song-start anchor) is never a drag/hover/selection target.
     const hot = k > 0 && (hoverMarker === k || tempoDrag?.index === k);
-    if (hot) {
-      ctx.fillStyle = 'rgba(122,184,255,0.25)';
+    const selected = k > 0 && selectedTempoTicks.has(marker.tick);
+    if (hot || selected) {
+      ctx.fillStyle = selected
+        ? OVERLAY_COLORS.selectedHalo
+        : 'rgba(122,184,255,0.25)';
       ctx.beginPath();
       ctx.arc(x, cy, 9, 0, Math.PI * 2);
       ctx.fill();
@@ -498,7 +505,12 @@ export function drawTempoLane(
     if (x < -50 || x > w + 10) continue;
     const rect = tsChipRect(ms, view, tw);
     const hot = dragging || hoverTsTick === ts.tick;
-    ctx.fillStyle = hot ? 'rgba(122,184,255,0.34)' : 'rgba(122,184,255,0.16)';
+    const selected = ts.tick !== 0 && selectedTsTicks.has(ts.tick);
+    ctx.fillStyle = selected
+      ? OVERLAY_COLORS.selectedHalo
+      : hot
+        ? 'rgba(122,184,255,0.34)'
+        : 'rgba(122,184,255,0.16)';
     roundRect(
       ctx,
       rect.left,
@@ -508,6 +520,10 @@ export function drawTempoLane(
       3,
     );
     ctx.fill();
+    if (selected) {
+      ctx.strokeStyle = OVERLAY_COLORS.selectedStroke;
+      ctx.stroke();
+    }
     ctx.fillStyle = COLORS.tempoInk;
     ctx.fillText(ts.label, rect.left + 4, top + TS_CHIP_TOP + 9.5);
   }
@@ -540,6 +556,9 @@ export function drawLyricsRow(
   widthsOut: Map<string, number>,
   vocalsWave: AmpPyramid | null,
   phraseEdgeDrag: PhraseEdgeDrag | null,
+  /** Ticks of marquee-selected phrase start / end edges. */
+  selectedPhraseStartTicks: ReadonlySet<number>,
+  selectedPhraseEndTicks: ReadonlySet<number>,
   /** Tick delta from an active NOTE-anchored drag (mode 'drag'), so
    *  co-selected lyrics preview moving together with the notes rather than
    *  only snapping into place when the note drag commits. Null when no
@@ -600,7 +619,7 @@ export function drawLyricsRow(
         );
       }
     }
-    return {ms, msEnd};
+    return {ms, msEnd, tick: band.tick, tickEnd: band.tickEnd};
   });
 
   for (const band of paintedBands) {
@@ -622,8 +641,21 @@ export function drawLyricsRow(
   // the syllable chips so the pills and their text sit on top.
   ctx.lineWidth = PHRASE_EDGE_LINE_W;
   for (const marker of phraseEdgeMarkers(paintedBands, view, w)) {
+    const selected =
+      marker.kind === 'start'
+        ? selectedPhraseStartTicks.has(marker.tick)
+        : selectedPhraseEndTicks.has(marker.tick);
     const color =
       marker.kind === 'start' ? COLORS.phraseStart : COLORS.phraseEnd;
+    if (selected) {
+      ctx.strokeStyle = OVERLAY_COLORS.selectedStroke;
+      ctx.lineWidth = PHRASE_EDGE_LINE_W + 2;
+      ctx.beginPath();
+      ctx.moveTo(marker.x, top + 1);
+      ctx.lineTo(marker.x, top + height - 1);
+      ctx.stroke();
+      ctx.lineWidth = PHRASE_EDGE_LINE_W;
+    }
     ctx.strokeStyle = color;
     ctx.globalAlpha = 0.85;
     ctx.beginPath();
@@ -731,6 +763,8 @@ export function drawRuler(
   laneBottom: number,
   sectionDrag: SectionDrag | null,
   loop: LoopRegion | null,
+  /** Ticks of selected section flags (click or marquee). */
+  selectedSectionTicks: ReadonlySet<number>,
 ): void {
   ctx.fillStyle = COLORS.rulerBg;
   ctx.fillRect(0, 0, w, RULER_H);
@@ -802,11 +836,16 @@ export function drawRuler(
     if (x > w + 10) continue;
     const tw = ctx.measureText(s.name).width;
     if (x + tw + 14 < 0) continue;
+    const selected = selectedSectionTicks.has(s.tick);
     ctx.fillStyle = COLORS.sectionFlag;
     ctx.fillRect(x, 2, 2, RULER_H - 4);
-    ctx.globalAlpha = dragging ? 0.3 : 0.18;
+    ctx.globalAlpha = selected ? 0.5 : dragging ? 0.3 : 0.18;
     ctx.fillRect(x + 2, 2, tw + 10, 12);
     ctx.globalAlpha = 1;
+    if (selected) {
+      ctx.strokeStyle = OVERLAY_COLORS.selectedStroke;
+      ctx.strokeRect(x + 1.5, 1.5, tw + 11, 13);
+    }
     ctx.fillStyle = COLORS.sectionFlag;
     ctx.fillText(s.name, x + 6, 11.5);
   }

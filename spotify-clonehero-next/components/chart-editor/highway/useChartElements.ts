@@ -36,7 +36,7 @@ import type {
  * stores this narrower shape.
  */
 type ParsedChart = ReturnType<typeof parseChartFile>;
-import type {EntityKind} from '@/lib/chart-edit';
+import type {EntityKind, SelectableKind} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {tickToMs} from '@/lib/drum-transcription/timing';
 import type {ChartDocument} from '@/lib/chart-edit';
@@ -47,7 +47,10 @@ import {
   schemaForInstrument,
   type InstrumentSchema,
 } from '@/lib/chart-edit/instruments';
-import {reconcilerKeyFor} from '@/lib/preview/highway/reconcilerKey';
+import {
+  isReconciledKind,
+  reconcilerKeyFor,
+} from '@/lib/preview/highway/reconcilerKey';
 import type {EditorCapabilities} from '../capabilities';
 import {
   isTrackScope,
@@ -80,8 +83,9 @@ export interface UseChartElementsInputs {
   /** Active vocal part. `vocals` for non-vocals scopes. */
   partName: string;
   capabilities: EditorCapabilities;
-  /** Per-entity-kind selection from the editor reducer. */
-  selection: ReadonlyMap<EntityKind, ReadonlySet<string>>;
+  /** Per-kind selection from the editor reducer. Wider than the
+   *  reconciler's kind space; filtered by `isReconciledKind` at the push. */
+  selection: ReadonlyMap<SelectableKind, ReadonlySet<string>>;
   /** Single hovered entity from the editor reducer (or null). */
   hovered: {kind: EntityKind; id: string} | null;
   noteDrag: NoteDragHint | null;
@@ -301,6 +305,10 @@ export function useChartElements(inputs: UseChartElementsInputs): void {
     const keys = new Set<string>();
     const track = isTrackScope(activeScope) ? activeScope.track : null;
     for (const [kind, ids] of selection) {
+      // Tempo markers / time-signature chips are piano-roll-only entities:
+      // the marquee can select them, but the highway has no element to
+      // highlight, so they never reach the reconciler.
+      if (!isReconciledKind(kind)) continue;
       for (const id of ids) {
         if (kind === 'note' && track) {
           const localId = localNoteIdForTrack(id, track);

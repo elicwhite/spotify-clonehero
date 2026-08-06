@@ -12,7 +12,6 @@ export {
 } from './clipboard';
 export {isCommandAllowed} from './capabilityGate';
 export {
-  getFirstSelectedId,
   getSelectedIds,
   isAnythingSelected,
   selectActiveSchema,

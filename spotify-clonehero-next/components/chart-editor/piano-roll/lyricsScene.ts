@@ -123,6 +123,10 @@ export interface PhraseEdgeMarker {
   kind: 'start' | 'end';
   x: number;
   flagDirection: 1 | -1;
+  /** The edge's own tick (`band.tick` for a start, `band.tickEnd` for an
+   *  end) — the value `phraseStartId`/`phraseEndId` key off, so the draw
+   *  layer can tell whether this edge is selected. */
+  tick: number;
 }
 
 /**
@@ -136,7 +140,7 @@ export interface PhraseEdgeMarker {
  * the band it is resizing.
  */
 export function phraseEdgeMarkers(
-  bands: readonly {ms: number; msEnd: number}[],
+  bands: readonly {ms: number; msEnd: number; tick: number; tickEnd: number}[],
   view: PianoRollView,
   width: number,
 ): PhraseEdgeMarker[] {
@@ -146,10 +150,20 @@ export function phraseEdgeMarkers(
     const startX = Math.round(msToX(band.ms, view));
     const endX = Math.round(msToX(band.msEnd, view));
     if (startX >= -margin && startX <= width + margin) {
-      markers.push({kind: 'start', x: startX, flagDirection: 1});
+      markers.push({
+        kind: 'start',
+        x: startX,
+        flagDirection: 1,
+        tick: band.tick,
+      });
     }
     if (endX >= -margin && endX <= width + margin) {
-      markers.push({kind: 'end', x: endX, flagDirection: -1});
+      markers.push({
+        kind: 'end',
+        x: endX,
+        flagDirection: -1,
+        tick: band.tickEnd,
+      });
     }
   }
   return markers;

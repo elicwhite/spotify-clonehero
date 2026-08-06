@@ -7,7 +7,6 @@ import {useChartEditorContext} from '../ChartEditorContext';
 import {useAudioServiceContext} from '../AudioServiceContext';
 import {
   getSelectedIds,
-  getFirstSelectedId,
   isClipboardEmpty,
   parseTrackKeyId,
   pasteAnchorTick,
@@ -26,12 +25,12 @@ import {
   trackQualifiedNoteId,
 } from '../scope';
 import {useExecuteCommand, useUndoRedo} from './useEditCommands';
+import {buildDeleteSelectionCommands} from '../editing/deleteSelection';
 import {
   AddLyricCommand,
   AddNoteCommand,
   DeleteLyricCommand,
   DeleteNotesCommand,
-  DeleteSectionCommand,
   BatchCommand,
   ToggleFlagCommand,
   noteId,
@@ -43,7 +42,6 @@ import {
 import {
   findTrack,
   lyricId,
-  parseLyricId,
   DEFAULT_VOCALS_PART,
   drums4LaneSchema,
   drums5LaneSchema,
@@ -795,51 +793,26 @@ export function useEditorKeyboard(onSave?: () => void) {
   }
 
   // -----------------------------------------------------------------------
-  // Delete / Backspace — act on whatever the selection holds.
-  //
-  // A selected section takes the key on its own (it is only ever selected
-  // alone, from the ruler). Otherwise notes and lyrics are both deleted,
-  // since a marquee across the piano roll can select the two together, and
-  // they go out as one batch so a single undo brings them back.
-  //
-  // Phrase starts and ends are deliberately NOT deletable this way: they are
-  // drag handles, never entries in `state.selection`, and "delete a phrase
-  // edge" has no meaning on its own — the phrase-band context menu's
-  // "Delete phrase" is the route to removing a phrase.
+  // Delete / Backspace — act on whatever the selection holds. The piano
+  // roll's marquee can select several kinds at once, so the command list
+  // (and the ordering rule it must respect) is built by
+  // `buildDeleteSelectionCommands`; everything goes out in ONE
+  // `BatchCommand` so a single undo brings the whole sweep back.
   // -----------------------------------------------------------------------
   const selectedLyricIds = getSelectedIds(state, 'lyric');
+  const selectedSectionIds = getSelectedIds(state, 'section');
+  const selectedTempoIds = getSelectedIds(state, 'tempo');
+  const selectedTimesigIds = getSelectedIds(state, 'timesig');
 
   const handleDelete = useCallback(() => {
-    const selectedSectionId = getFirstSelectedId(state, 'section');
-    const selectedSectionTick =
-      selectedSectionId !== null
-        ? Number.parseInt(selectedSectionId, 10)
-        : null;
-    if (selectedSectionTick !== null && state.chartDoc) {
-      const section = state.chartDoc.parsedChart.sections.find(
-        s => s.tick === selectedSectionTick,
-      );
-      if (section) {
-        executeCommand(new DeleteSectionCommand(section.tick, section.name));
-        dispatch({type: 'SET_SELECTION', kind: 'section', ids: new Set()});
-      }
-      return;
-    }
-
-    const commands: EditCommand[] = [];
-    const selectedNotes = activeNoteIds(state);
-    const trackKey = trackKeyFromScope(state.activeScope);
-    if (selectedNotes.size > 0 && trackKey) {
-      commands.push(
-        new DeleteNotesCommand(selectedNotes as Set<string>, trackKey),
-      );
-    }
-    for (const id of getSelectedIds(state, 'lyric')) {
-      const parsed = parseLyricId(id);
-      if (parsed) {
-        commands.push(new DeleteLyricCommand(parsed.tick, parsed.partName));
-      }
-    }
+    if (!state.chartDoc) return;
+    const commands = buildDeleteSelectionCommands({
+      state,
+      chartDoc: state.chartDoc,
+      noteIds: activeNoteIds(state),
+      trackKey: trackKeyFromScope(state.activeScope) ?? null,
+      glue: state.tempoGlueMode,
+    });
     if (commands.length === 0) return;
 
     executeCommand(
@@ -847,16 +820,17 @@ export function useEditorKeyboard(onSave?: () => void) {
         ? commands[0]
         : new BatchCommand(commands, `Delete ${commands.length} item(s)`),
     );
-    if (selectedNotes.size > 0) {
-      dispatch({type: 'SET_SELECTION', kind: 'note', ids: new Set()});
-    }
-    dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: new Set()});
+    // Everything the sweep touched is gone or (for phrase edges, which are
+    // never deleted) no longer worth holding, so the whole selection goes.
+    dispatch({type: 'CLEAR_SELECTION'});
   }, [state, executeCommand, dispatch]);
 
   const canDelete =
     activeNoteIds(state).size > 0 ||
     selectedLyricIds.size > 0 ||
-    getFirstSelectedId(state, 'section') !== null;
+    selectedSectionIds.size > 0 ||
+    selectedTempoIds.size > 0 ||
+    selectedTimesigIds.size > 0;
 
   useHotkey('Delete', handleDelete, {enabled: canDelete});
 

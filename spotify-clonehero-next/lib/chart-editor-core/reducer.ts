@@ -1,4 +1,8 @@
-import type {ChartDocument, DownbeatFlags} from '@/lib/chart-edit';
+import type {
+  ChartDocument,
+  DownbeatFlags,
+  SelectableKind,
+} from '@/lib/chart-edit';
 import {chartEndTick, deriveDownbeatFlags} from '@/lib/chart-edit';
 import type {ChartEditorAction, ChartEditorState} from './state';
 import {UNDO_STACK_CAP} from './state';
@@ -13,6 +17,20 @@ import {
   recomputeTrackStamps,
   withAssistProvenance,
 } from './content-stamps';
+
+/** True when two selection sets hold exactly the same ids (or both are
+ *  empty), so `SET_SELECTION_MULTI` can skip a no-op kind. */
+function sameIdSet(
+  a: ReadonlySet<string> | undefined,
+  b: ReadonlySet<string>,
+): boolean {
+  if (a === b) return true;
+  const size = a?.size ?? 0;
+  if (size !== b.size) return false;
+  if (!a) return true;
+  for (const id of a) if (!b.has(id)) return false;
+  return true;
+}
 
 function recoverTrackScope(
   chartDoc: ChartDocument,
@@ -175,6 +193,21 @@ export function chartEditorReducer(
         next.set(action.kind, ids as Set<string>);
       }
       return {...state, selection: next};
+    }
+    case 'SET_SELECTION_MULTI': {
+      let changed = false;
+      const next = new Map(state.selection);
+      for (const [kind, ids] of Object.entries(action.selection) as [
+        SelectableKind,
+        ReadonlySet<string>,
+      ][]) {
+        const current = next.get(kind);
+        if (sameIdSet(current, ids)) continue;
+        changed = true;
+        if (ids.size === 0) next.delete(kind);
+        else next.set(kind, new Set(ids));
+      }
+      return changed ? {...state, selection: next} : state;
     }
     case 'CLEAR_SELECTION':
       if (state.selection.size === 0) return state;

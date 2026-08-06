@@ -1,5 +1,10 @@
 import type {Dispatch} from 'react';
-import type {ChartDocument, DownbeatFlags, EntityKind} from '@/lib/chart-edit';
+import type {
+  ChartDocument,
+  DownbeatFlags,
+  EntityKind,
+  SelectableKind,
+} from '@/lib/chart-edit';
 import type {
   EditCommand,
   TempoGlueMode,
@@ -121,11 +126,18 @@ export interface ChartEditorState {
   // -- Editing state --
 
   /**
-   * Per-entity-kind selection. Each set holds opaque ids whose format is
-   * defined by the corresponding `EntityKindHandler` in `chart-edit`. Use
-   * the `getSelectedIds` / `isAnythingSelected` helpers to read.
+   * Per-kind selection. Each set holds opaque ids whose format is defined
+   * by the corresponding `EntityKindHandler` in `chart-edit`, or (for the
+   * handler-less `'tempo'`/`'timesig'` kinds) is `String(tick)`. Use the
+   * `getSelectedIds` / `isAnythingSelected` helpers to read.
+   *
+   * Keyed by `SelectableKind`, not `EntityKind`: the piano roll's marquee
+   * can sweep tempo markers and time-signature chips into the selection
+   * alongside notes, sections and lyrics. Consumers that only understand
+   * the reconciler's kinds (`useChartElements`' selection push) must filter
+   * rather than assume every key is an `EntityKind`.
    */
-  selection: Map<EntityKind, Set<string>>;
+  selection: Map<SelectableKind, Set<string>>;
   /**
    * Single-entity hover anchor — what the cursor (or active drag) is
    * pinned to. Source of truth for the reconciler's `setHoveredKey` push;
@@ -221,7 +233,18 @@ export type ChartEditorAction =
   | {type: 'SET_PLAYBACK_SPEED'; speed: number}
   | {type: 'SET_ZOOM'; zoom: number}
   /** Replace the selection set for one entity kind. */
-  | {type: 'SET_SELECTION'; kind: EntityKind; ids: ReadonlySet<string>}
+  | {type: 'SET_SELECTION'; kind: SelectableKind; ids: ReadonlySet<string>}
+  /**
+   * Replace several kinds' selection sets in one dispatch. The piano roll's
+   * marquee updates up to seven kinds per pointer-move; sending them as one
+   * action keeps that a single re-render, and the reducer returns the same
+   * state object when no kind's set actually changed, so a marquee dragged
+   * across empty space costs nothing.
+   */
+  | {
+      type: 'SET_SELECTION_MULTI';
+      selection: Partial<Record<SelectableKind, ReadonlySet<string>>>;
+    }
   /** Clear selection across all entity kinds. */
   | {type: 'CLEAR_SELECTION'}
   /** Set the single hovered entity (or null to clear). */

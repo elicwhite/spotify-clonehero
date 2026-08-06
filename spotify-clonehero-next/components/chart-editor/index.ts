@@ -14,7 +14,6 @@ export {
 // Headless editor core (reducer, history, selection — @/lib/chart-editor-core)
 export {
   getSelectedIds,
-  getFirstSelectedId,
   isAnythingSelected,
   selectActiveTrack,
   type ChartEditorState,

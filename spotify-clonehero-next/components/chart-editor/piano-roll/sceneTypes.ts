@@ -65,6 +65,11 @@ export const OVERLAY_COLORS = {
   hoverHalo: 'rgba(255,255,255,0.32)',
   marqueeFill: 'rgba(122,184,255,0.14)',
   marqueeStroke: 'rgba(122,184,255,0.7)',
+  /** Fill behind a marquee-selected marker/chip/flag, and the outline
+   *  around it. One pair for every band so a mixed selection reads as one
+   *  selection rather than five differently-styled ones. */
+  selectedHalo: 'rgba(122,184,255,0.45)',
+  selectedStroke: 'rgba(198,226,255,0.95)',
 } as const;
 
 // ---------------------------------------------------------------------------

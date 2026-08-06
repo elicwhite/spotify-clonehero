@@ -201,6 +201,7 @@ export {
   noteId,
   type EntityKind,
   type CommandEntityKind,
+  type SelectableKind,
   type CommandOperation,
   type EntityRef,
   type EntityKindHandler,

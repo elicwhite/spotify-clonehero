@@ -84,6 +84,61 @@ describe('chartEditorReducer', () => {
     });
   });
 
+  describe('SET_SELECTION_MULTI', () => {
+    it('replaces several kinds in one dispatch', () => {
+      const next = chartEditorReducer(initialState, {
+        type: 'SET_SELECTION_MULTI',
+        selection: {
+          note: new Set(['480:redDrum']),
+          tempo: new Set(['960', '1920']),
+          timesig: new Set(['960']),
+        },
+      });
+      expect(next.selection.get('note')).toEqual(new Set(['480:redDrum']));
+      expect(next.selection.get('tempo')).toEqual(new Set(['960', '1920']));
+      expect(next.selection.get('timesig')).toEqual(new Set(['960']));
+    });
+
+    it('drops kinds whose new set is empty', () => {
+      const seeded = chartEditorReducer(initialState, {
+        type: 'SET_SELECTION',
+        kind: 'tempo',
+        ids: new Set(['960']),
+      });
+      const cleared = chartEditorReducer(seeded, {
+        type: 'SET_SELECTION_MULTI',
+        selection: {tempo: new Set(), note: new Set()},
+      });
+      expect(cleared.selection.has('tempo')).toBe(false);
+      expect(cleared.selection.size).toBe(0);
+    });
+
+    it('returns the SAME state when no kind actually changed', () => {
+      const seeded = chartEditorReducer(initialState, {
+        type: 'SET_SELECTION_MULTI',
+        selection: {note: new Set(['480:redDrum']), tempo: new Set()},
+      });
+      const again = chartEditorReducer(seeded, {
+        type: 'SET_SELECTION_MULTI',
+        selection: {note: new Set(['480:redDrum']), tempo: new Set()},
+      });
+      expect(again).toBe(seeded);
+    });
+
+    it('leaves kinds it does not mention alone', () => {
+      const seeded = chartEditorReducer(initialState, {
+        type: 'SET_SELECTION',
+        kind: 'section',
+        ids: new Set(['1920']),
+      });
+      const next = chartEditorReducer(seeded, {
+        type: 'SET_SELECTION_MULTI',
+        selection: {note: new Set(['0:kick'])},
+      });
+      expect(next.selection.get('section')).toEqual(new Set(['1920']));
+    });
+  });
+
   describe('CLEAR_SELECTION', () => {
     it('drops every kind in one step', () => {
       const seeded = [

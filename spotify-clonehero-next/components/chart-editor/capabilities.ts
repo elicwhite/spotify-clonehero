@@ -25,6 +25,7 @@ import type {
   CommandEntityKind,
   CommandOperation,
   EntityKind,
+  SelectableKind,
 } from '@/lib/chart-edit';
 
 export interface EditorCapabilities {
@@ -32,10 +33,11 @@ export interface EditorCapabilities {
    * Entity kinds `EditorSession.dispatch` allows an `EditCommand` to declare
    * as its edit intent (plan 0037 Task 3) — the dispatch-path gate, checked
    * against `command.entityKinds`. A superset of `EntityKind`: also covers
-   * `'tempo'`/`'timesig'`, which aren't hoverable/selectable/draggable UI
-   * entities but are still edited by commands (tempo markers, time
-   * signatures). This is the enforcement layer; `hoverable`/`selectable`/
-   * `draggable` below remain the UI-affordance layer.
+   * `'tempo'`/`'timesig'`, which are edited only by their own dedicated
+   * commands (tempo markers, time signatures) rather than through the
+   * generic per-kind handler surface. This is the enforcement layer;
+   * `hoverable`/`selectable`/`draggable` below remain the UI-affordance
+   * layer.
    */
   editableEntities: ReadonlySet<CommandEntityKind>;
   /**
@@ -47,8 +49,18 @@ export interface EditorCapabilities {
   allowedOperations: ReadonlySet<CommandOperation>;
   /** Entity kinds that respond to hover (cursor change, hit feedback). */
   hoverable: ReadonlySet<EntityKind>;
-  /** Entity kinds that can be added to the selection. */
-  selectable: ReadonlySet<EntityKind>;
+  /**
+   * Kinds that can be added to the selection. Keyed by `SelectableKind`,
+   * so it can include `'tempo'`/`'timesig'`: the piano roll's marquee
+   * rubber-bands over the tempo lane like any other lane, and a selected
+   * marker gets a highlight and a place in a batched Delete. That is the
+   * whole of what selectable buys them — they stay out of `hoverable` and
+   * `draggable`, which govern the generic hover/drag machinery
+   * (`entityHandlers`, `MoveEntitiesCommand`) that has no marker
+   * implementation: a marker move is an ms-space BPM rewrite of its two
+   * neighbouring segments, not a tick translation.
+   */
+  selectable: ReadonlySet<SelectableKind>;
   /**
    * Entity kinds that can be drag-moved on the highway. Should be a subset
    * of `selectable` — hover/select must precede drag.
@@ -173,12 +185,14 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
     'phrase-start',
     'phrase-end',
   ]),
-  selectable: new Set([
+  selectable: new Set<SelectableKind>([
     'note',
     'section',
     'lyric',
     'phrase-start',
     'phrase-end',
+    'tempo',
+    'timesig',
   ]),
   draggable: new Set([
     'note',
@@ -239,8 +253,11 @@ export const PREVIEW_CAPABILITIES: EditorCapabilities = {
 /**
  * {@link TEMPO_CAPABILITIES}: `/tempo`'s tempo-mapping editor. Tempo, time-
  * signature, and section markers are editable via the piano roll's tempo
- * lane and ruler (not gated by the `hoverable`/`selectable`/`draggable`
- * `EntityKind` sets — those govern notes and lyrics only); nothing else is.
+ * lane and ruler; nothing else is. Tempo/timesig marquee selection is
+ * granted through `selectable`; the direct marker drags and the ruler's
+ * section drag run off their own hit tests, not off `hoverable`/`draggable`
+ * (which govern the generic `entityHandlers` machinery notes and lyrics
+ * use).
  * The piano roll hides its note lanes and lyrics row entirely
  * (`showPianoRollNotes: false`) since the page is about the tempo grid, not
  * the drum chart. `editableEntities` deliberately omits `'note'`: a tempo
@@ -251,7 +268,7 @@ export const TEMPO_CAPABILITIES: EditorCapabilities = {
   editableEntities: new Set<CommandEntityKind>(['tempo', 'timesig', 'section']),
   allowedOperations: ALL_OPERATIONS,
   hoverable: new Set(),
-  selectable: new Set(),
+  selectable: new Set<SelectableKind>(['tempo', 'timesig']),
   draggable: new Set(),
   showNotePlacementTools: false,
   showDrumLanes: true,
