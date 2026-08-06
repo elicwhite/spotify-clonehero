@@ -112,6 +112,14 @@ export class SceneReconciler {
   /** Currently hovered element key. */
   private hoveredKey: string | null = null;
 
+  /**
+   * Called after any declarative mutation. Lets the host learn that the scene
+   * changed without polling the reconciler on a frame that may never come --
+   * elements, selection, and hover are all pushed here directly rather than
+   * through the host.
+   */
+  private changeListener: (() => void) | null = null;
+
   constructor(
     root: THREE.Object3D,
     renderers: Record<string, ElementRenderer>,
@@ -127,6 +135,15 @@ export class SceneReconciler {
   // -----------------------------------------------------------------------
   // Declarative API
   // -----------------------------------------------------------------------
+
+  /**
+   * Register the callback fired after every declarative mutation
+   * (`setElements`, `setSelectedKeys`, `setHoveredKey`). One listener at a
+   * time; pass `null` to clear it.
+   */
+  setChangeListener(listener: (() => void) | null): void {
+    this.changeListener = listener;
+  }
 
   /**
    * Declare the full set of elements that should exist.
@@ -186,6 +203,8 @@ export class SceneReconciler {
       maxEndMs = Math.max(maxEndMs, el.endMsTime ?? el.msTime);
       this.maxEndMsPrefix.push(maxEndMs);
     }
+
+    this.changeListener?.();
   }
 
   /**
@@ -295,6 +314,7 @@ export class SceneReconciler {
       }
     }
     this.selectedKeys = new Set(keys);
+    this.changeListener?.();
   }
 
   /** Set which element key is hovered (for hover highlight). */
@@ -318,6 +338,7 @@ export class SceneReconciler {
       }
     }
     this.hoveredKey = key;
+    this.changeListener?.();
   }
 
   // -----------------------------------------------------------------------
@@ -392,6 +413,7 @@ export class SceneReconciler {
     this.maxEndMsPrefix = [];
     this.selectedKeys.clear();
     this.hoveredKey = null;
+    this.changeListener = null;
   }
 
   /**

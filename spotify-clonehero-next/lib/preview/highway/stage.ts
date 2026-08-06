@@ -32,6 +32,7 @@ import {
 } from './cell';
 import {toGlRect, type HighwayRect, type StageLayout} from './layout';
 import {computeHighwayCameraFit, HIGHWAY_CAMERA} from './cameraFit';
+import {RenderGate} from './renderGate';
 import type {Track} from './types';
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,17 @@ const HIGHWAY_ROOT_SPACING = 8;
 
 /** THREE has 32 layers, of which layer 0 is the shared "drawn everywhere" one. */
 const MAX_HIGHWAY_LAYER = 31;
+
+/**
+ * How often the parked stage re-checks whether it owes a frame.
+ *
+ * Every push into the stage wakes the loop directly, so this poll exists only
+ * for the one input that arrives with no push behind it: chart time moved
+ * because something seeked `AudioManager` on its own (the transport's
+ * section-jump buttons do exactly this). The piano roll runs the same poll at
+ * the same rate for the same reason, so the two surfaces catch up together.
+ */
+const IDLE_POLL_MS = 120;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -169,6 +181,11 @@ interface StageContext {
   getElapsedMs: () => number;
   /** The stage's tempo map, seeded into a highway as it finishes building. */
   getTiming: () => TimingData;
+  /**
+   * Tell the stage this highway's contents changed, so the loop draws again.
+   * Cheap and coalescing -- see `RenderGate`.
+   */
+  wake: () => void;
 }
 
 function makeCamera(worldX: number): THREE.PerspectiveCamera {
@@ -300,6 +317,10 @@ class StageHighway implements StageHighwayHandle {
     this.reconciler = core.reconciler;
     this.noteRenderer = core.noteRenderer;
     this.disposeCellMeshes = core.disposeMeshes;
+    // Notes, selection, and hover are pushed straight into the reconciler by
+    // the editor rather than through this handle, so the reconciler reports its
+    // own mutations instead of the stage polling it every frame.
+    core.reconciler.setChangeListener(ctx.wake);
 
     // SceneOverlays + InteractionManager exist for every highway -- they
     // power the cursor / ghost / hit-testing surface in both drum-editing
@@ -340,6 +361,7 @@ class StageHighway implements StageHighwayHandle {
 
   setOverlayState(state: OverlayState): void {
     this.overlayState = state;
+    this.ctx.wake();
   }
 
   async getInteractionManager(): Promise<InteractionManager | null> {
@@ -374,6 +396,7 @@ class StageHighway implements StageHighwayHandle {
     });
     this.waveformSurface.setVisible(this.highwayMode === 'waveform');
     this.root.syncLayers();
+    this.ctx.wake();
   }
 
   async setGridData(
@@ -398,6 +421,7 @@ class StageHighway implements StageHighwayHandle {
     // Grid lines are highway rendering, visible in both modes.
     this.gridOverlay.setVisible(true);
     this.root.syncLayers();
+    this.ctx.wake();
   }
 
   setHighwayMode(mode: HighwayMode): void {
@@ -406,6 +430,7 @@ class StageHighway implements StageHighwayHandle {
     // The classic floor stays visible in both modes: it is the gray plane
     // that frames the highway edges, and the waveform draws on top of it.
     this.gridOverlay?.setVisible(true);
+    this.ctx.wake();
   }
 
   // -- Stage-internal ------------------------------------------------------
@@ -416,6 +441,7 @@ class StageHighway implements StageHighwayHandle {
   ): void {
     this.sceneOverlays?.setTimingData(timedTempos, resolution);
     this.interactionManager?.setTimingData(timedTempos, resolution);
+    this.ctx.wake();
   }
 
   /**
@@ -428,6 +454,7 @@ class StageHighway implements StageHighwayHandle {
    */
   setRect(rect: HighwayRect | null): void {
     this.rect = rect;
+    this.ctx.wake();
     if (rect && rect.width > 0 && rect.height > 0) {
       const aspect = rect.width / rect.height;
       const fit = computeHighwayCameraFit({aspect, halfWidth: this.halfWidth});
@@ -614,6 +641,8 @@ export function setupStage(
     event.preventDefault();
     if (contextLost) return;
     contextLost = true;
+    stopIdlePoll();
+    looping = false;
     renderer.setAnimationLoop(null);
     for (const listener of Array.from(contextLostListeners)) {
       try {
@@ -646,6 +675,40 @@ export function setupStage(
     return currentMs - delay;
   }
 
+  /**
+   * Decides which frames are worth drawing. Every push below funnels into
+   * `wake()`; the loop itself only keeps drawing on its own while chart time is
+   * moving.
+   */
+  const gate = new RenderGate();
+  /** Whether the rAF loop is currently armed. */
+  let looping = false;
+  /** The low-rate poll that stands in while the loop is parked. */
+  let idleTimer: ReturnType<typeof setInterval> | null = null;
+
+  function stopIdlePoll(): void {
+    if (idleTimer === null) return;
+    clearInterval(idleTimer);
+    idleTimer = null;
+  }
+
+  /** Arm the rAF loop, if it is not already running and still can be. */
+  function arm(): void {
+    if (destroyed || contextLost || looping) return;
+    stopIdlePoll();
+    looping = true;
+    renderer.setAnimationLoop(animation);
+  }
+
+  /**
+   * Ask for a frame. O(1) and coalescing: any number of calls between two
+   * frames cost one frame, and none of them draw synchronously.
+   */
+  function wake(): void {
+    gate.wake();
+    arm();
+  }
+
   const context: StageContext = {
     scene,
     chart,
@@ -655,6 +718,7 @@ export function setupStage(
     audioManager,
     getElapsedMs,
     getTiming: () => timing,
+    wake,
   };
 
   /**
@@ -691,6 +755,9 @@ export function setupStage(
     highway.setRect(rectForId(id));
 
     await highway.ready;
+    // The scene core lands asynchronously, long after the push that asked for
+    // it, so the finished highway asks for its own first frame.
+    wake();
     return highway.isDisposed ? null : highway;
   }
 
@@ -704,10 +771,12 @@ export function setupStage(
     if (!highway) return;
     highways.delete(id);
     disposeHighway(highway);
+    wake();
   }
 
   function setLayout(layout: StageLayout, order: readonly string[]): void {
     layoutState = {layout, order: Array.from(order)};
+    wake();
     if (layout.measured) {
       canvasWidth = layout.canvas.width;
       canvasHeight = layout.canvas.height;
@@ -733,6 +802,7 @@ export function setupStage(
     lyrics: {msTime: number; text: string; msLength?: number}[],
     vocalPhrases: {msTime: number; msLength: number}[],
   ): void {
+    wake();
     if (lyricsOverlay) {
       lyricsOverlay.setLyrics(lyrics, vocalPhrases);
       return;
@@ -754,17 +824,61 @@ export function setupStage(
     for (const highway of highways.values()) {
       highway.setTimingData(timedTempos, resolution);
     }
+    wake();
+  }
+
+  /**
+   * The chart time this frame would draw at, and whether audio is advancing.
+   *
+   * Audio latency compensation only applies during active playback. When
+   * paused, the highway shows the exact seek position without offset --
+   * otherwise resuming creates a visible jump-back.
+   */
+  function frameTime(): {elapsedMs: number; isPlaying: boolean} {
+    const isPlaying = Boolean(
+      audioManager?.isPlaying && audioManager?.isInitialized,
+    );
+    const syncMs = isPlaying ? (audioManager?.delay || 0) * 1000 : 0;
+    const chartMs = (audioManager?.chartTime ?? 0) * 1000;
+    return {elapsedMs: chartMs - syncMs, isPlaying};
   }
 
   function animation(): void {
-    // Only apply audio latency compensation during active playback. When
-    // paused, the highway shows the exact seek position without offset --
-    // otherwise resuming creates a visible jump-back.
-    const isPlaying = audioManager?.isPlaying && audioManager?.isInitialized;
-    const syncMs = isPlaying ? (audioManager?.delay || 0) * 1000 : 0;
-    const chartMs = (audioManager?.chartTime ?? 0) * 1000;
-    const elapsedTime = chartMs - syncMs;
+    const {elapsedMs, isPlaying} = frameTime();
+    const decision = gate.evaluate({
+      nowMs: performance.now(),
+      elapsedMs,
+      isPlaying,
+    });
+    if (decision.render) draw(elapsedMs);
+    if (!decision.keepAwake) {
+      // THREE re-arms its own rAF immediately after this callback returns, so
+      // parking has to wait for the stack to unwind or the cancel would race
+      // ahead of the request it is meant to cancel.
+      queueMicrotask(park);
+    }
+  }
 
+  /**
+   * Stop the rAF loop and hand over to the low-rate poll. Only ever called
+   * once the gate has confirmed the next frame would be identical to the last.
+   */
+  function park(): void {
+    if (!looping) return;
+    looping = false;
+    renderer.setAnimationLoop(null);
+    if (destroyed || contextLost || idleTimer !== null) return;
+    idleTimer = setInterval(idlePoll, IDLE_POLL_MS);
+  }
+
+  function idlePoll(): void {
+    const {elapsedMs, isPlaying} = frameTime();
+    if (gate.reasonToRender({nowMs: performance.now(), elapsedMs, isPlaying})) {
+      arm();
+    }
+  }
+
+  function draw(elapsedTime: number): void {
     try {
       // Clear the whole canvas once, before any scissor is in force: with
       // scissor testing on, a clear only touches the scissor rect, leaving
@@ -806,8 +920,7 @@ export function setupStage(
   }
 
   function startRender(): void {
-    if (destroyed || contextLost) return;
-    renderer.setAnimationLoop(animation);
+    wake();
   }
 
   function onContextLost(listener: () => void): () => void {
@@ -830,6 +943,8 @@ export function setupStage(
       'webglcontextlost',
       handleContextLost,
     );
+    stopIdlePoll();
+    looping = false;
     renderer.setAnimationLoop(null);
     renderer.renderLists.dispose();
     renderer.dispose();

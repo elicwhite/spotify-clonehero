@@ -26,6 +26,13 @@ import {useUndoRedo} from './hooks/useEditCommands';
 import {usePlaybackSpeed} from './hooks/usePlaybackSpeed';
 import {cn} from '@/lib/utils';
 
+/**
+ * How often the transport readout re-reads `AudioManager` while stopped.
+ * Matches the piano roll's and the highway stage's idle poll, so every surface
+ * catches an outside seek in the same tick.
+ */
+const TRANSPORT_IDLE_POLL_MS = 120;
+
 /** Ghost icon button geometry shared by every control on this bar. */
 const TRANSPORT_BUTTON_CLASS =
   'h-[1.625rem] w-[1.625rem] hover:bg-[var(--ed-surface-hover)] hover:text-white';
@@ -94,20 +101,70 @@ export default function TransportControls({
   // stepper and this bar's hotkeys are two surfaces on the same hook.
   const {step: stepSpeed} = usePlaybackSpeed(audioManager);
 
-  // Poll AudioManager every frame to drive the time/playing displays.
-  // Keep both the loop function and its handle local to the effect so
-  // the function doesn't need to reference itself through a closure.
+  // Poll AudioManager to drive the time/playing displays. Every frame while
+  // the transport is running, because the readout counts up with the audio;
+  // a low-rate poll while it is stopped, where the only thing that can move
+  // the readout is a seek, and the display is only accurate to the second
+  // anyway. Same shape and same rate as the piano roll's idle poll.
+  //
+  // Keep the loop functions and their handles local to the effect so none of
+  // them needs to reference itself through a closure.
+  const kickTransportPollRef = useRef<() => void>(() => {});
   useEffect(() => {
     let rafId = 0;
-    const tick = () => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let mode: 'raf' | 'idle' | null = null;
+
+    const sample = () => {
       if (audioManager.isInitialized) {
         setCurrentTime(Math.min(audioManager.currentTime, durationSeconds));
       }
       setIsPlaying(audioManager.isPlaying);
-      rafId = requestAnimationFrame(tick);
     };
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
+
+    const switchToIdle = () => {
+      if (mode === 'idle') return;
+      mode = 'idle';
+      intervalId = setInterval(idleTick, TRANSPORT_IDLE_POLL_MS);
+    };
+
+    const switchToRaf = () => {
+      if (mode === 'raf') return;
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      mode = 'raf';
+      rafId = requestAnimationFrame(rafTick);
+    };
+
+    function rafTick() {
+      sample();
+      if (audioManager.isPlaying) rafId = requestAnimationFrame(rafTick);
+      else switchToIdle();
+    }
+
+    function idleTick() {
+      sample();
+      if (audioManager.isPlaying) switchToRaf();
+    }
+
+    // The controls that start playback themselves call this, so the readout
+    // switches over on the same tick instead of waiting for the idle poll.
+    kickTransportPollRef.current = () => {
+      sample();
+      if (audioManager.isPlaying) switchToRaf();
+    };
+
+    if (audioManager.isPlaying) switchToRaf();
+    else switchToIdle();
+    sample();
+
+    return () => {
+      kickTransportPollRef.current = () => {};
+      if (rafId) cancelAnimationFrame(rafId);
+      if (intervalId !== null) clearInterval(intervalId);
+    };
   }, [audioManager, durationSeconds]);
 
   // Play/Pause toggle
@@ -119,32 +176,34 @@ export default function TransportControls({
     } else {
       await audioManager.play({time: currentTime});
     }
+    kickTransportPollRef.current();
   }, [audioManager, currentTime]);
 
   // Section jumping
   // Section msTime values are chart time — use playChartTime for seeking
   // and chartTime for comparison.
-  const jumpToNextSection = useCallback(() => {
+  const jumpToNextSection = useCallback(async () => {
     if (sections.length === 0) return;
     const chartMs = audioManager.chartTime * 1000;
     const nextSection = sections.find(s => s.msTime > chartMs + 100);
-    if (nextSection) {
-      audioManager.playChartTime(nextSection.msTime / 1000);
-    }
+    if (!nextSection) return;
+    await audioManager.playChartTime(nextSection.msTime / 1000);
+    kickTransportPollRef.current();
   }, [audioManager, sections]);
 
-  const jumpToPrevSection = useCallback(() => {
+  const jumpToPrevSection = useCallback(async () => {
     if (sections.length === 0) return;
     const chartMs = audioManager.chartTime * 1000;
     // Find the section before the current position (with 500ms tolerance)
     const prevSections = sections.filter(s => s.msTime < chartMs - 500);
     if (prevSections.length > 0) {
       const prevSection = prevSections[prevSections.length - 1];
-      audioManager.playChartTime(prevSection.msTime / 1000);
+      await audioManager.playChartTime(prevSection.msTime / 1000);
     } else {
       // Go to beginning
-      audioManager.play({time: 0});
+      await audioManager.play({time: 0});
     }
+    kickTransportPollRef.current();
   }, [audioManager, sections]);
 
   // Keyboard shortcuts via @tanstack/react-hotkeys
