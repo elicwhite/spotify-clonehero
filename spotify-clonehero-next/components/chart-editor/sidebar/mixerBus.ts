@@ -84,6 +84,26 @@ export function defaultMuteFor(origin: AudioStemOrigin | undefined): boolean {
 }
 
 /**
+ * The row state after toggling its mute, with solo cleared.
+ *
+ * Mute and solo are contradictory instructions about the same row — "never
+ * play this" and "play only this" — so the pair is not allowed to be set at
+ * once. The newer instruction wins, which is what makes either button a
+ * single-click way out of the other's state. Enforcing it in the transition
+ * rather than in {@link resolveMixer} keeps the invariant true of the state
+ * itself, so the buttons cannot render a combination the bus would ignore.
+ */
+export function toggleMute(row: MixerRowState): MixerRowState {
+  return {...row, mute: !row.mute, solo: false};
+}
+
+/** The row state after toggling its solo, with mute cleared — see
+ *  {@link toggleMute}. */
+export function toggleSolo(row: MixerRowState): MixerRowState {
+  return {...row, solo: !row.solo, mute: false};
+}
+
+/**
  * Resolves the whole mixer. Precedence per row: an explicit mute wins, then
  * "someone else is solo'd", then the row's own slider value.
  */

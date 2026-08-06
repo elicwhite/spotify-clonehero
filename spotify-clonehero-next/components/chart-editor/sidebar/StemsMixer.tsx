@@ -9,7 +9,9 @@
  *
  * Volume/mute/solo live entirely in this component's own state: multiple
  * stems may be solo'd at once, and an explicit mute survives solo churn on
- * other rows. A row's opening values come from `mixerBus`'s
+ * other rows. One row's own mute and solo are mutually exclusive, enforced
+ * by `mixerBus`'s `toggleMute`/`toggleSolo`. A row's opening values come from
+ * `mixerBus`'s
  * `defaultVolumeFor`/`defaultMuteFor` — which is what makes an AI-separated
  * stem show up muted, since its audio is already in the full mix beside it.
  * `resolveMixer` turns that state into each row's effective
@@ -51,6 +53,8 @@ import {
   defaultMuteFor,
   defaultVolumeFor,
   resolveMixer,
+  toggleMute,
+  toggleSolo,
   type MixerRowState,
 } from './mixerBus';
 
@@ -361,9 +365,9 @@ export default function StemsMixer({
                   volume: defaultVolumeFor(name, {silentProject: emptyState}),
                 })
               }
-              onToggleMute={() => updateRow(name, {mute: !row.mute})}
+              onToggleMute={() => updateRow(name, toggleMute(row))}
               onToggleSolo={
-                isClick ? undefined : () => updateRow(name, {solo: !row.solo})
+                isClick ? undefined : () => updateRow(name, toggleSolo(row))
               }
             />
           );

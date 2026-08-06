@@ -8,6 +8,8 @@ import {
   defaultMuteFor,
   defaultVolumeFor,
   resolveMixer,
+  toggleMute,
+  toggleSolo,
   type MixerRowState,
 } from '../mixerBus';
 
@@ -53,6 +55,35 @@ describe('defaultMuteFor', () => {
     });
     expect(resolved['drums']).toEqual({volume: 0, dimmedBySolo: false});
     expect(defaultVolumeFor('drums')).toBe(100);
+  });
+});
+
+describe('toggleMute / toggleSolo', () => {
+  it('muting a solo’d row clears its solo, and the reverse', () => {
+    expect(toggleMute(row({solo: true}))).toMatchObject({
+      mute: true,
+      solo: false,
+    });
+    expect(toggleSolo(row({mute: true}))).toMatchObject({
+      mute: false,
+      solo: true,
+    });
+  });
+
+  it('turning either off leaves the other off', () => {
+    expect(toggleMute(row({mute: true}))).toMatchObject({
+      mute: false,
+      solo: false,
+    });
+    expect(toggleSolo(row({solo: true}))).toMatchObject({
+      mute: false,
+      solo: false,
+    });
+  });
+
+  it('leaves the slider alone', () => {
+    expect(toggleMute(row({volume: 42})).volume).toBe(42);
+    expect(toggleSolo(row({volume: 42})).volume).toBe(42);
   });
 });
 
