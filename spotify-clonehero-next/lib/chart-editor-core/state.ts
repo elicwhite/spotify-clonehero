@@ -331,7 +331,9 @@ export const initialState: ChartEditorState = {
   selection: new Map(),
   hovered: null,
   activeTool: 'cursor',
-  gridDivision: 4,
+  // 1/16: the finest division most charts are written on, so the default
+  // lands notes where they belong without a trip to the snap control.
+  gridDivision: 16,
   dirty: false,
   // Undo/Redo
   undoEntries: [],

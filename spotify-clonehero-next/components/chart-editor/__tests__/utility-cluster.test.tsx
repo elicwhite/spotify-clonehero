@@ -2,20 +2,19 @@
  * @jest-environment jsdom
  */
 /**
- * Behavior tests for the sidebar's "Snap · Speed · Loop" utility cluster.
+ * Behavior tests for the sidebar's "Speed · Loop" utility cluster.
+ *
+ * Snap is not here — it lives on the transport bar (`snap-control.test.tsx`).
  *
  * Contracts covered here that nothing else does:
- * 1. Every grid division the `Shift+N` hotkeys can dispatch has a matching
- *    snap option, so the trigger always names the active snap (plan 0074
- *    Phase 7).
- * 2. The speed stepper reads and writes the same `playbackSpeed` the
+ * 1. The speed stepper reads and writes the same `playbackSpeed` the
  *    `[` / `]` transport hotkeys use, so the two surfaces can't disagree
  *    (plan 0074 Phase 7).
- * 3. The cluster holds no tool actions at all — cursor/place-note and
+ * 2. The cluster holds no tool actions at all — cursor/place-note and
  *    undo/redo live on the transport bar, and the section tool's replacement
  *    is the piano roll's section-strip context menu.
- * 4. The Snap/Speed keyboard-hint pills are gone (plan 0076 item 20).
- * 5. The A/B loop buttons carry an accessible name stating the interaction
+ * 3. The Snap/Speed keyboard-hint pills are gone (plan 0076 item 20).
+ * 4. The A/B loop buttons carry an accessible name stating the interaction
  *    (plan 0076 item 21).
  */
 
@@ -40,10 +39,6 @@ class FakeResizeObserver {
 }
 (globalThis as unknown as {ResizeObserver: unknown}).ResizeObserver =
   FakeResizeObserver;
-
-/** Divisions reachable from `GRID_SHORTCUT_MAP` in
- *  `hooks/useEditorKeyboard.ts` (Shift+1..Shift+6, Shift+0). */
-const HOTKEY_DIVISIONS = [4, 8, 12, 16, 32, 64, 0];
 
 function stubAudioManager(setTempo: (t: number) => void = () => {}) {
   return fakeAudioManager({setTempo});
@@ -90,30 +85,6 @@ function renderCluster(opts: {
     </TooltipProvider>,
   );
 }
-
-describe('UtilityCluster snap control', () => {
-  it.each(HOTKEY_DIVISIONS)(
-    'names the active snap after the hotkey sets division %i',
-    division => {
-      renderCluster({division});
-      const trigger = screen.getByRole('combobox', {name: /snap/i});
-      expect(trigger).toHaveTextContent(/\S/);
-    },
-  );
-
-  it('labels free snap as Free and a subdivision as a fraction', () => {
-    const {unmount} = renderCluster({division: 0});
-    expect(screen.getByRole('combobox', {name: /snap/i})).toHaveTextContent(
-      'Free',
-    );
-    unmount();
-
-    renderCluster({division: 64});
-    expect(screen.getByRole('combobox', {name: /snap/i})).toHaveTextContent(
-      '1/64',
-    );
-  });
-});
 
 describe('UtilityCluster tool actions live on the transport', () => {
   it('renders no section tool button (its replacement is the section-strip context menu)', () => {

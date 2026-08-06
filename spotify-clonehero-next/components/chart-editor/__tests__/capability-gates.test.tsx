@@ -420,7 +420,7 @@ describe('Stems mixer gating', () => {
 
 /**
  * Sidebar section order (plan 0074 Phase 7): Chart Matrix -> Chart Assist ->
- * Stems -> the "Snap · Speed · Loop" utility cluster, matching the approved
+ * Stems -> the "Speed · Loop" utility cluster, matching the approved
  * prototype (`loading-inline.html`). Asserted by accessible heading name/
  * order rather than DOM class or testid, so a change that reorders sections
  * but keeps their markup would still fail this test.
@@ -442,7 +442,7 @@ describe('Sidebar section order (plan 0074 Phase 7)', () => {
       'Chart Matrix',
       'Chart Assist',
       'Stems',
-      'Snap · Speed · Loop',
+      'Speed · Loop',
     ]);
   });
 });

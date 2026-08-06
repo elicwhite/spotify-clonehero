@@ -22,6 +22,7 @@ import {
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {ToolMode} from '@/lib/chart-editor-core';
 import {useChartEditorContext} from './ChartEditorContext';
+import SnapControl from './SnapControl';
 import {useUndoRedo} from './hooks/useEditCommands';
 import {usePlaybackSpeed} from './hooks/usePlaybackSpeed';
 import {cn} from '@/lib/utils';
@@ -307,6 +308,17 @@ export default function TransportControls({
          *  the bar. Gated by the same capability flag every other tool
          *  affordance uses, so capability-limited pages (preview-only, for
          *  instance) still get a bare transport. */}
+        {/* Snap sits with the tools rather than in the sidebar: it changes
+         *  what the next click does, so it belongs beside the mode switch it
+         *  modifies. Gated on editing, not the tool palette — a page can snap
+         *  without placing notes. */}
+        {capabilities.showEditingControls && (
+          <div className="flex shrink-0 items-center">
+            <span className="mx-1 h-4 w-px bg-[var(--ed-surface-hover)]" />
+            <SnapControl />
+          </div>
+        )}
+
         {capabilities.showToolPalette && (
           <div className="flex shrink-0 items-center gap-1">
             <span className="mx-1 h-4 w-px bg-[var(--ed-surface-hover)]" />

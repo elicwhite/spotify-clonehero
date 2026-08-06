@@ -326,6 +326,13 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
 
   it('disables "Make this a downbeat" once the bar line is already there', async () => {
     const canvas = await mountPanel();
+    // This test needs a coarse grid: it re-clicks a few px off a chip and
+    // relies on landing back on the same grid tick. State the division it
+    // depends on rather than inheriting the editor's default, which is 1/16
+    // and only ~a quarter as wide per step.
+    act(() => {
+      latest!.dispatch({type: 'SET_GRID_DIVISION', division: 4});
+    });
     act(() => {
       fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
     });
@@ -336,9 +343,9 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
 
     // Right-click a position that still snaps to the tick just marked, but
     // clear of the chip the placement drew there (the chip's pill would open
-    // its own remove menu instead of the empty-lane one). The default 1/4
-    // grid is a 480-tick step here, tens of px wide, so backing a few px off
-    // the pill's left edge stays on the same grid tick.
+    // its own remove menu instead of the empty-lane one). The 1/4 grid set
+    // above is a 480-tick step here, tens of px wide, so backing a few px
+    // off the pill's left edge stays on the same grid tick.
     const chipHitX = findTsChipHitX(canvas);
     expect(chipHitX).toBeGreaterThan(0);
 
