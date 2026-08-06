@@ -206,16 +206,30 @@ export function DifficultySelect({
   );
 }
 
+/**
+ * Chip tones, each spelling BOTH themes.
+ *
+ * This dialog sits on `--background`, which is near-white in light mode, so
+ * a tone that names only the pale `-200` text is invisible there. See
+ * `song-metadata-contrast.test.tsx`, which measures these.
+ */
+const CHIP_TONES = {
+  red: 'border-red-400/60 bg-red-50 text-red-800 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200',
+  amber:
+    'border-amber-400/60 bg-amber-50 text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-200',
+  neutral: 'border-border bg-muted/40 text-muted-foreground',
+} as const;
+
 /** Tailwind tone for a disagreement, scaled by how far apart the numbers are.
  *  One tier is ordinary charter noise; three is a different claim entirely. */
 function severityTone(state: DifficultyRecommendationState): string {
   switch (state.severity) {
     case 'major':
-      return 'border-red-500/50 bg-red-500/10 text-red-200';
+      return CHIP_TONES.red;
     case 'moderate':
-      return 'border-amber-500/50 bg-amber-500/10 text-amber-200';
+      return CHIP_TONES.amber;
     default:
-      return 'border-border bg-muted/40 text-muted-foreground';
+      return CHIP_TONES.neutral;
   }
 }
 
@@ -286,10 +300,11 @@ function SuggestionChip({state, onApply}: DifficultySuggestion) {
       type="button"
       onClick={() => onApply(state.recommended)}
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors hover:brightness-125',
-        state.status === 'stale'
-          ? 'border-amber-500/50 bg-amber-500/10 text-amber-200'
-          : severityTone(state),
+        // Hover brightens on a dark background and dims on a light one:
+        // either way the chip moves away from its surface, rather than
+        // washing the light-mode text out toward it.
+        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors hover:brightness-95 dark:hover:brightness-125',
+        state.status === 'stale' ? CHIP_TONES.amber : severityTone(state),
       )}>
       <Sparkles className="h-3 w-3" />
       {state.status === 'stale'
