@@ -1,13 +1,17 @@
 /**
  * The `transcribe-drums` assist task (plan 0074 Design A).
  *
- * Composes `runner.ts`'s four orderings (fresh upload, existing chart
- * package, resume, regenerate) behind one task: the ordering to run is named
- * by the input, and `planSteps` predicts its step list from the same OPFS
- * existence checks the ordering performs. Every one of them owns an OPFS
+ * Composes `runner.ts`'s three orderings (fresh upload, existing chart
+ * package, resume) behind one task: the ordering to run is named by the
+ * input, and `planSteps` predicts its step list from the same OPFS existence
+ * checks the ordering performs. Every one of them owns an OPFS
  * drum-transcription project, which is what separates this task from
  * `transcribe-drums-from-audio.ts` — the same task key run against a host's
  * audio and open chart, with no project to keep.
+ *
+ * None of the three rewrites a tempo map a chart already has: only the
+ * upload ordering predicts one, and it predicts it for a chart that does not
+ * exist yet.
  */
 
 import type {ChartDocument, DrumNote} from '@/lib/chart-edit';
@@ -21,7 +25,6 @@ import {
 } from '@/lib/drum-transcription/storage/opfs';
 import {hasDrumStem} from '@/lib/drum-transcription/ml/roformer-separation';
 import {
-  regenerateProject,
   resumePipeline,
   runPipeline,
   runPipelineFromChart,
@@ -35,15 +38,13 @@ import {
 import {waitForOrtRuntime} from '@/lib/onnx/ort-ready';
 import {
   PIPELINE_PLANNED_STEPS,
-  REGENERATE_PLANNED_STEPS,
   pipelineProgressToStepEvent,
 } from '@/lib/drum-transcription/pipeline/step-mapping';
 import type {PlannedStep} from '../run-to-steps';
 import type {AssistTaskDef} from './types';
 
 /** The chart's SyncTrack as the run left it. The fresh notes' ticks are
- *  authored against it, and a regeneration re-predicts it from scratch, so it
- *  must be applied together with the notes. */
+ *  authored against it, so it must be applied together with the notes. */
 export interface TranscribeDrumsSync {
   resolution: number;
   tempos: ChartDocument['parsedChart']['tempos'];
@@ -52,13 +53,13 @@ export interface TranscribeDrumsSync {
 
 export interface TranscribeDrumsResult {
   /** The OPFS project the run produced (upload/chart) or advanced
-   *  (resume/regenerate). */
+   *  (resume). */
   projectId: string;
   /** The pipeline's own Expert Drums notes, ready for
    *  `ReplaceDrumTrackCommand`. Read from the generated chart file, never
    *  from an autosaved `notes.edited.chart` sibling — the caller is applying
    *  these over the editor's live document, so handing back that document's
-   *  own autosave would be a no-op dressed as a regeneration. */
+   *  own autosave would be a no-op dressed as a fresh transcription. */
   notes: DrumNote[];
   sync: TranscribeDrumsSync;
 }
@@ -73,7 +74,7 @@ export type ProjectCreatedCallback = (projectId: string) => void;
 
 /**
  * Which of `runner.ts`'s orderings a `transcribe-drums` run performs. The
- * four differ only in where the project comes from and how much of the
+ * three differ only in where the project comes from and how much of the
  * pipeline still has to happen; the stages themselves
  * (`pipeline/stages.ts`) and the OPFS bookkeeping around them are identical
  * and belong to the runner, not to this task.
@@ -85,10 +86,7 @@ export type TranscribeDrumsRun =
    *  predicted one, so the tempo-mapping stage never runs. */
   | {kind: 'chart'; input: ExistingChartPipelineInput}
   /** Interrupted project: fill in only what OPFS is still missing. */
-  | {kind: 'resume'; projectId: string}
-  /** In-editor re-run: recompute the tempo map and notes for a project that
-   *  already has both, replacing them only on full success. */
-  | {kind: 'regenerate'; projectId: string};
+  | {kind: 'resume'; projectId: string};
 
 export interface TranscribeDrumsInput {
   /** The ordering to perform, and the data it needs. Plain data. */
@@ -158,16 +156,6 @@ export function makeTranscribeDrumsTask({
         );
       }
 
-      if (run.kind === 'regenerate') {
-        // `regenerateProject` only accepts predicted-grid projects (it throws
-        // for provided-grid ones), so a regeneration always re-predicts the
-        // tempo map. Separation is the only step a regeneration can skip.
-        const separatingCached = await hasDrumStem(run.projectId);
-        return planCached(REGENERATE_PLANNED_STEPS, {
-          separating: separatingCached,
-        });
-      }
-
       // Resume: the same three checks `resumePipeline` makes, plus the
       // persisted-map check `ensureSynctrack` makes in 'resume' mode.
       const [hasAudio, hasStems, hasChart, hasSynctrack] = await Promise.all([
@@ -199,9 +187,8 @@ export function makeTranscribeDrumsTask({
       // The runner owns cancellation for every call below: it checks the
       // signal at each stage boundary, terminates the separation,
       // tempo-mapping, and transcription workers on abort, and rejects with
-      // an AbortError. A cancelled regeneration leaves the project exactly as
-      // it was; a cancelled upload/resume keeps whatever stages already
-      // landed, which is what makes the project resumable.
+      // an AbortError. A cancelled run keeps whatever stages already landed,
+      // which is what makes the project resumable.
       // The runner names the project it created on every tick after
       // creation; report the first one so a host can act on a failure that
       // happens later in the same run.
@@ -235,14 +222,6 @@ export function makeTranscribeDrumsTask({
           break;
         case 'resume':
           projectId = await resumePipeline(
-            run.projectId,
-            onPipelineProgress,
-            transcriber,
-            {signal},
-          );
-          break;
-        case 'regenerate':
-          projectId = await regenerateProject(
             run.projectId,
             onPipelineProgress,
             transcriber,

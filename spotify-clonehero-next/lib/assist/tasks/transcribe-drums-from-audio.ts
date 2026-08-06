@@ -22,8 +22,9 @@
  * confidence, a predicted grid) this one has nowhere to put.
  */
 
-import {findTrack, getDrumNotes} from '@/lib/chart-edit';
+import {findTrack, getAudioAnchor, getDrumNotes} from '@/lib/chart-edit';
 import type {ChartDocument, DrumNote} from '@/lib/chart-edit';
+import type {RawDrumEvent} from '@/lib/drum-transcription/ml/types';
 import {DRUMS_STEM, separateStems} from '@/lib/audio-pipeline/separate-stems';
 import {hasStem} from '@/lib/audio-pipeline/stem-cache';
 import {TARGET_SAMPLE_RATE} from '@/lib/drum-transcription/audio/types';
@@ -60,6 +61,30 @@ export interface TranscribeDrumsFromAudioResult {
    *  Handed back so the caller applies notes and sync together, the same
    *  contract the project-backed task has. */
   sync: TranscribeDrumsSync;
+}
+
+/**
+ * Move decoded onsets from original-audio time into the chart's time domain.
+ *
+ * The transcriber analyzes the host's ORIGINAL audio bytes, while a chart
+ * with leading silence lives on a padded timeline whose `audioAnchor.ms` is
+ * the chart-ms of original audio sample 0 (0064 addendum §7). Every onset
+ * therefore shifts by that anchor before it is snapped, the same convention
+ * `ReplaceSectionsCommand` applies to LinkSeg times and `ReDeriveNotesCommand`
+ * applies to retained onsets. Without it every note on a padded chart lands
+ * one anchor early.
+ *
+ * `anchorMs` of 0 (no padding) returns the events untouched.
+ */
+export function shiftOnsetsToChartTime(
+  events: RawDrumEvent[],
+  anchorMs: number,
+): RawDrumEvent[] {
+  if (anchorMs === 0) return events;
+  return events.map(e => ({
+    ...e,
+    timeSeconds: e.timeSeconds + anchorMs / 1000,
+  }));
 }
 
 /** Test seam: the transcriber the run uses. Omitted, a `CrnnTranscriber`. */
@@ -134,7 +159,10 @@ export function makeTranscribeDrumsFromAudioTask({
       // tempo list, replacing only the Expert Drums track.
       const built = buildChartDocumentFromExistingChart(
         chartDoc,
-        result.events,
+        shiftOnsetsToChartTime(
+          result.events,
+          getAudioAnchor(chartDoc)?.ms ?? 0,
+        ),
         result.durationSeconds,
       );
       const drumTrack = findTrack(built, {

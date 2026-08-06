@@ -89,7 +89,6 @@ function renderWithTracks(
 /** Wiring a fully project-backed host (the `/drum-transcription` editor)
  *  supplies: every Chart Assist card has what its action needs. */
 const FULL_WIRING: ChartAssistProps = {
-  projectId: 'proj-1',
   loadAudio: async () => ({
     loadOriginalBytes: async () => new Uint8Array(4),
   }),

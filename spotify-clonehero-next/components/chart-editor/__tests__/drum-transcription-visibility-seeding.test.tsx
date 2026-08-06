@@ -134,10 +134,6 @@ jest.mock('../../../lib/drum-transcription/ml/roformer-separation', () => ({
   ensureProjectStemFingerprint: jest.fn(async () => 'fp-1'),
 }));
 
-jest.mock('../../../lib/drum-transcription/pipeline/runner', () => ({
-  regenerateProject: jest.fn(),
-}));
-
 import EditorApp from '@/app/drum-transcription/components/EditorApp';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 

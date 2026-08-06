@@ -1682,29 +1682,9 @@ export class ReplaceSectionsCommand implements EditCommand {
 // Design A)
 // ---------------------------------------------------------------------------
 
-/**
- * The SyncTrack a replacement note set's ticks are authored against. A
- * transcription run that also (re)predicts the tempo map must hand it over
- * with the notes: applying the notes under the editor's previous grid would
- * place every one of them at the wrong time.
- */
-export interface ReplaceDrumTrackSync {
-  resolution: number;
-  tempos: ParsedChart['tempos'];
-  timeSignatures: ParsedChart['timeSignatures'];
-}
-
 export interface ReplaceDrumTrackOptions {
   /** Target track. Defaults to Drums Expert. */
   trackKey?: TrackKey | undefined;
-  /** Adopt this SyncTrack (resolution + tempos + time signatures) along
-   *  with the notes, retiming the whole doc under it. Omit when the notes
-   *  were transcribed against the doc's current grid. */
-  sync?: ReplaceDrumTrackSync | undefined;
-  /** Drop any leading-silence anchor. Regeneration rebuilds the chart
-   *  audio-relative from scratch, so the old anchor no longer applies
-   *  (0064 addendum §1). */
-  clearAudioAnchor?: boolean | undefined;
 }
 
 /**
@@ -1718,13 +1698,18 @@ export interface ReplaceDrumTrackOptions {
  * The whole target track is replaced, not just its notes: star power,
  * rejected star power, solo sections, flex lanes, freestyle sections, text
  * events, versus phrases, animations, and unrecognized MIDI events are all
- * cleared, because the chart the run persisted has none of them. Leaving them would strand phrases and lanes over unrelated new notes
- * and leave the in-editor doc disagreeing with the persisted chart. Every
- * other track, and (without `options.sync`) the tempo map, sections, and
- * lyrics, are untouched — `cloneDocWithTracks` shares them by reference.
- * With `options.sync` the doc also adopts that grid and is fully retimed
- * under it, so the applied notes land where the run put them. No-op (returns
- * `doc` unchanged) if the chart has no target track — mirrors
+ * cleared, because the chart the run persisted has none of them. Leaving
+ * them would strand phrases and lanes over unrelated new notes and leave the
+ * in-editor doc disagreeing with the persisted chart.
+ *
+ * The grid is NOT part of what is replaced. The notes are transcribed
+ * against the doc's own SyncTrack, so the tempo map, the time signatures,
+ * the leading-silence anchor, the sections, the lyrics and every other track
+ * survive untouched — `cloneDocWithTracks` shares them by reference. There
+ * is no option to adopt a different grid: predicting a tempo map is the
+ * `generate-tempo-map` task and the user's own explicit choice.
+ *
+ * No-op (returns `doc` unchanged) if the chart has no target track — mirrors
  * `AddNoteCommand`'s missing-track handling; every chart this task runs
  * against already has one (transcription always builds/loads onto an
  * existing Drums Expert track).
@@ -1735,33 +1720,20 @@ export interface ReplaceDrumTrackOptions {
  */
 export class ReplaceDrumTrackCommand implements EditCommand {
   readonly description = 'Replace drum track (transcription)';
-  readonly entityKinds: ReadonlySet<CommandEntityKind>;
+  readonly entityKinds = KIND.note;
   readonly operations = OP.update;
-  /** Always just the replaced drums track — even under `options.sync`,
-   *  where the tempo/time-signature intent is carried by `entityKinds`
-   *  alone (a synctrack swap isn't scoped to one instrument track, so it
-   *  doesn't add anything here). */
   readonly affectedTracks: ReadonlySet<TrackKeyId>;
 
   private readonly trackKey: TrackKey;
 
   constructor(
     private notes: DrumNote[],
-    private readonly options: ReplaceDrumTrackOptions = {},
+    options: ReplaceDrumTrackOptions = {},
   ) {
     this.trackKey = options.trackKey ?? {
       instrument: 'drums',
       difficulty: 'expert',
     };
-    // Adopting a fresh SyncTrack is a tempo/time-signature edit as well as
-    // a note edit, so the capability gate sees every intent.
-    this.entityKinds = options.sync
-      ? new Set<CommandEntityKind>([
-          ...KIND.note,
-          ...KIND.tempo,
-          ...KIND.timesig,
-        ])
-      : KIND.note;
     this.affectedTracks = singleTrack(this.trackKey);
   }
 
@@ -1769,16 +1741,8 @@ export class ReplaceDrumTrackCommand implements EditCommand {
     const idx = findTargetIndex(doc, this.trackKey);
     if (idx === -1) return doc;
 
-    const sync = this.options.sync;
-    const newDoc = sync
-      ? cloneDocForRetime(doc)
-      : cloneDocWithTracks(doc, this.trackKey);
+    const newDoc = cloneDocWithTracks(doc, this.trackKey);
     const chart = newDoc.parsedChart;
-    if (sync) {
-      chart.resolution = sync.resolution;
-      chart.tempos = sync.tempos.map(t => ({...t}));
-      chart.timeSignatures = sync.timeSignatures.map(ts => ({...ts}));
-    }
 
     const track = clearTrackContents(chart.trackData[idx]);
     chart.trackData[idx] = track;
@@ -1787,18 +1751,10 @@ export class ReplaceDrumTrackCommand implements EditCommand {
       addDrumNote(track, note, timing);
     }
 
-    // Every other event in the doc keeps its tick but now sits under a
-    // different map: recompute msTime/msLength chart-wide.
-    if (sync) retimeChart(chart);
-    const anchored = this.options.clearAudioAnchor
-      ? setAudioAnchor(newDoc, null)
-      : sync
-        ? refreshAnchorKeepMs(newDoc)
-        : newDoc;
     // The generating command writes the artifact AND its provenance in one
     // doc mutation (plan 0074 Design C), so undo removes both together and
     // no separate bookkeeping command is needed at the call site.
-    return setTempoStamp(anchored, 'drum-transcription');
+    return setTempoStamp(newDoc, 'drum-transcription');
   }
 }
 

@@ -4,7 +4,6 @@
 
 import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 import {ReplaceDrumTrackCommand} from '../commands';
-import type {ReplaceDrumTrackSync} from '../commands';
 import {trackKeyId} from '@/lib/chart-editor-core/trackInventory';
 import {
   ADD_LYRICS_CAPABILITIES,
@@ -71,19 +70,9 @@ describe('ReplaceDrumTrackCommand', () => {
     );
   });
 
-  it('still declares just the drums track under options.sync, even though entityKinds gains tempo/timesig', () => {
-    const sync: ReplaceDrumTrackSync = {
-      resolution: 480,
-      tempos: [{tick: 0, beatsPerMinute: 140, msTime: 0}],
-      timeSignatures: [
-        {tick: 0, numerator: 4, denominator: 4, msTime: 0, msLength: 2000},
-      ],
-    };
-    const cmd = new ReplaceDrumTrackCommand(transcribedNotes(), {sync});
-    expect(cmd.affectedTracks).toEqual(
-      new Set([trackKeyId({instrument: 'drums', difficulty: 'expert'})]),
-    );
-    expect(cmd.entityKinds).toEqual(new Set(['note', 'tempo', 'timesig']));
+  it('declares a note edit and nothing else, so it can never claim tempo intent', () => {
+    const cmd = new ReplaceDrumTrackCommand(transcribedNotes());
+    expect(cmd.entityKinds).toEqual(new Set(['note']));
   });
 
   it('clears phrases, lanes, and events on the replaced track that the run did not author', () => {
@@ -216,65 +205,36 @@ describe('ReplaceDrumTrackCommand', () => {
     expect(redoneNotes).toEqual(expectedNotes);
   });
 
-  describe('with a regenerated SyncTrack', () => {
-    const sync: ReplaceDrumTrackSync = {
-      resolution: 192,
-      tempos: [{tick: 0, beatsPerMinute: 132, msTime: 0}],
-      timeSignatures: [
-        {tick: 0, numerator: 3, denominator: 4, msTime: 0, msLength: 0},
-      ],
-    };
-
-    it('adopts the resolution, tempos, and time signatures the notes were authored against', () => {
+  describe("leaves the user's grid alone", () => {
+    it('keeps the resolution, the hand-edited tempo map, and the time signatures', () => {
       const before = makeFixtureDoc();
-      const after = new ReplaceDrumTrackCommand(transcribedNotes(), {
-        sync,
-      }).execute(before);
+      addTempo(before, 2400, 91.5);
+      const resolution = before.parsedChart.resolution;
+      const tempos = before.parsedChart.tempos.map(t => ({...t}));
+      const timeSignatures = before.parsedChart.timeSignatures.map(ts => ({
+        ...ts,
+      }));
 
-      expect(after.parsedChart.resolution).toBe(192);
-      expect(after.parsedChart.tempos).toEqual(sync.tempos);
-      expect(after.parsedChart.timeSignatures).toMatchObject(
-        sync.timeSignatures,
+      const after = new ReplaceDrumTrackCommand(transcribedNotes()).execute(
+        before,
       );
-      // The source doc keeps its own grid (no mutation).
-      expect(before.parsedChart.resolution).toBe(480);
-      expect(before.parsedChart.tempos.length).toBe(2);
+
+      expect(after.parsedChart.resolution).toBe(resolution);
+      expect(after.parsedChart.tempos).toEqual(tempos);
+      expect(after.parsedChart.timeSignatures).toEqual(timeSignatures);
     });
 
-    it('times the new notes under the adopted map, not the old one', () => {
-      const after = new ReplaceDrumTrackCommand(transcribedNotes(), {
-        sync,
-      }).execute(makeFixtureDoc());
-
-      const notes = after.parsedChart.trackData[0].noteEventGroups
-        .flat()
-        .sort((a, b) => a.tick - b.tick);
-      // tick 480 at 132 BPM / 192 ticks per beat = 2.5 beats.
-      expect(notes[2].msTime).toBeCloseTo((2.5 * 60000) / 132, 3);
-    });
-
-    it('retimes the rest of the doc under the adopted map', () => {
-      const after = new ReplaceDrumTrackCommand(transcribedNotes(), {
-        sync,
-      }).execute(makeFixtureDoc());
-
-      const verse = after.parsedChart.sections.find(s => s.tick === 1920);
-      expect(verse!.msTime).toBeCloseTo((1920 / 192 / 132) * 60000, 3);
-    });
-
-    it('clears the leading-silence anchor when asked', () => {
+    it('keeps the leading-silence anchor the user added', () => {
       const before = setAudioAnchor(makeFixtureDoc(), {tick: 480, ms: 500});
-      const after = new ReplaceDrumTrackCommand(transcribedNotes(), {
-        sync,
-        clearAudioAnchor: true,
-      }).execute(before);
+      const after = new ReplaceDrumTrackCommand(transcribedNotes()).execute(
+        before,
+      );
 
-      expect(getAudioAnchor(after)).toBeNull();
-      expect(getAudioAnchor(before)).toEqual({tick: 480, ms: 500});
+      expect(getAudioAnchor(after)).toEqual({tick: 480, ms: 500});
     });
 
-    it('declares tempo and time-signature intent so the capability gate sees it', () => {
-      const cmd = new ReplaceDrumTrackCommand(transcribedNotes(), {sync});
+    it('is blocked on a page that cannot edit notes, and never claims tempo intent', () => {
+      const cmd = new ReplaceDrumTrackCommand(transcribedNotes());
       expect(isCommandAllowed(cmd, DRUM_EDIT_CAPABILITIES)).toBe(true);
       expect(isCommandAllowed(cmd, ADD_LYRICS_CAPABILITIES)).toBe(false);
     });
@@ -304,21 +264,25 @@ describe('ReplaceDrumTrackCommand provenance (plan 0074 Design C)', () => {
     ).toBe(computeTempoStamp(after));
   });
 
-  it('stamps against the adopted grid when the run brought its own', () => {
-    const sync: ReplaceDrumTrackSync = {
-      resolution: 480,
-      tempos: [{tick: 0, beatsPerMinute: 140, msTime: 0}],
-      timeSignatures: [
-        {tick: 0, numerator: 4, denominator: 4, msTime: 0, msLength: 2000},
-      ],
-    };
-    const after = new ReplaceDrumTrackCommand(transcribedNotes(), {
-      sync,
-    }).execute(makeFixtureDoc());
+  it("stamps against the doc's own grid, so a later tempo edit reads as stale", () => {
+    const before = makeFixtureDoc();
+    const after = new ReplaceDrumTrackCommand(transcribedNotes()).execute(
+      before,
+    );
     expect(
       getAssistProvenance(after)!.tempoDerived!['drum-transcription']!
         .tempoStamp,
-    ).toBe(computeTempoStamp(after));
+    ).toBe(computeTempoStamp(before));
+
+    const retimed = {
+      ...after,
+      parsedChart: {...after.parsedChart},
+    };
+    addTempo(retimed, 2400, 91.5);
+    expect(
+      getAssistProvenance(retimed)!.tempoDerived!['drum-transcription']!
+        .tempoStamp,
+    ).not.toBe(computeTempoStamp(retimed));
   });
 
   it('keeps unrelated provenance entries (e.g. difficulty records)', () => {

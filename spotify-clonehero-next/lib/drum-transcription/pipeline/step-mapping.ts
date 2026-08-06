@@ -6,7 +6,7 @@
  * `transcribe-drums` task projects it through this one mapper onto the step
  * table its run needs — the full pipeline (five steps) for the
  * `/drum-transcription` home screen's upload/chart/resume runs, the
- * regeneration subset (three steps) for the in-editor re-run — so there is
+ * separate-and-transcribe subset for the in-editor re-run — so there is
  * exactly one place where a pipeline step becomes a rendered step.
  *
  * This is drum-transcription-specific and therefore lives with the pipeline
@@ -49,15 +49,6 @@ export const PIPELINE_PLANNED_STEPS: readonly PlannedStep[] = [
 ];
 
 /**
- * The subset an in-editor regeneration reports: the audio is already stored
- * and decoded, so the run starts at separation. The runtime wait stays on
- * the list because a regeneration still waits for ONNX Runtime before its
- * first worker; dropping it would leave the card blank for that whole wait.
- */
-export const REGENERATE_PLANNED_STEPS: readonly PlannedStep[] =
-  PIPELINE_PLANNED_STEPS.filter(s => s.key !== 'decoding');
-
-/**
  * The subset a run against a host's own audio reports. The host hands over
  * the song as one mix, so there is no decode step of ours to show, and the
  * chart already carries the grid the notes are authored against, so no tempo
@@ -72,8 +63,8 @@ export const AUDIO_TRANSCRIBE_PLANNED_STEPS: readonly PlannedStep[] =
 /**
  * One pipeline tick as a step event. 'ready' means the whole run finished;
  * 'idle'/'error' mean nothing is in flight. Any other step names itself —
- * a step a given step table doesn't list (e.g. 'decoding' during a
- * regeneration) resolves to "nothing in flight" for that table, which is
+ * a step a given step table doesn't list (e.g. 'tempo-mapping' for the
+ * in-editor re-run) resolves to "nothing in flight" for that table, which is
  * exactly right: that work isn't part of what the table promised to show.
  */
 export function pipelineProgressToStepEvent(

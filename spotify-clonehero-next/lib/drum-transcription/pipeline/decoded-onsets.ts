@@ -14,8 +14,8 @@ import type {DecodedOnsetsFile, RawDrumEvent} from '../ml/types';
 import {DRUM_CLASSES} from '../ml/types';
 import {projectFileExists, readProjectJSON} from '../storage/opfs';
 
-/** Filename for the persisted decoded onsets. Exported so the runner's
- * write sites and `REGENERATED_ARTIFACT_FILES` share one string. */
+/** Filename for the persisted decoded onsets. Exported so every write and
+ * read site shares one string. */
 export const DECODED_ONSETS_FILE = 'decoded-onsets.json';
 
 const VALID_FLOWS: ReadonlyArray<DecodedOnsetsFile['flow']> = [

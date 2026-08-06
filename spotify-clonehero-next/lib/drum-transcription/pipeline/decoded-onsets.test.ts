@@ -4,8 +4,7 @@
  * Covers the DecodedOnsetsFile build/load round trip and, via a mocked OPFS
  * layer, all three runner write sites (runPipeline, runPipelineFromChart,
  * resumePipeline — the third catches the silent-degradation bug where a
- * resumed-but-transcribed project would wrongly read as "never transcribed"),
- * plus regenerateProject invalidation through REGENERATED_ARTIFACT_FILES.
+ * resumed-but-transcribed project would wrongly read as "never transcribed").
  */
 
 import {createEmptyChart} from '@/lib/chart-edit';
@@ -16,13 +15,7 @@ import {
   loadDecodedOnsets,
   DECODED_ONSETS_FILE,
 } from './decoded-onsets';
-import {
-  runPipeline,
-  runPipelineFromChart,
-  resumePipeline,
-  regenerateProject,
-  REGENERATED_ARTIFACT_FILES,
-} from './runner';
+import {runPipeline, runPipelineFromChart, resumePipeline} from './runner';
 import * as opfs from '../storage/opfs';
 
 jest.mock('../storage/opfs', () => {
@@ -331,37 +324,6 @@ describe('runner write sites', () => {
 
     await resumePipeline(meta.id, noProgress, fakeTranscriber());
 
-    const expected = buildDecodedOnsetsFile(EVENTS, 'audio');
-    await expect(loadDecodedOnsets(meta.id)).resolves.toEqual(expected);
-  });
-
-  it('regenerateProject invalidates decoded onsets along with the other derived artifacts', async () => {
-    expect(REGENERATED_ARTIFACT_FILES).toContain(DECODED_ONSETS_FILE);
-
-    const meta = await opfs.createProject('regen');
-    await opfs.storeAudioOpus(
-      meta.id,
-      new Uint8Array(0),
-      {} as never,
-      0 as never,
-    );
-    // Simulate a fully transcribed project whose onsets would go stale.
-    const stale = buildDecodedOnsetsFile(
-      [{timeSeconds: 9, drumClass: 'RD', midiPitch: 51, confidence: 0.1}],
-      'audio',
-    );
-    await opfs.writeProjectJSON(meta.id, DECODED_ONSETS_FILE, stale);
-    await opfs.writeProjectBinary(meta.id, 'notes.chart', new Uint8Array(1));
-    await opfs.writeProjectJSON(meta.id, 'confidence.json', {notes: {}});
-
-    await regenerateProject(meta.id, noProgress, fakeTranscriber());
-
-    // The stale artifact was deleted...
-    expect(mockOpfs.deleteProjectFile.mock.calls).toContainEqual([
-      meta.id,
-      DECODED_ONSETS_FILE,
-    ]);
-    // ...and the resumed transcription rewrote a fresh one.
     const expected = buildDecodedOnsetsFile(EVENTS, 'audio');
     await expect(loadDecodedOnsets(meta.id)).resolves.toEqual(expected);
   });

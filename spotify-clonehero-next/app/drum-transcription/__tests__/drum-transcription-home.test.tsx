@@ -183,7 +183,7 @@ describe('/drum-transcription upload flow', () => {
     );
   });
 
-  it('names the stages it shares with the in-editor re-run identically', async () => {
+  it('names the stages it shares with a resumed run identically', async () => {
     const {container} = render(<DrumTranscriptionClient />);
     await screen.findByRole('button', {
       name: /just a song \(create a new chart\)/i,
@@ -192,18 +192,18 @@ describe('/drum-transcription upload flow', () => {
     uploadAudio(container);
     await screen.findByText('Processing: song.mp3');
 
-    // The in-editor Regenerate control plans its own step list from the same
-    // task; the labels a user reads for the shared stages must match.
+    // A resume plans its own step list from the same task; the labels a
+    // user reads for the shared stages must match.
     mockOpfs.__projects.set('proj-editor', {
       id: 'proj-editor',
       name: 'Song',
       createdAt: '',
       updatedAt: '',
-      stage: 'editing',
+      stage: 'separating',
       gridSource: 'predicted',
     });
     const rerunSteps = await transcribeDrumsTask.planSteps({
-      run: {kind: 'regenerate', projectId: 'proj-editor'},
+      run: {kind: 'resume', projectId: 'proj-editor'},
     });
 
     for (const step of rerunSteps) {

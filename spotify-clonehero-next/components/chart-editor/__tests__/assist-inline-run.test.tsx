@@ -9,11 +9,12 @@
  * for real). Only the highway/audio boundary is stubbed
  * (`ChartEditor` -> a note-count + `leftPanelChildren` + real `ChartAssist`
  * shim, so the run is driven through the card the user actually clicks,
- * `usePaddedAudio` -> a static fake `AudioManager`) and the OPFS/pipeline
- * boundary is faked (`storage/opfs`, `pipeline/runner`,
- * `ml/roformer-separation`) — `lib/chart-edit`'s real
- * `readChart`/`writeChartFolder` build and re-parse actual chart bytes, so
- * the note-count assertion reflects a genuine parse, not a mock.
+ * `usePaddedAudio` -> a static fake `AudioManager`) and the OPFS/GPU
+ * boundary is faked (`storage/opfs`, `audio-pipeline/separate-stems`,
+ * `ml/transcriber`, `ml/roformer-separation`) — `lib/chart-edit`'s real
+ * `readChart`/`writeChartFolder` build and re-parse actual chart bytes, and
+ * the run's own snap stage runs for real, so the note-count assertion
+ * reflects a genuine parse and a genuine transcription result, not a mock.
  */
 
 import '@testing-library/jest-dom';
@@ -29,9 +30,9 @@ class FakeResizeObserver {
 (globalThis as unknown as {ResizeObserver: unknown}).ResizeObserver =
   FakeResizeObserver;
 
-// EditorApp gates a regenerate run on the page's ONNX Runtime <Script> having
-// landed (`waitForOrtRuntime`). Stand in for it: the runtime itself is never
-// used here, since the pipeline is mocked.
+// The run waits for the page's ONNX Runtime <Script> to land
+// (`waitForOrtRuntime`). Stand in for it: the runtime itself is never used
+// here, since separation and transcription are mocked.
 (globalThis as unknown as {ort: unknown}).ort = {};
 
 import {render, screen, waitFor, fireEvent} from '@testing-library/react';
@@ -42,12 +43,12 @@ import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../scope';
 import {addDrumNote, writeChartFolder} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {makeEmptyDrumDoc} from './fixtures';
-import type {PipelineProgress} from '@/lib/drum-transcription/pipeline/stages';
 
 // ---------------------------------------------------------------------------
-// Fixture chart bytes: "before" (3 notes) and "after" (5 notes), so the
-// note-count assertion actually distinguishes the pre- and post-regenerate
-// tracks rather than coincidentally matching.
+// Fixture chart bytes: the project's stored chart carries 3 notes, and the
+// (mocked) transcriber returns 5 hits, so the note-count assertion actually
+// distinguishes the pre- and post-run tracks rather than coincidentally
+// matching.
 // ---------------------------------------------------------------------------
 
 function buildChartBytes(noteCount: number): Uint8Array {
@@ -70,7 +71,16 @@ function buildChartBytes(noteCount: number): Uint8Array {
 }
 
 const BEFORE_BYTES = buildChartBytes(3);
-const AFTER_BYTES = buildChartBytes(5);
+
+/** What the CRNN "detects": five hits, one per beat at the fixture's 120
+ *  BPM, so the snapped track has five notes on distinct ticks. */
+const TRANSCRIBED_EVENTS = [
+  {timeSeconds: 0, drumClass: 'BD', midiPitch: 36, confidence: 0.9},
+  {timeSeconds: 0.5, drumClass: 'SD', midiPitch: 38, confidence: 0.9},
+  {timeSeconds: 1, drumClass: 'HH', midiPitch: 42, confidence: 0.9},
+  {timeSeconds: 1.5, drumClass: 'MT', midiPitch: 47, confidence: 0.9},
+  {timeSeconds: 2, drumClass: 'CR', midiPitch: 49, confidence: 0.9},
+];
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -87,7 +97,7 @@ jest.mock('../ChartEditor', () => {
     const noteCount = drumsTrack ? drumsTrack.noteEventGroups.flat().length : 0;
     // A local-state "remount witness", standing in for the real
     // StemsMixer's own local mixer state: if `EditorApp` (this mock's
-    // parent) were to unmount/remount during a regenerate run, React would
+    // parent) were to unmount/remount during a run, React would
     // create a fresh instance of this whole mocked component, resetting
     // this `useState` back to its initial value. Collapsing it before the
     // run and asserting it's still collapsed after is what proves the run
@@ -143,8 +153,6 @@ jest.mock('../hooks/usePaddedAudio', () => {
   };
 });
 
-let regenerated = false;
-
 jest.mock('../../../lib/drum-transcription/storage/opfs', () => ({
   getProject: jest.fn(async () => ({
     id: 'proj-1',
@@ -172,9 +180,7 @@ jest.mock('../../../lib/drum-transcription/storage/opfs', () => ({
   projectFileExists: jest.fn(
     async (_id: string, name: string) => name === 'notes.chart',
   ),
-  readProjectBinary: jest.fn(
-    async () => (regenerated ? AFTER_BYTES : BEFORE_BYTES).buffer,
-  ),
+  readProjectBinary: jest.fn(async () => BEFORE_BYTES.buffer),
   writeProjectBinary: jest.fn(async () => {}),
   editedVariant: (name: string) => name.replace(/\.chart$/, '.edited.chart'),
   loadAudioMeta: jest.fn(async () => ({
@@ -214,39 +220,63 @@ jest.mock('../../../lib/drum-transcription/ml/roformer-separation', () => ({
   ensureProjectStemFingerprint: jest.fn(async () => 'fp-1'),
 }));
 
-let releaseRegenerate: (() => void) | null = null;
+/** Releases the (mocked) separation the run is parked on. */
+let releaseSeparation: (() => void) | null = null;
 
-jest.mock('../../../lib/drum-transcription/pipeline/runner', () => ({
-  regenerateProject: jest.fn(
-    (
-      projectId: string,
-      onProgress: (p: PipelineProgress) => void,
-      _transcriber?: unknown,
-      options: {signal?: AbortSignal} = {},
-    ) => {
-      onProgress({step: 'separating', progress: 0.2, projectId});
-      return new Promise<string>((resolve, reject) => {
-        // The real `regenerateProject` owns cancellation for its call: it
-        // terminates its workers on abort and rejects with an AbortError.
+jest.mock('../../../lib/audio-pipeline/separate-stems', () => ({
+  DRUMS_STEM: 'drums',
+  VOCALS_STEM: 'vocals',
+  separateStems: jest.fn(
+    (_bytes: Uint8Array, options: {signal?: AbortSignal} = {}) =>
+      new Promise((resolve, reject) => {
+        // The real `separateStems` terminates its worker on abort and
+        // rejects with an AbortError; the task delegates cancellation to it.
         options.signal?.addEventListener('abort', () =>
           reject(new DOMException('Aborted', 'AbortError')),
         );
-        releaseRegenerate = () => {
-          regenerated = true;
-          onProgress({step: 'transcribing', progress: 1, projectId});
-          resolve(projectId);
-        };
-      });
-    },
+        releaseSeparation = () =>
+          resolve({
+            drums: {
+              left: new Float32Array(1024),
+              right: new Float32Array(1024),
+            },
+          });
+      }),
   ),
+}));
+
+jest.mock('../../../lib/audio-pipeline/stem-cache', () => ({
+  ...jest.requireActual('../../../lib/audio-pipeline/stem-cache'),
+  hasStem: jest.fn(async () => false),
+}));
+
+jest.mock('../../../lib/drum-transcription/pipeline/crnn-audio-prep', () => ({
+  CRNN_SAMPLE_RATE: 48000,
+  planarStereoToCrnnInput: jest.fn(async () => new Float32Array(2048)),
+}));
+
+jest.mock('../../../lib/drum-transcription/ml/transcriber', () => ({
+  CrnnTranscriber: class {
+    async transcribe() {
+      return {
+        events: TRANSCRIBED_EVENTS,
+        modelOutput: {
+          predictions: new Float32Array(0),
+          nFrames: 0,
+          nClasses: 9,
+        },
+        durationSeconds: 4,
+      };
+    }
+  },
 }));
 
 import EditorApp from '@/app/drum-transcription/components/EditorApp';
 import {getProject} from '@/lib/drum-transcription/storage/opfs';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
-import {regenerateProject} from '@/lib/drum-transcription/pipeline/runner';
+import {separateStems} from '@/lib/audio-pipeline/separate-stems';
 
-const regenerateProjectMock = regenerateProject as jest.Mock;
+const separateStemsMock = separateStems as jest.Mock;
 const getProjectMock = getProject as jest.Mock;
 
 function renderEditor() {
@@ -264,7 +294,7 @@ function renderEditor() {
 /** Clicks the Drum transcription card's Run action and confirms the
  *  dialog it raises (the dialog's confirm shares the trigger's accessible
  *  name, so it is resolved scoped to the dialog). */
-function confirmRegenerate() {
+function confirmRun() {
   fireEvent.click(screen.getByRole('button', {name: /^run$/i}));
   // With the dialog open, Radix hides the rest of the app from the
   // accessibility tree, so the only reachable "Run" is the dialog's own
@@ -273,9 +303,8 @@ function confirmRegenerate() {
 }
 
 beforeEach(() => {
-  regenerated = false;
-  releaseRegenerate = null;
-  regenerateProjectMock.mockClear();
+  releaseSeparation = null;
+  separateStemsMock.mockClear();
 });
 
 /**
@@ -318,7 +347,7 @@ describe('assist provenance persistence', () => {
   });
 });
 
-describe('EditorApp inline regenerate (plan 0074 suite 2)', () => {
+describe('EditorApp inline drum transcription (plan 0074 suite 2)', () => {
   it('loads the project and shows the initial note count', async () => {
     renderEditor();
     await waitFor(() =>
@@ -333,12 +362,12 @@ describe('EditorApp inline regenerate (plan 0074 suite 2)', () => {
     );
 
     // Collapse the remount-witness marker (a stateful sibling) before
-    // running regenerate — if EditorApp were to unmount/remount during the
-    // run this local state would reset back to expanded.
+    // running — if EditorApp were to unmount/remount during the run this
+    // local state would reset back to expanded.
     fireEvent.click(screen.getByRole('button', {name: /remount witness/i}));
     expect(screen.queryByRole('slider')).not.toBeInTheDocument();
 
-    confirmRegenerate();
+    confirmRun();
 
     // Step list appears (AssistRunCard expands in place).
     await waitFor(() =>
@@ -351,9 +380,9 @@ describe('EditorApp inline regenerate (plan 0074 suite 2)', () => {
     // Sibling sidebar controls stay interactive while the run is in flight.
     expect(screen.getByRole('button', {name: /add lyrics/i})).toBeEnabled();
 
-    // Resolve the (mocked) pipeline.
+    // Resolve the (mocked) separation, which lets the run finish.
     await act(async () => {
-      releaseRegenerate!();
+      releaseSeparation!();
       await Promise.resolve();
     });
 
@@ -375,7 +404,7 @@ describe('EditorApp inline regenerate (plan 0074 suite 2)', () => {
       expect(screen.getByTestId('note-count')).toHaveTextContent('3'),
     );
 
-    confirmRegenerate();
+    confirmRun();
 
     await waitFor(() =>
       expect(

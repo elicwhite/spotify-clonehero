@@ -2,7 +2,7 @@
  * `ProjectMetadata.audioAnchor` persistence (plan 0064 addendum §1):
  * mirrors the in-memory `ChartDocument.audioAnchor` so leading-silence
  * padding survives a reload. `updateProject` must round-trip it, including
- * explicitly clearing it back to `null` (regenerate's contract).
+ * explicitly clearing it back to `null`.
  */
 
 import {installFakeOPFS} from './fake-opfs';

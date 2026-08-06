@@ -59,8 +59,8 @@ interface CapturedRun {
 let capturedTranscribe: CapturedRun | null = null;
 let capturedTempo: CapturedRun | null = null;
 
-jest.mock('../../../lib/assist/tasks/transcribe-drums', () => ({
-  transcribeDrumsTask: {
+jest.mock('../../../lib/assist/tasks/transcribe-drums-from-audio', () => ({
+  transcribeDrumsFromAudioTask: {
     key: 'transcribe-drums',
     title: 'Drum transcription',
     planSteps: async () => [{key: 'transcribing', label: 'Transcribing drums'}],
@@ -139,7 +139,6 @@ const ALL_CARD_NAMES = [
 ];
 
 interface Wiring {
-  projectId?: string | undefined;
   loadAudio?:
     | (() => Promise<{
         loadOriginalBytes: () => Promise<Uint8Array>;
@@ -153,9 +152,8 @@ interface Wiring {
   audioBusyReason?: string | undefined;
 }
 
-/** What a fully project-backed host supplies, so every card renders. */
+/** What a fully wired host supplies, so every card renders. */
 const FULL_WIRING: Wiring = {
-  projectId: 'proj-1',
   loadAudio: async () => ({
     loadOriginalBytes: async () => new Uint8Array(4),
   }),
@@ -163,8 +161,8 @@ const FULL_WIRING: Wiring = {
 };
 
 /**
- * What a host with the chart package's audio but neither padded playback nor
- * a drum-transcription project supplies — the difficulty-generation flow
+ * What a host with the chart package's audio but no padded playback
+ * supplies — the difficulty-generation flow
  * (`components/difficulty-generation/DifficultyGenerationFlow.tsx`), whose
  * reasons these strings mirror. The leading-silence card still renders with
  * its action dead: the point of the disabled-with-a-reason path is that a

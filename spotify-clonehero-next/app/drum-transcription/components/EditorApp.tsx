@@ -70,11 +70,12 @@ type LoadingState = 'loading' | 'ready' | 'error';
 interface EditorAppProps {
   projectId: string;
   /**
-   * Whether to offer re-running drum transcription (chart-flow grid-provided
-   * projects withhold it via `gridIsProvided` regardless). The control lives
-   * in the shared Chart Assist section's Drum transcription card, which runs
-   * the `transcribe-drums` assist task in place and applies the result via
-   * `ReplaceDrumTrackCommand` — the editor never unmounts.
+   * Whether to offer re-running drum transcription. The control lives in the
+   * shared Chart Assist section's Drum transcription card, which runs the
+   * `transcribe-drums` assist task in place against the chart's own
+   * SyncTrack and applies the result via `ReplaceDrumTrackCommand` — the
+   * editor never unmounts. Offered on a project whose grid the user supplied
+   * too: transcribing against that grid is exactly what it is for.
    */
   showRegenerate?: boolean | undefined;
 }
@@ -689,8 +690,6 @@ export default function EditorApp({
     return readProjectAssets(projectId);
   }, [projectId]);
 
-  const gridIsProvided = projectMeta?.gridSource === 'provided';
-
   if (loadingState === 'loading') {
     return (
       <div className="flex flex-col items-center justify-center flex-1 gap-4">
@@ -746,8 +745,7 @@ export default function EditorApp({
             : undefined
       }
       chartAssist={{
-        projectId,
-        allowDrumRerun: showRegenerate && !gridIsProvided,
+        allowDrumRerun: showRegenerate,
         loadAudio: loadAssistAudio,
         audioSampleRate: audioMeta?.sampleRate,
         audioBusyReason: audioRebuilding ? 'Rebuilding audio' : undefined,

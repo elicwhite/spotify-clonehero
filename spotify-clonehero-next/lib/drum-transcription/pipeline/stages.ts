@@ -5,7 +5,7 @@
  * Each function here does one thing (store the upload, load transcription
  * audio, separate the drum stem, ensure a synctrack) and knows nothing about
  * the order stages run in. `runner.ts` owns that ordering — the three entry
- * points (fresh upload / existing chart / resume+regenerate) differ only in
+ * points (fresh upload / existing chart / resume) differ only in
  * which of these they call and what they do with the results.
  */
 
@@ -229,33 +229,19 @@ function tempoProgressToPipeline(p: TempoPipelineProgress): {
 export interface SynctrackResult {
   synctrack: Synctrack;
   sections: LinkSegSections | null;
-  /** Set in 'regenerate' mode, where the freshly predicted map is handed
-   *  back instead of written: the caller persists it in the same write block
-   *  as the run's other outputs, so a cancel leaves the project's existing
-   *  map untouched. */
-  pendingStored?: StoredSynctrack;
 }
-
-/**
- * How this run treats the project's persisted tempo map.
- *
- * - `'resume'`: reuse a persisted map when there is one, and persist a
- *   freshly predicted map immediately so an interruption later in the run
- *   doesn't throw the tempo-mapping work away.
- * - `'regenerate'`: ignore any persisted map, predict a fresh one, and hand
- *   it back in {@link SynctrackResult.pendingStored} rather than writing it,
- *   so a cancelled regeneration leaves the existing map in place.
- */
-export type SynctrackMode = 'resume' | 'regenerate';
 
 export interface EnsureSynctrackOptions {
   signal?: AbortSignal | undefined;
-  mode?: SynctrackMode | undefined;
 }
 
 /**
  * Ensure a synctrack exists for the project, running the tempo-map pipeline
  * if needed.
+ *
+ * A persisted map is reused as-is; a freshly predicted one is persisted
+ * immediately, so an interruption later in the run doesn't throw the
+ * tempo-mapping work away.
  *
  * Reuses the already-separated transcription drum stem (mono mean of the
  * stored stereo stem — identical to the tempo worker's own mono separation
@@ -270,13 +256,10 @@ export async function ensureSynctrack(
   onProgress: PipelineProgressCallback,
   options: EnsureSynctrackOptions = {},
 ): Promise<SynctrackResult | null> {
-  const {signal, mode = 'resume'} = options;
+  const {signal} = options;
   throwIfAborted(signal);
 
-  if (
-    mode === 'resume' &&
-    (await projectFileExists(projectId, SYNCTRACK_FILE))
-  ) {
+  if (await projectFileExists(projectId, SYNCTRACK_FILE)) {
     try {
       const stored = await readProjectJSON<StoredSynctrack>(
         projectId,
@@ -339,15 +322,12 @@ export async function ensureSynctrack(
       drumOnsetOffsetMs: result.drumOnsetOffsetMs,
       sections: result.sections,
     };
-    if (mode === 'resume') {
-      await writeProjectJSON(projectId, SYNCTRACK_FILE, stored);
-    }
+    await writeProjectJSON(projectId, SYNCTRACK_FILE, stored);
 
     onProgress({step: 'tempo-mapping', progress: 1, projectId, projectName});
     return {
       synctrack: result.synctrack,
       sections: result.sections,
-      ...(mode === 'regenerate' ? {pendingStored: stored} : {}),
     };
   } catch (err) {
     // A cancelled run is not a tempo-mapping failure: propagate it instead

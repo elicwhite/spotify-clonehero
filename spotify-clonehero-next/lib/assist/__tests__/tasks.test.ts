@@ -1,7 +1,7 @@
 /**
  * lib/assist/tasks/ tests (plan 0074 Phase 1, Suite 1).
  *
- * `regenerateProject`, `hasDrumStem`, `decodeAndResampleTo44k`,
+ * `resumePipeline`, `hasDrumStem`, `decodeAndResampleTo44k`,
  * `resampleTo16kMono`, and `alignVocals` are mocked module boundaries —
  * runner.ts's internals, ONNX-worker-backed transcription, and real audio
  * decode are exercised by their own suites. `stem-cache.ts` and
@@ -21,7 +21,6 @@ import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import {installFakeOPFS} from '@/lib/drum-transcription/storage/__tests__/fake-opfs';
 import {
   createProject,
-  updateProject,
   writeProjectBinary,
   writeProjectJSON,
 } from '@/lib/drum-transcription/storage/opfs';
@@ -37,7 +36,7 @@ import {
 // mock registrations below use relative paths to the same files the `@/...`
 // imports below resolve to.
 jest.mock('../../drum-transcription/pipeline/runner', () => ({
-  regenerateProject: jest.fn(),
+  resumePipeline: jest.fn(),
 }));
 jest.mock('../../drum-transcription/ml/roformer-separation', () => ({
   hasDrumStem: jest.fn(),
@@ -58,7 +57,7 @@ jest.mock('../../drum-transcription/pipeline/crnn-audio-prep', () => ({
   planarStereoToCrnnInput: jest.fn(async () => new Float32Array(8)),
 }));
 
-import {regenerateProject} from '@/lib/drum-transcription/pipeline/runner';
+import {resumePipeline} from '@/lib/drum-transcription/pipeline/runner';
 import {hasDrumStem} from '@/lib/drum-transcription/ml/roformer-separation';
 import {decodeAndResampleTo44k} from '@/lib/audio-pipeline/decode-audio';
 import {resampleTo16kMono} from '@/lib/audio-pipeline/lyrics-audio';
@@ -74,7 +73,7 @@ import {makeGenerateTempoMapTask} from '../tasks/generate-tempo-map';
 import type {StepProgressEvent} from '../run-to-steps';
 import type {DrumTranscriber} from '@/lib/drum-transcription/ml/transcriber';
 
-const mockRegenerateProject = regenerateProject as jest.Mock;
+const mockResumePipeline = resumePipeline as jest.Mock;
 const mockHasDrumStem = hasDrumStem as jest.Mock;
 const mockDecode = decodeAndResampleTo44k as jest.Mock;
 const mockResample = resampleTo16kMono as jest.Mock;
@@ -151,7 +150,7 @@ function buildChartBytesWithDrumNotes(): Uint8Array {
 
 describe('transcribeDrumsTask', () => {
   beforeEach(() => {
-    mockRegenerateProject.mockReset();
+    mockResumePipeline.mockReset();
     mockHasDrumStem.mockReset();
   });
 
@@ -159,7 +158,7 @@ describe('transcribeDrumsTask', () => {
     mockHasDrumStem.mockResolvedValue(true);
     const project = await createProject('song');
     const steps = await transcribeDrumsTask.planSteps({
-      run: {kind: 'regenerate', projectId: project.id},
+      run: {kind: 'resume', projectId: project.id},
     });
     expect(steps.find(s => s.key === 'separating')?.cached).toBe(true);
     expect(steps.find(s => s.key === 'tempo-mapping')?.cached).toBe(false);
@@ -169,23 +168,12 @@ describe('transcribeDrumsTask', () => {
     mockHasDrumStem.mockResolvedValue(false);
     const project = await createProject('song');
     const steps = await transcribeDrumsTask.planSteps({
-      run: {kind: 'regenerate', projectId: project.id},
+      run: {kind: 'resume', projectId: project.id},
     });
     expect(steps.find(s => s.key === 'separating')?.cached).toBe(false);
   });
 
-  it('planSteps leaves "tempo-mapping" uncached even for a provided-grid project (regenerateProject refuses those runs outright)', async () => {
-    mockHasDrumStem.mockResolvedValue(false);
-    const project = await createProject('song');
-    await updateProject(project.id, {gridSource: 'provided'});
-
-    const steps = await transcribeDrumsTask.planSteps({
-      run: {kind: 'regenerate', projectId: project.id},
-    });
-    expect(steps.find(s => s.key === 'tempo-mapping')?.cached).toBe(false);
-  });
-
-  it('planSteps leaves "tempo-mapping" uncached for a regenerate run even with a persisted map', async () => {
+  it('planSteps marks "tempo-mapping" cached when a map is already persisted: a run never re-derives one', async () => {
     mockHasDrumStem.mockResolvedValue(false);
     const project = await createProject('song');
     await writeProjectJSON(project.id, 'synctrack.json', {
@@ -193,12 +181,12 @@ describe('transcribeDrumsTask', () => {
     });
 
     const steps = await transcribeDrumsTask.planSteps({
-      run: {kind: 'regenerate', projectId: project.id},
+      run: {kind: 'resume', projectId: project.id},
     });
-    expect(steps.find(s => s.key === 'tempo-mapping')?.cached).toBe(false);
+    expect(steps.find(s => s.key === 'tempo-mapping')?.cached).toBe(true);
   });
 
-  it('maps pipeline progress monotonically and returns the regenerated drum notes on success', async () => {
+  it('maps pipeline progress monotonically and returns the transcribed drum notes on success', async () => {
     const project = await createProject('song');
     await writeProjectBinary(
       project.id,
@@ -206,7 +194,7 @@ describe('transcribeDrumsTask', () => {
       buildChartBytesWithDrumNotes(),
     );
 
-    mockRegenerateProject.mockImplementation(
+    mockResumePipeline.mockImplementation(
       async (_projectId: string, onProgress: (p: unknown) => void) => {
         onProgress({step: 'separating', progress: 0});
         onProgress({step: 'separating', progress: 1});
@@ -222,7 +210,7 @@ describe('transcribeDrumsTask', () => {
     const events: StepProgressEvent[] = [];
     const controller = new AbortController();
     const result = await transcribeDrumsTask.run(
-      {run: {kind: 'regenerate', projectId: project.id}},
+      {run: {kind: 'resume', projectId: project.id}},
       controller.signal,
       e => events.push(e),
     );
@@ -241,12 +229,12 @@ describe('transcribeDrumsTask', () => {
 
   it('propagates a real pipeline error (not AbortError)', async () => {
     const project = await createProject('song');
-    mockRegenerateProject.mockRejectedValue(new Error('boom'));
+    mockResumePipeline.mockRejectedValue(new Error('boom'));
 
     const controller = new AbortController();
     await expect(
       transcribeDrumsTask.run(
-        {run: {kind: 'regenerate', projectId: project.id}},
+        {run: {kind: 'resume', projectId: project.id}},
         controller.signal,
         () => {},
       ),
@@ -255,10 +243,10 @@ describe('transcribeDrumsTask', () => {
 
   it('rejects with AbortError on cancel and applies nothing', async () => {
     const project = await createProject('song');
-    // Stands in for `regenerateProject`'s own cancellation contract: it
+    // Stands in for `resumePipeline`'s own cancellation contract: it
     // terminates its workers on abort and rejects with an AbortError. The
     // task delegates to that rather than racing it.
-    mockRegenerateProject.mockImplementation(
+    mockResumePipeline.mockImplementation(
       (
         _projectId: string,
         onProgress: (p: unknown) => void,
@@ -275,7 +263,7 @@ describe('transcribeDrumsTask', () => {
 
     const controller = new AbortController();
     const runPromise = transcribeDrumsTask.run(
-      {run: {kind: 'regenerate', projectId: project.id}},
+      {run: {kind: 'resume', projectId: project.id}},
       controller.signal,
       () => {},
     );

@@ -162,9 +162,7 @@ function DrumTranscriptionInner() {
       // one it was pointed at, or the one an upload/chart run creates part
       // way through. Retry needs it (see `handleRetryPipeline`).
       runProjectIdRef.current =
-        request.run.kind === 'resume' || request.run.kind === 'regenerate'
-          ? request.run.projectId
-          : null;
+        request.run.kind === 'resume' ? request.run.projectId : null;
       try {
         const result = await runner.start(transcribeDrumsTask, {
           run: request.run,

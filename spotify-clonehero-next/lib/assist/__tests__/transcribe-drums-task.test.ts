@@ -1,6 +1,6 @@
 /**
- * The `transcribe-drums` task's four compositions (plan 0074 Phase 6,
- * Suite 7): fresh upload, existing chart package, resume, regenerate.
+ * The `transcribe-drums` task's three compositions (plan 0074 Phase 6,
+ * Suite 7): fresh upload, existing chart package, resume.
  *
  * These run `runner.ts` and `pipeline/stages.ts` for real against the shared
  * project-storage double, so what a step marked "cached" claims and what the
@@ -75,7 +75,6 @@ import type {ProjectOpfsMock} from '@/lib/drum-transcription/storage/__tests__/f
 import {separateDrums} from '@/lib/drum-transcription/ml/roformer-separation';
 import {runTempoPipelineFromPcm} from '@/lib/tempo-map/pipeline-client';
 import {SYNCTRACK_FILE} from '@/lib/drum-transcription/pipeline/stages';
-import {DECODED_ONSETS_FILE} from '@/lib/drum-transcription/pipeline/decoded-onsets';
 import {
   makeTranscribeDrumsTask,
   type TranscribeDrumsInput,
@@ -216,73 +215,6 @@ describe('transcribe-drums: resume after an interrupted run', () => {
   });
 });
 
-describe('transcribe-drums: regenerate', () => {
-  const PROJECT_ID = 'proj-regen';
-
-  function seedFinished(): void {
-    mockOpfs.__projects.set(PROJECT_ID, {
-      id: PROJECT_ID,
-      name: 'Song',
-      createdAt: '',
-      updatedAt: '',
-      stage: 'editing',
-      gridSource: 'predicted',
-      audioAnchor: {tick: 192, ms: 500},
-    });
-    mockOpfs.__files.set(`${PROJECT_ID}/notes.chart`, chartBytesWithNotes());
-    mockOpfs.__files.set(
-      `${PROJECT_ID}/notes.edited.chart`,
-      chartBytesWithNotes(),
-    );
-    mockOpfs.__files.set(
-      `${PROJECT_ID}/review-progress.json`,
-      JSON.stringify({reviewed: 12}),
-    );
-    mockOpfs.__files.set(
-      `${PROJECT_ID}/${SYNCTRACK_FILE}`,
-      JSON.stringify({synctrack: {origin_ms: 0, tempos: [{ms: 0, bpm: 90}]}}),
-    );
-  }
-
-  it('re-predicts the tempo map even though one is persisted, and plans it as work', async () => {
-    seedFinished();
-
-    const steps = await task.planSteps({
-      run: {kind: 'regenerate', projectId: PROJECT_ID},
-    });
-    expect(step(steps, 'separating').cached).toBe(true);
-    expect(step(steps, 'tempo-mapping').cached).toBe(false);
-    // Regeneration starts from stored audio: the full pipeline's first two
-    // steps aren't part of what it promises to show.
-    expect(steps.map(s => s.key)).not.toContain('decoding');
-  });
-
-  it('replaces the derived artifacts and clears the leading-silence anchor', async () => {
-    seedFinished();
-
-    const result = await task.run(
-      {run: {kind: 'regenerate', projectId: PROJECT_ID}},
-      new AbortController().signal,
-      noProgress,
-    );
-
-    expect(mockTempo).toHaveBeenCalledTimes(1);
-    expect(mockOpfs.deleteProjectFile).toHaveBeenCalledWith(
-      PROJECT_ID,
-      'review-progress.json',
-    );
-    expect(persisted(PROJECT_ID, 'review-progress.json')).toBeUndefined();
-    // The autosaved sibling would shadow the regenerated chart, so it goes too.
-    expect(persisted(PROJECT_ID, 'notes.edited.chart')).toBeUndefined();
-    expect(
-      JSON.parse(persisted(PROJECT_ID, SYNCTRACK_FILE) as string).synctrack,
-    ).toEqual(PREDICTED_SYNCTRACK);
-    expect(persisted(PROJECT_ID, DECODED_ONSETS_FILE)).toBeDefined();
-    expect(mockOpfs.__projects.get(PROJECT_ID)?.['audioAnchor']).toBeNull();
-    expect(result.notes).toHaveLength(EVENTS.length);
-  });
-});
-
 describe('transcribe-drums: existing chart package', () => {
   function chartRunInput(): TranscribeDrumsInput {
     return {
@@ -338,13 +270,13 @@ describe('transcribe-drums: existing chart package', () => {
 });
 
 describe('transcribe-drums: step labels across compositions', () => {
-  it('names the shared stages identically for an upload and an in-editor re-run', async () => {
+  it('names the shared stages identically for an upload and a resume', async () => {
     mockOpfs.__projects.set('proj-labels', {
       id: 'proj-labels',
       name: 'Song',
       createdAt: '',
       updatedAt: '',
-      stage: 'editing',
+      stage: 'separating',
       gridSource: 'predicted',
     });
 
@@ -355,12 +287,12 @@ describe('transcribe-drums: step labels across compositions', () => {
         fileName: 'song.mp3',
       },
     });
-    const regenerate = await task.planSteps({
-      run: {kind: 'regenerate', projectId: 'proj-labels'},
+    const resume = await task.planSteps({
+      run: {kind: 'resume', projectId: 'proj-labels'},
     });
 
     for (const shared of ['separating', 'tempo-mapping', 'transcribing']) {
-      expect(step(upload, shared).label).toBe(step(regenerate, shared).label);
+      expect(step(upload, shared).label).toBe(step(resume, shared).label);
     }
   });
 });

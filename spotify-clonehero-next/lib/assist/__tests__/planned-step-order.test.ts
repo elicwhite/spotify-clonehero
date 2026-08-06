@@ -21,8 +21,8 @@ import {
   type PlannedStep,
 } from '../run-to-steps';
 import {
+  AUDIO_TRANSCRIBE_PLANNED_STEPS,
   PIPELINE_PLANNED_STEPS,
-  REGENERATE_PLANNED_STEPS,
 } from '@/lib/drum-transcription/pipeline/step-mapping';
 
 jest.mock('../../audio-pipeline/stem-cache', () => ({
@@ -205,21 +205,21 @@ describe('transcribe-drums planned order', () => {
     ]);
   });
 
-  // `regenerateProject` -> `resumePipeline(mode: 'regenerate')`.
-  it('matches a regeneration, with and without a cached stem', () => {
-    expectOrderMatchesEmissions(REGENERATE_PLANNED_STEPS, [
+  // `lib/assist/tasks/transcribe-drums-from-audio.ts`: the in-editor re-run
+  // works off the chart's own grid, so no tempo-mapping stage exists to
+  // show, cached or otherwise.
+  it('matches the in-editor re-run, with and without a cached stem', () => {
+    expectOrderMatchesEmissions(AUDIO_TRANSCRIBE_PLANNED_STEPS, [
       'loading-runtime',
       'separating',
-      'tempo-mapping',
       'transcribing',
     ]);
-    const cachedStem = REGENERATE_PLANNED_STEPS.map(s => ({
+    const cachedStem = AUDIO_TRANSCRIBE_PLANNED_STEPS.map(s => ({
       ...s,
       cached: s.key === 'separating',
     }));
     expectOrderMatchesEmissions(cachedStem, [
       'loading-runtime',
-      'tempo-mapping',
       'transcribing',
     ]);
   });

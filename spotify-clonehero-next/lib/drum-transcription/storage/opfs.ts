@@ -112,8 +112,7 @@ export interface ProjectMetadata {
    * leading-silence padding is active: the stored audio (`song.opus`) is
    * still the original, un-padded file, and the chart's notes were shifted
    * forward by `audioAnchor.ms`. `undefined`/`null` ⇒ no padding, current
-   * behavior. Cleared (set to `null`) whenever the chart is rebuilt from
-   * audio wholesale (`regenerateProject`), since a fresh chart has no anchor.
+   * behavior. Settable back to `null` for a chart that has no anchor.
    */
   audioAnchor?: {tick: number; ms: number} | null | undefined;
   /**

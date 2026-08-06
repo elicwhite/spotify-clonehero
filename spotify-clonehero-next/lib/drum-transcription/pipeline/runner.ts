@@ -13,10 +13,16 @@
  * in `./stages`; this file is only the three orderings of them.
  *
  * The assist engine's `transcribe-drums` task
- * (`lib/assist/tasks/transcribe-drums.ts`) is the one caller of all four
+ * (`lib/assist/tasks/transcribe-drums.ts`) is the one caller of all three
  * entry points below: it predicts each ordering's step
  * list from the same OPFS existence checks the ordering itself performs, maps
  * the progress reported here onto that list, and supplies the AbortSignal.
+ *
+ * None of them ever rewrites a chart's existing tempo map. Re-transcribing a
+ * chart already open in the editor is
+ * `lib/assist/tasks/transcribe-drums-from-audio.ts`, which snaps to that
+ * chart's own SyncTrack; predicting a tempo map is the separate
+ * `generate-tempo-map` task, and the user's own explicit choice.
  */
 
 import {decodeAudio} from '../audio/decoder';
@@ -30,10 +36,7 @@ import {
   hasProjectChartFile,
   writePackageInfo,
   writeProjectAssets,
-  deleteProjectFile,
   getProject,
-  editedVariant,
-  CHART_FILE_BASENAMES,
   type ProjectMetadata,
   type PackageInfo,
 } from '../storage/opfs';
@@ -48,7 +51,6 @@ import {
   buildChartDocumentFromExistingChart,
   buildConfidenceData,
   RESOLUTION,
-  type StoredSynctrack,
 } from './chart-builder';
 import {buildDecodedOnsetsFile, DECODED_ONSETS_FILE} from './decoded-onsets';
 import type {PhaseAlignResult} from './phase-align';
@@ -59,10 +61,8 @@ import {
   loadTranscriptionAudio48k,
   separateDrumsStep,
   storeUploadedAudioOriginal,
-  SYNCTRACK_FILE,
   throwIfAborted,
   type PipelineProgressCallback,
-  type SynctrackMode,
 } from './stages';
 
 // ---------------------------------------------------------------------------
@@ -472,14 +472,6 @@ export interface ResumePipelineOptions {
    * writes nothing.
    */
   signal?: AbortSignal | undefined;
-  /**
-   * `'regenerate'` ({@link regenerateProject}) recomputes the tempo map and
-   * notes even though the project already has a chart, and replaces the
-   * project's derived artifacts only once the run has fully succeeded.
-   * `'resume'` (the default) only fills in what is missing, persisting each
-   * stage as it lands so the next resume can reuse it.
-   */
-  mode?: SynctrackMode | undefined;
 }
 
 /**
@@ -494,7 +486,7 @@ export async function resumePipeline(
   options: ResumePipelineOptions = {},
 ): Promise<string> {
   const txr = transcriber ?? createDefaultTranscriber();
-  const {signal, mode = 'resume'} = options;
+  const {signal} = options;
   throwIfAborted(signal);
 
   const meta = await getProject(projectId);
@@ -525,11 +517,9 @@ export async function resumePipeline(
     );
   }
 
-  // In regeneration mode the project already has every artifact; the run
-  // recomputes them anyway and replaces them at the end (below), so a
-  // cancel mid-run leaves the existing chart, tempo map, and review
-  // progress exactly as they were.
-  const needsWork = mode === 'regenerate' || !hasChart;
+  // A project that already has a chart has nothing left to fill in past
+  // separation.
+  const needsWork = !hasChart;
 
   // Step 2: Stem separation (if needed)
   if (!hasStems) {
@@ -550,15 +540,12 @@ export async function resumePipeline(
   // isn't seeded — the pre-separated stem still avoids re-separation.
   let synctrack: Synctrack | null = null;
   let sections: LinkSegSections | null = null;
-  let pendingSynctrack: StoredSynctrack | null = null;
   if (needsWork) {
     const st = await ensureSynctrack(projectId, meta.name, null, onProgress, {
       signal,
-      mode,
     });
     synctrack = st?.synctrack ?? null;
     sections = st?.sections ?? null;
-    pendingSynctrack = st?.pendingStored ?? null;
   }
   throwIfAborted(signal);
 
@@ -610,22 +597,10 @@ export async function resumePipeline(
       throw new Error('writeChartFolder did not produce a chart file');
     }
 
-    // Everything the run produces is now in memory. This is the point of no
-    // return: regeneration discards the project's previous derived
-    // artifacts here rather than up front, so a cancel at any earlier point
-    // leaves the persisted project untouched. The subsequent writes have no
-    // await on GPU work between them.
+    // Everything the run produces is now in memory, so a cancel at any
+    // earlier point leaves the persisted project untouched. The writes below
+    // have no await on GPU work between them.
     throwIfAborted(signal);
-    if (mode === 'regenerate') {
-      await Promise.all(
-        REGENERATED_ARTIFACT_FILES.map(fileName =>
-          deleteProjectFile(projectId, fileName),
-        ),
-      );
-    }
-    if (pendingSynctrack) {
-      await writeProjectJSON(projectId, SYNCTRACK_FILE, pendingSynctrack);
-    }
 
     // Write confidence.json before the chart file: the chart file's presence
     // is the resume gate, so writing it last guarantees a crash never leaves
@@ -662,78 +637,6 @@ export async function resumePipeline(
   });
 
   return projectId;
-}
-
-// ---------------------------------------------------------------------------
-// Regeneration
-// ---------------------------------------------------------------------------
-
-/**
- * Derived artifacts a successful regeneration replaces. Deleted at the end
- * of the run, immediately before its own outputs are written, so a cancelled
- * or failed regeneration leaves the project exactly as it was. Covers both
- * chart formats plus their edited (autosave) variants — the edited variant
- * must go too, since findProjectChartFile prefers it and a leftover one
- * would shadow the regenerated chart.
- */
-export const REGENERATED_ARTIFACT_FILES: readonly string[] = [
-  SYNCTRACK_FILE,
-  'confidence.json',
-  DECODED_ONSETS_FILE,
-  'review-progress.json',
-  CHART_FILE_BASENAMES.chart,
-  CHART_FILE_BASENAMES.mid,
-  editedVariant(CHART_FILE_BASENAMES.chart),
-  editedVariant(CHART_FILE_BASENAMES.mid),
-];
-
-/**
- * Regenerate a project's beat grid (predicted tempo map) and predicted notes
- * from its stored audio, discarding all edits and review progress.
- *
- * The separated drum stem is reused from the fingerprint-keyed stem cache
- * (resumePipeline's separation gate sees it as already done), so this only
- * re-runs tempo mapping + transcription — no GPU separation.
- *
- * Only valid for predicted-grid projects: a provided-grid (chart-flow)
- * project's grid is the user's own chart, and this generic path cannot
- * reconstruct its original ParsedChart (same restriction as resume).
- *
- * Cancellable: `options.signal` stops the in-flight workers and rejects with
- * an `AbortError`. Nothing is deleted or written until the run has produced
- * every output, so cancelling (or failing) leaves the project's chart, tempo
- * map, review progress, and audio anchor untouched.
- */
-export async function regenerateProject(
-  projectId: string,
-  onProgress: PipelineProgressCallback,
-  transcriber?: DrumTranscriber,
-  options: {signal?: AbortSignal | undefined} = {},
-): Promise<string> {
-  const meta = await getProject(projectId);
-  if (meta.gridSource === 'provided') {
-    throw new Error(
-      'This project was created from an existing chart; its grid came from ' +
-        'that chart, so there is nothing to regenerate.',
-    );
-  }
-
-  try {
-    const result = await resumePipeline(projectId, onProgress, transcriber, {
-      signal: options.signal,
-      mode: 'regenerate',
-    });
-    // The regenerated chart is audio-relative from scratch — any leading-
-    // silence anchor from the discarded chart no longer applies (0064
-    // addendum §1: "regenerate clears it").
-    await updateProject(projectId, {audioAnchor: null});
-    return result;
-  } catch (err) {
-    // The project still has its original chart: put its stage back so it
-    // isn't mistaken for an interrupted pipeline on the next load.
-    await updateProject(projectId, {stage: meta.stage});
-    throw err;
-  }
 }
 
 // ---------------------------------------------------------------------------

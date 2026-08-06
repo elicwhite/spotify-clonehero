@@ -10,8 +10,16 @@
  * ticks asserted below are the ones the snap stage produced.
  */
 
-import {createEmptyChart} from '@eliwhite/scan-chart';
+import {createEmptyChart, noteTypes} from '@eliwhite/scan-chart';
 import type {ChartDocument} from '@/lib/chart-edit';
+import {
+  addDrumNote,
+  addTempo,
+  addTimeSignature,
+  getAudioAnchor,
+  setAudioAnchor,
+  writeChartFolder,
+} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import {installFakeOPFS} from '@/lib/drum-transcription/storage/__tests__/fake-opfs';
 import type {DrumTranscriber} from '@/lib/drum-transcription/ml/transcriber';
@@ -86,6 +94,37 @@ function chartAt120(): ChartDocument {
   return {parsedChart: parsed, assets: []};
 }
 
+/**
+ * A chart whose grid someone tuned by hand: an off-round starting tempo, a
+ * mid-song tempo change, and a meter change, none of which any predictor
+ * would land on. Its Expert Drums track already has notes, so a run that
+ * changes them is visible.
+ */
+function handTunedChart(): ChartDocument {
+  const doc = chartAt120();
+  addTempo(doc, 0, 137.42);
+  addTempo(doc, 1536, 91.5);
+  addTimeSignature(doc, 1536, 7, 8);
+  addDrumNote(doc.parsedChart.trackData[0], {tick: 96, type: noteTypes.kick});
+  addDrumNote(doc.parsedChart.trackData[0], {
+    tick: 2112,
+    type: noteTypes.redDrum,
+  });
+  return doc;
+}
+
+/** The `[SyncTrack]` block of a chart as it serializes to disk. */
+function syncTrackSection(doc: ChartDocument): string {
+  const chartFile = writeChartFolder(doc).find(
+    f => f.fileName === 'notes.chart',
+  );
+  if (!chartFile) throw new Error('fixture: no chart file produced');
+  const text = new TextDecoder().decode(chartFile.data);
+  const match = text.match(/\[SyncTrack\][^[]*/);
+  if (!match) throw new Error('fixture: no [SyncTrack] section produced');
+  return match[0];
+}
+
 /** The song as the host mixes it down: one buffer of bytes, whatever the
  *  package's stems were. */
 const MIX_BYTES = new Uint8Array([9, 8, 7, 6]);
@@ -132,6 +171,60 @@ describe('transcribeDrumsFromAudioTask', () => {
     expect(result.sync.resolution).toBe(doc.parsedChart.resolution);
     expect(result.sync.tempos).toEqual(doc.parsedChart.tempos);
     expect(result.sync.timeSignatures).toEqual(doc.parsedChart.timeSignatures);
+  });
+
+  it('leaves a hand-tuned tempo map byte-identical while replacing the notes', async () => {
+    const doc = handTunedChart();
+    const before = syncTrackSection(doc);
+    const notesBefore = doc.parsedChart.trackData[0].noteEventGroups
+      .flat()
+      .map(n => n.tick);
+
+    const result = await task.run(
+      {audio: audio(), chartDoc: doc},
+      new AbortController().signal,
+      () => {},
+    );
+
+    // The grid the run hands back serializes to the same bytes it was given:
+    // no tempo event moved, none was added, none was dropped.
+    const after = syncTrackSection({
+      parsedChart: {
+        ...doc.parsedChart,
+        resolution: result.sync.resolution,
+        tempos: result.sync.tempos,
+        timeSignatures: result.sync.timeSignatures,
+      },
+      assets: doc.assets,
+    });
+    expect(after).toBe(before);
+    // ...and the chart the caller started from is itself untouched.
+    expect(syncTrackSection(doc)).toBe(before);
+
+    // The notes really were replaced, so the identical grid isn't the
+    // result of a run that did nothing.
+    expect(result.notes.map(n => n.tick)).not.toEqual(notesBefore);
+    expect(result.notes).toHaveLength(EVENTS.length);
+  });
+
+  it('places the hits past the leading silence the user added, keeping their padding', async () => {
+    // One second of leading silence: the chart's grid sits on the padded
+    // timeline, while the transcriber analyzed the original audio.
+    const doc = setAudioAnchor(chartAt120(), {tick: 384, ms: 1000});
+
+    const result = await task.run(
+      {audio: audio(), chartDoc: doc},
+      new AbortController().signal,
+      () => {},
+    );
+
+    // 120 BPM at 192 ticks/beat is 384 ticks/second, so the two hits land a
+    // second in, not on tick 0 and tick 192.
+    expect(result.notes.map(n => n.tick)).toEqual([384, 576]);
+    // The padding is the user's: the run neither drops the anchor nor moves
+    // the grid it belongs to.
+    expect(getAudioAnchor(doc)).toEqual({tick: 384, ms: 1000});
+    expect(result.sync.tempos).toEqual(doc.parsedChart.tempos);
   });
 
   it('reports separating then transcribing, ending on done', async () => {
