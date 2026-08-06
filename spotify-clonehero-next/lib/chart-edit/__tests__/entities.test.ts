@@ -18,6 +18,8 @@ import {
   moveLyric,
   movePhraseEnd,
   movePhraseStart,
+  movePhrases,
+  phraseTranslationBounds,
   noteId,
 } from '../index';
 import {addNote} from '../entities/notes';
@@ -196,6 +198,124 @@ describe('phrase helpers', () => {
     const doc = chartWithVocals([makePhrase(960, 480)]);
     const final = movePhraseEnd(doc, 1440, 0);
     expect(final).toBe(961);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Whole-phrase translation — what selecting a phrase's start AND end edge
+// and dragging its words does.
+// ---------------------------------------------------------------------------
+
+describe('phraseTranslationBounds', () => {
+  const spans = [
+    {tick: 0, length: 480},
+    {tick: 960, length: 480},
+    {tick: 1920, length: 480},
+  ];
+
+  it('bounds a phrase by the neighbors that are staying put', () => {
+    // Phrase 960..1440 can back up to 480 (phrase 0's end) and run out to
+    // 1920 (phrase 2's start).
+    expect(phraseTranslationBounds(spans, [960])).toEqual({
+      minDelta: -480,
+      maxDelta: 480,
+    });
+  });
+
+  it('lets a phrase run to tick 0 and no further when nothing precedes it', () => {
+    expect(phraseTranslationBounds(spans, [0])).toEqual({
+      minDelta: 0,
+      maxDelta: 480,
+    });
+  });
+
+  it('is unbounded on the right past the last phrase', () => {
+    expect(phraseTranslationBounds(spans, [1920]).maxDelta).toBe(
+      Number.POSITIVE_INFINITY,
+    );
+  });
+
+  it('ignores phrases inside the moving set, so a group keeps its spacing', () => {
+    // 960 and 1920 move together: 960 does not clamp against 1920, and the
+    // group as a whole is bounded by phrase 0 on the left, nothing on the
+    // right.
+    expect(phraseTranslationBounds(spans, [960, 1920])).toEqual({
+      minDelta: -480,
+      maxDelta: Number.POSITIVE_INFINITY,
+    });
+  });
+
+  it('intersects the bounds across the moving set', () => {
+    // 0 and 1920 move while 960 stays. Right: phrase 0 can only advance 480
+    // before hitting it, against 1920's unbounded run — 480 wins. Left:
+    // 1920 can back up 480, but phrase 0 is already at tick 0 — 0 wins.
+    expect(phraseTranslationBounds(spans, [0, 1920])).toEqual({
+      minDelta: 0,
+      maxDelta: 480,
+    });
+  });
+
+  it('reports no room when nothing in the moving set exists', () => {
+    expect(phraseTranslationBounds(spans, [12345])).toEqual({
+      minDelta: 0,
+      maxDelta: 0,
+    });
+  });
+});
+
+describe('movePhrases', () => {
+  it('translates the phrase, its lyrics and its notes, keeping the length', () => {
+    const doc = chartWithVocals([makePhrase(960, 480, [1080, 1200])]);
+    expect(movePhrases(doc, [960], 240)).toBe(240);
+
+    const phrase = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
+    expect(phrase.tick).toBe(1200);
+    expect(phrase.length).toBe(480);
+    expect(phrase.lyrics.map(l => l.tick)).toEqual([1320, 1440]);
+    expect(phrase.notes.map(n => n.tick)).toEqual([1320, 1440]);
+  });
+
+  it('recomputes ms timing for the phrase and everything in it', () => {
+    // 480 ticks = 500ms at the fixture's 120 BPM / 480 resolution.
+    const doc = chartWithVocals([makePhrase(0, 480, [240])]);
+    movePhrases(doc, [0], 480);
+    const phrase = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases[0];
+    expect(phrase.msTime).toBeCloseTo(500);
+    expect(phrase.lyrics[0].msTime).toBeCloseTo(750);
+  });
+
+  it('clamps the group so it stops at the neighbor rather than overlapping', () => {
+    const doc = chartWithVocals([makePhrase(0, 480), makePhrase(960, 480)]);
+    expect(movePhrases(doc, [960], -9999)).toBe(-480);
+    const phrases = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases;
+    expect(phrases.map(p => p.tick)).toEqual([0, 480]);
+  });
+
+  it('moves co-selected phrases rigidly, at one shared clamped delta', () => {
+    const doc = chartWithVocals([
+      makePhrase(0, 480),
+      makePhrase(960, 480),
+      makePhrase(1920, 480),
+    ]);
+    // Phrases 2 and 3 move together; phrase 1 stops them 480 ticks short of
+    // the 9999 asked for, and BOTH stop there so the gap between them holds.
+    expect(movePhrases(doc, [960, 1920], -9999)).toBe(-480);
+    const phrases = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases;
+    expect(phrases.map(p => p.tick)).toEqual([0, 480, 1440]);
+  });
+
+  it('stops a phrase butting up against the next one, never on top of it', () => {
+    const doc = chartWithVocals([makePhrase(0, 480), makePhrase(960, 480)]);
+    expect(movePhrases(doc, [0], 9999)).toBe(480);
+    const phrases = doc.parsedChart.vocalTracks!.parts['vocals'].notePhrases;
+    expect(phrases.map(p => p.tick + p.length)).toEqual([960, 1440]);
+  });
+
+  it('is a no-op for a delta of zero, an unknown tick, or a chart with no vocals', () => {
+    const doc = chartWithVocals([makePhrase(0, 480)]);
+    expect(movePhrases(doc, [0], 0)).toBe(0);
+    expect(movePhrases(doc, [999], 240)).toBe(0);
+    expect(movePhrases(emptyChart(), [0], 240)).toBe(0);
   });
 });
 

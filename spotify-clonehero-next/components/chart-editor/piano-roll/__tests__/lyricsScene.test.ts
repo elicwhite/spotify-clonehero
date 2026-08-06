@@ -7,6 +7,7 @@
 import {
   buildLyricsRowScene,
   cleanLyricChipText,
+  fullySelectedPhraseTicks,
   lyricChipPreviewTick,
   phraseEdgeMarkers,
   type LyricChip,
@@ -204,6 +205,76 @@ describe('lyricChipPreviewTick: group-drag live preview', () => {
     expect(lyricChipPreviewTick(chipB, true, null, 60)).toBe(780);
     // Unselected chips are untouched by a note-anchored drag too.
     expect(lyricChipPreviewTick(chipB, false, null, 60)).toBe(720);
+  });
+
+  describe('when the chips ride a phrase that is moving whole', () => {
+    const wholePhrase = {
+      chipId: chipA.id,
+      originalTick: 240,
+      currentTick: 1240, // +1000, well past the phrase's resting 960 end
+      movingPhraseTicks: new Set([0]),
+    };
+
+    it('rides the raw delta, unclamped — the phrase bounds travel too', () => {
+      expect(lyricChipPreviewTick(chipB, true, wholePhrase, null)).toBe(1720);
+    });
+
+    it('carries a chip that is not itself selected, since its phrase is', () => {
+      expect(lyricChipPreviewTick(chipB, false, wholePhrase, null)).toBe(1720);
+    });
+
+    it('leaves chips in a phrase that is staying put alone', () => {
+      const otherPhraseChip: LyricChip = {
+        ...chipB,
+        id: 'vocals:1200',
+        tick: 1200,
+        phraseMinTick: 1200,
+        phraseMaxTick: 1440,
+      };
+      // Unselected and in a stationary phrase: nothing reaches it.
+      expect(
+        lyricChipPreviewTick(otherPhraseChip, false, wholePhrase, null),
+      ).toBe(1200);
+      // Selected but stationary: the old clamp still applies.
+      expect(
+        lyricChipPreviewTick(otherPhraseChip, true, wholePhrase, null),
+      ).toBe(1440);
+    });
+  });
+});
+
+describe('fullySelectedPhraseTicks', () => {
+  const bands = [
+    {tick: 0, tickEnd: 960},
+    {tick: 1920, tickEnd: 2880},
+  ];
+
+  it('names a phrase with both edges selected', () => {
+    expect(
+      fullySelectedPhraseTicks(bands, new Set([0]), new Set([960])),
+    ).toEqual([0]);
+  });
+
+  it('ignores a phrase with only one edge selected — that is a resize', () => {
+    expect(fullySelectedPhraseTicks(bands, new Set([0]), new Set())).toEqual(
+      [],
+    );
+    expect(fullySelectedPhraseTicks(bands, new Set(), new Set([960]))).toEqual(
+      [],
+    );
+  });
+
+  it('does not pair one phrase’s start with another phrase’s end', () => {
+    // Phrase 1's start and phrase 2's end: neither phrase is whole.
+    expect(
+      fullySelectedPhraseTicks(bands, new Set([0]), new Set([2880])),
+    ).toEqual([]);
+  });
+
+  it('names every whole phrase in a multi-phrase selection', () => {
+    expect(
+      fullySelectedPhraseTicks(bands, new Set([0, 1920]), new Set([960, 2880])),
+    ).toEqual([0, 1920]);
   });
 });
 

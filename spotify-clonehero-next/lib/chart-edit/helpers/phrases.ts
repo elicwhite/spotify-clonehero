@@ -8,7 +8,8 @@
  * `movePhraseStart` repositions the start without touching the end (length
  * shrinks/grows). `movePhraseEnd` repositions the end without touching the
  * start. Both clamp against neighboring phrases so they never invert or
- * cross. All mutations are in-place.
+ * cross. `movePhrases` translates whole phrases — both edges plus their
+ * lyrics and notes — keeping each length. All mutations are in-place.
  *
  * The `partName` argument selects which vocal part (`vocals`, `harm1`,
  * `harm2`, `harm3`) the helper operates on; defaults to `'vocals'`.
@@ -160,6 +161,99 @@ export function movePhraseEnd(
   phrase.length = clamped - phrase.tick;
   applyEventTiming(phrase, makeChartTiming(doc.parsedChart));
   return clamped;
+}
+
+/** A phrase's tick span, as the pure translation math below sees it. */
+export interface PhraseSpan {
+  tick: number;
+  length: number;
+}
+
+/**
+ * How far a set of whole phrases can translate together before one of them
+ * would overlap a phrase that is staying put (or run past tick 0).
+ *
+ * The bounds are an intersection across the whole moving set, so the group
+ * stays rigid: phrases keep their spacing instead of the leading one
+ * pressing up against a neighbor while the rest keep sliding. Delta 0 is
+ * always inside the range, since phrases don't overlap at rest.
+ */
+export function phraseTranslationBounds(
+  phrases: readonly PhraseSpan[],
+  movingStartTicks: Iterable<number>,
+): {minDelta: number; maxDelta: number} {
+  const moving = new Set(movingStartTicks);
+  const sorted = [...phrases].sort((a, b) => a.tick - b.tick);
+  let minDelta = Number.NEGATIVE_INFINITY;
+  let maxDelta = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < sorted.length; i++) {
+    const phrase = sorted[i];
+    if (!moving.has(phrase.tick)) continue;
+
+    let lowerBound = 0;
+    for (let j = i - 1; j >= 0; j--) {
+      if (moving.has(sorted[j].tick)) continue;
+      lowerBound = sorted[j].tick + sorted[j].length;
+      break;
+    }
+    let upperBound = Number.POSITIVE_INFINITY;
+    for (let j = i + 1; j < sorted.length; j++) {
+      if (moving.has(sorted[j].tick)) continue;
+      upperBound = sorted[j].tick;
+      break;
+    }
+
+    minDelta = Math.max(minDelta, lowerBound - phrase.tick);
+    maxDelta = Math.min(maxDelta, upperBound - (phrase.tick + phrase.length));
+  }
+
+  // Nothing in the moving set exists in `phrases`: no move is possible.
+  if (minDelta === Number.NEGATIVE_INFINITY) return {minDelta: 0, maxDelta: 0};
+  return {minDelta, maxDelta};
+}
+
+/**
+ * Translate whole phrases — start, end, lyrics and notes together — by
+ * `tickDelta`, keeping each phrase's length. The delta is clamped once for
+ * the whole group ({@link phraseTranslationBounds}), so the phrases move
+ * rigidly rather than each clamping on its own.
+ *
+ * Returns the delta actually applied (0 when nothing moved).
+ */
+export function movePhrases(
+  doc: ChartDocument,
+  startTicks: Iterable<number>,
+  tickDelta: number,
+  partName: string = DEFAULT_VOCALS_PART,
+): number {
+  const part = getVocalPart(doc, partName);
+  if (!part) return 0;
+
+  const phrases = part.notePhrases;
+  const moving = new Set(startTicks);
+  const targets = phrases.filter(p => moving.has(p.tick));
+  if (targets.length === 0) return 0;
+
+  const bounds = phraseTranslationBounds(phrases, moving);
+  const delta = Math.max(bounds.minDelta, Math.min(bounds.maxDelta, tickDelta));
+  if (delta === 0) return 0;
+
+  const timing = makeChartTiming(doc.parsedChart);
+  for (const phrase of targets) {
+    phrase.tick += delta;
+    applyEventTiming(phrase, timing);
+    for (const lyric of phrase.lyrics) {
+      lyric.tick += delta;
+      applyEventTiming(lyric, timing);
+    }
+    for (const note of phrase.notes) {
+      note.tick += delta;
+      applyEventTiming(note, timing);
+    }
+  }
+  phrases.sort((a, b) => a.tick - b.tick);
+  return delta;
 }
 
 /**

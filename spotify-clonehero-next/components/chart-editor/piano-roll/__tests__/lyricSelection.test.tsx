@@ -10,6 +10,10 @@
  * note+lyric selection moves both by the same tick delta — each lyric
  * independently clamped to its own phrase, matching single-chip drag.
  *
+ * A phrase with BOTH edges selected is the exception: dragging its words
+ * translates the whole phrase instead, so the syllables keep their places
+ * inside it rather than piling up against a bound that didn't move.
+ *
  * Mounts the real PianoRollTimeline (same harness as contextMenu.test.tsx)
  * and drives the actual pointer event path.
  */
@@ -240,6 +244,15 @@ function lyricTicks(state: ChartEditorState | null): number[] {
     state?.chartDoc?.parsedChart.vocalTracks?.parts['vocals']?.notePhrases ??
     [];
   return phrases.flatMap(p => p.lyrics.map(l => l.tick)).sort((a, b) => a - b);
+}
+
+function phraseSpans(
+  state: ChartEditorState | null,
+): {tick: number; length: number}[] {
+  const phrases =
+    state?.chartDoc?.parsedChart.vocalTracks?.parts['vocals']?.notePhrases ??
+    [];
+  return phrases.map(p => ({tick: p.tick, length: p.length}));
 }
 
 describe('lyrics multi-select', () => {
@@ -523,5 +536,83 @@ describe('dragging a mixed note+lyric selection moves both together', () => {
     const newLyricTicks = lyricTicks(stateRef.current);
     expect(newLyricTicks).toContain(960);
     expect(newLyricTicks).toContain(720);
+  });
+});
+
+describe('dragging the words of a fully-selected phrase moves the whole phrase', () => {
+  /**
+   * Marquee the whole lyrics row, which picks up both chips AND both phrase
+   * edges — the gesture the feature is defined by. The fixture has a single
+   * phrase (0..960 ticks ≈ 0..70px here), so the rectangle below reaches
+   * everything in the row.
+   */
+  async function selectWholeRow() {
+    const {canvas, stateRef} = await mountPanel();
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: 200, y: 32});
+      fireAt(canvas, 'pointermove', {x: -10, y: 32});
+      fireAt(canvas, 'pointerup', {x: -10, y: 32});
+    });
+    expect(getSelectedIds(stateRef.current!, 'phrase-start').size).toBe(1);
+    expect(getSelectedIds(stateRef.current!, 'phrase-end').size).toBe(1);
+    return {canvas, stateRef};
+  }
+
+  /** Drag a chip rightward far enough that a lyric clamped to the resting
+   *  phrase would visibly stop short of where it lands. */
+  function dragChipRight(canvas: HTMLCanvasElement, dx: number) {
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: LYRIC_240.x, y: LYRIC_240.y});
+    });
+    act(() => {
+      fireAt(canvas, 'pointermove', {x: LYRIC_240.x + dx, y: LYRIC_240.y});
+      fireAt(canvas, 'pointerup', {x: LYRIC_240.x + dx, y: LYRIC_240.y});
+    });
+  }
+
+  it('translates the phrase and its syllables by one delta, keeping the length', async () => {
+    const {canvas, stateRef} = await selectWholeRow();
+    dragChipRight(canvas, 40);
+
+    const spans = phraseSpans(stateRef.current);
+    expect(spans).toHaveLength(1);
+    const [{tick, length}] = spans;
+    const delta = tick;
+
+    // Big enough that the old behavior (lyrics clamped inside a stationary
+    // phrase) would be plainly different from this one.
+    expect(delta).toBeGreaterThan(240);
+    expect(length).toBe(960);
+    expect(lyricTicks(stateRef.current)).toEqual([240 + delta, 720 + delta]);
+  });
+
+  it('re-keys the phrase-edge selection so the phrase can be dragged again', async () => {
+    const {canvas, stateRef} = await selectWholeRow();
+    dragChipRight(canvas, 40);
+
+    const [{tick, length}] = phraseSpans(stateRef.current);
+    expect([...getSelectedIds(stateRef.current!, 'phrase-start')]).toEqual([
+      `vocals:${tick}`,
+    ]);
+    expect([...getSelectedIds(stateRef.current!, 'phrase-end')]).toEqual([
+      `vocals:${tick + length}`,
+    ]);
+  });
+
+  it('leaves the phrase alone when only one edge is selected — that is a resize', async () => {
+    const {canvas, stateRef, dispatchRef} = await mountPanel();
+    act(() => {
+      dispatchRef.current!({
+        type: 'SET_SELECTION',
+        kind: 'phrase-start',
+        ids: new Set(['vocals:0']),
+      });
+      click(canvas, LYRIC_240.x, LYRIC_240.y);
+    });
+    dragChipRight(canvas, 400);
+
+    expect(phraseSpans(stateRef.current)).toEqual([{tick: 0, length: 960}]);
+    // The dragged syllable clamped to the stationary phrase's end instead.
+    expect(lyricTicks(stateRef.current)).toEqual([720, 960]);
   });
 });

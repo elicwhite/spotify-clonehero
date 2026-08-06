@@ -85,11 +85,11 @@ import {
   parsePhraseId,
   phraseStartId,
   phraseEndId,
+  phraseTranslationBounds,
   DEFAULT_VOCALS_PART,
   getAudioAnchor,
   schemaForTrack,
   fullLaneRange,
-  typeToLane as schemaTypeToLane,
   laneToType as schemaLaneToType,
   drums4LaneSchema,
   planDownbeatAt,
@@ -133,6 +133,7 @@ import {
   DeleteNotesCommand,
   DeleteTempoMarkerCommand,
   MoveEntitiesCommand,
+  MovePhrasesCommand,
   MoveTempoMarkerCommand,
   CommitTempoCandidateCommand,
   RephaseDownbeatsCommand,
@@ -203,7 +204,7 @@ import {
   type LaneGeometry,
   type NotePartHit,
 } from './hitTest';
-import {buildLyricsRowScene} from './lyricsScene';
+import {buildLyricsRowScene, fullySelectedPhraseTicks} from './lyricsScene';
 import {
   fitToWidth,
   followLeftMs,
@@ -294,6 +295,10 @@ function tickSetFromIds(ids: ReadonlySet<string>): ReadonlySet<number> {
   }
   return out;
 }
+
+/** Shared "no ticks" set, so a drag that carries no whole phrase doesn't
+ *  allocate one per pointer-down. */
+const EMPTY_TICKS: ReadonlySet<number> = new Set<number>();
 
 /** Tick set from `partName:tick` phrase-edge selection ids. */
 function phraseTickSet(ids: ReadonlySet<string>): ReadonlySet<number> {
@@ -1831,6 +1836,27 @@ export default function PianoRollTimeline({
     [dispatch],
   );
 
+  /**
+   * The phrases a lyric drag should carry whole: every phrase with both
+   * edges selected, but only when the grabbed chip's own phrase
+   * (`anchorPhraseTick`) is one of them. Grabbing a syllable in some other
+   * phrase is an ordinary syllable drag, even if a phrase elsewhere happens
+   * to be fully selected. Empty set means "not a whole-phrase drag".
+   */
+  const wholePhraseDragTicks = useCallback(
+    (anchorPhraseTick: number): ReadonlySet<number> => {
+      const bands = sceneRef.current?.lyricBands;
+      if (!bands) return EMPTY_TICKS;
+      const ticks = fullySelectedPhraseTicks(
+        bands,
+        phraseStartSelectionRef.current,
+        phraseEndSelectionRef.current,
+      );
+      return ticks.includes(anchorPhraseTick) ? new Set(ticks) : EMPTY_TICKS;
+    },
+    [],
+  );
+
   const applyWheel = useCallback(
     (rawX: number, deltaX: number, deltaY: number, shiftKey: boolean) => {
       const stacked =
@@ -2042,12 +2068,32 @@ export default function PianoRollTimeline({
           pointerModeRef.current = 'lyric';
           viewRef.current.follow = false;
           pointerStartRef.current = {x, y};
+          // Both edges of the grabbed chip's phrase selected means "move
+          // this phrase", so the drag carries the phrase (with every other
+          // fully-selected one) and is bounded by how far those phrases can
+          // travel, not by the grabbed chip's own phrase.
+          const movingPhraseTicks = wholePhraseDragTicks(hit.phraseMinTick);
+          const bounds =
+            movingPhraseTicks.size > 0
+              ? phraseTranslationBounds(
+                  scene.lyricBands.map(b => ({
+                    tick: b.tick,
+                    length: b.tickEnd - b.tick,
+                  })),
+                  movingPhraseTicks,
+                )
+              : null;
           lyricDragRef.current = {
             chipId: hit.id,
             originalTick: hit.tick,
             currentTick: hit.tick,
-            phraseMinTick: hit.phraseMinTick,
-            phraseMaxTick: hit.phraseMaxTick,
+            phraseMinTick: bounds
+              ? hit.tick + bounds.minDelta
+              : hit.phraseMinTick,
+            phraseMaxTick: bounds
+              ? hit.tick + bounds.maxDelta
+              : hit.phraseMaxTick,
+            movingPhraseTicks,
             moved: false,
           };
           selectLyric(hit.id, e.shiftKey);
@@ -2325,6 +2371,7 @@ export default function PianoRollTimeline({
       setGhost,
       snappedTickAt,
       pointFromEvent,
+      wholePhraseDragTicks,
     ],
   );
 
@@ -3083,17 +3130,41 @@ export default function PianoRollTimeline({
       // lyrics via shift-click/marquee, and/or notes), everything selected
       // rides along at the SAME tickDelta — each lyric independently clamped
       // to its own phrase by `moveLyric`, matching single-chip drag semantics.
+      //
+      // A phrase with BOTH edges selected travels whole instead
+      // (`MovePhrasesCommand`), carrying its own lyrics; only lyrics outside
+      // those phrases still need a `lyric` move of their own.
       if (mode === 'lyric' && lyricDragRef.current) {
         const drag = lyricDragRef.current;
         if (drag.moved && drag.currentTick !== drag.originalTick) {
           const tickDelta = drag.currentTick - drag.originalTick;
           const st = editStateRef.current;
           const scene = sceneRef.current;
+          const moving = drag.movingPhraseTicks;
+          const chipFor = (id: string) =>
+            scene?.lyricChips.find(c => c.id === id);
+          const ridesWithPhrase = (id: string) => {
+            const chip = chipFor(id);
+            return chip !== undefined && moving.has(chip.phraseMinTick);
+          };
+
           const lyricIds = Array.from(getSelectedIds(st, 'lyric'));
+          const looseLyricIds = lyricIds.filter(id => !ridesWithPhrase(id));
           const noteIds = Array.from(getSelectedIds(st, 'note'));
           const cmds: EditCommand[] = [];
-          if (lyricIds.length > 0) {
-            cmds.push(new MoveEntitiesCommand('lyric', lyricIds, tickDelta, 0));
+          if (moving.size > 0) {
+            cmds.push(
+              new MovePhrasesCommand(
+                Array.from(moving),
+                tickDelta,
+                DEFAULT_VOCALS_PART,
+              ),
+            );
+          }
+          if (looseLyricIds.length > 0) {
+            cmds.push(
+              new MoveEntitiesCommand('lyric', looseLyricIds, tickDelta, 0),
+            );
           }
           if (noteIds.length > 0) {
             cmds.push(
@@ -3112,20 +3183,50 @@ export default function PianoRollTimeline({
             executeCommand(new BatchCommand(cmds));
           }
 
-          // Re-derive each moved lyric's post-clamp id from its own phrase
-          // bounds (the same clamp `moveLyric` applies) so the selection
-          // stays pinned to the moved chips instead of going stale.
+          // Re-derive each moved lyric's post-move id so the selection stays
+          // pinned to the moved chips instead of going stale: a chip riding
+          // its phrase keeps its place inside it, everything else lands
+          // where its own phrase's clamp (`moveLyric`) puts it.
           const nextLyricIds = new Set<string>();
           for (const id of lyricIds) {
-            const chip = scene?.lyricChips.find(c => c.id === id);
+            const chip = chipFor(id);
             if (!chip) continue;
-            const clamped = Math.max(
-              chip.phraseMinTick,
-              Math.min(chip.phraseMaxTick, chip.tick + tickDelta),
-            );
-            nextLyricIds.add(lyricId(clamped, DEFAULT_VOCALS_PART));
+            const tick = moving.has(chip.phraseMinTick)
+              ? chip.tick + tickDelta
+              : Math.max(
+                  chip.phraseMinTick,
+                  Math.min(chip.phraseMaxTick, chip.tick + tickDelta),
+                );
+            nextLyricIds.add(lyricId(tick, DEFAULT_VOCALS_PART));
           }
           dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: nextLyricIds});
+
+          // Phrase-edge ids are tick-keyed too, so a travelling phrase's
+          // edges need re-keying or the band loses its selection (and with
+          // it the ability to drag it again without re-selecting).
+          if (moving.size > 0 && scene) {
+            const nextStarts = new Set<string>();
+            const nextEnds = new Set<string>();
+            for (const band of scene.lyricBands) {
+              if (!moving.has(band.tick)) continue;
+              nextStarts.add(
+                phraseStartId(band.tick + tickDelta, DEFAULT_VOCALS_PART),
+              );
+              nextEnds.add(
+                phraseEndId(band.tickEnd + tickDelta, DEFAULT_VOCALS_PART),
+              );
+            }
+            dispatch({
+              type: 'SET_SELECTION',
+              kind: 'phrase-start',
+              ids: nextStarts,
+            });
+            dispatch({
+              type: 'SET_SELECTION',
+              kind: 'phrase-end',
+              ids: nextEnds,
+            });
+          }
         }
       }
 

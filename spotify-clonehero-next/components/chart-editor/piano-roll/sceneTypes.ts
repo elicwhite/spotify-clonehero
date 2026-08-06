@@ -157,6 +157,15 @@ export interface LyricDrag {
   currentTick: number;
   phraseMinTick: number;
   phraseMaxTick: number;
+  /**
+   * Start ticks of the phrases travelling whole with this drag — the ones
+   * whose start and end edge are both selected. Empty for an ordinary
+   * syllable drag. When it's non-empty the clamp above comes from
+   * `phraseTranslationBounds` (how far the phrases can travel) rather than
+   * from the grabbed chip's own phrase, and those phrases' bands and chips
+   * preview moving together.
+   */
+  movingPhraseTicks: ReadonlySet<number>;
   moved: boolean;
 }
 

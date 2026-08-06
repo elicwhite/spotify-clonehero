@@ -595,9 +595,35 @@ export function drawLyricsRow(
   // grows/shrinks under the pointer during the resize. These are the ms
   // values the row actually paints, shared by the band fills and the phrase
   // boundary lines below.
+  // A phrase travelling whole with a lyric drag paints at the drag's live
+  // delta, both edges together, so the band slides under the pointer with
+  // its syllables instead of snapping over on release.
+  const wholePhraseDelta =
+    drag && drag.movingPhraseTicks.size > 0
+      ? drag.currentTick - drag.originalTick
+      : 0;
   const paintedBands = scene.lyricBands.map(band => {
     let ms = band.ms;
     let msEnd = band.msEnd;
+    // Only the ms values move: `tick`/`tickEnd` stay the resting ones,
+    // because they are the edges' identity for the selection highlight
+    // below, not a position.
+    if (wholePhraseDelta !== 0 && drag?.movingPhraseTicks.has(band.tick)) {
+      return {
+        ms: tickToMs(
+          band.tick + wholePhraseDelta,
+          scene.timedTempos,
+          scene.resolution,
+        ),
+        msEnd: tickToMs(
+          band.tickEnd + wholePhraseDelta,
+          scene.timedTempos,
+          scene.resolution,
+        ),
+        tick: band.tick,
+        tickEnd: band.tickEnd,
+      };
+    }
     if (phraseEdgeDrag) {
       if (
         phraseEdgeDrag.kind === 'phrase-start' &&

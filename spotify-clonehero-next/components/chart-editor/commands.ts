@@ -64,6 +64,7 @@ import {
   setLyricText,
   addPhrase,
   deletePhrase,
+  movePhrases,
   getAudioAnchor,
   setAudioAnchor,
   refreshAnchorKeepMs,
@@ -2002,6 +2003,42 @@ export class DeletePhraseCommand implements EditCommand {
     const newDoc = cloneDocFor('lyric', doc);
     const removed = deletePhrase(newDoc, this.tick, this.partName);
     return removed ? newDoc : doc;
+  }
+}
+
+/**
+ * Translate whole phrases by a tick delta: both edges, plus the lyrics and
+ * notes inside them, keeping each phrase's length.
+ *
+ * This is what selecting a phrase's start AND end edge and dragging its
+ * words means — the selection says "all of this phrase", so the phrase
+ * travels instead of its syllables sliding around inside fixed bounds. The
+ * delta is clamped once for the whole group (`movePhrases`), so co-selected
+ * phrases keep their spacing.
+ */
+export class MovePhrasesCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.phrase;
+  readonly operations = OP.move;
+
+  constructor(
+    private startTicks: readonly number[],
+    private tickDelta: number,
+    private partName: string = DEFAULT_VOCALS_PART,
+  ) {
+    const n = startTicks.length;
+    this.description = `Move ${n} phrase${n === 1 ? '' : 's'}`;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    const newDoc = cloneDocFor('phrase-start', doc);
+    const applied = movePhrases(
+      newDoc,
+      this.startTicks,
+      this.tickDelta,
+      this.partName,
+    );
+    return applied === 0 ? doc : newDoc;
   }
 }
 

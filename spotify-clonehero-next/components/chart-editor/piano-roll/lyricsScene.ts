@@ -105,6 +105,25 @@ export function buildLyricsRowScene(
   return {chips, bands};
 }
 
+/**
+ * Start ticks of the phrases whose start AND end edge are both selected —
+ * the phrases a drag should translate whole rather than resize.
+ *
+ * Selecting one edge is a resize gesture; selecting both says "this phrase,
+ * all of it", which is what `movePhrases` acts on.
+ */
+export function fullySelectedPhraseTicks(
+  bands: readonly Pick<LyricBand, 'tick' | 'tickEnd'>[],
+  selectedStartTicks: ReadonlySet<number>,
+  selectedEndTicks: ReadonlySet<number>,
+): number[] {
+  return bands
+    .filter(
+      b => selectedStartTicks.has(b.tick) && selectedEndTicks.has(b.tickEnd),
+    )
+    .map(b => b.tick);
+}
+
 /** Half-width of the pennant drawn at the top of a phrase-edge line, in px.
  *  It points INTO the phrase: right for a start, left for an end. */
 export const PHRASE_EDGE_FLAG_W = 5;
@@ -175,6 +194,19 @@ export interface LyricDragPreview {
   chipId: string;
   originalTick: number;
   currentTick: number;
+  /** Start ticks of the phrases travelling whole with the drag; see
+   *  `LyricDrag.movingPhraseTicks`. */
+  movingPhraseTicks?: ReadonlySet<number>;
+}
+
+/** True when `chip` sits in a phrase that `drag` is moving whole, so the
+ *  chip rides the raw delta with its phrase instead of being clamped to the
+ *  phrase's resting bounds. */
+function ridesWithItsPhrase(
+  chip: Pick<LyricChip, 'phraseMinTick'>,
+  drag: LyricDragPreview | null,
+): boolean {
+  return drag?.movingPhraseTicks?.has(chip.phraseMinTick) ?? false;
 }
 
 /**
@@ -191,6 +223,10 @@ export interface LyricDragPreview {
  *    selected chip previews at that raw tick delta — there's no lyric
  *    anchor of its own, the notes are driving.
  *
+ * A chip inside a phrase the drag is moving whole (`movingPhraseTicks`)
+ * rides along whether or not it is itself selected, and unclamped: its
+ * phrase's bounds are travelling with it.
+ *
  * Without this, only the literal chip under the pointer (or none, for a
  * note-anchored drag) would preview moving; the rest of a multi-select
  * would sit still and only snap to their final position once the drag
@@ -204,12 +240,17 @@ export function lyricChipPreviewTick(
 ): number {
   if (drag && drag.chipId === chip.id) return drag.currentTick;
 
+  const withPhrase = ridesWithItsPhrase(chip, drag);
   const dragActive = drag !== null || noteDragTickDelta !== null;
-  if (!dragActive || !selected) return chip.tick;
+  if (!dragActive || !(selected || withPhrase)) return chip.tick;
 
   const delta = drag
     ? drag.currentTick - drag.originalTick
     : (noteDragTickDelta ?? 0);
+  // A chip whose whole phrase is moving keeps its place inside the phrase:
+  // the bounds travel with it, so clamping to the resting ones would drag
+  // it back out of formation.
+  if (withPhrase) return chip.tick + delta;
   return Math.max(
     chip.phraseMinTick,
     Math.min(chip.phraseMaxTick, chip.tick + delta),
