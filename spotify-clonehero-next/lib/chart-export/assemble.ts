@@ -333,8 +333,9 @@ export function assembleChartFiles({
 
 /**
  * Build the download file name for a chart package following the Clone Hero
- * convention `Artist - Song (Charter)`, with characters unsafe for a file name
- * replaced by underscores.
+ * convention `Artist - Song (Charter)`. Preserve punctuation and symbols from
+ * the metadata; only remove characters that are unsafe in a cross-platform
+ * file name.
  */
 export function chartPackageFileName(
   metadata: ChartPackageMetadata,
@@ -344,5 +345,5 @@ export function chartPackageFileName(
   const song = metadata.name.trim() || 'Untitled';
   const charter = metadata.charter.trim() || 'MusicCharts.tools';
   const base = `${artist} - ${song} (${charter})`;
-  return `${base.replace(/[^a-zA-Z0-9 _().-]/g, '_')}.${extension}`;
+  return `${base.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '')}.${extension}`;
 }

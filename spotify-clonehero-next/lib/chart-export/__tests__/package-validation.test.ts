@@ -302,6 +302,30 @@ describe('exported package validates with scan-chart', () => {
     ).toBe('The Band - My Song (AutoDrums).sng');
   });
 
+  test('download file name preserves punctuation and symbols', () => {
+    expect(
+      chartPackageFileName(
+        {
+          name: "Don't Listen To My Voicemail!",
+          artist: 'Your Broken Hero & Friends',
+          charter: 'Glider+',
+        },
+        'zip',
+      ),
+    ).toBe(
+      "Your Broken Hero & Friends - Don't Listen To My Voicemail! (Glider+).zip",
+    );
+  });
+
+  test('download file name removes only filename-unsafe characters', () => {
+    expect(
+      chartPackageFileName(
+        {name: 'A/B', artist: 'A\\B', charter: 'A:B'},
+        'zip',
+      ),
+    ).toBe('AB - AB (AB).zip');
+  });
+
   test('missing artist/charter fall back cleanly in the file name', () => {
     expect(
       chartPackageFileName({name: 'Solo', artist: '', charter: ''}, 'zip'),
