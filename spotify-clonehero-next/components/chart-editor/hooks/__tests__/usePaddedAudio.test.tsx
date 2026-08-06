@@ -23,7 +23,10 @@ import {createEmptyChart} from '@eliwhite/scan-chart';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {setAudioAnchor} from '@/lib/chart-edit';
 import type {AudioStemInput} from '../usePaddedAudio';
-import {AudioServiceProvider} from '../../AudioServiceContext';
+import {
+  AudioServiceProvider,
+  useAudioServiceContext,
+} from '../../AudioServiceContext';
 
 // ---------------------------------------------------------------------------
 // AudioManager stub
@@ -70,6 +73,21 @@ jest.mock('../../../../lib/preview/clickTrack', () => ({
   CLICK_TRACK_NAME: 'click',
   generateBeatClickTrackWav: jest.fn(async () => new Uint8Array(4)),
 }));
+
+// The pad/encode worker client, wrapped so tests can count how many times a
+// build actually encoded. The real implementation runs inline here (jsdom
+// has no Worker), so results stay real; only the call count is observed.
+const encodeCalls = {count: 0};
+jest.mock('../../../../lib/audio/pad-encode-client', () => {
+  const actual = jest.requireActual('../../../../lib/audio/pad-encode-client');
+  return {
+    ...actual,
+    padAndEncodeTracks: jest.fn((tracks: unknown, options: unknown) => {
+      encodeCalls.count++;
+      return actual.padAndEncodeTracks(tracks, options);
+    }),
+  };
+});
 
 jest.mock('../../../../lib/preview/audioManager', () => ({
   AudioManager: jest.fn().mockImplementation(function (
@@ -199,7 +217,7 @@ describe('buildPaddedAudioManager — N-stem construction (plan 0074 Task 5a)', 
     );
 
     const expectedLength = (100 + padSamples) * AUDIO_META.channels;
-    expect(paddedFullMixPcm.length).toBe(expectedLength);
+    expect(paddedFullMixPcm?.length).toBe(expectedLength);
     for (const stem of paddedStems) {
       expect(stem.pcm.length).toBe(expectedLength);
     }
@@ -239,6 +257,57 @@ describe('buildPaddedAudioManager — N-stem construction (plan 0074 Task 5a)', 
     expect(paddedStems.find((s: any) => s.name === 'guitar')?.origin).toBe(
       'chart-file',
     );
+  });
+});
+
+describe('buildPaddedAudioManager — a project with no audio', () => {
+  beforeEach(() => {
+    lastCapturedFiles = [];
+  });
+
+  it('builds the click alone, spanning the requested silent duration', async () => {
+    const chartDoc = makeChartDoc();
+    const {audioManager, paddedFullMixPcm, paddedStems} =
+      await buildPaddedAudioManager(
+        0,
+        AUDIO_META,
+        null,
+        [],
+        chartDoc,
+        () => {},
+        'song',
+        42,
+      );
+
+    expect(lastCapturedFiles.map(f => f.fileName)).toEqual(['click.wav']);
+    expect(audioManager.trackNames).toEqual(['click']);
+    expect(paddedFullMixPcm).toBeNull();
+    expect(paddedStems).toEqual([]);
+  });
+
+  it('starts the click audible, since it is the only thing to hear', async () => {
+    const chartDoc = makeChartDoc();
+    const silent = await buildPaddedAudioManager(
+      0,
+      AUDIO_META,
+      null,
+      [],
+      chartDoc,
+      () => {},
+      'song',
+      42,
+    );
+    expect(silent.audioManager.setVolume).toHaveBeenCalledWith('click', 0.7);
+
+    const withAudio = await buildPaddedAudioManager(
+      0,
+      AUDIO_META,
+      interleavedPcm(100),
+      [],
+      chartDoc,
+      () => {},
+    );
+    expect(withAudio.audioManager.setVolume).toHaveBeenCalledWith('click', 0);
   });
 });
 
@@ -580,5 +649,231 @@ describe('usePaddedAudio — hook contract (plan 0074 Task 5a)', () => {
     await waitFor(() =>
       expect(result.current.audioManager).not.toBe(firstManager),
     );
+  });
+});
+
+describe('usePaddedAudio — rebuild gating covers the full mix and the length', () => {
+  function wrapper({children}: {children: React.ReactNode}) {
+    return <AudioServiceProvider>{children}</AudioServiceProvider>;
+  }
+
+  it('rebuilds when a silent project gains its first audio', async () => {
+    const chartDoc = makeChartDoc();
+    const fullMixPcm = interleavedPcm(100);
+
+    type Props = {
+      fullMixPcm: Float32Array | null;
+      silentDurationSeconds: number | undefined;
+    };
+    const {result, rerender} = renderHook(
+      ({fullMixPcm: pcm, silentDurationSeconds}: Props) =>
+        usePaddedAudio({
+          chartDoc,
+          audioMeta: pcm ? AUDIO_META : null,
+          fullMixPcm: pcm,
+          stems: [],
+          silentDurationSeconds,
+          onSongEnded: () => {},
+        }),
+      {
+        wrapper,
+        initialProps: {
+          fullMixPcm: null,
+          silentDurationSeconds: 300,
+        } as Props,
+      },
+    );
+
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const silentManager = result.current.audioManager;
+    expect(silentManager?.trackNames).toEqual(['click']);
+
+    rerender({fullMixPcm, silentDurationSeconds: undefined});
+
+    await waitFor(() =>
+      expect(result.current.audioManager).not.toBe(silentManager),
+    );
+    expect(result.current.audioManager?.trackNames).toEqual(['song', 'click']);
+  });
+
+  it('rebuilds when only the silent duration changes, and not when nothing does', async () => {
+    const chartDoc = makeChartDoc();
+    const {result, rerender} = renderHook(
+      ({seconds}: {seconds: number}) =>
+        usePaddedAudio({
+          chartDoc,
+          audioMeta: null,
+          fullMixPcm: null,
+          stems: [],
+          silentDurationSeconds: seconds,
+          onSongEnded: () => {},
+        }),
+      {wrapper, initialProps: {seconds: 300}},
+    );
+
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const first = result.current.audioManager;
+
+    rerender({seconds: 300});
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.audioManager).toBe(first);
+
+    rerender({seconds: 200});
+    await waitFor(() => expect(result.current.audioManager).not.toBe(first));
+  });
+});
+
+describe('usePaddedAudio — pre-padding for an anchor change', () => {
+  function wrapper({children}: {children: React.ReactNode}) {
+    return <AudioServiceProvider>{children}</AudioServiceProvider>;
+  }
+
+  const fullMixPcm = interleavedPcm(100);
+  const drumPcm = interleavedPcm(100);
+  const STEMS = [
+    {name: 'drums', pcm: drumPcm, origin: 'ai-separated' as const},
+  ];
+
+  /** Renders the hook plus a handle on the service it publishes to. */
+  function renderWithService() {
+    return renderHook(
+      ({chartDoc}: {chartDoc: ChartDocument}) => ({
+        audio: usePaddedAudio({
+          chartDoc,
+          audioMeta: AUDIO_META,
+          fullMixPcm,
+          stems: STEMS,
+          onSongEnded: () => {},
+        }),
+        service: useAudioServiceContext(),
+      }),
+      {wrapper, initialProps: {chartDoc: makeChartDoc()}},
+    );
+  }
+
+  beforeEach(() => {
+    encodeCalls.count = 0;
+    lastCapturedFiles = [];
+  });
+
+  it('publishes a pre-pad function while mounted and withdraws it on unmount', async () => {
+    const {result, unmount} = renderWithService();
+    await waitFor(() =>
+      expect(result.current.audio.audioManager).not.toBeNull(),
+    );
+    const service = result.current.service;
+
+    expect(service.getPadAudioAhead()).not.toBeNull();
+    unmount();
+    expect(service.getPadAudioAhead()).toBeNull();
+  });
+
+  it('installs nothing by itself: the manager only changes when the anchor does', async () => {
+    const {result} = renderWithService();
+    await waitFor(() =>
+      expect(result.current.audio.audioManager).not.toBeNull(),
+    );
+    const before = result.current.audio.audioManager;
+
+    await act(async () => {
+      await result.current.service.getPadAudioAhead()!(500, {});
+    });
+
+    expect(result.current.audio.audioManager).toBe(before);
+    expect(result.current.audio.fullMixPcm?.length).toBe(100 * 2);
+  });
+
+  it('reuses the pre-padded audio for the build that matches it', async () => {
+    const {result, rerender} = renderWithService();
+    await waitFor(() =>
+      expect(result.current.audio.audioManager).not.toBeNull(),
+    );
+
+    await act(async () => {
+      await result.current.service.getPadAudioAhead()!(500, {});
+    });
+    const encodesBeforeRebuild = encodeCalls.count;
+
+    // The same 500 ms the pre-pad was asked for, quantized identically.
+    rerender({chartDoc: setAudioAnchor(makeChartDoc(), {ms: 500, tick: 0})});
+    await waitFor(() =>
+      expect(result.current.audio.fullMixPcm?.length).toBe((100 + 4000) * 2),
+    );
+
+    expect(encodeCalls.count).toBe(encodesBeforeRebuild);
+    expect(result.current.audio.stems[0].pcm.length).toBe((100 + 4000) * 2);
+  });
+
+  it('encodes again when the pad it prepared for is no longer the pad needed', async () => {
+    const {result, rerender} = renderWithService();
+    await waitFor(() =>
+      expect(result.current.audio.audioManager).not.toBeNull(),
+    );
+
+    // A tempo edit during the run changes the bar length, so the anchor the
+    // command installs (250 ms) is not the one this encoded for (500 ms).
+    await act(async () => {
+      await result.current.service.getPadAudioAhead()!(500, {});
+    });
+    const encodesBeforeRebuild = encodeCalls.count;
+
+    rerender({chartDoc: setAudioAnchor(makeChartDoc(), {ms: 250, tick: 0})});
+    await waitFor(() =>
+      expect(result.current.audio.fullMixPcm?.length).toBe((100 + 2000) * 2),
+    );
+
+    expect(encodeCalls.count).toBe(encodesBeforeRebuild + 1);
+  });
+
+  it('drops a claimed pre-pad, so a later build never picks up a stale one', async () => {
+    const {result, rerender} = renderWithService();
+    await waitFor(() =>
+      expect(result.current.audio.audioManager).not.toBeNull(),
+    );
+
+    await act(async () => {
+      await result.current.service.getPadAudioAhead()!(500, {});
+    });
+
+    rerender({chartDoc: setAudioAnchor(makeChartDoc(), {ms: 500, tick: 0})});
+    await waitFor(() =>
+      expect(result.current.audio.fullMixPcm?.length).toBe((100 + 4000) * 2),
+    );
+    const afterFirst = encodeCalls.count;
+
+    // Back to no silence, then to the same 500 ms anchor again: the second
+    // trip has to encode for itself.
+    rerender({chartDoc: makeChartDoc()});
+    await waitFor(() =>
+      expect(result.current.audio.fullMixPcm?.length).toBe(100 * 2),
+    );
+    rerender({chartDoc: setAudioAnchor(makeChartDoc(), {ms: 500, tick: 0})});
+    await waitFor(() =>
+      expect(result.current.audio.fullMixPcm?.length).toBe((100 + 4000) * 2),
+    );
+
+    expect(encodeCalls.count).toBe(afterFirst + 2);
+  });
+
+  it('reports pad progress per track', async () => {
+    const {result} = renderWithService();
+    await waitFor(() =>
+      expect(result.current.audio.audioManager).not.toBeNull(),
+    );
+
+    const seen: Array<[number, string]> = [];
+    await act(async () => {
+      await result.current.service.getPadAudioAhead()!(500, {
+        onProgress: (fraction, detail) => seen.push([fraction, detail]),
+      });
+    });
+
+    // The full mix plus one stem.
+    expect(seen).toEqual([
+      [0.5, '1 of 2'],
+      [1, '2 of 2'],
+    ]);
   });
 });

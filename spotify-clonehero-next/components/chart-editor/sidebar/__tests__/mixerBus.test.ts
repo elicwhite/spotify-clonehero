@@ -16,6 +16,13 @@ describe('defaultVolumeFor', () => {
     expect(defaultVolumeFor('drums')).toBe(100);
     expect(defaultVolumeFor('click')).toBe(0);
   });
+
+  it('starts the click audible on a project with no audio', () => {
+    // The click is the only thing there is to hear, so a silent default
+    // would make Play do nothing with nothing to explain it.
+    expect(defaultVolumeFor('click', {silentProject: true})).toBe(70);
+    expect(defaultVolumeFor('song', {silentProject: true})).toBe(100);
+  });
 });
 
 describe('resolveMixer', () => {

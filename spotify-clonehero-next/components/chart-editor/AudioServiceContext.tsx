@@ -27,9 +27,36 @@ import type {AudioManager} from '@/lib/preview/audioManager';
 //   a possibly-stale ref.
 // ---------------------------------------------------------------------------
 
+/**
+ * Pads and re-encodes the host's audio for the `audioAnchor` position the
+ * chart is ABOUT to have, off the main thread, and holds the result for the
+ * rebuild that edit triggers. Published by `usePaddedAudio` (the only owner
+ * of the original PCM) and called by the Chart Assist leading-silence run,
+ * so the encode happens under a progress card instead of inside the silent
+ * rebuild that follows the command.
+ *
+ * Resolving means the audio is ready, not that anything has changed yet:
+ * nothing is installed until the chart's `audioAnchor` actually moves. A
+ * held result that no longer matches what the rebuild needs is discarded and
+ * the rebuild encodes for itself.
+ */
+export type PadAudioAhead = (
+  /** Chart ms that original audio sample 0 will sit at after the edit — the
+   *  `audioAnchor.ms` the rebuild will read. Given in ms, not samples, so
+   *  the quantization is done once, by the same `anchorPadSamples` the
+   *  rebuild uses; a caller quantizing separately could round to a different
+   *  sample and silently miss the result it just paid for. */
+  anchorMs: number,
+  options: {
+    signal?: AbortSignal | undefined;
+    onProgress?: ((fraction: number, detail: string) => void) | undefined;
+  },
+) => Promise<void>;
+
 class AudioService {
   #current: AudioManager | null = null;
   #listeners = new Set<() => void>();
+  #padAudioAhead: PadAudioAhead | null = null;
   readonly ref: RefObject<AudioManager | null>;
 
   constructor() {
@@ -47,6 +74,14 @@ class AudioService {
 
   getAudioManager = (): AudioManager | null => this.#current;
 
+  setPadAudioAhead = (padAudioAhead: PadAudioAhead | null): void => {
+    this.#padAudioAhead = padAudioAhead;
+  };
+
+  /** The current pre-pad function, or null on a host with no audio to pad.
+   *  Deliberately not a subscription: callers read it when a run starts. */
+  getPadAudioAhead = (): PadAudioAhead | null => this.#padAudioAhead;
+
   subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
@@ -58,6 +93,10 @@ export interface AudioServiceContextValue {
   audioManagerRef: RefObject<AudioManager | null>;
   /** Publishes a new (or null) AudioManager to all subscribers. */
   setAudioManager: (manager: AudioManager | null) => void;
+  /** Publishes the host's {@link PadAudioAhead}, or null when it has none. */
+  setPadAudioAhead: (padAudioAhead: PadAudioAhead | null) => void;
+  /** Reads the host's current {@link PadAudioAhead}. */
+  getPadAudioAhead: () => PadAudioAhead | null;
 }
 
 const AudioServiceContext = createContext<AudioService | null>(null);
@@ -93,7 +132,25 @@ export function useAudioServiceContext(): AudioServiceContextValue {
     () => ({
       audioManagerRef: service.ref,
       setAudioManager: service.setAudioManager,
+      setPadAudioAhead: service.setPadAudioAhead,
+      getPadAudioAhead: service.getPadAudioAhead,
     }),
+    [service],
+  );
+}
+
+/**
+ * The host's {@link PadAudioAhead}, read at call time, or null when there
+ * isn't one — either because no host has published one yet or because this
+ * surface renders outside an `AudioServiceProvider` at all (capability-gate
+ * tests, sidebars mounted without a page's audio). Mirrors
+ * `useOptionalAssistRunnerContext`: a card that can live in both worlds asks
+ * for the capability rather than requiring the provider.
+ */
+export function usePadAudioAheadReader(): () => PadAudioAhead | null {
+  const service = useContext(AudioServiceContext);
+  return useMemo(
+    () => (service ? service.getPadAudioAhead : () => null),
     [service],
   );
 }

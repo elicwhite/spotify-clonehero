@@ -38,10 +38,25 @@ function soloExempt(name: string): boolean {
   return name === CLICK_TRACK_NAME;
 }
 
+/** Options for {@link defaultVolumeFor}. */
+export interface DefaultVolumeOptions {
+  /**
+   * True when the project has no audio at all. The click is then the only
+   * thing there is to hear, so starting it silent would make Play do nothing
+   * with no explanation. With audio present the click stays silent until the
+   * user raises it.
+   */
+  silentProject?: boolean | undefined;
+}
+
 /** The default slider position for a track: silent for the click, full for
  *  every real stem. */
-export function defaultVolumeFor(name: string): number {
-  return soloExempt(name) ? 0 : 100;
+export function defaultVolumeFor(
+  name: string,
+  {silentProject = false}: DefaultVolumeOptions = {},
+): number {
+  if (!soloExempt(name)) return 100;
+  return silentProject ? 70 : 0;
 }
 
 /**

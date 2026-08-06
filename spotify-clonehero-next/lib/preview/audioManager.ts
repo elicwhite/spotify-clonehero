@@ -95,9 +95,13 @@ export class AudioManager {
     this.#context.suspend();
 
     this.ready = this.#createTracks(audioFiles).then(() => {
-      this.#duration = Math.max(
-        ...Object.values(this.#tracks).map(track => track.duration),
+      // `Math.max()` of nothing is -Infinity, which would flow into every
+      // seek clamp and the transport readout as a frozen playhead with no
+      // error to explain it.
+      const durations = Object.values(this.#tracks).map(
+        track => track.duration,
       );
+      this.#duration = durations.length > 0 ? Math.max(...durations) : 0;
     });
   }
 

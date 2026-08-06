@@ -34,8 +34,11 @@ export interface AssistTaskRunOptions<Result, Input> {
   /** Applies a successful run's result — typically executing the command
    *  that installs it. */
   applyResult: (result: Result) => void;
-  /** Success toast copy. */
-  successMessage: string;
+  /** Success toast copy. A function is given the run's result, so a task
+   *  whose outcome varies can say what it actually did; returning null
+   *  raises no toast, for a run that applied nothing and has already said so
+   *  from `applyResult`. */
+  successMessage: string | ((result: Result) => string | null);
 }
 
 export interface AssistTaskRun {
@@ -60,7 +63,11 @@ export function useAssistTaskRun<Result, Input>(
     try {
       const result = await runner.start(task, await prepareInput());
       applyResult(result);
-      toast.success(successMessage);
+      const message =
+        typeof successMessage === 'function'
+          ? successMessage(result)
+          : successMessage;
+      if (message !== null) toast.success(message);
     } catch (e) {
       if (isAbortError(e)) return;
       toast.error(e instanceof Error ? e.message : String(e));

@@ -120,8 +120,11 @@ export default function ChartAssist({
     (variant === 'all' || variant === 'tempo-and-silence') &&
     runner != null &&
     loadAudio != null;
+  // Leading silence pads the audio in a worker under a progress card, so it
+  // needs a runner too — same as the other cards that do real work.
   const showSilence =
     (variant === 'all' || variant === 'tempo-and-silence') &&
+    runner != null &&
     doc != null &&
     audioSampleRate !== undefined;
   // Drum transcription runs from the host's audio, which it separates
@@ -194,6 +197,7 @@ export default function ChartAssist({
         {showSilence && (
           <LeadingSilenceCard
             doc={doc}
+            runner={runner}
             audioSampleRate={audioSampleRate}
             audioBusyReason={audioBusyReason}
             disabledReason={leadingSilenceDisabledReason}

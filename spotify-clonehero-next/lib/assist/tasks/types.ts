@@ -18,8 +18,7 @@
  *
  * The tasks themselves live one per file beside this one:
  * `transcribe-drums`, `add-lyrics`, `generate-tempo-map`,
- * `generate-sections`, `generate-difficulties`. `add-leading-silence` lands
- * in a later phase.
+ * `generate-sections`, `generate-difficulties`, `add-leading-silence`.
  */
 
 import {

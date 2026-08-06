@@ -297,11 +297,12 @@ describe('/chart-editor Stems list', () => {
     currentProjectId = 'proj2';
     rerender(tree());
 
-    // Project 2's audio was never separated, so it has no drums stem.
-    await waitFor(() =>
-      expect(screen.queryByTestId('stem-row-drums')).not.toBeInTheDocument(),
-    );
-    expect(screen.getByTestId('stem-row-song')).toBeInTheDocument();
+    // Project 2's audio was never separated, so once its mixer is up it has
+    // its own `song` row and no drums stem.
+    await waitFor(() => {
+      expect(screen.getByTestId('stem-row-song')).toBeInTheDocument();
+      expect(screen.queryByTestId('stem-row-drums')).not.toBeInTheDocument();
+    });
   });
 });
 
